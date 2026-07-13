@@ -285,7 +285,7 @@ const Compass = () => {
         <div className="flex items-center gap-3 flex-wrap">
           <span className="font-mono text-[10px] text-textMuted uppercase tracking-wider">{activeScanner.blurb}</span>
           <span className="ml-auto font-mono text-[10px] text-textMuted uppercase tracking-widest tnum">
-            Showing {filteredShown} of {data.totalFound} setups Â· scan {lastScanAt} Â· 10s
+            Showing {filteredShown} of {data.totalFound} setups · scan {lastScanAt} · 10s
           </span>
           <div className="relative">
             <button
