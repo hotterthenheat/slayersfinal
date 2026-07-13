@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Gauge, Newspaper, Sparkles } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
+import StatRibbon from '../components/ui/StatRibbon';
 import Panel from '../components/ui/Panel';
 import StatCard from '../components/ui/StatCard';
 import MetricGrid from '../components/ui/MetricGrid';
@@ -62,6 +63,9 @@ const News = () => {
     .filter(n => n.ticker)
     .sort((a, b) => Math.abs(b.prediction.expMove1dPct) - Math.abs(a.prediction.expMove1dPct))
     .slice(0, 3);
+  const bullN = feed.filter(n => n.sentiment > 0.12).length;
+  const bearN = feed.filter(n => n.sentiment < -0.12).length;
+  const macroN = feed.filter(n => !n.ticker).length;
 
   return (
     <>
@@ -69,6 +73,16 @@ const News = () => {
         breadcrumb={['Terminal', 'News']}
         title="News"
         subtitle="The wire on the left — what the model thinks it does to price on the right"
+        ribbon={
+          <StatRibbon
+            stats={[
+              { label: 'Bullish', value: String(bullN), tone: 'bull' },
+              { label: 'Bearish', value: String(bearN), tone: 'bear' },
+              { label: 'Macro', value: String(macroN), tone: 'select' },
+              { label: 'Top mover', value: movers[0] ? `${movers[0].ticker} ${movers[0].prediction.expMove1dPct >= 0 ? '+' : ''}${movers[0].prediction.expMove1dPct.toFixed(1)}%` : '--', tone: movers[0] && movers[0].sentiment >= 0 ? 'bull' : 'bear' },
+            ]}
+          />
+        }
         actions={<SegmentedControl ariaLabel="Category filter" options={CAT_OPTIONS} value={filter} onChange={setFilter} />}
       />
 

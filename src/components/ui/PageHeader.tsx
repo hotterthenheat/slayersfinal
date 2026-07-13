@@ -7,9 +7,11 @@ interface PageHeaderProps {
   title: string;
   subtitle?: string;
   actions?: React.ReactNode;
+  /** Dense stat strip that fills the otherwise-empty header center band */
+  ribbon?: React.ReactNode;
 }
 
-const PageHeader = ({ breadcrumb, title, subtitle, actions }: PageHeaderProps) => {
+const PageHeader = ({ breadcrumb, title, subtitle, actions, ribbon }: PageHeaderProps) => {
   const { pathname } = useLocation();
   // Every page carries its section icon — resolved from the nav registry, so
   // no page has to pass one and nav/page identity can never drift apart.
@@ -17,8 +19,8 @@ const PageHeader = ({ breadcrumb, title, subtitle, actions }: PageHeaderProps) =
   const Icon = NAV_ITEMS.find(i => i.path === section)?.icon;
 
   return (
-    <div className="flex items-end justify-between gap-4 flex-wrap">
-      <div className="min-w-0">
+    <div className="flex items-center justify-between gap-4 flex-wrap">
+      <div className="min-w-0 shrink-0">
         <div className="flex items-center gap-1.5 font-mono text-[10px] text-textMuted uppercase tracking-widest mb-1.5">
           {breadcrumb.map((part, i) => (
             <React.Fragment key={part}>
@@ -37,7 +39,9 @@ const PageHeader = ({ breadcrumb, title, subtitle, actions }: PageHeaderProps) =
         </div>
         {subtitle && <p className="text-xs text-textSecondary mt-1.5">{subtitle}</p>}
       </div>
-      {actions && <div className="flex items-center gap-2 flex-wrap">{actions}</div>}
+      {/* Center band — the dense stat strip fills what was empty whitespace */}
+      {ribbon && <div className="hidden md:flex flex-1 min-w-0 justify-center">{ribbon}</div>}
+      {actions && <div className="flex items-center gap-2 flex-wrap shrink-0">{actions}</div>}
     </div>
   );
 };

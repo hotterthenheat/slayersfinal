@@ -17,6 +17,8 @@ import SamplePreview from '../components/skyvision/SamplePreview';
 import ImpactLeaderboard from '../components/skyvision/ImpactLeaderboard';
 import ContractWeigher from '../components/compass/ContractWeigher';
 import SegmentedControl from '../components/ui/SegmentedControl';
+import StatRibbon from '../components/ui/StatRibbon';
+import { deriveMarketKpis } from '../data/kpis';
 
 type CompassMode = 'setups' | 'weigher';
 
@@ -198,6 +200,7 @@ const Compass = () => {
           ? 'Weeklies, swings & LEAPS on the scale — math, flow, dark pool and news decide what is worth buying'
           : 'The terminal calls ENTER or EXIT — you never place the order'
       }
+      ribbon={marketData ? <StatRibbon stats={deriveMarketKpis(marketData)} /> : undefined}
       actions={mode === 'weigher' ? (
         <span className="inline-flex items-center gap-2">
           {modeSwitch}
@@ -215,6 +218,7 @@ const Compass = () => {
       breadcrumb={['Terminal', 'Compass', 'Setups']}
       title="Trade Setups"
       subtitle="The terminal calls ENTER or EXIT — you never place the order"
+      ribbon={marketData ? <StatRibbon stats={deriveMarketKpis(marketData)} /> : undefined}
       actions={
         <span className="inline-flex items-center gap-2">
           {modeSwitch}

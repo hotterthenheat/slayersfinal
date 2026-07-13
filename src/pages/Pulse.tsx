@@ -5,6 +5,8 @@ import { buildGexView, pulseMatrix } from '../data/gex';
 import { buildCommandView, makeAutoNote } from '../data/command';
 import PageHeader from '../components/ui/PageHeader';
 import TickerSearch from '../components/ui/TickerSearch';
+import StatRibbon from '../components/ui/StatRibbon';
+import { deriveMarketKpis } from '../data/kpis';
 import SegmentedControl from '../components/ui/SegmentedControl';
 import Panel from '../components/ui/Panel';
 import StrikeChart from '../components/gex/StrikeChart';
@@ -162,6 +164,7 @@ const Pulse = () => {
         breadcrumb={['Terminal', 'Pulse']}
         title="Pulse"
         subtitle="Chart, dealer pressure, order flow & key levels"
+        ribbon={<StatRibbon stats={deriveMarketKpis(marketData)} />}
         actions={<TickerSearch value={activeTicker} onChange={changeTicker} />}
       />
 

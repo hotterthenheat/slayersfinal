@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Layers3, TrendingUp } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
+import StatRibbon from '../components/ui/StatRibbon';
 import Panel from '../components/ui/Panel';
 import StatCard from '../components/ui/StatCard';
 import MetricGrid from '../components/ui/MetricGrid';
@@ -66,6 +67,20 @@ const Stocks = () => {
   const breadth = Math.round((picks.filter(p => p.sleeves.momentum > 50).length / picks.length) * 100);
   const topSector = sectors[0];
   const bottomSector = sectors[sectors.length - 1];
+  const avgScore = Math.round(picks.reduce((a, p) => a + p.composite, 0) / picks.length);
+  const sectorsUp = sectors.filter(s => s.phase === 'LEADING' || s.phase === 'IMPROVING').length;
+  const rsSpread = sectors[0].score - sectors[sectors.length - 1].score;
+
+  const headerRibbon = (
+    <StatRibbon
+      stats={[
+        { label: 'Universe', value: String(picks.length) },
+        { label: 'Avg score', value: String(avgScore), tone: avgScore >= 60 ? 'bull' : avgScore <= 48 ? 'bear' : 'neutral' },
+        { label: 'Sectors up', value: `${sectorsUp}/${sectors.length}`, tone: sectorsUp > sectors.length / 2 ? 'bull' : 'bear' },
+        { label: 'RS spread', value: `${rsSpread}pts` },
+      ]}
+    />
+  );
 
   const columns: Column<StockPick>[] = [
     {
@@ -143,6 +158,7 @@ const Stocks = () => {
         breadcrumb={['Terminal', 'Stocks']}
         title="Stocks"
         subtitle="Common-stock board — what screens as ownable, and which sectors deserve the exposure"
+        ribbon={headerRibbon}
         actions={<SegmentedControl ariaLabel="Verdict filter" options={VIEW_OPTIONS} value={view} onChange={setView} />}
       />
 
