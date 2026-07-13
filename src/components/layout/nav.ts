@@ -1,5 +1,4 @@
 import {
-  Home,
   Activity,
   LayoutGrid,
   Crosshair,
@@ -14,7 +13,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-export type NavGroup = 'Main views' | 'Research' | 'Tools';
+export type NavGroup = 'Main' | 'Research' | 'Tools';
 
 export interface NavItem {
   path: string;
@@ -25,59 +24,54 @@ export interface NavItem {
   group: NavGroup;
 }
 
+// Home is intentionally absent — the wordmark is the sole home affordance.
+// Main views render inline in the top bar; Research and Tools fold into
+// labelled dropdown groups so the 12-route app fits a laptop-width bar.
 export const NAV_ITEMS: NavItem[] = [
-  {
-    path: '/',
-    label: 'Home',
-    code: '01',
-    icon: Home,
-    description: 'Back to the landing page',
-    group: 'Main views',
-  },
   {
     path: '/pulse',
     label: 'Pulse',
-    code: '02',
+    code: '01',
     icon: Activity,
     description: 'Live market terminal — chart, dealer pressure, order flow & key levels',
-    group: 'Main views',
+    group: 'Main',
   },
   {
     path: '/compass',
     label: 'Compass',
-    code: '03',
+    code: '02',
     icon: Compass,
     description: 'Options chooser — weeklies, swings & LEAPS weighed and graded',
-    group: 'Main views',
+    group: 'Main',
   },
   {
     path: '/trace',
     label: 'Trace',
-    code: '04',
+    code: '03',
     icon: Radar,
     description: 'Options flow & dark-pool intelligence — what the prints actually mean',
-    group: 'Main views',
+    group: 'Main',
   },
   {
     path: '/pinpoint',
     label: 'Pinpoint',
-    code: '05',
+    code: '04',
     icon: Crosshair,
     description: 'GEX & dealer-positioning system',
-    group: 'Main views',
+    group: 'Main',
   },
   {
     path: '/prove-it',
     label: 'Prove It',
-    code: '06',
+    code: '05',
     icon: Sigma,
     description: 'Quantitative modeling & predictive analytics',
-    group: 'Main views',
+    group: 'Research',
   },
   {
     path: '/stocks',
     label: 'Stocks',
-    code: '07',
+    code: '06',
     icon: BarChart3,
     description: 'Ranked equity picks & sector rotation',
     group: 'Research',
@@ -85,7 +79,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     path: '/news',
     label: 'News',
-    code: '08',
+    code: '07',
     icon: Newspaper,
     description: 'Stock news + predicted outcomes per headline',
     group: 'Research',
@@ -93,7 +87,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     path: '/earnings',
     label: 'Earnings',
-    code: '09',
+    code: '08',
     icon: CalendarClock,
     description: 'Earnings hub — implied vs. realized, play it or fade it',
     group: 'Research',
@@ -101,15 +95,15 @@ export const NAV_ITEMS: NavItem[] = [
   {
     path: '/tracker',
     label: 'Tracker',
-    code: '10',
+    code: '09',
     icon: Bookmark,
-    description: 'Bookmarked setups — live monitoring',
+    description: 'Bookmarked setups, contracts & names — live monitoring',
     group: 'Tools',
   },
   {
     path: '/workspace',
     label: 'Workspace',
-    code: '11',
+    code: '10',
     icon: LayoutGrid,
     description: 'Saved layouts — mix any panels together',
     group: 'Tools',
@@ -117,11 +111,15 @@ export const NAV_ITEMS: NavItem[] = [
   {
     path: '/community',
     label: 'Community',
-    code: '12',
+    code: '11',
     icon: Users,
     description: 'Trade ideas, requests & feedback',
     group: 'Tools',
   },
 ];
 
-export const NAV_GROUPS: NavGroup[] = ['Main views', 'Research', 'Tools'];
+export const NAV_GROUPS: NavGroup[] = ['Main', 'Research', 'Tools'];
+
+export const mainViews = NAV_ITEMS.filter(i => i.group === 'Main');
+export const researchViews = NAV_ITEMS.filter(i => i.group === 'Research');
+export const toolViews = NAV_ITEMS.filter(i => i.group === 'Tools');
