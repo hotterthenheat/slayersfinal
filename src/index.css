@@ -1,0 +1,243 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-canvas text-textPrimary antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+  ::selection {
+    background: rgba(200, 212, 235, 0.3);
+  }
+  :focus-visible {
+    outline: 1px solid rgba(228, 232, 244, 0.6);
+    outline-offset: 1px;
+  }
+}
+
+/* ============================================================
+   Holographic silver — the house accent.
+   One shared gradient (chrome → ice blue → pale violet → white)
+   panned back and forth so every accented element carries the
+   same living-foil sheen. First/last stops match the flat token
+   (#C7D3E8 family) so reduced-motion degrades to plain silver.
+   ============================================================ */
+:root {
+  --holo-gradient: linear-gradient(
+    115deg,
+    #aeb9cf 0%,
+    #eef1f8 14%,
+    #a8c4e8 30%,
+    #d6c6ee 45%,
+    #f7f8fc 58%,
+    #b2c8e2 72%,
+    #e2d4ee 86%,
+    #aeb9cf 100%
+  );
+  /* Brighter run for ink-on-holo chips — keeps dark text ≥7:1 at every stop */
+  --holo-gradient-bright: linear-gradient(
+    115deg,
+    #cfd6e4 0%,
+    #f4f6fb 16%,
+    #c2d6f0 32%,
+    #e4d8f4 48%,
+    #ffffff 62%,
+    #c8d8ec 78%,
+    #ecdff6 90%,
+    #cfd6e4 100%
+  );
+}
+
+@keyframes holo-pan {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 100% 50%; }
+}
+
+@keyframes holo-glow-shift {
+  0% { box-shadow: 0 0 18px -6px rgba(168, 196, 232, 0.55); }
+  33% { box-shadow: 0 0 20px -6px rgba(214, 198, 238, 0.6); }
+  66% { box-shadow: 0 0 20px -6px rgba(247, 248, 252, 0.5); }
+  100% { box-shadow: 0 0 18px -6px rgba(178, 200, 226, 0.55); }
+}
+
+/* Filled surface — active pills, CTAs, badges. Pair with dark ink text. */
+.holo-bg {
+  background-image: var(--holo-gradient-bright);
+  background-size: 250% 250%;
+  animation: holo-pan 4.5s ease-in-out infinite alternate;
+}
+
+/* Gradient ink — brand marks, hero numbers, standout labels. */
+.holo-text {
+  background-image: var(--holo-gradient);
+  background-size: 250% 250%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: holo-pan 4.5s ease-in-out infinite alternate;
+}
+
+/* Meter fills & thin rails — same foil, denser pan so short bars still shift. */
+.holo-bar {
+  background-image: var(--holo-gradient);
+  background-size: 350% 350%;
+  animation: holo-pan 3.5s ease-in-out infinite alternate;
+}
+
+/* 1px living border — gradient rides the border-box under a panel-dark pad. */
+.holo-border {
+  border: 1px solid transparent;
+  background-image: linear-gradient(#0a0a0a, #0a0a0a), var(--holo-gradient);
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+  background-size: 100% 100%, 250% 250%;
+  animation: holo-pan 4.5s ease-in-out infinite alternate;
+}
+
+/* Breathing chrome halo for the highest-emphasis cards/CTAs. */
+.holo-glow {
+  animation: holo-glow-shift 5s ease-in-out infinite alternate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .holo-bg, .holo-text, .holo-bar, .holo-border, .holo-glow {
+    animation: none;
+  }
+}
+
+/* Workspace grid (react-grid-layout) — house skin */
+.react-grid-item.react-grid-placeholder {
+  background: rgba(228, 232, 244, 0.06) !important;
+  border: 1px dashed rgba(228, 232, 244, 0.35);
+  border-radius: 6px;
+  opacity: 1 !important;
+}
+.react-grid-item > .react-resizable-handle {
+  opacity: 0.35;
+}
+.react-grid-item > .react-resizable-handle:hover {
+  opacity: 0.9;
+}
+.react-grid-item > .react-resizable-handle::after {
+  border-color: rgba(163, 163, 163, 0.8) !important;
+}
+.react-grid-item.react-draggable-dragging {
+  z-index: 30;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #2a2a2a;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #444444;
+}
+
+/* Tabular figures for aligned numeric columns */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Custom micro-animation for live ticks */
+@keyframes pulse-animation {
+  0% { transform: scale(0.95); opacity: 0.6; }
+  50% { transform: scale(1.05); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.6; }
+}
+
+.custom-pulse {
+  animation: pulse-animation 1.5s infinite;
+}
+
+/* Slide in animation for lists */
+@keyframes slide-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-slide-in {
+  animation: slide-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* View transition — used when swapping sections/routes so changes fade in */
+@keyframes view-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-view-in {
+  animation: view-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Terminal caret — hard on/off blink (no easing; real cursors don't fade) */
+@keyframes cursor-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+.animate-cursor-blink {
+  animation: cursor-blink 1.1s steps(1) infinite;
+}
+
+/* Border beam — a dash segment traveling the true perimeter of an SVG rect
+   (pathLength=100 normalizes any size; -100 offset = one full lap). */
+@keyframes border-trace {
+  to { stroke-dashoffset: -100; }
+}
+
+.animate-border-trace {
+  animation: border-trace 3.2s linear infinite;
+}
+
+/* Soft content swap — used when the same panel's data changes (e.g. selecting
+   a different contract). Shell stays put; only the body cross-fades. */
+@keyframes soft-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-soft-in {
+  animation: soft-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Landing marquee divider — two identical halves, -50% = seamless loop. */
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+.animate-marquee {
+  animation: marquee 46s linear infinite;
+}
+
+/* Landing anchor targets stop short of the fixed glass nav */
+#showcase,
+#live,
+#workspace,
+#pricing {
+  scroll-margin-top: 84px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-view-in,
+  .animate-slide-in,
+  .animate-soft-in,
+  .animate-border-trace,
+  .animate-cursor-blink,
+  .animate-marquee {
+    animation: none;
+  }
+}
