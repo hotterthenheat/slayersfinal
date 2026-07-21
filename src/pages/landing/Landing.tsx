@@ -17,6 +17,7 @@ import { ComparePlans, Faq } from './PricingExtras';
 import HeroScene from './HeroScene';
 import LiveSections from './LiveSections';
 import TiltBox from './TiltBox';
+import CardCoverFlow from '../../components/showcase/CardCoverFlow';
 
 const NAV_LINKS = [
   { label: 'Product', href: '#showcase' },
@@ -266,6 +267,21 @@ const Landing = () => (
 
     {/* ── Showcase → marquee → pillars → live engines → story → workspace ── */}
     <LiveSections />
+
+    {/* ── The desks (cover-flow) ── */}
+    <section className="px-6 md:px-10 py-20 max-w-4xl mx-auto text-center">
+      <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.25em] text-textSecondary">
+        The desks
+      </span>
+      <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">One chain, four desks.</h2>
+      <p className="mt-4 text-[14px] text-textSecondary leading-relaxed max-w-xl mx-auto">
+        Watch on Pulse, choose on Compass, read the flow on Trace, map the dealers on Pinpoint — and let Prove It keep the
+        receipts. Every desk feeds the next.
+      </p>
+      <div className="mt-10 h-[300px] max-w-md mx-auto">
+        <CardCoverFlow />
+      </div>
+    </section>
 
     {/* ── Community ── */}
     <section className="px-6 md:px-10 py-20 max-w-6xl mx-auto">
