@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { BookOpen, Layers, AlertTriangle, ScrollText, Target } from 'lucide-react';
+import { BookOpen, Layers, AlertTriangle, ScrollText, Target, ChevronDown } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import {
   buildEdgeLedger,
@@ -152,6 +152,7 @@ const EdgeLedger = () => {
   const { marketData } = useMarketData();
   const view = useMemo<EdgeLedgerView | null>(() => (marketData ? buildEdgeLedger(marketData) : null), [marketData]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [showAnalytics, setShowAnalytics] = useState(false);
 
   const selected = useMemo(() => {
     if (!view) return null;
@@ -271,73 +272,7 @@ const EdgeLedger = () => {
         </p>
       </Panel>
 
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
-        {/* Expectancy by setup */}
-        <Panel
-          title={
-            <span className="inline-flex items-center gap-1.5">
-              <Layers className="w-3.5 h-3.5" /> Expectancy by strategy
-            </span>
-          }
-          subtitle="what each setup actually pays — and where it lives or dies"
-          flush
-          className="xl:col-span-7"
-        >
-          <div className="flex flex-col divide-y divide-borderSubtle">
-            {view.strategies.map(st => (
-              <StrategyRow key={st.setup} st={st} maxAbs={maxAbsR} />
-            ))}
-          </div>
-          <p className="px-3.5 py-2.5 border-t border-borderSubtle font-mono text-[10px] text-textMuted leading-relaxed">
-            Expectancy is average P/L per trade in R — a full stop is −1R. ▲ marks the vol regime a setup pays best in, ▼ where it
-            has bled the most.
-          </p>
-        </Panel>
-
-        {/* Edge-decay warnings */}
-        <Panel
-          title={
-            <span className="inline-flex items-center gap-1.5">
-              <AlertTriangle className="w-3.5 h-3.5" /> Edge-decay warnings
-            </span>
-          }
-          subtitle="setups that only pay in the tape they were built for"
-          className="xl:col-span-5"
-          tone={view.decayFlagCount >= 2 ? 'warn' : 'neutral'}
-        >
-          {view.decayWarnings.length === 0 ? (
-            <div className="h-32 flex flex-col items-center justify-center gap-2 text-center">
-              <Target className="w-5 h-5 text-bull" />
-              <span className="font-mono text-[11px] text-textSecondary uppercase tracking-wider">No edge leaking across regimes</span>
-              <span className="text-[11px] text-textMuted max-w-[240px] leading-relaxed">
-                Every setup is holding expectancy wherever the tape has put it.
-              </span>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {view.decayWarnings.map((w: DecayWarning) => (
-                <div key={w.setup} className="border-l-2 border-borderSubtle pl-3 py-0.5">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-textPrimary">{w.setup}</span>
-                    <SignalBadge tone={severityTone[w.severity]} dot className="ml-auto">
-                      {w.severity}
-                    </SignalBadge>
-                  </div>
-                  <p className="text-[11px] text-textSecondary leading-relaxed">{w.message}</p>
-                  <div className="mt-1.5 flex items-center gap-3 font-mono text-[10px] tnum">
-                    <span className="text-bull">{regimeLabel(w.strongRegime)} {fmtR(w.strongExpectancy)}</span>
-                    <span className="text-textMuted">→</span>
-                    <span className="text-bear">{regimeLabel(w.weakRegime)} {fmtR(w.weakExpectancy)}</span>
-                    <span className="text-textMuted ml-auto">−{w.gap.toFixed(2)}R</span>
-                  </div>
-                </div>
-              ))}
-              <p className="text-[11px] text-textSecondary leading-relaxed border-t border-borderSubtle pt-2.5">{view.note}</p>
-            </div>
-          )}
-        </Panel>
-      </div>
-
+      {/* Primary — a clean table of the existing closed-trade entries */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
         {/* Per-trade ledger */}
         <Panel
@@ -356,7 +291,7 @@ const EdgeLedger = () => {
             rowKey={t => t.id}
             onRowClick={t => setSelectedId(t.id)}
             selectedKey={selected.id}
-            maxHeight="440px"
+            maxHeight="520px"
           />
         </Panel>
 
@@ -372,6 +307,91 @@ const EdgeLedger = () => {
         >
           <TradeDossier t={selected} />
         </Panel>
+      </div>
+
+      {/* Secondary — expectancy & edge-decay, collapsed so the ledger table stays primary */}
+      <div className="flex flex-col gap-4">
+        <button
+          onClick={() => setShowAnalytics(s => !s)}
+          aria-expanded={showAnalytics}
+          className="inst-surface rounded-md px-3.5 h-10 flex items-center gap-2 font-mono text-[11px] font-semibold uppercase tracking-widest text-textPrimary hover:bg-white/[0.02] transition-colors"
+        >
+          <Layers className="w-3.5 h-3.5" />
+          Expectancy &amp; edge-decay
+          <span className="font-mono text-[11px] font-normal normal-case tracking-wider text-textSecondary">
+            {view.decayFlagCount} decay {view.decayFlagCount === 1 ? 'flag' : 'flags'}
+          </span>
+          <ChevronDown className={`w-4 h-4 ml-auto transition-transform ${showAnalytics ? 'rotate-180' : ''}`} />
+        </button>
+
+        {showAnalytics && (
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start animate-view-in">
+            {/* Expectancy by setup */}
+            <Panel
+              title={
+                <span className="inline-flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5" /> Expectancy by strategy
+                </span>
+              }
+              subtitle="what each setup actually pays — and where it lives or dies"
+              flush
+              className="xl:col-span-7"
+            >
+              <div className="flex flex-col divide-y divide-borderSubtle">
+                {view.strategies.map(st => (
+                  <StrategyRow key={st.setup} st={st} maxAbs={maxAbsR} />
+                ))}
+              </div>
+              <p className="px-3.5 py-2.5 border-t border-borderSubtle font-mono text-[10px] text-textMuted leading-relaxed">
+                Expectancy is average P/L per trade in R — a full stop is −1R. ▲ marks the vol regime a setup pays best in, ▼ where
+                it has bled the most.
+              </p>
+            </Panel>
+
+            {/* Edge-decay warnings */}
+            <Panel
+              title={
+                <span className="inline-flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5" /> Edge-decay warnings
+                </span>
+              }
+              subtitle="setups that only pay in the tape they were built for"
+              className="xl:col-span-5"
+              tone={view.decayFlagCount >= 2 ? 'warn' : 'neutral'}
+            >
+              {view.decayWarnings.length === 0 ? (
+                <div className="h-32 flex flex-col items-center justify-center gap-2 text-center">
+                  <Target className="w-5 h-5 text-bull" />
+                  <span className="font-mono text-[11px] text-textSecondary uppercase tracking-wider">No edge leaking across regimes</span>
+                  <span className="text-[11px] text-textMuted max-w-[240px] leading-relaxed">
+                    Every setup is holding expectancy wherever the tape has put it.
+                  </span>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {view.decayWarnings.map((w: DecayWarning) => (
+                    <div key={w.setup} className="border-l-2 border-borderSubtle pl-3 py-0.5">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-textPrimary">{w.setup}</span>
+                        <SignalBadge tone={severityTone[w.severity]} dot className="ml-auto">
+                          {w.severity}
+                        </SignalBadge>
+                      </div>
+                      <p className="text-[11px] text-textSecondary leading-relaxed">{w.message}</p>
+                      <div className="mt-1.5 flex items-center gap-3 font-mono text-[10px] tnum">
+                        <span className="text-bull">{regimeLabel(w.strongRegime)} {fmtR(w.strongExpectancy)}</span>
+                        <span className="text-textMuted">→</span>
+                        <span className="text-bear">{regimeLabel(w.weakRegime)} {fmtR(w.weakExpectancy)}</span>
+                        <span className="text-textMuted ml-auto">−{w.gap.toFixed(2)}R</span>
+                      </div>
+                    </div>
+                  ))}
+                  <p className="text-[11px] text-textSecondary leading-relaxed border-t border-borderSubtle pt-2.5">{view.note}</p>
+                </div>
+              )}
+            </Panel>
+          </div>
+        )}
       </div>
 
       <Panel bodyClassName="py-3">

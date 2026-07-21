@@ -3,7 +3,7 @@ import { ChevronUp, Send } from 'lucide-react';
 import Panel from '../../components/ui/Panel';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import SignalBadge from '../../components/ui/SignalBadge';
-import type { Tone } from '../../components/ui/tones';
+import { toneDot, type Tone } from '../../components/ui/tones';
 import { loadCommunity, saveCommunity, timeAgo } from '../../data/community';
 import type { FeatureRequest, RequestKind, RequestStatus } from '../../types/community';
 
@@ -20,13 +20,32 @@ const STATUS_TONE: Record<RequestStatus, Tone> = {
   SHIPPED: 'bull',
 };
 
+// Left-edge rail per status — the fastest read of where an item sits.
+const STATUS_RAIL: Record<RequestStatus, string> = {
+  'UNDER REVIEW': 'border-l-textMuted/50',
+  PLANNED: 'border-l-select/60',
+  BUILDING: 'border-l-warn/70',
+  SHIPPED: 'border-l-[#30D158]/70',
+};
+
+// Plain-language line under each section header.
+const STATUS_BLURB: Record<RequestStatus, string> = {
+  BUILDING: 'In progress right now',
+  PLANNED: 'On the roadmap, not started',
+  'UNDER REVIEW': 'Being weighed — votes help it rise',
+  SHIPPED: 'Live in the terminal',
+};
+
 const STATUS_ORDER: RequestStatus[] = ['BUILDING', 'PLANNED', 'UNDER REVIEW', 'SHIPPED'];
+
+type StatusFilter = 'ALL' | RequestStatus;
 
 const Requests = () => {
   const [state, setState] = useState(loadCommunity);
   const [title, setTitle] = useState('');
   const [detail, setDetail] = useState('');
   const [kind, setKind] = useState<RequestKind>('FEATURE');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
 
   const update = (next: typeof state) => {
     setState(next);
@@ -60,14 +79,29 @@ const Requests = () => {
     });
   };
 
-  // Building first, then planned, then under review — shipped last; votes break ties
-  const shown = useMemo(
-    () =>
-      [...state.requests].sort((a, b) => {
-        const s = STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status);
-        return s !== 0 ? s : b.votes - a.votes;
-      }),
-    [state.requests]
+  // Count per status for the legend / filter chips.
+  const counts = useMemo(() => {
+    const c: Record<RequestStatus, number> = { BUILDING: 0, PLANNED: 0, 'UNDER REVIEW': 0, SHIPPED: 0 };
+    for (const r of state.requests) c[r.status] += 1;
+    return c;
+  }, [state.requests]);
+
+  // Group by status (order fixed), votes break ties inside a group.
+  const groups = useMemo(() => {
+    return STATUS_ORDER.filter(s => statusFilter === 'ALL' || s === statusFilter).map(status => ({
+      status,
+      items: state.requests
+        .filter(r => r.status === status)
+        .sort((a, b) => b.votes - a.votes),
+    }));
+  }, [state.requests, statusFilter]);
+
+  const filterOptions = useMemo(
+    () => [
+      { value: 'ALL' as StatusFilter, label: `All ${state.requests.length}` },
+      ...STATUS_ORDER.map(s => ({ value: s as StatusFilter, label: `${s} ${counts[s]}` })),
+    ],
+    [counts, state.requests.length]
   );
 
   return (
@@ -97,45 +131,81 @@ const Requests = () => {
               disabled={title.trim().length < 4}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-select/40 bg-select/[0.06] hover:bg-select/[0.12] font-mono text-[11px] font-semibold uppercase tracking-wider text-select transition-colors disabled:opacity-40 disabled:pointer-events-none"
             >
-              <Send className="w-3.5 h-3.5" /> Submit request
+              <Send className="w-3.5 h-3.5" /> Add request
             </button>
-            <span className="font-mono text-[10px] text-textMuted">
-              Vote for anything below — the most-wanted items get built first
+            <span className="font-mono text-[11px] text-textMuted">
+              Saved to this browser · votes sort the board so the most-wanted rise
             </span>
           </div>
         </div>
       </Panel>
 
-      {/* Board */}
-      <div className="flex flex-col gap-3">
-        {shown.map(req => {
-          const voted = state.voted.includes(req.id);
+      {/* Status filter / legend */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <SegmentedControl
+          ariaLabel="Filter by status"
+          options={filterOptions}
+          value={statusFilter}
+          onChange={setStatusFilter}
+        />
+      </div>
+
+      {/* Board — grouped by status */}
+      <div className="flex flex-col gap-6">
+        {groups.map(group => {
+          if (group.items.length === 0) return null;
+          const tone = STATUS_TONE[group.status];
           return (
-            <div key={req.id} className="border border-borderSubtle bg-panel rounded-md px-4 py-3 flex gap-4">
-              <button
-                onClick={() => toggleVote(req.id)}
-                className={`shrink-0 self-start flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-md border transition-colors ${
-                  voted
-                    ? 'border-select/50 bg-select/[0.08] text-select'
-                    : 'border-borderSubtle text-textSecondary hover:text-textPrimary hover:bg-white/[0.03]'
-                }`}
-                aria-label="Vote"
-              >
-                <ChevronUp className="w-4 h-4" />
-                <span className="font-mono text-[11px] font-bold tnum">{req.votes}</span>
-              </button>
-              <div className="min-w-0 flex-grow">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[13px] font-semibold text-textPrimary">{req.title}</span>
-                  <SignalBadge tone={STATUS_TONE[req.status]}>{req.status}</SignalBadge>
-                  <SignalBadge tone="neutral">{req.kind}</SignalBadge>
-                  <span className="ml-auto font-mono text-[10px] text-textMuted tnum">
-                    {req.author === 'you' ? <span className="text-select">you</span> : req.author} · {timeAgo(req.createdAt)}
-                  </span>
-                </div>
-                {req.detail && <p className="mt-1.5 text-[12px] text-textSecondary leading-relaxed">{req.detail}</p>}
+            <section key={group.status} className="flex flex-col gap-2.5">
+              {/* Status header */}
+              <div className="flex items-center gap-2.5">
+                <span className={`w-2 h-2 rounded-full ${toneDot[tone]}`} />
+                <h3 className="font-mono text-[13px] font-semibold uppercase tracking-wider text-textPrimary">
+                  {group.status}
+                </h3>
+                <span className="font-mono text-[11px] tnum text-textMuted">{group.items.length}</span>
+                <span className="font-mono text-[11px] text-textSecondary normal-case tracking-normal hidden sm:inline">
+                  · {STATUS_BLURB[group.status]}
+                </span>
               </div>
-            </div>
+
+              {/* Cards */}
+              {group.items.map(req => {
+                const voted = state.voted.includes(req.id);
+                return (
+                  <div
+                    key={req.id}
+                    className={`border border-borderSubtle border-l-2 ${STATUS_RAIL[group.status]} bg-panel rounded-md px-4 py-3 flex gap-4`}
+                  >
+                    <button
+                      onClick={() => toggleVote(req.id)}
+                      className={`shrink-0 self-start flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-md border transition-colors ${
+                        voted
+                          ? 'border-select/50 bg-select/[0.08] text-select'
+                          : 'border-borderSubtle text-textSecondary hover:text-textPrimary hover:bg-white/[0.03]'
+                      }`}
+                      aria-label="Vote"
+                    >
+                      <ChevronUp className="w-4 h-4" />
+                      <span className="font-mono text-[11px] font-bold tnum">{req.votes}</span>
+                    </button>
+                    <div className="min-w-0 flex-grow">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[13px] font-semibold text-textPrimary">{req.title}</span>
+                        <SignalBadge tone={STATUS_TONE[req.status]} dot>
+                          {req.status}
+                        </SignalBadge>
+                        <SignalBadge tone="neutral">{req.kind}</SignalBadge>
+                        <span className="ml-auto font-mono text-[10px] text-textMuted tnum">
+                          {req.author === 'you' ? <span className="text-select">you</span> : req.author} · {timeAgo(req.createdAt)}
+                        </span>
+                      </div>
+                      {req.detail && <p className="mt-1.5 text-[12px] text-textSecondary leading-relaxed">{req.detail}</p>}
+                    </div>
+                  </div>
+                );
+              })}
+            </section>
           );
         })}
       </div>

@@ -20,6 +20,9 @@ import {
   Columns,
   Rows,
   Grid2x2,
+  Lock,
+  Pencil,
+  Search,
 } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import Simulator from '../../core/simulator';
@@ -32,7 +35,8 @@ import { buildSkyVision } from '../../data/skyvision';
 import SignalBadge from '../../components/ui/SignalBadge';
 import type { MarketSnapshot } from '../../types/market';
 import type { WorkspaceCtx } from '../workspace/registry';
-import { PULSE_PANELS, pulsePanelByKey } from './pulseRegistry';
+import { PULSE_ADDABLE_PANELS, PULSE_DATA_CONNECTIONS, pulsePanelByKey } from './pulseRegistry';
+import PanelErrorBoundary from './PanelErrorBoundary';
 import {
   PULSE_PRESETS,
   PULSE_STORAGE_KEY,
@@ -146,9 +150,13 @@ const PulseWorkspace = () => {
 
   const [ws, setWs] = useState<PulseWorkspaceState>(loadState);
   const [addOpen, setAddOpen] = useState(false);
+  const [addQuery, setAddQuery] = useState('');
   const [wsMenuOpen, setWsMenuOpen] = useState(false);
   const [maximizedId, setMaximizedId] = useState<string | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
+  // Layout edit mode. When off, the grid is locked — no drag, no resize — so a
+  // finished desk can't be nudged by accident. Defaults on to preserve behavior.
+  const [editLayout, setEditLayout] = useState(true);
   // A price level to mark on the matching ticker's charts, arriving from a
   // cross-page "view on chart" deep-link (Exposure Profile / Ranked Targets).
   const [focus, setFocus] = useState<{ ticker: string; price: number } | null>(null);
@@ -178,6 +186,39 @@ const PulseWorkspace = () => {
       /* storage full — ignore */
     }
   }, [ws]);
+
+  // ---- keyboard shortcuts -------------------------------------------------
+  // Single-key desk controls. Ignored while typing in a field or with a
+  // modifier held, so they never collide with the ticker/search inputs.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if (e.key === 'Escape') {
+        setAddOpen(false);
+        setWsMenuOpen(false);
+        setMaximizedId(null);
+        setFullscreen(false);
+        return;
+      }
+      switch (e.key.toLowerCase()) {
+        case 'e':
+          setEditLayout(v => !v);
+          break;
+        case 'f':
+          setFullscreen(v => !v);
+          break;
+        case 'a':
+          setAddOpen(o => !o);
+          break;
+        default:
+          return;
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   // ---- data cadence -------------------------------------------------------
   const revRef = useRef(0);
@@ -322,24 +363,49 @@ const PulseWorkspace = () => {
 
   const maximized = maximizedId ? active.panels.find(p => p.id === maximizedId) : null;
 
+  // ---- add-panel search ---------------------------------------------------
+  // Reset the query each time the menu opens for a clean search.
+  useEffect(() => {
+    if (!addOpen) setAddQuery('');
+  }, [addOpen]);
+
+  const addMatch = (title: string, description: string) => {
+    const q = addQuery.trim().toLowerCase();
+    if (!q) return true;
+    return title.toLowerCase().includes(q) || description.toLowerCase().includes(q);
+  };
+  const addableMatches = PULSE_ADDABLE_PANELS.filter(d => addMatch(d.title, d.description));
+  const connectionMatches = PULSE_DATA_CONNECTIONS.filter(d => addMatch(d.title, `${d.description} ${d.requires}`));
+
   const renderPanelBody = (key: string, ticker: string) => {
     const def = pulsePanelByKey(key);
     const ctx = pulsedByTicker.get(ticker);
     if (!def) return null;
     if (!ctx)
       return (
-        <div className="h-full flex items-center justify-center font-mono text-[10px] text-textMuted uppercase tracking-widest">
+        <div className="h-full flex items-center justify-center font-mono text-[11px] text-textMuted uppercase tracking-widest">
           loading…
         </div>
       );
-    return def.render(ctx);
+    // Isolate each body so one throwing panel can't take down the whole grid.
+    return (
+      <PanelErrorBoundary resetKey={`${key}:${ticker}`} label={def.title}>
+        {def.render(ctx)}
+      </PanelErrorBoundary>
+    );
   };
 
   const PanelChrome = ({ panelId, panelKey, ticker, maximizedView }: { panelId: string; panelKey: string; ticker: string; maximizedView?: boolean }) => {
     const def = pulsePanelByKey(panelKey);
+    const draggable = !maximizedView && editLayout;
     return (
-      <div className={`${maximizedView ? '' : 'widget-drag cursor-grab active:cursor-grabbing'} flex items-center gap-2 px-2.5 h-8 border-b border-borderSubtle shrink-0 select-none`}>
-        {!maximizedView && <GripHorizontal className="w-3.5 h-3.5 text-textMuted shrink-0" />}
+      <div className={`${draggable ? 'widget-drag cursor-grab active:cursor-grabbing' : ''} flex items-center gap-2 px-2.5 h-8 border-b border-borderSubtle shrink-0 select-none`}>
+        {!maximizedView &&
+          (draggable ? (
+            <GripHorizontal className="w-3.5 h-3.5 text-textMuted shrink-0" />
+          ) : (
+            <Lock className="w-3 h-3 text-textMuted shrink-0" aria-label="Layout locked" />
+          ))}
         <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-textPrimary truncate">
           {def?.title ?? panelKey}
         </span>
@@ -415,32 +481,117 @@ const PulseWorkspace = () => {
           <button onClick={() => doArrange('quad')} title="Grid" className="px-2 py-1.5 text-textMuted hover:text-textPrimary hover:bg-white/[0.04] border-l border-borderSubtle"><Grid2x2 className="w-3.5 h-3.5" /></button>
         </div>
 
+        {/* Edit / lock the layout — locked disables drag & resize */}
+        <div className="inline-flex items-center rounded-md border border-borderSubtle overflow-hidden" role="group" aria-label="Layout edit mode">
+          <button
+            onClick={() => setEditLayout(true)}
+            aria-pressed={editLayout}
+            title="Edit layout — drag & resize (E)"
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-wider transition-colors ${
+              editLayout ? 'bg-select/[0.10] text-select' : 'text-textMuted hover:text-textPrimary hover:bg-white/[0.04]'
+            }`}
+          >
+            <Pencil className="w-3.5 h-3.5" /> Edit
+          </button>
+          <button
+            onClick={() => setEditLayout(false)}
+            aria-pressed={!editLayout}
+            title="Lock layout — no drag or resize (E)"
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-wider border-l border-borderSubtle transition-colors ${
+              !editLayout ? 'bg-select/[0.10] text-select' : 'text-textMuted hover:text-textPrimary hover:bg-white/[0.04]'
+            }`}
+          >
+            <Lock className="w-3.5 h-3.5" /> Locked
+          </button>
+        </div>
+
         {/* Add panel */}
         <div className="relative">
-          <button onClick={() => setAddOpen(o => !o)} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-select/40 bg-select/[0.06] hover:bg-select/[0.12] font-mono text-[11px] font-semibold uppercase tracking-wider text-select transition-colors">
+          <button onClick={() => setAddOpen(o => !o)} title="Add panel (A)" className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-select/40 bg-select/[0.06] hover:bg-select/[0.12] font-mono text-[11px] font-semibold uppercase tracking-wider text-select transition-colors">
             <Plus className="w-3.5 h-3.5" /> Add panel
           </button>
           {addOpen && (
-            <div className="absolute left-0 top-full mt-1 z-40 w-72 max-h-80 overflow-auto border border-borderMuted bg-panel rounded-md shadow-2xl shadow-black/60 animate-slide-in">
-              {PULSE_PANELS.map(def => (
-                <button
-                  key={def.key}
-                  onClick={() => addPanel(def.key)}
-                  className="w-full text-left px-3 py-2 hover:bg-white/[0.03] transition-colors border-b border-borderSubtle/40 last:border-0"
-                >
-                  <span className="block font-mono text-[11px] font-semibold text-textPrimary">{def.title}</span>
-                  <span className="block text-[10px] text-textSecondary">{def.description}</span>
-                </button>
-              ))}
+            <div className="absolute left-0 top-full mt-1 z-40 w-72 border border-borderMuted bg-panel rounded-md shadow-2xl shadow-black/60 animate-slide-in flex flex-col max-h-[420px]">
+              {/* Search */}
+              <div className="p-2 border-b border-borderSubtle shrink-0">
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-textMuted absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    autoFocus
+                    value={addQuery}
+                    onChange={e => setAddQuery(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Escape') setAddOpen(false);
+                      if (e.key === 'Enter' && addableMatches.length > 0) addPanel(addableMatches[0].key);
+                    }}
+                    placeholder="Search panels…"
+                    className="w-full bg-inputBg border border-borderMuted rounded pl-7 pr-2 py-1.5 font-mono text-[11px] text-textPrimary placeholder:text-textMuted outline-none focus:border-select/40"
+                  />
+                </div>
+              </div>
+
+              <div className="overflow-auto">
+                {addableMatches.map(def => (
+                  <button
+                    key={def.key}
+                    onClick={() => addPanel(def.key)}
+                    className="w-full text-left px-3 py-2 hover:bg-white/[0.03] transition-colors border-b border-borderSubtle/40 last:border-0"
+                  >
+                    <span className="block font-mono text-[11px] font-semibold text-textPrimary">{def.title}</span>
+                    <span className="block text-[10px] text-textSecondary">{def.description}</span>
+                  </button>
+                ))}
+
+                {addableMatches.length === 0 && connectionMatches.length === 0 && (
+                  <div className="px-3 py-5 text-center font-mono text-[11px] text-textMuted uppercase tracking-widest">
+                    No panels match
+                  </div>
+                )}
+
+                {/* Feed-gated modules — real, but dark until a live feed is wired */}
+                {connectionMatches.length > 0 && (
+                  <div className="border-t border-borderSubtle">
+                    <div className="px-3 pt-2.5 pb-1.5 flex items-center gap-2">
+                      <span className="font-mono text-[11px] font-semibold uppercase tracking-widest text-textMuted">
+                        Data connections
+                      </span>
+                      <span className="ml-auto font-mono text-[9px] uppercase tracking-wider text-textMuted">
+                        requires a live feed
+                      </span>
+                    </div>
+                    {connectionMatches.map(def => (
+                      <button
+                        key={def.key}
+                        onClick={() => addPanel(def.key)}
+                        title={`Requires ${def.requires}`}
+                        className="w-full text-left px-3 py-2 flex items-start gap-2 hover:bg-white/[0.03] transition-colors border-b border-borderSubtle/40 last:border-0"
+                      >
+                        <Lock className="w-3 h-3 text-textMuted mt-0.5 shrink-0" />
+                        <span className="min-w-0">
+                          <span className="block font-mono text-[11px] font-semibold text-textSecondary">{def.title}</span>
+                          <span className="block text-[10px] text-textMuted">requires {def.requires}</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
 
         <div className="ml-auto flex items-center gap-2">
+          {/* Keyboard hint */}
+          <span className="hidden lg:inline-flex items-center gap-1.5 font-mono text-[10px] text-textMuted" title="Keyboard: E edit/lock · F full-screen · A add panel · Esc close">
+            <kbd className="px-1 py-px rounded border border-borderSubtle bg-white/[0.02] text-[11px] text-textSecondary">E</kbd>
+            <span>edit</span>
+            <kbd className="px-1 py-px rounded border border-borderSubtle bg-white/[0.02] text-[11px] text-textSecondary">F</kbd>
+            <span>full</span>
+          </span>
           <SignalBadge tone="warn" dot pulse>
             Sim · live
           </SignalBadge>
-          <button onClick={() => setFullscreen(f => !f)} title="Full-screen workspace" className={barBtn}>
+          <button onClick={() => setFullscreen(f => !f)} title="Full-screen workspace (F)" className={barBtn}>
             {fullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
           </button>
         </div>
@@ -466,6 +617,8 @@ const PulseWorkspace = () => {
           containerPadding={[0, 0]}
           compactType="vertical"
           draggableHandle=".widget-drag"
+          isDraggable={editLayout}
+          isResizable={editLayout}
           onLayoutChange={onLayoutChange}
         >
           {active.panels.map(p => {
