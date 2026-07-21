@@ -224,20 +224,20 @@ const Landing = () => (
     <section className="relative h-[94vh] min-h-[620px]">
       <div className="absolute inset-0">
         <HeroScene />
-        {/* Scrims — same grammar as the real site: a strong center well keeps
-            the lockup + copy readable over the rain, a vignette pulls the eye
-            in, and a bottom fade hands off to the next section. Pointer-events
-            off so the cursor light still tracks through them. */}
+        {/* Light scrims — the rain now sits near-invisible, so the lockup reads
+            without a heavy veil, and the cursor's revealed window can glow up
+            even behind the copy. A soft center well + vignette + bottom fade,
+            pointer-events off so the flashlight still tracks through them. */}
         <div
           className="absolute inset-0 pointer-events-none"
           style={{
             background:
-              'radial-gradient(ellipse 70% 60% at 50% 45%, rgba(8,9,10,0.90) 0%, rgba(8,9,10,0.55) 44%, transparent 78%)',
+              'radial-gradient(ellipse 64% 54% at 50% 45%, rgba(8,9,10,0.52) 0%, rgba(8,9,10,0.24) 46%, transparent 80%)',
           }}
         />
         <div
           className="absolute inset-0 pointer-events-none"
-          style={{ background: 'radial-gradient(ellipse at center, transparent 52%, rgba(0,0,0,0.62) 100%)' }}
+          style={{ background: 'radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.5) 100%)' }}
         />
         <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-transparent via-transparent to-canvas" />
       </div>

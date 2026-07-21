@@ -1,14 +1,15 @@
 /*
 ==================================================
   SLAYER TERMINAL - CODE-RAIN (hero backdrop)
-  A faithful rebuild of the real slayerterminal.com
-  hero: columns of tinted terminal output raining up
-  and down over pure black. Steel = SkyVision, amber =
-  Pinpoint/dealer-flow, dim = the rest. Layered on top:
-  a cursor-following light that lifts the glyphs beneath
-  the pointer (mix-blend screen) — the terminal reacts
-  to you. Reduced-motion freezes the columns.
-  DOM columns + CSS transforms — GPU-cheap, no canvas.
+  The real slayerterminal.com hero, dialled down to a
+  whisper: columns of desk-tinted terminal output that
+  sit almost invisible and twinkle like distant stars.
+  The cursor is a flashlight — a single soft window
+  follows the pointer and is the only place the code
+  becomes legible ("one frame open at a time"). Move
+  off the hero and the window closes back to the faint
+  twinkle. Reduced-motion freezes everything to a dim,
+  static field. DOM columns + a CSS mask — GPU-cheap.
 ==================================================
 */
 
@@ -17,9 +18,8 @@ import { RAIN_POOL, tintFor, type RainTint } from './rainPool';
 
 interface Column {
   left: number; // %
-  dur: number; // s
+  dur: number; // s (slow — the baseline should barely drift)
   delay: number; // s (negative — starts mid-cycle)
-  opacity: number;
   up: boolean;
   lines: string[]; // one set; rendered twice for a seamless loop
 }
@@ -31,15 +31,21 @@ const TINT_COLOR: Record<RainTint, string> = {
   '': '#454E58',
 };
 
-const LINES_PER_COL = 30;
+const LINES_PER_COL = 26;
 
-/** Deterministic-enough shuffle pick — UI noise, so Math.random is fine here. */
 function pickLines(): string[] {
   const out: string[] = [];
   for (let i = 0; i < LINES_PER_COL; i++) {
     out.push(RAIN_POOL[Math.floor(Math.random() * RAIN_POOL.length)]);
   }
   return out;
+}
+
+/** Deterministic-from-index twinkle timing so it's stable across renders. */
+function twinkle(i: number, j: number) {
+  const dur = 2.6 + ((i * 7 + j * 13) % 42) / 10; // 2.6–6.8s
+  const delay = -(((i * 11 + j * 5) % 60) / 10); // 0 to −6s
+  return { dur, delay };
 }
 
 const CodeRain = ({ className = '' }: { className?: string }) => {
@@ -50,11 +56,10 @@ const CodeRain = ({ className = '' }: { className?: string }) => {
     window.matchMedia &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  // column count tracks width (matches the real site's 4–10 band, a touch denser)
   useEffect(() => {
     const compute = () => {
       const w = wrapRef.current?.clientWidth ?? window.innerWidth;
-      setCols(Math.max(5, Math.min(12, Math.floor(w / 155))));
+      setCols(Math.max(5, Math.min(11, Math.floor(w / 165))));
     };
     compute();
     const ro = new ResizeObserver(compute);
@@ -66,12 +71,11 @@ const CodeRain = ({ className = '' }: { className?: string }) => {
     if (!cols) return [];
     const arr: Column[] = [];
     for (let c = 0; c < cols; c++) {
-      const dur = 40 + Math.random() * 46;
+      const dur = 68 + Math.random() * 74; // slow drift
       arr.push({
         left: c * (100 / cols) + (Math.random() * 3 - 1.5),
         dur,
         delay: -Math.random() * dur,
-        opacity: 0.4 + Math.random() * 0.22,
         up: Math.random() > 0.5,
         lines: pickLines(),
       });
@@ -79,98 +83,140 @@ const CodeRain = ({ className = '' }: { className?: string }) => {
     return arr;
   }, [cols]);
 
-  // cursor light — write pointer position into CSS vars, rAF-throttled
+  // Flashlight: track the pointer, open the window while it's over the hero,
+  // ease it closed when it leaves. --ca drives the mask's centre alpha (0.05
+  // closed → 1 open); --mx/--my place it.
   useEffect(() => {
-    if (reduce) return;
     const wrap = wrapRef.current;
     if (!wrap) return;
+    if (reduce) {
+      wrap.style.setProperty('--ca', '0.07');
+      return;
+    }
     let raf = 0;
     let tx = 50;
-    let ty = 40; // target %, easing toward it
+    let ty = 40;
     let cx = 50;
     let cy = 40;
+    let revTarget = 0;
+    let rev = 0;
     let alive = true;
 
     const onMove = (e: PointerEvent) => {
       const r = wrap.getBoundingClientRect();
-      tx = ((e.clientX - r.left) / r.width) * 100;
-      ty = ((e.clientY - r.top) / r.height) * 100;
+      const inside =
+        e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+      if (inside) {
+        tx = ((e.clientX - r.left) / r.width) * 100;
+        ty = ((e.clientY - r.top) / r.height) * 100;
+        revTarget = 1;
+      } else {
+        revTarget = 0;
+      }
     };
+    const onLeave = () => {
+      revTarget = 0;
+    };
+
     const loop = () => {
       if (!alive) return;
-      cx += (tx - cx) * 0.12;
-      cy += (ty - cy) * 0.12;
+      cx += (tx - cx) * 0.16;
+      cy += (ty - cy) * 0.16;
+      // open a touch faster than it closes, so it feels responsive but calm
+      rev += (revTarget - rev) * (revTarget > rev ? 0.09 : 0.04);
+      const ca = 0.05 + rev * 0.95;
       wrap.style.setProperty('--mx', `${cx.toFixed(2)}%`);
       wrap.style.setProperty('--my', `${cy.toFixed(2)}%`);
+      wrap.style.setProperty('--ca', ca.toFixed(3));
       raf = requestAnimationFrame(loop);
     };
     window.addEventListener('pointermove', onMove, { passive: true });
+    window.addEventListener('pointerleave', onLeave);
     raf = requestAnimationFrame(loop);
     return () => {
       alive = false;
       cancelAnimationFrame(raf);
       window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerleave', onLeave);
     };
   }, [reduce]);
+
+  // A soft window (~300px) that follows the cursor; outside it the mask floors
+  // at 0.05 so the field is barely there.
+  const maskImage =
+    'radial-gradient(circle 300px at var(--mx) var(--my), rgba(0,0,0,var(--ca)) 0%, rgba(0,0,0,var(--ca)) 20%, rgba(0,0,0,0.05) 74%)';
 
   return (
     <div
       ref={wrapRef}
       className={`absolute inset-0 overflow-hidden ${className}`}
-      style={{ background: '#08090A', ['--mx' as string]: '50%', ['--my' as string]: '40%' }}
+      style={{
+        background: '#08090A',
+        ['--mx' as string]: '50%',
+        ['--my' as string]: '40%',
+        ['--ca' as string]: '0.05',
+      }}
       aria-hidden
     >
-      {/* rain columns */}
-      {columns.map((col, i) => (
-        <div
-          key={i}
-          className={reduce ? 'rain-col rain-static' : 'rain-col'}
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: `${col.left}%`,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '16px',
-            whiteSpace: 'nowrap',
-            fontFamily: '"JetBrains Mono", ui-monospace, monospace',
-            fontSize: '12px',
-            fontWeight: 500,
-            lineHeight: 1.85,
-            letterSpacing: '0.01em',
-            userSelect: 'none',
-            willChange: 'transform',
-            opacity: reduce ? 0.28 : col.opacity,
-            animation: reduce
-              ? 'none'
-              : `${col.up ? 'rain-up' : 'rain-down'} ${col.dur}s linear infinite`,
-            animationDelay: `${col.delay}s`,
-          }}
-        >
-          {[...col.lines, ...col.lines].map((line, j) => {
-            const t = tintFor(line);
-            return (
-              <span key={j} style={{ color: TINT_COLOR[t], opacity: t === 'steel' || t === 'amber' ? 0.72 : 1 }}>
-                {line}
-              </span>
-            );
-          })}
-        </div>
-      ))}
-
-      {/* cursor light — lifts the glyphs beneath the pointer */}
-      {!reduce && (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            pointerEvents: 'none',
-            mixBlendMode: 'screen',
-            background:
-              'radial-gradient(circle 300px at var(--mx) var(--my), rgba(199,211,232,0.26) 0%, rgba(199,211,232,0.09) 32%, transparent 64%)',
-          }}
-        />
-      )}
+      {/* masked rain layer — the flashlight decides where it's legible */}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          WebkitMaskImage: maskImage,
+          maskImage,
+          WebkitMaskRepeat: 'no-repeat',
+          maskRepeat: 'no-repeat',
+        }}
+      >
+        {columns.map((col, i) => (
+          <div
+            key={i}
+            className="rain-col"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: `${col.left}%`,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+              whiteSpace: 'nowrap',
+              fontFamily: '"JetBrains Mono", ui-monospace, monospace',
+              fontSize: '12px',
+              fontWeight: 500,
+              lineHeight: 1.85,
+              letterSpacing: '0.01em',
+              userSelect: 'none',
+              willChange: 'transform',
+              animation: reduce ? 'none' : `${col.up ? 'rain-up' : 'rain-down'} ${col.dur}s linear infinite`,
+              animationDelay: `${col.delay}s`,
+            }}
+          >
+            {[...col.lines, ...col.lines].map((line, j) => {
+              const t = tintFor(line);
+              const hi = t === 'steel' || t === 'amber';
+              const tw = twinkle(i, j);
+              return (
+                <span
+                  key={j}
+                  className={hi ? 'rain-tw-hi' : 'rain-tw'}
+                  style={{
+                    color: TINT_COLOR[t],
+                    willChange: 'opacity',
+                    animationDuration: reduce ? undefined : `${tw.dur}s`,
+                    animationDelay: reduce ? undefined : `${tw.delay}s`,
+                    animationTimingFunction: 'ease-in-out',
+                    animationIterationCount: 'infinite',
+                    opacity: reduce ? (hi ? 0.4 : 0.28) : undefined,
+                  }}
+                >
+                  {line}
+                </span>
+              );
+            })}
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
