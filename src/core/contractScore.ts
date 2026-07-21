@@ -143,136 +143,174 @@ function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));
 }
 
-export function weighContracts(snapshot: MarketSnapshot, horizon: Horizon): WeighedContract[] {
+/** Which sleeve a given DTE belongs to — drives weights when weighing a
+    single searched contract (0-1d = lotto, ≤10d = weeklies, ≤90d = swings). */
+export function horizonForDte(dte: number): Horizon {
+  return dte <= 1 ? 'LOTTO' : dte <= 10 ? 'WEEKLIES' : dte <= 90 ? 'SWINGS' : 'LEAPS';
+}
+
+/** Shared per-name context — one read per build, reused across every candidate. */
+interface ScoreCtx {
+  dp: ReturnType<typeof buildDarkPoolView>;
+  news: number;
+  ivRank: number;
+  baseIv: number;
+  trendUp: boolean;
+  rsi: number;
+  step: number;
+}
+
+function buildScoreCtx(snapshot: MarketSnapshot): ScoreCtx {
   const { ticker, spot, chain, indicators } = snapshot;
   const day = dayKey();
-  const shape = HORIZON_SHAPE[horizon];
-  const weights = WEIGHTS[horizon];
-
-  // Shared context — one read per build, applied to every candidate
   const dp = buildDarkPoolView(snapshot);
   const news = tickerSentiment(ticker);
   const ivRank = Math.round(hRange(`${ticker}-${day}-ivr`, 12, 92));
   const baseIv = Math.max(0.12, chain.length > 0 ? 0.18 + (indicators.squeeze ? -0.03 : 0.02) + hRange(`${ticker}-${day}-iv`, 0, 0.25) : 0.25);
   const trendUp = indicators.ema9 >= indicators.ema21;
   const rsi = indicators.rsi;
-
-  const out: WeighedContract[] = [];
-
   // Strike increment from the chain grid — candidates stay on listed strikes
   // even past the chain window's edge (LEAPS reach further OTM than it holds).
   const sorted = [...chain].sort((a, b) => a.strike - b.strike);
   const step = sorted.length > 1 ? Math.abs(sorted[1].strike - sorted[0].strike) : Math.max(spot * 0.005, 0.5);
+  return { dp, news, ivRank, baseIv, trendUp, rsi, step };
+}
+
+/** Weigh one concrete contract with the full factor stack. This is the single
+    scoring path both the setups scan and the searched-contract weigher run — so
+    a contract you type in is graded on the exact same math as the top picks. */
+function scoreCandidate(
+  snapshot: MarketSnapshot,
+  ctx: ScoreCtx,
+  horizon: Horizon,
+  right: 'C' | 'P',
+  strikeInput: number,
+  dte: number
+): WeighedContract {
+  const { ticker, spot, chain } = snapshot;
+  const weights = WEIGHTS[horizon];
+  const { dp, news, ivRank, baseIv, trendUp, rsi, step } = ctx;
+
+  const strike = Math.max(step, Math.round(strikeInput / step) * step);
+  const node = chain.reduce(
+    (best, n) => (Math.abs(n.strike - strike) < Math.abs(best.strike - strike) ? n : best),
+    chain[0]
+  );
+  const moneyness = (strike - spot) / spot;
+
+  // Skew: wings pay up
+  const iv = baseIv * (1 + Math.abs(moneyness) * 1.6);
+  const bs = blackScholes(spot, strike, iv, dte, right);
+  const mid = Number(bs.price.toFixed(2));
+  const thetaPerDayPct = (Math.abs(bs.thetaDay) / mid) * 100;
+  // OI thins out the further the strike sits past the chain window
+  const baseOi = node ? (right === 'C' ? node.callOI : node.putOI) : 500;
+  const oiCount = Math.max(50, Math.round(baseOi * Math.exp((-Math.abs(strike - (node?.strike ?? strike)) / spot) * 24)));
+  const spreadPct = clamp(6 - Math.log10(Math.max(oiCount, 10)) * 1.4, 0.4, 6) * (dte > 180 ? 1.5 : 1);
+
+  // Effective time floors at half a day so 0DTE still carries a real 1σ move
+  const tYears = Math.max(dte, 0.5) / 365;
+  const expectedMovePct = iv * Math.sqrt(tYears) * 100;
+  const beMove = right === 'C' ? (strike + mid) / spot - 1 : 1 - (strike - mid) / spot;
+  const breakevenMovePct = beMove * 100;
+
+  // ---- factor scores ------------------------------------------------------
+  const coverage = expectedMovePct / Math.max(breakevenMovePct, 0.05);
+  const mathScore = Math.round(clamp(coverage * 62, 4, 98));
+  const mathDetail =
+    coverage >= 1
+      ? `1σ move (${expectedMovePct.toFixed(1)}%) clears the ${breakevenMovePct.toFixed(1)}% breakeven — the math works without a miracle.`
+      : `Needs ${breakevenMovePct.toFixed(1)}% by expiry but 1σ is only ${expectedMovePct.toFixed(1)}% — you're paying for a tail.`;
+
+  const decayCeiling = DECAY_CEILING[horizon];
+  const decayScore = Math.round(clamp(100 - (thetaPerDayPct / decayCeiling) * 100, 2, 98));
+  const decayDetail =
+    decayScore >= 55
+      ? `Theta ${thetaPerDayPct.toFixed(1)}%/day is carryable for the holding window.`
+      : `Theta ${thetaPerDayPct.toFixed(1)}%/day — the clock beats you unless the move comes fast.`;
+
+  const volScore = Math.round(clamp(100 - ivRank + (horizon === 'LEAPS' ? 0 : 18), 4, 96));
+  const volDetail =
+    ivRank >= 65
+      ? `IV rank ${ivRank} — premium is expensive; vol crush works against longs.`
+      : `IV rank ${ivRank} — you're not overpaying for volatility here.`;
+
+  const dirSign = right === 'C' ? 1 : -1;
+  const flowAlign = dp.netPosturePct * dirSign;
+  const tapeAlign = (trendUp ? 1 : -1) * dirSign;
+  const flowScore = Math.round(clamp(50 + flowAlign * 0.45 + tapeAlign * 12, 4, 96));
+  const flowDetail =
+    flowScore >= 60
+      ? `Dark pool ${dp.posture.toLowerCase()} and the tape lean the same way as this contract.`
+      : flowScore <= 40
+        ? `Smart-money flow leans against ${right === 'C' ? 'calls' : 'puts'} here — you'd be fading the desks.`
+        : 'Flow is mixed — no institutional wind either way.';
+
+  const newsScore = Math.round(clamp(50 + news * 48 * dirSign, 4, 96));
+  const newsDetail =
+    Math.abs(news) < 0.12
+      ? 'Quiet tape on the name — news is a non-factor.'
+      : newsScore >= 55
+        ? 'The headline tape supports the direction.'
+        : 'Headline risk points the other way.';
+
+  const liqScore = Math.round(clamp(100 - spreadPct * 13 + Math.log10(Math.max(oiCount, 10)) * 6, 4, 98));
+  const liqDetail =
+    liqScore >= 55
+      ? `${spreadPct.toFixed(1)}% spread on ${oiCount.toLocaleString()} OI — in and out without paying a toll.`
+      : `${spreadPct.toFixed(1)}% spread — the market maker wins twice on this one.`;
+
+  // RSI sanity nudges the math sleeve at extremes (chasing into 80 RSI weeklies etc.)
+  const rsiPenalty = (right === 'C' && rsi > 74) || (right === 'P' && rsi < 26) ? 8 : 0;
+
+  const factors: FactorScore[] = [
+    { key: 'math', label: 'The math', score: Math.max(2, mathScore - rsiPenalty), weight: weights.math, detail: mathDetail },
+    { key: 'decay', label: 'Theta burden', score: decayScore, weight: weights.decay, detail: decayDetail },
+    { key: 'vol', label: 'Vol pricing', score: volScore, weight: weights.vol, detail: volDetail },
+    { key: 'flow', label: 'Flow & dark pool', score: flowScore, weight: weights.flow, detail: flowDetail },
+    { key: 'news', label: 'News lean', score: newsScore, weight: weights.news, detail: newsDetail },
+    { key: 'liq', label: 'Liquidity', score: liqScore, weight: weights.liq, detail: liqDetail },
+  ];
+
+  const composite = Math.round(factors.reduce((a, f) => a + f.score * f.weight, 0));
+  const verdict: ContractVerdict = composite >= 70 ? 'BUY' : composite >= 52 ? 'WATCH' : 'FADE';
+  const ranked = [...factors].sort((a, b) => b.score - a.score);
+
+  return {
+    id: `${ticker}-${right}-${strike}-${dte}`,
+    ticker,
+    right,
+    strike,
+    dte,
+    expiryLabel: expiryLabel(dte),
+    mid,
+    delta: Number(bs.delta.toFixed(2)),
+    ivPct: Number((iv * 100).toFixed(1)),
+    ivRank,
+    thetaPerDayPct: Number(thetaPerDayPct.toFixed(2)),
+    spreadPct: Number(spreadPct.toFixed(1)),
+    oi: oiCount,
+    breakevenMovePct: Number(breakevenMovePct.toFixed(2)),
+    expectedMovePct: Number(expectedMovePct.toFixed(2)),
+    factors,
+    composite,
+    verdict,
+    edge: ranked[0].detail,
+    risk: ranked[ranked.length - 1].detail,
+  };
+}
+
+export function weighContracts(snapshot: MarketSnapshot, horizon: Horizon): WeighedContract[] {
+  const { spot } = snapshot;
+  const shape = HORIZON_SHAPE[horizon];
+  const ctx = buildScoreCtx(snapshot);
+  const out: WeighedContract[] = [];
 
   (['C', 'P'] as const).forEach(right => {
     shape.otm.forEach((otm, oi) => {
       const dte = shape.dtes[(oi + (right === 'P' ? 1 : 0)) % shape.dtes.length];
       const rawStrike = right === 'C' ? spot * (1 + otm) : spot * (1 - otm);
-      const strike = Math.round(rawStrike / step) * step;
-      const node = chain.reduce(
-        (best, n) => (Math.abs(n.strike - strike) < Math.abs(best.strike - strike) ? n : best),
-        chain[0]
-      );
-      const moneyness = (strike - spot) / spot;
-
-      // Skew: wings pay up
-      const iv = baseIv * (1 + Math.abs(moneyness) * 1.6);
-      const bs = blackScholes(spot, strike, iv, dte, right);
-      const mid = Number(bs.price.toFixed(2));
-      const thetaPerDayPct = Math.abs(bs.thetaDay) / mid * 100;
-      // OI thins out the further the strike sits past the chain window
-      const baseOi = node ? (right === 'C' ? node.callOI : node.putOI) : 500;
-      const oiCount = Math.max(50, Math.round(baseOi * Math.exp((-Math.abs(strike - (node?.strike ?? strike)) / spot) * 24)));
-      const spreadPct = clamp(6 - Math.log10(Math.max(oiCount, 10)) * 1.4, 0.4, 6) * (dte > 180 ? 1.5 : 1);
-
-      const expectedMovePct = iv * Math.sqrt(dte / 365) * 100;
-      const beMove = right === 'C' ? (strike + mid) / spot - 1 : 1 - (strike - mid) / spot;
-      const breakevenMovePct = beMove * 100;
-
-      // ---- factor scores ------------------------------------------------------
-      const coverage = expectedMovePct / Math.max(breakevenMovePct, 0.05);
-      const mathScore = Math.round(clamp(coverage * 62, 4, 98));
-      const mathDetail =
-        coverage >= 1
-          ? `1σ move (${expectedMovePct.toFixed(1)}%) clears the ${breakevenMovePct.toFixed(1)}% breakeven — the math works without a miracle.`
-          : `Needs ${breakevenMovePct.toFixed(1)}% by expiry but 1σ is only ${expectedMovePct.toFixed(1)}% — you're paying for a tail.`;
-
-      const decayCeiling = DECAY_CEILING[horizon];
-      const decayScore = Math.round(clamp(100 - (thetaPerDayPct / decayCeiling) * 100, 2, 98));
-      const decayDetail =
-        decayScore >= 55
-          ? `Theta ${thetaPerDayPct.toFixed(1)}%/day is carryable for the holding window.`
-          : `Theta ${thetaPerDayPct.toFixed(1)}%/day — the clock beats you unless the move comes fast.`;
-
-      const volScore = Math.round(clamp(100 - ivRank + (horizon === 'LEAPS' ? 0 : 18), 4, 96));
-      const volDetail =
-        ivRank >= 65
-          ? `IV rank ${ivRank} — premium is expensive; vol crush works against longs.`
-          : `IV rank ${ivRank} — you're not overpaying for volatility here.`;
-
-      const dirSign = right === 'C' ? 1 : -1;
-      const flowAlign = dp.netPosturePct * dirSign;
-      const tapeAlign = (trendUp ? 1 : -1) * dirSign;
-      const flowScore = Math.round(clamp(50 + flowAlign * 0.45 + tapeAlign * 12, 4, 96));
-      const flowDetail =
-        flowScore >= 60
-          ? `Dark pool ${dp.posture.toLowerCase()} and the tape lean the same way as this contract.`
-          : flowScore <= 40
-            ? `Smart-money flow leans against ${right === 'C' ? 'calls' : 'puts'} here — you'd be fading the desks.`
-            : 'Flow is mixed — no institutional wind either way.';
-
-      const newsScore = Math.round(clamp(50 + news * 48 * dirSign, 4, 96));
-      const newsDetail =
-        Math.abs(news) < 0.12
-          ? 'Quiet tape on the name — news is a non-factor.'
-          : newsScore >= 55
-            ? 'The headline tape supports the direction.'
-            : 'Headline risk points the other way.';
-
-      const liqScore = Math.round(clamp(100 - spreadPct * 13 + Math.log10(Math.max(oiCount, 10)) * 6, 4, 98));
-      const liqDetail =
-        liqScore >= 55
-          ? `${spreadPct.toFixed(1)}% spread on ${oiCount.toLocaleString()} OI — in and out without paying a toll.`
-          : `${spreadPct.toFixed(1)}% spread — the market maker wins twice on this one.`;
-
-      // RSI sanity nudges the math sleeve at extremes (chasing into 80 RSI weeklies etc.)
-      const rsiPenalty = (right === 'C' && rsi > 74) || (right === 'P' && rsi < 26) ? 8 : 0;
-
-      const factors: FactorScore[] = [
-        { key: 'math', label: 'The math', score: Math.max(2, mathScore - rsiPenalty), weight: weights.math, detail: mathDetail },
-        { key: 'decay', label: 'Theta burden', score: decayScore, weight: weights.decay, detail: decayDetail },
-        { key: 'vol', label: 'Vol pricing', score: volScore, weight: weights.vol, detail: volDetail },
-        { key: 'flow', label: 'Flow & dark pool', score: flowScore, weight: weights.flow, detail: flowDetail },
-        { key: 'news', label: 'News lean', score: newsScore, weight: weights.news, detail: newsDetail },
-        { key: 'liq', label: 'Liquidity', score: liqScore, weight: weights.liq, detail: liqDetail },
-      ];
-
-      const composite = Math.round(factors.reduce((a, f) => a + f.score * f.weight, 0));
-      const verdict: ContractVerdict = composite >= 70 ? 'BUY' : composite >= 52 ? 'WATCH' : 'FADE';
-      const ranked = [...factors].sort((a, b) => b.score - a.score);
-
-      out.push({
-        id: `${ticker}-${right}-${strike}-${dte}`,
-        ticker,
-        right,
-        strike,
-        dte,
-        expiryLabel: expiryLabel(dte),
-        mid,
-        delta: Number(bs.delta.toFixed(2)),
-        ivPct: Number((iv * 100).toFixed(1)),
-        ivRank,
-        thetaPerDayPct: Number(thetaPerDayPct.toFixed(2)),
-        spreadPct: Number(spreadPct.toFixed(1)),
-        oi: oiCount,
-        breakevenMovePct: Number(breakevenMovePct.toFixed(2)),
-        expectedMovePct: Number(expectedMovePct.toFixed(2)),
-        factors,
-        composite,
-        verdict,
-        edge: ranked[0].detail,
-        risk: ranked[ranked.length - 1].detail,
-      });
+      out.push(scoreCandidate(snapshot, ctx, horizon, right, rawStrike, dte));
     });
   });
 
@@ -281,4 +319,35 @@ export function weighContracts(snapshot: MarketSnapshot, horizon: Horizon): Weig
   return out
     .filter(c => (seen.has(c.id) ? false : (seen.add(c.id), true)))
     .sort((a, b) => b.composite - a.composite);
+}
+
+/** Weigh a single contract the user searched — same engine as the setups scan. */
+export function weighContract(
+  snapshot: MarketSnapshot,
+  right: 'C' | 'P',
+  strike: number,
+  dte: number
+): WeighedContract {
+  const ctx = buildScoreCtx(snapshot);
+  return scoreCandidate(snapshot, ctx, horizonForDte(dte), right, strike, dte);
+}
+
+/**
+ * Given a weighed contract, scan its sleeve for the best same-direction
+ * alternative and return it when it clears the searched one on both score and
+ * reward-to-risk (1σ ÷ breakeven). Null when nothing beats what they've got.
+ */
+export function betterAlternative(
+  snapshot: MarketSnapshot,
+  target: WeighedContract
+): WeighedContract | null {
+  const horizon = horizonForDte(target.dte);
+  const rr = (c: WeighedContract) => c.expectedMovePct / Math.max(c.breakevenMovePct, 0.05);
+  const targetRr = rr(target);
+  const candidate = weighContracts(snapshot, horizon)
+    .filter(c => c.right === target.right && c.id !== target.id)
+    .sort((a, b) => b.composite - a.composite)[0];
+  if (!candidate) return null;
+  const better = candidate.composite >= target.composite + 5 && rr(candidate) >= targetRr;
+  return better ? candidate : null;
 }

@@ -5,8 +5,6 @@ import Simulator from '../../core/simulator';
 import { modelScoreboard, runMonteCarlo } from '../../core/quant';
 import PageHeader from '../../components/ui/PageHeader';
 import TickerSearch from '../../components/ui/TickerSearch';
-import StatRibbon from '../../components/ui/StatRibbon';
-import { deriveMarketKpis } from '../../data/kpis';
 import Panel from '../../components/ui/Panel';
 import StatCard from '../../components/ui/StatCard';
 import MetricGrid from '../../components/ui/MetricGrid';
@@ -60,7 +58,6 @@ const ProveIt = () => {
         breadcrumb={['Terminal', 'Prove It']}
         title="Prove It"
         subtitle="Quantitative modeling & predictive analytics — the receipts behind every call"
-        ribbon={<StatRibbon stats={deriveMarketKpis(marketData)} />}
         actions={
           <span className="inline-flex items-center gap-2">
             <SegmentedControl

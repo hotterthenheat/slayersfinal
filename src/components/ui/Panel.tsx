@@ -16,17 +16,8 @@ interface PanelProps {
   children: React.ReactNode;
 }
 
-// Eyebrow tick + hairline color per tone. Tone reads through the leading mark
-// and a whisper of header tint — never a muddy full-surface wash.
-const toneEyebrow: Record<Tone, string> = {
-  bull: 'bg-bull',
-  bear: 'bg-bear',
-  warn: 'bg-warn',
-  select: 'bg-select',
-  magenta: 'bg-[#EA00FF]',
-  neutral: '',
-};
-
+// Tone reads through a whisper of header tint + the divider — never a muddy
+// full-surface wash and never a decorative color bar.
 const toneHeaderTint: Record<Tone, string> = {
   bull: 'bg-bull/[0.05]',
   bear: 'bg-bear/[0.05]',
@@ -66,25 +57,17 @@ const Panel = ({
         <header
           className={`relative flex items-center justify-between gap-3 px-3.5 h-10 border-b ${toneDivider[tone]} ${toneHeaderTint[tone]} shrink-0`}
         >
-          <div className="flex items-center gap-2 min-w-0">
-            {/* Leading eyebrow tick — the signature detail. Holo on the hero
-                surface, tone-colored on a status panel, dim otherwise. */}
-            <span
-              className={`inst-eyebrow ${emphasis ? 'holo-bar' : toneEyebrow[tone] || 'bg-borderMuted'}`}
-              aria-hidden
-            />
-            <div className="flex items-baseline gap-2 min-w-0">
-              {title && (
-                <h3 className="font-mono text-[11px] font-semibold uppercase tracking-widest text-textPrimary truncate">
-                  {title}
-                </h3>
-              )}
-              {subtitle && (
-                <span className="font-mono text-[10px] text-textSecondary uppercase tracking-wider truncate">
-                  {subtitle}
-                </span>
-              )}
-            </div>
+          <div className="flex items-baseline gap-2 min-w-0">
+            {title && (
+              <h3 className="font-mono text-[11px] font-semibold uppercase tracking-widest text-textPrimary truncate">
+                {title}
+              </h3>
+            )}
+            {subtitle && (
+              <span className="font-mono text-[10px] text-textSecondary uppercase tracking-wider truncate">
+                {subtitle}
+              </span>
+            )}
           </div>
           {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
         </header>
