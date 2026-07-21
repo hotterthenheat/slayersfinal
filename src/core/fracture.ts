@@ -228,8 +228,8 @@ function buildDecomposition(snapshot: MarketSnapshot, p: EngineParams, seed: (t:
   return out;
 }
 
-function buildMoc(snapshot: MarketSnapshot, p: EngineParams, seed: (t: string) => number): MocRead {
-  const expectedLiq = p.G * hRange(`${snapshot.ticker}-moc-liq`, 0.4, 0.9);
+function buildMoc(snapshot: MarketSnapshot, G: number, seed: (t: string) => number): MocRead {
+  const expectedLiq = G * hRange(`${snapshot.ticker}-moc-liq`, 0.4, 0.9);
   const biasDir = snapshot.changePercent + (seed('bias') - 0.5) * 1.6 >= 0 ? 1 : -1;
   const imbalanceUsd = biasDir * expectedLiq * hRange(`${snapshot.ticker}-moc-imb`, 0.3, 1.7);
   const normalizedZ = imbalanceUsd / Math.max(expectedLiq, 1);
@@ -286,6 +286,19 @@ function buildMoc(snapshot: MarketSnapshot, p: EngineParams, seed: (t: string) =
     classification,
     note,
   };
+}
+
+/**
+ * Closing-auction (MOC) read on its own — the Lotto desk's centerpiece.
+ * Same model as the Fracture engine uses, but standalone so a page can price
+ * the close without paying for the whole forced-flow ladder + cascade sim.
+ */
+export function buildMocRead(snapshot: MarketSnapshot): MocRead {
+  const { ticker, chain, spot } = snapshot;
+  const day = dayKey();
+  const seed = (t: string) => h01(`${ticker}-${day}-frac-${t}`);
+  const G = chain.reduce((a, n) => a + Math.abs(n.netGex), 0) || spot * 1e6;
+  return buildMoc(snapshot, G, seed);
 }
 
 export function buildFractureView(snapshot: MarketSnapshot): FractureView {
@@ -395,7 +408,7 @@ export function buildFractureView(snapshot: MarketSnapshot): FractureView {
   const cascade = buildCascade(spot, trigger, params, `${ticker}-${day}-casc`);
 
   const decomposition = buildDecomposition(snapshot, params, seed);
-  const moc = buildMoc(snapshot, params, seed);
+  const moc = buildMoc(snapshot, params.G, seed);
 
   // ---- instability composite ----
   // Driven by cascade odds, self-excitation, and how close the fracture line sits

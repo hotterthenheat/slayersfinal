@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Zap, GitBranch, Layers, Gavel } from 'lucide-react';
+import { Zap, GitBranch, Layers } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildFractureView } from '../../core/fracture';
 import { deriveMarketKpis } from '../../data/kpis';
@@ -150,9 +150,6 @@ const Fracture = () => {
   const headTone: Tone = view.fractureSide === 'DOWN' ? 'bear' : view.fractureSide === 'UP' ? 'bull' : 'neutral';
   const crit = view.criticality;
   const critTone: Tone = crit.label === 'UNSTABLE' ? 'bear' : crit.label === 'CRITICAL' ? 'warn' : crit.label === 'REACTIVE' ? 'select' : 'bull';
-  const moc = view.moc;
-  const mocTone: Tone =
-    moc.classification === 'CONTINUATION' ? (moc.side === 'BUY' ? 'bull' : 'bear') : moc.classification === 'ABSORPTION FADE' ? 'warn' : moc.classification === 'DISLOCATION REVERSAL' ? 'magenta' : 'neutral';
 
   // spot sits between the below/above halves of the ladder
   const aboveCount = view.levels.filter(l => l.distPct > 0).length;
@@ -175,7 +172,7 @@ const Fracture = () => {
       </MetricGrid>
 
       {/* Headline read */}
-      <Panel tone={headTone} bodyClassName="py-3.5" className="holo-glow">
+      <Panel tone={headTone} bodyClassName="py-3.5" emphasis>
         <p className="text-[15px] text-textPrimary leading-relaxed">
           <span className={`font-mono text-[10px] font-semibold uppercase tracking-widest mr-2.5 ${headTone === 'bear' ? 'text-bear' : headTone === 'bull' ? 'text-bull' : 'text-textSecondary'}`}>
             The read
@@ -256,7 +253,7 @@ const Fracture = () => {
         </Panel>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
+      <div className="grid grid-cols-1 gap-4 items-start">
         {/* Criticality + move decomposition */}
         <Panel
           title={
@@ -265,7 +262,6 @@ const Fracture = () => {
             </span>
           }
           subtitle="is the market reacting to news, or to itself?"
-          className="xl:col-span-6"
           tone={critTone}
         >
           <div className="flex flex-col gap-4">
@@ -309,48 +305,6 @@ const Fracture = () => {
                   : 'Information leads — the move has a fundamental driver and is more likely to persist.'}
               </p>
             </div>
-          </div>
-        </Panel>
-
-        {/* MOC / closing auction */}
-        <Panel
-          title={
-            <span className="inline-flex items-center gap-1.5">
-              <Gavel className="w-3.5 h-3.5" /> Closing auction (MOC)
-            </span>
-          }
-          subtitle="the day's biggest scheduled forced-flow event"
-          className="xl:col-span-6"
-          tone={mocTone}
-        >
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-3">
-              <span className={`font-mono text-3xl font-bold tnum ${moc.score >= 0 ? 'text-bull' : 'text-bear'}`}>
-                {moc.score >= 0 ? '+' : ''}
-                {moc.score}
-              </span>
-              <SignalBadge tone={mocTone}>{moc.classification}</SignalBadge>
-              <span className="ml-auto font-mono text-[11px] text-textMuted">
-                {moc.side} {fmtUsd(Math.abs(moc.imbalanceUsd))}
-              </span>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {[
-                { k: 'Norm. imbal', v: `${moc.normalizedZ >= 0 ? '+' : ''}${moc.normalizedZ.toFixed(2)}σ` },
-                { k: 'Displacement', v: `${moc.displacementZ >= 0 ? '+' : ''}${moc.displacementZ.toFixed(2)}σ` },
-                { k: 'Absorbed', v: `${moc.absorptionPct}%` },
-                { k: 'Reversal risk', v: `${moc.reversalRisk}%` },
-              ].map(x => (
-                <div key={x.k} className="border border-borderSubtle bg-inset rounded-md px-2.5 py-2">
-                  <div className="font-mono text-[9px] uppercase tracking-widest text-textMuted">{x.k}</div>
-                  <div className="mt-1 font-mono text-sm font-semibold text-textPrimary tnum">{x.v}</div>
-                </div>
-              ))}
-            </div>
-            <p className="text-xs text-textSecondary leading-relaxed">{moc.note}</p>
-            <p className="font-mono text-[10px] text-textMuted leading-relaxed border-t border-borderSubtle pt-2.5">
-              Trade the imbalance change, not the 3:50 headline — read growth, indicative displacement and absorption in the 3:53–3:57 window.
-            </p>
           </div>
         </Panel>
       </div>

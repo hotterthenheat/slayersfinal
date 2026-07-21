@@ -15,7 +15,7 @@ import { buildDarkPoolView } from '../data/darkpool';
 import { tickerSentiment } from '../data/news';
 import type { MarketSnapshot } from '../types/market';
 
-export type Horizon = 'WEEKLIES' | 'SWINGS' | 'LEAPS';
+export type Horizon = 'LOTTO' | 'WEEKLIES' | 'SWINGS' | 'LEAPS';
 
 export interface FactorScore {
   key: string;
@@ -115,17 +115,24 @@ function blackScholes(spot: number, strike: number, ivAnnual: number, dte: numbe
 // ---- candidate generation --------------------------------------------------------
 
 const HORIZON_SHAPE: Record<Horizon, { dtes: number[]; otm: number[] }> = {
-  // % OTM offsets per horizon — weeklies hug spot, LEAPS reach for cheap deltas
+  // % OTM offsets per horizon — lottos hug spot on 0–1 DTE, LEAPS reach for cheap deltas
+  LOTTO: { dtes: [0, 1], otm: [0, 0.003, 0.006, 0.011] },
   WEEKLIES: { dtes: [2, 5, 7], otm: [0, 0.01, 0.02, 0.035] },
   SWINGS: { dtes: [21, 30, 45], otm: [0, 0.02, 0.045, 0.07] },
   LEAPS: { dtes: [365, 480], otm: [0, 0.05, 0.1, 0.18] },
 };
 
 const WEIGHTS: Record<Horizon, Record<string, number>> = {
+  // 0DTE: the math is a coin-flip, so the tape (flow) and decay/liquidity carry the vote
+  LOTTO: { math: 0.16, decay: 0.24, vol: 0.1, flow: 0.28, news: 0.06, liq: 0.16 },
   WEEKLIES: { math: 0.24, decay: 0.26, vol: 0.08, flow: 0.22, news: 0.08, liq: 0.12 },
   SWINGS: { math: 0.22, decay: 0.14, vol: 0.14, flow: 0.2, news: 0.16, liq: 0.14 },
   LEAPS: { math: 0.18, decay: 0.04, vol: 0.28, flow: 0.12, news: 0.22, liq: 0.16 },
 };
+
+// Theta scored against a horizon-realistic ceiling — 0DTE burns a huge % of
+// premium per day, so it needs its own scale or every lotto reads as a zero.
+const DECAY_CEILING: Record<Horizon, number> = { LOTTO: 60, WEEKLIES: 9, SWINGS: 3.5, LEAPS: 0.8 };
 
 function expiryLabel(dte: number): string {
   const d = new Date(Date.now() + dte * 86400000);
@@ -190,7 +197,7 @@ export function weighContracts(snapshot: MarketSnapshot, horizon: Horizon): Weig
           ? `1σ move (${expectedMovePct.toFixed(1)}%) clears the ${breakevenMovePct.toFixed(1)}% breakeven — the math works without a miracle.`
           : `Needs ${breakevenMovePct.toFixed(1)}% by expiry but 1σ is only ${expectedMovePct.toFixed(1)}% — you're paying for a tail.`;
 
-      const decayCeiling = horizon === 'WEEKLIES' ? 9 : horizon === 'SWINGS' ? 3.5 : 0.8;
+      const decayCeiling = DECAY_CEILING[horizon];
       const decayScore = Math.round(clamp(100 - (thetaPerDayPct / decayCeiling) * 100, 2, 98));
       const decayDetail =
         decayScore >= 55
