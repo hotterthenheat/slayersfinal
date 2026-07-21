@@ -2,11 +2,7 @@ import { useMemo } from 'react';
 import { Zap, GitBranch, Layers } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildFractureView } from '../../core/fracture';
-import { deriveMarketKpis } from '../../data/kpis';
 import { SPOT } from '../../components/gex/palette';
-import PageHeader from '../../components/ui/PageHeader';
-import TickerSearch from '../../components/ui/TickerSearch';
-import StatRibbon from '../../components/ui/StatRibbon';
 import Panel from '../../components/ui/Panel';
 import StatCard from '../../components/ui/StatCard';
 import MetricGrid from '../../components/ui/MetricGrid';
@@ -121,27 +117,14 @@ const CascadeFan = ({ paths, spot, trigger }: { paths: number[][]; spot: number;
 };
 
 const Fracture = () => {
-  const { activeTicker, marketData, changeTicker } = useMarketData();
+  const { marketData } = useMarketData();
   const view = useMemo(() => (marketData ? buildFractureView(marketData) : null), [marketData]);
-
-  const header = (
-    <PageHeader
-      breadcrumb={['Terminal', 'Fracture']}
-      title="Fracture"
-      subtitle="Where forced flow exceeds available liquidity and the market goes nonlinear — before it shows in price"
-      ribbon={marketData ? <StatRibbon stats={deriveMarketKpis(marketData)} /> : undefined}
-      actions={<TickerSearch value={activeTicker} onChange={changeTicker} />}
-    />
-  );
 
   if (!view || !marketData) {
     return (
-      <>
-        {header}
-        <Panel className="h-64" bodyClassName="flex items-center justify-center">
-          <span className="font-mono text-[11px] text-textMuted uppercase tracking-widest">Modeling forced flow…</span>
-        </Panel>
-      </>
+      <Panel className="h-64" bodyClassName="flex items-center justify-center">
+        <span className="font-mono text-[11px] text-textMuted uppercase tracking-widest">Modeling forced flow…</span>
+      </Panel>
     );
   }
 
@@ -156,8 +139,6 @@ const Fracture = () => {
 
   return (
     <>
-      {header}
-
       <MetricGrid min="170px">
         <StatCard
           label="Fracture line"

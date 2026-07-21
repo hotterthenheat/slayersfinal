@@ -1,4 +1,4 @@
-import { Map, Target, Waves, Grid3x3, Gauge, FlaskConical, History, type LucideIcon } from 'lucide-react';
+import { Map, Target, Waves, Grid3x3, Gauge, Zap, FlaskConical, History, type LucideIcon } from 'lucide-react';
 
 /** Pinpoint subpage registry — drives the sub-tab bar and command palette. */
 export interface GexSubpage {
@@ -38,6 +38,12 @@ export const GEX_SUBPAGES: GexSubpage[] = [
     label: 'Hedge Impact',
     subtitle: 'HEX — dealer hedge vs available liquidity, hedge-flow forecast & the failure boundary',
     icon: Gauge,
+  },
+  {
+    path: '/pinpoint/fracture',
+    label: 'Fracture',
+    subtitle: 'Where forced flow exceeds liquidity — instability, cascades & the fracture line',
+    icon: Zap,
   },
   {
     path: '/pinpoint/vol-lab',
