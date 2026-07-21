@@ -15,11 +15,13 @@ import VannaCharm from './pages/gex/VannaCharm';
 import VolLab from './pages/gex/VolLab';
 import GreeksRegime from './pages/gex/GreeksRegime';
 import HedgeImpact from './pages/gex/HedgeImpact';
+import StatePriceDensity from './components/gex/StatePriceDensity';
 import GexHistory from './pages/gex/GexHistory';
 import FlowDeskLayout from './pages/flowdesk/FlowDeskLayout';
 import LiveTape from './pages/flowdesk/LiveTape';
 import FlowScanner from './pages/flowdesk/FlowScanner';
 import FlowTracker from './pages/flowdesk/FlowTracker';
+import MetaorderReconstruction from './components/flowdesk/MetaorderReconstruction';
 import DarkPool from './pages/flowdesk/DarkPool';
 import Stocks from './pages/Stocks';
 import News from './pages/News';
@@ -70,6 +72,7 @@ const App = () => {
               <Route path="hedge-impact" element={<HedgeImpact />} />
               <Route path="fracture" element={<Fracture />} />
               <Route path="vol-lab" element={<VolLab />} />
+              <Route path="state-density" element={<StatePriceDensity />} />
               <Route path="history" element={<GexHistory />} />
             </Route>
             <Route path="/trace" element={<FlowDeskLayout />}>
@@ -78,6 +81,7 @@ const App = () => {
               <Route path="dark-pool" element={<DarkPool />} />
               <Route path="dark-feed" element={<Navigate to="/trace/dark-pool" replace />} />
               <Route path="scanner" element={<FlowScanner />} />
+              <Route path="reconstruction" element={<MetaorderReconstruction />} />
               <Route path="tracker" element={<FlowTracker />} />
             </Route>
             <Route path="/liquidity" element={<Navigate to="/trace" replace />} />

@@ -11,6 +11,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bookmark, Trash2, ArrowUpRight, Compass, Scale, Radar, CalendarClock } from 'lucide-react';
 import { useTracker } from '../context/TrackerContext';
+import EdgeLedger from '../components/tracker/EdgeLedger';
 import { useMarketData } from '../context/MarketDataContext';
 import Simulator from '../core/simulator';
 import { makeSetup } from '../data/skyvision';
@@ -362,6 +363,8 @@ const Tracker = () => {
           />
         </Panel>
       )}
+
+      <EdgeLedger />
     </>
   );
 };

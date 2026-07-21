@@ -1,4 +1,4 @@
-import { Map, Target, Waves, Grid3x3, Gauge, Zap, FlaskConical, History, type LucideIcon } from 'lucide-react';
+import { Map, Target, Waves, Grid3x3, Gauge, Zap, FlaskConical, AreaChart, History, type LucideIcon } from 'lucide-react';
 
 /** Pinpoint subpage registry — drives the sub-tab bar and command palette. */
 export interface GexSubpage {
@@ -50,6 +50,12 @@ export const GEX_SUBPAGES: GexSubpage[] = [
     label: 'Volatility Lab',
     subtitle: 'IV surface, term structure, implied odds & volatility state',
     icon: FlaskConical,
+  },
+  {
+    path: '/pinpoint/state-density',
+    label: 'State Density',
+    subtitle: 'Risk-neutral price density, probability-mass flow, skew stress & variance premium',
+    icon: AreaChart,
   },
   {
     path: '/pinpoint/history',

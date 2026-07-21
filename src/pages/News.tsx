@@ -9,6 +9,7 @@ import MetricGrid from '../components/ui/MetricGrid';
 import SignalBadge from '../components/ui/SignalBadge';
 import SegmentedControl from '../components/ui/SegmentedControl';
 import { buildNewsFeed, marketMood, type NewsCategory, type NewsItem } from '../data/news';
+import NewsIntel from '../components/news/NewsIntel';
 import type { Tone } from '../components/ui/tones';
 
 type CatFilter = 'ALL' | NewsCategory;
@@ -231,6 +232,8 @@ const News = () => {
           </Panel>
         )}
       </div>
+
+      <NewsIntel />
     </>
   );
 };

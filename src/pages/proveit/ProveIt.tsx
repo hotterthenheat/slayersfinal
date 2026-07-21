@@ -12,6 +12,7 @@ import SegmentedControl from '../../components/ui/SegmentedControl';
 import Sparkline from '../../components/skyvision/Sparkline';
 import MonteCarloPanel from './MonteCarloPanel';
 import Surface3D from './Surface3D';
+import MarketStateReplay from '../../components/proveit/MarketStateReplay';
 
 type Window = '10' | '30' | '60';
 
@@ -165,6 +166,8 @@ const ProveIt = () => {
           ))}
         </div>
       </Panel>
+
+      <MarketStateReplay snapshot={marketData} />
 
       <Panel bodyClassName="py-3">
         <p className="text-xs text-textSecondary leading-relaxed">
