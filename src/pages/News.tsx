@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Gauge, Newspaper, Sparkles } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import StatRibbon from '../components/ui/StatRibbon';
+import TickerJump from '../components/ui/TickerJump';
 import Panel from '../components/ui/Panel';
 import StatCard from '../components/ui/StatCard';
 import MetricGrid from '../components/ui/MetricGrid';
@@ -181,6 +182,8 @@ const News = () => {
           >
             <div className="flex flex-col gap-4">
               <p className="text-[13px] text-textPrimary leading-snug">{selected.headline}</p>
+
+              {selected.ticker && <TickerJump ticker={selected.ticker} />}
 
               <OddsBar probUp={selected.prediction.probUpPct} />
 

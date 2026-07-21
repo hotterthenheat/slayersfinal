@@ -16,6 +16,7 @@ import SignalMonitor from '../components/skyvision/SignalMonitor';
 import SamplePreview from '../components/skyvision/SamplePreview';
 import ImpactLeaderboard from '../components/skyvision/ImpactLeaderboard';
 import ContractWeigher from '../components/compass/ContractWeigher';
+import type { Horizon } from '../core/contractScore';
 import SegmentedControl from '../components/ui/SegmentedControl';
 import StatRibbon from '../components/ui/StatRibbon';
 import { deriveMarketKpis } from '../data/kpis';
@@ -41,6 +42,7 @@ const Compass = () => {
   const location = useLocation();
   const [scanner, setScanner] = useState<ScannerKey>('top-setups');
   const [mode, setMode] = useState<CompassMode>('setups');
+  const [weigherHorizon, setWeigherHorizon] = useState<Horizon | undefined>(undefined);
 
   // Phase 1 (browse): selectedSetup drives the SamplePreview card
   // Phase 2 (review): monitorTarget drives the SignalMonitor + ContractChain
@@ -54,16 +56,24 @@ const Compass = () => {
 
   const inReviewMode = monitorTarget !== null;
 
-  // Deep link from Tracker: land directly in review mode on the tracked setup
+  // Deep links: from Tracker (land in review mode on the tracked setup) or
+  // from Earnings/Stocks/News ("weigh this name's contracts").
   useEffect(() => {
-    const incoming = (
-      location.state as { monitor?: { ticker: string; strike: number; right: 'C' | 'P'; scanner: ScannerKey } } | null
-    )?.monitor;
+    const state = location.state as {
+      monitor?: { ticker: string; strike: number; right: 'C' | 'P'; scanner: ScannerKey };
+      weigh?: { ticker: string; horizon?: Horizon };
+    } | null;
+    const incoming = state?.monitor;
     if (incoming) {
       setScanner(incoming.scanner);
       changeTicker(incoming.ticker);
       setMonitorTarget({ ticker: incoming.ticker, strike: incoming.strike, right: incoming.right });
       window.history.replaceState({}, ''); // consume so refresh doesn't re-enter
+    } else if (state?.weigh) {
+      changeTicker(state.weigh.ticker);
+      setMode('weigher');
+      if (state.weigh.horizon) setWeigherHorizon(state.weigh.horizon);
+      window.history.replaceState({}, '');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -249,7 +259,7 @@ const Compass = () => {
       {inReviewMode && mode === 'setups' ? reviewHeader : browseHeader}
 
       {mode === 'weigher' ? (
-        <ContractWeigher snapshot={marketData} />
+        <ContractWeigher snapshot={marketData} initialHorizon={weigherHorizon} />
       ) : (
         <>
 

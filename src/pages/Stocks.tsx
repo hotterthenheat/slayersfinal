@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Layers3, TrendingUp } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import StatRibbon from '../components/ui/StatRibbon';
+import TickerJump from '../components/ui/TickerJump';
 import Panel from '../components/ui/Panel';
 import StatCard from '../components/ui/StatCard';
 import MetricGrid from '../components/ui/MetricGrid';
@@ -227,9 +228,10 @@ const Stocks = () => {
         flush
       >
         {selected && (
-          <div className="px-4 py-2.5 border-b border-borderSubtle bg-inset flex items-start gap-2 animate-soft-in">
+          <div className="px-4 py-2.5 border-b border-borderSubtle bg-inset flex items-start gap-2 flex-wrap animate-soft-in">
             <SignalBadge tone={verdictTone[selected.verdict]}>{selected.verdict}</SignalBadge>
-            <p className="text-xs text-textSecondary leading-relaxed">{selected.thesis}</p>
+            <p className="text-xs text-textSecondary leading-relaxed flex-1 min-w-[240px]">{selected.thesis}</p>
+            <TickerJump ticker={selected.ticker} horizon="SWINGS" />
           </div>
         )}
         <DataTable
