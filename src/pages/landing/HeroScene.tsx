@@ -1,67 +1,46 @@
 /*
 ==================================================
   SLAYER TERMINAL - HERO SCENE (landing)
-  Noah's isometric floating-boxes Spline scene as the
-  hero backdrop, forced monochrome with a CSS
-  grayscale filter (the scene ships blue/purple).
-  Lazy chunk — the Spline runtime never reaches
-  terminal users; WebGL failure degrades to gradient.
+  The hero backdrop IS the product: a live, slowly
+  orbiting quant exposure surface rendered in real
+  WebGL (three.js) — silver ridges of dealer support,
+  red valleys of negative gamma. No external scene
+  URL, no heavy runtime; WebGL failure degrades to a
+  gradient. Replaces the old community Spline scene.
 ==================================================
 */
 
-import { Component, Suspense, lazy, type ReactNode } from 'react';
+import VolSurface from '../../components/three/VolSurface';
 
-const Spline = lazy(() => import('@splinetool/react-spline'));
+const ROWS = 22;
+const COLS = 30;
 
-const SCENE_URL = 'https://prod.spline.design/cjTCO1IpJ2NvD3-9/scene.splinecode';
-
-const Fallback = () => (
-  <div
-    className="w-full h-full"
-    style={{ background: 'radial-gradient(ellipse at 65% 45%, #101012 0%, #050505 68%)' }}
-  />
-);
-
-class SceneBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
-  state = { failed: false };
-  static getDerivedStateFromError() {
-    return { failed: true };
-  }
-  render() {
-    return this.state.failed ? <Fallback /> : this.props.children;
-  }
-}
-
-/** The community scene ships a baked-in mock site (a "UI" group: Texts,
-    Rectangles, Ellipse). Keep only the boxes, effector & camera. */
-function stripMockUi(app: unknown) {
-  const anyApp = app as { getAllObjects?: () => Array<{ name: string; visible: boolean }> };
-  if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__splineApp = app;
-  try {
-    const mockUi = /^(ui$|text|rectangle|ellipse)/i;
-    for (const obj of anyApp.getAllObjects?.() ?? []) {
-      if (mockUi.test(obj.name)) obj.visible = false;
+/** A smooth, deterministic exposure-shaped surface: a silver support ridge,
+    a red short-gamma valley, and a fine ripple across the term structure. */
+const HERO_GRID: number[][] = (() => {
+  const g: number[][] = [];
+  for (let r = 0; r < ROWS; r++) {
+    const row: number[] = [];
+    for (let c = 0; c < COLS; c++) {
+      const x = (c / (COLS - 1) - 0.5) * 2;
+      const y = (r / (ROWS - 1) - 0.5) * 2;
+      const ridge = Math.exp(-((x - 0.28) ** 2 + (y + 0.18) ** 2) * 2.1) * 0.95;
+      const valley = Math.exp(-((x + 0.52) ** 2 + (y - 0.42) ** 2) * 3.0) * 0.6;
+      const ripple = Math.sin(x * 3.1 + y * 2.0) * 0.11;
+      row.push(Math.max(-1, Math.min(1, ridge - valley + ripple)));
     }
-  } catch {
-    /* scene renders as-authored — scrims still keep the copy readable */
+    g.push(row);
   }
-}
+  return g;
+})();
 
-/** Full-bleed backdrop. Pointer events stay ON — the scene's whole show is
-    the cursor-follow effector (boxes rise and glow near the mouse); the hero
-    copy sits above at z-10 so buttons and text still win where they overlap.
-    grayscale kills the scene's blue/purple; brightness lifts the wire edges
-    so they read on black. The canvas is oversized inside an overflow-hidden
-    frame so the runtime's bottom-right watermark is cropped out of view. */
 const HeroScene = () => (
-  <div className="w-full h-full overflow-hidden" aria-hidden>
-    <div style={{ width: '104%', height: '112%', filter: 'grayscale(1) brightness(2.4) contrast(1.05)' }}>
-      <SceneBoundary>
-        <Suspense fallback={<Fallback />}>
-          <Spline scene={SCENE_URL} style={{ width: '100%', height: '100%' }} onLoad={stripMockUi} />
-        </Suspense>
-      </SceneBoundary>
-    </div>
+  <div
+    className="w-full h-full overflow-hidden"
+    aria-hidden
+    style={{ background: 'radial-gradient(ellipse at 65% 45%, #101015 0%, #050505 70%)' }}
+  >
+    <VolSurface grid={HERO_GRID} colormap="exposure" height="100%" />
   </div>
 );
 
