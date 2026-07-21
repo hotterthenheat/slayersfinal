@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Search, Scale, Plus, Check, ArrowRight, TrendingUp } from 'lucide-react';
+import { Search, Scale, Plus, Check, ArrowRight, TrendingUp, Wallet } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { useTracker } from '../../context/TrackerContext';
 import {
@@ -112,6 +112,18 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
   const horizonLabel = HORIZONS.find(h => h.key === horizonForDte(dte))?.label ?? (dte <= 1 ? 'Lotto' : '');
   const tracked = isTracked(weighed.id);
   const coverage = weighed.expectedMovePct / Math.max(weighed.breakevenMovePct, 0.05);
+
+  // ---- execution & expected value: can you actually capture the edge? ----
+  const halfSpread = weighed.spreadPct / 2;
+  const expFill = weighed.mid * (1 + halfSpread / 100);
+  const flowScore = weighed.factors.find(f => f.key === 'flow')?.score ?? 50;
+  const fillProb = Math.max(20, Math.min(96, Math.round(62 + Math.log10(Math.max(weighed.oi, 10)) * 9 - weighed.spreadPct * 6)));
+  const adverse = weighed.spreadPct > 4 || flowScore < 42;
+  // spread round-trip + one day of theta, as % of premium, vs the 1σ move
+  const friction = weighed.spreadPct + weighed.thetaPerDayPct;
+  const costEatsEdge = friction >= weighed.expectedMovePct;
+  const evTone: Tone = !costEatsEdge && coverage >= 1 ? 'bull' : costEatsEdge ? 'bear' : 'warn';
+  const evVerdict = !costEatsEdge && coverage >= 1 ? 'EDGE SURVIVES COSTS' : costEatsEdge ? 'COSTS EAT THE EDGE' : 'THIN AFTER COSTS';
 
   const toggleTrack = () => {
     if (tracked) untrackSetup(weighed.id);
@@ -309,6 +321,46 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
           )}
         </Panel>
       </div>
+
+      {/* Execution & expected value — connect the grade to what you can capture */}
+      <Panel
+        title={
+          <span className="inline-flex items-center gap-1.5">
+            <Wallet className="w-3.5 h-3.5" /> Execution & expected value
+          </span>
+        }
+        subtitle="can you actually capture the edge after costs?"
+        tone={evTone}
+      >
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <SignalBadge tone={evTone}>{evVerdict}</SignalBadge>
+            {adverse && (
+              <SignalBadge tone="warn" dot>
+                Adverse selection
+              </SignalBadge>
+            )}
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <Cell k="Expected fill" v={`$${expFill.toFixed(2)}`} />
+            <Cell k="Spread round-trip" v={`${weighed.spreadPct.toFixed(1)}%`} tone={weighed.spreadPct > 4 ? 'bear' : 'neutral'} />
+            <Cell k="Exit slippage" v={`~${halfSpread.toFixed(1)}%`} />
+            <Cell k="Fill probability" v={`${fillProb}%`} tone={fillProb >= 70 ? 'bull' : fillProb < 45 ? 'bear' : 'warn'} />
+            <Cell k="Theta drag" v={`−${weighed.thetaPerDayPct.toFixed(1)}%/d`} tone={weighed.thetaPerDayPct > 5 ? 'bear' : 'neutral'} />
+            <Cell k="1σ move" v={`${weighed.expectedMovePct.toFixed(1)}%`} tone="bull" />
+            <Cell k="Breakeven" v={`${weighed.breakevenMovePct.toFixed(1)}%`} />
+            <Cell k="Total friction" v={`${friction.toFixed(1)}%`} tone={costEatsEdge ? 'bear' : 'neutral'} />
+          </div>
+          <p className="text-xs text-textSecondary leading-relaxed">
+            {costEatsEdge
+              ? `Spread round-trip plus a day of theta (${friction.toFixed(1)}%) is wider than the 1σ move (${weighed.expectedMovePct.toFixed(1)}%) — you'd need a fast, above-expected move just to clear the toll.`
+              : `The 1σ move (${weighed.expectedMovePct.toFixed(1)}%) clears the friction (${friction.toFixed(1)}%) — the edge is capturable if you work a limit near $${expFill.toFixed(2)} instead of paying the offer.`}
+          </p>
+          <p className="font-mono text-[10px] text-textMuted leading-relaxed border-t border-borderSubtle pt-2.5">
+            Modeled fills & slippage from spread and open interest; swap in a real quote + fill feed behind the same contract.
+          </p>
+        </div>
+      </Panel>
     </div>
   );
 };
