@@ -294,6 +294,17 @@
   animation: marquee 46s linear infinite;
 }
 
+/* Code-rain columns — each column holds its lines twice; translating by −50%
+   (or back) loops seamlessly. Direction + duration are set per column inline. */
+@keyframes rain-up {
+  from { transform: translateY(0); }
+  to { transform: translateY(-50%); }
+}
+@keyframes rain-down {
+  from { transform: translateY(-50%); }
+  to { transform: translateY(0); }
+}
+
 /* Landing anchor targets stop short of the fixed glass nav */
 #showcase,
 #live,
@@ -309,5 +320,8 @@
   .animate-cursor-blink,
   .animate-marquee {
     animation: none;
+  }
+  .rain-col {
+    animation: none !important;
   }
 }
