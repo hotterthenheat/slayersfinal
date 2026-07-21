@@ -132,7 +132,9 @@ const Fracture = () => {
   const maxLatent = Math.max(...view.levels.map(l => l.latentLiquidity), 1);
   const headTone: Tone = view.fractureSide === 'DOWN' ? 'bear' : view.fractureSide === 'UP' ? 'bull' : 'neutral';
   const crit = view.criticality;
-  const critTone: Tone = crit.label === 'UNSTABLE' ? 'bear' : crit.label === 'CRITICAL' ? 'warn' : crit.label === 'REACTIVE' ? 'select' : 'bull';
+  // Severity ascends STABLE → REACTIVE → UNSTABLE → CRITICAL, so CRITICAL must
+  // carry the most severe tone (bear), not a milder one.
+  const critTone: Tone = crit.label === 'CRITICAL' ? 'bear' : crit.label === 'UNSTABLE' ? 'warn' : crit.label === 'REACTIVE' ? 'select' : 'bull';
 
   // spot sits between the below/above halves of the ladder
   const aboveCount = view.levels.filter(l => l.distPct > 0).length;

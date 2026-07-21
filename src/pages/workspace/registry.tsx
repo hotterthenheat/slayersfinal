@@ -50,6 +50,8 @@ export interface WorkspaceCtx {
   vanna: VannaCharmView;
   vol: VolLabData;
   setups: SkyVisionData;
+  /** Deep-link focus: a price level to mark on charts (from "view on chart"). */
+  focusPrice?: number | null;
 }
 
 export interface WidgetDef {
@@ -83,6 +85,7 @@ export const WIDGETS: WidgetDef[] = [
           overlay="BOTH"
           timeframe="1m"
           height={200}
+          focusPrice={ctx.focusPrice ?? null}
         />
       </div>
     ),

@@ -1,6 +1,5 @@
 import {
   Activity,
-  LayoutGrid,
   Crosshair,
   Compass,
   Radar,
@@ -13,7 +12,12 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-export type NavGroup = 'Main' | 'Research' | 'Tools';
+// Navigation is organised by WORKFLOW, not by product name: Discover → Analyze
+// → Manage → Review reads as the pipeline a trader actually runs. The branded
+// desks (Pulse, Compass, Pinpoint…) live inside those workflows. Home exits via
+// the wordmark. (Workspace folded into Pulse; MOC into Compass; Fracture into
+// Pinpoint.)
+export type NavGroup = 'Discover' | 'Analyze' | 'Manage' | 'Review';
 
 export interface NavItem {
   path: string;
@@ -24,25 +28,23 @@ export interface NavItem {
   group: NavGroup;
 }
 
-// Home is intentionally absent — the wordmark is the sole home affordance.
-// Main views render inline in the top bar; Research and Tools fold into
-// labelled dropdown groups so the 12-route app fits a laptop-width bar.
 export const NAV_ITEMS: NavItem[] = [
-  {
-    path: '/pulse',
-    label: 'Pulse',
-    code: '01',
-    icon: Activity,
-    description: 'Live market terminal — chart, dealer pressure, order flow & key levels',
-    group: 'Main',
-  },
+  // ── Discover — find what is moving and what to trade ──
   {
     path: '/compass',
     label: 'Compass',
-    code: '02',
+    code: '01',
     icon: Compass,
     description: 'Options chooser — weeklies, swings & LEAPS weighed and graded',
-    group: 'Main',
+    group: 'Discover',
+  },
+  {
+    path: '/stocks',
+    label: 'Stocks',
+    code: '02',
+    icon: BarChart3,
+    description: 'Ranked equity picks & sector rotation',
+    group: 'Discover',
   },
   {
     path: '/trace',
@@ -50,76 +52,69 @@ export const NAV_ITEMS: NavItem[] = [
     code: '03',
     icon: Radar,
     description: 'Options flow & dark-pool intelligence — what the prints actually mean',
-    group: 'Main',
+    group: 'Discover',
+  },
+  // ── Analyze — study the tape, the dealers, the catalysts ──
+  {
+    path: '/pulse',
+    label: 'Pulse',
+    code: '04',
+    icon: Activity,
+    description: 'Live market terminal — chart, dealer pressure, order flow & key levels',
+    group: 'Analyze',
   },
   {
     path: '/pinpoint',
     label: 'Pinpoint',
-    code: '04',
+    code: '05',
     icon: Crosshair,
     description: 'GEX, dealer positioning, hedge impact & the fracture line',
-    group: 'Main',
-  },
-  {
-    path: '/prove-it',
-    label: 'Prove It',
-    code: '05',
-    icon: Sigma,
-    description: 'Quantitative modeling & predictive analytics',
-    group: 'Research',
-  },
-  {
-    path: '/stocks',
-    label: 'Stocks',
-    code: '06',
-    icon: BarChart3,
-    description: 'Ranked equity picks & sector rotation',
-    group: 'Research',
+    group: 'Analyze',
   },
   {
     path: '/news',
     label: 'News',
-    code: '07',
+    code: '06',
     icon: Newspaper,
     description: 'Stock news + predicted outcomes per headline',
-    group: 'Research',
+    group: 'Analyze',
   },
   {
     path: '/earnings',
     label: 'Earnings',
-    code: '08',
+    code: '07',
     icon: CalendarClock,
     description: 'Earnings hub — implied vs. realized, play it or fade it',
-    group: 'Research',
+    group: 'Analyze',
   },
+  // ── Manage — track what you are in and talk to the desk ──
   {
     path: '/tracker',
     label: 'Tracker',
-    code: '09',
+    code: '08',
     icon: Bookmark,
-    description: 'Bookmarked setups, contracts & names — live monitoring',
-    group: 'Tools',
-  },
-  {
-    path: '/workspace',
-    label: 'Workspace',
-    code: '10',
-    icon: LayoutGrid,
-    description: 'Saved layouts — mix any panels together',
-    group: 'Tools',
+    description: 'Bookmarked setups, contracts & names — monitoring in one place',
+    group: 'Manage',
   },
   {
     path: '/community',
     label: 'Community',
-    code: '11',
+    code: '09',
     icon: Users,
     description: 'Trade ideas, requests & feedback',
-    group: 'Tools',
+    group: 'Manage',
+  },
+  // ── Review — audit the models and the calls ──
+  {
+    path: '/prove-it',
+    label: 'Prove It',
+    code: '10',
+    icon: Sigma,
+    description: 'Quantitative modeling & predictive analytics',
+    group: 'Review',
   },
 ];
 
-export const NAV_GROUPS: NavGroup[] = ['Main', 'Research', 'Tools'];
+export const NAV_GROUPS: NavGroup[] = ['Discover', 'Analyze', 'Manage', 'Review'];
 
-export const mainViews = NAV_ITEMS.filter(i => i.group === 'Main');
-export const researchViews = NAV_ITEMS.filter(i => i.group === 'Research');
-export const toolViews = NAV_ITEMS.filter(i => i.group === 'Tools');
+export const itemsByGroup = (group: NavGroup): NavItem[] => NAV_ITEMS.filter(i => i.group === group);

@@ -46,7 +46,7 @@ const Grid = WidthProvider(RGL);
 const SCAN_INTERVAL_MS = 10_000;
 
 /** One shared data context per ticker, built once per scan. */
-function buildCtx(snapshot: MarketSnapshot, revision: number): WorkspaceCtx {
+function buildCtx(snapshot: MarketSnapshot, revision: number, focusPrice: number | null = null): WorkspaceCtx {
   const gex = buildGexView(snapshot, 'GEX', 10);
   const iv = Simulator.TICKERS[snapshot.ticker]?.iv ?? 0.2;
   return {
@@ -61,6 +61,7 @@ function buildCtx(snapshot: MarketSnapshot, revision: number): WorkspaceCtx {
     vanna: buildVannaCharm(snapshot, 'CHARM', -1),
     vol: buildVolLab(snapshot.ticker, snapshot.spot, iv),
     setups: buildSkyVision(snapshot, 'top-setups'),
+    focusPrice,
   };
 }
 
@@ -148,17 +149,24 @@ const PulseWorkspace = () => {
   const [wsMenuOpen, setWsMenuOpen] = useState(false);
   const [maximizedId, setMaximizedId] = useState<string | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
+  // A price level to mark on the matching ticker's charts, arriving from a
+  // cross-page "view on chart" deep-link (Exposure Profile / Ranked Targets).
+  const [focus, setFocus] = useState<{ ticker: string; price: number } | null>(null);
   const counterRef = useRef(1);
 
   const active = ws.layouts.find(l => l.id === ws.activeId) ?? ws.layouts[0];
 
-  // Consume a cross-page "view on chart" deep-link gracefully (switch ticker).
+  // Consume a cross-page "view on chart" deep-link: switch ticker and/or mark
+  // a price level on the chart. Documented contract:
+  //   navigate('/pulse', { state: { focusTicker?, focusPrice? } })
   useEffect(() => {
-    const st = location.state as { focusTicker?: string } | null;
-    if (st?.focusTicker) {
-      changeTicker(st.focusTicker);
-      window.history.replaceState({}, '');
+    const st = location.state as { focusTicker?: string; focusPrice?: number } | null;
+    if (!st) return;
+    if (st.focusTicker) changeTicker(st.focusTicker);
+    if (typeof st.focusPrice === 'number') {
+      setFocus({ ticker: st.focusTicker ?? activeTicker, price: st.focusPrice });
     }
+    if (st.focusTicker || st.focusPrice != null) window.history.replaceState({}, '');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -208,11 +216,12 @@ const PulseWorkspace = () => {
     if (!scanSnapshot) return m;
     for (const t of usedTickers) {
       const snap = t === activeTicker && marketData ? marketData : Simulator.buildSnapshot(t);
-      m.set(t, buildCtx(snap, revision));
+      const fp = focus && focus.ticker === t ? focus.price : null;
+      m.set(t, buildCtx(snap, revision, fp));
     }
     return m;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scanSnapshot, usedTickers.join('|')]);
+  }, [scanSnapshot, usedTickers.join('|'), focus?.ticker, focus?.price]);
 
   // Apply the 1s heatmap pulse on top (only the matrix changes).
   const pulsedByTicker = useMemo(() => {

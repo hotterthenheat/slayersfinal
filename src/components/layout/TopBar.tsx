@@ -1,12 +1,12 @@
 /*
 ==================================================
   SLAYER TERMINAL - TOP BAR (nav + utilities)
-  Main views sit inline with a sliding holo underline
-  ("white = where you are"); Research and Tools fold
-  into labelled hover-dropdown groups so the 11-route
-  app fits a laptop-width bar. Below lg the whole nav
-  collapses into a slide-down drawer. Home exits via
-  the wordmark.
+  Navigation is workflow-first: Discover · Analyze ·
+  Manage · Review, each a hover-dropdown of the branded
+  desks inside it. A sliding holo underline marks the
+  active workflow. Below lg the whole nav collapses into
+  a slide-down drawer grouped the same way. Home exits
+  via the wordmark.
 ==================================================
 */
 
@@ -17,28 +17,13 @@ import { ChevronDown, Search, Menu, X, type LucideIcon } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { useLaunch } from './LaunchTransition';
 import SignalBadge from '../ui/SignalBadge';
-import { NAV_ITEMS, mainViews, researchViews, toolViews, type NavItem } from './nav';
-import { GEX_SUBPAGES } from '../../pages/gex/subnav';
-import { FLOWDESK_SUBPAGES } from '../../pages/flowdesk/subnav';
-import { COMMUNITY_SUBPAGES } from '../../pages/community/subnav';
+import { NAV_GROUPS, itemsByGroup, NAV_ITEMS, type NavGroup, type NavItem } from './nav';
 
 interface TopBarProps {
   onOpenPalette: () => void;
 }
 
 type SubLink = { path: string; label: string; icon?: LucideIcon };
-
-/** Sections that carry subtabs — the inline nav item grows a hover dropdown. */
-const SECTION_SUBPAGES: Record<string, SubLink[]> = {
-  '/pinpoint': GEX_SUBPAGES,
-  '/trace': FLOWDESK_SUBPAGES,
-  '/community': COMMUNITY_SUBPAGES,
-};
-
-const GROUPS: { key: string; label: string; items: NavItem[] }[] = [
-  { key: 'group:research', label: 'Research', items: researchViews },
-  { key: 'group:tools', label: 'Tools', items: toolViews },
-];
 
 const Wordmark = ({ onClick, size = 'sm' }: { onClick: (e: React.MouseEvent) => void; size?: 'sm' | 'md' }) => (
   <a
@@ -74,7 +59,6 @@ const TopBar = ({ onOpenPalette }: TopBarProps) => {
     launch('/');
   };
   const section = `/${location.pathname.split('/')[1] ?? ''}`;
-  const groupActive = (items: NavItem[]) => items.some(i => i.path === section);
 
   return (
     <header className="h-14 shrink-0 border-b border-borderSubtle bg-canvas/90 backdrop-blur flex items-center gap-3 px-4 relative z-40">
@@ -92,72 +76,41 @@ const TopBar = ({ onOpenPalette }: TopBarProps) => {
         <Wordmark onClick={goHome} />
       </div>
 
-      {/* Center nav — Main views inline + Research/Tools group menus. Allowed to
-          shrink and scroll rather than overflow into the side zones. */}
+      {/* Center nav — one dropdown per workflow (Discover · Analyze · Manage ·
+          Review). Allowed to shrink rather than overflow the side zones. */}
       <nav className="hidden lg:flex items-center self-stretch min-w-0 mx-auto">
-        {mainViews.map(item => {
-          const subs = SECTION_SUBPAGES[item.path];
-          const isActive = item.path === section;
+        {NAV_GROUPS.map(group => {
+          const items = itemsByGroup(group);
+          const active = items.some(i => i.path === section);
           return (
             <div
-              key={item.path}
+              key={group}
               className="relative self-stretch flex items-center"
-              onMouseEnter={() => subs && setDropdown(item.path)}
-              onMouseLeave={() => setDropdown(null)}
-            >
-              <NavLink
-                to={item.path}
-                className={`relative self-stretch flex items-center gap-1 px-2.5 font-mono text-[11px] font-semibold uppercase tracking-wider transition-colors ${
-                  isActive ? 'text-textPrimary' : 'text-textSecondary hover:text-textPrimary'
-                }`}
-              >
-                <item.icon className={`w-3.5 h-3.5 ${isActive ? 'text-textPrimary' : 'text-textMuted'}`} />
-                {item.label}
-                {subs && <ChevronDown className="w-3 h-3 text-textMuted" />}
-                {isActive && (
-                  <motion.span
-                    layoutId="topnav-underline"
-                    className="absolute left-2 right-2 bottom-0 h-[2px] rounded-full holo-bar"
-                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                  />
-                )}
-              </NavLink>
-              <AnimatePresence>
-                {subs && dropdown === item.path && (
-                  <DropMenu title={item.label} code={item.code} items={subs} onPick={() => setDropdown(null)} />
-                )}
-              </AnimatePresence>
-            </div>
-          );
-        })}
-
-        {/* Divider before the grouped menus */}
-        <span className="w-px h-4 bg-borderSubtle mx-2" aria-hidden />
-
-        {GROUPS.map(group => {
-          const active = groupActive(group.items);
-          return (
-            <div
-              key={group.key}
-              className="relative self-stretch flex items-center"
-              onMouseEnter={() => setDropdown(group.key)}
+              onMouseEnter={() => setDropdown(group)}
               onMouseLeave={() => setDropdown(null)}
             >
               <button
-                className={`relative self-stretch flex items-center gap-1 px-2.5 font-mono text-[11px] font-semibold uppercase tracking-wider transition-colors ${
+                className={`relative self-stretch flex items-center gap-1 px-3 font-mono text-[11px] font-semibold uppercase tracking-wider transition-colors ${
                   active ? 'text-textPrimary' : 'text-textSecondary hover:text-textPrimary'
                 }`}
               >
-                {group.label}
+                {group}
                 <ChevronDown className="w-3 h-3 text-textMuted" />
-                {active && <span className="absolute left-2 right-2 bottom-0 h-[2px] rounded-full holo-bar" />}
+                {active && (
+                  <motion.span
+                    layoutId="topnav-underline"
+                    className="absolute left-3 right-3 bottom-0 h-[2px] rounded-full holo-bar"
+                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                  />
+                )}
               </button>
               <AnimatePresence>
-                {dropdown === group.key && (
+                {dropdown === group && (
                   <DropMenu
-                    title={group.label}
-                    items={group.items.map(i => ({ path: i.path, label: i.label, icon: i.icon }))}
-                    descriptions={Object.fromEntries(group.items.map(i => [i.path, i.description]))}
+                    title={group}
+                    items={items.map(i => ({ path: i.path, label: i.label, icon: i.icon }))}
+                    descriptions={Object.fromEntries(items.map(i => [i.path, i.description]))}
+                    section={section}
                     onPick={() => setDropdown(null)}
                   />
                 )}
@@ -222,18 +175,20 @@ const TopBar = ({ onOpenPalette }: TopBarProps) => {
   );
 };
 
-/** Shared hover dropdown for inline sections and grouped menus. */
+/** Shared hover dropdown — lists the desks inside a workflow with a one-line
+    description each. `section` marks the active desk (matches on the first path
+    segment so a desk's subpages still highlight it). */
 const DropMenu = ({
   title,
-  code,
   items,
   descriptions,
+  section,
   onPick,
 }: {
   title: string;
-  code?: string;
   items: SubLink[];
   descriptions?: Record<string, string>;
+  section?: string;
   onPick: () => void;
 }) => (
   <motion.div
@@ -243,55 +198,53 @@ const DropMenu = ({
     exit={{ opacity: 0, y: -6 }}
     transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
   >
-    <div className="mt-1 min-w-[230px] border border-borderMuted bg-panel rounded-md shadow-2xl shadow-black/60 overflow-hidden">
+    <div className="mt-1 min-w-[248px] border border-borderMuted bg-panel rounded-md shadow-2xl shadow-black/60 overflow-hidden">
       <div className="flex items-center justify-between gap-3 px-3 py-2 border-b border-borderSubtle">
         <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-textPrimary whitespace-nowrap">
           {title}
         </span>
-        {code && <span className="font-mono text-[9px] text-textMuted">{code}</span>}
       </div>
       <div className="p-1.5 flex flex-col gap-0.5">
-        {items.map(sub => (
-          <NavLink
-            key={sub.path}
-            to={sub.path}
-            onClick={onPick}
-            className={({ isActive }) =>
-              `flex items-center gap-2 px-2.5 py-1.5 rounded font-mono text-[12px] whitespace-nowrap transition-colors ${
-                isActive ? 'bg-white/[0.06] text-textPrimary' : 'text-textSecondary hover:text-textPrimary hover:bg-white/[0.03]'
-              }`
-            }
-          >
-            {sub.icon && <sub.icon className="w-3.5 h-3.5 text-textMuted" />}
-            <span className="flex flex-col">
-              {sub.label}
-              {descriptions?.[sub.path] && (
-                <span className="font-sans text-[10px] text-textMuted normal-case tracking-normal leading-tight">
-                  {descriptions[sub.path]}
-                </span>
-              )}
-            </span>
-          </NavLink>
-        ))}
+        {items.map(sub => {
+          const isActive = section ? sub.path === section : false;
+          return (
+            <NavLink
+              key={sub.path}
+              to={sub.path}
+              onClick={onPick}
+              className={`flex items-center gap-2 px-2.5 py-1.5 rounded font-mono text-[12px] whitespace-nowrap transition-colors ${
+                isActive
+                  ? 'bg-white/[0.06] text-textPrimary'
+                  : 'text-textSecondary hover:text-textPrimary hover:bg-white/[0.03]'
+              }`}
+            >
+              {sub.icon && <sub.icon className="w-3.5 h-3.5 text-textMuted" />}
+              <span className="flex flex-col">
+                {sub.label}
+                {descriptions?.[sub.path] && (
+                  <span className="font-sans text-[11px] text-textMuted normal-case tracking-normal leading-tight">
+                    {descriptions[sub.path]}
+                  </span>
+                )}
+              </span>
+            </NavLink>
+          );
+        })}
       </div>
     </div>
   </motion.div>
 );
 
-/** Full grouped nav list for the mobile drawer. */
-const MobileNav = ({ section, onPick }: { section: string; onPick: () => void }) => {
-  const groups: { label: string; items: NavItem[] }[] = [
-    { label: 'Main views', items: mainViews },
-    { label: 'Research', items: researchViews },
-    { label: 'Tools', items: toolViews },
-  ];
-  return (
-    <div className="p-3 flex flex-col gap-4">
-      {groups.map(g => (
-        <div key={g.label}>
-          <div className="px-2 pb-1.5 font-mono text-[10px] uppercase tracking-widest text-textMuted">{g.label}</div>
+/** Full workflow-grouped nav list for the mobile drawer. */
+const MobileNav = ({ section, onPick }: { section: string; onPick: () => void }) => (
+  <div className="p-3 flex flex-col gap-4">
+    {NAV_GROUPS.map((group: NavGroup) => {
+      const items = itemsByGroup(group);
+      return (
+        <div key={group}>
+          <div className="px-2 pb-1.5 font-mono text-[10px] uppercase tracking-widest text-textMuted">{group}</div>
           <div className="grid grid-cols-2 gap-1.5">
-            {g.items.map(item => {
+            {items.map((item: NavItem) => {
               const active = item.path === section;
               return (
                 <NavLink
@@ -311,12 +264,12 @@ const MobileNav = ({ section, onPick }: { section: string; onPick: () => void })
             })}
           </div>
         </div>
-      ))}
-      <p className="px-2 font-mono text-[10px] text-textMuted">
-        {NAV_ITEMS.length} destinations · ⌘K for quick jump
-      </p>
-    </div>
-  );
-};
+      );
+    })}
+    <p className="px-2 font-mono text-[10px] text-textMuted">
+      {NAV_ITEMS.length} desks · ⌘K for quick jump
+    </p>
+  </div>
+);
 
 export default TopBar;
