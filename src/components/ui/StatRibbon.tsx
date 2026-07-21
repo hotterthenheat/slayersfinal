@@ -36,7 +36,7 @@ const StatRibbon = ({ stats, className = '', variant = 'center' }: StatRibbonPro
   return (
     <div
       className={`flex items-center gap-0 overflow-x-auto no-scrollbar ${
-        variant === 'center' ? 'min-w-0' : 'w-full border border-borderSubtle bg-panel rounded-lg px-1'
+        variant === 'center' ? 'min-w-0' : 'w-full inst-surface rounded-md px-1'
       } ${className}`}
     >
       {stats.map((s, i) => (

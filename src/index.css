@@ -109,6 +109,78 @@
   }
 }
 
+/* ============================================================
+   Instrument surface — the house "box".
+   A machined panel instead of a flat 1px-outline card: a faint
+   top-lit wash and a bevelled top edge (light from above) give
+   every surface physical depth, and hairline corner registration
+   ticks read as a designed instrument, not a default frame.
+   Paint-only — never changes box size, so it's layout-safe on
+   every existing Panel/StatCard. Corner ticks need the host to be
+   position:relative and to leave ::before/::after free.
+   ============================================================ */
+.inst-surface {
+  background-color: #0a0a0a;
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0) 46%);
+  border: 1px solid #1c1c1c;
+  border-top-color: #333333; /* machined bevel — catches the light */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03); /* crisp top-lit edge */
+}
+
+/* Registration ticks — a scope-reticle bracket on two opposed corners.
+   Diagonal (not all four) reads as intentional framing, not decoration. */
+.inst-ticks::before,
+.inst-ticks::after {
+  content: '';
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.55;
+}
+.inst-ticks::before {
+  top: 6px;
+  left: 6px;
+  border-top: 1px solid #c7d3e8;
+  border-left: 1px solid #c7d3e8;
+}
+.inst-ticks::after {
+  bottom: 6px;
+  right: 6px;
+  border-bottom: 1px solid #c7d3e8;
+  border-right: 1px solid #c7d3e8;
+}
+
+/* Emphasis frame — the single hero surface on a page. A living holo
+   hairline rides the border-box under a panel-dark pad (same trick as
+   .holo-border) so the top instrument reads brighter than its siblings. */
+.inst-emphasis {
+  border: 1px solid transparent;
+  background-image: linear-gradient(#0b0b0b, #0b0b0b),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0) 46%), var(--holo-gradient);
+  background-origin: border-box;
+  background-clip: padding-box, padding-box, border-box;
+  background-size: 100% 100%, 100% 100%, 250% 250%;
+  animation: holo-pan 4.5s ease-in-out infinite alternate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inst-emphasis {
+    animation: none;
+  }
+}
+
+/* Eyebrow tick — the 3px vertical mark that leads a label. Shape only;
+   the component supplies the fill (tone color, holo-bar, or dim). */
+.inst-eyebrow {
+  display: inline-block;
+  width: 3px;
+  height: 9px;
+  border-radius: 1px;
+  flex: none;
+}
+
 /* Workspace grid (react-grid-layout) — house skin */
 .react-grid-item.react-grid-placeholder {
   background: rgba(228, 232, 244, 0.06) !important;
