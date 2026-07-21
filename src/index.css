@@ -304,6 +304,18 @@
   from { transform: translateY(-50%); }
   to { transform: translateY(0); }
 }
+/* Twinkle — the near-invisible baseline shimmers like distant stars; the cursor
+   mask decides where any of it is actually legible. Two ranges keep the steel/
+   amber desk lines a touch more present than the dim ones. Duration + delay are
+   set per glyph-line inline. */
+@keyframes rain-twinkle {
+  0%, 100% { opacity: 0.24; }
+  50% { opacity: 0.78; }
+}
+@keyframes rain-twinkle-hi {
+  0%, 100% { opacity: 0.48; }
+  50% { opacity: 1; }
+}
 
 /* Landing anchor targets stop short of the fixed glass nav */
 #showcase,
@@ -321,7 +333,9 @@
   .animate-marquee {
     animation: none;
   }
-  .rain-col {
+  .rain-col,
+  .rain-tw,
+  .rain-tw-hi {
     animation: none !important;
   }
 }
