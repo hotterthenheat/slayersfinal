@@ -26,8 +26,9 @@ export default {
         textMuted: '#6b6b6b',
 
         // Directional / status accents (always paired with a label or icon)
-        // Chrome direction: holographic silver up, hot red down
-        bull: '#C7D3E8',
+        // Direction reads green up / hot red down; silver is reserved for
+        // selection + brand only (see `select`), never for bullishness.
+        bull: '#30D158',
         bear: '#FF3B30',
         // True orange — caution reads clearly apart from silver and hot red
         warn: '#FF9500',

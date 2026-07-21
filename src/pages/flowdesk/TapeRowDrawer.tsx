@@ -1,10 +1,12 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { X, Bookmark } from 'lucide-react';
 import SignalBadge from '../../components/ui/SignalBadge';
+import StrikeChart from '../../components/gex/StrikeChart';
+import Simulator from '../../core/simulator';
 import { sentimentOf } from '../../data/flowtape';
-import { fmtUsd } from '../../data/gex';
+import { fmtUsd, buildGexView } from '../../data/gex';
 import type { FlowPrint, PrintSentiment } from '../../types/flowdesk';
 import type { Tone } from '../../components/ui/tones';
 
@@ -63,6 +65,19 @@ const TapeRowDrawer = ({ print, onClose, isMarked, onToggleMark }: TapeRowDrawer
   const sideLabel = print ? (print.side === 'ASK' ? 'BUY' : print.side === 'BID' ? 'SELL' : 'MID') : '';
   const sideTone =
     print?.side === 'ASK' ? 'text-bull' : print?.side === 'BID' ? 'text-bear' : 'text-textMuted';
+
+  // Underlying chart context for the print — the same StrikeChart the desks use,
+  // with this contract's strike marked. Built from the ticker's own snapshot so
+  // the levels match the tape's spot; recomputed only when the ticker changes.
+  const chartLevels = useMemo(() => {
+    if (!print) return null;
+    try {
+      return buildGexView(Simulator.buildSnapshot(print.ticker), 'GEX', 10).levels;
+    } catch {
+      return null;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [print?.ticker]);
 
   return createPortal(
     <AnimatePresence>
@@ -138,6 +153,31 @@ const TapeRowDrawer = ({ print, onClose, isMarked, onToggleMark }: TapeRowDrawer
                   <span className={`font-mono text-base font-bold ${sideTone}`}>{sideLabel}</span>
                 </div>
               </div>
+
+              {/* Underlying chart — the print's strike marked on the live chart */}
+              {chartLevels && (
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono text-[11px] uppercase tracking-widest text-textSecondary">
+                      {print.ticker} · walls, flip & spot
+                    </span>
+                    <span className="font-mono text-[11px] tnum text-textMuted">
+                      strike <span className={print.right === 'C' ? 'text-bull' : 'text-bear'}>${print.strike}</span> marked
+                    </span>
+                  </div>
+                  <div className="inst-surface rounded-md p-1.5 overflow-hidden">
+                    <StrikeChart
+                      ticker={print.ticker}
+                      revision={print.id}
+                      levels={chartLevels}
+                      overlay="BOTH"
+                      timeframe="1m"
+                      height={190}
+                      focusPrice={print.strike}
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* Contract */}
               <Section title="Contract">
