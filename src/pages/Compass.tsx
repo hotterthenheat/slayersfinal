@@ -205,7 +205,7 @@ const Compass = () => {
       title={mode === 'weigher' ? 'Contract Weigher' : 'Trade Setups'}
       subtitle={
         mode === 'weigher'
-          ? 'Weeklies, swings & LEAPS on the scale — math, flow, dark pool and news decide what is worth buying'
+          ? 'Search any contract you have — weighed on the same scale as the top setups, with a better-R/R suggestion'
           : 'The terminal calls ENTER or EXIT — you never place the order'
       }
       actions={mode === 'weigher' ? (
