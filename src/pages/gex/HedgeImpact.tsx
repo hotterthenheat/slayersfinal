@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { Gauge, Waves, TrendingDown } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Gauge, Waves, TrendingDown, SlidersHorizontal, ChevronDown } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildHedgeImpact, type HedgeImpactView, type StressLabel } from '../../data/hedgeimpact';
 import Panel from '../../components/ui/Panel';
@@ -99,6 +99,104 @@ const WindowRow = ({ w }: { w: HedgeImpactView['windows'][number] }) => {
   );
 };
 
+/** Neutral provenance chip — chrome only, never a directional/status color. */
+const ProvTag = ({ children, muted = true }: { children: string; muted?: boolean }) => (
+  <span
+    className={`font-mono text-[10px] font-medium uppercase tracking-wider border border-borderSubtle bg-white/[0.03] rounded px-1.5 py-0.5 shrink-0 ${
+      muted ? 'text-textMuted' : 'text-textSecondary'
+    }`}
+  >
+    {children}
+  </span>
+);
+
+/** Assumptions disclosure — the modeled depth inputs behind the HEX read. */
+const AssumptionsDrawer = ({ view }: { view: HedgeImpactView }) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <Panel
+      title={
+        <span className="inline-flex items-center gap-1.5">
+          <SlidersHorizontal className="w-3.5 h-3.5" /> Assumptions
+        </span>
+      }
+      subtitle="modeled liquidity & depth inputs"
+      actions={
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          aria-expanded={open}
+          className="inline-flex items-center gap-1 font-mono text-[11px] font-semibold uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
+        >
+          {open ? 'Hide' : 'Show'}
+          <ChevronDown className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
+        </button>
+      }
+      bodyClassName={open ? 'py-3.5' : 'py-2.5'}
+    >
+      {!open ? (
+        <p className="font-mono text-[11px] text-textMuted leading-relaxed">
+          HEX divides a live-chain hedge requirement by modeled market depth. Expand for the depth inputs behind the read.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <p className="text-[11px] text-textSecondary leading-relaxed">
+            The hedge requirement (numerator) comes from the live options chain. The liquidity that absorbs it
+            (denominator) is modeled per name and swaps for a real depth feed behind the same contract — so the depth
+            values below are single modeled estimates. A live feed would carry base / liquid / illiquid depth ranges in
+            their place.
+          </p>
+
+          <div className="flex flex-col divide-y divide-borderSubtle rounded-md border border-borderSubtle overflow-hidden">
+            {/* Modeled ADV — the liquidity denominator */}
+            <div className="flex items-center justify-between gap-3 px-3 py-2.5">
+              <div className="min-w-0">
+                <div className="font-mono text-[12px] font-semibold text-textPrimary">Avg daily $ volume</div>
+                <div className="text-[10px] text-textMuted leading-tight mt-0.5">liquidity denominator · per name</div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="font-mono text-[13px] font-semibold tnum text-textPrimary">{fmtUsd(view.advUsd)}</span>
+                <ProvTag>modeled</ProvTag>
+              </div>
+            </div>
+
+            {/* Per-window available depth — ADV scaled to each forecast window */}
+            <div className="px-3 py-2.5">
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <div className="min-w-0">
+                  <div className="font-mono text-[12px] font-semibold text-textPrimary">Available depth by window</div>
+                  <div className="text-[10px] text-textMuted leading-tight mt-0.5">ADV scaled to each 5–60 min forecast window</div>
+                </div>
+                <ProvTag>modeled</ProvTag>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {view.windows.map(w => (
+                  <div key={w.mins} className="rounded bg-white/[0.03] border border-borderSubtle px-2 py-1.5">
+                    <div className="font-mono text-[10px] uppercase tracking-wider text-textMuted">{w.label}</div>
+                    <div className="font-mono text-[12px] font-semibold tnum text-textPrimary mt-0.5">{fmtUsd(w.depthUsd)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Live-chain hedge requirement — the numerator, shown for contrast */}
+            <div className="flex items-center justify-between gap-3 px-3 py-2.5">
+              <div className="min-w-0">
+                <div className="font-mono text-[12px] font-semibold text-textPrimary">Hedge required · per 1% move</div>
+                <div className="text-[10px] text-textMuted leading-tight mt-0.5">{fmtNum(view.hedgeSharesPer1pct)} shares · from the live chain</div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="font-mono text-[13px] font-semibold tnum text-textPrimary">{fmtUsd(view.hedgePer1pctUsd)}</span>
+                <ProvTag muted={false}>live chain</ProvTag>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </Panel>
+  );
+};
+
 const HedgeImpact = () => {
   const { marketData } = useMarketData();
   const view = useMemo(() => (marketData ? buildHedgeImpact(marketData) : null), [marketData]);
@@ -116,7 +214,18 @@ const HedgeImpact = () => {
   return (
     <>
       <MetricGrid min="170px">
-        <StatCard label="HEX · 15 min" value={view.hex15.toFixed(2)} sub="hedge ÷ liquidity" tone={hexTone(view.hex15)} emphasis />
+        <StatCard
+          label="HEX · 15 min"
+          value={
+            <span className="inline-flex items-baseline gap-1.5">
+              {view.hex15.toFixed(2)}
+              <span className="text-[10px] font-medium uppercase tracking-wide text-textMuted">modeled</span>
+            </span>
+          }
+          sub="hedge ÷ liquidity"
+          tone={hexTone(view.hex15)}
+          emphasis
+        />
         <StatCard
           label="Hedge flow"
           value={view.hedgeDirection}
@@ -141,6 +250,8 @@ const HedgeImpact = () => {
           {view.headline}
         </p>
       </Panel>
+
+      <AssumptionsDrawer view={view} />
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
         {/* Hedge-flow forecast by window */}

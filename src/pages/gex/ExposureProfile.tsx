@@ -13,6 +13,7 @@ import AnimatedNumber from '../../components/ui/AnimatedNumber';
 import ExposureMatrix from '../../components/gex/ExposureMatrix';
 import PositioningMap from '../../components/gex/PositioningMap';
 import ExposureInsight from '../../components/gex/ExposureInsight';
+import ExposureLedger from './ExposureLedger';
 
 /** Exposure sweeps on its own cadence — bars must not vibrate with every tick. */
 const SCAN_INTERVAL_MS = 10_000;
@@ -127,6 +128,15 @@ const ExposureProfile = () => {
         </span>
       </div>
 
+      {/* Header note — dealer-sign convention + units (read the same way across every panel) */}
+      <p className="font-mono text-[11px] leading-relaxed text-textMuted">
+        <span className="text-textSecondary font-semibold uppercase tracking-wider">Sign</span> positive net = dealer short
+        gamma <span className="text-textSecondary">(upside supply)</span> · negative = dealer long gamma{' '}
+        <span className="text-textSecondary">(downside support)</span>.{' '}
+        <span className="text-textSecondary font-semibold uppercase tracking-wider">Units</span> signed $ — GEX per 1%
+        move, DEX per 1σ move, VEX per 1% vol.
+      </p>
+
       {/* Selected-strike detail bar */}
       <AnimatePresence initial={false}>
         {selectedRow && (
@@ -229,6 +239,15 @@ const ExposureProfile = () => {
           <ExposureInsight bias={data.bias} biasNote={data.biasNote} insights={data.insights} />
         </div>
       </div>
+
+      {/* Exposure ledger — filterable single-leg drill-down + CSV export */}
+      <ExposureLedger
+        data={data}
+        hoverStrike={hoverStrike}
+        selectedStrike={selectedStrike}
+        onHoverStrike={setHoverStrike}
+        onSelectStrike={toggleStrike}
+      />
     </>
   );
 };

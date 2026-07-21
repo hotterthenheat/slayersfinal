@@ -65,7 +65,7 @@ const DataTable = <T,>({
               <th
                 key={col.key}
                 style={col.width ? { width: col.width } : undefined}
-                className={`px-3 py-2 font-mono text-[10px] font-semibold uppercase tracking-wider text-textMuted whitespace-nowrap ${
+                className={`px-3 py-2 font-mono text-[11px] font-semibold uppercase tracking-wider text-textMuted whitespace-nowrap ${
                   col.align === 'right' ? 'text-right' : 'text-left'
                 } ${col.sortValue ? 'cursor-pointer select-none hover:text-textSecondary' : ''}`}
                 onClick={() => toggleSort(col)}
@@ -102,7 +102,7 @@ const DataTable = <T,>({
                     onRowClick ? 'cursor-pointer' : ''
                   } ${
                     selected
-                      ? 'bg-select/[0.06] shadow-[inset_2px_0_0_0_rgba(199,211,232,0.7)]'
+                      ? 'bg-select/[0.06] shadow-[inset_2px_0_0_0_rgba(228,232,244,0.7)]'
                       : 'hover:bg-white/[0.02]'
                   }`}
                 >

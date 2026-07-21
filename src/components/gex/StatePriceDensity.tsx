@@ -7,6 +7,7 @@ import Panel from '../ui/Panel';
 import StatCard from '../ui/StatCard';
 import MetricGrid from '../ui/MetricGrid';
 import SignalBadge from '../ui/SignalBadge';
+import PriceThresholdOdds from './PriceThresholdOdds';
 import type { Tone } from '../ui/tones';
 
 interface StatePriceDensityProps {
@@ -232,6 +233,9 @@ const StatePriceDensity = ({ snapshot }: StatePriceDensityProps) => {
           </p>
         </Panel>
       </div>
+
+      {/* Price-threshold odds — read P(above)/P(below) any level off the density */}
+      <PriceThresholdOdds view={view} />
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
         {/* Forward-vol curve */}

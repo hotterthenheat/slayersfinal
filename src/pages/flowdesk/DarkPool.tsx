@@ -37,6 +37,39 @@ const ShelfBar = ({ level, max }: { level: DarkPoolLevel; max: number }) => (
   </span>
 );
 
+/**
+ * Confidence tier — a plain-language bucket over the classifier's OWN conviction
+ * value. It relabels an existing number, it never fabricates one. Low reads amber
+ * (caution), the rest stay neutral so confidence never masquerades as bullishness.
+ */
+const confidenceTier = (conviction: number): { label: string; tone: Tone } =>
+  conviction >= 75
+    ? { label: 'High', tone: 'neutral' }
+    : conviction >= 55
+      ? { label: 'Moderate', tone: 'neutral' }
+      : { label: 'Low', tone: 'warn' };
+
+/** The honest alternative to each inferred read — same tape, a different story. */
+const competingRead: Record<DarkPoolIntent, string> = {
+  ACCUMULATION: 'Could equally be short-covering or a hedge being unwound rather than fresh conviction buying.',
+  DISTRIBUTION: 'Could equally be routine profit-taking or a hedge being layered on, not a directional exit.',
+  'HEDGE FLOW': 'Could turn directional if a desk is expressing a view through the shelf, not purely hedging.',
+  ROTATION: 'Could be the opening leg of an accumulation or distribution program that has yet to cluster.',
+};
+
+/** Confidence chip — surfaces the classifier's conviction as a tier plus the raw %. */
+const ConfidenceChip = ({ conviction }: { conviction: number }) => {
+  const { label, tone } = confidenceTier(conviction);
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className="font-mono text-[11px] uppercase tracking-wider text-textMuted">Confidence</span>
+      <SignalBadge tone={tone}>
+        {label} · {conviction}%
+      </SignalBadge>
+    </span>
+  );
+};
+
 const DarkPool = () => {
   const { marketData } = useMarketData();
   const view = useMemo(() => (marketData ? buildDarkPoolView(marketData) : null), [marketData]);
@@ -54,6 +87,14 @@ const DarkPool = () => {
   const maxNotional = Math.max(...view.levels.map(l => l.notional));
   const selected = view.levels.find(l => l.price === selectedPrice) ?? [...view.levels].sort((a, b) => b.notional - a.notional)[0];
   const activePrint = view.prints.find(p => p.id === selectedPrint) ?? null;
+  // Which tracked shelf did the selected print land on? Nearest by price — used to
+  // surface that shelf's retest count as evidence behind the inferred read.
+  const activePrintShelf =
+    activePrint && activePrint.atLevel && view.levels.length
+      ? view.levels.reduce((best, l) =>
+          Math.abs(l.price - activePrint.price) < Math.abs(best.price - activePrint.price) ? l : best
+        )
+      : null;
 
   const postureTone: Tone = view.posture === 'ACCUMULATING' ? 'bull' : view.posture === 'DISTRIBUTING' ? 'bear' : 'neutral';
   const PostureIcon = view.posture === 'ACCUMULATING' ? ArrowDownToLine : view.posture === 'DISTRIBUTING' ? ArrowUpFromLine : Scale;
@@ -99,7 +140,7 @@ const DarkPool = () => {
     { key: 'venue', header: 'Venue', render: p => <span className="font-mono text-xs text-textMuted">{p.venue}</span> },
     {
       key: 'intent',
-      header: 'Read',
+      header: 'Inferred read',
       sortValue: p => p.intent,
       render: p => (
         <span className="inline-flex items-center gap-2">
@@ -113,7 +154,11 @@ const DarkPool = () => {
       header: 'Conf',
       align: 'right',
       sortValue: p => p.conviction,
-      render: p => <span className="font-mono text-xs text-textSecondary tnum">{p.conviction}%</span>,
+      render: p => (
+        <span className={`font-mono text-xs tnum ${p.conviction < 55 ? 'text-warn' : 'text-textSecondary'}`}>
+          {p.conviction}%
+        </span>
+      ),
     },
   ];
 
@@ -134,7 +179,7 @@ const DarkPool = () => {
               {view.posture}
             </span>
           }
-          sub={`${view.netPosturePct >= 0 ? '+' : ''}${view.netPosturePct.toFixed(0)} conviction-weighted skew`}
+          sub={`inferred · ${view.netPosturePct >= 0 ? '+' : ''}${view.netPosturePct.toFixed(0)} conviction-weighted skew`}
           tone={postureTone}
         />
         <StatCard label="DP notional" value={fmtUsd(view.totalNotional)} sub={`${view.prints.length} sized prints tracked`} />
@@ -158,7 +203,7 @@ const DarkPool = () => {
       <Panel tone={postureTone} bodyClassName="py-3">
         <p className="text-xs text-textSecondary leading-relaxed">
           <span className={`font-mono font-semibold uppercase tracking-wider mr-2 ${postureTone === 'bull' ? 'text-bull' : postureTone === 'bear' ? 'text-bear' : 'text-textPrimary'}`}>
-            The read
+            Inferred read
           </span>
           {view.postureNote}
         </p>
@@ -197,8 +242,8 @@ const DarkPool = () => {
                       {level.distPct >= 0 ? '+' : ''}
                       {level.distPct.toFixed(2)}%
                     </span>
-                    <span className="font-mono text-[10px] text-textMuted text-right">
-                      {level.defended > 0 ? `held ${level.defended}×` : '—'}
+                    <span className="font-mono text-[11px] text-textMuted text-right">
+                      {level.defended > 0 ? `${level.defended}× held` : '—'}
                     </span>
                   </button>
                   {spotBetween && (
@@ -224,8 +269,8 @@ const DarkPool = () => {
               <SignalBadge tone={roleTone[selected.role]} dot>
                 {selected.role}
               </SignalBadge>
-              <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted">
-                {selected.sharePct.toFixed(0)}% of session DP · {selected.defended > 0 ? `defended ${selected.defended}×` : 'untested'}
+              <span className="font-mono text-[11px] uppercase tracking-wider text-textMuted">
+                {selected.sharePct.toFixed(0)}% of session DP · {selected.defended > 0 ? `${selected.defended} retest${selected.defended > 1 ? 's' : ''} held` : 'untested'}
               </span>
             </div>
             <p className="text-xs text-textSecondary leading-relaxed">{selected.usage}</p>
@@ -264,11 +309,29 @@ const DarkPool = () => {
       </div>
 
       {/* Classified prints */}
-      <Panel title="Sized prints" subtitle="classified — not just the tape line" flush>
+      <Panel title="Sized prints" subtitle="inferred classification — a read, not a confirmed fact" flush>
         {activePrint && (
-          <div className="px-4 py-2.5 border-b border-borderSubtle bg-inset flex items-start gap-2 animate-soft-in">
-            <SignalBadge tone={intentTone[activePrint.intent]}>{activePrint.intent}</SignalBadge>
+          <div className="px-4 py-3 border-b border-borderSubtle bg-inset flex flex-col gap-2.5 animate-soft-in">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-mono text-[11px] uppercase tracking-wider text-textMuted">Inferred as</span>
+              <SignalBadge tone={intentTone[activePrint.intent]}>{activePrint.intent}</SignalBadge>
+              <ConfidenceChip conviction={activePrint.conviction} />
+              {activePrintShelf && (
+                <span className="inline-flex items-center gap-1 font-mono text-[11px] uppercase tracking-wider text-flip">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  {activePrintShelf.defended > 0
+                    ? `shelf held ${activePrintShelf.defended}× on retest`
+                    : 'on an untested shelf'}
+                </span>
+              )}
+            </div>
             <p className="text-xs text-textSecondary leading-relaxed">{activePrint.read}</p>
+            <div className="flex items-start gap-2 border-t border-borderSubtle pt-2.5">
+              <span className="font-mono text-[11px] uppercase tracking-wider text-textMuted whitespace-nowrap mt-px">
+                Competing read
+              </span>
+              <p className="text-[11px] text-textMuted leading-relaxed">{competingRead[activePrint.intent]}</p>
+            </div>
           </div>
         )}
         <DataTable

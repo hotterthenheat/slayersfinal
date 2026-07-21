@@ -1,24 +1,43 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { MarketSnapshot } from '../../types/market';
 import VolSurface from '../../components/three/VolSurface';
+import SegmentedControl from '../../components/ui/SegmentedControl';
 
 /*
-  Dealer-positioning surface, now rendered in real WebGL (three.js): strikes
-  across, expiries deep, net GEX tall. Positive structure wears the holo silver
-  run; negative gamma burns red — the same grammar as every 2D exposure view.
-  Slow auto-orbit; drag to spin and tilt.
+  Dealer-positioning surface: strikes across, expiries deep, net GEX tall.
+  The default is a precise 2D heatmap — every strike × expiry cell is readable
+  and hoverable, so exact levels don't hide inside a rotating solid. A toggle
+  swaps in the WebGL 3D view for the shape-at-a-glance read. Positive structure
+  wears the holo silver run; negative gamma burns red — the same grammar as
+  every 2D exposure view.
 */
 
 const EXPIRY_ROWS = 11;
 
-/** Row-major grid of normalized exposure heights (−1…1): rows = expiries, cols = strikes. */
-function buildSurface(snapshot: MarketSnapshot): number[][] {
+type View = '2d' | '3d';
+
+const VIEW_OPTIONS = [
+  { value: '2d', label: '2D' },
+  { value: '3d', label: '3D' },
+] as const;
+
+interface SurfaceData {
+  /** Row-major grid of normalized exposure heights (−1…1): rows = expiries, cols = strikes. */
+  grid: number[][];
+  strikes: number[];
+  spotCol: number;
+}
+
+function buildSurface(snapshot: MarketSnapshot): SurfaceData {
   const { chain, spot } = snapshot;
   const nodes = [...chain].sort((a, b) => a.strike - b.strike);
   const idx = nodes.findIndex(n => n.strike >= spot);
   const from = Math.max(0, idx - 12);
   const window = nodes.slice(from, from + 24);
   const maxAbs = Math.max(...window.map(n => Math.abs(n.netGex)), 1);
+  const strikes = window.map(n => n.strike);
+  const spotFound = window.findIndex(n => n.strike >= spot);
+  const spotCol = spotFound < 0 ? Math.max(0, window.length - 1) : spotFound;
 
   const grid: number[][] = [];
   for (let e = 0; e < EXPIRY_ROWS; e++) {
@@ -31,8 +50,25 @@ function buildSurface(snapshot: MarketSnapshot): number[][] {
       })
     );
   }
-  return grid;
+  return { grid, strikes, spotCol };
 }
+
+/** −1…1 normalized exposure → house-grammar heatmap fill. Silver = support (+), red = negative gamma (−). */
+function cellColor(z: number): string {
+  const t = Math.min(Math.abs(z) * 1.3, 1);
+  const alpha = 0.05 + t * 0.9;
+  if (z >= 0) {
+    const r = Math.round(174 + t * 70);
+    const g = Math.round(185 + t * 60);
+    const b = Math.round(207 + t * 48);
+    return `rgba(${r},${g},${b},${alpha})`;
+  }
+  const g = Math.round(80 - t * 34);
+  const b = Math.round(64 - t * 24);
+  return `rgba(255,${g},${b},${alpha})`;
+}
+
+const fmtStrike = (s: number) => s.toLocaleString(undefined, { maximumFractionDigits: 1 });
 
 interface Surface3DProps {
   snapshot: MarketSnapshot;
@@ -40,20 +76,105 @@ interface Surface3DProps {
 }
 
 const Surface3D = ({ snapshot, height = 340 }: Surface3DProps) => {
-  const grid = useMemo(() => buildSurface(snapshot), [snapshot]);
+  const [view, setView] = useState<View>('2d');
+  const { grid, strikes, spotCol } = useMemo(() => buildSurface(snapshot), [snapshot]);
+  const cols = strikes.length;
+  const rows = grid.length;
+  const spotLeft = cols > 0 ? ((spotCol + 0.5) / cols) * 100 : 50;
 
   return (
-    <div className="relative select-none" style={{ height }}>
-      <VolSurface grid={grid} colormap="exposure" height={height} />
-      <div className="absolute bottom-2 left-3 flex items-center gap-3 font-mono text-[9px] uppercase tracking-widest text-textMuted pointer-events-none">
-        <span className="inline-flex items-center gap-1">
-          <span className="w-2 h-[2px] holo-bar inline-block" /> dealer support
+    <div className="relative flex flex-col select-none" style={{ height }}>
+      {/* view header */}
+      <div className="flex items-center justify-between gap-2 px-3.5 pt-3 pb-2">
+        <span className="font-mono text-[11px] uppercase tracking-widest text-textMuted truncate">
+          strikes × expiries × net GEX
         </span>
-        <span className="inline-flex items-center gap-1">
-          <span className="w-2 h-[2px] bg-bear/80 inline-block" /> negative gamma
-        </span>
-        <span>drag to orbit</span>
+        <SegmentedControl ariaLabel="Surface view" options={VIEW_OPTIONS} value={view} onChange={setView} />
       </div>
+
+      {view === '3d' ? (
+        <div className="relative flex-1 min-h-0">
+          <VolSurface grid={grid} colormap="exposure" height="100%" />
+          <div className="absolute bottom-2 left-3 flex items-center gap-3 font-mono text-[11px] uppercase tracking-wider text-textMuted pointer-events-none">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="w-2.5 h-[3px] holo-bar inline-block rounded-full" /> dealer support
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="w-2.5 h-[3px] bg-bear/80 inline-block rounded-full" /> negative gamma
+            </span>
+            <span className="text-[9px] tracking-widest">drag to orbit</span>
+          </div>
+        </div>
+      ) : (
+        <div className="flex-1 min-h-0 flex flex-col px-3.5 pb-2.5">
+          <div className="flex-1 min-h-0 flex">
+            {/* expiry (y) axis gutter */}
+            <div className="flex flex-col justify-between items-center pr-2 py-0.5 shrink-0">
+              <span className="font-mono text-[9px] uppercase tracking-widest text-textMuted">near</span>
+              <span className="font-mono text-[9px] uppercase tracking-widest text-textMuted [writing-mode:vertical-rl] rotate-180">
+                expiry
+              </span>
+              <span className="font-mono text-[9px] uppercase tracking-widest text-textMuted">far</span>
+            </div>
+
+            <div className="flex-1 min-w-0 flex flex-col">
+              {/* heatmap */}
+              <div className="relative flex-1 min-h-0 rounded-sm overflow-hidden bg-borderSubtle">
+                <div
+                  className="absolute inset-0 grid gap-px"
+                  style={{
+                    gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+                    gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
+                  }}
+                >
+                  {grid.map((row, r) =>
+                    row.map((z, c) => (
+                      <div
+                        key={`${r}-${c}`}
+                        className="transition-[filter] hover:brightness-125"
+                        style={{ background: cellColor(z) }}
+                        title={`$${fmtStrike(strikes[c])} · ${z >= 0 ? 'dealer support' : 'negative gamma'}`}
+                      />
+                    ))
+                  )}
+                </div>
+                {/* spot column guide */}
+                <div
+                  className="absolute top-0 bottom-0 w-px bg-white/45 pointer-events-none"
+                  style={{ left: `${spotLeft}%` }}
+                />
+              </div>
+
+              {/* strike (x) axis */}
+              <div className="relative h-4 mt-1.5">
+                <span className="absolute left-0 font-mono text-[11px] text-textMuted tnum">
+                  ${fmtStrike(strikes[0])}
+                </span>
+                <span
+                  className="absolute -translate-x-1/2 font-mono text-[11px] text-textSecondary tnum whitespace-nowrap"
+                  style={{ left: `${spotLeft}%` }}
+                >
+                  ${fmtStrike(strikes[spotCol])} spot
+                </span>
+                <span className="absolute right-0 font-mono text-[11px] text-textMuted tnum">
+                  ${fmtStrike(strikes[cols - 1])}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* legend */}
+          <div className="flex items-center gap-3 pt-2 font-mono text-[11px] uppercase tracking-wider text-textMuted">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="w-2.5 h-[3px] holo-bar inline-block rounded-full" /> dealer support
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="w-2.5 h-[3px] bg-bear/80 inline-block rounded-full" /> negative gamma
+            </span>
+            <span className="ml-auto text-[9px] tracking-widest">hover a cell for its strike</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
