@@ -106,8 +106,8 @@ const FOOTER_COLS = [
   {
     title: 'Access',
     links: [
-      { label: 'Launch Terminal', to: '/' },
-      { label: 'Log in / Sign up', to: '/' },
+      { label: 'Launch Terminal', to: '/pulse' },
+      { label: 'Log in / Sign up', to: '/pulse' },
       { label: 'Workspace', to: '/workspace' },
     ],
   },
