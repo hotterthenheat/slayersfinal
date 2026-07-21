@@ -35,12 +35,14 @@ const FactorRow = ({ label, weight, score, detail }: { label: string; weight: nu
 
 interface ContractWeigherProps {
   snapshot: MarketSnapshot;
+  /** Deep-link entry point — start on this horizon (e.g. from Earnings) */
+  initialHorizon?: Horizon;
 }
 
 /** Compass's second mode: the scale. Weeklies, swings and LEAPS candidates
     priced and weighed — buy list on top, fades on the bottom, reasons attached. */
-const ContractWeigher = ({ snapshot }: ContractWeigherProps) => {
-  const [horizon, setHorizon] = useState<Horizon>('WEEKLIES');
+const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => {
+  const [horizon, setHorizon] = useState<Horizon>(initialHorizon ?? 'WEEKLIES');
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const contracts = useMemo(() => weighContracts(snapshot, horizon), [snapshot, horizon]);

@@ -5,6 +5,8 @@ import { buildGexView, pulseMatrix } from '../data/gex';
 import { buildCommandView, makeAutoNote } from '../data/command';
 import PageHeader from '../components/ui/PageHeader';
 import TickerSearch from '../components/ui/TickerSearch';
+import StatRibbon from '../components/ui/StatRibbon';
+import { deriveMarketKpis } from '../data/kpis';
 import SegmentedControl from '../components/ui/SegmentedControl';
 import Panel from '../components/ui/Panel';
 import StrikeChart from '../components/gex/StrikeChart';
@@ -162,13 +164,19 @@ const Pulse = () => {
         breadcrumb={['Terminal', 'Pulse']}
         title="Pulse"
         subtitle="Chart, dealer pressure, order flow & key levels"
+        ribbon={<StatRibbon stats={deriveMarketKpis(marketData)} />}
         actions={<TickerSearch value={activeTicker} onChange={changeTicker} />}
       />
 
-      {/* Page-level controls — metric + range drive the matrix and board too */}
-      <div className="flex items-center gap-3 flex-wrap">
+      {/* Page-level controls — metric + range drive the matrix and board too;
+          overlay + timeframe are chart-scoped. One wrapping toolbar so nothing
+          clips on narrow screens. */}
+      <div className="flex items-center gap-2.5 flex-wrap">
         <SegmentedControl ariaLabel="Metric" options={METRIC_OPTIONS} value={metric} onChange={setMetric} />
         <SegmentedControl ariaLabel="Strike range" options={RANGE_OPTIONS} value={rangeKey} onChange={setRangeKey} />
+        <span className="w-px h-5 bg-borderSubtle hidden sm:block" aria-hidden />
+        <SegmentedControl ariaLabel="Overlay" options={OVERLAY_OPTIONS} value={overlay} onChange={setOverlay} />
+        <SegmentedControl ariaLabel="Timeframe" options={TIMEFRAME_OPTIONS} value={timeframe} onChange={setTimeframe} />
         <span className="ml-auto font-mono text-[10px] text-textMuted uppercase tracking-widest tnum">
           scan {lastScanAt} · 10s
         </span>
@@ -181,12 +189,6 @@ const Pulse = () => {
           subtitle="live tick feed"
           className="xl:col-span-7 w-full"
           bodyClassName="flex flex-col"
-          actions={
-            <span className="flex items-center gap-2">
-              <SegmentedControl ariaLabel="Overlay" options={OVERLAY_OPTIONS} value={overlay} onChange={setOverlay} />
-              <SegmentedControl ariaLabel="Timeframe" options={TIMEFRAME_OPTIONS} value={timeframe} onChange={setTimeframe} />
-            </span>
-          }
         >
           <StrikeChart
             ticker={activeTicker}

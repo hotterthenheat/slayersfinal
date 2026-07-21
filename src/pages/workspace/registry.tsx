@@ -15,8 +15,16 @@ import KeyLevelsRail from '../../components/gex/KeyLevelsRail';
 import OrderFlowPanel from '../../components/gex/OrderFlowPanel';
 import WallDrift from '../../components/gex/vannacharm/WallDrift';
 import RegimePanel from '../../components/gex/vollab/RegimePanel';
+import MonteCarloPanel from '../proveit/MonteCarloPanel';
 import SignalBadge from '../../components/ui/SignalBadge';
 import type { Tone } from '../../components/ui/tones';
+import { buildDarkPoolView } from '../../data/darkpool';
+import { buildStockBoard } from '../../data/stocks';
+import { buildNewsFeed } from '../../data/news';
+import { buildEarningsCalendar } from '../../data/earnings';
+import { runMonteCarlo } from '../../core/quant';
+import { fmtUsd } from '../../data/gex';
+import type { MarketSnapshot } from '../../types/market';
 import type {
   CommandView,
   DealerBias,
@@ -31,6 +39,9 @@ import type { SkyVisionData } from '../../types/skyvision';
 export interface WorkspaceCtx {
   ticker: string;
   revision: number;
+  /** Raw snapshot for widgets that run their own engine (dark pool, quant) */
+  snapshot: MarketSnapshot;
+  iv: number;
   gex: GexView;
   /** Strike × expiry matrix with the 1s live pulse applied */
   matrix: GexMatrixData;
@@ -225,6 +236,126 @@ export const WIDGETS: WidgetDef[] = [
                 {s.expectedMovePct >= 0 ? '+' : ''}
                 {s.expectedMovePct}%
               </span>
+            </div>
+          ))}
+      </div>
+    ),
+  },
+  {
+    key: 'dark-pool',
+    title: 'Dark Pool',
+    description: 'Off-exchange posture & liquidity shelves',
+    w: 4,
+    h: 5,
+    minW: 3,
+    minH: 4,
+    render: ctx => {
+      const dp = buildDarkPoolView(ctx.snapshot);
+      const tone: Tone = dp.posture === 'ACCUMULATING' ? 'bull' : dp.posture === 'DISTRIBUTING' ? 'bear' : 'neutral';
+      return (
+        <div className="h-full min-h-0 overflow-y-auto p-3 flex flex-col gap-2.5">
+          <div className="flex items-center gap-2">
+            <SignalBadge tone={tone} dot>
+              {dp.posture}
+            </SignalBadge>
+            <span className="font-mono text-[10px] text-textMuted tnum">
+              {dp.dpSharePct.toFixed(0)}% off-exchange · {dp.netPosturePct >= 0 ? '+' : ''}
+              {dp.netPosturePct.toFixed(0)}
+            </span>
+          </div>
+          {dp.levels.slice(0, 6).map(l => (
+            <div key={l.price} className="flex items-center justify-between gap-2 font-mono text-[11px]">
+              <span className="text-textPrimary tnum">${l.price.toFixed(2)}</span>
+              <SignalBadge tone={l.role === 'SUPPORT' ? 'bull' : l.role === 'RESISTANCE' ? 'bear' : 'neutral'}>{l.role}</SignalBadge>
+              <span className="text-textMuted tnum">{fmtUsd(l.notional)}</span>
+            </div>
+          ))}
+        </div>
+      );
+    },
+  },
+  {
+    key: 'monte-carlo',
+    title: 'Monte Carlo',
+    description: 'Simulated price cone & terminal distribution',
+    w: 6,
+    h: 5,
+    minW: 4,
+    minH: 4,
+    render: ctx => (
+      <div className="h-full min-h-0 p-3">
+        <MonteCarloPanel mc={runMonteCarlo(ctx.snapshot, ctx.iv, 30)} spot={ctx.snapshot.spot} height={180} />
+      </div>
+    ),
+  },
+  {
+    key: 'stocks-board',
+    title: 'Stocks Board',
+    description: 'Top-ranked equity picks by composite',
+    w: 4,
+    h: 5,
+    minW: 3,
+    minH: 4,
+    render: () => (
+      <div className="h-full min-h-0 overflow-y-auto">
+        {buildStockBoard()
+          .slice(0, 8)
+          .map(p => (
+            <div key={p.ticker} className="flex items-center gap-2 px-2.5 py-2 border-b border-borderSubtle/30 last:border-0">
+              <span className="font-mono text-[11px] font-bold text-textPrimary">{p.ticker}</span>
+              <SignalBadge tone={p.verdict === 'ACCUMULATE' ? 'bull' : p.verdict === 'AVOID' ? 'bear' : 'neutral'}>{p.verdict}</SignalBadge>
+              <span className="ml-auto font-mono text-[11px] font-semibold text-textPrimary tnum">{p.composite}</span>
+            </div>
+          ))}
+      </div>
+    ),
+  },
+  {
+    key: 'news-wire',
+    title: 'News Wire',
+    description: 'Latest headlines with expected move',
+    w: 5,
+    h: 4,
+    minW: 4,
+    minH: 3,
+    render: () => (
+      <div className="h-full min-h-0 overflow-y-auto">
+        {buildNewsFeed()
+          .slice(0, 8)
+          .map(n => (
+            <div key={n.id} className="px-2.5 py-2 border-b border-borderSubtle/30 last:border-0">
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-[9px] text-textMuted tnum">{n.time}</span>
+                {n.ticker && <span className="font-mono text-[10px] font-bold text-textPrimary">{n.ticker}</span>}
+                <span className={`ml-auto font-mono text-[10px] tnum ${n.prediction.expMove1dPct >= 0 ? 'text-bull' : 'text-bear'}`}>
+                  {n.prediction.expMove1dPct >= 0 ? '+' : ''}
+                  {n.prediction.expMove1dPct.toFixed(1)}%
+                </span>
+              </div>
+              <p className="mt-0.5 text-[11px] text-textSecondary leading-snug line-clamp-1">{n.headline}</p>
+            </div>
+          ))}
+      </div>
+    ),
+  },
+  {
+    key: 'earnings-calendar',
+    title: 'Earnings Slate',
+    description: 'Upcoming prints — implied move & verdict',
+    w: 4,
+    h: 4,
+    minW: 3,
+    minH: 3,
+    render: () => (
+      <div className="h-full min-h-0 overflow-y-auto">
+        {buildEarningsCalendar()
+          .slice(0, 8)
+          .map(e => (
+            <div key={e.ticker} className="flex items-center gap-2 px-2.5 py-2 border-b border-borderSubtle/30 last:border-0">
+              <span className="font-mono text-[11px] font-bold text-textPrimary">{e.ticker}</span>
+              <span className="font-mono text-[9px] text-textMuted">{e.dateLabel}</span>
+              <span className="ml-auto font-mono text-[10px] text-textSecondary tnum">{e.impliedMovePct.toFixed(1)}%</span>
+              <SignalBadge tone={e.verdict === 'PLAY' ? 'bull' : e.verdict === 'FADE' ? 'magenta' : 'neutral'}>{e.verdict}</SignalBadge>
             </div>
           ))}
       </div>

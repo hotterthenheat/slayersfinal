@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import { CalendarClock, Crosshair } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
+import StatRibbon from '../components/ui/StatRibbon';
+import TickerJump from '../components/ui/TickerJump';
 import Panel from '../components/ui/Panel';
 import StatCard from '../components/ui/StatCard';
 import MetricGrid from '../components/ui/MetricGrid';
@@ -58,9 +60,24 @@ const EarningsHub = () => {
 
   const plays = events.filter(e => e.verdict === 'PLAY');
   const fades = events.filter(e => e.verdict === 'FADE');
+  const skips = events.filter(e => e.verdict === 'SKIP');
   const richest = [...events].sort((a, b) => b.richness - a.richness)[0];
   const cheapest = [...events].sort((a, b) => a.richness - b.richness)[0];
   const biggest = [...events].sort((a, b) => b.impliedMovePct - a.impliedMovePct)[0];
+  const next = [...events].sort((a, b) => a.daysOut - b.daysOut)[0];
+  const avgRich = (events.reduce((a, e) => a + e.richness, 0) / Math.max(events.length, 1)).toFixed(2);
+
+  const headerRibbon = (
+    <StatRibbon
+      stats={[
+        { label: 'Next', value: next ? `${next.ticker} ${next.dateLabel}` : '--' },
+        { label: 'Avg rich', value: `${avgRich}×`, tone: Number(avgRich) >= 1.15 ? 'warn' : 'neutral' },
+        { label: 'Play', value: String(plays.length), tone: 'bull' },
+        { label: 'Fade', value: String(fades.length), tone: 'magenta' },
+        { label: 'Skip', value: String(skips.length) },
+      ]}
+    />
+  );
 
   // Group the next stretch of sessions into a calendar strip
   const byDay = useMemo(() => {
@@ -166,6 +183,7 @@ const EarningsHub = () => {
         breadcrumb={['Terminal', 'Earnings']}
         title="Earnings Hub"
         subtitle="Every upcoming print priced: implied vs what it actually moves — play the cheap ones, fade the rich ones"
+        ribbon={headerRibbon}
         actions={<SegmentedControl ariaLabel="Verdict filter" options={FILTER_OPTIONS} value={filter} onChange={setFilter} />}
       />
 
@@ -244,6 +262,7 @@ const EarningsHub = () => {
                 implied {selected.impliedMovePct.toFixed(1)}% · realized {selected.histAvgMovePct.toFixed(1)}% ·{' '}
                 {selected.richness.toFixed(2)}×
               </span>
+              <TickerJump ticker={selected.ticker} horizon="WEEKLIES" className="ml-auto" />
             </div>
             <p className="text-xs text-textPrimary leading-relaxed">{selected.strategy}</p>
             <p className="text-xs text-textSecondary leading-relaxed">{selected.rationale}</p>

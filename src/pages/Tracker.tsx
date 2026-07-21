@@ -9,7 +9,7 @@
 
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bookmark, Trash2, ArrowUpRight } from 'lucide-react';
+import { Bookmark, Trash2, ArrowUpRight, Compass, Scale, Radar, CalendarClock } from 'lucide-react';
 import { useTracker } from '../context/TrackerContext';
 import { useMarketData } from '../context/MarketDataContext';
 import Simulator from '../core/simulator';
@@ -285,24 +285,58 @@ const Tracker = () => {
         </span>
       </div>
 
-      {/* Empty state */}
+      {/* Empty state — a dense "get started" surface, not a blank panel */}
       {trackedSetups.length === 0 ? (
-        <Panel className="w-full" bodyClassName="flex flex-col items-center justify-center py-16 gap-4">
-          <Bookmark className="w-10 h-10 text-textMuted/40" />
-          <span className="font-mono text-[11px] text-textMuted uppercase tracking-widest">
-            No tracked setups yet
-          </span>
-          <p className="text-[12px] text-textSecondary text-center max-w-sm leading-relaxed">
-            Go to{' '}
-            <button
-              onClick={() => navigate('/compass')}
-              className="text-select hover:underline"
-            >
-              Compass
-            </button>
-            , pick a setup, and click <strong className="text-textPrimary">Track Setup +</strong> to bookmark it here.
-          </p>
-        </Panel>
+        <div className="flex flex-col gap-4 animate-view-in">
+          <Panel className="w-full" bodyClassName="py-8 px-6 flex flex-col md:flex-row md:items-center gap-6">
+            <div className="flex-1 min-w-0">
+              <div className="inline-flex w-11 h-11 rounded-lg border border-borderSubtle bg-inset items-center justify-center mb-3">
+                <Bookmark className="w-5 h-5 holo-text" />
+              </div>
+              <h2 className="text-lg font-semibold text-textPrimary">Nothing on watch yet</h2>
+              <p className="mt-1.5 text-[13px] text-textSecondary leading-relaxed max-w-xl">
+                The Tracker keeps your best ideas under live monitoring — it re-scores each one every tick and flags
+                the moment a setup's structure breaks. Bookmark something from any of the desks below to start.
+              </p>
+            </div>
+            <div className="grid grid-cols-3 gap-3 shrink-0">
+              {[
+                { k: 'Monitored', v: 'live', s: 'every tick' },
+                { k: 'Alerts', v: 'auto', s: 'on invalidation' },
+                { k: 'History', v: 'kept', s: 'win/loss ledger' },
+              ].map(x => (
+                <div key={x.k} className="border border-borderSubtle bg-inset rounded-lg px-3 py-2.5 text-center min-w-[92px]">
+                  <div className="font-mono text-[9px] uppercase tracking-widest text-textMuted">{x.k}</div>
+                  <div className="mt-1 font-mono text-sm font-semibold holo-text">{x.v}</div>
+                  <div className="mt-0.5 text-[10px] text-textMuted">{x.s}</div>
+                </div>
+              ))}
+            </div>
+          </Panel>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            {[
+              { icon: Compass, title: 'Compass setups', body: 'Graded ENTER / EXIT trade setups with a full plan.', to: '/compass', cta: 'Open Compass' },
+              { icon: Scale, title: 'Contract Weigher', body: 'Weeklies, swings & LEAPS scored BUY / WATCH / FADE.', to: '/compass', cta: 'Weigh contracts' },
+              { icon: Radar, title: 'Trace flow', body: 'Notable options prints and dark-pool blocks.', to: '/trace/tracker', cta: 'Open Trace' },
+              { icon: CalendarClock, title: 'Earnings plays', body: 'Implied-vs-realized PLAY / FADE calls into prints.', to: '/earnings', cta: 'Open Earnings' },
+            ].map(card => (
+              <div key={card.title} className="border border-borderSubtle bg-panel rounded-lg p-4 flex flex-col gap-2.5">
+                <span className="inline-flex w-8 h-8 rounded-md border border-borderSubtle bg-inset items-center justify-center">
+                  <card.icon className="w-4 h-4 text-textSecondary" />
+                </span>
+                <h3 className="font-mono text-[11px] font-semibold uppercase tracking-wider text-textPrimary">{card.title}</h3>
+                <p className="text-[11px] text-textMuted leading-relaxed flex-1">{card.body}</p>
+                <button
+                  onClick={() => navigate(card.to)}
+                  className="mt-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md holo-bg text-[#0a0a0a] font-mono text-[10px] font-semibold uppercase tracking-wider transition-transform hover:scale-[1.02]"
+                >
+                  {card.cta}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
       ) : tab === 'setups' ? (
         /* ---- Grid of tracked setup cards ---- */
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 animate-view-in">

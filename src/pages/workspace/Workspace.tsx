@@ -111,6 +111,8 @@ const Workspace = () => {
     return {
       ticker: scanSnapshot.ticker,
       revision,
+      snapshot: scanSnapshot,
+      iv,
       gex,
       matrix: gex.matrix,
       exposure: buildExposureProfile(scanSnapshot, '0DTE', 10),
