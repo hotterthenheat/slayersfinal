@@ -23,6 +23,7 @@ import Stocks from './pages/Stocks';
 import News from './pages/News';
 import EarningsHub from './pages/EarningsHub';
 import ProveIt from './pages/proveit/ProveIt';
+import Fracture from './pages/fracture/Fracture';
 import Landing from './pages/landing/Landing';
 import CommunityLayout from './pages/community/CommunityLayout';
 import Ideas from './pages/community/Ideas';
@@ -51,6 +52,7 @@ const App = () => {
             <Route path="/news" element={<News />} />
             <Route path="/earnings" element={<EarningsHub />} />
             <Route path="/prove-it" element={<ProveIt />} />
+            <Route path="/fracture" element={<Fracture />} />
             <Route path="/tracker" element={<Tracker />} />
             <Route path="/pinpoint" element={<GexLayout />}>
               <Route index element={<Navigate to="/pinpoint/exposure-profile" replace />} />
