@@ -13,6 +13,7 @@ import ExposureProfile from './pages/gex/ExposureProfile';
 import RankedTargets from './pages/gex/RankedTargets';
 import VannaCharm from './pages/gex/VannaCharm';
 import VolLab from './pages/gex/VolLab';
+import GreeksRegime from './pages/gex/GreeksRegime';
 import GexHistory from './pages/gex/GexHistory';
 import FlowDeskLayout from './pages/flowdesk/FlowDeskLayout';
 import LiveTape from './pages/flowdesk/LiveTape';
@@ -62,6 +63,7 @@ const App = () => {
               <Route path="ranked-targets" element={<RankedTargets />} />
               <Route path="strike-profile" element={<Navigate to="/pinpoint/exposure-profile" replace />} />
               <Route path="vanna-charm" element={<VannaCharm />} />
+              <Route path="greeks-regime" element={<GreeksRegime />} />
               <Route path="vol-lab" element={<VolLab />} />
               <Route path="history" element={<GexHistory />} />
             </Route>
