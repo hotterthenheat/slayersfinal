@@ -14,6 +14,7 @@ import RankedTargets from './pages/gex/RankedTargets';
 import VannaCharm from './pages/gex/VannaCharm';
 import VolLab from './pages/gex/VolLab';
 import GreeksRegime from './pages/gex/GreeksRegime';
+import HedgeImpact from './pages/gex/HedgeImpact';
 import GexHistory from './pages/gex/GexHistory';
 import FlowDeskLayout from './pages/flowdesk/FlowDeskLayout';
 import LiveTape from './pages/flowdesk/LiveTape';
@@ -66,6 +67,7 @@ const App = () => {
               <Route path="strike-profile" element={<Navigate to="/pinpoint/exposure-profile" replace />} />
               <Route path="vanna-charm" element={<VannaCharm />} />
               <Route path="greeks-regime" element={<GreeksRegime />} />
+              <Route path="hedge-impact" element={<HedgeImpact />} />
               <Route path="vol-lab" element={<VolLab />} />
               <Route path="history" element={<GexHistory />} />
             </Route>
