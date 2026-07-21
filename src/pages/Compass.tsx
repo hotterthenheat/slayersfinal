@@ -1,7 +1,7 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Filter } from 'lucide-react';
+import { Filter, AlertTriangle } from 'lucide-react';
 import { useMarketData } from '../context/MarketDataContext';
 import type { MarketSnapshot } from '../types/market';
 import Simulator from '../core/simulator';
@@ -10,6 +10,7 @@ import { SCANNERS, type ScannerKey, type Setup } from '../types/skyvision';
 import PageHeader from '../components/ui/PageHeader';
 import TickerSearch from '../components/ui/TickerSearch';
 import Panel from '../components/ui/Panel';
+import DataTable, { type Column } from '../components/ui/DataTable';
 import SetupsFeed from '../components/skyvision/SetupsFeed';
 import ContractChain, { type ChainSelection } from '../components/skyvision/ContractChain';
 import SignalMonitor from '../components/skyvision/SignalMonitor';
@@ -19,8 +20,18 @@ import ContractWeigher from '../components/compass/ContractWeigher';
 import LottoBoard from '../components/compass/LottoBoard';
 import type { Horizon } from '../core/contractScore';
 import SegmentedControl from '../components/ui/SegmentedControl';
+import { setupState, StateBadge, STATE_META, SETUP_STATES, type SetupState } from '../components/skyvision/SetupState';
+import { toneBadge, toneDot } from '../components/ui/tones';
 
 type CompassMode = 'setups' | 'weigher' | 'lotto';
+type SetupsView = 'list' | 'table';
+
+const SETUPS_VIEW_OPTIONS = [
+  { value: 'list', label: 'List' },
+  { value: 'table', label: 'Table' },
+] as const;
+
+const SETUPS_SUBTITLE = 'Lifecycle read from live signal — WAITING · ARMED · TRIGGERED · INVALIDATED — never an order';
 
 const MODE_OPTIONS = [
   { value: 'setups', label: 'Setups' },
@@ -53,6 +64,10 @@ const Compass = () => {
   // Ticker filter for browse mode — null means show all tickers
   const [tickerFilter, setTickerFilter] = useState<string | null>(null);
   const [showTickerDropdown, setShowTickerDropdown] = useState(false);
+
+  // Feed presentation: card list vs sortable table; lifecycle-state filter
+  const [setupsView, setSetupsView] = useState<SetupsView>('list');
+  const [stateFilter, setStateFilter] = useState<SetupState | null>(null);
 
   const inReviewMode = monitorTarget !== null;
 
@@ -133,11 +148,33 @@ const Compass = () => {
     return makeSetup(selectedSetup.ticker, cfg.currentPrice, selectedSetup.strike, selectedSetup.right, scanner, cfg.iv);
   }, [selectedSetup, scanner, marketData]);
 
-  // Filtered groups for browse mode
+  // Filtered groups for browse mode — ticker universe + lifecycle state.
+  // When a state filter is active we re-derive `found` from the surviving
+  // setups so the "N found" badge stays honest with what's shown.
   const filteredGroups = useMemo(() => {
     if (!data) return [];
-    if (!tickerFilter) return data.groups;
-    return data.groups.filter(g => g.ticker === tickerFilter);
+    let gs = tickerFilter ? data.groups.filter(g => g.ticker === tickerFilter) : data.groups;
+    if (stateFilter) {
+      gs = gs
+        .map(g => {
+          const setups = g.setups.filter(s => setupState(s) === stateFilter);
+          return { ...g, setups, found: setups.length };
+        })
+        .filter(g => g.setups.length > 0);
+    }
+    return gs;
+  }, [data, tickerFilter, stateFilter]);
+
+  // Flat, one-row-per-setup projection for the sortable table view
+  const flatSetups = useMemo(() => filteredGroups.flatMap(g => g.setups), [filteredGroups]);
+
+  // Counts per lifecycle state across the current ticker universe (unfiltered
+  // by state) — drives the filter-chip badges. Read straight off existing rows.
+  const stateCounts = useMemo(() => {
+    const base = data ? (tickerFilter ? data.groups.filter(g => g.ticker === tickerFilter) : data.groups) : [];
+    const counts: Record<SetupState, number> = { WAITING: 0, ARMED: 0, TRIGGERED: 0, INVALIDATED: 0 };
+    for (const g of base) for (const s of g.setups) counts[setupState(s)]++;
+    return counts;
   }, [data, tickerFilter]);
 
   // Compute counts per scanner tab (scan tier — stable between sweeps)
@@ -172,7 +209,95 @@ const Compass = () => {
     setSelectedSetup(null);
     setChainSel(null);
     setTickerFilter(null);
+    setStateFilter(null);
   };
+
+  // Sortable table columns — every value read straight off the setup the
+  // engine already built (state is a relabel of verdict + take-profit ladder).
+  const setupColumns: Column<Setup>[] = useMemo(
+    () => [
+      {
+        key: 'contract',
+        header: 'Contract',
+        sortValue: s => s.contract,
+        render: s => (
+          <span className="inline-flex items-center gap-2">
+            <span className={`inline-block w-1.5 h-1.5 rounded-full ${s.right === 'C' ? 'bg-bull' : 'bg-bear'}`} />
+            <span className="text-textPrimary font-semibold">{s.contract}</span>
+          </span>
+        ),
+      },
+      {
+        key: 'state',
+        header: 'State',
+        sortValue: s => STATE_META[setupState(s)].rank,
+        render: s => <StateBadge state={setupState(s)} />,
+      },
+      {
+        key: 'score',
+        header: 'Score',
+        align: 'right',
+        sortValue: s => s.score,
+        render: s => <span className="text-textPrimary font-semibold">{s.score}</span>,
+      },
+      {
+        key: 'move',
+        header: 'Exp Move',
+        align: 'right',
+        sortValue: s => s.expectedMovePct,
+        render: s => (
+          <span className={s.expectedMovePct >= 0 ? 'text-bull' : 'text-bear'}>
+            {s.expectedMovePct >= 0 ? '+' : ''}
+            {s.expectedMovePct}%
+          </span>
+        ),
+      },
+      {
+        key: 'health',
+        header: 'Health',
+        align: 'right',
+        sortValue: s => s.health,
+        render: s => <span className="text-textSecondary">{s.health}</span>,
+      },
+      {
+        key: 'conf',
+        header: 'Conf',
+        align: 'right',
+        sortValue: s => s.confidence,
+        render: s => <span className="text-textSecondary">{s.confidence}%</span>,
+      },
+      {
+        key: 'evidence',
+        header: 'Evidence',
+        sortValue: s => s.whyChips.length,
+        render: s => (
+          <span className="inline-flex flex-wrap items-center gap-1">
+            {s.whyChips.slice(0, 2).map(c => (
+              <span
+                key={c}
+                className="inline-flex items-center rounded border border-bull/20 bg-bull/[0.06] px-1.5 py-0.5 text-[11px] uppercase tracking-wider text-bull"
+              >
+                {c}
+              </span>
+            ))}
+            {s.whyChips.length > 2 && <span className="text-textMuted text-[11px]">+{s.whyChips.length - 2}</span>}
+          </span>
+        ),
+      },
+      {
+        key: 'contradiction',
+        header: 'Contradiction',
+        sortValue: s => s.invalidationPrice,
+        render: s => (
+          <span className="inline-flex items-center gap-1.5 text-warn" title={s.invalidationReason}>
+            <AlertTriangle className="w-3 h-3 shrink-0" />
+            {s.right === 'C' ? 'below' : 'above'} ${s.invalidationPrice.toFixed(2)}
+          </span>
+        ),
+      },
+    ],
+    []
+  );
 
   // Phase 1 → Phase 2: enter full review
   const handleReviewSetup = (setup: Setup) => {
@@ -209,7 +334,7 @@ const Compass = () => {
     setups: {
       crumb: 'Setups',
       title: 'Trade Setups',
-      subtitle: 'The terminal calls ENTER or EXIT — you never place the order',
+      subtitle: SETUPS_SUBTITLE,
     },
     weigher: {
       crumb: 'Weigher',
@@ -247,7 +372,7 @@ const Compass = () => {
     <PageHeader
       breadcrumb={['Terminal', 'Compass', 'Setups']}
       title="Trade Setups"
-      subtitle="The terminal calls ENTER or EXIT — you never place the order"
+      subtitle={SETUPS_SUBTITLE}
       actions={
         <span className="inline-flex items-center gap-2">
           {modeSwitch}
@@ -315,48 +440,96 @@ const Compass = () => {
         })}
       </div>
 
-      {/* Ticker filter + blurb row (browse mode only) */}
+      {/* Controls (browse mode only) — blurb + count, then lifecycle-state
+          filter, view toggle and ticker universe filter */}
       {!inReviewMode && (
-        <div className="flex items-center gap-3 flex-wrap">
-          <span className="font-mono text-[10px] text-textMuted uppercase tracking-wider">{activeScanner.blurb}</span>
-          <span className="ml-auto font-mono text-[10px] text-textMuted uppercase tracking-widest tnum">
-            Showing {filteredShown} of {data.totalFound} setups · scan {lastScanAt} · 10s
-          </span>
-          <div className="relative">
-            <button
-              onClick={() => setShowTickerDropdown(prev => !prev)}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border font-mono text-[10px] uppercase tracking-wider transition-colors ${
-                tickerFilter
-                  ? 'border-select/40 bg-select/[0.06] text-select'
-                  : 'border-borderSubtle bg-white/[0.02] text-textMuted hover:text-textSecondary'
-              }`}
-            >
-              <Filter className="w-3 h-3" />
-              {tickerFilter ?? 'Filter by Ticker'}
-            </button>
-            {showTickerDropdown && (
-              <div className="absolute right-0 top-full mt-1 z-20 min-w-[140px] border border-borderSubtle bg-panel rounded-md shadow-lg overflow-hidden animate-slide-in">
-                <button
-                  onClick={() => { setTickerFilter(null); setShowTickerDropdown(false); }}
-                  className={`w-full text-left px-3 py-2 font-mono text-[11px] transition-colors ${
-                    !tickerFilter ? 'text-select bg-select/[0.06]' : 'text-textSecondary hover:bg-white/[0.03]'
-                  }`}
-                >
-                  All Tickers
-                </button>
-                {feedTickers.map(t => (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="font-mono text-[11px] text-textMuted uppercase tracking-wider">{activeScanner.blurb}</span>
+            <span className="ml-auto font-mono text-[11px] text-textMuted uppercase tracking-widest tnum">
+              Showing {filteredShown} of {data.totalFound} setups · scan {lastScanAt} · 10s
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Lifecycle-state filter chips */}
+            <div className="inline-flex items-center gap-1 flex-wrap">
+              <button
+                onClick={() => setStateFilter(null)}
+                className={`px-2.5 py-1 rounded-md border font-mono text-[11px] uppercase tracking-wider transition-colors ${
+                  stateFilter === null
+                    ? 'border-borderMuted bg-white/[0.08] text-textPrimary'
+                    : 'border-borderSubtle bg-white/[0.02] text-textMuted hover:text-textSecondary'
+                }`}
+              >
+                All States
+              </button>
+              {SETUP_STATES.map(st => {
+                const active = stateFilter === st;
+                const meta = STATE_META[st];
+                return (
                   <button
-                    key={t}
-                    onClick={() => { setTickerFilter(t); setShowTickerDropdown(false); }}
-                    className={`w-full text-left px-3 py-2 font-mono text-[11px] transition-colors ${
-                      tickerFilter === t ? 'text-select bg-select/[0.06]' : 'text-textSecondary hover:bg-white/[0.03]'
+                    key={st}
+                    onClick={() => setStateFilter(active ? null : st)}
+                    title={meta.hint}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border font-mono text-[11px] uppercase tracking-wider transition-colors ${
+                      active
+                        ? toneBadge[meta.tone]
+                        : 'border-borderSubtle bg-white/[0.02] text-textMuted hover:text-textSecondary'
                     }`}
                   >
-                    {t}
+                    <span className={`w-1.5 h-1.5 rounded-full ${toneDot[meta.tone]} ${active && meta.pulse ? 'custom-pulse' : ''}`} />
+                    {st}
+                    <span className="tnum opacity-70">{stateCounts[st]}</span>
                   </button>
-                ))}
+                );
+              })}
+            </div>
+
+            <span className="ml-auto inline-flex items-center gap-2">
+              <SegmentedControl
+                ariaLabel="Setups view"
+                options={SETUPS_VIEW_OPTIONS}
+                value={setupsView}
+                onChange={v => setSetupsView(v as SetupsView)}
+              />
+              <div className="relative">
+                <button
+                  onClick={() => setShowTickerDropdown(prev => !prev)}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border font-mono text-[11px] uppercase tracking-wider transition-colors ${
+                    tickerFilter
+                      ? 'border-select/40 bg-select/[0.06] text-select'
+                      : 'border-borderSubtle bg-white/[0.02] text-textMuted hover:text-textSecondary'
+                  }`}
+                >
+                  <Filter className="w-3 h-3" />
+                  {tickerFilter ?? 'All Tickers'}
+                </button>
+                {showTickerDropdown && (
+                  <div className="absolute right-0 top-full mt-1 z-20 min-w-[140px] border border-borderSubtle bg-panel rounded-md shadow-lg overflow-hidden animate-slide-in">
+                    <button
+                      onClick={() => { setTickerFilter(null); setShowTickerDropdown(false); }}
+                      className={`w-full text-left px-3 py-2 font-mono text-[11px] transition-colors ${
+                        !tickerFilter ? 'text-select bg-select/[0.06]' : 'text-textSecondary hover:bg-white/[0.03]'
+                      }`}
+                    >
+                      All Tickers
+                    </button>
+                    {feedTickers.map(t => (
+                      <button
+                        key={t}
+                        onClick={() => { setTickerFilter(t); setShowTickerDropdown(false); }}
+                        className={`w-full text-left px-3 py-2 font-mono text-[11px] transition-colors ${
+                          tickerFilter === t ? 'text-select bg-select/[0.06]' : 'text-textSecondary hover:bg-white/[0.03]'
+                        }`}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
+            </span>
           </div>
         </div>
       )}
@@ -364,7 +537,7 @@ const Compass = () => {
       {/* Scanner blurb (review mode) */}
       {inReviewMode && (
         <div className="flex items-center gap-3 flex-wrap">
-          <span className="font-mono text-[10px] text-textMuted uppercase tracking-wider">{activeScanner.blurb}</span>
+          <span className="font-mono text-[11px] text-textMuted uppercase tracking-wider">{activeScanner.blurb}</span>
         </div>
       )}
 
@@ -384,12 +557,27 @@ const Compass = () => {
                 <SignalMonitor setup={monitoredSetup} onBack={handleBackToBrowse} />
               ) : (
                 <div className="flex flex-col gap-4">
-                  <SetupsFeed
-                    groups={filteredGroups}
-                    selectedSetupId={effectiveSelected?.id ?? null}
-                    onSelectSetup={handleSelectSetup}
-                    onOpenAnalysis={setup => handleReviewSetup(setup)}
-                  />
+                  {setupsView === 'table' ? (
+                    <Panel flush title="Setups" subtitle={`${filteredShown} shown`}>
+                      <DataTable
+                        columns={setupColumns}
+                        rows={flatSetups}
+                        rowKey={s => s.id}
+                        onRowClick={handleSelectSetup}
+                        selectedKey={effectiveSelected?.id ?? null}
+                        initialSort={{ key: 'state', dir: 'desc' }}
+                        maxHeight="640px"
+                        emptyText="No setups meet this scanner's threshold right now"
+                      />
+                    </Panel>
+                  ) : (
+                    <SetupsFeed
+                      groups={filteredGroups}
+                      selectedSetupId={effectiveSelected?.id ?? null}
+                      onSelectSetup={handleSelectSetup}
+                      onOpenAnalysis={setup => handleReviewSetup(setup)}
+                    />
+                  )}
                   {/* Lives in the feed column so short (filtered) feeds never
                       leave a void against the taller preview card */}
                   <ImpactLeaderboard rows={data.impact} />

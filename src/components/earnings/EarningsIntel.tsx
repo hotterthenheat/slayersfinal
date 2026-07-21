@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { Target, TrendingDown, Layers, Scale, History, ArrowDownUp } from 'lucide-react';
+import { useMemo, type ReactNode } from 'react';
+import { Target, TrendingDown, Layers, Scale, History, ArrowDownUp, GitBranch } from 'lucide-react';
 import {
   buildEarningsIntel,
   type EarningsIntelView,
@@ -12,7 +12,7 @@ import Panel from '../ui/Panel';
 import StatCard from '../ui/StatCard';
 import MetricGrid from '../ui/MetricGrid';
 import SignalBadge from '../ui/SignalBadge';
-import type { Tone } from '../ui/tones';
+import { toneText, type Tone } from '../ui/tones';
 
 interface EarningsIntelProps {
   /** The selected print from the earnings board. Null renders the empty state. */
@@ -147,26 +147,182 @@ const ExpressionCard = ({ expr, recommended }: { expr: Expression; recommended: 
         </span>
       </div>
       <div className="mt-0.5 flex items-center justify-between">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted">net EV · post spreads + crush</span>
+        <span className="font-mono text-[11px] uppercase tracking-wider text-textMuted">net EV · post spreads + crush</span>
         <SignalBadge tone={tone}>{expr.edgeLabel}</SignalBadge>
       </div>
       <p className="mt-2.5 font-mono text-[11px] text-textSecondary">{expr.legs}</p>
       <div className="mt-2.5 grid grid-cols-3 gap-2">
         <div className="rounded bg-white/[0.03] px-2 py-1.5">
-          <div className="font-mono text-[9px] uppercase tracking-wider text-textMuted">Cost</div>
-          <div className="font-mono text-[11px] text-textPrimary tnum">{expr.cost}</div>
+          <div className="font-mono text-[11px] uppercase tracking-wider text-textMuted">Cost</div>
+          <div className="font-mono text-[12px] text-textPrimary tnum">{expr.cost}</div>
         </div>
         <div className="rounded bg-white/[0.03] px-2 py-1.5">
-          <div className="font-mono text-[9px] uppercase tracking-wider text-textMuted">Breakeven</div>
-          <div className="font-mono text-[11px] text-textPrimary tnum">{expr.breakeven}</div>
+          <div className="font-mono text-[11px] uppercase tracking-wider text-textMuted">Breakeven</div>
+          <div className="font-mono text-[12px] text-textPrimary tnum">{expr.breakeven}</div>
         </div>
         <div className="rounded bg-white/[0.03] px-2 py-1.5">
-          <div className="font-mono text-[9px] uppercase tracking-wider text-textMuted">Structure</div>
-          <div className="font-mono text-[10px] text-textSecondary leading-tight">{expr.maxLabel}</div>
+          <div className="font-mono text-[11px] uppercase tracking-wider text-textMuted">Structure</div>
+          <div className="font-mono text-[11px] text-textSecondary leading-tight">{expr.maxLabel}</div>
         </div>
       </div>
       <p className="mt-2.5 text-xs text-textSecondary leading-relaxed">{expr.fit}</p>
     </Panel>
+  );
+};
+
+/*
+  Report-time confirmation is inferred from proximity — near-dated prints carry a
+  confirmed date/slot, further-out ones stay analyst-estimated. A read of the
+  existing daysOut field, labeled honestly.
+*/
+const ReportTimeChip = ({ daysOut }: { daysOut: number }) => {
+  const confirmed = daysOut <= 4;
+  return (
+    <span
+      title={
+        confirmed
+          ? 'Report date & slot inferred confirmed — inside the near-term window'
+          : 'Report date estimated — further-out prints stay analyst-estimated until confirmed'
+      }
+      className={`inline-flex items-center gap-1 font-mono text-[11px] uppercase tracking-wider ${
+        confirmed ? 'text-textSecondary' : 'text-warn'
+      }`}
+    >
+      <span className={`w-1.5 h-1.5 rounded-full ${confirmed ? 'bg-textSecondary' : 'bg-warn'}`} />
+      {confirmed ? 'confirmed' : 'est.'}
+    </span>
+  );
+};
+
+/** One rail-connected row in the scenario tree. */
+const TreeRow = ({ last = false, children }: { last?: boolean; children: ReactNode }) => (
+  <li className="relative pl-6">
+    <span className="absolute left-2 top-0 w-px bg-borderMuted" style={{ height: last ? 24 : '100%' }} aria-hidden />
+    <span className="absolute left-2 top-[24px] h-px w-3.5 bg-borderMuted" aria-hidden />
+    {children}
+  </li>
+);
+
+/** Model prob bar with the white priced tick — same grammar as the state rows. */
+const ProbBar = ({ model, priced }: { model: number; priced: number }) => (
+  <span className="relative block h-2 rounded-full bg-white/[0.06] overflow-hidden">
+    <span className="block h-full rounded-full holo-bar" style={{ width: `${Math.min(100, model * 100)}%` }} />
+    <span className="absolute top-0 bottom-0 w-px bg-white/70" style={{ left: `${Math.min(100, priced * 100)}%` }} aria-hidden />
+  </span>
+);
+
+/**
+ * Post-earnings scenario tree — a structural branch of the reaction the model and
+ * the market already price. Root = the print; the three branches (down / pin / up)
+ * sum the existing state probabilities; the leaves are the five states verbatim.
+ * Nothing new is computed — the branch figures are sums of the state array.
+ */
+const ScenarioTree = ({ view }: { view: EarningsIntelView }) => {
+  const byKey = Object.fromEntries(view.states.map(s => [s.key, s] as const)) as Record<string, StateNode>;
+  type Group = { key: string; label: string; tone: Tone; leaves: string[] };
+  const groups: Group[] = [
+    { key: 'down', label: 'Down reaction', tone: 'bear', leaves: ['gapDown', 'fade'] },
+    { key: 'pin', label: 'Pin / muted', tone: 'neutral', leaves: ['pin'] },
+    { key: 'up', label: 'Up reaction', tone: 'bull', leaves: ['pop', 'gapUp'] },
+  ];
+  // Which branch the recommended expression lives on — down/up wing, or the body for a short.
+  const targetKey =
+    view.recommended === 'SKIP'
+      ? null
+      : view.recommended === 'SHORT'
+        ? 'pin'
+        : view.downEdge >= view.upEdge
+          ? 'down'
+          : 'up';
+
+  const branchStat = (leaves: string[]) => {
+    const model = leaves.reduce((a, k) => a + (byKey[k]?.prob ?? 0), 0);
+    const priced = leaves.reduce((a, k) => a + (byKey[k]?.priced ?? 0), 0);
+    const delta = model - priced;
+    const mis: { tone: Tone; label: string } | null =
+      delta > 0.03 ? { tone: 'bull', label: 'CHEAP' } : delta < -0.03 ? { tone: 'warn', label: 'RICH' } : null;
+    return { model, priced, mis };
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      {/* Root */}
+      <div className="inst-surface rounded-md px-3.5 py-2.5 flex items-center justify-between gap-3">
+        <div className="flex flex-col">
+          <span className="font-mono text-[11px] uppercase tracking-widest text-textMuted">Print</span>
+          <span className="font-mono text-sm font-bold text-textPrimary">
+            {view.ticker} · implied ±{view.impliedMovePct.toFixed(1)}%
+          </span>
+        </div>
+        <div className="flex items-center gap-3 font-mono text-[11px] tnum">
+          <span className="text-textSecondary">
+            gap <span className="text-textPrimary">{view.gapProb.toFixed(0)}%</span>
+          </span>
+          <span className="text-textMuted">·</span>
+          <span className="text-textSecondary">
+            continuation <span className="text-textPrimary">{view.continuousProb.toFixed(0)}%</span>
+          </span>
+        </div>
+      </div>
+
+      {/* Branches */}
+      <ul className="flex flex-col">
+        {groups.map((g, gi) => {
+          const stat = branchStat(g.leaves);
+          const isTarget = targetKey === g.key;
+          return (
+            <TreeRow key={g.key} last={gi === groups.length - 1}>
+              <div
+                className={`rounded-md px-3 py-2 ${
+                  isTarget ? 'border border-select/40 bg-select/[0.06]' : 'border border-borderSubtle bg-white/[0.02]'
+                }`}
+              >
+                <div className="grid grid-cols-[104px_1fr_84px] items-center gap-3">
+                  <span className="flex items-center gap-1.5">
+                    <span className={`font-mono text-[12px] font-semibold ${toneText[g.tone]}`}>{g.label}</span>
+                  </span>
+                  <ProbBar model={stat.model} priced={stat.priced} />
+                  <span className="flex items-center justify-end gap-1.5">
+                    <span className="font-mono text-[12px] tnum text-textSecondary">{(stat.model * 100).toFixed(0)}%</span>
+                    {stat.mis && <SignalBadge tone={stat.mis.tone}>{stat.mis.label}</SignalBadge>}
+                  </span>
+                </div>
+                {isTarget && (
+                  <div className="mt-1.5 flex items-center gap-1.5">
+                    <SignalBadge tone="select" dot>
+                      Trade lives here
+                    </SignalBadge>
+                  </div>
+                )}
+
+                {/* Leaves — the individual states */}
+                <ul className="mt-1.5 flex flex-col">
+                  {g.leaves.map((k, li) => {
+                    const s = byKey[k];
+                    if (!s) return null;
+                    const moveTone = s.movePct > 0.05 ? 'text-bull' : s.movePct < -0.05 ? 'text-bear' : 'text-textSecondary';
+                    return (
+                      <TreeRow key={k} last={li === g.leaves.length - 1}>
+                        <div className="grid grid-cols-[104px_1fr_84px] items-center gap-3 py-0.5">
+                          <span className="flex flex-col">
+                            <span className="font-mono text-[12px] text-textPrimary">{s.label}</span>
+                            <span className={`font-mono text-[11px] tnum ${moveTone}`}>{fmtMove(s.movePct)}</span>
+                          </span>
+                          <ProbBar model={s.prob} priced={s.priced} />
+                          <span className="font-mono text-[12px] tnum text-textSecondary text-right">
+                            {(s.prob * 100).toFixed(0)}%
+                          </span>
+                        </div>
+                      </TreeRow>
+                    );
+                  })}
+                </ul>
+              </div>
+            </TreeRow>
+          );
+        })}
+      </ul>
+    </div>
   );
 };
 
@@ -337,6 +493,24 @@ const EarningsIntel = ({ event }: EarningsIntelProps) => {
           </div>
         </Panel>
       </div>
+
+      {/* Post-earnings scenario tree — structural branch of the reaction */}
+      <Panel
+        title={
+          <span className="inline-flex items-center gap-1.5">
+            <GitBranch className="w-3.5 h-3.5" /> Post-earnings scenario tree
+          </span>
+        }
+        subtitle="how the reaction branches"
+        actions={<ReportTimeChip daysOut={view.daysOut} />}
+      >
+        <ScenarioTree view={view} />
+        <p className="mt-3 font-mono text-[11px] text-textMuted leading-relaxed">
+          Each branch sums the state probabilities into a down / pin / up outcome; the bar is the modeled odds, the white tick
+          where the straddle + skew prices it. CHEAP = the model carries more of that branch than the market charges; the
+          highlighted branch is where the recommended structure lives.
+        </p>
+      </Panel>
 
       {/* Honest explainer */}
       <Panel bodyClassName="py-3">

@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { Gavel, Ticket, AlertTriangle, Clock } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Gavel, Ticket, AlertTriangle, Clock, ShieldAlert } from 'lucide-react';
 import { buildMocRead } from '../../core/fracture';
 import { weighContracts, type WeighedContract } from '../../core/contractScore';
 import type { MocRead } from '../../types/fracture';
@@ -29,10 +29,66 @@ const mocToneOf = (moc: MocRead): Tone =>
         ? 'magenta'
         : 'neutral';
 
-const verdictTone: Record<WeighedContract['verdict'], Tone> = {
-  BUY: 'bull',
+// On the lotto desk a contract does not get a "BUY" — it either clears the
+// flow/liquidity filter or it does not. Map the shared scorer's verdict to a
+// qualification state so a score never reads as an instruction to buy.
+const LOTTO_LABEL: Record<WeighedContract['verdict'], string> = {
+  BUY: 'QUALIFIES',
+  WATCH: 'CONDITIONAL',
+  FADE: 'REJECTED',
+};
+const lottoTone: Record<WeighedContract['verdict'], Tone> = {
+  BUY: 'select',
   WATCH: 'warn',
   FADE: 'bear',
+};
+
+/* ---- ET market clock: countdown to the 16:00 cross + MOC window status ---- */
+const fmtDur = (secs: number): string => {
+  const s = Math.max(0, secs);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const ss = Math.floor(s % 60);
+  return `${h}:${String(m).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+};
+
+interface MocClock {
+  marketOpen: boolean;
+  mocOpen: boolean;
+  toClose: string;
+  label: string;
+}
+
+const computeClock = (ms: number): MocClock => {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    hour12: false,
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(new Date(ms));
+  const get = (t: string) => parts.find(p => p.type === t)?.value ?? '';
+  const wd = get('weekday');
+  let hh = parseInt(get('hour'), 10);
+  if (hh === 24) hh = 0;
+  const mm = parseInt(get('minute'), 10);
+  const ss = parseInt(get('second'), 10);
+  const isWeekday = !['Sat', 'Sun'].includes(wd);
+  const mins = hh * 60 + mm;
+  const marketOpen = isWeekday && mins >= 570 && mins < 960; // 9:30–16:00 ET
+  const mocOpen = isWeekday && mins >= 945 && mins < 960; // 15:45–16:00 ET
+  const secsToClose = 960 * 60 - (mins * 60 + ss);
+  const label = marketOpen
+    ? mocOpen
+      ? 'MOC window open'
+      : 'market open'
+    : isWeekday
+      ? mins < 570
+        ? 'pre-market'
+        : 'after hours — closed'
+      : 'weekend — closed';
+  return { marketOpen, mocOpen, toClose: marketOpen ? fmtDur(secsToClose) : '—', label };
 };
 
 /* ---- MOC score gauge: -100 (sell) … 0 … +100 (buy) ---- */
@@ -43,17 +99,9 @@ const ScoreGauge = ({ score }: { score: number }) => {
       <span className="absolute top-0 bottom-0 left-1/2 w-px bg-white/25" aria-hidden />
       <span
         className={`absolute top-0 bottom-0 ${score >= 0 ? 'left-1/2' : ''} ${score >= 0 ? 'bg-bull/80' : 'bg-bear/80'}`}
-        style={
-          score >= 0
-            ? { width: `${(pct - 50).toFixed(1)}%` }
-            : { left: `${pct.toFixed(1)}%`, width: `${(50 - pct).toFixed(1)}%` }
-        }
+        style={score >= 0 ? { width: `${(pct - 50).toFixed(1)}%` } : { left: `${pct.toFixed(1)}%`, width: `${(50 - pct).toFixed(1)}%` }}
       />
-      <span
-        className="absolute -top-0.5 h-3 w-[2px] bg-textPrimary rounded-full"
-        style={{ left: `calc(${pct.toFixed(1)}% - 1px)` }}
-        aria-hidden
-      />
+      <span className="absolute -top-0.5 h-3 w-[2px] bg-textPrimary rounded-full" style={{ left: `calc(${pct.toFixed(1)}% - 1px)` }} aria-hidden />
     </div>
   );
 };
@@ -74,9 +122,7 @@ const GrowthTimeline = ({ moc }: { moc: MocRead }) => {
     <div>
       <div className="flex items-center justify-between mb-2">
         <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Imbalance growth</span>
-        <SignalBadge tone={growing ? (side as Tone) : 'neutral'}>
-          {growing ? 'building into cross' : 'fading pre-cross'}
-        </SignalBadge>
+        <SignalBadge tone={growing ? (side as Tone) : 'neutral'}>{growing ? 'building into cross' : 'fading pre-cross'}</SignalBadge>
       </div>
       <div className="flex items-end gap-1.5 h-16">
         {series.map(pt => {
@@ -101,7 +147,6 @@ const GrowthTimeline = ({ moc }: { moc: MocRead }) => {
 
 /* ---- one 0DTE lotto contract row ---- */
 const LottoRow = ({ c, best }: { c: WeighedContract; best: boolean }) => {
-  const tone = verdictTone[c.verdict];
   const rightColor = c.right === 'C' ? 'text-bull' : 'text-bear';
   return (
     <div className={`px-3.5 py-2.5 flex items-center gap-3 ${best ? 'bg-white/[0.02]' : ''}`}>
@@ -116,7 +161,7 @@ const LottoRow = ({ c, best }: { c: WeighedContract; best: boolean }) => {
           </span>
           {best && <SignalBadge tone="magenta">Top lotto</SignalBadge>}
         </div>
-        <div className="mt-1 font-mono text-[10px] text-textMuted truncate">{c.edge}</div>
+        <div className="mt-1 font-mono text-[11px] text-textMuted truncate">{c.edge}</div>
       </div>
       <div className="hidden sm:flex flex-col items-end shrink-0 w-14">
         <span className="font-mono text-[9px] uppercase tracking-wider text-textMuted">±1σ</span>
@@ -130,9 +175,9 @@ const LottoRow = ({ c, best }: { c: WeighedContract; best: boolean }) => {
         <span className="font-mono text-[9px] uppercase tracking-wider text-textMuted">mid</span>
         <span className="font-mono text-[12px] text-textPrimary tnum">${c.mid.toFixed(2)}</span>
       </div>
-      <div className="flex items-center gap-2 shrink-0 w-[92px] justify-end">
+      <div className="flex items-center gap-2 shrink-0 w-[124px] justify-end">
         <span className="font-mono text-lg font-bold tnum text-textPrimary">{c.composite}</span>
-        <SignalBadge tone={tone}>{c.verdict}</SignalBadge>
+        <SignalBadge tone={lottoTone[c.verdict]}>{LOTTO_LABEL[c.verdict]}</SignalBadge>
       </div>
     </div>
   );
@@ -148,20 +193,23 @@ const LottoBoard = ({ snapshot }: { snapshot: MarketSnapshot }) => {
   const moc = useMemo(() => buildMocRead(snapshot), [snapshot]);
   const lottos = useMemo(() => weighContracts(snapshot, 'LOTTO').slice(0, 6), [snapshot]);
 
+  const [acked, setAcked] = useState(false);
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const clock = useMemo(() => computeClock(nowTick), [nowTick]);
+
   const mocTone = mocToneOf(moc);
   const best = lottos[0];
-  const buyable = lottos.filter(c => c.verdict === 'BUY').length;
+  const qualifies = lottos.filter(c => c.verdict === 'BUY').length;
 
   return (
     <div className="flex flex-col gap-4">
       <MetricGrid min="170px">
         <StatCard label="Closing auction" value={moc.classification} sub="MOC engine read" tone={mocTone} emphasis />
-        <StatCard
-          label="MOC score"
-          value={`${moc.score >= 0 ? '+' : ''}${moc.score}`}
-          sub="−100 sell … +100 buy"
-          tone={moc.score >= 0 ? 'bull' : 'bear'}
-        />
+        <StatCard label="MOC score" value={`${moc.score >= 0 ? '+' : ''}${moc.score}`} sub="−100 sell … +100 buy" tone={moc.score >= 0 ? 'bull' : 'bear'} />
         <StatCard
           label="Imbalance"
           value={`${moc.side} ${fmtUsd(Math.abs(moc.imbalanceUsd))}`}
@@ -169,12 +217,12 @@ const LottoBoard = ({ snapshot }: { snapshot: MarketSnapshot }) => {
           tone={moc.side === 'BUY' ? 'bull' : moc.side === 'SELL' ? 'bear' : 'neutral'}
         />
         <StatCard
-          label="Top lotto"
-          value={best ? `${best.strike}${best.right}` : '—'}
-          sub={best ? `score ${best.composite} · ${best.verdict}` : 'no clean 0DTE'}
-          tone={best ? verdictTone[best.verdict] : 'neutral'}
+          label="Time to close"
+          value={clock.marketOpen ? clock.toClose : 'closed'}
+          sub={clock.label}
+          tone={clock.mocOpen ? 'warn' : clock.marketOpen ? 'select' : 'neutral'}
         />
-        <StatCard label="0DTE buys" value={`${buyable}`} sub={`of ${lottos.length} candidates graded`} tone={buyable > 0 ? 'bull' : 'neutral'} />
+        <StatCard label="0DTE qualifies" value={`${qualifies}`} sub={`of ${lottos.length} candidates graded`} tone={qualifies > 0 ? 'select' : 'neutral'} />
       </MetricGrid>
 
       <Panel tone="warn" bodyClassName="py-2.5">
@@ -183,7 +231,7 @@ const LottoBoard = ({ snapshot }: { snapshot: MarketSnapshot }) => {
           <span>
             <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-warn mr-2">Lotto risk</span>
             0DTE and closing-auction plays are all-or-nothing — theta is measured per hour, a contract can go to zero the same
-            session, and the MOC imbalance you see at 3:50 is not the one that clears. Size for a total loss.
+            session, and the imbalance you see at 3:50 is not the one that clears. Size for a total loss.
           </span>
         </p>
       </Panel>
@@ -200,6 +248,12 @@ const LottoBoard = ({ snapshot }: { snapshot: MarketSnapshot }) => {
           tone={mocTone}
         >
           <div className="flex flex-col gap-4">
+            {!clock.mocOpen && (
+              <p className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-textMuted border border-borderSubtle bg-inset rounded-md px-2.5 py-2">
+                <Clock className="w-3 h-3 shrink-0" />
+                MOC window inactive · publishes 3:45–4:00pm ET — {clock.label}
+              </p>
+            )}
             <div className="flex items-center gap-3 flex-wrap">
               <span className={`font-mono text-4xl font-bold tnum ${moc.score >= 0 ? 'text-bull' : 'text-bear'}`}>
                 {moc.score >= 0 ? '+' : ''}
@@ -248,14 +302,26 @@ const LottoBoard = ({ snapshot }: { snapshot: MarketSnapshot }) => {
               <Ticket className="w-3.5 h-3.5" /> 0DTE lotto board
             </span>
           }
-          subtitle="same-day contracts, graded by flow first"
+          subtitle="same-day contracts — QUALIFIES / CONDITIONAL / REJECTED by flow"
           flush
           className="xl:col-span-5"
         >
-          {lottos.length === 0 ? (
-            <div className="py-12 text-center font-mono text-[11px] text-textMuted uppercase tracking-widest">
-              No 0DTE candidates
+          {!acked ? (
+            <div className="px-4 py-8 flex flex-col items-center text-center gap-3">
+              <ShieldAlert className="w-6 h-6 text-warn" />
+              <p className="text-[12px] text-textSecondary leading-relaxed max-w-[34ch]">
+                These are 0DTE lotto tickets. Most expire worthless. Only view the board if you accept that a full loss of the
+                premium is the expected outcome.
+              </p>
+              <button
+                onClick={() => setAcked(true)}
+                className="mt-1 inline-flex items-center gap-2 px-3.5 py-2 rounded-md border border-warn/40 bg-warn/10 hover:bg-warn/15 font-mono text-[11px] font-semibold uppercase tracking-wider text-warn transition-colors"
+              >
+                I accept a total loss — show the board
+              </button>
             </div>
+          ) : lottos.length === 0 ? (
+            <div className="py-12 text-center font-mono text-[11px] text-textMuted uppercase tracking-widest">No 0DTE candidates</div>
           ) : (
             <div className="flex flex-col divide-y divide-borderSubtle">
               {lottos.map((c, i) => (

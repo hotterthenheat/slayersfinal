@@ -19,7 +19,7 @@ function fractureFor(snapshot: MarketSnapshot) {
   return v;
 }
 
-/** Pulse-only panels on top of the shared workspace catalog. */
+/** Analytical Pulse-only panels on top of the shared workspace catalog. */
 const PULSE_EXTRA: WidgetDef[] = [
   {
     key: 'moc-read',
@@ -80,10 +80,29 @@ const PULSE_EXTRA: WidgetDef[] = [
       );
     },
   },
+];
+
+/**
+ * A WidgetDef plus the short phrase naming the live feed that would light it up.
+ * `requires` is used by the picker's "Data connections" tray so the operator
+ * sees which modules are real but simply not yet wired to a feed.
+ */
+export interface DataConnectionDef extends WidgetDef {
+  /** Short phrase: the live feed this module needs before it activates. */
+  requires: string;
+}
+
+/**
+ * Real order-flow modules that stay dark until a live feed is connected. They
+ * are kept separate from the normal addable catalog and surfaced in their own
+ * "Data connections" section — the module exists, it just needs its feed.
+ */
+export const PULSE_DATA_CONNECTIONS: DataConnectionDef[] = [
   {
     key: 'dom-ladder',
     title: 'DOM Ladder',
-    description: 'Bid/ask depth by price — needs Level-2',
+    description: 'Bid/ask depth by price',
+    requires: 'a live Level-2 order-book feed',
     w: 4,
     h: 6,
     minW: 3,
@@ -93,7 +112,8 @@ const PULSE_EXTRA: WidgetDef[] = [
   {
     key: 'liquidity-heatmap',
     title: 'Liquidity Heatmap',
-    description: 'Resting depth over price & time — needs Level-2',
+    description: 'Resting depth over price & time',
+    requires: 'a live Level-2 depth feed',
     w: 8,
     h: 6,
     minW: 4,
@@ -103,7 +123,8 @@ const PULSE_EXTRA: WidgetDef[] = [
   {
     key: 'footprint',
     title: 'Footprint',
-    description: 'Bid × ask volume per price — needs tick prints',
+    description: 'Bid × ask volume per price',
+    requires: 'a tick-level trade feed',
     w: 6,
     h: 6,
     minW: 4,
@@ -113,7 +134,8 @@ const PULSE_EXTRA: WidgetDef[] = [
   {
     key: 'l2-tape',
     title: 'Time & Sales (L2)',
-    description: 'True prints with real aggressor — needs tick feed',
+    description: 'True prints with real aggressor',
+    requires: 'a live time-&-sales print feed',
     w: 5,
     h: 5,
     minW: 3,
@@ -122,7 +144,11 @@ const PULSE_EXTRA: WidgetDef[] = [
   },
 ];
 
-export const PULSE_PANELS: WidgetDef[] = [...WIDGETS, ...PULSE_EXTRA];
+/** Panels offered in the normal "Add panel" catalog (feed-independent). */
+export const PULSE_ADDABLE_PANELS: WidgetDef[] = [...WIDGETS, ...PULSE_EXTRA];
+
+/** Everything resolvable by key — catalog plus the feed-gated modules. */
+export const PULSE_PANELS: WidgetDef[] = [...PULSE_ADDABLE_PANELS, ...PULSE_DATA_CONNECTIONS];
 
 export function pulsePanelByKey(key: string): WidgetDef | undefined {
   return PULSE_PANELS.find(p => p.key === key);

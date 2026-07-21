@@ -1,9 +1,24 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Search, Scale, Plus, Check, ArrowRight, TrendingUp, Wallet } from 'lucide-react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  Search,
+  Scale,
+  Plus,
+  Check,
+  TrendingUp,
+  Wallet,
+  Terminal,
+  Calendar,
+  Target,
+  Percent,
+  DollarSign,
+  Layers,
+  SlidersHorizontal,
+} from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { useTracker } from '../../context/TrackerContext';
 import {
   weighContract,
+  weighContracts,
   betterAlternative,
   horizonForDte,
   HORIZONS,
@@ -14,11 +29,16 @@ import {
 import type { MarketSnapshot } from '../../types/market';
 import Panel from '../ui/Panel';
 import SignalBadge from '../ui/SignalBadge';
+import TickerSearch from '../ui/TickerSearch';
+import DataTable, { type Column } from '../ui/DataTable';
 import type { Tone } from '../ui/tones';
 
 const verdictTone: Record<ContractVerdict, Tone> = { BUY: 'bull', WATCH: 'warn', FADE: 'bear' };
 const dteForHorizon: Record<Horizon, number> = { LOTTO: 0, WEEKLIES: 5, SWINGS: 30, LEAPS: 365 };
 const DTE_PRESETS = [0, 7, 30, 365];
+/** Standard equity-option contract multiplier (shares per contract). */
+const CONTRACT_MULTIPLIER = 100;
+const MS_DAY = 86_400_000;
 
 /** Nearest listed strike to spot. */
 function atmStrike(snapshot: MarketSnapshot): number {
@@ -40,31 +60,73 @@ function parseQuery(q: string): { ticker?: string; right?: 'C' | 'P'; strike?: n
   };
 }
 
+// ---- calendar helpers (plain date arithmetic, no pricing) -------------------
+function startOfToday(): number {
+  const n = new Date();
+  return new Date(n.getFullYear(), n.getMonth(), n.getDate()).getTime();
+}
+function isoFromDte(dte: number): string {
+  const d = new Date(startOfToday() + Math.max(0, dte) * MS_DAY);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function dteFromISO(iso: string): number {
+  const [y, m, d] = iso.split('-').map(Number);
+  if (!y || !m || !d) return 0;
+  return Math.round((new Date(y, m - 1, d).getTime() - startOfToday()) / MS_DAY);
+}
+
 /** One factor of the composite — label, weight, meter, score. */
 const FactorRow = ({ label, weight, score, detail }: { label: string; weight: number; score: number; detail: string }) => (
   <div className="flex flex-col gap-1">
     <div className="flex items-center gap-2">
-      <span className="w-32 shrink-0 font-mono text-[10px] uppercase tracking-wider text-textSecondary">{label}</span>
-      <span className="font-mono text-[9px] text-textMuted tnum">×{weight.toFixed(2)}</span>
+      <span className="w-32 shrink-0 font-mono text-[11px] uppercase tracking-wider text-textSecondary">{label}</span>
+      <span className="font-mono text-[10px] text-textMuted tnum">×{weight.toFixed(2)}</span>
       <span className="flex-1 h-[4px] rounded-full bg-white/[0.06] overflow-hidden">
         <span
           className={`block h-full rounded-full ${score >= 60 ? 'holo-bar' : score >= 40 ? 'bg-white/30' : 'bg-bear/70'}`}
           style={{ width: `${score}%` }}
         />
       </span>
-      <span className="w-7 shrink-0 font-mono text-[11px] font-semibold text-textPrimary tnum text-right">{score}</span>
+      <span className="w-7 shrink-0 font-mono text-[12px] font-semibold text-textPrimary tnum text-right">{score}</span>
     </div>
-    <p className="pl-32 text-[10px] text-textMuted leading-snug">{detail}</p>
+    <p className="pl-32 text-[11px] text-textMuted leading-snug">{detail}</p>
   </div>
 );
 
 /** Small label/value cell for the analysis stat grid. */
 const Cell = ({ k, v, tone = 'neutral' }: { k: string; v: string; tone?: Tone }) => (
   <div className="border border-borderSubtle bg-inset rounded-md px-2.5 py-2">
-    <div className="font-mono text-[9px] uppercase tracking-widest text-textMuted">{k}</div>
+    <div className="font-mono text-[11px] uppercase tracking-widest text-textMuted">{k}</div>
     <div className={`mt-1 font-mono text-sm font-semibold tnum ${tone === 'bull' ? 'text-bull' : tone === 'bear' ? 'text-bear' : tone === 'warn' ? 'text-warn' : 'text-textPrimary'}`}>{v}</div>
   </div>
 );
+
+/** A single labelled control in the build form. */
+const Field = ({
+  label,
+  icon,
+  hint,
+  className = '',
+  children,
+}: {
+  label: string;
+  icon?: ReactNode;
+  hint?: ReactNode;
+  className?: string;
+  children: ReactNode;
+}) => (
+  <div className={`flex flex-col gap-1.5 min-w-0 ${className}`}>
+    <span className="inline-flex items-center gap-1.5 font-mono text-[11px] font-medium uppercase tracking-wider text-textSecondary">
+      {icon}
+      {label}
+    </span>
+    {children}
+    {hint != null && <span className="font-mono text-[10px] text-textMuted leading-tight tnum">{hint}</span>}
+  </div>
+);
+
+const inputBase =
+  'w-full bg-inputBg border border-borderSubtle focus:border-borderMuted rounded-md px-2.5 py-1.5 font-mono text-[12px] text-textPrimary placeholder:text-textMuted outline-none tnum';
 
 interface ContractWeigherProps {
   snapshot: MarketSnapshot;
@@ -73,18 +135,26 @@ interface ContractWeigherProps {
 }
 
 /**
- * Compass's second mode: search any contract you already have — we weigh it on
- * the exact same scale as the top setups, tell you everything about it, and if
- * a better risk/reward sits nearby in the same sleeve, we point you to it.
+ * Compass's second mode: build a contract in a structured form — we weigh it on
+ * the exact same scale as the top setups, tell you everything about it, and lay
+ * the whole sleeve of same-direction alternatives beside it in one table.
  */
 const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => {
   const { activeTicker, changeTicker } = useMarketData();
   const { trackContract, untrackSetup, isTracked } = useTracker();
 
+  const initialDte = initialHorizon ? dteForHorizon[initialHorizon] : 5;
+
   const [right, setRight] = useState<'C' | 'P'>('C');
   const [strike, setStrike] = useState<number>(() => atmStrike(snapshot));
-  const [dte, setDte] = useState<number>(initialHorizon ? dteForHorizon[initialHorizon] : 5);
+  const [dte, setDte] = useState<number>(initialDte);
   const [query, setQuery] = useState('');
+  const [showCmd, setShowCmd] = useState(false);
+
+  // Planning inputs — echoed against values the engine already computes.
+  const [targetISO, setTargetISO] = useState<string>(() => isoFromDte(initialDte));
+  const [expMoveInput, setExpMoveInput] = useState('');
+  const [budgetInput, setBudgetInput] = useState('');
 
   const step = useMemo(() => {
     const s = [...snapshot.chain].sort((a, b) => a.strike - b.strike);
@@ -112,6 +182,26 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
   const horizonLabel = HORIZONS.find(h => h.key === horizonForDte(dte))?.label ?? (dte <= 1 ? 'Lotto' : '');
   const tracked = isTracked(weighed.id);
   const coverage = weighed.expectedMovePct / Math.max(weighed.breakevenMovePct, 0.05);
+
+  // Every same-direction contract in the sleeve, the searched one folded in.
+  const altRows = useMemo(() => {
+    const sleeve = weighContracts(snapshot, horizonForDte(dte)).filter(c => c.right === right);
+    return sleeve.some(c => c.id === weighed.id) ? sleeve : [weighed, ...sleeve];
+  }, [snapshot, dte, right, weighed]);
+
+  // ---- planning readouts: user inputs read against existing engine values ----
+  const expiryISO = isoFromDte(dte);
+  const todayISO = isoFromDte(0);
+  const daysToTarget = Math.max(0, Math.min(dte, dteFromISO(targetISO)));
+  const runway = dte - daysToTarget;
+  const parsedExpMove = parseFloat(expMoveInput);
+  const effExpMove = Number.isFinite(parsedExpMove) && parsedExpMove > 0 ? parsedExpMove : weighed.expectedMovePct;
+  const clearsBreakeven = effExpMove >= weighed.breakevenMovePct;
+  const costPerContract = weighed.mid * CONTRACT_MULTIPLIER;
+  const parsedBudget = parseFloat(budgetInput);
+  const budget = Number.isFinite(parsedBudget) && parsedBudget > 0 ? parsedBudget : null;
+  const contractsInBudget = budget != null ? Math.floor(budget / costPerContract) : null;
+  const outlay = contractsInBudget != null ? contractsInBudget * costPerContract : null;
 
   // ---- execution & expected value: can you actually capture the edge? ----
   const halfSpread = weighed.spreadPct / 2;
@@ -146,70 +236,247 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
     setQuery('');
   };
 
+  const setExpiryDte = (next: number) => {
+    const clamped = Math.max(0, next);
+    setDte(clamped);
+    // keep the target inside the new expiry window
+    if (dteFromISO(targetISO) > clamped) setTargetISO(isoFromDte(clamped));
+  };
+
+  // ---- alternatives comparison table ----------------------------------------
+  const rr = (c: WeighedContract) => c.expectedMovePct / Math.max(c.breakevenMovePct, 0.05);
+  const altColumns: Column<WeighedContract>[] = [
+    {
+      key: 'contract',
+      header: 'Contract',
+      align: 'left',
+      sortValue: c => c.strike,
+      render: c => (
+        <span className="inline-flex items-center gap-2">
+          <span className={c.id === weighed.id ? 'text-select font-semibold' : 'text-textPrimary font-semibold'}>
+            {c.strike}
+            {c.right}
+          </span>
+          {c.id === weighed.id && <SignalBadge tone="select">Yours</SignalBadge>}
+          {better && c.id === better.id && (
+            <SignalBadge tone="bull" dot>
+              Better R/R
+            </SignalBadge>
+          )}
+        </span>
+      ),
+    },
+    { key: 'dte', header: 'DTE', align: 'right', sortValue: c => c.dte, render: c => <span className="text-textSecondary">{c.dte}d</span> },
+    {
+      key: 'score',
+      header: 'Score',
+      align: 'right',
+      sortValue: c => c.composite,
+      render: c => (
+        <span className={`font-semibold ${c.verdict === 'BUY' ? 'text-bull' : c.verdict === 'FADE' ? 'text-bear' : 'text-textPrimary'}`}>
+          {c.composite}
+        </span>
+      ),
+    },
+    { key: 'verdict', header: 'Verdict', align: 'right', sortValue: c => c.composite, render: c => <SignalBadge tone={verdictTone[c.verdict]}>{c.verdict}</SignalBadge> },
+    { key: 'mid', header: 'Mid', align: 'right', sortValue: c => c.mid, render: c => `$${c.mid.toFixed(2)}` },
+    { key: 'delta', header: 'Δ', align: 'right', sortValue: c => Math.abs(c.delta), render: c => c.delta.toFixed(2) },
+    {
+      key: 'theta',
+      header: 'θ / day',
+      align: 'right',
+      sortValue: c => c.thetaPerDayPct,
+      render: c => <span className={c.thetaPerDayPct > 5 ? 'text-bear' : 'text-textSecondary'}>−{c.thetaPerDayPct.toFixed(1)}%</span>,
+    },
+    { key: 'move', header: '1σ move', align: 'right', sortValue: c => c.expectedMovePct, render: c => <span className="text-bull">{c.expectedMovePct.toFixed(1)}%</span> },
+    { key: 'be', header: 'Breakeven', align: 'right', sortValue: c => c.breakevenMovePct, render: c => `${c.breakevenMovePct.toFixed(1)}%` },
+    {
+      key: 'rr',
+      header: 'Reward / risk',
+      align: 'right',
+      sortValue: c => rr(c),
+      render: c => {
+        const v = rr(c);
+        return <span className={v >= 1 ? 'text-bull' : 'text-warn'}>{v.toFixed(2)}×</span>;
+      },
+    },
+  ];
+
   return (
     <div className="flex flex-col gap-4">
-      {/* ---- Search / build bar ---- */}
-      <Panel bodyClassName="p-3" emphasis>
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="relative flex-1 min-w-[240px]">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-textMuted" />
-            <input
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && submitQuery()}
-              placeholder="Search any contract — e.g. SPY 500C 7  ·  strike · call/put · days"
-              className="w-full bg-inputBg border border-borderSubtle focus:border-borderMuted rounded-md pl-8 pr-3 py-2 font-mono text-xs text-textPrimary placeholder:text-textMuted outline-none"
-            />
-          </div>
-          <button
-            onClick={submitQuery}
-            className="px-3 py-2 rounded-md holo-bg text-[#0a0a0a] font-mono text-[11px] font-semibold uppercase tracking-wider"
-          >
-            Weigh it
-          </button>
-        </div>
+      {/* ---- Structured build form (primary interface) ---- */}
+      <Panel
+        emphasis
+        title={
+          <span className="inline-flex items-center gap-1.5">
+            <SlidersHorizontal className="w-3.5 h-3.5" /> Build a contract
+          </span>
+        }
+        subtitle="scored live on the same scale as the top setups"
+      >
+        <div className="flex flex-col gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-3.5">
+            {/* Ticker */}
+            <Field label="Ticker" hint={`Spot $${snapshot.spot.toFixed(2)}`}>
+              <TickerSearch value={activeTicker} onChange={changeTicker} />
+            </Field>
 
-        {/* Quick-adjust controls — the parsed contract, editable */}
-        <div className="mt-3 flex items-center gap-2 flex-wrap font-mono text-[11px]">
-          <span className="text-textMuted uppercase tracking-wider text-[10px]">{activeTicker}</span>
-          {/* call / put */}
-          <div className="inline-flex rounded-md overflow-hidden border border-borderSubtle">
-            {(['C', 'P'] as const).map(r => (
-              <button
-                key={r}
-                onClick={() => setRight(r)}
-                className={`px-2.5 py-1 font-semibold transition-colors ${
-                  right === r
-                    ? r === 'C'
-                      ? 'bg-[#15803d] text-white'
-                      : 'bg-[#b91c1c] text-white'
-                    : 'text-textMuted hover:text-textSecondary'
-                }`}
-              >
-                {r === 'C' ? 'CALL' : 'PUT'}
-              </button>
-            ))}
+            {/* Side */}
+            <Field label="Side">
+              <div className="inline-flex w-full rounded-md overflow-hidden border border-borderSubtle font-mono text-[12px]">
+                {(['C', 'P'] as const).map(r => (
+                  <button
+                    key={r}
+                    onClick={() => setRight(r)}
+                    className={`flex-1 px-2.5 py-1.5 font-semibold transition-colors ${
+                      right === r
+                        ? r === 'C'
+                          ? 'bg-[#15803d] text-white'
+                          : 'bg-[#b91c1c] text-white'
+                        : 'text-textMuted hover:text-textSecondary'
+                    }`}
+                  >
+                    {r === 'C' ? 'CALL' : 'PUT'}
+                  </button>
+                ))}
+              </div>
+            </Field>
+
+            {/* Strike */}
+            <Field label="Strike" hint={`${step} strike grid`}>
+              <div className="inline-flex w-full items-center rounded-md border border-borderSubtle overflow-hidden bg-inputBg">
+                <button onClick={() => setStrike(s => Math.max(step, s - step))} className="px-2.5 py-1.5 text-textMuted hover:text-textPrimary" aria-label="Lower strike">
+                  −
+                </button>
+                <input
+                  type="number"
+                  value={strike}
+                  step={step}
+                  onChange={e => {
+                    const v = parseFloat(e.target.value);
+                    if (Number.isFinite(v)) setStrike(v);
+                  }}
+                  className="min-w-0 flex-1 bg-transparent text-center font-mono text-[12px] text-textPrimary outline-none tnum"
+                />
+                <button onClick={() => setStrike(s => s + step)} className="px-2.5 py-1.5 text-textMuted hover:text-textPrimary" aria-label="Raise strike">
+                  +
+                </button>
+              </div>
+            </Field>
+
+            {/* Expiry */}
+            <Field
+              label="Expiry"
+              icon={<Calendar className="w-3 h-3" />}
+              hint={`${dte}d out · ${horizonLabel} sleeve`}
+            >
+              <div className="flex flex-col gap-1.5">
+                <input
+                  type="date"
+                  value={expiryISO}
+                  min={todayISO}
+                  onChange={e => e.target.value && setExpiryDte(dteFromISO(e.target.value))}
+                  className={inputBase}
+                />
+                <div className="inline-flex items-center gap-1 flex-wrap">
+                  {DTE_PRESETS.map(d => (
+                    <button
+                      key={d}
+                      onClick={() => setExpiryDte(d)}
+                      className={`px-2 py-0.5 rounded border font-mono text-[11px] transition-colors ${
+                        dte === d ? 'border-borderMuted bg-white/[0.06] text-textPrimary' : 'border-borderSubtle text-textMuted hover:text-textSecondary'
+                      }`}
+                    >
+                      {d === 0 ? '0DTE' : `${d}d`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </Field>
+
+            {/* Target date */}
+            <Field
+              label="Target date"
+              icon={<Target className="w-3 h-3" />}
+              hint={runway > 0 ? `${daysToTarget}d hold · ${runway}d runway to expiry` : `${daysToTarget}d hold · at expiry`}
+            >
+              <input
+                type="date"
+                value={targetISO}
+                min={todayISO}
+                max={expiryISO}
+                onChange={e => setTargetISO(e.target.value)}
+                className={inputBase}
+              />
+            </Field>
+
+            {/* Expected move */}
+            <Field
+              label="Expected move"
+              icon={<Percent className="w-3 h-3" />}
+              hint={`Modeled 1σ ${weighed.expectedMovePct.toFixed(1)}% · BE ${weighed.breakevenMovePct.toFixed(1)}%`}
+            >
+              <div className="relative">
+                <input
+                  type="number"
+                  value={expMoveInput}
+                  placeholder={weighed.expectedMovePct.toFixed(1)}
+                  onChange={e => setExpMoveInput(e.target.value)}
+                  className={`${inputBase} pr-6`}
+                />
+                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 font-mono text-[11px] text-textMuted">%</span>
+              </div>
+            </Field>
+
+            {/* Risk budget */}
+            <Field
+              label="Risk budget"
+              icon={<DollarSign className="w-3 h-3" />}
+              hint={`$${costPerContract.toFixed(0)} / contract at mid`}
+            >
+              <div className="relative">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 font-mono text-[11px] text-textMuted">$</span>
+                <input
+                  type="number"
+                  value={budgetInput}
+                  placeholder="0"
+                  onChange={e => setBudgetInput(e.target.value)}
+                  className={`${inputBase} pl-6`}
+                />
+              </div>
+            </Field>
           </div>
-          {/* strike stepper */}
-          <div className="inline-flex items-center rounded-md border border-borderSubtle overflow-hidden">
-            <button onClick={() => setStrike(s => Math.max(step, s - step))} className="px-2 py-1 text-textMuted hover:text-textPrimary">−</button>
-            <span className="px-2 py-1 text-textPrimary tnum tabular-nums">{strike}</span>
-            <button onClick={() => setStrike(s => s + step)} className="px-2 py-1 text-textMuted hover:text-textPrimary">+</button>
-          </div>
-          {/* dte presets */}
-          <div className="inline-flex items-center gap-1">
-            {DTE_PRESETS.map(d => (
-              <button
-                key={d}
-                onClick={() => setDte(d)}
-                className={`px-2 py-1 rounded border transition-colors ${
-                  dte === d ? 'border-borderMuted bg-white/[0.06] text-textPrimary' : 'border-borderSubtle text-textMuted hover:text-textSecondary'
-                }`}
-              >
-                {d === 0 ? '0DTE' : `${d}d`}
-              </button>
-            ))}
-            <span className="text-textMuted tnum">· {horizonLabel}</span>
+
+          {/* ---- Command shortcut (secondary, power-user) ---- */}
+          <div className="border-t border-borderSubtle pt-3">
+            <button
+              onClick={() => setShowCmd(s => !s)}
+              className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-textMuted hover:text-textSecondary transition-colors"
+            >
+              <Terminal className="w-3 h-3" />
+              Command shortcut
+              <span className="text-textMuted/60 normal-case tracking-normal">— type a contract instead</span>
+            </button>
+            {showCmd && (
+              <div className="mt-2.5 flex items-center gap-2 flex-wrap animate-slide-in">
+                <div className="relative flex-1 min-w-[240px]">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-textMuted" />
+                  <input
+                    value={query}
+                    onChange={e => setQuery(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && submitQuery()}
+                    placeholder="e.g. SPY 500C 7  ·  strike · call/put · days"
+                    className="w-full bg-inputBg border border-borderSubtle focus:border-borderMuted rounded-md pl-8 pr-3 py-2 font-mono text-[12px] text-textPrimary placeholder:text-textMuted outline-none"
+                  />
+                </div>
+                <button
+                  onClick={submitQuery}
+                  className="px-3 py-2 rounded-md border border-borderMuted bg-white/[0.04] text-textPrimary font-mono text-[11px] font-semibold uppercase tracking-wider hover:bg-white/[0.07] transition-colors"
+                >
+                  Parse
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </Panel>
@@ -229,7 +496,7 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
           actions={
             <button
               onClick={toggleTrack}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border font-mono text-[10px] font-semibold uppercase tracking-wider transition-colors ${
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border font-mono text-[11px] font-semibold uppercase tracking-wider transition-colors ${
                 tracked ? 'border-bull/40 bg-bull/10 text-bull' : 'border-borderSubtle text-textSecondary hover:text-textPrimary hover:border-borderMuted'
               }`}
             >
@@ -268,59 +535,108 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
 
             <div className="border-t border-borderSubtle pt-3 flex flex-col gap-2">
               <p className="text-xs leading-relaxed">
-                <span className="font-mono text-[10px] font-semibold uppercase tracking-wider text-bull mr-2">Edge</span>
+                <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-bull mr-2">Edge</span>
                 <span className="text-textSecondary">{weighed.edge}</span>
               </p>
               <p className="text-xs leading-relaxed">
-                <span className="font-mono text-[10px] font-semibold uppercase tracking-wider text-bear mr-2">Risk</span>
+                <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-bear mr-2">Risk</span>
                 <span className="text-textSecondary">{weighed.risk}</span>
               </p>
             </div>
           </div>
         </Panel>
 
-        {/* ---- Better risk/reward suggestion ---- */}
+        {/* ---- Your plan: form inputs read against engine values ---- */}
         <Panel
           title={
             <span className="inline-flex items-center gap-1.5">
-              <TrendingUp className="w-3.5 h-3.5" /> Better risk / reward?
+              <Target className="w-3.5 h-3.5" /> Your plan
             </span>
           }
-          subtitle="same direction, same sleeve"
-          tone={better ? 'bull' : 'neutral'}
+          subtitle="thesis, timing & sizing"
           className="xl:col-span-5"
         >
-          {better ? (
-            <div className="flex flex-col gap-3">
-              <p className="text-xs text-textSecondary leading-relaxed">
-                <span className="text-bull font-semibold">{better.ticker} {better.strike}{better.right}</span> scores{' '}
-                <span className="text-textPrimary font-semibold">{better.composite}</span> vs your{' '}
-                <span className="text-textPrimary font-semibold">{weighed.composite}</span> — and clears its breakeven with more
-                room ({better.expectedMovePct.toFixed(1)}% of 1σ against a {better.breakevenMovePct.toFixed(1)}% breakeven).
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                <Cell k="Score" v={`${better.composite}`} tone="bull" />
-                <Cell k="Verdict" v={better.verdict} tone={verdictTone[better.verdict]} />
-                <Cell k="Mid" v={`$${better.mid.toFixed(2)}`} />
-                <Cell k="θ / day" v={`−${better.thetaPerDayPct.toFixed(1)}%`} />
-                <Cell k="1σ move" v={`${better.expectedMovePct.toFixed(1)}%`} tone="bull" />
-                <Cell k="Breakeven" v={`${better.breakevenMovePct.toFixed(1)}%`} />
-              </div>
-              <button
-                onClick={() => loadContract(better)}
-                className="inline-flex items-center justify-center gap-1.5 w-full py-2 rounded-md border border-bull/40 bg-bull/10 text-bull font-mono text-[11px] font-semibold uppercase tracking-wider hover:bg-bull/[0.16] transition-colors"
-              >
-                Weigh this instead <ArrowRight className="w-3.5 h-3.5" />
-              </button>
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <SignalBadge tone={clearsBreakeven ? 'bull' : 'warn'} dot>
+                {clearsBreakeven ? 'Clears breakeven' : 'Short of breakeven'}
+              </SignalBadge>
+              <span className="font-mono text-[11px] text-textMuted tnum">
+                your {effExpMove.toFixed(1)}% vs {weighed.breakevenMovePct.toFixed(1)}% BE
+              </span>
             </div>
-          ) : (
-            <p className="text-xs text-textMuted leading-relaxed">
-              Nothing nearby beats it on both score and reward-to-risk — the {weighed.right === 'C' ? 'call' : 'put'} you searched
-              is the strongest expression in its sleeve right now.
+
+            <div className="grid grid-cols-2 gap-2">
+              <Cell k="Days to expiry" v={`${dte}d`} />
+              <Cell k="Hold to target" v={`${daysToTarget}d`} />
+              <Cell k="Runway to expiry" v={`${runway}d`} tone={runway <= 0 ? 'warn' : 'neutral'} />
+              <Cell k="Your exp. move" v={`${effExpMove.toFixed(1)}%`} tone={clearsBreakeven ? 'bull' : 'warn'} />
+              <Cell k="Cost / contract" v={`$${costPerContract.toFixed(0)}`} />
+              <Cell k="Contracts in budget" v={contractsInBudget != null ? `${contractsInBudget}` : '—'} tone={contractsInBudget === 0 ? 'warn' : 'neutral'} />
+              <Cell k="Est. outlay" v={outlay != null ? `$${outlay.toFixed(0)}` : '—'} />
+              <Cell k="Modeled 1σ" v={`${weighed.expectedMovePct.toFixed(1)}%`} tone="bull" />
+            </div>
+
+            <p className="text-xs text-textSecondary leading-relaxed">
+              {clearsBreakeven
+                ? `A ${effExpMove.toFixed(1)}% move clears the ${weighed.breakevenMovePct.toFixed(1)}% breakeven with room to spare.`
+                : `A ${effExpMove.toFixed(1)}% move falls short of the ${weighed.breakevenMovePct.toFixed(1)}% breakeven — you're leaning on the tail.`}
+              {budget != null &&
+                (contractsInBudget && contractsInBudget > 0
+                  ? ` Your $${budget.toFixed(0)} budget clears ${contractsInBudget} contract${contractsInBudget > 1 ? 's' : ''} at the $${costPerContract.toFixed(0)} mid.`
+                  : ` Your $${budget.toFixed(0)} budget is under the $${costPerContract.toFixed(0)} single-contract mid.`)}
             </p>
-          )}
+            <p className="font-mono text-[10px] text-textMuted leading-relaxed border-t border-borderSubtle pt-2.5">
+              Sizing off the modeled mid × {CONTRACT_MULTIPLIER}-share multiplier. Expected-move field defaults to the modeled 1σ; override it to stress your own thesis.
+            </p>
+          </div>
         </Panel>
       </div>
+
+      {/* ---- Alternatives in the same sleeve & direction ---- */}
+      <Panel
+        flush
+        title={
+          <span className="inline-flex items-center gap-1.5">
+            <Layers className="w-3.5 h-3.5" /> Same-sleeve alternatives
+          </span>
+        }
+        subtitle={`${weighed.right === 'C' ? 'calls' : 'puts'} · ${horizonLabel}`}
+        tone={better ? 'bull' : 'neutral'}
+      >
+        <div className="px-4 pt-3">
+          <p className="text-xs text-textSecondary leading-relaxed">
+            {better ? (
+              <>
+                <span className="inline-flex items-center gap-1 text-bull font-semibold">
+                  <TrendingUp className="w-3.5 h-3.5" />
+                  {better.ticker} {better.strike}
+                  {better.right}
+                </span>{' '}
+                scores <span className="text-textPrimary font-semibold">{better.composite}</span> vs your{' '}
+                <span className="text-textPrimary font-semibold">{weighed.composite}</span> and clears its breakeven with more room
+                ({better.expectedMovePct.toFixed(1)}% of 1σ against a {better.breakevenMovePct.toFixed(1)}% breakeven). Click any row to weigh it.
+              </>
+            ) : (
+              <>
+                Nothing in the {horizonLabel} sleeve beats your {weighed.right === 'C' ? 'call' : 'put'} on both score and
+                reward-to-risk — it's the strongest expression in its lane right now. Click any row to weigh it.
+              </>
+            )}
+          </p>
+        </div>
+        <div className="mt-2">
+          <DataTable
+            columns={altColumns}
+            rows={altRows}
+            rowKey={c => c.id}
+            onRowClick={loadContract}
+            selectedKey={weighed.id}
+            initialSort={{ key: 'score', dir: 'desc' }}
+            emptyText="No alternatives in this sleeve"
+          />
+        </div>
+      </Panel>
 
       {/* Execution & expected value — connect the grade to what you can capture */}
       <Panel

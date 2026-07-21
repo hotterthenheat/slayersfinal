@@ -6,8 +6,11 @@
 
 export type Tone = 'bull' | 'bear' | 'warn' | 'select' | 'magenta' | 'neutral';
 
+// Bull direction is GREEN (#30D158, Apple system green — pairs with the
+// existing Apple red #FF3B30 / orange #FF9500). Holographic silver stays
+// reserved for `select` (interface/brand), never for bullishness.
 export const toneText: Record<Tone, string> = {
-  bull: 'text-bull',
+  bull: 'text-[#30D158]',
   bear: 'text-bear',
   warn: 'text-warn',
   select: 'text-select',
@@ -16,7 +19,7 @@ export const toneText: Record<Tone, string> = {
 };
 
 export const toneDot: Record<Tone, string> = {
-  bull: 'bg-bull',
+  bull: 'bg-[#30D158]',
   bear: 'bg-bear',
   warn: 'bg-warn',
   select: 'bg-select',
@@ -25,7 +28,7 @@ export const toneDot: Record<Tone, string> = {
 };
 
 export const toneBadge: Record<Tone, string> = {
-  bull: 'bg-bull/10 text-bull border-bull/20',
+  bull: 'bg-[#30D158]/10 text-[#30D158] border-[#30D158]/20',
   bear: 'bg-bear/10 text-bear border-bear/20',
   warn: 'bg-warn/10 text-warn border-warn/20',
   select: 'bg-select/10 text-select border-select/20',
@@ -35,8 +38,8 @@ export const toneBadge: Record<Tone, string> = {
 };
 
 export const toneBar: Record<Tone, string> = {
-  // Silver needs its luminance — element-level chrome never below /90
-  bull: 'bg-bull/90',
+  // Element-level chrome keeps its luminance — never below /70
+  bull: 'bg-[#30D158]/90',
   bear: 'bg-bear/80',
   warn: 'bg-warn/70',
   select: 'bg-select/70',

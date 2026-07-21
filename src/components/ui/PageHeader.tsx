@@ -21,7 +21,7 @@ const PageHeader = ({ breadcrumb, title, subtitle, actions, ribbon }: PageHeader
   return (
     <div className="flex items-center justify-between gap-4 flex-wrap">
       <div className="min-w-0 shrink-0">
-        <div className="flex items-center gap-1.5 font-mono text-[10px] text-textMuted uppercase tracking-widest mb-1.5">
+        <div className="flex items-center gap-1.5 font-mono text-[11px] text-textMuted uppercase tracking-widest mb-1.5">
           {breadcrumb.map((part, i) => (
             <React.Fragment key={part}>
               {i > 0 && <span>/</span>}

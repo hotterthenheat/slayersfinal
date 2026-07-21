@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Zap, GitBranch, Layers } from 'lucide-react';
+import { Zap, GitBranch, Layers, Scale, Crosshair } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildFractureView } from '../../core/fracture';
 import { SPOT } from '../../components/gex/palette';
@@ -26,14 +26,52 @@ const regimeTone: Record<AbsorptionRegime, Tone> = {
   NONLINEAR: 'bear',
 };
 
-// Forced participants — one color each, stable across every view
-const PARTS: { key: keyof ForcedFlowLevel; label: string; color: string }[] = [
-  { key: 'dealerHedge', label: 'Dealer', color: '#C7D3E8' },
-  { key: 'volControl', label: 'Vol-control', color: '#7DD3FC' },
-  { key: 'cta', label: 'CTA', color: '#FF9500' },
-  { key: 'letf', label: 'LETF', color: '#EA00FF' },
-  { key: 'margin', label: 'Margin', color: '#FF3B30' },
+// How knowable each participant's forced flow actually is. Purely a framing of
+// provenance — not a computed quantity. Dealer hedging is inferred from the live
+// chain; margin liquidation can only be assumed from thresholds.
+type Tier = 'observed' | 'estimated' | 'assumed';
+
+// Forced participants — one color each, stable across every view. `tier` records
+// how directly each one is knowable; `basis` says why.
+const PARTS: { key: keyof ForcedFlowLevel; label: string; color: string; tier: Tier; basis: string }[] = [
+  { key: 'dealerHedge', label: 'Dealer', color: '#C7D3E8', tier: 'observed', basis: 'inferred from the live option-chain gamma' },
+  { key: 'volControl', label: 'Vol-control', color: '#7DD3FC', tier: 'estimated', basis: 'modeled from realized vol and vol-target sizing' },
+  { key: 'cta', label: 'CTA', color: '#FF9500', tier: 'assumed', basis: 'inferred from trend thresholds and crowding' },
+  { key: 'letf', label: 'LETF', color: '#EA00FF', tier: 'estimated', basis: 'estimated from leveraged-ETF assets and the daily rebalance rule' },
+  { key: 'margin', label: 'Margin', color: '#FF3B30', tier: 'assumed', basis: 'inferred from liquidation thresholds — not directly observable' },
 ];
+
+// Cascade amplifier names arrive as ForcedParticipant strings — map them back to
+// the same knowability tier so the confidence chip reads consistently everywhere.
+const AMP_TIER: Record<string, Tier> = {
+  'Dealer hedging': 'observed',
+  'Vol-control': 'estimated',
+  'CTA trend': 'assumed',
+  'Leveraged ETF': 'estimated',
+  'Margin / liquidation': 'assumed',
+};
+
+const TIER_ORDER: Tier[] = ['observed', 'estimated', 'assumed'];
+const TIER_META: Record<Tier, { label: string; dots: number; hint: string; text: string }> = {
+  observed: { label: 'Observed', dots: 3, hint: 'grounded in live market data', text: 'text-textPrimary' },
+  estimated: { label: 'Estimated', dots: 2, hint: 'modeled from proxies', text: 'text-textSecondary' },
+  assumed: { label: 'Assumed', dots: 1, hint: 'inferred from assumptions', text: 'text-textMuted' },
+};
+
+/** A confidence meter (filled dots) + tier label — neutral ink, never directional. */
+const ConfidenceChip = ({ tier, className = '' }: { tier: Tier; className?: string }) => {
+  const m = TIER_META[tier];
+  return (
+    <span className={`inline-flex items-center gap-1.5 shrink-0 ${className}`} title={`${m.label} — ${m.hint}`}>
+      <span className="flex items-center gap-[3px]">
+        {[0, 1, 2].map(i => (
+          <span key={i} className={`w-1 h-1 rounded-full ${i < m.dots ? 'bg-textSecondary' : 'bg-white/15'}`} />
+        ))}
+      </span>
+      <span className={`font-mono text-[11px] uppercase tracking-wider ${m.text}`}>{m.label}</span>
+    </span>
+  );
+};
 
 const DECOMP: { key: keyof MoveDecomposition; label: string; color: string }[] = [
   { key: 'informational', label: 'Information', color: '#7DD3FC' },
@@ -132,10 +170,44 @@ const Fracture = () => {
   const maxLatent = Math.max(...view.levels.map(l => l.latentLiquidity), 1);
   const headTone: Tone = view.fractureSide === 'DOWN' ? 'bear' : view.fractureSide === 'UP' ? 'bull' : 'neutral';
   const crit = view.criticality;
-  const critTone: Tone = crit.label === 'UNSTABLE' ? 'bear' : crit.label === 'CRITICAL' ? 'warn' : crit.label === 'REACTIVE' ? 'select' : 'bull';
+  // Severity ascends STABLE → REACTIVE → UNSTABLE → CRITICAL, so CRITICAL must
+  // carry the most severe tone (bear), not a milder one.
+  const critTone: Tone = crit.label === 'CRITICAL' ? 'bear' : crit.label === 'UNSTABLE' ? 'warn' : crit.label === 'REACTIVE' ? 'select' : 'bull';
 
   // spot sits between the below/above halves of the ladder
   const aboveCount = view.levels.filter(l => l.distPct > 0).length;
+
+  // ---- forced-flow attribution: sum each participant's |flow| across the ladder ----
+  // (reading the per-level arrays the engine already built — no new quantity)
+  const contributions = PARTS.map(p => ({
+    ...p,
+    usd: view.levels.reduce((sum, l) => sum + Math.abs(l[p.key] as number), 0),
+  }));
+  const contribTotal = contributions.reduce((a, c) => a + c.usd, 0) || 1;
+  const maxContrib = Math.max(...contributions.map(c => c.usd), 1);
+  const parts = contributions.map(c => ({ ...c, pct: Math.round((c.usd / contribTotal) * 100) }));
+  // Left→right the stacked bar runs most-knowable → least-knowable.
+  const barParts = TIER_ORDER.flatMap(t => parts.filter(c => c.tier === t).sort((a, b) => b.usd - a.usd));
+  const tierSummary = TIER_ORDER.map(t => ({
+    tier: t,
+    pct: parts.filter(c => c.tier === t).reduce((a, c) => a + c.pct, 0),
+  }));
+  const ladderRangePct = view.levels.length ? Math.max(...view.levels.map(l => Math.abs(l.distPct))) : 3;
+
+  // ---- explicit trigger / invalidation from existing fields ----
+  const triggerNote =
+    view.fractureSide === 'DOWN'
+      ? 'cascade arms on a break below'
+      : view.fractureSide === 'UP'
+        ? 'squeeze arms on a break above'
+        : 'nearest unstable level below spot';
+  const hasLine = view.fractureLine !== null;
+  const invalidationValue = hasLine ? `$${view.fractureLine!.toFixed(2)}` : 'in range';
+  const invalidationNote = !hasLine
+    ? `forced flow absorbed across ±${ladderRangePct.toFixed(0)}%`
+    : view.fractureSide === 'DOWN'
+      ? 'thesis voids while price holds above'
+      : 'thesis voids while price stays capped below';
 
   return (
     <>
@@ -155,7 +227,7 @@ const Fracture = () => {
       {/* Headline read */}
       <Panel tone={headTone} bodyClassName="py-3.5" emphasis>
         <p className="text-[15px] text-textPrimary leading-relaxed">
-          <span className={`font-mono text-[10px] font-semibold uppercase tracking-widest mr-2.5 ${headTone === 'bear' ? 'text-bear' : headTone === 'bull' ? 'text-bull' : 'text-textSecondary'}`}>
+          <span className={`font-mono text-[11px] font-semibold uppercase tracking-widest mr-2.5 ${headTone === 'bear' ? 'text-bear' : headTone === 'bull' ? 'text-bull' : 'text-textSecondary'}`}>
             The read
           </span>
           {view.headline}
@@ -176,7 +248,7 @@ const Fracture = () => {
           actions={
             <span className="hidden sm:flex items-center gap-2">
               {PARTS.map(p => (
-                <span key={p.key} className="inline-flex items-center gap-1 font-mono text-[9px] uppercase tracking-wider text-textMuted">
+                <span key={p.key} className="inline-flex items-center gap-1 font-mono text-[11px] uppercase tracking-wider text-textMuted">
                   <span className="w-2 h-2 rounded-sm inline-block" style={{ background: p.color }} /> {p.label}
                 </span>
               ))}
@@ -209,30 +281,121 @@ const Fracture = () => {
           tone={view.cascade.cascadeProbPct >= 50 ? 'bear' : 'neutral'}
         >
           <CascadeFan paths={view.cascade.paths} spot={view.spot} trigger={view.cascade.triggerPrice} />
+          {/* Explicit trigger / invalidation — the level that arms the move and the one that voids it */}
           <div className="mt-3 grid grid-cols-2 gap-2">
             <div className="border border-borderSubtle bg-inset rounded-md px-2.5 py-2">
-              <div className="font-mono text-[9px] uppercase tracking-widest text-textMuted">Median terminus</div>
+              <div className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-textMuted">
+                <Crosshair className="w-3 h-3" /> Trigger
+              </div>
+              <div className="mt-1 font-mono text-sm font-semibold text-textPrimary tnum">${view.cascade.triggerPrice.toFixed(2)}</div>
+              <div className="mt-0.5 font-mono text-[10px] text-textMuted">{triggerNote}</div>
+            </div>
+            <div className="border border-borderSubtle bg-inset rounded-md px-2.5 py-2">
+              <div className="font-mono text-[11px] uppercase tracking-widest text-textMuted">Invalidation</div>
+              <div className="mt-1 font-mono text-sm font-semibold text-textPrimary tnum">{invalidationValue}</div>
+              <div className="mt-0.5 font-mono text-[10px] text-textMuted">{invalidationNote}</div>
+            </div>
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <div className="border border-borderSubtle bg-inset rounded-md px-2.5 py-2">
+              <div className="font-mono text-[11px] uppercase tracking-widest text-textMuted">Median terminus</div>
               <div className="mt-1 font-mono text-sm font-semibold text-bear tnum">${view.cascade.medianTerminus.toFixed(2)}</div>
             </div>
             <div className="border border-borderSubtle bg-inset rounded-md px-2.5 py-2">
-              <div className="font-mono text-[9px] uppercase tracking-widest text-textMuted">Exhaustion zone</div>
+              <div className="font-mono text-[11px] uppercase tracking-widest text-textMuted">Exhaustion zone</div>
               <div className="mt-1 font-mono text-sm font-semibold text-textPrimary tnum">
                 ${view.cascade.exhaustionLo.toFixed(2)}–${view.cascade.exhaustionHi.toFixed(2)}
               </div>
             </div>
           </div>
           <div className="mt-2.5 flex flex-col gap-1.5">
-            <div className="flex items-center justify-between font-mono text-[11px]">
-              <span className="text-textMuted uppercase tracking-wider text-[10px]">Primary amplifier</span>
-              <span className="text-textPrimary">{view.cascade.primaryAmplifier}</span>
+            <div className="flex items-center justify-between gap-2 font-mono text-[11px]">
+              <span className="text-textMuted uppercase tracking-wider text-[11px]">Primary amplifier</span>
+              <span className="flex items-center gap-2 min-w-0">
+                <span className="text-textPrimary truncate">{view.cascade.primaryAmplifier}</span>
+                {AMP_TIER[view.cascade.primaryAmplifier] && <ConfidenceChip tier={AMP_TIER[view.cascade.primaryAmplifier]} />}
+              </span>
             </div>
-            <div className="flex items-center justify-between font-mono text-[11px]">
-              <span className="text-textMuted uppercase tracking-wider text-[10px]">Secondary</span>
-              <span className="text-textSecondary">{view.cascade.secondaryAmplifier}</span>
+            <div className="flex items-center justify-between gap-2 font-mono text-[11px]">
+              <span className="text-textMuted uppercase tracking-wider text-[11px]">Secondary</span>
+              <span className="flex items-center gap-2 min-w-0">
+                <span className="text-textSecondary truncate">{view.cascade.secondaryAmplifier}</span>
+                {AMP_TIER[view.cascade.secondaryAmplifier] && <ConfidenceChip tier={AMP_TIER[view.cascade.secondaryAmplifier]} />}
+              </span>
             </div>
           </div>
         </Panel>
       </div>
+
+      {/* Forced-flow attribution — tiered by how knowable each participant is */}
+      <Panel
+        title={
+          <span className="inline-flex items-center gap-1.5">
+            <Scale className="w-3.5 h-3.5" /> Forced-flow attribution
+          </span>
+        }
+        subtitle="who is forced — and how knowable each one is"
+        actions={
+          <span className="hidden sm:flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-wider">
+            {tierSummary.map(t => (
+              <span key={t.tier} className="inline-flex items-center gap-1.5">
+                <ConfidenceChip tier={t.tier} />
+                <span className="text-textPrimary tnum">{t.pct}%</span>
+              </span>
+            ))}
+          </span>
+        }
+      >
+        {/* contribution bar — left is what we observe, right is what we assume */}
+        <div className="flex h-3 rounded-sm overflow-hidden bg-white/[0.04]">
+          {barParts.map(c => (
+            <span key={c.key} style={{ width: `${(c.usd / contribTotal) * 100}%`, background: c.color }} title={`${c.label} · ${c.pct}% · ${fmtUsd(c.usd)}`} />
+          ))}
+        </div>
+        <div className="mt-1.5 flex items-center justify-between font-mono text-[10px] uppercase tracking-wider text-textMuted">
+          <span>most knowable</span>
+          <span>share of forced flow, summed across ±{ladderRangePct.toFixed(0)}%</span>
+          <span>most assumed</span>
+        </div>
+
+        {/* tiered rows */}
+        <div className="mt-4 flex flex-col gap-4">
+          {TIER_ORDER.map(tier => {
+            const rows = parts.filter(c => c.tier === tier).sort((a, b) => b.usd - a.usd);
+            if (!rows.length) return null;
+            const m = TIER_META[tier];
+            return (
+              <div key={tier}>
+                <div className="flex items-center gap-2 mb-2">
+                  <ConfidenceChip tier={tier} />
+                  <span className="h-px flex-1 bg-borderSubtle" />
+                  <span className="font-mono text-[10px] text-textMuted lowercase tracking-wide">{m.hint}</span>
+                </div>
+                <div className="flex flex-col">
+                  {rows.map(c => (
+                    <div key={c.key} className="grid grid-cols-[132px_1fr_92px] items-center gap-3 py-1.5" title={`${c.label} — ${c.basis}`}>
+                      <span className="flex items-center gap-2 min-w-0">
+                        <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: c.color }} />
+                        <span className="font-mono text-[12px] text-textPrimary truncate">{c.label}</span>
+                      </span>
+                      <span className="flex items-center gap-2 min-w-0">
+                        <span className="flex-1 h-2 rounded-full bg-white/[0.05] overflow-hidden">
+                          <span className="block h-full rounded-full" style={{ width: `${(c.usd / maxContrib) * 100}%`, background: c.color }} />
+                        </span>
+                        <span className="hidden md:inline font-mono text-[10px] text-textMuted truncate max-w-[220px]">{c.basis}</span>
+                      </span>
+                      <span className="text-right font-mono text-[12px] text-textPrimary tnum">
+                        {fmtUsd(c.usd)}
+                        <span className="ml-1.5 text-[10px] text-textMuted">{c.pct}%</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Panel>
 
       <div className="grid grid-cols-1 gap-4 items-start">
         {/* Criticality + move decomposition */}
@@ -248,7 +411,7 @@ const Fracture = () => {
           <div className="flex flex-col gap-4">
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Branching ratio</span>
+                <span className="font-mono text-[11px] uppercase tracking-widest text-textMuted">Branching ratio</span>
                 <SignalBadge tone={critTone} dot>
                   {crit.label}
                 </SignalBadge>
@@ -264,7 +427,7 @@ const Fracture = () => {
             </div>
 
             <div className="border-t border-borderSubtle pt-3">
-              <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted mb-2">
+              <div className="font-mono text-[11px] uppercase tracking-widest text-textMuted mb-2">
                 What's driving the current move
               </div>
               <div className="flex h-3 rounded-sm overflow-hidden bg-white/[0.04]">
@@ -274,7 +437,7 @@ const Fracture = () => {
               </div>
               <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-1">
                 {DECOMP.filter(d => view.decomposition[d.key] >= 4).map(d => (
-                  <span key={d.key} className="inline-flex items-center gap-1.5 font-mono text-[10px] text-textSecondary">
+                  <span key={d.key} className="inline-flex items-center gap-1.5 font-mono text-[11px] text-textSecondary">
                     <span className="w-2 h-2 rounded-sm inline-block" style={{ background: d.color }} />
                     {d.label} <span className="text-textMuted tnum ml-auto">{view.decomposition[d.key]}%</span>
                   </span>

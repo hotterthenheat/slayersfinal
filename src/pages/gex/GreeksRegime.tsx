@@ -1,13 +1,15 @@
-import { useMemo } from 'react';
-import { Grid3x3, Clock, Waves } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Grid3x3, Clock, Waves, Sliders, ChevronDown } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildGreeksRegime, GREEKS, type DealerRegime, type GreekKey, type GreekRow } from '../../data/greeksmatrix';
-import { SPOT } from '../../components/gex/palette';
 import Panel from '../../components/ui/Panel';
 import StatCard from '../../components/ui/StatCard';
 import MetricGrid from '../../components/ui/MetricGrid';
-import SignalBadge from '../../components/ui/SignalBadge';
+import SegmentedControl from '../../components/ui/SegmentedControl';
 import type { Tone } from '../../components/ui/tones';
+
+/** The three greeks a dealer-flow read leans on; the rest are specialist. */
+const CORE_KEYS: GreekKey[] = ['gamma', 'vanna', 'charm'];
 
 const fmtC = (v: number): string => {
   const a = Math.abs(v);
@@ -32,12 +34,11 @@ const GreekCell = ({ value, max }: { value: number; max: number }) => {
   const bg = pos ? `rgba(199,211,232,${0.06 + intensity * 0.34})` : `rgba(255,59,48,${0.06 + intensity * 0.34})`;
   return (
     <td className="px-2 py-1.5 text-right" style={{ background: bg }}>
-      <span className={`font-mono text-[10.5px] tnum ${pos ? 'text-textPrimary' : 'text-bear'}`}>{fmtC(value)}</span>
+      <span className={`font-mono text-[11px] tnum ${pos ? 'text-textPrimary' : 'text-bear'}`}>{fmtC(value)}</span>
     </td>
   );
 };
 
-/** Charm clock — dealer delta drift accelerating into the close. */
 const CharmChart = ({ points }: { points: { time: string; deltaShift: number }[] }) => {
   const W = 560;
   const H = 150;
@@ -55,7 +56,6 @@ const CharmChart = ({ points }: { points: { time: string; deltaShift: number }[]
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none">
       <line x1={0} x2={W} y1={zeroY} y2={zeroY} stroke="#fff" strokeOpacity={0.12} />
-      {/* last-hour shade */}
       <rect x={X(points.length - 3)} y={0} width={W - X(points.length - 3)} height={H} fill="rgba(255,149,0,0.06)" />
       <path d={area} fill={up ? 'rgba(199,211,232,0.14)' : 'rgba(255,59,48,0.14)'} />
       <path d={points.map((p, i) => `${i === 0 ? 'M' : 'L'}${X(i).toFixed(1)},${Y(p.deltaShift).toFixed(1)}`).join(' ')} fill="none" stroke={up ? '#C7D3E8' : '#FF3B30'} strokeWidth={1.75} />
@@ -64,7 +64,6 @@ const CharmChart = ({ points }: { points: { time: string; deltaShift: number }[]
   );
 };
 
-/** Vanna shock — dealer hedge vs an IV move (not a price move). */
 const VannaChart = ({ points }: { points: { volShockPct: number; hedgeUsd: number }[] }) => {
   const W = 560;
   const H = 150;
@@ -87,6 +86,41 @@ const VannaChart = ({ points }: { points: { volShockPct: number; hedgeUsd: numbe
 const GreeksRegime = () => {
   const { marketData } = useMarketData();
   const view = useMemo(() => (marketData ? buildGreeksRegime(marketData) : null), [marketData]);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [sortMode, setSortMode] = useState<'strike' | 'mag'>('strike');
+
+  const visibleGreeks = useMemo(() => (showAdvanced ? GREEKS : GREEKS.filter(g => CORE_KEYS.includes(g.key))), [showAdvanced]);
+
+  const colMax = useMemo(
+    () => (view ? (Object.fromEntries(GREEKS.map(g => [g.key, Math.max(...view.rows.map(r => Math.abs(r[g.key])), 1)])) as Record<GreekKey, number>) : ({} as Record<GreekKey, number>)),
+    [view]
+  );
+
+  // Total |exposure| per row across the currently-visible greeks — used for both
+  // sort-by-exposure and the top-contributor highlight. Pure read/sum, no new math.
+  const rowMag = useMemo(() => {
+    const m = new Map<number, number>();
+    if (view) for (const r of view.rows) m.set(r.strike, visibleGreeks.reduce((a, g) => a + Math.abs(r[g.key]), 0));
+    return m;
+  }, [view, visibleGreeks]);
+
+  const topStrike = useMemo<number | null>(() => {
+    let best: number | null = null;
+    let bestV = -1;
+    rowMag.forEach((v, k) => {
+      if (v > bestV) {
+        bestV = v;
+        best = k;
+      }
+    });
+    return best;
+  }, [rowMag]);
+
+  const sortedRows = useMemo(() => {
+    if (!view) return [];
+    if (sortMode === 'mag') return [...view.rows].sort((a, b) => (rowMag.get(b.strike) ?? 0) - (rowMag.get(a.strike) ?? 0));
+    return view.rows;
+  }, [view, sortMode, rowMag]);
 
   if (!view) {
     return (
@@ -96,13 +130,19 @@ const GreeksRegime = () => {
     );
   }
 
-  const colMax = Object.fromEntries(
-    GREEKS.map(g => [g.key, Math.max(...view.rows.map(r => Math.abs(r[g.key])), 1)])
-  ) as Record<GreekKey, number>;
   const aboveCount = view.rows.filter(r => r.distPct > 0).length;
   const dominant = GREEKS.map(g => ({ g, v: Math.abs(view.netByGreek[g.key]) }))
     .filter(x => ['vanna', 'charm', 'vomma', 'speed', 'color', 'ultima'].includes(x.g.key))
     .sort((a, b) => b.v - a.v)[0];
+
+  // "What would change the regime" — from existing probabilities + net gamma.
+  const sortedRegimes = [...view.regimes].sort((a, b) => b.prob - a.prob);
+  const lead = sortedRegimes[0];
+  const runner = sortedRegimes[1];
+  const gammaLong = view.netByGreek.gamma >= 0;
+  const regimeSwing = `${lead.regime} leads ${runner ? runner.regime : ''} by ${runner ? lead.prob - runner.prob : lead.prob} pts. Net gamma is ${gammaLong ? 'long (dampening)' : 'short (amplifying)'} — a flip in net gamma sign is what would swing the read.`;
+
+  const colSpan = 2 + visibleGreeks.length;
 
   return (
     <>
@@ -114,32 +154,72 @@ const GreeksRegime = () => {
         <StatCard label="Dominant higher-order" value={dominant.g.label} sub={dominant.g.blurb} tone="magenta" />
       </MetricGrid>
 
-      {/* Full greek exposure matrix */}
+      {/* Greek exposure matrix — core three by default, advanced on demand */}
       <Panel
         title={
           <span className="inline-flex items-center gap-1.5">
-            <Grid3x3 className="w-3.5 h-3.5" /> Full greek exposure matrix
+            <Grid3x3 className="w-3.5 h-3.5" /> Greek exposure matrix
           </span>
         }
-        subtitle="net dealer $ by strike — silver supports, red amplifies"
+        subtitle="net dealer $ by strike — silver supports, red amplifies · hover a header for its meaning"
         flush
       >
+        <div className="flex items-center gap-3 px-3 py-2 border-b border-borderSubtle flex-wrap">
+          <SegmentedControl
+            ariaLabel="Sort matrix"
+            options={[
+              { value: 'strike', label: 'By strike' },
+              { value: 'mag', label: 'By |exposure|' },
+            ]}
+            value={sortMode}
+            onChange={setSortMode}
+          />
+          <button
+            onClick={() => setShowAdvanced(v => !v)}
+            aria-pressed={showAdvanced}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border font-mono text-[11px] uppercase tracking-wider transition-colors ${
+              showAdvanced ? 'border-borderMuted bg-white/[0.05] text-textPrimary' : 'border-borderSubtle text-textSecondary hover:text-textPrimary'
+            }`}
+          >
+            <Sliders className="w-3.5 h-3.5" /> Advanced greeks
+            <ChevronDown className={`w-3 h-3 transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
+          </button>
+          {topStrike !== null && (
+            <span className="ml-auto font-mono text-[10px] uppercase tracking-widest text-textMuted tnum">
+              top contributor <span className="text-textPrimary font-semibold">${topStrike.toFixed(2)}</span>
+            </span>
+          )}
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
               <tr className="bg-[#0c0c0c] border-b border-borderSubtle">
-                <th className="px-3 py-2 text-left font-mono text-[10px] font-semibold uppercase tracking-wider text-textMuted">Strike</th>
-                <th className="px-2 py-2 text-right font-mono text-[10px] font-semibold uppercase tracking-wider text-textMuted">Dist</th>
-                {GREEKS.map(g => (
-                  <th key={g.key} className="px-2 py-2 text-right font-mono text-[10px] font-semibold uppercase tracking-wider text-textMuted" title={g.blurb}>
-                    {g.label}
+                <th className="sticky left-0 z-10 bg-[#0c0c0c] px-3 py-2 text-left font-mono text-[11px] font-semibold uppercase tracking-wider text-textMuted">Strike</th>
+                <th className="px-2 py-2 text-right font-mono text-[11px] font-semibold uppercase tracking-wider text-textMuted">Dist</th>
+                {visibleGreeks.map(g => (
+                  <th
+                    key={g.key}
+                    className="px-2 py-2 text-right font-mono text-[11px] font-semibold uppercase tracking-wider text-textMuted cursor-help"
+                    title={`${g.label} — ${g.blurb}`}
+                  >
+                    <span className="border-b border-dotted border-textMuted/40">{g.label}</span>
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {view.rows.map((r, i) => (
-                <RowWithSpot key={r.strike} r={r} colMax={colMax} showSpot={i === aboveCount - 1} ticker={view.ticker} spot={view.spot} />
+              {sortedRows.map((r, i) => (
+                <RowWithSpot
+                  key={r.strike}
+                  r={r}
+                  greeks={visibleGreeks}
+                  colMax={colMax}
+                  colSpan={colSpan}
+                  isTop={r.strike === topStrike}
+                  showSpot={sortMode === 'strike' && i === aboveCount - 1}
+                  ticker={view.ticker}
+                  spot={view.spot}
+                />
               ))}
             </tbody>
           </table>
@@ -147,7 +227,6 @@ const GreeksRegime = () => {
       </Panel>
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
-        {/* Dealer regime probability */}
         <Panel title="Dealer regime probability" subtitle="what the net positioning implies" className="xl:col-span-5">
           <div className="flex flex-col gap-3">
             {view.regimes.map(rg => (
@@ -167,10 +246,13 @@ const GreeksRegime = () => {
               </div>
             ))}
             <p className="text-[11px] text-textSecondary leading-relaxed border-t border-borderSubtle pt-2.5">{view.topRegime.note}</p>
+            <p className="flex items-start gap-2 text-[11px] text-warn/90 leading-relaxed border-t border-borderSubtle pt-2.5">
+              <span className="font-mono text-[9px] font-semibold uppercase tracking-widest text-warn mt-px shrink-0">What flips it</span>
+              <span className="text-textSecondary">{regimeSwing}</span>
+            </p>
           </div>
         </Panel>
 
-        {/* Charm clock + vanna shock */}
         <div className="xl:col-span-7 flex flex-col gap-4">
           <Panel
             title={
@@ -199,21 +281,45 @@ const GreeksRegime = () => {
 };
 
 /** A matrix row, optionally followed by the spot rule. */
-const RowWithSpot = ({ r, colMax, showSpot, ticker, spot }: { r: GreekRow; colMax: Record<GreekKey, number>; showSpot: boolean; ticker: string; spot: number }) => (
+const RowWithSpot = ({
+  r,
+  greeks,
+  colMax,
+  colSpan,
+  isTop,
+  showSpot,
+  ticker,
+  spot,
+}: {
+  r: GreekRow;
+  greeks: typeof GREEKS;
+  colMax: Record<GreekKey, number>;
+  colSpan: number;
+  isTop: boolean;
+  showSpot: boolean;
+  ticker: string;
+  spot: number;
+}) => (
   <>
     <tr className="border-b border-borderSubtle/40 hover:bg-white/[0.02]">
-      <td className="px-3 py-1.5 font-mono text-xs font-semibold text-textPrimary tnum whitespace-nowrap">${r.strike.toFixed(2)}</td>
-      <td className={`px-2 py-1.5 text-right font-mono text-[10px] tnum ${r.distPct >= 0 ? 'text-bull' : 'text-bear'}`}>
+      <td
+        className="sticky left-0 z-10 px-3 py-1.5 font-mono text-xs font-semibold text-textPrimary tnum whitespace-nowrap bg-canvas"
+        style={isTop ? { boxShadow: 'inset 3px 0 0 0 rgba(199,211,232,0.85)' } : undefined}
+      >
+        ${r.strike.toFixed(2)}
+        {isTop && <span className="ml-1.5 font-mono text-[8px] uppercase tracking-widest text-select">top</span>}
+      </td>
+      <td className={`px-2 py-1.5 text-right font-mono text-[11px] tnum ${r.distPct >= 0 ? 'text-bull' : 'text-bear'}`}>
         {r.distPct >= 0 ? '+' : ''}
         {r.distPct.toFixed(1)}%
       </td>
-      {GREEKS.map(g => (
+      {greeks.map(g => (
         <GreekCell key={g.key} value={r[g.key]} max={colMax[g.key]} />
       ))}
     </tr>
     {showSpot && (
       <tr>
-        <td colSpan={10} className="px-3 py-0.5">
+        <td colSpan={colSpan} className="px-3 py-0.5">
           <span className="flex items-center gap-2 select-none">
             <span className="h-px flex-grow bg-gradient-to-r from-textPrimary/10 via-textPrimary/40 to-textPrimary/50" />
             <span className="font-mono text-[9px] uppercase tracking-wider text-textSecondary">{ticker}</span>

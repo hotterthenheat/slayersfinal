@@ -8,7 +8,6 @@ import Compass from './pages/Compass';
 import Tracker from './pages/Tracker';
 import GexLayout from './pages/gex/GexLayout';
 import PulseWorkspace from './pages/pulse/PulseWorkspace';
-import Workspace from './pages/workspace/Workspace';
 import ExposureProfile from './pages/gex/ExposureProfile';
 import RankedTargets from './pages/gex/RankedTargets';
 import VannaCharm from './pages/gex/VannaCharm';
@@ -49,7 +48,8 @@ const App = () => {
             <Route path="/home" element={<Navigate to="/pulse" replace />} />
             <Route path="/pulse" element={<PulseWorkspace />} />
             <Route path="/live-terminal" element={<Navigate to="/pulse" replace />} />
-            <Route path="/workspace" element={<Workspace />} />
+            {/* Workspace folded into Pulse — Pulse is the one customizable desk */}
+            <Route path="/workspace" element={<Navigate to="/pulse" replace />} />
             <Route path="/compass" element={<Compass />} />
             <Route path="/skys-vision" element={<Navigate to="/compass" replace />} />
             <Route path="/stocks" element={<Stocks />} />

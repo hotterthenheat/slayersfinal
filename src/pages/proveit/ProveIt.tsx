@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Boxes, FlaskConical, Trophy } from 'lucide-react';
+import { Boxes, ChevronRight, FlaskConical, Trophy } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import Simulator from '../../core/simulator';
 import { modelScoreboard, runMonteCarlo } from '../../core/quant';
@@ -25,6 +25,7 @@ const WINDOW_OPTIONS = [
 const ProveIt = () => {
   const { activeTicker, marketData, changeTicker } = useMarketData();
   const [window_, setWindow] = useState<Window>('30');
+  const [assumptionsOpen, setAssumptionsOpen] = useState(false);
 
   const iv = Simulator.TICKERS[activeTicker]?.iv ?? 0.25;
 
@@ -52,6 +53,19 @@ const ProveIt = () => {
   }
 
   const regime = iv > 0.32 ? 'HIGH VOL' : iv > 0.22 ? 'NORMAL' : 'COMPRESSED';
+  const trendUp = marketData.indicators.ema9 >= marketData.indicators.ema21;
+
+  const assumptions: { label: string; value: string; note: string }[] = [
+    { label: 'Model', value: 'GBM', note: 'geometric Brownian motion, log-normal steps' },
+    { label: 'IV source', value: `${(iv * 100).toFixed(0)}% annualized`, note: `implied vol for ${activeTicker}` },
+    {
+      label: 'Drift source',
+      value: trendUp ? 'EMA9 ≥ EMA21' : 'EMA9 < EMA21',
+      note: 'trend-following — EMAs stand in for the return forecast',
+    },
+    { label: 'Horizon', value: `${mc.days} sessions`, note: 'trading days simulated forward' },
+    { label: 'Paths', value: `${mc.runs.toLocaleString()} runs`, note: 'deterministic seeded draws' },
+  ];
 
   return (
     <>
@@ -120,6 +134,38 @@ const ProveIt = () => {
           className="xl:col-span-7"
         >
           <MonteCarloPanel mc={mc} spot={marketData.spot} />
+
+          <div className="mt-3 border-t border-borderSubtle pt-3">
+            <button
+              type="button"
+              onClick={() => setAssumptionsOpen(o => !o)}
+              aria-expanded={assumptionsOpen}
+              className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
+            >
+              <ChevronRight className={`w-3.5 h-3.5 transition-transform ${assumptionsOpen ? 'rotate-90' : ''}`} />
+              Assumptions
+            </button>
+
+            {assumptionsOpen && (
+              <div className="mt-3">
+                <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5">
+                  {assumptions.map(a => (
+                    <div key={a.label} className="flex flex-col gap-0.5">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <dt className="font-mono text-[11px] uppercase tracking-wider text-textMuted">{a.label}</dt>
+                        <dd className="font-mono text-[12px] text-textPrimary tnum text-right">{a.value}</dd>
+                      </div>
+                      <p className="text-[10px] text-textMuted leading-snug">{a.note}</p>
+                    </div>
+                  ))}
+                </dl>
+                <p className="mt-3 text-[11px] text-textSecondary leading-relaxed">
+                  These inputs set the cone's width — they do not make it a forecast. Change the window or ticker and
+                  every stat above recomputes from the same seeded run.
+                </p>
+              </div>
+            )}
+          </div>
         </Panel>
 
         <Panel

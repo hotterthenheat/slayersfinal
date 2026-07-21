@@ -19,7 +19,7 @@ interface PanelProps {
 // Tone reads through a whisper of header tint + the divider — never a muddy
 // full-surface wash and never a decorative color bar.
 const toneHeaderTint: Record<Tone, string> = {
-  bull: 'bg-bull/[0.05]',
+  bull: 'bg-[#30D158]/[0.05]',
   bear: 'bg-bear/[0.05]',
   warn: 'bg-warn/[0.05]',
   select: 'bg-select/[0.05]',
@@ -28,7 +28,7 @@ const toneHeaderTint: Record<Tone, string> = {
 };
 
 const toneDivider: Record<Tone, string> = {
-  bull: 'border-bull/15',
+  bull: 'border-[#30D158]/15',
   bear: 'border-bear/15',
   warn: 'border-warn/15',
   select: 'border-select/15',
@@ -64,7 +64,7 @@ const Panel = ({
               </h3>
             )}
             {subtitle && (
-              <span className="font-mono text-[10px] text-textSecondary uppercase tracking-wider truncate">
+              <span className="font-mono text-[11px] text-textSecondary uppercase tracking-wider truncate">
                 {subtitle}
               </span>
             )}

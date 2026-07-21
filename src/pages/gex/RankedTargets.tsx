@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
-import { ArrowUpRight } from 'lucide-react';
+import { ArrowUpRight, ArrowUp, ArrowDown, ChevronUp, ChevronDown } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildRankedTargets } from '../../data/rankedtargets';
 import { fmtUsd } from '../../data/gex';
@@ -59,173 +58,48 @@ const CpChip = ({ t }: { t: RankedTarget }) => {
         <span className="h-full bg-bull/90" style={{ width: `${callPct}%` }} />
         <span className="h-full bg-bear/80" style={{ width: `${100 - callPct}%` }} />
       </span>
-      <span className="font-mono text-[10px] tnum text-textPrimary">{callPct}%C</span>
+      <span className="font-mono text-[11px] tnum text-textPrimary">{callPct}%C</span>
     </span>
   );
 };
 
-// ---- podium: the three strikes that own the day ------------------------------
-
-const PodiumCard = ({ t, onFlash }: { t: RankedTarget; onFlash: () => void }) => {
-  const isPrimary = t.rank === 1;
+/** Rank-change vs the previous scan: ▲ moved toward #1, ▼ slipped. */
+const RankDelta = ({ delta }: { delta: number | undefined }) => {
+  if (delta === undefined || delta === 0)
+    return <span className="w-6 shrink-0 font-mono text-[10px] text-textMuted select-none">·</span>;
+  const up = delta > 0;
   return (
-    <motion.button
-      layout
-      layoutId={`rt-${t.strike}`}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ layout: { type: 'spring', stiffness: 340, damping: 32 }, opacity: { duration: 0.18 } }}
-      onClick={onFlash}
-      title="Flash on chart"
-      className={`group relative text-left rounded-md border overflow-hidden transition-colors ${
-        isPrimary
-          ? 'border-[#EA00FF]/35 bg-[#EA00FF]/[0.035] hover:bg-[#EA00FF]/[0.06]'
-          : 'border-borderSubtle bg-inset hover:border-borderMuted hover:bg-white/[0.02]'
-      }`}
-      style={{ boxShadow: `inset 2px 0 0 0 ${CLASS_EDGE[t.hedgingClass]}` }}
+    <span
+      className={`w-6 shrink-0 inline-flex items-center gap-0.5 font-mono text-[10px] tnum ${up ? 'text-bull' : 'text-bear'}`}
+      title={`${up ? 'up' : 'down'} ${Math.abs(delta)} since last scan`}
     >
-      {/* Header — rank, strike, tags · score */}
-      <div className="flex items-start gap-2 px-3.5 pt-3">
-        <div className="flex items-baseline gap-2 flex-wrap min-w-0">
-          <span className="font-mono text-[10px] tnum text-textSecondary">#{t.rank}</span>
-          <span className="font-mono text-[18px] font-bold tnum text-textPrimary">{fmtStrike(t.strike)}</span>
-          {t.tags.map(tag => (
-            <SignalBadge key={tag} tone={TAG_TONE[tag]}>
-              {tag}
-            </SignalBadge>
-          ))}
-        </div>
-        <div className="ml-auto text-right shrink-0">
-          <span className="block font-mono text-[9px] uppercase tracking-widest text-textSecondary">Score</span>
-          <span className={`block font-mono text-[20px] font-bold tnum leading-tight ${isPrimary ? 'text-king' : 'text-textPrimary'}`}>
-            {t.score}
-          </span>
-        </div>
-        <ArrowUpRight className="absolute top-2.5 right-2.5 w-3 h-3 text-textMuted opacity-0 group-hover:opacity-100 transition-opacity" />
-      </div>
-
-      {/* Score bar */}
-      <div className="px-3.5 mt-1.5">
-        <span className="block relative h-[3px] rounded-full bg-white/[0.06]">
-          <span
-            className={`absolute inset-y-0 left-0 rounded-full ${isPrimary ? 'bg-[#EA00FF]/80' : 'bg-white/40'}`}
-            style={{ width: `${t.score}%` }}
-          />
-        </span>
-      </div>
-
-      {/* Stats — neutral ink; color is reserved for the verdict */}
-      <div className="px-3.5 mt-3 grid grid-cols-4 gap-2">
-        {[
-          { label: 'BPS', value: `${t.bps >= 0 ? '+' : ''}${t.bps}` },
-          { label: 'NBR', value: `${t.nbr.toFixed(2)}x`, strong: t.nbr >= 1.5 },
-          { label: 'Volume', value: t.volume.toLocaleString() },
-          { label: 'Open Int', value: t.openInterest.toLocaleString() },
-        ].map(s => (
-          <div key={s.label}>
-            <span className="block font-mono text-[9px] uppercase tracking-widest text-textSecondary">{s.label}</span>
-            <span className={`block font-mono text-[12px] tnum ${s.strong ? 'text-textPrimary font-bold' : 'text-textPrimary'}`}>
-              {s.value}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      {/* Verdict strip — the only place color speaks */}
-      <div className="mt-3 px-3.5 py-2 border-t border-borderSubtle/60 flex items-center gap-2">
-        <span className={`font-mono text-[13px] font-semibold tnum ${t.netGex >= 0 ? 'text-bull' : 'text-bear'}`}>
-          {fmtUsd(t.netGex)}
-        </span>
-        <span className={`font-mono text-[9px] font-semibold uppercase tracking-wider ${t.pressure === 'SUPPORT' ? 'text-bull' : 'text-bear'}`}>
-          {t.pressure}
-        </span>
-        <span className="ml-3">
-          <CpChip t={t} />
-        </span>
-        <span className={`ml-auto font-mono text-[10px] font-semibold uppercase tracking-wider ${CLASS_TEXT[t.hedgingClass]}`}>
-          {t.hedgingClass}
-        </span>
-      </div>
-    </motion.button>
+      {up ? <ArrowUp className="w-2.5 h-2.5" /> : <ArrowDown className="w-2.5 h-2.5" />}
+      {Math.abs(delta)}
+    </span>
   );
 };
 
-// ---- ladder: the tail, dense and calm ----------------------------------------
+// ---- sortable table ----------------------------------------------------------
 
-const LadderRow = ({ t, onFlash }: { t: RankedTarget; onFlash: () => void }) => (
-  <motion.button
-    layout
-    layoutId={`rt-${t.strike}`}
-    initial={{ opacity: 0 }}
-    animate={{ opacity: 1 }}
-    exit={{ opacity: 0 }}
-    transition={{ layout: { type: 'spring', stiffness: 340, damping: 32 }, opacity: { duration: 0.18 } }}
-    onClick={onFlash}
-    title="Flash on chart"
-    className="group w-full flex items-center gap-3 px-3.5 h-11 text-left border-b border-borderSubtle/30 last:border-0 transition-colors hover:bg-white/[0.03]"
-    style={{ boxShadow: `inset 2px 0 0 0 ${CLASS_EDGE[t.hedgingClass]}` }}
-  >
-    <span className="w-7 shrink-0 font-mono text-[10px] tnum text-textSecondary">#{t.rank}</span>
-    <span className="w-40 shrink-0 flex items-center gap-1.5 min-w-0">
-      <span className="font-mono text-[12px] font-bold tnum text-textPrimary">{fmtStrike(t.strike)}</span>
-      {t.tags.map(tag => (
-        <SignalBadge key={tag} tone={TAG_TONE[tag]}>
-          {tag}
-        </SignalBadge>
-      ))}
-    </span>
-    <span className="hidden md:flex items-center gap-2 w-24 shrink-0">
-      <span className="relative flex-1 h-[3px] rounded-full bg-white/[0.06]">
-        <span className="absolute inset-y-0 left-0 rounded-full bg-white/40" style={{ width: `${t.score}%` }} />
-      </span>
-      <span className="font-mono text-[11px] font-semibold tnum text-textPrimary">{t.score}</span>
-    </span>
-    <span className="w-14 shrink-0 text-right font-mono text-[11px] tnum text-textPrimary">
-      {t.bps >= 0 ? '+' : ''}
-      {t.bps}
-    </span>
-    <span className={`w-14 shrink-0 text-right font-mono text-[11px] tnum text-textPrimary ${t.nbr >= 1.5 ? 'font-bold' : ''}`}>
-      {t.nbr.toFixed(2)}x
-    </span>
-    <span className="hidden lg:block w-20 shrink-0 text-right font-mono text-[11px] tnum text-textPrimary">
-      {t.volume.toLocaleString()}
-    </span>
-    <span className="hidden lg:block w-20 shrink-0 text-right font-mono text-[11px] tnum text-textPrimary">
-      {t.openInterest.toLocaleString()}
-    </span>
-    <span className="hidden xl:block shrink-0">
-      <CpChip t={t} />
-    </span>
-    <span className={`ml-auto w-24 shrink-0 text-right font-mono text-[11px] font-semibold tnum ${t.netGex >= 0 ? 'text-bull' : 'text-bear'}`}>
-      {fmtUsd(t.netGex)}
-    </span>
-    <span className={`hidden sm:block w-36 shrink-0 text-right font-mono text-[9px] font-semibold uppercase tracking-wider ${CLASS_TEXT[t.hedgingClass]}`}>
-      {t.hedgingClass}
-    </span>
-  </motion.button>
-);
+type SortKey = 'rank' | 'strike' | 'score' | 'bps' | 'nbr' | 'volume' | 'openInterest' | 'netGex' | 'hedgingClass';
 
-/** Ladder column captions — one whisper, not one per row. */
-const LadderHead = () => (
-  <div className="flex items-center gap-3 px-3.5 h-7 border-b border-borderSubtle bg-[#0c0c0c] select-none">
-    <span className="w-7 shrink-0 font-mono text-[9px] uppercase tracking-widest text-textSecondary">Rank</span>
-    <span className="w-40 shrink-0 font-mono text-[9px] uppercase tracking-widest text-textSecondary">Strike</span>
-    <span className="hidden md:block w-24 shrink-0 font-mono text-[9px] uppercase tracking-widest text-textSecondary">Score</span>
-    <span className="w-14 shrink-0 text-right font-mono text-[9px] uppercase tracking-widest text-textSecondary">BPS</span>
-    <span className="w-14 shrink-0 text-right font-mono text-[9px] uppercase tracking-widest text-textSecondary">NBR</span>
-    <span className="hidden lg:block w-20 shrink-0 text-right font-mono text-[9px] uppercase tracking-widest text-textSecondary">Volume</span>
-    <span className="hidden lg:block w-20 shrink-0 text-right font-mono text-[9px] uppercase tracking-widest text-textSecondary">Open Int</span>
-    <span className="hidden xl:block w-[76px] shrink-0 font-mono text-[9px] uppercase tracking-widest text-textSecondary">C/P</span>
-    <span className="ml-auto w-24 shrink-0 text-right font-mono text-[9px] uppercase tracking-widest text-textSecondary">Net GEX</span>
-    <span className="hidden sm:block w-36 shrink-0 text-right font-mono text-[9px] uppercase tracking-widest text-textSecondary">Class</span>
-  </div>
-);
+const COLUMNS: { key: SortKey; label: string; align: 'left' | 'right'; cls: string; num: boolean }[] = [
+  { key: 'rank', label: 'Rank', align: 'left', cls: 'w-[74px]', num: true },
+  { key: 'strike', label: 'Strike', align: 'left', cls: 'w-40', num: true },
+  { key: 'score', label: 'Score', align: 'left', cls: 'w-28', num: true },
+  { key: 'bps', label: 'Dist', align: 'right', cls: 'w-16', num: true },
+  { key: 'nbr', label: 'NBR', align: 'right', cls: 'w-16', num: true },
+  { key: 'volume', label: 'Volume', align: 'right', cls: 'hidden lg:table-cell w-24', num: true },
+  { key: 'openInterest', label: 'Open Int', align: 'right', cls: 'hidden lg:table-cell w-24', num: true },
+  { key: 'netGex', label: 'Net GEX', align: 'right', cls: 'w-28', num: true },
+  { key: 'hedgingClass', label: 'Class', align: 'right', cls: 'hidden sm:table-cell w-40', num: false },
+];
 
 const RankedTargets = () => {
   const { marketData } = useMarketData();
   const navigate = useNavigate();
   const [isolator, setIsolator] = useState<Isolator>('ALL');
+  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'rank', dir: 'asc' });
 
   const [scanSnapshot, setScanSnapshot] = useState<MarketSnapshot | null>(null);
   const [lastScanAt, setLastScanAt] = useState('');
@@ -249,6 +123,23 @@ const RankedTargets = () => {
 
   const view = useMemo(() => (scanSnapshot ? buildRankedTargets(scanSnapshot) : null), [scanSnapshot]);
 
+  // Rank-change vs the last scan — remembers the engine's own rank per strike and
+  // subtracts; no new ranking math. Resets naturally when strikes change ticker.
+  const prevRanks = useRef<Map<number, number>>(new Map());
+  const [deltas, setDeltas] = useState<Map<number, number>>(new Map());
+  useEffect(() => {
+    if (!view) return;
+    const next = new Map<number, number>();
+    const d = new Map<number, number>();
+    for (const t of view.targets) {
+      next.set(t.strike, t.rank);
+      const prev = prevRanks.current.get(t.strike);
+      if (prev !== undefined && prev !== t.rank) d.set(t.strike, prev - t.rank);
+    }
+    setDeltas(d);
+    prevRanks.current = next;
+  }, [view]);
+
   const filtered = useMemo(() => {
     if (!view) return [];
     switch (isolator) {
@@ -265,6 +156,20 @@ const RankedTargets = () => {
     }
   }, [view, isolator]);
 
+  const sorted = useMemo(() => {
+    const arr = [...filtered];
+    const { key, dir } = sort;
+    arr.sort((a, b) => {
+      const av = a[key];
+      const bv = b[key];
+      let cmp: number;
+      if (typeof av === 'string' && typeof bv === 'string') cmp = av.localeCompare(bv);
+      else cmp = (av as number) - (bv as number);
+      return dir === 'asc' ? cmp : -cmp;
+    });
+    return arr;
+  }, [filtered, sort]);
+
   if (!view) {
     return (
       <Panel className="h-64" bodyClassName="flex items-center justify-center">
@@ -277,8 +182,10 @@ const RankedTargets = () => {
 
   const primary = view.targets[0];
   const flash = (t: RankedTarget) => navigate('/pulse', { state: { focusPrice: t.strike } });
-  const podium = filtered.slice(0, 3);
-  const ladder = filtered.slice(3);
+  const top3 = view.targets.slice(0, 3);
+
+  const toggleSort = (key: SortKey) =>
+    setSort(s => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: key === 'rank' || key === 'strike' ? 'asc' : 'desc' }));
 
   return (
     <>
@@ -291,9 +198,9 @@ const RankedTargets = () => {
             className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-[#EA00FF]/30 bg-[#EA00FF]/[0.05] hover:bg-[#EA00FF]/[0.1] transition-colors"
             title="Flash on chart"
           >
-            <span className="font-mono text-[9px] font-semibold uppercase tracking-widest text-king">Primary target</span>
-            <span className="font-mono text-[11px] font-bold tnum text-textPrimary">{fmtStrike(primary.strike)}</span>
-            <span className="font-mono text-[10px] tnum text-king">{primary.score}/100</span>
+            <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-king">Primary target</span>
+            <span className="font-mono text-[12px] font-bold tnum text-textPrimary">{fmtStrike(primary.strike)}</span>
+            <span className="font-mono text-[11px] tnum text-king">{primary.score}/100</span>
             <ArrowUpRight className="w-3 h-3 text-textSecondary" />
           </button>
         )}
@@ -302,39 +209,126 @@ const RankedTargets = () => {
         </span>
       </div>
 
-      {/* Ranked ladder — podium up top, dense rows for the tail */}
-      <Panel
-        title="Ranked Targets"
-        subtitle="priority strikes — click to flash on the chart"
-        flush
-        className="w-full"
-      >
-        {filtered.length === 0 ? (
-          <div className="py-10 text-center font-mono text-[11px] text-textMuted uppercase tracking-widest">
-            No strikes match this isolator
-          </div>
-        ) : (
-          <LayoutGroup>
-            <div className="p-3 grid grid-cols-1 md:grid-cols-3 gap-3">
-              <AnimatePresence initial={false} mode="popLayout">
-                {podium.map(t => (
-                  <PodiumCard key={t.strike} t={t} onFlash={() => flash(t)} />
-                ))}
-              </AnimatePresence>
+      {/* Compact top-3 summary — a glance, not a podium */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+        {top3.map(t => (
+          <button
+            key={t.strike}
+            onClick={() => flash(t)}
+            title="Flash on chart"
+            className={`group relative text-left rounded-md border px-3 py-2.5 transition-colors ${
+              t.rank === 1
+                ? 'border-[#EA00FF]/35 bg-[#EA00FF]/[0.035] hover:bg-[#EA00FF]/[0.06]'
+                : 'border-borderSubtle bg-inset hover:border-borderMuted'
+            }`}
+            style={{ boxShadow: `inset 2px 0 0 0 ${CLASS_EDGE[t.hedgingClass]}` }}
+          >
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[10px] tnum text-textSecondary">#{t.rank}</span>
+              <span className="font-mono text-[16px] font-bold tnum text-textPrimary">{fmtStrike(t.strike)}</span>
+              <span className={`ml-auto font-mono text-[16px] font-bold tnum ${t.rank === 1 ? 'text-king' : 'text-textPrimary'}`}>{t.score}</span>
             </div>
-            {ladder.length > 0 && (
-              <div className="border-t border-borderSubtle">
-                <LadderHead />
-                <div className="overflow-y-auto max-h-[480px]">
-                  <AnimatePresence initial={false} mode="popLayout">
-                    {ladder.map(t => (
-                      <LadderRow key={t.strike} t={t} onFlash={() => flash(t)} />
-                    ))}
-                  </AnimatePresence>
-                </div>
-              </div>
-            )}
-          </LayoutGroup>
+            <div className="mt-1.5 flex items-center gap-2">
+              <span className={`font-mono text-[12px] font-semibold tnum ${t.netGex >= 0 ? 'text-bull' : 'text-bear'}`}>{fmtUsd(t.netGex)}</span>
+              <span className={`ml-auto font-mono text-[10px] font-semibold uppercase tracking-wider ${CLASS_TEXT[t.hedgingClass]}`}>
+                {t.hedgingClass}
+              </span>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {/* Sortable ranking table — the working surface */}
+      <Panel title="Ranked Targets" subtitle="every strike scored — click a header to sort, a row to flash on the chart" flush className="w-full">
+        {sorted.length === 0 ? (
+          <div className="py-10 text-center font-mono text-[11px] text-textMuted uppercase tracking-widest">No strikes match this isolator</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="border-b border-borderSubtle bg-[#0c0c0c]">
+                  {COLUMNS.map(col => {
+                    const activeSort = sort.key === col.key;
+                    return (
+                      <th key={col.key} className={`${col.cls} px-3 py-2 select-none`}>
+                        <button
+                          onClick={() => toggleSort(col.key)}
+                          className={`w-full inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-widest transition-colors ${
+                            col.align === 'right' ? 'justify-end' : 'justify-start'
+                          } ${activeSort ? 'text-textPrimary' : 'text-textSecondary hover:text-textPrimary'}`}
+                        >
+                          {col.label}
+                          {activeSort ? (
+                            sort.dir === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+                          ) : (
+                            <span className="w-3" />
+                          )}
+                        </button>
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody className="max-h-[520px]">
+                {sorted.map(t => (
+                  <tr
+                    key={t.strike}
+                    onClick={() => flash(t)}
+                    title="Flash on chart"
+                    className="group cursor-pointer border-b border-borderSubtle/30 last:border-0 hover:bg-white/[0.03] transition-colors"
+                    style={{ boxShadow: `inset 2px 0 0 0 ${CLASS_EDGE[t.hedgingClass]}` }}
+                  >
+                    <td className="px-3 py-2.5">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="font-mono text-[12px] tnum text-textSecondary">#{t.rank}</span>
+                        <RankDelta delta={deltas.get(t.strike)} />
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="font-mono text-[13px] font-bold tnum text-textPrimary">{fmtStrike(t.strike)}</span>
+                        {t.tags.map(tag => (
+                          <SignalBadge key={tag} tone={TAG_TONE[tag]}>
+                            {tag}
+                          </SignalBadge>
+                        ))}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <span className="flex items-center gap-2">
+                        <span className="relative flex-1 h-[3px] rounded-full bg-white/[0.06] min-w-[36px]">
+                          <span
+                            className={`absolute inset-y-0 left-0 rounded-full ${t.rank === 1 ? 'bg-[#EA00FF]/80' : 'bg-white/40'}`}
+                            style={{ width: `${t.score}%` }}
+                          />
+                        </span>
+                        <span className="font-mono text-[12px] font-semibold tnum text-textPrimary">{t.score}</span>
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 text-right font-mono text-[12px] tnum text-textPrimary">
+                      {t.bps >= 0 ? '+' : ''}
+                      {t.bps}
+                    </td>
+                    <td className={`px-3 py-2.5 text-right font-mono text-[12px] tnum text-textPrimary ${t.nbr >= 1.5 ? 'font-bold' : ''}`}>
+                      {t.nbr.toFixed(2)}x
+                    </td>
+                    <td className="hidden lg:table-cell px-3 py-2.5 text-right font-mono text-[12px] tnum text-textPrimary">
+                      {t.volume.toLocaleString()}
+                    </td>
+                    <td className="hidden lg:table-cell px-3 py-2.5 text-right font-mono text-[12px] tnum text-textPrimary">
+                      {t.openInterest.toLocaleString()}
+                    </td>
+                    <td className={`px-3 py-2.5 text-right font-mono text-[12px] font-semibold tnum ${t.netGex >= 0 ? 'text-bull' : 'text-bear'}`}>
+                      {fmtUsd(t.netGex)}
+                    </td>
+                    <td className={`hidden sm:table-cell px-3 py-2.5 text-right font-mono text-[10px] font-semibold uppercase tracking-wider ${CLASS_TEXT[t.hedgingClass]}`}>
+                      {t.hedgingClass}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </Panel>
     </>
