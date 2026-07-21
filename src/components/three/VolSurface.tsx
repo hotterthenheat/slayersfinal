@@ -16,6 +16,8 @@ interface VolSurfaceProps {
   grid: number[][];
   colormap?: SurfaceColormap;
   height?: number | string;
+  /** Hero mode: the surface tilts toward the cursor and glows under it */
+  cursorReactive?: boolean;
   className?: string;
 }
 
@@ -76,7 +78,7 @@ function buildGeometry(grid: number[][], map: SurfaceColormap): THREE.BufferGeom
   return geo;
 }
 
-const VolSurface = ({ grid, colormap = 'exposure', height = 340, className = '' }: VolSurfaceProps) => {
+const VolSurface = ({ grid, colormap = 'exposure', height = 340, cursorReactive = false, className = '' }: VolSurfaceProps) => {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const gridRef = useRef(grid);
   gridRef.current = grid;
@@ -122,6 +124,12 @@ const VolSurface = ({ grid, colormap = 'exposure', height = 340, className = '' 
     rim.position.set(-5, 2, -4);
     scene.add(rim);
 
+    // Cursor light — a warm-white point that chases the mouse so the surface
+    // glows where the cursor is (hero mode only). Starts dark.
+    const cursorLight = new THREE.PointLight(0xe8eef8, 0, 9, 2);
+    cursorLight.position.set(0, 1.5, 0);
+    if (cursorReactive) scene.add(cursorLight);
+
     const group = new THREE.Group();
     scene.add(group);
 
@@ -141,26 +149,36 @@ const VolSurface = ({ grid, colormap = 'exposure', height = 340, className = '' 
     let py = 0;
     let yaw = 0.55;
     let pitch = 0;
+    let curNx = 0; // cursor position over the surface, −1…1
+    let curNy = 0;
+    let framesIdle = 999; // frames since the cursor last moved
     const el = renderer.domElement;
     el.style.touchAction = 'none';
-    el.style.cursor = 'grab';
+    el.style.cursor = cursorReactive ? 'default' : 'grab';
     const onDown = (e: PointerEvent) => {
       dragging = true;
       px = e.clientX;
       py = e.clientY;
       el.setPointerCapture(e.pointerId);
-      el.style.cursor = 'grabbing';
+      if (!cursorReactive) el.style.cursor = 'grabbing';
     };
     const onMove = (e: PointerEvent) => {
-      if (!dragging) return;
-      yaw += (e.clientX - px) * 0.01;
-      pitch = Math.max(-0.5, Math.min(0.6, pitch + (e.clientY - py) * 0.006));
-      px = e.clientX;
-      py = e.clientY;
+      if (dragging) {
+        yaw += (e.clientX - px) * 0.01;
+        pitch = Math.max(-0.5, Math.min(0.6, pitch + (e.clientY - py) * 0.006));
+        px = e.clientX;
+        py = e.clientY;
+      }
+      if (cursorReactive) {
+        const rect = el.getBoundingClientRect();
+        curNx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+        curNy = ((e.clientY - rect.top) / rect.height) * 2 - 1;
+        framesIdle = 0;
+      }
     };
     const onUp = () => {
       dragging = false;
-      el.style.cursor = 'grab';
+      if (!cursorReactive) el.style.cursor = 'grab';
     };
     el.addEventListener('pointerdown', onDown);
     el.addEventListener('pointermove', onMove);
@@ -180,7 +198,28 @@ const VolSurface = ({ grid, colormap = 'exposure', height = 340, className = '' 
     ro.observe(mount);
 
     const tick = () => {
-      if (!dragging && !reduce) yaw += 0.0032;
+      framesIdle++;
+      if (dragging) {
+        // manual orbit wins
+      } else if (cursorReactive) {
+        const hovering = framesIdle < 90 && !reduce; // ~1.5s since last move
+        if (hovering) {
+          // tilt toward the cursor (parallax) and let the glow chase it
+          const ty = curNx * 0.85;
+          const tp = Math.max(-0.5, Math.min(0.6, -curNy * 0.42));
+          yaw += (ty - yaw) * 0.06;
+          pitch += (tp - pitch) * 0.06;
+          cursorLight.position.x += (curNx * 2.6 - cursorLight.position.x) * 0.12;
+          cursorLight.position.z += (-curNy * 1.9 - cursorLight.position.z) * 0.12;
+          cursorLight.intensity += (3.0 - cursorLight.intensity) * 0.08;
+        } else {
+          if (!reduce) yaw += 0.0022; // gentle idle drift
+          pitch += (0 - pitch) * 0.03;
+          cursorLight.intensity += (0 - cursorLight.intensity) * 0.06;
+        }
+      } else if (!reduce) {
+        yaw += 0.0032;
+      }
       group.rotation.y = yaw;
       group.rotation.x = pitch;
       renderer.render(scene, camera);

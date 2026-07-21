@@ -19,11 +19,14 @@ import LiveSections from './LiveSections';
 import TiltBox from './TiltBox';
 import CardCoverFlow from '../../components/showcase/CardCoverFlow';
 
+// Top tabs open the actual products (into the terminal); Pricing stays an
+// on-page anchor.
 const NAV_LINKS = [
-  { label: 'Product', href: '#showcase' },
-  { label: 'Engines', href: '#live' },
-  { label: 'Workspace', href: '#workspace' },
-  { label: 'Pricing', href: '#pricing' },
+  { label: 'Pulse', to: '/pulse' },
+  { label: 'Compass', to: '/compass' },
+  { label: 'Trace', to: '/trace' },
+  { label: 'Pinpoint', to: '/pinpoint' },
+  { label: 'Pricing', to: '#pricing' },
 ];
 
 const TIERS = [
@@ -146,11 +149,17 @@ const SmartLink = ({ to, className, children }: { to: string; className: string;
     holo pill springs to the tab — same selection grammar as the terminal. */
 const GlassNav = () => {
   const [active, setActive] = useState<string | null>(null);
+  const { launch } = useLaunch();
 
-  const go = (href: string) => (e: MouseEvent) => {
+  const handle = (to: string) => (e: MouseEvent) => {
     e.preventDefault();
-    setActive(href);
-    document.querySelector(href)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (to.startsWith('#')) {
+      setActive(to);
+      document.querySelector(to)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+      // A product tab opens the actual desk through the launch gate.
+      launch(to);
+    }
   };
 
   return (
@@ -166,12 +175,12 @@ const GlassNav = () => {
         </button>
         <nav className="hidden md:flex items-center gap-1.5 ml-auto">
           {NAV_LINKS.map(l => {
-            const isActive = active === l.href;
+            const isActive = active === l.to;
             return (
               <motion.a
                 key={l.label}
-                href={l.href}
-                onClick={go(l.href)}
+                href={l.to}
+                onClick={handle(l.to)}
                 whileHover={{ scale: 1.08, y: -1 }}
                 whileTap={{ scale: 0.88 }}
                 transition={{ type: 'spring', stiffness: 500, damping: 14 }}

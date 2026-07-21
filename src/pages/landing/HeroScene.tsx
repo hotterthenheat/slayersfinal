@@ -40,7 +40,7 @@ const HeroScene = () => (
     aria-hidden
     style={{ background: 'radial-gradient(ellipse at 65% 45%, #101015 0%, #050505 70%)' }}
   >
-    <VolSurface grid={HERO_GRID} colormap="exposure" height="100%" />
+    <VolSurface grid={HERO_GRID} colormap="exposure" height="100%" cursorReactive />
   </div>
 );
 
