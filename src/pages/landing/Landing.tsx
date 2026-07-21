@@ -224,11 +224,13 @@ const Landing = () => (
     <section className="relative h-[94vh] min-h-[620px]">
       <div className="absolute inset-0">
         <HeroScene />
-        {/* Scrims — copy always wins over the scene */}
-        <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-canvas/80 via-canvas/30 to-canvas" />
+        {/* Light scrims only — the dot-field must read through. A gentle bottom
+            fade blends into the next section; a soft center vignette lifts copy
+            contrast without veiling the grid. */}
+        <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-transparent via-transparent to-canvas" />
         <div
           className="absolute inset-0 pointer-events-none"
-          style={{ background: 'radial-gradient(ellipse 52% 46% at 50% 46%, rgba(5,5,5,0.45) 0%, transparent 70%)' }}
+          style={{ background: 'radial-gradient(ellipse 46% 40% at 50% 46%, rgba(0,0,0,0.55) 0%, transparent 72%)' }}
         />
       </div>
 
@@ -241,7 +243,7 @@ const Landing = () => (
         <h1 className="mt-5 text-4xl md:text-6xl font-bold tracking-tight leading-[1.04] max-w-3xl">
           See the forces that
           <br />
-          move the market.
+          <span className="holo-text">move the market.</span>
         </h1>
         <p className="mt-6 max-w-xl text-[15px] md:text-base text-textSecondary leading-relaxed">
           Market makers have to hedge. That hedging pushes price toward some levels and away from
