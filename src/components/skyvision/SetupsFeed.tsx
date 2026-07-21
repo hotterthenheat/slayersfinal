@@ -34,7 +34,7 @@ const SetupsFeed = ({ groups, selectedSetupId, onSelectSetup, onOpenAnalysis }: 
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={flip}
-            className="border border-borderSubtle bg-panel rounded-lg overflow-hidden"
+            className="inst-surface rounded-md overflow-hidden"
           >
             {/* Group header */}
             <div className="flex items-center gap-3 px-3 h-11 border-b border-borderSubtle">
@@ -82,7 +82,7 @@ const SetupsFeed = ({ groups, selectedSetupId, onSelectSetup, onOpenAnalysis }: 
       </AnimatePresence>
 
       {groups.length === 0 && (
-        <div className="border border-borderSubtle bg-panel rounded-lg py-12 text-center font-mono text-[11px] text-textMuted">
+        <div className="inst-surface rounded-md py-12 text-center font-mono text-[11px] text-textMuted">
           No setups meet this scanner's threshold right now
         </div>
       )}

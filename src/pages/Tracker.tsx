@@ -77,7 +77,7 @@ const TrackedCard = ({ tracked, live, expired, onUntrack, onReview }: TrackedCar
   const scoreDelta = live.score - tracked.scoreAtTrack;
 
   return (
-    <div className="border border-borderSubtle bg-panel rounded-lg overflow-hidden flex flex-col">
+    <div className="inst-surface rounded-md overflow-hidden flex flex-col">
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-borderSubtle">
         <span className="font-mono text-sm font-bold text-textPrimary tracking-tight">{live.contract}</span>
@@ -321,7 +321,7 @@ const Tracker = () => {
               { icon: Radar, title: 'Trace flow', body: 'Notable options prints and dark-pool blocks.', to: '/trace/tracker', cta: 'Open Trace' },
               { icon: CalendarClock, title: 'Earnings plays', body: 'Implied-vs-realized PLAY / FADE calls into prints.', to: '/earnings', cta: 'Open Earnings' },
             ].map(card => (
-              <div key={card.title} className="border border-borderSubtle bg-panel rounded-lg p-4 flex flex-col gap-2.5">
+              <div key={card.title} className="inst-surface rounded-md p-4 flex flex-col gap-2.5">
                 <span className="inline-flex w-8 h-8 rounded-md border border-borderSubtle bg-inset items-center justify-center">
                   <card.icon className="w-4 h-4 text-textSecondary" />
                 </span>

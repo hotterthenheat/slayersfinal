@@ -11,7 +11,7 @@ const SegmentedControl = <V extends string>({ options, value, onChange, ariaLabe
     <div
       role="group"
       aria-label={ariaLabel}
-      className="inline-flex items-center border border-borderSubtle bg-panel rounded-md overflow-hidden"
+      className="inline-flex items-center inst-surface rounded-md overflow-hidden"
     >
       {options.map((opt, i) => {
         const active = opt.value === value;
