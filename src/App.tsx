@@ -13,6 +13,7 @@ import ExposureProfile from './pages/gex/ExposureProfile';
 import RankedTargets from './pages/gex/RankedTargets';
 import VannaCharm from './pages/gex/VannaCharm';
 import VolLab from './pages/gex/VolLab';
+import GreeksRegime from './pages/gex/GreeksRegime';
 import GexHistory from './pages/gex/GexHistory';
 import FlowDeskLayout from './pages/flowdesk/FlowDeskLayout';
 import LiveTape from './pages/flowdesk/LiveTape';
@@ -23,6 +24,7 @@ import Stocks from './pages/Stocks';
 import News from './pages/News';
 import EarningsHub from './pages/EarningsHub';
 import ProveIt from './pages/proveit/ProveIt';
+import Fracture from './pages/fracture/Fracture';
 import Landing from './pages/landing/Landing';
 import CommunityLayout from './pages/community/CommunityLayout';
 import Ideas from './pages/community/Ideas';
@@ -51,6 +53,7 @@ const App = () => {
             <Route path="/news" element={<News />} />
             <Route path="/earnings" element={<EarningsHub />} />
             <Route path="/prove-it" element={<ProveIt />} />
+            <Route path="/fracture" element={<Fracture />} />
             <Route path="/tracker" element={<Tracker />} />
             <Route path="/pinpoint" element={<GexLayout />}>
               <Route index element={<Navigate to="/pinpoint/exposure-profile" replace />} />
@@ -60,6 +63,7 @@ const App = () => {
               <Route path="ranked-targets" element={<RankedTargets />} />
               <Route path="strike-profile" element={<Navigate to="/pinpoint/exposure-profile" replace />} />
               <Route path="vanna-charm" element={<VannaCharm />} />
+              <Route path="greeks-regime" element={<GreeksRegime />} />
               <Route path="vol-lab" element={<VolLab />} />
               <Route path="history" element={<GexHistory />} />
             </Route>

@@ -1,4 +1,4 @@
-import { Map, Target, Waves, FlaskConical, History, type LucideIcon } from 'lucide-react';
+import { Map, Target, Waves, Grid3x3, FlaskConical, History, type LucideIcon } from 'lucide-react';
 
 /** Pinpoint subpage registry — drives the sub-tab bar and command palette. */
 export interface GexSubpage {
@@ -26,6 +26,12 @@ export const GEX_SUBPAGES: GexSubpage[] = [
     label: 'Vanna & Charm',
     subtitle: 'Where dealer exposure migrates as vol and time shift',
     icon: Waves,
+  },
+  {
+    path: '/pinpoint/greeks-regime',
+    label: 'Greeks & Regime',
+    subtitle: 'Full 8-greek exposure matrix, dealer regime probability, charm clock & vanna shock',
+    icon: Grid3x3,
   },
   {
     path: '/pinpoint/vol-lab',

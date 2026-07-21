@@ -5,6 +5,7 @@ import {
   Compass,
   Radar,
   Sigma,
+  Zap,
   BarChart3,
   Newspaper,
   CalendarClock,
@@ -58,6 +59,14 @@ export const NAV_ITEMS: NavItem[] = [
     code: '04',
     icon: Crosshair,
     description: 'GEX & dealer-positioning system',
+    group: 'Main',
+  },
+  {
+    path: '/fracture',
+    label: 'Fracture',
+    code: '05',
+    icon: Zap,
+    description: 'Where forced flow breaks liquidity — instability, cascades & the closing auction',
     group: 'Main',
   },
   {
