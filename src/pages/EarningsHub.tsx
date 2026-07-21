@@ -10,6 +10,7 @@ import SignalBadge from '../components/ui/SignalBadge';
 import SegmentedControl from '../components/ui/SegmentedControl';
 import DataTable, { type Column } from '../components/ui/DataTable';
 import { buildEarningsCalendar, type EarningsEvent, type EarningsVerdict } from '../data/earnings';
+import EarningsIntel from '../components/earnings/EarningsIntel';
 import type { Tone } from '../components/ui/tones';
 
 type VerdictFilter = 'ALL' | EarningsVerdict;
@@ -278,6 +279,8 @@ const EarningsHub = () => {
           maxHeight="560px"
         />
       </Panel>
+
+      <EarningsIntel event={selected} />
     </>
   );
 };

@@ -16,16 +16,16 @@ import SignalMonitor from '../components/skyvision/SignalMonitor';
 import SamplePreview from '../components/skyvision/SamplePreview';
 import ImpactLeaderboard from '../components/skyvision/ImpactLeaderboard';
 import ContractWeigher from '../components/compass/ContractWeigher';
+import LottoBoard from '../components/compass/LottoBoard';
 import type { Horizon } from '../core/contractScore';
 import SegmentedControl from '../components/ui/SegmentedControl';
-import StatRibbon from '../components/ui/StatRibbon';
-import { deriveMarketKpis } from '../data/kpis';
 
-type CompassMode = 'setups' | 'weigher';
+type CompassMode = 'setups' | 'weigher' | 'lotto';
 
 const MODE_OPTIONS = [
   { value: 'setups', label: 'Setups' },
   { value: 'weigher', label: 'Weigher' },
+  { value: 'lotto', label: 'Lotto' },
 ] as const;
 
 interface MonitorTarget {
@@ -62,6 +62,7 @@ const Compass = () => {
     const state = location.state as {
       monitor?: { ticker: string; strike: number; right: 'C' | 'P'; scanner: ScannerKey };
       weigh?: { ticker: string; horizon?: Horizon };
+      compassMode?: CompassMode;
     } | null;
     const incoming = state?.monitor;
     if (incoming) {
@@ -73,6 +74,10 @@ const Compass = () => {
       changeTicker(state.weigh.ticker);
       setMode('weigher');
       if (state.weigh.horizon) setWeigherHorizon(state.weigh.horizon);
+      window.history.replaceState({}, '');
+    } else if (state?.compassMode) {
+      // Landed from the /lotto redirect (or a palette deep-link)
+      setMode(state.compassMode);
       window.history.replaceState({}, '');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -200,25 +205,40 @@ const Compass = () => {
     />
   );
 
-  // Browse mode header — no ticker search
+  const modeMeta = {
+    setups: {
+      crumb: 'Setups',
+      title: 'Trade Setups',
+      subtitle: 'The terminal calls ENTER or EXIT — you never place the order',
+    },
+    weigher: {
+      crumb: 'Weigher',
+      title: 'Contract Weigher',
+      subtitle: 'Search any contract you have — weighed on the same scale as the top setups, with a better-R/R suggestion',
+    },
+    lotto: {
+      crumb: 'Lotto',
+      title: 'Lotto · 0DTE Desk',
+      subtitle: 'Same-day speculation — 0DTE contracts and the closing-auction (MOC) engine. High variance by design.',
+    },
+  }[mode];
+
+  // Browse mode header — setups needs no ticker search; weigher & lotto do
   const browseHeader = (
     <PageHeader
-      breadcrumb={['Terminal', 'Compass', mode === 'weigher' ? 'Weigher' : 'Setups']}
-      title={mode === 'weigher' ? 'Contract Weigher' : 'Trade Setups'}
-      subtitle={
-        mode === 'weigher'
-          ? 'Weeklies, swings & LEAPS on the scale — math, flow, dark pool and news decide what is worth buying'
-          : 'The terminal calls ENTER or EXIT — you never place the order'
+      breadcrumb={['Terminal', 'Compass', modeMeta.crumb]}
+      title={modeMeta.title}
+      subtitle={modeMeta.subtitle}
+      actions={
+        mode === 'setups' ? (
+          modeSwitch
+        ) : (
+          <span className="inline-flex items-center gap-2">
+            {modeSwitch}
+            <TickerSearch value={activeTicker} onChange={changeTicker} />
+          </span>
+        )
       }
-      ribbon={marketData ? <StatRibbon stats={deriveMarketKpis(marketData)} /> : undefined}
-      actions={mode === 'weigher' ? (
-        <span className="inline-flex items-center gap-2">
-          {modeSwitch}
-          <TickerSearch value={activeTicker} onChange={changeTicker} />
-        </span>
-      ) : (
-        modeSwitch
-      )}
     />
   );
 
@@ -228,7 +248,6 @@ const Compass = () => {
       breadcrumb={['Terminal', 'Compass', 'Setups']}
       title="Trade Setups"
       subtitle="The terminal calls ENTER or EXIT — you never place the order"
-      ribbon={marketData ? <StatRibbon stats={deriveMarketKpis(marketData)} /> : undefined}
       actions={
         <span className="inline-flex items-center gap-2">
           {modeSwitch}
@@ -260,6 +279,8 @@ const Compass = () => {
 
       {mode === 'weigher' ? (
         <ContractWeigher snapshot={marketData} initialHorizon={weigherHorizon} />
+      ) : mode === 'lotto' ? (
+        <LottoBoard snapshot={marketData} />
       ) : (
         <>
 

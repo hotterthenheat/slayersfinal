@@ -1,18 +1,14 @@
 import { useMemo } from 'react';
 import { Gavel, Ticket, AlertTriangle, Clock } from 'lucide-react';
-import { useMarketData } from '../../context/MarketDataContext';
 import { buildMocRead } from '../../core/fracture';
 import { weighContracts, type WeighedContract } from '../../core/contractScore';
-import { deriveMarketKpis } from '../../data/kpis';
 import type { MocRead } from '../../types/fracture';
-import PageHeader from '../../components/ui/PageHeader';
-import TickerSearch from '../../components/ui/TickerSearch';
-import StatRibbon from '../../components/ui/StatRibbon';
-import Panel from '../../components/ui/Panel';
-import StatCard from '../../components/ui/StatCard';
-import MetricGrid from '../../components/ui/MetricGrid';
-import SignalBadge from '../../components/ui/SignalBadge';
-import type { Tone } from '../../components/ui/tones';
+import type { MarketSnapshot } from '../../types/market';
+import Panel from '../ui/Panel';
+import StatCard from '../ui/StatCard';
+import MetricGrid from '../ui/MetricGrid';
+import SignalBadge from '../ui/SignalBadge';
+import type { Tone } from '../ui/tones';
 
 const fmtUsd = (v: number): string => {
   const a = Math.abs(v);
@@ -44,12 +40,9 @@ const ScoreGauge = ({ score }: { score: number }) => {
   const pct = (score + 100) / 2; // 0..100
   return (
     <div className="relative h-2 rounded-full bg-white/[0.06] overflow-hidden">
-      {/* center zero mark */}
       <span className="absolute top-0 bottom-0 left-1/2 w-px bg-white/25" aria-hidden />
       <span
-        className={`absolute top-0 bottom-0 ${score >= 0 ? 'left-1/2' : ''} ${
-          score >= 0 ? 'bg-bull/80' : 'bg-bear/80'
-        }`}
+        className={`absolute top-0 bottom-0 ${score >= 0 ? 'left-1/2' : ''} ${score >= 0 ? 'bg-bull/80' : 'bg-bear/80'}`}
         style={
           score >= 0
             ? { width: `${(pct - 50).toFixed(1)}%` }
@@ -73,7 +66,6 @@ const GrowthTimeline = ({ moc }: { moc: MocRead }) => {
   const maxAbs = Math.max(0.3, Math.abs(finalZ) * 1.15);
   const series = pubs.map((t, i) => {
     const frac = (i + 1) / pubs.length;
-    // growing → imbalance builds into the cross; fading → it was larger earlier
     const shape = growing ? Math.pow(frac, 1.5) : 1.15 - 0.35 * frac;
     return { t, z: finalZ * shape };
   });
@@ -91,10 +83,7 @@ const GrowthTimeline = ({ moc }: { moc: MocRead }) => {
           const h = Math.max(6, (Math.abs(pt.z) / maxAbs) * 100);
           return (
             <div key={pt.t} className="flex-1 h-full flex flex-col justify-end">
-              <span
-                className={`w-full rounded-sm ${pt.z >= 0 ? 'bg-bull/70' : 'bg-bear/70'}`}
-                style={{ height: `${h}%` }}
-              />
+              <span className={`w-full rounded-sm ${pt.z >= 0 ? 'bg-bull/70' : 'bg-bear/70'}`} style={{ height: `${h}%` }} />
             </div>
           );
         })}
@@ -149,40 +138,22 @@ const LottoRow = ({ c, best }: { c: WeighedContract; best: boolean }) => {
   );
 };
 
-const Lotto = () => {
-  const { activeTicker, marketData, changeTicker } = useMarketData();
-  const moc = useMemo(() => (marketData ? buildMocRead(marketData) : null), [marketData]);
-  const lottos = useMemo(() => (marketData ? weighContracts(marketData, 'LOTTO').slice(0, 6) : []), [marketData]);
-
-  const header = (
-    <PageHeader
-      breadcrumb={['Terminal', 'Lotto']}
-      title="Lotto"
-      subtitle="Same-day speculation — 0DTE contracts and the closing-auction (MOC) engine. High variance by design."
-      ribbon={marketData ? <StatRibbon stats={deriveMarketKpis(marketData)} /> : undefined}
-      actions={<TickerSearch value={activeTicker} onChange={changeTicker} />}
-    />
-  );
-
-  if (!moc || !marketData) {
-    return (
-      <>
-        {header}
-        <Panel className="h-64" bodyClassName="flex items-center justify-center">
-          <span className="font-mono text-[11px] text-textMuted uppercase tracking-widest">Reading the close…</span>
-        </Panel>
-      </>
-    );
-  }
+/**
+ * Compass's third mode — the same-day / 0DTE desk. The board is
+ * weighContracts(snapshot, 'LOTTO') (the same scoring engine as the setups and
+ * the weigher, just the 0DTE horizon), and the closing-auction MOC engine rides
+ * along as its context. Headerless — Compass owns the page header.
+ */
+const LottoBoard = ({ snapshot }: { snapshot: MarketSnapshot }) => {
+  const moc = useMemo(() => buildMocRead(snapshot), [snapshot]);
+  const lottos = useMemo(() => weighContracts(snapshot, 'LOTTO').slice(0, 6), [snapshot]);
 
   const mocTone = mocToneOf(moc);
   const best = lottos[0];
   const buyable = lottos.filter(c => c.verdict === 'BUY').length;
 
   return (
-    <>
-      {header}
-
+    <div className="flex flex-col gap-4">
       <MetricGrid min="170px">
         <StatCard label="Closing auction" value={moc.classification} sub="MOC engine read" tone={mocTone} emphasis />
         <StatCard
@@ -206,7 +177,6 @@ const Lotto = () => {
         <StatCard label="0DTE buys" value={`${buyable}`} sub={`of ${lottos.length} candidates graded`} tone={buyable > 0 ? 'bull' : 'neutral'} />
       </MetricGrid>
 
-      {/* Risk banner — lotto is high variance by construction */}
       <Panel tone="warn" bodyClassName="py-2.5">
         <p className="flex items-start gap-2 text-[12px] text-textSecondary leading-relaxed">
           <AlertTriangle className="w-3.5 h-3.5 text-warn shrink-0 mt-0.5" />
@@ -219,7 +189,6 @@ const Lotto = () => {
       </Panel>
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
-        {/* MOC engine — the centerpiece */}
         <Panel
           title={
             <span className="inline-flex items-center gap-1.5">
@@ -273,7 +242,6 @@ const Lotto = () => {
           </div>
         </Panel>
 
-        {/* 0DTE lotto board */}
         <Panel
           title={
             <span className="inline-flex items-center gap-1.5">
@@ -300,15 +268,15 @@ const Lotto = () => {
 
       <Panel bodyClassName="py-3">
         <p className="text-xs text-textSecondary leading-relaxed">
-          <span className="font-mono font-semibold uppercase tracking-wider mr-2 holo-text">Why lotto is its own desk</span>
+          <span className="font-mono font-semibold uppercase tracking-wider mr-2 holo-text">The 0DTE desk</span>
           On 0DTE the math is nearly a coin flip, so the tape decides: the board weighs dealer flow and liquidity above the
           breakeven arithmetic, and the closing auction — the one scheduled, forced, size-on-size event of the session — gets a
           full engine instead of a single imbalance number. Modeled from the live chain and dealer read; swap in the exchange's
           own MOC feed behind the same contract.
         </p>
       </Panel>
-    </>
+    </div>
   );
 };
 
-export default Lotto;
+export default LottoBoard;

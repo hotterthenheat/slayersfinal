@@ -9,7 +9,19 @@
 
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import type { TrackedSetup } from '../types/tracker';
-import type { Setup, ScannerKey } from '../types/skyvision';
+import type { Setup, ScannerKey, OptionRight, Verdict } from '../types/skyvision';
+
+/** Minimal shape to bookmark a contract weighed outside the setups scan. */
+export interface TrackContractInput {
+  id: string;
+  contract: string;
+  ticker: string;
+  strike: number;
+  right: OptionRight;
+  score: number;
+  verdict: Verdict;
+  scanner?: ScannerKey;
+}
 
 const STORAGE_KEY = 'slayer_tracked_setups';
 
@@ -33,6 +45,7 @@ function saveToStorage(setups: TrackedSetup[]): void {
 interface TrackerContextValue {
   trackedSetups: TrackedSetup[];
   trackSetup: (setup: Setup, scanner: ScannerKey) => void;
+  trackContract: (c: TrackContractInput) => void;
   untrackSetup: (id: string) => void;
   isTracked: (id: string) => boolean;
 }
@@ -64,6 +77,28 @@ export const TrackerProvider = ({ children }: { children: React.ReactNode }) => 
     });
   }, []);
 
+  const trackContract = useCallback((c: TrackContractInput) => {
+    setTrackedSetups(prev => {
+      if (prev.some(t => t.id === c.id)) return prev; // already tracked
+      const next = [
+        ...prev,
+        {
+          id: c.id,
+          contract: c.contract,
+          ticker: c.ticker,
+          strike: c.strike,
+          right: c.right,
+          scanner: c.scanner ?? 'top-setups',
+          trackedAt: Date.now(),
+          scoreAtTrack: c.score,
+          verdictAtTrack: c.verdict,
+        },
+      ];
+      saveToStorage(next);
+      return next;
+    });
+  }, []);
+
   const untrackSetup = useCallback((id: string) => {
     setTrackedSetups(prev => {
       const next = prev.filter(t => t.id !== id);
@@ -78,7 +113,7 @@ export const TrackerProvider = ({ children }: { children: React.ReactNode }) => 
   );
 
   return (
-    <TrackerContext.Provider value={{ trackedSetups, trackSetup, untrackSetup, isTracked }}>
+    <TrackerContext.Provider value={{ trackedSetups, trackSetup, trackContract, untrackSetup, isTracked }}>
       {children}
     </TrackerContext.Provider>
   );

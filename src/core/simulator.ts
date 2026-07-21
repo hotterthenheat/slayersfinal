@@ -507,6 +507,46 @@ const Simulator = (() => {
       const key = ensureTicker(sym);
       return gexHistory[key];
     },
+    /**
+     * Build a full MarketSnapshot for ANY symbol — the enabler for per-panel
+     * independent tickers in the Pulse workspace. Prices for every ticker
+     * already advance each tick(); this runs the same chain/indicator/plan
+     * builders the active feed uses, for the requested symbol, plus a small
+     * per-symbol tape slice. Every downstream view builder is pure (snapshot)
+     * => view, so it works unchanged on a per-panel snapshot.
+     */
+    buildSnapshot: (sym: string): MarketSnapshot => {
+      const key = ensureTicker(sym);
+      const cfg = TICKERS[key];
+      const chain = generateOptionsChain(key);
+      const indicators = getIndicators(priceHistory[key]);
+      const plan = generateTradePlan(key, cfg.currentPrice, chain, indicators);
+      const tape: TapeOrder[] = [];
+      const count = Math.floor(Math.random() * 3);
+      for (let i = 0; i < count; i++) {
+        const offset = (Math.floor(Math.random() * 7) - 3) * cfg.step;
+        const strike = Math.round(cfg.currentPrice / cfg.step) * cfg.step + offset;
+        tape.push({
+          time: new Date().toLocaleTimeString(),
+          ticker: key,
+          strike: strike.toFixed(2),
+          type: Math.random() > 0.5 ? 'C' : 'P',
+          size: Math.floor(Math.random() * 250) + 10,
+          orderType: Math.random() > 0.65 ? 'SWEEP' : 'BLOCK',
+          side: Math.random() > 0.48 ? 'ASK' : 'BID',
+        });
+      }
+      return {
+        ticker: key,
+        spot: cfg.currentPrice,
+        changePercent: ((cfg.currentPrice - cfg.basePrice) / cfg.basePrice) * 100,
+        priceHistory: priceHistory[key],
+        chain,
+        indicators,
+        plan,
+        tape,
+      };
+    },
     tick,
     getGreeks: calculateGreeks
   };

@@ -18,7 +18,8 @@ interface SetupCardProps {
 const SetupCard = ({ setup, expanded, isSelected, isTop, onToggle, onSelect, onOpenAnalysis }: SetupCardProps) => {
   const moveUp = setup.expectedMovePct >= 0;
   const isCall = setup.right === 'C';
-  const pillTone = isCall ? 'border-bull/30 bg-bull/10 text-bull' : 'border-bear/30 bg-bear/10 text-bear';
+  // Green for calls, red for puts — holographic-silver lettering rides on top.
+  const pillTone = isCall ? 'border-[#22c55e]/50 bg-[#15803d]' : 'border-[#ef4444]/50 bg-[#b91c1c]';
 
   return (
     <div className={`border rounded-md overflow-hidden transition-colors ${
@@ -32,7 +33,7 @@ const SetupCard = ({ setup, expanded, isSelected, isTop, onToggle, onSelect, onO
         className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-white/[0.02] transition-colors"
       >
         <span className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[11px] font-semibold ${pillTone}`}>
-          {setup.contract}
+          <span className="holo-text">{setup.contract}</span>
         </span>
         {isTop && <SignalBadge tone="magenta">TOP PICK</SignalBadge>}
 
@@ -95,39 +96,8 @@ const SetupCard = ({ setup, expanded, isSelected, isTop, onToggle, onSelect, onO
 
           <button
             onClick={onOpenAnalysis}
-            className="relative w-full rounded-md bg-[#0a0a0a] hover:bg-[#141414] py-2 text-xs font-semibold text-textPrimary transition-colors"
+            className="w-full rounded-md border border-borderSubtle bg-[#0a0a0a] hover:border-borderMuted hover:bg-[#141414] py-2 text-xs font-semibold text-textPrimary transition-colors"
           >
-            {/* Beam tracing the true button perimeter — blurred halo under a glowing core */}
-            <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible" fill="none" aria-hidden>
-              <rect
-                x="0.5"
-                y="0.5"
-                rx="6"
-                pathLength={100}
-                className="animate-border-trace"
-                style={{ width: 'calc(100% - 1px)', height: 'calc(100% - 1px)', filter: 'blur(4px)' }}
-                stroke="rgba(255,255,255,0.5)"
-                strokeWidth="3.5"
-                strokeDasharray="16 84"
-                strokeLinecap="round"
-              />
-              <rect
-                x="0.5"
-                y="0.5"
-                rx="6"
-                pathLength={100}
-                className="animate-border-trace"
-                style={{
-                  width: 'calc(100% - 1px)',
-                  height: 'calc(100% - 1px)',
-                  filter: 'drop-shadow(0 0 3px rgba(255,255,255,0.8))',
-                }}
-                stroke="rgba(255,255,255,0.95)"
-                strokeWidth="1"
-                strokeDasharray="16 84"
-                strokeLinecap="round"
-              />
-            </svg>
             Open Full Analysis →
           </button>
         </div>

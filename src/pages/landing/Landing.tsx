@@ -17,12 +17,16 @@ import { ComparePlans, Faq } from './PricingExtras';
 import HeroScene from './HeroScene';
 import LiveSections from './LiveSections';
 import TiltBox from './TiltBox';
+import CardCoverFlow from '../../components/showcase/CardCoverFlow';
 
+// Top tabs open the actual products (into the terminal); Pricing stays an
+// on-page anchor.
 const NAV_LINKS = [
-  { label: 'Product', href: '#showcase' },
-  { label: 'Engines', href: '#live' },
-  { label: 'Workspace', href: '#workspace' },
-  { label: 'Pricing', href: '#pricing' },
+  { label: 'Pulse', to: '/pulse' },
+  { label: 'Compass', to: '/compass' },
+  { label: 'Trace', to: '/trace' },
+  { label: 'Pinpoint', to: '/pinpoint' },
+  { label: 'Pricing', to: '#pricing' },
 ];
 
 const TIERS = [
@@ -105,8 +109,8 @@ const FOOTER_COLS = [
   {
     title: 'Access',
     links: [
-      { label: 'Launch Terminal', to: '/' },
-      { label: 'Log in / Sign up', to: '/' },
+      { label: 'Launch Terminal', to: '/pulse' },
+      { label: 'Log in / Sign up', to: '/pulse' },
       { label: 'Workspace', to: '/workspace' },
     ],
   },
@@ -145,11 +149,17 @@ const SmartLink = ({ to, className, children }: { to: string; className: string;
     holo pill springs to the tab — same selection grammar as the terminal. */
 const GlassNav = () => {
   const [active, setActive] = useState<string | null>(null);
+  const { launch } = useLaunch();
 
-  const go = (href: string) => (e: MouseEvent) => {
+  const handle = (to: string) => (e: MouseEvent) => {
     e.preventDefault();
-    setActive(href);
-    document.querySelector(href)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (to.startsWith('#')) {
+      setActive(to);
+      document.querySelector(to)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+      // A product tab opens the actual desk through the launch gate.
+      launch(to);
+    }
   };
 
   return (
@@ -165,12 +175,12 @@ const GlassNav = () => {
         </button>
         <nav className="hidden md:flex items-center gap-1.5 ml-auto">
           {NAV_LINKS.map(l => {
-            const isActive = active === l.href;
+            const isActive = active === l.to;
             return (
               <motion.a
                 key={l.label}
-                href={l.href}
-                onClick={go(l.href)}
+                href={l.to}
+                onClick={handle(l.to)}
                 whileHover={{ scale: 1.08, y: -1 }}
                 whileTap={{ scale: 0.88 }}
                 transition={{ type: 'spring', stiffness: 500, damping: 14 }}
@@ -214,12 +224,22 @@ const Landing = () => (
     <section className="relative h-[94vh] min-h-[620px]">
       <div className="absolute inset-0">
         <HeroScene />
-        {/* Scrims — copy always wins over the scene */}
-        <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-canvas/80 via-canvas/30 to-canvas" />
+        {/* Scrims — same grammar as the real site: a strong center well keeps
+            the lockup + copy readable over the rain, a vignette pulls the eye
+            in, and a bottom fade hands off to the next section. Pointer-events
+            off so the cursor light still tracks through them. */}
         <div
           className="absolute inset-0 pointer-events-none"
-          style={{ background: 'radial-gradient(ellipse 52% 46% at 50% 46%, rgba(5,5,5,0.45) 0%, transparent 70%)' }}
+          style={{
+            background:
+              'radial-gradient(ellipse 70% 60% at 50% 45%, rgba(8,9,10,0.90) 0%, rgba(8,9,10,0.55) 44%, transparent 78%)',
+          }}
         />
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{ background: 'radial-gradient(ellipse at center, transparent 52%, rgba(0,0,0,0.62) 100%)' }}
+        />
+        <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-transparent via-transparent to-canvas" />
       </div>
 
       {/* pointer-events-none so mouse moves reach the scene's effector below;
@@ -231,7 +251,7 @@ const Landing = () => (
         <h1 className="mt-5 text-4xl md:text-6xl font-bold tracking-tight leading-[1.04] max-w-3xl">
           See the forces that
           <br />
-          move the market.
+          <span className="holo-text">move the market.</span>
         </h1>
         <p className="mt-6 max-w-xl text-[15px] md:text-base text-textSecondary leading-relaxed">
           Market makers have to hedge. That hedging pushes price toward some levels and away from
@@ -266,6 +286,21 @@ const Landing = () => (
 
     {/* ── Showcase → marquee → pillars → live engines → story → workspace ── */}
     <LiveSections />
+
+    {/* ── The desks (cover-flow) ── */}
+    <section className="px-6 md:px-10 py-20 max-w-4xl mx-auto text-center">
+      <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.25em] text-textSecondary">
+        The desks
+      </span>
+      <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">One chain, four desks.</h2>
+      <p className="mt-4 text-[14px] text-textSecondary leading-relaxed max-w-xl mx-auto">
+        Watch on Pulse, choose on Compass, read the flow on Trace, map the dealers on Pinpoint — and let Prove It keep the
+        receipts. Every desk feeds the next.
+      </p>
+      <div className="mt-10 h-[300px] max-w-md mx-auto">
+        <CardCoverFlow />
+      </div>
+    </section>
 
     {/* ── Community ── */}
     <section className="px-6 md:px-10 py-20 max-w-6xl mx-auto">

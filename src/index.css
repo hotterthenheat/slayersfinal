@@ -273,16 +273,6 @@
   animation: cursor-blink 1.1s steps(1) infinite;
 }
 
-/* Border beam — a dash segment traveling the true perimeter of an SVG rect
-   (pathLength=100 normalizes any size; -100 offset = one full lap). */
-@keyframes border-trace {
-  to { stroke-dashoffset: -100; }
-}
-
-.animate-border-trace {
-  animation: border-trace 3.2s linear infinite;
-}
-
 /* Soft content swap — used when the same panel's data changes (e.g. selecting
    a different contract). Shell stays put; only the body cross-fades. */
 @keyframes soft-in {
@@ -304,6 +294,17 @@
   animation: marquee 46s linear infinite;
 }
 
+/* Code-rain columns — each column holds its lines twice; translating by −50%
+   (or back) loops seamlessly. Direction + duration are set per column inline. */
+@keyframes rain-up {
+  from { transform: translateY(0); }
+  to { transform: translateY(-50%); }
+}
+@keyframes rain-down {
+  from { transform: translateY(-50%); }
+  to { transform: translateY(0); }
+}
+
 /* Landing anchor targets stop short of the fixed glass nav */
 #showcase,
 #live,
@@ -316,9 +317,11 @@
   .animate-view-in,
   .animate-slide-in,
   .animate-soft-in,
-  .animate-border-trace,
   .animate-cursor-blink,
   .animate-marquee {
     animation: none;
+  }
+  .rain-col {
+    animation: none !important;
   }
 }

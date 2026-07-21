@@ -1,4 +1,4 @@
-import { Radio, Layers, ScanLine, Bookmark, type LucideIcon } from 'lucide-react';
+import { Radio, Layers, ScanLine, Network, Bookmark, type LucideIcon } from 'lucide-react';
 
 /** Trace subpage registry — drives the sub-tab bar and command palette. */
 export interface FlowDeskSubpage {
@@ -26,6 +26,12 @@ export const FLOWDESK_SUBPAGES: FlowDeskSubpage[] = [
     label: 'Scanner',
     subtitle: 'Per-contract flow aggregation — volume, ΔOI & bull/bear scoring',
     icon: ScanLine,
+  },
+  {
+    path: '/trace/reconstruction',
+    label: 'Reconstruction',
+    subtitle: 'Prints clustered into probable parent metaorders — size, completion & urgency',
+    icon: Network,
   },
   {
     path: '/trace/tracker',
