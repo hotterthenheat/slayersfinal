@@ -71,6 +71,21 @@ function buildCtx(snapshot: MarketSnapshot, revision: number, focusPrice: number
   };
 }
 
+/** Client-only media-query subscription. */
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia(query).matches : true
+  );
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const on = () => setMatches(mq.matches);
+    on();
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, [query]);
+  return matches;
+}
+
 // ---- persistence ---------------------------------------------------------
 function freshState(): PulseWorkspaceState {
   return {
@@ -171,6 +186,8 @@ const PulseWorkspace = () => {
   const counterRef = useRef(1);
 
   const active = ws.layouts.find(l => l.id === ws.activeId) ?? ws.layouts[0];
+  // Below lg the 12-col drag grid is unusable on a phone — stack instead.
+  const isDesktop = useMediaQuery('(min-width: 1024px)');
 
   // Consume a cross-page "view on chart" deep-link: switch ticker and/or mark
   // a price level on the chart. Documented contract:
@@ -611,6 +628,35 @@ const PulseWorkspace = () => {
         <div className="inst-surface rounded-md h-64 flex flex-col items-center justify-center gap-2">
           <span className="font-mono text-[11px] text-textMuted uppercase tracking-widest">Empty workspace</span>
           <span className="text-[11px] text-textSecondary">Use “Add panel” or pick a layout to build your desk</span>
+        </div>
+      ) : !isDesktop ? (
+        // Mobile: the 12-col drag grid is unreadable on a phone. Stack the panels
+        // in their on-screen order (top→bottom, left→right) at readable heights;
+        // drag/resize stay a desktop affordance. Tap ⤢ to focus one full-screen.
+        <div className="flex flex-col gap-3">
+          {[...active.panels]
+            .sort((a, b) => {
+              const la = active.layout.find(g => g.i === a.id);
+              const lb = active.layout.find(g => g.i === b.id);
+              return (la?.y ?? 0) - (lb?.y ?? 0) || (la?.x ?? 0) - (lb?.x ?? 0);
+            })
+            .map(p => {
+              const ticker = p.ticker ?? activeTicker;
+              const li = active.layout.find(g => g.i === p.id);
+              const h = Math.max(340, (li?.h ?? 6) * 52);
+              return (
+                <div
+                  key={p.id}
+                  className="inst-surface rounded-md overflow-hidden flex flex-col"
+                  style={{ height: p.minimized ? undefined : h }}
+                >
+                  <PanelChrome panelId={p.id} panelKey={p.key} ticker={ticker} />
+                  {!p.minimized && (
+                    <div className="flex-grow min-h-0 overflow-hidden">{renderPanelBody(p.key, ticker)}</div>
+                  )}
+                </div>
+              );
+            })}
         </div>
       ) : (
         // Keyed by the active layout so switching a desk profile crossfades +

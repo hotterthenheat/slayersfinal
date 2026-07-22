@@ -148,11 +148,12 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
         >
           <Settings className="w-3.5 h-3.5" />
         </button>
-        {/* Global ticker switcher — click the symbol from any page to change it */}
-        <div className="hidden sm:flex items-center gap-2.5 font-mono text-xs">
+        {/* Global ticker switcher — click the symbol from any page to change it.
+            Visible on mobile too (price/change collapse to save room). */}
+        <div className="flex items-center gap-2.5 font-mono text-xs">
           <TickerSearch value={activeTicker} onChange={changeTicker} />
           {marketData && (
-            <span className="flex items-baseline gap-1.5">
+            <span className="hidden sm:flex items-baseline gap-1.5">
               <span className="text-textPrimary font-semibold tnum">
                 <AnimatedNumber value={marketData.spot} format={v => `$${v.toFixed(2)}`} />
               </span>
