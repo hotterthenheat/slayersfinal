@@ -1,7 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { CalendarClock, Crosshair, Star, Bell, GitCompare, X, SlidersHorizontal } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
-import StatRibbon from '../components/ui/StatRibbon';
 import TickerJump from '../components/ui/TickerJump';
 import Panel from '../components/ui/Panel';
 import StatCard from '../components/ui/StatCard';
@@ -365,19 +364,6 @@ const EarningsHub = () => {
   const alertEvent = nextWatched ?? next;
   const avgRich = (events.reduce((a, e) => a + e.richness, 0) / Math.max(events.length, 1)).toFixed(2);
 
-  const headerRibbon = (
-    <StatRibbon
-      stats={[
-        { label: 'Next', value: next ? `${next.ticker} ${next.dateLabel}` : '--' },
-        { label: 'Avg rich', value: `${avgRich}×`, tone: Number(avgRich) >= 1.15 ? 'warn' : 'neutral' },
-        { label: 'Play', value: String(plays.length), tone: 'bull' },
-        { label: 'Fade', value: String(fades.length), tone: 'magenta' },
-        { label: 'Skip', value: String(skips.length) },
-        { label: 'Watch', value: String(watchlist.size), tone: watchlist.size > 0 ? 'select' : 'neutral' },
-      ]}
-    />
-  );
-
   // Group the next stretch of sessions into a calendar strip
   const byDay = useMemo(() => {
     const map = new Map<string, EarningsEvent[]>();
@@ -516,7 +502,6 @@ const EarningsHub = () => {
         breadcrumb={['Terminal', 'Earnings']}
         title="Earnings Hub"
         subtitle="Every upcoming print priced: implied vs what it actually moves — edge, conviction and the risk-defined structure for each"
-        ribbon={headerRibbon}
         actions={<SegmentedControl ariaLabel="Verdict filter" options={FILTER_OPTIONS} value={filter} onChange={setFilter} />}
       />
 

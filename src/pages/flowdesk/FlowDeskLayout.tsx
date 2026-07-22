@@ -3,15 +3,13 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useMarketData } from '../../context/MarketDataContext';
 import PageHeader from '../../components/ui/PageHeader';
 import TickerSearch from '../../components/ui/TickerSearch';
-import StatRibbon from '../../components/ui/StatRibbon';
-import { deriveMarketKpis } from '../../data/kpis';
 import SubNav from '../../components/ui/SubNav';
 import { FLOWDESK_SUBPAGES } from './subnav';
 
 /** Section shell for Trace — header, ticker context and subpage tabs.
     Header + tabs hold still; only the subpage body cross-fades on tab change. */
 const FlowDeskLayout = () => {
-  const { activeTicker, changeTicker, marketData } = useMarketData();
+  const { activeTicker, changeTicker } = useMarketData();
   const location = useLocation();
   const outlet = useOutlet();
 
@@ -23,7 +21,6 @@ const FlowDeskLayout = () => {
         breadcrumb={['Terminal', 'Trace', active.label]}
         title="Trace"
         subtitle={active.subtitle}
-        ribbon={marketData ? <StatRibbon stats={deriveMarketKpis(marketData)} /> : undefined}
         actions={<TickerSearch value={activeTicker} onChange={changeTicker} />}
       />
       <SubNav ariaLabel="Trace subpages" items={FLOWDESK_SUBPAGES} />
