@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom';
 
 const links = [
+  { to: '/guide', label: 'Guide' },
   { to: '/legal/disclaimer', label: 'Disclaimer' },
   { to: '/legal/terms', label: 'Terms' },
   { to: '/legal/privacy', label: 'Privacy' },
@@ -15,7 +16,7 @@ const Footer = () => (
     <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted">
       Not investment advice · research &amp; education only
     </span>
-    <nav className="ml-auto flex items-center gap-x-4 gap-y-1 flex-wrap" aria-label="Legal">
+    <nav className="ml-auto flex items-center gap-x-4 gap-y-1 flex-wrap" aria-label="Footer links">
       {links.map(l => (
         <NavLink
           key={l.to}

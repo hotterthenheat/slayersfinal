@@ -9,7 +9,12 @@ import AppShell from './components/layout/AppShell';
 import { LaunchProvider } from './components/layout/LaunchTransition';
 import Compass from './pages/Compass';
 import Tracker from './pages/Tracker';
-import Guide from './pages/Guide';
+import GuideLayout from './pages/guide/GuideLayout';
+import GuideOverview from './pages/guide/Overview';
+import GuideDesks from './pages/guide/Desks';
+import GuideConcepts from './pages/guide/Concepts';
+import GuideFaq from './pages/guide/Faq';
+import GuideShortcuts from './pages/guide/Shortcuts';
 import GexLayout from './pages/gex/GexLayout';
 import PulseWorkspace from './pages/pulse/PulseWorkspace';
 import ExposureProfile from './pages/gex/ExposureProfile';
@@ -84,7 +89,15 @@ const App = () => {
             <Route path="/fracture" element={<Navigate to="/pinpoint/fracture" replace />} />
             <Route path="/lotto" element={<Navigate to="/compass" state={{ compassMode: 'lotto' }} replace />} />
             <Route path="/tracker" element={<Tracker />} />
-            <Route path="/guide" element={<Guide />} />
+            <Route path="/help" element={<Navigate to="/guide" replace />} />
+            <Route path="/guide" element={<GuideLayout />}>
+              <Route index element={<Navigate to="/guide/overview" replace />} />
+              <Route path="overview" element={<GuideOverview />} />
+              <Route path="desks" element={<GuideDesks />} />
+              <Route path="concepts" element={<GuideConcepts />} />
+              <Route path="faq" element={<GuideFaq />} />
+              <Route path="shortcuts" element={<GuideShortcuts />} />
+            </Route>
             <Route path="/pinpoint" element={<GexLayout />}>
               <Route index element={<Navigate to="/pinpoint/gamma" replace />} />
               <Route path="command" element={<Navigate to="/pulse" replace />} />
