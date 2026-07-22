@@ -5,7 +5,7 @@
   Change here + there together, never one alone.
 */
 
-export const CALL_WALL = '#C7D3E8'; // bull (holo silver)
+export const CALL_WALL = '#30D158'; // bull (green — silver is selection-only, never direction)
 export const PUT_WALL = '#FF3B30'; // bear (hot red)
 export const FLIP = '#7DD3FC'; // baby blue — the regime border (cool against silver/red)
 export const KING = '#EA00FF'; // magenta — engine-standout family (peak-exposure strike)

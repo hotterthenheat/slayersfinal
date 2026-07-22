@@ -37,7 +37,9 @@ const matchTone: Record<MatchQuality, Tone> = {
   WEAK: 'bear',
 };
 
-const SILVER = '#C7D3E8';
+// neutral analytical series = white ("where the market is"); silver is selection-only
+const SERIES = '#ededed';
+const GREEN = '#30D158';
 const RED = '#FF3B30';
 const AMBER = '#FF9500';
 const MUTED = '#6b6b6b';
@@ -106,7 +108,7 @@ const CalibrationPlot = ({ view }: { view: StateReplayView }) => {
       {view.calibration.map((b, i) => (
         <g key={i}>
           <line x1={X(b.predictedPct)} y1={Y(b.predictedPct)} x2={X(b.predictedPct)} y2={Y(b.realizedPct)} stroke={AMBER} strokeOpacity={0.45} strokeWidth={1} />
-          <circle cx={X(b.predictedPct)} cy={Y(b.realizedPct)} r={Math.max(2.5, Math.min(6, 2 + b.count / 12))} fill={SILVER} fillOpacity={0.9} />
+          <circle cx={X(b.predictedPct)} cy={Y(b.realizedPct)} r={Math.max(2.5, Math.min(6, 2 + b.count / 12))} fill={SERIES} fillOpacity={0.9} />
         </g>
       ))}
       <text x={pad} y={H - 6} fontSize={7.5} fill={MUTED} fontFamily="monospace">
@@ -137,11 +139,11 @@ const EdgeDecayChart = ({ view }: { view: StateReplayView }) => {
       <line x1={pad} y1={8} x2={pad} y2={H - pad} stroke="#2a2a2a" strokeWidth={1} />
       {/* cumulative target / stop as faint context */}
       <path d={path(p => p.cumStopPct)} fill="none" stroke={RED} strokeOpacity={0.4} strokeWidth={1} />
-      <path d={path(p => p.cumTargetPct)} fill="none" stroke={SILVER} strokeOpacity={0.35} strokeWidth={1} />
+      <path d={path(p => p.cumTargetPct)} fill="none" stroke={GREEN} strokeOpacity={0.4} strokeWidth={1} />
       {/* net edge — the headline line */}
-      <path d={path(p => p.edgePct)} fill="none" stroke={SILVER} strokeWidth={1.9} />
+      <path d={path(p => p.edgePct)} fill="none" stroke={SERIES} strokeWidth={1.9} />
       {pts.map((p, i) => (
-        <circle key={i} cx={X(p.bar)} cy={Y(p.edgePct)} r={2} fill={SILVER} />
+        <circle key={i} cx={X(p.bar)} cy={Y(p.edgePct)} r={2} fill={SERIES} />
       ))}
       <text x={pad} y={H - 6} fontSize={7.5} fill={MUTED} fontFamily="monospace">
         bars held →
@@ -333,8 +335,9 @@ const MarketStateReplay = ({ snapshot }: MarketStateReplayProps) => {
             </div>
           </div>
           <p className="mt-2 text-xs text-textSecondary leading-relaxed">
-            Silver is net edge (target minus stop) captured by each checkpoint; it climbs early then flattens as the winners
-            resolve — the decay is the marginal edge, not the level. Faint lines are cumulative target and stop hits.
+            The white line is net edge (target minus stop) captured by each checkpoint; it climbs early then flattens as the
+            winners resolve — the decay is the marginal edge, not the level. The faint green and red lines are cumulative
+            target and stop hits.
           </p>
         </Panel>
       </div>

@@ -193,7 +193,7 @@ export function heatRgb(value: number, maxAbs: number): RGB {
   return [c, c, c];
 }
 
-const CHROME: RGB = [199, 211, 232];
+const CHROME: RGB = [48, 209, 88]; // positive GEX = green (silver is selection-only)
 const ROSE: RGB = [255, 59, 48];
 const TINT_START = 0.78;
 const TINT_MAX = 0.5;
@@ -215,7 +215,7 @@ export function heatCellStyle(value: number, maxAbs: number): CSSProperties {
     const alpha = 0.05 + t * 0.5;
     return {
       backgroundColor:
-        value >= 0 ? `rgba(199,211,232,${alpha.toFixed(3)})` : `rgba(255,59,48,${alpha.toFixed(3)})`,
+        value >= 0 ? `rgba(48,209,88,${alpha.toFixed(3)})` : `rgba(255,59,48,${alpha.toFixed(3)})`,
       color: '#ededed',
     };
   }
@@ -253,7 +253,7 @@ export const heatPoles = ramp
 export const heatScaleGradient: string = ramp
   ? ramp.gradient
   : HEAT_MODE === 'diverging'
-    ? 'linear-gradient(to bottom, rgba(199,211,232,0.85), rgba(199,211,232,0.12) 46%, rgba(20,20,20,1) 50%, rgba(255,59,48,0.12) 54%, rgba(255,59,48,0.85))'
+    ? 'linear-gradient(to bottom, rgba(48,209,88,0.85), rgba(48,209,88,0.12) 46%, rgba(20,20,20,1) 50%, rgba(255,59,48,0.12) 54%, rgba(255,59,48,0.85))'
     : HEAT_MODE === 'hybrid'
       ? 'linear-gradient(to bottom, rgb(126,210,180), rgb(235,235,235) 14%, rgb(61,61,61) 50%, rgb(5,5,5) 86%, rgb(122,32,47))'
       : 'linear-gradient(to bottom, rgb(235,235,235), rgb(61,61,61) 50%, rgb(5,5,5))';

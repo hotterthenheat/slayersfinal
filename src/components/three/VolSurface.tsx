@@ -4,9 +4,9 @@ import * as THREE from 'three';
 /*
   Quant-grade 3D surface, rendered in real WebGL (three.js) — replaces the flat
   canvas wireframe. A grid of normalized heights (−1…1) becomes a lit, shaded
-  mesh: strikes across, expiries deep, exposure tall. Positive structure wears
-  the holographic silver run; negative gamma burns red — the same grammar as
-  every 2D exposure view. Auto-orbits while idle; drag to spin and tilt.
+  mesh: strikes across, expiries deep, exposure tall. Positive structure reads
+  green; negative gamma burns red — the same grammar as every 2D exposure view.
+  Auto-orbits while idle; drag to spin and tilt.
 */
 
 export type SurfaceColormap = 'exposure' | 'vol';
@@ -33,9 +33,9 @@ function colorFor(z: number, map: SurfaceColormap, out: THREE.Color) {
     out.setRGB(0.05 + t * 0.75, 0.12 + t * 0.7, 0.28 + t * 0.68);
     return out;
   }
-  // diverging: silver support (+) vs hot red (−)
+  // diverging: green support (+) vs hot red (−) — silver is selection-only
   const t = Math.min(Math.abs(z) * 1.3, 1);
-  if (z >= 0) out.setRGB((174 + t * 70) / 255, (185 + t * 60) / 255, (207 + t * 48) / 255);
+  if (z >= 0) out.setRGB((130 - t * 82) / 255, 210 / 255, (160 - t * 72) / 255);
   else out.setRGB(1, (80 - t * 34) / 255, (64 - t * 24) / 255);
   return out;
 }

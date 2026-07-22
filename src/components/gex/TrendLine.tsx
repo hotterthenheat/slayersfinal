@@ -13,7 +13,7 @@ const TrendLine = ({ points }: { points: number[] }) => {
       <polyline
         points={pts}
         fill="none"
-        stroke={rising ? '#C7D3E8' : '#FF3B30'}
+        stroke={rising ? '#30D158' : '#FF3B30'}
         strokeWidth="1"
         vectorEffect="non-scaling-stroke"
         strokeLinejoin="round"

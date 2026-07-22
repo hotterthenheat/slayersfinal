@@ -13,14 +13,14 @@
 import { useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronDown, Search, Menu, X, type LucideIcon } from 'lucide-react';
+import { ChevronDown, Search, Menu, X, Settings, type LucideIcon } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { useLaunch } from './LaunchTransition';
-import SignalBadge from '../ui/SignalBadge';
 import { NAV_GROUPS, itemsByGroup, NAV_ITEMS, type NavGroup, type NavItem } from './nav';
 
 interface TopBarProps {
   onOpenPalette: () => void;
+  onOpenSettings: () => void;
 }
 
 type SubLink = { path: string; label: string; icon?: LucideIcon };
@@ -37,7 +37,7 @@ const Wordmark = ({ onClick, size = 'sm' }: { onClick: (e: React.MouseEvent) => 
   </a>
 );
 
-const TopBar = ({ onOpenPalette }: TopBarProps) => {
+const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
   const { activeTicker, marketData } = useMarketData();
   const { launch } = useLaunch();
   const location = useLocation();
@@ -132,6 +132,13 @@ const TopBar = ({ onOpenPalette }: TopBarProps) => {
             ⌘K
           </kbd>
         </button>
+        <button
+          onClick={onOpenSettings}
+          aria-label="Settings"
+          className="inline-flex items-center justify-center w-8 h-8 border border-borderSubtle bg-panel hover:border-borderMuted rounded-md text-textMuted hover:text-textPrimary transition-colors"
+        >
+          <Settings className="w-3.5 h-3.5" />
+        </button>
         <div className="hidden sm:flex items-center gap-2 font-mono text-xs">
           <span className="text-textSecondary font-semibold">{activeTicker}</span>
           <span className="text-textPrimary font-semibold tnum">
@@ -144,7 +151,6 @@ const TopBar = ({ onOpenPalette }: TopBarProps) => {
             </span>
           )}
         </div>
-        <SignalBadge tone="warn">Sim</SignalBadge>
         <span className="hidden xl:block font-mono text-xs text-textSecondary tnum select-none">{clock}</span>
       </div>
 

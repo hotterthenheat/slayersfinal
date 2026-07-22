@@ -57,7 +57,7 @@ const HexCurve = ({ view }: { view: HedgeImpactView }) => {
           <text x={bx + 4} y={H - 5} fontSize={8.5} fill="#FF9500" fontFamily="monospace">{view.failureBoundaryPct.toFixed(2)}% boundary</text>
         </>
       )}
-      <path d={line} fill="none" stroke="#C7D3E8" strokeWidth={1.75} />
+      <path d={line} fill="none" stroke="#ededed" strokeWidth={1.75} />
       {[0, 1, 2, 3].map(m => (
         <text key={m} x={X(m)} y={12} fontSize={8} fill="#6b6b6b" fontFamily="monospace">{m}%</text>
       ))}

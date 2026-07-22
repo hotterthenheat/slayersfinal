@@ -40,7 +40,7 @@ const CLASS_TEXT: Record<HedgingClass, string> = {
 
 /** Left edge accent per hedging class — the whale-print grammar. */
 const CLASS_EDGE: Record<HedgingClass, string> = {
-  'DOWNSIDE CUSHION': 'rgba(199,211,232,0.85)',
+  'DOWNSIDE CUSHION': 'rgba(48,209,88,0.85)',
   'UPSIDE RESISTANCE': 'rgba(255,59,48,0.75)',
   MAGNET: 'rgba(234,0,255,0.8)',
   NEUTRAL: 'transparent',

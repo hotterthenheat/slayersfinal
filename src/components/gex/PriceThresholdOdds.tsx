@@ -116,7 +116,7 @@ const PriceThresholdOdds = ({ view }: { view: StateDensityView }) => {
           </div>
         </div>
 
-        {/* Probability split — below (red) vs above (silver) the line */}
+        {/* Probability split — below (red) vs above (green) the line */}
         <div className="relative h-3 rounded-full overflow-hidden bg-white/[0.06] flex">
           <span className="h-full bg-bear/70" style={{ width: `${pBelow}%` }} aria-hidden />
           <span className="h-full bg-bull/70" style={{ width: `${pAbove}%` }} aria-hidden />

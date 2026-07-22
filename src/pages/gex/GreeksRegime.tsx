@@ -27,11 +27,11 @@ const regimeTone: Record<DealerRegime, Tone> = {
   'LIQUIDATION CASCADE': 'bear',
 };
 
-/** Per-cell exposure heatmap — silver for dealer-supportive, red for amplifying. */
+/** Per-cell exposure heatmap — green for dealer-supportive, red for amplifying. */
 const GreekCell = ({ value, max }: { value: number; max: number }) => {
   const intensity = Math.min(1, Math.abs(value) / (max || 1));
   const pos = value >= 0;
-  const bg = pos ? `rgba(199,211,232,${0.06 + intensity * 0.34})` : `rgba(255,59,48,${0.06 + intensity * 0.34})`;
+  const bg = pos ? `rgba(48,209,88,${0.06 + intensity * 0.34})` : `rgba(255,59,48,${0.06 + intensity * 0.34})`;
   return (
     <td className="px-2 py-1.5 text-right" style={{ background: bg }}>
       <span className={`font-mono text-[11px] tnum ${pos ? 'text-textPrimary' : 'text-bear'}`}>{fmtC(value)}</span>
@@ -57,8 +57,8 @@ const CharmChart = ({ points }: { points: { time: string; deltaShift: number }[]
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none">
       <line x1={0} x2={W} y1={zeroY} y2={zeroY} stroke="#fff" strokeOpacity={0.12} />
       <rect x={X(points.length - 3)} y={0} width={W - X(points.length - 3)} height={H} fill="rgba(255,149,0,0.06)" />
-      <path d={area} fill={up ? 'rgba(199,211,232,0.14)' : 'rgba(255,59,48,0.14)'} />
-      <path d={points.map((p, i) => `${i === 0 ? 'M' : 'L'}${X(i).toFixed(1)},${Y(p.deltaShift).toFixed(1)}`).join(' ')} fill="none" stroke={up ? '#C7D3E8' : '#FF3B30'} strokeWidth={1.75} />
+      <path d={area} fill={up ? 'rgba(48,209,88,0.14)' : 'rgba(255,59,48,0.14)'} />
+      <path d={points.map((p, i) => `${i === 0 ? 'M' : 'L'}${X(i).toFixed(1)},${Y(p.deltaShift).toFixed(1)}`).join(' ')} fill="none" stroke={up ? '#30D158' : '#FF3B30'} strokeWidth={1.75} />
       <text x={X(points.length - 3) + 4} y={12} fontSize={8} fill="#FF9500" fontFamily="monospace">POWER HOUR</text>
     </svg>
   );
@@ -161,7 +161,7 @@ const GreeksRegime = () => {
             <Grid3x3 className="w-3.5 h-3.5" /> Greek exposure matrix
           </span>
         }
-        subtitle="net dealer $ by strike — silver supports, red amplifies · hover a header for its meaning"
+        subtitle="net dealer $ by strike — green supports, red amplifies · hover a header for its meaning"
         flush
       >
         <div className="flex items-center gap-3 px-3 py-2 border-b border-borderSubtle flex-wrap">

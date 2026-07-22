@@ -139,7 +139,7 @@ const CascadeFan = ({ paths, spot, trigger }: { paths: number[][]; spot: number;
           key={i}
           d={p.map((v, j) => `${j === 0 ? 'M' : 'L'}${X(j).toFixed(1)},${Y(v).toFixed(1)}`).join(' ')}
           fill="none"
-          stroke={p[p.length - 1] < trigger ? '#FF3B30' : '#C7D3E8'}
+          stroke={p[p.length - 1] < trigger ? '#FF3B30' : '#30D158'}
           strokeOpacity={0.16}
           strokeWidth={1}
         />

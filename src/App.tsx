@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { MotionConfig } from 'framer-motion';
 import { MarketDataProvider } from './context/MarketDataContext';
 import { TrackerProvider } from './context/TrackerContext';
+import { ToastProvider } from './components/ui/Toast';
 import AppShell from './components/layout/AppShell';
 import { LaunchProvider } from './components/layout/LaunchTransition';
 import Compass from './pages/Compass';
@@ -36,6 +37,7 @@ import Feedback from './pages/community/Feedback';
 const App = () => {
   return (
     <MotionConfig reducedMotion="user">
+      <ToastProvider>
       <MarketDataProvider>
         <TrackerProvider>
         <LaunchProvider>
@@ -100,6 +102,7 @@ const App = () => {
         </LaunchProvider>
         </TrackerProvider>
       </MarketDataProvider>
+      </ToastProvider>
     </MotionConfig>
   );
 };

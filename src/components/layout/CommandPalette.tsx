@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Activity, ArrowRightLeft, CornerDownLeft, Crosshair, Users } from 'lucide-react';
+import { Activity, ArrowRightLeft, CornerDownLeft, Crosshair, Keyboard, Settings, Users } from 'lucide-react';
 import { NAV_ITEMS } from './nav';
 import { GEX_SUBPAGES } from '../../pages/gex/subnav';
 import { FLOWDESK_SUBPAGES } from '../../pages/flowdesk/subnav';
@@ -11,18 +11,20 @@ import Simulator from '../../core/simulator';
 interface CommandPaletteProps {
   open: boolean;
   onClose: () => void;
+  onOpenSettings: () => void;
+  onOpenShortcuts: () => void;
 }
 
 interface PaletteAction {
   id: string;
-  group: 'Navigate' | 'Ticker';
+  group: 'Action' | 'Navigate' | 'Ticker';
   label: string;
   hint: string;
   run: () => void;
   icon?: React.ReactNode;
 }
 
-const CommandPalette = ({ open, onClose }: CommandPaletteProps) => {
+const CommandPalette = ({ open, onClose, onOpenSettings, onOpenShortcuts }: CommandPaletteProps) => {
   const navigate = useNavigate();
   const { changeTicker, activeTicker } = useMarketData();
   const [query, setQuery] = useState('');
@@ -30,6 +32,24 @@ const CommandPalette = ({ open, onClose }: CommandPaletteProps) => {
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const actions = useMemo<PaletteAction[]>(() => {
+    const commands: PaletteAction[] = [
+      {
+        id: 'action-settings',
+        group: 'Action',
+        label: 'Open settings',
+        hint: 'preferences & local data',
+        icon: <Settings className="w-3.5 h-3.5" />,
+        run: onOpenSettings,
+      },
+      {
+        id: 'action-shortcuts',
+        group: 'Action',
+        label: 'Keyboard shortcuts',
+        hint: 'press ?',
+        icon: <Keyboard className="w-3.5 h-3.5" />,
+        run: onOpenShortcuts,
+      },
+    ];
     const nav: PaletteAction[] = NAV_ITEMS.map(item => ({
       id: `nav-${item.path}`,
       group: 'Navigate',
@@ -66,12 +86,12 @@ const CommandPalette = ({ open, onClose }: CommandPaletteProps) => {
       id: `ticker-${tk}`,
       group: 'Ticker',
       label: `Set ticker → ${tk}`,
-      hint: tk === activeTicker ? 'active' : 'switch simulation feed',
+      hint: tk === activeTicker ? 'active' : 'load symbol',
       icon: <ArrowRightLeft className="w-3.5 h-3.5" />,
       run: () => changeTicker(tk),
     }));
-    return [...nav, ...gexSubs, ...flowSubs, ...communitySubs, ...tickers];
-  }, [navigate, changeTicker, activeTicker]);
+    return [...commands, ...nav, ...gexSubs, ...flowSubs, ...communitySubs, ...tickers];
+  }, [navigate, changeTicker, activeTicker, onOpenSettings, onOpenShortcuts]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

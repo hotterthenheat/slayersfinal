@@ -23,7 +23,7 @@ const RiskNeutralDist = ({ data }: RiskNeutralDistProps) => {
     { price: sigma1[0], label: '-1σ', cls: 'rgba(143,143,143,0.7)', dash: '3 2' },
     { price: forward, label: 'Fwd', cls: '#ededed' },
     { price: sigma1[1], label: '+1σ', cls: 'rgba(143,143,143,0.7)', dash: '3 2' },
-    { price: sigma2[1], label: '+2σ', cls: 'rgba(199,211,232,0.85)', dash: '2 2' },
+    { price: sigma2[1], label: '+2σ', cls: 'rgba(48,209,88,0.85)', dash: '2 2' },
   ];
 
   const statCells: { label: string; value: string; tone?: string }[] = [

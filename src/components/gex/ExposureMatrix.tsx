@@ -21,7 +21,7 @@ const NET_BAR = 'rgba(234,0,255,0.8)';
 
 const legBar = (leg: Leg): string => {
   if (leg === 'put') return 'rgba(255,59,48,0.7)';
-  if (leg === 'call') return 'rgba(199,211,232,0.85)';
+  if (leg === 'call') return 'rgba(48,209,88,0.85)';
   return NET_BAR;
 };
 
