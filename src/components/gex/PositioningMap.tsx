@@ -76,7 +76,7 @@ const StrikeHoverCard = ({ row, ticker, y }: { row: StrikeExposure; ticker: stri
 
   return (
     <div
-      className={`absolute z-20 w-60 pointer-events-none border border-borderSubtle bg-[#0c0c0c]/95 rounded-md shadow-lg p-3 animate-soft-in ${
+      className={`absolute z-20 w-60 pointer-events-none border border-borderSubtle bg-panelRaised/95 rounded-md shadow-lg p-3 animate-soft-in ${
         callHeavy ? 'right-24' : 'left-16'
       }`}
       style={{ top: Math.max(4, y - 110) }}
@@ -143,7 +143,7 @@ const StrikeHoverCard = ({ row, ticker, y }: { row: StrikeExposure; ticker: stri
                   <span className="text-textMuted">{w.label}</span>
                   <span className={up ? 'text-bull' : 'text-bear'}>
                     {up ? '+' : '−'}
-                    {fmtUsd(Math.abs(delta)).replace('$', '$')} {up ? '+' : '−'}
+                    {fmtUsd(Math.abs(delta))} · {up ? '+' : '−'}
                     {Math.abs(pct).toFixed(1)}%
                   </span>
                 </div>
@@ -218,7 +218,7 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
       <div className="flex items-center px-2 py-1 border-b border-borderSubtle/60 select-none">
         <span className="w-14 shrink-0" />
         <div className="flex-1 flex justify-between font-mono text-[8px] text-textMuted tnum">
-          <span>−{fmtUsd(max).replace('$', '$')}</span>
+          <span>−{fmtUsd(max)}</span>
           <span>0</span>
           <span>+{fmtUsd(max)}</span>
         </div>

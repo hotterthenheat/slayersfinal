@@ -53,7 +53,7 @@ const PressureMatrix = ({ ticker, spot, rows, maxAbs, onSelectStrike }: Pressure
     <div className="overflow-auto h-full min-h-0">
       <table className="w-full border-collapse">
         <thead className="sticky top-0 z-10">
-          <tr className="bg-[#0c0c0c]">
+          <tr className="bg-panelRaised">
             <th className="px-2 py-1.5 text-left font-mono text-[10px] font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle">
               Strike
             </th>
@@ -67,7 +67,7 @@ const PressureMatrix = ({ ticker, spot, rows, maxAbs, onSelectStrike }: Pressure
               Net
             </th>
           </tr>
-          <tr className="bg-[#0c0c0c]">
+          <tr className="bg-panelRaised">
             <th className="border-b border-borderSubtle" />
             {(['Pressure', 'ΔOI', 'Vol', 'Pressure', 'ΔOI', 'Vol'] as const).map((label, i) => (
               <th

@@ -430,7 +430,7 @@ const FloatChip = ({
   <motion.span
     animate={{ y: [0, -6, 0] }}
     transition={{ duration: 4.2, repeat: Infinity, ease: 'easeInOut', delay }}
-    className={`absolute z-20 inline-flex items-center gap-2 rounded-full border border-borderMuted bg-[#0c0c0c]/90 px-3 py-1.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-textPrimary shadow-lg shadow-black/50 pointer-events-none ${className}`}
+    className={`absolute z-20 inline-flex items-center gap-2 rounded-full border border-borderMuted bg-panelRaised/90 px-3 py-1.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-textPrimary shadow-lg shadow-black/50 pointer-events-none ${className}`}
   >
     <span className="w-1.5 h-1.5 rounded-full" style={{ background: dot }} />
     {label}

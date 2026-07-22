@@ -126,7 +126,7 @@ const WallDrift = ({ drift }: WallDriftProps) => {
                   />
                 ))}
                 <div
-                  className="absolute top-1 z-10 pointer-events-none border border-borderSubtle bg-[#0c0c0c]/95 rounded-md px-2.5 py-2 shadow-lg min-w-[132px]"
+                  className="absolute top-1 z-10 pointer-events-none border border-borderSubtle bg-panelRaised/95 rounded-md px-2.5 py-2 shadow-lg min-w-[132px]"
                   style={flipSide ? { right: `${100 - xPct + 1.5}%` } : { left: `${xPct + 1.5}%` }}
                 >
                   <div className="font-mono text-[9px] uppercase tracking-widest text-textMuted tnum mb-1.5">

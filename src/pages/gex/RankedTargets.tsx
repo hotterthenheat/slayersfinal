@@ -254,7 +254,7 @@ const RankedTargets = () => {
                   {COLUMNS.map(col => {
                     const activeSort = sort.key === col.key;
                     return (
-                      <th key={col.key} className={`${col.cls} px-3 py-2 select-none sticky top-0 z-10 bg-[#0c0c0c]`}>
+                      <th key={col.key} className={`${col.cls} px-3 py-2 select-none sticky top-0 z-10 bg-panelRaised`}>
                         <button
                           onClick={() => toggleSort(col.key)}
                           className={`w-full inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-widest transition-colors ${

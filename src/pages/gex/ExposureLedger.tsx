@@ -130,7 +130,7 @@ const ExposureLedger = ({
     >
       <div className="overflow-auto h-full min-h-0">
         {/* Sticky legend — stays pinned while the rows scroll */}
-        <div className="sticky top-0 z-20 flex items-center gap-3 h-9 px-2.5 bg-[#0c0c0c] border-b border-borderSubtle overflow-hidden whitespace-nowrap">
+        <div className="sticky top-0 z-20 flex items-center gap-3 h-9 px-2.5 bg-panelRaised border-b border-borderSubtle overflow-hidden whitespace-nowrap">
           <span className="flex items-center gap-1.5 font-mono text-[11px] font-semibold uppercase tracking-wider text-textPrimary">
             <span className="inline-block w-3 h-[3px] rounded-full" style={{ background: LEG_BAR[leg] }} />
             {LEG_NAME[leg]}
@@ -148,7 +148,7 @@ const ExposureLedger = ({
 
         <table className="w-full border-collapse">
           <thead className="sticky top-9 z-10">
-            <tr className="bg-[#0c0c0c]">
+            <tr className="bg-panelRaised">
               <th className="px-2.5 py-1.5 text-left font-mono text-[11px] font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle">
                 Strike
               </th>

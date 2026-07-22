@@ -1,4 +1,7 @@
 import type { ExposureProfileData } from '../../types/gex';
+import { fmtUsd } from '../../data/gex';
+
+const strikeFmt = (v: number) => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
 
 /**
  * Dealer gamma by price — a compact vertical profile of net GEX per strike,
@@ -18,10 +21,17 @@ const DealerGammaRail = ({ data }: { data: ExposureProfileData }) => {
 
   return (
     <div className="h-full flex flex-col min-h-0">
-      {/* zero-line legend */}
-      <div className="flex items-center justify-between px-2 pb-1.5 shrink-0 font-mono text-[9px] uppercase tracking-wider text-textMuted">
-        <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-bear/70" /> short γ</span>
-        <span className="inline-flex items-center gap-1">long γ <span className="w-2 h-2 rounded-sm bg-bull/70" /></span>
+      {/* zero-line legend + magnitude scale */}
+      <div className="px-2 pb-1.5 shrink-0">
+        <div className="flex items-center justify-between font-mono text-[9px] uppercase tracking-wider text-textMuted">
+          <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-bear/70" /> short γ</span>
+          <span className="inline-flex items-center gap-1">long γ <span className="w-2 h-2 rounded-sm bg-bull/70" /></span>
+        </div>
+        <div className="flex items-center justify-between font-mono text-[8px] tnum mt-0.5">
+          <span className="text-bear">−{fmtUsd(max)}</span>
+          <span className="text-textMuted">0</span>
+          <span className="text-bull">+{fmtUsd(max)}</span>
+        </div>
       </div>
       <div className="flex-1 min-h-0 flex flex-col">
         {data.strikes.map(s => {
@@ -40,7 +50,7 @@ const DealerGammaRail = ({ data }: { data: ExposureProfileData }) => {
               className={`relative flex items-center gap-1.5 flex-1 min-h-0 ${isSpot ? 'bg-white/[0.04]' : ''}`}
             >
               <span className={`w-11 shrink-0 text-right font-mono text-[9px] tnum ${isSpot ? 'text-textPrimary font-semibold' : 'text-textMuted'}`}>
-                {s.strike}
+                {strikeFmt(s.strike)}
               </span>
               <div className="relative flex-1 h-full">
                 {/* centre zero line */}
@@ -51,10 +61,10 @@ const DealerGammaRail = ({ data }: { data: ExposureProfileData }) => {
                   style={pos ? { left: '50%', width: `${pct}%` } : { right: '50%', width: `${pct}%` }}
                 />
                 {/* level marker line */}
-                {(isSpot || isFlip || isCall || isPut) && (
+                {(isSpot || isFlip || isCall || isPut || isPin) && (
                   <span
                     className={`absolute inset-x-0 top-1/2 -translate-y-1/2 h-px ${
-                      isSpot ? 'bg-textPrimary/50' : isFlip ? 'bg-flip/60' : isCall ? 'bg-bull/50' : 'bg-bear/50'
+                      isSpot ? 'bg-textPrimary/50' : isFlip ? 'bg-flip/60' : isCall ? 'bg-bull/50' : isPut ? 'bg-bear/50' : 'bg-king/50'
                     }`}
                   />
                 )}
@@ -62,7 +72,7 @@ const DealerGammaRail = ({ data }: { data: ExposureProfileData }) => {
               {tag && (
                 <span
                   className={`w-9 shrink-0 font-mono text-[8px] font-semibold uppercase tracking-wider ${
-                    isCall ? 'text-bull' : isPut ? 'text-bear' : isFlip ? 'text-flip' : 'text-textMuted'
+                    isCall ? 'text-bull' : isPut ? 'text-bear' : isFlip ? 'text-flip' : isPin ? 'text-king' : 'text-textMuted'
                   }`}
                 >
                   {tag}

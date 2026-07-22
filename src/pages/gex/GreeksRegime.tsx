@@ -31,10 +31,12 @@ const regimeTone: Record<DealerRegime, Tone> = {
 const GreekCell = ({ value, max }: { value: number; max: number }) => {
   const intensity = Math.min(1, Math.abs(value) / (max || 1));
   const pos = value >= 0;
-  const bg = pos ? `rgba(48,209,88,${0.06 + intensity * 0.34})` : `rgba(255,59,48,${0.06 + intensity * 0.34})`;
+  // Direction is carried by the tinted background; keep the number white for both
+  // signs so high-magnitude cells stay legible (red-on-red used to wash out).
+  const bg = pos ? `rgba(48,209,88,${0.06 + intensity * 0.34})` : `rgba(255,59,48,${0.06 + intensity * 0.3})`;
   return (
     <td className="px-2 py-1.5 text-right" style={{ background: bg }}>
-      <span className={`font-mono text-[11px] tnum ${pos ? 'text-textPrimary' : 'text-bear'}`}>{fmtC(value)}</span>
+      <span className="font-mono text-[11px] tnum text-textPrimary">{fmtC(value)}</span>
     </td>
   );
 };
@@ -76,9 +78,9 @@ const VannaChart = ({ points }: { points: { volShockPct: number; hedgeUsd: numbe
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none">
       <line x1={W / 2} x2={W / 2} y1={0} y2={H} stroke="#fff" strokeOpacity={0.12} strokeDasharray="3 3" />
       <line x1={0} x2={W} y1={Y(0)} y2={Y(0)} stroke="#fff" strokeOpacity={0.12} />
-      <path d={points.map((p, i) => `${i === 0 ? 'M' : 'L'}${X(i).toFixed(1)},${Y(p.hedgeUsd).toFixed(1)}`).join(' ')} fill="none" stroke="#7DD3FC" strokeWidth={1.75} />
-      <text x={6} y={H - 4} fontSize={8} fill="#a1a1aa" fontFamily="monospace">−3% IV</text>
-      <text x={W - 40} y={H - 4} fontSize={8} fill="#a1a1aa" fontFamily="monospace">+3% IV</text>
+      <path d={points.map((p, i) => `${i === 0 ? 'M' : 'L'}${X(i).toFixed(1)},${Y(p.hedgeUsd).toFixed(1)}`).join(' ')} fill="none" stroke="#ededed" strokeWidth={1.75} />
+      <text x={6} y={H - 4} fontSize={8} fill="#7d7d7d" fontFamily="monospace">−3% IV</text>
+      <text x={W - 40} y={H - 4} fontSize={8} fill="#7d7d7d" fontFamily="monospace">+3% IV</text>
     </svg>
   );
 };
@@ -149,9 +151,9 @@ const GreeksRegime = () => {
       <MetricGrid min="170px">
         <StatCard label="Dealer regime" value={view.topRegime.regime} sub={`${view.topRegime.prob}% probability`} tone={regimeTone[view.topRegime.regime]} />
         <StatCard label="Net gamma" value={fmtC(view.netByGreek.gamma)} sub={view.netByGreek.gamma >= 0 ? 'long — dampening' : 'short — amplifying'} tone={view.netByGreek.gamma >= 0 ? 'bull' : 'bear'} />
-        <StatCard label="Vanna / +1% IV" value={fmtC(view.vannaPerVol)} sub={view.vannaPerVol >= 0 ? 'vol pop → dealers buy' : 'vol pop → dealers sell'} tone="select" />
+        <StatCard label="Vanna / +1% IV" value={fmtC(view.vannaPerVol)} sub={view.vannaPerVol >= 0 ? 'vol pop → dealers buy' : 'vol pop → dealers sell'} tone={view.vannaPerVol >= 0 ? 'bull' : 'bear'} />
         <StatCard label="Charm to close" value={fmtC(view.charmToClose)} sub="delta dealers shed by 16:00" tone={view.charmToClose >= 0 ? 'bull' : 'bear'} />
-        <StatCard label="Dominant higher-order" value={dominant.g.label} sub={dominant.g.blurb} tone="magenta" />
+        <StatCard label="Dominant higher-order" value={dominant.g.label} sub={dominant.g.blurb} tone="neutral" />
       </MetricGrid>
 
       {/* Greek exposure matrix — core three by default, advanced on demand */}
@@ -193,7 +195,7 @@ const GreeksRegime = () => {
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
-              <tr className="bg-[#0c0c0c] border-b border-borderSubtle">
+              <tr className="bg-panelRaised border-b border-borderSubtle">
                 <th className="sticky left-0 z-10 bg-inset px-3 py-2 text-left font-mono text-[11px] font-semibold uppercase tracking-wider text-textMuted">Strike</th>
                 <th className="px-2 py-2 text-right font-mono text-[11px] font-semibold uppercase tracking-wider text-textMuted">Dist</th>
                 {visibleGreeks.map(g => (
