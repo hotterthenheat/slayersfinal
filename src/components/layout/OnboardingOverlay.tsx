@@ -63,7 +63,7 @@ const OnboardingOverlay = () => {
             role="dialog"
             aria-modal="true"
             aria-label="Welcome to Slayer Terminal"
-            className="relative w-full max-w-lg rounded-xl border border-borderMuted bg-panelRaised shadow-2xl shadow-black overflow-hidden"
+            className="relative w-full max-w-lg rounded-xl border border-borderMuted bg-panelRaised shadow-overlay overflow-hidden"
             initial={{ opacity: 0, y: 14, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.98 }}

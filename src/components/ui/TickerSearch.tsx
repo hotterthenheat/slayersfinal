@@ -77,7 +77,7 @@ const TickerSearch = ({ value, onChange }: TickerSearchProps) => {
 
       {open && (
         <div
-          className="absolute right-0 top-full mt-1.5 z-40 w-72 border border-borderMuted bg-panel rounded-lg shadow-2xl shadow-black overflow-hidden animate-slide-in"
+          className="absolute right-0 top-full mt-1.5 z-40 w-72 border border-borderMuted bg-panel rounded-lg shadow-overlay overflow-hidden animate-slide-in"
           onKeyDown={onKeyDown}
         >
           <div className="flex items-center gap-2 px-3 border-b border-borderSubtle">

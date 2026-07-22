@@ -479,7 +479,7 @@ const PulseWorkspace = () => {
             <ChevronDown className="w-3 h-3 text-textMuted" />
           </button>
           {wsMenuOpen && (
-            <div className="absolute left-0 top-full mt-1 z-40 w-64 border border-borderMuted bg-panel rounded-md shadow-2xl shadow-black/60 overflow-hidden animate-slide-in">
+            <div className="absolute left-0 top-full mt-1 z-40 w-64 border border-borderMuted bg-panel rounded-md shadow-overlay overflow-hidden animate-slide-in">
               <div className="px-3 pt-2 pb-1 font-mono text-[10px] uppercase tracking-widest text-textMuted">Views</div>
               <div className="max-h-56 overflow-auto">
                 {ws.layouts.map(l => (
@@ -524,7 +524,7 @@ const PulseWorkspace = () => {
                 <Plus className="w-3.5 h-3.5" /> Add panel
               </button>
               {addOpen && (
-            <div className="absolute left-0 top-full mt-1 z-40 w-72 border border-borderMuted bg-panel rounded-md shadow-2xl shadow-black/60 animate-slide-in flex flex-col max-h-[420px]">
+            <div className="absolute left-0 top-full mt-1 z-40 w-72 border border-borderMuted bg-panel rounded-md shadow-overlay animate-slide-in flex flex-col max-h-[420px]">
               {/* Search */}
               <div className="p-2 border-b border-borderSubtle shrink-0">
                 <div className="relative">

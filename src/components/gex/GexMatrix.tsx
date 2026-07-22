@@ -127,7 +127,7 @@ const GexMatrix = ({ data }: GexMatrixProps) => {
       {/* Hover read-out — strike × expiry detail on the cell under the cursor */}
       {hover && hovered && (
         <div
-          className="pointer-events-none fixed z-50 rounded-md border border-borderMuted bg-panelRaised px-3 py-2 shadow-2xl shadow-black"
+          className="pointer-events-none fixed z-50 rounded-md border border-borderMuted bg-panelRaised px-3 py-2 shadow-overlay"
           style={{ left: Math.min(hover.x + 14, window.innerWidth - 200), top: hover.y + 14 }}
         >
           <div className="flex items-baseline gap-2">

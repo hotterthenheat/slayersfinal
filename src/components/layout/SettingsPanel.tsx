@@ -66,7 +66,7 @@ const SettingsPanel = ({ open, onClose }: SettingsPanelProps) => {
             role="dialog"
             aria-modal="true"
             aria-label="Settings"
-            className="fixed inset-y-0 right-0 z-[70] w-full max-w-[440px] bg-panel border-l border-borderMuted shadow-2xl shadow-black/60 overflow-y-auto"
+            className="fixed inset-y-0 right-0 z-[70] w-full max-w-[440px] bg-panel border-l border-borderMuted shadow-overlay overflow-y-auto"
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}

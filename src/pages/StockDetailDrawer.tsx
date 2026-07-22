@@ -113,7 +113,7 @@ const StockDetailDrawer = ({
           <motion.aside
             role="dialog"
             aria-label={`${pick.ticker} detail`}
-            className="fixed inset-y-0 right-0 z-[60] w-full max-w-[440px] bg-panel border-l border-borderMuted shadow-2xl shadow-black/60 overflow-y-auto"
+            className="fixed inset-y-0 right-0 z-[60] w-full max-w-[440px] bg-panel border-l border-borderMuted shadow-overlay overflow-y-auto"
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}

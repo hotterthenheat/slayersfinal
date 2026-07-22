@@ -276,7 +276,7 @@ const FilterMenu = ({
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full mt-1.5 z-40 w-[340px] border border-borderMuted bg-panel rounded-lg shadow-2xl shadow-black overflow-hidden animate-slide-in">
+        <div className="absolute left-0 top-full mt-1.5 z-40 w-[340px] border border-borderMuted bg-panel rounded-lg shadow-overlay overflow-hidden animate-slide-in">
           <div className="flex items-center justify-between px-3 py-2 border-b border-borderSubtle">
             <span className="font-mono text-[11px] uppercase tracking-widest text-textSecondary">Scan filters</span>
             <button
@@ -351,7 +351,7 @@ const TemplatesMenu = ({
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full mt-1.5 z-40 w-64 border border-borderMuted bg-panel rounded-lg shadow-2xl shadow-black overflow-hidden animate-slide-in">
+        <div className="absolute left-0 top-full mt-1.5 z-40 w-64 border border-borderMuted bg-panel rounded-lg shadow-overlay overflow-hidden animate-slide-in">
           <div className="max-h-72 overflow-y-auto py-1">
             <div className="px-3 pt-2 pb-1 font-mono text-[11px] uppercase tracking-widest text-textMuted">Presets</div>
             {PRESETS.map(p => {
@@ -443,7 +443,7 @@ const ColumnChooser = ({
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1.5 z-40 w-56 border border-borderMuted bg-panel rounded-lg shadow-2xl shadow-black overflow-hidden animate-slide-in">
+        <div className="absolute right-0 top-full mt-1.5 z-40 w-56 border border-borderMuted bg-panel rounded-lg shadow-overlay overflow-hidden animate-slide-in">
           <div className="flex items-center justify-between px-3 py-2 border-b border-borderSubtle">
             <span className="font-mono text-[11px] uppercase tracking-widest text-textSecondary">Columns</span>
             <button

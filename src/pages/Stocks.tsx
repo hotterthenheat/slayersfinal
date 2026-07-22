@@ -112,7 +112,7 @@ const ScopeSelect = ({
       {open && (
         <div
           role="listbox"
-          className="absolute left-0 top-full mt-1.5 z-40 w-60 max-h-72 overflow-y-auto border border-borderMuted bg-panel rounded-lg shadow-2xl shadow-black py-1 animate-slide-in"
+          className="absolute left-0 top-full mt-1.5 z-40 w-60 max-h-72 overflow-y-auto border border-borderMuted bg-panel rounded-lg shadow-overlay py-1 animate-slide-in"
         >
           {options.map(opt => {
             const active = opt.value === value;
@@ -540,7 +540,7 @@ const Stocks = () => {
               {factorsOpen && (
                 <>
                   <div className="fixed inset-0 z-30" onClick={() => setFactorsOpen(false)} />
-                  <div className="absolute right-0 top-full mt-1.5 z-40 w-72 border border-borderMuted bg-panel rounded-lg shadow-2xl shadow-black p-3 animate-slide-in">
+                  <div className="absolute right-0 top-full mt-1.5 z-40 w-72 border border-borderMuted bg-panel rounded-lg shadow-overlay p-3 animate-slide-in">
                     <div className="font-mono text-[11px] uppercase tracking-widest text-textSecondary mb-2">
                       What the sleeves mean
                     </div>

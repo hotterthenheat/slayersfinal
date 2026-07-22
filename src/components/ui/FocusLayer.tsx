@@ -36,7 +36,7 @@ const FocusLayer = () => {
             onClick={close}
           />
           <motion.div
-            className="relative w-full max-w-[1600px] h-[88vh] inst-emphasis holo-glow rounded-lg overflow-hidden flex flex-col shadow-2xl shadow-black"
+            className="relative w-full max-w-[1600px] h-[88vh] inst-emphasis holo-glow rounded-lg overflow-hidden flex flex-col shadow-overlay"
             initial={{ opacity: 0, scale: 0.98, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.98, y: 10 }}

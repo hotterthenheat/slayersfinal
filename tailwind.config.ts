@@ -16,6 +16,13 @@ export default {
       transitionDuration: {
         DEFAULT: '120ms',
       },
+      // One elevation for every floating surface — menus, drawers, toasts,
+      // tooltips, modals. Replaces a scattered `shadow-2xl shadow-black` (a
+      // 50px, fully-opaque black shadow) with a tight, restrained lift: the
+      // hairline border owns the edge, the shadow just sets it off the canvas.
+      boxShadow: {
+        overlay: '0 12px 32px -12px rgba(0,0,0,0.75), 0 4px 10px -6px rgba(0,0,0,0.55)',
+      },
       colors: {
         // Surfaces
         canvas: '#050505',

@@ -179,7 +179,7 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
               onClick={() => setMobileOpen(false)}
             />
             <motion.div
-              className="lg:hidden absolute left-0 right-0 top-full z-40 border-b border-borderMuted bg-panel shadow-2xl shadow-black/60 max-h-[calc(100vh-3.5rem)] overflow-y-auto"
+              className="lg:hidden absolute left-0 right-0 top-full z-40 border-b border-borderMuted bg-panel shadow-overlay max-h-[calc(100vh-3.5rem)] overflow-y-auto"
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
@@ -217,7 +217,7 @@ const DropMenu = ({
     exit={{ opacity: 0, y: -6 }}
     transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
   >
-    <div className="mt-1 min-w-[248px] border border-borderMuted bg-panel rounded-md shadow-2xl shadow-black/60 overflow-hidden">
+    <div className="mt-1 min-w-[248px] border border-borderMuted bg-panel rounded-md shadow-overlay overflow-hidden">
       <div className="flex items-center justify-between gap-3 px-3 py-2 border-b border-borderSubtle">
         <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-textPrimary whitespace-nowrap">
           {title}

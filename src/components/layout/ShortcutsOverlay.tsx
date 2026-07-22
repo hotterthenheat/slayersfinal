@@ -42,7 +42,7 @@ const ShortcutsOverlay = ({ open, onClose }: ShortcutsOverlayProps) => {
             role="dialog"
             aria-modal="true"
             aria-label="Keyboard shortcuts"
-            className="relative w-full max-w-lg border border-borderMuted bg-panel rounded-lg shadow-2xl shadow-black overflow-hidden"
+            className="relative w-full max-w-lg border border-borderMuted bg-panel rounded-lg shadow-overlay overflow-hidden"
             initial={{ opacity: 0, scale: 0.97, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: 8 }}
