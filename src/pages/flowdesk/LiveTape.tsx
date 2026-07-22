@@ -5,6 +5,9 @@ import { enrichPrint, sentimentOf, summarizeTape } from '../../data/flowtape';
 import { buildGexView, fmtUsd } from '../../data/gex';
 import Panel from '../../components/ui/Panel';
 import SegmentedControl from '../../components/ui/SegmentedControl';
+import StatCard from '../../components/ui/StatCard';
+import MetricGrid from '../../components/ui/MetricGrid';
+import type { Tone } from '../../components/ui/tones';
 import { useToast } from '../../components/ui/Toast';
 import TapeRowDrawer from './TapeRowDrawer';
 import type { FlowPrint, PrintSentiment, TapeSummary } from '../../types/flowdesk';
@@ -87,27 +90,6 @@ const RatioBar = ({ left, right }: { left: number; right: number }) => {
     </span>
   );
 };
-
-const SessionCard = ({
-  label,
-  value,
-  sub,
-  tone = 'text-textPrimary',
-  children,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  tone?: string;
-  children?: React.ReactNode;
-}) => (
-  <div className="border border-borderSubtle bg-panel rounded-md px-3 py-2 min-w-0">
-    <div className="font-mono text-[11px] uppercase tracking-widest text-textSecondary truncate">{label}</div>
-    <div className={`mt-0.5 font-mono text-base font-bold tnum ${tone}`}>{value}</div>
-    {sub && <div className="font-mono text-[11px] text-textSecondary truncate">{sub}</div>}
-    {children}
-  </div>
-);
 
 // ---- cells ----------------------------------------------------------------------
 const SpreadCell = ({ print }: { print: FlowPrint }) => {
@@ -782,27 +764,27 @@ const LiveTape = () => {
   return (
     <>
       {/* Session strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2">
-        <SessionCard label="Session Premium" value={fmtUsd(summary.totalPremium)} sub={`${rows.length} prints on tape`} />
-        <SessionCard label="Call / Put Premium" value={`${summary.callCount} / ${summary.putCount}`} sub={`${fmtUsd(summary.callPremium)} vs ${fmtUsd(summary.putPremium)}`}>
+      <MetricGrid min="170px">
+        <StatCard label="Session Premium" value={fmtUsd(summary.totalPremium)} sub={`${rows.length} prints on tape`} />
+        <StatCard label="Call / Put Premium" value={`${summary.callCount} / ${summary.putCount}`} sub={`${fmtUsd(summary.callPremium)} vs ${fmtUsd(summary.putPremium)}`}>
           <RatioBar left={summary.callPremium} right={summary.putPremium} />
-        </SessionCard>
-        <SessionCard
+        </StatCard>
+        <StatCard
           label="Bullish vs Bearish"
           value={bearPct >= 50 ? `${bearPct}% BEAR` : `${100 - bearPct}% BULL`}
-          tone={bearPct >= 50 ? 'text-bear' : 'text-bull'}
+          tone={bearPct >= 50 ? 'bear' : 'bull'}
         >
           <RatioBar left={summary.bullPremium} right={summary.bearPremium} />
-        </SessionCard>
-        <SessionCard label="Sweeps" value={String(summary.sweeps)} sub="aggressive orders" tone="text-warn" />
-        <SessionCard label="Blocks" value={String(summary.blocks)} sub="negotiated size" />
-        <SessionCard
+        </StatCard>
+        <StatCard label="Sweeps" value={String(summary.sweeps)} sub="aggressive orders" tone="warn" />
+        <StatCard label="Blocks" value={String(summary.blocks)} sub="negotiated size" />
+        <StatCard
           label="Largest Print"
           value={summary.largest ? fmtUsd(summary.largest.premium) : '—'}
           sub={summary.largest ? `${summary.largest.ticker} ${summary.largest.strike}${summary.largest.right}` : 'awaiting tape'}
-          tone={summary.largest && summary.largest.premium >= 1_000_000 ? 'text-king' : 'text-textPrimary'}
+          tone={(summary.largest && summary.largest.premium >= 1_000_000 ? 'magenta' : 'neutral') as Tone}
         />
-      </div>
+      </MetricGrid>
 
       {/* Controls + filters */}
       <div className="flex items-center gap-3 flex-wrap">
@@ -873,15 +855,15 @@ const LiveTape = () => {
 
       {/* The terminal's read of the tape — fixed height so a changing sentence
           length never reflows the tape below it (no layout shift under live data). */}
-      <div className={`flex items-start gap-2.5 border-l-2 pl-3 min-h-[34px] ${summary.bullish ? 'border-bull/70' : 'border-bear/70'}`}>
-        <span className="font-mono text-[11px] font-semibold uppercase tracking-widest text-textMuted pt-1.5 shrink-0">
+      <div className={`flex items-center gap-2.5 border-l-2 pl-3 min-h-[34px] ${summary.bullish ? 'border-bull/70' : 'border-bear/70'}`}>
+        <span className="font-mono text-[11px] font-semibold uppercase tracking-widest text-textMuted shrink-0">
           Tape read
         </span>
         <p className="text-[11px] text-textSecondary leading-snug tnum self-center line-clamp-2">{read}</p>
       </div>
 
       {/* Tape + concentration */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-stretch">
         <Panel title="Options Tape" subtitle={paused ? 'rendering paused — tape still collecting' : 'streaming prints — newest first'} flush className="xl:col-span-9 min-w-0">
           {/* FIXED height (not max-h) — the tape never grows or shrinks as prints
               arrive; it always scrolls inside a stable 640px viewport. */}
@@ -987,7 +969,7 @@ const LiveTape = () => {
         </Panel>
 
         {/* Right rail: concentration summary on top, dark-pool feed below */}
-        <div className="xl:col-span-3 min-w-0 flex flex-col gap-4">
+        <div className="xl:col-span-3 min-w-0 flex flex-col gap-4 h-full min-h-0">
           <Panel title="Top Tickers" subtitle="session premium concentration" className="w-full">
             <div className="flex flex-col gap-2.5">
               {topTickers.length === 0 && (
@@ -1015,7 +997,7 @@ const LiveTape = () => {
           </Panel>
 
           <Panel title="Dark Pool" subtitle="off-exchange crosses · by notional" flush className="w-full flex-1 min-h-0">
-            <div className="overflow-y-auto max-h-[360px]">
+            <div className="overflow-y-auto h-full">
               {darkPrints.length === 0 ? (
                 <span className="block font-mono text-[11px] text-textMuted uppercase tracking-widest py-6 text-center">
                   Awaiting prints…
