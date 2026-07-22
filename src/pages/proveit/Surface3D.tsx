@@ -162,7 +162,7 @@ const Surface3D = ({ snapshot, height = 340 }: Surface3DProps) => {
           {/* legend */}
           <div className="flex items-center gap-3 pt-2 font-mono text-[11px] uppercase tracking-wider text-textMuted">
             <span className="inline-flex items-center gap-1.5">
-              <span className="w-2.5 h-[3px] holo-bar inline-block rounded-full" /> dealer support
+              <span className="w-2.5 h-[3px] bg-bull/90 inline-block rounded-full" /> dealer support
             </span>
             <span className="inline-flex items-center gap-1.5">
               <span className="w-2.5 h-[3px] bg-bear/80 inline-block rounded-full" /> negative gamma
