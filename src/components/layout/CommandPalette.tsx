@@ -52,8 +52,8 @@ const CommandPalette = ({ open, onClose, onOpenSettings, onOpenShortcuts }: Comm
       {
         id: 'action-experience',
         group: 'Action',
-        label: 'Immersive world',
-        hint: '3D experience',
+        label: 'Quant Lab',
+        hint: 'surfaces · simulation · regime',
         icon: <Orbit className="w-3.5 h-3.5" />,
         run: () => navigate('/experience'),
       },
