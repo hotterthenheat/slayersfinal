@@ -83,7 +83,7 @@ export interface GexView {
 
 // ---- Exposure Profile (GEX / DEX / VEX by strike + dealer positioning) ------
 
-export type ExposureExpiry = '0DTE' | '1D' | '2D' | '5D' | '7D' | 'OPEX' | 'ALL';
+export type ExposureExpiry = '0DTE' | '1D' | '2D' | '5D' | '7D' | 'ALL';
 
 /** Put / call legs and their net, signed dollars. */
 export interface GreekSplit {

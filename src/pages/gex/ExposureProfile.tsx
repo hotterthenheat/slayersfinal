@@ -27,7 +27,6 @@ const EXPIRY_OPTIONS = [
   { value: '2D', label: '2D' },
   { value: '5D', label: '5D' },
   { value: '7D', label: '7D' },
-  { value: 'OPEX', label: 'OPEX' },
   { value: 'ALL', label: 'All' },
 ] as const;
 
