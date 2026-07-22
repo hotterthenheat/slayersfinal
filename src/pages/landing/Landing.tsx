@@ -17,7 +17,6 @@ import { ComparePlans, Faq } from './PricingExtras';
 import HeroScene from './HeroScene';
 import LiveSections from './LiveSections';
 import TiltBox from './TiltBox';
-import CardCoverFlow from '../../components/showcase/CardCoverFlow';
 
 // Top tabs open the actual products (into the terminal); Pricing stays an
 // on-page anchor.
@@ -153,9 +152,9 @@ const SmartLink = ({ to, className, children }: { to: string; className: string;
   );
 };
 
-/** Floating glass nav. Clicking a tab glides the page to its section while a
-    holo pill springs to the tab — same selection grammar as the terminal. */
-const GlassNav = () => {
+/** Flush hairline nav — the terminal's own chrome, not a floating glass bar.
+    Clicking a tab glides to its section while a holo pill springs across. */
+const LandingNav = () => {
   const [active, setActive] = useState<string | null>(null);
   const { launch } = useLaunch();
 
@@ -171,8 +170,8 @@ const GlassNav = () => {
   };
 
   return (
-    <header className="fixed top-0 inset-x-0 z-40 flex justify-center px-4 pt-4">
-      <div className="w-full max-w-5xl flex items-center gap-6 rounded-xl border border-white/10 bg-white/[0.045] backdrop-blur-xl px-5 py-2.5 shadow-lg shadow-black/40">
+    <header className="fixed top-0 inset-x-0 z-40 border-b border-borderSubtle bg-canvas/80 backdrop-blur">
+      <div className="mx-auto max-w-6xl flex items-center gap-6 px-4 lg:px-6 py-3">
         <button
           onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           className="font-mono text-[13px] font-bold tracking-tight whitespace-nowrap select-none"
@@ -181,7 +180,7 @@ const GlassNav = () => {
           <span className="holo-text">slayer_terminal</span>
           <span className="inline-block w-[6px] h-[12px] ml-1 bg-textPrimary align-middle animate-cursor-blink" />
         </button>
-        <nav className="hidden md:flex items-center gap-1.5 ml-auto">
+        <nav className="hidden md:flex items-center gap-1 ml-auto">
           {NAV_LINKS.map(l => {
             const isActive = active === l.to;
             return (
@@ -189,22 +188,21 @@ const GlassNav = () => {
                 key={l.label}
                 href={l.to}
                 onClick={handle(l.to)}
-                whileHover={{ scale: 1.08, y: -1 }}
-                whileTap={{ scale: 0.88 }}
-                transition={{ type: 'spring', stiffness: 500, damping: 14 }}
-                className="relative px-3 py-1.5 rounded-full font-mono text-[11px] uppercase tracking-wider"
+                whileHover={{ y: -1 }}
+                whileTap={{ scale: 0.98 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                className="relative px-3 py-1.5 rounded-md font-mono text-[11px] uppercase tracking-wider"
               >
                 {isActive && (
                   <motion.span
-                    layoutId="glass-nav-pill"
-                    className="absolute inset-0 rounded-full"
-                    style={{ background: 'rgba(237,237,237,0.95)' }}
-                    transition={{ type: 'spring', stiffness: 320, damping: 17 }}
+                    layoutId="landing-nav-pill"
+                    className="absolute inset-0 rounded-md holo-bg"
+                    transition={{ type: 'spring', stiffness: 320, damping: 30 }}
                   />
                 )}
                 <span
                   className={`relative z-10 transition-colors ${
-                    isActive ? 'text-[#0a0a0a] font-bold' : 'text-textSecondary hover:text-textPrimary'
+                    isActive ? 'text-[#0a0a0a] font-semibold' : 'text-textSecondary hover:text-textPrimary'
                   }`}
                 >
                   {l.label}
@@ -215,7 +213,7 @@ const GlassNav = () => {
         </nav>
         <SmartLink
           to="/pulse"
-          className="ml-auto md:ml-0 shrink-0 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-md font-mono text-[11px] font-semibold uppercase tracking-wider text-[#0a0a0a] holo-bg holo-glow transition-transform hover:scale-[1.03]"
+          className="ml-auto md:ml-0 shrink-0 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-md font-mono text-[11px] font-semibold uppercase tracking-wider text-[#0a0a0a] holo-bg transition-transform active:scale-[0.98]"
         >
           Launch terminal <ArrowRight className="w-3.5 h-3.5" />
         </SmartLink>
@@ -226,7 +224,7 @@ const GlassNav = () => {
 
 const Landing = () => (
   <div className="min-h-screen bg-canvas text-textPrimary overflow-x-hidden">
-    <GlassNav />
+    <LandingNav />
 
     {/* ── Hero: the statement. The product waits one scroll below. ── */}
     <section className="relative h-[94vh] min-h-[620px]">
@@ -295,18 +293,36 @@ const Landing = () => (
     {/* ── Showcase → marquee → pillars → live engines → story → workspace ── */}
     <LiveSections />
 
-    {/* ── The desks (cover-flow) ── */}
-    <section className="px-6 md:px-10 py-20 max-w-6xl mx-auto text-center">
+    {/* ── The desks ── */}
+    <section className="px-6 md:px-10 py-20 max-w-6xl mx-auto">
       <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.25em] text-textSecondary">
         The desks
       </span>
-      <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">One chain, four desks.</h2>
-      <p className="mt-4 text-[14px] text-textSecondary leading-relaxed max-w-xl mx-auto">
+      <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">One chain, five desks.</h2>
+      <p className="mt-4 text-[14px] text-textSecondary leading-relaxed max-w-xl">
         Watch on Pulse, choose on Compass, read the flow on Trace, map the dealers on Pinpoint — and let Prove It keep the
         receipts. Every desk feeds the next.
       </p>
-      <div className="mt-10 h-[300px] max-w-md mx-auto">
-        <CardCoverFlow />
+      <div className="mt-10 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        {[
+          { n: '01', name: 'Pulse', sub: 'Live workspace you arrange', to: '/pulse' },
+          { n: '02', name: 'Compass', sub: 'Scores the setup', to: '/compass' },
+          { n: '03', name: 'Trace', sub: 'Reads the live flow', to: '/trace' },
+          { n: '04', name: 'Pinpoint', sub: 'Maps dealer positioning', to: '/pinpoint' },
+          { n: '05', name: 'Prove It', sub: 'Keeps the receipts', to: '/prove-it' },
+        ].map(d => (
+          <SmartLink
+            key={d.name}
+            to={d.to}
+            className="group rounded-lg border border-borderSubtle bg-panel hover:border-select/40 transition-colors p-4 flex flex-col justify-between gap-8 min-h-[140px]"
+          >
+            <span className="font-mono text-[11px] tnum text-textMuted">{d.n}</span>
+            <span className="flex flex-col gap-1">
+              <span className="font-mono text-[13px] font-bold uppercase tracking-wider text-textPrimary">{d.name}</span>
+              <span className="text-[12px] text-textMuted leading-relaxed">{d.sub}</span>
+            </span>
+          </SmartLink>
+        ))}
       </div>
     </section>
 
@@ -369,7 +385,7 @@ const Landing = () => (
                   border-straddling chip would get cut in half. */}
               {tier.featured && (
                 <span className="self-start inline-flex px-2 py-0.5 rounded font-mono text-[10px] font-bold uppercase tracking-widest text-[#0a0a0a] holo-bg">
-                  Most popular
+                  The whole desk
                 </span>
               )}
               <div>

@@ -7,6 +7,15 @@ export default {
   ],
   theme: {
     extend: {
+      // One motion hand: every bare `transition-*` inherits the house
+      // easeOutExpo curve at DUR.fast (120ms), so CSS transitions read the same
+      // as the framer-motion ones instead of Tailwind's generic default.
+      transitionTimingFunction: {
+        DEFAULT: 'cubic-bezier(0.16, 1, 0.3, 1)',
+      },
+      transitionDuration: {
+        DEFAULT: '120ms',
+      },
       colors: {
         // Surfaces
         canvas: '#050505',

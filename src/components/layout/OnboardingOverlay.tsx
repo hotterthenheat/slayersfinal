@@ -93,28 +93,30 @@ const OnboardingOverlay = () => {
               ))}
             </div>
 
-            <div className="px-6 py-4 border-t border-borderSubtle flex items-center gap-3">
+            <div className="px-6 py-4 border-t border-borderSubtle flex flex-col sm:flex-row sm:items-center gap-3">
               <button
                 type="button"
                 onClick={dismiss}
-                className="inline-flex items-center gap-1.5 rounded-md bg-white/[0.08] hover:bg-white/[0.12] px-4 py-2 font-mono text-[12px] font-semibold uppercase tracking-wider text-textPrimary transition-colors"
+                className="inline-flex w-full sm:w-auto justify-center items-center gap-1.5 rounded-md bg-white/[0.08] hover:bg-white/[0.12] px-4 py-2 font-mono text-[12px] font-semibold uppercase tracking-wider text-textPrimary transition-colors active:scale-[0.98]"
               >
                 Start exploring <ArrowRight className="w-3.5 h-3.5" />
               </button>
-              <Link
-                to="/guide"
-                onClick={dismiss}
-                className="font-mono text-[11px] uppercase tracking-wider text-textMuted hover:text-textPrimary transition-colors"
-              >
-                See the full guide
-              </Link>
-              <button
-                type="button"
-                onClick={dismiss}
-                className="ml-auto font-mono text-[11px] uppercase tracking-wider text-textMuted hover:text-textPrimary transition-colors"
-              >
-                Skip
-              </button>
+              <div className="flex items-center gap-4">
+                <Link
+                  to="/guide"
+                  onClick={dismiss}
+                  className="font-mono text-[11px] uppercase tracking-wider text-textMuted hover:text-textPrimary transition-colors"
+                >
+                  See the full guide
+                </Link>
+                <button
+                  type="button"
+                  onClick={dismiss}
+                  className="ml-auto sm:ml-0 font-mono text-[11px] uppercase tracking-wider text-textMuted hover:text-textPrimary transition-colors"
+                >
+                  Skip
+                </button>
+              </div>
             </div>
           </motion.div>
         </motion.div>

@@ -39,7 +39,9 @@ const GexMatrix = ({ data }: GexMatrixProps) => {
       <div className="flex-grow overflow-auto min-w-0">
         {/* table-fixed: geometry is tick-independent, so the pulse only swaps glyphs
             (fmtUsd char-count changes each second) instead of reflowing columns */}
-        <table className="w-full table-fixed border-collapse">
+        {/* min-width keeps the dense grid legible on a phone: the overflow-auto
+            wrapper scrolls it horizontally instead of fusing the mono values */}
+        <table className="w-full min-w-[460px] table-fixed border-collapse">
           <thead className="sticky top-0 z-10">
             <tr className="bg-panelRaised">
               <th className="px-2 py-1.5 text-left font-mono text-[10px] font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle" style={{ width: '30%' }}>

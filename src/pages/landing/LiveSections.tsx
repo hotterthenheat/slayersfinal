@@ -172,14 +172,14 @@ const DemoTape = ({ snapshot }: { snapshot: MarketSnapshot }) => {
             >
               {p.ticker} {p.strike}{p.right}
             </span>
-            <span className="font-mono text-[11px] text-textPrimary tnum shrink-0">
+            <span className="hidden sm:inline font-mono text-[11px] text-textPrimary tnum shrink-0">
               {p.size} <span className="text-textMuted">@</span> {p.fill.toFixed(2)}
             </span>
             <span className="ml-auto font-mono text-[11px] font-semibold text-textPrimary tnum shrink-0">
               {fmtUsd(p.premium)}
             </span>
             {p.sweep && (
-              <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-warn shrink-0">Sweep</span>
+              <span className="hidden sm:inline font-mono text-[10px] font-bold uppercase tracking-wider text-warn shrink-0">Sweep</span>
             )}
             <span
               className={`inline-flex items-center rounded px-1.5 py-0.5 font-mono text-[10px] font-bold shrink-0 ${
@@ -325,7 +325,7 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
                 mode === m && m === 'EXIT' ? { background: 'rgba(255,59,48,0.85)' } : undefined
               }
             >
-              {m}
+              {m === 'ENTER' ? 'QUALIFIED' : 'FADED'}
             </button>
           ))}
         </div>
@@ -415,37 +415,35 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
 
 // ---- chart showcase (the "first product hit" right after the hero) ---------
 
-/** Floating callout chip pinned over the showcase frame. */
+/** A static annotation tag pinned over the showcase frame — a legend teaching
+    the level colors (walls / flip / king), not a floating marketing pill. */
 const FloatChip = ({
   label,
   dot,
   className,
-  delay = 0,
 }: {
   label: string;
   dot: string;
   className: string;
   delay?: number;
 }) => (
-  <motion.span
-    animate={{ y: [0, -6, 0] }}
-    transition={{ duration: 4.2, repeat: Infinity, ease: 'easeInOut', delay }}
-    className={`absolute z-20 inline-flex items-center gap-2 rounded-full border border-borderMuted bg-panelRaised/90 px-3 py-1.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-textPrimary shadow-lg shadow-black/50 pointer-events-none ${className}`}
+  <span
+    className={`absolute z-20 inline-flex items-center gap-2 rounded border border-borderMuted bg-panelRaised/95 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-wider text-textPrimary pointer-events-none ${className}`}
   >
     <span className="w-1.5 h-1.5 rounded-full" style={{ background: dot }} />
     {label}
-  </motion.span>
+  </span>
 );
 
 /** A big framed chart, done live — the terminal's own chart actually running, not a screenshot. */
 const ChartShowcase = ({ ctx }: { ctx: LandingCtx | null }) => (
   <section id="showcase" className="px-6 md:px-10 pt-24 pb-20 max-w-6xl mx-auto">
-    <div className="text-center">
+    <div>
       <SectionKicker>Charting</SectionKicker>
       <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">
         The chart that knows where dealers stand.
       </h2>
-      <p className="mt-4 text-[14px] text-textSecondary leading-relaxed max-w-xl mx-auto">
+      <p className="mt-4 text-[14px] text-textSecondary leading-relaxed max-w-xl">
         Walls, the gamma flip, the king strike — drawn straight on the candles and repriced as the
         session moves. This isn't a screenshot; it's the terminal's chart, running live.
       </p>

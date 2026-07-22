@@ -19,7 +19,7 @@ const Tab = ({ item, pillId }: { item: SubNavItem; pillId: string }) => (
   <NavLink
     to={item.path}
     className={({ isActive }) =>
-      `relative shrink-0 px-3 py-1.5 font-mono text-xs whitespace-nowrap transition-colors ${
+      `relative shrink-0 px-3 py-1.5 font-mono text-xs whitespace-nowrap transition-colors rounded-[5px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-select/60 active:scale-[0.98] ${
         isActive
           ? 'text-[#0a0a0a] font-semibold'
           : 'text-textSecondary font-medium hover:text-textPrimary hover:bg-white/[0.03] rounded-[5px]'

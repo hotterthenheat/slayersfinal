@@ -20,9 +20,9 @@ const SegmentedControl = <V extends string>({ options, value, onChange, ariaLabe
             key={opt.value}
             onClick={() => onChange(opt.value)}
             aria-pressed={active}
-            className={`shrink-0 whitespace-nowrap px-3 py-1.5 font-mono text-xs font-medium transition-colors ${i > 0 ? 'border-l border-borderSubtle' : ''} ${
+            className={`shrink-0 whitespace-nowrap px-3 py-1.5 font-mono text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 active:scale-[0.98] ${i > 0 ? 'border-l border-borderSubtle' : ''} ${
               active
-                ? 'bg-white/[0.08] text-textPrimary'
+                ? 'bg-white/[0.12] text-textPrimary'
                 : 'text-textSecondary hover:text-textPrimary hover:bg-white/[0.03]'
             }`}
           >

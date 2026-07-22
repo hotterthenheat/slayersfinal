@@ -41,7 +41,7 @@ const Disclaimer = () => (
         heading: 'No recommendation — do your own research',
         body: (
           <p>
-            Any label such as BUY, PLAY, FADE, or SKIP is an analytical reading of the inputs the tool measures, not a
+            Any label such as QUALIFIED, WATCH, or FADED is an analytical reading of the inputs the tool measures, not a
             solicitation or recommendation. Always conduct your own due diligence and consult a licensed financial
             professional before acting.
           </p>
