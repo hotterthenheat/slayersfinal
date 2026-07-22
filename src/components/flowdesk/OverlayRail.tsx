@@ -28,32 +28,32 @@ interface OverlayRailProps {
   dense?: boolean;
 }
 
-const Switch = ({ on }: { on: boolean }) => (
-  <span className={`relative inline-block w-6 h-3 rounded-full transition-colors ${on ? 'bg-select/40' : 'bg-white/10'}`}>
-    <span
-      className={`absolute top-0.5 h-2 w-2 rounded-full transition-all ${on ? 'left-3 bg-select' : 'left-0.5 bg-textMuted'}`}
-    />
-  </span>
-);
-
 const OverlayRail = ({ overlays, onToggle, chartType, onChartType, dense }: OverlayRailProps) => (
-  <div className={`flex items-center gap-x-1 gap-y-1.5 flex-wrap ${dense ? 'px-2 py-1.5' : 'px-3 py-2'}`}>
-    {OVERLAY_DEFS.map(def => {
-      const on = overlays[def.key];
-      return (
-        <button
-          key={def.key}
-          onClick={() => onToggle(def.key)}
-          aria-pressed={on}
-          className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md font-mono text-[10px] uppercase tracking-wider transition-colors ${
-            on ? 'text-textPrimary bg-white/[0.03]' : 'text-textMuted hover:text-textSecondary'
-          }`}
-        >
-          <Switch on={on} />
-          {def.label}
-        </button>
-      );
-    })}
+  <div className={`flex items-center gap-3 flex-wrap ${dense ? 'px-2 py-1.5' : 'px-3 py-2'}`}>
+    {/* Overlays are independent toggles, but rendered as one segmented group so
+        the control matches the house SegmentedControl used everywhere else
+        (active = filled) instead of an off-pattern row of sliding switches. */}
+    <div
+      role="group"
+      aria-label="Chart overlays"
+      className="inline-flex items-center inst-surface rounded-md overflow-hidden max-w-full overflow-x-auto no-scrollbar"
+    >
+      {OVERLAY_DEFS.map((def, i) => {
+        const on = overlays[def.key];
+        return (
+          <button
+            key={def.key}
+            onClick={() => onToggle(def.key)}
+            aria-pressed={on}
+            className={`shrink-0 whitespace-nowrap px-3 py-1.5 font-mono text-xs font-medium transition-colors ${
+              i > 0 ? 'border-l border-borderSubtle' : ''
+            } ${on ? 'bg-white/[0.08] text-textPrimary' : 'text-textSecondary hover:text-textPrimary hover:bg-white/[0.03]'}`}
+          >
+            {def.label}
+          </button>
+        );
+      })}
+    </div>
     <div className="ml-auto">
       <SegmentedControl options={CHART_OPTIONS} value={chartType} onChange={onChartType} ariaLabel="Price rendering" />
     </div>
