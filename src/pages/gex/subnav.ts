@@ -21,8 +21,8 @@ export const GEX_SUBPAGES: GexSubpage[] = [
   // ── Positioning ──
   {
     path: '/pinpoint/gamma',
-    label: 'Gamma Chart',
-    subtitle: 'Live candles with dealer walls, flip & king — net gamma by price and the pin-vs-trend regime',
+    label: 'Gamma Heatmap',
+    subtitle: 'Net dealer gamma across every strike × expiry — the walls, flip, king strike and the pin-vs-trend regime',
     icon: CandlestickChart,
     group: 'Positioning',
   },

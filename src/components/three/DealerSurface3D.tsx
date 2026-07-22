@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Html, Line } from '@react-three/drei';
+import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { rampColor } from '../experience/surfaceRamps';
 
@@ -45,9 +46,13 @@ function buildGeometry(grid: number[][]): THREE.BufferGeometry {
       positions[p + 1] = z * RISE;
       positions[p + 2] = zForRow(r, rows);
       rampColor(z, 'gamma', tmp);
-      colors[p] = tmp.r;
-      colors[p + 1] = tmp.g;
-      colors[p + 2] = tmp.b;
+      // Peaks self-illuminate — the taller the wall (|z|), the brighter it burns.
+      // Pushes ridge colors past 1.0 (HDR) so the bloom pass makes them glow
+      // while flat, near-zero cells stay matte and readable.
+      const glow = 1 + Math.abs(z) * Math.abs(z) * 1.35;
+      colors[p] = tmp.r * glow;
+      colors[p + 1] = tmp.g * glow;
+      colors[p + 2] = tmp.b * glow;
       p += 3;
     }
   }
@@ -92,7 +97,8 @@ const Surface = ({ grid, strikes, spotCol }: { grid: number[][]; strikes: number
   return (
     <group>
       <mesh geometry={geo}>
-        <meshStandardMaterial vertexColors metalness={0.16} roughness={0.5} side={THREE.DoubleSide} />
+        {/* toneMapped off so the HDR ridge colors survive to the bloom pass */}
+        <meshStandardMaterial vertexColors toneMapped={false} metalness={0.16} roughness={0.5} side={THREE.DoubleSide} />
       </mesh>
       <lineSegments geometry={wire}>
         <lineBasicMaterial color="#0a0e14" transparent opacity={0.18} />
@@ -161,6 +167,11 @@ const DealerSurface3D = ({ grid, strikes, spotCol, maxAbsUsd }: DealerSurface3DP
         minPolarAngle={Math.PI / 6}
         maxPolarAngle={Math.PI / 2.1}
       />
+      {/* Cinematic glow — only the brightest ridges (the walls) bloom; the DOM
+          axis/labels ride above the canvas untouched, so readability holds. */}
+      <EffectComposer>
+        <Bloom luminanceThreshold={1} luminanceSmoothing={0.7} intensity={0.7} mipmapBlur />
+      </EffectComposer>
     </Canvas>
 
     {/* NET GEX colourbar — the dollar scale the surface can't show on its own */}

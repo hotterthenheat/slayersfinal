@@ -166,6 +166,7 @@ const GreeksRegime = () => {
         }
         subtitle="net dealer $ by strike — green supports, red amplifies · hover a header for its meaning"
         flush
+        focusable
       >
         <div className="flex items-center gap-3 px-3 py-2 border-b border-borderSubtle flex-wrap">
           <SegmentedControl

@@ -27,7 +27,6 @@ const EXPIRY_OPTIONS = [
   { value: '2D', label: '2D' },
   { value: '5D', label: '5D' },
   { value: '7D', label: '7D' },
-  { value: 'OPEX', label: 'OPEX' },
   { value: 'ALL', label: 'All' },
 ] as const;
 
@@ -170,6 +169,7 @@ const ExposureProfile = () => {
           title="Exposure Matrix"
           subtitle="inventory & sensitivity by strike"
           flush
+          focusable
           className="xl:col-span-7 min-w-0"
           bodyClassName="flex flex-col max-h-[640px]"
         >
@@ -185,6 +185,7 @@ const ExposureProfile = () => {
           title="Dealer Positioning Map"
           subtitle="net dealer pressure by strike"
           flush
+          focusable
           className="xl:col-span-5 min-w-0"
           bodyClassName="flex flex-col max-h-[640px]"
         >

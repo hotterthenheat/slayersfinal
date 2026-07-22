@@ -4,7 +4,6 @@ import { useMarketData } from '../../context/MarketDataContext';
 import Simulator from '../../core/simulator';
 import { modelScoreboard, runMonteCarlo } from '../../core/quant';
 import PageHeader from '../../components/ui/PageHeader';
-import TickerSearch from '../../components/ui/TickerSearch';
 import Panel from '../../components/ui/Panel';
 import StatCard from '../../components/ui/StatCard';
 import MetricGrid from '../../components/ui/MetricGrid';
@@ -23,7 +22,7 @@ const WINDOW_OPTIONS = [
 ] as const;
 
 const ProveIt = () => {
-  const { activeTicker, marketData, changeTicker } = useMarketData();
+  const { activeTicker, marketData } = useMarketData();
   const [window_, setWindow] = useState<Window>('30');
   const [assumptionsOpen, setAssumptionsOpen] = useState(false);
 
@@ -81,7 +80,6 @@ const ProveIt = () => {
               value={window_}
               onChange={v => setWindow(v as Window)}
             />
-            <TickerSearch value={activeTicker} onChange={changeTicker} />
           </span>
         }
       />

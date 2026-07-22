@@ -8,7 +8,6 @@ import Simulator from '../core/simulator';
 import { buildSkyVision, makeSetup } from '../data/skyvision';
 import { SCANNERS, type ScannerKey, type Setup } from '../types/skyvision';
 import PageHeader from '../components/ui/PageHeader';
-import TickerSearch from '../components/ui/TickerSearch';
 import Panel from '../components/ui/Panel';
 import DataTable, { type Column } from '../components/ui/DataTable';
 import SetupsFeed from '../components/skyvision/SetupsFeed';
@@ -333,31 +332,17 @@ const Compass = () => {
       breadcrumb={['Terminal', 'Compass', modeMeta.crumb]}
       title={modeMeta.title}
       subtitle={modeMeta.subtitle}
-      actions={
-        mode === 'setups' ? (
-          modeSwitch
-        ) : (
-          <span className="inline-flex items-center gap-2">
-            {modeSwitch}
-            <TickerSearch value={activeTicker} onChange={changeTicker} />
-          </span>
-        )
-      }
+      actions={modeSwitch}
     />
   );
 
-  // Review mode header — ticker search in top-right
+  // Review mode header — mode switch top-right (ticker lives in the top bar)
   const reviewHeader = (
     <PageHeader
       breadcrumb={['Terminal', 'Compass', 'Setups']}
       title="Trade Setups"
       subtitle={SETUPS_SUBTITLE}
-      actions={
-        <span className="inline-flex items-center gap-2">
-          {modeSwitch}
-          <TickerSearch value={activeTicker} onChange={changeTicker} />
-        </span>
-      }
+      actions={modeSwitch}
     />
   );
 

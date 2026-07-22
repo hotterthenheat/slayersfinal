@@ -15,6 +15,8 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronDown, Search, Menu, X, Settings, type LucideIcon } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
+import AnimatedNumber from '../ui/AnimatedNumber';
+import TickerSearch from '../ui/TickerSearch';
 import { useLaunch } from './LaunchTransition';
 import { NAV_GROUPS, itemsByGroup, NAV_ITEMS, type NavGroup, type NavItem } from './nav';
 
@@ -38,7 +40,7 @@ const Wordmark = ({ onClick, size = 'sm' }: { onClick: (e: React.MouseEvent) => 
 );
 
 const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
-  const { activeTicker, marketData } = useMarketData();
+  const { activeTicker, marketData, changeTicker } = useMarketData();
   const { launch } = useLaunch();
   const location = useLocation();
   const [clock, setClock] = useState(() => new Date().toLocaleTimeString('en-US', { hour12: false }));
@@ -146,15 +148,19 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
         >
           <Settings className="w-3.5 h-3.5" />
         </button>
-        <div className="hidden sm:flex items-center gap-2 font-mono text-xs">
-          <span className="text-textSecondary font-semibold">{activeTicker}</span>
-          <span className="text-textPrimary font-semibold tnum">
-            {marketData ? `$${marketData.spot.toFixed(2)}` : '--'}
-          </span>
+        {/* Global ticker switcher — click the symbol from any page to change it.
+            Visible on mobile too (price/change collapse to save room). */}
+        <div className="flex items-center gap-2.5 font-mono text-xs">
+          <TickerSearch value={activeTicker} onChange={changeTicker} />
           {marketData && (
-            <span className={`tnum text-[11px] ${changeUp ? 'text-bull' : 'text-bear'}`}>
-              {changeUp ? '+' : ''}
-              {marketData.changePercent.toFixed(2)}%
+            <span className="hidden sm:flex items-baseline gap-1.5">
+              <span className="text-textPrimary font-semibold tnum">
+                <AnimatedNumber value={marketData.spot} format={v => `$${v.toFixed(2)}`} />
+              </span>
+              <span className={`tnum text-[11px] ${changeUp ? 'text-bull' : 'text-bear'}`}>
+                {changeUp ? '+' : ''}
+                {marketData.changePercent.toFixed(2)}%
+              </span>
             </span>
           )}
         </div>

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Layers3, TrendingUp, ChevronDown, Star, GitCompare, Info, X, SlidersHorizontal } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
-import StatRibbon from '../components/ui/StatRibbon';
 import Panel from '../components/ui/Panel';
 import StatCard from '../components/ui/StatCard';
 import MetricGrid from '../components/ui/MetricGrid';
@@ -259,17 +258,6 @@ const Stocks = () => {
   const avgScore = Math.round(picks.reduce((a, p) => a + p.composite, 0) / picks.length);
   const sectorsUp = sectors.filter(s => s.phase === 'LEADING' || s.phase === 'IMPROVING').length;
 
-  const headerRibbon = (
-    <StatRibbon
-      stats={[
-        { label: 'Universe', value: String(picks.length) },
-        { label: 'Avg score', value: String(avgScore), tone: avgScore >= 60 ? 'bull' : avgScore <= 48 ? 'bear' : 'neutral' },
-        { label: 'Sectors up', value: `${sectorsUp}/${sectors.length}`, tone: sectorsUp > sectors.length / 2 ? 'bull' : 'bear' },
-        { label: 'Watchlist', value: String(watchlist.size), tone: watchlist.size > 0 ? 'select' : 'neutral' },
-      ]}
-    />
-  );
-
   const columns: Column<StockPick>[] = [
     {
       key: 'watch',
@@ -388,7 +376,6 @@ const Stocks = () => {
         breadcrumb={['Terminal', 'Stocks']}
         title="Stocks"
         subtitle="Common-stock board — what screens as ownable, and which sectors deserve the exposure"
-        ribbon={headerRibbon}
         actions={<SegmentedControl ariaLabel="Verdict filter" options={VIEW_OPTIONS} value={view} onChange={setView} />}
       />
 

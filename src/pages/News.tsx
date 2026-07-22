@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Gauge, Newspaper, Sparkles, Star, BellOff, Eye, EyeOff, ChevronDown, ChevronRight, Clock, Link2 } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
-import StatRibbon from '../components/ui/StatRibbon';
 import TickerJump from '../components/ui/TickerJump';
 import Panel from '../components/ui/Panel';
 import StatCard from '../components/ui/StatCard';
@@ -178,20 +177,6 @@ const News = () => {
         breadcrumb={['Terminal', 'News']}
         title="News"
         subtitle="The wire on the left — what the model thinks it does to price on the right"
-        ribbon={
-          <StatRibbon
-            stats={[
-              { label: 'Bullish', value: String(bullN), tone: 'bull' },
-              { label: 'Bearish', value: String(bearN), tone: 'bear' },
-              { label: 'Macro', value: String(macroN), tone: 'neutral' },
-              {
-                label: 'Top mover',
-                value: movers[0] ? `${movers[0].ticker} ${signedPct(movers[0].prediction.expMove1dPct)}` : '--',
-                tone: movers[0] && movers[0].sentiment >= 0 ? 'bull' : 'bear',
-              },
-            ]}
-          />
-        }
         actions={<SegmentedControl ariaLabel="Category filter" options={CAT_OPTIONS} value={filter} onChange={setFilter} />}
       />
 

@@ -151,6 +151,76 @@ export const PULSE_PRESETS: PulseLayout[] = [
       L('f-pos', 0, 6, 12, 4, 4, 4),
     ],
   },
+  // ── Workflow desks — one tap reshapes the terminal around how you're trading
+  //    right now. Composed from real panels; switching them animates.
+  {
+    id: 'desk-scalper',
+    name: 'Scalper',
+    preset: true,
+    panels: [
+      { id: 'sc-chart', key: 'live-chart' },
+      { id: 'sc-flow', key: 'order-flow' },
+      { id: 'sc-levels', key: 'key-levels' },
+      { id: 'sc-liq', key: 'liquidity-map' },
+    ],
+    layout: [
+      L('sc-chart', 0, 0, 8, 7, 4, 4),
+      L('sc-flow', 8, 0, 4, 4, 3, 4),
+      L('sc-levels', 8, 4, 4, 3, 3, 3),
+      L('sc-liq', 0, 7, 12, 4, 4, 3),
+    ],
+  },
+  {
+    id: 'desk-swing',
+    name: 'Swing',
+    preset: true,
+    panels: [
+      { id: 'sw-chart', key: 'live-chart' },
+      { id: 'sw-setups', key: 'top-setups' },
+      { id: 'sw-pos', key: 'positioning-map' },
+      { id: 'sw-levels', key: 'key-levels' },
+    ],
+    layout: [
+      L('sw-chart', 0, 0, 8, 6, 4, 4),
+      L('sw-setups', 8, 0, 4, 6, 3, 4),
+      L('sw-pos', 0, 6, 7, 5, 4, 4),
+      L('sw-levels', 7, 6, 5, 5, 3, 3),
+    ],
+  },
+  {
+    id: 'desk-macro',
+    name: 'Macro',
+    preset: true,
+    panels: [
+      { id: 'mc-stocks', key: 'stocks-board' },
+      { id: 'mc-news', key: 'news-wire' },
+      { id: 'mc-chart', key: 'live-chart' },
+      { id: 'mc-heat', key: 'gex-heatmap' },
+    ],
+    layout: [
+      L('mc-stocks', 0, 0, 6, 6, 4, 4),
+      L('mc-news', 6, 0, 6, 6, 4, 4),
+      L('mc-chart', 0, 6, 8, 5, 4, 4),
+      L('mc-heat', 8, 6, 4, 5, 3, 4),
+    ],
+  },
+  {
+    id: 'desk-earnings',
+    name: 'Earnings',
+    preset: true,
+    panels: [
+      { id: 'ea-cal', key: 'earnings-calendar' },
+      { id: 'ea-vol', key: 'vol-state' },
+      { id: 'ea-setups', key: 'top-setups' },
+      { id: 'ea-chart', key: 'live-chart' },
+    ],
+    layout: [
+      L('ea-cal', 0, 0, 7, 6, 4, 4),
+      L('ea-vol', 7, 0, 5, 3, 3, 3),
+      L('ea-setups', 7, 3, 5, 3, 3, 3),
+      L('ea-chart', 0, 6, 12, 5, 4, 4),
+    ],
+  },
   {
     id: 'minimal-chart',
     name: 'Minimal Chart',

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import RGL, { WidthProvider, type Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
@@ -37,6 +38,7 @@ import type { MarketSnapshot } from '../../types/market';
 import type { WorkspaceCtx } from '../workspace/registry';
 import { PULSE_ADDABLE_PANELS, PULSE_DATA_CONNECTIONS, pulsePanelByKey } from './pulseRegistry';
 import PanelErrorBoundary from './PanelErrorBoundary';
+import { EASE } from '../../lib/motion';
 import {
   PULSE_PRESETS,
   PULSE_STORAGE_KEY,
@@ -69,6 +71,21 @@ function buildCtx(snapshot: MarketSnapshot, revision: number, focusPrice: number
   };
 }
 
+/** Client-only media-query subscription. */
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia(query).matches : true
+  );
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const on = () => setMatches(mq.matches);
+    on();
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, [query]);
+  return matches;
+}
+
 // ---- persistence ---------------------------------------------------------
 function freshState(): PulseWorkspaceState {
   return {
@@ -91,6 +108,11 @@ function loadState(): PulseWorkspaceState {
       const panels = l.panels.filter(p => pulsePanelByKey(p.key));
       return { ...l, panels, layout: l.layout.filter(g => panels.some(p => p.id === g.i)) };
     });
+    // Fold in any preset the saved state predates (by id), so returning users
+    // gain newly-shipped desk profiles without losing their custom layouts.
+    const have = new Set(parsed.layouts.map(l => l.id));
+    const missing = PULSE_PRESETS.filter(p => !have.has(p.id)).map(clonePreset);
+    if (missing.length) parsed.layouts = [...parsed.layouts, ...missing];
     if (!parsed.layouts.some(l => l.id === parsed.activeId)) parsed.activeId = parsed.layouts[0].id;
     return parsed;
   } catch {
@@ -164,6 +186,8 @@ const PulseWorkspace = () => {
   const counterRef = useRef(1);
 
   const active = ws.layouts.find(l => l.id === ws.activeId) ?? ws.layouts[0];
+  // Below lg the 12-col drag grid is unusable on a phone — stack instead.
+  const isDesktop = useMediaQuery('(min-width: 1024px)');
 
   // Consume a cross-page "view on chart" deep-link: switch ticker and/or mark
   // a price level on the chart. Documented contract:
@@ -605,30 +629,73 @@ const PulseWorkspace = () => {
           <span className="font-mono text-[11px] text-textMuted uppercase tracking-widest">Empty workspace</span>
           <span className="text-[11px] text-textSecondary">Use “Add panel” or pick a layout to build your desk</span>
         </div>
+      ) : !isDesktop ? (
+        // Mobile: the 12-col drag grid is unreadable on a phone. Stack the panels
+        // in their on-screen order (top→bottom, left→right) at readable heights;
+        // drag/resize stay a desktop affordance. Tap ⤢ to focus one full-screen.
+        <div className="flex flex-col gap-3">
+          {[...active.panels]
+            .sort((a, b) => {
+              const la = active.layout.find(g => g.i === a.id);
+              const lb = active.layout.find(g => g.i === b.id);
+              return (la?.y ?? 0) - (lb?.y ?? 0) || (la?.x ?? 0) - (lb?.x ?? 0);
+            })
+            .map(p => {
+              const ticker = p.ticker ?? activeTicker;
+              const li = active.layout.find(g => g.i === p.id);
+              const h = Math.max(340, (li?.h ?? 6) * 52);
+              return (
+                <div
+                  key={p.id}
+                  className="inst-surface rounded-md overflow-hidden flex flex-col"
+                  style={{ height: p.minimized ? undefined : h }}
+                >
+                  <PanelChrome panelId={p.id} panelKey={p.key} ticker={ticker} />
+                  {!p.minimized && (
+                    <div className="flex-grow min-h-0 overflow-hidden">{renderPanelBody(p.key, ticker)}</div>
+                  )}
+                </div>
+              );
+            })}
+        </div>
       ) : (
-        <Grid
-          layout={active.layout}
-          cols={12}
-          rowHeight={64}
-          margin={[12, 12]}
-          containerPadding={[0, 0]}
-          compactType="vertical"
-          draggableHandle=".widget-drag"
-          isDraggable={editLayout}
-          isResizable={editLayout}
-          onLayoutChange={onLayoutChange}
-        >
-          {active.panels.map(p => {
-            const ticker = p.ticker ?? activeTicker;
-            const minimized = p.minimized;
-            return (
-              <div key={p.id} className="inst-surface rounded-md overflow-hidden flex flex-col">
-                <PanelChrome panelId={p.id} panelKey={p.key} ticker={ticker} />
-                {!minimized && <div className="flex-grow min-h-0 overflow-hidden">{renderPanelBody(p.key, ticker)}</div>}
-              </div>
-            );
-          })}
-        </Grid>
+        // Keyed by the active layout so switching a desk profile crossfades +
+        // settles into the new arrangement — the terminal visibly rearranging
+        // itself. Only fires on profile switch (not data ticks or drags); first
+        // load skips it (initial={false}) so the page's own entrance leads.
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={active.id}
+            initial={{ opacity: 0, scale: 0.985 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.99 }}
+            transition={{ duration: 0.24, ease: EASE }}
+          >
+            <Grid
+              layout={active.layout}
+              cols={12}
+              rowHeight={64}
+              margin={[12, 12]}
+              containerPadding={[0, 0]}
+              compactType="vertical"
+              draggableHandle=".widget-drag"
+              isDraggable={editLayout}
+              isResizable={editLayout}
+              onLayoutChange={onLayoutChange}
+            >
+              {active.panels.map(p => {
+                const ticker = p.ticker ?? activeTicker;
+                const minimized = p.minimized;
+                return (
+                  <div key={p.id} className="inst-surface rounded-md overflow-hidden flex flex-col">
+                    <PanelChrome panelId={p.id} panelKey={p.key} ticker={ticker} />
+                    {!minimized && <div className="flex-grow min-h-0 overflow-hidden">{renderPanelBody(p.key, ticker)}</div>}
+                  </div>
+                );
+              })}
+            </Grid>
+          </motion.div>
+        </AnimatePresence>
       )}
     </div>
   );

@@ -41,8 +41,6 @@ const EXPIRY_DECAY: Record<ExposureExpiry, number> = {
   '2D': 0.38,
   '5D': 0.22,
   '7D': 0.16,
-  // Monthly expiration carries the heavy structural weight (institutional books)
-  OPEX: 0.85,
   ALL: 3.13,
 };
 
