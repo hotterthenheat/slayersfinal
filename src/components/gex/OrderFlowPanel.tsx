@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { fmtUsd } from '../../data/gex';
 import type { OrderFlowData } from '../../types/gex';
 import { BULL, BEAR } from './palette';
+import HoverReadout from '../ui/HoverReadout';
 
 interface OrderFlowPanelProps {
   data: OrderFlowData;
@@ -43,6 +45,7 @@ const CumulativeDelta = ({ data }: { data: OrderFlowData }) => {
 const DeltaByPriceBars = ({ data }: { data: OrderFlowData }) => {
   const rows = [...data.deltaByPrice].sort((a, b) => b.price - a.price);
   const max = rows.reduce((a, r) => Math.max(a, Math.abs(r.value)), 1);
+  const [hover, setHover] = useState<{ price: number; value: number; x: number; y: number } | null>(null);
   return (
     <div className="flex flex-col gap-[3px]">
       {rows.map(r => {
@@ -50,8 +53,14 @@ const DeltaByPriceBars = ({ data }: { data: OrderFlowData }) => {
         const neg = r.value < 0;
         const isPoc = r.price === data.poc;
         return (
-          <div key={r.price} className="flex items-center gap-1.5">
-            <span className={`w-12 shrink-0 text-right font-mono text-[9px] tnum ${isPoc ? 'text-textPrimary font-semibold' : 'text-textMuted'}`}>
+          <div
+            key={r.price}
+            onMouseEnter={e => setHover({ price: r.price, value: r.value, x: e.clientX, y: e.clientY })}
+            onMouseMove={e => setHover({ price: r.price, value: r.value, x: e.clientX, y: e.clientY })}
+            onMouseLeave={() => setHover(h => (h && h.price === r.price ? null : h))}
+            className="flex items-center gap-1.5 cursor-crosshair rounded-sm hover:bg-white/[0.03]"
+          >
+            <span className={`w-12 shrink-0 text-right font-mono text-[10px] tnum ${isPoc ? 'text-textPrimary font-semibold' : 'text-textMuted'}`}>
               {r.price.toFixed(2)}
             </span>
             <div className="relative flex-1 h-[6px]">
@@ -68,6 +77,23 @@ const DeltaByPriceBars = ({ data }: { data: OrderFlowData }) => {
           </div>
         );
       })}
+      {hover && (
+        <HoverReadout x={hover.x} y={hover.y}>
+          <div className="flex items-baseline gap-2">
+            <span className="font-mono text-[12px] font-bold text-textPrimary tnum">{hover.price.toFixed(2)}</span>
+            {hover.price === data.poc && (
+              <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-select">poc</span>
+            )}
+          </div>
+          <div className={`mt-0.5 font-mono text-[13px] font-bold tnum ${hover.value >= 0 ? 'text-bull' : 'text-bear'}`}>
+            {hover.value >= 0 ? '+' : '−'}
+            {fmtUsd(Math.abs(hover.value))}
+          </div>
+          <div className="mt-0.5 font-mono text-[10px] text-textSecondary">
+            {hover.value >= 0 ? 'net buying · delta' : 'net selling · delta'}
+          </div>
+        </HoverReadout>
+      )}
     </div>
   );
 };

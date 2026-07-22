@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import type { MarketSnapshot } from '../../types/market';
 import DealerSurface3D from '../../components/three/DealerSurface3D';
 import SegmentedControl from '../../components/ui/SegmentedControl';
+import HoverReadout from '../../components/ui/HoverReadout';
+import { fmtUsd } from '../../data/gex';
 
 /*
   Dealer-positioning surface: strikes across, expiries deep, net GEX tall.
@@ -79,6 +81,7 @@ interface Surface3DProps {
 
 const Surface3D = ({ snapshot, height = 340 }: Surface3DProps) => {
   const [view, setView] = useState<View>('2d');
+  const [hover, setHover] = useState<{ r: number; c: number; z: number; x: number; y: number } | null>(null);
   const { grid, strikes, spotCol, maxAbsUsd } = useMemo(() => buildSurface(snapshot), [snapshot]);
   const cols = strikes.length;
   const rows = grid.length;
@@ -127,9 +130,11 @@ const Surface3D = ({ snapshot, height = 340 }: Surface3DProps) => {
                     row.map((z, c) => (
                       <div
                         key={`${r}-${c}`}
-                        className="transition-[filter] hover:brightness-125"
+                        onMouseEnter={e => setHover({ r, c, z, x: e.clientX, y: e.clientY })}
+                        onMouseMove={e => setHover({ r, c, z, x: e.clientX, y: e.clientY })}
+                        onMouseLeave={() => setHover(h => (h && h.r === r && h.c === c ? null : h))}
+                        className="transition-[filter] hover:brightness-125 cursor-crosshair"
                         style={{ background: cellColor(z) }}
-                        title={`$${fmtStrike(strikes[c])} · ${z >= 0 ? 'dealer support' : 'negative gamma'}`}
                       />
                     ))
                   )}
@@ -167,8 +172,26 @@ const Surface3D = ({ snapshot, height = 340 }: Surface3DProps) => {
             <span className="inline-flex items-center gap-1.5">
               <span className="w-2.5 h-[3px] bg-bear/80 inline-block rounded-full" /> negative gamma
             </span>
-            <span className="ml-auto text-[9px] tracking-widest">hover a cell for its strike</span>
+            <span className="ml-auto text-[9px] tracking-widest">hover a cell for the read</span>
           </div>
+
+          {hover && (
+            <HoverReadout x={hover.x} y={hover.y}>
+              <div className="flex items-baseline gap-2">
+                <span className="font-mono text-[12px] font-bold text-textPrimary tnum">${fmtStrike(strikes[hover.c])}</span>
+                <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">
+                  {hover.r < rows / 3 ? 'near' : hover.r < (2 * rows) / 3 ? 'mid' : 'far'} exp
+                </span>
+              </div>
+              <div className={`mt-0.5 font-mono text-[13px] font-bold tnum ${hover.z >= 0 ? 'text-bull' : 'text-bear'}`}>
+                {hover.z >= 0 ? '+' : '−'}
+                {fmtUsd(Math.abs(hover.z * maxAbsUsd))}
+              </div>
+              <div className="mt-0.5 font-mono text-[10px] text-textSecondary">
+                {hover.z >= 0 ? 'dealer support · long γ' : 'negative gamma · short γ'}
+              </div>
+            </HoverReadout>
+          )}
         </div>
       )}
     </div>
