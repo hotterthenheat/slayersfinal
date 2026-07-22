@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Activity, ArrowRightLeft, CornerDownLeft, Crosshair, Keyboard, Settings, Users } from 'lucide-react';
+import { Activity, ArrowRightLeft, BookOpen, CornerDownLeft, Crosshair, Keyboard, Settings, Users } from 'lucide-react';
 import { NAV_ITEMS } from './nav';
 import { GEX_SUBPAGES } from '../../pages/gex/subnav';
 import { FLOWDESK_SUBPAGES } from '../../pages/flowdesk/subnav';
 import { COMMUNITY_SUBPAGES } from '../../pages/community/subnav';
+import { GUIDE_SUBPAGES } from '../../pages/guide/subnav';
 import { useMarketData } from '../../context/MarketDataContext';
 import Simulator from '../../core/simulator';
 
@@ -83,6 +84,14 @@ const CommandPalette = ({ open, onClose, onOpenSettings, onOpenShortcuts }: Comm
       icon: <Users className="w-3.5 h-3.5" />,
       run: () => navigate(page.path),
     }));
+    const guideSubs: PaletteAction[] = GUIDE_SUBPAGES.map(page => ({
+      id: `nav-${page.path}`,
+      group: 'Navigate',
+      label: `Guide → ${page.label}`,
+      hint: page.subtitle,
+      icon: <BookOpen className="w-3.5 h-3.5" />,
+      run: () => navigate(page.path),
+    }));
     const tickers: PaletteAction[] = Object.keys(Simulator.TICKERS).map(tk => ({
       id: `ticker-${tk}`,
       group: 'Ticker',
@@ -91,7 +100,7 @@ const CommandPalette = ({ open, onClose, onOpenSettings, onOpenShortcuts }: Comm
       icon: <ArrowRightLeft className="w-3.5 h-3.5" />,
       run: () => changeTicker(tk),
     }));
-    return [...commands, ...nav, ...gexSubs, ...flowSubs, ...communitySubs, ...tickers];
+    return [...commands, ...nav, ...gexSubs, ...flowSubs, ...communitySubs, ...guideSubs, ...tickers];
   }, [navigate, changeTicker, activeTicker, onOpenSettings, onOpenShortcuts]);
 
   const filtered = useMemo(() => {

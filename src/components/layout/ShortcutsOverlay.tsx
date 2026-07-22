@@ -3,39 +3,12 @@ import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { X } from 'lucide-react';
 import { EASE } from '../../lib/motion';
+import { SHORTCUT_GROUPS as GROUPS } from '../../lib/shortcuts';
 
 interface ShortcutsOverlayProps {
   open: boolean;
   onClose: () => void;
 }
-
-const GROUPS: { title: string; rows: { keys: string[]; label: string }[] }[] = [
-  {
-    title: 'Global',
-    rows: [
-      { keys: ['⌘', 'K'], label: 'Open the command palette' },
-      { keys: ['['], label: 'Previous ticker in the watchlist' },
-      { keys: [']'], label: 'Next ticker in the watchlist' },
-      { keys: ['?'], label: 'Show this shortcuts sheet' },
-      { keys: ['Esc'], label: 'Close palette, drawer or overlay' },
-    ],
-  },
-  {
-    title: 'Command palette',
-    rows: [
-      { keys: ['↑', '↓'], label: 'Move between results' },
-      { keys: ['↵'], label: 'Run the highlighted command' },
-      { keys: ['Type'], label: 'Filter pages, tickers and actions' },
-    ],
-  },
-  {
-    title: 'Tables & drawers',
-    rows: [
-      { keys: ['Click'], label: 'Open a row’s contract drilldown' },
-      { keys: ['Esc'], label: 'Close the drilldown drawer' },
-    ],
-  },
-];
 
 const Key = ({ children }: { children: string }) => (
   <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded border border-borderMuted bg-inset font-mono text-[11px] text-textPrimary">

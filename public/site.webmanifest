@@ -1,0 +1,13 @@
+{
+  "name": "Slayer Terminal",
+  "short_name": "Slayer",
+  "description": "Dealer-flow options analytics — order flow, market-maker hedging dynamics, and institutional liquidity tracking.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#050505",
+  "theme_color": "#050505",
+  "icons": [
+    { "src": "/favicon.svg", "type": "image/svg+xml", "sizes": "any", "purpose": "any maskable" }
+  ]
+}
