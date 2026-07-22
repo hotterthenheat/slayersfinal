@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { MotionConfig } from 'framer-motion';
 import { MarketDataProvider } from './context/MarketDataContext';
@@ -30,6 +31,8 @@ import EarningsHub from './pages/EarningsHub';
 import ProveIt from './pages/proveit/ProveIt';
 import Fracture from './pages/fracture/Fracture';
 import Landing from './pages/landing/Landing';
+// R3F + postprocessing are heavy — the immersive world is its own lazy chunk.
+const ImmersiveWorld = lazy(() => import('./pages/experience/ImmersiveWorld'));
 import CommunityLayout from './pages/community/CommunityLayout';
 import Ideas from './pages/community/Ideas';
 import Requests from './pages/community/Requests';
@@ -47,6 +50,16 @@ const App = () => {
               visitor sees; "Launch terminal" plays the gate into /pulse. */}
           <Route path="/" element={<Landing />} />
           <Route path="/welcome" element={<Navigate to="/" replace />} />
+          {/* Immersive 3D world — full-screen R3F experience, outside the shell */}
+          <Route
+            path="/experience"
+            element={
+              <Suspense fallback={<div className="fixed inset-0 bg-[#05060a]" />}>
+                <ImmersiveWorld />
+              </Suspense>
+            }
+          />
+          <Route path="/immersive" element={<Navigate to="/experience" replace />} />
           <Route element={<AppShell />}>
             <Route path="/home" element={<Navigate to="/pulse" replace />} />
             <Route path="/pulse" element={<PulseWorkspace />} />

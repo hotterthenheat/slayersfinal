@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Activity, ArrowRightLeft, CornerDownLeft, Crosshair, Keyboard, Settings, Users } from 'lucide-react';
+import { Activity, ArrowRightLeft, CornerDownLeft, Crosshair, Keyboard, Orbit, Settings, Users } from 'lucide-react';
 import { NAV_ITEMS } from './nav';
 import { GEX_SUBPAGES } from '../../pages/gex/subnav';
 import { FLOWDESK_SUBPAGES } from '../../pages/flowdesk/subnav';
@@ -48,6 +48,14 @@ const CommandPalette = ({ open, onClose, onOpenSettings, onOpenShortcuts }: Comm
         hint: 'press ?',
         icon: <Keyboard className="w-3.5 h-3.5" />,
         run: onOpenShortcuts,
+      },
+      {
+        id: 'action-experience',
+        group: 'Action',
+        label: 'Immersive world',
+        hint: '3D experience',
+        icon: <Orbit className="w-3.5 h-3.5" />,
+        run: () => navigate('/experience'),
       },
     ];
     const nav: PaletteAction[] = NAV_ITEMS.map(item => ({
