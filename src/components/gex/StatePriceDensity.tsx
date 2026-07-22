@@ -163,7 +163,7 @@ const StatePriceDensity = ({ snapshot }: StatePriceDensityProps) => {
         </span>
       </div>
 
-      <MetricGrid min="176px">
+      <MetricGrid min="170px">
         <StatCard
           label="Prob-mass drift"
           value={`${signed(view.headlineShift.deltaPts)} pts`}

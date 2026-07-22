@@ -1002,7 +1002,7 @@ const LiveTape = () => {
                   </span>
                   <span className="relative flex-1 h-[5px] rounded-full bg-white/[0.05]">
                     <span
-                      className={`absolute inset-y-0 left-0 rounded-full ${i === 0 ? 'bg-[#EA00FF]/70' : 'bg-white/25'}`}
+                      className={`absolute inset-y-0 left-0 rounded-full ${i === 0 ? 'bg-king/70' : 'bg-white/25'}`}
                       style={{ width: `${(t.premium / topMax) * 100}%` }}
                     />
                   </span>

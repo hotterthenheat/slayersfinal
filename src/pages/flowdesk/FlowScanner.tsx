@@ -639,7 +639,7 @@ const FlowScanner = () => {
         />
       </MetricGrid>
 
-      <div className="flex items-center gap-2.5 flex-wrap">
+      <div className="flex items-center gap-3 flex-wrap">
         <SegmentedControl ariaLabel="Universe" options={UNIVERSE_OPTIONS} value={filters.universe} onChange={v => patch({ universe: v })} />
         <SegmentedControl ariaLabel="Sentiment filter" options={SENT_OPTIONS} value={filters.sent} onChange={v => patch({ sent: v })} />
         <FilterMenu filters={filters} patch={patch} onReset={resetFilterMenu} activeCount={activeCount} />

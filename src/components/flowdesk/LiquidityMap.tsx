@@ -66,7 +66,7 @@ const SCALE_EASE = 0.06; // per-frame approach for the strip auto-scales
 const CANDLE_UP = '#30D158';
 const CANDLE_DN = '#FF3B30';
 const PRICE_LINE = '#ededed';
-const DP_COLOR = '150,164,246'; // cool indigo — reads as "off-exchange", not direction
+const DP_COLOR = '45,212,191'; // house darkpool token (#2dd4bf) — off-exchange, one color app-wide
 
 const easeOut = (t: number) => 1 - (1 - t) * (1 - t) * (1 - t);
 

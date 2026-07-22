@@ -192,7 +192,7 @@ const ProveIt = () => {
         subtitle="every engine tracked against what actually happened"
         flush
       >
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-px bg-borderSubtle">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-px bg-borderSubtle">
           {scoreboard.map(m => (
             <div key={m.model} className="bg-panel px-3.5 py-3 flex flex-col gap-2">
               <div className="font-mono text-[11px] font-semibold text-textPrimary">{m.model}</div>

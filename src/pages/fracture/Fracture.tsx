@@ -227,7 +227,7 @@ const Fracture = () => {
       {/* Headline read */}
       <Panel tone={headTone} bodyClassName="py-3.5" emphasis>
         <p className="text-[15px] text-textPrimary leading-relaxed">
-          <span className={`font-mono text-[11px] font-semibold uppercase tracking-widest mr-2.5 ${headTone === 'bear' ? 'text-bear' : headTone === 'bull' ? 'text-bull' : 'text-textSecondary'}`}>
+          <span className={`font-mono text-[10px] font-semibold uppercase tracking-widest mr-2.5 ${headTone === 'bear' ? 'text-bear' : headTone === 'bull' ? 'text-bull' : 'text-textSecondary'}`}>
             The read
           </span>
           {view.headline}

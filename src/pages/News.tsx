@@ -195,7 +195,7 @@ const News = () => {
         actions={<SegmentedControl ariaLabel="Category filter" options={CAT_OPTIONS} value={filter} onChange={setFilter} />}
       />
 
-      <MetricGrid min="180px">
+      <MetricGrid min="170px">
         <StatCard
           label="Tape mood"
           value={
@@ -323,7 +323,7 @@ const News = () => {
                       )}
                     </button>
 
-                    <div className="flex flex-col items-end justify-between gap-1.5 pr-3 py-3 shrink-0">
+                    <div className="flex flex-col items-end justify-between gap-1.5 pr-4 py-3 shrink-0">
                       <span className={`font-mono text-[11px] font-semibold tnum ${lead.prediction.expMove1dPct >= 0 ? 'text-bull' : 'text-bear'}`}>
                         {signedPct(lead.prediction.expMove1dPct)} exp
                       </span>

@@ -37,7 +37,7 @@ const SetupsFeed = ({ groups, selectedSetupId, onSelectSetup, onOpenAnalysis }: 
             className="inst-surface rounded-md overflow-hidden"
           >
             {/* Group header */}
-            <div className="flex items-center gap-3 px-3 h-11 border-b border-borderSubtle">
+            <div className="flex items-center gap-3 px-3 h-10 border-b border-borderSubtle">
               <span className="font-mono text-xs font-bold text-textPrimary tracking-wide">{group.ticker}</span>
               <SignalBadge tone="magenta">{group.found} found</SignalBadge>
               <Sparkline data={group.sparkline} up={up} />
