@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import type { RndData } from '../../../types/gex';
+import HoverReadout, { svgHoverIndex } from '../../ui/HoverReadout';
 
 interface RiskNeutralDistProps {
   data: RndData;
@@ -14,6 +16,16 @@ const RiskNeutralDist = ({ data }: RiskNeutralDistProps) => {
   const hi = prices[prices.length - 1];
   const span = hi - lo || 1;
   const x = (price: number) => ((price - lo) / span) * W;
+  const [h, setH] = useState<{ i: number; x: number; y: number } | null>(null);
+
+  // Market-implied cumulative probability below each grid price (density is the
+  // plotting-normalised curve, so its running share IS the CDF).
+  const total = density.reduce((s, d) => s + d, 0) || 1;
+  const cumBelow = (idx: number): number => {
+    let s = 0;
+    for (let i = 0; i <= idx; i++) s += density[i];
+    return (s / total) * 100;
+  };
 
   const line = prices.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(p).toFixed(2)},${(H - density[i] * (H - 4)).toFixed(2)}`).join(' ');
   const area = `${line} L${W},${H} L0,${H} Z`;
@@ -53,7 +65,13 @@ const RiskNeutralDist = ({ data }: RiskNeutralDistProps) => {
 
       {/* Density */}
       <div className="flex-grow min-h-0">
-        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-full">
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          preserveAspectRatio="none"
+          className="w-full h-full cursor-crosshair"
+          onMouseMove={e => setH({ i: svgHoverIndex(e, prices.length), x: e.clientX, y: e.clientY })}
+          onMouseLeave={() => setH(null)}
+        >
           <path d={area} fill="rgba(151,136,196,0.12)" />
           <path d={line} fill="none" stroke="rgba(151,136,196,0.9)" strokeWidth="0.8" vectorEffect="non-scaling-stroke" />
           {markers.map(m => (
@@ -69,8 +87,26 @@ const RiskNeutralDist = ({ data }: RiskNeutralDistProps) => {
               vectorEffect="non-scaling-stroke"
             />
           ))}
+          {h && (
+            <>
+              <line x1={x(prices[h.i])} x2={x(prices[h.i])} y1={0} y2={H} stroke="rgba(255,255,255,0.4)" strokeWidth="0.4" vectorEffect="non-scaling-stroke" />
+              <circle cx={x(prices[h.i])} cy={H - density[h.i] * (H - 4)} r="1.4" fill="#ededed" vectorEffect="non-scaling-stroke" />
+            </>
+          )}
         </svg>
       </div>
+      {h && prices[h.i] != null && (
+        <HoverReadout x={h.x} y={h.y}>
+          <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted">
+            {prices[h.i].toFixed(0)} · {((prices[h.i] - forward) / forward >= 0 ? '+' : '')}
+            {(((prices[h.i] - forward) / forward) * 100).toFixed(1)}% vs fwd
+          </div>
+          <div className="mt-1 flex items-center gap-2.5 font-mono text-[11px] tnum">
+            <span className="text-bear">P&lt; {cumBelow(h.i).toFixed(1)}%</span>
+            <span className="text-bull">P&gt; {(100 - cumBelow(h.i)).toFixed(1)}%</span>
+          </div>
+        </HoverReadout>
+      )}
       <div className="flex justify-between font-mono text-[8px] tnum text-textMuted select-none">
         <span>{lo.toFixed(0)}</span>
         <span className="uppercase tracking-wider">underlying price</span>
