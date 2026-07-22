@@ -55,7 +55,7 @@ const RiskNeutralDist = ({ data }: RiskNeutralDistProps) => {
         {markers.map(m => (
           <span
             key={m.label}
-            className={`absolute -translate-x-1/2 font-mono text-[8px] tnum ${m.label === 'Fwd' ? 'text-textPrimary font-semibold' : 'text-textMuted'}`}
+            className={`absolute -translate-x-1/2 font-mono text-[10px] tnum ${m.label === 'Fwd' ? 'text-textPrimary font-semibold' : 'text-textMuted'}`}
             style={{ left: `${x(m.price)}%` }}
           >
             {m.label} {m.price.toFixed(0)}
@@ -88,10 +88,7 @@ const RiskNeutralDist = ({ data }: RiskNeutralDistProps) => {
             />
           ))}
           {h && (
-            <>
-              <line x1={x(prices[h.i])} x2={x(prices[h.i])} y1={0} y2={H} stroke="rgba(255,255,255,0.4)" strokeWidth="0.4" vectorEffect="non-scaling-stroke" />
-              <circle cx={x(prices[h.i])} cy={H - density[h.i] * (H - 4)} r="1.4" fill="#ededed" vectorEffect="non-scaling-stroke" />
-            </>
+            <line x1={x(prices[h.i])} x2={x(prices[h.i])} y1={0} y2={H} stroke="rgba(255,255,255,0.4)" strokeWidth="0.4" vectorEffect="non-scaling-stroke" />
           )}
         </svg>
       </div>
@@ -107,7 +104,7 @@ const RiskNeutralDist = ({ data }: RiskNeutralDistProps) => {
           </div>
         </HoverReadout>
       )}
-      <div className="flex justify-between font-mono text-[8px] tnum text-textMuted select-none">
+      <div className="flex justify-between font-mono text-[10px] tnum text-textMuted select-none">
         <span>{lo.toFixed(0)}</span>
         <span className="uppercase tracking-wider">underlying price</span>
         <span>{hi.toFixed(0)}</span>
@@ -117,7 +114,7 @@ const RiskNeutralDist = ({ data }: RiskNeutralDistProps) => {
       <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 pt-2 border-t border-borderSubtle">
         {statCells.map(s => (
           <span key={s.label} className="min-w-0">
-            <span className="block font-mono text-[8px] uppercase tracking-widest text-textMuted truncate">{s.label}</span>
+            <span className="block font-mono text-[10px] uppercase tracking-widest text-textMuted truncate">{s.label}</span>
             <span className={`block font-mono text-[10px] font-semibold tnum ${s.tone ?? 'text-textPrimary'}`}>{s.value}</span>
           </span>
         ))}

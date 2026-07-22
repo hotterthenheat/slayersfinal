@@ -58,12 +58,12 @@ const IvSurface = ({ data }: IvSurfaceProps) => {
         </div>
         <div className="flex items-center gap-[2px] pl-8">
           {moneyness.map((m, c) => (
-            <span key={m} className="flex-1 text-center font-mono text-[8px] tnum text-textMuted">
+            <span key={m} className="flex-1 text-center font-mono text-[10px] tnum text-textMuted">
               {c % 4 === 0 ? m.toFixed(2) : ''}
             </span>
           ))}
         </div>
-        <div className="flex items-center justify-between font-mono text-[9px] text-textMuted uppercase tracking-wider pl-8">
+        <div className="flex items-center justify-between font-mono text-[10px] text-textMuted uppercase tracking-wider pl-8">
           <span>strike / forward</span>
           <span className="tnum normal-case">Fwd {forward.toFixed(2)}</span>
         </div>
@@ -71,15 +71,15 @@ const IvSurface = ({ data }: IvSurfaceProps) => {
 
       {/* Scale */}
       <div className="shrink-0 w-9 flex flex-col items-center py-1 select-none">
-        <span className="font-mono text-[9px] tnum text-textPrimary">{max.toFixed(0)}%</span>
+        <span className="font-mono text-[10px] tnum text-textPrimary">{max.toFixed(0)}%</span>
         <div
           className="flex-grow w-2.5 my-1.5 rounded-full border border-borderSubtle"
           style={{
             background: 'linear-gradient(to bottom, #EFE8E0 0%, #9788C4 25%, #4a4470 55%, #121214 100%)',
           }}
         />
-        <span className="font-mono text-[9px] tnum text-textSecondary">{min.toFixed(0)}%</span>
-        <span className="mt-1 font-mono text-[8px] text-textMuted uppercase">iv</span>
+        <span className="font-mono text-[10px] tnum text-textSecondary">{min.toFixed(0)}%</span>
+        <span className="mt-1 font-mono text-[10px] text-textMuted uppercase">iv</span>
       </div>
 
       {hover && (

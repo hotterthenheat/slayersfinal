@@ -136,7 +136,7 @@ const GrowthTimeline = ({ moc }: { moc: MocRead }) => {
       </div>
       <div className="flex gap-1.5 mt-1">
         {series.map(pt => (
-          <span key={pt.t} className="flex-1 text-center font-mono text-[8px] text-textMuted">
+          <span key={pt.t} className="flex-1 text-center font-mono text-[10px] text-textMuted">
             {pt.t}
           </span>
         ))}
@@ -156,7 +156,7 @@ const LottoRow = ({ c, best }: { c: WeighedContract; best: boolean }) => {
             {c.ticker} {c.strike}
             <span className={rightColor}>{c.right}</span>
           </span>
-          <span className="font-mono text-[9px] uppercase tracking-wider text-textMuted border border-borderSubtle rounded px-1 py-px">
+          <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted border border-borderSubtle rounded px-1 py-px">
             {c.dte === 0 ? '0DTE' : `${c.dte}DTE`}
           </span>
           {best && <SignalBadge tone="magenta">Top lotto</SignalBadge>}
@@ -164,15 +164,15 @@ const LottoRow = ({ c, best }: { c: WeighedContract; best: boolean }) => {
         <div className="mt-1 font-mono text-[11px] text-textMuted truncate">{c.edge}</div>
       </div>
       <div className="hidden sm:flex flex-col items-end shrink-0 w-14">
-        <span className="font-mono text-[9px] uppercase tracking-wider text-textMuted">±1σ</span>
+        <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted">±1σ</span>
         <span className="font-mono text-[12px] text-textSecondary tnum">{c.expectedMovePct.toFixed(1)}%</span>
       </div>
       <div className="hidden md:flex flex-col items-end shrink-0 w-16">
-        <span className="font-mono text-[9px] uppercase tracking-wider text-textMuted">θ/day</span>
+        <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted">θ/day</span>
         <span className="font-mono text-[12px] text-warn tnum">−{c.thetaPerDayPct.toFixed(0)}%</span>
       </div>
       <div className="flex flex-col items-end shrink-0 w-14">
-        <span className="font-mono text-[9px] uppercase tracking-wider text-textMuted">mid</span>
+        <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted">mid</span>
         <span className="font-mono text-[12px] text-textPrimary tnum">${c.mid.toFixed(2)}</span>
       </div>
       <div className="flex items-center gap-2 shrink-0 w-[124px] justify-end">
@@ -277,7 +277,7 @@ const LottoBoard = ({ snapshot }: { snapshot: MarketSnapshot }) => {
                 { k: 'Reversal risk', v: `${moc.reversalRisk}%` },
               ].map(x => (
                 <div key={x.k} className="border border-borderSubtle bg-inset rounded-md px-2.5 py-2">
-                  <div className="font-mono text-[9px] uppercase tracking-widest text-textMuted">{x.k}</div>
+                  <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted">{x.k}</div>
                   <div className="mt-1 font-mono text-sm font-semibold text-textPrimary tnum">{x.v}</div>
                 </div>
               ))}

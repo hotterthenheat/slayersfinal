@@ -200,12 +200,12 @@ const StatePriceDensity = ({ snapshot }: StatePriceDensityProps) => {
           className="xl:col-span-7"
         >
           <DensityChart view={view} />
-          <div className="mt-2 flex items-center justify-between font-mono text-[8.5px] tnum text-textMuted select-none">
+          <div className="mt-2 flex items-center justify-between font-mono text-[10px] tnum text-textMuted select-none">
             <span>{view.density[0].price.toFixed(0)}</span>
             <span className="uppercase tracking-wider">terminal price · {view.horizonDays}D</span>
             <span>{view.density[view.density.length - 1].price.toFixed(0)}</span>
           </div>
-          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[9px] uppercase tracking-wider text-textMuted">
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[10px] uppercase tracking-wider text-textMuted">
             <span className="inline-flex items-center gap-1.5"><span className="w-3 h-px bg-bull" /> implied</span>
             <span className="inline-flex items-center gap-1.5"><span className="w-3 border-t border-dashed border-textSecondary" /> realized</span>
             <span className="inline-flex items-center gap-1.5"><span className="w-3 h-2 bg-bear/20" /> 2σ tails</span>
@@ -250,7 +250,7 @@ const StatePriceDensity = ({ snapshot }: StatePriceDensityProps) => {
           className="xl:col-span-7"
         >
           <ForwardVolChart view={view} />
-          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[9px] uppercase tracking-wider text-textMuted">
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[10px] uppercase tracking-wider text-textMuted">
             <span className="inline-flex items-center gap-1.5"><span className="w-3 h-px bg-bull" /> forward vol</span>
             <span className="inline-flex items-center gap-1.5"><span className="w-3 border-t border-dashed border-textSecondary" /> spot vol</span>
           </div>
@@ -293,7 +293,7 @@ const StatePriceDensity = ({ snapshot }: StatePriceDensityProps) => {
                   <span key={t} className="absolute top-0 bottom-0 w-px bg-white/25" style={{ left: `${t}%` }} aria-hidden />
                 ))}
               </div>
-              <div className="mt-1.5 flex items-center justify-between font-mono text-[9px] uppercase tracking-wider text-textMuted">
+              <div className="mt-1.5 flex items-center justify-between font-mono text-[10px] uppercase tracking-wider text-textMuted">
                 <span>Calm</span>
                 <span>Normal</span>
                 <span>Elevated</span>
@@ -306,15 +306,15 @@ const StatePriceDensity = ({ snapshot }: StatePriceDensityProps) => {
           </div>
           <div className="mt-3 grid grid-cols-3 gap-2 pt-3 border-t border-borderSubtle">
             <div className="min-w-0">
-              <span className="block font-mono text-[9px] uppercase tracking-widest text-textMuted truncate">Put wing 25Δ</span>
+              <span className="block font-mono text-[10px] uppercase tracking-widest text-textMuted truncate">Put wing 25Δ</span>
               <span className="block font-mono text-[13px] font-semibold tnum text-bear">{view.putWingVol.toFixed(1)}</span>
             </div>
             <div className="min-w-0">
-              <span className="block font-mono text-[9px] uppercase tracking-widest text-textMuted truncate">Call wing 25Δ</span>
+              <span className="block font-mono text-[10px] uppercase tracking-widest text-textMuted truncate">Call wing 25Δ</span>
               <span className="block font-mono text-[13px] font-semibold tnum text-textPrimary">{view.callWingVol.toFixed(1)}</span>
             </div>
             <div className="min-w-0">
-              <span className="block font-mono text-[9px] uppercase tracking-widest text-textMuted truncate">Risk reversal</span>
+              <span className="block font-mono text-[10px] uppercase tracking-widest text-textMuted truncate">Risk reversal</span>
               <span className="block font-mono text-[13px] font-semibold tnum text-bear">{view.skewRr25.toFixed(2)}</span>
             </div>
           </div>
@@ -328,32 +328,32 @@ const StatePriceDensity = ({ snapshot }: StatePriceDensityProps) => {
       >
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           <div className="min-w-0">
-            <span className="block font-mono text-[9px] uppercase tracking-widest text-textMuted truncate">Down −{down.otmPct.toFixed(1)}% · P</span>
+            <span className="block font-mono text-[10px] uppercase tracking-widest text-textMuted truncate">Down −{down.otmPct.toFixed(1)}% · P</span>
             <span className="block font-mono text-[15px] font-semibold tnum text-bear">{down.prob.toFixed(1)}%</span>
             <span className="block text-[10px] text-textMuted">@ {fmtK(down.strike)}</span>
           </div>
           <div className="min-w-0">
-            <span className="block font-mono text-[9px] uppercase tracking-widest text-textMuted truncate">Down insure</span>
+            <span className="block font-mono text-[10px] uppercase tracking-widest text-textMuted truncate">Down insure</span>
             <span className="block font-mono text-[15px] font-semibold tnum text-textPrimary">{down.premiumPct.toFixed(2)}%</span>
             <span className="block text-[10px] text-textMuted">of spot</span>
           </div>
           <div className="min-w-0">
-            <span className="block font-mono text-[9px] uppercase tracking-widest text-textMuted truncate">Up +{up.otmPct.toFixed(1)}% · P</span>
+            <span className="block font-mono text-[10px] uppercase tracking-widest text-textMuted truncate">Up +{up.otmPct.toFixed(1)}% · P</span>
             <span className="block font-mono text-[15px] font-semibold tnum text-bull">{up.prob.toFixed(1)}%</span>
             <span className="block text-[10px] text-textMuted">@ {fmtK(up.strike)}</span>
           </div>
           <div className="min-w-0">
-            <span className="block font-mono text-[9px] uppercase tracking-widest text-textMuted truncate">Up insure</span>
+            <span className="block font-mono text-[10px] uppercase tracking-widest text-textMuted truncate">Up insure</span>
             <span className="block font-mono text-[15px] font-semibold tnum text-textPrimary">{up.premiumPct.toFixed(2)}%</span>
             <span className="block text-[10px] text-textMuted">of spot</span>
           </div>
           <div className="min-w-0">
-            <span className="block font-mono text-[9px] uppercase tracking-widest text-textMuted truncate">Implied var</span>
+            <span className="block font-mono text-[10px] uppercase tracking-widest text-textMuted truncate">Implied var</span>
             <span className="block font-mono text-[15px] font-semibold tnum text-textPrimary">{view.impliedVar.toFixed(2)}</span>
             <span className="block text-[10px] text-textMuted">RV {view.realizedVar.toFixed(2)}</span>
           </div>
           <div className="min-w-0">
-            <span className="block font-mono text-[9px] uppercase tracking-widest text-textMuted truncate">VRP</span>
+            <span className="block font-mono text-[10px] uppercase tracking-widest text-textMuted truncate">VRP</span>
             <span className={`block font-mono text-[15px] font-semibold tnum ${vrpTone === 'bull' ? 'text-bull' : 'text-warn'}`}>
               {signed(view.vrp, 2)}
             </span>

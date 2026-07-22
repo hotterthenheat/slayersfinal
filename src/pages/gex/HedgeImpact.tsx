@@ -312,7 +312,7 @@ const HedgeImpact = () => {
                 <span key={t} className="absolute top-0 bottom-0 w-px bg-white/25" style={{ left: `${t}%` }} aria-hidden />
               ))}
             </div>
-            <div className="mt-1.5 flex items-center justify-between font-mono text-[9px] uppercase tracking-wider text-textMuted">
+            <div className="mt-1.5 flex items-center justify-between font-mono text-[10px] uppercase tracking-wider text-textMuted">
               <span>Light</span>
               <span>Building</span>
               <span>Stretched</span>

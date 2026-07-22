@@ -63,7 +63,7 @@ const ProveIt = () => {
       note: 'trend-following — EMAs stand in for the return forecast',
     },
     { label: 'Horizon', value: `${mc.days} sessions`, note: 'trading days ahead' },
-    { label: 'Paths', value: `${mc.runs.toLocaleString()} runs`, note: 'deterministic seeded draws' },
+    { label: 'Paths', value: `${mc.runs.toLocaleString()} runs`, note: 'independent random sample paths' },
   ];
 
   return (

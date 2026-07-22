@@ -73,7 +73,7 @@ const WorkspaceLoop = ({ tiles }: { tiles: WorkspaceTile[] }) => {
                 <span key={i} className="w-[3px] h-[3px] rounded-full bg-textMuted/60" />
               ))}
             </span>
-            <span className="font-mono text-[9px] font-semibold uppercase tracking-widest text-textSecondary truncate">
+            <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-textSecondary truncate">
               {tile.title}
             </span>
           </div>

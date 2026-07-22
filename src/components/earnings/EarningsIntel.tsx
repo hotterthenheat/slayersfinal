@@ -436,7 +436,7 @@ const EarningsIntel = ({ event }: EarningsIntelProps) => {
                 <span className="h-full holo-bar" style={{ width: `${view.gapProb}%` }} />
                 <span className="h-full bg-white/25" style={{ width: `${view.continuousProb}%` }} />
               </div>
-              <div className="mt-1.5 flex items-center justify-between font-mono text-[9px] uppercase tracking-wider text-textMuted">
+              <div className="mt-1.5 flex items-center justify-between font-mono text-[10px] uppercase tracking-wider text-textMuted">
                 <span>Overnight gap</span>
                 <span>Continuation</span>
               </div>
@@ -467,23 +467,23 @@ const EarningsIntel = ({ event }: EarningsIntelProps) => {
                   <span className="font-mono text-[11px] font-semibold text-textPrimary">{a.tag}</span>
                   <div className="flex flex-col gap-1">
                     <span className="flex items-center gap-1.5">
-                      <span className="w-6 font-mono text-[8px] uppercase text-textMuted">imp</span>
+                      <span className="w-6 font-mono text-[10px] uppercase text-textMuted">imp</span>
                       <span className="flex-1 h-[3px] rounded-full bg-white/[0.06] overflow-hidden">
                         <span className="block h-full rounded-full bg-white/30" style={{ width: `${(a.impliedPct / max) * 100}%` }} />
                       </span>
-                      <span className="w-9 text-right font-mono text-[9px] text-textSecondary tnum">{a.impliedPct.toFixed(1)}%</span>
+                      <span className="w-9 text-right font-mono text-[10px] text-textSecondary tnum">{a.impliedPct.toFixed(1)}%</span>
                     </span>
                     <span className="flex items-center gap-1.5">
-                      <span className="w-6 font-mono text-[8px] uppercase text-textMuted">real</span>
+                      <span className="w-6 font-mono text-[10px] uppercase text-textMuted">real</span>
                       <span className="flex-1 h-[3px] rounded-full bg-white/[0.06] overflow-hidden">
                         <span className="block h-full rounded-full holo-bar" style={{ width: `${(a.realizedPct / max) * 100}%` }} />
                       </span>
-                      <span className={`w-9 text-right font-mono text-[9px] tnum ${a.direction === 'UP' ? 'text-bull' : 'text-bear'}`}>
+                      <span className={`w-9 text-right font-mono text-[10px] tnum ${a.direction === 'UP' ? 'text-bull' : 'text-bear'}`}>
                         {a.direction === 'UP' ? '+' : '−'}{a.realizedPct.toFixed(1)}%
                       </span>
                     </span>
                   </div>
-                  <span className="font-mono text-[9px] uppercase tracking-wider text-textMuted text-center">{a.gapped ? 'gapped' : 'grind'}</span>
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted text-center">{a.gapped ? 'gapped' : 'grind'}</span>
                   <div className="flex justify-end">
                     <SignalBadge tone={a.covered ? 'bull' : 'warn'}>{a.covered ? 'COVER' : 'BUST'}</SignalBadge>
                   </div>

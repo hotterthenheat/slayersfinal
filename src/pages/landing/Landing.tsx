@@ -279,7 +279,7 @@ const Landing = () => (
         href="#showcase"
         className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-1 text-textMuted hover:text-textSecondary transition-colors"
       >
-        <span className="font-mono text-[9px] uppercase tracking-[0.3em]">Scroll</span>
+        <span className="font-mono text-[10px] uppercase tracking-[0.3em]">Scroll</span>
         <ChevronDown className="w-4 h-4 animate-bounce" />
       </a>
     </section>
@@ -323,7 +323,7 @@ const Landing = () => (
             </span>
             <span className="font-mono text-[12px] font-bold text-textPrimary shrink-0">{idea.ticker}</span>
             <span
-              className={`inline-flex items-center rounded px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider shrink-0 ${
+              className={`inline-flex items-center rounded px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider shrink-0 ${
                 idea.direction === 'BULLISH' ? 'bg-bull/10 text-bull' : 'bg-bear/10 text-bear'
               }`}
             >
@@ -360,7 +360,7 @@ const Landing = () => (
               {/* Badge lives inside the card — TiltBox clips overflow, so a
                   border-straddling chip would get cut in half. */}
               {tier.featured && (
-                <span className="self-start inline-flex px-2 py-0.5 rounded font-mono text-[9px] font-bold uppercase tracking-widest text-[#0a0a0a] holo-bg">
+                <span className="self-start inline-flex px-2 py-0.5 rounded font-mono text-[10px] font-bold uppercase tracking-widest text-[#0a0a0a] holo-bg">
                   Most popular
                 </span>
               )}

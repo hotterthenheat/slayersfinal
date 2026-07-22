@@ -19,7 +19,7 @@ const fmt = (v: number) => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
 /** Current → projected for each structural level, delta called out. */
 const LevelShiftList = ({ shifts }: LevelShiftListProps) => (
   <div className="flex flex-col">
-    <div className="grid grid-cols-[1fr_auto] gap-x-3 px-2.5 py-1.5 border-b border-borderSubtle font-mono text-[8px] font-semibold uppercase tracking-widest text-textMuted select-none">
+    <div className="grid grid-cols-[1fr_auto] gap-x-3 px-2.5 py-1.5 border-b border-borderSubtle font-mono text-[10px] font-semibold uppercase tracking-widest text-textMuted select-none">
       <span>Level</span>
       <span className="text-right">Now → Scenario</span>
     </div>
@@ -41,7 +41,7 @@ const LevelShiftList = ({ shifts }: LevelShiftListProps) => (
               {fmt(s.projected)}
             </span>
             <span
-              className={`w-12 text-right font-mono text-[9px] tnum ${
+              className={`w-12 text-right font-mono text-[10px] tnum ${
                 !moved ? 'text-textMuted' : delta > 0 ? 'text-bull/90' : 'text-bear/90'
               }`}
             >

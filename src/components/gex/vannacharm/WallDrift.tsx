@@ -62,7 +62,7 @@ const WallDrift = ({ drift }: WallDriftProps) => {
       {/* Legend */}
       <div className="flex items-center gap-3 flex-wrap select-none">
         {SERIES.map(s => (
-          <span key={s.label} className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-wider text-textSecondary">
+          <span key={s.label} className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-textSecondary">
             <span
               className="inline-block w-3 h-0"
               style={{ borderTop: `2px ${s.dash ? 'dashed' : 'solid'} ${s.color}` }}
@@ -101,8 +101,8 @@ const WallDrift = ({ drift }: WallDriftProps) => {
             />
           ))}
         </svg>
-        <span className="absolute left-0 top-0 font-mono text-[8px] tnum text-textMuted">{max.toFixed(0)}</span>
-        <span className="absolute left-0 bottom-0 font-mono text-[8px] tnum text-textMuted">{min.toFixed(0)}</span>
+        <span className="absolute left-0 top-0 font-mono text-[10px] tnum text-textMuted">{max.toFixed(0)}</span>
+        <span className="absolute left-0 bottom-0 font-mono text-[10px] tnum text-textMuted">{min.toFixed(0)}</span>
 
         {/* Crosshair + reading card */}
         {hover != null &&
@@ -129,14 +129,14 @@ const WallDrift = ({ drift }: WallDriftProps) => {
                   className="absolute top-1 z-10 pointer-events-none border border-borderSubtle bg-panelRaised/95 rounded-md px-2.5 py-2 shadow-lg min-w-[132px]"
                   style={flipSide ? { right: `${100 - xPct + 1.5}%` } : { left: `${xPct + 1.5}%` }}
                 >
-                  <div className="font-mono text-[9px] uppercase tracking-widest text-textMuted tnum mb-1.5">
+                  <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted tnum mb-1.5">
                     {timeLabel(p.time)}
                   </div>
                   <div className="flex flex-col gap-1">
                     {rows.map(r => (
                       <div key={r.label} className="flex items-center gap-2">
                         <span className="inline-block w-2 h-[2px] rounded-full shrink-0" style={{ background: r.color }} />
-                        <span className="font-mono text-[9px] uppercase tracking-wider text-textSecondary">{r.label}</span>
+                        <span className="font-mono text-[10px] uppercase tracking-wider text-textSecondary">{r.label}</span>
                         <span className="ml-auto pl-3 font-mono text-[10px] font-semibold tnum text-textPrimary">
                           {r.v.toFixed(2)}
                         </span>
@@ -148,7 +148,7 @@ const WallDrift = ({ drift }: WallDriftProps) => {
             );
           })()}
       </div>
-      <div className="flex justify-between font-mono text-[8px] tnum text-textMuted select-none">
+      <div className="flex justify-between font-mono text-[10px] tnum text-textMuted select-none">
         {ticks.map((p, i) => (
           <span key={`${p.time}-${i}`}>{timeLabel(p.time)}</span>
         ))}

@@ -15,7 +15,7 @@ interface CellProps {
 
 const Cell = ({ label, value, arrow = null, tone = 'text-textPrimary' }: CellProps) => (
   <div className="flex flex-col gap-1 px-3 py-2">
-    <span className="font-mono text-[9px] uppercase tracking-widest text-textMuted">{label}</span>
+    <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">{label}</span>
     <span className={`font-mono text-xs font-semibold tnum flex items-center gap-1 ${tone}`}>
       {arrow === 'up' && <span className="text-bull">▲</span>}
       {arrow === 'down' && <span className="text-bear">▼</span>}

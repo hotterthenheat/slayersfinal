@@ -146,7 +146,7 @@ export const ComparePlans = () => (
               <span className="flex items-center gap-2">
                 <span className="text-[13px] font-bold text-textPrimary tracking-tight">{row.label}</span>
                 {row.badge && (
-                  <span className="inline-flex items-center rounded border border-warn/30 bg-warn/10 px-1.5 py-0.5 font-mono text-[8px] font-bold uppercase tracking-widest text-warn">
+                  <span className="inline-flex items-center rounded border border-warn/30 bg-warn/10 px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-widest text-warn">
                     {row.badge}
                   </span>
                 )}

@@ -183,7 +183,7 @@ const ExposureLedger = ({
                   <td className="px-2.5 py-1.5 bg-inset border-r border-borderSubtle/40 font-mono text-[11px] font-semibold tnum text-textSecondary whitespace-nowrap">
                     {strikeLabel(row.strike)}
                     {row.pin && (
-                      <span className="ml-1.5 font-mono text-[9px] font-bold uppercase tracking-wider text-textPrimary">
+                      <span className="ml-1.5 font-mono text-[10px] font-bold uppercase tracking-wider text-textPrimary">
                         pin
                       </span>
                     )}

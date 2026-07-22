@@ -316,7 +316,7 @@ const GreeksRegime = () => {
             ))}
             <p className="text-[11px] text-textSecondary leading-relaxed border-t border-borderSubtle pt-2.5">{view.topRegime.note}</p>
             <p className="flex items-start gap-2 text-[11px] text-warn/90 leading-relaxed border-t border-borderSubtle pt-2.5">
-              <span className="font-mono text-[9px] font-semibold uppercase tracking-widest text-warn mt-px shrink-0">What flips it</span>
+              <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-warn mt-px shrink-0">What flips it</span>
               <span className="text-textSecondary">{regimeSwing}</span>
             </p>
           </div>
@@ -376,7 +376,7 @@ const RowWithSpot = ({
         style={isTop ? { boxShadow: 'inset 3px 0 0 0 rgba(199,211,232,0.85)' } : undefined}
       >
         ${r.strike.toFixed(2)}
-        {isTop && <span className="ml-1.5 font-mono text-[8px] uppercase tracking-widest text-select">top</span>}
+        {isTop && <span className="ml-1.5 font-mono text-[10px] uppercase tracking-widest text-select">top</span>}
       </td>
       <td className={`px-2 py-1.5 text-right font-mono text-[11px] tnum ${r.distPct >= 0 ? 'text-bull' : 'text-bear'}`}>
         {r.distPct >= 0 ? '+' : ''}
@@ -391,7 +391,7 @@ const RowWithSpot = ({
         <td colSpan={colSpan} className="px-3 py-0.5">
           <span className="flex items-center gap-2 select-none">
             <span className="h-px flex-grow bg-gradient-to-r from-textPrimary/10 via-textPrimary/40 to-textPrimary/50" />
-            <span className="font-mono text-[9px] uppercase tracking-wider text-textSecondary">{ticker}</span>
+            <span className="font-mono text-[10px] uppercase tracking-wider text-textSecondary">{ticker}</span>
             <span className="inline-flex items-center rounded-[3px] bg-textPrimary px-1.5 py-px font-mono text-[10px] font-bold tnum text-[#0a0a0a]">{spot.toFixed(2)}</span>
             <span className="h-px w-3 shrink-0 bg-textPrimary/50" />
           </span>

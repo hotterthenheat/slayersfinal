@@ -117,7 +117,7 @@ const ContractFlowChart = ({ contract }: { contract: ContractRef }) => {
         <div className="mt-0.5">
           <div className="flex justify-between font-mono text-[10px] tnum text-textMuted mb-1">
             <span>Bid {Math.round(cf.ratio.bid * 100)}%</span>
-            <span className="uppercase tracking-widest text-[9px]">Contract Ratio</span>
+            <span className="uppercase tracking-widest text-[10px]">Contract Ratio</span>
             <span>Ask {Math.round(cf.ratio.ask * 100)}%</span>
           </div>
           <div className="flex h-[4px] rounded-full overflow-hidden bg-white/[0.06]">
@@ -190,7 +190,7 @@ const ContractFlowChart = ({ contract }: { contract: ContractRef }) => {
         <div className="mt-0.5">
           <div className="flex justify-between font-mono text-[10px] tnum text-textMuted mb-1">
             <span>Bearish {100 - bullPct}%</span>
-            <span className="uppercase tracking-widest text-[9px]">Net Sentiment</span>
+            <span className="uppercase tracking-widest text-[10px]">Net Sentiment</span>
             <span>Bullish {bullPct}%</span>
           </div>
           <div className="flex h-[4px] rounded-full overflow-hidden bg-white/[0.06]">

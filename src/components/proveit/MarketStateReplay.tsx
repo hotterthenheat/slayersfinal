@@ -78,7 +78,7 @@ const SessionRow = ({ s }: { s: SimSession }) => {
         <div className="relative h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
           <span className="holo-bar block h-full rounded-full" style={{ width: `${Math.round(s.sim * 100)}%` }} />
         </div>
-        <span className="mt-0.5 block font-mono text-[9px] text-textMuted tnum">
+        <span className="mt-0.5 block font-mono text-[10px] text-textMuted tnum">
           sim {Math.round(s.sim * 100)}% · {s.daysAgo}d ago · +{s.mfePct.toFixed(1)}/−{s.maePct.toFixed(1)}%
         </span>
       </div>
@@ -216,7 +216,7 @@ const StateFingerprint = ({ view }: { view: StateReplayView }) => (
         <span className="flex items-center justify-end gap-1.5">
           <span className="font-mono text-[10px] tnum text-textPrimary">{Math.round(f.value * 100)}</span>
           <span
-            className={`font-mono text-[8px] uppercase tracking-wider ${f.live ? 'holo-text' : 'text-textMuted'}`}
+            className={`font-mono text-[10px] uppercase tracking-wider ${f.live ? 'holo-text' : 'text-textMuted'}`}
             title={f.live ? 'read from the live chain/tape' : 'macro context'}
           >
             {f.live ? 'live' : 'mdl'}
@@ -298,8 +298,8 @@ const MarketStateReplay = ({ snapshot }: MarketStateReplayProps) => {
             <OutcomeBar view={view} />
           </div>
           <div className="flex items-center justify-between border-y border-borderSubtle px-3.5 py-1.5">
-            <span className="font-mono text-[9px] uppercase tracking-widest text-textMuted">closest analogs</span>
-            <span className="font-mono text-[9px] uppercase tracking-widest text-textMuted">outcome · result</span>
+            <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">closest analogs</span>
+            <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">outcome · result</span>
           </div>
           <div className="flex flex-col divide-y divide-borderSubtle">
             {view.topSessions.map(s => (
@@ -367,17 +367,17 @@ const MarketStateReplay = ({ snapshot }: MarketStateReplayProps) => {
           <EdgeDecayChart view={view} />
           <div className="mt-2 grid grid-cols-3 gap-2">
             <div>
-              <div className="font-mono text-[9px] uppercase tracking-wider text-textMuted">Peak edge</div>
+              <div className="font-mono text-[10px] uppercase tracking-wider text-textMuted">Peak edge</div>
               <div className="font-mono text-sm font-semibold tnum holo-text">
                 {Math.max(...view.edgeDecay.map(p => p.edgePct)).toFixed(0)}pt
               </div>
             </div>
             <div>
-              <div className="font-mono text-[9px] uppercase tracking-wider text-textMuted">MFE / MAE</div>
+              <div className="font-mono text-[10px] uppercase tracking-wider text-textMuted">MFE / MAE</div>
               <div className="font-mono text-sm font-semibold tnum text-textPrimary">{view.edgeRatio.toFixed(2)}×</div>
             </div>
             <div>
-              <div className="font-mono text-[9px] uppercase tracking-wider text-textMuted">Avg excursion</div>
+              <div className="font-mono text-[10px] uppercase tracking-wider text-textMuted">Avg excursion</div>
               <div className="font-mono text-sm font-semibold tnum text-textPrimary">
                 +{view.avgMfePct.toFixed(1)}/−{view.avgMaePct.toFixed(1)}%
               </div>

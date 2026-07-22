@@ -30,7 +30,7 @@ const KIND_BAR: Record<KeyLevelKind, string> = {
 /** Price-ordered ladder of structural levels: distance from spot + parked exposure. */
 const KeyLevelsRail = ({ rows, maxPressure, onSelect }: KeyLevelsRailProps) => (
   <div className="flex flex-col">
-    <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 px-2.5 py-1.5 border-b border-borderSubtle font-mono text-[8px] font-semibold uppercase tracking-widest text-textMuted select-none">
+    <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 px-2.5 py-1.5 border-b border-borderSubtle font-mono text-[10px] font-semibold uppercase tracking-widest text-textMuted select-none">
       <span>Level</span>
       <span className="text-right w-14">Dist</span>
       <span className="text-right w-16">Pressure</span>

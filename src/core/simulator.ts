@@ -17,6 +17,7 @@ import type {
   TickerSymbol,
   TradePlan,
 } from '../types/market';
+import { lookup as universeLookup } from '../data/universe';
 
 const Simulator = (() => {
   // Math Helpers
@@ -71,12 +72,17 @@ const Simulator = (() => {
     };
   }
 
-  // Configured Tick States — core tickers with hand-set params
+  // Configured Tick States — core tickers with hand-set params. Equity base
+  // prices are sourced from the shared universe so the live desks and the
+  // research pages (Stocks/News/Earnings/Compass) show the same price for the
+  // same name; SPY/QQQ are ETFs outside that universe and keep their own refs.
+  const aaplPx = universeLookup('AAPL')?.px ?? 232.4;
+  const nvdaPx = universeLookup('NVDA')?.px ?? 138.6;
   const TICKERS: Record<string, TickerConfig> = {
     SPY: { basePrice: 500, currentPrice: 500, iv: 0.15, step: 1 },
     QQQ: { basePrice: 440, currentPrice: 440, iv: 0.18, step: 1 },
-    AAPL: { basePrice: 190, currentPrice: 190, iv: 0.20, step: 0.5 },
-    NVDA: { basePrice: 120, currentPrice: 120, iv: 0.35, step: 0.5 }
+    AAPL: { basePrice: aaplPx, currentPrice: aaplPx, iv: 0.20, step: 0.5 },
+    NVDA: { basePrice: nvdaPx, currentPrice: nvdaPx, iv: 0.35, step: 0.5 }
   };
 
   /** Core watchlist that always populates the opportunity feed. */
@@ -215,7 +221,10 @@ const Simulator = (() => {
     const sym = symbolRaw.toUpperCase();
     if (!TICKERS[sym]) {
       const h = symbolHash(sym);
-      const basePrice = Number((15 + (h % 58500) / 100).toFixed(2)); // ~15..600
+      // Prefer the shared universe's reference price so a name shown on the
+      // research desks reads the same here; fall back to a hashed price for the
+      // long tail of searchable tickers the universe doesn't list.
+      const basePrice = universeLookup(sym)?.px ?? Number((15 + (h % 58500) / 100).toFixed(2)); // ~15..600
       const iv = 0.15 + ((h >>> 5) % 45) / 100; // ~0.15..0.60
       const step = basePrice >= 100 ? 1 : 0.5;
       TICKERS[sym] = { basePrice, currentPrice: basePrice, iv, step };

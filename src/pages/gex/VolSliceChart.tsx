@@ -86,7 +86,7 @@ const VolSliceChart = ({ points, xCaption, xTitle, refIndex, refLabel }: VolSlic
             {Math.abs(dIv).toFixed(2)}
           </span>
         </span>
-        <span className="ml-auto font-mono text-[9px] uppercase tracking-wider text-textMuted">
+        <span className="ml-auto font-mono text-[10px] uppercase tracking-wider text-textMuted">
           {hoverIdx === null ? 'hover to scan · click to pin' : 'click to pin'}
         </span>
       </div>
@@ -124,7 +124,7 @@ const VolSliceChart = ({ points, xCaption, xTitle, refIndex, refLabel }: VolSlic
 
         {/* Reference tag */}
         <span
-          className="absolute top-0 -translate-x-1/2 font-mono text-[9px] uppercase tracking-wider text-textMuted pointer-events-none"
+          className="absolute top-0 -translate-x-1/2 font-mono text-[10px] uppercase tracking-wider text-textMuted pointer-events-none"
           style={{ left: `${px(refIndex)}%` }}
         >
           {refLabel}
@@ -134,17 +134,17 @@ const VolSliceChart = ({ points, xCaption, xTitle, refIndex, refLabel }: VolSlic
           className="absolute w-[9px] h-[9px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-textPrimary ring-2 ring-panel pointer-events-none"
           style={{ left: `${px(activeIdx)}%`, top: `${(py(active.y) / H) * 100}%` }}
         />
-        <span className="absolute left-0 top-0 font-mono text-[9px] tnum text-textMuted">{max.toFixed(0)}%</span>
-        <span className="absolute left-0 bottom-0 font-mono text-[9px] tnum text-textMuted">{min.toFixed(0)}%</span>
+        <span className="absolute left-0 top-0 font-mono text-[10px] tnum text-textMuted">{max.toFixed(0)}%</span>
+        <span className="absolute left-0 bottom-0 font-mono text-[10px] tnum text-textMuted">{min.toFixed(0)}%</span>
       </div>
 
       {/* X axis */}
-      <div className="flex justify-between font-mono text-[9px] tnum text-textMuted select-none">
+      <div className="flex justify-between font-mono text-[10px] tnum text-textMuted select-none">
         {tickIdxs.map(i => (
           <span key={i}>{points[i].label}</span>
         ))}
       </div>
-      <div className="text-center font-mono text-[9px] uppercase tracking-wider text-textMuted select-none">{xTitle}</div>
+      <div className="text-center font-mono text-[10px] uppercase tracking-wider text-textMuted select-none">{xTitle}</div>
     </div>
   );
 };

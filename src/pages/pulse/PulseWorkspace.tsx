@@ -491,7 +491,7 @@ const PulseWorkspace = () => {
                     }`}
                   >
                     {l.name}
-                    {l.preset && <span className="ml-auto text-[9px] text-textMuted uppercase tracking-wider">preset</span>}
+                    {l.preset && <span className="ml-auto text-[10px] text-textMuted uppercase tracking-wider">preset</span>}
                   </button>
                 ))}
               </div>
@@ -568,7 +568,7 @@ const PulseWorkspace = () => {
                       <span className="font-mono text-[11px] font-semibold uppercase tracking-widest text-textMuted">
                         Data connections
                       </span>
-                      <span className="ml-auto font-mono text-[9px] uppercase tracking-wider text-textMuted">
+                      <span className="ml-auto font-mono text-[10px] uppercase tracking-wider text-textMuted">
                         requires a live feed
                       </span>
                     </div>

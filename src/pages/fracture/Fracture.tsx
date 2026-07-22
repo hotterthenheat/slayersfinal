@@ -136,7 +136,7 @@ const FlowRow = ({ level, maxForced }: { level: ForcedFlowLevel; maxForced: numb
           />
           <span className="absolute top-0 bottom-0" style={{ left: `${(100 / 150) * 100}%`, width: '1px', background: 'rgba(255,255,255,0.5)' }} />
         </span>
-        <span className="font-mono text-[9px] text-textMuted tnum">
+        <span className="font-mono text-[10px] text-textMuted tnum">
           {fmtUsd(Math.abs(level.totalForced))} vs {fmtUsd(level.latentLiquidity)} · {level.absorption.toFixed(2)}×
         </span>
       </span>
