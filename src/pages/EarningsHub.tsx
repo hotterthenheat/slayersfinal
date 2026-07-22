@@ -39,9 +39,11 @@ const inWindow = (e: EarningsEvent, w: WindowFilter): boolean => {
 
 const WATCHLIST_KEY = 'slayer.earnings.watchlist';
 
+// PLAY = green (buy the event), FADE = amber caution (premium's too rich), SKIP = neutral.
+// Magenta stays reserved for the king/standout signal, not a verdict.
 const verdictTone: Record<EarningsVerdict, Tone> = {
   PLAY: 'bull',
-  FADE: 'magenta',
+  FADE: 'warn',
   SKIP: 'neutral',
 };
 

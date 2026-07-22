@@ -19,9 +19,10 @@ const fmtUsd = (v: number): string => {
   return `${s}$${(a / 1e3).toFixed(0)}K`;
 };
 
+// Severity ramp: absorbed (calm) green → neutral → amber → red (never brand silver).
 const regimeTone: Record<AbsorptionRegime, Tone> = {
-  ABSORBED: 'neutral',
-  PRESSURE: 'select',
+  ABSORBED: 'bull',
+  PRESSURE: 'neutral',
   UNSTABLE: 'warn',
   NONLINEAR: 'bear',
 };
@@ -84,7 +85,7 @@ const DECOMP: { key: keyof MoveDecomposition; label: string; color: string }[] =
 ];
 
 /** One row of the forced-flow balance sheet. */
-const FlowRow = ({ level, maxForced, maxLatent }: { level: ForcedFlowLevel; maxForced: number; maxLatent: number }) => {
+const FlowRow = ({ level, maxForced }: { level: ForcedFlowLevel; maxForced: number }) => {
   const absPct = Math.min(150, level.absorption * 100);
   return (
     <div className="px-4 py-2 grid grid-cols-[76px_1fr_120px_92px] items-center gap-3">
@@ -115,7 +116,6 @@ const FlowRow = ({ level, maxForced, maxLatent }: { level: ForcedFlowLevel; maxF
       <span className="text-right">
         <SignalBadge tone={regimeTone[level.regime]}>{level.regime}</SignalBadge>
       </span>
-      <span className="sr-only">{maxLatent}</span>
     </div>
   );
 };
@@ -167,12 +167,11 @@ const Fracture = () => {
   }
 
   const maxForced = Math.max(...view.levels.map(l => Math.abs(l.totalForced)), 1);
-  const maxLatent = Math.max(...view.levels.map(l => l.latentLiquidity), 1);
   const headTone: Tone = view.fractureSide === 'DOWN' ? 'bear' : view.fractureSide === 'UP' ? 'bull' : 'neutral';
   const crit = view.criticality;
   // Severity ascends STABLE → REACTIVE → UNSTABLE → CRITICAL, so CRITICAL must
   // carry the most severe tone (bear), not a milder one.
-  const critTone: Tone = crit.label === 'CRITICAL' ? 'bear' : crit.label === 'UNSTABLE' ? 'warn' : crit.label === 'REACTIVE' ? 'select' : 'bull';
+  const critTone: Tone = crit.label === 'CRITICAL' ? 'bear' : crit.label === 'UNSTABLE' ? 'warn' : crit.label === 'REACTIVE' ? 'neutral' : 'bull';
 
   // spot sits between the below/above halves of the ladder
   const aboveCount = view.levels.filter(l => l.distPct > 0).length;
@@ -258,7 +257,7 @@ const Fracture = () => {
           <div className="flex flex-col">
             {view.levels.map((level, i) => (
               <div key={level.price}>
-                <FlowRow level={level} maxForced={maxForced} maxLatent={maxLatent} />
+                <FlowRow level={level} maxForced={maxForced} />
                 {i === aboveCount - 1 && (
                   <div className="px-4 py-1">
                     <SpotRule ticker={view.ticker} price={view.spot} />

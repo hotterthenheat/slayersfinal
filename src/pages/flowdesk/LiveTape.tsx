@@ -1038,7 +1038,7 @@ const LiveTape = () => {
                           ${p.price.toFixed(2)}
                         </td>
                         <td className="px-2 py-2 text-right font-mono text-[11px] font-bold tnum text-textPrimary">
-                          ${p.notional.toFixed(2)}B
+                          {fmtUsd(p.size * p.price)}
                         </td>
                         <td className="px-2 py-2 text-right font-mono text-[11px] tnum text-textSecondary whitespace-nowrap">
                           {p.time.slice(0, 5)}

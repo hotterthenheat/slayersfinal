@@ -478,47 +478,6 @@ const ChartShowcase = ({ ctx }: { ctx: LandingCtx | null }) => (
   </section>
 );
 
-// ---- marquee + pillars -------------------------------------------------------
-
-const TERMS = [
-  'Call wall',
-  'Put wall',
-  'Gamma flip',
-  'King strike',
-  'Net GEX',
-  'DEX',
-  'VEX',
-  'Pin zones',
-  'Dark pool',
-  '0DTE levels',
-  'Ranked strikes',
-  'Expected move',
-  'Whale sweeps',
-  'Options tape',
-];
-
-const MarqueeHalf = () => (
-  <div className="flex shrink-0">
-    {TERMS.map(t => (
-      <span
-        key={t}
-        className="flex items-center font-mono text-[10px] font-semibold uppercase tracking-[0.22em] text-textMuted whitespace-nowrap"
-      >
-        <span className="px-6">{t}</span>
-        <span className="text-borderMuted select-none">·</span>
-      </span>
-    ))}
-  </div>
-);
-
-const Marquee = () => (
-  <div className="border-y border-borderSubtle py-3.5 overflow-hidden" aria-hidden>
-    <div className="flex w-max animate-marquee">
-      <MarqueeHalf />
-      <MarqueeHalf />
-    </div>
-  </div>
-);
 
 const PILLARS = [
   {
@@ -571,7 +530,6 @@ const LiveSections = () => {
   return (
     <div>
       <ChartShowcase ctx={ctx} />
-      <Marquee />
       <Pillars />
 
       <section id="live" className="px-6 md:px-10 py-20 max-w-6xl mx-auto">
