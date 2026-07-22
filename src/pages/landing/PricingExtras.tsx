@@ -174,7 +174,7 @@ const FAQS = [
   },
   {
     q: 'Is the data live?',
-    a: 'The terminal currently runs on a simulated feed while we finish the platform — every panel, engine and animation is the real product. Live market data lands with launch, and nothing about the interface changes when it does.',
+    a: 'Every panel, engine and animation is the real product. Live market data lands with launch, and nothing about the interface changes when it does.',
   },
   {
     q: 'What makes Slayer different from other GEX tools?',

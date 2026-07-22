@@ -16,6 +16,7 @@ import OrderFlowPanel from '../../components/gex/OrderFlowPanel';
 import WallDrift from '../../components/gex/vannacharm/WallDrift';
 import RegimePanel from '../../components/gex/vollab/RegimePanel';
 import MonteCarloPanel from '../proveit/MonteCarloPanel';
+import LiquidityPanel from '../../components/flowdesk/LiquidityPanel';
 import SignalBadge from '../../components/ui/SignalBadge';
 import type { Tone } from '../../components/ui/tones';
 import { buildDarkPoolView } from '../../data/darkpool';
@@ -89,6 +90,25 @@ export const WIDGETS: WidgetDef[] = [
         />
       </div>
     ),
+  },
+  {
+    key: 'liquidity-map',
+    title: 'Liquidity Map',
+    description: 'Order-flow heatmap — flow, volume, delta, dark-pool & a live DOM',
+    w: 8,
+    h: 6,
+    minW: 4,
+    minH: 4,
+    render: ctx => {
+      const dp = buildDarkPoolView(ctx.snapshot);
+      return (
+        <LiquidityPanel
+          ticker={ctx.ticker}
+          spot={ctx.snapshot.spot}
+          darkPoolLevels={dp.levels.map(l => ({ price: l.price, notional: l.notional }))}
+        />
+      );
+    },
   },
   {
     key: 'positioning-map',
@@ -280,7 +300,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     key: 'monte-carlo',
     title: 'Monte Carlo',
-    description: 'Simulated price cone & terminal distribution',
+    description: 'Price cone & terminal distribution',
     w: 6,
     h: 5,
     minW: 4,

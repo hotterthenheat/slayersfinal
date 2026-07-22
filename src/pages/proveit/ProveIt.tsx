@@ -63,7 +63,7 @@ const ProveIt = () => {
       value: trendUp ? 'EMA9 ≥ EMA21' : 'EMA9 < EMA21',
       note: 'trend-following — EMAs stand in for the return forecast',
     },
-    { label: 'Horizon', value: `${mc.days} sessions`, note: 'trading days simulated forward' },
+    { label: 'Horizon', value: `${mc.days} sessions`, note: 'trading days ahead' },
     { label: 'Paths', value: `${mc.runs.toLocaleString()} runs`, note: 'deterministic seeded draws' },
   ];
 
@@ -112,7 +112,7 @@ const ProveIt = () => {
               ${mc.stats.rangeLow.toFixed(0)}–${mc.stats.rangeHigh.toFixed(0)}
             </span>
           }
-          sub="90% of simulated paths land inside"
+          sub="90% of paths land inside"
         />
         <StatCard
           label="Vol regime"
@@ -192,7 +192,7 @@ const ProveIt = () => {
         subtitle="every engine tracked against what actually happened"
         flush
       >
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-px bg-borderSubtle">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-px bg-borderSubtle">
           {scoreboard.map(m => (
             <div key={m.model} className="bg-panel px-3.5 py-3 flex flex-col gap-2">
               <div className="font-mono text-[11px] font-semibold text-textPrimary">{m.model}</div>

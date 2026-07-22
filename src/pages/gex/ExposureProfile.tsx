@@ -10,6 +10,9 @@ import type { ExposureExpiry } from '../../types/gex';
 import Panel from '../../components/ui/Panel';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import AnimatedNumber from '../../components/ui/AnimatedNumber';
+import StatCard from '../../components/ui/StatCard';
+import MetricGrid from '../../components/ui/MetricGrid';
+import type { Tone } from '../../components/ui/tones';
 import ExposureMatrix from '../../components/gex/ExposureMatrix';
 import PositioningMap from '../../components/gex/PositioningMap';
 import ExposureInsight from '../../components/gex/ExposureInsight';
@@ -32,24 +35,6 @@ const WINDOW_OPTIONS = [
   { value: '10', label: '±10' },
   { value: '15', label: '±15' },
 ] as const;
-
-interface StatCardProps {
-  label: string;
-  value: number;
-  format?: (v: number) => string;
-  sub?: string;
-  tone?: string;
-}
-
-const StatCard = ({ label, value, format = fmtUsd, sub, tone = 'text-textPrimary' }: StatCardProps) => (
-  <div className="border border-borderSubtle bg-panel rounded-md px-3 py-2 min-w-0">
-    <div className="font-mono text-[9px] uppercase tracking-widest text-textMuted truncate">{label}</div>
-    <div className={`mt-1 font-mono text-sm font-bold tnum ${tone}`}>
-      <AnimatedNumber value={value} format={format} />
-    </div>
-    {sub && <div className="font-mono text-[9px] text-textMuted tnum truncate">{sub}</div>}
-  </div>
-);
 
 const ExposureProfile = () => {
   const { marketData } = useMarketData();
@@ -104,7 +89,7 @@ const ExposureProfile = () => {
     const pct = ((wall - levels.spot) / levels.spot) * 100;
     return `${Math.abs(pct).toFixed(2)}% ${pct >= 0 ? 'above' : 'below'}`;
   };
-  const biasTone = data.bias === 'BULLISH' ? 'text-bull' : data.bias === 'BEARISH' ? 'text-bear' : 'text-textPrimary';
+  const biasTok: Tone = data.bias === 'BULLISH' ? 'bull' : data.bias === 'BEARISH' ? 'bear' : 'neutral';
   const strikeFmt = (v: number) => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
 
   return (
@@ -215,25 +200,23 @@ const ExposureProfile = () => {
 
       {/* Stat rail + insight */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-stretch">
-        <div className="xl:col-span-8 grid grid-cols-2 sm:grid-cols-4 gap-2 content-start">
-          <StatCard label="Net GEX" value={data.netGex} tone={data.netGex >= 0 ? 'text-bull' : 'text-bear'} sub={data.netGex >= 0 ? 'Net supportive' : 'Net negative'} />
-          <StatCard label="Net DEX" value={data.netDex} sub="Delta exposure" />
-          <StatCard label="Net VEX" value={data.netVex} sub="Vega exposure" />
-          <StatCard label="Spot" value={levels.spot} format={v => `$${v.toFixed(2)}`} sub="Live underlying" />
-          <div onMouseEnter={() => setHoverStrike(levels.putWall)} onMouseLeave={() => setHoverStrike(null)}>
-            <StatCard label="Put Wall" value={levels.putWall} format={strikeFmt} tone="text-bear" sub={wallDist(levels.putWall)} />
-          </div>
-          <div onMouseEnter={() => setHoverStrike(levels.pin)} onMouseLeave={() => setHoverStrike(null)}>
-            <StatCard label="Pin Level" value={levels.pin} format={strikeFmt} sub="Max OI magnet" />
-          </div>
-          <div onMouseEnter={() => setHoverStrike(levels.callWall)} onMouseLeave={() => setHoverStrike(null)}>
-            <StatCard label="Call Wall" value={levels.callWall} format={strikeFmt} tone="text-bull" sub={wallDist(levels.callWall)} />
-          </div>
-          <div className="border border-borderSubtle bg-panel rounded-md px-3 py-2 min-w-0">
-            <div className="font-mono text-[9px] uppercase tracking-widest text-textMuted">Dealer Bias</div>
-            <div className={`mt-1 font-mono text-sm font-bold ${biasTone}`}>{data.bias}</div>
-            <div className="font-mono text-[9px] text-textMuted truncate">{data.biasNote}</div>
-          </div>
+        <div className="xl:col-span-8">
+          <MetricGrid min="170px">
+            <StatCard label="Net GEX" value={<AnimatedNumber value={data.netGex} format={fmtUsd} />} tone={data.netGex >= 0 ? 'bull' : 'bear'} sub={data.netGex >= 0 ? 'Net supportive' : 'Net negative'} />
+            <StatCard label="Net DEX" value={<AnimatedNumber value={data.netDex} format={fmtUsd} />} sub="Delta exposure" />
+            <StatCard label="Net VEX" value={<AnimatedNumber value={data.netVex} format={fmtUsd} />} sub="Vega exposure" />
+            <StatCard label="Spot" value={<AnimatedNumber value={levels.spot} format={v => `$${v.toFixed(2)}`} />} sub="Live underlying" />
+            <div className="h-full" onMouseEnter={() => setHoverStrike(levels.putWall)} onMouseLeave={() => setHoverStrike(null)}>
+              <StatCard className="h-full" label="Put Wall" value={<AnimatedNumber value={levels.putWall} format={strikeFmt} />} tone="bear" sub={wallDist(levels.putWall)} />
+            </div>
+            <div className="h-full" onMouseEnter={() => setHoverStrike(levels.pin)} onMouseLeave={() => setHoverStrike(null)}>
+              <StatCard className="h-full" label="Pin Level" value={<AnimatedNumber value={levels.pin} format={strikeFmt} />} sub="Max OI magnet" />
+            </div>
+            <div className="h-full" onMouseEnter={() => setHoverStrike(levels.callWall)} onMouseLeave={() => setHoverStrike(null)}>
+              <StatCard className="h-full" label="Call Wall" value={<AnimatedNumber value={levels.callWall} format={strikeFmt} />} tone="bull" sub={wallDist(levels.callWall)} />
+            </div>
+            <StatCard label="Dealer Bias" value={data.bias} tone={biasTok} sub={data.biasNote} />
+          </MetricGrid>
         </div>
         <div className="xl:col-span-4 min-w-0">
           <ExposureInsight bias={data.bias} biasNote={data.biasNote} insights={data.insights} />

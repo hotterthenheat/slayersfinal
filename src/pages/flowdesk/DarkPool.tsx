@@ -8,6 +8,7 @@ import StatCard from '../../components/ui/StatCard';
 import MetricGrid from '../../components/ui/MetricGrid';
 import SignalBadge from '../../components/ui/SignalBadge';
 import DataTable, { type Column } from '../../components/ui/DataTable';
+import DarkPoolFeed from '../../components/flowdesk/DarkPoolFeed';
 import SpotRule from '../../components/ui/SpotRule';
 import type { DarkPoolIntent, DarkPoolLevel, DarkPoolPrint } from '../../types/darkpool';
 import type { Tone } from '../../components/ui/tones';
@@ -164,6 +165,9 @@ const DarkPool = () => {
 
   return (
     <>
+      {/* Market-wide off-exchange flow first — scan the sectors, then drill the active name */}
+      <DarkPoolFeed />
+
       {/* Session posture at a glance */}
       <MetricGrid min="170px">
         <StatCard

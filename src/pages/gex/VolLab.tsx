@@ -157,7 +157,7 @@ const VolLab = () => {
           title="IV Surface"
           subtitle={surfaceSubtitle}
           className="min-w-0"
-          bodyClassName="h-[320px]"
+          bodyClassName="h-[300px]"
           actions={
             <SegmentedControl ariaLabel="Surface slice" options={VIEW_OPTIONS} value={sliceMode} onChange={setSliceMode} />
           }

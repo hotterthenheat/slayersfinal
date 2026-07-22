@@ -155,7 +155,7 @@ const Ideas = () => {
       <Panel title="Write a thesis" subtitle="structure the trade before you post it" className="w-full">
         <div className="flex flex-col gap-4">
           {/* Instrument + direction + horizon */}
-          <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
+          <div className="flex flex-wrap items-end gap-x-5 gap-y-3">
             <Field label="Ticker" value={ticker} onChange={v => setTicker(v.toUpperCase())} placeholder="SPY" className="w-32" />
             <label className="flex flex-col gap-1">
               <span className="font-mono text-[11px] uppercase tracking-wider text-textMuted">Direction</span>

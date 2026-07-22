@@ -11,6 +11,7 @@ import Tracker from './pages/Tracker';
 import GexLayout from './pages/gex/GexLayout';
 import PulseWorkspace from './pages/pulse/PulseWorkspace';
 import ExposureProfile from './pages/gex/ExposureProfile';
+import GammaChart from './pages/gex/GammaChart';
 import RankedTargets from './pages/gex/RankedTargets';
 import VannaCharm from './pages/gex/VannaCharm';
 import VolLab from './pages/gex/VolLab';
@@ -24,7 +25,6 @@ import FlowScanner from './pages/flowdesk/FlowScanner';
 import FlowTracker from './pages/flowdesk/FlowTracker';
 import MetaorderReconstruction from './components/flowdesk/MetaorderReconstruction';
 import DarkPool from './pages/flowdesk/DarkPool';
-import LiquidityDesk from './pages/flowdesk/LiquidityDesk';
 import Stocks from './pages/Stocks';
 import News from './pages/News';
 import EarningsHub from './pages/EarningsHub';
@@ -77,9 +77,10 @@ const App = () => {
             <Route path="/lotto" element={<Navigate to="/compass" state={{ compassMode: 'lotto' }} replace />} />
             <Route path="/tracker" element={<Tracker />} />
             <Route path="/pinpoint" element={<GexLayout />}>
-              <Route index element={<Navigate to="/pinpoint/exposure-profile" replace />} />
+              <Route index element={<Navigate to="/pinpoint/gamma" replace />} />
               <Route path="command" element={<Navigate to="/pulse" replace />} />
               <Route path="flow-map" element={<Navigate to="/pulse" replace />} />
+              <Route path="gamma" element={<GammaChart />} />
               <Route path="exposure-profile" element={<ExposureProfile />} />
               <Route path="ranked-targets" element={<RankedTargets />} />
               <Route path="strike-profile" element={<Navigate to="/pinpoint/exposure-profile" replace />} />
@@ -95,7 +96,8 @@ const App = () => {
               <Route index element={<Navigate to="/trace/live-tape" replace />} />
               <Route path="live-tape" element={<LiveTape />} />
               <Route path="dark-pool" element={<DarkPool />} />
-              <Route path="liquidity" element={<LiquidityDesk />} />
+              {/* Liquidity Map moved to Pulse — it's an order-flow overlay surface, not a Trace desk */}
+              <Route path="liquidity" element={<Navigate to="/pulse" replace />} />
               <Route path="dark-feed" element={<Navigate to="/trace/dark-pool" replace />} />
               <Route path="scanner" element={<FlowScanner />} />
               <Route path="reconstruction" element={<MetaorderReconstruction />} />

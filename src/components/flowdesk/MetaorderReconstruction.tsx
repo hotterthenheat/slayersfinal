@@ -387,7 +387,7 @@ const MetaorderReconstruction = () => {
 
   return (
     <>
-      <MetricGrid min="180px">
+      <MetricGrid min="170px">
         <StatCard
           label="Net directional info"
           value={signed(view.netInfoScore)}

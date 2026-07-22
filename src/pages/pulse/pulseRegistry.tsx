@@ -110,17 +110,6 @@ export const PULSE_DATA_CONNECTIONS: DataConnectionDef[] = [
     render: () => <DataUnavailablePanel requires="streaming Level-2 order-book depth" />,
   },
   {
-    key: 'liquidity-heatmap',
-    title: 'Liquidity Heatmap',
-    description: 'Resting depth over price & time',
-    requires: 'a live Level-2 depth feed',
-    w: 8,
-    h: 6,
-    minW: 4,
-    minH: 4,
-    render: () => <DataUnavailablePanel requires="timestamped Level-2 depth updates" />,
-  },
-  {
     key: 'footprint',
     title: 'Footprint',
     description: 'Bid × ask volume per price',

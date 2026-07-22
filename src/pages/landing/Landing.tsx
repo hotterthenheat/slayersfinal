@@ -288,7 +288,7 @@ const Landing = () => (
     <LiveSections />
 
     {/* ── The desks (cover-flow) ── */}
-    <section className="px-6 md:px-10 py-20 max-w-4xl mx-auto text-center">
+    <section className="px-6 md:px-10 py-20 max-w-6xl mx-auto text-center">
       <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.25em] text-textSecondary">
         The desks
       </span>
@@ -329,7 +329,7 @@ const Landing = () => (
             >
               {idea.direction}
             </span>
-            <span className="text-[12px] text-textSecondary truncate">"{idea.thesis}"</span>
+            <span className="min-w-0 flex-1 text-[12px] text-textSecondary truncate">"{idea.thesis}"</span>
             <span className="ml-auto hidden md:block font-mono text-[10px] text-textMuted shrink-0">
               {idea.author}
             </span>
@@ -345,7 +345,7 @@ const Landing = () => (
     </section>
 
     {/* ── Pricing ── */}
-    <section id="pricing" className="px-6 md:px-10 py-20 max-w-5xl mx-auto">
+    <section id="pricing" className="px-6 md:px-10 py-20 max-w-6xl mx-auto">
       <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.25em] text-textSecondary">
         Pricing
       </span>
@@ -409,7 +409,7 @@ const Landing = () => (
     <Faq />
 
     {/* ── Closing CTA ── */}
-    <section className="px-6 md:px-10 py-24 border-t border-borderSubtle text-center">
+    <section className="px-6 md:px-10 py-20 border-t border-borderSubtle text-center">
       <h2 className="text-3xl md:text-4xl font-bold tracking-tight max-w-2xl mx-auto">
         Trade with the machine,
         <br />
@@ -480,7 +480,7 @@ const Landing = () => (
             © 2026 Slayer Terminal · Compass · Pinpoint
           </span>
           <span className="md:ml-auto font-mono text-[10px] tracking-wide text-textMuted">
-            For informational purposes only. Not investment advice. Preview data is simulated.
+            For informational purposes only. Not investment advice.
           </span>
         </div>
       </div>

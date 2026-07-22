@@ -208,6 +208,13 @@ const Requests = () => {
             </section>
           );
         })}
+        {groups.every(g => g.items.length === 0) && (
+          <Panel>
+            <div className="h-40 flex items-center justify-center font-mono text-[11px] uppercase tracking-widest text-textMuted">
+              No requests in this view
+            </div>
+          </Panel>
+        )}
       </div>
     </>
   );

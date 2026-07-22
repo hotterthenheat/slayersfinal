@@ -403,9 +403,9 @@ const PulseWorkspace = () => {
     // maximize affordance. Editing controls (grip, duplicate, minimize, close)
     // only appear in Customize mode.
     return (
-      <div className={`${draggable ? 'widget-drag cursor-grab active:cursor-grabbing' : ''} flex items-center gap-2 px-2.5 h-8 border-b border-borderSubtle shrink-0 select-none`}>
+      <div className={`${draggable ? 'widget-drag cursor-grab active:cursor-grabbing' : ''} flex items-center gap-2 px-3.5 h-10 border-b border-borderSubtle shrink-0 select-none`}>
         {draggable && <GripHorizontal className="w-3.5 h-3.5 text-textMuted shrink-0" />}
-        <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-textPrimary truncate">
+        <span className="font-mono text-[11px] font-semibold uppercase tracking-widest text-textPrimary truncate">
           {def?.title ?? panelKey}
         </span>
         <PanelTicker value={ticker} onChange={t => setPanelTicker(panelId, t)} />
@@ -440,7 +440,7 @@ const PulseWorkspace = () => {
   const barBtn = 'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-borderSubtle bg-white/[0.02] hover:bg-white/[0.05] font-mono text-[11px] uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors';
 
   return (
-    <div className={fullscreen ? 'fixed inset-0 z-50 bg-canvas p-3 flex flex-col gap-3 overflow-auto' : 'flex flex-col gap-3'}>
+    <div className={fullscreen ? 'fixed inset-0 z-50 bg-canvas p-3 flex flex-col gap-4 overflow-auto' : 'flex flex-col gap-4'}>
       {/* Workspace bar */}
       <div className="flex items-center gap-2 flex-wrap">
         {/* View switcher — the hero control (present in both modes) */}
@@ -593,7 +593,10 @@ const PulseWorkspace = () => {
 
       {/* Maximized single panel */}
       {maximized ? (
-        <div className="flex-1 min-h-0 inst-surface rounded-md overflow-hidden flex flex-col" style={{ height: fullscreen ? 'auto' : '78vh' }}>
+        <div
+          className={`${fullscreen ? 'flex-1' : ''} min-h-0 inst-surface rounded-md overflow-hidden flex flex-col`}
+          style={{ height: fullscreen ? 'auto' : '78vh' }}
+        >
           <PanelChrome panelId={maximized.id} panelKey={maximized.key} ticker={maximized.ticker ?? activeTicker} maximizedView />
           <div className="flex-grow min-h-0 overflow-hidden">{renderPanelBody(maximized.key, maximized.ticker ?? activeTicker)}</div>
         </div>
@@ -607,7 +610,7 @@ const PulseWorkspace = () => {
           layout={active.layout}
           cols={12}
           rowHeight={64}
-          margin={[10, 10]}
+          margin={[12, 12]}
           containerPadding={[0, 0]}
           compactType="vertical"
           draggableHandle=".widget-drag"

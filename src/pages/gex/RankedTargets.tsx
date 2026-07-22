@@ -245,14 +245,14 @@ const RankedTargets = () => {
         {sorted.length === 0 ? (
           <div className="py-10 text-center font-mono text-[11px] text-textMuted uppercase tracking-widest">No strikes match this isolator</div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-auto max-h-[560px]">
             <table className="w-full border-collapse">
               <thead>
-                <tr className="border-b border-borderSubtle bg-[#0c0c0c]">
+                <tr className="border-b border-borderSubtle">
                   {COLUMNS.map(col => {
                     const activeSort = sort.key === col.key;
                     return (
-                      <th key={col.key} className={`${col.cls} px-3 py-2 select-none`}>
+                      <th key={col.key} className={`${col.cls} px-3 py-2 select-none sticky top-0 z-10 bg-[#0c0c0c]`}>
                         <button
                           onClick={() => toggleSort(col.key)}
                           className={`w-full inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-widest transition-colors ${
@@ -271,7 +271,7 @@ const RankedTargets = () => {
                   })}
                 </tr>
               </thead>
-              <tbody className="max-h-[520px]">
+              <tbody>
                 {sorted.map(t => (
                   <tr
                     key={t.strike}

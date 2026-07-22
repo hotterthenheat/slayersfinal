@@ -194,7 +194,7 @@ const GreeksRegime = () => {
           <table className="w-full border-collapse">
             <thead>
               <tr className="bg-[#0c0c0c] border-b border-borderSubtle">
-                <th className="sticky left-0 z-10 bg-[#0c0c0c] px-3 py-2 text-left font-mono text-[11px] font-semibold uppercase tracking-wider text-textMuted">Strike</th>
+                <th className="sticky left-0 z-10 bg-inset px-3 py-2 text-left font-mono text-[11px] font-semibold uppercase tracking-wider text-textMuted">Strike</th>
                 <th className="px-2 py-2 text-right font-mono text-[11px] font-semibold uppercase tracking-wider text-textMuted">Dist</th>
                 {visibleGreeks.map(g => (
                   <th
@@ -303,7 +303,7 @@ const RowWithSpot = ({
   <>
     <tr className="border-b border-borderSubtle/40 hover:bg-white/[0.02]">
       <td
-        className="sticky left-0 z-10 px-3 py-1.5 font-mono text-xs font-semibold text-textPrimary tnum whitespace-nowrap bg-canvas"
+        className="sticky left-0 z-10 px-3 py-1.5 font-mono text-xs font-semibold text-textPrimary tnum whitespace-nowrap bg-inset"
         style={isTop ? { boxShadow: 'inset 3px 0 0 0 rgba(199,211,232,0.85)' } : undefined}
       >
         ${r.strike.toFixed(2)}
