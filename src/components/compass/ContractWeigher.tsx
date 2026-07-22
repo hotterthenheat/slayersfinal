@@ -34,6 +34,8 @@ import DataTable, { type Column } from '../ui/DataTable';
 import type { Tone } from '../ui/tones';
 
 const verdictTone: Record<ContractVerdict, Tone> = { BUY: 'bull', WATCH: 'warn', FADE: 'bear' };
+// Observational grade, never a directive — describes the contract's quality.
+const verdictLabel: Record<ContractVerdict, string> = { BUY: 'STRONG', WATCH: 'WATCH', FADE: 'WEAK' };
 const dteForHorizon: Record<Horizon, number> = { LOTTO: 0, WEEKLIES: 5, SWINGS: 30, LEAPS: 365 };
 const DTE_PRESETS = [0, 7, 30, 365];
 /** Standard equity-option contract multiplier (shares per contract). */
@@ -278,7 +280,7 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
         </span>
       ),
     },
-    { key: 'verdict', header: 'Verdict', align: 'right', sortValue: c => c.composite, render: c => <SignalBadge tone={verdictTone[c.verdict]}>{c.verdict}</SignalBadge> },
+    { key: 'verdict', header: 'Verdict', align: 'right', sortValue: c => c.composite, render: c => <SignalBadge tone={verdictTone[c.verdict]}>{verdictLabel[c.verdict]}</SignalBadge> },
     { key: 'mid', header: 'Mid', align: 'right', sortValue: c => c.mid, render: c => `$${c.mid.toFixed(2)}` },
     { key: 'delta', header: 'Δ', align: 'right', sortValue: c => Math.abs(c.delta), render: c => c.delta.toFixed(2) },
     {
@@ -507,10 +509,10 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
         >
           <div className="flex flex-col gap-4">
             <div className="flex items-center gap-3 flex-wrap">
-              <span className={`font-mono text-4xl font-bold tnum ${weighed.composite >= 70 ? 'holo-text' : weighed.composite < 52 ? 'text-bear' : 'text-textPrimary'}`}>
+              <span className={`font-mono text-4xl font-bold tnum ${weighed.composite >= 70 ? 'text-bull' : weighed.composite < 52 ? 'text-bear' : 'text-textPrimary'}`}>
                 {weighed.composite}
               </span>
-              <SignalBadge tone={tone}>{weighed.verdict}</SignalBadge>
+              <SignalBadge tone={tone}>{verdictLabel[weighed.verdict]}</SignalBadge>
               <span className="ml-auto font-mono text-[11px] text-textMuted tnum">
                 ${weighed.mid.toFixed(2)} mid · Δ{weighed.delta.toFixed(2)} · IV {weighed.ivPct.toFixed(0)}%
               </span>

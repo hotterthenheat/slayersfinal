@@ -187,12 +187,14 @@ export function makeSetup(
   const verdict: Verdict = score >= 88 ? 'ENTER' : score >= 72 ? 'WATCH' : 'EXIT';
 
   const why = WHY_LIBRARY[scanner];
+  // Observational headlines only — the engine describes what the signal shows,
+  // it never instructs the user to place an order ("enter now" is off-limits).
   const headline =
     verdict === 'ENTER'
-      ? `STRONG ${right === 'C' ? 'CALL' : 'PUT'} — ENTER NOW`
+      ? `STRONG ${right === 'C' ? 'CALL' : 'PUT'} — CONDITIONS ALIGNED`
       : verdict === 'WATCH'
-        ? 'BUILDING — WAIT FOR TRIGGER'
-        : 'FADING — STAND ASIDE';
+        ? 'BUILDING — UNCONFIRMED'
+        : 'FADING — LOW CONVICTION';
 
   // Liquidity: derive from bid/ask spread
   const spreadPct = mid > 0 ? ((ask - bid) / mid) * 100 : 0;

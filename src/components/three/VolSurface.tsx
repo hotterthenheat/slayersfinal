@@ -1,5 +1,10 @@
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
 /*
   Quant-grade 3D surface, rendered in real WebGL (three.js) — replaces the flat
@@ -33,10 +38,14 @@ function colorFor(z: number, map: SurfaceColormap, out: THREE.Color) {
     out.setRGB(0.05 + t * 0.75, 0.12 + t * 0.7, 0.28 + t * 0.68);
     return out;
   }
-  // diverging: green support (+) vs hot red (−) — silver is selection-only
+  // diverging: green support (+) vs hot red (−) — silver is selection-only.
+  // Brightness scales with magnitude so low-exposure cells stay DARK (they melt
+  // into the scene) and only the walls glow — a readable heat ramp, not a
+  // washed-out pale sheet.
   const t = Math.min(Math.abs(z) * 1.3, 1);
-  if (z >= 0) out.setRGB((130 - t * 82) / 255, 210 / 255, (160 - t * 72) / 255);
-  else out.setRGB(1, (80 - t * 34) / 255, (64 - t * 24) / 255);
+  const b = 0.1 + t * 0.82; // ~0.1 near zero → ~0.92 at a wall
+  if (z >= 0) out.setRGB(b * 0.22, b, b * 0.42);
+  else out.setRGB(b, b * 0.2, b * 0.16);
   return out;
 }
 
@@ -91,6 +100,10 @@ const VolSurface = ({ grid, colormap = 'exposure', height = 340, cursorReactive 
     group?: THREE.Group;
     mesh?: THREE.Mesh;
     wire?: THREE.LineSegments;
+    composer?: EffectComposer;
+    bloom?: UnrealBloomPass;
+    pmrem?: THREE.PMREMGenerator;
+    envTex?: THREE.Texture;
     raf?: number;
   }>({});
 
@@ -101,26 +114,40 @@ const VolSurface = ({ grid, colormap = 'exposure', height = 340, cursorReactive 
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
-    camera.position.set(0, 2.1, 4.4);
-    camera.lookAt(0, -0.15, 0);
+    const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
+    // Pulled in + slightly lower so the surface fills the frame — no dead margins.
+    camera.position.set(0, 1.85, 3.75);
+    camera.lookAt(0, -0.08, 0);
 
     let renderer: THREE.WebGLRenderer;
     try {
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
     } catch {
       return; // no WebGL context — leave the mount empty so the parent bg shows
     }
     renderer.setClearColor(0x000000, 0);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    // Filmic tone mapping + correct colour space give the surface a graded,
+    // cinematic look instead of raw clipped WebGL colours.
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 0.95;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
     mount.appendChild(renderer.domElement);
 
-    // Lighting — a cool key from above, a dim warm fill, a rim for the silver sheen
-    scene.add(new THREE.AmbientLight(0x5a6472, 1.15));
-    const key = new THREE.DirectionalLight(0xdfe8f5, 1.7);
+    // Image-based lighting from a neutral studio room — gives the PBR metal its
+    // soft reflections and grounds the whole surface in real light.
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    const envTex = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    scene.environment = envTex;
+
+    // Lighting — the env map does most of the work now; direct lights just shape
+    // the ridges. Kept dim so the green/red exposure colours stay saturated,
+    // never washed to white.
+    scene.add(new THREE.AmbientLight(0x5a6472, 0.7));
+    const key = new THREE.DirectionalLight(0xdfe8f5, 1.5);
     key.position.set(4, 8, 6);
     scene.add(key);
-    const rim = new THREE.DirectionalLight(0x7db0ff, 0.5);
+    const rim = new THREE.DirectionalLight(0x7db0ff, 0.45);
     rim.position.set(-5, 2, -4);
     scene.add(rim);
 
@@ -140,7 +167,15 @@ const VolSurface = ({ grid, colormap = 'exposure', height = 340, cursorReactive 
     (gh.material as THREE.Material).opacity = 0.5;
     group.add(gh);
 
-    objs.current = { renderer, scene, camera, group };
+    // Postprocessing — a restrained bloom so bright exposure ridges glow like
+    // lit glass, plus an OutputPass that applies the tone-map after compositing.
+    const composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+    const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.3, 0.5, 0.92); // strength, radius, threshold — subtle glow on the brightest ridges only
+    composer.addPass(bloom);
+    composer.addPass(new OutputPass());
+
+    objs.current = { renderer, scene, camera, group, composer, bloom, pmrem, envTex };
     buildMesh();
 
     // ---- interaction: manual orbit (yaw + clamped pitch) + idle auto-spin ----
@@ -190,6 +225,8 @@ const VolSurface = ({ grid, colormap = 'exposure', height = 340, cursorReactive 
       const h = mount.clientHeight;
       if (!w || !h) return;
       renderer.setSize(w, h, false);
+      composer.setSize(w, h);
+      bloom.setSize(w, h);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
     };
@@ -222,7 +259,7 @@ const VolSurface = ({ grid, colormap = 'exposure', height = 340, cursorReactive 
       }
       group.rotation.y = yaw;
       group.rotation.x = pitch;
-      renderer.render(scene, camera);
+      composer.render();
       objs.current.raf = requestAnimationFrame(tick);
     };
     objs.current.raf = requestAnimationFrame(tick);
@@ -238,6 +275,9 @@ const VolSurface = ({ grid, colormap = 'exposure', height = 340, cursorReactive 
       (objs.current.mesh?.material as THREE.Material)?.dispose();
       objs.current.wire?.geometry.dispose();
       (objs.current.wire?.material as THREE.Material)?.dispose();
+      objs.current.composer?.dispose();
+      objs.current.envTex?.dispose();
+      objs.current.pmrem?.dispose();
       renderer.dispose();
       if (renderer.domElement.parentNode === mount) mount.removeChild(renderer.domElement);
     };
@@ -261,8 +301,9 @@ const VolSurface = ({ grid, colormap = 'exposure', height = 340, cursorReactive 
     }
     const mat = new THREE.MeshStandardMaterial({
       vertexColors: true,
-      metalness: 0.38,
-      roughness: 0.46,
+      metalness: 0.22,
+      roughness: 0.52,
+      envMapIntensity: 0.3,
       side: THREE.DoubleSide,
       flatShading: false,
     });

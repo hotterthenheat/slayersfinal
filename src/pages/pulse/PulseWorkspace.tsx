@@ -23,6 +23,7 @@ import {
   Lock,
   Pencil,
   Search,
+  Check,
 } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import Simulator from '../../core/simulator';
@@ -32,7 +33,6 @@ import { buildCommandView } from '../../data/command';
 import { buildVannaCharm } from '../../data/vannacharm';
 import { buildVolLab } from '../../data/vollab';
 import { buildSkyVision } from '../../data/skyvision';
-import SignalBadge from '../../components/ui/SignalBadge';
 import type { MarketSnapshot } from '../../types/market';
 import type { WorkspaceCtx } from '../workspace/registry';
 import { PULSE_ADDABLE_PANELS, PULSE_DATA_CONNECTIONS, pulsePanelByKey } from './pulseRegistry';
@@ -154,9 +154,10 @@ const PulseWorkspace = () => {
   const [wsMenuOpen, setWsMenuOpen] = useState(false);
   const [maximizedId, setMaximizedId] = useState<string | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
-  // Layout edit mode. When off, the grid is locked — no drag, no resize — so a
-  // finished desk can't be nudged by accident. Defaults on to preserve behavior.
-  const [editLayout, setEditLayout] = useState(true);
+  // Layout edit mode. Pulse is a finished dashboard by DEFAULT — locked, clean,
+  // no editing chrome. "Customize" opts into drag/resize/add — the workspace
+  // builder is a deliberate mode you enter, not the front door.
+  const [editLayout, setEditLayout] = useState(false);
   // A price level to mark on the matching ticker's charts, arriving from a
   // cross-page "view on chart" deep-link (Exposure Profile / Ranked Targets).
   const [focus, setFocus] = useState<{ ticker: string; price: number } | null>(null);
@@ -398,26 +399,26 @@ const PulseWorkspace = () => {
   const PanelChrome = ({ panelId, panelKey, ticker, maximizedView }: { panelId: string; panelKey: string; ticker: string; maximizedView?: boolean }) => {
     const def = pulsePanelByKey(panelKey);
     const draggable = !maximizedView && editLayout;
+    // Locked dashboard: panels are finished cards — title, ticker, and just a
+    // maximize affordance. Editing controls (grip, duplicate, minimize, close)
+    // only appear in Customize mode.
     return (
       <div className={`${draggable ? 'widget-drag cursor-grab active:cursor-grabbing' : ''} flex items-center gap-2 px-2.5 h-8 border-b border-borderSubtle shrink-0 select-none`}>
-        {!maximizedView &&
-          (draggable ? (
-            <GripHorizontal className="w-3.5 h-3.5 text-textMuted shrink-0" />
-          ) : (
-            <Lock className="w-3 h-3 text-textMuted shrink-0" aria-label="Layout locked" />
-          ))}
+        {draggable && <GripHorizontal className="w-3.5 h-3.5 text-textMuted shrink-0" />}
         <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-textPrimary truncate">
           {def?.title ?? panelKey}
         </span>
         <PanelTicker value={ticker} onChange={t => setPanelTicker(panelId, t)} />
         <div className="ml-auto flex items-center gap-1.5 shrink-0" onMouseDown={e => e.stopPropagation()}>
-          <button onClick={() => duplicatePanel(panelId)} title="Duplicate" className="text-textMuted hover:text-textPrimary transition-colors">
-            <Copy className="w-3 h-3" />
-          </button>
-          {!maximizedView && (
-            <button onClick={() => toggleMin(panelId)} title="Minimize" className="text-textMuted hover:text-textPrimary transition-colors">
-              <Minus className="w-3.5 h-3.5" />
-            </button>
+          {draggable && (
+            <>
+              <button onClick={() => duplicatePanel(panelId)} title="Duplicate" className="text-textMuted hover:text-textPrimary transition-colors">
+                <Copy className="w-3 h-3" />
+              </button>
+              <button onClick={() => toggleMin(panelId)} title="Minimize" className="text-textMuted hover:text-textPrimary transition-colors">
+                <Minus className="w-3.5 h-3.5" />
+              </button>
+            </>
           )}
           <button
             onClick={() => setMaximizedId(maximizedView ? null : panelId)}
@@ -426,9 +427,11 @@ const PulseWorkspace = () => {
           >
             {maximizedView ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3 h-3" />}
           </button>
-          <button onClick={() => removePanel(panelId)} title="Close" className="text-textMuted hover:text-bear transition-colors">
-            <X className="w-3.5 h-3.5" />
-          </button>
+          {draggable && (
+            <button onClick={() => removePanel(panelId)} title="Close" className="text-textMuted hover:text-bear transition-colors">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
     );
@@ -440,14 +443,20 @@ const PulseWorkspace = () => {
     <div className={fullscreen ? 'fixed inset-0 z-50 bg-canvas p-3 flex flex-col gap-3 overflow-auto' : 'flex flex-col gap-3'}>
       {/* Workspace bar */}
       <div className="flex items-center gap-2 flex-wrap">
-        {/* Workspace selector */}
+        {/* View switcher — the hero control (present in both modes) */}
         <div className="relative">
-          <button onClick={() => setWsMenuOpen(o => !o)} className={barBtn}>
-            <LayoutGrid className="w-3.5 h-3.5" /> {active.name}
-            <ChevronDown className="w-3 h-3" />
+          <button
+            onClick={() => setWsMenuOpen(o => !o)}
+            className="inline-flex items-center gap-2 pl-2.5 pr-2 py-1.5 rounded-md border border-borderMuted bg-white/[0.03] hover:bg-white/[0.06] transition-colors"
+          >
+            <LayoutGrid className="w-3.5 h-3.5 text-select" />
+            <span className="font-mono text-[12px] font-semibold text-textPrimary">{active.name}</span>
+            <span className="font-mono text-[10px] text-textMuted tnum">· {active.panels.length}</span>
+            <ChevronDown className="w-3 h-3 text-textMuted" />
           </button>
           {wsMenuOpen && (
             <div className="absolute left-0 top-full mt-1 z-40 w-64 border border-borderMuted bg-panel rounded-md shadow-2xl shadow-black/60 overflow-hidden animate-slide-in">
+              <div className="px-3 pt-2 pb-1 font-mono text-[10px] uppercase tracking-widest text-textMuted">Views</div>
               <div className="max-h-56 overflow-auto">
                 {ws.layouts.map(l => (
                   <button
@@ -462,55 +471,35 @@ const PulseWorkspace = () => {
                   </button>
                 ))}
               </div>
-              <div className="border-t border-borderSubtle p-1.5 grid grid-cols-2 gap-1">
-                <button onClick={saveAs} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-[10px] text-textSecondary hover:bg-white/[0.04] transition-colors"><Save className="w-3 h-3" /> Save as</button>
-                <button onClick={rename} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-[10px] text-textSecondary hover:bg-white/[0.04] transition-colors">Rename</button>
-                <button onClick={duplicateLayout} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-[10px] text-textSecondary hover:bg-white/[0.04] transition-colors"><Copy className="w-3 h-3" /> Duplicate</button>
-                <button onClick={resetLayout} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-[10px] text-textSecondary hover:bg-white/[0.04] transition-colors"><RotateCcw className="w-3 h-3" /> Reset</button>
-                <button onClick={deleteLayout} disabled={ws.layouts.length <= 1} className="col-span-2 flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-[10px] text-bear/80 hover:bg-bear/[0.08] disabled:opacity-40 transition-colors"><Trash2 className="w-3 h-3" /> Delete layout</button>
-              </div>
+              {/* Layout-management ops only surface inside Customize mode */}
+              {editLayout && (
+                <div className="border-t border-borderSubtle p-1.5 grid grid-cols-2 gap-1">
+                  <button onClick={saveAs} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-[10px] text-textSecondary hover:bg-white/[0.04] transition-colors"><Save className="w-3 h-3" /> Save as</button>
+                  <button onClick={rename} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-[10px] text-textSecondary hover:bg-white/[0.04] transition-colors">Rename</button>
+                  <button onClick={duplicateLayout} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-[10px] text-textSecondary hover:bg-white/[0.04] transition-colors"><Copy className="w-3 h-3" /> Duplicate</button>
+                  <button onClick={resetLayout} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-[10px] text-textSecondary hover:bg-white/[0.04] transition-colors"><RotateCcw className="w-3 h-3" /> Reset</button>
+                  <button onClick={deleteLayout} disabled={ws.layouts.length <= 1} className="col-span-2 flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-[10px] text-bear/80 hover:bg-bear/[0.08] disabled:opacity-40 transition-colors"><Trash2 className="w-3 h-3" /> Delete layout</button>
+                </div>
+              )}
             </div>
           )}
         </div>
 
-        {/* Layout shortcuts */}
-        <div className="inline-flex items-center rounded-md border border-borderSubtle overflow-hidden">
-          <button onClick={() => doArrange('one')} title="One panel" className="px-2 py-1.5 text-textMuted hover:text-textPrimary hover:bg-white/[0.04]"><Square className="w-3.5 h-3.5" /></button>
-          <button onClick={() => doArrange('cols')} title="Columns" className="px-2 py-1.5 text-textMuted hover:text-textPrimary hover:bg-white/[0.04] border-l border-borderSubtle"><Columns className="w-3.5 h-3.5" /></button>
-          <button onClick={() => doArrange('rows')} title="Rows" className="px-2 py-1.5 text-textMuted hover:text-textPrimary hover:bg-white/[0.04] border-l border-borderSubtle"><Rows className="w-3.5 h-3.5" /></button>
-          <button onClick={() => doArrange('quad')} title="Grid" className="px-2 py-1.5 text-textMuted hover:text-textPrimary hover:bg-white/[0.04] border-l border-borderSubtle"><Grid2x2 className="w-3.5 h-3.5" /></button>
-        </div>
+        {/* Builder tools — only in Customize mode */}
+        {editLayout && (
+          <>
+            <div className="inline-flex items-center rounded-md border border-borderSubtle overflow-hidden">
+              <button onClick={() => doArrange('one')} title="One panel" className="px-2 py-1.5 text-textMuted hover:text-textPrimary hover:bg-white/[0.04]"><Square className="w-3.5 h-3.5" /></button>
+              <button onClick={() => doArrange('cols')} title="Columns" className="px-2 py-1.5 text-textMuted hover:text-textPrimary hover:bg-white/[0.04] border-l border-borderSubtle"><Columns className="w-3.5 h-3.5" /></button>
+              <button onClick={() => doArrange('rows')} title="Rows" className="px-2 py-1.5 text-textMuted hover:text-textPrimary hover:bg-white/[0.04] border-l border-borderSubtle"><Rows className="w-3.5 h-3.5" /></button>
+              <button onClick={() => doArrange('quad')} title="Grid" className="px-2 py-1.5 text-textMuted hover:text-textPrimary hover:bg-white/[0.04] border-l border-borderSubtle"><Grid2x2 className="w-3.5 h-3.5" /></button>
+            </div>
 
-        {/* Edit / lock the layout — locked disables drag & resize */}
-        <div className="inline-flex items-center rounded-md border border-borderSubtle overflow-hidden" role="group" aria-label="Layout edit mode">
-          <button
-            onClick={() => setEditLayout(true)}
-            aria-pressed={editLayout}
-            title="Edit layout — drag & resize (E)"
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-wider transition-colors ${
-              editLayout ? 'bg-select/[0.10] text-select' : 'text-textMuted hover:text-textPrimary hover:bg-white/[0.04]'
-            }`}
-          >
-            <Pencil className="w-3.5 h-3.5" /> Edit
-          </button>
-          <button
-            onClick={() => setEditLayout(false)}
-            aria-pressed={!editLayout}
-            title="Lock layout — no drag or resize (E)"
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-wider border-l border-borderSubtle transition-colors ${
-              !editLayout ? 'bg-select/[0.10] text-select' : 'text-textMuted hover:text-textPrimary hover:bg-white/[0.04]'
-            }`}
-          >
-            <Lock className="w-3.5 h-3.5" /> Locked
-          </button>
-        </div>
-
-        {/* Add panel */}
-        <div className="relative">
-          <button onClick={() => setAddOpen(o => !o)} title="Add panel (A)" className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-select/40 bg-select/[0.06] hover:bg-select/[0.12] font-mono text-[11px] font-semibold uppercase tracking-wider text-select transition-colors">
-            <Plus className="w-3.5 h-3.5" /> Add panel
-          </button>
-          {addOpen && (
+            <div className="relative">
+              <button onClick={() => setAddOpen(o => !o)} title="Add panel (A)" className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-select/40 bg-select/[0.06] hover:bg-select/[0.12] font-mono text-[11px] font-semibold uppercase tracking-wider text-select transition-colors">
+                <Plus className="w-3.5 h-3.5" /> Add panel
+              </button>
+              {addOpen && (
             <div className="absolute left-0 top-full mt-1 z-40 w-72 border border-borderMuted bg-panel rounded-md shadow-2xl shadow-black/60 animate-slide-in flex flex-col max-h-[420px]">
               {/* Search */}
               <div className="p-2 border-b border-borderSubtle shrink-0">
@@ -578,20 +567,25 @@ const PulseWorkspace = () => {
               </div>
             </div>
           )}
-        </div>
+            </div>
+          </>
+        )}
 
         <div className="ml-auto flex items-center gap-2">
-          {/* Keyboard hint */}
-          <span className="hidden lg:inline-flex items-center gap-1.5 font-mono text-[10px] text-textMuted" title="Keyboard: E edit/lock · F full-screen · A add panel · Esc close">
-            <kbd className="px-1 py-px rounded border border-borderSubtle bg-white/[0.02] text-[11px] text-textSecondary">E</kbd>
-            <span>edit</span>
-            <kbd className="px-1 py-px rounded border border-borderSubtle bg-white/[0.02] text-[11px] text-textSecondary">F</kbd>
-            <span>full</span>
-          </span>
-          <SignalBadge tone="warn" dot pulse>
-            Sim · live
-          </SignalBadge>
-          <button onClick={() => setFullscreen(f => !f)} title="Full-screen workspace (F)" className={barBtn}>
+          {editLayout ? (
+            <button
+              onClick={() => setEditLayout(false)}
+              title="Done customizing (E)"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-select/40 bg-select/[0.10] hover:bg-select/[0.16] font-mono text-[11px] font-semibold uppercase tracking-wider text-select transition-colors"
+            >
+              <Check className="w-3.5 h-3.5" /> Done
+            </button>
+          ) : (
+            <button onClick={() => setEditLayout(true)} title="Customize this view (E)" className={barBtn}>
+              <Pencil className="w-3.5 h-3.5" /> Customize
+            </button>
+          )}
+          <button onClick={() => setFullscreen(f => !f)} title="Full-screen (F)" className={barBtn}>
             {fullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
           </button>
         </div>

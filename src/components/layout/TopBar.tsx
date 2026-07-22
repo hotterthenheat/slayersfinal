@@ -90,16 +90,18 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
               onMouseLeave={() => setDropdown(null)}
             >
               <button
-                className={`relative self-stretch flex items-center gap-1 px-3 font-mono text-[11px] font-semibold uppercase tracking-wider transition-colors ${
-                  active ? 'text-textPrimary' : 'text-textSecondary hover:text-textPrimary'
+                className={`relative self-stretch flex items-center gap-1 px-3 my-2 rounded-md font-mono text-[11px] font-semibold uppercase tracking-wider transition-colors ${
+                  active
+                    ? 'text-textPrimary bg-white/[0.06]'
+                    : 'text-textMuted hover:text-textPrimary hover:bg-white/[0.03]'
                 }`}
               >
                 {group}
-                <ChevronDown className="w-3 h-3 text-textMuted" />
+                <ChevronDown className={`w-3 h-3 ${active ? 'text-textSecondary' : 'text-textMuted'}`} />
                 {active && (
                   <motion.span
                     layoutId="topnav-underline"
-                    className="absolute left-3 right-3 bottom-0 h-[2px] rounded-full holo-bar"
+                    className="absolute left-2.5 right-2.5 -bottom-2 h-[2px] rounded-full holo-bar"
                     transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                   />
                 )}

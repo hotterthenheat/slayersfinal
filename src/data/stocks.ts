@@ -88,10 +88,10 @@ function thesisFor(name: string, sl: StockSleeves, verdict: StockVerdict): strin
   const best = ranked[0];
   const worst = ranked[ranked.length - 1];
   if (verdict === 'ACCUMULATE') {
-    return `${name}: ${best.good}; ${worst.v < 45 ? `watch that ${worst.k} (${worst.v}) doesn't roll over` : 'no sleeve is fighting the trade'}. Scale in on pullbacks, not breakouts.`;
+    return `${name}: ${best.good}; ${worst.v < 45 ? `watch that ${worst.k} (${worst.v}) doesn't roll over` : 'no sleeve is fighting the trade'}. Pullbacks read cleaner than breakouts here.`;
   }
   if (verdict === 'AVOID') {
-    return `${name}: ${worst.bad} (${worst.v}); ${best.v > 65 ? `${best.k} alone isn't enough to carry it` : 'nothing on the board argues for owning it here'}. Stand aside or fade strength.`;
+    return `${name}: ${worst.bad} (${worst.v}); ${best.v > 65 ? `${best.k} alone isn't enough to carry it` : 'nothing on the board argues for owning it here'}. Strength here reads as supply, not a base.`;
   }
   return `${name}: sleeves disagree — ${best.good}, but ${worst.bad.replace('—', 'and')}. Needs a catalyst; keep it on the bench.`;
 }

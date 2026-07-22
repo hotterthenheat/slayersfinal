@@ -76,7 +76,7 @@ const ProveIt = () => {
         actions={
           <span className="inline-flex items-center gap-2">
             <SegmentedControl
-              ariaLabel="Simulation window"
+              ariaLabel="Modeling window"
               options={WINDOW_OPTIONS}
               value={window_}
               onChange={v => setWindow(v as Window)}
