@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import RGL, { WidthProvider, type Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
@@ -37,6 +38,7 @@ import type { MarketSnapshot } from '../../types/market';
 import type { WorkspaceCtx } from '../workspace/registry';
 import { PULSE_ADDABLE_PANELS, PULSE_DATA_CONNECTIONS, pulsePanelByKey } from './pulseRegistry';
 import PanelErrorBoundary from './PanelErrorBoundary';
+import { EASE } from '../../lib/motion';
 import {
   PULSE_PRESETS,
   PULSE_STORAGE_KEY,
@@ -91,6 +93,11 @@ function loadState(): PulseWorkspaceState {
       const panels = l.panels.filter(p => pulsePanelByKey(p.key));
       return { ...l, panels, layout: l.layout.filter(g => panels.some(p => p.id === g.i)) };
     });
+    // Fold in any preset the saved state predates (by id), so returning users
+    // gain newly-shipped desk profiles without losing their custom layouts.
+    const have = new Set(parsed.layouts.map(l => l.id));
+    const missing = PULSE_PRESETS.filter(p => !have.has(p.id)).map(clonePreset);
+    if (missing.length) parsed.layouts = [...parsed.layouts, ...missing];
     if (!parsed.layouts.some(l => l.id === parsed.activeId)) parsed.activeId = parsed.layouts[0].id;
     return parsed;
   } catch {
@@ -606,29 +613,43 @@ const PulseWorkspace = () => {
           <span className="text-[11px] text-textSecondary">Use “Add panel” or pick a layout to build your desk</span>
         </div>
       ) : (
-        <Grid
-          layout={active.layout}
-          cols={12}
-          rowHeight={64}
-          margin={[12, 12]}
-          containerPadding={[0, 0]}
-          compactType="vertical"
-          draggableHandle=".widget-drag"
-          isDraggable={editLayout}
-          isResizable={editLayout}
-          onLayoutChange={onLayoutChange}
-        >
-          {active.panels.map(p => {
-            const ticker = p.ticker ?? activeTicker;
-            const minimized = p.minimized;
-            return (
-              <div key={p.id} className="inst-surface rounded-md overflow-hidden flex flex-col">
-                <PanelChrome panelId={p.id} panelKey={p.key} ticker={ticker} />
-                {!minimized && <div className="flex-grow min-h-0 overflow-hidden">{renderPanelBody(p.key, ticker)}</div>}
-              </div>
-            );
-          })}
-        </Grid>
+        // Keyed by the active layout so switching a desk profile crossfades +
+        // settles into the new arrangement — the terminal visibly rearranging
+        // itself. Only fires on profile switch (not data ticks or drags); first
+        // load skips it (initial={false}) so the page's own entrance leads.
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={active.id}
+            initial={{ opacity: 0, scale: 0.985 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.99 }}
+            transition={{ duration: 0.24, ease: EASE }}
+          >
+            <Grid
+              layout={active.layout}
+              cols={12}
+              rowHeight={64}
+              margin={[12, 12]}
+              containerPadding={[0, 0]}
+              compactType="vertical"
+              draggableHandle=".widget-drag"
+              isDraggable={editLayout}
+              isResizable={editLayout}
+              onLayoutChange={onLayoutChange}
+            >
+              {active.panels.map(p => {
+                const ticker = p.ticker ?? activeTicker;
+                const minimized = p.minimized;
+                return (
+                  <div key={p.id} className="inst-surface rounded-md overflow-hidden flex flex-col">
+                    <PanelChrome panelId={p.id} panelKey={p.key} ticker={ticker} />
+                    {!minimized && <div className="flex-grow min-h-0 overflow-hidden">{renderPanelBody(p.key, ticker)}</div>}
+                  </div>
+                );
+              })}
+            </Grid>
+          </motion.div>
+        </AnimatePresence>
       )}
     </div>
   );
