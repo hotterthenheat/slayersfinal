@@ -26,12 +26,12 @@ const roleTone: Record<DarkPoolLevel['role'], Tone> = {
   PIVOT: 'neutral',
 };
 
-/** Notional meter for a shelf — support rides the holo foil, supply reads red. */
+/** Notional meter for a shelf — support reads green, supply reads red. */
 const ShelfBar = ({ level, max }: { level: DarkPoolLevel; max: number }) => (
   <span className="flex w-full h-[5px] rounded-full overflow-hidden bg-white/[0.05]">
     <span
       className={`h-full rounded-full ${
-        level.role === 'SUPPORT' ? 'holo-bar' : level.role === 'RESISTANCE' ? 'bg-bear/80' : 'bg-white/25'
+        level.role === 'SUPPORT' ? 'bg-bull/80' : level.role === 'RESISTANCE' ? 'bg-bear/80' : 'bg-white/25'
       }`}
       style={{ width: `${Math.max(6, (level.notional / max) * 100)}%` }}
     />

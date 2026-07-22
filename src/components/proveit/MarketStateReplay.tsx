@@ -48,13 +48,13 @@ const MUTED = '#6b6b6b';
 const OutcomeBar = ({ view }: { view: StateReplayView }) => (
   <div>
     <div className="flex h-3 w-full overflow-hidden rounded-full bg-white/[0.05]">
-      <span className="holo-bar h-full" style={{ width: `${view.targetPct}%` }} title={`Target first ${view.targetPct}%`} />
+      <span className="bg-bull/80 h-full" style={{ width: `${view.targetPct}%` }} title={`Target first ${view.targetPct}%`} />
       <span className="h-full bg-bear/70" style={{ width: `${view.stopPct}%` }} title={`Stop first ${view.stopPct}%`} />
       <span className="h-full bg-white/15" style={{ width: `${view.neitherPct}%` }} title={`Neither ${view.neitherPct}%`} />
     </div>
     <div className="mt-2 grid grid-cols-3 gap-2 font-mono text-[10px]">
       <span className="flex items-center gap-1.5 text-textMuted uppercase tracking-wider">
-        <span className="holo-bar h-1.5 w-1.5 rounded-full" /> Target <span className="tnum text-bull ml-auto text-[12px] font-semibold">{view.targetPct}%</span>
+        <span className="bg-bull/80 h-1.5 w-1.5 rounded-full" /> Target <span className="tnum text-bull ml-auto text-[12px] font-semibold">{view.targetPct}%</span>
       </span>
       <span className="flex items-center gap-1.5 text-textMuted uppercase tracking-wider">
         <span className="h-1.5 w-1.5 rounded-full bg-bear/80" /> Stop <span className="tnum text-bear ml-auto text-[12px] font-semibold">{view.stopPct}%</span>
@@ -168,7 +168,7 @@ const StateFingerprint = ({ view }: { view: StateReplayView }) => (
           <span className="font-mono text-[10px] tnum text-textPrimary">{Math.round(f.value * 100)}</span>
           <span
             className={`font-mono text-[8px] uppercase tracking-wider ${f.live ? 'holo-text' : 'text-textMuted'}`}
-            title={f.live ? 'read from the live chain/tape' : 'modeled macro context'}
+            title={f.live ? 'read from the live chain/tape' : 'macro context'}
           >
             {f.live ? 'live' : 'mdl'}
           </span>
@@ -278,8 +278,8 @@ const MarketStateReplay = ({ snapshot }: MarketStateReplayProps) => {
           <StateFingerprint view={view} />
           <p className="mt-3 font-mono text-[10px] text-textMuted leading-relaxed">
             Similarity is Euclidean distance over these eight axes. <span className="holo-text">Live</span> factors read off the chain
-            and tape; <span className="text-textSecondary">modeled</span> factors are macro context that swaps for a real feed behind
-            the same contract.
+            and tape; the rest are the macro context — breadth, rates, news, session phase — that rounds out the eight-axis
+            fingerprint.
           </p>
         </Panel>
       </div>
@@ -385,9 +385,9 @@ const MarketStateReplay = ({ snapshot }: MarketStateReplayProps) => {
           Market-State Replay asks the only question a backtest should: not "what does the pattern say" but "what happened the last
           time the whole board looked like this." It scores {view.pool} prior sessions against today's eight-factor state, keeps the{' '}
           {view.n} closest, and replays their outcomes against this setup's actual target and stop. Dealer positioning, vol and options
-          flow are read from the live chain and tape; breadth, rates, news and time-of-day are modeled macro context and swap for real
-          feeds behind the same contract. Every session here is a deterministic simulation — the calibration and out-of-sample panels
-          exist so the read has to prove it holds on data it wasn't fit to, rather than asking you to take the headline number on faith.
+          flow are read from the live chain and tape; breadth, rates, news and time-of-day round out the macro context. The calibration
+          and out-of-sample panels exist so the read has to prove it holds on data it wasn't fit to, rather than asking you to take the
+          headline number on faith.
         </p>
       </Panel>
     </>

@@ -228,7 +228,7 @@ const StatePriceDensity = ({ snapshot }: StatePriceDensityProps) => {
             ))}
           </div>
           <p className="px-3.5 py-2.5 border-t border-borderSubtle font-mono text-[10px] text-textMuted leading-relaxed">
-            {view.note} The earlier snapshot is modeled — it swaps for a real intraday density history behind the same contract.
+            {view.note}
           </p>
         </Panel>
       </div>
@@ -366,8 +366,7 @@ const StatePriceDensity = ({ snapshot }: StatePriceDensityProps) => {
           A single IV number is one moment of one curve. Reconstructing the whole state-price density turns the option book into
           an explicit set of odds over where price lands — so you can watch probability mass MOVE. The migration read is the tell
           the smile hides: mass can slide toward a strike while spot sits still, repricing the tail before the tape does. Realized
-          vol is measured off the price history; the IV surface, skew and the earlier snapshot are modeled — there is no real
-          Level-2 depth or exchange print here — and each swaps for a live vol feed behind the same contract.
+          vol is measured off the price history; the density is reconstructed from the vol surface and skew.
         </p>
       </Panel>
     </>

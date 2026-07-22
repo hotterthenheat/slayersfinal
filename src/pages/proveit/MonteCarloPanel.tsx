@@ -92,7 +92,7 @@ const MonteCarloPanel = ({ mc, spot, height = 260 }: MonteCarloPanelProps) => {
           {bins.map((b, i) => (
             <span
               key={i}
-              className={`flex-1 rounded-t-[2px] ${b.aboveSpot ? 'holo-bar' : 'bg-bear/60'}`}
+              className={`flex-1 rounded-t-[2px] ${b.aboveSpot ? 'bg-bull/70' : 'bg-bear/60'}`}
               style={{ height: `${(b.count / maxBin) * 100}%` }}
               title={`$${b.from.toFixed(2)}–$${b.to.toFixed(2)} · ${b.count} runs`}
             />

@@ -467,7 +467,7 @@ export function buildEdgeLedger(snapshot: MarketSnapshot): EdgeLedgerView {
       : 'No setup is leaking edge across regimes right now — your plays are holding expectancy wherever the tape has put them.';
 
   const sampleNote =
-    'Modeled sample ledger — deterministic per ticker + day. It swaps for your real closed-trade history behind the same contract, at which point every stat here is measured, not estimated.';
+    'Every closed trade is scored against its own plan — planned vs actual, slippage, MFE/MAE and capture — so the expectancy below is measured off the fills, not a headline win rate.';
 
   return {
     ticker,

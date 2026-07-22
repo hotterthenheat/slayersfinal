@@ -24,7 +24,6 @@ interface SamplePreviewProps {
 const SamplePreview = ({ setup, scanner, onReviewSetup }: SamplePreviewProps) => {
   const { trackSetup, untrackSetup, isTracked } = useTracker();
   const tracked = isTracked(setup.id);
-  const moveUp = setup.expectedMovePct >= 0;
   const bullish = setup.right === 'C';
 
   const liquidityTone = setup.liquidityLabel === 'Tight' ? 'bull' : setup.liquidityLabel === 'Normal' ? 'warn' : 'bear';
@@ -86,8 +85,8 @@ const SamplePreview = ({ setup, scanner, onReviewSetup }: SamplePreviewProps) =>
           </div>
           <div className="border border-borderSubtle bg-inset rounded-md px-3 py-2">
             <div className="font-mono text-[9px] uppercase tracking-widest text-textMuted">Exp. Move</div>
-            <div className={`mt-1 font-mono text-sm font-semibold tnum ${moveUp ? 'text-bull' : 'text-bear'}`}>
-              <AnimatedNumber value={setup.expectedMovePct} format={v => `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`} />
+            <div className={`mt-1 font-mono text-sm font-semibold tnum ${bullish ? 'text-bull' : 'text-bear'}`}>
+              <AnimatedNumber value={setup.expectedMovePct} format={v => `${bullish ? '+' : '−'}${Math.abs(v).toFixed(1)}%`} />
             </div>
           </div>
         </div>
@@ -139,7 +138,7 @@ const SamplePreview = ({ setup, scanner, onReviewSetup }: SamplePreviewProps) =>
               <span className="font-mono text-[9px] uppercase tracking-widest text-textMuted">Invalidation</span>
             </div>
             <div className="font-mono text-sm font-semibold text-warn tnum">
-              Below ${setup.invalidationPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {bullish ? 'Below' : 'Above'} ${setup.invalidationPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
             <div className="font-mono text-[10px] text-textMuted">{setup.invalidationReason}</div>
           </div>

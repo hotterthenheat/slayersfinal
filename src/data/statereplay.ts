@@ -34,12 +34,12 @@ export type FeatureKey = 'dealer' | 'vol' | 'liquidity' | 'breadth' | 'rates' | 
 export const STATE_FEATURES: { key: FeatureKey; label: string; blurb: string }[] = [
   { key: 'dealer', label: 'Dealer positioning', blurb: 'net gamma sign & size dealers must hedge' },
   { key: 'vol', label: 'Vol regime', blurb: 'realized/implied energy in the tape' },
-  { key: 'liquidity', label: 'Liquidity', blurb: 'depth available to absorb flow (modeled)' },
-  { key: 'breadth', label: 'Breadth', blurb: 'how broad the move is (modeled)' },
-  { key: 'rates', label: 'Rates', blurb: 'macro rates backdrop (modeled)' },
-  { key: 'news', label: 'News', blurb: 'headline pressure on the session (modeled)' },
+  { key: 'liquidity', label: 'Liquidity', blurb: 'depth available to absorb flow' },
+  { key: 'breadth', label: 'Breadth', blurb: 'how broad the move is' },
+  { key: 'rates', label: 'Rates', blurb: 'macro rates backdrop' },
+  { key: 'news', label: 'News', blurb: 'headline pressure on the session' },
   { key: 'flow', label: 'Options flow', blurb: 'aggressive call/put tape imbalance' },
-  { key: 'tod', label: 'Time of day', blurb: 'session phase the state sits in (modeled)' },
+  { key: 'tod', label: 'Time of day', blurb: 'session phase the state sits in' },
 ];
 
 export type Outcome = 'TARGET' | 'STOP' | 'NEITHER';
