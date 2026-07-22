@@ -18,7 +18,7 @@ const SetupCard = ({ setup, expanded, isSelected, isTop, onToggle, onSelect, onO
   const moveUp = setup.expectedMovePct >= 0;
   const isCall = setup.right === 'C';
   // Green for calls, red for puts (house tokens) — holographic-silver lettering on top.
-  const pillTone = isCall ? 'border-bull/50 bg-[#15803d]' : 'border-bear/50 bg-[#b91c1c]';
+  const pillTone = isCall ? 'border-bull/50 bg-bull/20 text-bull' : 'border-bear/50 bg-bear/20 text-bear';
 
   return (
     <div className={`border rounded-md overflow-hidden transition-colors ${

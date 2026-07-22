@@ -75,7 +75,7 @@ const CrushPath = ({ view }: { view: EarningsIntelView }) => {
       <rect x={px} y={0} width={W - px} height={H} fill="rgba(255,149,0,0.05)" />
       {/* post-crush baseline */}
       <line x1={6} x2={W - 6} y1={baseY} y2={baseY} stroke="#6b6b6b" strokeOpacity={0.6} strokeWidth={1} strokeDasharray="4 3" />
-      <text x={8} y={baseY - 4} fontSize={8.5} fill="#8b8b8b" fontFamily="monospace">
+      <text x={8} y={baseY - 4} fontSize={8.5} fill="#7d7d7d" fontFamily="monospace">
         base IV {view.baseIv.toFixed(0)}%
       </text>
       {/* print marker */}
@@ -141,7 +141,7 @@ const ExpressionCard = ({ expr, recommended }: { expr: Expression; recommended: 
       actions={recommended ? <SignalBadge tone={tone} dot pulse>THE TRADE</SignalBadge> : undefined}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className={`font-mono text-base font-bold ${expr.side === 'LONG' ? 'text-bull' : 'text-[#EA00FF]'}`}>{expr.name}</span>
+        <span className={`font-mono text-base font-bold ${expr.side === 'LONG' ? 'text-bull' : 'text-king'}`}>{expr.name}</span>
         <span className={`font-mono text-lg font-bold tnum ${evTone(expr.ev) === 'bull' ? 'text-bull' : evTone(expr.ev) === 'bear' ? 'text-bear' : 'text-textPrimary'}`}>
           {fmtEv(expr.ev)}
         </span>
