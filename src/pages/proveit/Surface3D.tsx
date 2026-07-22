@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { MarketSnapshot } from '../../types/market';
-import VolSurface from '../../components/three/VolSurface';
+import DealerSurface3D from '../../components/three/DealerSurface3D';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 
 /*
@@ -26,6 +26,8 @@ interface SurfaceData {
   grid: number[][];
   strikes: number[];
   spotCol: number;
+  /** max |net GEX| in the window, dollars — the surface's real scale */
+  maxAbsUsd: number;
 }
 
 function buildSurface(snapshot: MarketSnapshot): SurfaceData {
@@ -50,7 +52,7 @@ function buildSurface(snapshot: MarketSnapshot): SurfaceData {
       })
     );
   }
-  return { grid, strikes, spotCol };
+  return { grid, strikes, spotCol, maxAbsUsd: maxAbs };
 }
 
 /** −1…1 normalized exposure → house-grammar heatmap fill. Green = support (+), red = negative gamma (−). */
@@ -77,7 +79,7 @@ interface Surface3DProps {
 
 const Surface3D = ({ snapshot, height = 340 }: Surface3DProps) => {
   const [view, setView] = useState<View>('2d');
-  const { grid, strikes, spotCol } = useMemo(() => buildSurface(snapshot), [snapshot]);
+  const { grid, strikes, spotCol, maxAbsUsd } = useMemo(() => buildSurface(snapshot), [snapshot]);
   const cols = strikes.length;
   const rows = grid.length;
   const spotLeft = cols > 0 ? ((spotCol + 0.5) / cols) * 100 : 50;
@@ -94,15 +96,9 @@ const Surface3D = ({ snapshot, height = 340 }: Surface3DProps) => {
 
       {view === '3d' ? (
         <div className="relative flex-1 min-h-0">
-          <VolSurface grid={grid} colormap="exposure" height="100%" />
-          <div className="absolute bottom-2 left-3 flex items-center gap-3 font-mono text-[11px] uppercase tracking-wider text-textMuted pointer-events-none">
-            <span className="inline-flex items-center gap-1.5">
-              <span className="w-2.5 h-[3px] holo-bar inline-block rounded-full" /> dealer support
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="w-2.5 h-[3px] bg-bear/80 inline-block rounded-full" /> negative gamma
-            </span>
-            <span className="text-[9px] tracking-widest">drag to orbit</span>
+          <DealerSurface3D grid={grid} strikes={strikes} spotCol={spotCol} maxAbsUsd={maxAbsUsd} />
+          <div className="absolute bottom-2 right-3 font-mono text-[9px] uppercase tracking-widest text-textMuted pointer-events-none">
+            drag · scroll to zoom
           </div>
         </div>
       ) : (
