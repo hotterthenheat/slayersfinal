@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { X } from 'lucide-react';
+import { EASE } from '../../lib/motion';
 
 interface ShortcutsOverlayProps {
   open: boolean;
@@ -13,6 +14,8 @@ const GROUPS: { title: string; rows: { keys: string[]; label: string }[] }[] = [
     title: 'Global',
     rows: [
       { keys: ['⌘', 'K'], label: 'Open the command palette' },
+      { keys: ['['], label: 'Previous ticker in the watchlist' },
+      { keys: [']'], label: 'Next ticker in the watchlist' },
       { keys: ['?'], label: 'Show this shortcuts sheet' },
       { keys: ['Esc'], label: 'Close palette, drawer or overlay' },
     ],
@@ -70,7 +73,7 @@ const ShortcutsOverlay = ({ open, onClose }: ShortcutsOverlayProps) => {
             initial={{ opacity: 0, scale: 0.97, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: 8 }}
-            transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 0.18, ease: EASE }}
           >
             <header className="flex items-center justify-between px-4 py-3 border-b border-borderSubtle">
               <span className="font-mono text-[11px] uppercase tracking-widest text-textSecondary">Keyboard shortcuts</span>

@@ -3,16 +3,17 @@
   SLAYER TERMINAL - LAUNCH TRANSITION
   One branded gate, three triggers: "Launch terminal"
   CTAs, logo clicks, and every full page load (boot).
-  Caret logo + a lime progress line over black, then
-  the destination fades in beneath it. Fixed duration
-  — when a real boot sequence exists it slots into
-  the same hold.
+  Caret logo + a holo-silver progress line over black,
+  then the destination fades in beneath it. A reload or
+  back/forward boot uses a clipped hold so refreshes
+  feel instant; a first visit gets the full moment.
 ==================================================
 */
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
+import { EASE } from '../../lib/motion';
 
 interface LaunchCtxValue {
   /** Play the gate, then navigate (defaults to the terminal's front door). */
@@ -31,6 +32,19 @@ export const useLaunch = (): LaunchCtxValue => {
 const HOLD_MS = 1050;
 /** …then the destination mounts behind it before the fade-out starts. */
 const REVEAL_MS = 300;
+/** A reload / back-forward boot has nothing new to introduce — clip it. */
+const RELOAD_HOLD_MS = 320;
+
+/** Full hold for a first visit, a clipped one for a reload or history nav. */
+const bootGateMs = (): number => {
+  try {
+    const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+    if (nav && (nav.type === 'reload' || nav.type === 'back_forward')) return RELOAD_HOLD_MS + REVEAL_MS;
+  } catch {
+    // performance API unavailable — fall through to the full hold
+  }
+  return HOLD_MS + REVEAL_MS;
+};
 
 const captionFor = (path: string) => (path === '/' ? 'Loading' : 'Entering terminal');
 
@@ -38,6 +52,9 @@ export const LaunchProvider = ({ children }: { children: ReactNode }) => {
   // Boot gate: every full page load (first visit, refresh) opens through it.
   const [active, setActive] = useState(true);
   const [caption, setCaption] = useState(() => captionFor(window.location.pathname));
+  // How long the bar fills for the current pass — clipped on reload, full on
+  // launch clicks. Read by the progress bar so the two never disagree.
+  const [gateMs, setGateMs] = useState(bootGateMs);
   const busyRef = useRef(true);
   /** Boot renders the gate already opaque — a fade-in would flash the page. */
   const bootRef = useRef(true);
@@ -47,8 +64,10 @@ export const LaunchProvider = ({ children }: { children: ReactNode }) => {
     const t = window.setTimeout(() => {
       setActive(false);
       busyRef.current = false;
-    }, HOLD_MS + REVEAL_MS);
+    }, gateMs);
     return () => window.clearTimeout(t);
+    // gateMs is fixed for the boot pass; launch() drives later passes itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const launch = useCallback(
@@ -62,6 +81,7 @@ export const LaunchProvider = ({ children }: { children: ReactNode }) => {
       busyRef.current = true;
       bootRef.current = false;
       setCaption(captionFor(to));
+      setGateMs(HOLD_MS + REVEAL_MS);
       setActive(true);
       window.setTimeout(() => {
         navigate(to);
@@ -84,7 +104,7 @@ export const LaunchProvider = ({ children }: { children: ReactNode }) => {
             initial={bootRef.current ? false : { opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 0.3, ease: EASE }}
             className="fixed inset-0 z-[100] bg-canvas flex flex-col items-center justify-center gap-6"
           >
             <span className="font-mono text-xl font-bold tracking-tight select-none">
@@ -97,7 +117,7 @@ export const LaunchProvider = ({ children }: { children: ReactNode }) => {
                 className="h-full rounded-full holo-bar"
                 initial={{ width: '0%' }}
                 animate={{ width: '100%' }}
-                transition={{ duration: (HOLD_MS + REVEAL_MS) / 1000, ease: [0.3, 0.1, 0.3, 1] }}
+                transition={{ duration: gateMs / 1000, ease: [0.3, 0.1, 0.3, 1] }}
               />
             </div>
             <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-textMuted select-none">

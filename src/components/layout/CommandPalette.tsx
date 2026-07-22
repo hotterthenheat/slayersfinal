@@ -30,6 +30,7 @@ const CommandPalette = ({ open, onClose, onOpenSettings, onOpenShortcuts }: Comm
   const [query, setQuery] = useState('');
   const [highlight, setHighlight] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
 
   const actions = useMemo<PaletteAction[]>(() => {
     const commands: PaletteAction[] = [
@@ -112,6 +113,12 @@ const CommandPalette = ({ open, onClose, onOpenSettings, onOpenShortcuts }: Comm
     setHighlight(0);
   }, [query]);
 
+  // Keep the highlighted row in view as the selection walks past the fold.
+  useEffect(() => {
+    const el = listRef.current?.querySelector<HTMLElement>(`[data-index="${highlight}"]`);
+    el?.scrollIntoView({ block: 'nearest' });
+  }, [highlight]);
+
   if (!open) return null;
 
   const runAction = (action: PaletteAction | undefined) => {
@@ -149,7 +156,7 @@ const CommandPalette = ({ open, onClose, onOpenSettings, onOpenShortcuts }: Comm
           placeholder="Type a command or destination…"
           className="w-full bg-transparent px-4 py-3 text-sm text-textPrimary placeholder:text-textMuted focus:outline-none border-b border-borderSubtle"
         />
-        <div className="max-h-72 overflow-y-auto py-1.5">
+        <div ref={listRef} className="max-h-72 overflow-y-auto py-1.5">
           {filtered.length === 0 && (
             <div className="px-4 py-6 text-center font-mono text-[11px] text-textMuted">No matches</div>
           )}
@@ -164,6 +171,7 @@ const CommandPalette = ({ open, onClose, onOpenSettings, onOpenShortcuts }: Comm
                   </div>
                 )}
                 <button
+                  data-index={i}
                   onClick={() => runAction(action)}
                   onMouseEnter={() => setHighlight(i)}
                   className={`w-full flex items-center gap-3 px-4 py-2 text-left transition-colors ${
