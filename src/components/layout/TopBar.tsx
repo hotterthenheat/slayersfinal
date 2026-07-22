@@ -16,7 +16,6 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronDown, Search, Menu, X, type LucideIcon } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { useLaunch } from './LaunchTransition';
-import SignalBadge from '../ui/SignalBadge';
 import { NAV_GROUPS, itemsByGroup, NAV_ITEMS, type NavGroup, type NavItem } from './nav';
 
 interface TopBarProps {
@@ -144,7 +143,6 @@ const TopBar = ({ onOpenPalette }: TopBarProps) => {
             </span>
           )}
         </div>
-        <SignalBadge tone="warn">Sim</SignalBadge>
         <span className="hidden xl:block font-mono text-xs text-textSecondary tnum select-none">{clock}</span>
       </div>
 

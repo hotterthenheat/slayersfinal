@@ -10,9 +10,39 @@
 */
 
 import { hRange, hGauss, hash } from '../core/rng';
-import type { FlowPrint } from '../types/flowdesk';
 
 export type FlowSide = 'BID' | 'MID' | 'ASK';
+
+/**
+ * Minimal contract identity the drilldown needs — the shared shape every desk
+ * that shows a single contract (the tape print, a scanner row, …) can satisfy.
+ * `FlowPrint` already carries every field, so it is assignable as-is; other
+ * desks map their row onto this before opening the drilldown.
+ */
+export interface ContractRef {
+  ticker: string;
+  strike: number;
+  right: 'C' | 'P';
+  /** MM/DD/YYYY — seeds the deterministic drilldown alongside ticker+strike+right */
+  expiry: string;
+  /** representative contract premium ($ per contract) */
+  fill: number;
+  /** bid-side share of the contract's day, 0–100 */
+  ratioBidPct: number;
+  /** underlying spot */
+  spot: number;
+  /** dominant aggressor side */
+  side: FlowSide;
+  /** representative print size (0 when the row is an aggregate) */
+  size: number;
+  volume: number;
+  oi: number;
+  premium: number;
+  otmPct: number;
+  volOverOI: number;
+  /** leg count — 1 for a single contract */
+  legs: number;
+}
 
 export interface ContractPrintPoint {
   min: number; // minutes since the 09:30 open (0…390)
@@ -63,7 +93,7 @@ export function flowClock(min: number): string {
   return `${hh}:${String(m).padStart(2, '0')}`;
 }
 
-export function buildContractFlow(p: FlowPrint): ContractFlow {
+export function buildContractFlow(p: ContractRef): ContractFlow {
   const key = `${p.ticker}-${p.strike}${p.right}-${p.expiry}`;
 
   // ---- contract flow: this contract's intraday prints ----

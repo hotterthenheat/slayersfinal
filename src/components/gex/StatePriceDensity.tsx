@@ -50,10 +50,10 @@ const DensityChart = ({ view }: { view: StateDensityView }) => {
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none">
       {/* shaded 2σ tails */}
       <rect x={0} y={0} width={Math.max(0, lTail)} height={H} fill="rgba(255,59,48,0.06)" />
-      <rect x={rTail} y={0} width={Math.max(0, W - rTail)} height={H} fill="rgba(199,211,232,0.05)" />
+      <rect x={rTail} y={0} width={Math.max(0, W - rTail)} height={H} fill="rgba(48,209,88,0.06)" />
       {/* implied density */}
       <path d={impArea} fill="rgba(151,136,196,0.12)" />
-      <path d={impLine} fill="none" stroke="#C7D3E8" strokeWidth={1.75} vectorEffect="non-scaling-stroke" />
+      <path d={impLine} fill="none" stroke="#ededed" strokeWidth={1.75} vectorEffect="non-scaling-stroke" />
       {/* realized density — dotted overlay */}
       <path d={realLine} fill="none" stroke="#8f8f8f" strokeWidth={1.1} strokeDasharray="2 2.5" vectorEffect="non-scaling-stroke" />
       {/* forward marker */}
@@ -64,7 +64,7 @@ const DensityChart = ({ view }: { view: StateDensityView }) => {
       <text x={sx + 3} y={H - 5} fontSize={8.5} fill="#ededed" fontFamily="monospace">SPOT {spot.toFixed(2)}</text>
       {/* 2σ tick labels */}
       <text x={Math.max(2, lTail - 2)} y={H - 5} fontSize={8} fill="#FF3B30" fontFamily="monospace" textAnchor="end">−2σ</text>
-      <text x={Math.min(W - 2, rTail + 2)} y={12} fontSize={8} fill="#C7D3E8" fontFamily="monospace">+2σ</text>
+      <text x={Math.min(W - 2, rTail + 2)} y={12} fontSize={8} fill="#30D158" fontFamily="monospace">+2σ</text>
     </svg>
   );
 };
@@ -118,10 +118,10 @@ const ForwardVolChart = ({ view }: { view: StateDensityView }) => {
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none">
       <path d={spotLine} fill="none" stroke="#6b6b6b" strokeWidth={1.1} strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
-      <path d={fwdLine} fill="none" stroke="#C7D3E8" strokeWidth={1.75} vectorEffect="non-scaling-stroke" />
+      <path d={fwdLine} fill="none" stroke="#ededed" strokeWidth={1.75} vectorEffect="non-scaling-stroke" />
       {pts.map((p, i) => (
         <g key={p.label}>
-          <circle cx={X(i)} cy={Y(p.forwardVol)} r={2.4} fill="#C7D3E8" />
+          <circle cx={X(i)} cy={Y(p.forwardVol)} r={2.4} fill="#ededed" />
           <text x={X(i)} y={H - 6} fontSize={8} fill="#6b6b6b" fontFamily="monospace" textAnchor="middle">{p.label}</text>
           <text x={X(i)} y={Y(p.forwardVol) - 6} fontSize={8} fill="#ededed" fontFamily="monospace" textAnchor="middle">
             {p.forwardVol.toFixed(1)}
@@ -157,7 +157,6 @@ const StatePriceDensity = ({ snapshot }: StatePriceDensityProps) => {
       <div className="flex items-center gap-3 flex-wrap">
         <span className="inline-flex items-center gap-1.5 border border-borderSubtle bg-panel rounded-md px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider text-textSecondary">
           Model <span className="text-textPrimary font-semibold">SLAYER-DENSITY v0.1</span>
-          <span className="text-textMuted">· SIM</span>
         </span>
         <span className="font-mono text-[10px] text-textMuted uppercase tracking-widest tnum">
           {view.ticker} · risk-neutral · {view.horizonDays}D horizon

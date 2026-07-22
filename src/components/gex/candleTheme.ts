@@ -23,13 +23,13 @@ export const CANDLE_THEMES = {
     volUp: 'rgba(238,241,245,0.22)',
     volDown: 'rgba(86,92,104,0.30)',
   },
-  // House chrome — holo silver up / hot red down (matches bull/bear tokens)
+  // House chrome — green up / hot red down (matches bull/bear tokens)
   classic: {
-    up: '#C7D3E8',
+    up: '#30D158',
     down: '#FF3B30',
-    wickUp: '#C7D3E8',
+    wickUp: '#30D158',
     wickDown: '#FF3B30',
-    volUp: 'rgba(199,211,232,0.28)',
+    volUp: 'rgba(48,209,88,0.28)',
     volDown: 'rgba(255,59,48,0.28)',
   },
   // Desaturated sage / clay

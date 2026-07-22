@@ -30,10 +30,10 @@ const SCALE_OPTIONS = [
 ] as const;
 
 // Leg identity colors mirror the Exposure Matrix so the two tables read as one
-// system: puts red, calls silver, net magenta (the "land here" column).
+// system: puts red, calls green, net magenta (the "land here" column).
 const LEG_BAR: Record<Leg, string> = {
   put: 'rgba(255,59,48,0.7)',
-  call: 'rgba(199,211,232,0.85)',
+  call: 'rgba(48,209,88,0.85)',
   net: 'rgba(234,0,255,0.8)',
 };
 

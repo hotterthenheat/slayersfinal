@@ -1,26 +1,41 @@
 import { useMemo, useState } from 'react';
-import { buildContractFlow, flowClock } from '../../data/contractflow';
+import {
+  ComposedChart,
+  ScatterChart,
+  Scatter,
+  Line,
+  Area,
+  XAxis,
+  YAxis,
+  ZAxis,
+  CartesianGrid,
+  Tooltip,
+  ReferenceLine,
+  ResponsiveContainer,
+} from 'recharts';
+import { buildContractFlow, flowClock, type ContractRef } from '../../data/contractflow';
 import { fmtUsd } from '../../data/gex';
-import type { FlowPrint } from '../../types/flowdesk';
 
 /*
-  Contract drilldown — the Flowseeker-style flow of a single contract, not a
-  candlestick of the underlying. Two stacked panels:
-    • Contract Flow — this contract's intraday prints (time × premium), each a
-      bar sized by volume and coloured by aggressor (ask=green / mid=grey /
-      bid=red), with the running average line + a bid/mid/ask ratio bar.
-    • Net Premium — the underlying's cumulative net call vs put premium as
-      green/red areas, with the underlying price line overlaid.
-  All values come from the deterministic contract-flow builder.
+  Contract drilldown (Flowseeker-style) rendered on recharts — this contract's
+  own flow, not a candlestick of the underlying.
+    • Contract Flow — prints as bubbles (time × premium), sized by volume and
+      coloured by aggressor (ask green / mid grey / bid red), + running avg line.
+    • Net Premium — underlying cumulative net call vs put premium (green/red
+      areas) with the underlying price line overlaid.
+  Values come from the deterministic contract-flow builder.
 */
 
 const ASK = '#30D158';
 const BID = '#FF3B30';
 const MID = '#8b8f96';
-const PRICE_LINE = '#c7d3e8';
+// neutral price/avg reference line — white ("where the market is"); silver is selection-only
+const PRICE_LINE = '#ededed';
+const AXIS = '#6b6b6b';
+const GRID = 'rgba(255,255,255,0.05)';
 
-const SESSION = 390;
-const fmtVol = (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${Math.round(v)}`);
+const axisTick = { fill: AXIS, fontSize: 10, fontFamily: 'JetBrains Mono, monospace' };
+const timeTick = (v: number) => (v <= 0 ? 'Open' : flowClock(v));
 
 const Stat = ({ k, v, tone = 'text-textPrimary' }: { k: string; v: string; tone?: string }) => (
   <span className="whitespace-nowrap font-mono text-[11px] tnum text-textMuted">
@@ -28,45 +43,59 @@ const Stat = ({ k, v, tone = 'text-textPrimary' }: { k: string; v: string; tone?
   </span>
 );
 
-const ContractFlowChart = ({ print }: { print: FlowPrint }) => {
-  const cf = useMemo(() => buildContractFlow(print), [print]);
+const Box = ({ children }: { children: React.ReactNode }) => (
+  <div className="rounded border border-borderMuted bg-panel px-2.5 py-1.5 shadow-lg shadow-black/50 font-mono text-[11px]">{children}</div>
+);
+
+interface FlowTip {
+  active?: boolean;
+  payload?: { payload: { min: number; price: number; size: number; side: string } }[];
+}
+const FlowTooltip = ({ active, payload }: FlowTip) => {
+  if (!active || !payload?.length) return null;
+  const p = payload[0].payload;
+  const c = p.side === 'ASK' ? ASK : p.side === 'BID' ? BID : MID;
+  return (
+    <Box>
+      <div className="text-textMuted">{flowClock(p.min)} ET</div>
+      <div className="text-textPrimary">
+        ${p.price.toFixed(2)} · <span style={{ color: c }}>{p.side}</span> · {p.size.toLocaleString()}x
+      </div>
+    </Box>
+  );
+};
+
+interface NetTip {
+  active?: boolean;
+  payload?: { payload: { min: number; netCall: number; netPut: number; price: number } }[];
+}
+const NetTooltip = ({ active, payload }: NetTip) => {
+  if (!active || !payload?.length) return null;
+  const p = payload[0].payload;
+  return (
+    <Box>
+      <div className="text-textMuted">{flowClock(p.min)} ET · ${p.price.toFixed(2)}</div>
+      <div style={{ color: ASK }}>net call {fmtUsd(p.netCall)}</div>
+      <div style={{ color: BID }}>net put {fmtUsd(p.netPut)}</div>
+    </Box>
+  );
+};
+
+const ContractFlowChart = ({ contract }: { contract: ContractRef }) => {
+  const cf = useMemo(() => buildContractFlow(contract), [contract]);
   const [showAvg, setShowAvg] = useState(true);
   const [showPrice, setShowPrice] = useState(true);
 
-  // ── geometry ──
-  const W = 460;
-  const H = 150;
-  const ML = 6;
-  const MR = 44;
-  const MT = 8;
-  const MB = 18;
-  const PW = W - ML - MR;
-  const PH = H - MT - MB;
-  const xOf = (min: number) => ML + (min / SESSION) * PW;
+  const askPts = useMemo(() => cf.points.filter(p => p.side === 'ASK'), [cf]);
+  const midPts = useMemo(() => cf.points.filter(p => p.side === 'MID'), [cf]);
+  const bidPts = useMemo(() => cf.points.filter(p => p.side === 'BID'), [cf]);
 
-  // Contract-flow scales (right axis = premium)
-  const pY = (p: number) => MT + PH - ((p - cf.priceMin) / (cf.priceMax - cf.priceMin || 1)) * PH;
-  const barMaxH = PH * 0.72;
-  const avgPath = cf.avg.map((a, i) => `${i === 0 ? 'M' : 'L'}${xOf(a.min).toFixed(1)},${pY(a.price).toFixed(1)}`).join(' ');
-  const priceTicks = [cf.priceMax, (cf.priceMax + cf.priceMin) / 2, cf.priceMin];
-
-  // Net-premium scales (left = premium ±, right = underlying price)
-  const nY = (v: number) => MT + PH / 2 - (v / (cf.net.premAbs || 1)) * (PH / 2);
-  const uY = (u: number) => MT + PH - ((u - cf.net.uMin) / (cf.net.uMax - cf.net.uMin || 1)) * PH;
-  const s = cf.net.series;
-  const callArea =
-    `M${xOf(s[0].min).toFixed(1)},${nY(0).toFixed(1)} ` +
-    s.map(n => `L${xOf(n.min).toFixed(1)},${nY(n.netCall).toFixed(1)}`).join(' ') +
-    ` L${xOf(s[s.length - 1].min).toFixed(1)},${nY(0).toFixed(1)} Z`;
-  const putArea =
-    `M${xOf(s[0].min).toFixed(1)},${nY(0).toFixed(1)} ` +
-    s.map(n => `L${xOf(n.min).toFixed(1)},${nY(n.netPut).toFixed(1)}`).join(' ') +
-    ` L${xOf(s[s.length - 1].min).toFixed(1)},${nY(0).toFixed(1)} Z`;
-  const priceLine = s.map((n, i) => `${i === 0 ? 'M' : 'L'}${xOf(n.min).toFixed(1)},${uY(n.price).toFixed(1)}`).join(' ');
-  const xTicks = [0, 130, 260, 390];
-
-  const avgPrice = cf.avg[cf.avg.length - 1]?.price ?? print.fill;
+  const avgPrice = cf.avg[cf.avg.length - 1]?.price ?? contract.fill;
   const bullPct = cf.net.bullishPct;
+  const premAbs = cf.net.premAbs;
+  // symmetric, zero-anchored premium ticks so the axis reads cleanly ($0 at the
+  // centre) instead of recharts' auto near-zero tick landing on an odd value
+  const premTicks = [-premAbs, -premAbs / 2, 0, premAbs / 2, premAbs];
 
   return (
     <div className="flex flex-col gap-4">
@@ -77,16 +106,14 @@ const ContractFlowChart = ({ print }: { print: FlowPrint }) => {
           <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted">1D · 5min</span>
         </div>
         <div className="flex items-center gap-x-3 gap-y-1 flex-wrap">
-          <Stat k="Vol" v={print.volume.toLocaleString()} />
-          <Stat k="OI" v={print.oi.toLocaleString()} />
+          <Stat k="Vol" v={contract.volume.toLocaleString()} />
+          <Stat k="OI" v={contract.oi.toLocaleString()} />
           <Stat k="Avg" v={`$${avgPrice.toFixed(2)}`} />
-          <Stat k="Prem" v={fmtUsd(print.premium)} />
-          <Stat k="OTM" v={`${print.otmPct.toFixed(0)}%`} />
-          <Stat k="Vol/OI" v={`${print.volOverOI.toFixed(2)}`} />
-          <Stat k="Multi" v={print.legs > 1 ? `×${print.legs}` : '1'} />
+          <Stat k="Prem" v={fmtUsd(contract.premium)} />
+          <Stat k="OTM" v={`${contract.otmPct.toFixed(1)}%`} />
+          <Stat k="Vol/OI" v={contract.volOverOI.toFixed(2)} />
+          <Stat k="Multi" v={contract.legs > 1 ? `×${contract.legs}` : '1'} />
         </div>
-
-        {/* Contract ratio */}
         <div className="mt-0.5">
           <div className="flex justify-between font-mono text-[10px] tnum text-textMuted mb-1">
             <span>Bid {Math.round(cf.ratio.bid * 100)}%</span>
@@ -99,8 +126,6 @@ const ContractFlowChart = ({ print }: { print: FlowPrint }) => {
             <span style={{ width: `${cf.ratio.ask * 100}%`, background: ASK }} />
           </div>
         </div>
-
-        {/* Legend */}
         <div className="flex items-center gap-3 flex-wrap font-mono text-[10px] text-textMuted">
           <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: BID }} /> Bid {cf.count.bid}</span>
           <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: MID }} /> Mid {cf.count.mid}</span>
@@ -112,29 +137,41 @@ const ContractFlowChart = ({ print }: { print: FlowPrint }) => {
             <span className="w-3 h-[2px] rounded-full" style={{ background: showAvg ? PRICE_LINE : '#555' }} /> Avg
           </button>
         </div>
-
-        {/* Flow chart */}
         <div className="inst-surface rounded-md p-1.5">
-          <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 150 }} preserveAspectRatio="none">
-            {priceTicks.map((p, i) => (
-              <g key={i}>
-                <line x1={ML} x2={W - MR} y1={pY(p)} y2={pY(p)} stroke="#fff" strokeOpacity={0.06} />
-                <text x={W - MR + 3} y={pY(p) + 3} fontSize={8} fill="#8b8f96" fontFamily="monospace">${p.toFixed(2)}</text>
-              </g>
-            ))}
-            {cf.points.map((pt, i) => {
-              const h = Math.max(2.5, (pt.size / cf.volMax) * barMaxH);
-              const y = pY(pt.price);
-              const c = pt.side === 'ASK' ? ASK : pt.side === 'BID' ? BID : MID;
-              return <rect key={i} x={xOf(pt.min) - 1.4} y={y - h / 2} width={2.8} height={h} rx={1} fill={c} opacity={0.9} />;
-            })}
-            {showAvg && <path d={avgPath} fill="none" stroke={PRICE_LINE} strokeWidth={1.4} strokeOpacity={0.85} />}
-            {xTicks.map(t => (
-              <text key={t} x={xOf(t)} y={H - 5} fontSize={8} fill="#6b6b6b" fontFamily="monospace" textAnchor={t === 0 ? 'start' : 'middle'}>
-                {t === 0 ? 'Open' : flowClock(t)}
-              </text>
-            ))}
-          </svg>
+          <ResponsiveContainer width="100%" height={168}>
+            <ScatterChart margin={{ top: 6, right: 6, bottom: 2, left: 0 }}>
+              <CartesianGrid stroke={GRID} />
+              <XAxis
+                type="number"
+                dataKey="min"
+                domain={[0, 390]}
+                ticks={[0, 130, 260, 390]}
+                tickFormatter={timeTick}
+                tick={axisTick}
+                tickLine={false}
+                axisLine={{ stroke: GRID }}
+              />
+              <YAxis
+                type="number"
+                dataKey="price"
+                domain={[cf.priceMin, cf.priceMax]}
+                orientation="right"
+                width={46}
+                tickFormatter={(v: number) => `$${v.toFixed(2)}`}
+                tick={axisTick}
+                tickLine={false}
+                axisLine={false}
+              />
+              <ZAxis type="number" dataKey="size" range={[24, 440]} />
+              <Tooltip content={<FlowTooltip />} cursor={{ stroke: 'rgba(255,255,255,0.15)' }} />
+              {showAvg && (
+                <Scatter data={cf.avg} line={{ stroke: PRICE_LINE, strokeWidth: 1.5 }} lineType="joint" shape={() => <g />} legendType="none" />
+              )}
+              <Scatter data={bidPts} fill={BID} fillOpacity={0.85} />
+              <Scatter data={midPts} fill={MID} fillOpacity={0.8} />
+              <Scatter data={askPts} fill={ASK} fillOpacity={0.85} />
+            </ScatterChart>
+          </ResponsiveContainer>
         </div>
       </div>
 
@@ -142,7 +179,7 @@ const ContractFlowChart = ({ print }: { print: FlowPrint }) => {
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center justify-between gap-2">
           <span className="font-mono text-[11px] font-semibold uppercase tracking-widest text-textPrimary">Net Premium</span>
-          <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted">{print.ticker} · 1D</span>
+          <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted">{contract.ticker} · 1D</span>
         </div>
         <div className="flex items-center gap-x-3 gap-y-1 flex-wrap">
           <Stat k="Prem" v={fmtUsd(cf.net.callBought + cf.net.callSold + cf.net.putBought + cf.net.putSold)} />
@@ -150,8 +187,6 @@ const ContractFlowChart = ({ print }: { print: FlowPrint }) => {
           <Stat k="NCP" v={fmtUsd(cf.net.ncp)} tone="text-bull" />
           <Stat k="NPP" v={fmtUsd(cf.net.npp)} tone="text-bear" />
         </div>
-
-        {/* Net sentiment */}
         <div className="mt-0.5">
           <div className="flex justify-between font-mono text-[10px] tnum text-textMuted mb-1">
             <span>Bearish {100 - bullPct}%</span>
@@ -163,8 +198,6 @@ const ContractFlowChart = ({ print }: { print: FlowPrint }) => {
             <span style={{ width: `${bullPct}%`, background: ASK }} />
           </div>
         </div>
-
-        {/* Legend */}
         <div className="flex items-center gap-3 flex-wrap font-mono text-[10px] text-textMuted">
           <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: ASK }} /> Call {fmtUsd(cf.net.callBought)}</span>
           <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: BID }} /> Put {fmtUsd(cf.net.putBought)}</span>
@@ -175,28 +208,49 @@ const ContractFlowChart = ({ print }: { print: FlowPrint }) => {
             <span className="w-3 h-[2px] rounded-full" style={{ background: showPrice ? PRICE_LINE : '#555' }} /> Price
           </button>
         </div>
-
-        {/* Net premium chart */}
         <div className="inst-surface rounded-md p-1.5">
-          <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 150 }} preserveAspectRatio="none">
-            <path d={callArea} fill={ASK} fillOpacity={0.16} />
-            <path d={putArea} fill={BID} fillOpacity={0.16} />
-            <line x1={ML} x2={W - MR} y1={nY(0)} y2={nY(0)} stroke="#fff" strokeOpacity={0.18} strokeDasharray="3 3" />
-            <path d={s.map((n, i) => `${i === 0 ? 'M' : 'L'}${xOf(n.min).toFixed(1)},${nY(n.netCall).toFixed(1)}`).join(' ')} fill="none" stroke={ASK} strokeWidth={1.3} />
-            <path d={s.map((n, i) => `${i === 0 ? 'M' : 'L'}${xOf(n.min).toFixed(1)},${nY(n.netPut).toFixed(1)}`).join(' ')} fill="none" stroke={BID} strokeWidth={1.3} />
-            {showPrice && <path d={priceLine} fill="none" stroke={PRICE_LINE} strokeWidth={1.6} />}
-            {/* left premium axis */}
-            <text x={ML} y={nY(cf.net.premAbs) + 7} fontSize={8} fill="#8b8f96" fontFamily="monospace">+{fmtUsd(cf.net.premAbs)}</text>
-            <text x={ML} y={nY(-cf.net.premAbs) - 2} fontSize={8} fill="#8b8f96" fontFamily="monospace">−{fmtUsd(cf.net.premAbs)}</text>
-            {/* right price axis */}
-            <text x={W - MR + 3} y={uY(cf.net.uMax) + 7} fontSize={8} fill="#8b8f96" fontFamily="monospace">${cf.net.uMax.toFixed(0)}</text>
-            <text x={W - MR + 3} y={uY(cf.net.uMin) - 1} fontSize={8} fill="#8b8f96" fontFamily="monospace">${cf.net.uMin.toFixed(0)}</text>
-            {xTicks.map(t => (
-              <text key={t} x={xOf(t)} y={H - 5} fontSize={8} fill="#6b6b6b" fontFamily="monospace" textAnchor={t === 0 ? 'start' : 'middle'}>
-                {t === 0 ? 'Open' : flowClock(t)}
-              </text>
-            ))}
-          </svg>
+          <ResponsiveContainer width="100%" height={168}>
+            <ComposedChart data={cf.net.series} margin={{ top: 6, right: 4, bottom: 2, left: 0 }}>
+              <CartesianGrid stroke={GRID} />
+              <XAxis
+                type="number"
+                dataKey="min"
+                domain={[0, 390]}
+                ticks={[0, 130, 260, 390]}
+                tickFormatter={timeTick}
+                tick={axisTick}
+                tickLine={false}
+                axisLine={{ stroke: GRID }}
+              />
+              <YAxis
+                yAxisId="prem"
+                domain={[-premAbs, premAbs]}
+                ticks={premTicks}
+                width={46}
+                tickFormatter={(v: number) => (Math.abs(v) < premAbs * 0.01 ? '$0' : fmtUsd(v))}
+                tick={axisTick}
+                tickLine={false}
+                axisLine={false}
+              />
+              <YAxis
+                yAxisId="px"
+                orientation="right"
+                domain={[cf.net.uMin, cf.net.uMax]}
+                width={40}
+                tickFormatter={(v: number) => `$${v.toFixed(0)}`}
+                tick={axisTick}
+                tickLine={false}
+                axisLine={false}
+              />
+              <ReferenceLine yAxisId="prem" y={0} stroke="rgba(255,255,255,0.18)" strokeDasharray="3 3" />
+              <Tooltip content={<NetTooltip />} cursor={{ stroke: 'rgba(255,255,255,0.15)' }} />
+              <Area yAxisId="prem" type="monotone" dataKey="netCall" stroke={ASK} strokeWidth={1.3} fill={ASK} fillOpacity={0.16} isAnimationActive={false} />
+              <Area yAxisId="prem" type="monotone" dataKey="netPut" stroke={BID} strokeWidth={1.3} fill={BID} fillOpacity={0.16} isAnimationActive={false} />
+              {showPrice && (
+                <Line yAxisId="px" type="monotone" dataKey="price" stroke={PRICE_LINE} strokeWidth={1.8} dot={false} isAnimationActive={false} />
+              )}
+            </ComposedChart>
+          </ResponsiveContainer>
         </div>
       </div>
     </div>

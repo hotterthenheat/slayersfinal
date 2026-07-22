@@ -26,8 +26,8 @@ const CumulativeDelta = ({ data }: { data: OrderFlowData }) => {
   const line = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(2)},${y(p.value).toFixed(2)}`).join(' ');
   const area = `${line} L${W},${zeroY.toFixed(2)} L0,${zeroY.toFixed(2)} Z`;
   const negative = (points[points.length - 1]?.value ?? 0) < 0;
-  const stroke = negative ? '#FF3B30' : '#C7D3E8';
-  const fill = negative ? 'rgba(255,59,48,0.10)' : 'rgba(199,211,232,0.10)';
+  const stroke = negative ? '#FF3B30' : '#30D158';
+  const fill = negative ? 'rgba(255,59,48,0.10)' : 'rgba(48,209,88,0.10)';
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-24">
@@ -60,7 +60,7 @@ const DeltaByPriceBars = ({ data }: { data: OrderFlowData }) => {
                 style={{
                   left: neg ? `calc(50% - ${pct}%)` : '50%',
                   width: `${pct}%`,
-                  background: neg ? 'rgba(255,59,48,0.78)' : 'rgba(199,211,232,0.9)',
+                  background: neg ? 'rgba(255,59,48,0.78)' : 'rgba(48,209,88,0.9)',
                 }}
               />
             </div>

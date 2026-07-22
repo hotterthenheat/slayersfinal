@@ -84,9 +84,9 @@ const CrushPath = ({ view }: { view: EarningsIntelView }) => {
         PRINT · {view.frontIv.toFixed(0)}% → crush {view.ivCrushPct.toFixed(0)}%
       </text>
       {/* IV path */}
-      <path d={line} fill="none" stroke="#C7D3E8" strokeWidth={1.9} strokeLinejoin="round" />
+      <path d={line} fill="none" stroke="#ededed" strokeWidth={1.9} strokeLinejoin="round" />
       {pts.map((p, i) => (
-        <circle key={p.day} cx={X(i)} cy={Y(p.iv)} r={p.phase === 'print' ? 3 : 1.8} fill={p.phase === 'print' ? '#FF9500' : '#C7D3E8'} />
+        <circle key={p.day} cx={X(i)} cy={Y(p.iv)} r={p.phase === 'print' ? 3 : 1.8} fill={p.phase === 'print' ? '#FF9500' : '#ededed'} />
       ))}
       {/* x labels */}
       {pts.map((p, i) =>

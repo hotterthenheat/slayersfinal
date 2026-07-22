@@ -69,7 +69,7 @@ const RegimePanel = ({ data }: RegimePanelProps) => {
       {/* Stacked probability bands */}
       <div className="flex-grow min-h-0">
         <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-full">
-          <path d={bandPath(zero, lowTop)} fill="rgba(199,211,232,0.55)" />
+          <path d={bandPath(zero, lowTop)} fill="rgba(48,209,88,0.5)" />
           <path d={bandPath(lowTop, normTop)} fill="rgba(255,255,255,0.07)" />
           <path d={bandPath(normTop, fullTop)} fill="rgba(255,59,48,0.45)" />
         </svg>

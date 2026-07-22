@@ -268,7 +268,7 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
                   <span className="absolute left-1/2 top-0 bottom-0 w-px bg-borderMuted" />
                   {/* Pin magnet rule — behind the bars, unmistakable */}
                   {row.pin && <span className="absolute inset-x-0 top-1/2 border-t border-dashed border-textPrimary/30" />}
-                  <CenterBar value={row.gex.call} max={max} color="rgba(199,211,232,0.9)" top />
+                  <CenterBar value={row.gex.call} max={max} color="rgba(48,209,88,0.9)" top />
                   <CenterBar value={row.gex.put} max={max} color="rgba(255,59,48,0.78)" top={false} />
                   {row.pin && (
                     <span className="absolute right-1 top-1/2 -translate-y-1/2 inline-flex items-center rounded-[3px] border border-textPrimary/60 bg-canvas px-1.5 py-px font-mono text-[8px] font-bold uppercase tracking-wider text-textPrimary">

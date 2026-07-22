@@ -31,7 +31,7 @@ const severityTone: Record<DecaySeverity, Tone> = {
   DECAYING: 'bear',
 };
 
-/** Diverging expectancy meter — silver fill, tone lives in the R value beside it. */
+/** Diverging expectancy meter — green right (positive R), red left (negative R). */
 const ExpectancyBar = ({ r, maxAbs }: { r: number; maxAbs: number }) => {
   const halfW = Math.min(50, (Math.abs(r) / (maxAbs || 1)) * 50);
   const pos = r >= 0;
@@ -39,7 +39,7 @@ const ExpectancyBar = ({ r, maxAbs }: { r: number; maxAbs: number }) => {
     <div className="relative h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
       <span className="absolute top-0 bottom-0 left-1/2 w-px bg-white/25" aria-hidden />
       <span
-        className={`absolute top-0 bottom-0 rounded-full ${pos ? 'holo-bar' : 'bg-white/35'}`}
+        className={`absolute top-0 bottom-0 rounded-full ${pos ? 'bg-bull/80' : 'bg-bear/80'}`}
         style={pos ? { left: '50%', width: `${halfW}%` } : { left: `${50 - halfW}%`, width: `${halfW}%` }}
       />
     </div>

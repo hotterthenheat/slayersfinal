@@ -350,7 +350,7 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
             >
               <h3
                 className="font-mono text-[17px] font-bold tracking-tight"
-                style={{ color: entering ? '#C7D3E8' : '#FF3B30' }}
+                style={{ color: entering ? '#30D158' : '#FF3B30' }}
               >
                 {entering ? `STRONG ${bull ? 'CALL' : 'PUT'} — ENTER NOW` : 'FADING — STAND ASIDE'}
               </h3>
@@ -372,7 +372,7 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
                     initial={false}
                     animate={{
                       width: `${confidence}%`,
-                      background: entering ? 'rgba(199,211,232,0.92)' : 'rgba(255,59,48,0.85)',
+                      background: entering ? 'rgba(48,209,88,0.92)' : 'rgba(255,59,48,0.85)',
                     }}
                     transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
                   />

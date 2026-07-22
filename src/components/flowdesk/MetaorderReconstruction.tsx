@@ -123,7 +123,7 @@ const Cell = ({ label, value, tone = 'neutral' }: { label: string; value: ReactN
   );
 };
 
-/** Child-print execution timeline — clip size = radius, ask-lifts ride the silver foil. */
+/** Child-print execution timeline — clip size = radius, ask-lifts read green. */
 const Timeline = ({ prints }: { prints: ChildPrint[] }) => {
   const W = 520;
   const H = 44;
@@ -140,7 +140,9 @@ const Timeline = ({ prints }: { prints: ChildPrint[] }) => {
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="inferred child-print execution timeline">
       <line x1={padX} x2={W - padX} y1={yMid} y2={yMid} stroke="rgba(255,255,255,0.08)" strokeWidth={1} />
       {prints.map(p => {
-        const fill = p.side === 'ASK' ? '#C7D3E8' : 'rgba(150,160,180,0.4)';
+        // aggressor colour follows the app convention (ask-lift = green buy
+        // aggression, bid = muted supply); silver is reserved for selection.
+        const fill = p.side === 'ASK' ? '#30D158' : 'rgba(150,160,180,0.4)';
         return (
           <circle
             key={p.id}
@@ -148,8 +150,8 @@ const Timeline = ({ prints }: { prints: ChildPrint[] }) => {
             cy={yMid}
             r={R(p.size)}
             fill={fill}
-            stroke={p.orderType === 'SWEEP' ? '#C7D3E8' : 'none'}
-            strokeOpacity={p.orderType === 'SWEEP' ? 0.5 : 0}
+            stroke={p.orderType === 'SWEEP' ? 'rgba(255,255,255,0.55)' : 'none'}
+            strokeOpacity={p.orderType === 'SWEEP' ? 0.8 : 0}
             strokeWidth={p.orderType === 'SWEEP' ? 1 : 0}
           />
         );

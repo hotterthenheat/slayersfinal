@@ -8,7 +8,7 @@ import SegmentedControl from '../../components/ui/SegmentedControl';
   The default is a precise 2D heatmap — every strike × expiry cell is readable
   and hoverable, so exact levels don't hide inside a rotating solid. A toggle
   swaps in the WebGL 3D view for the shape-at-a-glance read. Positive structure
-  wears the holo silver run; negative gamma burns red — the same grammar as
+  reads green; negative gamma burns red — the same grammar as
   every 2D exposure view.
 */
 
@@ -53,14 +53,14 @@ function buildSurface(snapshot: MarketSnapshot): SurfaceData {
   return { grid, strikes, spotCol };
 }
 
-/** −1…1 normalized exposure → house-grammar heatmap fill. Silver = support (+), red = negative gamma (−). */
+/** −1…1 normalized exposure → house-grammar heatmap fill. Green = support (+), red = negative gamma (−). */
 function cellColor(z: number): string {
   const t = Math.min(Math.abs(z) * 1.3, 1);
   const alpha = 0.05 + t * 0.9;
   if (z >= 0) {
-    const r = Math.round(174 + t * 70);
-    const g = Math.round(185 + t * 60);
-    const b = Math.round(207 + t * 48);
+    const r = Math.round(130 - t * 82);
+    const g = 210;
+    const b = Math.round(160 - t * 72);
     return `rgba(${r},${g},${b},${alpha})`;
   }
   const g = Math.round(80 - t * 34);

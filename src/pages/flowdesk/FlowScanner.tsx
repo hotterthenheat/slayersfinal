@@ -9,6 +9,7 @@ import MetricGrid from '../../components/ui/MetricGrid';
 import SignalBadge from '../../components/ui/SignalBadge';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import DataTable, { type Column } from '../../components/ui/DataTable';
+import ScannerRowDrawer from './ScannerRowDrawer';
 import type { Tone } from '../../components/ui/tones';
 
 const COLS_KEY = 'slayer.flowscanner.cols.v1';
@@ -657,33 +658,19 @@ const FlowScanner = () => {
         subtitle="volume · estimated daily ΔOI · premium · bull/bear conviction"
         flush
       >
-        {selected && (
-          <div className="px-4 py-2.5 border-b border-borderSubtle bg-inset flex items-center gap-2 flex-wrap animate-soft-in">
-            <SignalBadge tone={sentTone[selected.sentiment]}>{selected.sentiment}</SignalBadge>
-            <span className="font-mono text-xs font-bold text-textPrimary">
-              {selected.ticker} {selected.strike}
-              {selected.right} · {selected.expiry}
-            </span>
-            <span className="font-mono text-[11px] text-textSecondary">
-              {selected.volume.toLocaleString()} vol on {selected.oi.toLocaleString()} OI ({selected.volOverOi.toFixed(2)}× vol/OI) ·{' '}
-              {selected.bidPct}% bid-side · {fmtUsd(selected.premium)} premium ·{' '}
-              {selected.deltaOi >= 0 ? '+' : ''}
-              {selected.deltaOi.toLocaleString()} est. daily ΔOI
-              {selected.sweeps > 0 ? ` · ${selected.sweeps} sweeps` : ''}
-            </span>
-          </div>
-        )}
         <DataTable
           columns={columns}
           rows={filtered}
           rowKey={r => r.id}
-          onRowClick={r => setSelectedId(prev => (prev === r.id ? null : r.id))}
+          onRowClick={r => setSelectedId(r.id)}
           selectedKey={selectedId}
           initialSort={{ key: 'premium', dir: 'desc' }}
           maxHeight="560px"
           emptyText="No contracts match these filters"
         />
       </Panel>
+
+      <ScannerRowDrawer row={selected} spot={marketData?.spot ?? 0} onClose={() => setSelectedId(null)} />
     </>
   );
 };
