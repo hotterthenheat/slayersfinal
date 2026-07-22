@@ -207,7 +207,9 @@ const Rig = ({ index }: { index: number }) => {
 };
 
 const Effects = () => (
-  <EffectComposer multisampling={2}>
+  // multisampling 0: MSAA render targets conflict with DepthOfField's depth-buffer
+  // blit (glBlitFramebuffer depth-stencil error). Bloom + DoF soften edges anyway.
+  <EffectComposer multisampling={0}>
     <Bloom mipmapBlur intensity={0.85} luminanceThreshold={0.62} luminanceSmoothing={0.3} radius={0.7} />
     <DepthOfField focusDistance={0.02} focalLength={0.045} bokehScale={2} />
     <Vignette eskil={false} offset={0.25} darkness={0.9} />
