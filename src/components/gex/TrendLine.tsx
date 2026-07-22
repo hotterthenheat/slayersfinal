@@ -1,3 +1,5 @@
+import { BULL, BEAR } from './palette';
+
 /** Tiny trend line for hover cards — colored by direction of travel. */
 const TrendLine = ({ points }: { points: number[] }) => {
   if (points.length < 2) return null;
@@ -13,7 +15,7 @@ const TrendLine = ({ points }: { points: number[] }) => {
       <polyline
         points={pts}
         fill="none"
-        stroke={rising ? '#30D158' : '#FF3B30'}
+        stroke={rising ? BULL : BEAR}
         strokeWidth="1"
         vectorEffect="non-scaling-stroke"
         strokeLinejoin="round"

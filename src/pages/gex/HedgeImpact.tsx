@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Gauge, Waves, TrendingDown, SlidersHorizontal, ChevronDown } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
+import { BEAR } from '../../components/gex/palette';
 import { buildHedgeImpact, type HedgeImpactView, type StressLabel } from '../../data/hedgeimpact';
 import Panel from '../../components/ui/Panel';
 import StatCard from '../../components/ui/StatCard';
@@ -49,8 +50,8 @@ const HexCurve = ({ view }: { view: HedgeImpactView }) => {
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none">
       {/* danger zone above HEX = 1 */}
       <rect x={0} y={0} width={W} height={oneY} fill="rgba(255,59,48,0.05)" />
-      <line x1={0} x2={W} y1={oneY} y2={oneY} stroke="#FF3B30" strokeOpacity={0.5} strokeWidth={1} strokeDasharray="4 3" />
-      <text x={4} y={oneY - 4} fontSize={8.5} fill="#FF3B30" fontFamily="monospace">HEX = 1 · hedging outruns liquidity</text>
+      <line x1={0} x2={W} y1={oneY} y2={oneY} stroke={BEAR} strokeOpacity={0.5} strokeWidth={1} strokeDasharray="4 3" />
+      <text x={4} y={oneY - 4} fontSize={8.5} fill={BEAR} fontFamily="monospace">HEX = 1 · hedging outruns liquidity</text>
       {/* failure boundary marker */}
       {view.failureBoundaryPct <= maxMove && (
         <>
@@ -216,12 +217,7 @@ const HedgeImpact = () => {
       <MetricGrid min="170px">
         <StatCard
           label="HEX · 15 min"
-          value={
-            <span className="inline-flex items-baseline gap-1.5">
-              {view.hex15.toFixed(2)}
-              <span className="text-[10px] font-medium uppercase tracking-wide text-textMuted">modeled</span>
-            </span>
-          }
+          value={view.hex15.toFixed(2)}
           sub="hedge ÷ liquidity"
           tone={hexTone(view.hex15)}
           emphasis

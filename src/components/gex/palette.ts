@@ -12,3 +12,10 @@ export const KING = '#EA00FF'; // magenta — engine-standout family (peak-expos
 export const DARK_POOL = '#2dd4bf'; // teal — institutional reference prints
 export const SPOT = '#ededed'; // white — where the market is
 export const FOCUS = '#E4E8F4'; // holo silver — what the user clicked (selection language)
+
+// Generic directional ink for JS-API chart consumers (trend lines, cumulative
+// delta, sigma tails) — the same values as the bull/bear tokens in
+// tailwind.config.ts, named by direction so a chart doesn't import "CALL_WALL"
+// to color a line that isn't a wall.
+export const BULL = '#30D158'; // up / support (Apple system green)
+export const BEAR = '#FF3B30'; // down (hot red)

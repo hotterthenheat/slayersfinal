@@ -1,5 +1,6 @@
 import { fmtUsd } from '../../data/gex';
 import type { OrderFlowData } from '../../types/gex';
+import { BULL, BEAR } from './palette';
 
 interface OrderFlowPanelProps {
   data: OrderFlowData;
@@ -26,7 +27,7 @@ const CumulativeDelta = ({ data }: { data: OrderFlowData }) => {
   const line = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(2)},${y(p.value).toFixed(2)}`).join(' ');
   const area = `${line} L${W},${zeroY.toFixed(2)} L0,${zeroY.toFixed(2)} Z`;
   const negative = (points[points.length - 1]?.value ?? 0) < 0;
-  const stroke = negative ? '#FF3B30' : '#30D158';
+  const stroke = negative ? BEAR : BULL;
   const fill = negative ? 'rgba(255,59,48,0.10)' : 'rgba(48,209,88,0.10)';
 
   return (

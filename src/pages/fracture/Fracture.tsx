@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Zap, GitBranch, Layers, Scale, Crosshair } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildFractureView } from '../../core/fracture';
-import { SPOT } from '../../components/gex/palette';
+import { SPOT, BULL, BEAR } from '../../components/gex/palette';
 import Panel from '../../components/ui/Panel';
 import StatCard from '../../components/ui/StatCard';
 import MetricGrid from '../../components/ui/MetricGrid';
@@ -133,13 +133,13 @@ const CascadeFan = ({ paths, spot, trigger }: { paths: number[][]; spot: number;
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none">
       <line x1={0} x2={W} y1={Y(spot)} y2={Y(spot)} stroke={SPOT} strokeOpacity={0.35} strokeWidth={1} strokeDasharray="3 3" />
-      <line x1={0} x2={W} y1={Y(trigger)} y2={Y(trigger)} stroke="#FF3B30" strokeOpacity={0.5} strokeWidth={1} strokeDasharray="4 3" />
+      <line x1={0} x2={W} y1={Y(trigger)} y2={Y(trigger)} stroke={BEAR} strokeOpacity={0.5} strokeWidth={1} strokeDasharray="4 3" />
       {paths.map((p, i) => (
         <path
           key={i}
           d={p.map((v, j) => `${j === 0 ? 'M' : 'L'}${X(j).toFixed(1)},${Y(v).toFixed(1)}`).join(' ')}
           fill="none"
-          stroke={p[p.length - 1] < trigger ? '#FF3B30' : '#30D158'}
+          stroke={p[p.length - 1] < trigger ? BEAR : BULL}
           strokeOpacity={0.16}
           strokeWidth={1}
         />
@@ -147,7 +147,7 @@ const CascadeFan = ({ paths, spot, trigger }: { paths: number[][]; spot: number;
       <text x={4} y={Y(spot) - 4} fontSize={9} fill={SPOT} fillOpacity={0.6} fontFamily="monospace">
         spot ${spot.toFixed(0)}
       </text>
-      <text x={4} y={Y(trigger) + 11} fontSize={9} fill="#FF3B30" fontFamily="monospace">
+      <text x={4} y={Y(trigger) + 11} fontSize={9} fill={BEAR} fontFamily="monospace">
         trigger ${trigger.toFixed(0)}
       </text>
     </svg>

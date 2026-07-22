@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Grid3x3, Clock, Waves, Sliders, ChevronDown } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
+import { BULL, BEAR } from '../../components/gex/palette';
 import { buildGreeksRegime, GREEKS, type DealerRegime, type GreekKey, type GreekRow } from '../../data/greeksmatrix';
 import Panel from '../../components/ui/Panel';
 import StatCard from '../../components/ui/StatCard';
@@ -60,7 +61,7 @@ const CharmChart = ({ points }: { points: { time: string; deltaShift: number }[]
       <line x1={0} x2={W} y1={zeroY} y2={zeroY} stroke="#fff" strokeOpacity={0.12} />
       <rect x={X(points.length - 3)} y={0} width={W - X(points.length - 3)} height={H} fill="rgba(255,149,0,0.06)" />
       <path d={area} fill={up ? 'rgba(48,209,88,0.14)' : 'rgba(255,59,48,0.14)'} />
-      <path d={points.map((p, i) => `${i === 0 ? 'M' : 'L'}${X(i).toFixed(1)},${Y(p.deltaShift).toFixed(1)}`).join(' ')} fill="none" stroke={up ? '#30D158' : '#FF3B30'} strokeWidth={1.75} />
+      <path d={points.map((p, i) => `${i === 0 ? 'M' : 'L'}${X(i).toFixed(1)},${Y(p.deltaShift).toFixed(1)}`).join(' ')} fill="none" stroke={up ? BULL : BEAR} strokeWidth={1.75} />
       <text x={X(points.length - 3) + 4} y={12} fontSize={8} fill="#FF9500" fontFamily="monospace">POWER HOUR</text>
     </svg>
   );

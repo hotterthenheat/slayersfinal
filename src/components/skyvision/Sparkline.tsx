@@ -1,3 +1,5 @@
+import { BULL, BEAR } from '../gex/palette';
+
 interface SparklineProps {
   data: number[];
   up: boolean;
@@ -19,7 +21,7 @@ const Sparkline = ({ data, up, width = 88, height = 24 }: SparklineProps) => {
     })
     .join(' ');
   // Real direction: green when up, red when down — house bull/bear tokens.
-  const color = up ? '#30D158' : '#FF3B30';
+  const color = up ? BULL : BEAR;
 
   return (
     <svg width={width} height={height} className="overflow-visible">

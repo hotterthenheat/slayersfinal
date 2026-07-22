@@ -100,7 +100,7 @@ const ContributorList = ({ rows, max }: { rows: Contrib[]; max: number }) => (
           </span>
           <span className="relative flex-1 min-w-0 h-[6px] rounded-sm bg-white/[0.04] overflow-hidden">
             <span
-              className={`absolute inset-y-0 left-0 rounded-sm ${up ? 'bg-[#30D158]/80' : 'bg-bear/80'}`}
+              className={`absolute inset-y-0 left-0 rounded-sm ${up ? 'bg-bull/80' : 'bg-bear/80'}`}
               style={{ width: `${w}%` }}
             />
           </span>

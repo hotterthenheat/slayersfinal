@@ -199,7 +199,7 @@ const RankedTargets = () => {
         {primary && (
           <button
             onClick={() => flash(primary)}
-            className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-[#EA00FF]/30 bg-[#EA00FF]/[0.05] hover:bg-[#EA00FF]/[0.1] transition-colors"
+            className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-king/30 bg-king/[0.05] hover:bg-king/[0.1] transition-colors"
             title="Flash on chart"
           >
             <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-king">Primary target</span>
@@ -222,7 +222,7 @@ const RankedTargets = () => {
             title="Flash on chart"
             className={`group relative text-left rounded-md border px-3 py-2.5 transition-colors ${
               t.rank === 1
-                ? 'border-[#EA00FF]/35 bg-[#EA00FF]/[0.035] hover:bg-[#EA00FF]/[0.06]'
+                ? 'border-king/35 bg-king/[0.035] hover:bg-king/[0.06]'
                 : 'border-borderSubtle bg-inset hover:border-borderMuted'
             }`}
             style={{ boxShadow: `inset 2px 0 0 0 ${CLASS_EDGE[t.hedgingClass]}` }}
@@ -297,7 +297,7 @@ const RankedTargets = () => {
                       <span className="flex items-center gap-2">
                         <span className="relative flex-1 h-[3px] rounded-full bg-white/[0.06] min-w-[36px]">
                           <span
-                            className={`absolute inset-y-0 left-0 rounded-full ${t.rank === 1 ? 'bg-[#EA00FF]/80' : 'bg-white/40'}`}
+                            className={`absolute inset-y-0 left-0 rounded-full ${t.rank === 1 ? 'bg-king/80' : 'bg-white/40'}`}
                             style={{ width: `${t.score}%` }}
                           />
                         </span>
