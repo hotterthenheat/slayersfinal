@@ -5,6 +5,7 @@ import { enrichPrint, sentimentOf, summarizeTape } from '../../data/flowtape';
 import { buildGexView, fmtUsd } from '../../data/gex';
 import Panel from '../../components/ui/Panel';
 import SegmentedControl from '../../components/ui/SegmentedControl';
+import { useToast } from '../../components/ui/Toast';
 import TapeRowDrawer from './TapeRowDrawer';
 import type { FlowPrint, PrintSentiment, TapeSummary } from '../../types/flowdesk';
 
@@ -536,6 +537,7 @@ const SavedViews = ({
 /** Streaming rich options prints in the house grammar — session strip, filters, multi-ticker. */
 const LiveTape = () => {
   const { marketData } = useMarketData();
+  const toast = useToast();
   const [rows, setRows] = useState<FlowPrint[]>([]);
   const [paused, setPaused] = useState(false);
   // Snapshot captured at pause — data keeps collecting into `rows`, but the tape
@@ -676,8 +678,13 @@ const LiveTape = () => {
   const toggleMark = (id: number) =>
     setMarked(prev => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+        toast.info('Removed from tracked prints');
+      } else {
+        next.add(id);
+        toast.success('Tracking print');
+      }
       return next;
     });
 

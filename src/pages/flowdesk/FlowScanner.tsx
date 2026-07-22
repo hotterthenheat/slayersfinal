@@ -10,6 +10,7 @@ import SignalBadge from '../../components/ui/SignalBadge';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import DataTable, { type Column } from '../../components/ui/DataTable';
 import ScannerRowDrawer from './ScannerRowDrawer';
+import { useToast } from '../../components/ui/Toast';
 import type { Tone } from '../../components/ui/tones';
 
 const COLS_KEY = 'slayer.flowscanner.cols.v1';
@@ -485,6 +486,7 @@ const ColumnChooser = ({
 // ---- page ----------------------------------------------------------------------
 const FlowScanner = () => {
   const { marketData } = useMarketData();
+  const toast = useToast();
   const rows = useMemo(() => (marketData ? buildScannerRows(marketData) : []), [marketData]);
   const summary = useMemo(() => summarizeScanner(rows), [rows]);
   const [filters, setFilters] = useState<ScanFilters>(DEFAULTS);
@@ -591,9 +593,14 @@ const FlowScanner = () => {
     return saved?.name ?? null;
   }, [filters, templates]);
 
-  const saveTemplate = (name: string) =>
+  const saveTemplate = (name: string) => {
     setTemplates(prev => [...prev.filter(t => t.name !== name), { name, filters }]);
-  const deleteTemplate = (name: string) => setTemplates(prev => prev.filter(t => t.name !== name));
+    toast.success(`Saved template “${name}”`);
+  };
+  const deleteTemplate = (name: string) => {
+    setTemplates(prev => prev.filter(t => t.name !== name));
+    toast.info(`Deleted template “${name}”`);
+  };
 
   const toggleCol = (key: string) =>
     setVisibleCols(prev => {
