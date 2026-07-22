@@ -18,17 +18,19 @@ const GexMatrix = ({ data }: GexMatrixProps) => {
   return (
     <div className="flex gap-2 h-full min-h-0">
       <div className="flex-grow overflow-auto min-w-0">
-        <table className="w-full border-collapse">
+        {/* table-fixed: geometry is tick-independent, so the pulse only swaps glyphs
+            (fmtUsd char-count changes each second) instead of reflowing columns */}
+        <table className="w-full table-fixed border-collapse">
           <thead className="sticky top-0 z-10">
-            <tr className="bg-[#0c0c0c]">
-              <th className="px-2 py-1.5 text-left font-mono text-[9px] font-semibold uppercase tracking-widest text-textMuted border-b border-borderSubtle">
+            <tr className="bg-panelRaised">
+              <th className="px-2 py-1.5 text-left font-mono text-[9px] font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle" style={{ width: '30%' }}>
                 Strike
               </th>
               {expiries.map((exp, i) => (
                 <th
                   key={exp}
                   className={`px-2 py-1.5 text-right font-mono text-[9px] font-semibold uppercase tracking-widest border-b border-borderSubtle ${
-                    i === 0 ? 'text-warn' : 'text-textMuted'
+                    i === 0 ? 'text-textSecondary' : 'text-textMuted'
                   }`}
                 >
                   {exp}
@@ -73,10 +75,10 @@ const GexMatrix = ({ data }: GexMatrixProps) => {
                       key={c}
                       style={heatCellStyle(cell.value, maxAbs)}
                       className={`px-2 py-1 text-right font-mono text-[11px] tnum whitespace-nowrap transition-colors duration-700 ${
-                        cell.king ? 'shadow-[inset_0_0_0_1px_#EA00FF]' : ''
+                        cell.king ? 'ring-1 ring-inset ring-king' : ''
                       }`}
                     >
-                      {cell.king && <span className="mr-1 inline-block w-1.5 h-1.5 rounded-full bg-[#EA00FF]" />}
+                      {cell.king && <span className="mr-1 inline-block w-1.5 h-1.5 rounded-full bg-king" />}
                       {fmtUsd(cell.value)}
                     </td>
                   ))}

@@ -27,65 +27,112 @@ const MonteCarloPanel = ({ mc, spot, height = 260 }: MonteCarloPanelProps) => {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
 
-    const dpr = window.devicePixelRatio || 1;
-    const w = canvas.clientWidth;
-    const h = canvas.clientHeight;
-    canvas.width = w * dpr;
-    canvas.height = h * dpr;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, w, h);
+    const draw = () => {
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      const dpr = window.devicePixelRatio || 1;
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      if (!w || !h) return;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, w, h);
 
-    const all = [...mc.cone.p5, ...mc.cone.p95];
-    const lo = Math.min(...all) * 0.998;
-    const hi = Math.max(...all) * 1.002;
-    const X = (d: number) => (d / mc.days) * (w - 8) + 4;
-    const Y = (px: number) => h - ((px - lo) / (hi - lo)) * (h - 10) - 5;
+      const padB = 13; // room for the day (x) axis
+      const all = [...mc.cone.p5, ...mc.cone.p95];
+      const lo = Math.min(...all) * 0.998;
+      const hi = Math.max(...all) * 1.002;
+      const X = (d: number) => (d / mc.days) * (w - 8) + 4;
+      const Y = (px: number) => (h - padB) - ((px - lo) / (hi - lo)) * (h - padB - 8) - 4;
 
-    // cone fills
-    const fillBand = (top: number[], bot: number[], fill: string) => {
-      ctx.fillStyle = fill;
+      ctx.font = '9px "JetBrains Mono", monospace';
+
+      // price (y) gridlines + right-edge labels
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      for (let i = 0; i <= 4; i++) {
+        const px = lo + (hi - lo) * (i / 4);
+        const y = Y(px);
+        ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(4, y);
+        ctx.lineTo(w - 2, y);
+        ctx.stroke();
+        ctx.fillStyle = '#7d7d7d';
+        ctx.fillText(px.toFixed(0), w - 3, y - 6);
+      }
+
+      // cone fills
+      const fillBand = (top: number[], bot: number[], fill: string) => {
+        ctx.fillStyle = fill;
+        ctx.beginPath();
+        top.forEach((p, d) => (d === 0 ? ctx.moveTo(X(d), Y(p)) : ctx.lineTo(X(d), Y(p))));
+        for (let d = bot.length - 1; d >= 0; d--) ctx.lineTo(X(d), Y(bot[d]));
+        ctx.closePath();
+        ctx.fill();
+      };
+      fillBand(mc.cone.p95, mc.cone.p5, CONE_OUTER);
+      fillBand(mc.cone.p75, mc.cone.p25, CONE_INNER);
+
+      // sampled paths
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = PATH_STROKE;
+      for (const path of mc.paths) {
+        ctx.beginPath();
+        path.forEach((p, d) => (d === 0 ? ctx.moveTo(X(d), Y(p)) : ctx.lineTo(X(d), Y(p))));
+        ctx.stroke();
+      }
+
+      // median
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = MEDIAN;
       ctx.beginPath();
-      top.forEach((p, d) => (d === 0 ? ctx.moveTo(X(d), Y(p)) : ctx.lineTo(X(d), Y(p))));
-      for (let d = bot.length - 1; d >= 0; d--) ctx.lineTo(X(d), Y(bot[d]));
-      ctx.closePath();
-      ctx.fill();
-    };
-    fillBand(mc.cone.p95, mc.cone.p5, CONE_OUTER);
-    fillBand(mc.cone.p75, mc.cone.p25, CONE_INNER);
-
-    // sampled paths
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = PATH_STROKE;
-    for (const path of mc.paths) {
-      ctx.beginPath();
-      path.forEach((p, d) => (d === 0 ? ctx.moveTo(X(d), Y(p)) : ctx.lineTo(X(d), Y(p))));
+      mc.cone.p50.forEach((p, d) => (d === 0 ? ctx.moveTo(X(d), Y(p)) : ctx.lineTo(X(d), Y(p))));
       ctx.stroke();
-    }
 
-    // median
-    ctx.lineWidth = 1.5;
-    ctx.strokeStyle = MEDIAN;
-    ctx.beginPath();
-    mc.cone.p50.forEach((p, d) => (d === 0 ? ctx.moveTo(X(d), Y(p)) : ctx.lineTo(X(d), Y(p))));
-    ctx.stroke();
+      // spot reference + label
+      ctx.setLineDash([3, 4]);
+      ctx.strokeStyle = SPOT_LINE;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(4, Y(spot));
+      ctx.lineTo(w - 4, Y(spot));
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = SPOT_LINE;
+      ctx.textAlign = 'left';
+      ctx.fillText(`spot ${spot.toFixed(0)}`, 5, Y(spot) - 6);
 
-    // spot reference
-    ctx.setLineDash([3, 4]);
-    ctx.strokeStyle = SPOT_LINE;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(4, Y(spot));
-    ctx.lineTo(w - 4, Y(spot));
-    ctx.stroke();
-    ctx.setLineDash([]);
+      // day (x) axis labels
+      ctx.fillStyle = '#7d7d7d';
+      ctx.textBaseline = 'alphabetic';
+      ctx.textAlign = 'left';
+      ctx.fillText('0d', 4, h - 3);
+      ctx.textAlign = 'center';
+      ctx.fillText(`${Math.round(mc.days / 2)}d`, w / 2, h - 3);
+      ctx.textAlign = 'right';
+      ctx.fillText(`${mc.days}d`, w - 3, h - 3);
+    };
+
+    draw();
+    const ro = new ResizeObserver(draw);
+    ro.observe(canvas);
+    return () => ro.disconnect();
   }, [mc, spot]);
 
   return (
     <div className="flex flex-col gap-3">
       <canvas ref={canvasRef} className="w-full" style={{ height }} />
+      {/* legend */}
+      <div className="flex items-center gap-3 -mt-1 font-mono text-[9px] uppercase tracking-wider text-textMuted">
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2 rounded-[1px]" style={{ background: CONE_OUTER }} /> 90% band</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2 rounded-[1px]" style={{ background: CONE_INNER }} /> 50% band</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-[2px]" style={{ background: MEDIAN }} /> median</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-0 border-t border-dashed" style={{ borderColor: SPOT_LINE }} /> spot</span>
+      </div>
       {/* Terminal distribution */}
       <div>
         <div className="flex items-end gap-px h-14">

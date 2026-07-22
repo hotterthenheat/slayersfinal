@@ -18,9 +18,10 @@ interface StatePriceDensityProps {
 const fmtK = (n: number): string => (n >= 1000 ? n.toFixed(0) : n >= 50 ? n.toFixed(n % 1 ? 1 : 0) : n.toFixed(2));
 const signed = (n: number, d = 1): string => `${n >= 0 ? '+' : ''}${n.toFixed(d)}`;
 
+// Severity ramp: green → neutral → amber → red (never through brand silver).
 const skewTone: Record<SkewLabel, Tone> = {
   CALM: 'bull',
-  NORMAL: 'select',
+  NORMAL: 'neutral',
   ELEVATED: 'warn',
   STRESSED: 'bear',
 };

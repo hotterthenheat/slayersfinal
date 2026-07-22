@@ -154,8 +154,6 @@ const DealerSurface3D = ({ grid, strikes, spotCol, maxAbsUsd }: DealerSurface3DP
         makeDefault
         target={[0, -0.1, 0]}
         enablePan={false}
-        autoRotate
-        autoRotateSpeed={0.5}
         enableDamping
         dampingFactor={0.1}
         minDistance={3.4}

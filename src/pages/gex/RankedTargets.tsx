@@ -101,7 +101,9 @@ const RankedTargets = () => {
   const { marketData } = useMarketData();
   const navigate = useNavigate();
   const [isolator, setIsolator] = useState<Isolator>('ALL');
-  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'rank', dir: 'asc' });
+  // Default to Score-desc (same order as engine rank) so the active-sort indicator
+  // shows on a real column header instead of a phantom 'rank' key.
+  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'score', dir: 'desc' });
 
   const [scanSnapshot, setScanSnapshot] = useState<MarketSnapshot | null>(null);
   const [lastScanAt, setLastScanAt] = useState('');
