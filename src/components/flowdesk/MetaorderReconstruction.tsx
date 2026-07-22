@@ -307,12 +307,6 @@ const MetaorderRow = ({ m }: { m: Metaorder }) => {
       {/* the inferred read */}
       <p className="text-[11px] text-textMuted leading-relaxed">{m.read}</p>
 
-      {/* per-output data-limitation caveat — sits next to this output, not only at the bottom */}
-      <p className="text-[11px] text-textMuted leading-relaxed inline-flex items-start gap-1.5">
-        <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
-        {PER_OUTPUT_CAVEAT}
-      </p>
-
       {/* expandable disclosure — child prints + alternates + what would invalidate this */}
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2 pt-0.5">
         <button
@@ -435,7 +429,7 @@ const MetaorderReconstruction = () => {
             <GitMerge className="w-3.5 h-3.5" /> Inferred parent orders
           </span>
         }
-        subtitle="child prints inferred into the parent order behind them — every read below is a model estimate, not a confirmed ticket"
+        subtitle="child prints clustered into the parent order working behind them"
         flush
       >
         <div className="flex flex-col divide-y divide-borderSubtle">
@@ -458,12 +452,10 @@ const MetaorderReconstruction = () => {
           <span className="font-mono font-semibold uppercase tracking-wider mr-2 holo-text">Beyond the tape</span>
           A parent order never prints as one ticket — a desk works a clip over minutes, and the tape only shows the
           children. TRACE clusters those prints by strike geometry, aggressor side and timing, then infers the strategy,
-          projects the full size from what is already done, and estimates the time and urgency to finish. Chain strikes
-          are the live chain; the child-print clip and the parent-order reconstruction are inferred from the session tape
-          — a genuine execution reconstruction needs order-audit data this app cannot see, so treat every parent here as
-          an estimate, and it swaps for a real reconstruction feed behind the same contract. The information-vs-hedge
-          split and directional-info score are the model’s inferred read, not confirmed intent — each parent above
-          carries its own confidence range, alternates, and what-would-invalidate-it note for exactly that reason.
+          projects the full size from what is already done, and estimates the time and urgency to finish. The child-print
+          clip and the parent-order reconstruction are inferred from the session tape — the information-vs-hedge split and
+          directional-info score are a read of intent, not confirmed intent, so each parent above carries its own
+          confidence range, alternates, and what-would-invalidate-it note for exactly that reason.
         </p>
       </Panel>
     </>

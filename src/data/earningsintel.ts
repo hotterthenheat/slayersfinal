@@ -375,7 +375,7 @@ export function buildEarningsIntel(e: EarningsEvent): EarningsIntelView {
   const headline =
     recommended === 'SKIP'
       ? `${e.ticker} prices its ${im}% print in line with history and the model — nothing to harvest into the report.`
-      : `${e.ticker}: ${mispricing.verdict} Modeled net EV ${netEv >= 0 ? '+' : ''}${netEv.toFixed(2)}% after spreads and the ${ivCrushPct.toFixed(0)}% IV crush.`;
+      : `${e.ticker}: ${mispricing.verdict} Net EV ${netEv >= 0 ? '+' : ''}${netEv.toFixed(2)}% after spreads and the ${ivCrushPct.toFixed(0)}% IV crush.`;
 
   return {
     ticker: e.ticker,

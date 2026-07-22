@@ -416,7 +416,7 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
             <Field
               label="Expected move"
               icon={<Percent className="w-3 h-3" />}
-              hint={`Modeled 1σ ${weighed.expectedMovePct.toFixed(1)}% · BE ${weighed.breakevenMovePct.toFixed(1)}%`}
+              hint={`1σ move ${weighed.expectedMovePct.toFixed(1)}% · BE ${weighed.breakevenMovePct.toFixed(1)}%`}
             >
               <div className="relative">
                 <input
@@ -576,7 +576,7 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
               <Cell k="Cost / contract" v={`$${costPerContract.toFixed(0)}`} />
               <Cell k="Contracts in budget" v={contractsInBudget != null ? `${contractsInBudget}` : '—'} tone={contractsInBudget === 0 ? 'warn' : 'neutral'} />
               <Cell k="Est. outlay" v={outlay != null ? `$${outlay.toFixed(0)}` : '—'} />
-              <Cell k="Modeled 1σ" v={`${weighed.expectedMovePct.toFixed(1)}%`} tone="bull" />
+              <Cell k="1σ move" v={`${weighed.expectedMovePct.toFixed(1)}%`} tone="bull" />
             </div>
 
             <p className="text-xs text-textSecondary leading-relaxed">
@@ -589,7 +589,7 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
                   : ` Your $${budget.toFixed(0)} budget is under the $${costPerContract.toFixed(0)} single-contract mid.`)}
             </p>
             <p className="font-mono text-[10px] text-textMuted leading-relaxed border-t border-borderSubtle pt-2.5">
-              Sizing off the modeled mid × {CONTRACT_MULTIPLIER}-share multiplier. Expected-move field defaults to the modeled 1σ; override it to stress your own thesis.
+              Sizing off the mid × {CONTRACT_MULTIPLIER}-share multiplier. Expected-move field defaults to the 1σ move; override it to stress your own thesis.
             </p>
           </div>
         </Panel>
@@ -675,7 +675,7 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
               : `The 1σ move (${weighed.expectedMovePct.toFixed(1)}%) clears the friction (${friction.toFixed(1)}%) — the edge is capturable if you work a limit near $${expFill.toFixed(2)} instead of paying the offer.`}
           </p>
           <p className="font-mono text-[10px] text-textMuted leading-relaxed border-t border-borderSubtle pt-2.5">
-            Modeled fills & slippage from spread and open interest; swap in a real quote + fill feed behind the same contract.
+            Fills & slippage read from the spread and open interest — work a limit near the mid rather than paying the offer.
           </p>
         </div>
       </Panel>

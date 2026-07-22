@@ -70,7 +70,7 @@ const OddsBar = ({ probUp }: { probUp: number }) => (
     </div>
     <div className="mt-1.5 flex h-1.5 rounded-full overflow-hidden bg-white/[0.06]">
       <span className="h-full bg-bear/80" style={{ width: `${100 - probUp}%` }} />
-      <span className="h-full holo-bar" style={{ width: `${probUp}%` }} />
+      <span className="h-full bg-bull/80" style={{ width: `${probUp}%` }} />
     </div>
   </div>
 );

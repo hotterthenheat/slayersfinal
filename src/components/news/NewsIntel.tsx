@@ -197,7 +197,7 @@ const NewsIntel = ({ selectedItem, onSelect }: NewsIntelProps) => {
   if (!view) {
     return (
       <div className="flex items-center justify-center h-32">
-        <span className="font-mono text-[11px] text-textMuted uppercase tracking-widest">Modeling news intel…</span>
+        <span className="font-mono text-[11px] text-textMuted uppercase tracking-widest">Reading positioning…</span>
       </div>
     );
   }

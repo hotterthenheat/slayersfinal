@@ -406,7 +406,7 @@ const EarningsIntel = ({ event }: EarningsIntelProps) => {
             ))}
           </div>
           <p className="px-3.5 py-2.5 border-t border-borderSubtle font-mono text-[10px] text-textMuted leading-relaxed">
-            Bar = modeled outcome probability; the white tick is where the straddle + skew price it. Bar past the tick = a state the market
+            Bar = outcome probability; the white tick is where the straddle + skew price it. Bar past the tick = a state the market
             discounts (CHEAP); tick past the bar = one it overpays for (RICH).
           </p>
         </Panel>
@@ -506,8 +506,8 @@ const EarningsIntel = ({ event }: EarningsIntelProps) => {
       >
         <ScenarioTree view={view} />
         <p className="mt-3 font-mono text-[11px] text-textMuted leading-relaxed">
-          Each branch sums the state probabilities into a down / pin / up outcome; the bar is the modeled odds, the white tick
-          where the straddle + skew prices it. CHEAP = the model carries more of that branch than the market charges; the
+          Each branch sums the state probabilities into a down / pin / up outcome; the bar is the odds, the white tick
+          where the straddle + skew prices it. CHEAP = the read carries more of that branch than the market charges; the
           highlighted branch is where the recommended structure lives.
         </p>
       </Panel>
@@ -519,9 +519,8 @@ const EarningsIntel = ({ event }: EarningsIntelProps) => {
           A single implied move hides the trade. This dossier strips the jump vol out of the front-month IV, traces the crush the
           overnight brings, and splits the reaction into an outcome distribution — so the edge is not &ldquo;vol is rich&rdquo; but
           which slice of that distribution the market has wrong. The recommended expression is the one that harvests exactly that slice,
-          net EV taken after modeled spreads and the IV crush. Implied move, richness and the event fields come straight from the earnings
-          contract; base vol, 25Δ skew, the crush depth and the prior-print analogs are modeled per name and clearly labeled estimates —
-          each swaps for a real options-surface feed behind the same contract without touching this view.
+          net EV taken after spreads and the IV crush. Implied move, richness and the event fields come straight from the earnings
+          contract; base vol, 25Δ skew, the crush depth and the prior-print analogs round out the read per name.
         </p>
       </Panel>
     </div>

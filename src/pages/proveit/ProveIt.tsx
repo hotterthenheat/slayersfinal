@@ -76,7 +76,7 @@ const ProveIt = () => {
         actions={
           <span className="inline-flex items-center gap-2">
             <SegmentedControl
-              ariaLabel="Modeling window"
+              ariaLabel="Forecast window"
               options={WINDOW_OPTIONS}
               value={window_}
               onChange={v => setWindow(v as Window)}
@@ -107,11 +107,7 @@ const ProveIt = () => {
         />
         <StatCard
           label="Expected range"
-          value={
-            <span className="text-sm">
-              ${mc.stats.rangeLow.toFixed(0)}–${mc.stats.rangeHigh.toFixed(0)}
-            </span>
-          }
+          value={`${mc.stats.rangeLow.toFixed(0)}–${mc.stats.rangeHigh.toFixed(0)}`}
           sub="90% of paths land inside"
         />
         <StatCard
@@ -120,7 +116,7 @@ const ProveIt = () => {
           sub={`IV ${(iv * 100).toFixed(0)}% annualized`}
           tone={regime === 'HIGH VOL' ? 'warn' : 'neutral'}
         />
-        <StatCard label="Model composite" value={`${composite}%`} sub="engines' blended hit rate" tone="select" />
+        <StatCard label="Model composite" value={`${composite}%`} sub="engines' blended hit rate" tone={composite >= 60 ? 'bull' : 'neutral'} />
       </MetricGrid>
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
@@ -197,7 +193,7 @@ const ProveIt = () => {
             <div key={m.model} className="bg-panel px-3.5 py-3 flex flex-col gap-2">
               <div className="font-mono text-[11px] font-semibold text-textPrimary">{m.model}</div>
               <div className="flex items-baseline gap-2">
-                <span className={`font-mono text-2xl font-bold tnum ${m.hitRatePct >= 65 ? 'holo-text' : 'text-textPrimary'}`}>
+                <span className={`font-mono text-2xl font-bold tnum ${m.hitRatePct >= 65 ? 'text-bull' : 'text-textPrimary'}`}>
                   {m.hitRatePct}%
                 </span>
                 <span className="font-mono text-[10px] text-textMuted tnum">n={m.sample}</span>

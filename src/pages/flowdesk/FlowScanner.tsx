@@ -130,13 +130,13 @@ const sentTone: Record<FlowSentiment, Tone> = {
   NEUTRAL: 'neutral',
 };
 
-/** Diverging conviction bar centered at 0 — bullish right (holo), bearish left (red). */
+/** Diverging conviction bar centered at 0 — bullish right (green), bearish left (red). */
 const ScoreBar = ({ score }: { score: number }) => (
   <span className="flex items-center gap-1.5 w-full">
     <span className="relative flex-1 h-[6px] rounded-full bg-white/[0.05] overflow-hidden">
       <span className="absolute top-0 bottom-0 left-1/2 w-px bg-white/20" />
       {score >= 0 ? (
-        <span className="absolute top-0 bottom-0 left-1/2 holo-bar rounded-r-full" style={{ width: `${(score / 100) * 50}%` }} />
+        <span className="absolute top-0 bottom-0 left-1/2 bg-bull/80 rounded-r-full" style={{ width: `${(score / 100) * 50}%` }} />
       ) : (
         <span className="absolute top-0 bottom-0 right-1/2 bg-bear/80 rounded-l-full" style={{ width: `${(-score / 100) * 50}%` }} />
       )}

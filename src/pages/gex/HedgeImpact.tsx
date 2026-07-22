@@ -26,9 +26,10 @@ const fmtNum = (v: number): string => {
 
 const hexTone = (hex: number): Tone => (hex >= 1 ? 'bear' : hex >= 0.7 ? 'warn' : 'bull');
 
+// Severity ramp reads green → neutral → amber → red (never through brand silver).
 const stressTone: Record<StressLabel, Tone> = {
   LIGHT: 'bull',
-  BUILDING: 'select',
+  BUILDING: 'neutral',
   STRETCHED: 'warn',
   CRITICAL: 'bear',
 };
@@ -120,7 +121,7 @@ const AssumptionsDrawer = ({ view }: { view: HedgeImpactView }) => {
           <SlidersHorizontal className="w-3.5 h-3.5" /> Assumptions
         </span>
       }
-      subtitle="modeled liquidity & depth inputs"
+      subtitle="liquidity & depth inputs"
       actions={
         <button
           type="button"
@@ -136,15 +137,14 @@ const AssumptionsDrawer = ({ view }: { view: HedgeImpactView }) => {
     >
       {!open ? (
         <p className="font-mono text-[11px] text-textMuted leading-relaxed">
-          HEX divides a live-chain hedge requirement by modeled market depth. Expand for the depth inputs behind the read.
+          HEX divides a live-chain hedge requirement by the available market depth. Expand for the depth inputs behind the read.
         </p>
       ) : (
         <div className="flex flex-col gap-3">
           <p className="text-[11px] text-textSecondary leading-relaxed">
             The hedge requirement (numerator) comes from the live options chain. The liquidity that absorbs it
-            (denominator) is modeled per name and swaps for a real depth feed behind the same contract — so the depth
-            values below are single modeled estimates. A live feed would carry base / liquid / illiquid depth ranges in
-            their place.
+            (denominator) is the desk's depth read per name — the depth values behind each forecast window are shown
+            below.
           </p>
 
           <div className="flex flex-col divide-y divide-borderSubtle rounded-md border border-borderSubtle overflow-hidden">
@@ -156,7 +156,7 @@ const AssumptionsDrawer = ({ view }: { view: HedgeImpactView }) => {
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <span className="font-mono text-[13px] font-semibold tnum text-textPrimary">{fmtUsd(view.advUsd)}</span>
-                <ProvTag>modeled</ProvTag>
+                <ProvTag>depth</ProvTag>
               </div>
             </div>
 
@@ -167,7 +167,7 @@ const AssumptionsDrawer = ({ view }: { view: HedgeImpactView }) => {
                   <div className="font-mono text-[12px] font-semibold text-textPrimary">Available depth by window</div>
                   <div className="text-[10px] text-textMuted leading-tight mt-0.5">ADV scaled to each 5–60 min forecast window</div>
                 </div>
-                <ProvTag>modeled</ProvTag>
+                <ProvTag>depth</ProvTag>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {view.windows.map(w => (
@@ -335,8 +335,7 @@ const HedgeImpact = () => {
           Two sessions can carry identical gamma and trade nothing alike — the difference is depth. HEX divides the hedge dealers
           are forced to do by the liquidity available to absorb it, so it reads the outcome GEX only implies. The forecast turns
           gamma into shares and futures over the next 5–60 minutes; the failure boundary is the move where that hedging outruns the
-          book and starts feeding itself. Gamma and OI are the live chain; depth is modeled per name and swaps for a real feed
-          behind the same contract.
+          book and starts feeding itself. Gamma and OI are the live chain; depth is the desk's liquidity read per name.
         </p>
       </Panel>
     </>
