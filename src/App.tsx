@@ -11,6 +11,7 @@ import Tracker from './pages/Tracker';
 import GexLayout from './pages/gex/GexLayout';
 import PulseWorkspace from './pages/pulse/PulseWorkspace';
 import ExposureProfile from './pages/gex/ExposureProfile';
+import GammaChart from './pages/gex/GammaChart';
 import RankedTargets from './pages/gex/RankedTargets';
 import VannaCharm from './pages/gex/VannaCharm';
 import VolLab from './pages/gex/VolLab';
@@ -76,9 +77,10 @@ const App = () => {
             <Route path="/lotto" element={<Navigate to="/compass" state={{ compassMode: 'lotto' }} replace />} />
             <Route path="/tracker" element={<Tracker />} />
             <Route path="/pinpoint" element={<GexLayout />}>
-              <Route index element={<Navigate to="/pinpoint/exposure-profile" replace />} />
+              <Route index element={<Navigate to="/pinpoint/gamma" replace />} />
               <Route path="command" element={<Navigate to="/pulse" replace />} />
               <Route path="flow-map" element={<Navigate to="/pulse" replace />} />
+              <Route path="gamma" element={<GammaChart />} />
               <Route path="exposure-profile" element={<ExposureProfile />} />
               <Route path="ranked-targets" element={<RankedTargets />} />
               <Route path="strike-profile" element={<Navigate to="/pinpoint/exposure-profile" replace />} />
