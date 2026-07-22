@@ -170,6 +170,7 @@ const ExposureProfile = () => {
           title="Exposure Matrix"
           subtitle="inventory & sensitivity by strike"
           flush
+          focusable
           className="xl:col-span-7 min-w-0"
           bodyClassName="flex flex-col max-h-[640px]"
         >
@@ -185,6 +186,7 @@ const ExposureProfile = () => {
           title="Dealer Positioning Map"
           subtitle="net dealer pressure by strike"
           flush
+          focusable
           className="xl:col-span-5 min-w-0"
           bodyClassName="flex flex-col max-h-[640px]"
         >

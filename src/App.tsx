@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { MotionConfig } from 'framer-motion';
 import { MarketDataProvider } from './context/MarketDataContext';
 import { TrackerProvider } from './context/TrackerContext';
+import { FocusProvider } from './context/FocusContext';
 import { ToastProvider } from './components/ui/Toast';
 import AppShell from './components/layout/AppShell';
 import { LaunchProvider } from './components/layout/LaunchTransition';
@@ -42,6 +43,7 @@ const App = () => {
       <MarketDataProvider>
         <TrackerProvider>
         <LaunchProvider>
+        <FocusProvider>
         <Routes>
           {/* Public landing — full-bleed, outside the app shell. First thing a
               visitor sees; "Launch terminal" plays the gate into /pulse. */}
@@ -107,6 +109,7 @@ const App = () => {
             <Route path="/auditor-log" element={<Navigate to="/tracker" replace />} />
           </Route>
         </Routes>
+        </FocusProvider>
         </LaunchProvider>
         </TrackerProvider>
       </MarketDataProvider>

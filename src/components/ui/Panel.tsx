@@ -1,5 +1,8 @@
-import React from 'react';
+import React, { useId } from 'react';
+import { createPortal } from 'react-dom';
+import { Maximize2, Minimize2 } from 'lucide-react';
 import type { Tone } from './tones';
+import { useFocus } from '../../context/FocusContext';
 
 interface PanelProps {
   title?: React.ReactNode;
@@ -11,6 +14,8 @@ interface PanelProps {
   tone?: Tone;
   /** The one hero surface on a page — living holo frame + halo */
   emphasis?: boolean;
+  /** Opt in to Focus Mode — a header control blooms this panel full-bleed */
+  focusable?: boolean;
   className?: string;
   bodyClassName?: string;
   children: React.ReactNode;
@@ -46,6 +51,7 @@ const Panel = ({
   flush = false,
   tone = 'neutral',
   emphasis = false,
+  focusable = false,
   className = '',
   bodyClassName = '',
   children,
@@ -53,11 +59,16 @@ const Panel = ({
   // Scope-reticle corner ticks read as a deliberate "this is the hero instrument"
   // cue — reserved for emphasis panels, not scattered on every box.
   const surface = emphasis ? 'inst-emphasis holo-glow inst-ticks' : 'inst-surface';
+  const uid = useId();
+  const { focusedId, overlayEl, focus, close } = useFocus();
+  const isFocused = focusable && focusedId === uid;
+  const bodyPad = flush ? '' : 'p-4';
+
   return (
     <section
       className={`relative ${surface} rounded-md flex flex-col min-w-0 ${className}`}
     >
-      {(title || actions) && (
+      {(title || actions || focusable) && (
         <header
           className={`relative flex items-center justify-between gap-3 px-3.5 h-10 border-b ${toneDivider[tone]} ${toneHeaderTint[tone]} shrink-0`}
         >
@@ -73,10 +84,36 @@ const Panel = ({
               </span>
             )}
           </div>
-          {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
+          {(actions || focusable) && (
+            <div className="flex items-center gap-2 shrink-0">
+              {actions}
+              {focusable && (
+                <button
+                  onClick={() => (isFocused ? close() : focus(uid, title ?? subtitle))}
+                  aria-label={isFocused ? 'Exit focus' : 'Focus this panel'}
+                  title={isFocused ? 'Exit focus (Esc)' : 'Focus'}
+                  className="text-textMuted hover:text-textPrimary transition-colors"
+                >
+                  {isFocused ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+                </button>
+              )}
+            </div>
+          )}
         </header>
       )}
-      <div className={`${flush ? '' : 'p-4'} flex-grow min-h-0 ${bodyClassName}`}>{children}</div>
+      {isFocused && overlayEl ? (
+        <>
+          {/* Body lives in the focus overlay while focused — hold the height here. */}
+          <div className={`${bodyPad} flex-grow min-h-0 flex items-center justify-center`}>
+            <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">
+              Viewing in focus · Esc to return
+            </span>
+          </div>
+          {createPortal(<div className={`h-full min-h-0 ${bodyClassName}`}>{children}</div>, overlayEl)}
+        </>
+      ) : (
+        <div className={`${bodyPad} flex-grow min-h-0 ${bodyClassName}`}>{children}</div>
+      )}
     </section>
   );
 };

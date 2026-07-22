@@ -128,6 +128,7 @@ const GammaChart = () => {
             </span>
           }
           flush
+          focusable
           bodyClassName="h-full p-2"
         >
           <StrikeChart ticker={activeTicker} revision={revision} levels={gexLevels} overlay={overlay} timeframe="1m" />
