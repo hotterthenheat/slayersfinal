@@ -68,7 +68,7 @@ const SleeveBar = ({ label, value, title }: { label: string; value: number; titl
     <span className="w-9 shrink-0 font-mono text-[11px] uppercase tracking-wider text-textSecondary">{label}</span>
     <span className="flex-1 h-[3px] rounded-full bg-white/[0.06] overflow-hidden">
       <span
-        className={`block h-full rounded-full ${value >= 60 ? 'holo-bar' : value >= 40 ? 'bg-white/30' : 'bg-bear/70'}`}
+        className={`block h-full rounded-full ${value >= 60 ? 'bg-bull/90' : value >= 40 ? 'bg-white/30' : 'bg-bear/70'}`}
         style={{ width: `${value}%` }}
       />
     </span>
@@ -369,7 +369,7 @@ const Stocks = () => {
       align: 'right',
       sortValue: p => p.composite,
       render: p => (
-        <span className={`font-mono text-sm font-bold tnum ${p.composite >= 68 ? 'holo-text' : p.composite <= 46 ? 'text-bear' : 'text-textPrimary'}`}>
+        <span className={`font-mono text-sm font-bold tnum ${p.composite >= 68 ? 'text-bull' : p.composite <= 46 ? 'text-bear' : 'text-textPrimary'}`}>
           {p.composite}
         </span>
       ),
@@ -437,7 +437,7 @@ const Stocks = () => {
                   <SignalBadge tone={phaseTone[s.phase]}>{s.phase}</SignalBadge>
                 </div>
                 <div className="flex items-baseline gap-2">
-                  <span className={`font-mono text-xl font-bold tnum ${s.verdict === 'OVERWEIGHT' ? 'holo-text' : s.verdict === 'UNDERWEIGHT' ? 'text-bear' : 'text-textPrimary'}`}>
+                  <span className={`font-mono text-xl font-bold tnum ${s.verdict === 'OVERWEIGHT' ? 'text-bull' : s.verdict === 'UNDERWEIGHT' ? 'text-bear' : 'text-textPrimary'}`}>
                     {s.score}
                   </span>
                   <span className={`font-mono text-[10px] uppercase tracking-wider ${sectorTone[s.verdict] === 'bull' ? 'text-bull' : sectorTone[s.verdict] === 'bear' ? 'text-bear' : 'text-textMuted'}`}>
@@ -446,7 +446,7 @@ const Stocks = () => {
                 </div>
                 <div className="h-[4px] rounded-full bg-white/[0.06] overflow-hidden">
                   <span
-                    className={`block h-full rounded-full ${s.verdict === 'OVERWEIGHT' ? 'holo-bar' : s.verdict === 'UNDERWEIGHT' ? 'bg-bear/70' : 'bg-white/30'}`}
+                    className={`block h-full rounded-full ${s.verdict === 'OVERWEIGHT' ? 'bg-bull/90' : s.verdict === 'UNDERWEIGHT' ? 'bg-bear/70' : 'bg-white/30'}`}
                     style={{ width: `${s.score}%` }}
                   />
                 </div>
@@ -513,7 +513,7 @@ const Stocks = () => {
                   <SignalBadge tone={verdictTone[p.verdict]}>{p.verdict}</SignalBadge>
                 </div>
                 <div className="flex items-baseline gap-2">
-                  <span className={`font-mono text-lg font-bold tnum ${p.composite >= 68 ? 'holo-text' : p.composite <= 46 ? 'text-bear' : 'text-textPrimary'}`}>
+                  <span className={`font-mono text-lg font-bold tnum ${p.composite >= 68 ? 'text-bull' : p.composite <= 46 ? 'text-bear' : 'text-textPrimary'}`}>
                     {p.composite}
                   </span>
                   <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted">score</span>

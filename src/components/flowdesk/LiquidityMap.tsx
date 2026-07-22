@@ -419,10 +419,12 @@ const LiquidityMap = ({ ticker, spot, height, fill, chartType = 'candle', overla
             if (i === 0) ctx.moveTo(x, y);
             else ctx.lineTo(x, y);
           }
-          ctx.strokeStyle = pts[COLS - 1] >= 0 ? 'rgba(70,210,235,0.55)' : 'rgba(220,120,240,0.5)';
+          // cumulative delta: net buying green (bull), net selling red (bear)
+          const cdUp = pts[COLS - 1] >= 0;
+          ctx.strokeStyle = cdUp ? 'rgba(48,209,88,0.5)' : 'rgba(255,59,48,0.5)';
           ctx.lineWidth = 3.2;
           ctx.stroke();
-          ctx.strokeStyle = pts[COLS - 1] >= 0 ? '#46d2eb' : '#dc78f0';
+          ctx.strokeStyle = cdUp ? '#30D158' : '#FF3B30';
           ctx.lineWidth = 1.4;
           ctx.stroke();
         }

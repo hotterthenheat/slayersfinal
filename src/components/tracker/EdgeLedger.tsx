@@ -247,19 +247,19 @@ const EdgeLedger = () => {
           label="Best strategy"
           value={view.bestStrategy.setup}
           sub={`${fmtR(view.bestStrategy.avgR)} · ${view.bestStrategy.winRate.toFixed(0)}% win`}
-          tone="bull"
+          tone={view.bestStrategy.avgR >= 0 ? 'bull' : 'bear'}
         />
         <StatCard
           label="Worst strategy"
           value={view.worstStrategy.setup}
           sub={`${fmtR(view.worstStrategy.avgR)} · ${view.worstStrategy.winRate.toFixed(0)}% win`}
-          tone="bear"
+          tone={view.worstStrategy.avgR >= 0 ? 'bull' : 'bear'}
         />
         <StatCard
           label="Decay flags"
           value={`${view.decayFlagCount}`}
           sub="regime edge-decay warnings"
-          tone={view.decayFlagCount >= 2 ? 'warn' : view.decayFlagCount === 1 ? 'select' : 'bull'}
+          tone={view.decayFlagCount >= 2 ? 'warn' : view.decayFlagCount === 1 ? 'neutral' : 'bull'}
         />
       </MetricGrid>
 
