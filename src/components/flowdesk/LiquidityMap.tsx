@@ -74,6 +74,8 @@ const easeOut = (t: number) => 1 - (1 - t) * (1 - t) * (1 - t);
 const fmtNotional = (n: number) =>
   n >= 1e9 ? `$${(n / 1e9).toFixed(1)}B` : n >= 1e6 ? `$${(n / 1e6).toFixed(0)}M` : n >= 1e3 ? `$${(n / 1e3).toFixed(0)}K` : `$${n | 0}`;
 
+const fmtSize = (v: number) => (v >= 1e3 ? `${(v / 1e3).toFixed(1)}K` : `${Math.round(v)}`);
+
 /** Pre-render a soft radial-glow sprite once; drawImage-scaling it per trade is
     far cheaper than building a gradient every frame and gives free overlap. */
 function makeGlowSprite(r: number, g: number, b: number): HTMLCanvasElement {
@@ -510,6 +512,69 @@ const LiquidityMap = ({ ticker, spot, height, fill, chartType = 'candle', overla
         ctx.textAlign = 'right';
         ctx.font = '10px "JetBrains Mono", monospace';
         ctx.fillText(book.rowToPrice(yToRow(cyv)).toFixed(2), ladderX - 5, cyv);
+      }
+
+      // ---- crosshair cell read-out (price · resting depth · executed) ----
+      // Drawn straight on the canvas from the render-loop closure, so hovering
+      // never triggers a React re-render on this streaming surface.
+      if (crossOn) {
+        const ci = Math.max(0, Math.min(COLS - 1, Math.round(m.x / colW + sub)));
+        const ri = Math.max(0, Math.min(rows - 1, Math.round(yToRow(m.y))));
+        const depthPct = Math.round(buf[ci].depth[ri] * 100);
+        const price = book.rowToPrice(yToRow(m.y)); // exact cursor price, matches the axis tag
+        const ageS = ((COLS - 1 - ci) * COL_MS) / 1000;
+        const isBid = ri <= cur.c;
+
+        const boxW = 132;
+        const boxH = 50;
+        let bx = m.x + 14;
+        let by = m.y + 14;
+        if (bx + boxW > heatW) bx = m.x - boxW - 14;
+        if (bx < 0) bx = 2;
+        if (by + boxH > plotH) by = plotH - boxH - 2;
+        if (by < 0) by = 2;
+
+        ctx.fillStyle = 'rgba(12,12,12,0.94)';
+        ctx.fillRect(bx, by, boxW, boxH);
+        ctx.strokeStyle = 'rgba(42,42,42,1)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(bx + 0.5, by + 0.5, boxW - 1, boxH - 1);
+
+        ctx.textBaseline = 'alphabetic';
+        // header: price + age
+        ctx.textAlign = 'left';
+        ctx.font = '11px "JetBrains Mono", monospace';
+        ctx.fillStyle = '#ededed';
+        ctx.fillText(price.toFixed(2), bx + 8, by + 16);
+        ctx.textAlign = 'right';
+        ctx.font = '9px "JetBrains Mono", monospace';
+        ctx.fillStyle = '#7d7d7d';
+        ctx.fillText(ageS < 0.05 ? 'now' : `−${ageS.toFixed(1)}s`, bx + boxW - 8, by + 15);
+        // resting depth at the cell
+        ctx.textAlign = 'left';
+        ctx.font = '9px "JetBrains Mono", monospace';
+        ctx.fillStyle = '#7d7d7d';
+        ctx.fillText('DEPTH', bx + 8, by + 31);
+        ctx.textAlign = 'right';
+        ctx.font = '10px "JetBrains Mono", monospace';
+        ctx.fillStyle = isBid ? '#30D158' : '#FF4E42';
+        ctx.fillText(`${depthPct}% ${isBid ? 'bid' : 'ask'}`, bx + boxW - 8, by + 31);
+        // executed buy / sell in the column
+        ctx.textAlign = 'left';
+        ctx.font = '9px "JetBrains Mono", monospace';
+        ctx.fillStyle = '#7d7d7d';
+        ctx.fillText('EXEC', bx + 8, by + 44);
+        ctx.font = '10px "JetBrains Mono", monospace';
+        const ex = bx + 44;
+        ctx.fillStyle = '#30D158';
+        const bStr = fmtSize(buyVol[ci]);
+        ctx.fillText(bStr, ex, by + 44);
+        const bW = ctx.measureText(bStr).width;
+        ctx.fillStyle = '#7d7d7d';
+        ctx.fillText(' / ', ex + bW, by + 44);
+        const gW = ctx.measureText(' / ').width;
+        ctx.fillStyle = '#FF4E42';
+        ctx.fillText(fmtSize(sellVol[ci]), ex + bW + gW, by + 44);
       }
     };
 

@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { histogram, type MonteCarloResult } from '../../core/quant';
+import HoverReadout from '../../components/ui/HoverReadout';
 
 /*
   The fan chart: sampled GBM paths in faint chrome, the percentile cone in
@@ -23,6 +24,15 @@ const MonteCarloPanel = ({ mc, spot, height = 260 }: MonteCarloPanelProps) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const bins = useMemo(() => histogram(mc.terminal, spot, 28), [mc, spot]);
   const maxBin = Math.max(...bins.map(b => b.count), 1);
+  const [hover, setHover] = useState<{ d: number; leftPct: number; x: number; y: number } | null>(null);
+
+  const onConeMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const w = rect.width || 1;
+    const frac = (e.clientX - rect.left - 4) / (w - 8);
+    const d = Math.max(0, Math.min(mc.days, Math.round(frac * mc.days)));
+    setHover({ d, leftPct: (((d / mc.days) * (w - 8) + 4) / w) * 100, x: e.clientX, y: e.clientY });
+  };
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -123,9 +133,43 @@ const MonteCarloPanel = ({ mc, spot, height = 260 }: MonteCarloPanelProps) => {
     return () => ro.disconnect();
   }, [mc, spot]);
 
+  const move = (arr: number[]): string => {
+    const v = arr[hover ? hover.d : 0] ?? spot;
+    const pct = ((v - spot) / spot) * 100;
+    return `$${v.toFixed(0)} · ${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
+  };
+
   return (
     <div className="flex flex-col gap-3">
-      <canvas ref={canvasRef} className="w-full" style={{ height }} />
+      <div className="relative">
+        <canvas
+          ref={canvasRef}
+          className="w-full cursor-crosshair"
+          style={{ height }}
+          onMouseMove={onConeMove}
+          onMouseLeave={() => setHover(null)}
+        />
+        {hover && (
+          <span
+            className="pointer-events-none absolute top-0 bottom-0 w-px bg-white/30"
+            style={{ left: `${hover.leftPct}%` }}
+          />
+        )}
+        {hover && (
+          <HoverReadout x={hover.x} y={hover.y}>
+            <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted">
+              {hover.d === 0 ? 'today' : `+${hover.d} session${hover.d > 1 ? 's' : ''}`}
+            </div>
+            <div className="mt-1 font-mono text-[13px] font-bold tnum text-textPrimary">median {move(mc.cone.p50)}</div>
+            <div className="mt-1 grid grid-cols-[auto_1fr] gap-x-2.5 gap-y-0.5 font-mono text-[10px] tnum text-textSecondary">
+              <span className="text-textMuted">50% band</span>
+              <span>{move(mc.cone.p25)} → {move(mc.cone.p75)}</span>
+              <span className="text-textMuted">90% band</span>
+              <span>{move(mc.cone.p5)} → {move(mc.cone.p95)}</span>
+            </div>
+          </HoverReadout>
+        )}
+      </div>
       {/* legend */}
       <div className="flex items-center gap-3 -mt-1 font-mono text-[9px] uppercase tracking-wider text-textMuted">
         <span className="flex items-center gap-1"><span className="w-2.5 h-2 rounded-[1px]" style={{ background: CONE_OUTER }} /> 90% band</span>

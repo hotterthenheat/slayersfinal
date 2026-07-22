@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import type { TermPoint, TermStructureData } from '../../../types/gex';
+import HoverReadout from '../../ui/HoverReadout';
 
 interface TermStructureProps {
   data: TermStructureData;
@@ -29,6 +31,23 @@ const TermStructure = ({ data }: TermStructureProps) => {
   const min = Math.min(...all.map(p => p.iv)) - 1;
   const max = Math.max(...all.map(p => p.iv)) + 1;
   const span = max - min || 1;
+  const [h, setH] = useState<{ i: number; x: number; y: number } | null>(null);
+  const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const dte = ((e.clientX - rect.left) / (rect.width || 1)) * 360;
+    let i = 0;
+    let best = Infinity;
+    data.current.forEach((p, idx) => {
+      const d = Math.abs(p.dte - dte);
+      if (d < best) {
+        best = d;
+        i = idx;
+      }
+    });
+    setH({ i, x: e.clientX, y: e.clientY });
+  };
+  const cx = (i: number) => (data.current[i].dte / 360) * W;
+  const cy = (iv: number) => H - ((iv - min) / span) * H;
 
   const stats: { label: string; value: string }[] = [
     { label: 'ATM IV 30D', value: `${data.stats.atm30.toFixed(2)}%` },
@@ -56,7 +75,13 @@ const TermStructure = ({ data }: TermStructureProps) => {
 
       {/* Curves */}
       <div className="flex-grow min-h-0 relative">
-        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-full">
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          preserveAspectRatio="none"
+          className="w-full h-full cursor-crosshair"
+          onMouseMove={onMove}
+          onMouseLeave={() => setH(null)}
+        >
           {[0.25, 0.5, 0.75].map(f => (
             <line key={f} x1="0" y1={H * f} x2={W} y2={H * f} stroke="rgba(255,255,255,0.04)" strokeWidth="0.3" />
           ))}
@@ -72,9 +97,26 @@ const TermStructure = ({ data }: TermStructureProps) => {
             />
           ))}
           <path d={pathFor(data.current, min, span)} fill="none" stroke="#ededed" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+          {h && (
+            <>
+              <line x1={cx(h.i)} x2={cx(h.i)} y1={0} y2={H} stroke="rgba(255,255,255,0.35)" strokeWidth="0.4" vectorEffect="non-scaling-stroke" />
+              <circle cx={cx(h.i)} cy={cy(data.current[h.i].iv)} r="1.6" fill="#ededed" vectorEffect="non-scaling-stroke" />
+            </>
+          )}
         </svg>
         <span className="absolute left-0 top-0 font-mono text-[8px] tnum text-textMuted">{max.toFixed(0)}%</span>
         <span className="absolute left-0 bottom-0 font-mono text-[8px] tnum text-textMuted">{min.toFixed(0)}%</span>
+        {h && (
+          <HoverReadout x={h.x} y={h.y}>
+            <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted">{data.current[h.i].dte}D</div>
+            <div className="mt-0.5 font-mono text-[13px] font-bold tnum text-textPrimary">{data.current[h.i].iv.toFixed(2)}%</div>
+            <div className="mt-0.5 flex items-center gap-2.5 font-mono text-[10px] tnum text-textSecondary">
+              {data.dayAgo[h.i] && <span>1D {data.dayAgo[h.i].iv.toFixed(1)}%</span>}
+              {data.weekAgo[h.i] && <span>1W {data.weekAgo[h.i].iv.toFixed(1)}%</span>}
+              {data.monthAgo[h.i] && <span>1M {data.monthAgo[h.i].iv.toFixed(1)}%</span>}
+            </div>
+          </HoverReadout>
+        )}
       </div>
       <div className="flex justify-between font-mono text-[8px] tnum text-textMuted select-none">
         {[7, 90, 180, 270, 360].map(t => (

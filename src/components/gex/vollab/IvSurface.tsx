@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import type { IvSurfaceData } from '../../../types/gex';
+import HoverReadout from '../../ui/HoverReadout';
 
 interface IvSurfaceProps {
   data: IvSurfaceData;
@@ -32,6 +34,7 @@ function rampColor(t: number): string {
 const IvSurface = ({ data }: IvSurfaceProps) => {
   const { moneyness, dte, cells, min, max, forward } = data;
   const span = max - min || 1;
+  const [hover, setHover] = useState<{ t: number; m: number; iv: number; x: number; y: number } | null>(null);
 
   return (
     <div className="flex gap-2 h-full min-h-0">
@@ -39,12 +42,14 @@ const IvSurface = ({ data }: IvSurfaceProps) => {
         <div className="flex-grow flex flex-col gap-[2px]">
           {dte.map((t, r) => (
             <div key={t} className="flex items-stretch gap-[2px] flex-1 min-h-[18px]">
-              <span className="w-8 shrink-0 flex items-center font-mono text-[9px] tnum text-textMuted">{t}d</span>
+              <span className="w-8 shrink-0 flex items-center font-mono text-[10px] tnum text-textMuted">{t}d</span>
               {cells[r].map((iv, c) => (
                 <span
                   key={c}
-                  title={`${t}DTE · ${moneyness[c].toFixed(2)} K/F · ${iv.toFixed(1)}% IV`}
-                  className="flex-1 rounded-[2px]"
+                  onMouseEnter={e => setHover({ t, m: moneyness[c], iv, x: e.clientX, y: e.clientY })}
+                  onMouseMove={e => setHover({ t, m: moneyness[c], iv, x: e.clientX, y: e.clientY })}
+                  onMouseLeave={() => setHover(h => (h && h.t === t && h.m === moneyness[c] ? null : h))}
+                  className="flex-1 rounded-[2px] cursor-crosshair hover:brightness-125"
                   style={{ background: rampColor((iv - min) / span) }}
                 />
               ))}
@@ -76,6 +81,20 @@ const IvSurface = ({ data }: IvSurfaceProps) => {
         <span className="font-mono text-[9px] tnum text-textSecondary">{min.toFixed(0)}%</span>
         <span className="mt-1 font-mono text-[8px] text-textMuted uppercase">iv</span>
       </div>
+
+      {hover && (
+        <HoverReadout x={hover.x} y={hover.y}>
+          <div className="flex items-baseline gap-2">
+            <span className="font-mono text-[12px] font-bold text-textPrimary tnum">{hover.iv.toFixed(1)}%</span>
+            <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">IV</span>
+          </div>
+          <div className="mt-0.5 flex items-center gap-3 font-mono text-[10px] tnum text-textSecondary">
+            <span>{hover.t}DTE</span>
+            <span>{hover.m.toFixed(2)} K/F</span>
+          </div>
+          <div className="mt-0.5 font-mono text-[10px] text-textMuted tnum">Fwd {forward.toFixed(2)}</div>
+        </HoverReadout>
+      )}
     </div>
   );
 };

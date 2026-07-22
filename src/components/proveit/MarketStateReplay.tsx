@@ -1,5 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { History, Target, Activity, TrendingDown, Layers } from 'lucide-react';
+import HoverReadout from '../ui/HoverReadout';
 import {
   buildStateReplay,
   type StateReplayView,
@@ -94,30 +95,50 @@ const CalibrationPlot = ({ view }: { view: StateReplayView }) => {
   const pad = 22;
   const X = (p: number) => pad + (p / 100) * (W - pad - 6);
   const Y = (p: number) => H - pad - (p / 100) * (H - pad - 8);
+  const [h, setH] = useState<{ b: StateReplayView['calibration'][number]; x: number; y: number } | null>(null);
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }}>
-      {/* frame */}
-      <line x1={pad} y1={H - pad} x2={W - 6} y2={H - pad} stroke="#2a2a2a" strokeWidth={1} />
-      <line x1={pad} y1={8} x2={pad} y2={H - pad} stroke="#2a2a2a" strokeWidth={1} />
-      {/* perfect-calibration diagonal */}
-      <line x1={X(0)} y1={Y(0)} x2={X(100)} y2={Y(100)} stroke={MUTED} strokeOpacity={0.5} strokeWidth={1} strokeDasharray="3 3" />
-      <text x={X(100) - 2} y={Y(100) + 2} fontSize={7.5} fill={MUTED} fontFamily="monospace" textAnchor="end">
-        ideal
-      </text>
-      {/* points */}
-      {view.calibration.map((b, i) => (
-        <g key={i}>
-          <line x1={X(b.predictedPct)} y1={Y(b.predictedPct)} x2={X(b.predictedPct)} y2={Y(b.realizedPct)} stroke={AMBER} strokeOpacity={0.45} strokeWidth={1} />
-          <circle cx={X(b.predictedPct)} cy={Y(b.realizedPct)} r={Math.max(2.5, Math.min(6, 2 + b.count / 12))} fill={SERIES} fillOpacity={0.9} />
-        </g>
-      ))}
-      <text x={pad} y={H - 6} fontSize={7.5} fill={MUTED} fontFamily="monospace">
-        predicted →
-      </text>
-      <text x={6} y={14} fontSize={7.5} fill={MUTED} fontFamily="monospace">
-        realized ↑
-      </text>
-    </svg>
+    <>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }}>
+        {/* frame */}
+        <line x1={pad} y1={H - pad} x2={W - 6} y2={H - pad} stroke="#2a2a2a" strokeWidth={1} />
+        <line x1={pad} y1={8} x2={pad} y2={H - pad} stroke="#2a2a2a" strokeWidth={1} />
+        {/* perfect-calibration diagonal */}
+        <line x1={X(0)} y1={Y(0)} x2={X(100)} y2={Y(100)} stroke={MUTED} strokeOpacity={0.5} strokeWidth={1} strokeDasharray="3 3" />
+        <text x={X(100) - 2} y={Y(100) + 2} fontSize={7.5} fill={MUTED} fontFamily="monospace" textAnchor="end">
+          ideal
+        </text>
+        {/* points */}
+        {view.calibration.map((b, i) => (
+          <g key={i}>
+            <line x1={X(b.predictedPct)} y1={Y(b.predictedPct)} x2={X(b.predictedPct)} y2={Y(b.realizedPct)} stroke={AMBER} strokeOpacity={0.45} strokeWidth={1} />
+            <circle cx={X(b.predictedPct)} cy={Y(b.realizedPct)} r={Math.max(2.5, Math.min(6, 2 + b.count / 12))} fill={SERIES} fillOpacity={0.9} />
+            <circle
+              cx={X(b.predictedPct)}
+              cy={Y(b.realizedPct)}
+              r={9}
+              fill="transparent"
+              className="cursor-crosshair"
+              onMouseEnter={e => setH({ b, x: e.clientX, y: e.clientY })}
+              onMouseMove={e => setH({ b, x: e.clientX, y: e.clientY })}
+              onMouseLeave={() => setH(cur => (cur?.b === b ? null : cur))}
+            />
+          </g>
+        ))}
+        <text x={pad} y={H - 6} fontSize={7.5} fill={MUTED} fontFamily="monospace">
+          predicted →
+        </text>
+        <text x={6} y={14} fontSize={7.5} fill={MUTED} fontFamily="monospace">
+          realized ↑
+        </text>
+      </svg>
+      {h && (
+        <HoverReadout x={h.x} y={h.y}>
+          <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Predicted {h.b.predictedPct.toFixed(0)}%</div>
+          <div className="mt-0.5 font-mono text-[13px] font-bold tnum text-textPrimary">Realized {h.b.realizedPct.toFixed(0)}%</div>
+          <div className="mt-0.5 font-mono text-[10px] text-textSecondary tnum">{h.b.count} samples</div>
+        </HoverReadout>
+      )}
+    </>
   );
 };
 
@@ -133,25 +154,53 @@ const EdgeDecayChart = ({ view }: { view: StateReplayView }) => {
   const Y = (v: number) => H - pad - (v / maxEdge) * (H - pad - 8);
   const path = (sel: (p: (typeof pts)[number]) => number) =>
     pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${X(p.bar).toFixed(1)},${Y(sel(p)).toFixed(1)}`).join(' ');
+  const [h, setH] = useState<{ p: (typeof pts)[number]; x: number; y: number } | null>(null);
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }}>
-      <line x1={pad} y1={H - pad} x2={W - 6} y2={H - pad} stroke="#2a2a2a" strokeWidth={1} />
-      <line x1={pad} y1={8} x2={pad} y2={H - pad} stroke="#2a2a2a" strokeWidth={1} />
-      {/* cumulative target / stop as faint context */}
-      <path d={path(p => p.cumStopPct)} fill="none" stroke={RED} strokeOpacity={0.4} strokeWidth={1} />
-      <path d={path(p => p.cumTargetPct)} fill="none" stroke={GREEN} strokeOpacity={0.4} strokeWidth={1} />
-      {/* net edge — the headline line */}
-      <path d={path(p => p.edgePct)} fill="none" stroke={SERIES} strokeWidth={1.9} />
-      {pts.map((p, i) => (
-        <circle key={i} cx={X(p.bar)} cy={Y(p.edgePct)} r={2} fill={SERIES} />
-      ))}
-      <text x={pad} y={H - 6} fontSize={7.5} fill={MUTED} fontFamily="monospace">
-        bars held →
-      </text>
-      <text x={6} y={14} fontSize={7.5} fill={MUTED} fontFamily="monospace">
-        net edge ↑
-      </text>
-    </svg>
+    <>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }}>
+        <line x1={pad} y1={H - pad} x2={W - 6} y2={H - pad} stroke="#2a2a2a" strokeWidth={1} />
+        <line x1={pad} y1={8} x2={pad} y2={H - pad} stroke="#2a2a2a" strokeWidth={1} />
+        {/* cumulative target / stop as faint context */}
+        <path d={path(p => p.cumStopPct)} fill="none" stroke={RED} strokeOpacity={0.4} strokeWidth={1} />
+        <path d={path(p => p.cumTargetPct)} fill="none" stroke={GREEN} strokeOpacity={0.4} strokeWidth={1} />
+        {/* net edge — the headline line */}
+        <path d={path(p => p.edgePct)} fill="none" stroke={SERIES} strokeWidth={1.9} />
+        {pts.map((p, i) => (
+          <g key={i}>
+            <circle cx={X(p.bar)} cy={Y(p.edgePct)} r={2} fill={SERIES} />
+            <circle
+              cx={X(p.bar)}
+              cy={Y(p.edgePct)}
+              r={8}
+              fill="transparent"
+              className="cursor-crosshair"
+              onMouseEnter={e => setH({ p, x: e.clientX, y: e.clientY })}
+              onMouseMove={e => setH({ p, x: e.clientX, y: e.clientY })}
+              onMouseLeave={() => setH(cur => (cur?.p === p ? null : cur))}
+            />
+          </g>
+        ))}
+        <text x={pad} y={H - 6} fontSize={7.5} fill={MUTED} fontFamily="monospace">
+          bars held →
+        </text>
+        <text x={6} y={14} fontSize={7.5} fill={MUTED} fontFamily="monospace">
+          net edge ↑
+        </text>
+      </svg>
+      {h && (
+        <HoverReadout x={h.x} y={h.y}>
+          <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted">{h.p.bar} bars held</div>
+          <div className={`mt-0.5 font-mono text-[13px] font-bold tnum ${h.p.edgePct >= 0 ? 'text-bull' : 'text-bear'}`}>
+            {h.p.edgePct >= 0 ? '+' : '−'}
+            {Math.abs(h.p.edgePct).toFixed(1)}pt edge
+          </div>
+          <div className="mt-0.5 flex items-center gap-2.5 font-mono text-[10px] tnum text-textSecondary">
+            <span className="text-bull">tgt {h.p.cumTargetPct.toFixed(1)}%</span>
+            <span className="text-bear">stop {h.p.cumStopPct.toFixed(1)}%</span>
+          </div>
+        </HoverReadout>
+      )}
+    </>
   );
 };
 
