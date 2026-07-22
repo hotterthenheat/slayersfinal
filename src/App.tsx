@@ -23,6 +23,7 @@ import FlowScanner from './pages/flowdesk/FlowScanner';
 import FlowTracker from './pages/flowdesk/FlowTracker';
 import MetaorderReconstruction from './components/flowdesk/MetaorderReconstruction';
 import DarkPool from './pages/flowdesk/DarkPool';
+import LiquidityDesk from './pages/flowdesk/LiquidityDesk';
 import Stocks from './pages/Stocks';
 import News from './pages/News';
 import EarningsHub from './pages/EarningsHub';
@@ -81,6 +82,7 @@ const App = () => {
               <Route index element={<Navigate to="/trace/live-tape" replace />} />
               <Route path="live-tape" element={<LiveTape />} />
               <Route path="dark-pool" element={<DarkPool />} />
+              <Route path="liquidity" element={<LiquidityDesk />} />
               <Route path="dark-feed" element={<Navigate to="/trace/dark-pool" replace />} />
               <Route path="scanner" element={<FlowScanner />} />
               <Route path="reconstruction" element={<MetaorderReconstruction />} />
