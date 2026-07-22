@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { Bookmark } from 'lucide-react';
 import SignalBadge from '../../components/ui/SignalBadge';
 import DrilldownDrawer, { Field, Section } from '../../components/flowdesk/DrilldownDrawer';
+import CrossDeskLinks from '../../components/flowdesk/CrossDeskLinks';
 
 // recharts is heavy — keep it out of the initial bundle; the drilldown only
 // mounts when a print is opened.
@@ -189,6 +190,9 @@ const TapeRowDrawer = ({ print, onClose, isMarked, onToggleMark }: TapeRowDrawer
             <Bookmark className="w-3.5 h-3.5" fill={isMarked ? 'currentColor' : 'none'} />
             {isMarked ? 'Tracking print' : 'Track print'}
           </button>
+
+          {/* Cross-desk deep links — carry this exact contract to the next desk */}
+          <CrossDeskLinks ticker={print.ticker} strike={print.strike} right={print.right} onNavigate={onClose} />
         </>
       )}
     </DrilldownDrawer>

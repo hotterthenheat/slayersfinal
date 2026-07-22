@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import SignalBadge from '../../components/ui/SignalBadge';
 import DrilldownDrawer, { Field, Section } from '../../components/flowdesk/DrilldownDrawer';
+import CrossDeskLinks from '../../components/flowdesk/CrossDeskLinks';
 import { fmtUsd } from '../../data/gex';
 import type { ContractRef } from '../../data/contractflow';
 import type { ScannerRow, FlowSentiment } from '../../data/flowscan';
@@ -168,6 +169,9 @@ const ScannerRowDrawer = ({ row, spot, onClose }: ScannerRowDrawerProps) => {
               tone={`text-${SENT_TONE[row.sentiment] === 'neutral' ? 'textMuted' : SENT_TONE[row.sentiment]}`}
             />
           </Section>
+
+          {/* Cross-desk deep links — carry this contract to the next desk */}
+          <CrossDeskLinks ticker={row.ticker} strike={row.strike} right={row.right} onNavigate={onClose} />
         </>
       )}
     </DrilldownDrawer>
