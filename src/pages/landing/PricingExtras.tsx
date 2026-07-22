@@ -170,7 +170,7 @@ export const ComparePlans = () => (
 const FAQS = [
   {
     q: 'Do you offer alerts and signals?',
-    a: "Yes — that's Compass. Every setup is graded 0–100 and carries a live call: ENTER, EXIT or STAND ASIDE, with the reasoning in plain English. Discord alerts fire the moment a setup is detected. The terminal calls it — you decide and you place it.",
+    a: "Yes — that's Compass. Every setup is graded 0–100 and carries a live read: QUALIFIED, WATCH or FADED, with the reasoning in plain English. Discord alerts fire the moment a setup is detected. The terminal reads the tape — you decide and you place it.",
   },
   {
     q: 'Is the data live?',

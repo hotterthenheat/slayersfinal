@@ -27,7 +27,7 @@ const richTone = (r: number): Tone => (r >= 1.3 ? 'warn' : r <= 0.85 ? 'bull' : 
 const recLabel: Record<EarningsIntelView['recommended'], string> = {
   LONG: 'LONG VOL',
   SHORT: 'SHORT VOL',
-  SKIP: 'STAND ASIDE',
+  SKIP: 'NO EDGE',
 };
 const recTone: Record<EarningsIntelView['recommended'], Tone> = {
   LONG: 'bull',

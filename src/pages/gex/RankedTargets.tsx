@@ -84,8 +84,10 @@ const RankDelta = ({ delta }: { delta: number | undefined }) => {
 type SortKey = 'rank' | 'strike' | 'score' | 'bps' | 'nbr' | 'volume' | 'openInterest' | 'netGex' | 'hedgingClass';
 
 const COLUMNS: { key: SortKey; label: string; align: 'left' | 'right'; cls: string; num: boolean }[] = [
-  { key: 'rank', label: 'Rank', align: 'left', cls: 'w-[74px]', num: true },
-  { key: 'strike', label: 'Strike', align: 'left', cls: 'w-40', num: true },
+  // Rank column dropped — rows already sort by rank and the top cards call out
+  // #1/#2/#3, so an explicit rank number was redundant. The rank-movement arrow
+  // moves next to the strike below (that's the non-redundant part).
+  { key: 'strike', label: 'Strike', align: 'left', cls: 'w-44', num: true },
   { key: 'score', label: 'Score', align: 'left', cls: 'w-28', num: true },
   { key: 'bps', label: 'Dist', align: 'right', cls: 'w-16', num: true },
   { key: 'nbr', label: 'NBR', align: 'right', cls: 'w-16', num: true },
@@ -280,13 +282,8 @@ const RankedTargets = () => {
                   >
                     <td className="px-3 py-2.5">
                       <span className="inline-flex items-center gap-1.5">
-                        <span className="font-mono text-[12px] tnum text-textSecondary">#{t.rank}</span>
-                        <RankDelta delta={deltas.get(t.strike)} />
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <span className="inline-flex items-center gap-1.5">
                         <span className="font-mono text-[13px] font-bold tnum text-textPrimary">{fmtStrike(t.strike)}</span>
+                        <RankDelta delta={deltas.get(t.strike)} />
                         {t.tags.map(tag => (
                           <SignalBadge key={tag} tone={TAG_TONE[tag]}>
                             {tag}

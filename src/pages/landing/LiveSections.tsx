@@ -302,7 +302,7 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
         <SectionKicker>Entries are easy</SectionKicker>
         <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">It calls the exit, too.</h2>
         <p className="mt-4 text-[14px] text-textSecondary leading-relaxed max-w-md">
-          Most tools tell you when to get in and go quiet. Here, the same card that said ENTER watches its own
+          Most tools flag a setup and go quiet. Here, the same card that read QUALIFIED watches its own
           setup — and when the structure under it breaks, it turns red and says so. This is one real card from
           the terminal, shown in both of its states.
         </p>
@@ -352,7 +352,7 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
                 className="font-mono text-[17px] font-bold tracking-tight"
                 style={{ color: entering ? '#30D158' : '#FF3B30' }}
               >
-                {entering ? `STRONG ${bull ? 'CALL' : 'PUT'} — ENTER NOW` : 'FADING — STAND ASIDE'}
+                {entering ? `STRONG ${bull ? 'CALL' : 'PUT'} — CONDITIONS ALIGNED` : 'FADING — LOW CONVICTION'}
               </h3>
               <p className="mt-3 text-[12px] text-textSecondary leading-relaxed">
                 {entering
