@@ -15,6 +15,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronDown, Search, Menu, X, Settings, type LucideIcon } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
+import AnimatedNumber from '../ui/AnimatedNumber';
 import { useLaunch } from './LaunchTransition';
 import { NAV_GROUPS, itemsByGroup, NAV_ITEMS, type NavGroup, type NavItem } from './nav';
 
@@ -149,7 +150,7 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
         <div className="hidden sm:flex items-center gap-2 font-mono text-xs">
           <span className="text-textSecondary font-semibold">{activeTicker}</span>
           <span className="text-textPrimary font-semibold tnum">
-            {marketData ? `$${marketData.spot.toFixed(2)}` : '--'}
+            {marketData ? <AnimatedNumber value={marketData.spot} format={v => `$${v.toFixed(2)}`} /> : '--'}
           </span>
           {marketData && (
             <span className={`tnum text-[11px] ${changeUp ? 'text-bull' : 'text-bear'}`}>
