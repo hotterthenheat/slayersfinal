@@ -120,7 +120,7 @@ const AvailCell = ({ a }: { a: Avail }) => (
 
 export const ComparePlans = () => (
   <div className="mt-16">
-    <h3 className="text-center text-2xl md:text-3xl font-bold tracking-tight">Compare plans</h3>
+    <h3 className="text-2xl md:text-3xl font-bold tracking-tight">Compare plans</h3>
     <div className="mt-8 border border-borderSubtle bg-panel rounded-lg overflow-x-auto">
       <div className="min-w-[640px]">
         {/* Header */}
@@ -195,7 +195,7 @@ export const Faq = () => {
 
   return (
     <section id="faq" className="px-6 md:px-10 py-20 max-w-3xl mx-auto">
-      <div className="text-center">
+      <div>
         <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.25em] text-textSecondary">FAQ</span>
         <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">
           Questions, <span className="text-textMuted">answered.</span>

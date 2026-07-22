@@ -503,9 +503,9 @@ const Pillars = () => (
     <SectionKicker>What the terminal reads</SectionKicker>
     <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">Price doesn't move randomly.</h2>
     <p className="mt-4 text-[14px] text-textSecondary leading-relaxed max-w-2xl">
-      Options dealers have to hedge, and their hedging concentrates around a few price levels every
-      session — mechanically. That structure is what actually pushes and pins price. Slayer maps it
-      live, then grades the contracts that trade it.
+      That hedging leaves fingerprints. The same three keep showing up on every chain — where the
+      move gets capped, where dealers flip from calming price to chasing it, and where the size hits
+      the tape before it hits the print.
     </p>
     <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-8">
       {PILLARS.map(p => (
