@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { motion, useMotionValue, useSpring, useTransform, useReducedMotion } from 'framer-motion';
 
 interface AnimatedNumberProps {
@@ -9,22 +9,28 @@ interface AnimatedNumberProps {
 }
 
 /**
- * Rolls smoothly between numeric values instead of snapping.
- * Mounts at its initial value (no entrance animation) — pair with `tnum`
- * on the parent so digits don't jitter horizontally while rolling.
+ * Rolls smoothly between numeric values, then settles — a data terminal wants
+ * numbers at rest most of the time, so the spring is tuned to land well under
+ * one 1.5s tick. Renders inline-block + tabular-nums so digits never shift
+ * horizontally; when the formatted width changes (e.g. 99→100, $9.9M→$10.2M)
+ * it JUMPS rather than rolling a value that would shove its neighbors sideways.
  */
 const AnimatedNumber = ({ value, format = v => v.toFixed(2), className }: AnimatedNumberProps) => {
   const reduced = useReducedMotion();
   const raw = useMotionValue(value);
-  const spring = useSpring(raw, { stiffness: 170, damping: 28 });
+  const spring = useSpring(raw, { stiffness: 260, damping: 32 });
   const text = useTransform(spring, v => format(v));
+  const prevLen = useRef(format(value).length);
 
   useEffect(() => {
-    if (reduced) spring.jump(value);
+    const len = format(value).length;
+    // jump on reduced-motion OR when the character count changes (width would jump anyway)
+    if (reduced || len !== prevLen.current) spring.jump(value);
     else raw.set(value);
-  }, [value, reduced, raw, spring]);
+    prevLen.current = len;
+  }, [value, reduced, raw, spring, format]);
 
-  return <motion.span className={className}>{text}</motion.span>;
+  return <motion.span className={`inline-block tabular-nums ${className ?? ''}`}>{text}</motion.span>;
 };
 
 export default AnimatedNumber;

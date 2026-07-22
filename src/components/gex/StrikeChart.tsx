@@ -116,10 +116,10 @@ const StrikeChart = ({ ticker, revision, levels, overlay, timeframe, height = 46
       autoSize: true,
       layout: {
         background: { color: 'transparent' },
-        textColor: '#6b6b6b',
+        textColor: '#7d7d7d',
         fontFamily: 'JetBrains Mono, monospace',
         fontSize: 10,
-        attributionLogo: true,
+        attributionLogo: false,
       },
       grid: {
         vertLines: { color: 'rgba(255,255,255,0.03)' },
@@ -317,8 +317,8 @@ const StrikeChart = ({ ticker, revision, levels, overlay, timeframe, height = 46
         {[
           { label: 'Call Wall', cls: 'bg-bull' },
           { label: 'Put Wall', cls: 'bg-bear' },
-          { label: 'Flip', cls: 'bg-[#7DD3FC]' },
-          { label: 'King', cls: 'bg-[#EA00FF]' },
+          { label: 'Flip', cls: 'bg-flip' },
+          { label: 'King', cls: 'bg-king' },
           { label: '+GEX node', color: heatPoles.pos },
           { label: '−GEX node', color: heatPoles.neg },
         ].map((item: { label: string; cls?: string; color?: string }) => (

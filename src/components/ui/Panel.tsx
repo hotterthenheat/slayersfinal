@@ -19,20 +19,20 @@ interface PanelProps {
 // Tone reads through a whisper of header tint + the divider — never a muddy
 // full-surface wash and never a decorative color bar.
 const toneHeaderTint: Record<Tone, string> = {
-  bull: 'bg-[#30D158]/[0.05]',
+  bull: 'bg-bull/[0.05]',
   bear: 'bg-bear/[0.05]',
   warn: 'bg-warn/[0.05]',
   select: 'bg-select/[0.05]',
-  magenta: 'bg-[#EA00FF]/[0.06]',
+  magenta: 'bg-king/[0.06]',
   neutral: '',
 };
 
 const toneDivider: Record<Tone, string> = {
-  bull: 'border-[#30D158]/15',
+  bull: 'border-bull/15',
   bear: 'border-bear/15',
   warn: 'border-warn/15',
   select: 'border-select/15',
-  magenta: 'border-[#EA00FF]/15',
+  magenta: 'border-king/15',
   neutral: 'border-borderSubtle',
 };
 
@@ -48,7 +48,9 @@ const Panel = ({
   bodyClassName = '',
   children,
 }: PanelProps) => {
-  const surface = emphasis ? 'inst-emphasis holo-glow' : 'inst-surface inst-ticks';
+  // Scope-reticle corner ticks read as a deliberate "this is the hero instrument"
+  // cue — reserved for emphasis panels, not scattered on every box.
+  const surface = emphasis ? 'inst-emphasis holo-glow inst-ticks' : 'inst-surface';
   return (
     <section
       className={`relative ${surface} rounded-md flex flex-col min-w-0 ${className}`}

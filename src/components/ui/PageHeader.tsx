@@ -35,7 +35,7 @@ const PageHeader = ({ breadcrumb, title, subtitle, actions, ribbon }: PageHeader
               <Icon className="w-3.5 h-3.5 text-textSecondary" />
             </span>
           )}
-          <h1 className="text-lg font-semibold tracking-tight text-textPrimary leading-none">{title}</h1>
+          <h1 className="text-xl font-semibold tracking-tight text-textPrimary leading-none">{title}</h1>
         </div>
         {subtitle && <p className="text-xs text-textSecondary mt-1.5">{subtitle}</p>}
       </div>

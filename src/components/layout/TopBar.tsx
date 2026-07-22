@@ -90,6 +90,11 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
               onMouseLeave={() => setDropdown(null)}
             >
               <button
+                type="button"
+                aria-haspopup="true"
+                aria-expanded={dropdown === group}
+                onClick={() => setDropdown(prev => (prev === group ? null : group))}
+                onFocus={() => setDropdown(group)}
                 className={`relative self-stretch flex items-center gap-1 px-3 my-2 rounded-md font-mono text-[11px] font-semibold uppercase tracking-wider transition-colors ${
                   active
                     ? 'text-textPrimary bg-white/[0.06]'

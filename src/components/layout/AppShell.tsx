@@ -49,13 +49,15 @@ const AppShell = () => {
       <main className="flex-grow overflow-y-auto">
         {/* Keyed by top-level section only — subpage changes animate inside
             their section layout so the header/tabs never remount */}
+        {/* Opacity-only crossfade — no vertical translate (which nudged the whole
+            page on every section switch) and a short fade so content never blanks. */}
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={`/${location.pathname.split('/')[1] ?? ''}`}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.12, ease: 'easeOut' }}
             className="w-full px-4 lg:px-6 2xl:px-8 py-5 flex flex-col gap-4"
           >
             {/* One broken desk should never blank the whole terminal; the key

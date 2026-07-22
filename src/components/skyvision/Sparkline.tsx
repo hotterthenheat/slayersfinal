@@ -18,8 +18,8 @@ const Sparkline = ({ data, up, width = 88, height = 24 }: SparklineProps) => {
       return `${x.toFixed(1)},${y.toFixed(1)}`;
     })
     .join(' ');
-  // Real direction: green when the ticker is up, red when it's down.
-  const color = up ? '#22C55E' : '#FF3B30';
+  // Real direction: green when up, red when down — house bull/bear tokens.
+  const color = up ? '#30D158' : '#FF3B30';
 
   return (
     <svg width={width} height={height} className="overflow-visible">
