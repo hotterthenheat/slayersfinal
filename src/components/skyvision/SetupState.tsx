@@ -47,12 +47,14 @@ interface StateMeta {
   hint: string;
 }
 
-// Grey = dormant · amber = primed · green = live · red = dead.
+// Lifecycle is a PROCESS, not a direction — it uses a neutral/selection language
+// so green & red stay reserved for market direction (call/put, bull/bear). Silver
+// (select) = primed/live, grey = dormant/faded; only the live state pulses.
 export const STATE_META: Record<SetupState, StateMeta> = {
   WAITING: { tone: 'neutral', pulse: false, rank: 1, hint: 'Score present, no trigger yet — still building' },
-  ARMED: { tone: 'warn', pulse: false, rank: 2, hint: 'Entry conditions met — no trigger fired yet' },
-  TRIGGERED: { tone: 'bull', pulse: true, rank: 3, hint: 'Trigger fired — a take-profit level is live' },
-  INVALIDATED: { tone: 'bear', pulse: false, rank: 0, hint: 'Thesis faded — engine has stepped aside' },
+  ARMED: { tone: 'select', pulse: false, rank: 2, hint: 'Entry conditions met — no trigger fired yet' },
+  TRIGGERED: { tone: 'select', pulse: true, rank: 3, hint: 'Trigger fired — a take-profit level is live' },
+  INVALIDATED: { tone: 'neutral', pulse: false, rank: 0, hint: 'Thesis faded — engine has stepped aside' },
 };
 
 interface StateBadgeProps {
