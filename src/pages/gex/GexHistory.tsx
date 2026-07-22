@@ -174,7 +174,7 @@ const GexHistory = () => {
   if (!view) {
     return (
       <Panel title="History & Replay">
-        <div className="h-40 flex items-center justify-center font-mono text-xs text-textMuted">Reconstructing session…</div>
+        <div className="h-40 flex items-center justify-center font-mono text-[11px] uppercase tracking-widest text-textMuted">Reconstructing session…</div>
       </Panel>
     );
   }
@@ -210,7 +210,7 @@ const GexHistory = () => {
     { key: 'callWall', header: 'Call Wall', align: 'right', sortValue: p => p.callWall, render: p => <span className="font-mono text-xs tnum text-bull">${p.callWall.toFixed(2)}</span> },
     { key: 'flip', header: 'Flip', align: 'right', sortValue: p => p.flip, render: p => <span className="font-mono text-xs tnum text-flip">${p.flip.toFixed(2)}</span> },
     { key: 'putWall', header: 'Put Wall', align: 'right', sortValue: p => p.putWall, render: p => <span className="font-mono text-xs tnum text-bear">${p.putWall.toFixed(2)}</span> },
-    { key: 'king', header: 'King', align: 'right', sortValue: p => p.king, render: p => <span className="font-mono text-xs tnum text-[#EA00FF]">${p.king.toFixed(2)}</span> },
+    { key: 'king', header: 'King', align: 'right', sortValue: p => p.king, render: p => <span className="font-mono text-xs tnum text-king">${p.king.toFixed(2)}</span> },
     {
       key: 'netGex',
       header: 'Net GEX',

@@ -586,11 +586,16 @@ const LiveSections = () => {
         </h2>
 
         {!ctx ? (
-          <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-5">
-            {Array.from({ length: 4 }, (_, i) => (
-              <div key={i} className="h-[340px] border border-borderSubtle bg-panel rounded-lg animate-pulse" />
-            ))}
-          </div>
+          <>
+            <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {Array.from({ length: 4 }, (_, i) => (
+                <div key={i} className="h-[340px] border border-borderSubtle bg-panel rounded-lg animate-pulse" />
+              ))}
+            </div>
+            {/* Reserve the positioning-map row so the sections below don't jump
+                when the live context resolves (matches the loaded branch). */}
+            <div className="mt-5 h-[440px] border border-borderSubtle bg-panel rounded-lg animate-pulse" />
+          </>
         ) : (
           <>
             <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-5">

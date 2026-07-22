@@ -487,7 +487,7 @@ const Compass = () => {
       )}
 
       {/* Feed / monitor + preview / chain */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-stretch">
+      <div className={`grid grid-cols-1 xl:grid-cols-12 gap-4 ${inReviewMode ? 'items-stretch' : 'items-start'}`}>
         {/* LEFT COLUMN */}
         <div className="xl:col-span-7 min-w-0">
           <AnimatePresence mode="wait" initial={false}>

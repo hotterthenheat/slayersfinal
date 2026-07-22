@@ -125,7 +125,7 @@ const GreeksRegime = () => {
   if (!view) {
     return (
       <Panel title="Greeks & Regime">
-        <div className="h-40 flex items-center justify-center font-mono text-xs text-textMuted">Building the exposure surface…</div>
+        <div className="h-40 flex items-center justify-center font-mono text-[11px] uppercase tracking-widest text-textMuted">Building the exposure surface…</div>
       </Panel>
     );
   }
