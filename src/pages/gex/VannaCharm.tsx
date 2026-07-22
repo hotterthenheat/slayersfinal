@@ -96,7 +96,7 @@ const ContributorList = ({ rows, max }: { rows: Contrib[]; max: number }) => (
         >
           <span className="w-16 shrink-0 font-mono text-[12px] font-semibold tnum text-textSecondary">
             {fmtStrike(r.strike)}
-            {r.pin && <span className="ml-1 font-mono text-[8px] font-bold uppercase text-textPrimary">pin</span>}
+            {r.pin && <span className="ml-1 font-mono text-[10px] font-bold uppercase text-textPrimary">pin</span>}
           </span>
           <span className="relative flex-1 min-w-0 h-[6px] rounded-sm bg-white/[0.04] overflow-hidden">
             <span

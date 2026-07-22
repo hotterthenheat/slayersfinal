@@ -335,7 +335,7 @@ const MetaorderRow = ({ m }: { m: Metaorder }) => {
       {/* execution timeline */}
       <div>
         <Timeline prints={m.children} />
-        <div className="mt-0.5 flex items-center justify-between font-mono text-[9px] text-textMuted tnum">
+        <div className="mt-0.5 flex items-center justify-between font-mono text-[10px] text-textMuted tnum">
           <span>{first?.time}</span>
           <span className="uppercase tracking-widest">
             worked over ~{m.minsElapsed}m · {m.sweepShare.toFixed(0)}% sweeps

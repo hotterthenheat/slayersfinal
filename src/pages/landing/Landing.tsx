@@ -279,7 +279,7 @@ const Landing = () => (
         href="#showcase"
         className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-1 text-textMuted hover:text-textSecondary transition-colors"
       >
-        <span className="font-mono text-[9px] uppercase tracking-[0.3em]">Scroll</span>
+        <span className="font-mono text-[10px] uppercase tracking-[0.3em]">Scroll</span>
         <ChevronDown className="w-4 h-4 animate-bounce" />
       </a>
     </section>
@@ -323,7 +323,7 @@ const Landing = () => (
             </span>
             <span className="font-mono text-[12px] font-bold text-textPrimary shrink-0">{idea.ticker}</span>
             <span
-              className={`inline-flex items-center rounded px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider shrink-0 ${
+              className={`inline-flex items-center rounded px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider shrink-0 ${
                 idea.direction === 'BULLISH' ? 'bg-bull/10 text-bull' : 'bg-bear/10 text-bear'
               }`}
             >
@@ -360,7 +360,7 @@ const Landing = () => (
               {/* Badge lives inside the card — TiltBox clips overflow, so a
                   border-straddling chip would get cut in half. */}
               {tier.featured && (
-                <span className="self-start inline-flex px-2 py-0.5 rounded font-mono text-[9px] font-bold uppercase tracking-widest text-[#0a0a0a] holo-bg">
+                <span className="self-start inline-flex px-2 py-0.5 rounded font-mono text-[10px] font-bold uppercase tracking-widest text-[#0a0a0a] holo-bg">
                   Most popular
                 </span>
               )}
@@ -448,7 +448,7 @@ const Landing = () => (
             rel="noopener noreferrer"
             className="mt-4 inline-flex items-center gap-2 font-mono text-[11px] text-textSecondary hover:text-textPrimary transition-colors"
           >
-            <svg viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5">
+            <svg viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5" aria-hidden="true">
               <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
             </svg>
             @JoinSlayer

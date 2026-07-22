@@ -49,7 +49,7 @@ const DensityChart = ({ view }: { view: StateDensityView }) => {
   const fx = X(forward);
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none">
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none" role="img" aria-label="Risk-neutral terminal-price density — implied versus realized">
       {/* shaded 2σ tails */}
       <rect x={0} y={0} width={Math.max(0, lTail)} height={H} fill="rgba(255,59,48,0.06)" />
       <rect x={rTail} y={0} width={Math.max(0, W - rTail)} height={H} fill="rgba(48,209,88,0.06)" />
@@ -60,13 +60,13 @@ const DensityChart = ({ view }: { view: StateDensityView }) => {
       <path d={realLine} fill="none" stroke="#8f8f8f" strokeWidth={1.1} strokeDasharray="2 2.5" vectorEffect="non-scaling-stroke" />
       {/* forward marker */}
       <line x1={fx} x2={fx} y1={0} y2={H} stroke="#6b6b6b" strokeOpacity={0.7} strokeWidth={1} strokeDasharray="3 3" />
-      <text x={fx + 3} y={12} fontSize={8} fill="#6b6b6b" fontFamily="monospace">FWD {forward.toFixed(0)}</text>
+      <text x={fx + 3} y={12} fontSize={10} fill="#6b6b6b" fontFamily="monospace">FWD {forward.toFixed(0)}</text>
       {/* spot marker — white, "where the market is" */}
       <line x1={sx} x2={sx} y1={0} y2={H} stroke="#ededed" strokeOpacity={0.85} strokeWidth={1.25} />
-      <text x={sx + 3} y={H - 5} fontSize={8.5} fill="#ededed" fontFamily="monospace">SPOT {spot.toFixed(2)}</text>
+      <text x={sx + 3} y={H - 5} fontSize={10} fill="#ededed" fontFamily="monospace">SPOT {spot.toFixed(2)}</text>
       {/* 2σ tick labels */}
-      <text x={Math.max(2, lTail - 2)} y={H - 5} fontSize={8} fill={BEAR} fontFamily="monospace" textAnchor="end">−2σ</text>
-      <text x={Math.min(W - 2, rTail + 2)} y={12} fontSize={8} fill={BULL} fontFamily="monospace">+2σ</text>
+      <text x={Math.max(2, lTail - 2)} y={H - 5} fontSize={10} fill={BEAR} fontFamily="monospace" textAnchor="end">−2σ</text>
+      <text x={Math.min(W - 2, rTail + 2)} y={12} fontSize={10} fill={BULL} fontFamily="monospace">+2σ</text>
     </svg>
   );
 };
@@ -118,14 +118,14 @@ const ForwardVolChart = ({ view }: { view: StateDensityView }) => {
   const fwdLine = pts.map((p, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(p.forwardVol).toFixed(1)}`).join(' ');
   const spotLine = pts.map((p, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(p.spotVol).toFixed(1)}`).join(' ');
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none">
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none" role="img" aria-label="Forward-vol curve — volatility priced between tenors">
       <path d={spotLine} fill="none" stroke="#6b6b6b" strokeWidth={1.1} strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
       <path d={fwdLine} fill="none" stroke="#ededed" strokeWidth={1.75} vectorEffect="non-scaling-stroke" />
       {pts.map((p, i) => (
         <g key={p.label}>
           <circle cx={X(i)} cy={Y(p.forwardVol)} r={2.4} fill="#ededed" />
-          <text x={X(i)} y={H - 6} fontSize={8} fill="#6b6b6b" fontFamily="monospace" textAnchor="middle">{p.label}</text>
-          <text x={X(i)} y={Y(p.forwardVol) - 6} fontSize={8} fill="#ededed" fontFamily="monospace" textAnchor="middle">
+          <text x={X(i)} y={H - 6} fontSize={10} fill="#6b6b6b" fontFamily="monospace" textAnchor="middle">{p.label}</text>
+          <text x={X(i)} y={Y(p.forwardVol) - 6} fontSize={10} fill="#ededed" fontFamily="monospace" textAnchor="middle">
             {p.forwardVol.toFixed(1)}
           </text>
         </g>
@@ -200,12 +200,12 @@ const StatePriceDensity = ({ snapshot }: StatePriceDensityProps) => {
           className="xl:col-span-7"
         >
           <DensityChart view={view} />
-          <div className="mt-2 flex items-center justify-between font-mono text-[8.5px] tnum text-textMuted select-none">
+          <div className="mt-2 flex items-center justify-between font-mono text-[10px] tnum text-textMuted select-none">
             <span>{view.density[0].price.toFixed(0)}</span>
             <span className="uppercase tracking-wider">terminal price · {view.horizonDays}D</span>
             <span>{view.density[view.density.length - 1].price.toFixed(0)}</span>
           </div>
-          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[9px] uppercase tracking-wider text-textMuted">
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[10px] uppercase tracking-wider text-textMuted">
             <span className="inline-flex items-center gap-1.5"><span className="w-3 h-px bg-bull" /> implied</span>
             <span className="inline-flex items-center gap-1.5"><span className="w-3 border-t border-dashed border-textSecondary" /> realized</span>
             <span className="inline-flex items-center gap-1.5"><span className="w-3 h-2 bg-bear/20" /> 2σ tails</span>
@@ -250,7 +250,7 @@ const StatePriceDensity = ({ snapshot }: StatePriceDensityProps) => {
           className="xl:col-span-7"
         >
           <ForwardVolChart view={view} />
-          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[9px] uppercase tracking-wider text-textMuted">
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[10px] uppercase tracking-wider text-textMuted">
             <span className="inline-flex items-center gap-1.5"><span className="w-3 h-px bg-bull" /> forward vol</span>
             <span className="inline-flex items-center gap-1.5"><span className="w-3 border-t border-dashed border-textSecondary" /> spot vol</span>
           </div>
@@ -293,7 +293,7 @@ const StatePriceDensity = ({ snapshot }: StatePriceDensityProps) => {
                   <span key={t} className="absolute top-0 bottom-0 w-px bg-white/25" style={{ left: `${t}%` }} aria-hidden />
                 ))}
               </div>
-              <div className="mt-1.5 flex items-center justify-between font-mono text-[9px] uppercase tracking-wider text-textMuted">
+              <div className="mt-1.5 flex items-center justify-between font-mono text-[10px] uppercase tracking-wider text-textMuted">
                 <span>Calm</span>
                 <span>Normal</span>
                 <span>Elevated</span>
@@ -306,15 +306,15 @@ const StatePriceDensity = ({ snapshot }: StatePriceDensityProps) => {
           </div>
           <div className="mt-3 grid grid-cols-3 gap-2 pt-3 border-t border-borderSubtle">
             <div className="min-w-0">
-              <span className="block font-mono text-[9px] uppercase tracking-widest text-textMuted truncate">Put wing 25Δ</span>
+              <span className="block font-mono text-[10px] uppercase tracking-widest text-textMuted truncate">Put wing 25Δ</span>
               <span className="block font-mono text-[13px] font-semibold tnum text-bear">{view.putWingVol.toFixed(1)}</span>
             </div>
             <div className="min-w-0">
-              <span className="block font-mono text-[9px] uppercase tracking-widest text-textMuted truncate">Call wing 25Δ</span>
+              <span className="block font-mono text-[10px] uppercase tracking-widest text-textMuted truncate">Call wing 25Δ</span>
               <span className="block font-mono text-[13px] font-semibold tnum text-textPrimary">{view.callWingVol.toFixed(1)}</span>
             </div>
             <div className="min-w-0">
-              <span className="block font-mono text-[9px] uppercase tracking-widest text-textMuted truncate">Risk reversal</span>
+              <span className="block font-mono text-[10px] uppercase tracking-widest text-textMuted truncate">Risk reversal</span>
               <span className="block font-mono text-[13px] font-semibold tnum text-bear">{view.skewRr25.toFixed(2)}</span>
             </div>
           </div>
@@ -328,32 +328,32 @@ const StatePriceDensity = ({ snapshot }: StatePriceDensityProps) => {
       >
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           <div className="min-w-0">
-            <span className="block font-mono text-[9px] uppercase tracking-widest text-textMuted truncate">Down −{down.otmPct.toFixed(1)}% · P</span>
+            <span className="block font-mono text-[10px] uppercase tracking-widest text-textMuted truncate">Down −{down.otmPct.toFixed(1)}% · P</span>
             <span className="block font-mono text-[15px] font-semibold tnum text-bear">{down.prob.toFixed(1)}%</span>
             <span className="block text-[10px] text-textMuted">@ {fmtK(down.strike)}</span>
           </div>
           <div className="min-w-0">
-            <span className="block font-mono text-[9px] uppercase tracking-widest text-textMuted truncate">Down insure</span>
+            <span className="block font-mono text-[10px] uppercase tracking-widest text-textMuted truncate">Down insure</span>
             <span className="block font-mono text-[15px] font-semibold tnum text-textPrimary">{down.premiumPct.toFixed(2)}%</span>
             <span className="block text-[10px] text-textMuted">of spot</span>
           </div>
           <div className="min-w-0">
-            <span className="block font-mono text-[9px] uppercase tracking-widest text-textMuted truncate">Up +{up.otmPct.toFixed(1)}% · P</span>
+            <span className="block font-mono text-[10px] uppercase tracking-widest text-textMuted truncate">Up +{up.otmPct.toFixed(1)}% · P</span>
             <span className="block font-mono text-[15px] font-semibold tnum text-bull">{up.prob.toFixed(1)}%</span>
             <span className="block text-[10px] text-textMuted">@ {fmtK(up.strike)}</span>
           </div>
           <div className="min-w-0">
-            <span className="block font-mono text-[9px] uppercase tracking-widest text-textMuted truncate">Up insure</span>
+            <span className="block font-mono text-[10px] uppercase tracking-widest text-textMuted truncate">Up insure</span>
             <span className="block font-mono text-[15px] font-semibold tnum text-textPrimary">{up.premiumPct.toFixed(2)}%</span>
             <span className="block text-[10px] text-textMuted">of spot</span>
           </div>
           <div className="min-w-0">
-            <span className="block font-mono text-[9px] uppercase tracking-widest text-textMuted truncate">Implied var</span>
+            <span className="block font-mono text-[10px] uppercase tracking-widest text-textMuted truncate">Implied var</span>
             <span className="block font-mono text-[15px] font-semibold tnum text-textPrimary">{view.impliedVar.toFixed(2)}</span>
             <span className="block text-[10px] text-textMuted">RV {view.realizedVar.toFixed(2)}</span>
           </div>
           <div className="min-w-0">
-            <span className="block font-mono text-[9px] uppercase tracking-widest text-textMuted truncate">VRP</span>
+            <span className="block font-mono text-[10px] uppercase tracking-widest text-textMuted truncate">VRP</span>
             <span className={`block font-mono text-[15px] font-semibold tnum ${vrpTone === 'bull' ? 'text-bull' : 'text-warn'}`}>
               {signed(view.vrp, 2)}
             </span>

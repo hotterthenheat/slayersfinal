@@ -109,7 +109,7 @@ const PriceThresholdOdds = ({ view }: { view: StateDensityView }) => {
             aria-label="Terminal price threshold"
             className="w-full accent-select cursor-pointer"
           />
-          <div className="mt-1 flex items-center justify-between font-mono text-[9px] tnum text-textMuted select-none">
+          <div className="mt-1 flex items-center justify-between font-mono text-[10px] tnum text-textMuted select-none">
             <span>{lo.toFixed(0)}</span>
             <span className="uppercase tracking-wider">terminal price · {view.horizonDays}D</span>
             <span>{hi.toFixed(0)}</span>

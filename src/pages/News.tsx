@@ -165,9 +165,6 @@ const News = () => {
     .filter(n => n.ticker)
     .sort((a, b) => Math.abs(b.prediction.expMove1dPct) - Math.abs(a.prediction.expMove1dPct))
     .slice(0, 3);
-  const bullN = feed.filter(n => n.sentiment > 0.12).length;
-  const bearN = feed.filter(n => n.sentiment < -0.12).length;
-  const macroN = feed.filter(n => !n.ticker).length;
 
   const hasFilters = watched.size > 0 || muted.size > 0;
 

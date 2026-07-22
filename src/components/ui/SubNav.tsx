@@ -19,7 +19,7 @@ const Tab = ({ item, pillId }: { item: SubNavItem; pillId: string }) => (
   <NavLink
     to={item.path}
     className={({ isActive }) =>
-      `relative px-3 py-1.5 font-mono text-xs whitespace-nowrap transition-colors ${
+      `relative shrink-0 px-3 py-1.5 font-mono text-xs whitespace-nowrap transition-colors ${
         isActive
           ? 'text-[#0a0a0a] font-semibold'
           : 'text-textSecondary font-medium hover:text-textPrimary hover:bg-white/[0.03] rounded-[5px]'
@@ -58,7 +58,7 @@ const SubNav = ({ items, ariaLabel }: SubNavProps) => {
     return (
       <nav
         aria-label={ariaLabel}
-        className="inline-flex items-center gap-0.5 border border-borderSubtle bg-panel rounded-md p-0.5"
+        className="flex items-center gap-0.5 border border-borderSubtle bg-panel rounded-md p-0.5 max-w-full overflow-x-auto no-scrollbar"
       >
         {items.map(item => (
           <Tab key={item.path} item={item} pillId={pillId} />

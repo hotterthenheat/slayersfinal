@@ -89,7 +89,7 @@ const ExposureMatrix = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
               (['put', 'call', 'net'] as Leg[]).map(leg => (
                 <th
                   key={`${g.key}-${leg}`}
-                  className={`px-2 py-1 text-right font-mono text-[9px] font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle ${
+                  className={`px-2 py-1 text-right font-mono text-[10px] font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle ${
                     leg === 'put' ? 'border-l' : ''
                   }`}
                 >
@@ -120,7 +120,7 @@ const ExposureMatrix = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
                 <td className="px-2 py-1 bg-inset border-r border-borderSubtle/40 font-mono text-[10px] font-semibold tnum text-textSecondary whitespace-nowrap">
                   {row.strike % 1 === 0 ? row.strike.toFixed(0) : row.strike.toFixed(2)}
                   {row.pin && (
-                    <span className="ml-1.5 font-mono text-[8px] font-bold uppercase tracking-wider text-textPrimary">
+                    <span className="ml-1.5 font-mono text-[10px] font-bold uppercase tracking-wider text-textPrimary">
                       pin
                     </span>
                   )}

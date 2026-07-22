@@ -89,7 +89,6 @@ function windowMovePct(sigmaAnnual: number, mins: number): number {
 export function buildHedgeImpact(snapshot: MarketSnapshot): HedgeImpactView {
   const { ticker, spot, chain, changePercent, indicators, plan } = snapshot;
   const day = dayKey();
-  const seed = (t: string) => hRange(`${ticker}-${day}-hex-${t}`, 0, 1);
 
   const netGex = chain.reduce((a, n) => a + n.netGex, 0);
   const gammaMag = chain.reduce((a, n) => a + Math.abs(n.netGex), 0) || spot * 1e6;

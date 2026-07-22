@@ -33,7 +33,7 @@ const CumulativeDelta = ({ data }: { data: OrderFlowData }) => {
   const fill = negative ? 'rgba(255,59,48,0.10)' : 'rgba(48,209,88,0.10)';
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-24">
+    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-24" role="img" aria-label="Session cumulative delta">
       <line x1="0" y1={zeroY} x2={W} y2={zeroY} stroke="rgba(255,255,255,0.08)" strokeWidth="0.4" />
       <path d={area} fill={fill} />
       <path d={line} fill="none" stroke={stroke} strokeWidth="0.7" vectorEffect="non-scaling-stroke" />
@@ -82,7 +82,7 @@ const DeltaByPriceBars = ({ data }: { data: OrderFlowData }) => {
           <div className="flex items-baseline gap-2">
             <span className="font-mono text-[12px] font-bold text-textPrimary tnum">{hover.price.toFixed(2)}</span>
             {hover.price === data.poc && (
-              <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-select">poc</span>
+              <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-select">poc</span>
             )}
           </div>
           <div className={`mt-0.5 font-mono text-[13px] font-bold tnum ${hover.value >= 0 ? 'text-bull' : 'text-bear'}`}>
@@ -100,7 +100,7 @@ const DeltaByPriceBars = ({ data }: { data: OrderFlowData }) => {
 
 const Stat = ({ label, value, tone = 'text-textPrimary' }: { label: string; value: string; tone?: string }) => (
   <span className="min-w-0">
-    <span className="block font-mono text-[8px] uppercase tracking-widest text-textMuted">{label}</span>
+    <span className="block font-mono text-[10px] uppercase tracking-widest text-textMuted">{label}</span>
     <span className={`block font-mono text-[10px] font-semibold tnum ${tone}`}>{value}</span>
   </span>
 );
@@ -109,11 +109,11 @@ const Stat = ({ label, value, tone = 'text-textPrimary' }: { label: string; valu
 const OrderFlowPanel = ({ data }: OrderFlowPanelProps) => (
   <div className="flex flex-col gap-3 h-full min-h-0">
     <div>
-      <div className="font-mono text-[9px] uppercase tracking-widest text-textMuted mb-1">Cumulative Delta</div>
+      <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted mb-1">Cumulative Delta</div>
       <CumulativeDelta data={data} />
     </div>
     <div className="flex-grow min-h-0 overflow-y-auto">
-      <div className="font-mono text-[9px] uppercase tracking-widest text-textMuted mb-1.5">Delta by Price</div>
+      <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted mb-1.5">Delta by Price</div>
       <DeltaByPriceBars data={data} />
     </div>
     <div className="grid grid-cols-5 gap-2 pt-2 border-t border-borderSubtle">

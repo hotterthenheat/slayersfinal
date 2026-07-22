@@ -74,17 +74,17 @@ const GexMatrix = ({ data }: GexMatrixProps) => {
                       {strike % 1 === 0 ? strike.toFixed(0) : strike.toFixed(2)}
                     </span>
                     {isSpot && (
-                      <span className="ml-1.5 font-mono text-[9px] font-bold uppercase tracking-wider text-textMuted">
+                      <span className="ml-1.5 font-mono text-[10px] font-bold uppercase tracking-wider text-textMuted">
                         spot
                       </span>
                     )}
                     {isCallWall && !isSpot && (
-                      <span className="ml-1.5 font-mono text-[9px] font-bold uppercase tracking-wider text-bull">
+                      <span className="ml-1.5 font-mono text-[10px] font-bold uppercase tracking-wider text-bull">
                         cw
                       </span>
                     )}
                     {isPutWall && !isSpot && (
-                      <span className="ml-1.5 font-mono text-[9px] font-bold uppercase tracking-wider text-bear">
+                      <span className="ml-1.5 font-mono text-[10px] font-bold uppercase tracking-wider text-bear">
                         pw
                       </span>
                     )}
@@ -119,7 +119,7 @@ const GexMatrix = ({ data }: GexMatrixProps) => {
           style={{ background: heatScaleGradient }}
         />
         <span className={`font-mono text-[10px] tnum ${heatScaleLabels.neg}`}>−{fmtUsd(maxAbs).replace('$', '')}</span>
-        <span className="mt-1 font-mono text-[9px] text-textMuted uppercase">gex</span>
+        <span className="mt-1 font-mono text-[10px] text-textMuted uppercase">gex</span>
       </div>
 
       {/* Hover read-out — strike × expiry detail on the cell under the cursor */}
@@ -134,7 +134,7 @@ const GexMatrix = ({ data }: GexMatrixProps) => {
             </span>
             <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">{expiries[hover.c]}</span>
             {hovered.king && (
-              <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-king">king</span>
+              <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-king">king</span>
             )}
           </div>
           <div className={`mt-0.5 font-mono text-[13px] font-bold tnum ${hovered.value >= 0 ? 'text-bull' : 'text-bear'}`}>

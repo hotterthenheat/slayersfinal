@@ -356,13 +356,11 @@ const EarningsHub = () => {
 
   const plays = events.filter(e => e.verdict === 'PLAY');
   const fades = events.filter(e => e.verdict === 'FADE');
-  const skips = events.filter(e => e.verdict === 'SKIP');
   const richest = [...events].sort((a, b) => b.richness - a.richness)[0];
   const cheapest = [...events].sort((a, b) => a.richness - b.richness)[0];
   const next = [...events].sort((a, b) => a.daysOut - b.daysOut)[0];
   const nextWatched = [...events].filter(e => watchlist.has(e.ticker)).sort((a, b) => a.daysOut - b.daysOut)[0];
   const alertEvent = nextWatched ?? next;
-  const avgRich = (events.reduce((a, e) => a + e.richness, 0) / Math.max(events.length, 1)).toFixed(2);
 
   // Group the next stretch of sessions into a calendar strip
   const byDay = useMemo(() => {

@@ -348,7 +348,7 @@ export const WIDGETS: WidgetDef[] = [
           .map(n => (
             <div key={n.id} className="px-2.5 py-2 border-b border-borderSubtle/30 last:border-0">
               <div className="flex items-center gap-2">
-                <span className="font-mono text-[9px] text-textMuted tnum">{n.time}</span>
+                <span className="font-mono text-[10px] text-textMuted tnum">{n.time}</span>
                 {n.ticker && <span className="font-mono text-[10px] font-bold text-textPrimary">{n.ticker}</span>}
                 <span className={`ml-auto font-mono text-[10px] tnum ${n.prediction.expMove1dPct >= 0 ? 'text-bull' : 'text-bear'}`}>
                   {n.prediction.expMove1dPct >= 0 ? '+' : ''}
@@ -376,7 +376,7 @@ export const WIDGETS: WidgetDef[] = [
           .map(e => (
             <div key={e.ticker} className="flex items-center gap-2 px-2.5 py-2 border-b border-borderSubtle/30 last:border-0">
               <span className="font-mono text-[11px] font-bold text-textPrimary">{e.ticker}</span>
-              <span className="font-mono text-[9px] text-textMuted">{e.dateLabel}</span>
+              <span className="font-mono text-[10px] text-textMuted">{e.dateLabel}</span>
               <span className="ml-auto font-mono text-[10px] text-textSecondary tnum">{e.impliedMovePct.toFixed(1)}%</span>
               <SignalBadge tone={e.verdict === 'PLAY' ? 'bull' : e.verdict === 'FADE' ? 'magenta' : 'neutral'}>{e.verdict}</SignalBadge>
             </div>

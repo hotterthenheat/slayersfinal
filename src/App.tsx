@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { MotionConfig } from 'framer-motion';
 import { MarketDataProvider } from './context/MarketDataContext';
@@ -28,13 +29,23 @@ import DarkPool from './pages/flowdesk/DarkPool';
 import Stocks from './pages/Stocks';
 import News from './pages/News';
 import EarningsHub from './pages/EarningsHub';
-import ProveIt from './pages/proveit/ProveIt';
 import Fracture from './pages/fracture/Fracture';
 import Landing from './pages/landing/Landing';
 import CommunityLayout from './pages/community/CommunityLayout';
 import Ideas from './pages/community/Ideas';
 import Requests from './pages/community/Requests';
 import Feedback from './pages/community/Feedback';
+
+// Prove It pulls in the full three.js / WebGL stack for the dealer surface.
+// Lazy-loading it keeps that ~600KB+ out of the initial bundle so the landing
+// page and every other desk paint without downloading the 3D engine.
+const ProveIt = lazy(() => import('./pages/proveit/ProveIt'));
+
+const RouteFallback = () => (
+  <div className="flex items-center justify-center h-[60vh]">
+    <span className="font-mono text-[11px] uppercase tracking-widest text-textMuted animate-pulse">Loading…</span>
+  </div>
+);
 
 const App = () => {
   return (
@@ -64,7 +75,7 @@ const App = () => {
             <Route path="/stocks" element={<Stocks />} />
             <Route path="/news" element={<News />} />
             <Route path="/earnings" element={<EarningsHub />} />
-            <Route path="/prove-it" element={<ProveIt />} />
+            <Route path="/prove-it" element={<Suspense fallback={<RouteFallback />}><ProveIt /></Suspense>} />
             {/* Fracture folded under Pinpoint; Lotto folded into Compass */}
             <Route path="/fracture" element={<Navigate to="/pinpoint/fracture" replace />} />
             <Route path="/lotto" element={<Navigate to="/compass" state={{ compassMode: 'lotto' }} replace />} />
@@ -96,10 +107,11 @@ const App = () => {
               <Route path="reconstruction" element={<MetaorderReconstruction />} />
               <Route path="tracker" element={<FlowTracker />} />
             </Route>
-            <Route path="/liquidity" element={<Navigate to="/trace" replace />} />
-            {/* Legacy section paths from before the rebrand */}
-            <Route path="/flow-desk/*" element={<Navigate to="/trace" replace />} />
-            <Route path="/pinpoint-gex/*" element={<Navigate to="/pinpoint" replace />} />
+            <Route path="/liquidity" element={<Navigate to="/pulse" replace />} />
+            {/* Legacy section paths from before the rebrand — jump straight to the
+                section's landing leaf so there's no redirect-of-a-redirect hop. */}
+            <Route path="/flow-desk/*" element={<Navigate to="/trace/live-tape" replace />} />
+            <Route path="/pinpoint-gex/*" element={<Navigate to="/pinpoint/gamma" replace />} />
             <Route path="/community" element={<CommunityLayout />}>
               <Route index element={<Navigate to="/community/ideas" replace />} />
               <Route path="ideas" element={<Ideas />} />
@@ -108,6 +120,9 @@ const App = () => {
             </Route>
             <Route path="/auditor-log" element={<Navigate to="/tracker" replace />} />
           </Route>
+          {/* Any unmatched URL (typo, stale bookmark, removed path) falls back to
+              the terminal home instead of rendering a blank page. */}
+          <Route path="*" element={<Navigate to="/pulse" replace />} />
         </Routes>
         </FocusProvider>
         </LaunchProvider>

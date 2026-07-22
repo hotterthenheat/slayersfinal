@@ -96,14 +96,14 @@ const SpreadCell = ({ print }: { print: FlowPrint }) => {
   const dot = print.side === 'ASK' ? 'bg-bull' : print.side === 'BID' ? 'bg-bear' : 'bg-white/50';
   return (
     <span className="inline-flex items-center gap-1.5">
-      <span className="font-mono text-[9px] tnum text-textMuted">{print.bid.toFixed(2)}</span>
+      <span className="font-mono text-[10px] tnum text-textMuted">{print.bid.toFixed(2)}</span>
       <span className="relative w-12 h-[3px] rounded-full bg-white/[0.07]">
         <span
           className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-[6px] h-[6px] rounded-full ${dot}`}
           style={{ left: `${print.fillPos * 100}%` }}
         />
       </span>
-      <span className="font-mono text-[9px] tnum text-textMuted">{print.ask.toFixed(2)}</span>
+      <span className="font-mono text-[10px] tnum text-textMuted">{print.ask.toFixed(2)}</span>
     </span>
   );
 };

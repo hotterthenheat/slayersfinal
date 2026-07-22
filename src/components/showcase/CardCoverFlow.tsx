@@ -91,7 +91,7 @@ export default function CardCoverFlow({ className = '', images = DEFAULT_ITEMS }
                   <span className="font-mono text-[11px] font-bold uppercase tracking-widest" style={{ color: item.accent ?? '#E4E8F4' }}>
                     {item.title}
                   </span>
-                  {item.sub && <span className="text-[8px] text-white/55 uppercase tracking-wider text-center px-2">{item.sub}</span>}
+                  {item.sub && <span className="text-[10px] text-white/55 uppercase tracking-wider text-center px-2">{item.sub}</span>}
                 </div>
               )}
               <motion.div

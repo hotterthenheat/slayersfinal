@@ -112,7 +112,7 @@ const hotMatrix = (matrix: GexMatrixData): GexMatrixData => ({
 // ---- shared chrome ----------------------------------------------------------
 
 const LivePill = () => (
-  <span className="inline-flex items-center gap-1.5 font-mono text-[9px] font-bold uppercase tracking-widest text-select">
+  <span className="inline-flex items-center gap-1.5 font-mono text-[10px] font-bold uppercase tracking-widest text-select">
     <span className="w-1.5 h-1.5 rounded-full bg-select animate-pulse" />
     Live
   </span>
@@ -179,10 +179,10 @@ const DemoTape = ({ snapshot }: { snapshot: MarketSnapshot }) => {
               {fmtUsd(p.premium)}
             </span>
             {p.sweep && (
-              <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-warn shrink-0">Sweep</span>
+              <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-warn shrink-0">Sweep</span>
             )}
             <span
-              className={`inline-flex items-center rounded px-1.5 py-0.5 font-mono text-[9px] font-bold shrink-0 ${
+              className={`inline-flex items-center rounded px-1.5 py-0.5 font-mono text-[10px] font-bold shrink-0 ${
                 p.side === 'ASK'
                   ? 'bg-bull/90 text-[#0a0a0a]'
                   : p.side === 'BID'
@@ -217,7 +217,7 @@ const DemoSetup = ({ setups }: { setups: SkyVisionData }) => {
         >
           {setup.contract}
         </span>
-        <span className="inline-flex items-center rounded px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider bg-king/10 text-king">
+        <span className="inline-flex items-center rounded px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider bg-king/10 text-king">
           Top pick
         </span>
         <span
@@ -241,7 +241,7 @@ const DemoSetup = ({ setups }: { setups: SkyVisionData }) => {
           },
         ].map(cell => (
           <div key={cell.label} className="border border-borderSubtle rounded-md px-2.5 py-2">
-            <span className="block font-mono text-[9px] uppercase tracking-widest text-textMuted">{cell.label}</span>
+            <span className="block font-mono text-[10px] uppercase tracking-widest text-textMuted">{cell.label}</span>
             <span className={`block mt-0.5 font-mono text-[15px] font-bold tnum ${cell.tone ?? 'text-textPrimary'}`}>
               {cell.value}
             </span>
@@ -251,7 +251,7 @@ const DemoSetup = ({ setups }: { setups: SkyVisionData }) => {
 
       <div>
         <div className="flex items-center justify-between">
-          <span className="font-mono text-[9px] uppercase tracking-widest text-textMuted">Confidence</span>
+          <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Confidence</span>
           <span className="font-mono text-[11px] font-semibold text-textPrimary tnum">{setup.confidence}%</span>
         </div>
         <div className="mt-1.5 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
@@ -363,7 +363,7 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
 
               <div className="mt-4">
                 <div className="flex items-center justify-between">
-                  <span className="font-mono text-[9px] uppercase tracking-widest text-textMuted">Confidence</span>
+                  <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Confidence</span>
                   <span className="font-mono text-[11px] font-semibold text-textPrimary tnum">{confidence}%</span>
                 </div>
                 <div className="mt-1.5 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
@@ -387,7 +387,7 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
                   { label: 'IV', value: `${setup.greeks.iv.toFixed(1)}%` },
                 ].map(g => (
                   <div key={g.label} className="border border-borderSubtle rounded-md px-2 py-1.5">
-                    <span className="block font-mono text-[8px] uppercase tracking-widest text-textMuted">{g.label}</span>
+                    <span className="block font-mono text-[10px] uppercase tracking-widest text-textMuted">{g.label}</span>
                     <span className={`block mt-0.5 font-mono text-[12px] font-semibold tnum ${g.tone ?? 'text-textPrimary'}`}>
                       {g.value}
                     </span>
@@ -399,7 +399,7 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
                 {setup.whyChips.map(chip => (
                   <span
                     key={chip}
-                    className="inline-flex items-center rounded border border-borderSubtle px-2 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-wider text-textSecondary"
+                    className="inline-flex items-center rounded border border-borderSubtle px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-textSecondary"
                   >
                     {chip}
                   </span>
@@ -645,7 +645,7 @@ const LiveSections = () => {
               </p>
             </div>
             <Link
-              to="/workspace"
+              to="/pulse"
               className="md:ml-auto shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-md border border-borderMuted font-mono text-[12px] uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-white/[0.03] transition-colors"
             >
               Try the workspace <ArrowRight className="w-3.5 h-3.5" />

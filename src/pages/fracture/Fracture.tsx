@@ -136,7 +136,7 @@ const FlowRow = ({ level, maxForced }: { level: ForcedFlowLevel; maxForced: numb
           />
           <span className="absolute top-0 bottom-0" style={{ left: `${(100 / 150) * 100}%`, width: '1px', background: 'rgba(255,255,255,0.5)' }} />
         </span>
-        <span className="font-mono text-[9px] text-textMuted tnum">
+        <span className="font-mono text-[10px] text-textMuted tnum">
           {fmtUsd(Math.abs(level.totalForced))} vs {fmtUsd(level.latentLiquidity)} · {level.absorption.toFixed(2)}×
         </span>
       </span>
@@ -158,7 +158,7 @@ const CascadeFan = ({ paths, spot, trigger }: { paths: number[][]; spot: number;
   const X = (i: number) => (i / (maxLen - 1)) * W;
   const Y = (v: number) => H - ((v - lo) / (hi - lo)) * H;
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none">
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none" role="img" aria-label="Reflexive cascade fan chart — simulated feedback price paths">
       <line x1={0} x2={W} y1={Y(spot)} y2={Y(spot)} stroke={SPOT} strokeOpacity={0.35} strokeWidth={1} strokeDasharray="3 3" />
       <line x1={0} x2={W} y1={Y(trigger)} y2={Y(trigger)} stroke={BEAR} strokeOpacity={0.5} strokeWidth={1} strokeDasharray="4 3" />
       {paths.map((p, i) => (
@@ -171,10 +171,10 @@ const CascadeFan = ({ paths, spot, trigger }: { paths: number[][]; spot: number;
           strokeWidth={1}
         />
       ))}
-      <text x={4} y={Y(spot) - 4} fontSize={9} fill={SPOT} fillOpacity={0.6} fontFamily="monospace">
+      <text x={4} y={Y(spot) - 4} fontSize={10} fill={SPOT} fillOpacity={0.6} fontFamily="monospace">
         spot ${spot.toFixed(0)}
       </text>
-      <text x={4} y={Y(trigger) + 11} fontSize={9} fill={BEAR} fontFamily="monospace">
+      <text x={4} y={Y(trigger) + 11} fontSize={10} fill={BEAR} fontFamily="monospace">
         trigger ${trigger.toFixed(0)}
       </text>
     </svg>

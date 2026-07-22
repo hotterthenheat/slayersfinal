@@ -44,7 +44,7 @@ export const LOCAL_DATA_GROUPS: LocalDataGroup[] = [
     id: 'tracker',
     label: 'Tracker & journal',
     description: 'Tracked setups, closed trades and journal notes',
-    keys: ['slayer_tracked_setups', 'slayer_tracker_journal', 'slayer_closed_trades'],
+    keys: ['slayer_tracked_setups', 'slayer_tracker_journal'],
   },
   {
     id: 'community',

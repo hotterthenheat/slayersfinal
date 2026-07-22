@@ -47,7 +47,7 @@ interface MonitorTarget {
 const SCAN_INTERVAL_MS = 10_000;
 
 const Compass = () => {
-  const { activeTicker, marketData, changeTicker } = useMarketData();
+  const { marketData, changeTicker } = useMarketData();
   const location = useLocation();
   const [scanner, setScanner] = useState<ScannerKey>('top-setups');
   const [mode, setMode] = useState<CompassMode>('setups');

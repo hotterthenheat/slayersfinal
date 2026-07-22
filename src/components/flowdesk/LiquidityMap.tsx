@@ -176,7 +176,7 @@ const LiquidityMap = ({ ticker, spot, height, fill, chartType = 'candle', overla
       for (let i = 0; i < COLS; i++) {
         let b = 0;
         let s = 0;
-        for (const tr of buf[i].trades) (tr.buy ? (b += tr.size) : (s += tr.size));
+        for (const tr of buf[i].trades) { if (tr.buy) b += tr.size; else s += tr.size; }
         buyVol[i] = b;
         sellVol[i] = s;
       }
@@ -613,7 +613,7 @@ const LiquidityMap = ({ ticker, spot, height, fill, chartType = 'candle', overla
       className="w-full h-full overflow-hidden"
       style={fill ? undefined : { height: height ?? 540 }}
     >
-      <canvas ref={canvasRef} className="block cursor-crosshair" />
+      <canvas ref={canvasRef} className="block cursor-crosshair" role="img" aria-label="Live order-flow liquidity heatmap" />
     </div>
   );
 };

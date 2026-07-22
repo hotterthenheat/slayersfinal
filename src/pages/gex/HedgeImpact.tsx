@@ -47,21 +47,21 @@ const HexCurve = ({ view }: { view: HedgeImpactView }) => {
   const line = view.curve.map((c, i) => `${i === 0 ? 'M' : 'L'}${X(c.movePct).toFixed(1)},${Y(c.hex).toFixed(1)}`).join(' ');
   const bx = X(Math.min(maxMove, view.failureBoundaryPct));
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none">
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none" role="img" aria-label="Hedge failure boundary — HEX versus the size of the move">
       {/* danger zone above HEX = 1 */}
       <rect x={0} y={0} width={W} height={oneY} fill="rgba(255,59,48,0.05)" />
       <line x1={0} x2={W} y1={oneY} y2={oneY} stroke={BEAR} strokeOpacity={0.5} strokeWidth={1} strokeDasharray="4 3" />
-      <text x={4} y={oneY - 4} fontSize={8.5} fill={BEAR} fontFamily="monospace">HEX = 1 · hedging outruns liquidity</text>
+      <text x={4} y={oneY - 4} fontSize={10} fill={BEAR} fontFamily="monospace">HEX = 1 · hedging outruns liquidity</text>
       {/* failure boundary marker */}
       {view.failureBoundaryPct <= maxMove && (
         <>
           <line x1={bx} x2={bx} y1={0} y2={H} stroke="#FF9500" strokeOpacity={0.6} strokeWidth={1} />
-          <text x={bx + 4} y={H - 5} fontSize={8.5} fill="#FF9500" fontFamily="monospace">{view.failureBoundaryPct.toFixed(2)}% boundary</text>
+          <text x={bx + 4} y={H - 5} fontSize={10} fill="#FF9500" fontFamily="monospace">{view.failureBoundaryPct.toFixed(2)}% boundary</text>
         </>
       )}
       <path d={line} fill="none" stroke="#ededed" strokeWidth={1.75} />
       {[0, 1, 2, 3].map(m => (
-        <text key={m} x={X(m)} y={12} fontSize={8} fill="#6b6b6b" fontFamily="monospace">{m}%</text>
+        <text key={m} x={X(m)} y={12} fontSize={10} fill="#6b6b6b" fontFamily="monospace">{m}%</text>
       ))}
     </svg>
   );
@@ -312,7 +312,7 @@ const HedgeImpact = () => {
                 <span key={t} className="absolute top-0 bottom-0 w-px bg-white/25" style={{ left: `${t}%` }} aria-hidden />
               ))}
             </div>
-            <div className="mt-1.5 flex items-center justify-between font-mono text-[9px] uppercase tracking-wider text-textMuted">
+            <div className="mt-1.5 flex items-center justify-between font-mono text-[10px] uppercase tracking-wider text-textMuted">
               <span>Light</span>
               <span>Building</span>
               <span>Stretched</span>

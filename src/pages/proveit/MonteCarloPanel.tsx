@@ -146,6 +146,8 @@ const MonteCarloPanel = ({ mc, spot, height = 260 }: MonteCarloPanelProps) => {
           ref={canvasRef}
           className="w-full cursor-crosshair"
           style={{ height }}
+          role="img"
+          aria-label="Monte Carlo price-path fan chart"
           onMouseMove={onConeMove}
           onMouseLeave={() => setHover(null)}
         />
@@ -171,7 +173,7 @@ const MonteCarloPanel = ({ mc, spot, height = 260 }: MonteCarloPanelProps) => {
         )}
       </div>
       {/* legend */}
-      <div className="flex items-center gap-3 -mt-1 font-mono text-[9px] uppercase tracking-wider text-textMuted">
+      <div className="flex items-center gap-3 -mt-1 font-mono text-[10px] uppercase tracking-wider text-textMuted">
         <span className="flex items-center gap-1"><span className="w-2.5 h-2 rounded-[1px]" style={{ background: CONE_OUTER }} /> 90% band</span>
         <span className="flex items-center gap-1"><span className="w-2.5 h-2 rounded-[1px]" style={{ background: CONE_INNER }} /> 50% band</span>
         <span className="flex items-center gap-1"><span className="w-2.5 h-[2px]" style={{ background: MEDIAN }} /> median</span>
@@ -189,7 +191,7 @@ const MonteCarloPanel = ({ mc, spot, height = 260 }: MonteCarloPanelProps) => {
             />
           ))}
         </div>
-        <div className="mt-1.5 flex items-center justify-between font-mono text-[9px] uppercase tracking-widest text-textMuted">
+        <div className="mt-1.5 flex items-center justify-between font-mono text-[10px] uppercase tracking-widest text-textMuted">
           <span>${mc.terminal[0].toFixed(0)}</span>
           <span>terminal price after {mc.days} sessions · {mc.runs.toLocaleString()} runs</span>
           <span>${mc.terminal[mc.terminal.length - 1].toFixed(0)}</span>

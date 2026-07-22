@@ -100,7 +100,7 @@ const Surface3D = ({ snapshot, height = 340 }: Surface3DProps) => {
       {view === '3d' ? (
         <div className="relative flex-1 min-h-0">
           <DealerSurface3D grid={grid} strikes={strikes} spotCol={spotCol} maxAbsUsd={maxAbsUsd} />
-          <div className="absolute bottom-2 right-3 font-mono text-[9px] uppercase tracking-widest text-textMuted pointer-events-none">
+          <div className="absolute bottom-2 right-3 font-mono text-[10px] uppercase tracking-widest text-textMuted pointer-events-none">
             drag · scroll to zoom
           </div>
         </div>
@@ -109,11 +109,11 @@ const Surface3D = ({ snapshot, height = 340 }: Surface3DProps) => {
           <div className="flex-1 min-h-0 flex">
             {/* expiry (y) axis gutter */}
             <div className="flex flex-col justify-between items-center pr-2 py-0.5 shrink-0">
-              <span className="font-mono text-[9px] uppercase tracking-widest text-textMuted">near</span>
-              <span className="font-mono text-[9px] uppercase tracking-widest text-textMuted [writing-mode:vertical-rl] rotate-180">
+              <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">near</span>
+              <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted [writing-mode:vertical-rl] rotate-180">
                 expiry
               </span>
-              <span className="font-mono text-[9px] uppercase tracking-widest text-textMuted">far</span>
+              <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">far</span>
             </div>
 
             <div className="flex-1 min-w-0 flex flex-col">
@@ -172,7 +172,7 @@ const Surface3D = ({ snapshot, height = 340 }: Surface3DProps) => {
             <span className="inline-flex items-center gap-1.5">
               <span className="w-2.5 h-[3px] bg-bear/80 inline-block rounded-full" /> negative gamma
             </span>
-            <span className="ml-auto text-[9px] tracking-widest">hover a cell for the read</span>
+            <span className="ml-auto text-[10px] tracking-widest">hover a cell for the read</span>
           </div>
 
           {hover && (

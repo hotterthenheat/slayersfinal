@@ -110,7 +110,7 @@ const MigrationChart = ({
       {SERIES.map(s => (
         <g key={`tag-${s.key}`}>
           <rect x={W - padR + 2} y={Y(last[s.key] as number) - 7} width={padR - 4} height={14} rx={2} fill={s.color} fillOpacity={0.16} />
-          <text x={W - padR + 5} y={Y(last[s.key] as number) + 3} fontSize={9} fill={s.color} fontFamily="monospace">
+          <text x={W - padR + 5} y={Y(last[s.key] as number) + 3} fontSize={10} fill={s.color} fontFamily="monospace">
             {(last[s.key] as number).toFixed(0)}
           </text>
         </g>
