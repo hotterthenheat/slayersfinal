@@ -94,12 +94,21 @@ export const WIDGETS: WidgetDef[] = [
   {
     key: 'liquidity-map',
     title: 'Liquidity Map',
-    description: 'Order-book heatmap — walls, trades & a live DOM',
+    description: 'Order-flow heatmap — flow, volume, delta, dark-pool & a live DOM',
     w: 8,
     h: 6,
     minW: 4,
     minH: 4,
-    render: ctx => <LiquidityPanel ticker={ctx.ticker} spot={ctx.snapshot.spot} />,
+    render: ctx => {
+      const dp = buildDarkPoolView(ctx.snapshot);
+      return (
+        <LiquidityPanel
+          ticker={ctx.ticker}
+          spot={ctx.snapshot.spot}
+          darkPoolLevels={dp.levels.map(l => ({ price: l.price, notional: l.notional }))}
+        />
+      );
+    },
   },
   {
     key: 'positioning-map',

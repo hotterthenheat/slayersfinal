@@ -593,7 +593,10 @@ const PulseWorkspace = () => {
 
       {/* Maximized single panel */}
       {maximized ? (
-        <div className="flex-1 min-h-0 inst-surface rounded-md overflow-hidden flex flex-col" style={{ height: fullscreen ? 'auto' : '78vh' }}>
+        <div
+          className={`${fullscreen ? 'flex-1' : ''} min-h-0 inst-surface rounded-md overflow-hidden flex flex-col`}
+          style={{ height: fullscreen ? 'auto' : '78vh' }}
+        >
           <PanelChrome panelId={maximized.id} panelKey={maximized.key} ticker={maximized.ticker ?? activeTicker} maximizedView />
           <div className="flex-grow min-h-0 overflow-hidden">{renderPanelBody(maximized.key, maximized.ticker ?? activeTicker)}</div>
         </div>
