@@ -16,6 +16,7 @@ import OrderFlowPanel from '../../components/gex/OrderFlowPanel';
 import WallDrift from '../../components/gex/vannacharm/WallDrift';
 import RegimePanel from '../../components/gex/vollab/RegimePanel';
 import MonteCarloPanel from '../proveit/MonteCarloPanel';
+import LiquidityPanel from '../../components/flowdesk/LiquidityPanel';
 import SignalBadge from '../../components/ui/SignalBadge';
 import type { Tone } from '../../components/ui/tones';
 import { buildDarkPoolView } from '../../data/darkpool';
@@ -89,6 +90,16 @@ export const WIDGETS: WidgetDef[] = [
         />
       </div>
     ),
+  },
+  {
+    key: 'liquidity-map',
+    title: 'Liquidity Map',
+    description: 'Order-book heatmap — walls, trades & a live DOM',
+    w: 8,
+    h: 6,
+    minW: 4,
+    minH: 4,
+    render: ctx => <LiquidityPanel ticker={ctx.ticker} spot={ctx.snapshot.spot} />,
   },
   {
     key: 'positioning-map',
