@@ -31,8 +31,8 @@ import EarningsHub from './pages/EarningsHub';
 import ProveIt from './pages/proveit/ProveIt';
 import Fracture from './pages/fracture/Fracture';
 import Landing from './pages/landing/Landing';
-// R3F + postprocessing are heavy — the immersive world is its own lazy chunk.
-const ImmersiveWorld = lazy(() => import('./pages/experience/ImmersiveWorld'));
+// recharts + R3F surface tiles are heavy — the Quant Lab is its own lazy chunk.
+const QuantLab = lazy(() => import('./pages/quantlab/QuantLab'));
 import CommunityLayout from './pages/community/CommunityLayout';
 import Ideas from './pages/community/Ideas';
 import Requests from './pages/community/Requests';
@@ -50,15 +50,16 @@ const App = () => {
               visitor sees; "Launch terminal" plays the gate into /pulse. */}
           <Route path="/" element={<Landing />} />
           <Route path="/welcome" element={<Navigate to="/" replace />} />
-          {/* Immersive 3D world — full-screen R3F experience, outside the shell */}
+          {/* Quant Lab — full-screen analytics dashboard, outside the shell */}
           <Route
             path="/experience"
             element={
-              <Suspense fallback={<div className="fixed inset-0 bg-[#05060a]" />}>
-                <ImmersiveWorld />
+              <Suspense fallback={<div className="fixed inset-0 bg-canvas" />}>
+                <QuantLab />
               </Suspense>
             }
           />
+          <Route path="/quant-lab" element={<Navigate to="/experience" replace />} />
           <Route path="/immersive" element={<Navigate to="/experience" replace />} />
           <Route element={<AppShell />}>
             <Route path="/home" element={<Navigate to="/pulse" replace />} />
