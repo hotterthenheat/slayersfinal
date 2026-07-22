@@ -16,7 +16,7 @@ const DataUnavailablePanel = ({ requires }: { requires: string }) => (
       Live data unavailable
     </span>
     <span className="text-[11px] text-textMuted leading-relaxed max-w-[240px]">
-      This module needs {requires} for the active symbol. It is intentionally left dark rather than filled with synthetic
+      This module needs {requires} for the active symbol. It is intentionally left dark rather than filled with placeholder
       signals — wire the real feed and it activates behind the same contract.
     </span>
   </div>

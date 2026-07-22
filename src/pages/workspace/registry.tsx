@@ -300,7 +300,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     key: 'monte-carlo',
     title: 'Monte Carlo',
-    description: 'Simulated price cone & terminal distribution',
+    description: 'Modeled price cone & terminal distribution',
     w: 6,
     h: 5,
     minW: 4,
