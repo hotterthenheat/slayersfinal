@@ -12,6 +12,9 @@ export default {
         canvas: '#050505',
         panel: '#0a0a0a',
         panelHover: '#101010',
+        // Raised surface — sticky table headers, tooltips, hover cards (was a
+        // repeated raw #0c0c0c across 17+ files; single-sourced here).
+        panelRaised: '#0c0c0c',
         inset: '#070707',
         inputBg: '#050505',
 
@@ -20,10 +23,11 @@ export default {
         borderMuted: '#2a2a2a',
         borderFocus: '#ededed',
 
-        // Text — tiers must clear WCAG on the dark canvas (muted was 2.06:1, illegible)
+        // Text — tiers must clear WCAG on the dark canvas. Muted lifted #6b6b6b→#7d7d7d
+        // so sub-12px labels clear ~4.5:1 (were ~3.7:1, below AA — the #1 legibility gripe).
         textPrimary: '#ededed',
         textSecondary: '#a3a3a3',
-        textMuted: '#6b6b6b',
+        textMuted: '#7d7d7d',
 
         // Directional / status accents (always paired with a label or icon)
         // Direction reads green up / hot red down; silver is reserved for

@@ -21,7 +21,7 @@ const pillTone: Record<Tone, string> = {
   bear: 'bg-bear/10 text-bear',
   warn: 'bg-warn/10 text-warn',
   select: 'bg-select/10 text-select',
-  magenta: 'bg-[#EA00FF]/10 text-[#EA00FF]',
+  magenta: 'bg-king/10 text-king',
   neutral: 'bg-white/[0.05] text-textSecondary',
 };
 
@@ -46,7 +46,7 @@ const StatRibbon = ({ stats, className = '', variant = 'center' }: StatRibbonPro
             i > 0 ? 'border-l border-borderSubtle' : ''
           }`}
         >
-          <span className="font-mono text-[9px] uppercase tracking-widest text-textMuted">{s.label}</span>
+          <span className="font-mono text-[10px] uppercase tracking-widest text-textSecondary">{s.label}</span>
           {s.pill ? (
             <span
               className={`font-mono text-[10px] font-semibold uppercase tracking-wider rounded px-1.5 py-0.5 ${
