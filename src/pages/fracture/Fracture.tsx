@@ -102,7 +102,7 @@ const FlowRow = ({ level, maxForced, maxLatent }: { level: ForcedFlowLevel; maxF
         <span className="relative h-1.5 rounded-full bg-white/[0.05] overflow-hidden">
           <span
             className={`block h-full rounded-full ${
-              level.absorption >= 1 ? 'bg-bear' : level.absorption >= 0.6 ? 'bg-warn' : level.absorption >= 0.25 ? 'holo-bar' : 'bg-white/25'
+              level.absorption >= 1 ? 'bg-bear' : level.absorption >= 0.6 ? 'bg-warn' : level.absorption >= 0.25 ? 'bg-bull' : 'bg-white/25'
             }`}
             style={{ width: `${(absPct / 150) * 100}%` }}
           />
@@ -418,7 +418,7 @@ const Fracture = () => {
               </div>
               <div className="relative h-2 rounded-full bg-white/[0.06] overflow-hidden">
                 <span
-                  className={`block h-full rounded-full ${crit.branchingRatio >= 0.9 ? 'bg-bear' : crit.branchingRatio >= 0.78 ? 'bg-warn' : 'holo-bar'}`}
+                  className={`block h-full rounded-full ${crit.branchingRatio >= 0.9 ? 'bg-bear' : crit.branchingRatio >= 0.78 ? 'bg-warn' : 'bg-bull'}`}
                   style={{ width: `${crit.branchingRatio * 100}%` }}
                 />
                 <span className="absolute top-0 bottom-0" style={{ left: '80%', width: '1px', background: 'rgba(255,255,255,0.4)' }} />

@@ -85,7 +85,7 @@ const WindowRow = ({ w }: { w: HedgeImpactView['windows'][number] }) => {
         {/* HEX bar — threshold at the 50% mark (HEX = 1) */}
         <div className="relative h-2 rounded-full bg-white/[0.06] overflow-hidden">
           <span
-            className={`block h-full rounded-full ${w.hex >= 1 ? 'bg-bear' : w.hex >= 0.7 ? 'bg-warn' : 'holo-bar'}`}
+            className={`block h-full rounded-full ${w.hex >= 1 ? 'bg-bear' : w.hex >= 0.7 ? 'bg-warn' : 'bg-bull'}`}
             style={{ width: `${barPct}%` }}
           />
           <span className="absolute top-0 bottom-0 left-1/2 w-px bg-white/40" aria-hidden />
@@ -309,7 +309,7 @@ const HedgeImpact = () => {
           <div className="flex-1">
             <div className="relative h-2.5 rounded-full bg-white/[0.06] overflow-hidden">
               <span
-                className={`block h-full rounded-full ${view.stressLabel === 'CRITICAL' ? 'bg-bear' : view.stressLabel === 'STRETCHED' ? 'bg-warn' : view.stressLabel === 'BUILDING' ? 'bg-select' : 'holo-bar'}`}
+                className={`block h-full rounded-full ${view.stressLabel === 'CRITICAL' ? 'bg-bear' : view.stressLabel === 'STRETCHED' ? 'bg-warn' : view.stressLabel === 'BUILDING' ? 'bg-select' : 'bg-bull'}`}
                 style={{ width: `${view.inventoryStress}%` }}
               />
               {[36, 58, 78].map(t => (

@@ -20,8 +20,7 @@ import ContractWeigher from '../components/compass/ContractWeigher';
 import LottoBoard from '../components/compass/LottoBoard';
 import type { Horizon } from '../core/contractScore';
 import SegmentedControl from '../components/ui/SegmentedControl';
-import { setupState, StateBadge, STATE_META, SETUP_STATES, type SetupState } from '../components/skyvision/SetupState';
-import { toneBadge, toneDot } from '../components/ui/tones';
+import { setupState, StateBadge, STATE_META } from '../components/skyvision/SetupState';
 
 type CompassMode = 'setups' | 'weigher' | 'lotto';
 type SetupsView = 'list' | 'table';
@@ -31,7 +30,7 @@ const SETUPS_VIEW_OPTIONS = [
   { value: 'table', label: 'Table' },
 ] as const;
 
-const SETUPS_SUBTITLE = 'Lifecycle read from live signal — WAITING · ARMED · TRIGGERED · INVALIDATED — never an order';
+const SETUPS_SUBTITLE = 'Setups ranked by trend + dealer-flow conviction — a read, never an order';
 
 const MODE_OPTIONS = [
   { value: 'setups', label: 'Setups' },
@@ -65,9 +64,8 @@ const Compass = () => {
   const [tickerFilter, setTickerFilter] = useState<string | null>(null);
   const [showTickerDropdown, setShowTickerDropdown] = useState(false);
 
-  // Feed presentation: card list vs sortable table; lifecycle-state filter
+  // Feed presentation: card list vs sortable table
   const [setupsView, setSetupsView] = useState<SetupsView>('list');
-  const [stateFilter, setStateFilter] = useState<SetupState | null>(null);
 
   const inReviewMode = monitorTarget !== null;
 
@@ -148,34 +146,16 @@ const Compass = () => {
     return makeSetup(selectedSetup.ticker, cfg.currentPrice, selectedSetup.strike, selectedSetup.right, scanner, cfg.iv);
   }, [selectedSetup, scanner, marketData]);
 
-  // Filtered groups for browse mode — ticker universe + lifecycle state.
-  // When a state filter is active we re-derive `found` from the surviving
-  // setups so the "N found" badge stays honest with what's shown.
+  // Filtered groups for browse mode — ticker universe only. (The lifecycle-state
+  // filter was removed: it segmented the feed by triggered/invalidated with
+  // colours that collided with market direction, and added little over the rank.)
   const filteredGroups = useMemo(() => {
     if (!data) return [];
-    let gs = tickerFilter ? data.groups.filter(g => g.ticker === tickerFilter) : data.groups;
-    if (stateFilter) {
-      gs = gs
-        .map(g => {
-          const setups = g.setups.filter(s => setupState(s) === stateFilter);
-          return { ...g, setups, found: setups.length };
-        })
-        .filter(g => g.setups.length > 0);
-    }
-    return gs;
-  }, [data, tickerFilter, stateFilter]);
+    return tickerFilter ? data.groups.filter(g => g.ticker === tickerFilter) : data.groups;
+  }, [data, tickerFilter]);
 
   // Flat, one-row-per-setup projection for the sortable table view
   const flatSetups = useMemo(() => filteredGroups.flatMap(g => g.setups), [filteredGroups]);
-
-  // Counts per lifecycle state across the current ticker universe (unfiltered
-  // by state) — drives the filter-chip badges. Read straight off existing rows.
-  const stateCounts = useMemo(() => {
-    const base = data ? (tickerFilter ? data.groups.filter(g => g.ticker === tickerFilter) : data.groups) : [];
-    const counts: Record<SetupState, number> = { WAITING: 0, ARMED: 0, TRIGGERED: 0, INVALIDATED: 0 };
-    for (const g of base) for (const s of g.setups) counts[setupState(s)]++;
-    return counts;
-  }, [data, tickerFilter]);
 
   // Compute counts per scanner tab (scan tier — stable between sweeps)
   const scannerCounts = useMemo(() => {
@@ -209,7 +189,6 @@ const Compass = () => {
     setSelectedSetup(null);
     setChainSel(null);
     setTickerFilter(null);
-    setStateFilter(null);
   };
 
   // Sortable table columns — every value read straight off the setup the
@@ -452,40 +431,6 @@ const Compass = () => {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Lifecycle-state filter chips */}
-            <div className="inline-flex items-center gap-1 flex-wrap">
-              <button
-                onClick={() => setStateFilter(null)}
-                className={`px-2.5 py-1 rounded-md border font-mono text-[11px] uppercase tracking-wider transition-colors ${
-                  stateFilter === null
-                    ? 'border-borderMuted bg-white/[0.08] text-textPrimary'
-                    : 'border-borderSubtle bg-white/[0.02] text-textMuted hover:text-textSecondary'
-                }`}
-              >
-                All States
-              </button>
-              {SETUP_STATES.map(st => {
-                const active = stateFilter === st;
-                const meta = STATE_META[st];
-                return (
-                  <button
-                    key={st}
-                    onClick={() => setStateFilter(active ? null : st)}
-                    title={meta.hint}
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border font-mono text-[11px] uppercase tracking-wider transition-colors ${
-                      active
-                        ? toneBadge[meta.tone]
-                        : 'border-borderSubtle bg-white/[0.02] text-textMuted hover:text-textSecondary'
-                    }`}
-                  >
-                    <span className={`w-1.5 h-1.5 rounded-full ${toneDot[meta.tone]} ${active && meta.pulse ? 'custom-pulse' : ''}`} />
-                    {st}
-                    <span className="tnum opacity-70">{stateCounts[st]}</span>
-                  </button>
-                );
-              })}
-            </div>
-
             <span className="ml-auto inline-flex items-center gap-2">
               <SegmentedControl
                 ariaLabel="Setups view"

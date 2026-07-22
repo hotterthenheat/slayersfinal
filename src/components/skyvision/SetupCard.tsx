@@ -1,7 +1,6 @@
 import { ChevronDown, Info, AlertTriangle } from 'lucide-react';
 import SignalBadge from '../ui/SignalBadge';
 import GreeksRow from './GreeksRow';
-import { setupState, StateBadge } from './SetupState';
 import type { Setup } from '../../types/skyvision';
 
 interface SetupCardProps {
@@ -18,9 +17,8 @@ interface SetupCardProps {
 const SetupCard = ({ setup, expanded, isSelected, isTop, onToggle, onSelect, onOpenAnalysis }: SetupCardProps) => {
   const moveUp = setup.expectedMovePct >= 0;
   const isCall = setup.right === 'C';
-  const state = setupState(setup);
-  // Green for calls, red for puts — holographic-silver lettering rides on top.
-  const pillTone = isCall ? 'border-[#22c55e]/50 bg-[#15803d]' : 'border-[#ef4444]/50 bg-[#b91c1c]';
+  // Green for calls, red for puts (house tokens) — holographic-silver lettering on top.
+  const pillTone = isCall ? 'border-bull/50 bg-[#15803d]' : 'border-bear/50 bg-[#b91c1c]';
 
   return (
     <div className={`border rounded-md overflow-hidden transition-colors ${
@@ -43,8 +41,6 @@ const SetupCard = ({ setup, expanded, isSelected, isTop, onToggle, onSelect, onO
             <span>
               Score <span className="text-textPrimary font-semibold">{setup.score}</span>
             </span>
-            <span className="text-textMuted/50">·</span>
-            <StateBadge state={state} />
           </span>
           <span className="text-right">
             <span className="block font-mono text-[11px] text-textMuted uppercase tracking-wider">Exp Move</span>
