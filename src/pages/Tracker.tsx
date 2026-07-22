@@ -81,7 +81,7 @@ const STATUS_PICKS: { value: 'auto' | UserStatus; label: string }[] = [
 const STATUS_PICK_ACTIVE: Record<'auto' | UserStatus, string> = {
   auto: 'bg-white/[0.09] border-white/25 text-textPrimary',
   active: 'bg-white/[0.09] border-white/25 text-textPrimary',
-  triggered: 'bg-[#30D158]/12 border-[#30D158]/35 text-[#30D158]',
+  triggered: 'bg-bull/12 border-bull/35 text-bull',
   invalidated: 'bg-bear/12 border-bear/35 text-bear',
   closed: 'bg-white/[0.04] border-borderSubtle text-textMuted',
 };
@@ -600,9 +600,9 @@ const Tracker = () => {
                 <p className="text-[11px] text-textMuted leading-relaxed flex-1">{card.body}</p>
                 <button
                   onClick={() => navigate(card.to)}
-                  className="mt-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md holo-bg text-[#0a0a0a] font-mono text-[10px] font-semibold uppercase tracking-wider transition-transform hover:scale-[1.02]"
+                  className="mt-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md border border-borderSubtle bg-white/[0.03] hover:bg-white/[0.06] text-textSecondary hover:text-textPrimary font-mono text-[10px] font-semibold uppercase tracking-wider transition-colors"
                 >
-                  {card.cta}
+                  {card.cta} <ArrowUpRight className="w-3 h-3" />
                 </button>
               </div>
             ))}

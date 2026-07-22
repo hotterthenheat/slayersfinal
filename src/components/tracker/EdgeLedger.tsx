@@ -59,7 +59,7 @@ const StrategyRow = ({ st, maxAbs }: { st: StrategyStat; maxAbs: number }) => {
           </span>
         </div>
         <ExpectancyBar r={st.avgR} maxAbs={maxAbs} />
-        <div className="mt-1.5 flex items-center gap-2 font-mono text-[9px] uppercase tracking-wider">
+        <div className="mt-1.5 flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider">
           <span className="text-bull">▲ {regimeLabel(st.bestRegime)}</span>
           <span className="text-textMuted">·</span>
           <span className="text-bear">▼ {regimeLabel(st.worstRegime)}</span>
@@ -69,7 +69,7 @@ const StrategyRow = ({ st, maxAbs }: { st: StrategyStat; maxAbs: number }) => {
         <span className={`font-mono text-lg font-bold tnum ${tone === 'bull' ? 'text-bull' : tone === 'bear' ? 'text-bear' : 'text-textPrimary'}`}>
           {fmtR(st.avgR)}
         </span>
-        <span className="font-mono text-[9px] text-textMuted uppercase tracking-wider">{fmtPct(st.expectancyPct)}/tr</span>
+        <span className="font-mono text-[10px] text-textMuted uppercase tracking-wider">{fmtPct(st.expectancyPct)}/tr</span>
       </div>
     </div>
   );
@@ -78,7 +78,7 @@ const StrategyRow = ({ st, maxAbs }: { st: StrategyStat; maxAbs: number }) => {
 /** A micro label / value stack used in the selected-trade dossier. */
 const Field = ({ label, children, tone }: { label: string; children: ReactNode; tone?: Tone }) => (
   <div>
-    <div className="font-mono text-[9px] uppercase tracking-widest text-textSecondary">{label}</div>
+    <div className="font-mono text-[10px] uppercase tracking-widest text-textSecondary">{label}</div>
     <div className={`mt-0.5 text-[12px] leading-snug ${tone === 'bull' ? 'text-bull' : tone === 'bear' ? 'text-bear' : 'text-textPrimary'}`}>
       {children}
     </div>
@@ -103,15 +103,15 @@ const TradeDossier = ({ t }: { t: LedgerTrade }) => {
 
       <div className="grid grid-cols-3 gap-2">
         <div className="inst-surface rounded px-2.5 py-2">
-          <div className="font-mono text-[9px] uppercase tracking-widest text-textSecondary">Planned</div>
+          <div className="font-mono text-[10px] uppercase tracking-widest text-textSecondary">Planned</div>
           <div className="mt-0.5 font-mono text-[13px] font-semibold text-textPrimary tnum">${t.plannedEntry.toFixed(2)}</div>
         </div>
         <div className="inst-surface rounded px-2.5 py-2">
-          <div className="font-mono text-[9px] uppercase tracking-widest text-textSecondary">Actual fill</div>
+          <div className="font-mono text-[10px] uppercase tracking-widest text-textSecondary">Actual fill</div>
           <div className="mt-0.5 font-mono text-[13px] font-semibold text-textPrimary tnum">${t.actualFill.toFixed(2)}</div>
         </div>
         <div className="inst-surface rounded px-2.5 py-2">
-          <div className="font-mono text-[9px] uppercase tracking-widest text-textSecondary">Slippage</div>
+          <div className="font-mono text-[10px] uppercase tracking-widest text-textSecondary">Slippage</div>
           <div className={`mt-0.5 font-mono text-[13px] font-semibold tnum ${t.slippagePct > 0 ? 'text-bear' : 'text-bull'}`}>
             {fmtPct(t.slippagePct)}
           </div>
@@ -128,7 +128,7 @@ const TradeDossier = ({ t }: { t: LedgerTrade }) => {
           { k: 'Capture', v: `${Math.round(Math.max(0, Math.min(1, t.captureRatio)) * 100)}%`, cls: 'text-textPrimary' },
         ].map(x => (
           <div key={x.k} className="text-center">
-            <div className="font-mono text-[9px] uppercase tracking-widest text-textSecondary">{x.k}</div>
+            <div className="font-mono text-[10px] uppercase tracking-widest text-textSecondary">{x.k}</div>
             <div className={`mt-0.5 font-mono text-[13px] font-semibold tnum ${x.cls}`}>{x.v}</div>
           </div>
         ))}

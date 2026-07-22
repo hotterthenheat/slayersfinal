@@ -217,7 +217,7 @@ const DemoSetup = ({ setups }: { setups: SkyVisionData }) => {
         >
           {setup.contract}
         </span>
-        <span className="inline-flex items-center rounded px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider bg-[#EA00FF]/10 text-[#EA00FF]">
+        <span className="inline-flex items-center rounded px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider bg-king/10 text-king">
           Top pick
         </span>
         <span
@@ -494,7 +494,7 @@ const PILLARS = [
   },
   {
     n: '03',
-    tone: 'text-bear',
+    tone: 'text-darkpool',
     title: 'The flow',
     body: 'Sweeps, blocks and dark-pool prints — positioning that shows up on the tape before it shows up in price.',
   },
@@ -573,7 +573,7 @@ const LiveSections = () => {
                 <EngineBox
                   name="Compass"
                   line="Setups graded 0–100, in plain English"
-                  accent="bg-[#EA00FF]"
+                  accent="bg-king"
                   to="/compass"
                 >
                   <DemoSetup setups={ctx.setups} />

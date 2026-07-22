@@ -21,12 +21,15 @@ interface CardCoverFlowProps {
   images?: CoverItem[];
 }
 
+// Desk accents mirror the canonical per-desk tokens used across the app
+// (flip / king / darkpool / select / warn) so the carousel reads as the same
+// product, not a re-skinned one.
 const DEFAULT_ITEMS: CoverItem[] = [
-  { title: 'Pulse', sub: 'Live workspace', accent: '#C7D3E8' },
-  { title: 'Compass', sub: 'Choose the trade', accent: '#7DD3FC' },
-  { title: 'Trace', sub: 'Flow & dark pool', accent: '#EA00FF' },
-  { title: 'Pinpoint', sub: 'Dealer positioning', accent: '#C7D3E8' },
-  { title: 'Prove It', sub: 'The receipts', accent: '#FF9500' },
+  { title: 'Pulse', sub: 'Live workspace', accent: '#7DD3FC' }, // flip
+  { title: 'Compass', sub: 'Choose the trade', accent: '#EA00FF' }, // king
+  { title: 'Trace', sub: 'Flow & dark pool', accent: '#2dd4bf' }, // darkpool
+  { title: 'Pinpoint', sub: 'Dealer positioning', accent: '#E4E8F4' }, // select
+  { title: 'Prove It', sub: 'The receipts', accent: '#FF9500' }, // warn
 ];
 
 export default function CardCoverFlow({ className = '', images = DEFAULT_ITEMS }: CardCoverFlowProps) {
@@ -83,9 +86,9 @@ export default function CardCoverFlow({ className = '', images = DEFAULT_ITEMS }
               ) : (
                 <div
                   className="w-full h-full rounded-xl shadow-2xl border border-white/10 overflow-hidden flex flex-col items-center justify-center gap-1 relative"
-                  style={{ background: `linear-gradient(155deg, ${(item.accent ?? '#C7D3E8') + '2b'}, #0a0a0a 72%)` }}
+                  style={{ background: `linear-gradient(155deg, ${(item.accent ?? '#E4E8F4') + '2b'}, #0a0a0a 72%)` }}
                 >
-                  <span className="font-mono text-[11px] font-bold uppercase tracking-widest" style={{ color: item.accent ?? '#C7D3E8' }}>
+                  <span className="font-mono text-[11px] font-bold uppercase tracking-widest" style={{ color: item.accent ?? '#E4E8F4' }}>
                     {item.title}
                   </span>
                   {item.sub && <span className="text-[8px] text-white/55 uppercase tracking-wider text-center px-2">{item.sub}</span>}
