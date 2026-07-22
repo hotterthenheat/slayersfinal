@@ -17,6 +17,7 @@ import type { CSSProperties } from 'react';
   Flip HEAT_MODE to switch instantly.
 */
 export type HeatMode =
+  | 'green-red'
   | 'pastel'
   | 'spectrum'
   | 'amber'
@@ -29,7 +30,9 @@ export type HeatMode =
   | 'diverging';
 
 // `as HeatMode` stops TS from narrowing to the literal so the other branches stay legal.
-export const HEAT_MODE = 'pastel' as HeatMode;
+// green-red: positive GEX = green (stabilizing), negative = red — the house grammar,
+// keeping flip (baby-blue) and king (magenta) unambiguous on the chart.
+export const HEAT_MODE = 'green-red' as HeatMode;
 
 type RGB = [number, number, number];
 type Stops = [number, RGB][];
@@ -43,7 +46,22 @@ interface RampPalette {
 }
 
 // Ramps run from neutral (t=0) → extreme (t=1)
-const RAMPS: Record<'pastel' | 'spectrum' | 'amber' | 'redwood' | 'thermal' | 'teal-violet' | 'gold-slate', RampPalette> = {
+const RAMPS: Record<'green-red' | 'pastel' | 'spectrum' | 'amber' | 'redwood' | 'thermal' | 'teal-violet' | 'gold-slate', RampPalette> = {
+  // House diverging: green (+, stabilizing) ↔ red (−, accelerating). Neutral stays
+  // dark so near-zero cells recede; poles are the bull/bear tokens.
+  'green-red': {
+    pos: [
+      [0.0, NEUTRAL],
+      [0.5, [30, 120, 63]],
+      [1.0, [48, 209, 88]], // bull #30D158
+    ],
+    neg: [
+      [0.0, NEUTRAL],
+      [0.5, [122, 32, 30]],
+      [1.0, [255, 59, 48]], // bear #FF3B30
+    ],
+    gradient: 'linear-gradient(to bottom, #30D158 0%, #1E783F 32%, #2a2a2a 50%, #7A201E 68%, #FF3B30 100%)',
+  },
   // Requested pastel scheme — cool blues (+, stabilizing) ↔ warm lavender/cream
   // (−, accelerating). Softer than the punchy schemes; neutral stays dark so
   // near-zero cells recede into the panel.
@@ -260,4 +278,6 @@ export const heatScaleGradient: string = ramp
 
 /** Scale end-label classes (sign already carried by the printed values). */
 export const heatScaleLabels =
-  HEAT_MODE === 'diverging' ? { pos: 'text-bull', neg: 'text-bear' } : { pos: 'text-textPrimary', neg: 'text-textSecondary' };
+  HEAT_MODE === 'diverging' || HEAT_MODE === 'green-red'
+    ? { pos: 'text-bull', neg: 'text-bear' }
+    : { pos: 'text-textPrimary', neg: 'text-textSecondary' };

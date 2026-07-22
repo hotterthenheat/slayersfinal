@@ -153,7 +153,7 @@ const StockDetailDrawer = ({
                   <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Score</span>
                   <span
                     className={`font-mono text-sm font-bold tnum ${
-                      pick.composite >= 68 ? 'holo-text' : pick.composite <= 46 ? 'text-bear' : 'text-textPrimary'
+                      pick.composite >= 68 ? 'text-bull' : pick.composite <= 46 ? 'text-bear' : 'text-textPrimary'
                     }`}
                   >
                     {pick.composite}

@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { GitMerge, Zap, Timer, ChevronRight, AlertTriangle, Layers } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
+import { BULL } from '../gex/palette';
 import {
   buildMetaorderView,
   type ChildPrint,
@@ -113,7 +114,7 @@ const Cell = ({ label, value, tone = 'neutral' }: { label: string; value: ReactN
           : tone === 'select'
             ? 'text-select'
             : tone === 'magenta'
-              ? 'text-[#EA00FF]'
+              ? 'text-king'
               : 'text-textPrimary';
   return (
     <div className="min-w-0">
@@ -142,7 +143,7 @@ const Timeline = ({ prints }: { prints: ChildPrint[] }) => {
       {prints.map(p => {
         // aggressor colour follows the app convention (ask-lift = green buy
         // aggression, bid = muted supply); silver is reserved for selection.
-        const fill = p.side === 'ASK' ? '#30D158' : 'rgba(150,160,180,0.4)';
+        const fill = p.side === 'ASK' ? BULL : 'rgba(150,160,180,0.4)';
         return (
           <circle
             key={p.id}

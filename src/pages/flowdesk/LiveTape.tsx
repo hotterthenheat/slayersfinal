@@ -802,7 +802,7 @@ const LiveTape = () => {
             </>
           ) : (
             <>
-              <Pause className="w-3 h-3" /> Live
+              <Pause className="w-3 h-3" /> Pause
             </>
           )}
         </button>
@@ -870,7 +870,7 @@ const LiveTape = () => {
           <div ref={scrollRef} onScroll={onScroll} className="overflow-auto h-[640px]">
             <table className="w-full border-collapse min-w-[640px]">
               <thead className="sticky top-0 z-10">
-                <tr className="bg-[#0c0c0c]">
+                <tr className="bg-panelRaised">
                   <th rowSpan={2} className="px-2 py-1.5 text-left font-mono text-[11px] font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle w-24">
                     Time
                   </th>
@@ -888,7 +888,7 @@ const LiveTape = () => {
                     );
                   })}
                 </tr>
-                <tr className="bg-[#0c0c0c]">
+                <tr className="bg-panelRaised">
                   {visibleDataCols.map((c, i) => {
                     const groupStart = i === 0 || visibleDataCols[i - 1].group !== c.group;
                     return (
@@ -1005,7 +1005,7 @@ const LiveTape = () => {
               ) : (
                 <table className="w-full border-collapse">
                   <thead className="sticky top-0 z-10">
-                    <tr className="bg-[#0c0c0c]">
+                    <tr className="bg-panelRaised">
                       {['Ticker', 'Size', 'Price', 'Notional', 'Time'].map((h, i) => (
                         <th
                           key={h}

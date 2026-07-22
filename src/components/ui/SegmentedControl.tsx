@@ -11,7 +11,7 @@ const SegmentedControl = <V extends string>({ options, value, onChange, ariaLabe
     <div
       role="group"
       aria-label={ariaLabel}
-      className="inline-flex items-center inst-surface rounded-md overflow-hidden"
+      className="inline-flex items-center inst-surface rounded-md overflow-hidden max-w-full overflow-x-auto no-scrollbar"
     >
       {options.map((opt, i) => {
         const active = opt.value === value;
@@ -20,7 +20,7 @@ const SegmentedControl = <V extends string>({ options, value, onChange, ariaLabe
             key={opt.value}
             onClick={() => onChange(opt.value)}
             aria-pressed={active}
-            className={`px-3 py-1.5 font-mono text-xs font-medium transition-colors ${i > 0 ? 'border-l border-borderSubtle' : ''} ${
+            className={`shrink-0 whitespace-nowrap px-3 py-1.5 font-mono text-xs font-medium transition-colors ${i > 0 ? 'border-l border-borderSubtle' : ''} ${
               active
                 ? 'bg-white/[0.08] text-textPrimary'
                 : 'text-textSecondary hover:text-textPrimary hover:bg-white/[0.03]'

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { createLiquidityBook, thermal, type LiqColumn, type LiquidityBook } from '../../data/liquiditymap';
+import { BULL, BEAR } from '../gex/palette';
 
 /*
   Bookmap-style order-flow heatmap on a GPU-friendly 2D canvas.
@@ -424,7 +425,7 @@ const LiquidityMap = ({ ticker, spot, height, fill, chartType = 'candle', overla
           ctx.strokeStyle = cdUp ? 'rgba(48,209,88,0.5)' : 'rgba(255,59,48,0.5)';
           ctx.lineWidth = 3.2;
           ctx.stroke();
-          ctx.strokeStyle = cdUp ? '#30D158' : '#FF3B30';
+          ctx.strokeStyle = cdUp ? BULL : BEAR;
           ctx.lineWidth = 1.4;
           ctx.stroke();
         }

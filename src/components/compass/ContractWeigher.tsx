@@ -333,8 +333,8 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
                     className={`flex-1 px-2.5 py-1.5 font-semibold transition-colors ${
                       right === r
                         ? r === 'C'
-                          ? 'bg-[#15803d] text-white'
-                          : 'bg-[#b91c1c] text-white'
+                          ? 'bg-bull text-[#0a0a0a]'
+                          : 'bg-bear text-white'
                         : 'text-textMuted hover:text-textSecondary'
                     }`}
                   >

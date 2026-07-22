@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import TopBar from './TopBar';
@@ -6,6 +6,9 @@ import CommandPalette from './CommandPalette';
 import SettingsPanel from './SettingsPanel';
 import ShortcutsOverlay from './ShortcutsOverlay';
 import RouteErrorBoundary from './RouteErrorBoundary';
+import { useMarketData } from '../../context/MarketDataContext';
+import Simulator from '../../core/simulator';
+import { DUR } from '../../lib/motion';
 
 /** True when focus is in a field, so global single-key shortcuts don't fire mid-typing. */
 const isTypingTarget = (el: EventTarget | null): boolean => {
@@ -20,11 +23,16 @@ const AppShell = () => {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const location = useLocation();
+  const { activeTicker, changeTicker } = useMarketData();
 
   const openPalette = useCallback(() => setPaletteOpen(true), []);
   const closePalette = useCallback(() => setPaletteOpen(false), []);
   const openSettings = useCallback(() => setSettingsOpen(true), []);
   const openShortcuts = useCallback(() => setShortcutsOpen(true), []);
+
+  // Keep the live handler reading the current ticker without re-binding the listener.
+  const tickerRef = useRef(activeTicker);
+  tickerRef.current = activeTicker;
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -33,15 +41,26 @@ const AppShell = () => {
         setPaletteOpen(prev => !prev);
         return;
       }
-      // `?` (Shift+/) opens the shortcuts sheet, unless the user is typing
-      if (e.key === '?' && !e.metaKey && !e.ctrlKey && !e.altKey && !isTypingTarget(e.target)) {
+      if (e.metaKey || e.ctrlKey || e.altKey || isTypingTarget(e.target)) return;
+      // `?` (Shift+/) opens the shortcuts sheet
+      if (e.key === '?') {
         e.preventDefault();
         setShortcutsOpen(prev => !prev);
+        return;
+      }
+      // `[` / `]` step through the watchlist without leaving the keyboard
+      if (e.key === '[' || e.key === ']') {
+        const list = Simulator.WATCHLIST;
+        const at = list.indexOf(tickerRef.current);
+        if (at === -1) return;
+        e.preventDefault();
+        const next = e.key === ']' ? (at + 1) % list.length : (at - 1 + list.length) % list.length;
+        changeTicker(list[next]);
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
+  }, [changeTicker]);
 
   return (
     <div className="h-screen flex flex-col bg-canvas text-textPrimary overflow-hidden">
@@ -57,7 +76,7 @@ const AppShell = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.12, ease: 'easeOut' }}
+            transition={{ duration: DUR.fast, ease: 'easeOut' }}
             className="w-full px-4 lg:px-6 2xl:px-8 py-5 flex flex-col gap-4"
           >
             {/* One broken desk should never blank the whole terminal; the key

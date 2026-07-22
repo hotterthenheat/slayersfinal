@@ -51,7 +51,7 @@ const RegimePanel = ({ data }: RegimePanelProps) => {
       <div className="flex items-center gap-3 flex-wrap select-none">
         {[
           { label: 'Low vol', cls: 'bg-bull/60' },
-          { label: 'Normal', cls: 'bg-white/20' },
+          { label: 'Normal', cls: 'bg-white/[0.18]' },
           { label: 'High vol', cls: 'bg-bear/50' },
         ].map(item => (
           <span key={item.label} className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-wider text-textMuted">
@@ -70,7 +70,7 @@ const RegimePanel = ({ data }: RegimePanelProps) => {
       <div className="flex-grow min-h-0">
         <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-full">
           <path d={bandPath(zero, lowTop)} fill="rgba(48,209,88,0.5)" />
-          <path d={bandPath(lowTop, normTop)} fill="rgba(255,255,255,0.07)" />
+          <path d={bandPath(lowTop, normTop)} fill="rgba(255,255,255,0.18)" />
           <path d={bandPath(normTop, fullTop)} fill="rgba(255,59,48,0.45)" />
         </svg>
       </div>

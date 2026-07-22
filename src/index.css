@@ -330,7 +330,8 @@
   .animate-slide-in,
   .animate-soft-in,
   .animate-cursor-blink,
-  .animate-marquee {
+  .animate-marquee,
+  .custom-pulse {
     animation: none;
   }
   .rain-col,

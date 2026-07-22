@@ -20,6 +20,7 @@ const pillTone: Record<Tone, string> = {
   bull: 'bg-bull/10 text-bull',
   bear: 'bg-bear/10 text-bear',
   warn: 'bg-warn/10 text-warn',
+  info: 'bg-flip/10 text-flip',
   select: 'bg-select/10 text-select',
   magenta: 'bg-king/10 text-king',
   neutral: 'bg-white/[0.05] text-textSecondary',

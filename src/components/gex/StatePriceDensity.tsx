@@ -6,6 +6,7 @@ import type { MarketSnapshot } from '../../types/market';
 import Panel from '../ui/Panel';
 import StatCard from '../ui/StatCard';
 import MetricGrid from '../ui/MetricGrid';
+import { BULL, BEAR } from './palette';
 import SignalBadge from '../ui/SignalBadge';
 import PriceThresholdOdds from './PriceThresholdOdds';
 import type { Tone } from '../ui/tones';
@@ -64,8 +65,8 @@ const DensityChart = ({ view }: { view: StateDensityView }) => {
       <line x1={sx} x2={sx} y1={0} y2={H} stroke="#ededed" strokeOpacity={0.85} strokeWidth={1.25} />
       <text x={sx + 3} y={H - 5} fontSize={8.5} fill="#ededed" fontFamily="monospace">SPOT {spot.toFixed(2)}</text>
       {/* 2σ tick labels */}
-      <text x={Math.max(2, lTail - 2)} y={H - 5} fontSize={8} fill="#FF3B30" fontFamily="monospace" textAnchor="end">−2σ</text>
-      <text x={Math.min(W - 2, rTail + 2)} y={12} fontSize={8} fill="#30D158" fontFamily="monospace">+2σ</text>
+      <text x={Math.max(2, lTail - 2)} y={H - 5} fontSize={8} fill={BEAR} fontFamily="monospace" textAnchor="end">−2σ</text>
+      <text x={Math.min(W - 2, rTail + 2)} y={12} fontSize={8} fill={BULL} fontFamily="monospace">+2σ</text>
     </svg>
   );
 };

@@ -3,6 +3,7 @@ import { Bookmark, Check, Grid3x3, Plus, RotateCcw, ScanLine, SlidersHorizontal,
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildScannerRows, summarizeScanner, type FlowSentiment, type ScannerRow } from '../../data/flowscan';
 import { fmtUsd } from '../../data/gex';
+import type { MarketSnapshot } from '../../types/market';
 import Panel from '../../components/ui/Panel';
 import StatCard from '../../components/ui/StatCard';
 import MetricGrid from '../../components/ui/MetricGrid';
@@ -484,10 +485,28 @@ const ColumnChooser = ({
 };
 
 // ---- page ----------------------------------------------------------------------
+const SCAN_INTERVAL_MS = 10_000;
+
 const FlowScanner = () => {
   const { marketData } = useMarketData();
   const toast = useToast();
-  const rows = useMemo(() => (marketData ? buildScannerRows(marketData) : []), [marketData]);
+
+  // Scan on a fixed cadence, not every 1.5s tick — otherwise the premium-sorted
+  // rows reshuffle under the reader every second. Freeze the set between scans.
+  const [scanSnapshot, setScanSnapshot] = useState<MarketSnapshot | null>(null);
+  const scanRef = useRef<MarketSnapshot | null>(null);
+  const lastScanRef = useRef(0);
+  useEffect(() => {
+    if (!marketData) return;
+    const now = Date.now();
+    if (!scanRef.current || now - lastScanRef.current >= SCAN_INTERVAL_MS || scanRef.current.ticker !== marketData.ticker) {
+      scanRef.current = marketData;
+      lastScanRef.current = now;
+      setScanSnapshot(marketData);
+    }
+  }, [marketData]);
+
+  const rows = useMemo(() => (scanSnapshot ? buildScannerRows(scanSnapshot) : []), [scanSnapshot]);
   const summary = useMemo(() => summarizeScanner(rows), [rows]);
   const [filters, setFilters] = useState<ScanFilters>(DEFAULTS);
   const [selectedId, setSelectedId] = useState<string | null>(null);

@@ -45,11 +45,11 @@ const DarkPoolFeed = () => {
                     style={{ width: `${Math.max(6, (sec.notional / maxSectorNotional) * 100)}%` }}
                   />
                 </span>
-                <span className="font-mono text-[9px] text-textMuted tnum shrink-0">{sec.prints} prints</span>
+                <span className="font-mono text-[10px] text-textMuted tnum shrink-0">{sec.prints} prints</span>
               </div>
             </div>
             {/* Column header */}
-            <div className="flex items-center px-3 py-1 font-mono text-[8px] uppercase tracking-widest text-textMuted border-b border-borderSubtle/40">
+            <div className="flex items-center px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-textMuted border-b border-borderSubtle/40">
               <span className="w-12 shrink-0">Ticker</span>
               <span className="flex-1 text-right">Notional</span>
               <span className="w-14 text-right">%AvgVol</span>
@@ -64,7 +64,7 @@ const DarkPoolFeed = () => {
                 >
                   <span className="w-12 shrink-0 flex flex-col leading-none">
                     <span className="font-mono text-[11px] font-bold text-textPrimary">{r.ticker}</span>
-                    <span className={`font-mono text-[8px] tnum ${r.changePct >= 0 ? 'text-bull' : 'text-bear'}`}>
+                    <span className={`font-mono text-[10px] tnum ${r.changePct >= 0 ? 'text-bull' : 'text-bear'}`}>
                       {r.changePct >= 0 ? '+' : ''}
                       {r.changePct.toFixed(2)}%
                     </span>

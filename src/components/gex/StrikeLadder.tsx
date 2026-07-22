@@ -43,7 +43,7 @@ const StrikeLadder = ({ board }: StrikeLadderProps) => {
                 style={heatCellStyle(row.value, ladderMaxAbs)}
                 className="flex-grow flex items-center justify-end gap-1.5 px-2.5 py-[5px] font-mono text-[11px] font-semibold tnum transition-colors duration-700"
               >
-                {row.king && <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#EA00FF]" />}
+                {row.king && <span className="inline-block w-1.5 h-1.5 rounded-full bg-king" />}
                 {fmtUsd(row.value)}
               </span>
             </div>

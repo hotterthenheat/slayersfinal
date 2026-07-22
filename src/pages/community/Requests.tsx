@@ -15,7 +15,7 @@ const KIND_OPTIONS = [
 
 const STATUS_TONE: Record<RequestStatus, Tone> = {
   'UNDER REVIEW': 'neutral',
-  PLANNED: 'select',
+  PLANNED: 'info',
   BUILDING: 'warn',
   SHIPPED: 'bull',
 };
@@ -23,9 +23,9 @@ const STATUS_TONE: Record<RequestStatus, Tone> = {
 // Left-edge rail per status — the fastest read of where an item sits.
 const STATUS_RAIL: Record<RequestStatus, string> = {
   'UNDER REVIEW': 'border-l-textMuted/50',
-  PLANNED: 'border-l-select/60',
+  PLANNED: 'border-l-flip/60',
   BUILDING: 'border-l-warn/70',
-  SHIPPED: 'border-l-[#30D158]/70',
+  SHIPPED: 'border-l-bull/70',
 };
 
 // Plain-language line under each section header.

@@ -217,7 +217,7 @@ const DemoSetup = ({ setups }: { setups: SkyVisionData }) => {
         >
           {setup.contract}
         </span>
-        <span className="inline-flex items-center rounded px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider bg-[#EA00FF]/10 text-[#EA00FF]">
+        <span className="inline-flex items-center rounded px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider bg-king/10 text-king">
           Top pick
         </span>
         <span
@@ -430,7 +430,7 @@ const FloatChip = ({
   <motion.span
     animate={{ y: [0, -6, 0] }}
     transition={{ duration: 4.2, repeat: Infinity, ease: 'easeInOut', delay }}
-    className={`absolute z-20 inline-flex items-center gap-2 rounded-full border border-borderMuted bg-[#0c0c0c]/90 px-3 py-1.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-textPrimary shadow-lg shadow-black/50 pointer-events-none ${className}`}
+    className={`absolute z-20 inline-flex items-center gap-2 rounded-full border border-borderMuted bg-panelRaised/90 px-3 py-1.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-textPrimary shadow-lg shadow-black/50 pointer-events-none ${className}`}
   >
     <span className="w-1.5 h-1.5 rounded-full" style={{ background: dot }} />
     {label}
@@ -494,7 +494,7 @@ const PILLARS = [
   },
   {
     n: '03',
-    tone: 'text-bear',
+    tone: 'text-darkpool',
     title: 'The flow',
     body: 'Sweeps, blocks and dark-pool prints — positioning that shows up on the tape before it shows up in price.',
   },
@@ -573,7 +573,7 @@ const LiveSections = () => {
                 <EngineBox
                   name="Compass"
                   line="Setups graded 0–100, in plain English"
-                  accent="bg-[#EA00FF]"
+                  accent="bg-king"
                   to="/compass"
                 >
                   <DemoSetup setups={ctx.setups} />

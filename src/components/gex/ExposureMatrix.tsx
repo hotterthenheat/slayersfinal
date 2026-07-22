@@ -69,7 +69,7 @@ const ExposureMatrix = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
     <div className="overflow-auto h-full min-h-0">
       <table className="w-full border-collapse">
         <thead className="sticky top-0 z-10">
-          <tr className="bg-[#0c0c0c]">
+          <tr className="bg-panelRaised">
             <th className="px-2 py-1.5 text-left font-mono text-[10px] font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle">
               Strike
             </th>
@@ -83,7 +83,7 @@ const ExposureMatrix = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
               </th>
             ))}
           </tr>
-          <tr className="bg-[#0c0c0c]">
+          <tr className="bg-panelRaised">
             <th className="border-b border-borderSubtle" />
             {GROUPS.map(g =>
               (['put', 'call', 'net'] as Leg[]).map(leg => (

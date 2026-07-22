@@ -183,7 +183,7 @@ const News = () => {
             stats={[
               { label: 'Bullish', value: String(bullN), tone: 'bull' },
               { label: 'Bearish', value: String(bearN), tone: 'bear' },
-              { label: 'Macro', value: String(macroN), tone: 'select' },
+              { label: 'Macro', value: String(macroN), tone: 'neutral' },
               {
                 label: 'Top mover',
                 value: movers[0] ? `${movers[0].ticker} ${signedPct(movers[0].prediction.expMove1dPct)}` : '--',
@@ -300,7 +300,7 @@ const News = () => {
                         {lead.ticker ? (
                           <span className="font-mono text-[11px] font-bold text-textPrimary">{lead.ticker}</span>
                         ) : (
-                          <span className="font-mono text-[11px] uppercase tracking-wider text-flip">Macro</span>
+                          <span className="font-mono text-[11px] uppercase tracking-wider text-textMuted">Macro</span>
                         )}
                         <SignalBadge tone={catTone[lead.category]}>{lead.category}</SignalBadge>
                       </div>

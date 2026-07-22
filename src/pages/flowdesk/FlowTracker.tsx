@@ -115,7 +115,10 @@ const FlowTracker = () => {
   if (surfaced.length === 0) {
     return (
       <Panel title="Auto-surfaced flow">
-        <div className="h-40 flex items-center justify-center font-mono text-xs text-textMuted">Scanning the tape for notable prints…</div>
+        <div className="h-40 flex flex-col items-center justify-center gap-1.5 text-center">
+          <span className="font-mono text-[11px] uppercase tracking-widest text-textSecondary">No notable prints on the tape</span>
+          <span className="font-mono text-[10px] text-textMuted">Sweeps and blocks that clear the size + conviction bar will surface here.</span>
+        </div>
       </Panel>
     );
   }
@@ -196,9 +199,9 @@ const FlowTracker = () => {
                     </div>
 
                     {/* Values */}
-                    <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[11px] text-textMuted tnum">
+                    <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[11px] text-textSecondary tnum">
                       <span>{r.expiry}</span>
-                      <span>· {fmtUsd(r.premium)}</span>
+                      <span className="text-textMuted">·</span><span className="text-textPrimary font-semibold">{fmtUsd(r.premium)}</span>
                       <span className={r.deltaOi >= 0 ? 'text-bull' : 'text-bear'}>
                         · ΔOI {r.deltaOi >= 0 ? '+' : ''}
                         {r.deltaOi.toLocaleString()}
