@@ -735,11 +735,14 @@ const LiveTape = () => {
   }, []);
 
   // Self-correct the row height from the first mounted row so the padding math
-  // matches real layout regardless of borders, fonts, or content.
+  // matches real layout regardless of borders, fonts, or content. Only re-measures
+  // when the first row appears or the column set changes — not on every scroll/tick,
+  // which would force a layout read each render.
   useEffect(() => {
     const h = firstRowRef.current?.getBoundingClientRect().height;
     if (h && h > 0 && Math.abs(h - rowH) > 0.5) setRowH(h);
-  });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [colCount, view.length > 0]);
 
   useEffect(
     () => () => {
@@ -868,18 +871,21 @@ const LiveTape = () => {
         </span>
       </div>
 
-      {/* The terminal's read of the tape */}
-      <div className={`flex items-start gap-2.5 border-l-2 pl-3 py-0.5 ${summary.bullish ? 'border-bull/70' : 'border-bear/70'}`}>
-        <span className="font-mono text-[11px] font-semibold uppercase tracking-widest text-textMuted pt-px shrink-0">
+      {/* The terminal's read of the tape — fixed height so a changing sentence
+          length never reflows the tape below it (no layout shift under live data). */}
+      <div className={`flex items-start gap-2.5 border-l-2 pl-3 min-h-[34px] ${summary.bullish ? 'border-bull/70' : 'border-bear/70'}`}>
+        <span className="font-mono text-[11px] font-semibold uppercase tracking-widest text-textMuted pt-1.5 shrink-0">
           Tape read
         </span>
-        <p className="text-[11px] text-textSecondary leading-snug tnum">{read}</p>
+        <p className="text-[11px] text-textSecondary leading-snug tnum self-center line-clamp-2">{read}</p>
       </div>
 
       {/* Tape + concentration */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
         <Panel title="Options Tape" subtitle={paused ? 'rendering paused — tape still collecting' : 'streaming prints — newest first'} flush className="xl:col-span-9 min-w-0">
-          <div ref={scrollRef} onScroll={onScroll} className="overflow-auto max-h-[640px]">
+          {/* FIXED height (not max-h) — the tape never grows or shrinks as prints
+              arrive; it always scrolls inside a stable 640px viewport. */}
+          <div ref={scrollRef} onScroll={onScroll} className="overflow-auto h-[640px]">
             <table className="w-full border-collapse min-w-[640px]">
               <thead className="sticky top-0 z-10">
                 <tr className="bg-[#0c0c0c]">
