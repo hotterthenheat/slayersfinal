@@ -802,7 +802,7 @@ const LiveTape = () => {
             </>
           ) : (
             <>
-              <Pause className="w-3 h-3" /> Live
+              <Pause className="w-3 h-3" /> Pause
             </>
           )}
         </button>
