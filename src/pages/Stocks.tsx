@@ -255,8 +255,6 @@ const Stocks = () => {
   const breadth = Math.round((picks.filter(p => p.sleeves.momentum > 50).length / picks.length) * 100);
   const topSector = sectors[0];
   const bottomSector = sectors[sectors.length - 1];
-  const avgScore = Math.round(picks.reduce((a, p) => a + p.composite, 0) / picks.length);
-  const sectorsUp = sectors.filter(s => s.phase === 'LEADING' || s.phase === 'IMPROVING').length;
 
   const columns: Column<StockPick>[] = [
     {

@@ -151,7 +151,7 @@ const PanelTicker = ({ value, onChange }: { value: string; onChange: (t: string)
           if (e.key === 'Escape') setEditing(false);
         }}
         onMouseDown={e => e.stopPropagation()}
-        className="w-16 bg-inputBg border border-borderMuted rounded px-1 py-0.5 font-mono text-[10px] text-textPrimary outline-none"
+        className="w-16 bg-inputBg border border-borderMuted rounded px-1 py-0.5 font-mono text-[10px] text-textPrimary outline-none focus:border-select"
       />
     );
   return (

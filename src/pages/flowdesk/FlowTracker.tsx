@@ -34,7 +34,7 @@ const FlowChart = ({ points }: { points: IntradayPoint[] }) => {
   const pricePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${X(i).toFixed(1)},${Yp(p.price).toFixed(1)}`).join(' ');
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none">
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none" role="img" aria-label="Intraday flow — cumulative net premium versus price">
       <defs>
         <linearGradient id="flowfill" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor={positive ? '#c2d6f0' : '#ff3b30'} stopOpacity={0.28} />

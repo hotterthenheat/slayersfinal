@@ -76,6 +76,8 @@ const RegimePanel = ({ data }: RegimePanelProps) => {
           viewBox={`0 0 ${W} ${H}`}
           preserveAspectRatio="none"
           className="w-full h-full cursor-crosshair"
+          role="img"
+          aria-label="Volatility-regime probability history — low, normal and high vol bands"
           onMouseMove={e => setH({ i: svgHoverIndex(e, series.length), x: e.clientX, y: e.clientY })}
           onMouseLeave={() => setH(null)}
         >

@@ -84,7 +84,7 @@ const WallDrift = ({ drift }: WallDriftProps) => {
         }}
         onMouseLeave={() => setHover(null)}
       >
-        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-full">
+        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-full" role="img" aria-label="Wall drift — call wall, put wall, gamma flip and spot over the session">
           {[0.25, 0.5, 0.75].map(f => (
             <line key={f} x1="0" y1={H * f} x2={W} y2={H * f} stroke="rgba(255,255,255,0.04)" strokeWidth="0.3" />
           ))}

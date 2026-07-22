@@ -87,7 +87,6 @@ const Surface = ({ grid, strikes, spotCol }: { grid: number[][]; strikes: number
   useEffect(() => () => { geo.dispose(); wire.dispose(); }, [geo, wire]);
 
   const cols = strikes.length;
-  const rows = grid.length;
   const xSpot = xForCol(spotCol, cols);
   const yFloor = -RISE * 1.04;
   const xL = -WIDTH / 2;

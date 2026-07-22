@@ -33,7 +33,7 @@ const CumulativeDelta = ({ data }: { data: OrderFlowData }) => {
   const fill = negative ? 'rgba(255,59,48,0.10)' : 'rgba(48,209,88,0.10)';
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-24">
+    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-24" role="img" aria-label="Session cumulative delta">
       <line x1="0" y1={zeroY} x2={W} y2={zeroY} stroke="rgba(255,255,255,0.08)" strokeWidth="0.4" />
       <path d={area} fill={fill} />
       <path d={line} fill="none" stroke={stroke} strokeWidth="0.7" vectorEffect="non-scaling-stroke" />

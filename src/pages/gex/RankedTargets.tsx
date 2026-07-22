@@ -48,21 +48,6 @@ const CLASS_EDGE: Record<HedgingClass, string> = {
 
 const fmtStrike = (v: number) => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
 
-/** Small two-tone C/P chip — never a banner. */
-const CpChip = ({ t }: { t: RankedTarget }) => {
-  const total = t.callVol + t.putVol || 1;
-  const callPct = Math.round((t.callVol / total) * 100);
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <span className="flex w-12 h-[4px] rounded-full overflow-hidden bg-white/[0.06]">
-        <span className="h-full bg-bull/90" style={{ width: `${callPct}%` }} />
-        <span className="h-full bg-bear/80" style={{ width: `${100 - callPct}%` }} />
-      </span>
-      <span className="font-mono text-[11px] tnum text-textPrimary">{callPct}%C</span>
-    </span>
-  );
-};
-
 /** Rank-change vs the previous scan: ▲ moved toward #1, ▼ slipped. */
 const RankDelta = ({ delta }: { delta: number | undefined }) => {
   if (delta === undefined || delta === 0)

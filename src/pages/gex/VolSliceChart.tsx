@@ -97,6 +97,8 @@ const VolSliceChart = ({ points, xCaption, xTitle, refIndex, refLabel }: VolSlic
           viewBox={`0 0 ${W} ${H}`}
           preserveAspectRatio="none"
           className="w-full h-full cursor-crosshair"
+          role="img"
+          aria-label="Implied volatility slice — IV across the surface cross-section"
           onMouseMove={onMove}
           onMouseLeave={() => setHoverIdx(null)}
           onClick={() => hoverIdx !== null && setPinIdx(hoverIdx)}

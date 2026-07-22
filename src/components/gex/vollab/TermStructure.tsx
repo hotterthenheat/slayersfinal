@@ -47,7 +47,6 @@ const TermStructure = ({ data }: TermStructureProps) => {
     setH({ i, x: e.clientX, y: e.clientY });
   };
   const cx = (i: number) => (data.current[i].dte / 360) * W;
-  const cy = (iv: number) => H - ((iv - min) / span) * H;
 
   const stats: { label: string; value: string }[] = [
     { label: 'ATM IV 30D', value: `${data.stats.atm30.toFixed(2)}%` },
@@ -79,6 +78,8 @@ const TermStructure = ({ data }: TermStructureProps) => {
           viewBox={`0 0 ${W} ${H}`}
           preserveAspectRatio="none"
           className="w-full h-full cursor-crosshair"
+          role="img"
+          aria-label="Implied volatility term structure — ATM IV versus days to expiry"
           onMouseMove={onMove}
           onMouseLeave={() => setH(null)}
         >

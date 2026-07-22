@@ -69,6 +69,8 @@ const RiskNeutralDist = ({ data }: RiskNeutralDistProps) => {
           viewBox={`0 0 ${W} ${H}`}
           preserveAspectRatio="none"
           className="w-full h-full cursor-crosshair"
+          role="img"
+          aria-label="Options-implied risk-neutral price density with sigma markers"
           onMouseMove={e => setH({ i: svgHoverIndex(e, prices.length), x: e.clientX, y: e.clientY })}
           onMouseLeave={() => setH(null)}
         >

@@ -146,6 +146,8 @@ const MonteCarloPanel = ({ mc, spot, height = 260 }: MonteCarloPanelProps) => {
           ref={canvasRef}
           className="w-full cursor-crosshair"
           style={{ height }}
+          role="img"
+          aria-label="Monte Carlo price-path fan chart"
           onMouseMove={onConeMove}
           onMouseLeave={() => setHover(null)}
         />

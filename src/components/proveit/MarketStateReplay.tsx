@@ -98,13 +98,15 @@ const CalibrationPlot = ({ view }: { view: StateReplayView }) => {
   const [h, setH] = useState<{ b: StateReplayView['calibration'][number]; x: number; y: number } | null>(null);
   return (
     <>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }}>
+      {/* calibration scatter keeps its 1:1 aspect (the y=x diagonal must stay
+          diagonal), so it's capped and centered rather than stretched full-width */}
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-[250px] mx-auto block" style={{ height: H }} role="img" aria-label="Probability calibration — predicted target rate versus realized frequency">
         {/* frame */}
         <line x1={pad} y1={H - pad} x2={W - 6} y2={H - pad} stroke="#2a2a2a" strokeWidth={1} />
         <line x1={pad} y1={8} x2={pad} y2={H - pad} stroke="#2a2a2a" strokeWidth={1} />
         {/* perfect-calibration diagonal */}
         <line x1={X(0)} y1={Y(0)} x2={X(100)} y2={Y(100)} stroke={MUTED} strokeOpacity={0.5} strokeWidth={1} strokeDasharray="3 3" />
-        <text x={X(100) - 2} y={Y(100) + 2} fontSize={7.5} fill={MUTED} fontFamily="monospace" textAnchor="end">
+        <text x={X(100) - 2} y={Y(100) + 2} fontSize={10} fill={MUTED} fontFamily="monospace" textAnchor="end">
           ideal
         </text>
         {/* points */}
@@ -124,10 +126,10 @@ const CalibrationPlot = ({ view }: { view: StateReplayView }) => {
             />
           </g>
         ))}
-        <text x={pad} y={H - 6} fontSize={7.5} fill={MUTED} fontFamily="monospace">
+        <text x={pad} y={H - 6} fontSize={10} fill={MUTED} fontFamily="monospace">
           predicted →
         </text>
-        <text x={6} y={14} fontSize={7.5} fill={MUTED} fontFamily="monospace">
+        <text x={6} y={14} fontSize={10} fill={MUTED} fontFamily="monospace">
           realized ↑
         </text>
       </svg>
@@ -157,7 +159,8 @@ const EdgeDecayChart = ({ view }: { view: StateReplayView }) => {
   const [h, setH] = useState<{ p: (typeof pts)[number]; x: number; y: number } | null>(null);
   return (
     <>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }}>
+      {/* edge-decay is a time series — fill the panel width like the app's other bar charts */}
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none" role="img" aria-label="Edge decay — net edge captured as the trade is held longer">
         <line x1={pad} y1={H - pad} x2={W - 6} y2={H - pad} stroke="#2a2a2a" strokeWidth={1} />
         <line x1={pad} y1={8} x2={pad} y2={H - pad} stroke="#2a2a2a" strokeWidth={1} />
         {/* cumulative target / stop as faint context */}
@@ -180,10 +183,10 @@ const EdgeDecayChart = ({ view }: { view: StateReplayView }) => {
             />
           </g>
         ))}
-        <text x={pad} y={H - 6} fontSize={7.5} fill={MUTED} fontFamily="monospace">
+        <text x={pad} y={H - 6} fontSize={10} fill={MUTED} fontFamily="monospace">
           bars held →
         </text>
-        <text x={6} y={14} fontSize={7.5} fill={MUTED} fontFamily="monospace">
+        <text x={6} y={14} fontSize={10} fill={MUTED} fontFamily="monospace">
           net edge ↑
         </text>
       </svg>

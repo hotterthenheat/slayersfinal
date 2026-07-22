@@ -107,10 +107,11 @@ const App = () => {
               <Route path="reconstruction" element={<MetaorderReconstruction />} />
               <Route path="tracker" element={<FlowTracker />} />
             </Route>
-            <Route path="/liquidity" element={<Navigate to="/trace" replace />} />
-            {/* Legacy section paths from before the rebrand */}
-            <Route path="/flow-desk/*" element={<Navigate to="/trace" replace />} />
-            <Route path="/pinpoint-gex/*" element={<Navigate to="/pinpoint" replace />} />
+            <Route path="/liquidity" element={<Navigate to="/pulse" replace />} />
+            {/* Legacy section paths from before the rebrand — jump straight to the
+                section's landing leaf so there's no redirect-of-a-redirect hop. */}
+            <Route path="/flow-desk/*" element={<Navigate to="/trace/live-tape" replace />} />
+            <Route path="/pinpoint-gex/*" element={<Navigate to="/pinpoint/gamma" replace />} />
             <Route path="/community" element={<CommunityLayout />}>
               <Route index element={<Navigate to="/community/ideas" replace />} />
               <Route path="ideas" element={<Ideas />} />

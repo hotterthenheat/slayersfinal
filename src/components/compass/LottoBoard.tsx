@@ -202,7 +202,6 @@ const LottoBoard = ({ snapshot }: { snapshot: MarketSnapshot }) => {
   const clock = useMemo(() => computeClock(nowTick), [nowTick]);
 
   const mocTone = mocToneOf(moc);
-  const best = lottos[0];
   const qualifies = lottos.filter(c => c.verdict === 'BUY').length;
 
   return (

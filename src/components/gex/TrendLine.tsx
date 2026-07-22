@@ -11,7 +11,7 @@ const TrendLine = ({ points }: { points: number[] }) => {
     .join(' ');
   const rising = points[points.length - 1] >= points[0];
   return (
-    <svg viewBox="0 0 100 26" preserveAspectRatio="none" className="w-full h-7">
+    <svg viewBox="0 0 100 26" preserveAspectRatio="none" className="w-full h-7" aria-hidden="true">
       <polyline
         points={pts}
         fill="none"

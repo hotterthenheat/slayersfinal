@@ -645,7 +645,7 @@ const LiveSections = () => {
               </p>
             </div>
             <Link
-              to="/workspace"
+              to="/pulse"
               className="md:ml-auto shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-md border border-borderMuted font-mono text-[12px] uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-white/[0.03] transition-colors"
             >
               Try the workspace <ArrowRight className="w-3.5 h-3.5" />

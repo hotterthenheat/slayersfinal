@@ -70,17 +70,17 @@ const CrushPath = ({ view }: { view: EarningsIntelView }) => {
   const px = X(printIdx);
   const baseY = Y(view.baseIv);
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none">
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none" role="img" aria-label="Expected IV-crush path — ATM implied volatility around the earnings print">
       {/* post-print crush zone */}
       <rect x={px} y={0} width={W - px} height={H} fill="rgba(255,149,0,0.05)" />
       {/* post-crush baseline */}
       <line x1={6} x2={W - 6} y1={baseY} y2={baseY} stroke="#6b6b6b" strokeOpacity={0.6} strokeWidth={1} strokeDasharray="4 3" />
-      <text x={8} y={baseY - 4} fontSize={8.5} fill="#7d7d7d" fontFamily="monospace">
+      <text x={8} y={baseY - 4} fontSize={10} fill="#7d7d7d" fontFamily="monospace">
         base IV {view.baseIv.toFixed(0)}%
       </text>
       {/* print marker */}
       <line x1={px} x2={px} y1={6} y2={H - 4} stroke="#FF9500" strokeOpacity={0.65} strokeWidth={1} />
-      <text x={px + 4} y={14} fontSize={8.5} fill="#FF9500" fontFamily="monospace">
+      <text x={px + 4} y={14} fontSize={10} fill="#FF9500" fontFamily="monospace">
         PRINT · {view.frontIv.toFixed(0)}% → crush {view.ivCrushPct.toFixed(0)}%
       </text>
       {/* IV path */}
@@ -91,7 +91,7 @@ const CrushPath = ({ view }: { view: EarningsIntelView }) => {
       {/* x labels */}
       {pts.map((p, i) =>
         p.day % 2 === 0 || p.phase === 'print' ? (
-          <text key={`l${p.day}`} x={X(i)} y={H - 2} fontSize={7.5} fill="#6b6b6b" fontFamily="monospace" textAnchor="middle">
+          <text key={`l${p.day}`} x={X(i)} y={H - 2} fontSize={10} fill="#6b6b6b" fontFamily="monospace" textAnchor="middle">
             {p.label}
           </text>
         ) : null

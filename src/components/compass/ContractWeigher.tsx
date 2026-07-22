@@ -358,7 +358,7 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
                     const v = parseFloat(e.target.value);
                     if (Number.isFinite(v)) setStrike(v);
                   }}
-                  className="min-w-0 flex-1 bg-transparent text-center font-mono text-[12px] text-textPrimary outline-none tnum"
+                  className="min-w-0 flex-1 bg-transparent text-center font-mono text-[12px] text-textPrimary outline-none focus:text-select tnum"
                 />
                 <button onClick={() => setStrike(s => s + step)} className="px-2.5 py-1.5 text-textMuted hover:text-textPrimary" aria-label="Raise strike">
                   +
