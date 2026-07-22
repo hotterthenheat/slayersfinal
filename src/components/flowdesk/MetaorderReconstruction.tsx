@@ -13,6 +13,7 @@ import Panel from '../ui/Panel';
 import StatCard from '../ui/StatCard';
 import MetricGrid from '../ui/MetricGrid';
 import SignalBadge from '../ui/SignalBadge';
+import HoverReadout from '../ui/HoverReadout';
 import type { Tone } from '../ui/tones';
 
 const fmtUsd = (v: number): string => {
@@ -137,27 +138,65 @@ const Timeline = ({ prints }: { prints: ChildPrint[] }) => {
   const X = (f: number) => padX + ((f - lo) / range) * (W - 2 * padX);
   const yMid = H / 2;
   const R = (s: number) => 2 + (s / maxSize) * 5;
+  const [hover, setHover] = useState<{ p: ChildPrint; x: number; y: number } | null>(null);
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="inferred child-print execution timeline">
-      <line x1={padX} x2={W - padX} y1={yMid} y2={yMid} stroke="rgba(255,255,255,0.08)" strokeWidth={1} />
-      {prints.map(p => {
-        // aggressor colour follows the app convention (ask-lift = green buy
-        // aggression, bid = muted supply); silver is reserved for selection.
-        const fill = p.side === 'ASK' ? BULL : 'rgba(150,160,180,0.4)';
-        return (
+    <>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="inferred child-print execution timeline">
+        <line x1={padX} x2={W - padX} y1={yMid} y2={yMid} stroke="rgba(255,255,255,0.08)" strokeWidth={1} />
+        {prints.map(p => {
+          // aggressor colour follows the app convention (ask-lift = green buy
+          // aggression, bid = muted supply); silver is reserved for selection.
+          const fill = p.side === 'ASK' ? BULL : 'rgba(150,160,180,0.4)';
+          return (
+            <circle
+              key={p.id}
+              cx={X(p.atFrac)}
+              cy={yMid}
+              r={R(p.size)}
+              fill={fill}
+              stroke={p.orderType === 'SWEEP' ? 'rgba(255,255,255,0.55)' : 'none'}
+              strokeOpacity={p.orderType === 'SWEEP' ? 0.8 : 0}
+              strokeWidth={p.orderType === 'SWEEP' ? 1 : 0}
+            />
+          );
+        })}
+        {/* enlarged transparent hit-targets so each clip is easy to hover */}
+        {prints.map(p => (
           <circle
-            key={p.id}
+            key={`hit-${p.id}`}
             cx={X(p.atFrac)}
             cy={yMid}
-            r={R(p.size)}
-            fill={fill}
-            stroke={p.orderType === 'SWEEP' ? 'rgba(255,255,255,0.55)' : 'none'}
-            strokeOpacity={p.orderType === 'SWEEP' ? 0.8 : 0}
-            strokeWidth={p.orderType === 'SWEEP' ? 1 : 0}
+            r={Math.max(R(p.size) + 3, 8)}
+            fill="transparent"
+            className="cursor-crosshair"
+            onMouseMove={e => setHover({ p, x: e.clientX, y: e.clientY })}
+            onMouseLeave={() => setHover(null)}
           />
-        );
-      })}
-    </svg>
+        ))}
+      </svg>
+      {hover && (
+        <HoverReadout x={hover.x} y={hover.y}>
+          <div className="flex items-center justify-between gap-3">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">{hover.p.time}</span>
+            <span
+              className={`font-mono text-[10px] font-semibold uppercase tracking-wider ${
+                hover.p.side === 'ASK' ? 'text-bull' : 'text-textSecondary'
+              }`}
+            >
+              {hover.p.side === 'ASK' ? 'ask-lift' : 'bid'}
+            </span>
+          </div>
+          <div className="mt-1 font-mono text-[13px] font-bold tnum text-textPrimary">
+            {hover.p.strike}
+            {hover.p.right} · {fmtNum(hover.p.size)}
+          </div>
+          <div className="mt-0.5 flex items-center gap-2.5 font-mono text-[10px] tnum text-textSecondary">
+            <span>{fmtUsd(hover.p.premium)}</span>
+            <span className={hover.p.orderType === 'SWEEP' ? 'text-warn' : 'text-textMuted'}>{hover.p.orderType}</span>
+          </div>
+        </HoverReadout>
+      )}
+    </>
   );
 };
 

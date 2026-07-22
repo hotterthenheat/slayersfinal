@@ -1,8 +1,9 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Zap, GitBranch, Layers, Scale, Crosshair } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildFractureView } from '../../core/fracture';
 import { SPOT, BULL, BEAR } from '../../components/gex/palette';
+import HoverReadout from '../../components/ui/HoverReadout';
 import Panel from '../../components/ui/Panel';
 import StatCard from '../../components/ui/StatCard';
 import MetricGrid from '../../components/ui/MetricGrid';
@@ -87,17 +88,43 @@ const DECOMP: { key: keyof MoveDecomposition; label: string; color: string }[] =
 /** One row of the forced-flow balance sheet. */
 const FlowRow = ({ level, maxForced }: { level: ForcedFlowLevel; maxForced: number }) => {
   const absPct = Math.min(150, level.absorption * 100);
+  const [hx, setHx] = useState<{ x: number; y: number } | null>(null);
   return (
     <div className="px-4 py-2 grid grid-cols-[76px_1fr_120px_92px] items-center gap-3">
       <span className="font-mono text-xs font-semibold text-textPrimary tnum">${level.price.toFixed(2)}</span>
       {/* forced-flow stacked bar */}
-      <span className="flex h-3 rounded-sm overflow-hidden bg-white/[0.04]" title={`Forced ${fmtUsd(level.totalForced)}`}>
+      <span
+        className="flex h-3 rounded-sm overflow-hidden bg-white/[0.04] cursor-crosshair"
+        onMouseEnter={e => setHx({ x: e.clientX, y: e.clientY })}
+        onMouseMove={e => setHx({ x: e.clientX, y: e.clientY })}
+        onMouseLeave={() => setHx(null)}
+      >
         {PARTS.map(p => {
           const v = Math.abs(level[p.key] as number);
           const w = (v / maxForced) * 100;
           return w > 0.4 ? <span key={p.key} style={{ width: `${w}%`, background: p.color }} /> : null;
         })}
       </span>
+      {hx && (
+        <HoverReadout x={hx.x} y={hx.y}>
+          <div className="font-mono text-[11px] font-bold text-textPrimary tnum">${level.price.toFixed(2)} · forced flow</div>
+          <div className="mt-1 flex flex-col gap-0.5">
+            {PARTS.map(p => {
+              const v = Math.abs(level[p.key] as number);
+              return v > 0 ? (
+                <div key={p.key} className="flex items-center gap-2 font-mono text-[10px] tnum">
+                  <span className="w-2 h-2 rounded-[2px] shrink-0" style={{ background: p.color }} />
+                  <span className="text-textSecondary w-20">{p.label}</span>
+                  <span className="text-textPrimary ml-auto">{fmtUsd(v)}</span>
+                </div>
+              ) : null;
+            })}
+          </div>
+          <div className="mt-1 pt-1 border-t border-borderSubtle font-mono text-[10px] text-textMuted tnum">
+            {fmtUsd(Math.abs(level.totalForced))} forced vs {fmtUsd(level.latentLiquidity)} latent · {level.absorption.toFixed(2)}×
+          </div>
+        </HoverReadout>
+      )}
       {/* latent vs absorption */}
       <span className="flex flex-col gap-0.5">
         <span className="relative h-1.5 rounded-full bg-white/[0.05] overflow-hidden">
