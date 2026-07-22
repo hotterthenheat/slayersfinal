@@ -161,7 +161,7 @@ export function buildVannaCharm(
     { label: 'Call Wall', kind: 'call-wall', current: base.callWall, projected: proj.callWall },
     { label: 'Gamma Flip', kind: 'flip', current: base.flip, projected: proj.flip },
     { label: 'Put Wall', kind: 'put-wall', current: base.putWall, projected: proj.putWall },
-    { label: 'King Node', kind: 'king', current: base.king, projected: proj.king },
+    { label: 'King Strike', kind: 'king', current: base.king, projected: proj.king },
   ];
 
   // Narrative — the terminal explains the dominant flow

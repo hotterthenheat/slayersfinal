@@ -17,7 +17,7 @@ import { buildContractFlow, flowClock, type ContractRef } from '../../data/contr
 import { fmtUsd } from '../../data/gex';
 
 /*
-  Contract drilldown (Flowseeker-style) rendered on recharts — this contract's
+  Contract drilldown rendered on recharts — this contract's
   own flow, not a candlestick of the underlying.
     • Contract Flow — prints as bubbles (time × premium), sized by volume and
       coloured by aggressor (ask green / mid grey / bid red), + running avg line.

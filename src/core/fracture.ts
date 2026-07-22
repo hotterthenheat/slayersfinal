@@ -111,7 +111,7 @@ function forcedAt(d: number, p: EngineParams) {
       : s * p.G * 0.04 * (a / p.marginThresh);
 
   const totalForced = dealerHedge + volControl + cta + letf + margin;
-  // Liquidity is U-shaped: deep at spot, thin through the 2–5% "air pocket" where
+  // Liquidity is U-shaped: deep at spot, thin through the 2–5% low-liquidity zone where
   // resting interest is sparse, then rising again far out as deep-value buyers
   // step in — the floor that lets a cascade exhaust instead of running forever.
   // Criticality throttles replenishment across the whole curve.

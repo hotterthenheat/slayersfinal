@@ -2,9 +2,9 @@ import type { LiqChartType, LiqOverlays } from './LiquidityMap';
 import SegmentedControl from '../ui/SegmentedControl';
 
 /**
- * The overlay control rail — the Heatseeker interaction model: a row of mini
- * switches that flip each overlay on the shared heatmap surface, plus the
- * price-rendering selector. Presentational only; state lives in the host.
+ * The overlay control rail — a row of mini switches that flip each overlay on
+ * the shared order-flow heatmap, plus the price-rendering selector.
+ * Presentational only; state lives in the host.
  */
 const OVERLAY_DEFS: { key: keyof LiqOverlays; label: string }[] = [
   { key: 'flow', label: 'Flow' },
@@ -20,7 +20,7 @@ const CHART_OPTIONS = [
   { value: 'bubbles', label: 'Bubbles' },
 ] as const;
 
-interface HeatseekerRailProps {
+interface OverlayRailProps {
   overlays: LiqOverlays;
   onToggle: (key: keyof LiqOverlays) => void;
   chartType: LiqChartType;
@@ -36,7 +36,7 @@ const Switch = ({ on }: { on: boolean }) => (
   </span>
 );
 
-const HeatseekerRail = ({ overlays, onToggle, chartType, onChartType, dense }: HeatseekerRailProps) => (
+const OverlayRail = ({ overlays, onToggle, chartType, onChartType, dense }: OverlayRailProps) => (
   <div className={`flex items-center gap-x-1 gap-y-1.5 flex-wrap ${dense ? 'px-2 py-1.5' : 'px-3 py-2'}`}>
     {OVERLAY_DEFS.map(def => {
       const on = overlays[def.key];
@@ -60,4 +60,4 @@ const HeatseekerRail = ({ overlays, onToggle, chartType, onChartType, dense }: H
   </div>
 );
 
-export default HeatseekerRail;
+export default OverlayRail;

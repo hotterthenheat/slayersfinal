@@ -2,7 +2,7 @@
 ==================================================
   SLAYER TERMINAL - GEX HISTORY (gexhistory.ts)
   Reconstructs how the session's structural levels —
-  call wall, put wall, gamma flip, king node and net
+  call wall, put wall, gamma flip, king strike and net
   GEX — migrated across the day, from the simulator's
   price history. Deterministic per ticker + day; the
   real intraday snapshot store fills the same shape.
@@ -117,7 +117,7 @@ export function buildGexHistory(snapshot: MarketSnapshot): GexHistoryView {
     { label: 'Call Wall', from: open.callWall, to: now.callWall, deltaPct: pct(open.callWall, now.callWall) },
     { label: 'Put Wall', from: open.putWall, to: now.putWall, deltaPct: pct(open.putWall, now.putWall) },
     { label: 'Gamma Flip', from: open.flip, to: now.flip, deltaPct: pct(open.flip, now.flip) },
-    { label: 'King Node', from: open.king, to: now.king, deltaPct: pct(open.king, now.king) },
+    { label: 'King Strike', from: open.king, to: now.king, deltaPct: pct(open.king, now.king) },
   ];
 
   let netGexFlips = 0;

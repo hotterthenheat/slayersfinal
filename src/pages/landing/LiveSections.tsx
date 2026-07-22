@@ -437,7 +437,7 @@ const FloatChip = ({
   </motion.span>
 );
 
-/** Skylit's "Atlas" pattern, done live: a big framed chart — actually running. */
+/** A big framed chart, done live — the terminal's own chart actually running, not a screenshot. */
 const ChartShowcase = ({ ctx }: { ctx: LandingCtx | null }) => (
   <section id="showcase" className="px-6 md:px-10 pt-24 pb-20 max-w-6xl mx-auto">
     <div className="text-center">

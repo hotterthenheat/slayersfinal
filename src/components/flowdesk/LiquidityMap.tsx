@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { createLiquidityBook, thermal, type LiqColumn, type LiquidityBook } from '../../data/liquiditymap';
 
 /*
-  Bookmap / Heatseeker-style order-flow terminal on a GPU-friendly 2D canvas.
+  Bookmap-style order-flow heatmap on a GPU-friendly 2D canvas.
 
     • The resting book is a smooth thermal field (black→blue→cyan→white→yellow→
       orange→red) drawn from a small offscreen buffer scaled up with bilinear
