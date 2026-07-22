@@ -1,38 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Activity, Info } from 'lucide-react';
+import { Activity, Grid3x3, Info } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildExposureProfile } from '../../data/exposure';
-import { buildGexView, fmtUsd } from '../../data/gex';
+import { buildGexView, fmtUsd, pulseMatrix } from '../../data/gex';
 import { buildCommandView } from '../../data/command';
 import type { MarketSnapshot } from '../../types/market';
-import type { ExposureExpiry, OverlayMode } from '../../types/gex';
 import Panel from '../../components/ui/Panel';
-import SegmentedControl from '../../components/ui/SegmentedControl';
-import StrikeChart from '../../components/gex/StrikeChart';
-import DealerGammaRail from '../../components/gex/DealerGammaRail';
+import GexMatrix from '../../components/gex/GexMatrix';
 
-/** The profile sweeps on its own cadence so bars don't vibrate every tick;
-    the candle chart still folds new bars every tick via `revision`. */
+/** The heatmap sweeps on its own cadence (10s) so cells don't vibrate every
+    tick; the live glyph pulse still folds in per tick via `revision`. */
 const SCAN_INTERVAL_MS = 10_000;
-
-const EXPIRY_OPTIONS = [
-  { value: '0DTE', label: '0DTE' },
-  { value: '1D', label: '1D' },
-  { value: '2D', label: '2D' },
-  { value: '5D', label: '5D' },
-  { value: 'ALL', label: 'All' },
-] as const;
-
-const OVERLAY_OPTIONS = [
-  { value: 'LEVELS', label: 'Levels' },
-  { value: 'NODES', label: 'Nodes' },
-  { value: 'BOTH', label: 'Both' },
-] as const;
 
 const LevelChip = ({ label, value, tone }: { label: string; value: number; tone: string }) => (
   <span className="inline-flex flex-col leading-tight">
-    <span className="font-mono text-[8px] uppercase tracking-widest text-textMuted">{label}</span>
-    <span className={`font-mono text-[11px] font-semibold tnum ${tone}`}>${value.toFixed(2)}</span>
+    <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">{label}</span>
+    <span className={`font-mono text-[12px] font-semibold tnum ${tone}`}>${value.toFixed(2)}</span>
   </span>
 );
 
@@ -40,8 +23,6 @@ const GammaChart = () => {
   const { activeTicker, marketData } = useMarketData();
   const revRef = useRef(0);
   const revision = useMemo(() => ++revRef.current, [marketData]);
-  const [expiry, setExpiry] = useState<ExposureExpiry>('0DTE');
-  const [overlay, setOverlay] = useState<OverlayMode>('BOTH');
 
   // Scan-tier snapshot (10s; ticker switch is immediate).
   const [scan, setScan] = useState<MarketSnapshot | null>(null);
@@ -59,11 +40,14 @@ const GammaChart = () => {
     }
   }, [marketData]);
 
-  const exposure = useMemo(() => (scan ? buildExposureProfile(scan, expiry, 10) : null), [scan, expiry]);
-  const gexLevels = useMemo(() => (scan ? buildGexView(scan, 'GEX', 10).levels : null), [scan]);
+  const exposure = useMemo(() => (scan ? buildExposureProfile(scan, '0DTE', 10) : null), [scan]);
+  const gexView = useMemo(() => (scan ? buildGexView(scan, 'GEX', 10) : null), [scan]);
+  const gexLevels = gexView?.levels ?? null;
+  // Pulse the matrix glyphs each tick for a live read (geometry stays fixed).
+  const matrix = useMemo(() => (gexView ? pulseMatrix(gexView.matrix, revision) : null), [gexView, revision]);
   const vwap = useMemo(() => (scan ? buildCommandView(scan).orderFlow.vwap : null), [scan]);
 
-  if (!exposure || !gexLevels) {
+  if (!scan || !exposure || !gexLevels || !matrix) {
     return (
       <Panel>
         <div className="h-64 flex items-center justify-center font-mono text-[11px] uppercase tracking-widest text-textMuted">
@@ -77,11 +61,11 @@ const GammaChart = () => {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Regime banner + key levels */}
+      {/* Regime banner + key levels — the read, no candles (charts live in Pulse) */}
       <Panel flush emphasis>
         <div className="flex items-center gap-x-6 gap-y-3 flex-wrap px-3.5 py-3">
           <div className="min-w-0">
-            <div className="font-mono text-[9px] uppercase tracking-widest text-textMuted">Dealer gamma @ spot</div>
+            <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Dealer gamma @ spot</div>
             <div className="flex items-baseline gap-2.5">
               <span className={`font-mono text-2xl font-bold tnum ${longGamma ? 'text-bull' : 'text-bear'}`}>
                 {longGamma ? '+' : '−'}
@@ -111,42 +95,30 @@ const GammaChart = () => {
         </div>
       </Panel>
 
-      {/* Controls */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <SegmentedControl ariaLabel="Expiry" options={EXPIRY_OPTIONS} value={expiry} onChange={setExpiry} />
-        <div className="ml-auto">
-          <SegmentedControl ariaLabel="Chart overlay" options={OVERLAY_OPTIONS} value={overlay} onChange={setOverlay} />
-        </div>
-      </div>
-
-      {/* Candle chart + dealer-gamma-by-price rail */}
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_300px] gap-4 h-[calc(100dvh-26rem)] min-h-[460px]">
-        <Panel
-          title={
-            <span className="inline-flex items-center gap-1.5">
-              <Activity className="w-3.5 h-3.5 text-select" /> Gamma Chart · {activeTicker}
-            </span>
-          }
-          flush
-          focusable
-          bodyClassName="h-full p-2"
-        >
-          <StrikeChart ticker={activeTicker} revision={revision} levels={gexLevels} overlay={overlay} timeframe="1m" />
-        </Panel>
-        <Panel title="Dealer Gamma by Price" subtitle="net GEX per strike — where dealers are long vs short γ" flush bodyClassName="h-full py-2 pr-2 pl-1">
-          <DealerGammaRail data={exposure} />
-        </Panel>
-      </div>
+      {/* GEX heatmap — net dealer gamma across every strike × expiry */}
+      <Panel
+        title={
+          <span className="inline-flex items-center gap-1.5">
+            <Grid3x3 className="w-3.5 h-3.5 text-select" /> Gamma Heatmap · {activeTicker}
+          </span>
+        }
+        subtitle="net GEX by strike × expiry — green supports, red amplifies"
+        flush
+        focusable
+        bodyClassName="h-[calc(100dvh-24rem)] min-h-[440px] p-2"
+      >
+        <GexMatrix data={matrix} spot={scan.spot} />
+      </Panel>
 
       {/* Read */}
-      <p className="flex items-start gap-2 text-[11px] text-textSecondary leading-relaxed px-1">
+      <p className="flex items-start gap-2 text-[12px] text-textSecondary leading-relaxed px-1">
         <Info className="w-3.5 h-3.5 text-textMuted mt-px shrink-0" />
         <span>
           <span className="font-mono font-semibold uppercase tracking-wider mr-1.5 holo-text">Reading the gamma</span>
-          Net dealer gamma sets the regime: <span className="text-bull">long γ</span> means dealers buy dips and sell rips —
-          price gets pinned toward the walls; <span className="text-bear">short γ</span> means they hedge with the move, so
-          breaks run. The rail shows where that gamma sits by strike; the flip is the price where the sign turns. Levels are
-          the live chain — swap in a dealer-positioning feed behind the same view.
+          Each cell is net dealer gamma at that strike and expiry — <span className="text-bull">green</span> is dealer support
+          (long γ, dips get bought toward the walls); <span className="text-bear">red</span> is where hedging amplifies the move.
+          The nearest expiries carry the most gamma; the flip is the price where the sign turns. Candlesticks live on Pulse — this
+          is the positioning read.
         </span>
       </p>
     </div>
