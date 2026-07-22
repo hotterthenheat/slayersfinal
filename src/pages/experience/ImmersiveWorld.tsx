@@ -6,7 +6,6 @@ import {
   Float,
   Sparkles,
   MeshReflectorMaterial,
-  MeshTransmissionMaterial,
   OrbitControls,
   Instances,
   Instance,
@@ -17,31 +16,44 @@ import * as THREE from 'three';
 import gsap from 'gsap';
 import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { useMarketData } from '../../context/MarketDataContext';
+import Simulator from '../../core/simulator';
+import { buildQuantSurfaces, type QuantSurfaceData, type SurfaceKey } from '../../data/quantsurfaces';
+import QuantSurface from '../../components/experience/QuantSurface';
 
 /*
   Slayer Terminal — Immersive World.
-  A genuine React-Three-Fiber scene (not layered divs): a dark data-cathedral you
-  move through station-to-station with cinematic GSAP camera moves. Real geometry,
-  PBR materials, procedural image-based lighting via Lightformers (no external
-  HDR needed — CSP-safe), and a bloom/DoF/vignette/grain post stack. OrbitControls
-  give constrained look-around at each station.
+  A genuine React-Three-Fiber scene (not layered divs). The hero is a LIVE quant
+  surface — dealer gamma / vol / Monte-Carlo cone / risk-neutral density rendered
+  as real lit geometry you fly around and read. Reflective floor, instanced PBR
+  colonnade, procedural image-based lighting via Lightformers (CSP-safe, no HDR),
+  a bloom/DoF/vignette/grain post stack, and cinematic GSAP camera vantages. The
+  surface is the analytics; the room just frames it.
 */
 
-const KING = '#EA00FF';
 const CYAN = '#46d2eb';
 
-interface Station {
+interface Vantage {
   name: string;
-  caption: string;
+  hint: string;
   cam: [number, number, number];
   target: [number, number, number];
 }
 
-const STATIONS: Station[] = [
-  { name: 'Threshold', caption: 'You are standing at the mouth of the hall. The core burns at the far end.', cam: [0, 1.7, 9.6], target: [0, 1.55, -1] },
-  { name: 'The Core', caption: 'A single crystal of live market structure — refracting every desk at once.', cam: [0.2, 1.8, 3.9], target: [0, 1.7, 0] },
-  { name: 'The Gallery', caption: 'The desks, hung as glass — Pulse, Trace, Pinpoint, Compass, Prove It.', cam: [-5.7, 1.9, 2.6], target: [-4.4, 1.7, -1] },
-  { name: 'The Vault', caption: 'Above the floor. The colonnade runs to the vanishing point.', cam: [0, 4.7, 7.2], target: [0, 0.7, -3.5] },
+/** Camera stations = reading angles on the surface (it stays put; you move). */
+const VANTAGES: Vantage[] = [
+  { name: 'Approach', hint: 'The surface at the end of the hall — the whole shape at once.', cam: [0, 2.9, 11], target: [0, 2.5, -1.2] },
+  { name: 'The Read', hint: 'Pulled in to eye level — ridge heights and the near-term detail.', cam: [0.4, 3.1, 5.8], target: [0, 2.4, -1.4] },
+  { name: 'Overhead', hint: 'Above the field — the topology reads like a heatmap from here.', cam: [0.2, 7.6, 3.6], target: [0, 2.0, -1.8] },
+  { name: 'The Wing', hint: 'Off the flank — skew and asymmetry across the wings.', cam: [-7.2, 3.2, 4.6], target: [0.2, 2.4, -1.4] },
+];
+
+/** Surface selector chrome — labels render before the data resolves. */
+const SURFACE_TABS: { key: SurfaceKey; label: string; short: string }[] = [
+  { key: 'gamma', label: 'Dealer Gamma', short: 'Γ' },
+  { key: 'vol', label: 'Vol Surface', short: 'IV' },
+  { key: 'mc', label: 'Monte Carlo', short: 'MC' },
+  { key: 'rnd', label: 'Risk-Neutral', short: 'RND' },
 ];
 
 /** Reflective stone floor. */
@@ -86,7 +98,7 @@ const Colonnade = () => {
   );
 };
 
-/** Emissive light strips running along the floor toward the core — the runway. */
+/** Emissive light strips running along the floor toward the surface — the runway. */
 const Runway = () => (
   <group>
     {[-1.4, 1.4].map((x, i) => (
@@ -98,43 +110,7 @@ const Runway = () => (
   </group>
 );
 
-/** The centerpiece: a slowly turning glass crystal with an inner magenta glow. */
-const Core = () => {
-  const ref = useRef<THREE.Group>(null);
-  useFrame((_, dt) => {
-    if (ref.current) ref.current.rotation.y += dt * 0.18;
-  });
-  return (
-    <Float speed={1.2} rotationIntensity={0.15} floatIntensity={0.5}>
-      <group ref={ref} position={[0, 1.7, 0]}>
-        {/* inner emissive heart */}
-        <mesh>
-          <icosahedronGeometry args={[0.62, 0]} />
-          <meshStandardMaterial color={KING} emissive={KING} emissiveIntensity={3.2} toneMapped={false} />
-        </mesh>
-        {/* outer glass shell */}
-        <mesh castShadow>
-          <icosahedronGeometry args={[1.25, 0]} />
-          <MeshTransmissionMaterial
-            samples={4}
-            resolution={256}
-            thickness={0.9}
-            roughness={0.1}
-            transmission={1}
-            ior={1.4}
-            chromaticAberration={0.05}
-            anisotropy={0.25}
-            distortion={0.15}
-            distortionScale={0.3}
-            color="#dfe8f5"
-          />
-        </mesh>
-      </group>
-    </Float>
-  );
-};
-
-/** Floating glass desk-panels along the left wall. */
+/** Floating glass desk-panels along the left wall — ambient context. */
 const Gallery = () => {
   const panels = ['PULSE', 'TRACE', 'PINPOINT', 'COMPASS', 'PROVE IT'];
   return (
@@ -166,15 +142,17 @@ const Gallery = () => {
   );
 };
 
-/** Procedural studio IBL — no external HDR, works under a strict CSP. */
+/** Procedural studio IBL — no external HDR, works under a strict CSP. Kept neutral
+    over the surface so the data colours read true (bloom still catches bright peaks). */
 const Lighting = () => (
   <>
-    <ambientLight intensity={0.12} />
-    <directionalLight position={[6, 12, 4]} intensity={2.2} castShadow shadow-mapSize={[2048, 2048]}>
+    <ambientLight intensity={0.14} />
+    <directionalLight position={[6, 12, 4]} intensity={2.3} castShadow shadow-mapSize={[2048, 2048]}>
       <orthographicCamera attach="shadow-camera" args={[-14, 14, 14, -14, 0.1, 50]} />
     </directionalLight>
-    <spotLight position={[0, 9, 2]} angle={0.5} penumbra={0.8} intensity={40} color={CYAN} distance={30} castShadow />
-    <pointLight position={[0, 1.7, 0]} intensity={6} color={KING} distance={9} />
+    <spotLight position={[0, 10, 2]} angle={0.5} penumbra={0.8} intensity={34} color="#eaf2ff" distance={32} castShadow />
+    {/* soft cool fill centred on the surface so it lifts off the dark hall */}
+    <pointLight position={[0, 2.3, -1.2]} intensity={3.2} color="#cfe0ff" distance={12} />
     <Environment resolution={256}>
       <group rotation={[0, 0, 0]}>
         <Lightformer form="rect" intensity={2} position={[0, 6, -9]} scale={[10, 4, 1]} color="#5a6472" />
@@ -186,13 +164,13 @@ const Lighting = () => (
   </>
 );
 
-/** Drives the camera + orbit target between stations with a weighted GSAP move. */
+/** Drives the camera + orbit target between vantages with a weighted GSAP move. */
 const Rig = ({ index }: { index: number }) => {
   const { camera, controls } = useThree() as unknown as { camera: THREE.PerspectiveCamera; controls: { target: THREE.Vector3; update: () => void } | null };
-  const target = useRef(new THREE.Vector3(...STATIONS[0].target));
+  const target = useRef(new THREE.Vector3(...VANTAGES[0].target));
 
   useEffect(() => {
-    const st = STATIONS[index];
+    const st = VANTAGES[index];
     gsap.to(camera.position, { x: st.cam[0], y: st.cam[1], z: st.cam[2], duration: 2.1, ease: 'power3.inOut' });
     gsap.to(target.current, { x: st.target[0], y: st.target[1], z: st.target[2], duration: 2.1, ease: 'power3.inOut' });
   }, [index, camera]);
@@ -217,15 +195,15 @@ const Effects = () => (
   </EffectComposer>
 );
 
-const Scene = ({ index }: { index: number }) => (
+const Scene = ({ vantage, surface }: { vantage: number; surface: QuantSurfaceData | null }) => (
   <>
     <color attach="background" args={['#05060a']} />
-    <fog attach="fog" args={['#05060a', 10, 34]} />
+    <fog attach="fog" args={['#05060a', 12, 38]} />
     <Lighting />
     <Floor />
     <Colonnade />
     <Runway />
-    <Core />
+    {surface && <QuantSurface data={surface} />}
     <Gallery />
     <Sparkles count={120} scale={[18, 8, 24]} size={2} speed={0.3} color="#9fb4d4" opacity={0.5} />
     <OrbitControls
@@ -234,12 +212,12 @@ const Scene = ({ index }: { index: number }) => (
       enableZoom={false}
       enableDamping
       dampingFactor={0.08}
-      minPolarAngle={Math.PI / 3.4}
+      minPolarAngle={Math.PI / 5}
       maxPolarAngle={Math.PI / 1.9}
-      minAzimuthAngle={-Math.PI / 5}
-      maxAzimuthAngle={Math.PI / 5}
+      minAzimuthAngle={-Math.PI / 4}
+      maxAzimuthAngle={Math.PI / 4}
     />
-    <Rig index={index} />
+    <Rig index={vantage} />
     <Effects />
   </>
 );
@@ -275,29 +253,47 @@ class SceneBoundary extends Component<{ children: ReactNode }, { failed: boolean
 
 /** HUD + boot overlay — the only DOM in the experience; everything else is real 3D. */
 const ImmersiveWorld = () => {
-  const [index, setIndex] = useState(0);
+  const { marketData, activeTicker } = useMarketData();
+  const [surfaceIndex, setSurfaceIndex] = useState(0);
+  const [vantage, setVantage] = useState(0);
   const [booted, setBooted] = useState(false);
+
+  // Build the four surfaces once per ticker (deterministic structure; a live tick
+  // shouldn't rebuild the mesh every 1.5s and make it flicker). Cache by ticker.
+  const cacheRef = useRef<Record<string, QuantSurfaceData[]>>({});
+  const surfaces = useMemo(() => {
+    if (!marketData) return cacheRef.current[activeTicker] ?? null;
+    if (!cacheRef.current[activeTicker]) {
+      const iv = Simulator.TICKERS[marketData.ticker]?.iv ?? 0.2;
+      cacheRef.current[activeTicker] = buildQuantSurfaces(marketData, iv);
+    }
+    return cacheRef.current[activeTicker];
+  }, [activeTicker, marketData]);
+
+  const surface = surfaces?.[surfaceIndex] ?? null;
+
   useEffect(() => {
     const id = setTimeout(() => setBooted(true), 1400);
     return () => clearTimeout(id);
   }, []);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight') setIndex(i => Math.min(i + 1, STATIONS.length - 1));
-      if (e.key === 'ArrowLeft') setIndex(i => Math.max(i - 1, 0));
+      if (e.key === 'ArrowRight') setVantage(i => Math.min(i + 1, VANTAGES.length - 1));
+      if (e.key === 'ArrowLeft') setVantage(i => Math.max(i - 1, 0));
+      if (e.key >= '1' && e.key <= '4') setSurfaceIndex(Math.min(Number(e.key) - 1, SURFACE_TABS.length - 1));
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const st = STATIONS[index];
+  const van = VANTAGES[vantage];
 
   return (
     <div className="fixed inset-0 z-[100] bg-[#05060a]">
       <SceneBoundary>
-        <Canvas shadows dpr={[1, 2]} camera={{ position: STATIONS[0].cam, fov: 38, near: 0.1, far: 100 }} gl={{ antialias: true }}>
+        <Canvas shadows dpr={[1, 2]} camera={{ position: VANTAGES[0].cam, fov: 38, near: 0.1, far: 100 }} gl={{ antialias: true }}>
           <Suspense fallback={null}>
-            <Scene index={index} />
+            <Scene vantage={vantage} surface={surface} />
           </Suspense>
         </Canvas>
       </SceneBoundary>
@@ -307,7 +303,7 @@ const ImmersiveWorld = () => {
         <div className="absolute inset-0 flex items-center justify-center bg-[#05060a] transition-opacity">
           <div className="flex flex-col items-center gap-3">
             <span className="font-mono text-sm holo-text tracking-widest">&gt; slayer_terminal</span>
-            <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-textMuted animate-pulse">entering</span>
+            <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-textMuted animate-pulse">rendering surface</span>
           </div>
         </div>
       )}
@@ -327,36 +323,61 @@ const ImmersiveWorld = () => {
           <X className="w-3.5 h-3.5" /> Enter terminal
         </Link>
 
-        {/* prev / next */}
+        {/* top-center surface selector — the primary control: which quant surface */}
+        <div className="pointer-events-auto absolute top-5 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1.5">
+          <div className="flex items-center gap-1 rounded-full border border-borderMuted bg-black/45 p-1 backdrop-blur">
+            {SURFACE_TABS.map((t, i) => {
+              const active = i === surfaceIndex;
+              return (
+                <button
+                  key={t.key}
+                  onClick={() => setSurfaceIndex(i)}
+                  className={`rounded-full px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider transition-colors ${
+                    active ? 'bg-select/20 text-select border border-select/40' : 'text-textSecondary border border-transparent hover:text-textPrimary'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
+          <div className="font-mono text-[9px] uppercase tracking-[0.3em] text-textMuted">surface · {activeTicker}</div>
+        </div>
+
+        {/* prev / next — move around the surface (vantage) */}
         <button
-          onClick={() => setIndex(i => Math.max(i - 1, 0))}
-          disabled={index === 0}
-          aria-label="Previous station"
+          onClick={() => setVantage(i => Math.max(i - 1, 0))}
+          disabled={vantage === 0}
+          aria-label="Previous vantage"
           className="pointer-events-auto absolute left-5 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-11 h-11 rounded-full border border-borderMuted bg-black/40 text-textSecondary hover:text-textPrimary hover:border-borderFocus disabled:opacity-25 transition-colors backdrop-blur"
         >
           <ChevronLeft className="w-5 h-5" />
         </button>
         <button
-          onClick={() => setIndex(i => Math.min(i + 1, STATIONS.length - 1))}
-          disabled={index === STATIONS.length - 1}
-          aria-label="Next station"
+          onClick={() => setVantage(i => Math.min(i + 1, VANTAGES.length - 1))}
+          disabled={vantage === VANTAGES.length - 1}
+          aria-label="Next vantage"
           className="pointer-events-auto absolute right-5 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-11 h-11 rounded-full border border-borderMuted bg-black/40 text-textSecondary hover:text-textPrimary hover:border-borderFocus disabled:opacity-25 transition-colors backdrop-blur"
         >
           <ChevronRight className="w-5 h-5" />
         </button>
 
-        {/* bottom station panel */}
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-[min(560px,90vw)] text-center">
+        {/* bottom panel — what the surface is + which vantage you're reading it from */}
+        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-[min(620px,92vw)] text-center">
           <div className="mb-2 flex items-center justify-center gap-1.5">
-            {STATIONS.map((_, i) => (
-              <span key={i} className={`h-[3px] rounded-full transition-all duration-500 ${i === index ? 'w-8 bg-select' : 'w-3 bg-white/25'}`} />
+            {VANTAGES.map((_, i) => (
+              <span key={i} className={`h-[3px] rounded-full transition-all duration-500 ${i === vantage ? 'w-8 bg-select' : 'w-3 bg-white/25'}`} />
             ))}
           </div>
           <div className="font-mono text-[10px] uppercase tracking-[0.35em] text-select mb-1.5">
-            {String(index + 1).padStart(2, '0')} / {String(STATIONS.length).padStart(2, '0')} · {st.name}
+            {surface?.label ?? SURFACE_TABS[surfaceIndex].label} · {van.name}
           </div>
-          <p className="text-[13px] text-textSecondary leading-relaxed">{st.caption}</p>
-          <div className="mt-2 font-mono text-[9px] uppercase tracking-widest text-textMuted">drag to look · ← → to travel</div>
+          <p className="text-[13px] text-textSecondary leading-relaxed min-h-[2.6em]">
+            {surface?.caption ?? van.hint}
+          </p>
+          <div className="mt-2 font-mono text-[9px] uppercase tracking-widest text-textMuted">
+            1–4 surface · ← → move around it · drag to look
+          </div>
         </div>
       </div>
     </div>
