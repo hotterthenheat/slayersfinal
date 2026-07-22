@@ -111,7 +111,15 @@ const FOOTER_COLS = [
     links: [
       { label: 'Launch Terminal', to: '/pulse' },
       { label: 'Log in / Sign up', to: '/pulse' },
-      { label: 'Workspace', to: '/workspace' },
+      { label: 'Guide', to: '/guide' },
+    ],
+  },
+  {
+    title: 'Legal',
+    links: [
+      { label: 'Disclaimer', to: '/legal/disclaimer' },
+      { label: 'Terms', to: '/legal/terms' },
+      { label: 'Privacy', to: '/legal/privacy' },
     ],
   },
 ];
@@ -433,7 +441,7 @@ const Landing = () => (
 
     {/* ── Footer ── */}
     <footer className="border-t border-borderSubtle">
-      <div className="px-6 md:px-10 py-14 max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-5 gap-10">
+      <div className="px-6 md:px-10 py-14 max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-6 gap-10">
         <div className="col-span-2">
           <span className="font-mono text-[13px] font-bold text-textPrimary">
             <span className="text-textMuted">&gt; </span>slayer_terminal
@@ -479,9 +487,12 @@ const Landing = () => (
           <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted">
             © 2026 Slayer Terminal · Compass · Pinpoint
           </span>
-          <span className="md:ml-auto font-mono text-[10px] tracking-wide text-textMuted">
+          <SmartLink
+            to="/legal/disclaimer"
+            className="md:ml-auto font-mono text-[10px] tracking-wide text-textMuted hover:text-textSecondary transition-colors"
+          >
             For informational purposes only. Not investment advice.
-          </span>
+          </SmartLink>
         </div>
       </div>
     </footer>

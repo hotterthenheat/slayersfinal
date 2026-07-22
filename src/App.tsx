@@ -9,6 +9,7 @@ import AppShell from './components/layout/AppShell';
 import { LaunchProvider } from './components/layout/LaunchTransition';
 import Compass from './pages/Compass';
 import Tracker from './pages/Tracker';
+import Guide from './pages/Guide';
 import GexLayout from './pages/gex/GexLayout';
 import PulseWorkspace from './pages/pulse/PulseWorkspace';
 import ExposureProfile from './pages/gex/ExposureProfile';
@@ -35,6 +36,9 @@ import CommunityLayout from './pages/community/CommunityLayout';
 import Ideas from './pages/community/Ideas';
 import Requests from './pages/community/Requests';
 import Feedback from './pages/community/Feedback';
+import Disclaimer from './pages/legal/Disclaimer';
+import Terms from './pages/legal/Terms';
+import Privacy from './pages/legal/Privacy';
 
 // Prove It pulls in the full three.js / WebGL stack for the dealer surface.
 // Lazy-loading it keeps that ~600KB+ out of the initial bundle so the landing
@@ -80,6 +84,7 @@ const App = () => {
             <Route path="/fracture" element={<Navigate to="/pinpoint/fracture" replace />} />
             <Route path="/lotto" element={<Navigate to="/compass" state={{ compassMode: 'lotto' }} replace />} />
             <Route path="/tracker" element={<Tracker />} />
+            <Route path="/guide" element={<Guide />} />
             <Route path="/pinpoint" element={<GexLayout />}>
               <Route index element={<Navigate to="/pinpoint/gamma" replace />} />
               <Route path="command" element={<Navigate to="/pulse" replace />} />
@@ -118,6 +123,9 @@ const App = () => {
               <Route path="requests" element={<Requests />} />
               <Route path="feedback" element={<Feedback />} />
             </Route>
+            <Route path="/legal/disclaimer" element={<Disclaimer />} />
+            <Route path="/legal/terms" element={<Terms />} />
+            <Route path="/legal/privacy" element={<Privacy />} />
             <Route path="/auditor-log" element={<Navigate to="/tracker" replace />} />
           </Route>
           {/* Any unmatched URL (typo, stale bookmark, removed path) falls back to
