@@ -38,10 +38,10 @@ interface Station {
 }
 
 const STATIONS: Station[] = [
-  { name: 'Threshold', caption: 'You are standing at the mouth of the hall. The core burns at the far end.', cam: [0, 1.7, 12], target: [0, 1.6, 0] },
-  { name: 'The Core', caption: 'A single crystal of live market structure — refracting every desk at once.', cam: [0.2, 1.8, 4.4], target: [0, 1.7, 0] },
-  { name: 'The Gallery', caption: 'The desks, hung as glass — Pulse, Trace, Pinpoint, Compass, Prove It.', cam: [-6.4, 1.9, 3.2], target: [-4.2, 1.7, -1] },
-  { name: 'The Vault', caption: 'Above the floor. The colonnade runs to the vanishing point.', cam: [0, 5.4, 8.5], target: [0, 0.6, -3] },
+  { name: 'Threshold', caption: 'You are standing at the mouth of the hall. The core burns at the far end.', cam: [0, 1.7, 9.6], target: [0, 1.55, -1] },
+  { name: 'The Core', caption: 'A single crystal of live market structure — refracting every desk at once.', cam: [0.2, 1.8, 3.9], target: [0, 1.7, 0] },
+  { name: 'The Gallery', caption: 'The desks, hung as glass — Pulse, Trace, Pinpoint, Compass, Prove It.', cam: [-5.7, 1.9, 2.6], target: [-4.4, 1.7, -1] },
+  { name: 'The Vault', caption: 'Above the floor. The colonnade runs to the vanishing point.', cam: [0, 4.7, 7.2], target: [0, 0.7, -3.5] },
 ];
 
 /** Reflective stone floor. */
@@ -293,7 +293,7 @@ const ImmersiveWorld = () => {
   return (
     <div className="fixed inset-0 z-[100] bg-[#05060a]">
       <SceneBoundary>
-        <Canvas shadows dpr={[1, 2]} camera={{ position: STATIONS[0].cam, fov: 42, near: 0.1, far: 100 }} gl={{ antialias: true }}>
+        <Canvas shadows dpr={[1, 2]} camera={{ position: STATIONS[0].cam, fov: 38, near: 0.1, far: 100 }} gl={{ antialias: true }}>
           <Suspense fallback={null}>
             <Scene index={index} />
           </Suspense>
