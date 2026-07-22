@@ -1,4 +1,3 @@
-import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { MotionConfig } from 'framer-motion';
 import { MarketDataProvider } from './context/MarketDataContext';
@@ -31,8 +30,6 @@ import EarningsHub from './pages/EarningsHub';
 import ProveIt from './pages/proveit/ProveIt';
 import Fracture from './pages/fracture/Fracture';
 import Landing from './pages/landing/Landing';
-// recharts + R3F surface tiles are heavy — the Quant Lab is its own lazy chunk.
-const QuantLab = lazy(() => import('./pages/quantlab/QuantLab'));
 import CommunityLayout from './pages/community/CommunityLayout';
 import Ideas from './pages/community/Ideas';
 import Requests from './pages/community/Requests';
@@ -50,17 +47,10 @@ const App = () => {
               visitor sees; "Launch terminal" plays the gate into /pulse. */}
           <Route path="/" element={<Landing />} />
           <Route path="/welcome" element={<Navigate to="/" replace />} />
-          {/* Quant Lab — full-screen analytics dashboard, outside the shell */}
-          <Route
-            path="/experience"
-            element={
-              <Suspense fallback={<div className="fixed inset-0 bg-canvas" />}>
-                <QuantLab />
-              </Suspense>
-            }
-          />
-          <Route path="/quant-lab" element={<Navigate to="/experience" replace />} />
-          <Route path="/immersive" element={<Navigate to="/experience" replace />} />
+          {/* Retired routes → the quant desk is Prove It */}
+          <Route path="/experience" element={<Navigate to="/prove-it" replace />} />
+          <Route path="/quant-lab" element={<Navigate to="/prove-it" replace />} />
+          <Route path="/immersive" element={<Navigate to="/prove-it" replace />} />
           <Route element={<AppShell />}>
             <Route path="/home" element={<Navigate to="/pulse" replace />} />
             <Route path="/pulse" element={<PulseWorkspace />} />
