@@ -7,7 +7,18 @@ import Panel from '../../components/ui/Panel';
 import StatCard from '../../components/ui/StatCard';
 import MetricGrid from '../../components/ui/MetricGrid';
 import SegmentedControl from '../../components/ui/SegmentedControl';
+import HoverReadout, { svgHoverIndex } from '../../components/ui/HoverReadout';
+import { fmtUsd } from '../../data/gex';
 import type { Tone } from '../../components/ui/tones';
+
+/** Compact delta (shares-equiv) formatter — no dollar sign. */
+const fmtDelta = (v: number): string => {
+  const a = Math.abs(v);
+  const s = v < 0 ? '−' : '+';
+  if (a >= 1e6) return `${s}${(a / 1e6).toFixed(1)}M`;
+  if (a >= 1e3) return `${s}${(a / 1e3).toFixed(0)}K`;
+  return `${s}${a.toFixed(0)}`;
+};
 
 /** The three greeks a dealer-flow read leans on; the rest are specialist. */
 const CORE_KEYS: GreekKey[] = ['gamma', 'vanna', 'charm'];
@@ -56,14 +67,39 @@ const CharmChart = ({ points }: { points: { time: string; deltaShift: number }[]
   const area =
     points.map((p, i) => `${i === 0 ? 'M' : 'L'}${X(i).toFixed(1)},${Y(p.deltaShift).toFixed(1)}`).join(' ') +
     ` L${W},${zeroY} L0,${zeroY} Z`;
+  const [h, setH] = useState<{ i: number; x: number; y: number } | null>(null);
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none">
-      <line x1={0} x2={W} y1={zeroY} y2={zeroY} stroke="#fff" strokeOpacity={0.12} />
-      <rect x={X(points.length - 3)} y={0} width={W - X(points.length - 3)} height={H} fill="rgba(255,149,0,0.06)" />
-      <path d={area} fill={up ? 'rgba(48,209,88,0.14)' : 'rgba(255,59,48,0.14)'} />
-      <path d={points.map((p, i) => `${i === 0 ? 'M' : 'L'}${X(i).toFixed(1)},${Y(p.deltaShift).toFixed(1)}`).join(' ')} fill="none" stroke={up ? BULL : BEAR} strokeWidth={1.75} />
-      <text x={X(points.length - 3) + 4} y={12} fontSize={8} fill="#FF9500" fontFamily="monospace">POWER HOUR</text>
-    </svg>
+    <>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="w-full cursor-crosshair"
+        style={{ height: H }}
+        preserveAspectRatio="none"
+        onMouseMove={e => setH({ i: svgHoverIndex(e, points.length), x: e.clientX, y: e.clientY })}
+        onMouseLeave={() => setH(null)}
+      >
+        <line x1={0} x2={W} y1={zeroY} y2={zeroY} stroke="#fff" strokeOpacity={0.12} />
+        <rect x={X(points.length - 3)} y={0} width={W - X(points.length - 3)} height={H} fill="rgba(255,149,0,0.06)" />
+        <path d={area} fill={up ? 'rgba(48,209,88,0.14)' : 'rgba(255,59,48,0.14)'} />
+        <path d={points.map((p, i) => `${i === 0 ? 'M' : 'L'}${X(i).toFixed(1)},${Y(p.deltaShift).toFixed(1)}`).join(' ')} fill="none" stroke={up ? BULL : BEAR} strokeWidth={1.75} />
+        <text x={X(points.length - 3) + 4} y={12} fontSize={8} fill="#FF9500" fontFamily="monospace">POWER HOUR</text>
+        {h && (
+          <>
+            <line x1={X(h.i)} x2={X(h.i)} y1={0} y2={H} stroke="rgba(255,255,255,0.35)" strokeWidth={0.6} />
+            <circle cx={X(h.i)} cy={Y(points[h.i].deltaShift)} r={2.6} fill={points[h.i].deltaShift >= 0 ? BULL : BEAR} />
+          </>
+        )}
+      </svg>
+      {h && (
+        <HoverReadout x={h.x} y={h.y}>
+          <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted">{points[h.i].time}</div>
+          <div className={`mt-0.5 font-mono text-[13px] font-bold tnum ${points[h.i].deltaShift >= 0 ? 'text-bull' : 'text-bear'}`}>
+            {fmtDelta(points[h.i].deltaShift)}
+          </div>
+          <div className="mt-0.5 font-mono text-[10px] text-textSecondary">dealer Δ shift</div>
+        </HoverReadout>
+      )}
+    </>
   );
 };
 
@@ -75,14 +111,43 @@ const VannaChart = ({ points }: { points: { volShockPct: number; hedgeUsd: numbe
   const hi = Math.max(...vals);
   const X = (i: number) => (i / (points.length - 1)) * W;
   const Y = (v: number) => H - ((v - lo) / (hi - lo || 1)) * (H - 8) - 4;
+  const [h, setH] = useState<{ i: number; x: number; y: number } | null>(null);
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none">
-      <line x1={W / 2} x2={W / 2} y1={0} y2={H} stroke="#fff" strokeOpacity={0.12} strokeDasharray="3 3" />
-      <line x1={0} x2={W} y1={Y(0)} y2={Y(0)} stroke="#fff" strokeOpacity={0.12} />
-      <path d={points.map((p, i) => `${i === 0 ? 'M' : 'L'}${X(i).toFixed(1)},${Y(p.hedgeUsd).toFixed(1)}`).join(' ')} fill="none" stroke="#ededed" strokeWidth={1.75} />
-      <text x={6} y={H - 4} fontSize={8} fill="#7d7d7d" fontFamily="monospace">−3% IV</text>
-      <text x={W - 40} y={H - 4} fontSize={8} fill="#7d7d7d" fontFamily="monospace">+3% IV</text>
-    </svg>
+    <>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="w-full cursor-crosshair"
+        style={{ height: H }}
+        preserveAspectRatio="none"
+        onMouseMove={e => setH({ i: svgHoverIndex(e, points.length), x: e.clientX, y: e.clientY })}
+        onMouseLeave={() => setH(null)}
+      >
+        <line x1={W / 2} x2={W / 2} y1={0} y2={H} stroke="#fff" strokeOpacity={0.12} strokeDasharray="3 3" />
+        <line x1={0} x2={W} y1={Y(0)} y2={Y(0)} stroke="#fff" strokeOpacity={0.12} />
+        <path d={points.map((p, i) => `${i === 0 ? 'M' : 'L'}${X(i).toFixed(1)},${Y(p.hedgeUsd).toFixed(1)}`).join(' ')} fill="none" stroke="#ededed" strokeWidth={1.75} />
+        <text x={6} y={H - 4} fontSize={8} fill="#7d7d7d" fontFamily="monospace">−3% IV</text>
+        <text x={W - 40} y={H - 4} fontSize={8} fill="#7d7d7d" fontFamily="monospace">+3% IV</text>
+        {h && (
+          <>
+            <line x1={X(h.i)} x2={X(h.i)} y1={0} y2={H} stroke="rgba(255,255,255,0.35)" strokeWidth={0.6} />
+            <circle cx={X(h.i)} cy={Y(points[h.i].hedgeUsd)} r={2.6} fill="#ededed" />
+          </>
+        )}
+      </svg>
+      {h && (
+        <HoverReadout x={h.x} y={h.y}>
+          <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted">
+            {points[h.i].volShockPct >= 0 ? '+' : '−'}
+            {Math.abs(points[h.i].volShockPct).toFixed(1)}% IV shock
+          </div>
+          <div className={`mt-0.5 font-mono text-[13px] font-bold tnum ${points[h.i].hedgeUsd >= 0 ? 'text-bull' : 'text-bear'}`}>
+            {points[h.i].hedgeUsd >= 0 ? '+' : '−'}
+            {fmtUsd(Math.abs(points[h.i].hedgeUsd))}
+          </div>
+          <div className="mt-0.5 font-mono text-[10px] text-textSecondary">dealer hedge</div>
+        </HoverReadout>
+      )}
+    </>
   );
 };
 

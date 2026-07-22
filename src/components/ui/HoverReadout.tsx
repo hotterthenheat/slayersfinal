@@ -1,4 +1,14 @@
-import type { ReactNode } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
+
+/**
+ * Cursor → nearest data index for a full-width SVG/area chart (works with
+ * preserveAspectRatio="none" since it measures the rendered rect, not viewBox).
+ */
+export function svgHoverIndex(e: MouseEvent, count: number): number {
+  const rect = (e.currentTarget as Element).getBoundingClientRect();
+  const frac = (e.clientX - rect.left) / (rect.width || 1);
+  return Math.max(0, Math.min(count - 1, Math.round(frac * (count - 1))));
+}
 
 interface HoverReadoutProps {
   /** Cursor client X/Y — the card floats just off the pointer and stays on-screen. */

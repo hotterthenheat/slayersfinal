@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import SignalBadge from '../../ui/SignalBadge';
+import HoverReadout, { svgHoverIndex } from '../../ui/HoverReadout';
 import type { RegimeData, VolRegime } from '../../../types/gex';
 import type { Tone } from '../../ui/tones';
 
@@ -36,6 +38,8 @@ const RegimePanel = ({ data }: RegimePanelProps) => {
   const normTop = series.map(s => s.low + s.normal);
   const fullTop = series.map(() => 1);
   const zero = series.map(() => 0);
+  const [h, setH] = useState<{ i: number; x: number; y: number } | null>(null);
+  const cx = (i: number) => (i / (series.length - 1)) * W;
 
   const stats: { label: string; value: string }[] = [
     { label: 'Confidence', value: `${prob}%` },
@@ -68,12 +72,29 @@ const RegimePanel = ({ data }: RegimePanelProps) => {
 
       {/* Stacked probability bands */}
       <div className="flex-grow min-h-0">
-        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-full">
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          preserveAspectRatio="none"
+          className="w-full h-full cursor-crosshair"
+          onMouseMove={e => setH({ i: svgHoverIndex(e, series.length), x: e.clientX, y: e.clientY })}
+          onMouseLeave={() => setH(null)}
+        >
           <path d={bandPath(zero, lowTop)} fill="rgba(48,209,88,0.5)" />
           <path d={bandPath(lowTop, normTop)} fill="rgba(255,255,255,0.18)" />
           <path d={bandPath(normTop, fullTop)} fill="rgba(255,59,48,0.45)" />
+          {h && <line x1={cx(h.i)} x2={cx(h.i)} y1={0} y2={H} stroke="rgba(255,255,255,0.4)" strokeWidth="0.4" vectorEffect="non-scaling-stroke" />}
         </svg>
       </div>
+      {h && series[h.i] && (
+        <HoverReadout x={h.x} y={h.y}>
+          <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted">{series[h.i].month}</div>
+          <div className="mt-1 flex items-center gap-2.5 font-mono text-[11px] tnum">
+            <span className="text-bull">Low {Math.round(series[h.i].low * 100)}%</span>
+            <span className="text-textSecondary">Norm {Math.round(series[h.i].normal * 100)}%</span>
+            <span className="text-bear">High {Math.round(series[h.i].high * 100)}%</span>
+          </div>
+        </HoverReadout>
+      )}
       <div className="flex justify-between font-mono text-[8px] text-textMuted select-none">
         {series.filter((_, i) => i % 6 === 0).map(s => (
           <span key={s.month}>{s.month}</span>
