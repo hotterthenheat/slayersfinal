@@ -276,7 +276,7 @@ const Fracture = () => {
               <GitBranch className="w-3.5 h-3.5" /> Reflexive cascade
             </span>
           }
-          subtitle={`${view.cascade.cascadeProbPct}% cascade · 500 modeled feedback paths`}
+          subtitle={`${view.cascade.cascadeProbPct}% cascade · 500 feedback paths`}
           className="xl:col-span-5"
           tone={view.cascade.cascadeProbPct >= 50 ? 'bear' : 'neutral'}
         >
@@ -458,7 +458,7 @@ const Fracture = () => {
           <span className="font-mono font-semibold uppercase tracking-wider mr-2 holo-text">Beyond GEX</span>
           GEX estimates which way dealers must hedge. Fracture estimates whether the market can absorb that hedging — it combines
           the forced flow from every mechanical participant, the liquidity actually available to take the other side, and how close
-          activity is to self-sustaining, then models the feedback loop. The fracture line is where that balance breaks. Modeled
+          activity is to self-sustaining, then runs the feedback loop forward. The fracture line is where that balance breaks. Built
           from the live chain and price path; swap in real dealer, flow and depth feeds behind the same contract.
         </p>
       </Panel>

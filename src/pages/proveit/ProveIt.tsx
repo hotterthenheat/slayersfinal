@@ -63,7 +63,7 @@ const ProveIt = () => {
       value: trendUp ? 'EMA9 ≥ EMA21' : 'EMA9 < EMA21',
       note: 'trend-following — EMAs stand in for the return forecast',
     },
-    { label: 'Horizon', value: `${mc.days} sessions`, note: 'trading days modeled forward' },
+    { label: 'Horizon', value: `${mc.days} sessions`, note: 'trading days ahead' },
     { label: 'Paths', value: `${mc.runs.toLocaleString()} runs`, note: 'deterministic seeded draws' },
   ];
 
@@ -112,7 +112,7 @@ const ProveIt = () => {
               ${mc.stats.rangeLow.toFixed(0)}–${mc.stats.rangeHigh.toFixed(0)}
             </span>
           }
-          sub="90% of modeled paths land inside"
+          sub="90% of paths land inside"
         />
         <StatCard
           label="Vol regime"

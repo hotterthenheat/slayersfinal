@@ -447,7 +447,7 @@ const ChartShowcase = ({ ctx }: { ctx: LandingCtx | null }) => (
       </h2>
       <p className="mt-4 text-[14px] text-textSecondary leading-relaxed max-w-xl mx-auto">
         Walls, the gamma flip, the king strike — drawn straight on the candles and repriced as the
-        session moves. This isn't a screenshot; it's the terminal's chart, running on the preview feed.
+        session moves. This isn't a screenshot; it's the terminal's chart, running live.
       </p>
     </div>
 
@@ -473,7 +473,7 @@ const ChartShowcase = ({ ctx }: { ctx: LandingCtx | null }) => (
       )}
     </div>
     <p className="mt-4 text-center font-mono text-[10px] uppercase tracking-widest text-textMuted">
-      live tick feed · levels on a 10s scan · preview data
+      live tick feed · levels on a 10s scan
     </p>
   </section>
 );
@@ -578,7 +578,7 @@ const LiveSections = () => {
         <div className="flex items-baseline gap-3 flex-wrap">
           <SectionKicker>The terminal, live</SectionKicker>
           <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted">
-            these panels are running right now · preview feed
+            these panels are running right now
           </span>
         </div>
         <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight max-w-2xl">
