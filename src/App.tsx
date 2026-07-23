@@ -19,6 +19,7 @@ import GexLayout from './pages/gex/GexLayout';
 import PulseWorkspace from './pages/pulse/PulseWorkspace';
 import ExposureProfile from './pages/gex/ExposureProfile';
 import GammaChart from './pages/gex/GammaChart';
+import ComplexBoard from './pages/gex/ComplexBoard';
 import RankedTargets from './pages/gex/RankedTargets';
 import VannaCharm from './pages/gex/VannaCharm';
 import VolLab from './pages/gex/VolLab';
@@ -103,6 +104,7 @@ const App = () => {
               <Route path="command" element={<Navigate to="/pulse" replace />} />
               <Route path="flow-map" element={<Navigate to="/pulse" replace />} />
               <Route path="gamma" element={<GammaChart />} />
+              <Route path="complex" element={<ComplexBoard />} />
               <Route path="exposure-profile" element={<ExposureProfile />} />
               <Route path="ranked-targets" element={<RankedTargets />} />
               <Route path="strike-profile" element={<Navigate to="/pinpoint/exposure-profile" replace />} />

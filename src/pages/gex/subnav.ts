@@ -1,4 +1,4 @@
-import { Map, Target, Waves, Grid3x3, Gauge, Zap, FlaskConical, AreaChart, History, CandlestickChart, type LucideIcon } from 'lucide-react';
+import { Map, Target, Waves, Grid3x3, Gauge, Zap, FlaskConical, AreaChart, History, CandlestickChart, Columns3, type LucideIcon } from 'lucide-react';
 
 /** Pinpoint subpage registry — drives the sub-tab bar and command palette.
     The nine views cluster into four workflows so the bar reads as a map, not a
@@ -24,6 +24,13 @@ export const GEX_SUBPAGES: GexSubpage[] = [
     label: 'Gamma Heatmap',
     subtitle: 'Net dealer gamma across every strike × expiry — the walls, flip, king strike and the pin-vs-trend regime',
     icon: CandlestickChart,
+    group: 'Positioning',
+  },
+  {
+    path: '/pinpoint/complex',
+    label: 'Complex',
+    subtitle: 'Net dealer gamma across the whole complex — SPY, QQQ and the leaders, every wall, flip and king side by side',
+    icon: Columns3,
     group: 'Positioning',
   },
   {
