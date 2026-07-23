@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import Simulator from '../core/simulator';
 import type { MarketSnapshot, TickerSymbol } from '../types/market';
 
@@ -8,7 +8,21 @@ interface MarketDataContextValue {
   changeTicker: (ticker: string) => void;
 }
 
-const MarketDataContext = createContext<MarketDataContextValue | null>(null);
+/**
+ * Two contexts, one provider. The market snapshot re-publishes on every 1.5s
+ * tick; the ticker identity only changes when the user switches symbols. Splitting
+ * them means chrome that only needs the active ticker (AppShell, the nav) no longer
+ * re-renders on every price tick — only the handful of components that read
+ * `marketData` do. `useMarketData()` still returns all three for the many
+ * consumers that genuinely need the live snapshot.
+ */
+interface TickerContextValue {
+  activeTicker: TickerSymbol;
+  changeTicker: (ticker: string) => void;
+}
+
+const TickerContext = createContext<TickerContextValue | null>(null);
+const SnapshotContext = createContext<MarketSnapshot | null>(null);
 
 export const MarketDataProvider = ({ children }: { children: React.ReactNode }) => {
   const [activeTicker, setActiveTickerState] = useState<TickerSymbol>(Simulator.getActiveTicker());
@@ -17,47 +31,57 @@ export const MarketDataProvider = ({ children }: { children: React.ReactNode }) 
   const tickIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
+    const processTick = () => Simulator.tick(setMarketData);
+    const startSimulator = () => {
+      if (tickIntervalRef.current) clearInterval(tickIntervalRef.current);
+      processTick();
+      tickIntervalRef.current = setInterval(processTick, 1500);
+    };
     startSimulator();
     return () => {
-      stopSimulator();
+      if (tickIntervalRef.current) {
+        clearInterval(tickIntervalRef.current);
+        tickIntervalRef.current = null;
+      }
     };
   }, []);
 
-  const processTick = () => {
-    Simulator.tick(setMarketData);
-  };
-
-  const startSimulator = () => {
-    if (tickIntervalRef.current) clearInterval(tickIntervalRef.current);
-    processTick();
-    tickIntervalRef.current = setInterval(processTick, 1500);
-  };
-
-  const stopSimulator = () => {
-    if (tickIntervalRef.current) {
-      clearInterval(tickIntervalRef.current);
-      tickIntervalRef.current = null;
-    }
-  };
-
-  const changeTicker = (ticker: string) => {
+  // Stable across ticks — identity only changes never (setters are stable), so
+  // effects keyed on changeTicker don't re-run every tick.
+  const changeTicker = useCallback((ticker: string) => {
     const sym = Simulator.setActiveTicker(ticker);
     setActiveTickerState(sym);
-    // Trigger instant tick for snappy UI transition
+    // Trigger an instant tick for a snappy symbol switch.
     Simulator.tick(setMarketData);
-  };
+  }, []);
+
+  const tickerValue = useMemo<TickerContextValue>(
+    () => ({ activeTicker, changeTicker }),
+    [activeTicker, changeTicker],
+  );
 
   return (
-    <MarketDataContext.Provider value={{ activeTicker, marketData, changeTicker }}>
-      {children}
-    </MarketDataContext.Provider>
+    <TickerContext.Provider value={tickerValue}>
+      <SnapshotContext.Provider value={marketData}>{children}</SnapshotContext.Provider>
+    </TickerContext.Provider>
   );
 };
 
-export const useMarketData = (): MarketDataContextValue => {
-  const context = useContext(MarketDataContext);
+/** Ticker identity + switcher only — does NOT re-render on price ticks. */
+export const useTicker = (): TickerContextValue => {
+  const context = useContext(TickerContext);
   if (!context) {
-    throw new Error('useMarketData must be used within a MarketDataProvider');
+    throw new Error('useTicker must be used within a MarketDataProvider');
   }
   return context;
+};
+
+/** Full live view (re-renders every tick). Use only where the snapshot is read. */
+export const useMarketData = (): MarketDataContextValue => {
+  const ticker = useContext(TickerContext);
+  const marketData = useContext(SnapshotContext);
+  if (!ticker) {
+    throw new Error('useMarketData must be used within a MarketDataProvider');
+  }
+  return { activeTicker: ticker.activeTicker, marketData, changeTicker: ticker.changeTicker };
 };

@@ -14,7 +14,7 @@ import { useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronDown, Search, Menu, X, Settings, type LucideIcon } from 'lucide-react';
-import { useMarketData } from '../../context/MarketDataContext';
+import { useMarketData, useTicker } from '../../context/MarketDataContext';
 import AnimatedNumber from '../ui/AnimatedNumber';
 import TickerSearch from '../ui/TickerSearch';
 import { useLaunch } from './LaunchTransition';
@@ -40,7 +40,7 @@ const Wordmark = ({ onClick, size = 'sm' }: { onClick: (e: React.MouseEvent) => 
 );
 
 const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
-  const { activeTicker, marketData, changeTicker } = useMarketData();
+  const { activeTicker, changeTicker } = useTicker();
   const { launch } = useLaunch();
   const location = useLocation();
   const [clock, setClock] = useState(() => new Date().toLocaleTimeString('en-US', { hour12: false }));
@@ -55,7 +55,6 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
   // Close the mobile drawer whenever the route changes
   useEffect(() => setMobileOpen(false), [location.pathname]);
 
-  const changeUp = (marketData?.changePercent ?? 0) >= 0;
   const goHome = (e: React.MouseEvent) => {
     e.preventDefault();
     launch('/');
@@ -153,17 +152,7 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
             Visible on mobile too (price/change collapse to save room). */}
         <div className="flex items-center gap-2.5 font-mono text-xs">
           <TickerSearch value={activeTicker} onChange={changeTicker} />
-          {marketData && (
-            <span className="hidden sm:flex items-baseline gap-1.5">
-              <span className="text-textPrimary font-semibold tnum">
-                <AnimatedNumber value={marketData.spot} format={v => `$${v.toFixed(2)}`} />
-              </span>
-              <span className={`tnum text-label ${changeUp ? 'text-bull' : 'text-bear'}`}>
-                {changeUp ? '+' : ''}
-                {marketData.changePercent.toFixed(2)}%
-              </span>
-            </span>
-          )}
+          <LivePrice />
         </div>
         <span className="hidden xl:block font-mono text-xs text-textSecondary tnum select-none">{clock}</span>
       </div>
@@ -196,6 +185,25 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
         )}
       </AnimatePresence>
     </>
+  );
+};
+
+/** Live spot + day change. Isolated so the price tick re-renders only this
+    span, not the whole workflow nav / dropdown tree above it. */
+const LivePrice = () => {
+  const { marketData } = useMarketData();
+  if (!marketData) return null;
+  const changeUp = marketData.changePercent >= 0;
+  return (
+    <span className="hidden sm:flex items-baseline gap-1.5">
+      <span className="text-textPrimary font-semibold tnum">
+        <AnimatedNumber value={marketData.spot} format={v => `$${v.toFixed(2)}`} />
+      </span>
+      <span className={`tnum text-label ${changeUp ? 'text-bull' : 'text-bear'}`}>
+        {changeUp ? '+' : ''}
+        {marketData.changePercent.toFixed(2)}%
+      </span>
+    </span>
   );
 };
 

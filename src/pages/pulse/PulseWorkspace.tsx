@@ -166,6 +166,69 @@ const PanelTicker = ({ value, onChange }: { value: string; onChange: (t: string)
   );
 };
 
+/** Handlers the panel header needs from the workspace. Bundled so PanelChrome
+    can live at module scope (stable identity → no header remount per tick, so
+    the ticker editor keeps its state mid-type). */
+interface PanelChromeHandlers {
+  editLayout: boolean;
+  onTicker: (panelId: string, t: string) => void;
+  onDuplicate: (panelId: string) => void;
+  onMinimize: (panelId: string) => void;
+  onMaximize: (panelId: string | null) => void;
+  onClose: (panelId: string) => void;
+}
+
+/** Panel header — title, per-panel ticker, and edit/maximize affordances. */
+const PanelChrome = ({
+  panelId,
+  panelKey,
+  ticker,
+  maximizedView,
+  h,
+}: {
+  panelId: string;
+  panelKey: string;
+  ticker: string;
+  maximizedView?: boolean;
+  h: PanelChromeHandlers;
+}) => {
+  const def = pulsePanelByKey(panelKey);
+  const draggable = !maximizedView && h.editLayout;
+  return (
+    <div className={`${draggable ? 'widget-drag cursor-grab active:cursor-grabbing' : ''} flex items-center gap-2 px-3.5 h-10 border-b border-borderSubtle shrink-0 select-none`}>
+      {draggable && <GripHorizontal className="w-3.5 h-3.5 text-textMuted shrink-0" />}
+      <span className="font-mono text-label font-semibold uppercase tracking-widest text-textPrimary truncate">
+        {def?.title ?? panelKey}
+      </span>
+      <PanelTicker value={ticker} onChange={t => h.onTicker(panelId, t)} />
+      <div className="ml-auto flex items-center gap-1.5 shrink-0" onMouseDown={e => e.stopPropagation()}>
+        {draggable && (
+          <>
+            <button onClick={() => h.onDuplicate(panelId)} title="Duplicate" className="text-textMuted hover:text-textPrimary transition-colors">
+              <Copy className="w-3 h-3" />
+            </button>
+            <button onClick={() => h.onMinimize(panelId)} title="Minimize" className="text-textMuted hover:text-textPrimary transition-colors">
+              <Minus className="w-3.5 h-3.5" />
+            </button>
+          </>
+        )}
+        <button
+          onClick={() => h.onMaximize(maximizedView ? null : panelId)}
+          title={maximizedView ? 'Restore' : 'Maximize'}
+          className="text-textMuted hover:text-textPrimary transition-colors"
+        >
+          {maximizedView ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3 h-3" />}
+        </button>
+        {draggable && (
+          <button onClick={() => h.onClose(panelId)} title="Close" className="text-textMuted hover:text-bear transition-colors">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const PulseWorkspace = () => {
   const { activeTicker, marketData, changeTicker } = useMarketData();
   const location = useLocation();
@@ -246,8 +309,11 @@ const PulseWorkspace = () => {
   }, []);
 
   // ---- data cadence -------------------------------------------------------
-  const revRef = useRef(0);
-  const revision = useMemo(() => ++revRef.current, [marketData]);
+  // Monotonic nonce bumped whenever the snapshot re-publishes; drives the heat
+  // pulse. Kept in state + effect (not a ref mutated during render) so it stays
+  // pure under StrictMode/concurrent rendering.
+  const [revision, setRevision] = useState(0);
+  useEffect(() => setRevision(r => r + 1), [marketData]);
   const [scanSnapshot, setScanSnapshot] = useState<MarketSnapshot | null>(null);
   const scanRef = useRef<MarketSnapshot | null>(null);
   const lastScanTimeRef = useRef(0);
@@ -420,45 +486,16 @@ const PulseWorkspace = () => {
     );
   };
 
-  const PanelChrome = ({ panelId, panelKey, ticker, maximizedView }: { panelId: string; panelKey: string; ticker: string; maximizedView?: boolean }) => {
-    const def = pulsePanelByKey(panelKey);
-    const draggable = !maximizedView && editLayout;
-    // Locked dashboard: panels are finished cards — title, ticker, and just a
-    // maximize affordance. Editing controls (grip, duplicate, minimize, close)
-    // only appear in Customize mode.
-    return (
-      <div className={`${draggable ? 'widget-drag cursor-grab active:cursor-grabbing' : ''} flex items-center gap-2 px-3.5 h-10 border-b border-borderSubtle shrink-0 select-none`}>
-        {draggable && <GripHorizontal className="w-3.5 h-3.5 text-textMuted shrink-0" />}
-        <span className="font-mono text-label font-semibold uppercase tracking-widest text-textPrimary truncate">
-          {def?.title ?? panelKey}
-        </span>
-        <PanelTicker value={ticker} onChange={t => setPanelTicker(panelId, t)} />
-        <div className="ml-auto flex items-center gap-1.5 shrink-0" onMouseDown={e => e.stopPropagation()}>
-          {draggable && (
-            <>
-              <button onClick={() => duplicatePanel(panelId)} title="Duplicate" className="text-textMuted hover:text-textPrimary transition-colors">
-                <Copy className="w-3 h-3" />
-              </button>
-              <button onClick={() => toggleMin(panelId)} title="Minimize" className="text-textMuted hover:text-textPrimary transition-colors">
-                <Minus className="w-3.5 h-3.5" />
-              </button>
-            </>
-          )}
-          <button
-            onClick={() => setMaximizedId(maximizedView ? null : panelId)}
-            title={maximizedView ? 'Restore' : 'Maximize'}
-            className="text-textMuted hover:text-textPrimary transition-colors"
-          >
-            {maximizedView ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3 h-3" />}
-          </button>
-          {draggable && (
-            <button onClick={() => removePanel(panelId)} title="Close" className="text-textMuted hover:text-bear transition-colors">
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
-      </div>
-    );
+  // Locked dashboard: panels are finished cards — title, ticker, and a maximize
+  // affordance. Editing controls only appear in Customize mode. Handlers bundled
+  // for the module-scope PanelChrome.
+  const chromeHandlers: PanelChromeHandlers = {
+    editLayout,
+    onTicker: setPanelTicker,
+    onDuplicate: duplicatePanel,
+    onMinimize: toggleMin,
+    onMaximize: setMaximizedId,
+    onClose: removePanel,
   };
 
   const barBtn = 'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-borderSubtle bg-white/[0.02] hover:bg-white/[0.05] font-mono text-label uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors';
@@ -621,7 +658,7 @@ const PulseWorkspace = () => {
           className={`${fullscreen ? 'flex-1' : ''} min-h-0 inst-surface rounded-md overflow-hidden flex flex-col`}
           style={{ height: fullscreen ? 'auto' : '78vh' }}
         >
-          <PanelChrome panelId={maximized.id} panelKey={maximized.key} ticker={maximized.ticker ?? activeTicker} maximizedView />
+          <PanelChrome panelId={maximized.id} panelKey={maximized.key} ticker={maximized.ticker ?? activeTicker} maximizedView h={chromeHandlers} />
           <div className="flex-grow min-h-0 overflow-hidden">{renderPanelBody(maximized.key, maximized.ticker ?? activeTicker)}</div>
         </div>
       ) : active.panels.length === 0 ? (
@@ -650,7 +687,7 @@ const PulseWorkspace = () => {
                   className="inst-surface rounded-md overflow-hidden flex flex-col"
                   style={{ height: p.minimized ? undefined : h }}
                 >
-                  <PanelChrome panelId={p.id} panelKey={p.key} ticker={ticker} />
+                  <PanelChrome panelId={p.id} panelKey={p.key} ticker={ticker} h={chromeHandlers} />
                   {!p.minimized && (
                     <div className="flex-grow min-h-0 overflow-hidden">{renderPanelBody(p.key, ticker)}</div>
                   )}
@@ -688,7 +725,7 @@ const PulseWorkspace = () => {
                 const minimized = p.minimized;
                 return (
                   <div key={p.id} className="inst-surface rounded-md overflow-hidden flex flex-col">
-                    <PanelChrome panelId={p.id} panelKey={p.key} ticker={ticker} />
+                    <PanelChrome panelId={p.id} panelKey={p.key} ticker={ticker} h={chromeHandlers} />
                     {!minimized && <div className="flex-grow min-h-0 overflow-hidden">{renderPanelBody(p.key, ticker)}</div>}
                   </div>
                 );
