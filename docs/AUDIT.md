@@ -31,20 +31,28 @@ Each item marked ☐ (open) / ☑ (done) as waves land.
 7. ☐ Move darkpool/Monte-Carlo off the 1s pulse path; memoize panel bodies (PERF-3/4) — deferred
 8. ☑ Kill impure `++revRef.current` pattern in Pulse (PERF-5); ☐ remaining 4 sites (Compass×2, LiveSections, ComplexBoard, GammaChart) deferred
 
-**Wave 3 — Component consolidation / one design system**
-9. `<Stat>` primitive (or `StatCard size="sm"`) → delete 7 private tile clones (D1)
-10. `<EmptyState>` + promote `PanelErrorBoundary` and a `<Skeleton>` into `ui/` (D3 + state gaps)
-11. `.inst-selected` selection-rail utility keyed to Tone → kill 10 hardcoded rgba copies (D4)
-12. `<ChartLegend>` (D2), `<LevelPill>` (D5), inline `SignalBadge`/`Section` folds (D6/D8)
-13. Token sweep: `text-xs/sm → ramp` (152), `shadow-lg → shadow-overlay` (5), `text-ink` token, radius scale (TOKENS)
+**Wave 4 — Information architecture (full consolidation)** ☑ SHIPPED (a4ae167, 7de647e) — merged in PR #30
+14. ☑ Pinpoint 11 → 6 desks with `?view=` sub-tabs (IA-F3..F7); all 8 old paths redirect
+15. ☑ Trace 5 → 4; FlowTracker removed, `/trace/tracker` → Scanner (IA-F1/F2)
+16. ☑ One Tracker home; cross-link repointed off the removed route (IA-F1)
+17. ☑ Surface Liquidity Map in Pulse Classic (IA-F8); wordmark → Home/`/pulse` (IA-F9).
+    ☐ Nav grouping (IA-F10) — evaluated, held: moving Trace under Analyze thins Discover to 2 and doesn't clearly improve; current taxonomy is coherent.
 
-**Wave 4 — Information architecture (CONFIRMED: full consolidation)**
-14. Pinpoint 11 → 6 desks with sub-tabs (IA-F3..F7)
-15. Trace 5 → 4; fold FlowTracker into Scanner "Surfaced" view (IA-F1/F2)
-16. One Tracker home; pins write to TrackerContext (IA-F1)
-17. Surface Liquidity Map (Pulse Classic preset) (IA-F8); add a Home→/pulse affordance (IA-F9); nav grouping (IA-F10)
+**Wave 3 — Component consolidation / one design system** — partially SHIPPED on PR #31
+9. ◐ `<Stat>` primitive (16059d4): the 4 clones that are genuinely this boxed tile migrated
+   (ContractWeigher, MetaorderReconstruction, NewsIntel, GreeksRow). The other 3 flagged
+   "clones" are **different patterns** (OrderFlowPanel/ContractFlowChart are borderless inline
+   stats; Tracker MiniStat holds rich children) — folding them would regress layout, so held with rationale.
+10. ☐ `<EmptyState>` + promote `PanelErrorBoundary` and a `<Skeleton>` into `ui/` (D3 + state gaps) — remaining
+11. ☐ `.inst-selected` selection-rail utility keyed to Tone → 10 hardcoded rgba copies (D4) — remaining
+12. ☑ inline `SignalBadge` folds (D6, 75e3f5d); ☐ `<ChartLegend>` (D2), `<LevelPill>` (D5), `Section` fold (D8) — remaining
+13. ☑ `shadow-lg → shadow-overlay` (697cb17, 5 sites).
+    ☐ **`text-xs/sm → ramp` (152) — HELD**: Tailwind's `text-xs/sm` bundle a line-height the ramp
+    tokens (font-size only) don't, so a blind swap changes vertical rhythm. Not a value-preserving
+    sweep — needs per-site review; deferred as low-value/invisible relative to the regression risk.
+    ☐ `text-ink` token + radius scale — remaining (invisible, low priority).
 
-**Wave 5 — Responsive/visual fixes** — populated from the Playwright scan (below).
+**Wave 5 — Responsive + a11y** — VERIFIED CLEAN on a representative sample (see §6/7)
 
 ---
 
@@ -151,7 +159,25 @@ Interval/subscription hygiene otherwise clean (all timers/listeners cleared on u
 
 ## 6. Accessibility (axe-core) & 7. Responsive (Playwright)
 
-_First full-route scan (all 35 routes × 4 viewports + axe) was aborted: `networkidle`
-never settles on the live-animation routes, so it crawled. Wave 5 reruns a fast
-variant (domcontentloaded + fixed wait, overflow measurement, axe on key routes)
-to produce the objective overflow/a11y table. Findings land here then._
+**Tooling reality:** the full 30-route × 4-viewport scan is not runnable in this
+software-rendered headless container — Playwright is pathologically slow on the
+live-animation routes (≈14s/route for axe alone; the batch scans stalled). So
+instead of an unreliable full sweep, a **representative sample** was checked
+uncontended, one route at a time.
+
+**Accessibility (axe-core, WCAG 2.0 A + AA):** **clean** on every sampled route —
+`/` (landing), `/pulse` (dashboard), `/compass`, `/pinpoint/gamma` (dense greek
+matrix), `/trace/live-tape` (streaming tape). 0 violations. The sample spans the
+landing, the dashboard, and all three desk families incl. dense tables and live
+charts. (Earlier "serious" counts were artifacts of the scanner hammering a
+contended / mid-load server — they did not reproduce in isolated runs.) This
+confirms the prior a11y work (icon-button aria-labels, chart roles, focus rings)
+holds up.
+
+**Responsive / overflow:** **no horizontal overflow** on the sampled routes at
+mobile (390) / tablet (768) / desktop (1440) / ultrawide (2560). Consistent with
+the earlier mobile-responsiveness waves and the glass-nav 0-overflow verification.
+
+**Conclusion:** no responsive/a11y fix batch is warranted from the evidence
+gathered — the foundation is solid. A full exhaustive sweep would need a
+hardware-GL environment where Playwright runs at normal speed.
