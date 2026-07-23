@@ -19,17 +19,17 @@ Each item marked ☐ (open) / ☑ (done) as waves land.
 
 ## Priority queue (what gets done, in order)
 
-**Wave 1 — Correctness & hygiene (safe, no layout risk)**
-1. Verdict-lexicon unification → QUALIFIED / WATCH / FADED everywhere user-facing (COPY-1..7)
-2. Fracture `aria-label` "simulated" → "modeled" (COPY-8, banned word, screen-reader-audible)
-3. Delete dead `StatRibbon.tsx` + unused `widgetByKey` export; drop unused audit dev-deps before commit (DEAD-1..3)
-4. Loading/empty copy register unified ("Awaiting feed…") (COPY-9)
+**Wave 1 — Correctness & hygiene (safe, no layout risk)** ☑ SHIPPED (b331eb2)
+1. ☑ Verdict-lexicon unification → QUALIFIED / WATCH / FADED everywhere user-facing (COPY-1..7)
+2. ☑ Fracture `aria-label` "simulated" → "modeled" (COPY-8, banned word, screen-reader-audible)
+3. ☑ Delete dead `StatRibbon.tsx` + unused `widgetByKey` export; audit dev-deps reverted before commit (DEAD-1..3)
+4. ☐ Loading/empty copy register unified ("Awaiting feed…") (COPY-9) — deferred to Wave 3
 
-**Wave 2 — Performance (measurable, moderate risk, verify hard)**
-5. Split MarketDataContext into stable `{activeTicker,changeTicker}` + volatile `marketData` (PERF-1)
-6. Hoist `PanelChrome` out of PulseWorkspace render body (PERF-2)
-7. Move darkpool/Monte-Carlo off the 1s pulse path; memoize panel bodies (PERF-3/4)
-8. Kill impure `++revRef.current` render pattern → clears 5 lint warnings (PERF-5)
+**Wave 2 — Performance (measurable)** ☑ SHIPPED (79b1ba5)
+5. ☑ Split MarketDataContext into stable `useTicker()` + volatile `useMarketData()` (PERF-1); AppShell→useTicker
+6. ☑ Hoist `PanelChrome` out of PulseWorkspace render body (PERF-2); isolate `<LivePrice/>` in TopBar (PERF-6)
+7. ☐ Move darkpool/Monte-Carlo off the 1s pulse path; memoize panel bodies (PERF-3/4) — deferred
+8. ☑ Kill impure `++revRef.current` pattern in Pulse (PERF-5); ☐ remaining 4 sites (Compass×2, LiveSections, ComplexBoard, GammaChart) deferred
 
 **Wave 3 — Component consolidation / one design system**
 9. `<Stat>` primitive (or `StatCard size="sm"`) → delete 7 private tile clones (D1)
@@ -38,7 +38,7 @@ Each item marked ☐ (open) / ☑ (done) as waves land.
 12. `<ChartLegend>` (D2), `<LevelPill>` (D5), inline `SignalBadge`/`Section` folds (D6/D8)
 13. Token sweep: `text-xs/sm → ramp` (152), `shadow-lg → shadow-overlay` (5), `text-ink` token, radius scale (TOKENS)
 
-**Wave 4 — Information architecture (opinionated; confirm before shipping)**
+**Wave 4 — Information architecture (CONFIRMED: full consolidation)**
 14. Pinpoint 11 → 6 desks with sub-tabs (IA-F3..F7)
 15. Trace 5 → 4; fold FlowTracker into Scanner "Surfaced" view (IA-F1/F2)
 16. One Tracker home; pins write to TrackerContext (IA-F1)
@@ -151,4 +151,7 @@ Interval/subscription hygiene otherwise clean (all timers/listeners cleared on u
 
 ## 6. Accessibility (axe-core) & 7. Responsive (Playwright)
 
-_Populated from the full-route scan — see next section._
+_First full-route scan (all 35 routes × 4 viewports + axe) was aborted: `networkidle`
+never settles on the live-animation routes, so it crawled. Wave 5 reruns a fast
+variant (domcontentloaded + fixed wait, overflow measurement, axe on key routes)
+to produce the objective overflow/a11y table. Findings land here then._
