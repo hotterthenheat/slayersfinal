@@ -4,6 +4,7 @@ import Simulator from '../../core/simulator';
 import { buildGexView, pulseMatrix } from '../../data/gex';
 import { buildExposureProfile } from '../../data/exposure';
 import GexMatrix from '../../components/gex/GexMatrix';
+import TickerTag from '../../components/ui/TickerTag';
 import type { GexMatrixData } from '../../types/gex';
 
 /** Structure rebuilds on the slow scan; the glyphs pulse every tick. Same
@@ -79,7 +80,7 @@ const ComplexBoard = () => {
           >
             {/* Ticker header — symbol, spot, change and the pin-vs-trend regime */}
             <header className="flex items-center gap-2 px-3 h-11 border-b border-borderSubtle shrink-0">
-              <span className="font-mono text-label font-bold uppercase tracking-wider text-textPrimary">{col.sym}</span>
+              <TickerTag symbol={col.sym} className="font-mono text-label font-bold uppercase tracking-wider text-textPrimary" />
               <span className="font-mono text-caption tnum text-textSecondary">${col.spot.toFixed(2)}</span>
               <span className={`font-mono text-micro tnum ${col.changePercent >= 0 ? 'text-bull' : 'text-bear'}`}>
                 {col.changePercent >= 0 ? '+' : ''}
