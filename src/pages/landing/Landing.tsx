@@ -202,7 +202,7 @@ const LandingNav = () => {
                 )}
                 <span
                   className={`relative z-10 transition-colors ${
-                    isActive ? 'text-[#0a0a0a] font-semibold' : 'text-textSecondary hover:text-textPrimary'
+                    isActive ? 'text-ink font-semibold' : 'text-textSecondary hover:text-textPrimary'
                   }`}
                 >
                   {l.label}
@@ -213,7 +213,7 @@ const LandingNav = () => {
         </nav>
         <SmartLink
           to="/pulse"
-          className="ml-auto md:ml-0 shrink-0 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-md font-mono text-label font-semibold uppercase tracking-wider text-[#0a0a0a] holo-bg transition-transform active:scale-[0.98]"
+          className="ml-auto md:ml-0 shrink-0 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-md font-mono text-label font-semibold uppercase tracking-wider text-ink holo-bg transition-transform active:scale-[0.98]"
         >
           Launch terminal <ArrowRight className="w-3.5 h-3.5" />
         </SmartLink>
@@ -267,7 +267,7 @@ const Landing = () => (
         <div className="mt-9 flex items-center gap-4 flex-wrap justify-center">
           <SmartLink
             to="/pulse"
-            className="pointer-events-auto inline-flex items-center gap-2 px-5 py-2.5 rounded-md font-mono text-data font-semibold uppercase tracking-wider text-[#0a0a0a] holo-bg holo-glow transition-transform hover:scale-[1.03]"
+            className="pointer-events-auto inline-flex items-center gap-2 px-5 py-2.5 rounded-md font-mono text-data font-semibold uppercase tracking-wider text-ink holo-bg holo-glow transition-transform hover:scale-[1.03]"
           >
             Launch terminal <ArrowRight className="w-4 h-4" />
           </SmartLink>
@@ -384,7 +384,7 @@ const Landing = () => (
               {/* Badge lives inside the card — TiltBox clips overflow, so a
                   border-straddling chip would get cut in half. */}
               {tier.featured && (
-                <span className="self-start inline-flex px-2 py-0.5 rounded font-mono text-micro font-bold uppercase tracking-widest text-[#0a0a0a] holo-bg">
+                <span className="self-start inline-flex px-2 py-0.5 rounded font-mono text-micro font-bold uppercase tracking-widest text-ink holo-bg">
                   The whole desk
                 </span>
               )}
@@ -412,7 +412,7 @@ const Landing = () => (
                 to={tier.to}
                 className={`mt-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-md font-mono text-caption font-semibold uppercase tracking-wider transition-colors ${
                   tier.featured
-                    ? 'holo-bg text-[#0a0a0a]'
+                    ? 'holo-bg text-ink'
                     : 'border border-borderMuted text-textSecondary hover:text-textPrimary hover:bg-white/[0.03]'
                 }`}
               >
@@ -442,7 +442,7 @@ const Landing = () => (
       <div className="mt-8 flex items-center justify-center gap-4 flex-wrap">
         <SmartLink
           to="/pulse"
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md font-mono text-data font-semibold uppercase tracking-wider text-[#0a0a0a] holo-bg holo-glow transition-transform hover:scale-[1.03]"
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md font-mono text-data font-semibold uppercase tracking-wider text-ink holo-bg holo-glow transition-transform hover:scale-[1.03]"
         >
           Launch terminal <ArrowRight className="w-4 h-4" />
         </SmartLink>

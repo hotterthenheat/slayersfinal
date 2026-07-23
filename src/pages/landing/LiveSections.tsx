@@ -185,9 +185,9 @@ const DemoTape = ({ snapshot }: { snapshot: MarketSnapshot }) => {
             <span
               className={`inline-flex items-center rounded px-1.5 py-0.5 font-mono text-micro font-bold shrink-0 ${
                 p.side === 'ASK'
-                  ? 'bg-bull/90 text-[#0a0a0a]'
+                  ? 'bg-bull/90 text-ink'
                   : p.side === 'BID'
-                    ? 'bg-bear/80 text-[#0a0a0a]'
+                    ? 'bg-bear/80 text-ink'
                     : 'bg-white/10 text-textSecondary'
               }`}
             >
@@ -222,7 +222,7 @@ const DemoSetup = ({ setups }: { setups: SkyVisionData }) => {
           Top pick
         </span>
         <span
-          className={`ml-auto inline-flex items-center rounded px-2 py-0.5 font-mono text-micro font-bold uppercase tracking-wider text-[#0a0a0a] ${
+          className={`ml-auto inline-flex items-center rounded px-2 py-0.5 font-mono text-micro font-bold uppercase tracking-wider text-ink ${
             bull ? 'holo-bg' : ''
           }`}
           style={bull ? undefined : { background: 'rgba(255,59,48,0.85)' }}
@@ -318,8 +318,8 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
               className={`px-4 py-1.5 font-mono text-label font-bold uppercase tracking-wider transition-colors ${
                 mode === m
                   ? m === 'ENTER'
-                    ? 'text-[#0a0a0a] holo-bg'
-                    : 'text-[#0a0a0a]'
+                    ? 'text-ink holo-bg'
+                    : 'text-ink'
                   : 'text-textSecondary hover:text-textPrimary'
               }`}
               style={

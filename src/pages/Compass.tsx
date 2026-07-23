@@ -382,7 +382,7 @@ const Compass = () => {
               onClick={() => handleScanner(s.key)}
               className={`relative inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md font-mono text-label uppercase tracking-wider transition-colors ${
                 isActive
-                  ? 'text-[#0a0a0a] font-semibold'
+                  ? 'text-ink font-semibold'
                   : 'text-textMuted font-medium hover:text-textSecondary hover:bg-white/[0.03]'
               }`}
             >
@@ -394,7 +394,7 @@ const Compass = () => {
                 />
               )}
               <span className="relative z-10">{s.label}</span>
-              <span className={`relative z-10 font-mono text-micro tnum ${isActive ? 'text-[#0a0a0a]/70' : 'text-textMuted/60'}`}>
+              <span className={`relative z-10 font-mono text-micro tnum ${isActive ? 'text-ink/70' : 'text-textMuted/60'}`}>
                 {count}
               </span>
             </button>

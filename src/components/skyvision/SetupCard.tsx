@@ -116,7 +116,7 @@ const SetupCard = ({ setup, expanded, isSelected, isTop, onToggle, onSelect, onO
 
           <button
             onClick={onOpenAnalysis}
-            className="w-full rounded-md border border-borderSubtle bg-[#0a0a0a] hover:border-borderMuted hover:bg-[#141414] py-2 text-xs font-semibold text-textPrimary transition-colors"
+            className="w-full rounded-md border border-borderSubtle bg-panel hover:border-borderMuted hover:bg-[#141414] py-2 text-xs font-semibold text-textPrimary transition-colors"
           >
             Open Full Analysis →
           </button>
