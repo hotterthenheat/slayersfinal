@@ -185,6 +185,16 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
+/* Selection rail — the left-edge accent on a selected / active / spotlit row.
+   One shape (a 2px inset bar), five tones, instead of the same inset box-shadow
+   re-spelled as raw rgba in a dozen places. Pair with a faint bg tint (e.g.
+   bg-select/[0.06]) at the call site. */
+.rail-select { box-shadow: inset 2px 0 0 0 rgba(228, 232, 244, 0.7); }
+.rail-silver { box-shadow: inset 2px 0 0 0 rgba(199, 211, 232, 0.7); }
+.rail-neutral { box-shadow: inset 2px 0 0 0 rgba(237, 237, 237, 0.6); }
+.rail-king { box-shadow: inset 2px 0 0 0 rgba(234, 0, 255, 0.75); }
+.rail-warn { box-shadow: inset 2px 0 0 0 rgba(255, 149, 0, 0.5); }
+
 /* Eyebrow tick — the 3px vertical mark that leads a label. Shape only;
    the component supplies the fill (tone color, holo-bar, or dim). */
 .inst-eyebrow {

@@ -23,7 +23,7 @@ const SetupCard = ({ setup, expanded, isSelected, isTop, onToggle, onSelect, onO
   return (
     <div className={`border rounded-md overflow-hidden transition-colors ${
       isSelected
-        ? 'border-select/40 bg-select/[0.03] shadow-[inset_3px_0_0_0_rgba(199,211,232,0.5)]'
+        ? 'border-select/40 bg-select/[0.03] rail-silver'
         : 'border-borderSubtle bg-panel'
     }`}>
       {/* Collapsed header row */}

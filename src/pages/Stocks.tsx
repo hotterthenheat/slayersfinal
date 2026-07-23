@@ -414,7 +414,7 @@ const Stocks = () => {
                 aria-pressed={scoped}
                 title={scoped ? 'Clear sector scope' : `Scope board to ${s.sector}`}
                 className={`cursor-pointer text-left bg-panel px-3.5 py-3 flex flex-col gap-2 transition-colors hover:bg-panelHover focus:outline-none focus-visible:ring-1 focus-visible:ring-select/40 ${
-                  scoped ? 'shadow-[inset_2px_0_0_0_rgba(199,211,232,0.7)] bg-select/[0.05]' : ''
+                  scoped ? 'rail-silver bg-select/[0.05]' : ''
                 }`}
               >
                 <div className="flex items-center justify-between gap-2">

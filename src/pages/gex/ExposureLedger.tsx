@@ -174,7 +174,7 @@ const ExposureLedger = ({
                     onSelectStrike ? 'cursor-pointer' : ''
                   } ${
                     selectedStrike === row.strike
-                      ? 'bg-select/[0.05] shadow-[inset_2px_0_0_0_rgba(199,211,232,0.7)]'
+                      ? 'bg-select/[0.05] rail-silver'
                       : hoverStrike === row.strike
                         ? 'bg-white/[0.04]'
                         : ''

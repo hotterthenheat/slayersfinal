@@ -136,7 +136,7 @@ const DataTable = <T,>({
                       : ''
                   } ${
                     selected
-                      ? 'bg-select/[0.06] shadow-[inset_2px_0_0_0_rgba(228,232,244,0.7)]'
+                      ? 'bg-select/[0.06] rail-select'
                       : 'hover:bg-white/[0.02]'
                   }`}
                 >

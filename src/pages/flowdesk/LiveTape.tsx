@@ -58,9 +58,9 @@ const PREM_OPTIONS = [
 /** Whale prints get an edge accent (row-level structure, not rainbow text). */
 const rowAccent = (premium: number): string =>
   premium >= 1_000_000
-    ? 'shadow-[inset_2px_0_0_0_rgba(234,0,255,0.75)]'
+    ? 'rail-king'
     : premium >= 250_000
-      ? 'shadow-[inset_2px_0_0_0_rgba(255,149,0,0.5)]'
+      ? 'rail-warn'
       : '';
 
 /** The terminal's read of the tape — same voice as market notes. */

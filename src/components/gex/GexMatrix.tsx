@@ -84,7 +84,7 @@ const GexMatrix = ({ data, highlightCol = null }: GexMatrixProps) => {
                 <tr
                   key={strike}
                   className={`border-b border-borderSubtle/40 last:border-0 ${
-                    isSpot ? 'shadow-[inset_2px_0_0_0_rgba(237,237,237,0.6)]' : ''
+                    isSpot ? 'rail-neutral' : ''
                   }`}
                 >
                   <td className="px-2 py-1 font-mono text-label whitespace-nowrap">

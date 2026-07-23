@@ -281,7 +281,7 @@ const News = () => {
                 <div
                   key={unit.key}
                   className={`border-b border-borderSubtle last:border-b-0 transition-colors ${isMuted ? 'opacity-45' : ''} ${
-                    isSel ? 'bg-select/[0.05] shadow-[inset_2px_0_0_0_rgba(228,232,244,0.7)]' : isWatched ? 'bg-select/[0.02]' : ''
+                    isSel ? 'bg-select/[0.05] rail-select' : isWatched ? 'bg-select/[0.02]' : ''
                   }`}
                 >
                   <div className="flex items-stretch">
