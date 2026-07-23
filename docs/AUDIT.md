@@ -38,19 +38,28 @@ Each item marked ☐ (open) / ☑ (done) as waves land.
 17. ☑ Surface Liquidity Map in Pulse Classic (IA-F8); wordmark → Home/`/pulse` (IA-F9).
     ☐ Nav grouping (IA-F10) — evaluated, held: moving Trace under Analyze thins Discover to 2 and doesn't clearly improve; current taxonomy is coherent.
 
-**Wave 3 — Component consolidation / one design system** — partially SHIPPED on PR #31
-9. ◐ `<Stat>` primitive (16059d4): the 4 clones that are genuinely this boxed tile migrated
-   (ContractWeigher, MetaorderReconstruction, NewsIntel, GreeksRow). The other 3 flagged
-   "clones" are **different patterns** (OrderFlowPanel/ContractFlowChart are borderless inline
-   stats; Tracker MiniStat holds rich children) — folding them would regress layout, so held with rationale.
-10. ☐ `<EmptyState>` + promote `PanelErrorBoundary` and a `<Skeleton>` into `ui/` (D3 + state gaps) — remaining
-11. ☐ `.inst-selected` selection-rail utility keyed to Tone → 10 hardcoded rgba copies (D4) — remaining
-12. ☑ inline `SignalBadge` folds (D6, 75e3f5d); ☐ `<ChartLegend>` (D2), `<LevelPill>` (D5), `Section` fold (D8) — remaining
-13. ☑ `shadow-lg → shadow-overlay` (697cb17, 5 sites).
+**Wave 3 — Component consolidation / one design system** ☑ SHIPPED on PR #31 (genuine scope complete)
+Note: on inspection the audit over-counted several "duplications" — like the 7 "clones"
+that were really 4. The genuine consolidations are done; items that turned out NOT to be
+real duplication, or that carried regression risk, are held with rationale below.
+9. ☑ `<Stat>` primitive (16059d4): migrated the **4** clones that are genuinely this boxed tile
+   (ContractWeigher, MetaorderReconstruction, NewsIntel, GreeksRow). The other 3 flagged "clones"
+   are **different patterns** (OrderFlowPanel/ContractFlowChart borderless inline; Tracker MiniStat
+   holds a score-bar child) — folding regresses layout; held.
+10. ☑ `<EmptyState>` primitive (e54c17a) — adopted on short-label empties (LottoBoard, LiveTape,
+   DataUnavailablePanel). Sentence-length empties stay plain (uppercase label doesn't fit a sentence).
+   `<Skeleton>`/`PanelErrorBoundary`→ui held: data is synchronous (no loading states to speak of),
+   and per-desk error-boundary wiring is architectural, not a dedup.
+11. ☑ `.rail-{select,silver,neutral,king,warn}` selection-rail utilities (a3cd26b) — 11 static
+   sites migrated. Dynamic (RankedTargets CLASS_EDGE) + full-border (ContractChain) kept inline.
+12. ☑ inline `SignalBadge` folds (D6, 75e3f5d); ☑ `<ChartLegend>` (D2, 0dcb8c7) — Fracture + RegimePanel,
+   available for the rest. `<LevelPill>` (D5) held: 3 tone-varied pills embedded in marker components,
+   marginal. `Section` (D8) held: the two defs are **different components** (page `<section>`+`<h2>` vs
+   drawer 3-col stat grid), not a real duplicate.
+13. ☑ `shadow-lg → shadow-overlay` (697cb17, 5 sites); ☑ `text-ink` token + 17 swaps (2ec43f5).
     ☐ **`text-xs/sm → ramp` (152) — HELD**: Tailwind's `text-xs/sm` bundle a line-height the ramp
-    tokens (font-size only) don't, so a blind swap changes vertical rhythm. Not a value-preserving
-    sweep — needs per-site review; deferred as low-value/invisible relative to the regression risk.
-    ☐ `text-ink` token + radius scale — remaining (invisible, low priority).
+    tokens (font-size only) don't, so a blind swap changes vertical rhythm. Not value-preserving —
+    needs per-site review; deferred as invisible relative to the regression risk. Radius scale — likewise low-value.
 
 **Wave 5 — Responsive + a11y** — VERIFIED CLEAN on a representative sample (see §6/7)
 
