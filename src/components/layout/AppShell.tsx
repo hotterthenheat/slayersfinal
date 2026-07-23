@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import TopBar from './TopBar';
-import Footer from './Footer';
 import OnboardingOverlay from './OnboardingOverlay';
 import CommandPalette from './CommandPalette';
 import SettingsPanel from './SettingsPanel';
@@ -89,7 +88,6 @@ const AppShell = () => {
           </motion.div>
         </AnimatePresence>
       </main>
-      <Footer />
       <CommandPalette
         open={paletteOpen}
         onClose={closePalette}

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { X, Trash2, Database, ShieldCheck } from 'lucide-react';
 import { useToast } from '../ui/Toast';
@@ -152,6 +153,32 @@ const SettingsPanel = ({ open, onClose }: SettingsPanelProps) => {
                     Cancel
                   </button>
                 )}
+              </div>
+
+              {/* Legal — the not-financial-advice line and legal pages live here,
+                  reachable from every desk, instead of stapled to a footer bar. */}
+              <div className="flex flex-col gap-2.5 border-t border-borderSubtle pt-4">
+                <p className="font-mono text-micro uppercase tracking-wider text-textMuted leading-relaxed">
+                  Not investment advice · research &amp; education only
+                </p>
+                <nav className="flex flex-wrap items-center gap-x-4 gap-y-1.5" aria-label="Legal">
+                  {[
+                    { to: '/guide', label: 'Guide' },
+                    { to: '/legal/disclaimer', label: 'Disclaimer' },
+                    { to: '/legal/terms', label: 'Terms' },
+                    { to: '/legal/privacy', label: 'Privacy' },
+                  ].map(l => (
+                    <Link
+                      key={l.to}
+                      to={l.to}
+                      onClick={onClose}
+                      className="font-mono text-micro uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
+                    >
+                      {l.label}
+                    </Link>
+                  ))}
+                  <span className="font-mono text-micro uppercase tracking-wider text-textMuted">© 2026 Slayer Terminal</span>
+                </nav>
               </div>
             </div>
           </motion.aside>
