@@ -61,12 +61,12 @@ const Concepts = () => (
   <div className="flex flex-col gap-6">
     {GROUPS.map(g => (
       <div key={g.title} className="flex flex-col gap-3">
-        <h2 className="font-mono text-[11px] font-semibold uppercase tracking-widest text-textMuted">{g.title}</h2>
+        <h2 className="font-mono text-label font-semibold uppercase tracking-widest text-textMuted">{g.title}</h2>
         <div className="rounded-lg border border-borderSubtle bg-panel divide-y divide-borderSubtle">
           {g.terms.map(t => (
             <div key={t.term} className="px-4 py-3 grid grid-cols-1 sm:grid-cols-[210px_1fr] gap-1 sm:gap-4">
-              <span className="font-mono text-[12px] font-semibold uppercase tracking-wide text-textPrimary">{t.term}</span>
-              <span className="text-[13px] text-textSecondary leading-relaxed">{t.def}</span>
+              <span className="font-mono text-caption font-semibold uppercase tracking-wide text-textPrimary">{t.term}</span>
+              <span className="text-data text-textSecondary leading-relaxed">{t.def}</span>
             </div>
           ))}
         </div>

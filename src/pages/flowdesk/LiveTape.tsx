@@ -96,14 +96,14 @@ const SpreadCell = ({ print }: { print: FlowPrint }) => {
   const dot = print.side === 'ASK' ? 'bg-bull' : print.side === 'BID' ? 'bg-bear' : 'bg-white/50';
   return (
     <span className="inline-flex items-center gap-1.5">
-      <span className="font-mono text-[10px] tnum text-textMuted">{print.bid.toFixed(2)}</span>
+      <span className="font-mono text-micro tnum text-textMuted">{print.bid.toFixed(2)}</span>
       <span className="relative w-12 h-[3px] rounded-full bg-white/[0.07]">
         <span
           className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-[6px] h-[6px] rounded-full ${dot}`}
           style={{ left: `${print.fillPos * 100}%` }}
         />
       </span>
-      <span className="font-mono text-[10px] tnum text-textMuted">{print.ask.toFixed(2)}</span>
+      <span className="font-mono text-micro tnum text-textMuted">{print.ask.toFixed(2)}</span>
     </span>
   );
 };
@@ -119,7 +119,7 @@ const FlowCell = ({ print }: { print: FlowPrint }) => {
     <span className="inline-flex flex-col items-start gap-[3px] w-16">
       <span className="inline-flex items-center gap-1.5">
         <span
-          className={`inline-flex w-9 justify-center rounded border px-1 py-px font-mono text-[10px] font-semibold ${
+          className={`inline-flex w-9 justify-center rounded border px-1 py-px font-mono text-micro font-semibold ${
             print.side === 'ASK'
               ? 'border-bull/30 bg-bull/[0.07] text-bull'
               : print.side === 'BID'
@@ -129,7 +129,7 @@ const FlowCell = ({ print }: { print: FlowPrint }) => {
         >
           {sideLabel}
         </span>
-        <span className={`w-7 text-right font-mono text-[11px] tnum font-semibold ${tone}`}>
+        <span className={`w-7 text-right font-mono text-label tnum font-semibold ${tone}`}>
           {score > 0 ? '+' : ''}
           {score}
         </span>
@@ -149,7 +149,7 @@ const RatioCell = ({ print }: { print: FlowPrint }) => {
   const tone = print.ratioLabel === 'MID' ? 'text-textMuted' : print.ratioBidPct >= 50 ? 'text-bear' : 'text-bull';
   return (
     <span className="inline-flex flex-col items-end gap-[3px] w-16">
-      <span className={`font-mono text-[10px] font-semibold uppercase tracking-wide tnum leading-[14px] ${tone}`}>
+      <span className={`font-mono text-micro font-semibold uppercase tracking-wide tnum leading-[14px] ${tone}`}>
         {print.ratioLabel}
       </span>
       <span className="flex w-16 h-[3px] rounded-full overflow-hidden bg-white/[0.06]">
@@ -192,14 +192,14 @@ const ALL_COLS: TapeCol[] = [
     cell: r => (
       <>
         <span
-          className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[11px] font-semibold ${
+          className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-label font-semibold ${
             r.right === 'C' ? 'border-bull/30 bg-bull/10 text-bull' : 'border-bear/30 bg-bear/10 text-bear'
           }`}
         >
           {r.ticker} {r.strike}
           {r.right}
         </span>
-        {r.legs > 1 && <span className="ml-1.5 font-mono text-[10px] text-select">×{r.legs}</span>}
+        {r.legs > 1 && <span className="ml-1.5 font-mono text-micro text-select">×{r.legs}</span>}
       </>
     ),
   },
@@ -208,7 +208,7 @@ const ALL_COLS: TapeCol[] = [
     group: 'Contract',
     label: 'Exp · DTE',
     align: 'right',
-    cls: 'text-[11px] tnum text-textSecondary',
+    cls: 'text-label tnum text-textSecondary',
     cell: r => (
       <>
         {r.expiry.slice(0, 5)} · <span className={r.dte === 0 ? 'text-warn font-semibold' : ''}>{r.dte}d</span>
@@ -220,7 +220,7 @@ const ALL_COLS: TapeCol[] = [
     group: 'Contract',
     label: 'OTM',
     align: 'right',
-    cls: 'text-[11px] tnum',
+    cls: 'text-label tnum',
     dyn: r => (r.otmPct >= 0 ? 'text-bull' : 'text-bear'),
     cell: r => `${r.otmPct >= 0 ? '+' : ''}${r.otmPct.toFixed(1)}%`,
   },
@@ -229,7 +229,7 @@ const ALL_COLS: TapeCol[] = [
     group: 'Contract',
     label: 'Spot',
     align: 'right',
-    cls: 'text-[11px] tnum text-textSecondary',
+    cls: 'text-label tnum text-textSecondary',
     cell: r => `$${r.spot.toFixed(2)}`,
   },
   // Execution
@@ -238,7 +238,7 @@ const ALL_COLS: TapeCol[] = [
     group: 'Execution',
     label: 'Fill',
     align: 'right',
-    cls: 'text-[11px] tnum font-semibold text-textPrimary',
+    cls: 'text-label tnum font-semibold text-textPrimary',
     cell: r => `$${r.fill.toFixed(2)}`,
   },
   { id: 'spread', group: 'Execution', label: 'Spread', cls: '', cell: r => <SpreadCell print={r} /> },
@@ -247,7 +247,7 @@ const ALL_COLS: TapeCol[] = [
     group: 'Execution',
     label: 'Size',
     align: 'right',
-    cls: 'text-[11px] tnum text-textPrimary',
+    cls: 'text-label tnum text-textPrimary',
     cell: r => r.size.toLocaleString(),
   },
   {
@@ -255,7 +255,7 @@ const ALL_COLS: TapeCol[] = [
     group: 'Execution',
     label: 'Prem',
     align: 'right',
-    cls: 'text-[11px] tnum',
+    cls: 'text-label tnum',
     dyn: r => (r.premium >= 250_000 ? 'font-bold text-textPrimary' : 'text-textSecondary'),
     cell: r => fmtUsd(r.premium),
   },
@@ -267,7 +267,7 @@ const ALL_COLS: TapeCol[] = [
     group: 'Conviction',
     label: 'Sentiment',
     align: 'right',
-    cls: 'text-[11px] font-semibold',
+    cls: 'text-label font-semibold',
     dyn: r => SENT_TEXT[sentimentOf(r)],
     cell: r => sentimentOf(r),
   },
@@ -277,7 +277,7 @@ const ALL_COLS: TapeCol[] = [
     group: 'Activity',
     label: 'Vol',
     align: 'right',
-    cls: 'text-[11px] tnum text-textSecondary',
+    cls: 'text-label tnum text-textSecondary',
     cell: r => r.volume.toLocaleString(),
   },
   {
@@ -285,7 +285,7 @@ const ALL_COLS: TapeCol[] = [
     group: 'Activity',
     label: 'OI',
     align: 'right',
-    cls: 'text-[11px] tnum text-textSecondary',
+    cls: 'text-label tnum text-textSecondary',
     cell: r => r.oi.toLocaleString(),
   },
   {
@@ -293,7 +293,7 @@ const ALL_COLS: TapeCol[] = [
     group: 'Activity',
     label: 'ΔOI',
     align: 'right',
-    cls: 'text-[11px] tnum',
+    cls: 'text-label tnum',
     cell: r =>
       r.deltaOI === 0 ? (
         <span className="text-textMuted">—</span>
@@ -309,7 +309,7 @@ const ALL_COLS: TapeCol[] = [
     group: 'Activity',
     label: 'V/OI',
     align: 'right',
-    cls: 'text-[11px] tnum',
+    cls: 'text-label tnum',
     dyn: r => (r.volOverOI >= 5 ? 'text-warn font-semibold' : 'text-textSecondary'),
     cell: r => `${r.volOverOI.toFixed(2)}x`,
   },
@@ -318,14 +318,14 @@ const ALL_COLS: TapeCol[] = [
     group: 'Activity',
     label: 'IV',
     align: 'right',
-    cls: 'text-[11px] tnum text-textSecondary',
+    cls: 'text-label tnum text-textSecondary',
     cell: r => `${r.iv.toFixed(1)}%`,
   },
   {
     id: 'tag',
     group: 'Activity',
     label: 'Tag',
-    cls: 'text-[10px] text-textMuted',
+    cls: 'text-micro text-textMuted',
     cell: r => (r.sweep ? <span className="text-warn font-semibold">SWEEP</span> : r.strat),
   },
 ];
@@ -371,19 +371,19 @@ const ColumnChooser = ({
       <button
         onClick={() => setOpen(o => !o)}
         aria-expanded={open}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-borderSubtle hover:border-borderMuted bg-panel font-mono text-[11px] font-semibold uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-borderSubtle hover:border-borderMuted bg-panel font-mono text-label font-semibold uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
       >
         <SlidersHorizontal className="w-3.5 h-3.5" /> Columns
-        {hiddenCount > 0 && <span className="font-mono text-[11px] text-select tnum">−{hiddenCount}</span>}
+        {hiddenCount > 0 && <span className="font-mono text-label text-select tnum">−{hiddenCount}</span>}
       </button>
 
       {open && (
         <div className="absolute right-0 top-full mt-1.5 z-40 w-64 border border-borderMuted bg-panel rounded-lg shadow-overlay overflow-hidden animate-slide-in">
           <div className="flex items-center justify-between px-3 py-2 border-b border-borderSubtle">
-            <span className="font-mono text-[11px] uppercase tracking-widest text-textSecondary">Columns</span>
+            <span className="font-mono text-label uppercase tracking-widest text-textSecondary">Columns</span>
             <button
               onClick={onReset}
-              className="font-mono text-[11px] uppercase tracking-wider text-textMuted hover:text-textPrimary transition-colors"
+              className="font-mono text-label uppercase tracking-wider text-textMuted hover:text-textPrimary transition-colors"
             >
               Show all
             </button>
@@ -391,7 +391,7 @@ const ColumnChooser = ({
           <div className="max-h-80 overflow-y-auto py-1">
             {GROUP_ORDER.map(g => (
               <div key={g}>
-                <div className="px-3 pt-2 pb-1 font-mono text-[11px] uppercase tracking-widest text-textMuted">{g}</div>
+                <div className="px-3 pt-2 pb-1 font-mono text-label uppercase tracking-widest text-textMuted">{g}</div>
                 {ALL_COLS.filter(c => c.group === g).map(c => {
                   const on = visible.has(c.id);
                   return (
@@ -407,7 +407,7 @@ const ColumnChooser = ({
                       >
                         <Check className="w-3 h-3" />
                       </span>
-                      <span className={`font-mono text-[12px] ${on ? 'text-textPrimary' : 'text-textMuted'}`}>{c.label}</span>
+                      <span className={`font-mono text-caption ${on ? 'text-textPrimary' : 'text-textMuted'}`}>{c.label}</span>
                     </button>
                   );
                 })}
@@ -451,20 +451,20 @@ const SavedViews = ({
       <button
         onClick={() => setOpen(o => !o)}
         aria-expanded={open}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-borderSubtle hover:border-borderMuted bg-panel font-mono text-[11px] font-semibold uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-borderSubtle hover:border-borderMuted bg-panel font-mono text-label font-semibold uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
       >
         <Save className="w-3.5 h-3.5" /> Views
-        {views.length > 0 && <span className="font-mono text-[11px] text-select tnum">{views.length}</span>}
+        {views.length > 0 && <span className="font-mono text-label text-select tnum">{views.length}</span>}
       </button>
 
       {open && (
         <div className="absolute right-0 top-full mt-1.5 z-40 w-64 border border-borderMuted bg-panel rounded-lg shadow-overlay overflow-hidden animate-slide-in">
           <div className="px-3 py-2 border-b border-borderSubtle">
-            <span className="font-mono text-[11px] uppercase tracking-widest text-textSecondary">Saved filter views</span>
+            <span className="font-mono text-label uppercase tracking-widest text-textSecondary">Saved filter views</span>
           </div>
           <div className="max-h-56 overflow-y-auto py-1">
             {views.length === 0 ? (
-              <div className="px-3 py-4 text-center font-mono text-[11px] text-textMuted">No saved views yet</div>
+              <div className="px-3 py-4 text-center font-mono text-label text-textMuted">No saved views yet</div>
             ) : (
               views.map(v => (
                 <div
@@ -476,7 +476,7 @@ const SavedViews = ({
                       onApply(v);
                       setOpen(false);
                     }}
-                    className={`flex-1 min-w-0 text-left font-mono text-[12px] truncate transition-colors ${
+                    className={`flex-1 min-w-0 text-left font-mono text-caption truncate transition-colors ${
                       activeName === v.name ? 'text-select' : 'text-textPrimary hover:text-select'
                     }`}
                   >
@@ -501,11 +501,11 @@ const SavedViews = ({
                 if (e.key === 'Enter') commit();
               }}
               placeholder="Name this view…"
-              className="flex-1 min-w-0 bg-inset border border-borderSubtle rounded px-2 py-1 font-mono text-[12px] text-textPrimary placeholder:text-textMuted focus:outline-none focus:border-borderMuted"
+              className="flex-1 min-w-0 bg-inset border border-borderSubtle rounded px-2 py-1 font-mono text-caption text-textPrimary placeholder:text-textMuted focus:outline-none focus:border-borderMuted"
             />
             <button
               onClick={commit}
-              className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded border border-borderSubtle hover:border-borderMuted font-mono text-[11px] text-textSecondary hover:text-textPrimary transition-colors"
+              className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded border border-borderSubtle hover:border-borderMuted font-mono text-label text-textSecondary hover:text-textPrimary transition-colors"
             >
               <Plus className="w-3 h-3" /> Save
             </button>
@@ -790,7 +790,7 @@ const LiveTape = () => {
       <div className="flex items-center gap-3 flex-wrap">
         <button
           onClick={togglePause}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border font-mono text-[11px] font-semibold uppercase tracking-wider transition-colors ${
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border font-mono text-label font-semibold uppercase tracking-wider transition-colors ${
             paused
               ? 'border-warn/40 bg-warn/[0.06] text-warn hover:bg-warn/[0.1]'
               : 'border-bull/40 bg-bull/[0.06] text-bull hover:bg-bull/[0.1]'
@@ -808,7 +808,7 @@ const LiveTape = () => {
         </button>
 
         {paused && (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-warn/40 bg-warn/[0.06] font-mono text-[11px] font-semibold uppercase tracking-wider text-warn">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-warn/40 bg-warn/[0.06] font-mono text-label font-semibold uppercase tracking-wider text-warn">
             <span className="w-1.5 h-1.5 rounded-full bg-warn custom-pulse" />
             Paused · {pending} new print{pending === 1 ? '' : 's'} buffered — resume to catch up
           </span>
@@ -822,7 +822,7 @@ const LiveTape = () => {
             onChange={e => setSearch(e.target.value)}
             placeholder="Ticker / contract…"
             aria-label="Search ticker or contract"
-            className="w-44 bg-panel border border-borderSubtle hover:border-borderMuted focus:border-borderMuted rounded-md pl-8 pr-7 py-1.5 font-mono text-[11px] text-textPrimary placeholder:text-textMuted focus:outline-none transition-colors"
+            className="w-44 bg-panel border border-borderSubtle hover:border-borderMuted focus:border-borderMuted rounded-md pl-8 pr-7 py-1.5 font-mono text-label text-textPrimary placeholder:text-textMuted focus:outline-none transition-colors"
           />
           {search && (
             <button
@@ -848,7 +848,7 @@ const LiveTape = () => {
         />
         <ColumnChooser visible={visibleCols} onToggle={toggleCol} onReset={resetCols} />
 
-        <span className="ml-auto font-mono text-[11px] text-textMuted uppercase tracking-wider tnum">
+        <span className="ml-auto font-mono text-label text-textMuted uppercase tracking-wider tnum">
           {view.length} of {base.length} prints · {marked.size} marked
         </span>
       </div>
@@ -856,10 +856,10 @@ const LiveTape = () => {
       {/* The terminal's read of the tape — fixed height so a changing sentence
           length never reflows the tape below it (no layout shift under live data). */}
       <div className={`flex items-center gap-2.5 border-l-2 pl-3 min-h-[34px] ${summary.bullish ? 'border-bull/70' : 'border-bear/70'}`}>
-        <span className="font-mono text-[11px] font-semibold uppercase tracking-widest text-textMuted shrink-0">
+        <span className="font-mono text-label font-semibold uppercase tracking-widest text-textMuted shrink-0">
           Tape read
         </span>
-        <p className="text-[11px] text-textSecondary leading-snug tnum self-center line-clamp-2">{read}</p>
+        <p className="text-label text-textSecondary leading-snug tnum self-center line-clamp-2">{read}</p>
       </div>
 
       {/* Tape + concentration */}
@@ -871,7 +871,7 @@ const LiveTape = () => {
             <table className="w-full border-collapse min-w-[640px]">
               <thead className="sticky top-0 z-10">
                 <tr className="bg-panelRaised">
-                  <th rowSpan={2} className="px-2 py-1.5 text-left font-mono text-[11px] font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle w-24">
+                  <th rowSpan={2} className="px-2 py-1.5 text-left font-mono text-label font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle w-24">
                     Time
                   </th>
                   {GROUP_ORDER.map(g => {
@@ -881,7 +881,7 @@ const LiveTape = () => {
                       <th
                         key={g}
                         colSpan={gc.length}
-                        className="px-2 py-1.5 text-center font-mono text-[11px] font-bold uppercase tracking-widest text-textPrimary border-b border-l border-borderSubtle"
+                        className="px-2 py-1.5 text-center font-mono text-label font-bold uppercase tracking-widest text-textPrimary border-b border-l border-borderSubtle"
                       >
                         {g}
                       </th>
@@ -894,7 +894,7 @@ const LiveTape = () => {
                     return (
                       <th
                         key={c.id}
-                        className={`px-2 py-1 font-mono text-[11px] font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle whitespace-nowrap ${
+                        className={`px-2 py-1 font-mono text-label font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle whitespace-nowrap ${
                           groupStart ? 'border-l' : ''
                         } ${c.align === 'right' ? 'text-right' : 'text-left'}`}
                       >
@@ -907,7 +907,7 @@ const LiveTape = () => {
               <tbody>
                 {total === 0 && (
                   <tr>
-                    <td colSpan={colCount} className="py-10 text-center font-mono text-[11px] text-textMuted uppercase tracking-widest">
+                    <td colSpan={colCount} className="py-10 text-center font-mono text-label text-textMuted uppercase tracking-widest">
                       {base.length === 0 ? 'Awaiting first prints…' : 'No prints match the filters'}
                     </td>
                   </tr>
@@ -939,7 +939,7 @@ const LiveTape = () => {
                         >
                           <Bookmark className="w-3 h-3" fill={marked.has(r.id) ? 'currentColor' : 'none'} />
                         </button>
-                        <span className="font-mono text-[11px] tnum text-textMuted">{r.time}</span>
+                        <span className="font-mono text-label tnum text-textMuted">{r.time}</span>
                       </span>
                     </td>
 
@@ -973,13 +973,13 @@ const LiveTape = () => {
           <Panel title="Top Tickers" subtitle="session premium concentration" className="w-full">
             <div className="flex flex-col gap-2.5">
               {topTickers.length === 0 && (
-                <span className="font-mono text-[11px] text-textMuted uppercase tracking-widest py-6 text-center">
+                <span className="font-mono text-label text-textMuted uppercase tracking-widest py-6 text-center">
                   Awaiting tape…
                 </span>
               )}
               {topTickers.map((t, i) => (
                 <div key={t.ticker} className="flex items-center gap-2">
-                  <span className={`w-12 shrink-0 font-mono text-[11px] font-semibold ${i === 0 ? 'text-king' : 'text-textPrimary'}`}>
+                  <span className={`w-12 shrink-0 font-mono text-label font-semibold ${i === 0 ? 'text-king' : 'text-textPrimary'}`}>
                     {t.ticker}
                   </span>
                   <span className="relative flex-1 h-[5px] rounded-full bg-white/[0.05]">
@@ -988,7 +988,7 @@ const LiveTape = () => {
                       style={{ width: `${(t.premium / topMax) * 100}%` }}
                     />
                   </span>
-                  <span className="w-14 shrink-0 text-right font-mono text-[11px] tnum text-textSecondary">
+                  <span className="w-14 shrink-0 text-right font-mono text-label tnum text-textSecondary">
                     {fmtUsd(t.premium)}
                   </span>
                 </div>
@@ -999,7 +999,7 @@ const LiveTape = () => {
           <Panel title="Dark Pool" subtitle="off-exchange crosses · by notional" flush className="w-full flex-1 min-h-0">
             <div className="overflow-y-auto h-full">
               {darkPrints.length === 0 ? (
-                <span className="block font-mono text-[11px] text-textMuted uppercase tracking-widest py-6 text-center">
+                <span className="block font-mono text-label text-textMuted uppercase tracking-widest py-6 text-center">
                   Awaiting prints…
                 </span>
               ) : (
@@ -1009,7 +1009,7 @@ const LiveTape = () => {
                       {['Ticker', 'Size', 'Price', 'Notional', 'Time'].map((h, i) => (
                         <th
                           key={h}
-                          className={`px-2 py-1.5 font-mono text-[11px] font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle ${
+                          className={`px-2 py-1.5 font-mono text-label font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle ${
                             i === 0 ? 'text-left' : 'text-right'
                           }`}
                         >
@@ -1028,19 +1028,19 @@ const LiveTape = () => {
                         <td className="px-2 py-2 whitespace-nowrap">
                           <span className="flex items-center gap-1.5">
                             <span className="inline-block w-1.5 h-1.5 rounded-full bg-darkpool" />
-                            <span className="font-mono text-[11px] font-semibold text-textPrimary">{p.ticker}</span>
+                            <span className="font-mono text-label font-semibold text-textPrimary">{p.ticker}</span>
                           </span>
                         </td>
-                        <td className="px-2 py-2 text-right font-mono text-[11px] tnum text-textSecondary">
+                        <td className="px-2 py-2 text-right font-mono text-label tnum text-textSecondary">
                           {p.size.toLocaleString()}
                         </td>
-                        <td className="px-2 py-2 text-right font-mono text-[11px] tnum text-textSecondary">
+                        <td className="px-2 py-2 text-right font-mono text-label tnum text-textSecondary">
                           ${p.price.toFixed(2)}
                         </td>
-                        <td className="px-2 py-2 text-right font-mono text-[11px] font-bold tnum text-textPrimary">
+                        <td className="px-2 py-2 text-right font-mono text-label font-bold tnum text-textPrimary">
                           {fmtUsd(p.size * p.price)}
                         </td>
-                        <td className="px-2 py-2 text-right font-mono text-[11px] tnum text-textSecondary whitespace-nowrap">
+                        <td className="px-2 py-2 text-right font-mono text-label tnum text-textSecondary whitespace-nowrap">
                           {p.time.slice(0, 5)}
                         </td>
                       </tr>

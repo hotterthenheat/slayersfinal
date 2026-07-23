@@ -14,8 +14,8 @@ const SCAN_INTERVAL_MS = 10_000;
 
 const LevelChip = ({ label, value, tone }: { label: string; value: number; tone: string }) => (
   <span className="inline-flex flex-col leading-tight">
-    <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">{label}</span>
-    <span className={`font-mono text-[12px] font-semibold tnum ${tone}`}>${value.toFixed(2)}</span>
+    <span className="font-mono text-micro uppercase tracking-widest text-textMuted">{label}</span>
+    <span className={`font-mono text-caption font-semibold tnum ${tone}`}>${value.toFixed(2)}</span>
   </span>
 );
 
@@ -50,7 +50,7 @@ const GammaChart = () => {
   if (!scan || !exposure || !gexLevels || !matrix) {
     return (
       <Panel>
-        <div className="h-64 flex items-center justify-center font-mono text-[11px] uppercase tracking-widest text-textMuted">
+        <div className="h-64 flex items-center justify-center font-mono text-label uppercase tracking-widest text-textMuted">
           loading…
         </div>
       </Panel>
@@ -65,14 +65,14 @@ const GammaChart = () => {
       <Panel flush emphasis>
         <div className="flex items-center gap-x-6 gap-y-3 flex-wrap px-3.5 py-3">
           <div className="min-w-0">
-            <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Dealer gamma @ spot</div>
+            <div className="font-mono text-micro uppercase tracking-widest text-textMuted">Dealer gamma @ spot</div>
             <div className="flex items-baseline gap-2.5">
               <span className={`font-mono text-2xl font-bold tnum ${longGamma ? 'text-bull' : 'text-bear'}`}>
                 {longGamma ? '+' : '−'}
                 {fmtUsd(Math.abs(exposure.netGex))}
               </span>
               <span
-                className={`inline-flex items-center gap-1 rounded px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider ${
+                className={`inline-flex items-center gap-1 rounded px-2 py-0.5 font-mono text-micro font-bold uppercase tracking-wider ${
                   longGamma ? 'bg-bull/10 text-bull' : 'bg-bear/10 text-bear'
                 }`}
               >
@@ -80,7 +80,7 @@ const GammaChart = () => {
                 {longGamma ? 'Long Γ' : 'Short Γ'}
               </span>
             </div>
-            <div className="mt-0.5 font-mono text-[10px] text-textSecondary">
+            <div className="mt-0.5 font-mono text-micro text-textSecondary">
               {longGamma ? 'pinning — dealers dampen moves toward the walls' : 'trending — dealer hedging amplifies the move'}
             </div>
           </div>
@@ -111,7 +111,7 @@ const GammaChart = () => {
       </Panel>
 
       {/* Read */}
-      <p className="flex items-start gap-2 text-[12px] text-textSecondary leading-relaxed px-1">
+      <p className="flex items-start gap-2 text-caption text-textSecondary leading-relaxed px-1">
         <Info className="w-3.5 h-3.5 text-textMuted mt-px shrink-0" />
         <span>
           <span className="font-mono font-semibold uppercase tracking-wider mr-1.5 holo-text">Reading the gamma</span>

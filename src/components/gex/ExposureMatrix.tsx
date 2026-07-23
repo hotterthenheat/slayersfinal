@@ -30,7 +30,7 @@ const Cell = ({ split, leg, maxAbs }: { split: GreekSplit; leg: Leg; maxAbs: num
   const pct = Math.min(100, (Math.abs(value) / (maxAbs || 1)) * 100);
   return (
     <td className="px-2 py-1 text-right align-middle">
-      <span className={`block font-mono text-[11px] tnum ${leg === 'net' ? 'text-textPrimary font-semibold' : 'text-textPrimary'}`}>
+      <span className={`block font-mono text-label tnum ${leg === 'net' ? 'text-textPrimary font-semibold' : 'text-textPrimary'}`}>
         {fmtUsd(value)}
       </span>
       <span className="mt-0.5 ml-auto block h-[3px] w-full max-w-[52px] rounded-full bg-white/[0.04]">
@@ -70,14 +70,14 @@ const ExposureMatrix = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
       <table className="w-full border-collapse">
         <thead className="sticky top-0 z-10">
           <tr className="bg-panelRaised">
-            <th className="px-2 py-1.5 text-left font-mono text-[10px] font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle">
+            <th className="px-2 py-1.5 text-left font-mono text-micro font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle">
               Strike
             </th>
             {GROUPS.map(g => (
               <th
                 key={g.key}
                 colSpan={3}
-                className="px-2 py-1.5 text-center font-mono text-[10px] font-bold uppercase tracking-widest text-textPrimary border-b border-l border-borderSubtle"
+                className="px-2 py-1.5 text-center font-mono text-micro font-bold uppercase tracking-widest text-textPrimary border-b border-l border-borderSubtle"
               >
                 {g.label} <span className="text-textSecondary font-medium normal-case">· {g.unit}</span>
               </th>
@@ -89,7 +89,7 @@ const ExposureMatrix = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
               (['put', 'call', 'net'] as Leg[]).map(leg => (
                 <th
                   key={`${g.key}-${leg}`}
-                  className={`px-2 py-1 text-right font-mono text-[10px] font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle ${
+                  className={`px-2 py-1 text-right font-mono text-micro font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle ${
                     leg === 'put' ? 'border-l' : ''
                   }`}
                 >
@@ -117,10 +117,10 @@ const ExposureMatrix = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
                       : ''
                 }`}
               >
-                <td className="px-2 py-1 bg-inset border-r border-borderSubtle/40 font-mono text-[10px] font-semibold tnum text-textSecondary whitespace-nowrap">
+                <td className="px-2 py-1 bg-inset border-r border-borderSubtle/40 font-mono text-micro font-semibold tnum text-textSecondary whitespace-nowrap">
                   {row.strike % 1 === 0 ? row.strike.toFixed(0) : row.strike.toFixed(2)}
                   {row.pin && (
-                    <span className="ml-1.5 font-mono text-[10px] font-bold uppercase tracking-wider text-textPrimary">
+                    <span className="ml-1.5 font-mono text-micro font-bold uppercase tracking-wider text-textPrimary">
                       pin
                     </span>
                   )}

@@ -118,18 +118,18 @@ const MoveCompare = ({ implied, hist }: { implied: number; hist: number }) => {
   return (
     <span className="flex flex-col gap-1 w-full py-0.5">
       <span className="flex items-center gap-1.5">
-        <span className="w-7 font-mono text-[10px] uppercase text-textMuted">imp</span>
+        <span className="w-7 font-mono text-micro uppercase text-textMuted">imp</span>
         <span className="flex-1 h-[4px] rounded-full bg-white/[0.06] overflow-hidden">
           <span className="block h-full rounded-full holo-bar" style={{ width: `${(implied / max) * 100}%` }} />
         </span>
-        <span className="w-11 font-mono text-[11px] text-textPrimary tnum text-right">{implied.toFixed(1)}%</span>
+        <span className="w-11 font-mono text-label text-textPrimary tnum text-right">{implied.toFixed(1)}%</span>
       </span>
       <span className="flex items-center gap-1.5">
-        <span className="w-7 font-mono text-[10px] uppercase text-textMuted">real</span>
+        <span className="w-7 font-mono text-micro uppercase text-textMuted">real</span>
         <span className="flex-1 h-[4px] rounded-full bg-white/[0.06] overflow-hidden">
           <span className="block h-full rounded-full bg-white/30" style={{ width: `${(hist / max) * 100}%` }} />
         </span>
-        <span className="w-11 font-mono text-[11px] text-textSecondary tnum text-right">{hist.toFixed(1)}%</span>
+        <span className="w-11 font-mono text-label text-textSecondary tnum text-right">{hist.toFixed(1)}%</span>
       </span>
     </span>
   );
@@ -145,7 +145,7 @@ const ReportTimeTag = ({ e }: { e: EarningsEvent }) => {
           ? 'Report date & slot inferred confirmed — inside the near-term window'
           : 'Report date estimated — further-out prints stay analyst-estimated until the company confirms'
       }
-      className={`inline-flex items-center gap-1 font-mono text-[11px] uppercase tracking-wider ${
+      className={`inline-flex items-center gap-1 font-mono text-label uppercase tracking-wider ${
         confirmed ? 'text-textSecondary' : 'text-warn'
       }`}
     >
@@ -176,7 +176,7 @@ const WatchStar = ({ on, onClick }: { on: boolean; onClick: () => void }) => (
 const VoteChips = ({ e }: { e: EarningsEvent }) => {
   const { rev, flow, setup } = dirVote(e);
   const chip = (label: string, v: number) => (
-    <span className={`font-mono text-[11px] ${v > 0 ? 'text-bull' : v < 0 ? 'text-bear' : 'text-textMuted'}`}>
+    <span className={`font-mono text-label ${v > 0 ? 'text-bull' : v < 0 ? 'text-bear' : 'text-textMuted'}`}>
       {label}
       {v > 0 ? '▲' : v < 0 ? '▼' : '—'}
     </span>
@@ -238,7 +238,7 @@ const AlertCountdown = ({
         <Bell className={`w-4 h-4 ${armed ? 'fill-current' : ''}`} />
       </span>
       <div className="flex flex-col min-w-0">
-        <span className="font-mono text-[11px] uppercase tracking-widest text-textMuted">
+        <span className="font-mono text-label uppercase tracking-widest text-textMuted">
           {watched ? 'Next watched print · alert' : 'Next print · alert countdown'}
         </span>
         <button
@@ -264,7 +264,7 @@ const AlertCountdown = ({
         <button
           onClick={onArm}
           aria-pressed={armed}
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded border font-mono text-[11px] uppercase tracking-wider transition-colors ${
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded border font-mono text-label uppercase tracking-wider transition-colors ${
             armed
               ? 'border-select/40 bg-select/10 text-select'
               : 'border-borderSubtle bg-white/[0.02] text-textSecondary hover:text-textPrimary hover:border-borderMuted'
@@ -287,9 +287,9 @@ const TradeRead = ({ e }: { e: EarningsEvent }) => {
     <div className="flex flex-col gap-1">
       <div className="flex items-center gap-1.5">
         <SignalBadge tone={verdictTone[e.verdict]}>{e.verdict}</SignalBadge>
-        <span className="font-mono text-[11px] text-textPrimary">{st.label}</span>
+        <span className="font-mono text-label text-textPrimary">{st.label}</span>
       </div>
-      <div className="flex items-center gap-2 font-mono text-[11px] whitespace-nowrap">
+      <div className="flex items-center gap-2 font-mono text-label whitespace-nowrap">
         <span className={toneText[edge.tone]}>{edge.label}</span>
         <span className="text-textMuted tnum">{edgePtsLabel(e)}</span>
         <span className="text-textMuted">·</span>
@@ -413,7 +413,7 @@ const EarningsHub = () => {
       render: e => (
         <span className="flex flex-col">
           <span className="font-mono text-xs font-bold text-textPrimary">{e.ticker}</span>
-          <span className="text-[11px] text-textMuted truncate">{e.name}</span>
+          <span className="text-label text-textMuted truncate">{e.name}</span>
         </span>
       ),
     },
@@ -424,7 +424,7 @@ const EarningsHub = () => {
       render: e => (
         <span className="flex flex-col gap-0.5">
           <span className="font-mono text-xs text-textPrimary">{e.dateLabel}</span>
-          <span className="font-mono text-[11px] text-textMuted">
+          <span className="font-mono text-label text-textMuted">
             {e.slot} · {e.daysOut === 0 ? 'today' : `${e.daysOut}d out`}
           </span>
           <ReportTimeTag e={e} />
@@ -546,7 +546,7 @@ const EarningsHub = () => {
           {byDay.map(([label, list]) => (
             <div key={label} className="min-w-[140px] flex-1 px-3 py-2.5">
               <div className="flex items-center justify-between">
-                <span className="font-mono text-[11px] font-semibold uppercase tracking-widest text-textMuted">{label}</span>
+                <span className="font-mono text-label font-semibold uppercase tracking-widest text-textMuted">{label}</span>
                 {!reportConfirmed(list[0]) && (
                   <span className="w-1.5 h-1.5 rounded-full bg-warn" title="Estimated date — not yet confirmed" />
                 )}
@@ -561,8 +561,8 @@ const EarningsHub = () => {
                     }`}
                   >
                     {watchlist.has(e.ticker) && <Star className="w-3 h-3 shrink-0 text-select fill-current" />}
-                    <span className="font-mono text-[12px] font-bold text-textPrimary">{e.ticker}</span>
-                    <span className="font-mono text-[10px] text-textMuted">{e.slot}</span>
+                    <span className="font-mono text-caption font-bold text-textPrimary">{e.ticker}</span>
+                    <span className="font-mono text-micro text-textMuted">{e.slot}</span>
                     <SignalBadge tone={verdictTone[e.verdict]} className="ml-auto">
                       {e.verdict}
                     </SignalBadge>
@@ -587,7 +587,7 @@ const EarningsHub = () => {
           actions={
             <button
               onClick={() => setCompareSet(new Set())}
-              className="inline-flex items-center gap-1 px-2 py-1 rounded border border-borderSubtle bg-white/[0.02] font-mono text-[11px] uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:border-borderMuted transition-colors"
+              className="inline-flex items-center gap-1 px-2 py-1 rounded border border-borderSubtle bg-white/[0.02] font-mono text-label uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:border-borderMuted transition-colors"
             >
               <X className="w-3 h-3" /> Clear
             </button>
@@ -604,7 +604,7 @@ const EarningsHub = () => {
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="font-mono text-sm font-bold text-textPrimary">{e.ticker}</div>
-                      <div className="text-[11px] text-textMuted truncate">
+                      <div className="text-label text-textMuted truncate">
                         {e.dateLabel} {e.slot}
                       </div>
                     </div>
@@ -624,14 +624,14 @@ const EarningsHub = () => {
 
                   <div className="flex flex-col gap-1.5 pt-0.5">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-mono text-[11px] uppercase tracking-wider text-textMuted">Edge</span>
-                      <span className={`font-mono text-[12px] font-semibold ${toneText[edge.tone]}`}>
+                      <span className="font-mono text-label uppercase tracking-wider text-textMuted">Edge</span>
+                      <span className={`font-mono text-caption font-semibold ${toneText[edge.tone]}`}>
                         {edge.label} <span className="text-textMuted tnum">{e.richness.toFixed(2)}×</span>
                       </span>
                     </div>
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-mono text-[11px] uppercase tracking-wider text-textMuted">Conviction</span>
-                      <span className={`font-mono text-[12px] font-semibold ${toneText[conv.tone]}`}>
+                      <span className="font-mono text-label uppercase tracking-wider text-textMuted">Conviction</span>
+                      <span className={`font-mono text-caption font-semibold ${toneText[conv.tone]}`}>
                         {conv.dir === 'MIXED' ? 'Split' : `${conv.dir} ${conv.label}`}
                       </span>
                     </div>
@@ -639,10 +639,10 @@ const EarningsHub = () => {
                       <VoteChips e={e} />
                     </div>
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-mono text-[11px] uppercase tracking-wider text-textMuted">Structure</span>
-                      <span className={`font-mono text-[12px] font-semibold ${toneText[st.tone]}`}>{st.label}</span>
+                      <span className="font-mono text-label uppercase tracking-wider text-textMuted">Structure</span>
+                      <span className={`font-mono text-caption font-semibold ${toneText[st.tone]}`}>{st.label}</span>
                     </div>
-                    <div className="text-right font-mono text-[11px] text-textMuted">{st.risk}</div>
+                    <div className="text-right font-mono text-label text-textMuted">{st.risk}</div>
                   </div>
 
                   <div className="pt-1 border-t border-borderSubtle">
@@ -666,13 +666,13 @@ const EarningsHub = () => {
         flush
         actions={
           <div className="flex items-center gap-2">
-            <span className="hidden sm:inline font-mono text-[11px] text-textMuted tnum">
+            <span className="hidden sm:inline font-mono text-label text-textMuted tnum">
               {rows.length}/{events.length}
             </span>
             <button
               onClick={() => setWatchOnly(w => !w)}
               aria-pressed={watchOnly}
-              className={`inline-flex items-center gap-1 px-2 py-1 rounded border font-mono text-[11px] uppercase tracking-wider transition-colors ${
+              className={`inline-flex items-center gap-1 px-2 py-1 rounded border font-mono text-label uppercase tracking-wider transition-colors ${
                 watchOnly
                   ? 'border-select/40 bg-select/10 text-select'
                   : 'border-borderSubtle bg-white/[0.02] text-textSecondary hover:text-textPrimary hover:border-borderMuted'
@@ -683,7 +683,7 @@ const EarningsHub = () => {
             <button
               onClick={() => setCompareMode(m => !m)}
               aria-pressed={compareMode}
-              className={`inline-flex items-center gap-1 px-2 py-1 rounded border font-mono text-[11px] uppercase tracking-wider transition-colors ${
+              className={`inline-flex items-center gap-1 px-2 py-1 rounded border font-mono text-label uppercase tracking-wider transition-colors ${
                 compareMode
                   ? 'border-select/40 bg-select/10 text-select'
                   : 'border-borderSubtle bg-white/[0.02] text-textSecondary hover:text-textPrimary hover:border-borderMuted'
@@ -698,10 +698,10 @@ const EarningsHub = () => {
         <div className="flex items-center gap-3 flex-wrap px-4 py-2.5 border-b border-borderSubtle bg-inset">
           <SlidersHorizontal className="w-3.5 h-3.5 text-textMuted shrink-0" />
           <div className="flex items-center gap-1.5">
-            <span className="font-mono text-[11px] uppercase tracking-widest text-textMuted">Window</span>
+            <span className="font-mono text-label uppercase tracking-widest text-textMuted">Window</span>
             <SegmentedControl ariaLabel="Date window" options={WINDOW_OPTIONS} value={windowFilter} onChange={setWindowFilter} />
           </div>
-          <span className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-textMuted">
+          <span className="inline-flex items-center gap-1.5 font-mono text-label uppercase tracking-wider text-textMuted">
             <span className="w-1.5 h-1.5 rounded-full bg-textSecondary" /> confirmed
             <span className="w-1.5 h-1.5 rounded-full bg-warn ml-2" /> estimated
           </span>
@@ -716,7 +716,7 @@ const EarningsHub = () => {
                 {selected.ticker} · {selected.dateLabel} {selected.slot}
               </span>
               <ReportTimeTag e={selected} />
-              <span className="font-mono text-[11px] text-textMuted">
+              <span className="font-mono text-label text-textMuted">
                 implied {selected.impliedMovePct.toFixed(1)}% · realized {selected.histAvgMovePct.toFixed(1)}% ·{' '}
                 {selected.richness.toFixed(2)}×
               </span>
@@ -732,14 +732,14 @@ const EarningsHub = () => {
                 return (
                   <>
                     <div className="inst-surface rounded-md px-3 py-2">
-                      <div className="font-mono text-[11px] uppercase tracking-widest text-textMuted">Edge</div>
+                      <div className="font-mono text-label uppercase tracking-widest text-textMuted">Edge</div>
                       <div className={`mt-1 font-mono text-sm font-semibold ${toneText[edge.tone]}`}>
-                        {edge.label} <span className="text-textMuted tnum text-[12px]">{edgePtsLabel(selected)}</span>
+                        {edge.label} <span className="text-textMuted tnum text-caption">{edgePtsLabel(selected)}</span>
                       </div>
                     </div>
                     <div className="inst-surface rounded-md px-3 py-2">
                       <div className="flex items-center justify-between">
-                        <span className="font-mono text-[11px] uppercase tracking-widest text-textMuted">Conviction</span>
+                        <span className="font-mono text-label uppercase tracking-widest text-textMuted">Conviction</span>
                         <VoteChips e={selected} />
                       </div>
                       <div className={`mt-1 font-mono text-sm font-semibold ${toneText[conv.tone]}`}>
@@ -747,9 +747,9 @@ const EarningsHub = () => {
                       </div>
                     </div>
                     <div className="inst-surface rounded-md px-3 py-2">
-                      <div className="font-mono text-[11px] uppercase tracking-widest text-textMuted">Structure</div>
+                      <div className="font-mono text-label uppercase tracking-widest text-textMuted">Structure</div>
                       <div className={`mt-1 font-mono text-sm font-semibold ${toneText[st.tone]}`}>{st.label}</div>
-                      <div className="font-mono text-[11px] text-textMuted">{st.risk}</div>
+                      <div className="font-mono text-label text-textMuted">{st.risk}</div>
                     </div>
                   </>
                 );

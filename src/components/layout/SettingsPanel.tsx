@@ -73,7 +73,7 @@ const SettingsPanel = ({ open, onClose }: SettingsPanelProps) => {
             transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
           >
             <header className="sticky top-0 z-10 flex items-center justify-between gap-3 px-4 py-3 border-b border-borderSubtle bg-panel/95 backdrop-blur">
-              <span className="font-mono text-[12px] font-semibold uppercase tracking-widest text-textPrimary">Settings</span>
+              <span className="font-mono text-caption font-semibold uppercase tracking-widest text-textPrimary">Settings</span>
               <button
                 onClick={onClose}
                 aria-label="Close settings"
@@ -87,7 +87,7 @@ const SettingsPanel = ({ open, onClose }: SettingsPanelProps) => {
               {/* Privacy note */}
               <div className="inst-surface rounded-md px-3.5 py-3 flex items-start gap-2.5">
                 <ShieldCheck className="w-4 h-4 mt-0.5 shrink-0 text-bull" />
-                <p className="text-[12px] leading-relaxed text-textSecondary">
+                <p className="text-caption leading-relaxed text-textSecondary">
                   Your watchlists, layouts, tracked setups and notes are stored in{' '}
                   <span className="text-textPrimary">this browser only</span> — nothing is sent to a server. Clearing here
                   is permanent and cannot be undone.
@@ -97,10 +97,10 @@ const SettingsPanel = ({ open, onClose }: SettingsPanelProps) => {
               {/* Local data */}
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between">
-                  <span className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-textSecondary">
+                  <span className="inline-flex items-center gap-1.5 font-mono text-label uppercase tracking-widest text-textSecondary">
                     <Database className="w-3.5 h-3.5" /> Local data
                   </span>
-                  <span className="font-mono text-[10px] text-textMuted tnum">
+                  <span className="font-mono text-micro text-textMuted tnum">
                     {totalStored} {totalStored === 1 ? 'item' : 'items'} stored
                   </span>
                 </div>
@@ -111,13 +111,13 @@ const SettingsPanel = ({ open, onClose }: SettingsPanelProps) => {
                     return (
                       <div key={group.id} className="flex items-center gap-3 bg-inset px-3.5 py-2.5">
                         <div className="min-w-0 flex-1">
-                          <div className="text-[12px] font-semibold text-textPrimary">{group.label}</div>
-                          <div className="text-[11px] text-textMuted truncate">{group.description}</div>
+                          <div className="text-caption font-semibold text-textPrimary">{group.label}</div>
+                          <div className="text-label text-textMuted truncate">{group.description}</div>
                         </div>
                         <button
                           onClick={() => onClearGroup(group.id)}
                           disabled={count === 0}
-                          className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded border font-mono text-[10px] uppercase tracking-wider transition-colors ${
+                          className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded border font-mono text-micro uppercase tracking-wider transition-colors ${
                             count === 0
                               ? 'border-borderSubtle text-textMuted cursor-not-allowed opacity-50'
                               : 'border-borderSubtle text-textSecondary hover:text-bear hover:border-bear/40'
@@ -135,7 +135,7 @@ const SettingsPanel = ({ open, onClose }: SettingsPanelProps) => {
               <div className="flex flex-col gap-2 border-t border-borderSubtle pt-4">
                 <button
                   onClick={onClearAll}
-                  className={`w-full inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded border font-mono text-[11px] uppercase tracking-wider transition-colors ${
+                  className={`w-full inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded border font-mono text-label uppercase tracking-wider transition-colors ${
                     confirmAll
                       ? 'border-bear/50 bg-bear/15 text-bear'
                       : 'border-borderMuted bg-white/[0.02] text-textSecondary hover:text-bear hover:border-bear/40'
@@ -147,7 +147,7 @@ const SettingsPanel = ({ open, onClose }: SettingsPanelProps) => {
                 {confirmAll && (
                   <button
                     onClick={() => setConfirmAll(false)}
-                    className="self-center font-mono text-[10px] uppercase tracking-wider text-textMuted hover:text-textPrimary transition-colors"
+                    className="self-center font-mono text-micro uppercase tracking-wider text-textMuted hover:text-textPrimary transition-colors"
                   >
                     Cancel
                   </button>

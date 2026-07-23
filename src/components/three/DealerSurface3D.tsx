@@ -73,7 +73,7 @@ function buildGeometry(grid: number[][]): THREE.BufferGeometry {
   return geo;
 }
 
-const labelClass = 'font-mono text-[10px] uppercase tracking-wide text-textMuted whitespace-nowrap';
+const labelClass = 'font-mono text-micro uppercase tracking-wide text-textMuted whitespace-nowrap';
 
 const Tag = ({ pos, children, color }: { pos: [number, number, number]; children: React.ReactNode; color?: string }) => (
   <Html position={pos} center style={{ pointerEvents: 'none' }} zIndexRange={[10, 0]}>
@@ -175,16 +175,16 @@ const DealerSurface3D = ({ grid, strikes, spotCol, maxAbsUsd }: DealerSurface3DP
 
     {/* NET GEX colourbar — the dollar scale the surface can't show on its own */}
     <div className="pointer-events-none absolute top-3 left-3 flex flex-col items-start gap-1">
-      <span className="font-mono text-[10px] uppercase tracking-wide text-textMuted">net gex</span>
+      <span className="font-mono text-micro uppercase tracking-wide text-textMuted">net gex</span>
       <div className="flex items-center gap-1.5">
         <div
           className="w-2 h-24 rounded-sm border border-borderSubtle/60"
           style={{ background: 'linear-gradient(to top, #d43329, #7a1a15, #0a0a0d, #187a3f, #30d158)' }}
         />
         <div className="flex flex-col justify-between h-24 py-0.5">
-          <span className="font-mono text-[10px] text-[#30d158]">+{fmtUsd(maxAbsUsd)}</span>
-          <span className="font-mono text-[10px] text-textMuted">0</span>
-          <span className="font-mono text-[10px] text-[#ff3b30]">{fmtUsd(-maxAbsUsd)}</span>
+          <span className="font-mono text-micro text-[#30d158]">+{fmtUsd(maxAbsUsd)}</span>
+          <span className="font-mono text-micro text-textMuted">0</span>
+          <span className="font-mono text-micro text-[#ff3b30]">{fmtUsd(-maxAbsUsd)}</span>
         </div>
       </div>
     </div>

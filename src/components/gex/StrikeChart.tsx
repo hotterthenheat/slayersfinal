@@ -322,7 +322,7 @@ const StrikeChart = ({ ticker, revision, levels, overlay, timeframe, height = 46
           { label: '+GEX node', color: heatPoles.pos },
           { label: '−GEX node', color: heatPoles.neg },
         ].map((item: { label: string; cls?: string; color?: string }) => (
-          <span key={item.label} className="flex items-center gap-1.5 font-mono text-[10px] text-textSecondary">
+          <span key={item.label} className="flex items-center gap-1.5 font-mono text-micro text-textSecondary">
             <span
               className={`inline-block w-3 h-0.5 rounded-full ${item.cls ?? ''}`}
               style={item.color ? { background: item.color } : undefined}
@@ -330,13 +330,13 @@ const StrikeChart = ({ ticker, revision, levels, overlay, timeframe, height = 46
             {item.label}
           </span>
         ))}
-        <span className="ml-auto font-mono text-[10px] text-textMuted uppercase tracking-wider">
+        <span className="ml-auto font-mono text-micro text-textMuted uppercase tracking-wider">
           scroll zoom · drag pan · dbl-click reset
         </span>
         <button
           onClick={resetView}
           title="Reset view (or double-click the chart)"
-          className="inline-flex items-center gap-1.5 border border-borderSubtle hover:border-borderMuted bg-panel rounded px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
+          className="inline-flex items-center gap-1.5 border border-borderSubtle hover:border-borderMuted bg-panel rounded px-2 py-1 font-mono text-micro uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
         >
           <RotateCcw className="w-3 h-3" /> Reset
         </button>

@@ -76,7 +76,7 @@ const VolLab = () => {
   if (!data) {
     return (
       <Panel className="h-64" bodyClassName="flex items-center justify-center">
-        <span className="font-mono text-[11px] text-textMuted uppercase tracking-widest">
+        <span className="font-mono text-label text-textMuted uppercase tracking-widest">
           Awaiting feed initialization…
         </span>
       </Panel>
@@ -141,13 +141,13 @@ const VolLab = () => {
     <>
       {/* Model header */}
       <div className="flex items-center gap-3 flex-wrap">
-        <span className="inline-flex items-center gap-1.5 border border-borderSubtle bg-panel rounded-md px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-wider text-textSecondary">
+        <span className="inline-flex items-center gap-1.5 border border-borderSubtle bg-panel rounded-md px-2.5 py-1.5 font-mono text-label uppercase tracking-wider text-textSecondary">
           Model <span className="text-textPrimary font-semibold">SLAYER-VOL v0.2</span>
         </span>
-        <span className="font-mono text-[10px] text-textMuted uppercase tracking-widest tnum">
+        <span className="font-mono text-micro text-textMuted uppercase tracking-widest tnum">
           calibrated {calibratedAt}
         </span>
-        <span className="ml-auto font-mono text-[10px] text-textMuted uppercase tracking-widest tnum">
+        <span className="ml-auto font-mono text-micro text-textMuted uppercase tracking-widest tnum">
           scan {calibratedAt} · 10s
         </span>
       </div>
@@ -168,7 +168,7 @@ const VolLab = () => {
               {sliceMode === 'SKEW' && (
                 <>
                   <label className="flex items-center gap-2">
-                    <span className="font-mono text-[11px] uppercase tracking-widest text-textMuted">Expiry</span>
+                    <span className="font-mono text-label uppercase tracking-widest text-textMuted">Expiry</span>
                     <SegmentedControl
                       ariaLabel="Skew expiry"
                       options={expiryOptions}
@@ -177,14 +177,14 @@ const VolLab = () => {
                     />
                   </label>
                   <label className="flex items-center gap-2">
-                    <span className="font-mono text-[11px] uppercase tracking-widest text-textMuted">Window</span>
+                    <span className="font-mono text-label uppercase tracking-widest text-textMuted">Window</span>
                     <SegmentedControl ariaLabel="Moneyness window" options={RANGE_OPTIONS} value={rangeKey} onChange={setRangeKey} />
                   </label>
                 </>
               )}
               {sliceMode === 'TERM' && (
                 <label className="flex items-center gap-2">
-                  <span className="font-mono text-[11px] uppercase tracking-widest text-textMuted">Moneyness K/F</span>
+                  <span className="font-mono text-label uppercase tracking-widest text-textMuted">Moneyness K/F</span>
                   <SegmentedControl
                     ariaLabel="Term moneyness"
                     options={termOptions}
@@ -195,7 +195,7 @@ const VolLab = () => {
               )}
               {sliceMode === 'SURFACE' && (
                 <label className="flex items-center gap-2">
-                  <span className="font-mono text-[11px] uppercase tracking-widest text-textMuted">Window</span>
+                  <span className="font-mono text-label uppercase tracking-widest text-textMuted">Window</span>
                   <SegmentedControl ariaLabel="Moneyness window" options={RANGE_OPTIONS} value={rangeKey} onChange={setRangeKey} />
                 </label>
               )}

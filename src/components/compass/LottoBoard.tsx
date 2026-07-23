@@ -121,7 +121,7 @@ const GrowthTimeline = ({ moc }: { moc: MocRead }) => {
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
-        <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Imbalance growth</span>
+        <span className="font-mono text-micro uppercase tracking-widest text-textMuted">Imbalance growth</span>
         <SignalBadge tone={growing ? (side as Tone) : 'neutral'}>{growing ? 'building into cross' : 'fading pre-cross'}</SignalBadge>
       </div>
       <div className="flex items-end gap-1.5 h-16">
@@ -136,7 +136,7 @@ const GrowthTimeline = ({ moc }: { moc: MocRead }) => {
       </div>
       <div className="flex gap-1.5 mt-1">
         {series.map(pt => (
-          <span key={pt.t} className="flex-1 text-center font-mono text-[10px] text-textMuted">
+          <span key={pt.t} className="flex-1 text-center font-mono text-micro text-textMuted">
             {pt.t}
           </span>
         ))}
@@ -152,28 +152,28 @@ const LottoRow = ({ c, best }: { c: WeighedContract; best: boolean }) => {
     <div className={`px-3.5 py-2.5 flex items-center gap-3 ${best ? 'bg-white/[0.02]' : ''}`}>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="font-mono text-[13px] font-semibold text-textPrimary tnum">
+          <span className="font-mono text-data font-semibold text-textPrimary tnum">
             {c.ticker} {c.strike}
             <span className={rightColor}>{c.right}</span>
           </span>
-          <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted border border-borderSubtle rounded px-1 py-px">
+          <span className="font-mono text-micro uppercase tracking-wider text-textMuted border border-borderSubtle rounded px-1 py-px">
             {c.dte === 0 ? '0DTE' : `${c.dte}DTE`}
           </span>
           {best && <SignalBadge tone="magenta">Top lotto</SignalBadge>}
         </div>
-        <div className="mt-1 font-mono text-[11px] text-textMuted truncate">{c.edge}</div>
+        <div className="mt-1 font-mono text-label text-textMuted truncate">{c.edge}</div>
       </div>
       <div className="hidden sm:flex flex-col items-end shrink-0 w-14">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted">±1σ</span>
-        <span className="font-mono text-[12px] text-textSecondary tnum">{c.expectedMovePct.toFixed(1)}%</span>
+        <span className="font-mono text-micro uppercase tracking-wider text-textMuted">±1σ</span>
+        <span className="font-mono text-caption text-textSecondary tnum">{c.expectedMovePct.toFixed(1)}%</span>
       </div>
       <div className="hidden md:flex flex-col items-end shrink-0 w-16">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted">θ/day</span>
-        <span className="font-mono text-[12px] text-warn tnum">−{c.thetaPerDayPct.toFixed(0)}%</span>
+        <span className="font-mono text-micro uppercase tracking-wider text-textMuted">θ/day</span>
+        <span className="font-mono text-caption text-warn tnum">−{c.thetaPerDayPct.toFixed(0)}%</span>
       </div>
       <div className="flex flex-col items-end shrink-0 w-14">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted">mid</span>
-        <span className="font-mono text-[12px] text-textPrimary tnum">${c.mid.toFixed(2)}</span>
+        <span className="font-mono text-micro uppercase tracking-wider text-textMuted">mid</span>
+        <span className="font-mono text-caption text-textPrimary tnum">${c.mid.toFixed(2)}</span>
       </div>
       <div className="flex items-center gap-2 shrink-0 w-[124px] justify-end">
         <span className="font-mono text-lg font-bold tnum text-textPrimary">{c.composite}</span>
@@ -225,10 +225,10 @@ const LottoBoard = ({ snapshot }: { snapshot: MarketSnapshot }) => {
       </MetricGrid>
 
       <Panel tone="warn" bodyClassName="py-2.5">
-        <p className="flex items-start gap-2 text-[12px] text-textSecondary leading-relaxed">
+        <p className="flex items-start gap-2 text-caption text-textSecondary leading-relaxed">
           <AlertTriangle className="w-3.5 h-3.5 text-warn shrink-0 mt-0.5" />
           <span>
-            <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-warn mr-2">Lotto risk</span>
+            <span className="font-mono text-micro font-semibold uppercase tracking-widest text-warn mr-2">Lotto risk</span>
             0DTE and closing-auction plays are all-or-nothing — theta is measured per hour, a contract can go to zero the same
             session, and the imbalance you see at 3:50 is not the one that clears. Size for a total loss.
           </span>
@@ -248,7 +248,7 @@ const LottoBoard = ({ snapshot }: { snapshot: MarketSnapshot }) => {
         >
           <div className="flex flex-col gap-4">
             {!clock.mocOpen && (
-              <p className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-textMuted border border-borderSubtle bg-inset rounded-md px-2.5 py-2">
+              <p className="flex items-center gap-2 font-mono text-micro uppercase tracking-widest text-textMuted border border-borderSubtle bg-inset rounded-md px-2.5 py-2">
                 <Clock className="w-3 h-3 shrink-0" />
                 MOC window inactive · publishes 3:45–4:00pm ET — {clock.label}
               </p>
@@ -260,7 +260,7 @@ const LottoBoard = ({ snapshot }: { snapshot: MarketSnapshot }) => {
               </span>
               <div className="flex flex-col gap-1">
                 <SignalBadge tone={mocTone}>{moc.classification}</SignalBadge>
-                <span className="font-mono text-[11px] text-textMuted">
+                <span className="font-mono text-label text-textMuted">
                   {moc.side} imbalance {fmtUsd(Math.abs(moc.imbalanceUsd))}
                 </span>
               </div>
@@ -276,7 +276,7 @@ const LottoBoard = ({ snapshot }: { snapshot: MarketSnapshot }) => {
                 { k: 'Reversal risk', v: `${moc.reversalRisk}%` },
               ].map(x => (
                 <div key={x.k} className="border border-borderSubtle bg-inset rounded-md px-2.5 py-2">
-                  <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted">{x.k}</div>
+                  <div className="font-mono text-micro uppercase tracking-widest text-textMuted">{x.k}</div>
                   <div className="mt-1 font-mono text-sm font-semibold text-textPrimary tnum">{x.v}</div>
                 </div>
               ))}
@@ -287,7 +287,7 @@ const LottoBoard = ({ snapshot }: { snapshot: MarketSnapshot }) => {
             </div>
 
             <p className="text-xs text-textSecondary leading-relaxed">{moc.note}</p>
-            <p className="flex items-center gap-1.5 font-mono text-[10px] text-textMuted leading-relaxed border-t border-borderSubtle pt-2.5">
+            <p className="flex items-center gap-1.5 font-mono text-micro text-textMuted leading-relaxed border-t border-borderSubtle pt-2.5">
               <Clock className="w-3 h-3 shrink-0" />
               Trade the imbalance change, not the 3:50 headline — read growth, indicative displacement and absorption in the
               3:53–3:57 window before the cross.
@@ -308,19 +308,19 @@ const LottoBoard = ({ snapshot }: { snapshot: MarketSnapshot }) => {
           {!acked ? (
             <div className="px-4 py-8 flex flex-col items-center text-center gap-3">
               <ShieldAlert className="w-6 h-6 text-warn" />
-              <p className="text-[12px] text-textSecondary leading-relaxed max-w-[34ch]">
+              <p className="text-caption text-textSecondary leading-relaxed max-w-[34ch]">
                 These are 0DTE lotto tickets. Most expire worthless. Only view the board if you accept that a full loss of the
                 premium is the expected outcome.
               </p>
               <button
                 onClick={() => setAcked(true)}
-                className="mt-1 inline-flex items-center gap-2 px-3.5 py-2 rounded-md border border-warn/40 bg-warn/10 hover:bg-warn/15 font-mono text-[11px] font-semibold uppercase tracking-wider text-warn transition-colors"
+                className="mt-1 inline-flex items-center gap-2 px-3.5 py-2 rounded-md border border-warn/40 bg-warn/10 hover:bg-warn/15 font-mono text-label font-semibold uppercase tracking-wider text-warn transition-colors"
               >
                 I accept a total loss — show the board
               </button>
             </div>
           ) : lottos.length === 0 ? (
-            <div className="py-12 text-center font-mono text-[11px] text-textMuted uppercase tracking-widest">No 0DTE candidates</div>
+            <div className="py-12 text-center font-mono text-label text-textMuted uppercase tracking-widest">No 0DTE candidates</div>
           ) : (
             <div className="flex flex-col divide-y divide-borderSubtle">
               {lottos.map((c, i) => (

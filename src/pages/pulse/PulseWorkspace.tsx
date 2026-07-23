@@ -151,14 +151,14 @@ const PanelTicker = ({ value, onChange }: { value: string; onChange: (t: string)
           if (e.key === 'Escape') setEditing(false);
         }}
         onMouseDown={e => e.stopPropagation()}
-        className="w-16 bg-inputBg border border-borderMuted rounded px-1 py-0.5 font-mono text-[10px] text-textPrimary outline-none focus:border-select"
+        className="w-16 bg-inputBg border border-borderMuted rounded px-1 py-0.5 font-mono text-micro text-textPrimary outline-none focus:border-select"
       />
     );
   return (
     <button
       onMouseDown={e => e.stopPropagation()}
       onClick={() => setEditing(true)}
-      className="font-mono text-[10px] font-semibold text-select hover:text-textPrimary px-1 rounded transition-colors"
+      className="font-mono text-micro font-semibold text-select hover:text-textPrimary px-1 rounded transition-colors"
       title="Change this panel's ticker"
     >
       {value}
@@ -408,7 +408,7 @@ const PulseWorkspace = () => {
     if (!def) return null;
     if (!ctx)
       return (
-        <div className="h-full flex items-center justify-center font-mono text-[11px] text-textMuted uppercase tracking-widest">
+        <div className="h-full flex items-center justify-center font-mono text-label text-textMuted uppercase tracking-widest">
           loading…
         </div>
       );
@@ -429,7 +429,7 @@ const PulseWorkspace = () => {
     return (
       <div className={`${draggable ? 'widget-drag cursor-grab active:cursor-grabbing' : ''} flex items-center gap-2 px-3.5 h-10 border-b border-borderSubtle shrink-0 select-none`}>
         {draggable && <GripHorizontal className="w-3.5 h-3.5 text-textMuted shrink-0" />}
-        <span className="font-mono text-[11px] font-semibold uppercase tracking-widest text-textPrimary truncate">
+        <span className="font-mono text-label font-semibold uppercase tracking-widest text-textPrimary truncate">
           {def?.title ?? panelKey}
         </span>
         <PanelTicker value={ticker} onChange={t => setPanelTicker(panelId, t)} />
@@ -461,7 +461,7 @@ const PulseWorkspace = () => {
     );
   };
 
-  const barBtn = 'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-borderSubtle bg-white/[0.02] hover:bg-white/[0.05] font-mono text-[11px] uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors';
+  const barBtn = 'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-borderSubtle bg-white/[0.02] hover:bg-white/[0.05] font-mono text-label uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors';
 
   return (
     <div className={fullscreen ? 'fixed inset-0 z-50 bg-canvas p-3 flex flex-col gap-4 overflow-auto' : 'flex flex-col gap-4'}>
@@ -474,35 +474,35 @@ const PulseWorkspace = () => {
             className="inline-flex items-center gap-2 pl-2.5 pr-2 py-1.5 rounded-md border border-borderMuted bg-white/[0.03] hover:bg-white/[0.06] transition-colors"
           >
             <LayoutGrid className="w-3.5 h-3.5 text-select" />
-            <span className="font-mono text-[12px] font-semibold text-textPrimary">{active.name}</span>
-            <span className="font-mono text-[10px] text-textMuted tnum">· {active.panels.length}</span>
+            <span className="font-mono text-caption font-semibold text-textPrimary">{active.name}</span>
+            <span className="font-mono text-micro text-textMuted tnum">· {active.panels.length}</span>
             <ChevronDown className="w-3 h-3 text-textMuted" />
           </button>
           {wsMenuOpen && (
             <div className="absolute left-0 top-full mt-1 z-40 w-64 border border-borderMuted bg-panel rounded-md shadow-overlay overflow-hidden animate-slide-in">
-              <div className="px-3 pt-2 pb-1 font-mono text-[10px] uppercase tracking-widest text-textMuted">Views</div>
+              <div className="px-3 pt-2 pb-1 font-mono text-micro uppercase tracking-widest text-textMuted">Views</div>
               <div className="max-h-56 overflow-auto">
                 {ws.layouts.map(l => (
                   <button
                     key={l.id}
                     onClick={() => switchLayout(l.id)}
-                    className={`w-full text-left px-3 py-2 font-mono text-[11px] flex items-center gap-2 transition-colors ${
+                    className={`w-full text-left px-3 py-2 font-mono text-label flex items-center gap-2 transition-colors ${
                       l.id === active.id ? 'text-select bg-select/[0.06]' : 'text-textSecondary hover:bg-white/[0.03]'
                     }`}
                   >
                     {l.name}
-                    {l.preset && <span className="ml-auto text-[10px] text-textMuted uppercase tracking-wider">preset</span>}
+                    {l.preset && <span className="ml-auto text-micro text-textMuted uppercase tracking-wider">preset</span>}
                   </button>
                 ))}
               </div>
               {/* Layout-management ops only surface inside Customize mode */}
               {editLayout && (
                 <div className="border-t border-borderSubtle p-1.5 grid grid-cols-2 gap-1">
-                  <button onClick={saveAs} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-[10px] text-textSecondary hover:bg-white/[0.04] transition-colors"><Save className="w-3 h-3" /> Save as</button>
-                  <button onClick={rename} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-[10px] text-textSecondary hover:bg-white/[0.04] transition-colors">Rename</button>
-                  <button onClick={duplicateLayout} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-[10px] text-textSecondary hover:bg-white/[0.04] transition-colors"><Copy className="w-3 h-3" /> Duplicate</button>
-                  <button onClick={resetLayout} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-[10px] text-textSecondary hover:bg-white/[0.04] transition-colors"><RotateCcw className="w-3 h-3" /> Reset</button>
-                  <button onClick={deleteLayout} disabled={ws.layouts.length <= 1} className="col-span-2 flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-[10px] text-bear/80 hover:bg-bear/[0.08] disabled:opacity-40 transition-colors"><Trash2 className="w-3 h-3" /> Delete layout</button>
+                  <button onClick={saveAs} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-micro text-textSecondary hover:bg-white/[0.04] transition-colors"><Save className="w-3 h-3" /> Save as</button>
+                  <button onClick={rename} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-micro text-textSecondary hover:bg-white/[0.04] transition-colors">Rename</button>
+                  <button onClick={duplicateLayout} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-micro text-textSecondary hover:bg-white/[0.04] transition-colors"><Copy className="w-3 h-3" /> Duplicate</button>
+                  <button onClick={resetLayout} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-micro text-textSecondary hover:bg-white/[0.04] transition-colors"><RotateCcw className="w-3 h-3" /> Reset</button>
+                  <button onClick={deleteLayout} disabled={ws.layouts.length <= 1} className="col-span-2 flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-micro text-bear/80 hover:bg-bear/[0.08] disabled:opacity-40 transition-colors"><Trash2 className="w-3 h-3" /> Delete layout</button>
                 </div>
               )}
             </div>
@@ -520,7 +520,7 @@ const PulseWorkspace = () => {
             </div>
 
             <div className="relative">
-              <button onClick={() => setAddOpen(o => !o)} title="Add panel (A)" className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-select/40 bg-select/[0.06] hover:bg-select/[0.12] font-mono text-[11px] font-semibold uppercase tracking-wider text-select transition-colors">
+              <button onClick={() => setAddOpen(o => !o)} title="Add panel (A)" className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-select/40 bg-select/[0.06] hover:bg-select/[0.12] font-mono text-label font-semibold uppercase tracking-wider text-select transition-colors">
                 <Plus className="w-3.5 h-3.5" /> Add panel
               </button>
               {addOpen && (
@@ -538,7 +538,7 @@ const PulseWorkspace = () => {
                       if (e.key === 'Enter' && addableMatches.length > 0) addPanel(addableMatches[0].key);
                     }}
                     placeholder="Search panels…"
-                    className="w-full bg-inputBg border border-borderMuted rounded pl-7 pr-2 py-1.5 font-mono text-[11px] text-textPrimary placeholder:text-textMuted outline-none focus:border-select/40"
+                    className="w-full bg-inputBg border border-borderMuted rounded pl-7 pr-2 py-1.5 font-mono text-label text-textPrimary placeholder:text-textMuted outline-none focus:border-select/40"
                   />
                 </div>
               </div>
@@ -550,13 +550,13 @@ const PulseWorkspace = () => {
                     onClick={() => addPanel(def.key)}
                     className="w-full text-left px-3 py-2 hover:bg-white/[0.03] transition-colors border-b border-borderSubtle/40 last:border-0"
                   >
-                    <span className="block font-mono text-[11px] font-semibold text-textPrimary">{def.title}</span>
-                    <span className="block text-[10px] text-textSecondary">{def.description}</span>
+                    <span className="block font-mono text-label font-semibold text-textPrimary">{def.title}</span>
+                    <span className="block text-micro text-textSecondary">{def.description}</span>
                   </button>
                 ))}
 
                 {addableMatches.length === 0 && connectionMatches.length === 0 && (
-                  <div className="px-3 py-5 text-center font-mono text-[11px] text-textMuted uppercase tracking-widest">
+                  <div className="px-3 py-5 text-center font-mono text-label text-textMuted uppercase tracking-widest">
                     No panels match
                   </div>
                 )}
@@ -565,10 +565,10 @@ const PulseWorkspace = () => {
                 {connectionMatches.length > 0 && (
                   <div className="border-t border-borderSubtle">
                     <div className="px-3 pt-2.5 pb-1.5 flex items-center gap-2">
-                      <span className="font-mono text-[11px] font-semibold uppercase tracking-widest text-textMuted">
+                      <span className="font-mono text-label font-semibold uppercase tracking-widest text-textMuted">
                         Data connections
                       </span>
-                      <span className="ml-auto font-mono text-[10px] uppercase tracking-wider text-textMuted">
+                      <span className="ml-auto font-mono text-micro uppercase tracking-wider text-textMuted">
                         requires a live feed
                       </span>
                     </div>
@@ -581,8 +581,8 @@ const PulseWorkspace = () => {
                       >
                         <Lock className="w-3 h-3 text-textMuted mt-0.5 shrink-0" />
                         <span className="min-w-0">
-                          <span className="block font-mono text-[11px] font-semibold text-textSecondary">{def.title}</span>
-                          <span className="block text-[10px] text-textMuted">requires {def.requires}</span>
+                          <span className="block font-mono text-label font-semibold text-textSecondary">{def.title}</span>
+                          <span className="block text-micro text-textMuted">requires {def.requires}</span>
                         </span>
                       </button>
                     ))}
@@ -600,7 +600,7 @@ const PulseWorkspace = () => {
             <button
               onClick={() => setEditLayout(false)}
               title="Done customizing (E)"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-select/40 bg-select/[0.10] hover:bg-select/[0.16] font-mono text-[11px] font-semibold uppercase tracking-wider text-select transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-select/40 bg-select/[0.10] hover:bg-select/[0.16] font-mono text-label font-semibold uppercase tracking-wider text-select transition-colors"
             >
               <Check className="w-3.5 h-3.5" /> Done
             </button>
@@ -626,8 +626,8 @@ const PulseWorkspace = () => {
         </div>
       ) : active.panels.length === 0 ? (
         <div className="inst-surface rounded-md h-64 flex flex-col items-center justify-center gap-2">
-          <span className="font-mono text-[11px] text-textMuted uppercase tracking-widest">Empty workspace</span>
-          <span className="text-[11px] text-textSecondary">Use “Add panel” or pick a layout to build your desk</span>
+          <span className="font-mono text-label text-textMuted uppercase tracking-widest">Empty workspace</span>
+          <span className="text-label text-textSecondary">Use “Add panel” or pick a layout to build your desk</span>
         </div>
       ) : !isDesktop ? (
         // Mobile: the 12-col drag grid is unreadable on a phone. Stack the panels

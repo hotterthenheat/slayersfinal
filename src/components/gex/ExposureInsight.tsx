@@ -23,10 +23,10 @@ const ExposureInsight = ({ bias, biasNote, insights }: ExposureInsightProps) => 
     className="w-full h-full"
   >
     <div className="flex flex-col gap-2.5">
-      <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted">{biasNote}</span>
+      <span className="font-mono text-micro uppercase tracking-wider text-textMuted">{biasNote}</span>
       <ul className="flex flex-col gap-2">
         {insights.map((line, i) => (
-          <li key={i} className="flex items-start gap-2 text-[11px] text-textSecondary leading-relaxed">
+          <li key={i} className="flex items-start gap-2 text-label text-textSecondary leading-relaxed">
             <span className="text-textMuted mt-px select-none">›</span>
             <span className="tnum">{line}</span>
           </li>

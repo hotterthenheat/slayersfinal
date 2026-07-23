@@ -63,7 +63,7 @@ const ConfidenceChip = ({ conviction }: { conviction: number }) => {
   const { label, tone } = confidenceTier(conviction);
   return (
     <span className="inline-flex items-center gap-1.5">
-      <span className="font-mono text-[11px] uppercase tracking-wider text-textMuted">Confidence</span>
+      <span className="font-mono text-label uppercase tracking-wider text-textMuted">Confidence</span>
       <SignalBadge tone={tone}>
         {label} · {conviction}%
       </SignalBadge>
@@ -238,7 +238,7 @@ const DarkPool = () => {
                     <SignalBadge tone={roleTone[level.role]}>{level.role}</SignalBadge>
                     <span className="min-w-0">
                       <ShelfBar level={level} max={maxNotional} />
-                      <span className="mt-1 block font-mono text-[10px] text-textMuted tnum">
+                      <span className="mt-1 block font-mono text-micro text-textMuted tnum">
                         {fmtUsd(level.notional)} · {level.prints} prints · {level.sharePct.toFixed(0)}% of DP
                       </span>
                     </span>
@@ -246,7 +246,7 @@ const DarkPool = () => {
                       {level.distPct >= 0 ? '+' : ''}
                       {level.distPct.toFixed(2)}%
                     </span>
-                    <span className="font-mono text-[11px] text-textMuted text-right">
+                    <span className="font-mono text-label text-textMuted text-right">
                       {level.defended > 0 ? `${level.defended}× held` : '—'}
                     </span>
                   </button>
@@ -273,26 +273,26 @@ const DarkPool = () => {
               <SignalBadge tone={roleTone[selected.role]} dot>
                 {selected.role}
               </SignalBadge>
-              <span className="font-mono text-[11px] uppercase tracking-wider text-textMuted">
+              <span className="font-mono text-label uppercase tracking-wider text-textMuted">
                 {selected.sharePct.toFixed(0)}% of session DP · {selected.defended > 0 ? `${selected.defended} retest${selected.defended > 1 ? 's' : ''} held` : 'untested'}
               </span>
             </div>
             <p className="text-xs text-textSecondary leading-relaxed">{selected.usage}</p>
             <div className="border-t border-borderSubtle pt-3 flex flex-col gap-2">
               <div className="flex items-center justify-between font-mono text-xs">
-                <span className="text-textMuted uppercase tracking-wider text-[10px]">Above the shelf</span>
+                <span className="text-textMuted uppercase tracking-wider text-micro">Above the shelf</span>
                 <span className="text-bull">
                   {selected.role === 'RESISTANCE' ? 'breakout confirms — supply cleared' : 'bias long against it'}
                 </span>
               </div>
               <div className="flex items-center justify-between font-mono text-xs">
-                <span className="text-textMuted uppercase tracking-wider text-[10px]">Below the shelf</span>
+                <span className="text-textMuted uppercase tracking-wider text-micro">Below the shelf</span>
                 <span className="text-bear">
                   {selected.role === 'SUPPORT' ? 'read invalid — step aside' : 'supply in control'}
                 </span>
               </div>
               <div className="flex items-center justify-between font-mono text-xs">
-                <span className="text-textMuted uppercase tracking-wider text-[10px]">Next shelf</span>
+                <span className="text-textMuted uppercase tracking-wider text-micro">Next shelf</span>
                 <span className="text-textPrimary tnum">
                   {selected.distPct >= 0
                     ? nextUp && nextUp.price !== selected.price
@@ -317,11 +317,11 @@ const DarkPool = () => {
         {activePrint && (
           <div className="px-4 py-3 border-b border-borderSubtle bg-inset flex flex-col gap-2.5 animate-soft-in">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="font-mono text-[11px] uppercase tracking-wider text-textMuted">Inferred as</span>
+              <span className="font-mono text-label uppercase tracking-wider text-textMuted">Inferred as</span>
               <SignalBadge tone={intentTone[activePrint.intent]}>{activePrint.intent}</SignalBadge>
               <ConfidenceChip conviction={activePrint.conviction} />
               {activePrintShelf && (
-                <span className="inline-flex items-center gap-1 font-mono text-[11px] uppercase tracking-wider text-flip">
+                <span className="inline-flex items-center gap-1 font-mono text-label uppercase tracking-wider text-flip">
                   <ShieldCheck className="w-3.5 h-3.5" />
                   {activePrintShelf.defended > 0
                     ? `shelf held ${activePrintShelf.defended}× on retest`
@@ -331,10 +331,10 @@ const DarkPool = () => {
             </div>
             <p className="text-xs text-textSecondary leading-relaxed">{activePrint.read}</p>
             <div className="flex items-start gap-2 border-t border-borderSubtle pt-2.5">
-              <span className="font-mono text-[11px] uppercase tracking-wider text-textMuted whitespace-nowrap mt-px">
+              <span className="font-mono text-label uppercase tracking-wider text-textMuted whitespace-nowrap mt-px">
                 Competing read
               </span>
-              <p className="text-[11px] text-textMuted leading-relaxed">{competingRead[activePrint.intent]}</p>
+              <p className="text-label text-textMuted leading-relaxed">{competingRead[activePrint.intent]}</p>
             </div>
           </div>
         )}

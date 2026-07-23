@@ -78,7 +78,7 @@ const SubNav = ({ items, ariaLabel }: SubNavProps) => {
     <nav aria-label={ariaLabel} className="flex flex-wrap items-start gap-x-3 gap-y-2.5">
       {groups.map(g => (
         <div key={g} className="flex flex-col gap-1">
-          <span className="px-1 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-textMuted select-none">
+          <span className="px-1 font-mono text-micro font-medium uppercase tracking-[0.18em] text-textMuted select-none">
             {g}
           </span>
           <div className="inline-flex items-center gap-0.5 border border-borderSubtle bg-panel rounded-md p-0.5">

@@ -112,7 +112,7 @@ const ExposureLedger = ({
       />
       <button
         onClick={exportCsv}
-        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-borderSubtle bg-white/[0.03] hover:bg-white/[0.06] font-mono text-[11px] font-semibold uppercase tracking-wider text-textPrimary transition-colors"
+        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-borderSubtle bg-white/[0.03] hover:bg-white/[0.06] font-mono text-label font-semibold uppercase tracking-wider text-textPrimary transition-colors"
       >
         <Download className="w-3.5 h-3.5" /> Export CSV
       </button>
@@ -131,17 +131,17 @@ const ExposureLedger = ({
       <div className="overflow-auto h-full min-h-0">
         {/* Sticky legend — stays pinned while the rows scroll */}
         <div className="sticky top-0 z-20 flex items-center gap-3 h-9 px-2.5 bg-panelRaised border-b border-borderSubtle overflow-hidden whitespace-nowrap">
-          <span className="flex items-center gap-1.5 font-mono text-[11px] font-semibold uppercase tracking-wider text-textPrimary">
+          <span className="flex items-center gap-1.5 font-mono text-label font-semibold uppercase tracking-wider text-textPrimary">
             <span className="inline-block w-3 h-[3px] rounded-full" style={{ background: LEG_BAR[leg] }} />
             {LEG_NAME[leg]}
           </span>
           <span className="h-3 w-px bg-borderSubtle" />
           {GREEKS.map(g => (
-            <span key={g.key} className="font-mono text-[11px] uppercase tracking-wider text-textSecondary">
+            <span key={g.key} className="font-mono text-label uppercase tracking-wider text-textSecondary">
               {g.label} <span className="text-textMuted normal-case">· {g.unit}</span>
             </span>
           ))}
-          <span className="ml-auto font-mono text-[11px] uppercase tracking-wider text-textMuted">
+          <span className="ml-auto font-mono text-label uppercase tracking-wider text-textMuted">
             {normalize ? '% of window max' : 'signed $'}
           </span>
         </div>
@@ -149,13 +149,13 @@ const ExposureLedger = ({
         <table className="w-full border-collapse">
           <thead className="sticky top-9 z-10">
             <tr className="bg-panelRaised">
-              <th className="px-2.5 py-1.5 text-left font-mono text-[11px] font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle">
+              <th className="px-2.5 py-1.5 text-left font-mono text-label font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle">
                 Strike
               </th>
               {GREEKS.map(g => (
                 <th
                   key={g.key}
-                  className="px-2.5 py-1.5 text-right font-mono text-[11px] font-semibold uppercase tracking-widest text-textSecondary border-b border-l border-borderSubtle"
+                  className="px-2.5 py-1.5 text-right font-mono text-label font-semibold uppercase tracking-widest text-textSecondary border-b border-l border-borderSubtle"
                 >
                   {g.label}
                 </th>
@@ -180,10 +180,10 @@ const ExposureLedger = ({
                         : ''
                   }`}
                 >
-                  <td className="px-2.5 py-1.5 bg-inset border-r border-borderSubtle/40 font-mono text-[11px] font-semibold tnum text-textSecondary whitespace-nowrap">
+                  <td className="px-2.5 py-1.5 bg-inset border-r border-borderSubtle/40 font-mono text-label font-semibold tnum text-textSecondary whitespace-nowrap">
                     {strikeLabel(row.strike)}
                     {row.pin && (
-                      <span className="ml-1.5 font-mono text-[10px] font-bold uppercase tracking-wider text-textPrimary">
+                      <span className="ml-1.5 font-mono text-micro font-bold uppercase tracking-wider text-textPrimary">
                         pin
                       </span>
                     )}
@@ -193,7 +193,7 @@ const ExposureLedger = ({
                     return (
                       <td key={g.key} className="px-2.5 py-1.5 text-right align-middle border-l border-borderSubtle/20">
                         <span
-                          className={`block font-mono text-[12px] tnum ${
+                          className={`block font-mono text-caption tnum ${
                             leg === 'net' ? 'text-textPrimary font-semibold' : 'text-textPrimary'
                           }`}
                         >

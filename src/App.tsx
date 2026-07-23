@@ -52,7 +52,7 @@ const ProveIt = lazy(() => import('./pages/proveit/ProveIt'));
 
 const RouteFallback = () => (
   <div className="flex items-center justify-center h-[60vh]">
-    <span className="font-mono text-[11px] uppercase tracking-widest text-textMuted animate-pulse">Loading…</span>
+    <span className="font-mono text-label uppercase tracking-widest text-textMuted animate-pulse">Loading…</span>
   </div>
 );
 

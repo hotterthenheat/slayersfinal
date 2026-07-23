@@ -38,13 +38,13 @@ const axisTick = { fill: AXIS, fontSize: 10, fontFamily: 'JetBrains Mono, monosp
 const timeTick = (v: number) => (v <= 0 ? 'Open' : flowClock(v));
 
 const Stat = ({ k, v, tone = 'text-textPrimary' }: { k: string; v: string; tone?: string }) => (
-  <span className="whitespace-nowrap font-mono text-[11px] tnum text-textMuted">
+  <span className="whitespace-nowrap font-mono text-label tnum text-textMuted">
     {k}: <span className={`font-semibold ${tone}`}>{v}</span>
   </span>
 );
 
 const Box = ({ children }: { children: React.ReactNode }) => (
-  <div className="rounded border border-borderMuted bg-panel px-2.5 py-1.5 shadow-lg shadow-black/50 font-mono text-[11px]">{children}</div>
+  <div className="rounded border border-borderMuted bg-panel px-2.5 py-1.5 shadow-lg shadow-black/50 font-mono text-label">{children}</div>
 );
 
 interface FlowTip {
@@ -102,8 +102,8 @@ const ContractFlowChart = ({ contract }: { contract: ContractRef }) => {
       {/* ── Contract Flow ── */}
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center justify-between gap-2">
-          <span className="font-mono text-[11px] font-semibold uppercase tracking-widest text-textPrimary">Contract Flow</span>
-          <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted">1D · 5min</span>
+          <span className="font-mono text-label font-semibold uppercase tracking-widest text-textPrimary">Contract Flow</span>
+          <span className="font-mono text-micro uppercase tracking-wider text-textMuted">1D · 5min</span>
         </div>
         <div className="flex items-center gap-x-3 gap-y-1 flex-wrap">
           <Stat k="Vol" v={contract.volume.toLocaleString()} />
@@ -115,9 +115,9 @@ const ContractFlowChart = ({ contract }: { contract: ContractRef }) => {
           <Stat k="Multi" v={contract.legs > 1 ? `×${contract.legs}` : '1'} />
         </div>
         <div className="mt-0.5">
-          <div className="flex justify-between font-mono text-[10px] tnum text-textMuted mb-1">
+          <div className="flex justify-between font-mono text-micro tnum text-textMuted mb-1">
             <span>Bid {Math.round(cf.ratio.bid * 100)}%</span>
-            <span className="uppercase tracking-widest text-[10px]">Contract Ratio</span>
+            <span className="uppercase tracking-widest text-micro">Contract Ratio</span>
             <span>Ask {Math.round(cf.ratio.ask * 100)}%</span>
           </div>
           <div className="flex h-[4px] rounded-full overflow-hidden bg-white/[0.06]">
@@ -126,7 +126,7 @@ const ContractFlowChart = ({ contract }: { contract: ContractRef }) => {
             <span style={{ width: `${cf.ratio.ask * 100}%`, background: ASK }} />
           </div>
         </div>
-        <div className="flex items-center gap-3 flex-wrap font-mono text-[10px] text-textMuted">
+        <div className="flex items-center gap-3 flex-wrap font-mono text-micro text-textMuted">
           <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: BID }} /> Bid {cf.count.bid}</span>
           <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: MID }} /> Mid {cf.count.mid}</span>
           <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: ASK }} /> Ask {cf.count.ask}</span>
@@ -178,8 +178,8 @@ const ContractFlowChart = ({ contract }: { contract: ContractRef }) => {
       {/* ── Net Premium ── */}
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center justify-between gap-2">
-          <span className="font-mono text-[11px] font-semibold uppercase tracking-widest text-textPrimary">Net Premium</span>
-          <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted">{contract.ticker} · 1D</span>
+          <span className="font-mono text-label font-semibold uppercase tracking-widest text-textPrimary">Net Premium</span>
+          <span className="font-mono text-micro uppercase tracking-wider text-textMuted">{contract.ticker} · 1D</span>
         </div>
         <div className="flex items-center gap-x-3 gap-y-1 flex-wrap">
           <Stat k="Prem" v={fmtUsd(cf.net.callBought + cf.net.callSold + cf.net.putBought + cf.net.putSold)} />
@@ -188,9 +188,9 @@ const ContractFlowChart = ({ contract }: { contract: ContractRef }) => {
           <Stat k="NPP" v={fmtUsd(cf.net.npp)} tone="text-bear" />
         </div>
         <div className="mt-0.5">
-          <div className="flex justify-between font-mono text-[10px] tnum text-textMuted mb-1">
+          <div className="flex justify-between font-mono text-micro tnum text-textMuted mb-1">
             <span>Bearish {100 - bullPct}%</span>
-            <span className="uppercase tracking-widest text-[10px]">Net Sentiment</span>
+            <span className="uppercase tracking-widest text-micro">Net Sentiment</span>
             <span>Bullish {bullPct}%</span>
           </div>
           <div className="flex h-[4px] rounded-full overflow-hidden bg-white/[0.06]">
@@ -198,7 +198,7 @@ const ContractFlowChart = ({ contract }: { contract: ContractRef }) => {
             <span style={{ width: `${bullPct}%`, background: ASK }} />
           </div>
         </div>
-        <div className="flex items-center gap-3 flex-wrap font-mono text-[10px] text-textMuted">
+        <div className="flex items-center gap-3 flex-wrap font-mono text-micro text-textMuted">
           <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: ASK }} /> Call {fmtUsd(cf.net.callBought)}</span>
           <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: BID }} /> Put {fmtUsd(cf.net.putBought)}</span>
           <button

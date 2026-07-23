@@ -83,27 +83,27 @@ const StrikeHoverCard = ({ row, ticker, y }: { row: StrikeExposure; ticker: stri
     >
       {/* Header */}
       <div className="flex items-center justify-between gap-2">
-        <span className="font-mono text-[11px] font-bold text-textPrimary tnum">
+        <span className="font-mono text-label font-bold text-textPrimary tnum">
           Strike {strikeLabel}
-          {row.pin && <span className="ml-1.5 font-mono text-[10px] font-bold uppercase tracking-wider text-textSecondary">pin</span>}
+          {row.pin && <span className="ml-1.5 font-mono text-micro font-bold uppercase tracking-wider text-textSecondary">pin</span>}
         </span>
         <SignalBadge tone={callHeavy ? 'bull' : 'bear'}>{callHeavy ? 'CALL-HEAVY' : 'PUT-HEAVY'}</SignalBadge>
       </div>
 
       {/* Current value */}
       <div className="mt-2">
-        <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Net GEX · now</div>
+        <div className="font-mono text-micro uppercase tracking-widest text-textMuted">Net GEX · now</div>
         <div className={`font-mono text-base font-bold tnum ${row.gex.net >= 0 ? 'text-bull' : 'text-bear'}`}>
           {row.gex.net >= 0 ? '+' : ''}
           {fmtUsd(row.gex.net)}
         </div>
-        <div className={`font-mono text-[10px] uppercase tracking-wider ${rising ? 'text-bull' : 'text-bear'}`}>
+        <div className={`font-mono text-micro uppercase tracking-wider ${rising ? 'text-bull' : 'text-bear'}`}>
           {rising ? '↗ exposure building' : '↘ exposure draining'}
         </div>
       </div>
 
       {/* Legs */}
-      <div className="mt-2 flex items-center gap-3 font-mono text-[10px] uppercase tracking-wider text-textMuted tnum">
+      <div className="mt-2 flex items-center gap-3 font-mono text-micro uppercase tracking-wider text-textMuted tnum">
         <span>
           C <span className="text-bull">{fmtUsd(row.gex.call)}</span>
         </span>
@@ -118,9 +118,9 @@ const StrikeHoverCard = ({ row, ticker, y }: { row: StrikeExposure; ticker: stri
       {/* Trend */}
       {recent.length > 1 && (
         <div className="mt-2 pt-2 border-t border-borderSubtle/60">
-          <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted mb-1">Value over time</div>
+          <div className="font-mono text-micro uppercase tracking-widest text-textMuted mb-1">Value over time</div>
           <TrendLine points={recent} />
-          <div className="flex justify-between font-mono text-[10px] text-textMuted">
+          <div className="flex justify-between font-mono text-micro text-textMuted">
             <span>15m ago</span>
             <span>now</span>
           </div>
@@ -130,7 +130,7 @@ const StrikeHoverCard = ({ row, ticker, y }: { row: StrikeExposure; ticker: stri
       {/* Rate of change */}
       {series.length > 2 && (
         <div className="mt-2 pt-2 border-t border-borderSubtle/60">
-          <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted mb-1">Rate of change</div>
+          <div className="font-mono text-micro uppercase tracking-widest text-textMuted mb-1">Rate of change</div>
           <div className="flex flex-col gap-[3px]">
             {ROC_WINDOWS.map(w => {
               const past = series[series.length - 1 - w.bars];
@@ -139,7 +139,7 @@ const StrikeHoverCard = ({ row, ticker, y }: { row: StrikeExposure; ticker: stri
               const pct = past !== 0 ? (delta / Math.abs(past)) * 100 : 0;
               const up = delta >= 0;
               return (
-                <div key={w.label} className="flex items-center justify-between font-mono text-[10px] tnum">
+                <div key={w.label} className="flex items-center justify-between font-mono text-micro tnum">
                   <span className="text-textMuted">{w.label}</span>
                   <span className={up ? 'text-bull' : 'text-bear'}>
                     {up ? '+' : '−'}
@@ -160,7 +160,7 @@ const StrikeHoverCard = ({ row, ticker, y }: { row: StrikeExposure; ticker: stri
 const FlipMarker = ({ price }: { price: number }) => (
   <div className="flex items-center gap-1.5 px-2 py-[2px]">
     <span className="h-0 flex-grow border-t border-dashed border-flip/70" />
-    <span className="inline-flex items-center rounded-[3px] border border-flip/60 bg-canvas px-1.5 py-px font-mono text-[10px] font-bold uppercase tracking-wider text-flip whitespace-nowrap">
+    <span className="inline-flex items-center rounded-[3px] border border-flip/60 bg-canvas px-1.5 py-px font-mono text-micro font-bold uppercase tracking-wider text-flip whitespace-nowrap">
       FLIP {price % 1 === 0 ? price.toFixed(0) : price.toFixed(2)}
     </span>
     <span className="h-0 w-3 shrink-0 border-t border-dashed border-flip/70" />
@@ -207,7 +207,7 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
           { label: 'Pin', cls: 'w-3 h-0 border-t border-dashed border-textPrimary/70' },
           { label: 'Flip', cls: 'w-3 h-0 border-t border-dashed border-flip/80' },
         ].map(item => (
-          <span key={item.label} className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-textSecondary">
+          <span key={item.label} className="flex items-center gap-1.5 font-mono text-micro uppercase tracking-wider text-textSecondary">
             <span className={`inline-block ${item.cls}`} />
             {item.label}
           </span>
@@ -217,7 +217,7 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
       {/* Scale header */}
       <div className="flex items-center px-2 py-1 border-b border-borderSubtle/60 select-none">
         <span className="w-14 shrink-0" />
-        <div className="flex-1 flex justify-between font-mono text-[10px] text-textMuted tnum">
+        <div className="flex-1 flex justify-between font-mono text-micro text-textMuted tnum">
           <span>−{fmtUsd(max)}</span>
           <span>0</span>
           <span>+{fmtUsd(max)}</span>
@@ -258,7 +258,7 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
                       : ''
                 }`}
               >
-                <span className="w-14 shrink-0 px-2 py-[3px] bg-inset border-r border-borderSubtle/40 font-mono text-[10px] font-semibold tnum text-textSecondary">
+                <span className="w-14 shrink-0 px-2 py-[3px] bg-inset border-r border-borderSubtle/40 font-mono text-micro font-semibold tnum text-textSecondary">
                   {row.strike % 1 === 0 ? row.strike.toFixed(0) : row.strike.toFixed(2)}
                 </span>
                 <div className="relative flex-1 h-[14px]">
@@ -271,7 +271,7 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
                   <CenterBar value={row.gex.call} max={max} color="rgba(48,209,88,0.9)" top />
                   <CenterBar value={row.gex.put} max={max} color="rgba(255,59,48,0.78)" top={false} />
                   {row.pin && (
-                    <span className="absolute right-1 top-1/2 -translate-y-1/2 inline-flex items-center rounded-[3px] border border-textPrimary/60 bg-canvas px-1.5 py-px font-mono text-[10px] font-bold uppercase tracking-wider text-textPrimary">
+                    <span className="absolute right-1 top-1/2 -translate-y-1/2 inline-flex items-center rounded-[3px] border border-textPrimary/60 bg-canvas px-1.5 py-px font-mono text-micro font-bold uppercase tracking-wider text-textPrimary">
                       PIN {row.strike % 1 === 0 ? row.strike.toFixed(0) : row.strike.toFixed(2)}
                     </span>
                   )}
@@ -280,7 +280,7 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
                 <span className="w-20 shrink-0 flex items-center gap-1 pl-1.5 self-stretch">
                   {zone && <span className={`w-[3px] self-stretch rounded-full ${ZONE_STYLE[zone.kind].rail}`} />}
                   {zoneStart && (
-                    <span className={`font-mono text-[10px] font-semibold uppercase tracking-wider ${ZONE_STYLE[zoneStart.kind].text}`}>
+                    <span className={`font-mono text-micro font-semibold uppercase tracking-wider ${ZONE_STYLE[zoneStart.kind].text}`}>
                       {zoneStart.label}
                     </span>
                   )}
@@ -297,7 +297,7 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
       {hoverRow && <StrikeHoverCard row={hoverRow} ticker={ticker} y={hoverY} />}
 
       {/* Sign convention */}
-      <div className="px-2.5 py-1.5 border-t border-borderSubtle font-mono text-[10px] text-textMuted leading-relaxed select-none">
+      <div className="px-2.5 py-1.5 border-t border-borderSubtle font-mono text-micro text-textMuted leading-relaxed select-none">
         Positive = dealer short gamma <span className="text-textSecondary">(upside supply)</span> · Negative = dealer
         long gamma <span className="text-textSecondary">(downside support)</span>
       </div>

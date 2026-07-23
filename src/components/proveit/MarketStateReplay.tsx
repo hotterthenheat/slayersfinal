@@ -53,15 +53,15 @@ const OutcomeBar = ({ view }: { view: StateReplayView }) => (
       <span className="h-full bg-bear/70" style={{ width: `${view.stopPct}%` }} title={`Stop first ${view.stopPct}%`} />
       <span className="h-full bg-white/15" style={{ width: `${view.neitherPct}%` }} title={`Neither ${view.neitherPct}%`} />
     </div>
-    <div className="mt-2 grid grid-cols-3 gap-2 font-mono text-[10px]">
+    <div className="mt-2 grid grid-cols-3 gap-2 font-mono text-micro">
       <span className="flex items-center gap-1.5 text-textMuted uppercase tracking-wider">
-        <span className="bg-bull/80 h-1.5 w-1.5 rounded-full" /> Target <span className="tnum text-bull ml-auto text-[12px] font-semibold">{view.targetPct}%</span>
+        <span className="bg-bull/80 h-1.5 w-1.5 rounded-full" /> Target <span className="tnum text-bull ml-auto text-caption font-semibold">{view.targetPct}%</span>
       </span>
       <span className="flex items-center gap-1.5 text-textMuted uppercase tracking-wider">
-        <span className="h-1.5 w-1.5 rounded-full bg-bear/80" /> Stop <span className="tnum text-bear ml-auto text-[12px] font-semibold">{view.stopPct}%</span>
+        <span className="h-1.5 w-1.5 rounded-full bg-bear/80" /> Stop <span className="tnum text-bear ml-auto text-caption font-semibold">{view.stopPct}%</span>
       </span>
       <span className="flex items-center gap-1.5 text-textMuted uppercase tracking-wider">
-        <span className="h-1.5 w-1.5 rounded-full bg-white/30" /> Neither <span className="tnum text-textPrimary ml-auto text-[12px] font-semibold">{view.neitherPct}%</span>
+        <span className="h-1.5 w-1.5 rounded-full bg-white/30" /> Neither <span className="tnum text-textPrimary ml-auto text-caption font-semibold">{view.neitherPct}%</span>
       </span>
     </div>
   </div>
@@ -73,17 +73,17 @@ const SessionRow = ({ s }: { s: SimSession }) => {
   const rTxt = `${s.rMultiple >= 0 ? '+' : ''}${s.rMultiple.toFixed(2)}R`;
   return (
     <div className="grid grid-cols-[64px_1fr_58px_54px] items-center gap-2 px-3.5 py-2">
-      <span className="font-mono text-[10px] text-textSecondary tnum">{s.id}</span>
+      <span className="font-mono text-micro text-textSecondary tnum">{s.id}</span>
       <div className="min-w-0">
         <div className="relative h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
           <span className="holo-bar block h-full rounded-full" style={{ width: `${Math.round(s.sim * 100)}%` }} />
         </div>
-        <span className="mt-0.5 block font-mono text-[10px] text-textMuted tnum">
+        <span className="mt-0.5 block font-mono text-micro text-textMuted tnum">
           sim {Math.round(s.sim * 100)}% · {s.daysAgo}d ago · +{s.mfePct.toFixed(1)}/−{s.maePct.toFixed(1)}%
         </span>
       </div>
       <SignalBadge tone={tone}>{outcomeLabel[s.outcome]}</SignalBadge>
-      <span className={`text-right font-mono text-[12px] font-semibold tnum ${s.rMultiple >= 0 ? 'text-bull' : 'text-bear'}`}>{rTxt}</span>
+      <span className={`text-right font-mono text-caption font-semibold tnum ${s.rMultiple >= 0 ? 'text-bull' : 'text-bear'}`}>{rTxt}</span>
     </div>
   );
 };
@@ -135,9 +135,9 @@ const CalibrationPlot = ({ view }: { view: StateReplayView }) => {
       </svg>
       {h && (
         <HoverReadout x={h.x} y={h.y}>
-          <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Predicted {h.b.predictedPct.toFixed(0)}%</div>
-          <div className="mt-0.5 font-mono text-[13px] font-bold tnum text-textPrimary">Realized {h.b.realizedPct.toFixed(0)}%</div>
-          <div className="mt-0.5 font-mono text-[10px] text-textSecondary tnum">{h.b.count} samples</div>
+          <div className="font-mono text-micro uppercase tracking-widest text-textMuted">Predicted {h.b.predictedPct.toFixed(0)}%</div>
+          <div className="mt-0.5 font-mono text-data font-bold tnum text-textPrimary">Realized {h.b.realizedPct.toFixed(0)}%</div>
+          <div className="mt-0.5 font-mono text-micro text-textSecondary tnum">{h.b.count} samples</div>
         </HoverReadout>
       )}
     </>
@@ -192,12 +192,12 @@ const EdgeDecayChart = ({ view }: { view: StateReplayView }) => {
       </svg>
       {h && (
         <HoverReadout x={h.x} y={h.y}>
-          <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted">{h.p.bar} bars held</div>
-          <div className={`mt-0.5 font-mono text-[13px] font-bold tnum ${h.p.edgePct >= 0 ? 'text-bull' : 'text-bear'}`}>
+          <div className="font-mono text-micro uppercase tracking-widest text-textMuted">{h.p.bar} bars held</div>
+          <div className={`mt-0.5 font-mono text-data font-bold tnum ${h.p.edgePct >= 0 ? 'text-bull' : 'text-bear'}`}>
             {h.p.edgePct >= 0 ? '+' : '−'}
             {Math.abs(h.p.edgePct).toFixed(1)}pt edge
           </div>
-          <div className="mt-0.5 flex items-center gap-2.5 font-mono text-[10px] tnum text-textSecondary">
+          <div className="mt-0.5 flex items-center gap-2.5 font-mono text-micro tnum text-textSecondary">
             <span className="text-bull">tgt {h.p.cumTargetPct.toFixed(1)}%</span>
             <span className="text-bear">stop {h.p.cumStopPct.toFixed(1)}%</span>
           </div>
@@ -212,14 +212,14 @@ const StateFingerprint = ({ view }: { view: StateReplayView }) => (
   <div className="flex flex-col gap-2">
     {view.factors.map(f => (
       <div key={f.key} className="grid grid-cols-[110px_1fr_58px] items-center gap-2.5">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-textSecondary truncate">{f.label}</span>
+        <span className="font-mono text-micro uppercase tracking-wider text-textSecondary truncate">{f.label}</span>
         <div className="relative h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
           <span className="holo-bar block h-full rounded-full" style={{ width: `${Math.round(f.value * 100)}%` }} />
         </div>
         <span className="flex items-center justify-end gap-1.5">
-          <span className="font-mono text-[10px] tnum text-textPrimary">{Math.round(f.value * 100)}</span>
+          <span className="font-mono text-micro tnum text-textPrimary">{Math.round(f.value * 100)}</span>
           <span
-            className={`font-mono text-[10px] uppercase tracking-wider ${f.live ? 'holo-text' : 'text-textMuted'}`}
+            className={`font-mono text-micro uppercase tracking-wider ${f.live ? 'holo-text' : 'text-textMuted'}`}
             title={f.live ? 'read from the live chain/tape' : 'macro context'}
           >
             {f.live ? 'live' : 'mdl'}
@@ -272,9 +272,9 @@ const MarketStateReplay = ({ snapshot }: MarketStateReplayProps) => {
       </MetricGrid>
 
       <Panel tone={edgeTone} bodyClassName="py-3.5" emphasis>
-        <p className="text-[15px] text-textPrimary leading-relaxed">
+        <p className="text-read text-textPrimary leading-relaxed">
           <span
-            className={`font-mono text-[10px] font-semibold uppercase tracking-widest mr-2.5 ${
+            className={`font-mono text-micro font-semibold uppercase tracking-widest mr-2.5 ${
               view.edgePts >= 4 ? 'text-bull' : view.edgePts <= -4 ? 'text-bear' : 'text-warn'
             }`}
           >
@@ -282,7 +282,7 @@ const MarketStateReplay = ({ snapshot }: MarketStateReplayProps) => {
           </span>
           {view.headline}
         </p>
-        <p className="mt-1.5 font-mono text-[11px] text-textSecondary tnum">{view.receipts}</p>
+        <p className="mt-1.5 font-mono text-label text-textSecondary tnum">{view.receipts}</p>
       </Panel>
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
@@ -301,15 +301,15 @@ const MarketStateReplay = ({ snapshot }: MarketStateReplayProps) => {
             <OutcomeBar view={view} />
           </div>
           <div className="flex items-center justify-between border-y border-borderSubtle px-3.5 py-1.5">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">closest analogs</span>
-            <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">outcome · result</span>
+            <span className="font-mono text-micro uppercase tracking-widest text-textMuted">closest analogs</span>
+            <span className="font-mono text-micro uppercase tracking-widest text-textMuted">outcome · result</span>
           </div>
           <div className="flex flex-col divide-y divide-borderSubtle">
             {view.topSessions.map(s => (
               <SessionRow key={s.id} s={s} />
             ))}
           </div>
-          <p className="px-3.5 py-2.5 border-t border-borderSubtle font-mono text-[10px] text-textMuted leading-relaxed">
+          <p className="px-3.5 py-2.5 border-t border-borderSubtle font-mono text-micro text-textMuted leading-relaxed">
             Target first vs stop first is scored against this setup's own geometry — {view.targetDistPct.toFixed(1)}% to target,{' '}
             {view.stopDistPct.toFixed(1)}% to stop ({view.rr.toFixed(1)}:1). Excess over the {view.baselineTargetPct}% a no-edge
             session posts is the edge: {view.edgePts >= 0 ? '+' : ''}
@@ -328,7 +328,7 @@ const MarketStateReplay = ({ snapshot }: MarketStateReplayProps) => {
           className="xl:col-span-5"
         >
           <StateFingerprint view={view} />
-          <p className="mt-3 font-mono text-[10px] text-textMuted leading-relaxed">
+          <p className="mt-3 font-mono text-micro text-textMuted leading-relaxed">
             Similarity is Euclidean distance over these eight axes. <span className="holo-text">Live</span> factors read off the chain
             and tape; the rest are the macro context — breadth, rates, news, session phase — that rounds out the eight-axis
             fingerprint.
@@ -350,7 +350,7 @@ const MarketStateReplay = ({ snapshot }: MarketStateReplayProps) => {
         >
           <CalibrationPlot view={view} />
           <div className="mt-2 flex items-center justify-between">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted">mean gap</span>
+            <span className="font-mono text-micro uppercase tracking-wider text-textMuted">mean gap</span>
             <SignalBadge tone={view.calibrationErrorPct <= 6 ? 'bull' : 'warn'} dot>
               {view.calibrationErrorPct}pt error
             </SignalBadge>
@@ -370,17 +370,17 @@ const MarketStateReplay = ({ snapshot }: MarketStateReplayProps) => {
           <EdgeDecayChart view={view} />
           <div className="mt-2 grid grid-cols-3 gap-2">
             <div>
-              <div className="font-mono text-[10px] uppercase tracking-wider text-textMuted">Peak edge</div>
+              <div className="font-mono text-micro uppercase tracking-wider text-textMuted">Peak edge</div>
               <div className="font-mono text-sm font-semibold tnum holo-text">
                 {Math.max(...view.edgeDecay.map(p => p.edgePct)).toFixed(0)}pt
               </div>
             </div>
             <div>
-              <div className="font-mono text-[10px] uppercase tracking-wider text-textMuted">MFE / MAE</div>
+              <div className="font-mono text-micro uppercase tracking-wider text-textMuted">MFE / MAE</div>
               <div className="font-mono text-sm font-semibold tnum text-textPrimary">{view.edgeRatio.toFixed(2)}×</div>
             </div>
             <div>
-              <div className="font-mono text-[10px] uppercase tracking-wider text-textMuted">Avg excursion</div>
+              <div className="font-mono text-micro uppercase tracking-wider text-textMuted">Avg excursion</div>
               <div className="font-mono text-sm font-semibold tnum text-textPrimary">
                 +{view.avgMfePct.toFixed(1)}/−{view.avgMaePct.toFixed(1)}%
               </div>
@@ -406,24 +406,24 @@ const MarketStateReplay = ({ snapshot }: MarketStateReplayProps) => {
       >
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
           <div className="flex flex-col gap-1">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted">In-sample</span>
+            <span className="font-mono text-micro uppercase tracking-wider text-textMuted">In-sample</span>
             <span className="font-mono text-2xl font-bold tnum text-textPrimary">{view.oos.inSampleTargetPct}%</span>
-            <span className="font-mono text-[10px] text-textMuted tnum">older {view.oos.inSampleN} analogs · target first</span>
+            <span className="font-mono text-micro text-textMuted tnum">older {view.oos.inSampleN} analogs · target first</span>
           </div>
           <div className="flex flex-col gap-1">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted">Out-of-sample</span>
+            <span className="font-mono text-micro uppercase tracking-wider text-textMuted">Out-of-sample</span>
             <span className={`font-mono text-2xl font-bold tnum ${Math.abs(view.oos.degradationPts) <= 5 ? 'holo-text' : 'text-warn'}`}>
               {view.oos.outSampleTargetPct}%
             </span>
-            <span className="font-mono text-[10px] text-textMuted tnum">recent {view.oos.outSampleN} held out · target first</span>
+            <span className="font-mono text-micro text-textMuted tnum">recent {view.oos.outSampleN} held out · target first</span>
           </div>
           <div className="flex flex-col gap-1">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted">Degradation</span>
+            <span className="font-mono text-micro uppercase tracking-wider text-textMuted">Degradation</span>
             <span className={`font-mono text-2xl font-bold tnum ${Math.abs(view.oos.degradationPts) <= 5 ? 'text-bull' : 'text-warn'}`}>
               {view.oos.degradationPts >= 0 ? '−' : '+'}
               {Math.abs(view.oos.degradationPts)}pt
             </span>
-            <span className="font-mono text-[10px] text-textMuted tnum">
+            <span className="font-mono text-micro text-textMuted tnum">
               {Math.abs(view.oos.degradationPts) <= 5 ? 'holds out of sample' : 'softens on the holdout'}
             </span>
           </div>

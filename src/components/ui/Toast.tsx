@@ -91,7 +91,7 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
                   role="status"
                 >
                   <span className={`mt-0.5 shrink-0 ${tone.text}`}>{tone.icon}</span>
-                  <span className="flex-1 text-[12px] leading-snug text-textPrimary">{t.message}</span>
+                  <span className="flex-1 text-caption leading-snug text-textPrimary">{t.message}</span>
                   <button
                     onClick={() => dismiss(t.id)}
                     aria-label="Dismiss"

@@ -16,16 +16,16 @@ export const Field = ({
   sub?: string;
 }) => (
   <div className="bg-inset px-3 py-2 flex flex-col gap-0.5 min-w-0">
-    <span className="font-mono text-[11px] uppercase tracking-widest text-textMuted truncate">{label}</span>
-    <span className={`font-mono text-[13px] font-semibold tnum ${tone} truncate`}>{value}</span>
-    {sub && <span className="font-mono text-[11px] text-textSecondary truncate">{sub}</span>}
+    <span className="font-mono text-label uppercase tracking-widest text-textMuted truncate">{label}</span>
+    <span className={`font-mono text-data font-semibold tnum ${tone} truncate`}>{value}</span>
+    {sub && <span className="font-mono text-label text-textSecondary truncate">{sub}</span>}
   </div>
 );
 
 /** A titled 3-up grid of Fields. */
 export const Section = ({ title, children }: { title: string; children: ReactNode }) => (
   <div className="flex flex-col gap-1.5">
-    <span className="font-mono text-[11px] uppercase tracking-widest text-textSecondary">{title}</span>
+    <span className="font-mono text-label uppercase tracking-widest text-textSecondary">{title}</span>
     <div className="grid grid-cols-3 gap-px bg-borderSubtle rounded-md overflow-hidden">{children}</div>
   </div>
 );

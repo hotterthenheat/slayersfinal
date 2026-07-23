@@ -31,7 +31,7 @@ const Wordmark = ({ onClick, size = 'sm' }: { onClick: (e: React.MouseEvent) => 
   <a
     href="/"
     onClick={onClick}
-    className={`shrink-0 font-mono font-bold tracking-tight select-none ${size === 'md' ? 'text-[15px]' : 'text-[13px]'}`}
+    className={`shrink-0 font-mono font-bold tracking-tight select-none ${size === 'md' ? 'text-read' : 'text-data'}`}
   >
     <span className="text-textMuted">&gt; </span>
     <span className="holo-text">slayer_terminal</span>
@@ -97,7 +97,7 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
                 aria-expanded={dropdown === group}
                 onClick={() => setDropdown(prev => (prev === group ? null : group))}
                 onFocus={() => setDropdown(group)}
-                className={`relative self-stretch flex items-center gap-1 px-3 my-2 rounded-md font-mono text-[11px] font-semibold uppercase tracking-wider transition-colors ${
+                className={`relative self-stretch flex items-center gap-1 px-3 my-2 rounded-md font-mono text-label font-semibold uppercase tracking-wider transition-colors ${
                   active
                     ? 'text-textPrimary bg-white/[0.06]'
                     : 'text-textMuted hover:text-textPrimary hover:bg-white/[0.03]'
@@ -137,7 +137,7 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
           className="flex items-center gap-2 border border-borderSubtle bg-panel hover:border-borderMuted rounded-md px-2.5 py-1.5 text-xs text-textMuted transition-colors"
         >
           <Search className="w-3.5 h-3.5" />
-          <kbd className="hidden sm:inline font-mono text-[10px] border border-borderSubtle rounded px-1 py-0.5 text-textMuted bg-inset">
+          <kbd className="hidden sm:inline font-mono text-micro border border-borderSubtle rounded px-1 py-0.5 text-textMuted bg-inset">
             ⌘K
           </kbd>
         </button>
@@ -157,7 +157,7 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
               <span className="text-textPrimary font-semibold tnum">
                 <AnimatedNumber value={marketData.spot} format={v => `$${v.toFixed(2)}`} />
               </span>
-              <span className={`tnum text-[11px] ${changeUp ? 'text-bull' : 'text-bear'}`}>
+              <span className={`tnum text-label ${changeUp ? 'text-bull' : 'text-bear'}`}>
                 {changeUp ? '+' : ''}
                 {marketData.changePercent.toFixed(2)}%
               </span>
@@ -219,7 +219,7 @@ const DropMenu = ({
   >
     <div className="mt-1 min-w-[248px] border border-borderMuted bg-panel rounded-md shadow-overlay overflow-hidden">
       <div className="flex items-center justify-between gap-3 px-3 py-2 border-b border-borderSubtle">
-        <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-textPrimary whitespace-nowrap">
+        <span className="font-mono text-micro font-semibold uppercase tracking-widest text-textPrimary whitespace-nowrap">
           {title}
         </span>
       </div>
@@ -231,7 +231,7 @@ const DropMenu = ({
               key={sub.path}
               to={sub.path}
               onClick={onPick}
-              className={`flex items-center gap-2 px-2.5 py-1.5 rounded font-mono text-[12px] whitespace-nowrap transition-colors ${
+              className={`flex items-center gap-2 px-2.5 py-1.5 rounded font-mono text-caption whitespace-nowrap transition-colors ${
                 isActive
                   ? 'bg-white/[0.06] text-textPrimary'
                   : 'text-textSecondary hover:text-textPrimary hover:bg-white/[0.03]'
@@ -241,7 +241,7 @@ const DropMenu = ({
               <span className="flex flex-col">
                 {sub.label}
                 {descriptions?.[sub.path] && (
-                  <span className="font-sans text-[11px] text-textMuted normal-case tracking-normal leading-tight">
+                  <span className="font-sans text-label text-textMuted normal-case tracking-normal leading-tight">
                     {descriptions[sub.path]}
                   </span>
                 )}
@@ -261,7 +261,7 @@ const MobileNav = ({ section, onPick }: { section: string; onPick: () => void })
       const items = itemsByGroup(group);
       return (
         <div key={group}>
-          <div className="px-2 pb-1.5 font-mono text-[10px] uppercase tracking-widest text-textMuted">{group}</div>
+          <div className="px-2 pb-1.5 font-mono text-micro uppercase tracking-widest text-textMuted">{group}</div>
           <div className="grid grid-cols-2 gap-1.5">
             {items.map((item: NavItem) => {
               const active = item.path === section;
@@ -277,7 +277,7 @@ const MobileNav = ({ section, onPick }: { section: string; onPick: () => void })
                   }`}
                 >
                   <item.icon className={`w-4 h-4 ${active ? 'text-textPrimary' : 'text-textMuted'}`} />
-                  <span className="font-mono text-[12px] font-semibold uppercase tracking-wider">{item.label}</span>
+                  <span className="font-mono text-caption font-semibold uppercase tracking-wider">{item.label}</span>
                 </NavLink>
               );
             })}
@@ -285,7 +285,7 @@ const MobileNav = ({ section, onPick }: { section: string; onPick: () => void })
         </div>
       );
     })}
-    <p className="px-2 font-mono text-[10px] text-textMuted">
+    <p className="px-2 font-mono text-micro text-textMuted">
       {NAV_ITEMS.length} desks · ⌘K for quick jump
     </p>
   </div>

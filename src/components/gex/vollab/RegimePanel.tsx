@@ -58,7 +58,7 @@ const RegimePanel = ({ data }: RegimePanelProps) => {
           { label: 'Normal', cls: 'bg-white/[0.18]' },
           { label: 'High vol', cls: 'bg-bear/50' },
         ].map(item => (
-          <span key={item.label} className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-textMuted">
+          <span key={item.label} className="flex items-center gap-1.5 font-mono text-micro uppercase tracking-wider text-textMuted">
             <span className={`inline-block w-2.5 h-2 rounded-[2px] ${item.cls}`} />
             {item.label}
           </span>
@@ -89,15 +89,15 @@ const RegimePanel = ({ data }: RegimePanelProps) => {
       </div>
       {h && series[h.i] && (
         <HoverReadout x={h.x} y={h.y}>
-          <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted">{series[h.i].month}</div>
-          <div className="mt-1 flex items-center gap-2.5 font-mono text-[11px] tnum">
+          <div className="font-mono text-micro uppercase tracking-widest text-textMuted">{series[h.i].month}</div>
+          <div className="mt-1 flex items-center gap-2.5 font-mono text-label tnum">
             <span className="text-bull">Low {Math.round(series[h.i].low * 100)}%</span>
             <span className="text-textSecondary">Norm {Math.round(series[h.i].normal * 100)}%</span>
             <span className="text-bear">High {Math.round(series[h.i].high * 100)}%</span>
           </div>
         </HoverReadout>
       )}
-      <div className="flex justify-between font-mono text-[10px] text-textMuted select-none">
+      <div className="flex justify-between font-mono text-micro text-textMuted select-none">
         {series.filter((_, i) => i % 6 === 0).map(s => (
           <span key={s.month}>{s.month}</span>
         ))}
@@ -108,8 +108,8 @@ const RegimePanel = ({ data }: RegimePanelProps) => {
       <div className="grid grid-cols-5 gap-2 pt-2 border-t border-borderSubtle">
         {stats.map(s => (
           <span key={s.label} className="min-w-0">
-            <span className="block font-mono text-[10px] uppercase tracking-widest text-textMuted truncate">{s.label}</span>
-            <span className="block font-mono text-[10px] font-semibold tnum text-textPrimary">{s.value}</span>
+            <span className="block font-mono text-micro uppercase tracking-widest text-textMuted truncate">{s.label}</span>
+            <span className="block font-mono text-micro font-semibold tnum text-textPrimary">{s.value}</span>
           </span>
         ))}
       </div>

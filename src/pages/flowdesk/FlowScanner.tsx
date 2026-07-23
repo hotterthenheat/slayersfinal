@@ -142,7 +142,7 @@ const ScoreBar = ({ score }: { score: number }) => (
         <span className="absolute top-0 bottom-0 right-1/2 bg-bear/80 rounded-l-full" style={{ width: `${(-score / 100) * 50}%` }} />
       )}
     </span>
-    <span className={`w-8 text-right font-mono text-[11px] tnum ${score >= 0 ? 'text-bull' : 'text-bear'}`}>
+    <span className={`w-8 text-right font-mono text-label tnum ${score >= 0 ? 'text-bull' : 'text-bear'}`}>
       {score >= 0 ? '+' : ''}
       {score}
     </span>
@@ -174,7 +174,7 @@ const ALL_COLUMNS: Column<ScannerRow>[] = [
           {r.ticker} {r.strike}
           <span className={r.right === 'C' ? 'text-bull' : 'text-bear'}>{r.right}</span>
         </span>
-        <span className="font-mono text-[11px] text-textMuted">
+        <span className="font-mono text-label text-textMuted">
           {r.expiry} · {r.dte}d · {r.otmPct >= 0 ? '+' : ''}
           {r.otmPct.toFixed(1)}%
         </span>
@@ -231,7 +231,7 @@ function useDismiss<T extends HTMLElement>(open: boolean, onClose: () => void) {
 }
 
 const triggerCls =
-  'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-borderSubtle hover:border-borderMuted bg-panel font-mono text-[11px] font-semibold uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors';
+  'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-borderSubtle hover:border-borderMuted bg-panel font-mono text-label font-semibold uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors';
 
 // ---- filter menu ---------------------------------------------------------------
 const FilterRow = <V extends string>({
@@ -246,7 +246,7 @@ const FilterRow = <V extends string>({
   onChange: (v: V) => void;
 }) => (
   <div className="px-3 py-2">
-    <div className="mb-1.5 font-mono text-[11px] uppercase tracking-widest text-textMuted">{label}</div>
+    <div className="mb-1.5 font-mono text-label uppercase tracking-widest text-textMuted">{label}</div>
     <div className="overflow-x-auto">
       <SegmentedControl ariaLabel={label} options={options} value={value} onChange={onChange} />
     </div>
@@ -272,16 +272,16 @@ const FilterMenu = ({
     <div ref={ref} className="relative">
       <button onClick={() => setOpen(o => !o)} aria-expanded={open} className={triggerCls}>
         <SlidersHorizontal className="w-3.5 h-3.5" /> Filters
-        {activeCount > 0 && <span className="font-mono text-[11px] text-select tnum">{activeCount}</span>}
+        {activeCount > 0 && <span className="font-mono text-label text-select tnum">{activeCount}</span>}
       </button>
 
       {open && (
         <div className="absolute left-0 top-full mt-1.5 z-40 w-[340px] border border-borderMuted bg-panel rounded-lg shadow-overlay overflow-hidden animate-slide-in">
           <div className="flex items-center justify-between px-3 py-2 border-b border-borderSubtle">
-            <span className="font-mono text-[11px] uppercase tracking-widest text-textSecondary">Scan filters</span>
+            <span className="font-mono text-label uppercase tracking-widest text-textSecondary">Scan filters</span>
             <button
               onClick={onReset}
-              className="inline-flex items-center gap-1 font-mono text-[11px] uppercase tracking-wider text-textMuted hover:text-textPrimary transition-colors"
+              className="inline-flex items-center gap-1 font-mono text-label uppercase tracking-wider text-textMuted hover:text-textPrimary transition-colors"
             >
               <RotateCcw className="w-3 h-3" /> Reset
             </button>
@@ -303,7 +303,7 @@ const FilterMenu = ({
               >
                 <Check className="w-3 h-3" />
               </span>
-              <span className={`font-mono text-[12px] ${filters.sweepsOnly ? 'text-textPrimary' : 'text-textMuted'}`}>Sweeps only</span>
+              <span className={`font-mono text-caption ${filters.sweepsOnly ? 'text-textPrimary' : 'text-textMuted'}`}>Sweeps only</span>
             </button>
           </div>
         </div>
@@ -347,13 +347,13 @@ const TemplatesMenu = ({
     <div ref={ref} className="relative">
       <button onClick={() => setOpen(o => !o)} aria-expanded={open} className={triggerCls}>
         <Bookmark className="w-3.5 h-3.5" /> {activeName ?? 'Templates'}
-        {custom.length > 0 && <span className="font-mono text-[11px] text-select tnum">{custom.length}</span>}
+        {custom.length > 0 && <span className="font-mono text-label text-select tnum">{custom.length}</span>}
       </button>
 
       {open && (
         <div className="absolute left-0 top-full mt-1.5 z-40 w-64 border border-borderMuted bg-panel rounded-lg shadow-overlay overflow-hidden animate-slide-in">
           <div className="max-h-72 overflow-y-auto py-1">
-            <div className="px-3 pt-2 pb-1 font-mono text-[11px] uppercase tracking-widest text-textMuted">Presets</div>
+            <div className="px-3 pt-2 pb-1 font-mono text-label uppercase tracking-widest text-textMuted">Presets</div>
             {PRESETS.map(p => {
               const f = resolve(p.patch);
               const on = activeName === p.name;
@@ -361,7 +361,7 @@ const TemplatesMenu = ({
                 <button
                   key={p.name}
                   onClick={() => apply(f)}
-                  className={`w-full text-left px-3 py-1.5 font-mono text-[12px] transition-colors ${
+                  className={`w-full text-left px-3 py-1.5 font-mono text-caption transition-colors ${
                     on ? 'text-select bg-select/[0.06]' : 'text-textPrimary hover:text-select hover:bg-white/[0.03]'
                   }`}
                 >
@@ -370,17 +370,17 @@ const TemplatesMenu = ({
               );
             })}
 
-            <div className="px-3 pt-2 pb-1 mt-1 border-t border-borderSubtle font-mono text-[11px] uppercase tracking-widest text-textMuted">
+            <div className="px-3 pt-2 pb-1 mt-1 border-t border-borderSubtle font-mono text-label uppercase tracking-widest text-textMuted">
               Saved
             </div>
             {custom.length === 0 ? (
-              <div className="px-3 py-2 font-mono text-[11px] text-textMuted">No saved templates yet</div>
+              <div className="px-3 py-2 font-mono text-label text-textMuted">No saved templates yet</div>
             ) : (
               custom.map(t => (
                 <div key={t.name} className={`flex items-center gap-2 pl-3 pr-2 py-1 ${activeName === t.name ? 'bg-select/[0.06]' : ''}`}>
                   <button
                     onClick={() => apply(t.filters)}
-                    className={`flex-1 min-w-0 text-left font-mono text-[12px] truncate transition-colors ${
+                    className={`flex-1 min-w-0 text-left font-mono text-caption truncate transition-colors ${
                       activeName === t.name ? 'text-select' : 'text-textPrimary hover:text-select'
                     }`}
                   >
@@ -405,11 +405,11 @@ const TemplatesMenu = ({
                 if (e.key === 'Enter') commit();
               }}
               placeholder="Save current filters…"
-              className="flex-1 min-w-0 bg-inset border border-borderSubtle rounded px-2 py-1 font-mono text-[12px] text-textPrimary placeholder:text-textMuted focus:outline-none focus:border-borderMuted"
+              className="flex-1 min-w-0 bg-inset border border-borderSubtle rounded px-2 py-1 font-mono text-caption text-textPrimary placeholder:text-textMuted focus:outline-none focus:border-borderMuted"
             />
             <button
               onClick={commit}
-              className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded border border-borderSubtle hover:border-borderMuted font-mono text-[11px] text-textSecondary hover:text-textPrimary transition-colors"
+              className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded border border-borderSubtle hover:border-borderMuted font-mono text-label text-textSecondary hover:text-textPrimary transition-colors"
             >
               <Plus className="w-3 h-3" /> Save
             </button>
@@ -439,16 +439,16 @@ const ColumnChooser = ({
     <div ref={ref} className="relative">
       <button onClick={() => setOpen(o => !o)} aria-expanded={open} className={triggerCls}>
         <Grid3x3 className="w-3.5 h-3.5" /> Columns
-        {hiddenCount > 0 && <span className="font-mono text-[11px] text-select tnum">−{hiddenCount}</span>}
+        {hiddenCount > 0 && <span className="font-mono text-label text-select tnum">−{hiddenCount}</span>}
       </button>
 
       {open && (
         <div className="absolute right-0 top-full mt-1.5 z-40 w-56 border border-borderMuted bg-panel rounded-lg shadow-overlay overflow-hidden animate-slide-in">
           <div className="flex items-center justify-between px-3 py-2 border-b border-borderSubtle">
-            <span className="font-mono text-[11px] uppercase tracking-widest text-textSecondary">Columns</span>
+            <span className="font-mono text-label uppercase tracking-widest text-textSecondary">Columns</span>
             <button
               onClick={onReset}
-              className="font-mono text-[11px] uppercase tracking-wider text-textMuted hover:text-textPrimary transition-colors"
+              className="font-mono text-label uppercase tracking-wider text-textMuted hover:text-textPrimary transition-colors"
             >
               Show all
             </button>
@@ -472,8 +472,8 @@ const ColumnChooser = ({
                   >
                     <Check className="w-3 h-3" />
                   </span>
-                  <span className={`font-mono text-[12px] ${on ? 'text-textPrimary' : 'text-textMuted'}`}>{c.label}</span>
-                  {c.locked && <span className="ml-auto font-mono text-[11px] uppercase tracking-wider text-textMuted">pinned</span>}
+                  <span className={`font-mono text-caption ${on ? 'text-textPrimary' : 'text-textMuted'}`}>{c.label}</span>
+                  {c.locked && <span className="ml-auto font-mono text-label uppercase tracking-wider text-textMuted">pinned</span>}
                 </button>
               );
             })}
@@ -670,7 +670,7 @@ const FlowScanner = () => {
           activeName={activeTemplate}
         />
         <ColumnChooser visible={visibleCols} onToggle={toggleCol} onReset={resetCols} />
-        <span className="ml-auto font-mono text-[11px] text-textMuted uppercase tracking-widest tnum">
+        <span className="ml-auto font-mono text-label text-textMuted uppercase tracking-widest tnum">
           {filtered.length} of {summary.contracts} · {summary.sweeps} sweeps · per-contract · 10s
         </span>
       </div>

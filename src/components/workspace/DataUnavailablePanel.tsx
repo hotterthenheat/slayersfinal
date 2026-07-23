@@ -12,10 +12,10 @@ const DataUnavailablePanel = ({ requires }: { requires: string }) => (
     <span className="inline-flex w-8 h-8 rounded-md border border-borderSubtle bg-inset items-center justify-center">
       <Lock className="w-4 h-4 text-textMuted" />
     </span>
-    <span className="font-mono text-[11px] font-semibold uppercase tracking-widest text-textSecondary">
+    <span className="font-mono text-label font-semibold uppercase tracking-widest text-textSecondary">
       Live data unavailable
     </span>
-    <span className="text-[11px] text-textMuted leading-relaxed max-w-[240px]">
+    <span className="text-label text-textMuted leading-relaxed max-w-[240px]">
       This module needs {requires} for the active symbol. It stays dark until the feed is connected — wire it and the
       module activates behind the same contract.
     </span>

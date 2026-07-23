@@ -192,7 +192,7 @@ export const WIDGETS: WidgetDef[] = [
         </span>
         <ul className="flex flex-col gap-2">
           {ctx.exposure.insights.map((line, i) => (
-            <li key={i} className="flex items-start gap-2 text-[11px] text-textSecondary leading-relaxed">
+            <li key={i} className="flex items-start gap-2 text-label text-textSecondary leading-relaxed">
               <span className="text-textMuted mt-px select-none">›</span>
               <span className="tnum">{line}</span>
             </li>
@@ -246,16 +246,16 @@ export const WIDGETS: WidgetDef[] = [
           .map(s => (
             <div key={s.id} className="flex items-center gap-2 px-2.5 py-2 border-b border-borderSubtle/30 last:border-0">
               <span
-                className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[10px] font-semibold ${
+                className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-micro font-semibold ${
                   s.right === 'C' ? 'border-bull/30 bg-bull/10 text-bull' : 'border-bear/30 bg-bear/10 text-bear'
                 }`}
               >
                 {s.contract}
               </span>
-              <span className="ml-auto font-mono text-[10px] text-textSecondary tnum">
+              <span className="ml-auto font-mono text-micro text-textSecondary tnum">
                 score <span className="text-textPrimary font-semibold">{s.score}</span>
               </span>
-              <span className={`font-mono text-[10px] font-semibold tnum ${s.expectedMovePct >= 0 ? 'text-bull' : 'text-bear'}`}>
+              <span className={`font-mono text-micro font-semibold tnum ${s.expectedMovePct >= 0 ? 'text-bull' : 'text-bear'}`}>
                 {s.expectedMovePct >= 0 ? '+' : ''}
                 {s.expectedMovePct}%
               </span>
@@ -281,13 +281,13 @@ export const WIDGETS: WidgetDef[] = [
             <SignalBadge tone={tone} dot>
               {dp.posture}
             </SignalBadge>
-            <span className="font-mono text-[10px] text-textMuted tnum">
+            <span className="font-mono text-micro text-textMuted tnum">
               {dp.dpSharePct.toFixed(0)}% off-exchange · {dp.netPosturePct >= 0 ? '+' : ''}
               {dp.netPosturePct.toFixed(0)}
             </span>
           </div>
           {dp.levels.slice(0, 6).map(l => (
-            <div key={l.price} className="flex items-center justify-between gap-2 font-mono text-[11px]">
+            <div key={l.price} className="flex items-center justify-between gap-2 font-mono text-label">
               <span className="text-textPrimary tnum">${l.price.toFixed(2)}</span>
               <SignalBadge tone={l.role === 'SUPPORT' ? 'bull' : l.role === 'RESISTANCE' ? 'bear' : 'neutral'}>{l.role}</SignalBadge>
               <span className="text-textMuted tnum">{fmtUsd(l.notional)}</span>
@@ -325,9 +325,9 @@ export const WIDGETS: WidgetDef[] = [
           .slice(0, 8)
           .map(p => (
             <div key={p.ticker} className="flex items-center gap-2 px-2.5 py-2 border-b border-borderSubtle/30 last:border-0">
-              <span className="font-mono text-[11px] font-bold text-textPrimary">{p.ticker}</span>
+              <span className="font-mono text-label font-bold text-textPrimary">{p.ticker}</span>
               <SignalBadge tone={p.verdict === 'ACCUMULATE' ? 'bull' : p.verdict === 'AVOID' ? 'bear' : 'neutral'}>{p.verdict}</SignalBadge>
-              <span className="ml-auto font-mono text-[11px] font-semibold text-textPrimary tnum">{p.composite}</span>
+              <span className="ml-auto font-mono text-label font-semibold text-textPrimary tnum">{p.composite}</span>
             </div>
           ))}
       </div>
@@ -348,14 +348,14 @@ export const WIDGETS: WidgetDef[] = [
           .map(n => (
             <div key={n.id} className="px-2.5 py-2 border-b border-borderSubtle/30 last:border-0">
               <div className="flex items-center gap-2">
-                <span className="font-mono text-[10px] text-textMuted tnum">{n.time}</span>
-                {n.ticker && <span className="font-mono text-[10px] font-bold text-textPrimary">{n.ticker}</span>}
-                <span className={`ml-auto font-mono text-[10px] tnum ${n.prediction.expMove1dPct >= 0 ? 'text-bull' : 'text-bear'}`}>
+                <span className="font-mono text-micro text-textMuted tnum">{n.time}</span>
+                {n.ticker && <span className="font-mono text-micro font-bold text-textPrimary">{n.ticker}</span>}
+                <span className={`ml-auto font-mono text-micro tnum ${n.prediction.expMove1dPct >= 0 ? 'text-bull' : 'text-bear'}`}>
                   {n.prediction.expMove1dPct >= 0 ? '+' : ''}
                   {n.prediction.expMove1dPct.toFixed(1)}%
                 </span>
               </div>
-              <p className="mt-0.5 text-[11px] text-textSecondary leading-snug line-clamp-1">{n.headline}</p>
+              <p className="mt-0.5 text-label text-textSecondary leading-snug line-clamp-1">{n.headline}</p>
             </div>
           ))}
       </div>
@@ -375,9 +375,9 @@ export const WIDGETS: WidgetDef[] = [
           .slice(0, 8)
           .map(e => (
             <div key={e.ticker} className="flex items-center gap-2 px-2.5 py-2 border-b border-borderSubtle/30 last:border-0">
-              <span className="font-mono text-[11px] font-bold text-textPrimary">{e.ticker}</span>
-              <span className="font-mono text-[10px] text-textMuted">{e.dateLabel}</span>
-              <span className="ml-auto font-mono text-[10px] text-textSecondary tnum">{e.impliedMovePct.toFixed(1)}%</span>
+              <span className="font-mono text-label font-bold text-textPrimary">{e.ticker}</span>
+              <span className="font-mono text-micro text-textMuted">{e.dateLabel}</span>
+              <span className="ml-auto font-mono text-micro text-textSecondary tnum">{e.impliedMovePct.toFixed(1)}%</span>
               <SignalBadge tone={e.verdict === 'PLAY' ? 'bull' : e.verdict === 'FADE' ? 'magenta' : 'neutral'}>{e.verdict}</SignalBadge>
             </div>
           ))}

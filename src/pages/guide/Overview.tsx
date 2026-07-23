@@ -29,7 +29,7 @@ const STEPS = [
 const Overview = () => (
   <>
     <Section title="What Slayer is">
-      <p className="text-[14px] leading-relaxed text-textSecondary max-w-[70ch]">
+      <p className="text-body leading-relaxed text-textSecondary max-w-[70ch]">
         Slayer Terminal is a dealer-flow options terminal. It reads where market-makers are positioned, where size is
         actually printing, and how that pins or accelerates price — then turns it into plain-English reads. The through
         line is simple: <span className="text-textPrimary">Compass finds the setup, Pinpoint reads the dealer
@@ -47,16 +47,16 @@ const Overview = () => (
           >
             <div className="flex items-center gap-2">
               <d.icon className="w-4 h-4 text-textSecondary group-hover:text-textPrimary transition-colors" />
-              <span className="font-mono text-[13px] font-bold uppercase tracking-wider text-textPrimary">{d.name}</span>
+              <span className="font-mono text-data font-bold uppercase tracking-wider text-textPrimary">{d.name}</span>
             </div>
-            <p className="text-[13px] text-textSecondary leading-relaxed">{d.blurb}</p>
+            <p className="text-data text-textSecondary leading-relaxed">{d.blurb}</p>
           </Link>
         ))}
         <Link
           to="/guide/desks"
           className="group rounded-lg border border-dashed border-borderMuted hover:border-textMuted transition-colors p-4 flex items-center justify-center gap-2 text-textMuted hover:text-textPrimary"
         >
-          <span className="font-mono text-[12px] uppercase tracking-wider">How to read each desk</span>
+          <span className="font-mono text-caption uppercase tracking-wider">How to read each desk</span>
           <ArrowRight className="w-3.5 h-3.5" />
         </Link>
       </div>
@@ -66,8 +66,8 @@ const Overview = () => (
       <Card className="p-4">
         <ol className="flex flex-col gap-3">
           {STEPS.map((s, i) => (
-            <li key={i} className="flex gap-3 text-[13.5px] leading-relaxed text-textSecondary">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-borderSubtle bg-inset font-mono text-[11px] font-semibold text-textPrimary tnum">
+            <li key={i} className="flex gap-3 text-data leading-relaxed text-textSecondary">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-borderSubtle bg-inset font-mono text-label font-semibold text-textPrimary tnum">
                 {i + 1}
               </span>
               <span className="pt-0.5">{s}</span>

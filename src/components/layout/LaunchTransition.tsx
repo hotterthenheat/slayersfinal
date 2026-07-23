@@ -129,7 +129,7 @@ export const LaunchProvider = ({ children }: { children: ReactNode }) => {
                 transition={{ duration: gateMs / 1000, ease: [0.3, 0.1, 0.3, 1] }}
               />
             </div>
-            <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-textMuted select-none">
+            <span className="font-mono text-micro uppercase tracking-[0.3em] text-textMuted select-none">
               {caption}
             </span>
           </motion.div>

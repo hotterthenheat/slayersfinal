@@ -58,13 +58,13 @@ const valueClass = (v: number) => (v >= 60 ? 'text-textPrimary' : v >= 40 ? 'tex
 const FactorRow = ({ v, name, desc }: { v: number; name: string; desc: string }) => (
   <div className="flex flex-col gap-1">
     <div className="flex items-baseline justify-between gap-2">
-      <span className="font-mono text-[12px] font-semibold text-textPrimary">{name}</span>
-      <span className={`font-mono text-[12px] font-semibold tnum ${valueClass(v)}`}>{v}</span>
+      <span className="font-mono text-caption font-semibold text-textPrimary">{name}</span>
+      <span className={`font-mono text-caption font-semibold tnum ${valueClass(v)}`}>{v}</span>
     </div>
     <span className="h-[5px] rounded-full bg-white/[0.06] overflow-hidden">
       <span className={`block h-full rounded-full ${barClass(v)}`} style={{ width: `${v}%` }} />
     </span>
-    <span className="text-[11px] text-textMuted leading-snug">{desc}</span>
+    <span className="text-label text-textMuted leading-snug">{desc}</span>
   </div>
 );
 
@@ -126,8 +126,8 @@ const StockDetailDrawer = ({
                   <span className="font-mono text-base font-bold text-textPrimary">{pick.ticker}</span>
                   <SignalBadge tone={verdictTone[pick.verdict]}>{pick.verdict}</SignalBadge>
                 </div>
-                <div className="mt-0.5 text-[12px] text-textSecondary truncate">{pick.name}</div>
-                <div className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-textMuted">{pick.sector}</div>
+                <div className="mt-0.5 text-caption text-textSecondary truncate">{pick.name}</div>
+                <div className="mt-0.5 font-mono text-label uppercase tracking-wider text-textMuted">{pick.sector}</div>
               </div>
               <button
                 onClick={onClose}
@@ -142,15 +142,15 @@ const StockDetailDrawer = ({
               {/* Price + score row */}
               <div className="grid grid-cols-3 gap-px bg-borderSubtle rounded-md overflow-hidden">
                 <div className="bg-inset px-3 py-2.5 flex flex-col gap-0.5">
-                  <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Last</span>
+                  <span className="font-mono text-micro uppercase tracking-widest text-textMuted">Last</span>
                   <span className="font-mono text-sm font-semibold text-textPrimary tnum">${pick.price.toFixed(2)}</span>
-                  <span className={`font-mono text-[11px] tnum ${pick.changePct >= 0 ? 'text-bull' : 'text-bear'}`}>
+                  <span className={`font-mono text-label tnum ${pick.changePct >= 0 ? 'text-bull' : 'text-bear'}`}>
                     {pick.changePct >= 0 ? '+' : ''}
                     {pick.changePct.toFixed(2)}%
                   </span>
                 </div>
                 <div className="bg-inset px-3 py-2.5 flex flex-col gap-0.5">
-                  <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Score</span>
+                  <span className="font-mono text-micro uppercase tracking-widest text-textMuted">Score</span>
                   <span
                     className={`font-mono text-sm font-bold tnum ${
                       pick.composite >= 68 ? 'text-bull' : pick.composite <= 46 ? 'text-bear' : 'text-textPrimary'
@@ -158,20 +158,20 @@ const StockDetailDrawer = ({
                   >
                     {pick.composite}
                   </span>
-                  <span className="font-mono text-[11px] text-textMuted tnum">composite</span>
+                  <span className="font-mono text-label text-textMuted tnum">composite</span>
                 </div>
                 <div className="bg-inset px-3 py-2.5 flex flex-col gap-0.5">
-                  <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Beta</span>
+                  <span className="font-mono text-micro uppercase tracking-widest text-textMuted">Beta</span>
                   <span className="font-mono text-sm font-semibold text-textPrimary tnum">
                     {beta != null ? beta.toFixed(2) : '—'}
                   </span>
-                  <span className="font-mono text-[11px] text-textMuted">{beta == null ? 'risk lens' : beta < 1 ? 'defensive' : 'cyclical'}</span>
+                  <span className="font-mono text-label text-textMuted">{beta == null ? 'risk lens' : beta < 1 ? 'defensive' : 'cyclical'}</span>
                 </div>
               </div>
 
               {/* Relative-strength trend */}
               <div className="flex flex-col gap-1.5">
-                <span className="font-mono text-[11px] uppercase tracking-widest text-textSecondary">30d relative strength</span>
+                <span className="font-mono text-label uppercase tracking-widest text-textSecondary">30d relative strength</span>
                 <div className="inst-surface rounded-md px-3 py-2.5 overflow-x-auto no-scrollbar">
                   <Sparkline data={pick.trend} up={pick.trend[pick.trend.length - 1] >= pick.trend[0]} width={360} height={40} />
                 </div>
@@ -179,15 +179,15 @@ const StockDetailDrawer = ({
 
               {/* Thesis */}
               <div className="flex flex-col gap-1.5">
-                <span className="font-mono text-[11px] uppercase tracking-widest text-textSecondary">Thesis</span>
-                <p className="text-[13px] text-textSecondary leading-relaxed inst-surface rounded-md px-3 py-2.5">{pick.thesis}</p>
+                <span className="font-mono text-label uppercase tracking-widest text-textSecondary">Thesis</span>
+                <p className="text-data text-textSecondary leading-relaxed inst-surface rounded-md px-3 py-2.5">{pick.thesis}</p>
               </div>
 
               {/* Sleeve anatomy + factor guide */}
               <div className="flex flex-col gap-2.5">
                 <div className="flex items-center gap-1.5">
                   <Info className="w-3.5 h-3.5 text-textMuted" />
-                  <span className="font-mono text-[11px] uppercase tracking-widest text-textSecondary">Factor breakdown</span>
+                  <span className="font-mono text-label uppercase tracking-widest text-textSecondary">Factor breakdown</span>
                 </div>
                 <div className="flex flex-col gap-3 inst-surface rounded-md px-3 py-3">
                   {FACTOR_GUIDE.map(f => (
@@ -202,7 +202,7 @@ const StockDetailDrawer = ({
                   <button
                     onClick={() => onToggleWatch(pick.ticker)}
                     aria-pressed={isWatched}
-                    className={`flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded border font-mono text-[12px] uppercase tracking-wider transition-colors ${
+                    className={`flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded border font-mono text-caption uppercase tracking-wider transition-colors ${
                       isWatched
                         ? 'border-select/30 bg-select/10 text-select'
                         : 'border-borderSubtle bg-white/[0.02] text-textSecondary hover:text-textPrimary hover:border-borderMuted'
@@ -214,7 +214,7 @@ const StockDetailDrawer = ({
                   <button
                     onClick={() => onToggleCompare(pick.ticker)}
                     aria-pressed={inCompare}
-                    className={`flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded border font-mono text-[12px] uppercase tracking-wider transition-colors ${
+                    className={`flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded border font-mono text-caption uppercase tracking-wider transition-colors ${
                       inCompare
                         ? 'border-select/30 bg-select/10 text-select'
                         : 'border-borderSubtle bg-white/[0.02] text-textSecondary hover:text-textPrimary hover:border-borderMuted'

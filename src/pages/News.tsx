@@ -63,7 +63,7 @@ interface WireUnit {
 /** Odds meter — the model's directional lean rendered as a two-sided bar. */
 const OddsBar = ({ probUp }: { probUp: number }) => (
   <div>
-    <div className="flex items-center justify-between font-mono text-[11px] uppercase tracking-wider text-textMuted">
+    <div className="flex items-center justify-between font-mono text-label uppercase tracking-wider text-textMuted">
       <span>Down {100 - probUp}%</span>
       <span>Up {probUp}%</span>
     </div>
@@ -230,13 +230,13 @@ const News = () => {
                   {watched.size} watched
                 </SignalBadge>
               )}
-              {muted.size > 0 && <span className="font-mono text-[11px] uppercase tracking-wider text-textMuted">{muted.size} muted</span>}
+              {muted.size > 0 && <span className="font-mono text-label uppercase tracking-wider text-textMuted">{muted.size} muted</span>}
               <div className="ml-auto flex items-center gap-2">
                 {muted.size > 0 && (
                   <button
                     type="button"
                     onClick={() => setHideMuted(v => !v)}
-                    className={`inline-flex items-center gap-1 px-2 py-1 rounded border font-mono text-[11px] uppercase tracking-wider transition-colors ${
+                    className={`inline-flex items-center gap-1 px-2 py-1 rounded border font-mono text-label uppercase tracking-wider transition-colors ${
                       hideMuted ? 'border-select/40 text-textPrimary bg-white/[0.05]' : 'border-borderSubtle text-textSecondary hover:text-textPrimary hover:border-borderMuted'
                     }`}
                   >
@@ -251,7 +251,7 @@ const News = () => {
                     setMuted(new Set());
                     setHideMuted(false);
                   }}
-                  className="font-mono text-[11px] uppercase tracking-wider text-textMuted hover:text-textPrimary transition-colors"
+                  className="font-mono text-label uppercase tracking-wider text-textMuted hover:text-textPrimary transition-colors"
                 >
                   Clear
                 </button>
@@ -277,28 +277,28 @@ const News = () => {
                   <div className="flex items-stretch">
                     <button onClick={() => setSelectedId(lead.id)} className={`flex-1 min-w-0 text-left px-4 py-3 ${!isSel ? 'hover:bg-white/[0.02]' : ''}`}>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-mono text-[11px] text-textMuted tnum">{lead.time}</span>
-                        <span className="font-mono text-[11px] text-textMuted">{lead.source}</span>
+                        <span className="font-mono text-label text-textMuted tnum">{lead.time}</span>
+                        <span className="font-mono text-label text-textMuted">{lead.source}</span>
                         {lead.ticker ? (
-                          <span className="font-mono text-[11px] font-bold text-textPrimary">{lead.ticker}</span>
+                          <span className="font-mono text-label font-bold text-textPrimary">{lead.ticker}</span>
                         ) : (
-                          <span className="font-mono text-[11px] uppercase tracking-wider text-textMuted">Macro</span>
+                          <span className="font-mono text-label uppercase tracking-wider text-textMuted">Macro</span>
                         )}
                         <SignalBadge tone={catTone[lead.category]}>{lead.category}</SignalBadge>
                       </div>
-                      <p className="mt-1.5 text-[13px] text-textPrimary leading-snug">{lead.headline}</p>
+                      <p className="mt-1.5 text-data text-textPrimary leading-snug">{lead.headline}</p>
 
                       {isCluster && (
                         <div className="mt-2 flex items-center gap-3 flex-wrap">
                           <SignalBadge tone="neutral" dot>
                             {unit.items.length} stories
                           </SignalBadge>
-                          <span className="inline-flex items-center gap-1 font-mono text-[10px] text-textMuted tnum">
+                          <span className="inline-flex items-center gap-1 font-mono text-micro text-textMuted tnum">
                             <Clock className="w-3 h-3" /> {unit.firstSeen.time}
                             <span className="opacity-50">→</span>
                             {unit.lastUpdated.time}
                           </span>
-                          <span className="inline-flex items-center gap-1 font-mono text-[10px] text-textMuted">
+                          <span className="inline-flex items-center gap-1 font-mono text-micro text-textMuted">
                             <Link2 className="w-3 h-3" /> {unit.sources.join(' · ')}
                           </span>
                         </div>
@@ -306,7 +306,7 @@ const News = () => {
                     </button>
 
                     <div className="flex flex-col items-end justify-between gap-1.5 pr-4 py-3 shrink-0">
-                      <span className={`font-mono text-[11px] font-semibold tnum ${lead.prediction.expMove1dPct >= 0 ? 'text-bull' : 'text-bear'}`}>
+                      <span className={`font-mono text-label font-semibold tnum ${lead.prediction.expMove1dPct >= 0 ? 'text-bull' : 'text-bear'}`}>
                         {signedPct(lead.prediction.expMove1dPct)} exp
                       </span>
                       <div className="flex items-center gap-1">
@@ -355,10 +355,10 @@ const News = () => {
                               iSel ? 'bg-select/[0.05]' : 'hover:bg-white/[0.02]'
                             }`}
                           >
-                            <span className="font-mono text-[10px] text-textMuted tnum shrink-0">{i.time}</span>
-                            <span className="font-mono text-[10px] text-textMuted shrink-0">{i.source}</span>
-                            <span className="flex-1 min-w-0 truncate text-[12px] text-textSecondary">{i.headline}</span>
-                            <span className={`font-mono text-[11px] font-semibold tnum shrink-0 ${i.prediction.expMove1dPct >= 0 ? 'text-bull' : 'text-bear'}`}>
+                            <span className="font-mono text-micro text-textMuted tnum shrink-0">{i.time}</span>
+                            <span className="font-mono text-micro text-textMuted shrink-0">{i.source}</span>
+                            <span className="flex-1 min-w-0 truncate text-caption text-textSecondary">{i.headline}</span>
+                            <span className={`font-mono text-label font-semibold tnum shrink-0 ${i.prediction.expMove1dPct >= 0 ? 'text-bull' : 'text-bear'}`}>
                               {signedPct(i.prediction.expMove1dPct)}
                             </span>
                           </button>
@@ -383,7 +383,7 @@ const News = () => {
             className="lg:col-span-2 lg:sticky lg:top-4"
             actions={<SegmentedControl ariaLabel="Selected view" options={RIGHT_OPTIONS} value={rightTab} onChange={setRightTab} />}
           >
-            <p className="text-[13px] text-textPrimary leading-snug mb-4">{selected.headline}</p>
+            <p className="text-data text-textPrimary leading-snug mb-4">{selected.headline}</p>
 
             {rightTab === 'outcome' ? (
               <div className="flex flex-col gap-4">
@@ -393,30 +393,30 @@ const News = () => {
 
                 <div className="grid grid-cols-3 gap-2">
                   <div className="border border-borderSubtle bg-inset rounded-md px-2.5 py-2">
-                    <div className="font-mono text-[11px] uppercase tracking-wider text-textMuted">1-day exp</div>
+                    <div className="font-mono text-label uppercase tracking-wider text-textMuted">1-day exp</div>
                     <div className={`mt-1 font-mono text-sm font-semibold tnum ${selected.prediction.expMove1dPct >= 0 ? 'text-bull' : 'text-bear'}`}>
                       {signedPct(selected.prediction.expMove1dPct)}
                     </div>
                   </div>
                   <div className="border border-borderSubtle bg-inset rounded-md px-2.5 py-2">
-                    <div className="font-mono text-[11px] uppercase tracking-wider text-textMuted">5-day exp</div>
+                    <div className="font-mono text-label uppercase tracking-wider text-textMuted">5-day exp</div>
                     <div className={`mt-1 font-mono text-sm font-semibold tnum ${selected.prediction.expMove5dPct >= 0 ? 'text-bull' : 'text-bear'}`}>
                       {signedPct(selected.prediction.expMove5dPct)}
                     </div>
                   </div>
                   <div className="border border-borderSubtle bg-inset rounded-md px-2.5 py-2">
-                    <div className="font-mono text-[11px] uppercase tracking-wider text-textMuted">Confidence</div>
+                    <div className="font-mono text-label uppercase tracking-wider text-textMuted">Confidence</div>
                     <div className="mt-1 font-mono text-sm font-semibold text-textPrimary tnum">{selected.prediction.confidencePct}%</div>
                   </div>
                 </div>
 
                 <div>
-                  <div className="font-mono text-[11px] uppercase tracking-widest text-textMuted">Historical analog</div>
+                  <div className="font-mono text-label uppercase tracking-widest text-textMuted">Historical analog</div>
                   <p className="mt-1.5 text-xs text-textSecondary leading-relaxed">{selected.prediction.analog}</p>
                 </div>
 
                 <div className="border-t border-borderSubtle pt-3">
-                  <div className="font-mono text-[11px] uppercase tracking-widest text-textMuted">Playbook</div>
+                  <div className="font-mono text-label uppercase tracking-widest text-textMuted">Playbook</div>
                   <p className="mt-1.5 text-xs text-textSecondary leading-relaxed">{selected.prediction.playbook}</p>
                 </div>
               </div>

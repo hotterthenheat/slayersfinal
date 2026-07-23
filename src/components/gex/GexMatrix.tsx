@@ -44,13 +44,13 @@ const GexMatrix = ({ data }: GexMatrixProps) => {
         <table className="w-full min-w-[460px] table-fixed border-collapse">
           <thead className="sticky top-0 z-10">
             <tr className="bg-panelRaised">
-              <th className="px-2 py-1.5 text-left font-mono text-[10px] font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle" style={{ width: '30%' }}>
+              <th className="px-2 py-1.5 text-left font-mono text-micro font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle" style={{ width: '30%' }}>
                 Strike
               </th>
               {expiries.map((exp, i) => (
                 <th
                   key={exp}
-                  className={`px-2 py-1.5 text-right font-mono text-[10px] font-semibold uppercase tracking-widest border-b border-borderSubtle ${
+                  className={`px-2 py-1.5 text-right font-mono text-micro font-semibold uppercase tracking-widest border-b border-borderSubtle ${
                     i === 0 ? 'text-textSecondary' : 'text-textMuted'
                   }`}
                 >
@@ -71,22 +71,22 @@ const GexMatrix = ({ data }: GexMatrixProps) => {
                     isSpot ? 'shadow-[inset_2px_0_0_0_rgba(237,237,237,0.6)]' : ''
                   }`}
                 >
-                  <td className="px-2 py-1 font-mono text-[11px] whitespace-nowrap">
+                  <td className="px-2 py-1 font-mono text-label whitespace-nowrap">
                     <span className={isSpot ? 'text-textPrimary font-bold' : 'text-textPrimary font-semibold'}>
                       {strike % 1 === 0 ? strike.toFixed(0) : strike.toFixed(2)}
                     </span>
                     {isSpot && (
-                      <span className="ml-1.5 font-mono text-[10px] font-bold uppercase tracking-wider text-textMuted">
+                      <span className="ml-1.5 font-mono text-micro font-bold uppercase tracking-wider text-textMuted">
                         spot
                       </span>
                     )}
                     {isCallWall && !isSpot && (
-                      <span className="ml-1.5 font-mono text-[10px] font-bold uppercase tracking-wider text-bull">
+                      <span className="ml-1.5 font-mono text-micro font-bold uppercase tracking-wider text-bull">
                         cw
                       </span>
                     )}
                     {isPutWall && !isSpot && (
-                      <span className="ml-1.5 font-mono text-[10px] font-bold uppercase tracking-wider text-bear">
+                      <span className="ml-1.5 font-mono text-micro font-bold uppercase tracking-wider text-bear">
                         pw
                       </span>
                     )}
@@ -98,7 +98,7 @@ const GexMatrix = ({ data }: GexMatrixProps) => {
                       onMouseEnter={e => setHover({ r, c, x: e.clientX, y: e.clientY })}
                       onMouseMove={e => setHover({ r, c, x: e.clientX, y: e.clientY })}
                       onMouseLeave={() => setHover(h => (h && h.r === r && h.c === c ? null : h))}
-                      className={`px-2 py-1 text-right font-mono text-[11px] tnum whitespace-nowrap cursor-crosshair transition-colors duration-700 ${
+                      className={`px-2 py-1 text-right font-mono text-label tnum whitespace-nowrap cursor-crosshair transition-colors duration-700 ${
                         cell.king ? 'ring-1 ring-inset ring-king' : ''
                       } ${hover && hover.r === r && hover.c === c ? 'brightness-125' : ''}`}
                     >
@@ -115,13 +115,13 @@ const GexMatrix = ({ data }: GexMatrixProps) => {
 
       {/* Diverging color scale */}
       <div className="shrink-0 w-9 flex flex-col items-center py-1 select-none">
-        <span className={`font-mono text-[10px] tnum ${heatScaleLabels.pos}`}>+{fmtUsd(maxAbs).replace('$', '')}</span>
+        <span className={`font-mono text-micro tnum ${heatScaleLabels.pos}`}>+{fmtUsd(maxAbs).replace('$', '')}</span>
         <div
           className="flex-grow w-2.5 my-1.5 rounded-full border border-borderSubtle"
           style={{ background: heatScaleGradient }}
         />
-        <span className={`font-mono text-[10px] tnum ${heatScaleLabels.neg}`}>−{fmtUsd(maxAbs).replace('$', '')}</span>
-        <span className="mt-1 font-mono text-[10px] text-textMuted uppercase">gex</span>
+        <span className={`font-mono text-micro tnum ${heatScaleLabels.neg}`}>−{fmtUsd(maxAbs).replace('$', '')}</span>
+        <span className="mt-1 font-mono text-micro text-textMuted uppercase">gex</span>
       </div>
 
       {/* Hover read-out — strike × expiry detail on the cell under the cursor */}
@@ -131,19 +131,19 @@ const GexMatrix = ({ data }: GexMatrixProps) => {
           style={{ left: Math.min(hover.x + 14, window.innerWidth - 200), top: hover.y + 14 }}
         >
           <div className="flex items-baseline gap-2">
-            <span className="font-mono text-[12px] font-bold text-textPrimary tnum">
+            <span className="font-mono text-caption font-bold text-textPrimary tnum">
               {strikes[hover.r] % 1 === 0 ? strikes[hover.r].toFixed(0) : strikes[hover.r].toFixed(2)}
             </span>
-            <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">{expiries[hover.c]}</span>
+            <span className="font-mono text-micro uppercase tracking-widest text-textMuted">{expiries[hover.c]}</span>
             {hovered.king && (
-              <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-king">king</span>
+              <span className="font-mono text-micro font-bold uppercase tracking-wider text-king">king</span>
             )}
           </div>
-          <div className={`mt-0.5 font-mono text-[13px] font-bold tnum ${hovered.value >= 0 ? 'text-bull' : 'text-bear'}`}>
+          <div className={`mt-0.5 font-mono text-data font-bold tnum ${hovered.value >= 0 ? 'text-bull' : 'text-bear'}`}>
             {hovered.value >= 0 ? '+' : '−'}
             {fmtUsd(Math.abs(hovered.value))}
           </div>
-          <div className="mt-0.5 font-mono text-[10px] text-textSecondary">
+          <div className="mt-0.5 font-mono text-micro text-textSecondary">
             {hovered.value >= 0 ? 'dealer support · long γ' : 'negative gamma · short γ'}
             {marker(hover.r) && <span className="text-textMuted"> · {marker(hover.r)}</span>}
           </div>

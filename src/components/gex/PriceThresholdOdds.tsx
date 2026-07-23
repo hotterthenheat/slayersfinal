@@ -77,19 +77,19 @@ const PriceThresholdOdds = ({ view }: { view: StateDensityView }) => {
         {/* Chosen level + move from spot, with quick-set anchors */}
         <div className="flex items-end justify-between gap-3 flex-wrap">
           <div className="min-w-0">
-            <span className="block font-mono text-[11px] uppercase tracking-widest text-textMuted">Threshold level</span>
+            <span className="block font-mono text-label uppercase tracking-widest text-textMuted">Threshold level</span>
             <span className="font-mono text-3xl font-bold tnum text-textPrimary">{K.toFixed(2)}</span>
-            <span className={`ml-2 font-mono text-[13px] tnum ${upFromSpot ? 'text-bull' : 'text-bear'}`}>
+            <span className={`ml-2 font-mono text-data tnum ${upFromSpot ? 'text-bull' : 'text-bear'}`}>
               {signed(movePct)}%
             </span>
-            <span className="ml-1 font-mono text-[11px] text-textMuted uppercase tracking-wider">from spot</span>
+            <span className="ml-1 font-mono text-label text-textMuted uppercase tracking-wider">from spot</span>
           </div>
           <div className="flex items-center gap-1.5">
             {anchors.map(a => (
               <button
                 key={a.label}
                 onClick={() => setThreshold(a.value)}
-                className="font-mono text-[11px] uppercase tracking-wider px-2 py-1 rounded border border-borderSubtle text-textSecondary hover:text-textPrimary hover:bg-white/[0.04] transition-colors"
+                className="font-mono text-label uppercase tracking-wider px-2 py-1 rounded border border-borderSubtle text-textSecondary hover:text-textPrimary hover:bg-white/[0.04] transition-colors"
               >
                 {a.label}
               </button>
@@ -109,7 +109,7 @@ const PriceThresholdOdds = ({ view }: { view: StateDensityView }) => {
             aria-label="Terminal price threshold"
             className="w-full accent-select cursor-pointer"
           />
-          <div className="mt-1 flex items-center justify-between font-mono text-[10px] tnum text-textMuted select-none">
+          <div className="mt-1 flex items-center justify-between font-mono text-micro tnum text-textMuted select-none">
             <span>{lo.toFixed(0)}</span>
             <span className="uppercase tracking-wider">terminal price · {view.horizonDays}D</span>
             <span>{hi.toFixed(0)}</span>
@@ -124,13 +124,13 @@ const PriceThresholdOdds = ({ view }: { view: StateDensityView }) => {
 
         <div className="grid grid-cols-2 gap-3">
           <div className="min-w-0">
-            <span className="block font-mono text-[11px] uppercase tracking-wider text-textMuted truncate">
+            <span className="block font-mono text-label uppercase tracking-wider text-textMuted truncate">
               P(below {K.toFixed(0)})
             </span>
             <span className="block font-mono text-2xl font-bold tnum text-bear">{pBelow.toFixed(1)}%</span>
           </div>
           <div className="min-w-0 text-right">
-            <span className="block font-mono text-[11px] uppercase tracking-wider text-textMuted truncate">
+            <span className="block font-mono text-label uppercase tracking-wider text-textMuted truncate">
               P(above {K.toFixed(0)})
             </span>
             <span className="block font-mono text-2xl font-bold tnum text-bull">{pAbove.toFixed(1)}%</span>
@@ -138,7 +138,7 @@ const PriceThresholdOdds = ({ view }: { view: StateDensityView }) => {
         </div>
 
         {/* Honest framing of what a risk-neutral density is */}
-        <p className="font-mono text-[11px] text-textMuted leading-relaxed">
+        <p className="font-mono text-label text-textMuted leading-relaxed">
           Read against the {source} curve. A risk-neutral density is not a literal price forecast — it is the odds the option
           book implies once risk premium is baked in, not a prediction of where the underlying will land.
         </p>

@@ -101,9 +101,9 @@ const Faq = () => (
       <details key={item.q} className="group">
         <summary className="flex items-center gap-3 px-4 py-3.5 cursor-pointer list-none [&::-webkit-details-marker]:hidden hover:bg-white/[0.02] transition-colors">
           <ChevronRight className="w-4 h-4 text-textMuted shrink-0 transition-transform group-open:rotate-90" />
-          <span className="text-[14px] font-medium text-textPrimary">{item.q}</span>
+          <span className="text-body font-medium text-textPrimary">{item.q}</span>
         </summary>
-        <div className="px-4 pb-4 pl-11 text-[13.5px] text-textSecondary leading-relaxed">{item.a}</div>
+        <div className="px-4 pb-4 pl-11 text-data text-textSecondary leading-relaxed">{item.a}</div>
       </details>
     ))}
   </div>

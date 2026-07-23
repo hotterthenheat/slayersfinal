@@ -91,7 +91,7 @@ const Surface3D = ({ snapshot, height = 340 }: Surface3DProps) => {
     <div className="relative flex flex-col select-none" style={{ height }}>
       {/* view header */}
       <div className="flex items-center justify-between gap-2 px-3.5 pt-3 pb-2">
-        <span className="font-mono text-[11px] uppercase tracking-widest text-textMuted truncate">
+        <span className="font-mono text-label uppercase tracking-widest text-textMuted truncate">
           strikes × expiries × net GEX
         </span>
         <SegmentedControl ariaLabel="Surface view" options={VIEW_OPTIONS} value={view} onChange={setView} />
@@ -100,7 +100,7 @@ const Surface3D = ({ snapshot, height = 340 }: Surface3DProps) => {
       {view === '3d' ? (
         <div className="relative flex-1 min-h-0">
           <DealerSurface3D grid={grid} strikes={strikes} spotCol={spotCol} maxAbsUsd={maxAbsUsd} />
-          <div className="absolute bottom-2 right-3 font-mono text-[10px] uppercase tracking-widest text-textMuted pointer-events-none">
+          <div className="absolute bottom-2 right-3 font-mono text-micro uppercase tracking-widest text-textMuted pointer-events-none">
             drag · scroll to zoom
           </div>
         </div>
@@ -109,11 +109,11 @@ const Surface3D = ({ snapshot, height = 340 }: Surface3DProps) => {
           <div className="flex-1 min-h-0 flex">
             {/* expiry (y) axis gutter */}
             <div className="flex flex-col justify-between items-center pr-2 py-0.5 shrink-0">
-              <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">near</span>
-              <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted [writing-mode:vertical-rl] rotate-180">
+              <span className="font-mono text-micro uppercase tracking-widest text-textMuted">near</span>
+              <span className="font-mono text-micro uppercase tracking-widest text-textMuted [writing-mode:vertical-rl] rotate-180">
                 expiry
               </span>
-              <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">far</span>
+              <span className="font-mono text-micro uppercase tracking-widest text-textMuted">far</span>
             </div>
 
             <div className="flex-1 min-w-0 flex flex-col">
@@ -148,16 +148,16 @@ const Surface3D = ({ snapshot, height = 340 }: Surface3DProps) => {
 
               {/* strike (x) axis */}
               <div className="relative h-4 mt-1.5">
-                <span className="absolute left-0 font-mono text-[11px] text-textMuted tnum">
+                <span className="absolute left-0 font-mono text-label text-textMuted tnum">
                   ${fmtStrike(strikes[0])}
                 </span>
                 <span
-                  className="absolute -translate-x-1/2 font-mono text-[11px] text-textSecondary tnum whitespace-nowrap"
+                  className="absolute -translate-x-1/2 font-mono text-label text-textSecondary tnum whitespace-nowrap"
                   style={{ left: `${spotLeft}%` }}
                 >
                   ${fmtStrike(strikes[spotCol])} spot
                 </span>
-                <span className="absolute right-0 font-mono text-[11px] text-textMuted tnum">
+                <span className="absolute right-0 font-mono text-label text-textMuted tnum">
                   ${fmtStrike(strikes[cols - 1])}
                 </span>
               </div>
@@ -165,29 +165,29 @@ const Surface3D = ({ snapshot, height = 340 }: Surface3DProps) => {
           </div>
 
           {/* legend */}
-          <div className="flex items-center gap-3 pt-2 font-mono text-[11px] uppercase tracking-wider text-textMuted">
+          <div className="flex items-center gap-3 pt-2 font-mono text-label uppercase tracking-wider text-textMuted">
             <span className="inline-flex items-center gap-1.5">
               <span className="w-2.5 h-[3px] bg-bull/90 inline-block rounded-full" /> dealer support
             </span>
             <span className="inline-flex items-center gap-1.5">
               <span className="w-2.5 h-[3px] bg-bear/80 inline-block rounded-full" /> negative gamma
             </span>
-            <span className="ml-auto text-[10px] tracking-widest">hover a cell for the read</span>
+            <span className="ml-auto text-micro tracking-widest">hover a cell for the read</span>
           </div>
 
           {hover && (
             <HoverReadout x={hover.x} y={hover.y}>
               <div className="flex items-baseline gap-2">
-                <span className="font-mono text-[12px] font-bold text-textPrimary tnum">${fmtStrike(strikes[hover.c])}</span>
-                <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">
+                <span className="font-mono text-caption font-bold text-textPrimary tnum">${fmtStrike(strikes[hover.c])}</span>
+                <span className="font-mono text-micro uppercase tracking-widest text-textMuted">
                   {hover.r < rows / 3 ? 'near' : hover.r < (2 * rows) / 3 ? 'mid' : 'far'} exp
                 </span>
               </div>
-              <div className={`mt-0.5 font-mono text-[13px] font-bold tnum ${hover.z >= 0 ? 'text-bull' : 'text-bear'}`}>
+              <div className={`mt-0.5 font-mono text-data font-bold tnum ${hover.z >= 0 ? 'text-bull' : 'text-bear'}`}>
                 {hover.z >= 0 ? '+' : '−'}
                 {fmtUsd(Math.abs(hover.z * maxAbsUsd))}
               </div>
-              <div className="mt-0.5 font-mono text-[10px] text-textSecondary">
+              <div className="mt-0.5 font-mono text-micro text-textSecondary">
                 {hover.z >= 0 ? 'dealer support · long γ' : 'negative gamma · short γ'}
               </div>
             </HoverReadout>

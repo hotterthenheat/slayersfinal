@@ -31,19 +31,19 @@ const SetupCard = ({ setup, expanded, isSelected, isTop, onToggle, onSelect, onO
         onClick={() => { onSelect?.(); onToggle(); }}
         className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-white/[0.02] transition-colors"
       >
-        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[11px] font-semibold ${pillTone}`}>
+        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-label font-semibold ${pillTone}`}>
           <span className="holo-text">{setup.contract}</span>
         </span>
         {isTop && <SignalBadge tone="magenta">TOP PICK</SignalBadge>}
 
         <span className="ml-auto flex items-center gap-3">
-          <span className="hidden sm:flex items-center gap-2 font-mono text-[11px] text-textMuted uppercase tracking-wider">
+          <span className="hidden sm:flex items-center gap-2 font-mono text-label text-textMuted uppercase tracking-wider">
             <span>
               Score <span className="text-textPrimary font-semibold">{setup.score}</span>
             </span>
           </span>
           <span className="text-right">
-            <span className="block font-mono text-[11px] text-textMuted uppercase tracking-wider">Exp Move</span>
+            <span className="block font-mono text-label text-textMuted uppercase tracking-wider">Exp Move</span>
             <span className={`font-mono text-xs font-semibold tnum ${moveUp ? 'text-bull' : 'text-bear'}`}>
               {moveUp ? '+' : ''}
               {setup.expectedMovePct}%
@@ -59,21 +59,21 @@ const SetupCard = ({ setup, expanded, isSelected, isTop, onToggle, onSelect, onO
           {/* Targets */}
           <div className="grid grid-cols-2 gap-2">
             <div className="border border-borderSubtle bg-inset rounded-md px-3 py-2">
-              <div className="font-mono text-[11px] uppercase tracking-widest text-textMuted">Swing Target</div>
+              <div className="font-mono text-label uppercase tracking-widest text-textMuted">Swing Target</div>
               <div className="mt-1 font-mono text-sm font-semibold text-textPrimary tnum">${setup.swingTarget.price.toFixed(2)}</div>
-              <div className="font-mono text-[11px] text-bull">+{setup.swingTarget.pct}%</div>
+              <div className="font-mono text-label text-bull">+{setup.swingTarget.pct}%</div>
             </div>
             <div className="border border-borderSubtle bg-inset rounded-md px-3 py-2">
-              <div className="font-mono text-[11px] uppercase tracking-widest text-textMuted">Scalp Exit</div>
+              <div className="font-mono text-label uppercase tracking-widest text-textMuted">Scalp Exit</div>
               <div className="mt-1 font-mono text-sm font-semibold text-warn tnum">${setup.scalpExit.price.toFixed(2)}</div>
-              <div className="font-mono text-[11px] text-warn">+{setup.scalpExit.pct}%</div>
+              <div className="font-mono text-label text-warn">+{setup.scalpExit.pct}%</div>
             </div>
           </div>
 
           {/* Why */}
           <div className="flex items-start gap-2 border border-borderSubtle bg-inset rounded-md px-3 py-2.5">
             <Info className="w-3.5 h-3.5 text-select shrink-0 mt-0.5" />
-            <p className="text-[11px] text-textSecondary leading-relaxed">
+            <p className="text-label text-textSecondary leading-relaxed">
               <span className="text-select font-semibold">WHY: </span>
               {setup.whyText}
             </p>
@@ -82,12 +82,12 @@ const SetupCard = ({ setup, expanded, isSelected, isTop, onToggle, onSelect, onO
           {/* Evidence for / contradiction against — both read from existing fields */}
           {setup.whyChips.length > 0 && (
             <div>
-              <div className="font-mono text-[11px] uppercase tracking-widest text-textMuted mb-1.5">Evidence</div>
+              <div className="font-mono text-label uppercase tracking-widest text-textMuted mb-1.5">Evidence</div>
               <div className="flex flex-wrap gap-1.5">
                 {setup.whyChips.map(chip => (
                   <span
                     key={chip}
-                    className="inline-flex items-center rounded border border-bull/20 bg-bull/[0.06] px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-bull"
+                    className="inline-flex items-center rounded border border-bull/20 bg-bull/[0.06] px-1.5 py-0.5 font-mono text-label uppercase tracking-wider text-bull"
                   >
                     {chip}
                   </span>
@@ -98,7 +98,7 @@ const SetupCard = ({ setup, expanded, isSelected, isTop, onToggle, onSelect, onO
 
           <div className="flex items-start gap-2 border border-warn/20 bg-warn/[0.05] rounded-md px-3 py-2.5">
             <AlertTriangle className="w-3.5 h-3.5 text-warn shrink-0 mt-0.5" />
-            <p className="font-mono text-[11px] text-textSecondary leading-relaxed">
+            <p className="font-mono text-label text-textSecondary leading-relaxed">
               <span className="text-warn font-semibold uppercase tracking-wider">Contradiction: </span>
               Thesis breaks {isCall ? 'below' : 'above'}{' '}
               <span className="text-warn font-semibold tnum">${setup.invalidationPrice.toFixed(2)}</span> — {setup.invalidationReason}
@@ -108,7 +108,7 @@ const SetupCard = ({ setup, expanded, isSelected, isTop, onToggle, onSelect, onO
           <GreeksRow greeks={setup.greeks} fourth="iv" />
 
           {/* Bid/ask + action */}
-          <div className="flex items-center justify-between font-mono text-[11px] text-textMuted uppercase tracking-wider">
+          <div className="flex items-center justify-between font-mono text-label text-textMuted uppercase tracking-wider">
             <span>
               Bid/Ask <span className="text-textSecondary tnum">${setup.bid.toFixed(2)} – ${setup.ask.toFixed(2)}</span>
             </span>

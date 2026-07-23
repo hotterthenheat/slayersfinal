@@ -114,7 +114,7 @@ const Requests = () => {
               value={title}
               onChange={e => setTitle(e.target.value)}
               placeholder="One-line summary (e.g. Alerts when a wall breaks)"
-              className="flex-grow min-w-[240px] bg-inputBg border border-borderSubtle rounded-md px-2.5 py-1.5 text-[12px] text-textPrimary placeholder:text-textMuted focus:border-borderMuted outline-none transition-colors"
+              className="flex-grow min-w-[240px] bg-inputBg border border-borderSubtle rounded-md px-2.5 py-1.5 text-caption text-textPrimary placeholder:text-textMuted focus:border-borderMuted outline-none transition-colors"
             />
             <SegmentedControl ariaLabel="Request type" options={KIND_OPTIONS} value={kind} onChange={setKind} />
           </div>
@@ -123,17 +123,17 @@ const Requests = () => {
             onChange={e => setDetail(e.target.value)}
             placeholder="Optional detail — what problem does it solve for you?"
             rows={2}
-            className="w-full bg-inputBg border border-borderSubtle rounded-md px-2.5 py-2 text-[12px] text-textPrimary placeholder:text-textMuted focus:border-borderMuted outline-none transition-colors resize-y"
+            className="w-full bg-inputBg border border-borderSubtle rounded-md px-2.5 py-2 text-caption text-textPrimary placeholder:text-textMuted focus:border-borderMuted outline-none transition-colors resize-y"
           />
           <div className="flex items-center gap-3">
             <button
               onClick={submit}
               disabled={title.trim().length < 4}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-select/40 bg-select/[0.06] hover:bg-select/[0.12] font-mono text-[11px] font-semibold uppercase tracking-wider text-select transition-colors disabled:opacity-40 disabled:pointer-events-none"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-select/40 bg-select/[0.06] hover:bg-select/[0.12] font-mono text-label font-semibold uppercase tracking-wider text-select transition-colors disabled:opacity-40 disabled:pointer-events-none"
             >
               <Send className="w-3.5 h-3.5" /> Add request
             </button>
-            <span className="font-mono text-[11px] text-textMuted">
+            <span className="font-mono text-label text-textMuted">
               Saved to this browser · votes sort the board so the most-wanted rise
             </span>
           </div>
@@ -160,11 +160,11 @@ const Requests = () => {
               {/* Status header */}
               <div className="flex items-center gap-2.5">
                 <span className={`w-2 h-2 rounded-full ${toneDot[tone]}`} />
-                <h3 className="font-mono text-[13px] font-semibold uppercase tracking-wider text-textPrimary">
+                <h3 className="font-mono text-data font-semibold uppercase tracking-wider text-textPrimary">
                   {group.status}
                 </h3>
-                <span className="font-mono text-[11px] tnum text-textMuted">{group.items.length}</span>
-                <span className="font-mono text-[11px] text-textSecondary normal-case tracking-normal hidden sm:inline">
+                <span className="font-mono text-label tnum text-textMuted">{group.items.length}</span>
+                <span className="font-mono text-label text-textSecondary normal-case tracking-normal hidden sm:inline">
                   · {STATUS_BLURB[group.status]}
                 </span>
               </div>
@@ -187,20 +187,20 @@ const Requests = () => {
                       aria-label="Vote"
                     >
                       <ChevronUp className="w-4 h-4" />
-                      <span className="font-mono text-[11px] font-bold tnum">{req.votes}</span>
+                      <span className="font-mono text-label font-bold tnum">{req.votes}</span>
                     </button>
                     <div className="min-w-0 flex-grow">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[13px] font-semibold text-textPrimary">{req.title}</span>
+                        <span className="text-data font-semibold text-textPrimary">{req.title}</span>
                         <SignalBadge tone={STATUS_TONE[req.status]} dot>
                           {req.status}
                         </SignalBadge>
                         <SignalBadge tone="neutral">{req.kind}</SignalBadge>
-                        <span className="ml-auto font-mono text-[10px] text-textMuted tnum">
+                        <span className="ml-auto font-mono text-micro text-textMuted tnum">
                           {req.author === 'you' ? <span className="text-select">you</span> : req.author} · {timeAgo(req.createdAt)}
                         </span>
                       </div>
-                      {req.detail && <p className="mt-1.5 text-[12px] text-textSecondary leading-relaxed">{req.detail}</p>}
+                      {req.detail && <p className="mt-1.5 text-caption text-textSecondary leading-relaxed">{req.detail}</p>}
                     </div>
                   </div>
                 );
@@ -210,7 +210,7 @@ const Requests = () => {
         })}
         {groups.every(g => g.items.length === 0) && (
           <Panel>
-            <div className="h-40 flex items-center justify-center font-mono text-[11px] uppercase tracking-widest text-textMuted">
+            <div className="h-40 flex items-center justify-center font-mono text-label uppercase tracking-widest text-textMuted">
               No requests in this view
             </div>
           </Panel>

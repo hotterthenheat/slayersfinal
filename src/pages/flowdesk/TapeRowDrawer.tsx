@@ -43,7 +43,7 @@ const TapeRowDrawer = ({ print, onClose, isMarked, onToggleMark }: TapeRowDrawer
           <>
             <div className="flex items-center gap-2 flex-wrap">
               <span
-                className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[13px] font-semibold ${
+                className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-data font-semibold ${
                   print.right === 'C'
                     ? 'border-bull/30 bg-bull/10 text-bull'
                     : 'border-bear/30 bg-bear/10 text-bear'
@@ -52,12 +52,12 @@ const TapeRowDrawer = ({ print, onClose, isMarked, onToggleMark }: TapeRowDrawer
                 {print.ticker} {print.strike}
                 {print.right}
               </span>
-              {print.legs > 1 && <span className="font-mono text-[11px] text-select">×{print.legs}</span>}
+              {print.legs > 1 && <span className="font-mono text-label text-select">×{print.legs}</span>}
               <SignalBadge tone={sent === 'BULLISH' ? 'bull' : sent === 'BEARISH' ? 'bear' : 'neutral'}>
                 {sent}
               </SignalBadge>
             </div>
-            <div className="mt-1 flex items-center gap-2 font-mono text-[11px] text-textSecondary tnum">
+            <div className="mt-1 flex items-center gap-2 font-mono text-label text-textSecondary tnum">
               <span>{print.time}</span>
               <span className="text-textMuted">·</span>
               <span className={print.sweep ? 'text-warn font-semibold uppercase' : 'uppercase'}>
@@ -73,7 +73,7 @@ const TapeRowDrawer = ({ print, onClose, isMarked, onToggleMark }: TapeRowDrawer
           {/* Headline premium */}
           <div className="inst-surface rounded-md px-4 py-3 flex items-end justify-between gap-3">
             <div className="flex flex-col gap-0.5 min-w-0">
-              <span className="font-mono text-[11px] uppercase tracking-widest text-textMuted">Print Premium</span>
+              <span className="font-mono text-label uppercase tracking-widest text-textMuted">Print Premium</span>
               <span
                 className={`font-mono text-xl font-bold tnum ${
                   print.premium >= 1_000_000 ? 'text-king' : 'text-textPrimary'
@@ -83,7 +83,7 @@ const TapeRowDrawer = ({ print, onClose, isMarked, onToggleMark }: TapeRowDrawer
               </span>
             </div>
             <div className="flex flex-col items-end gap-0.5 shrink-0">
-              <span className="font-mono text-[11px] uppercase tracking-widest text-textMuted">Aggressor</span>
+              <span className="font-mono text-label uppercase tracking-widest text-textMuted">Aggressor</span>
               <span className={`font-mono text-base font-bold ${sideTone}`}>{sideLabel}</span>
             </div>
           </div>
@@ -91,7 +91,7 @@ const TapeRowDrawer = ({ print, onClose, isMarked, onToggleMark }: TapeRowDrawer
           {/* Contract drilldown — this contract's flow + underlying net premium */}
           <Suspense
             fallback={
-              <div className="h-[380px] rounded-md inst-surface flex items-center justify-center font-mono text-[11px] text-textMuted uppercase tracking-widest">
+              <div className="h-[380px] rounded-md inst-surface flex items-center justify-center font-mono text-label text-textMuted uppercase tracking-widest">
                 Loading drilldown…
               </div>
             }
@@ -119,9 +119,9 @@ const TapeRowDrawer = ({ print, onClose, isMarked, onToggleMark }: TapeRowDrawer
 
           {/* Spread fill position */}
           <div className="flex flex-col gap-1.5">
-            <span className="font-mono text-[11px] uppercase tracking-widest text-textSecondary">Fill in spread</span>
+            <span className="font-mono text-label uppercase tracking-widest text-textSecondary">Fill in spread</span>
             <div className="inst-surface rounded-md px-3 py-3 flex items-center gap-3">
-              <span className="font-mono text-[11px] tnum text-textMuted">{print.bid.toFixed(2)}</span>
+              <span className="font-mono text-label tnum text-textMuted">{print.bid.toFixed(2)}</span>
               <span className="relative flex-1 h-[4px] rounded-full bg-white/[0.07]">
                 <span
                   className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-[9px] h-[9px] rounded-full ${
@@ -130,7 +130,7 @@ const TapeRowDrawer = ({ print, onClose, isMarked, onToggleMark }: TapeRowDrawer
                   style={{ left: `${print.fillPos * 100}%` }}
                 />
               </span>
-              <span className="font-mono text-[11px] tnum text-textMuted">{print.ask.toFixed(2)}</span>
+              <span className="font-mono text-label tnum text-textMuted">{print.ask.toFixed(2)}</span>
             </div>
           </div>
 
@@ -181,7 +181,7 @@ const TapeRowDrawer = ({ print, onClose, isMarked, onToggleMark }: TapeRowDrawer
           <button
             onClick={() => onToggleMark(print.id)}
             aria-pressed={isMarked}
-            className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded border font-mono text-[12px] uppercase tracking-wider transition-colors ${
+            className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded border font-mono text-caption uppercase tracking-wider transition-colors ${
               isMarked
                 ? 'border-select/30 bg-select/10 text-select'
                 : 'border-borderSubtle bg-white/[0.02] text-textSecondary hover:text-textPrimary hover:border-borderMuted'

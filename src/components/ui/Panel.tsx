@@ -74,12 +74,12 @@ const Panel = ({
         >
           <div className="flex items-baseline gap-2 min-w-0">
             {title && (
-              <h3 className="font-mono text-[11px] font-semibold uppercase tracking-widest text-textPrimary truncate">
+              <h3 className="font-mono text-label font-semibold uppercase tracking-widest text-textPrimary truncate">
                 {title}
               </h3>
             )}
             {subtitle && (
-              <span className="font-mono text-[11px] text-textSecondary uppercase tracking-wider truncate">
+              <span className="font-mono text-label text-textSecondary uppercase tracking-wider truncate">
                 {subtitle}
               </span>
             )}
@@ -105,7 +105,7 @@ const Panel = ({
         <>
           {/* Body lives in the focus overlay while focused — hold the height here. */}
           <div className={`${bodyPad} flex-grow min-h-0 flex items-center justify-center`}>
-            <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">
+            <span className="font-mono text-micro uppercase tracking-widest text-textMuted">
               Viewing in focus · Esc to return
             </span>
           </div>

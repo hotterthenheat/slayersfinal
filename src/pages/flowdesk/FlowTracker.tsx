@@ -116,8 +116,8 @@ const FlowTracker = () => {
     return (
       <Panel title="Auto-surfaced flow">
         <div className="h-40 flex flex-col items-center justify-center gap-1.5 text-center">
-          <span className="font-mono text-[11px] uppercase tracking-widest text-textSecondary">No notable prints on the tape</span>
-          <span className="font-mono text-[10px] text-textMuted">Sweeps and blocks that clear the size + conviction bar will surface here.</span>
+          <span className="font-mono text-label uppercase tracking-widest text-textSecondary">No notable prints on the tape</span>
+          <span className="font-mono text-micro text-textMuted">Sweeps and blocks that clear the size + conviction bar will surface here.</span>
         </div>
       </Panel>
     );
@@ -159,7 +159,7 @@ const FlowTracker = () => {
             {visible.length === 0 && (
               <div className="px-4 py-10 flex flex-col items-center gap-2 text-center">
                 <Bookmark className="w-5 h-5 text-textMuted" />
-                <p className="font-mono text-[11px] text-textMuted">Nothing pinned yet — use the bookmark on a row to track it.</p>
+                <p className="font-mono text-label text-textMuted">Nothing pinned yet — use the bookmark on a row to track it.</p>
               </div>
             )}
             {visible.map(r => {
@@ -176,7 +176,7 @@ const FlowTracker = () => {
                 >
                   <button onClick={() => setSelectedId(r.id)} className="flex-1 min-w-0 text-left px-4 py-3">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-mono text-[13px] font-bold text-textPrimary">
+                      <span className="font-mono text-data font-bold text-textPrimary">
                         {r.ticker} {r.strike}
                         <span className={r.right === 'C' ? 'text-bull' : 'text-bear'}>{r.right}</span>
                       </span>
@@ -199,7 +199,7 @@ const FlowTracker = () => {
                     </div>
 
                     {/* Values */}
-                    <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[11px] text-textSecondary tnum">
+                    <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-label text-textSecondary tnum">
                       <span>{r.expiry}</span>
                       <span className="text-textMuted">·</span><span className="text-textPrimary font-semibold">{fmtUsd(r.premium)}</span>
                       <span className={r.deltaOi >= 0 ? 'text-bull' : 'text-bear'}>
@@ -212,7 +212,7 @@ const FlowTracker = () => {
                     </div>
 
                     {/* Auto-note */}
-                    <p className="mt-1.5 text-[11px] text-textSecondary leading-snug">{noteOf(r)}</p>
+                    <p className="mt-1.5 text-label text-textSecondary leading-snug">{noteOf(r)}</p>
                   </button>
 
                   {/* Track affordance */}
@@ -248,7 +248,7 @@ const FlowTracker = () => {
               <button
                 onClick={() => toggleTrack(selected.id)}
                 aria-pressed={tracked.has(selected.id)}
-                className={`inline-flex items-center gap-1.5 rounded border px-2 py-1 font-mono text-[11px] font-semibold uppercase tracking-wider transition-colors ${
+                className={`inline-flex items-center gap-1.5 rounded border px-2 py-1 font-mono text-label font-semibold uppercase tracking-wider transition-colors ${
                   tracked.has(selected.id)
                     ? 'text-select bg-select/10 border-select/20'
                     : 'text-textSecondary border-borderSubtle hover:text-textPrimary hover:bg-white/[0.05]'
@@ -262,7 +262,7 @@ const FlowTracker = () => {
           >
             {/* Surface context for the selected contract */}
             <div className="flex flex-wrap items-center gap-2 mb-3">
-              <span className="font-mono text-[11px] uppercase tracking-wider text-textMuted">Why surfaced</span>
+              <span className="font-mono text-label uppercase tracking-wider text-textMuted">Why surfaced</span>
               {selReasons.map(rs => (
                 <SignalBadge key={rs.label} tone={rs.tone}>
                   {rs.label}
@@ -273,7 +273,7 @@ const FlowTracker = () => {
                   {selStatus.label}
                 </SignalBadge>
               )}
-              <span className="inline-flex items-center gap-1 font-mono text-[11px] text-textSecondary">
+              <span className="inline-flex items-center gap-1 font-mono text-label text-textSecondary">
                 <Clock className="w-3 h-3" /> first seen {selected.last}
               </span>
             </div>
@@ -281,21 +281,21 @@ const FlowTracker = () => {
             <FlowChart points={intraday} />
             <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
               <div className="border border-borderSubtle bg-inset rounded-md px-2.5 py-2">
-                <div className="font-mono text-[11px] uppercase tracking-widest text-textMuted">Volume</div>
+                <div className="font-mono text-label uppercase tracking-widest text-textMuted">Volume</div>
                 <div className="mt-1 font-mono text-sm font-semibold text-textPrimary tnum">{selected.volume.toLocaleString()}</div>
               </div>
               <div className="border border-borderSubtle bg-inset rounded-md px-2.5 py-2">
-                <div className="font-mono text-[11px] uppercase tracking-widest text-textMuted">Open interest</div>
+                <div className="font-mono text-label uppercase tracking-widest text-textMuted">Open interest</div>
                 <div className="mt-1 font-mono text-sm font-semibold text-textPrimary tnum">{selected.oi.toLocaleString()}</div>
               </div>
               <div className="border border-borderSubtle bg-inset rounded-md px-2.5 py-2">
-                <div className="font-mono text-[11px] uppercase tracking-widest text-textMuted">Vol / OI</div>
+                <div className="font-mono text-label uppercase tracking-widest text-textMuted">Vol / OI</div>
                 <div className={`mt-1 font-mono text-sm font-semibold tnum ${selected.volOverOi > 1 ? 'text-warn' : 'text-textPrimary'}`}>
                   {selected.volOverOi.toFixed(2)}
                 </div>
               </div>
               <div className="border border-borderSubtle bg-inset rounded-md px-2.5 py-2">
-                <div className="font-mono text-[11px] uppercase tracking-widest text-textMuted">Bid-side</div>
+                <div className="font-mono text-label uppercase tracking-widest text-textMuted">Bid-side</div>
                 <div className="mt-1 font-mono text-sm font-semibold text-textPrimary tnum">{selected.bidPct}%</div>
               </div>
             </div>

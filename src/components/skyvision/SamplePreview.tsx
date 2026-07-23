@@ -42,7 +42,7 @@ const SamplePreview = ({ setup, scanner, onReviewSetup }: SamplePreviewProps) =>
         {/* Direction + conviction subtitle */}
         <div className="flex items-center gap-2">
           <VerdictBadge verdict={setup.verdict} dot />
-          <span className="font-mono text-[11px] uppercase tracking-wider text-textSecondary">
+          <span className="font-mono text-label uppercase tracking-wider text-textSecondary">
             {bullish ? 'Bullish' : 'Bearish'} · {setup.score >= 93 ? 'High' : setup.score >= 85 ? 'Medium' : 'Low'} Conviction
           </span>
         </div>
@@ -50,19 +50,19 @@ const SamplePreview = ({ setup, scanner, onReviewSetup }: SamplePreviewProps) =>
         {/* Top metrics grid: Score / Confidence / Conviction */}
         <div className="grid grid-cols-3 gap-2">
           <div className="border border-borderSubtle bg-inset rounded-md px-3 py-2">
-            <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Score</div>
+            <div className="font-mono text-micro uppercase tracking-widest text-textMuted">Score</div>
             <div className="mt-1 font-mono text-lg font-bold text-textPrimary tnum">
               <AnimatedNumber value={setup.score} format={v => Math.round(v).toString()} />
             </div>
           </div>
           <div className="border border-borderSubtle bg-inset rounded-md px-3 py-2">
-            <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Confidence</div>
+            <div className="font-mono text-micro uppercase tracking-widest text-textMuted">Confidence</div>
             <div className="mt-1 font-mono text-lg font-bold text-textPrimary tnum">
               <AnimatedNumber value={setup.confidence} format={v => `${Math.round(v)}%`} />
             </div>
           </div>
           <div className="border border-borderSubtle bg-inset rounded-md px-3 py-2">
-            <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Conviction</div>
+            <div className="font-mono text-micro uppercase tracking-widest text-textMuted">Conviction</div>
             <div className="mt-1 font-mono text-sm font-semibold text-textPrimary">
               {setup.score >= 93 ? 'High' : setup.score >= 85 ? 'Medium' : 'Low'}
             </div>
@@ -72,19 +72,19 @@ const SamplePreview = ({ setup, scanner, onReviewSetup }: SamplePreviewProps) =>
         {/* Second metrics grid: Premium / Live Mid / Exp. Move */}
         <div className="grid grid-cols-3 gap-2">
           <div className="border border-borderSubtle bg-inset rounded-md px-3 py-2">
-            <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Premium</div>
+            <div className="font-mono text-micro uppercase tracking-widest text-textMuted">Premium</div>
             <div className="mt-1 font-mono text-sm font-semibold text-textPrimary tnum">
               <AnimatedNumber value={setup.mid} format={v => `$${v.toFixed(2)}`} />
             </div>
           </div>
           <div className="border border-borderSubtle bg-inset rounded-md px-3 py-2">
-            <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Live Mid</div>
+            <div className="font-mono text-micro uppercase tracking-widest text-textMuted">Live Mid</div>
             <div className="mt-1 font-mono text-sm font-semibold text-textPrimary tnum">
               <AnimatedNumber value={setup.liveMid} format={v => `$${v.toFixed(2)}`} />
             </div>
           </div>
           <div className="border border-borderSubtle bg-inset rounded-md px-3 py-2">
-            <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Exp. Move</div>
+            <div className="font-mono text-micro uppercase tracking-widest text-textMuted">Exp. Move</div>
             <div className={`mt-1 font-mono text-sm font-semibold tnum ${bullish ? 'text-bull' : 'text-bear'}`}>
               <AnimatedNumber value={setup.expectedMovePct} format={v => `${bullish ? '+' : '−'}${Math.abs(v).toFixed(1)}%`} />
             </div>
@@ -93,21 +93,21 @@ const SamplePreview = ({ setup, scanner, onReviewSetup }: SamplePreviewProps) =>
 
         {/* Greeks */}
         <div>
-          <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted mb-1.5">Greeks</div>
+          <div className="font-mono text-micro uppercase tracking-widest text-textMuted mb-1.5">Greeks</div>
           <GreeksRow greeks={setup.greeks} fourth="iv" />
         </div>
 
         {/* Targets */}
         <div className="grid grid-cols-2 gap-2">
           <div className="border border-borderSubtle bg-inset rounded-md px-3 py-2">
-            <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Swing Target</div>
+            <div className="font-mono text-micro uppercase tracking-widest text-textMuted">Swing Target</div>
             <div className="mt-1 font-mono text-sm font-semibold text-textPrimary tnum">${setup.swingTarget.price.toFixed(2)}</div>
-            <div className="font-mono text-[10px] text-bull">+{setup.swingTarget.pct}%</div>
+            <div className="font-mono text-micro text-bull">+{setup.swingTarget.pct}%</div>
           </div>
           <div className="border border-borderSubtle bg-inset rounded-md px-3 py-2">
-            <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Scalp Exit</div>
+            <div className="font-mono text-micro uppercase tracking-widest text-textMuted">Scalp Exit</div>
             <div className="mt-1 font-mono text-sm font-semibold text-warn tnum">${setup.scalpExit.price.toFixed(2)}</div>
-            <div className="font-mono text-[10px] text-warn">+{setup.scalpExit.pct}%</div>
+            <div className="font-mono text-micro text-warn">+{setup.scalpExit.pct}%</div>
           </div>
         </div>
 
@@ -115,8 +115,8 @@ const SamplePreview = ({ setup, scanner, onReviewSetup }: SamplePreviewProps) =>
         <div className="flex items-start gap-2 border border-borderSubtle bg-inset rounded-md px-3 py-2.5">
           <Info className="w-3.5 h-3.5 text-select shrink-0 mt-0.5" />
           <div className="flex flex-col gap-1">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-select font-semibold">Why This Ranked</span>
-            <p className="text-[11px] text-textSecondary leading-relaxed">{setup.whyText}</p>
+            <span className="font-mono text-micro uppercase tracking-widest text-select font-semibold">Why This Ranked</span>
+            <p className="text-label text-textSecondary leading-relaxed">{setup.whyText}</p>
           </div>
         </div>
 
@@ -125,22 +125,22 @@ const SamplePreview = ({ setup, scanner, onReviewSetup }: SamplePreviewProps) =>
           <div className="border border-borderSubtle bg-inset rounded-md px-3 py-2.5">
             <div className="flex items-center gap-1.5 mb-1.5">
               <Droplets className="w-3 h-3 text-textMuted" />
-              <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Liquidity</span>
+              <span className="font-mono text-micro uppercase tracking-widest text-textMuted">Liquidity</span>
             </div>
             <div className={`font-mono text-sm font-semibold ${liquidityTone === 'bull' ? 'text-bull' : liquidityTone === 'warn' ? 'text-warn' : 'text-bear'}`}>
               {setup.liquidityLabel}
             </div>
-            <div className="font-mono text-[10px] text-textMuted tnum">{setup.liquiditySpread}</div>
+            <div className="font-mono text-micro text-textMuted tnum">{setup.liquiditySpread}</div>
           </div>
           <div className="border border-borderSubtle bg-inset rounded-md px-3 py-2.5">
             <div className="flex items-center gap-1.5 mb-1.5">
               <AlertTriangle className="w-3 h-3 text-warn" />
-              <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Invalidation</span>
+              <span className="font-mono text-micro uppercase tracking-widest text-textMuted">Invalidation</span>
             </div>
             <div className="font-mono text-sm font-semibold text-warn tnum">
               {bullish ? 'Below' : 'Above'} ${setup.invalidationPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
-            <div className="font-mono text-[10px] text-textMuted">{setup.invalidationReason}</div>
+            <div className="font-mono text-micro text-textMuted">{setup.invalidationReason}</div>
           </div>
         </div>
 

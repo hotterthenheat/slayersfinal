@@ -51,11 +51,11 @@ const fmtStrike = (v: number) => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
 /** Rank-change vs the previous scan: ▲ moved toward #1, ▼ slipped. */
 const RankDelta = ({ delta }: { delta: number | undefined }) => {
   if (delta === undefined || delta === 0)
-    return <span className="w-6 shrink-0 font-mono text-[10px] text-textMuted select-none">·</span>;
+    return <span className="w-6 shrink-0 font-mono text-micro text-textMuted select-none">·</span>;
   const up = delta > 0;
   return (
     <span
-      className={`w-6 shrink-0 inline-flex items-center gap-0.5 font-mono text-[10px] tnum ${up ? 'text-bull' : 'text-bear'}`}
+      className={`w-6 shrink-0 inline-flex items-center gap-0.5 font-mono text-micro tnum ${up ? 'text-bull' : 'text-bear'}`}
       title={`${up ? 'up' : 'down'} ${Math.abs(delta)} since last scan`}
     >
       {up ? <ArrowUp className="w-2.5 h-2.5" /> : <ArrowDown className="w-2.5 h-2.5" />}
@@ -162,7 +162,7 @@ const RankedTargets = () => {
   if (!view) {
     return (
       <Panel className="h-64" bodyClassName="flex items-center justify-center">
-        <span className="font-mono text-[11px] text-textMuted uppercase tracking-widest">
+        <span className="font-mono text-label text-textMuted uppercase tracking-widest">
           Awaiting feed initialization…
         </span>
       </Panel>
@@ -187,13 +187,13 @@ const RankedTargets = () => {
             className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-king/30 bg-king/[0.05] hover:bg-king/[0.1] transition-colors"
             title="Flash on chart"
           >
-            <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-king">Primary target</span>
-            <span className="font-mono text-[12px] font-bold tnum text-textPrimary">{fmtStrike(primary.strike)}</span>
-            <span className="font-mono text-[11px] tnum text-king">{primary.score}/100</span>
+            <span className="font-mono text-micro font-semibold uppercase tracking-widest text-king">Primary target</span>
+            <span className="font-mono text-caption font-bold tnum text-textPrimary">{fmtStrike(primary.strike)}</span>
+            <span className="font-mono text-label tnum text-king">{primary.score}/100</span>
             <ArrowUpRight className="w-3 h-3 text-textSecondary" />
           </button>
         )}
-        <span className="ml-auto font-mono text-[10px] text-textMuted uppercase tracking-widest tnum">
+        <span className="ml-auto font-mono text-micro text-textMuted uppercase tracking-widest tnum">
           {filtered.length} of {view.targets.length} strikes · scan {lastScanAt} · 10s
         </span>
       </div>
@@ -213,13 +213,13 @@ const RankedTargets = () => {
             style={{ boxShadow: `inset 2px 0 0 0 ${CLASS_EDGE[t.hedgingClass]}` }}
           >
             <div className="flex items-center gap-2">
-              <span className="font-mono text-[10px] tnum text-textSecondary">#{t.rank}</span>
-              <span className="font-mono text-[16px] font-bold tnum text-textPrimary">{fmtStrike(t.strike)}</span>
-              <span className={`ml-auto font-mono text-[16px] font-bold tnum ${t.rank === 1 ? 'text-king' : 'text-textPrimary'}`}>{t.score}</span>
+              <span className="font-mono text-micro tnum text-textSecondary">#{t.rank}</span>
+              <span className="font-mono text-lead font-bold tnum text-textPrimary">{fmtStrike(t.strike)}</span>
+              <span className={`ml-auto font-mono text-lead font-bold tnum ${t.rank === 1 ? 'text-king' : 'text-textPrimary'}`}>{t.score}</span>
             </div>
             <div className="mt-1.5 flex items-center gap-2">
-              <span className={`font-mono text-[12px] font-semibold tnum ${t.netGex >= 0 ? 'text-bull' : 'text-bear'}`}>{fmtUsd(t.netGex)}</span>
-              <span className={`ml-auto font-mono text-[10px] font-semibold uppercase tracking-wider ${CLASS_TEXT[t.hedgingClass]}`}>
+              <span className={`font-mono text-caption font-semibold tnum ${t.netGex >= 0 ? 'text-bull' : 'text-bear'}`}>{fmtUsd(t.netGex)}</span>
+              <span className={`ml-auto font-mono text-micro font-semibold uppercase tracking-wider ${CLASS_TEXT[t.hedgingClass]}`}>
                 {t.hedgingClass}
               </span>
             </div>
@@ -230,7 +230,7 @@ const RankedTargets = () => {
       {/* Sortable ranking table — the working surface */}
       <Panel title="Ranked Targets" subtitle="every strike scored — click a header to sort, a row to flash on the chart" flush className="w-full">
         {sorted.length === 0 ? (
-          <div className="py-10 text-center font-mono text-[11px] text-textMuted uppercase tracking-widest">No strikes match this isolator</div>
+          <div className="py-10 text-center font-mono text-label text-textMuted uppercase tracking-widest">No strikes match this isolator</div>
         ) : (
           <div className="overflow-auto max-h-[560px]">
             <table className="w-full border-collapse">
@@ -242,7 +242,7 @@ const RankedTargets = () => {
                       <th key={col.key} className={`${col.cls} px-3 py-2 select-none sticky top-0 z-10 bg-panelRaised`}>
                         <button
                           onClick={() => toggleSort(col.key)}
-                          className={`w-full inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-widest transition-colors ${
+                          className={`w-full inline-flex items-center gap-1 font-mono text-micro uppercase tracking-widest transition-colors ${
                             col.align === 'right' ? 'justify-end' : 'justify-start'
                           } ${activeSort ? 'text-textPrimary' : 'text-textSecondary hover:text-textPrimary'}`}
                         >
@@ -269,7 +269,7 @@ const RankedTargets = () => {
                   >
                     <td className="px-3 py-2.5">
                       <span className="inline-flex items-center gap-1.5">
-                        <span className="font-mono text-[13px] font-bold tnum text-textPrimary">{fmtStrike(t.strike)}</span>
+                        <span className="font-mono text-data font-bold tnum text-textPrimary">{fmtStrike(t.strike)}</span>
                         <RankDelta delta={deltas.get(t.strike)} />
                         {t.tags.map(tag => (
                           <SignalBadge key={tag} tone={TAG_TONE[tag]}>
@@ -286,26 +286,26 @@ const RankedTargets = () => {
                             style={{ width: `${t.score}%` }}
                           />
                         </span>
-                        <span className="font-mono text-[12px] font-semibold tnum text-textPrimary">{t.score}</span>
+                        <span className="font-mono text-caption font-semibold tnum text-textPrimary">{t.score}</span>
                       </span>
                     </td>
-                    <td className="px-3 py-2.5 text-right font-mono text-[12px] tnum text-textPrimary">
+                    <td className="px-3 py-2.5 text-right font-mono text-caption tnum text-textPrimary">
                       {t.bps >= 0 ? '+' : ''}
                       {t.bps}
                     </td>
-                    <td className={`px-3 py-2.5 text-right font-mono text-[12px] tnum text-textPrimary ${t.nbr >= 1.5 ? 'font-bold' : ''}`}>
+                    <td className={`px-3 py-2.5 text-right font-mono text-caption tnum text-textPrimary ${t.nbr >= 1.5 ? 'font-bold' : ''}`}>
                       {t.nbr.toFixed(2)}x
                     </td>
-                    <td className="hidden lg:table-cell px-3 py-2.5 text-right font-mono text-[12px] tnum text-textPrimary">
+                    <td className="hidden lg:table-cell px-3 py-2.5 text-right font-mono text-caption tnum text-textPrimary">
                       {t.volume.toLocaleString()}
                     </td>
-                    <td className="hidden lg:table-cell px-3 py-2.5 text-right font-mono text-[12px] tnum text-textPrimary">
+                    <td className="hidden lg:table-cell px-3 py-2.5 text-right font-mono text-caption tnum text-textPrimary">
                       {t.openInterest.toLocaleString()}
                     </td>
-                    <td className={`px-3 py-2.5 text-right font-mono text-[12px] font-semibold tnum ${t.netGex >= 0 ? 'text-bull' : 'text-bear'}`}>
+                    <td className={`px-3 py-2.5 text-right font-mono text-caption font-semibold tnum ${t.netGex >= 0 ? 'text-bull' : 'text-bear'}`}>
                       {fmtUsd(t.netGex)}
                     </td>
-                    <td className={`hidden sm:table-cell px-3 py-2.5 text-right font-mono text-[10px] font-semibold uppercase tracking-wider ${CLASS_TEXT[t.hedgingClass]}`}>
+                    <td className={`hidden sm:table-cell px-3 py-2.5 text-right font-mono text-micro font-semibold uppercase tracking-wider ${CLASS_TEXT[t.hedgingClass]}`}>
                       {t.hedgingClass}
                     </td>
                   </tr>

@@ -62,11 +62,11 @@ const TermStructure = ({ data }: TermStructureProps) => {
     <div className="flex flex-col gap-3 h-full min-h-0">
       {/* Legend */}
       <div className="flex items-center gap-3 flex-wrap select-none">
-        <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-textPrimary">
+        <span className="flex items-center gap-1.5 font-mono text-micro uppercase tracking-wider text-textPrimary">
           <span className="inline-block w-3 h-[2px] rounded-full bg-textPrimary" /> Current
         </span>
         {GHOSTS.slice().reverse().map(g => (
-          <span key={g.key} className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-textMuted">
+          <span key={g.key} className="flex items-center gap-1.5 font-mono text-micro uppercase tracking-wider text-textMuted">
             <span className="inline-block w-3 h-px rounded-full" style={{ background: g.stroke }} /> {g.label}
           </span>
         ))}
@@ -102,13 +102,13 @@ const TermStructure = ({ data }: TermStructureProps) => {
             <line x1={cx(h.i)} x2={cx(h.i)} y1={0} y2={H} stroke="rgba(255,255,255,0.35)" strokeWidth="0.4" vectorEffect="non-scaling-stroke" />
           )}
         </svg>
-        <span className="absolute left-0 top-0 font-mono text-[10px] tnum text-textMuted">{max.toFixed(0)}%</span>
-        <span className="absolute left-0 bottom-0 font-mono text-[10px] tnum text-textMuted">{min.toFixed(0)}%</span>
+        <span className="absolute left-0 top-0 font-mono text-micro tnum text-textMuted">{max.toFixed(0)}%</span>
+        <span className="absolute left-0 bottom-0 font-mono text-micro tnum text-textMuted">{min.toFixed(0)}%</span>
         {h && (
           <HoverReadout x={h.x} y={h.y}>
-            <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted">{data.current[h.i].dte}D</div>
-            <div className="mt-0.5 font-mono text-[13px] font-bold tnum text-textPrimary">{data.current[h.i].iv.toFixed(2)}%</div>
-            <div className="mt-0.5 flex items-center gap-2.5 font-mono text-[10px] tnum text-textSecondary">
+            <div className="font-mono text-micro uppercase tracking-widest text-textMuted">{data.current[h.i].dte}D</div>
+            <div className="mt-0.5 font-mono text-data font-bold tnum text-textPrimary">{data.current[h.i].iv.toFixed(2)}%</div>
+            <div className="mt-0.5 flex items-center gap-2.5 font-mono text-micro tnum text-textSecondary">
               {data.dayAgo[h.i] && <span>1D {data.dayAgo[h.i].iv.toFixed(1)}%</span>}
               {data.weekAgo[h.i] && <span>1W {data.weekAgo[h.i].iv.toFixed(1)}%</span>}
               {data.monthAgo[h.i] && <span>1M {data.monthAgo[h.i].iv.toFixed(1)}%</span>}
@@ -116,7 +116,7 @@ const TermStructure = ({ data }: TermStructureProps) => {
           </HoverReadout>
         )}
       </div>
-      <div className="flex justify-between font-mono text-[10px] tnum text-textMuted select-none">
+      <div className="flex justify-between font-mono text-micro tnum text-textMuted select-none">
         {[7, 90, 180, 270, 360].map(t => (
           <span key={t}>{t}d</span>
         ))}
@@ -126,8 +126,8 @@ const TermStructure = ({ data }: TermStructureProps) => {
       <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 pt-2 border-t border-borderSubtle">
         {stats.map(s => (
           <span key={s.label} className="min-w-0">
-            <span className="block font-mono text-[10px] uppercase tracking-widest text-textMuted truncate">{s.label}</span>
-            <span className="block font-mono text-[10px] font-semibold tnum text-textPrimary">{s.value}</span>
+            <span className="block font-mono text-micro uppercase tracking-widest text-textMuted truncate">{s.label}</span>
+            <span className="block font-mono text-micro font-semibold tnum text-textPrimary">{s.value}</span>
           </span>
         ))}
       </div>

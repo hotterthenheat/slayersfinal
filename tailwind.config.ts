@@ -70,9 +70,21 @@ export default {
         gammaNeg: '#FF3B30',
         warning: '#FF9500',
       },
+      // Terminal type ramp. Every size below `text-lg` came from ~1,180
+      // scattered `text-[Npx]` utilities; these name them as one system.
+      // Deliberately font-size ONLY (string form, no bundled line-height) —
+      // unlike Tailwind's built-in text-xs/sm/base — so the leading each call
+      // site already set via `leading-*` is preserved untouched. The dense
+      // 10–13px micro-steps are the terminal's label tiers; 14–16px carry
+      // prose and inline copy. Headings keep the rem-based display scale.
       fontSize: {
-        'xxs': '0.7rem',
-        'xxxs': '0.6rem',
+        micro: '10px', // axis ticks, densest legends
+        label: '11px', // the dominant uppercase mono label
+        caption: '12px', // table cells, secondary text
+        data: '13px', // readable panel body / data rows
+        body: '14px', // prose in guide / legal / landing
+        read: '15px', // prose emphasis, card titles
+        lead: '16px', // largest inline copy
       },
       fontFamily: {
         sans: ['Inter', 'sans-serif'],

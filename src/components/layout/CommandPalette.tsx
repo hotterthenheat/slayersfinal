@@ -167,7 +167,7 @@ const CommandPalette = ({ open, onClose, onOpenSettings, onOpenShortcuts }: Comm
         />
         <div ref={listRef} className="max-h-72 overflow-y-auto py-1.5">
           {filtered.length === 0 && (
-            <div className="px-4 py-6 text-center font-mono text-[11px] text-textMuted">No matches</div>
+            <div className="px-4 py-6 text-center font-mono text-label text-textMuted">No matches</div>
           )}
           {filtered.map((action, i) => {
             const showGroup = action.group !== lastGroup;
@@ -175,7 +175,7 @@ const CommandPalette = ({ open, onClose, onOpenSettings, onOpenShortcuts }: Comm
             return (
               <div key={action.id}>
                 {showGroup && (
-                  <div className="px-4 pt-2 pb-1 font-mono text-[10px] uppercase tracking-widest text-textMuted select-none">
+                  <div className="px-4 pt-2 pb-1 font-mono text-micro uppercase tracking-widest text-textMuted select-none">
                     {action.group}
                   </div>
                 )}
@@ -188,14 +188,14 @@ const CommandPalette = ({ open, onClose, onOpenSettings, onOpenShortcuts }: Comm
                   }`}
                 >
                   <span className={i === highlight ? 'text-select' : 'text-textMuted'}>{action.icon}</span>
-                  <span className="text-[13px] text-textPrimary">{action.label}</span>
-                  <span className="ml-auto text-[10px] font-mono text-textMuted truncate max-w-[45%]">{action.hint}</span>
+                  <span className="text-data text-textPrimary">{action.label}</span>
+                  <span className="ml-auto text-micro font-mono text-textMuted truncate max-w-[45%]">{action.hint}</span>
                 </button>
               </div>
             );
           })}
         </div>
-        <div className="flex items-center gap-4 px-4 py-2 border-t border-borderSubtle font-mono text-[10px] text-textMuted select-none">
+        <div className="flex items-center gap-4 px-4 py-2 border-t border-borderSubtle font-mono text-micro text-textMuted select-none">
           <span>↑↓ navigate</span>
           <span className="flex items-center gap-1">
             <CornerDownLeft className="w-3 h-3" /> select

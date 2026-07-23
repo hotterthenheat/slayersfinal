@@ -253,12 +253,12 @@ const Compass = () => {
             {s.whyChips.slice(0, 2).map(c => (
               <span
                 key={c}
-                className="inline-flex items-center rounded border border-bull/20 bg-bull/[0.06] px-1.5 py-0.5 text-[11px] uppercase tracking-wider text-bull"
+                className="inline-flex items-center rounded border border-bull/20 bg-bull/[0.06] px-1.5 py-0.5 text-label uppercase tracking-wider text-bull"
               >
                 {c}
               </span>
             ))}
-            {s.whyChips.length > 2 && <span className="text-textMuted text-[11px]">+{s.whyChips.length - 2}</span>}
+            {s.whyChips.length > 2 && <span className="text-textMuted text-label">+{s.whyChips.length - 2}</span>}
           </span>
         ),
       },
@@ -351,7 +351,7 @@ const Compass = () => {
       <>
         {browseHeader}
         <Panel className="h-64" bodyClassName="flex items-center justify-center">
-          <span className="font-mono text-[11px] text-textMuted uppercase tracking-widest">
+          <span className="font-mono text-label text-textMuted uppercase tracking-widest">
             Awaiting feed initialization…
           </span>
         </Panel>
@@ -382,7 +382,7 @@ const Compass = () => {
             <button
               key={s.key}
               onClick={() => handleScanner(s.key)}
-              className={`relative inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md font-mono text-[11px] uppercase tracking-wider transition-colors ${
+              className={`relative inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md font-mono text-label uppercase tracking-wider transition-colors ${
                 isActive
                   ? 'text-[#0a0a0a] font-semibold'
                   : 'text-textMuted font-medium hover:text-textSecondary hover:bg-white/[0.03]'
@@ -396,7 +396,7 @@ const Compass = () => {
                 />
               )}
               <span className="relative z-10">{s.label}</span>
-              <span className={`relative z-10 font-mono text-[10px] tnum ${isActive ? 'text-[#0a0a0a]/70' : 'text-textMuted/60'}`}>
+              <span className={`relative z-10 font-mono text-micro tnum ${isActive ? 'text-[#0a0a0a]/70' : 'text-textMuted/60'}`}>
                 {count}
               </span>
             </button>
@@ -409,8 +409,8 @@ const Compass = () => {
       {!inReviewMode && (
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-3 flex-wrap">
-            <span className="font-mono text-[11px] text-textMuted uppercase tracking-wider">{activeScanner.blurb}</span>
-            <span className="ml-auto font-mono text-[11px] text-textMuted uppercase tracking-widest tnum">
+            <span className="font-mono text-label text-textMuted uppercase tracking-wider">{activeScanner.blurb}</span>
+            <span className="ml-auto font-mono text-label text-textMuted uppercase tracking-widest tnum">
               Showing {filteredShown} of {data.totalFound} setups · scan {lastScanAt} · 10s
             </span>
           </div>
@@ -426,7 +426,7 @@ const Compass = () => {
               <div className="relative">
                 <button
                   onClick={() => setShowTickerDropdown(prev => !prev)}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border font-mono text-[11px] uppercase tracking-wider transition-colors ${
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border font-mono text-label uppercase tracking-wider transition-colors ${
                     tickerFilter
                       ? 'border-select/40 bg-select/[0.06] text-select'
                       : 'border-borderSubtle bg-white/[0.02] text-textMuted hover:text-textSecondary'
@@ -439,7 +439,7 @@ const Compass = () => {
                   <div className="absolute right-0 top-full mt-1 z-20 min-w-[140px] border border-borderSubtle bg-panel rounded-md shadow-lg overflow-hidden animate-slide-in">
                     <button
                       onClick={() => { setTickerFilter(null); setShowTickerDropdown(false); }}
-                      className={`w-full text-left px-3 py-2 font-mono text-[11px] transition-colors ${
+                      className={`w-full text-left px-3 py-2 font-mono text-label transition-colors ${
                         !tickerFilter ? 'text-select bg-select/[0.06]' : 'text-textSecondary hover:bg-white/[0.03]'
                       }`}
                     >
@@ -449,7 +449,7 @@ const Compass = () => {
                       <button
                         key={t}
                         onClick={() => { setTickerFilter(t); setShowTickerDropdown(false); }}
-                        className={`w-full text-left px-3 py-2 font-mono text-[11px] transition-colors ${
+                        className={`w-full text-left px-3 py-2 font-mono text-label transition-colors ${
                           tickerFilter === t ? 'text-select bg-select/[0.06]' : 'text-textSecondary hover:bg-white/[0.03]'
                         }`}
                       >
@@ -467,7 +467,7 @@ const Compass = () => {
       {/* Scanner blurb (review mode) */}
       {inReviewMode && (
         <div className="flex items-center gap-3 flex-wrap">
-          <span className="font-mono text-[11px] text-textMuted uppercase tracking-wider">{activeScanner.blurb}</span>
+          <span className="font-mono text-label text-textMuted uppercase tracking-wider">{activeScanner.blurb}</span>
         </div>
       )}
 
@@ -542,7 +542,7 @@ const Compass = () => {
                 />
               ) : (
                 <Panel className="h-64" bodyClassName="flex items-center justify-center">
-                  <span className="font-mono text-[11px] text-textMuted uppercase tracking-widest">
+                  <span className="font-mono text-label text-textMuted uppercase tracking-widest">
                     Select a setup to preview
                   </span>
                 </Panel>

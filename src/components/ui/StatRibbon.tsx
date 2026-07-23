@@ -47,17 +47,17 @@ const StatRibbon = ({ stats, className = '', variant = 'center' }: StatRibbonPro
             i > 0 ? 'border-l border-borderSubtle' : ''
           }`}
         >
-          <span className="font-mono text-[10px] uppercase tracking-widest text-textSecondary">{s.label}</span>
+          <span className="font-mono text-micro uppercase tracking-widest text-textSecondary">{s.label}</span>
           {s.pill ? (
             <span
-              className={`font-mono text-[10px] font-semibold uppercase tracking-wider rounded px-1.5 py-0.5 ${
+              className={`font-mono text-micro font-semibold uppercase tracking-wider rounded px-1.5 py-0.5 ${
                 pillTone[s.tone ?? 'neutral']
               }`}
             >
               {s.value}
             </span>
           ) : (
-            <span className={`font-mono text-[12px] font-semibold tnum ${toneText[s.tone ?? 'neutral']}`}>
+            <span className={`font-mono text-caption font-semibold tnum ${toneText[s.tone ?? 'neutral']}`}>
               {s.value}
             </span>
           )}
