@@ -239,7 +239,7 @@ const HedgeImpact = () => {
       </MetricGrid>
 
       <Panel tone={headTone} bodyClassName="py-3.5" emphasis>
-        <p className="text-read text-textPrimary leading-relaxed">
+        <p className="text-data text-textPrimary leading-relaxed">
           <span className={`font-mono text-micro font-semibold uppercase tracking-widest mr-2.5 ${view.longGamma ? 'text-bull' : 'text-bear'}`}>
             HEX read
           </span>

@@ -20,7 +20,9 @@ const PageHeader = ({ breadcrumb, title, subtitle, actions, ribbon }: PageHeader
 
   return (
     <div className="flex items-center justify-between gap-4 flex-wrap">
-      <div className="min-w-0 shrink-0">
+      {/* Not shrink-0: on a phone the block must be able to shrink so a long
+          subtitle wraps to a second line instead of running off the edge. */}
+      <div className="min-w-0">
         <div className="flex items-center gap-1.5 font-mono text-label text-textMuted uppercase tracking-widest mb-1.5">
           {breadcrumb.map((part, i) => (
             <React.Fragment key={part}>

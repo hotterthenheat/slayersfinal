@@ -79,7 +79,10 @@ const Panel = ({
               </h3>
             )}
             {subtitle && (
-              <span className="font-mono text-label text-textSecondary uppercase tracking-wider truncate">
+              // Hidden on phones: the title + subtitle + actions can't share one
+              // narrow row without the title truncating to a few letters, and a
+              // clipped subtitle reads as nothing. Title wins; subtitle returns at sm.
+              <span className="hidden sm:inline font-mono text-label text-textSecondary uppercase tracking-wider truncate">
                 {subtitle}
               </span>
             )}

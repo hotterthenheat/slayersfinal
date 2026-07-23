@@ -67,7 +67,9 @@ const ExposureMatrix = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
 
   return (
     <div className="overflow-auto h-full min-h-0">
-      <table className="w-full border-collapse">
+      {/* min-width so the 10-column greek matrix scrolls on a phone instead of
+          squeezing every value until the DEX column clips. */}
+      <table className="w-full min-w-[560px] border-collapse">
         <thead className="sticky top-0 z-10">
           <tr className="bg-panelRaised">
             <th className="px-2 py-1.5 text-left font-mono text-micro font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle">
