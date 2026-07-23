@@ -65,9 +65,29 @@ const DataTable = <T,>({
               <th
                 key={col.key}
                 style={col.width ? { width: col.width } : undefined}
+                aria-sort={
+                  col.sortValue
+                    ? sort?.key === col.key
+                      ? sort.dir === 'asc'
+                        ? 'ascending'
+                        : 'descending'
+                      : 'none'
+                    : undefined
+                }
+                tabIndex={col.sortValue ? 0 : undefined}
+                onKeyDown={
+                  col.sortValue
+                    ? e => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          toggleSort(col);
+                        }
+                      }
+                    : undefined
+                }
                 className={`px-3 py-2 font-mono text-label font-semibold uppercase tracking-wider text-textSecondary whitespace-nowrap ${
                   col.align === 'right' ? 'text-right' : 'text-left'
-                } ${col.sortValue ? 'cursor-pointer select-none hover:text-textPrimary' : ''}`}
+                } ${col.sortValue ? 'cursor-pointer select-none hover:text-textPrimary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60' : ''}`}
                 onClick={() => toggleSort(col)}
               >
                 <span className="inline-flex items-center gap-1">
@@ -98,8 +118,22 @@ const DataTable = <T,>({
                 <tr
                   key={key}
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
+                  tabIndex={onRowClick ? 0 : undefined}
+                  aria-selected={onRowClick ? selected : undefined}
+                  onKeyDown={
+                    onRowClick
+                      ? e => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            onRowClick(row);
+                          }
+                        }
+                      : undefined
+                  }
                   className={`border-b border-borderSubtle/60 last:border-0 transition-colors ${
-                    onRowClick ? 'cursor-pointer' : ''
+                    onRowClick
+                      ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60'
+                      : ''
                   } ${
                     selected
                       ? 'bg-select/[0.06] shadow-[inset_2px_0_0_0_rgba(228,232,244,0.7)]'

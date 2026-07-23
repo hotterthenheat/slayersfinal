@@ -62,12 +62,12 @@ const GammaChart = () => {
   return (
     <div className="flex flex-col gap-4">
       {/* Regime banner + key levels — the read, no candles (charts live in Pulse) */}
-      <Panel flush emphasis>
+      <Panel flush>
         <div className="flex items-center gap-x-6 gap-y-3 flex-wrap px-3.5 py-3">
           <div className="min-w-0">
             <div className="font-mono text-micro uppercase tracking-widest text-textMuted">Dealer gamma @ spot</div>
             <div className="flex items-baseline gap-2.5">
-              <span className={`font-mono text-2xl font-bold tnum ${longGamma ? 'text-bull' : 'text-bear'}`}>
+              <span className={`font-mono text-lg font-bold tnum ${longGamma ? 'text-bull' : 'text-bear'}`}>
                 {longGamma ? '+' : '−'}
                 {fmtUsd(Math.abs(exposure.netGex))}
               </span>
@@ -99,13 +99,16 @@ const GammaChart = () => {
       <Panel
         title={
           <span className="inline-flex items-center gap-1.5">
-            <Grid3x3 className="w-3.5 h-3.5 text-select" /> Gamma Heatmap · {activeTicker}
+            <Grid3x3 className="w-3.5 h-3.5 text-select" /> Gamma Heatmap
+            <span className="rounded border border-borderMuted px-1.5 py-px text-micro tracking-normal text-textSecondary">
+              {activeTicker}
+            </span>
           </span>
         }
-        subtitle="net GEX by strike × expiry — green supports, red amplifies"
+        subtitle="net GEX by strike × expiry"
         flush
         focusable
-        bodyClassName="h-[calc(100dvh-24rem)] min-h-[440px] p-2"
+        bodyClassName="h-[calc(100dvh-27rem)] min-h-[340px] max-h-[520px] p-2"
       >
         <GexMatrix data={matrix} spot={scan.spot} />
       </Panel>
