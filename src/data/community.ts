@@ -128,6 +128,19 @@ export const SHIPPED_FROM_FEEDBACK: { title: string; note: string }[] = [
   { title: 'Live tape filters', note: 'Flow type, sentiment and minimum premium filters on the tape.' },
 ];
 
+// The rest of the loop — what asks have moved into the build, and what is still
+// being weighed. Illustrative for the preview; the real board fills the same shape.
+export const IN_PROGRESS_FROM_FEEDBACK: { title: string; note: string }[] = [
+  { title: 'Alert delivery', note: 'Push + email the moment a tracked setup triggers or invalidates.' },
+  { title: 'Saved scanner presets', note: 'Name a filter stack on the tape and recall it in one click.' },
+  { title: 'Per-desk density toggle', note: 'Comfortable vs compact rows, remembered per desk.' },
+];
+
+export const CONSIDERING_FROM_FEEDBACK: { title: string; note: string }[] = [
+  { title: 'Multi-ticker Pinpoint', note: 'Tile several names’ dealer positioning at once.' },
+  { title: 'Session replay', note: 'Scrub a past session and watch the levels move.' },
+];
+
 // ---- persistence ---------------------------------------------------------------
 export interface CommunityState {
   ideas: CommunityIdea[];

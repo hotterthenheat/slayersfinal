@@ -439,6 +439,15 @@ const COLUMNS: Column<Row>[] = [
   },
 ];
 
+// The four mutually-exclusive status lanes — every tracked item sits in exactly
+// one, so their counts partition the book and stack cleanly into one bar.
+const STATUS_LANES: { key: ViewKey; label: string; bar: string; dot: string }[] = [
+  { key: 'active', label: 'Active', bar: 'bg-white/35', dot: 'bg-white/60' },
+  { key: 'triggered', label: 'Triggered', bar: 'bg-bull/80', dot: 'bg-bull' },
+  { key: 'invalidated', label: 'Invalidated', bar: 'bg-bear/70', dot: 'bg-bear' },
+  { key: 'closed', label: 'Closed', bar: 'bg-white/12', dot: 'bg-textMuted' },
+];
+
 // ---- Main Page Component ---------------------------------------------------
 
 const Tracker = () => {
@@ -648,9 +657,11 @@ const Tracker = () => {
             <span className="font-mono text-label text-textMuted uppercase tracking-wider">{VIEW_HINT[view]}</span>
           </div>
 
-          {/* One primary table + per-item editor */}
-          <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
-            <Panel title="Tracked setups" subtitle={VIEWS.find(v => v.value === view)?.label} flush className="xl:col-span-8">
+          {/* One primary table + per-item editor. items-stretch keeps the table
+              panel as tall as the (inherently tall) item editor, so a quiet lane
+              never leaves a void beside it — the book overview fills the base. */}
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-stretch">
+            <Panel title="Tracked setups" subtitle={VIEWS.find(v => v.value === view)?.label} flush className="xl:col-span-8" bodyClassName="flex flex-col">
               <DataTable
                 columns={COLUMNS}
                 rows={visibleRows}
@@ -660,6 +671,38 @@ const Tracker = () => {
                 maxHeight="560px"
                 emptyText={`Nothing in ${VIEWS.find(v => v.value === view)?.label}`}
               />
+              {/* Book across lanes — anchors the base of the panel and doubles as
+                  cross-lane nav so a quiet view still points to where the book sits. */}
+              <div className="mt-auto border-t border-borderSubtle px-4 py-3.5 flex flex-col gap-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-micro uppercase tracking-widest text-textMuted">Book across lanes</span>
+                  <span className="font-mono text-micro tnum text-textMuted">{rows.length} tracked</span>
+                </div>
+                <div className="flex h-2 rounded-full overflow-hidden bg-white/[0.05]" role="img" aria-label="Distribution of tracked setups across status lanes">
+                  {STATUS_LANES.map(s =>
+                    counts[s.key] > 0 ? (
+                      <span key={s.key} className={s.bar} style={{ width: `${(counts[s.key] / (rows.length || 1)) * 100}%` }} />
+                    ) : null
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {STATUS_LANES.map(s => (
+                    <button
+                      key={s.key}
+                      onClick={() => setView(s.key)}
+                      aria-pressed={view === s.key}
+                      className={`inline-flex items-center gap-1.5 px-2 py-1 rounded border font-mono text-label uppercase tracking-wider transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-select/50 ${
+                        view === s.key
+                          ? 'border-select/40 bg-select/[0.06] text-textPrimary'
+                          : 'border-borderSubtle text-textSecondary hover:text-textPrimary hover:bg-white/[0.03]'
+                      }`}
+                    >
+                      <span className={`inline-block w-1.5 h-1.5 rounded-full ${s.dot}`} />
+                      {s.label} <span className="tnum text-textMuted">{counts[s.key]}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
             </Panel>
 
             <Panel

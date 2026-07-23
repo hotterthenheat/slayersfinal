@@ -1,10 +1,44 @@
 import { useState } from 'react';
-import { Check, Send } from 'lucide-react';
+import { Check, CircleDot, CircleDashed, Send, type LucideIcon } from 'lucide-react';
 import Panel from '../../components/ui/Panel';
 import SegmentedControl from '../../components/ui/SegmentedControl';
-import { SHIPPED_FROM_FEEDBACK, loadCommunity, saveCommunity, timeAgo } from '../../data/community';
+import {
+  SHIPPED_FROM_FEEDBACK,
+  IN_PROGRESS_FROM_FEEDBACK,
+  CONSIDERING_FROM_FEEDBACK,
+  loadCommunity,
+  saveCommunity,
+  timeAgo,
+} from '../../data/community';
 import type { FeedbackCategory, FeedbackEntry } from '../../types/community';
 import { packMeta, shortBrowser, unpackMeta } from './localMeta';
+
+/** One stage of the public feedback loop — shipped / building / weighing. */
+const LoopStage = ({
+  title,
+  subtitle,
+  items,
+  icon: Icon,
+  iconClass,
+}: {
+  title: string;
+  subtitle: string;
+  items: { title: string; note: string }[];
+  icon: LucideIcon;
+  iconClass: string;
+}) => (
+  <Panel title={title} subtitle={subtitle} flush className="w-full">
+    {items.map(item => (
+      <div key={item.title} className="flex items-start gap-2.5 px-4 py-3 border-b border-borderSubtle/40 last:border-0">
+        <Icon className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${iconClass}`} />
+        <div className="min-w-0">
+          <span className="block text-caption font-semibold text-textPrimary">{item.title}</span>
+          <span className="block text-label text-textSecondary leading-snug">{item.note}</span>
+        </div>
+      </div>
+    ))}
+  </Panel>
+);
 
 const CATEGORY_OPTIONS = [
   { value: 'BUG', label: 'Bug' },
@@ -153,19 +187,29 @@ const Feedback = () => {
         )}
       </div>
 
-      {/* The loop, closed */}
-      <div className="xl:col-span-5 min-w-0">
-        <Panel title="Shipped from feedback" subtitle="changes already live on the desk" flush className="w-full">
-          {SHIPPED_FROM_FEEDBACK.map(item => (
-            <div key={item.title} className="flex items-start gap-2.5 px-4 py-3 border-b border-borderSubtle/40 last:border-0">
-              <Check className="w-3.5 h-3.5 text-bull shrink-0 mt-0.5" />
-              <div className="min-w-0">
-                <span className="block text-caption font-semibold text-textPrimary">{item.title}</span>
-                <span className="block text-label text-textSecondary leading-snug">{item.note}</span>
-              </div>
-            </div>
-          ))}
-        </Panel>
+      {/* The whole loop — where notes go: shipped, being built, being weighed. */}
+      <div className="xl:col-span-5 min-w-0 flex flex-col gap-4">
+        <LoopStage
+          title="Shipped from feedback"
+          subtitle="already live on the desk"
+          items={SHIPPED_FROM_FEEDBACK}
+          icon={Check}
+          iconClass="text-bull"
+        />
+        <LoopStage
+          title="In progress"
+          subtitle="on the bench right now"
+          items={IN_PROGRESS_FROM_FEEDBACK}
+          icon={CircleDot}
+          iconClass="text-select"
+        />
+        <LoopStage
+          title="Considering"
+          subtitle="weighing — your note moves these"
+          items={CONSIDERING_FROM_FEEDBACK}
+          icon={CircleDashed}
+          iconClass="text-textMuted"
+        />
       </div>
     </div>
   );
