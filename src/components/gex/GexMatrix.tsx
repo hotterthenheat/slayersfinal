@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { fmtUsd } from '../../data/gex';
 import { heatCellStyle, heatScaleGradient, heatScaleLabels } from './heatmap';
 import type { GexMatrixData } from '../../types/gex';
@@ -6,6 +6,8 @@ import type { GexMatrixData } from '../../types/gex';
 interface GexMatrixProps {
   data: GexMatrixData;
   spot: number;
+  /** Column index to spotlight (expiry picker) — dims the rest, scrolls it in. */
+  highlightCol?: number | null;
 }
 
 interface HoverCell {
@@ -21,9 +23,20 @@ interface HoverCell {
  * flips by cell luminance, so color is never the only channel. Hovering a
  * cell floats a read-out — strike, expiry, net GEX and what the sign means.
  */
-const GexMatrix = ({ data }: GexMatrixProps) => {
+const GexMatrix = ({ data, highlightCol = null }: GexMatrixProps) => {
   const { expiries, strikes, cells, maxAbs, spotRowIndex, callWallIndex, putWallIndex } = data;
   const [hover, setHover] = useState<HoverCell | null>(null);
+
+  // Bring the spotlit expiry into view (matters on a phone, where the grid
+  // scrolls horizontally and the picked column may be off-screen).
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (highlightCol == null) return;
+    scrollRef.current?.querySelector(`th[data-col="${highlightCol}"]`)?.scrollIntoView({
+      inline: 'center',
+      block: 'nearest',
+    });
+  }, [highlightCol]);
 
   const marker = (r: number): string | null => {
     if (r === spotRowIndex) return 'Spot';
@@ -36,7 +49,7 @@ const GexMatrix = ({ data }: GexMatrixProps) => {
 
   return (
     <div className="relative flex gap-2 h-full min-h-0">
-      <div className="flex-grow overflow-auto min-w-0">
+      <div ref={scrollRef} className="flex-grow overflow-auto min-w-0">
         {/* table-fixed: geometry is tick-independent, so the pulse only swaps glyphs
             (fmtUsd char-count changes each second) instead of reflowing columns */}
         {/* min-width keeps the dense grid legible on a phone: the overflow-auto
@@ -50,8 +63,11 @@ const GexMatrix = ({ data }: GexMatrixProps) => {
               {expiries.map((exp, i) => (
                 <th
                   key={exp}
-                  className={`px-2 py-1.5 text-right font-mono text-micro font-semibold uppercase tracking-wide border-b border-borderSubtle ${
-                    i === 0 ? 'text-textSecondary' : 'text-textMuted'
+                  data-col={i}
+                  className={`px-2 py-1.5 text-right font-mono text-micro font-semibold uppercase tracking-wide border-b transition-colors ${
+                    i === highlightCol
+                      ? 'text-select border-select/50'
+                      : `border-borderSubtle ${i === 0 ? 'text-textSecondary' : 'text-textMuted'}`
                   }`}
                 >
                   {exp}
@@ -98,9 +114,11 @@ const GexMatrix = ({ data }: GexMatrixProps) => {
                       onMouseEnter={e => setHover({ r, c, x: e.clientX, y: e.clientY })}
                       onMouseMove={e => setHover({ r, c, x: e.clientX, y: e.clientY })}
                       onMouseLeave={() => setHover(h => (h && h.r === r && h.c === c ? null : h))}
-                      className={`px-2 py-1 text-right font-mono text-label tnum whitespace-nowrap cursor-crosshair transition-colors duration-700 ${
+                      className={`px-2 py-1 text-right font-mono text-label tnum whitespace-nowrap cursor-crosshair transition-all duration-300 ${
                         cell.king ? 'ring-1 ring-inset ring-king' : ''
-                      } ${hover && hover.r === r && hover.c === c ? 'brightness-125' : ''}`}
+                      } ${hover && hover.r === r && hover.c === c ? 'brightness-125' : ''} ${
+                        highlightCol != null && c !== highlightCol ? 'opacity-35' : ''
+                      }`}
                     >
                       {cell.king && <span className="mr-1 inline-block w-1.5 h-1.5 rounded-full bg-king" />}
                       {fmtUsd(cell.value)}

@@ -30,6 +30,8 @@ const GammaChart = () => {
   // Expanded (Focus Mode) shows the full chain — every strike; the inline view
   // stays a tighter window centred on spot so it reads without scrolling.
   const fullChain = focusedId === HEATMAP_FOCUS_ID;
+  // Expiry spotlight — null = all columns even; else the highlighted column index.
+  const [highlightCol, setHighlightCol] = useState<number | null>(null);
   const revRef = useRef(0);
   const revision = useMemo(() => ++revRef.current, [marketData]);
 
@@ -118,10 +120,30 @@ const GammaChart = () => {
         flush
         focusable
         focusId={HEATMAP_FOCUS_ID}
+        actions={
+          <div className="inline-flex items-center gap-0.5 rounded-md border border-borderSubtle bg-panel p-0.5 max-w-full overflow-x-auto no-scrollbar">
+            {['All', ...matrix.expiries].map((label, i) => {
+              const col = i === 0 ? null : i - 1;
+              const on = highlightCol === col;
+              return (
+                <button
+                  key={label}
+                  onClick={() => setHighlightCol(col)}
+                  aria-pressed={on}
+                  className={`shrink-0 rounded px-2 py-1 font-mono text-micro font-semibold uppercase tracking-wide transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-select/60 ${
+                    on ? 'bg-select/15 text-select' : 'text-textMuted hover:text-textPrimary'
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        }
         // Capped inline; uncapped when expanded so the overlay shows every strike.
         bodyClassName={fullChain ? 'p-2' : 'h-[calc(100dvh-27rem)] min-h-[340px] max-h-[520px] p-2'}
       >
-        <GexMatrix data={matrix} spot={scan.spot} />
+        <GexMatrix data={matrix} spot={scan.spot} highlightCol={highlightCol} />
       </Panel>
 
       {/* Read */}
