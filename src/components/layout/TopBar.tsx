@@ -63,6 +63,7 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
   const section = `/${location.pathname.split('/')[1] ?? ''}`;
 
   return (
+    <>
     <header className="glass absolute top-0 inset-x-0 h-14 border-b border-white/[0.07] flex items-center gap-3 px-4 z-40">
       {/* Left zone: mobile menu + wordmark. Reserved, high-stacking so nav can
           never paint over it. */}
@@ -167,19 +168,23 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
         <span className="hidden xl:block font-mono text-xs text-textSecondary tnum select-none">{clock}</span>
       </div>
 
-      {/* Mobile drawer */}
+    </header>
+
+      {/* Mobile overlay — a SIBLING of the glass header, not a child. A
+          backdrop-filter nested inside another backdrop-filter element can't
+          sample the page, so the drawer's blur only composites out here. */}
       <AnimatePresence>
         {mobileOpen && (
           <>
             <motion.div
-              className="lg:hidden fixed inset-0 top-14 z-30 bg-black/50"
+              className="lg:hidden fixed inset-0 top-14 z-30 bg-black/70"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setMobileOpen(false)}
             />
             <motion.div
-              className="lg:hidden absolute left-0 right-0 top-full z-40 border-b border-borderMuted bg-panel shadow-overlay max-h-[calc(100vh-3.5rem)] overflow-y-auto"
+              className="glass lg:hidden fixed inset-x-0 top-14 z-40 border-b border-white/[0.08] shadow-overlay max-h-[calc(100vh-3.5rem)] overflow-y-auto"
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
@@ -190,7 +195,7 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
           </>
         )}
       </AnimatePresence>
-    </header>
+    </>
   );
 };
 

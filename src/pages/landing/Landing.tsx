@@ -170,7 +170,7 @@ const LandingNav = () => {
   };
 
   return (
-    <header className="fixed top-0 inset-x-0 z-40 border-b border-borderSubtle bg-canvas/80 backdrop-blur">
+    <header className="glass fixed top-0 inset-x-0 z-40 border-b border-white/[0.07]">
       <div className="mx-auto max-w-6xl flex items-center gap-6 px-4 lg:px-6 py-3">
         <button
           onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
