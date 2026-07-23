@@ -200,9 +200,16 @@ function perceivedLuminance([r, g, b]: RGB): number {
   return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
 }
 
+// Perceptual lift for the low/mid end: raw magnitude is near-linear, which
+// leaves weak cells hovering around flat NEUTRAL gray (a weak + reads the same
+// as a weak −). A gamma < 1 pushes small values toward their hue sooner while
+// leaving the poles (t=1) untouched, so the ordering never inverts.
+const heatT = (value: number, maxAbs: number): number =>
+  Math.pow(Math.min(1, Math.abs(value) / (maxAbs || 1)), 0.7);
+
 /** Raw ramp color for a signed value — used by the on-chart node overlay. */
 export function heatRgb(value: number, maxAbs: number): RGB {
-  const t = Math.min(1, Math.abs(value) / (maxAbs || 1));
+  const t = heatT(value, maxAbs);
   const r = RAMPS[HEAT_MODE as keyof typeof RAMPS];
   if (r) return rampColor(value >= 0 ? r.pos : r.neg, t);
   // grayscale fallback for the legacy mono/hybrid/diverging modes
@@ -219,7 +226,7 @@ const TINT_MAX = 0.5;
 const ramp = RAMPS[HEAT_MODE as keyof typeof RAMPS];
 
 export function heatCellStyle(value: number, maxAbs: number): CSSProperties {
-  const t = Math.min(1, Math.abs(value) / (maxAbs || 1));
+  const t = heatT(value, maxAbs);
 
   if (ramp) {
     const rgb = rampColor(value >= 0 ? ramp.pos : ramp.neg, t);

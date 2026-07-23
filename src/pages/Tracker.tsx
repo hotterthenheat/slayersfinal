@@ -422,7 +422,7 @@ const COLUMNS: Column<Row>[] = [
     render: r =>
       r.notes.trim() ? (
         <span className="inline-flex items-center gap-1.5 text-textSecondary">
-          <StickyNote className="w-3 h-3 holo-text shrink-0" />
+          <StickyNote className="w-3 h-3 text-select shrink-0" />
           {truncate(r.notes.trim(), 22)}
         </span>
       ) : (
@@ -558,7 +558,7 @@ const Tracker = () => {
           <Panel className="w-full" bodyClassName="py-6 px-6 flex flex-col md:flex-row md:items-center gap-6">
             <div className="flex-1 min-w-0">
               <div className="inline-flex w-11 h-11 rounded-lg border border-borderSubtle bg-inset items-center justify-center mb-3">
-                <Bookmark className="w-5 h-5 holo-text" />
+                <Bookmark className="w-5 h-5 text-select" />
               </div>
               <h2 className="text-lg font-semibold text-textPrimary">Nothing on watch yet</h2>
               <p className="mt-1.5 text-data text-textSecondary leading-relaxed max-w-xl">

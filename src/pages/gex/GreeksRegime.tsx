@@ -20,8 +20,10 @@ const fmtDelta = (v: number): string => {
   return `${s}${a.toFixed(0)}`;
 };
 
-/** The three greeks a dealer-flow read leans on; the rest are specialist. */
-const CORE_KEYS: GreekKey[] = ['gamma', 'vanna', 'charm'];
+/** The core greeks a dealer-flow read leans on; the rest are specialist. Four
+    (not three) so the matrix fills a desktop width with heat instead of leaving
+    the strike column a wide black gutter. */
+const CORE_KEYS: GreekKey[] = ['delta', 'gamma', 'vanna', 'charm'];
 
 const fmtC = (v: number): string => {
   const a = Math.abs(v);
@@ -264,7 +266,17 @@ const GreeksRegime = () => {
           )}
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
+          {/* table-fixed + colgroup: pin Strike/Dist narrow so the heat-filled
+              greek columns absorb the desktop width, instead of Strike ballooning
+              into a wide black gutter next to a cluster of numbers. */}
+          <table className="w-full min-w-[640px] table-fixed border-collapse">
+            <colgroup>
+              <col className="w-[104px]" />
+              <col className="w-[76px]" />
+              {visibleGreeks.map(g => (
+                <col key={g.key} />
+              ))}
+            </colgroup>
             <thead>
               <tr className="bg-panelRaised border-b border-borderSubtle">
                 <th className="sticky left-0 z-10 bg-inset px-3 py-2 text-left font-mono text-label font-semibold uppercase tracking-wider text-textMuted">Strike</th>

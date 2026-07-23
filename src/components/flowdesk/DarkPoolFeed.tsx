@@ -31,7 +31,7 @@ const DarkPoolFeed = () => {
       {/* Masonry columns, not a grid: sectors vary in row count (Tech 6, Utilities 1),
           so a fixed grid left a ragged half-empty last row. Columns balance by height
           and fill evenly; gap-px + mb-px keep the fused hairline look. */}
-      <div className="columns-1 md:columns-2 xl:columns-4 gap-px bg-borderSubtle">
+      <div className="columns-1 md:columns-2 xl:columns-3 gap-px bg-borderSubtle">
         {sectors.map(sec => (
           <div key={sec.sector} className="bg-panel flex flex-col break-inside-avoid mb-px">
             {/* Sector header */}

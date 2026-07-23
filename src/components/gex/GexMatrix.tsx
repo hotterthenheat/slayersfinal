@@ -57,7 +57,10 @@ const GexMatrix = ({ data, highlightCol = null }: GexMatrixProps) => {
         <table className="w-full min-w-[460px] table-fixed border-collapse">
           <thead className="sticky top-0 z-10">
             <tr className="bg-panelRaised">
-              <th className="px-2 py-1.5 text-left font-mono text-micro font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle" style={{ width: '30%' }}>
+              {/* Fixed (not 30%) so the strike column stays tight on a desktop
+                  width instead of ballooning into a ~400px black gutter; the
+                  heat-filled expiry columns absorb the remaining width. */}
+              <th className="px-2 py-1.5 text-left font-mono text-micro font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle" style={{ width: 112 }}>
                 Strike
               </th>
               {expiries.map((exp, i) => (
@@ -131,8 +134,10 @@ const GexMatrix = ({ data, highlightCol = null }: GexMatrixProps) => {
         </table>
       </div>
 
-      {/* Diverging color scale */}
-      <div className="shrink-0 w-9 flex flex-col items-center py-1 select-none">
+      {/* Diverging color scale — hidden on phones, where every cell already
+          prints its signed, colour-coded value and the 36px rail would only
+          squeeze the grid into a harder horizontal scroll. */}
+      <div className="shrink-0 w-9 hidden sm:flex flex-col items-center py-1 select-none">
         <span className={`font-mono text-micro tnum ${heatScaleLabels.pos}`}>+{fmtUsd(maxAbs).replace('$', '')}</span>
         <div
           className="flex-grow w-2.5 my-1.5 rounded-full border border-borderSubtle"

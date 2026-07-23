@@ -29,16 +29,24 @@ const SubtabDesk = ({ views, ariaLabel }: { views: SubView[]; ariaLabel: string 
   const current = views.find(v => v.key === params.get('view')) ?? views[0];
   return (
     <div className="flex flex-col gap-4">
-      <SegmentedControl
-        ariaLabel={ariaLabel}
-        options={views.map(v => ({ value: v.key, label: v.label }))}
-        value={current.key}
-        onChange={key => {
-          const next = new URLSearchParams(params);
-          next.set('view', key);
-          setParams(next, { replace: true });
-        }}
-      />
+      {/* A within-desk view switch — the leading eyebrow keeps it visibly
+          subordinate to the Pinpoint desk tabs above (which own the holo pill),
+          so the two nav levels never read as one ambiguous double tab bar. */}
+      <div className="flex items-center gap-2.5">
+        <span className="font-mono text-micro font-medium uppercase tracking-[0.18em] text-textMuted select-none">
+          View
+        </span>
+        <SegmentedControl
+          ariaLabel={ariaLabel}
+          options={views.map(v => ({ value: v.key, label: v.label }))}
+          value={current.key}
+          onChange={key => {
+            const next = new URLSearchParams(params);
+            next.set('view', key);
+            setParams(next, { replace: true });
+          }}
+        />
+      </div>
       {current.node}
     </div>
   );

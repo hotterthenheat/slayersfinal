@@ -55,6 +55,23 @@ const LEVEL_SPEC: {
   { key: 'king', color: KING, title: 'KING', style: LineStyle.Solid, width: 2 },
 ];
 
+// When two levels resolve to the same price (e.g. the king strike IS the put
+// wall), their axis-label pills stack into an unreadable overlap. Keep every
+// coloured line drawn, but show only ONE pill per price — walls claim it first
+// (they carry directional structure), then king, then flip. The full per-level
+// breakdown still lives in the Key Levels panel, so nothing is lost.
+const LABEL_PRIORITY: ('callWall' | 'putWall' | 'king' | 'flip')[] = ['callWall', 'putWall', 'king', 'flip'];
+const labelVisibility = (L: KeyLevels): Record<'callWall' | 'putWall' | 'flip' | 'king', boolean> => {
+  const claimed = new Set<string>();
+  const vis = { callWall: true, putWall: true, flip: true, king: true };
+  for (const key of LABEL_PRIORITY) {
+    const priceKey = L[key].toFixed(2);
+    if (claimed.has(priceKey)) vis[key] = false;
+    else claimed.add(priceKey);
+  }
+  return vis;
+};
+
 const toCandle = (b: Candle) => ({
   time: b.time as UTCTimestamp,
   open: b.open,
@@ -240,6 +257,7 @@ const StrikeChart = ({ ticker, revision, levels, overlay, timeframe, height = 46
 
     if (overlay === 'LEVELS' || overlay === 'BOTH') {
       const L = levelsRef.current;
+      const vis = labelVisibility(L);
       for (const spec of LEVEL_SPEC) {
         levelLinesRef.current[spec.key] = candleSeries.createPriceLine({
           price: L[spec.key],
@@ -247,7 +265,7 @@ const StrikeChart = ({ ticker, revision, levels, overlay, timeframe, height = 46
           title: spec.title,
           lineStyle: spec.style,
           lineWidth: spec.width,
-          axisLabelVisible: true,
+          axisLabelVisible: vis[spec.key],
         });
       }
       shownLevelsRef.current = { ...L };
@@ -259,6 +277,11 @@ const StrikeChart = ({ ticker, revision, levels, overlay, timeframe, height = 46
   useEffect(() => {
     const lines = levelLinesRef.current;
     if (!lines.callWall) return; // levels hidden
+
+    // Whichever level owns each price pill can change as levels move — recompute
+    // so a coincident pill re-appears the moment the levels separate again.
+    const vis = labelVisibility(levels);
+    for (const spec of LEVEL_SPEC) lines[spec.key]?.applyOptions({ axisLabelVisible: vis[spec.key] });
 
     // Ticker switch = new world: snap, don't tween across symbols
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;

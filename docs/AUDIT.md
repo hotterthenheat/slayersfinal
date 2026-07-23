@@ -192,3 +192,30 @@ the earlier mobile-responsiveness waves and the glass-nav 0-overflow verificatio
 **Conclusion:** no responsive/a11y fix batch is warranted from the evidence
 gathered — the foundation is solid. A full exhaustive sweep would need a
 hardware-GL environment where Playwright runs at normal speed.
+
+## 8. Critic fix wave (post-verification)
+
+Six independent visual critics graded valid content screenshots (avg ≈7.1/10)
+and flagged 11 items. Each was re-checked against a live render before any change
+— echoing the ProveIt "crash" that turned out to be a scan-during-rebuild artifact.
+
+**Confirmed real → fixed**
+
+| Fix | Root cause | Files |
+|-----|-----------|-------|
+| Invisible icons | `.holo-text` (`background-clip:text; color:transparent`) makes SVG icons vanish (Bookmark, StickyNote, News Radar). Icons now get `text-select`. | Tracker.tsx, news/NewsIntel.tsx |
+| Pulse pill collision | KING often equals PUT/CALL wall → axis-label pills stack. Dedupe coincident price-line labels (walls > king > flip); every coloured line still drawn. | gex/StrikeChart.tsx |
+| Pulse mobile heatmap clip | 36px colour rail stole width from the cramped grid → hide it below `sm` (every cell already prints its signed colour-coded value). | gex/GexMatrix.tsx |
+| Data-table dead space | Greeks `w-full` + few cols → ~480px black strike gutter; GexMatrix strike col `30%` = ~420px on desktop. Fixed: `table-fixed`+colgroup, 4 default greeks, strike col 112px. | gex/GreeksRegime.tsx, gex/GexMatrix.tsx |
+| Mobile orphan stat card | `MetricGrid` auto-fit left the odd 5th card at half-width. Now flex-wrap so a lone last card fills the row; even counts unchanged. | ui/MetricGrid.tsx |
+| Two-level Pinpoint nav | Desk tabs + SubtabDesk toggle read as one ambiguous bar. Added a "View" eyebrow so the sub-toggle is visibly subordinate. | gex/desks.tsx |
+| DarkPool empty quadrant | `xl:columns-4` starved the 4th column → `xl:columns-3` balances the sector masonry. | flowdesk/DarkPoolFeed.tsx |
+| Legal wide measure / empty rails | Added a sticky section TOC in the left rail on desktop; prose stays `max-w-3xl`. | legal/LegalLayout.tsx |
+| Low-end heatmap contrast | Near-linear `t` left weak cells near flat NEUTRAL. Gamma lift (`t^0.7`) pushes low/mid values toward hue; poles untouched. | gex/heatmap.ts |
+| Templated repeated copy | News template pool too small (Apple & J&J printed identical headlines) + static sector notes. Added templates + salted feed-level dedupe; sector notes weave in leaders/breadth. | data/news.ts, data/stocks.ts |
+
+**Flagged but verified NOT bugs (critic misreads of net-vs-component data)** — no change:
+- *Compass ±sign* — puts show a green "+ exp move" by the app-wide favourable-move framing (consistent with swing/scalp targets); `expectedMovePct = moveBias × …`.
+- *Reconstruction +20 / −28* — top card is **net** directional info across 4 parents; the −28 is the largest single parent's own `DIR. INFO`. Already labelled net vs per-parent.
+- *News 15/18/18* — clustered stories vs raw wire vs total tracked; three distinct, already-labelled metrics.
+- *Earnings SLATE / Shortcuts / Feedback "air"* — reference/form/calendar pages; bottom whitespace is native to the page type, not a dashboard void.

@@ -201,7 +201,7 @@ const NewsIntel = ({ selectedItem, onSelect }: NewsIntelProps) => {
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-2 flex-wrap">
         <span className="inline-flex items-center gap-1.5 font-mono text-label font-semibold uppercase tracking-widest holo-text">
-          <Radar className="w-3.5 h-3.5" /> Positioning read
+          <Radar className="w-3.5 h-3.5 text-select" /> Positioning read
         </span>
         <span className="font-mono text-label font-bold text-textPrimary">{view.ticker}</span>
         <SignalBadge tone="neutral" className="ml-auto">

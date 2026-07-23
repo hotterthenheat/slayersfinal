@@ -87,7 +87,28 @@ const TICKER_TEMPLATES: Template[] = [
     sentiment: 0.45,
     magnitude: 0.35,
     make: (u, h) =>
-      `${u.name} unveils next-gen ${hPickStr(h('prod'), ['AI platform', 'flagship product line', 'enterprise suite'])}; early reviews positive`,
+      `${u.name} unveils next-gen ${hPickStr(h('prod'), ['AI platform', 'flagship product line', 'enterprise suite', 'developer toolkit', 'data cloud', 'consumer device'])}; early reviews positive`,
+  },
+  {
+    category: 'Analyst',
+    sentiment: 0.5,
+    magnitude: 0.42,
+    make: (u, h) =>
+      `${BANKS[Math.floor(h('bank') * BANKS.length)]} initiates ${u.name} at Overweight, Street-high $${Math.round(u.px * (1.18 + h('pt') * 0.2))} target`,
+  },
+  {
+    category: 'Product',
+    sentiment: 0.4,
+    magnitude: 0.4,
+    make: (u, h) =>
+      `${u.name} widens ${hPickStr(h('ptnr'), ['cloud', 'chip-supply', 'distribution'])} partnership to defend ${hPickStr(h('scope'), ['margins', 'its moat', 'unit reach'])}`,
+  },
+  {
+    category: 'Guidance',
+    sentiment: 0.35,
+    magnitude: 0.5,
+    make: (u, h) =>
+      `${u.name} authorizes $${2 + Math.floor(h('bb') * 18)}B buyback; signals confidence in ${hPickStr(h('conf'), ['cash flow', 'the setup into year-end', 'end-market demand'])}`,
   },
   {
     category: 'M&A',
@@ -193,49 +214,53 @@ const FEED_SIZE = 18;
 export function buildNewsFeed(): NewsItem[] {
   const day = dayKey();
   const items: NewsItem[] = [];
+  const seen = new Set<string>(); // headline text already used this feed
 
   for (let i = 0; i < FEED_SIZE; i++) {
     const seed = `news-${day}-${i}`;
-    const h = (tag: string) => h01(`${seed}-${tag}`);
-    const isMacro = h('macro') < 0.28;
-    const minutesAgo = Math.floor(Math.pow(h('t'), 1.25) * 420) + 2;
+    const baseH = (tag: string) => h01(`${seed}-${tag}`);
+    const isMacro = baseH('macro') < 0.28;
+    const minutesAgo = Math.floor(Math.pow(baseH('t'), 1.25) * 420) + 2;
     const ts = new Date(Date.now() - minutesAgo * 60000);
     const time = `${String(ts.getHours()).padStart(2, '0')}:${String(ts.getMinutes()).padStart(2, '0')}`;
     const source = hPick(`${seed}-src`, SOURCES);
 
-    if (isMacro) {
-      const t = MACRO_TEMPLATES[Math.floor(h('mt') * MACRO_TEMPLATES.length)];
-      const sentiment = t.sentiment * (0.85 + h('sj') * 0.3);
-      const magnitude = t.magnitude * (0.85 + h('mj') * 0.3);
-      items.push({
-        id: seed,
-        time,
-        minutesAgo,
-        source,
-        ticker: null,
-        headline: t.text,
-        category: 'Macro',
-        sentiment,
-        magnitude,
-        prediction: predict('Macro', sentiment, magnitude, 1, seed),
-      });
-    } else {
-      const u = UNIVERSE[Math.floor(h('tk') * UNIVERSE.length)];
-      const t = TICKER_TEMPLATES[Math.floor(h('tpl') * TICKER_TEMPLATES.length)];
-      const sentiment = t.sentiment * (0.8 + h('sj') * 0.4);
-      const magnitude = t.magnitude * (0.8 + h('mj') * 0.4);
-      items.push({
-        id: seed,
-        time,
-        minutesAgo,
-        source,
-        ticker: u.ticker,
-        headline: t.make(u, h),
-        category: t.category,
-        sentiment,
-        magnitude,
-        prediction: predict(t.category, sentiment, magnitude, u.beta, seed),
-      });
+    // Re-roll the copy (salted) until it's unique in this feed — the template
+    // pools are small, so two items can otherwise print byte-identical
+    // headlines (e.g. two names "unveil a next-gen flagship product line").
+    // The macro/name split stays fixed per slot so the feed mix is stable.
+    let built: NewsItem | null = null;
+    for (let salt = 0; salt < 8; salt++) {
+      const last = salt === 7;
+      const h = salt === 0 ? baseH : (tag: string) => h01(`${seed}-r${salt}-${tag}`);
+      if (isMacro) {
+        const t = MACRO_TEMPLATES[Math.floor(h('mt') * MACRO_TEMPLATES.length)];
+        if (seen.has(t.text) && !last) continue;
+        const sentiment = t.sentiment * (0.85 + h('sj') * 0.3);
+        const magnitude = t.magnitude * (0.85 + h('mj') * 0.3);
+        built = {
+          id: seed, time, minutesAgo, source, ticker: null, headline: t.text,
+          category: 'Macro', sentiment, magnitude,
+          prediction: predict('Macro', sentiment, magnitude, 1, seed),
+        };
+      } else {
+        const u = UNIVERSE[Math.floor(h('tk') * UNIVERSE.length)];
+        const t = TICKER_TEMPLATES[Math.floor(h('tpl') * TICKER_TEMPLATES.length)];
+        const headline = t.make(u, h);
+        if (seen.has(headline) && !last) continue;
+        const sentiment = t.sentiment * (0.8 + h('sj') * 0.4);
+        const magnitude = t.magnitude * (0.8 + h('mj') * 0.4);
+        built = {
+          id: seed, time, minutesAgo, source, ticker: u.ticker, headline,
+          category: t.category, sentiment, magnitude,
+          prediction: predict(t.category, sentiment, magnitude, u.beta, seed),
+        };
+      }
+      break;
+    }
+    if (built) {
+      seen.add(built.headline);
+      items.push(built);
     }
   }
 
