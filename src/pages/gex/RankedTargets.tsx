@@ -163,7 +163,7 @@ const RankedTargets = () => {
     return (
       <Panel className="h-64" bodyClassName="flex items-center justify-center">
         <span className="font-mono text-label text-textMuted uppercase tracking-widest">
-          Awaiting feed initialization…
+          Awaiting feed…
         </span>
       </Panel>
     );

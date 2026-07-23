@@ -136,6 +136,8 @@ const Compass = () => {
     Simulator.ensureTicker(monitorTarget.ticker);
     const cfg = Simulator.TICKERS[monitorTarget.ticker];
     return makeSetup(monitorTarget.ticker, cfg.currentPrice, monitorTarget.strike, monitorTarget.right, scanner, cfg.iv);
+    // marketData is a re-tick trigger — the body reads live prices from Simulator.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [monitorTarget, scanner, marketData]);
 
   // Also rebuild the selected preview setup live so metrics stay current
@@ -144,6 +146,8 @@ const Compass = () => {
     Simulator.ensureTicker(selectedSetup.ticker);
     const cfg = Simulator.TICKERS[selectedSetup.ticker];
     return makeSetup(selectedSetup.ticker, cfg.currentPrice, selectedSetup.strike, selectedSetup.right, scanner, cfg.iv);
+    // marketData is a re-tick trigger — the body reads live prices from Simulator.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSetup, scanner, marketData]);
 
   // Filtered groups for browse mode — ticker universe only. (The lifecycle-state
@@ -350,7 +354,7 @@ const Compass = () => {
         {browseHeader}
         <Panel className="h-64" bodyClassName="flex items-center justify-center">
           <span className="font-mono text-label text-textMuted uppercase tracking-widest">
-            Awaiting feed initialization…
+            Awaiting feed…
           </span>
         </Panel>
       </>

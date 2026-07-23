@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMarketData } from '../../context/MarketDataContext';
 import Simulator from '../../core/simulator';
 import { buildGexView, pulseMatrix } from '../../data/gex';
@@ -28,8 +28,8 @@ interface Column {
 const ComplexBoard = () => {
   const { activeTicker, marketData } = useMarketData();
   // marketData bumps every tick — drives the per-second glyph pulse.
-  const revRef = useRef(0);
-  const revision = useMemo(() => ++revRef.current, [marketData]);
+  const [revision, setRevision] = useState(0);
+  useEffect(() => setRevision(r => r + 1), [marketData]);
 
   // Slow scan: every ticker's price already advances each tick(); this rebuilds
   // their chains/exposure on the 10s cadence so geometry doesn't churn per tick.

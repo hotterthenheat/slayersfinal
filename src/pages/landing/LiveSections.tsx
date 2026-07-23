@@ -52,8 +52,8 @@ function useLandingScan(): LandingCtx | null {
   const enabled = true;
   const { marketData } = useMarketData();
 
-  const revRef = useRef(0);
-  const revision = useMemo(() => ++revRef.current, [marketData]);
+  const [revision, setRevision] = useState(0);
+  useEffect(() => setRevision(r => r + 1), [marketData]);
 
   const [scan, setScan] = useState<MarketSnapshot | null>(null);
   const scanRef = useRef<MarketSnapshot | null>(null);
