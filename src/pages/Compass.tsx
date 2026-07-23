@@ -9,6 +9,7 @@ import { buildSkyVision, makeSetup } from '../data/skyvision';
 import { SCANNERS, type ScannerKey, type Setup } from '../types/skyvision';
 import PageHeader from '../components/ui/PageHeader';
 import Panel from '../components/ui/Panel';
+import SignalBadge from '../components/ui/SignalBadge';
 import DataTable, { type Column } from '../components/ui/DataTable';
 import SetupsFeed from '../components/skyvision/SetupsFeed';
 import ContractChain, { type ChainSelection } from '../components/skyvision/ContractChain';
@@ -251,12 +252,9 @@ const Compass = () => {
         render: s => (
           <span className="inline-flex flex-wrap items-center gap-1">
             {s.whyChips.slice(0, 2).map(c => (
-              <span
-                key={c}
-                className="inline-flex items-center rounded border border-bull/20 bg-bull/[0.06] px-1.5 py-0.5 text-label uppercase tracking-wider text-bull"
-              >
+              <SignalBadge key={c} tone="bull">
                 {c}
-              </span>
+              </SignalBadge>
             ))}
             {s.whyChips.length > 2 && <span className="text-textMuted text-label">+{s.whyChips.length - 2}</span>}
           </span>

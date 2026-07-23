@@ -268,12 +268,9 @@ const ItemDetail = ({ row, onStatus, onNotes, onReview, onUntrack }: ItemDetailP
       {row.attention.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {row.attention.map(a => (
-            <span
-              key={a}
-              className="inline-flex items-center rounded border border-warn/25 bg-warn/10 px-1.5 py-0.5 font-mono text-micro uppercase tracking-wider text-warn"
-            >
+            <SignalBadge key={a} tone="warn">
               {a}
-            </span>
+            </SignalBadge>
           ))}
         </div>
       )}

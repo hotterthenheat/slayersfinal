@@ -10,6 +10,7 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Check, ChevronDown, Clock, Minus } from 'lucide-react';
+import SignalBadge from '../../components/ui/SignalBadge';
 
 // ---- compare plans -----------------------------------------------------------
 
@@ -145,11 +146,7 @@ export const ComparePlans = () => (
             <div className="flex-grow min-w-0 pr-4">
               <span className="flex items-center gap-2">
                 <span className="text-data font-bold text-textPrimary tracking-tight">{row.label}</span>
-                {row.badge && (
-                  <span className="inline-flex items-center rounded border border-warn/30 bg-warn/10 px-1.5 py-0.5 font-mono text-micro font-bold uppercase tracking-widest text-warn">
-                    {row.badge}
-                  </span>
-                )}
+                {row.badge && <SignalBadge tone="warn">{row.badge}</SignalBadge>}
               </span>
               <span className="block mt-0.5 text-label text-textSecondary leading-snug">{row.detail}</span>
             </div>

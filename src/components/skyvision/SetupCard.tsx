@@ -85,12 +85,9 @@ const SetupCard = ({ setup, expanded, isSelected, isTop, onToggle, onSelect, onO
               <div className="font-mono text-label uppercase tracking-widest text-textMuted mb-1.5">Evidence</div>
               <div className="flex flex-wrap gap-1.5">
                 {setup.whyChips.map(chip => (
-                  <span
-                    key={chip}
-                    className="inline-flex items-center rounded border border-bull/20 bg-bull/[0.06] px-1.5 py-0.5 font-mono text-label uppercase tracking-wider text-bull"
-                  >
+                  <SignalBadge key={chip} tone="bull">
                     {chip}
-                  </span>
+                  </SignalBadge>
                 ))}
               </div>
             </div>
