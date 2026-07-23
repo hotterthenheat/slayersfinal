@@ -385,5 +385,3 @@ export const WIDGETS: WidgetDef[] = [
     ),
   },
 ];
-
-export const widgetByKey = (key: string): WidgetDef | undefined => WIDGETS.find(w => w.key === key);

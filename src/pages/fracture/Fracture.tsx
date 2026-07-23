@@ -158,7 +158,7 @@ const CascadeFan = ({ paths, spot, trigger }: { paths: number[][]; spot: number;
   const X = (i: number) => (i / (maxLen - 1)) * W;
   const Y = (v: number) => H - ((v - lo) / (hi - lo)) * H;
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none" role="img" aria-label="Reflexive cascade fan chart — simulated feedback price paths">
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none" role="img" aria-label="Reflexive cascade fan chart — modeled feedback price paths">
       <line x1={0} x2={W} y1={Y(spot)} y2={Y(spot)} stroke={SPOT} strokeOpacity={0.35} strokeWidth={1} strokeDasharray="3 3" />
       <line x1={0} x2={W} y1={Y(trigger)} y2={Y(trigger)} stroke={BEAR} strokeOpacity={0.5} strokeWidth={1} strokeDasharray="4 3" />
       {paths.map((p, i) => (

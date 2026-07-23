@@ -1,19 +1,6 @@
 import SignalBadge from '../ui/SignalBadge';
 import type { Verdict } from '../../types/skyvision';
-
-const VERDICT_TONE = {
-  ENTER: 'bull',
-  EXIT: 'bear',
-  WATCH: 'warn',
-} as const;
-
-// Displayed labels describe the setup's quality — they never command an action.
-// The internal Verdict type stays ENTER/EXIT/WATCH; only the wording is observational.
-const VERDICT_LABEL: Record<Verdict, string> = {
-  ENTER: 'QUALIFIED',
-  EXIT: 'FADED',
-  WATCH: 'WATCH',
-};
+import { VERDICT_LABEL, VERDICT_TONE } from './verdict';
 
 interface VerdictBadgeProps {
   verdict: Verdict;

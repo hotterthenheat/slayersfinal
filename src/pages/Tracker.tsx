@@ -45,8 +45,8 @@ type ViewKey = (typeof VIEWS)[number]['value'];
 
 const VIEW_HINT: Record<ViewKey, string> = {
   active: 'live watch — nothing flagged yet',
-  triggered: 'engine currently reads ENTER',
-  invalidated: 'engine currently reads EXIT',
+  triggered: 'engine currently reads QUALIFIED',
+  invalidated: 'engine currently reads FADED',
   expiring: 'inside a day of expiry',
   closed: 'expired or marked closed',
   alerts: 'flags recomputed from the current read',
@@ -510,7 +510,7 @@ const Tracker = () => {
 
         const attention: string[] = [];
         if (status !== 'closed') {
-          if (live.verdict === 'EXIT') attention.push('Engine reads EXIT');
+          if (live.verdict === 'EXIT') attention.push('Engine reads FADED');
           if (expiringSoon) attention.push('Expires within a day');
           if (scoreDelta < 0) attention.push(`Score ${scoreDelta} vs track`);
         }
@@ -587,8 +587,8 @@ const Tracker = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
             {[
-              { icon: Compass, title: 'Compass setups', body: 'Graded ENTER / EXIT trade setups with a full plan.', to: '/compass', cta: 'Open Compass' },
-              { icon: Scale, title: 'Contract Weigher', body: 'Weeklies, swings & LEAPS scored BUY / WATCH / FADE.', to: '/compass', cta: 'Weigh contracts' },
+              { icon: Compass, title: 'Compass setups', body: 'Graded QUALIFIED / WATCH / FADED setups with a full plan.', to: '/compass', cta: 'Open Compass' },
+              { icon: Scale, title: 'Contract Weigher', body: 'Weeklies, swings & LEAPS scored STRONG / WATCH / WEAK.', to: '/compass', cta: 'Weigh contracts' },
               { icon: Radar, title: 'Trace flow', body: 'Notable options prints and dark-pool blocks.', to: '/trace/tracker', cta: 'Open Trace' },
               { icon: CalendarClock, title: 'Earnings plays', body: 'Implied-vs-realized PLAY / FADE calls into prints.', to: '/earnings', cta: 'Open Earnings' },
             ].map(card => (
@@ -620,7 +620,7 @@ const Tracker = () => {
             <StatCard
               label="Triggered"
               value={`${counts.triggered}`}
-              sub="engine reads ENTER"
+              sub="engine reads QUALIFIED"
               tone={counts.triggered > 0 ? 'bull' : 'neutral'}
             />
             <StatCard

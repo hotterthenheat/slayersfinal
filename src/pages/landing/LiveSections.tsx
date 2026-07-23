@@ -27,6 +27,7 @@ import WorkspaceLoop, { type WorkspaceTile } from './WorkspaceLoop';
 import type { MarketSnapshot } from '../../types/market';
 import type { CommandView, ExposureProfileData, GexMatrixData, GexView } from '../../types/gex';
 import type { Setup, SkyVisionData } from '../../types/skyvision';
+import { VERDICT_LABEL } from '../../components/skyvision/verdict';
 
 const SCAN_INTERVAL_MS = 10_000;
 
@@ -226,7 +227,7 @@ const DemoSetup = ({ setups }: { setups: SkyVisionData }) => {
           }`}
           style={bull ? undefined : { background: 'rgba(255,59,48,0.85)' }}
         >
-          {setup.verdict}
+          {VERDICT_LABEL[setup.verdict]}
         </span>
       </div>
 

@@ -58,7 +58,7 @@ const ROWS: FeatureRow[] = [
   },
   {
     label: 'Compass',
-    detail: 'Graded setups with ENTER / EXIT calls, explained in plain English',
+    detail: 'Graded setups with a live QUALIFIED / WATCH / FADED read, in plain English',
     tiers: [false, true, true],
   },
   {
