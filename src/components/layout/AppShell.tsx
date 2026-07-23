@@ -2,13 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import TopBar from './TopBar';
-import Footer from './Footer';
 import OnboardingOverlay from './OnboardingOverlay';
 import CommandPalette from './CommandPalette';
 import SettingsPanel from './SettingsPanel';
 import ShortcutsOverlay from './ShortcutsOverlay';
 import RouteErrorBoundary from './RouteErrorBoundary';
-import { useMarketData } from '../../context/MarketDataContext';
+import { useTicker } from '../../context/MarketDataContext';
 import Simulator from '../../core/simulator';
 import { DUR } from '../../lib/motion';
 
@@ -25,7 +24,7 @@ const AppShell = () => {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const location = useLocation();
-  const { activeTicker, changeTicker } = useMarketData();
+  const { activeTicker, changeTicker } = useTicker();
 
   const openPalette = useCallback(() => setPaletteOpen(true), []);
   const closePalette = useCallback(() => setPaletteOpen(false), []);
@@ -65,9 +64,11 @@ const AppShell = () => {
   }, [changeTicker]);
 
   return (
-    <div className="h-screen flex flex-col bg-canvas text-textPrimary overflow-hidden">
+    <div className="h-screen relative bg-canvas text-textPrimary overflow-hidden">
       <TopBar onOpenPalette={openPalette} onOpenSettings={openSettings} />
-      <main className="flex-grow overflow-y-auto">
+      {/* pt-14 clears the overlaid glass bar; content scrolls under it so the
+          blur has the live desk behind it to refract. */}
+      <main className="h-full overflow-y-auto pt-14">
         {/* Keyed by top-level section only — subpage changes animate inside
             their section layout so the header/tabs never remount */}
         {/* Opacity-only crossfade — no vertical translate (which nudged the whole
@@ -89,7 +90,6 @@ const AppShell = () => {
           </motion.div>
         </AnimatePresence>
       </main>
-      <Footer />
       <CommandPalette
         open={paletteOpen}
         onClose={closePalette}

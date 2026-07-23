@@ -38,12 +38,12 @@ const PULSE_EXTRA: WidgetDef[] = [
               {moc.score >= 0 ? '+' : ''}
               {moc.score}
             </span>
-            <span className="font-mono text-[10px] uppercase tracking-widest text-textSecondary">{moc.classification}</span>
+            <span className="font-mono text-micro uppercase tracking-widest text-textSecondary">{moc.classification}</span>
           </div>
-          <div className="font-mono text-[11px] text-textMuted">
+          <div className="font-mono text-label text-textMuted">
             {moc.side} imbalance · {moc.absorptionPct}% absorbed · reversal {moc.reversalRisk}%
           </div>
-          <p className="text-[11px] text-textSecondary leading-relaxed">{moc.note}</p>
+          <p className="text-label text-textSecondary leading-relaxed">{moc.note}</p>
         </div>
       );
     },
@@ -62,20 +62,20 @@ const PULSE_EXTRA: WidgetDef[] = [
         <div className="h-full p-3 flex flex-col gap-2.5 overflow-auto">
           <div className="flex items-start gap-5">
             <div>
-              <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Instability</div>
+              <div className="font-mono text-micro uppercase tracking-widest text-textMuted">Instability</div>
               <div className="font-mono text-2xl font-bold tnum text-textPrimary">{v.instability}</div>
             </div>
             <div>
-              <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Fracture line</div>
+              <div className="font-mono text-micro uppercase tracking-widest text-textMuted">Fracture line</div>
               <div className="font-mono text-lg font-semibold tnum text-bear">
                 {v.fractureLine ? `$${v.fractureLine.toFixed(2)}` : 'none'}
               </div>
             </div>
           </div>
-          <div className="font-mono text-[11px] text-textMuted">
+          <div className="font-mono text-label text-textMuted">
             Cascade if tested {v.cascade.cascadeProbPct}% · criticality {v.criticality.label}
           </div>
-          <p className="text-[11px] text-textSecondary leading-relaxed">{v.headline}</p>
+          <p className="text-label text-textSecondary leading-relaxed">{v.headline}</p>
         </div>
       );
     },

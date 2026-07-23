@@ -45,7 +45,7 @@ const ProveIt = () => {
           subtitle="Quantitative modeling & predictive analytics — the receipts behind every call"
         />
         <Panel className="h-64" bodyClassName="flex items-center justify-center">
-          <span className="font-mono text-[11px] text-textMuted uppercase tracking-widest">Spinning up the models…</span>
+          <span className="font-mono text-label text-textMuted uppercase tracking-widest">Spinning up the models…</span>
         </Panel>
       </>
     );
@@ -134,7 +134,7 @@ const ProveIt = () => {
               type="button"
               onClick={() => setAssumptionsOpen(o => !o)}
               aria-expanded={assumptionsOpen}
-              className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
+              className="flex items-center gap-1.5 font-mono text-label uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
             >
               <ChevronRight className={`w-3.5 h-3.5 transition-transform ${assumptionsOpen ? 'rotate-90' : ''}`} />
               Assumptions
@@ -146,14 +146,14 @@ const ProveIt = () => {
                   {assumptions.map(a => (
                     <div key={a.label} className="flex flex-col gap-0.5">
                       <div className="flex items-baseline justify-between gap-3">
-                        <dt className="font-mono text-[11px] uppercase tracking-wider text-textMuted">{a.label}</dt>
-                        <dd className="font-mono text-[12px] text-textPrimary tnum text-right">{a.value}</dd>
+                        <dt className="font-mono text-label uppercase tracking-wider text-textMuted">{a.label}</dt>
+                        <dd className="font-mono text-caption text-textPrimary tnum text-right">{a.value}</dd>
                       </div>
-                      <p className="text-[10px] text-textMuted leading-snug">{a.note}</p>
+                      <p className="text-micro text-textMuted leading-snug">{a.note}</p>
                     </div>
                   ))}
                 </dl>
-                <p className="mt-3 text-[11px] text-textSecondary leading-relaxed">
+                <p className="mt-3 text-label text-textSecondary leading-relaxed">
                   These inputs set the cone's width — they do not make it a forecast. Change the window or ticker and
                   every stat above recomputes from the same seeded run.
                 </p>
@@ -189,19 +189,19 @@ const ProveIt = () => {
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-px bg-borderSubtle">
           {scoreboard.map(m => (
             <div key={m.model} className="bg-panel px-3.5 py-3 flex flex-col gap-2">
-              <div className="font-mono text-[11px] font-semibold text-textPrimary">{m.model}</div>
+              <div className="font-mono text-label font-semibold text-textPrimary">{m.model}</div>
               <div className="flex items-baseline gap-2">
                 <span className={`font-mono text-2xl font-bold tnum ${m.hitRatePct >= 65 ? 'text-bull' : 'text-textPrimary'}`}>
                   {m.hitRatePct}%
                 </span>
-                <span className="font-mono text-[10px] text-textMuted tnum">n={m.sample}</span>
+                <span className="font-mono text-micro text-textMuted tnum">n={m.sample}</span>
               </div>
               <Sparkline data={m.trend} up={m.trend[m.trend.length - 1] >= m.trend[0]} width={120} height={22} />
-              <div className="font-mono text-[10px] text-textSecondary tnum">
+              <div className="font-mono text-micro text-textSecondary tnum">
                 edge {m.edgeBps >= 0 ? '+' : ''}
                 {m.edgeBps} bps/signal
               </div>
-              <p className="text-[10px] text-textMuted leading-snug">{m.note}</p>
+              <p className="text-micro text-textMuted leading-snug">{m.note}</p>
             </div>
           ))}
         </div>

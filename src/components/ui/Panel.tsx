@@ -16,6 +16,9 @@ interface PanelProps {
   emphasis?: boolean;
   /** Opt in to Focus Mode — a header control blooms this panel full-bleed */
   focusable?: boolean;
+  /** Stable focus id so a page can detect its own panel's focus state (e.g. to
+      render more data when expanded). Falls back to an auto-generated id. */
+  focusId?: string;
   className?: string;
   bodyClassName?: string;
   children: React.ReactNode;
@@ -52,14 +55,16 @@ const Panel = ({
   tone = 'neutral',
   emphasis = false,
   focusable = false,
+  focusId,
   className = '',
   bodyClassName = '',
   children,
 }: PanelProps) => {
-  // Scope-reticle corner ticks read as a deliberate "this is the hero instrument"
-  // cue — reserved for emphasis panels, not scattered on every box.
-  const surface = emphasis ? 'inst-emphasis holo-glow inst-ticks' : 'inst-surface';
-  const uid = useId();
+  // Emphasis is now a quiet static lift (brighter hairline) — no animated
+  // holo frame, glow, or corner ticks. Hierarchy from contrast, not ornament.
+  const surface = emphasis ? 'inst-emphasis' : 'inst-surface';
+  const generatedId = useId();
+  const uid = focusId ?? generatedId;
   const { focusedId, overlayEl, focus, close } = useFocus();
   const isFocused = focusable && focusedId === uid;
   const bodyPad = flush ? '' : 'p-4';
@@ -74,12 +79,15 @@ const Panel = ({
         >
           <div className="flex items-baseline gap-2 min-w-0">
             {title && (
-              <h3 className="font-mono text-[11px] font-semibold uppercase tracking-widest text-textPrimary truncate">
+              <h3 className="font-mono text-label font-semibold uppercase tracking-widest text-textPrimary truncate">
                 {title}
               </h3>
             )}
             {subtitle && (
-              <span className="font-mono text-[11px] text-textSecondary uppercase tracking-wider truncate">
+              // Hidden on phones: the title + subtitle + actions can't share one
+              // narrow row without the title truncating to a few letters, and a
+              // clipped subtitle reads as nothing. Title wins; subtitle returns at sm.
+              <span className="hidden sm:inline font-mono text-label text-textSecondary uppercase tracking-wider truncate">
                 {subtitle}
               </span>
             )}
@@ -105,7 +113,7 @@ const Panel = ({
         <>
           {/* Body lives in the focus overlay while focused — hold the height here. */}
           <div className={`${bodyPad} flex-grow min-h-0 flex items-center justify-center`}>
-            <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">
+            <span className="font-mono text-micro uppercase tracking-widest text-textMuted">
               Viewing in focus · Esc to return
             </span>
           </div>

@@ -58,7 +58,7 @@ const ROWS: FeatureRow[] = [
   },
   {
     label: 'Compass',
-    detail: 'Graded setups with ENTER / EXIT calls, explained in plain English',
+    detail: 'Graded setups with a live QUALIFIED / WATCH / FADED read, in plain English',
     tiers: [false, true, true],
   },
   {
@@ -120,18 +120,18 @@ const AvailCell = ({ a }: { a: Avail }) => (
 
 export const ComparePlans = () => (
   <div className="mt-16">
-    <h3 className="text-center text-2xl md:text-3xl font-bold tracking-tight">Compare plans</h3>
+    <h3 className="text-2xl md:text-3xl font-bold tracking-tight">Compare plans</h3>
     <div className="mt-8 border border-borderSubtle bg-panel rounded-lg overflow-x-auto">
       <div className="min-w-[640px]">
         {/* Header */}
         <div className="flex items-center px-5 py-3 border-b border-borderSubtle">
-          <span className="flex-grow font-mono text-[10px] font-bold uppercase tracking-widest text-textMuted">
+          <span className="flex-grow font-mono text-micro font-bold uppercase tracking-widest text-textMuted">
             Features
           </span>
           {TIER_COLS.map((t, i) => (
             <span
               key={t}
-              className={`w-28 text-center font-mono text-[10px] font-bold uppercase tracking-widest ${
+              className={`w-28 text-center font-mono text-micro font-bold uppercase tracking-widest ${
                 i === 1 ? 'text-select' : 'text-textSecondary'
               }`}
             >
@@ -144,14 +144,14 @@ export const ComparePlans = () => (
           <div key={row.label} className="flex items-center px-5 py-3.5 border-b border-borderSubtle/50 last:border-0">
             <div className="flex-grow min-w-0 pr-4">
               <span className="flex items-center gap-2">
-                <span className="text-[13px] font-bold text-textPrimary tracking-tight">{row.label}</span>
+                <span className="text-data font-bold text-textPrimary tracking-tight">{row.label}</span>
                 {row.badge && (
-                  <span className="inline-flex items-center rounded border border-warn/30 bg-warn/10 px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-widest text-warn">
+                  <span className="inline-flex items-center rounded border border-warn/30 bg-warn/10 px-1.5 py-0.5 font-mono text-micro font-bold uppercase tracking-widest text-warn">
                     {row.badge}
                   </span>
                 )}
               </span>
-              <span className="block mt-0.5 text-[11px] text-textSecondary leading-snug">{row.detail}</span>
+              <span className="block mt-0.5 text-label text-textSecondary leading-snug">{row.detail}</span>
             </div>
             {row.tiers.map((a, i) => (
               <span key={i} className="w-28 flex justify-center shrink-0">
@@ -195,8 +195,8 @@ export const Faq = () => {
 
   return (
     <section id="faq" className="px-6 md:px-10 py-20 max-w-3xl mx-auto">
-      <div className="text-center">
-        <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.25em] text-textSecondary">FAQ</span>
+      <div>
+        <span className="font-mono text-label font-semibold uppercase tracking-[0.25em] text-textSecondary">FAQ</span>
         <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">
           Questions, <span className="text-textMuted">answered.</span>
         </h2>
@@ -210,7 +210,7 @@ export const Faq = () => {
                 onClick={() => setOpen(isOpen ? null : i)}
                 className="w-full flex items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-white/[0.02]"
               >
-                <span className={`flex-grow text-[14px] font-semibold tracking-tight ${isOpen ? 'text-textPrimary' : 'text-textSecondary'}`}>
+                <span className={`flex-grow text-body font-semibold tracking-tight ${isOpen ? 'text-textPrimary' : 'text-textSecondary'}`}>
                   {item.q}
                 </span>
                 <motion.span animate={{ rotate: isOpen ? 180 : 0 }} transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}>
@@ -226,7 +226,7 @@ export const Faq = () => {
                     transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
                     className="overflow-hidden"
                   >
-                    <p className="px-5 pb-5 text-[13px] text-textSecondary leading-relaxed">{item.a}</p>
+                    <p className="px-5 pb-5 text-data text-textSecondary leading-relaxed">{item.a}</p>
                   </motion.div>
                 )}
               </AnimatePresence>

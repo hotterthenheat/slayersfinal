@@ -1,4 +1,5 @@
-import { NavLink } from 'react-router-dom';
+import { useEffect, useRef } from 'react';
+import { NavLink, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import type { LucideIcon } from 'lucide-react';
 
@@ -19,7 +20,7 @@ const Tab = ({ item, pillId }: { item: SubNavItem; pillId: string }) => (
   <NavLink
     to={item.path}
     className={({ isActive }) =>
-      `relative shrink-0 px-3 py-1.5 font-mono text-xs whitespace-nowrap transition-colors ${
+      `relative shrink-0 px-3 py-1.5 font-mono text-xs whitespace-nowrap transition-colors rounded-[5px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-select/60 active:scale-[0.98] ${
         isActive
           ? 'text-[#0a0a0a] font-semibold'
           : 'text-textSecondary font-medium hover:text-textPrimary hover:bg-white/[0.03] rounded-[5px]'
@@ -53,12 +54,22 @@ const Tab = ({ item, pillId }: { item: SubNavItem; pillId: string }) => (
 const SubNav = ({ items, ariaLabel }: SubNavProps) => {
   const pillId = `subnav-pill-${ariaLabel ?? 'tabs'}`;
   const grouped = items.some(i => i.group);
+  const navRef = useRef<HTMLElement>(null);
+  const { pathname } = useLocation();
+
+  // On a phone the bar scrolls horizontally; keep the active tab in view so you
+  // never land on a page with its own tab clipped off the right edge.
+  useEffect(() => {
+    const active = navRef.current?.querySelector('[aria-current="page"]');
+    active?.scrollIntoView({ inline: 'center', block: 'nearest' });
+  }, [pathname]);
 
   if (!grouped) {
     return (
       <nav
+        ref={navRef}
         aria-label={ariaLabel}
-        className="flex items-center gap-0.5 border border-borderSubtle bg-panel rounded-md p-0.5 max-w-full overflow-x-auto no-scrollbar"
+        className="glass flex items-center gap-0.5 border border-white/[0.08] rounded-md p-0.5 max-w-full overflow-x-auto no-scrollbar"
       >
         {items.map(item => (
           <Tab key={item.path} item={item} pillId={pillId} />
@@ -77,11 +88,11 @@ const SubNav = ({ items, ariaLabel }: SubNavProps) => {
   return (
     <nav aria-label={ariaLabel} className="flex flex-wrap items-start gap-x-3 gap-y-2.5">
       {groups.map(g => (
-        <div key={g} className="flex flex-col gap-1">
-          <span className="px-1 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-textMuted select-none">
+        <div key={g} className="flex flex-col gap-1 min-w-0 max-w-full">
+          <span className="px-1 font-mono text-micro font-medium uppercase tracking-[0.18em] text-textMuted select-none">
             {g}
           </span>
-          <div className="inline-flex items-center gap-0.5 border border-borderSubtle bg-panel rounded-md p-0.5">
+          <div className="glass flex items-center gap-0.5 border border-white/[0.08] rounded-md p-0.5 max-w-full overflow-x-auto no-scrollbar">
             {items
               .filter(i => (i.group ?? '') === g)
               .map(item => (

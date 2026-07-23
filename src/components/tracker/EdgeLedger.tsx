@@ -53,13 +53,13 @@ const StrategyRow = ({ st, maxAbs }: { st: StrategyStat; maxAbs: number }) => {
     <div className="px-3.5 py-2.5 grid grid-cols-[1fr_88px] items-center gap-3">
       <div className="min-w-0">
         <div className="flex items-center justify-between mb-1.5">
-          <span className="font-mono text-[12px] font-semibold text-textPrimary truncate">{st.setup}</span>
-          <span className="font-mono text-[10px] text-textMuted tnum shrink-0 ml-2">
+          <span className="font-mono text-caption font-semibold text-textPrimary truncate">{st.setup}</span>
+          <span className="font-mono text-micro text-textMuted tnum shrink-0 ml-2">
             {st.count} tr · {st.winRate.toFixed(0)}% W · PF {st.profitFactor.toFixed(2)}
           </span>
         </div>
         <ExpectancyBar r={st.avgR} maxAbs={maxAbs} />
-        <div className="mt-1.5 flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider">
+        <div className="mt-1.5 flex items-center gap-2 font-mono text-micro uppercase tracking-wider">
           <span className="text-bull">▲ {regimeLabel(st.bestRegime)}</span>
           <span className="text-textMuted">·</span>
           <span className="text-bear">▼ {regimeLabel(st.worstRegime)}</span>
@@ -69,7 +69,7 @@ const StrategyRow = ({ st, maxAbs }: { st: StrategyStat; maxAbs: number }) => {
         <span className={`font-mono text-lg font-bold tnum ${tone === 'bull' ? 'text-bull' : tone === 'bear' ? 'text-bear' : 'text-textPrimary'}`}>
           {fmtR(st.avgR)}
         </span>
-        <span className="font-mono text-[10px] text-textMuted uppercase tracking-wider">{fmtPct(st.expectancyPct)}/tr</span>
+        <span className="font-mono text-micro text-textMuted uppercase tracking-wider">{fmtPct(st.expectancyPct)}/tr</span>
       </div>
     </div>
   );
@@ -78,8 +78,8 @@ const StrategyRow = ({ st, maxAbs }: { st: StrategyStat; maxAbs: number }) => {
 /** A micro label / value stack used in the selected-trade dossier. */
 const Field = ({ label, children, tone }: { label: string; children: ReactNode; tone?: Tone }) => (
   <div>
-    <div className="font-mono text-[10px] uppercase tracking-widest text-textSecondary">{label}</div>
-    <div className={`mt-0.5 text-[12px] leading-snug ${tone === 'bull' ? 'text-bull' : tone === 'bear' ? 'text-bear' : 'text-textPrimary'}`}>
+    <div className="font-mono text-micro uppercase tracking-widest text-textSecondary">{label}</div>
+    <div className={`mt-0.5 text-caption leading-snug ${tone === 'bull' ? 'text-bull' : tone === 'bear' ? 'text-bear' : 'text-textPrimary'}`}>
       {children}
     </div>
   </div>
@@ -92,7 +92,7 @@ const TradeDossier = ({ t }: { t: LedgerTrade }) => {
     <div className="flex flex-col gap-3.5">
       <div className="flex items-center gap-2">
         <span className="font-mono text-sm font-bold text-textPrimary tracking-tight">{t.contract}</span>
-        <span className="font-mono text-[10px] text-textMuted uppercase tracking-wider">{t.setup}</span>
+        <span className="font-mono text-micro text-textMuted uppercase tracking-wider">{t.setup}</span>
         <SignalBadge tone={win ? 'bull' : 'bear'} dot className="ml-auto">
           {t.outcome} {fmtR(t.rMultiple)}
         </SignalBadge>
@@ -103,16 +103,16 @@ const TradeDossier = ({ t }: { t: LedgerTrade }) => {
 
       <div className="grid grid-cols-3 gap-2">
         <div className="inst-surface rounded px-2.5 py-2">
-          <div className="font-mono text-[10px] uppercase tracking-widest text-textSecondary">Planned</div>
-          <div className="mt-0.5 font-mono text-[13px] font-semibold text-textPrimary tnum">${t.plannedEntry.toFixed(2)}</div>
+          <div className="font-mono text-micro uppercase tracking-widest text-textSecondary">Planned</div>
+          <div className="mt-0.5 font-mono text-data font-semibold text-textPrimary tnum">${t.plannedEntry.toFixed(2)}</div>
         </div>
         <div className="inst-surface rounded px-2.5 py-2">
-          <div className="font-mono text-[10px] uppercase tracking-widest text-textSecondary">Actual fill</div>
-          <div className="mt-0.5 font-mono text-[13px] font-semibold text-textPrimary tnum">${t.actualFill.toFixed(2)}</div>
+          <div className="font-mono text-micro uppercase tracking-widest text-textSecondary">Actual fill</div>
+          <div className="mt-0.5 font-mono text-data font-semibold text-textPrimary tnum">${t.actualFill.toFixed(2)}</div>
         </div>
         <div className="inst-surface rounded px-2.5 py-2">
-          <div className="font-mono text-[10px] uppercase tracking-widest text-textSecondary">Slippage</div>
-          <div className={`mt-0.5 font-mono text-[13px] font-semibold tnum ${t.slippagePct > 0 ? 'text-bear' : 'text-bull'}`}>
+          <div className="font-mono text-micro uppercase tracking-widest text-textSecondary">Slippage</div>
+          <div className={`mt-0.5 font-mono text-data font-semibold tnum ${t.slippagePct > 0 ? 'text-bear' : 'text-bull'}`}>
             {fmtPct(t.slippagePct)}
           </div>
         </div>
@@ -128,12 +128,12 @@ const TradeDossier = ({ t }: { t: LedgerTrade }) => {
           { k: 'Capture', v: `${Math.round(Math.max(0, Math.min(1, t.captureRatio)) * 100)}%`, cls: 'text-textPrimary' },
         ].map(x => (
           <div key={x.k} className="text-center">
-            <div className="font-mono text-[10px] uppercase tracking-widest text-textSecondary">{x.k}</div>
-            <div className={`mt-0.5 font-mono text-[13px] font-semibold tnum ${x.cls}`}>{x.v}</div>
+            <div className="font-mono text-micro uppercase tracking-widest text-textSecondary">{x.k}</div>
+            <div className={`mt-0.5 font-mono text-data font-semibold tnum ${x.cls}`}>{x.v}</div>
           </div>
         ))}
       </div>
-      <div className="flex items-center justify-between font-mono text-[10px]">
+      <div className="flex items-center justify-between font-mono text-micro">
         <span className="text-textSecondary uppercase tracking-wider">Exit quality</span>
         <span className="text-textPrimary">{t.exitQuality} · {regimeLabel(t.volRegime)} regime</span>
       </div>
@@ -167,7 +167,7 @@ const EdgeLedger = () => {
         render: t => (
           <span className="flex flex-col">
             <span className="font-semibold text-textPrimary">{t.contract}</span>
-            <span className="text-[10px] text-textMuted">{t.setup}</span>
+            <span className="text-micro text-textMuted">{t.setup}</span>
           </span>
         ),
       },
@@ -219,7 +219,7 @@ const EdgeLedger = () => {
   if (!view || !selected) {
     return (
       <Panel className="h-64" bodyClassName="flex items-center justify-center">
-        <span className="font-mono text-[11px] text-textMuted uppercase tracking-widest">Reconstructing the edge ledger…</span>
+        <span className="font-mono text-label text-textMuted uppercase tracking-widest">Reconstructing the edge ledger…</span>
       </Panel>
     );
   }
@@ -264,8 +264,8 @@ const EdgeLedger = () => {
       </MetricGrid>
 
       <Panel tone={expTone} bodyClassName="py-3.5">
-        <p className="text-[15px] text-textPrimary leading-relaxed">
-          <span className={`font-mono text-[10px] font-semibold uppercase tracking-widest mr-2.5 ${expTone === 'bear' ? 'text-bear' : 'holo-text'}`}>
+        <p className="text-read text-textPrimary leading-relaxed">
+          <span className={`font-mono text-micro font-semibold uppercase tracking-widest mr-2.5 ${expTone === 'bear' ? 'text-bear' : 'holo-text'}`}>
             Ledger read
           </span>
           {view.headline}
@@ -314,11 +314,11 @@ const EdgeLedger = () => {
         <button
           onClick={() => setShowAnalytics(s => !s)}
           aria-expanded={showAnalytics}
-          className="inst-surface rounded-md px-3.5 h-10 flex items-center gap-2 font-mono text-[11px] font-semibold uppercase tracking-widest text-textPrimary hover:bg-white/[0.02] transition-colors"
+          className="inst-surface rounded-md px-3.5 h-10 flex items-center gap-2 font-mono text-label font-semibold uppercase tracking-widest text-textPrimary hover:bg-white/[0.02] transition-colors"
         >
           <Layers className="w-3.5 h-3.5" />
           Expectancy &amp; edge-decay
-          <span className="font-mono text-[11px] font-normal normal-case tracking-wider text-textSecondary">
+          <span className="font-mono text-label font-normal normal-case tracking-wider text-textSecondary">
             {view.decayFlagCount} decay {view.decayFlagCount === 1 ? 'flag' : 'flags'}
           </span>
           <ChevronDown className={`w-4 h-4 ml-auto transition-transform ${showAnalytics ? 'rotate-180' : ''}`} />
@@ -342,7 +342,7 @@ const EdgeLedger = () => {
                   <StrategyRow key={st.setup} st={st} maxAbs={maxAbsR} />
                 ))}
               </div>
-              <p className="px-3.5 py-2.5 border-t border-borderSubtle font-mono text-[10px] text-textMuted leading-relaxed">
+              <p className="px-3.5 py-2.5 border-t border-borderSubtle font-mono text-micro text-textMuted leading-relaxed">
                 Expectancy is average P/L per trade in R — a full stop is −1R. ▲ marks the vol regime a setup pays best in, ▼ where
                 it has bled the most.
               </p>
@@ -362,8 +362,8 @@ const EdgeLedger = () => {
               {view.decayWarnings.length === 0 ? (
                 <div className="h-32 flex flex-col items-center justify-center gap-2 text-center">
                   <Target className="w-5 h-5 text-bull" />
-                  <span className="font-mono text-[11px] text-textSecondary uppercase tracking-wider">No edge leaking across regimes</span>
-                  <span className="text-[11px] text-textMuted max-w-[240px] leading-relaxed">
+                  <span className="font-mono text-label text-textSecondary uppercase tracking-wider">No edge leaking across regimes</span>
+                  <span className="text-label text-textMuted max-w-[240px] leading-relaxed">
                     Every setup is holding expectancy wherever the tape has put it.
                   </span>
                 </div>
@@ -372,13 +372,13 @@ const EdgeLedger = () => {
                   {view.decayWarnings.map((w: DecayWarning) => (
                     <div key={w.setup} className="border-l-2 border-borderSubtle pl-3 py-0.5">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-textPrimary">{w.setup}</span>
+                        <span className="font-mono text-label font-semibold uppercase tracking-wider text-textPrimary">{w.setup}</span>
                         <SignalBadge tone={severityTone[w.severity]} dot className="ml-auto">
                           {w.severity}
                         </SignalBadge>
                       </div>
-                      <p className="text-[11px] text-textSecondary leading-relaxed">{w.message}</p>
-                      <div className="mt-1.5 flex items-center gap-3 font-mono text-[10px] tnum">
+                      <p className="text-label text-textSecondary leading-relaxed">{w.message}</p>
+                      <div className="mt-1.5 flex items-center gap-3 font-mono text-micro tnum">
                         <span className="text-bull">{regimeLabel(w.strongRegime)} {fmtR(w.strongExpectancy)}</span>
                         <span className="text-textMuted">→</span>
                         <span className="text-bear">{regimeLabel(w.weakRegime)} {fmtR(w.weakExpectancy)}</span>
@@ -386,7 +386,7 @@ const EdgeLedger = () => {
                       </div>
                     </div>
                   ))}
-                  <p className="text-[11px] text-textSecondary leading-relaxed border-t border-borderSubtle pt-2.5">{view.note}</p>
+                  <p className="text-label text-textSecondary leading-relaxed border-t border-borderSubtle pt-2.5">{view.note}</p>
                 </div>
               )}
             </Panel>

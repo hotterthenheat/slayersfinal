@@ -17,25 +17,16 @@ import GuideFaq from './pages/guide/Faq';
 import GuideShortcuts from './pages/guide/Shortcuts';
 import GexLayout from './pages/gex/GexLayout';
 import PulseWorkspace from './pages/pulse/PulseWorkspace';
-import ExposureProfile from './pages/gex/ExposureProfile';
-import GammaChart from './pages/gex/GammaChart';
-import RankedTargets from './pages/gex/RankedTargets';
-import VannaCharm from './pages/gex/VannaCharm';
-import VolLab from './pages/gex/VolLab';
-import GreeksRegime from './pages/gex/GreeksRegime';
-import HedgeImpact from './pages/gex/HedgeImpact';
-import StatePriceDensity from './components/gex/StatePriceDensity';
+import { GammaDesk, LevelsDesk, GreeksDesk, VolatilityDesk, StressDesk } from './pages/gex/desks';
 import GexHistory from './pages/gex/GexHistory';
 import FlowDeskLayout from './pages/flowdesk/FlowDeskLayout';
 import LiveTape from './pages/flowdesk/LiveTape';
 import FlowScanner from './pages/flowdesk/FlowScanner';
-import FlowTracker from './pages/flowdesk/FlowTracker';
 import MetaorderReconstruction from './components/flowdesk/MetaorderReconstruction';
 import DarkPool from './pages/flowdesk/DarkPool';
 import Stocks from './pages/Stocks';
 import News from './pages/News';
 import EarningsHub from './pages/EarningsHub';
-import Fracture from './pages/fracture/Fracture';
 import Landing from './pages/landing/Landing';
 import CommunityLayout from './pages/community/CommunityLayout';
 import Ideas from './pages/community/Ideas';
@@ -52,7 +43,7 @@ const ProveIt = lazy(() => import('./pages/proveit/ProveIt'));
 
 const RouteFallback = () => (
   <div className="flex items-center justify-center h-[60vh]">
-    <span className="font-mono text-[11px] uppercase tracking-widest text-textMuted animate-pulse">Loading…</span>
+    <span className="font-mono text-label uppercase tracking-widest text-textMuted animate-pulse">Loading…</span>
   </div>
 );
 
@@ -85,8 +76,8 @@ const App = () => {
             <Route path="/news" element={<News />} />
             <Route path="/earnings" element={<EarningsHub />} />
             <Route path="/prove-it" element={<Suspense fallback={<RouteFallback />}><ProveIt /></Suspense>} />
-            {/* Fracture folded under Pinpoint; Lotto folded into Compass */}
-            <Route path="/fracture" element={<Navigate to="/pinpoint/fracture" replace />} />
+            {/* Fracture folded into Pinpoint Stress; Lotto folded into Compass */}
+            <Route path="/fracture" element={<Navigate to="/pinpoint/stress?view=fracture" replace />} />
             <Route path="/lotto" element={<Navigate to="/compass" state={{ compassMode: 'lotto' }} replace />} />
             <Route path="/tracker" element={<Tracker />} />
             <Route path="/help" element={<Navigate to="/guide" replace />} />
@@ -102,17 +93,25 @@ const App = () => {
               <Route index element={<Navigate to="/pinpoint/gamma" replace />} />
               <Route path="command" element={<Navigate to="/pulse" replace />} />
               <Route path="flow-map" element={<Navigate to="/pulse" replace />} />
-              <Route path="gamma" element={<GammaChart />} />
-              <Route path="exposure-profile" element={<ExposureProfile />} />
-              <Route path="ranked-targets" element={<RankedTargets />} />
-              <Route path="strike-profile" element={<Navigate to="/pinpoint/exposure-profile" replace />} />
-              <Route path="vanna-charm" element={<VannaCharm />} />
-              <Route path="greeks-regime" element={<GreeksRegime />} />
-              <Route path="hedge-impact" element={<HedgeImpact />} />
-              <Route path="fracture" element={<Fracture />} />
-              <Route path="vol-lab" element={<VolLab />} />
-              <Route path="state-density" element={<StatePriceDensity />} />
+              {/* Six consolidated desks; the second read on each lives as an
+                  in-desk ?view= sub-toggle rather than its own tab. */}
+              <Route path="gamma" element={<GammaDesk />} />
+              <Route path="levels" element={<LevelsDesk />} />
+              <Route path="greeks" element={<GreeksDesk />} />
+              <Route path="volatility" element={<VolatilityDesk />} />
+              <Route path="stress" element={<StressDesk />} />
               <Route path="history" element={<GexHistory />} />
+              {/* Retired sub-desks → consolidated desk + the matching sub-view */}
+              <Route path="complex" element={<Navigate to="/pinpoint/gamma?view=complex" replace />} />
+              <Route path="exposure-profile" element={<Navigate to="/pinpoint/levels" replace />} />
+              <Route path="strike-profile" element={<Navigate to="/pinpoint/levels" replace />} />
+              <Route path="ranked-targets" element={<Navigate to="/pinpoint/levels?view=ranked" replace />} />
+              <Route path="greeks-regime" element={<Navigate to="/pinpoint/greeks" replace />} />
+              <Route path="vanna-charm" element={<Navigate to="/pinpoint/greeks?view=migration" replace />} />
+              <Route path="vol-lab" element={<Navigate to="/pinpoint/volatility" replace />} />
+              <Route path="state-density" element={<Navigate to="/pinpoint/volatility?view=density" replace />} />
+              <Route path="hedge-impact" element={<Navigate to="/pinpoint/stress" replace />} />
+              <Route path="fracture" element={<Navigate to="/pinpoint/stress?view=fracture" replace />} />
             </Route>
             <Route path="/trace" element={<FlowDeskLayout />}>
               <Route index element={<Navigate to="/trace/live-tape" replace />} />
@@ -123,7 +122,9 @@ const App = () => {
               <Route path="dark-feed" element={<Navigate to="/trace/dark-pool" replace />} />
               <Route path="scanner" element={<FlowScanner />} />
               <Route path="reconstruction" element={<MetaorderReconstruction />} />
-              <Route path="tracker" element={<FlowTracker />} />
+              {/* FlowTracker folded away — Scanner is the single flow-hunting
+                  surface, /tracker the single persistent watch home. */}
+              <Route path="tracker" element={<Navigate to="/trace/scanner" replace />} />
             </Route>
             <Route path="/liquidity" element={<Navigate to="/pulse" replace />} />
             {/* Legacy section paths from before the rebrand — jump straight to the

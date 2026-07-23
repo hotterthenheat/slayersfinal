@@ -18,15 +18,15 @@ interface StatCardProps {
 const StatCard = ({ label, value, sub, tone = 'neutral', emphasis = false, className = '', children }: StatCardProps) => {
   return (
     <div className={`${emphasis ? 'inst-emphasis' : 'inst-surface'} rounded-md px-3.5 py-3 min-w-0 ${className}`}>
-      <div className="font-mono text-[11px] uppercase tracking-widest text-textSecondary truncate">{label}</div>
+      <div className="font-mono text-label uppercase tracking-widest text-textSecondary truncate">{label}</div>
       <div
         className={`mt-1.5 font-mono text-lg font-semibold leading-none tnum ${
-          emphasis && tone === 'neutral' ? 'holo-text' : toneText[tone]
+          emphasis && tone === 'neutral' ? 'text-textPrimary' : toneText[tone]
         }`}
       >
         {value}
       </div>
-      {sub && <div className="mt-1 text-[11px] text-textMuted leading-tight truncate">{sub}</div>}
+      {sub && <div className="mt-1 text-label text-textMuted leading-tight truncate">{sub}</div>}
       {children && <div className="mt-1.5">{children}</div>}
     </div>
   );

@@ -36,7 +36,7 @@ const FocusLayer = () => {
             onClick={close}
           />
           <motion.div
-            className="relative w-full max-w-[1600px] h-[88vh] inst-emphasis holo-glow rounded-lg overflow-hidden flex flex-col shadow-2xl shadow-black"
+            className="relative w-full max-w-[1600px] h-[88vh] inst-emphasis holo-glow rounded-lg overflow-hidden flex flex-col shadow-overlay"
             initial={{ opacity: 0, scale: 0.98, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.98, y: 10 }}
@@ -44,7 +44,7 @@ const FocusLayer = () => {
           >
             <header className="flex items-center justify-between gap-3 px-4 h-11 border-b border-borderSubtle shrink-0">
               <div className="flex items-baseline gap-2 min-w-0">
-                <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted shrink-0">Focus</span>
+                <span className="font-mono text-micro uppercase tracking-widest text-textMuted shrink-0">Focus</span>
                 <div className="min-w-0 truncate">{title}</div>
               </div>
               <button
@@ -52,7 +52,7 @@ const FocusLayer = () => {
                 aria-label="Exit focus"
                 className="inline-flex items-center gap-1.5 rounded border border-borderSubtle bg-white/[0.02] px-2 h-7 text-textSecondary hover:text-textPrimary hover:border-borderMuted transition-colors"
               >
-                <span className="font-mono text-[10px] uppercase tracking-widest">Esc</span>
+                <span className="font-mono text-micro uppercase tracking-widest">Esc</span>
                 <X className="w-3.5 h-3.5" />
               </button>
             </header>

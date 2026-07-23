@@ -48,7 +48,7 @@ const GreekCell = ({ value, max }: { value: number; max: number }) => {
   const bg = pos ? `rgba(48,209,88,${0.06 + intensity * 0.34})` : `rgba(255,59,48,${0.06 + intensity * 0.3})`;
   return (
     <td className="px-2 py-1.5 text-right" style={{ background: bg }}>
-      <span className="font-mono text-[11px] tnum text-textPrimary">{fmtC(value)}</span>
+      <span className="font-mono text-label tnum text-textPrimary">{fmtC(value)}</span>
     </td>
   );
 };
@@ -94,11 +94,11 @@ const CharmChart = ({ points }: { points: { time: string; deltaShift: number }[]
       </svg>
       {h && (
         <HoverReadout x={h.x} y={h.y}>
-          <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted">{points[h.i].time}</div>
-          <div className={`mt-0.5 font-mono text-[13px] font-bold tnum ${points[h.i].deltaShift >= 0 ? 'text-bull' : 'text-bear'}`}>
+          <div className="font-mono text-micro uppercase tracking-widest text-textMuted">{points[h.i].time}</div>
+          <div className={`mt-0.5 font-mono text-data font-bold tnum ${points[h.i].deltaShift >= 0 ? 'text-bull' : 'text-bear'}`}>
             {fmtDelta(points[h.i].deltaShift)}
           </div>
-          <div className="mt-0.5 font-mono text-[10px] text-textSecondary">dealer Δ shift</div>
+          <div className="mt-0.5 font-mono text-micro text-textSecondary">dealer Δ shift</div>
         </HoverReadout>
       )}
     </>
@@ -140,15 +140,15 @@ const VannaChart = ({ points }: { points: { volShockPct: number; hedgeUsd: numbe
       </svg>
       {h && (
         <HoverReadout x={h.x} y={h.y}>
-          <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted">
+          <div className="font-mono text-micro uppercase tracking-widest text-textMuted">
             {points[h.i].volShockPct >= 0 ? '+' : '−'}
             {Math.abs(points[h.i].volShockPct).toFixed(1)}% IV shock
           </div>
-          <div className={`mt-0.5 font-mono text-[13px] font-bold tnum ${points[h.i].hedgeUsd >= 0 ? 'text-bull' : 'text-bear'}`}>
+          <div className={`mt-0.5 font-mono text-data font-bold tnum ${points[h.i].hedgeUsd >= 0 ? 'text-bull' : 'text-bear'}`}>
             {points[h.i].hedgeUsd >= 0 ? '+' : '−'}
             {fmtUsd(Math.abs(points[h.i].hedgeUsd))}
           </div>
-          <div className="mt-0.5 font-mono text-[10px] text-textSecondary">dealer hedge</div>
+          <div className="mt-0.5 font-mono text-micro text-textSecondary">dealer hedge</div>
         </HoverReadout>
       )}
     </>
@@ -197,7 +197,7 @@ const GreeksRegime = () => {
   if (!view) {
     return (
       <Panel title="Greeks & Regime">
-        <div className="h-40 flex items-center justify-center font-mono text-[11px] uppercase tracking-widest text-textMuted">Building the exposure surface…</div>
+        <div className="h-40 flex items-center justify-center font-mono text-label uppercase tracking-widest text-textMuted">Building the exposure surface…</div>
       </Panel>
     );
   }
@@ -250,7 +250,7 @@ const GreeksRegime = () => {
           <button
             onClick={() => setShowAdvanced(v => !v)}
             aria-pressed={showAdvanced}
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border font-mono text-[11px] uppercase tracking-wider transition-colors ${
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border font-mono text-label uppercase tracking-wider transition-colors ${
               showAdvanced ? 'border-borderMuted bg-white/[0.05] text-textPrimary' : 'border-borderSubtle text-textSecondary hover:text-textPrimary'
             }`}
           >
@@ -258,7 +258,7 @@ const GreeksRegime = () => {
             <ChevronDown className={`w-3 h-3 transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
           </button>
           {topStrike !== null && (
-            <span className="ml-auto font-mono text-[10px] uppercase tracking-widest text-textMuted tnum">
+            <span className="ml-auto font-mono text-micro uppercase tracking-widest text-textMuted tnum">
               top contributor <span className="text-textPrimary font-semibold">${topStrike.toFixed(2)}</span>
             </span>
           )}
@@ -267,12 +267,12 @@ const GreeksRegime = () => {
           <table className="w-full border-collapse">
             <thead>
               <tr className="bg-panelRaised border-b border-borderSubtle">
-                <th className="sticky left-0 z-10 bg-inset px-3 py-2 text-left font-mono text-[11px] font-semibold uppercase tracking-wider text-textMuted">Strike</th>
-                <th className="px-2 py-2 text-right font-mono text-[11px] font-semibold uppercase tracking-wider text-textMuted">Dist</th>
+                <th className="sticky left-0 z-10 bg-inset px-3 py-2 text-left font-mono text-label font-semibold uppercase tracking-wider text-textMuted">Strike</th>
+                <th className="px-2 py-2 text-right font-mono text-label font-semibold uppercase tracking-wider text-textMuted">Dist</th>
                 {visibleGreeks.map(g => (
                   <th
                     key={g.key}
-                    className="px-2 py-2 text-right font-mono text-[11px] font-semibold uppercase tracking-wider text-textMuted cursor-help"
+                    className="px-2 py-2 text-right font-mono text-label font-semibold uppercase tracking-wider text-textMuted cursor-help"
                     title={`${g.label} — ${g.blurb}`}
                   >
                     <span className="border-b border-dotted border-textMuted/40">{g.label}</span>
@@ -305,7 +305,7 @@ const GreeksRegime = () => {
             {view.regimes.map(rg => (
               <div key={rg.regime}>
                 <div className="flex items-center justify-between mb-1">
-                  <span className={`font-mono text-[11px] font-semibold uppercase tracking-wider ${rg === view.topRegime ? 'text-textPrimary' : 'text-textSecondary'}`}>{rg.regime}</span>
+                  <span className={`font-mono text-label font-semibold uppercase tracking-wider ${rg === view.topRegime ? 'text-textPrimary' : 'text-textSecondary'}`}>{rg.regime}</span>
                   <span className="font-mono text-xs font-semibold text-textPrimary tnum">{rg.prob}%</span>
                 </div>
                 <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
@@ -318,9 +318,9 @@ const GreeksRegime = () => {
                 </div>
               </div>
             ))}
-            <p className="text-[11px] text-textSecondary leading-relaxed border-t border-borderSubtle pt-2.5">{view.topRegime.note}</p>
-            <p className="flex items-start gap-2 text-[11px] text-warn/90 leading-relaxed border-t border-borderSubtle pt-2.5">
-              <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-warn mt-px shrink-0">What flips it</span>
+            <p className="text-label text-textSecondary leading-relaxed border-t border-borderSubtle pt-2.5">{view.topRegime.note}</p>
+            <p className="flex items-start gap-2 text-label text-warn/90 leading-relaxed border-t border-borderSubtle pt-2.5">
+              <span className="font-mono text-micro font-semibold uppercase tracking-widest text-warn mt-px shrink-0">What flips it</span>
               <span className="text-textSecondary">{regimeSwing}</span>
             </p>
           </div>
@@ -380,9 +380,9 @@ const RowWithSpot = ({
         style={isTop ? { boxShadow: 'inset 3px 0 0 0 rgba(199,211,232,0.85)' } : undefined}
       >
         ${r.strike.toFixed(2)}
-        {isTop && <span className="ml-1.5 font-mono text-[10px] uppercase tracking-widest text-select">top</span>}
+        {isTop && <span className="ml-1.5 font-mono text-micro uppercase tracking-widest text-select">top</span>}
       </td>
-      <td className={`px-2 py-1.5 text-right font-mono text-[11px] tnum ${r.distPct >= 0 ? 'text-bull' : 'text-bear'}`}>
+      <td className={`px-2 py-1.5 text-right font-mono text-label tnum ${r.distPct >= 0 ? 'text-bull' : 'text-bear'}`}>
         {r.distPct >= 0 ? '+' : ''}
         {r.distPct.toFixed(1)}%
       </td>
@@ -395,8 +395,8 @@ const RowWithSpot = ({
         <td colSpan={colSpan} className="px-3 py-0.5">
           <span className="flex items-center gap-2 select-none">
             <span className="h-px flex-grow bg-gradient-to-r from-textPrimary/10 via-textPrimary/40 to-textPrimary/50" />
-            <span className="font-mono text-[10px] uppercase tracking-wider text-textSecondary">{ticker}</span>
-            <span className="inline-flex items-center rounded-[3px] bg-textPrimary px-1.5 py-px font-mono text-[10px] font-bold tnum text-[#0a0a0a]">{spot.toFixed(2)}</span>
+            <span className="font-mono text-micro uppercase tracking-wider text-textSecondary">{ticker}</span>
+            <span className="inline-flex items-center rounded-[3px] bg-textPrimary px-1.5 py-px font-mono text-micro font-bold tnum text-[#0a0a0a]">{spot.toFixed(2)}</span>
             <span className="h-px w-3 shrink-0 bg-textPrimary/50" />
           </span>
         </td>

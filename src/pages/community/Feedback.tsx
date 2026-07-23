@@ -29,10 +29,10 @@ const CAPTURE_FIELDS: { key: string; label: string }[] = [
 
 const ReadOnlyField = ({ label, value, title }: { label: string; value: string; title?: string }) => (
   <div className="flex flex-col gap-1 min-w-0">
-    <span className="font-mono text-[11px] uppercase tracking-wider text-textMuted">{label}</span>
+    <span className="font-mono text-label uppercase tracking-wider text-textMuted">{label}</span>
     <div
       title={title}
-      className="font-mono text-[12px] text-textSecondary bg-inputBg border border-borderSubtle rounded-md px-2.5 py-1.5 truncate"
+      className="font-mono text-caption text-textSecondary bg-inputBg border border-borderSubtle rounded-md px-2.5 py-1.5 truncate"
     >
       {value}
     </div>
@@ -83,22 +83,22 @@ const Feedback = () => {
               onChange={e => setMessage(e.target.value)}
               placeholder="What slowed you down, confused you, or looked wrong?"
               rows={4}
-              className="w-full bg-inputBg border border-borderSubtle rounded-md px-2.5 py-2 text-[12px] text-textPrimary placeholder:text-textMuted focus:border-borderMuted outline-none transition-colors resize-y"
+              className="w-full bg-inputBg border border-borderSubtle rounded-md px-2.5 py-2 text-caption text-textPrimary placeholder:text-textMuted focus:border-borderMuted outline-none transition-colors resize-y"
             />
 
             {/* Auto-captured context saved with the note */}
             <div className="rounded-md border border-borderSubtle/70 bg-white/[0.02] p-3 flex flex-col gap-2.5">
-              <span className="font-mono text-[11px] uppercase tracking-wider text-textMuted">
+              <span className="font-mono text-label uppercase tracking-wider text-textMuted">
                 Captured with this note
               </span>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <label className="flex flex-col gap-1 min-w-0">
-                  <span className="font-mono text-[11px] uppercase tracking-wider text-textMuted">Route</span>
+                  <span className="font-mono text-label uppercase tracking-wider text-textMuted">Route</span>
                   <input
                     value={route}
                     onChange={e => setRoute(e.target.value)}
                     placeholder="/community/feedback"
-                    className="w-full bg-inputBg border border-borderSubtle rounded-md px-2.5 py-1.5 font-mono text-[12px] text-textPrimary placeholder:text-textMuted focus:border-borderMuted outline-none transition-colors"
+                    className="w-full bg-inputBg border border-borderSubtle rounded-md px-2.5 py-1.5 font-mono text-caption text-textPrimary placeholder:text-textMuted focus:border-borderMuted outline-none transition-colors"
                   />
                 </label>
                 <ReadOnlyField label="App version" value={APP_VERSION} />
@@ -110,12 +110,12 @@ const Feedback = () => {
               <button
                 onClick={submit}
                 disabled={message.trim().length < 10}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-select/40 bg-select/[0.06] hover:bg-select/[0.12] font-mono text-[11px] font-semibold uppercase tracking-wider text-select transition-colors disabled:opacity-40 disabled:pointer-events-none"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-select/40 bg-select/[0.06] hover:bg-select/[0.12] font-mono text-label font-semibold uppercase tracking-wider text-select transition-colors disabled:opacity-40 disabled:pointer-events-none"
               >
                 <Send className="w-3.5 h-3.5" /> Save note
               </button>
               {justSaved && (
-                <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-bull animate-slide-in">
+                <span className="inline-flex items-center gap-1.5 font-mono text-label text-bull animate-slide-in">
                   <Check className="w-3.5 h-3.5" /> Saved to this browser
                 </span>
               )}
@@ -131,16 +131,16 @@ const Feedback = () => {
               return (
                 <div key={fb.id} className="px-4 py-2.5 border-b border-borderSubtle/40 last:border-0">
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-[11px] font-semibold uppercase tracking-widest text-textSecondary">
+                    <span className="font-mono text-label font-semibold uppercase tracking-widest text-textSecondary">
                       {fb.category}
                     </span>
-                    <span className="ml-auto font-mono text-[10px] text-textMuted tnum">{timeAgo(fb.createdAt)}</span>
+                    <span className="ml-auto font-mono text-micro text-textMuted tnum">{timeAgo(fb.createdAt)}</span>
                   </div>
-                  <p className="mt-1 text-[12px] text-textSecondary leading-relaxed">{text}</p>
+                  <p className="mt-1 text-caption text-textSecondary leading-relaxed">{text}</p>
                   {captured.length > 0 && (
                     <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
                       {captured.map(f => (
-                        <span key={f.key} className="font-mono text-[10px] text-textMuted tnum">
+                        <span key={f.key} className="font-mono text-micro text-textMuted tnum">
                           <span className="uppercase tracking-wider">{f.label}</span> {meta[f.key]}
                         </span>
                       ))}
@@ -160,8 +160,8 @@ const Feedback = () => {
             <div key={item.title} className="flex items-start gap-2.5 px-4 py-3 border-b border-borderSubtle/40 last:border-0">
               <Check className="w-3.5 h-3.5 text-bull shrink-0 mt-0.5" />
               <div className="min-w-0">
-                <span className="block text-[12px] font-semibold text-textPrimary">{item.title}</span>
-                <span className="block text-[11px] text-textSecondary leading-snug">{item.note}</span>
+                <span className="block text-caption font-semibold text-textPrimary">{item.title}</span>
+                <span className="block text-label text-textSecondary leading-snug">{item.note}</span>
               </div>
             </div>
           ))}

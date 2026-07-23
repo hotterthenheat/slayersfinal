@@ -4,9 +4,9 @@
   One branded gate, three triggers: "Launch terminal"
   CTAs, logo clicks, and every full page load (boot).
   Caret logo + a holo-silver progress line over black,
-  then the destination fades in beneath it. A reload or
-  back/forward boot uses a clipped hold so refreshes
-  feel instant; a first visit gets the full moment.
+  then the destination fades in beneath it. The full
+  moment plays once — the first-ever visit; every boot
+  after (reload, history nav, a returning visitor) clips.
 ==================================================
 */
 
@@ -34,14 +34,23 @@ const HOLD_MS = 1050;
 const REVEAL_MS = 300;
 /** A reload / back-forward boot has nothing new to introduce — clip it. */
 const RELOAD_HOLD_MS = 320;
+/** Remembers that this browser has already seen the full boot moment. */
+const BOOT_KEY = 'slayer_booted_v1';
 
-/** Full hold for a first visit, a clipped one for a reload or history nav. */
+/**
+ * The full moment plays once — a first-ever visit. After that every boot
+ * clips: reloads, history nav, and a returning visitor arriving fresh all
+ * get the quick hold, so the gate never taxes someone who's seen it. Explicit
+ * "Launch" clicks always play in full — that's a deliberate action, not a boot.
+ */
 const bootGateMs = (): number => {
   try {
     const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
-    if (nav && (nav.type === 'reload' || nav.type === 'back_forward')) return RELOAD_HOLD_MS + REVEAL_MS;
+    const reload = nav && (nav.type === 'reload' || nav.type === 'back_forward');
+    if (reload || localStorage.getItem(BOOT_KEY) === '1') return RELOAD_HOLD_MS + REVEAL_MS;
+    localStorage.setItem(BOOT_KEY, '1');
   } catch {
-    // performance API unavailable — fall through to the full hold
+    // performance / storage unavailable — fall through to the full hold
   }
   return HOLD_MS + REVEAL_MS;
 };
@@ -120,7 +129,7 @@ export const LaunchProvider = ({ children }: { children: ReactNode }) => {
                 transition={{ duration: gateMs / 1000, ease: [0.3, 0.1, 0.3, 1] }}
               />
             </div>
-            <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-textMuted select-none">
+            <span className="font-mono text-micro uppercase tracking-[0.3em] text-textMuted select-none">
               {caption}
             </span>
           </motion.div>

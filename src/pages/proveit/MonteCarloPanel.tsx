@@ -159,11 +159,11 @@ const MonteCarloPanel = ({ mc, spot, height = 260 }: MonteCarloPanelProps) => {
         )}
         {hover && (
           <HoverReadout x={hover.x} y={hover.y}>
-            <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted">
+            <div className="font-mono text-micro uppercase tracking-widest text-textMuted">
               {hover.d === 0 ? 'today' : `+${hover.d} session${hover.d > 1 ? 's' : ''}`}
             </div>
-            <div className="mt-1 font-mono text-[13px] font-bold tnum text-textPrimary">median {move(mc.cone.p50)}</div>
-            <div className="mt-1 grid grid-cols-[auto_1fr] gap-x-2.5 gap-y-0.5 font-mono text-[10px] tnum text-textSecondary">
+            <div className="mt-1 font-mono text-data font-bold tnum text-textPrimary">median {move(mc.cone.p50)}</div>
+            <div className="mt-1 grid grid-cols-[auto_1fr] gap-x-2.5 gap-y-0.5 font-mono text-micro tnum text-textSecondary">
               <span className="text-textMuted">50% band</span>
               <span>{move(mc.cone.p25)} → {move(mc.cone.p75)}</span>
               <span className="text-textMuted">90% band</span>
@@ -173,7 +173,7 @@ const MonteCarloPanel = ({ mc, spot, height = 260 }: MonteCarloPanelProps) => {
         )}
       </div>
       {/* legend */}
-      <div className="flex items-center gap-3 -mt-1 font-mono text-[10px] uppercase tracking-wider text-textMuted">
+      <div className="flex items-center gap-3 -mt-1 font-mono text-micro uppercase tracking-wider text-textMuted">
         <span className="flex items-center gap-1"><span className="w-2.5 h-2 rounded-[1px]" style={{ background: CONE_OUTER }} /> 90% band</span>
         <span className="flex items-center gap-1"><span className="w-2.5 h-2 rounded-[1px]" style={{ background: CONE_INNER }} /> 50% band</span>
         <span className="flex items-center gap-1"><span className="w-2.5 h-[2px]" style={{ background: MEDIAN }} /> median</span>
@@ -191,7 +191,7 @@ const MonteCarloPanel = ({ mc, spot, height = 260 }: MonteCarloPanelProps) => {
             />
           ))}
         </div>
-        <div className="mt-1.5 flex items-center justify-between font-mono text-[10px] uppercase tracking-widest text-textMuted">
+        <div className="mt-1.5 flex items-center justify-between font-mono text-micro uppercase tracking-widest text-textMuted">
           <span>${mc.terminal[0].toFixed(0)}</span>
           <span>terminal price after {mc.days} sessions · {mc.runs.toLocaleString()} runs</span>
           <span>${mc.terminal[mc.terminal.length - 1].toFixed(0)}</span>

@@ -55,7 +55,7 @@ const RiskNeutralDist = ({ data }: RiskNeutralDistProps) => {
         {markers.map(m => (
           <span
             key={m.label}
-            className={`absolute -translate-x-1/2 font-mono text-[10px] tnum ${m.label === 'Fwd' ? 'text-textPrimary font-semibold' : 'text-textMuted'}`}
+            className={`absolute -translate-x-1/2 font-mono text-micro tnum ${m.label === 'Fwd' ? 'text-textPrimary font-semibold' : 'text-textMuted'}`}
             style={{ left: `${x(m.price)}%` }}
           >
             {m.label} {m.price.toFixed(0)}
@@ -96,17 +96,17 @@ const RiskNeutralDist = ({ data }: RiskNeutralDistProps) => {
       </div>
       {h && prices[h.i] != null && (
         <HoverReadout x={h.x} y={h.y}>
-          <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted">
+          <div className="font-mono text-micro uppercase tracking-widest text-textMuted">
             {prices[h.i].toFixed(0)} · {((prices[h.i] - forward) / forward >= 0 ? '+' : '')}
             {(((prices[h.i] - forward) / forward) * 100).toFixed(1)}% vs fwd
           </div>
-          <div className="mt-1 flex items-center gap-2.5 font-mono text-[11px] tnum">
+          <div className="mt-1 flex items-center gap-2.5 font-mono text-label tnum">
             <span className="text-bear">P&lt; {cumBelow(h.i).toFixed(1)}%</span>
             <span className="text-bull">P&gt; {(100 - cumBelow(h.i)).toFixed(1)}%</span>
           </div>
         </HoverReadout>
       )}
-      <div className="flex justify-between font-mono text-[10px] tnum text-textMuted select-none">
+      <div className="flex justify-between font-mono text-micro tnum text-textMuted select-none">
         <span>{lo.toFixed(0)}</span>
         <span className="uppercase tracking-wider">underlying price</span>
         <span>{hi.toFixed(0)}</span>
@@ -116,8 +116,8 @@ const RiskNeutralDist = ({ data }: RiskNeutralDistProps) => {
       <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 pt-2 border-t border-borderSubtle">
         {statCells.map(s => (
           <span key={s.label} className="min-w-0">
-            <span className="block font-mono text-[10px] uppercase tracking-widest text-textMuted truncate">{s.label}</span>
-            <span className={`block font-mono text-[10px] font-semibold tnum ${s.tone ?? 'text-textPrimary'}`}>{s.value}</span>
+            <span className="block font-mono text-micro uppercase tracking-widest text-textMuted truncate">{s.label}</span>
+            <span className={`block font-mono text-micro font-semibold tnum ${s.tone ?? 'text-textPrimary'}`}>{s.value}</span>
           </span>
         ))}
       </div>

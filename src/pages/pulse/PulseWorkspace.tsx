@@ -151,18 +151,81 @@ const PanelTicker = ({ value, onChange }: { value: string; onChange: (t: string)
           if (e.key === 'Escape') setEditing(false);
         }}
         onMouseDown={e => e.stopPropagation()}
-        className="w-16 bg-inputBg border border-borderMuted rounded px-1 py-0.5 font-mono text-[10px] text-textPrimary outline-none focus:border-select"
+        className="w-16 bg-inputBg border border-borderMuted rounded px-1 py-0.5 font-mono text-micro text-textPrimary outline-none focus:border-select"
       />
     );
   return (
     <button
       onMouseDown={e => e.stopPropagation()}
       onClick={() => setEditing(true)}
-      className="font-mono text-[10px] font-semibold text-select hover:text-textPrimary px-1 rounded transition-colors"
+      className="font-mono text-micro font-semibold text-select hover:text-textPrimary px-1 rounded transition-colors"
       title="Change this panel's ticker"
     >
       {value}
     </button>
+  );
+};
+
+/** Handlers the panel header needs from the workspace. Bundled so PanelChrome
+    can live at module scope (stable identity → no header remount per tick, so
+    the ticker editor keeps its state mid-type). */
+interface PanelChromeHandlers {
+  editLayout: boolean;
+  onTicker: (panelId: string, t: string) => void;
+  onDuplicate: (panelId: string) => void;
+  onMinimize: (panelId: string) => void;
+  onMaximize: (panelId: string | null) => void;
+  onClose: (panelId: string) => void;
+}
+
+/** Panel header — title, per-panel ticker, and edit/maximize affordances. */
+const PanelChrome = ({
+  panelId,
+  panelKey,
+  ticker,
+  maximizedView,
+  h,
+}: {
+  panelId: string;
+  panelKey: string;
+  ticker: string;
+  maximizedView?: boolean;
+  h: PanelChromeHandlers;
+}) => {
+  const def = pulsePanelByKey(panelKey);
+  const draggable = !maximizedView && h.editLayout;
+  return (
+    <div className={`${draggable ? 'widget-drag cursor-grab active:cursor-grabbing' : ''} flex items-center gap-2 px-3.5 h-10 border-b border-borderSubtle shrink-0 select-none`}>
+      {draggable && <GripHorizontal className="w-3.5 h-3.5 text-textMuted shrink-0" />}
+      <span className="font-mono text-label font-semibold uppercase tracking-widest text-textPrimary truncate">
+        {def?.title ?? panelKey}
+      </span>
+      <PanelTicker value={ticker} onChange={t => h.onTicker(panelId, t)} />
+      <div className="ml-auto flex items-center gap-1.5 shrink-0" onMouseDown={e => e.stopPropagation()}>
+        {draggable && (
+          <>
+            <button onClick={() => h.onDuplicate(panelId)} title="Duplicate" className="text-textMuted hover:text-textPrimary transition-colors">
+              <Copy className="w-3 h-3" />
+            </button>
+            <button onClick={() => h.onMinimize(panelId)} title="Minimize" className="text-textMuted hover:text-textPrimary transition-colors">
+              <Minus className="w-3.5 h-3.5" />
+            </button>
+          </>
+        )}
+        <button
+          onClick={() => h.onMaximize(maximizedView ? null : panelId)}
+          title={maximizedView ? 'Restore' : 'Maximize'}
+          className="text-textMuted hover:text-textPrimary transition-colors"
+        >
+          {maximizedView ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3 h-3" />}
+        </button>
+        {draggable && (
+          <button onClick={() => h.onClose(panelId)} title="Close" className="text-textMuted hover:text-bear transition-colors">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+    </div>
   );
 };
 
@@ -246,8 +309,11 @@ const PulseWorkspace = () => {
   }, []);
 
   // ---- data cadence -------------------------------------------------------
-  const revRef = useRef(0);
-  const revision = useMemo(() => ++revRef.current, [marketData]);
+  // Monotonic nonce bumped whenever the snapshot re-publishes; drives the heat
+  // pulse. Kept in state + effect (not a ref mutated during render) so it stays
+  // pure under StrictMode/concurrent rendering.
+  const [revision, setRevision] = useState(0);
+  useEffect(() => setRevision(r => r + 1), [marketData]);
   const [scanSnapshot, setScanSnapshot] = useState<MarketSnapshot | null>(null);
   const scanRef = useRef<MarketSnapshot | null>(null);
   const lastScanTimeRef = useRef(0);
@@ -408,7 +474,7 @@ const PulseWorkspace = () => {
     if (!def) return null;
     if (!ctx)
       return (
-        <div className="h-full flex items-center justify-center font-mono text-[11px] text-textMuted uppercase tracking-widest">
+        <div className="h-full flex items-center justify-center font-mono text-label text-textMuted uppercase tracking-widest">
           loading…
         </div>
       );
@@ -420,48 +486,19 @@ const PulseWorkspace = () => {
     );
   };
 
-  const PanelChrome = ({ panelId, panelKey, ticker, maximizedView }: { panelId: string; panelKey: string; ticker: string; maximizedView?: boolean }) => {
-    const def = pulsePanelByKey(panelKey);
-    const draggable = !maximizedView && editLayout;
-    // Locked dashboard: panels are finished cards — title, ticker, and just a
-    // maximize affordance. Editing controls (grip, duplicate, minimize, close)
-    // only appear in Customize mode.
-    return (
-      <div className={`${draggable ? 'widget-drag cursor-grab active:cursor-grabbing' : ''} flex items-center gap-2 px-3.5 h-10 border-b border-borderSubtle shrink-0 select-none`}>
-        {draggable && <GripHorizontal className="w-3.5 h-3.5 text-textMuted shrink-0" />}
-        <span className="font-mono text-[11px] font-semibold uppercase tracking-widest text-textPrimary truncate">
-          {def?.title ?? panelKey}
-        </span>
-        <PanelTicker value={ticker} onChange={t => setPanelTicker(panelId, t)} />
-        <div className="ml-auto flex items-center gap-1.5 shrink-0" onMouseDown={e => e.stopPropagation()}>
-          {draggable && (
-            <>
-              <button onClick={() => duplicatePanel(panelId)} title="Duplicate" className="text-textMuted hover:text-textPrimary transition-colors">
-                <Copy className="w-3 h-3" />
-              </button>
-              <button onClick={() => toggleMin(panelId)} title="Minimize" className="text-textMuted hover:text-textPrimary transition-colors">
-                <Minus className="w-3.5 h-3.5" />
-              </button>
-            </>
-          )}
-          <button
-            onClick={() => setMaximizedId(maximizedView ? null : panelId)}
-            title={maximizedView ? 'Restore' : 'Maximize'}
-            className="text-textMuted hover:text-textPrimary transition-colors"
-          >
-            {maximizedView ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3 h-3" />}
-          </button>
-          {draggable && (
-            <button onClick={() => removePanel(panelId)} title="Close" className="text-textMuted hover:text-bear transition-colors">
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
-      </div>
-    );
+  // Locked dashboard: panels are finished cards — title, ticker, and a maximize
+  // affordance. Editing controls only appear in Customize mode. Handlers bundled
+  // for the module-scope PanelChrome.
+  const chromeHandlers: PanelChromeHandlers = {
+    editLayout,
+    onTicker: setPanelTicker,
+    onDuplicate: duplicatePanel,
+    onMinimize: toggleMin,
+    onMaximize: setMaximizedId,
+    onClose: removePanel,
   };
 
-  const barBtn = 'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-borderSubtle bg-white/[0.02] hover:bg-white/[0.05] font-mono text-[11px] uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors';
+  const barBtn = 'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-borderSubtle bg-white/[0.02] hover:bg-white/[0.05] font-mono text-label uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors';
 
   return (
     <div className={fullscreen ? 'fixed inset-0 z-50 bg-canvas p-3 flex flex-col gap-4 overflow-auto' : 'flex flex-col gap-4'}>
@@ -474,35 +511,35 @@ const PulseWorkspace = () => {
             className="inline-flex items-center gap-2 pl-2.5 pr-2 py-1.5 rounded-md border border-borderMuted bg-white/[0.03] hover:bg-white/[0.06] transition-colors"
           >
             <LayoutGrid className="w-3.5 h-3.5 text-select" />
-            <span className="font-mono text-[12px] font-semibold text-textPrimary">{active.name}</span>
-            <span className="font-mono text-[10px] text-textMuted tnum">· {active.panels.length}</span>
+            <span className="font-mono text-caption font-semibold text-textPrimary">{active.name}</span>
+            <span className="font-mono text-micro text-textMuted tnum">· {active.panels.length}</span>
             <ChevronDown className="w-3 h-3 text-textMuted" />
           </button>
           {wsMenuOpen && (
-            <div className="absolute left-0 top-full mt-1 z-40 w-64 border border-borderMuted bg-panel rounded-md shadow-2xl shadow-black/60 overflow-hidden animate-slide-in">
-              <div className="px-3 pt-2 pb-1 font-mono text-[10px] uppercase tracking-widest text-textMuted">Views</div>
+            <div className="absolute left-0 top-full mt-1 z-40 w-64 border border-borderMuted bg-panel rounded-md shadow-overlay overflow-hidden animate-slide-in">
+              <div className="px-3 pt-2 pb-1 font-mono text-micro uppercase tracking-widest text-textMuted">Views</div>
               <div className="max-h-56 overflow-auto">
                 {ws.layouts.map(l => (
                   <button
                     key={l.id}
                     onClick={() => switchLayout(l.id)}
-                    className={`w-full text-left px-3 py-2 font-mono text-[11px] flex items-center gap-2 transition-colors ${
+                    className={`w-full text-left px-3 py-2 font-mono text-label flex items-center gap-2 transition-colors ${
                       l.id === active.id ? 'text-select bg-select/[0.06]' : 'text-textSecondary hover:bg-white/[0.03]'
                     }`}
                   >
                     {l.name}
-                    {l.preset && <span className="ml-auto text-[10px] text-textMuted uppercase tracking-wider">preset</span>}
+                    {l.preset && <span className="ml-auto text-micro text-textMuted uppercase tracking-wider">preset</span>}
                   </button>
                 ))}
               </div>
               {/* Layout-management ops only surface inside Customize mode */}
               {editLayout && (
                 <div className="border-t border-borderSubtle p-1.5 grid grid-cols-2 gap-1">
-                  <button onClick={saveAs} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-[10px] text-textSecondary hover:bg-white/[0.04] transition-colors"><Save className="w-3 h-3" /> Save as</button>
-                  <button onClick={rename} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-[10px] text-textSecondary hover:bg-white/[0.04] transition-colors">Rename</button>
-                  <button onClick={duplicateLayout} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-[10px] text-textSecondary hover:bg-white/[0.04] transition-colors"><Copy className="w-3 h-3" /> Duplicate</button>
-                  <button onClick={resetLayout} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-[10px] text-textSecondary hover:bg-white/[0.04] transition-colors"><RotateCcw className="w-3 h-3" /> Reset</button>
-                  <button onClick={deleteLayout} disabled={ws.layouts.length <= 1} className="col-span-2 flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-[10px] text-bear/80 hover:bg-bear/[0.08] disabled:opacity-40 transition-colors"><Trash2 className="w-3 h-3" /> Delete layout</button>
+                  <button onClick={saveAs} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-micro text-textSecondary hover:bg-white/[0.04] transition-colors"><Save className="w-3 h-3" /> Save as</button>
+                  <button onClick={rename} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-micro text-textSecondary hover:bg-white/[0.04] transition-colors">Rename</button>
+                  <button onClick={duplicateLayout} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-micro text-textSecondary hover:bg-white/[0.04] transition-colors"><Copy className="w-3 h-3" /> Duplicate</button>
+                  <button onClick={resetLayout} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-micro text-textSecondary hover:bg-white/[0.04] transition-colors"><RotateCcw className="w-3 h-3" /> Reset</button>
+                  <button onClick={deleteLayout} disabled={ws.layouts.length <= 1} className="col-span-2 flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-micro text-bear/80 hover:bg-bear/[0.08] disabled:opacity-40 transition-colors"><Trash2 className="w-3 h-3" /> Delete layout</button>
                 </div>
               )}
             </div>
@@ -520,11 +557,11 @@ const PulseWorkspace = () => {
             </div>
 
             <div className="relative">
-              <button onClick={() => setAddOpen(o => !o)} title="Add panel (A)" className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-select/40 bg-select/[0.06] hover:bg-select/[0.12] font-mono text-[11px] font-semibold uppercase tracking-wider text-select transition-colors">
+              <button onClick={() => setAddOpen(o => !o)} title="Add panel (A)" className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-select/40 bg-select/[0.06] hover:bg-select/[0.12] font-mono text-label font-semibold uppercase tracking-wider text-select transition-colors">
                 <Plus className="w-3.5 h-3.5" /> Add panel
               </button>
               {addOpen && (
-            <div className="absolute left-0 top-full mt-1 z-40 w-72 border border-borderMuted bg-panel rounded-md shadow-2xl shadow-black/60 animate-slide-in flex flex-col max-h-[420px]">
+            <div className="absolute left-0 top-full mt-1 z-40 w-72 border border-borderMuted bg-panel rounded-md shadow-overlay animate-slide-in flex flex-col max-h-[420px]">
               {/* Search */}
               <div className="p-2 border-b border-borderSubtle shrink-0">
                 <div className="relative">
@@ -538,7 +575,7 @@ const PulseWorkspace = () => {
                       if (e.key === 'Enter' && addableMatches.length > 0) addPanel(addableMatches[0].key);
                     }}
                     placeholder="Search panels…"
-                    className="w-full bg-inputBg border border-borderMuted rounded pl-7 pr-2 py-1.5 font-mono text-[11px] text-textPrimary placeholder:text-textMuted outline-none focus:border-select/40"
+                    className="w-full bg-inputBg border border-borderMuted rounded pl-7 pr-2 py-1.5 font-mono text-label text-textPrimary placeholder:text-textMuted outline-none focus:border-select/40"
                   />
                 </div>
               </div>
@@ -550,13 +587,13 @@ const PulseWorkspace = () => {
                     onClick={() => addPanel(def.key)}
                     className="w-full text-left px-3 py-2 hover:bg-white/[0.03] transition-colors border-b border-borderSubtle/40 last:border-0"
                   >
-                    <span className="block font-mono text-[11px] font-semibold text-textPrimary">{def.title}</span>
-                    <span className="block text-[10px] text-textSecondary">{def.description}</span>
+                    <span className="block font-mono text-label font-semibold text-textPrimary">{def.title}</span>
+                    <span className="block text-micro text-textSecondary">{def.description}</span>
                   </button>
                 ))}
 
                 {addableMatches.length === 0 && connectionMatches.length === 0 && (
-                  <div className="px-3 py-5 text-center font-mono text-[11px] text-textMuted uppercase tracking-widest">
+                  <div className="px-3 py-5 text-center font-mono text-label text-textMuted uppercase tracking-widest">
                     No panels match
                   </div>
                 )}
@@ -565,10 +602,10 @@ const PulseWorkspace = () => {
                 {connectionMatches.length > 0 && (
                   <div className="border-t border-borderSubtle">
                     <div className="px-3 pt-2.5 pb-1.5 flex items-center gap-2">
-                      <span className="font-mono text-[11px] font-semibold uppercase tracking-widest text-textMuted">
+                      <span className="font-mono text-label font-semibold uppercase tracking-widest text-textMuted">
                         Data connections
                       </span>
-                      <span className="ml-auto font-mono text-[10px] uppercase tracking-wider text-textMuted">
+                      <span className="ml-auto font-mono text-micro uppercase tracking-wider text-textMuted">
                         requires a live feed
                       </span>
                     </div>
@@ -581,8 +618,8 @@ const PulseWorkspace = () => {
                       >
                         <Lock className="w-3 h-3 text-textMuted mt-0.5 shrink-0" />
                         <span className="min-w-0">
-                          <span className="block font-mono text-[11px] font-semibold text-textSecondary">{def.title}</span>
-                          <span className="block text-[10px] text-textMuted">requires {def.requires}</span>
+                          <span className="block font-mono text-label font-semibold text-textSecondary">{def.title}</span>
+                          <span className="block text-micro text-textMuted">requires {def.requires}</span>
                         </span>
                       </button>
                     ))}
@@ -600,7 +637,7 @@ const PulseWorkspace = () => {
             <button
               onClick={() => setEditLayout(false)}
               title="Done customizing (E)"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-select/40 bg-select/[0.10] hover:bg-select/[0.16] font-mono text-[11px] font-semibold uppercase tracking-wider text-select transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-select/40 bg-select/[0.10] hover:bg-select/[0.16] font-mono text-label font-semibold uppercase tracking-wider text-select transition-colors"
             >
               <Check className="w-3.5 h-3.5" /> Done
             </button>
@@ -621,13 +658,13 @@ const PulseWorkspace = () => {
           className={`${fullscreen ? 'flex-1' : ''} min-h-0 inst-surface rounded-md overflow-hidden flex flex-col`}
           style={{ height: fullscreen ? 'auto' : '78vh' }}
         >
-          <PanelChrome panelId={maximized.id} panelKey={maximized.key} ticker={maximized.ticker ?? activeTicker} maximizedView />
+          <PanelChrome panelId={maximized.id} panelKey={maximized.key} ticker={maximized.ticker ?? activeTicker} maximizedView h={chromeHandlers} />
           <div className="flex-grow min-h-0 overflow-hidden">{renderPanelBody(maximized.key, maximized.ticker ?? activeTicker)}</div>
         </div>
       ) : active.panels.length === 0 ? (
         <div className="inst-surface rounded-md h-64 flex flex-col items-center justify-center gap-2">
-          <span className="font-mono text-[11px] text-textMuted uppercase tracking-widest">Empty workspace</span>
-          <span className="text-[11px] text-textSecondary">Use “Add panel” or pick a layout to build your desk</span>
+          <span className="font-mono text-label text-textMuted uppercase tracking-widest">Empty workspace</span>
+          <span className="text-label text-textSecondary">Use “Add panel” or pick a layout to build your desk</span>
         </div>
       ) : !isDesktop ? (
         // Mobile: the 12-col drag grid is unreadable on a phone. Stack the panels
@@ -650,7 +687,7 @@ const PulseWorkspace = () => {
                   className="inst-surface rounded-md overflow-hidden flex flex-col"
                   style={{ height: p.minimized ? undefined : h }}
                 >
-                  <PanelChrome panelId={p.id} panelKey={p.key} ticker={ticker} />
+                  <PanelChrome panelId={p.id} panelKey={p.key} ticker={ticker} h={chromeHandlers} />
                   {!p.minimized && (
                     <div className="flex-grow min-h-0 overflow-hidden">{renderPanelBody(p.key, ticker)}</div>
                   )}
@@ -688,7 +725,7 @@ const PulseWorkspace = () => {
                 const minimized = p.minimized;
                 return (
                   <div key={p.id} className="inst-surface rounded-md overflow-hidden flex flex-col">
-                    <PanelChrome panelId={p.id} panelKey={p.key} ticker={ticker} />
+                    <PanelChrome panelId={p.id} panelKey={p.key} ticker={ticker} h={chromeHandlers} />
                     {!minimized && <div className="flex-grow min-h-0 overflow-hidden">{renderPanelBody(p.key, ticker)}</div>}
                   </div>
                 );

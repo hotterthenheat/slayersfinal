@@ -11,13 +11,12 @@
 */
 
 import { useEffect, useState } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronDown, Search, Menu, X, Settings, type LucideIcon } from 'lucide-react';
-import { useMarketData } from '../../context/MarketDataContext';
+import { useMarketData, useTicker } from '../../context/MarketDataContext';
 import AnimatedNumber from '../ui/AnimatedNumber';
 import TickerSearch from '../ui/TickerSearch';
-import { useLaunch } from './LaunchTransition';
 import { NAV_GROUPS, itemsByGroup, NAV_ITEMS, type NavGroup, type NavItem } from './nav';
 
 interface TopBarProps {
@@ -29,9 +28,11 @@ type SubLink = { path: string; label: string; icon?: LucideIcon };
 
 const Wordmark = ({ onClick, size = 'sm' }: { onClick: (e: React.MouseEvent) => void; size?: 'sm' | 'md' }) => (
   <a
-    href="/"
+    href="/pulse"
     onClick={onClick}
-    className={`shrink-0 font-mono font-bold tracking-tight select-none ${size === 'md' ? 'text-[15px]' : 'text-[13px]'}`}
+    aria-label="Terminal home"
+    title="Terminal home"
+    className={`shrink-0 font-mono font-bold tracking-tight select-none ${size === 'md' ? 'text-read' : 'text-data'}`}
   >
     <span className="text-textMuted">&gt; </span>
     <span className="holo-text">slayer_terminal</span>
@@ -40,8 +41,8 @@ const Wordmark = ({ onClick, size = 'sm' }: { onClick: (e: React.MouseEvent) => 
 );
 
 const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
-  const { activeTicker, marketData, changeTicker } = useMarketData();
-  const { launch } = useLaunch();
+  const { activeTicker, changeTicker } = useTicker();
+  const navigate = useNavigate();
   const location = useLocation();
   const [clock, setClock] = useState(() => new Date().toLocaleTimeString('en-US', { hour12: false }));
   const [dropdown, setDropdown] = useState<string | null>(null);
@@ -55,15 +56,17 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
   // Close the mobile drawer whenever the route changes
   useEffect(() => setMobileOpen(false), [location.pathname]);
 
-  const changeUp = (marketData?.changePercent ?? 0) >= 0;
+  // Inside the shell the wordmark is Home — it returns to the terminal dashboard
+  // (/pulse), the convention for an app logo, rather than exiting to marketing.
   const goHome = (e: React.MouseEvent) => {
     e.preventDefault();
-    launch('/');
+    navigate('/pulse');
   };
   const section = `/${location.pathname.split('/')[1] ?? ''}`;
 
   return (
-    <header className="h-14 shrink-0 border-b border-borderSubtle bg-canvas/90 backdrop-blur flex items-center gap-3 px-4 relative z-40">
+    <>
+    <header className="glass absolute top-0 inset-x-0 h-14 border-b border-white/[0.07] flex items-center gap-3 px-4 z-40">
       {/* Left zone: mobile menu + wordmark. Reserved, high-stacking so nav can
           never paint over it. */}
       <div className="flex items-center gap-2 shrink-0 relative z-10">
@@ -97,7 +100,7 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
                 aria-expanded={dropdown === group}
                 onClick={() => setDropdown(prev => (prev === group ? null : group))}
                 onFocus={() => setDropdown(group)}
-                className={`relative self-stretch flex items-center gap-1 px-3 my-2 rounded-md font-mono text-[11px] font-semibold uppercase tracking-wider transition-colors ${
+                className={`relative self-stretch flex items-center gap-1 px-3 my-2 rounded-md font-mono text-label font-semibold uppercase tracking-wider transition-colors ${
                   active
                     ? 'text-textPrimary bg-white/[0.06]'
                     : 'text-textMuted hover:text-textPrimary hover:bg-white/[0.03]'
@@ -137,7 +140,7 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
           className="flex items-center gap-2 border border-borderSubtle bg-panel hover:border-borderMuted rounded-md px-2.5 py-1.5 text-xs text-textMuted transition-colors"
         >
           <Search className="w-3.5 h-3.5" />
-          <kbd className="hidden sm:inline font-mono text-[10px] border border-borderSubtle rounded px-1 py-0.5 text-textMuted bg-inset">
+          <kbd className="hidden sm:inline font-mono text-micro border border-borderSubtle rounded px-1 py-0.5 text-textMuted bg-inset">
             ⌘K
           </kbd>
         </button>
@@ -152,34 +155,28 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
             Visible on mobile too (price/change collapse to save room). */}
         <div className="flex items-center gap-2.5 font-mono text-xs">
           <TickerSearch value={activeTicker} onChange={changeTicker} />
-          {marketData && (
-            <span className="hidden sm:flex items-baseline gap-1.5">
-              <span className="text-textPrimary font-semibold tnum">
-                <AnimatedNumber value={marketData.spot} format={v => `$${v.toFixed(2)}`} />
-              </span>
-              <span className={`tnum text-[11px] ${changeUp ? 'text-bull' : 'text-bear'}`}>
-                {changeUp ? '+' : ''}
-                {marketData.changePercent.toFixed(2)}%
-              </span>
-            </span>
-          )}
+          <LivePrice />
         </div>
         <span className="hidden xl:block font-mono text-xs text-textSecondary tnum select-none">{clock}</span>
       </div>
 
-      {/* Mobile drawer */}
+    </header>
+
+      {/* Mobile overlay — a SIBLING of the glass header, not a child. A
+          backdrop-filter nested inside another backdrop-filter element can't
+          sample the page, so the drawer's blur only composites out here. */}
       <AnimatePresence>
         {mobileOpen && (
           <>
             <motion.div
-              className="lg:hidden fixed inset-0 top-14 z-30 bg-black/50"
+              className="lg:hidden fixed inset-0 top-14 z-30 bg-black/70"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setMobileOpen(false)}
             />
             <motion.div
-              className="lg:hidden absolute left-0 right-0 top-full z-40 border-b border-borderMuted bg-panel shadow-2xl shadow-black/60 max-h-[calc(100vh-3.5rem)] overflow-y-auto"
+              className="glass lg:hidden fixed inset-x-0 top-14 z-40 border-b border-white/[0.08] shadow-overlay max-h-[calc(100vh-3.5rem)] overflow-y-auto"
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
@@ -190,7 +187,26 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
           </>
         )}
       </AnimatePresence>
-    </header>
+    </>
+  );
+};
+
+/** Live spot + day change. Isolated so the price tick re-renders only this
+    span, not the whole workflow nav / dropdown tree above it. */
+const LivePrice = () => {
+  const { marketData } = useMarketData();
+  if (!marketData) return null;
+  const changeUp = marketData.changePercent >= 0;
+  return (
+    <span className="hidden sm:flex items-baseline gap-1.5">
+      <span className="text-textPrimary font-semibold tnum">
+        <AnimatedNumber value={marketData.spot} format={v => `$${v.toFixed(2)}`} />
+      </span>
+      <span className={`tnum text-label ${changeUp ? 'text-bull' : 'text-bear'}`}>
+        {changeUp ? '+' : ''}
+        {marketData.changePercent.toFixed(2)}%
+      </span>
+    </span>
   );
 };
 
@@ -217,9 +233,9 @@ const DropMenu = ({
     exit={{ opacity: 0, y: -6 }}
     transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
   >
-    <div className="mt-1 min-w-[248px] border border-borderMuted bg-panel rounded-md shadow-2xl shadow-black/60 overflow-hidden">
+    <div className="mt-1 min-w-[248px] border border-borderMuted bg-panel rounded-md shadow-overlay overflow-hidden">
       <div className="flex items-center justify-between gap-3 px-3 py-2 border-b border-borderSubtle">
-        <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-textPrimary whitespace-nowrap">
+        <span className="font-mono text-micro font-semibold uppercase tracking-widest text-textPrimary whitespace-nowrap">
           {title}
         </span>
       </div>
@@ -231,7 +247,7 @@ const DropMenu = ({
               key={sub.path}
               to={sub.path}
               onClick={onPick}
-              className={`flex items-center gap-2 px-2.5 py-1.5 rounded font-mono text-[12px] whitespace-nowrap transition-colors ${
+              className={`flex items-center gap-2 px-2.5 py-1.5 rounded font-mono text-caption whitespace-nowrap transition-colors ${
                 isActive
                   ? 'bg-white/[0.06] text-textPrimary'
                   : 'text-textSecondary hover:text-textPrimary hover:bg-white/[0.03]'
@@ -241,7 +257,7 @@ const DropMenu = ({
               <span className="flex flex-col">
                 {sub.label}
                 {descriptions?.[sub.path] && (
-                  <span className="font-sans text-[11px] text-textMuted normal-case tracking-normal leading-tight">
+                  <span className="font-sans text-label text-textMuted normal-case tracking-normal leading-tight">
                     {descriptions[sub.path]}
                   </span>
                 )}
@@ -261,7 +277,7 @@ const MobileNav = ({ section, onPick }: { section: string; onPick: () => void })
       const items = itemsByGroup(group);
       return (
         <div key={group}>
-          <div className="px-2 pb-1.5 font-mono text-[10px] uppercase tracking-widest text-textMuted">{group}</div>
+          <div className="px-2 pb-1.5 font-mono text-micro uppercase tracking-widest text-textMuted">{group}</div>
           <div className="grid grid-cols-2 gap-1.5">
             {items.map((item: NavItem) => {
               const active = item.path === section;
@@ -277,7 +293,7 @@ const MobileNav = ({ section, onPick }: { section: string; onPick: () => void })
                   }`}
                 >
                   <item.icon className={`w-4 h-4 ${active ? 'text-textPrimary' : 'text-textMuted'}`} />
-                  <span className="font-mono text-[12px] font-semibold uppercase tracking-wider">{item.label}</span>
+                  <span className="font-mono text-caption font-semibold uppercase tracking-wider">{item.label}</span>
                 </NavLink>
               );
             })}
@@ -285,7 +301,7 @@ const MobileNav = ({ section, onPick }: { section: string; onPick: () => void })
         </div>
       );
     })}
-    <p className="px-2 font-mono text-[10px] text-textMuted">
+    <p className="px-2 font-mono text-micro text-textMuted">
       {NAV_ITEMS.length} desks · ⌘K for quick jump
     </p>
   </div>

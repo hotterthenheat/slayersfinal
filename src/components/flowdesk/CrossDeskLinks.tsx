@@ -26,18 +26,18 @@ const CrossDeskLinks = ({ ticker, strike, right, onNavigate }: CrossDeskLinksPro
   };
 
   const btn =
-    'inline-flex items-center justify-center gap-1.5 flex-1 min-w-[92px] px-2.5 py-2 rounded border border-borderSubtle bg-white/[0.02] font-mono text-[10px] uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:border-borderMuted transition-colors';
+    'inline-flex items-center justify-center gap-1.5 flex-1 min-w-[92px] px-2.5 py-2 rounded border border-borderSubtle bg-white/[0.02] font-mono text-micro uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:border-borderMuted transition-colors';
 
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="font-mono text-[11px] uppercase tracking-widest text-textSecondary">Open in</span>
+      <span className="font-mono text-label uppercase tracking-widest text-textSecondary">Open in</span>
       <div className="flex items-center gap-1.5 flex-wrap">
         <button
           type="button"
           onClick={() =>
             go(() => {
               changeTicker(ticker);
-              navigate('/pinpoint/exposure-profile');
+              navigate('/pinpoint/levels');
             })
           }
           className={btn}

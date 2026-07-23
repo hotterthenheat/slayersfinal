@@ -109,8 +109,8 @@ const StateRow = ({ s, maxP }: { s: StateNode; maxP: number }) => {
   return (
     <div className="px-3.5 py-2 grid grid-cols-[92px_1fr_88px] items-center gap-3">
       <span className="flex flex-col">
-        <span className="font-mono text-[11px] font-semibold text-textPrimary">{s.label}</span>
-        <span className={`font-mono text-[10px] tnum ${moveTone}`}>{fmtMove(s.movePct)}</span>
+        <span className="font-mono text-label font-semibold text-textPrimary">{s.label}</span>
+        <span className={`font-mono text-micro tnum ${moveTone}`}>{fmtMove(s.movePct)}</span>
       </span>
       <div className="relative h-2.5 rounded-full bg-white/[0.06] overflow-hidden">
         <span className="block h-full rounded-full holo-bar" style={{ width: `${(s.prob / maxP) * 100}%` }} />
@@ -118,7 +118,7 @@ const StateRow = ({ s, maxP }: { s: StateNode; maxP: number }) => {
         <span className="absolute top-0 bottom-0 w-px bg-white/70" style={{ left: `${Math.min(100, (s.priced / maxP) * 100)}%` }} aria-hidden />
       </div>
       <div className="flex items-center justify-end gap-1.5">
-        <span className="font-mono text-[11px] tnum text-textSecondary">{(s.prob * 100).toFixed(0)}%</span>
+        <span className="font-mono text-label tnum text-textSecondary">{(s.prob * 100).toFixed(0)}%</span>
         {mis && <SignalBadge tone={mis.tone}>{mis.label}</SignalBadge>}
       </div>
     </div>
@@ -147,22 +147,22 @@ const ExpressionCard = ({ expr, recommended }: { expr: Expression; recommended: 
         </span>
       </div>
       <div className="mt-0.5 flex items-center justify-between">
-        <span className="font-mono text-[11px] uppercase tracking-wider text-textMuted">net EV · post spreads + crush</span>
+        <span className="font-mono text-label uppercase tracking-wider text-textMuted">net EV · post spreads + crush</span>
         <SignalBadge tone={tone}>{expr.edgeLabel}</SignalBadge>
       </div>
-      <p className="mt-2.5 font-mono text-[11px] text-textSecondary">{expr.legs}</p>
+      <p className="mt-2.5 font-mono text-label text-textSecondary">{expr.legs}</p>
       <div className="mt-2.5 grid grid-cols-3 gap-2">
         <div className="rounded bg-white/[0.03] px-2 py-1.5">
-          <div className="font-mono text-[11px] uppercase tracking-wider text-textMuted">Cost</div>
-          <div className="font-mono text-[12px] text-textPrimary tnum">{expr.cost}</div>
+          <div className="font-mono text-label uppercase tracking-wider text-textMuted">Cost</div>
+          <div className="font-mono text-caption text-textPrimary tnum">{expr.cost}</div>
         </div>
         <div className="rounded bg-white/[0.03] px-2 py-1.5">
-          <div className="font-mono text-[11px] uppercase tracking-wider text-textMuted">Breakeven</div>
-          <div className="font-mono text-[12px] text-textPrimary tnum">{expr.breakeven}</div>
+          <div className="font-mono text-label uppercase tracking-wider text-textMuted">Breakeven</div>
+          <div className="font-mono text-caption text-textPrimary tnum">{expr.breakeven}</div>
         </div>
         <div className="rounded bg-white/[0.03] px-2 py-1.5">
-          <div className="font-mono text-[11px] uppercase tracking-wider text-textMuted">Structure</div>
-          <div className="font-mono text-[11px] text-textSecondary leading-tight">{expr.maxLabel}</div>
+          <div className="font-mono text-label uppercase tracking-wider text-textMuted">Structure</div>
+          <div className="font-mono text-label text-textSecondary leading-tight">{expr.maxLabel}</div>
         </div>
       </div>
       <p className="mt-2.5 text-xs text-textSecondary leading-relaxed">{expr.fit}</p>
@@ -184,7 +184,7 @@ const ReportTimeChip = ({ daysOut }: { daysOut: number }) => {
           ? 'Report date & slot inferred confirmed — inside the near-term window'
           : 'Report date estimated — further-out prints stay analyst-estimated until confirmed'
       }
-      className={`inline-flex items-center gap-1 font-mono text-[11px] uppercase tracking-wider ${
+      className={`inline-flex items-center gap-1 font-mono text-label uppercase tracking-wider ${
         confirmed ? 'text-textSecondary' : 'text-warn'
       }`}
     >
@@ -249,12 +249,12 @@ const ScenarioTree = ({ view }: { view: EarningsIntelView }) => {
       {/* Root */}
       <div className="inst-surface rounded-md px-3.5 py-2.5 flex items-center justify-between gap-3">
         <div className="flex flex-col">
-          <span className="font-mono text-[11px] uppercase tracking-widest text-textMuted">Print</span>
+          <span className="font-mono text-label uppercase tracking-widest text-textMuted">Print</span>
           <span className="font-mono text-sm font-bold text-textPrimary">
             {view.ticker} · implied ±{view.impliedMovePct.toFixed(1)}%
           </span>
         </div>
-        <div className="flex items-center gap-3 font-mono text-[11px] tnum">
+        <div className="flex items-center gap-3 font-mono text-label tnum">
           <span className="text-textSecondary">
             gap <span className="text-textPrimary">{view.gapProb.toFixed(0)}%</span>
           </span>
@@ -279,11 +279,11 @@ const ScenarioTree = ({ view }: { view: EarningsIntelView }) => {
               >
                 <div className="grid grid-cols-[104px_1fr_84px] items-center gap-3">
                   <span className="flex items-center gap-1.5">
-                    <span className={`font-mono text-[12px] font-semibold ${toneText[g.tone]}`}>{g.label}</span>
+                    <span className={`font-mono text-caption font-semibold ${toneText[g.tone]}`}>{g.label}</span>
                   </span>
                   <ProbBar model={stat.model} priced={stat.priced} />
                   <span className="flex items-center justify-end gap-1.5">
-                    <span className="font-mono text-[12px] tnum text-textSecondary">{(stat.model * 100).toFixed(0)}%</span>
+                    <span className="font-mono text-caption tnum text-textSecondary">{(stat.model * 100).toFixed(0)}%</span>
                     {stat.mis && <SignalBadge tone={stat.mis.tone}>{stat.mis.label}</SignalBadge>}
                   </span>
                 </div>
@@ -305,11 +305,11 @@ const ScenarioTree = ({ view }: { view: EarningsIntelView }) => {
                       <TreeRow key={k} last={li === g.leaves.length - 1}>
                         <div className="grid grid-cols-[104px_1fr_84px] items-center gap-3 py-0.5">
                           <span className="flex flex-col">
-                            <span className="font-mono text-[12px] text-textPrimary">{s.label}</span>
-                            <span className={`font-mono text-[11px] tnum ${moveTone}`}>{fmtMove(s.movePct)}</span>
+                            <span className="font-mono text-caption text-textPrimary">{s.label}</span>
+                            <span className={`font-mono text-label tnum ${moveTone}`}>{fmtMove(s.movePct)}</span>
                           </span>
                           <ProbBar model={s.prob} priced={s.priced} />
-                          <span className="font-mono text-[12px] tnum text-textSecondary text-right">
+                          <span className="font-mono text-caption tnum text-textSecondary text-right">
                             {(s.prob * 100).toFixed(0)}%
                           </span>
                         </div>
@@ -332,7 +332,7 @@ const EarningsIntel = ({ event }: EarningsIntelProps) => {
   if (!view) {
     return (
       <Panel className="h-56" bodyClassName="flex items-center justify-center">
-        <span className="font-mono text-[11px] text-textMuted uppercase tracking-widest">Select a print to open the event dossier</span>
+        <span className="font-mono text-label text-textMuted uppercase tracking-widest">Select a print to open the event dossier</span>
       </Panel>
     );
   }
@@ -360,9 +360,9 @@ const EarningsIntel = ({ event }: EarningsIntelProps) => {
         subtitle={`${view.ticker} · ${view.dateLabel} ${view.slot}`}
         actions={<SignalBadge tone={componentTone[view.mispricing.component]} dot>{componentLabel[view.mispricing.component]}</SignalBadge>}
       >
-        <p className="text-[15px] text-textPrimary leading-relaxed">{view.mispricing.headline}</p>
+        <p className="text-read text-textPrimary leading-relaxed">{view.mispricing.headline}</p>
         <p className="mt-2 text-sm text-textSecondary leading-relaxed">
-          <span className={`font-mono text-[10px] font-semibold uppercase tracking-widest mr-2 ${componentTone[view.mispricing.component] === 'neutral' ? 'holo-text' : ''}`}>
+          <span className={`font-mono text-micro font-semibold uppercase tracking-widest mr-2 ${componentTone[view.mispricing.component] === 'neutral' ? 'holo-text' : ''}`}>
             Verdict
           </span>
           {view.mispricing.verdict}
@@ -405,7 +405,7 @@ const EarningsIntel = ({ event }: EarningsIntelProps) => {
               <StateRow key={s.key} s={s} maxP={maxP} />
             ))}
           </div>
-          <p className="px-3.5 py-2.5 border-t border-borderSubtle font-mono text-[10px] text-textMuted leading-relaxed">
+          <p className="px-3.5 py-2.5 border-t border-borderSubtle font-mono text-micro text-textMuted leading-relaxed">
             Bar = outcome probability; the white tick is where the straddle + skew price it. Bar past the tick = a state the market
             discounts (CHEAP); tick past the bar = one it overpays for (RICH).
           </p>
@@ -436,7 +436,7 @@ const EarningsIntel = ({ event }: EarningsIntelProps) => {
                 <span className="h-full holo-bar" style={{ width: `${view.gapProb}%` }} />
                 <span className="h-full bg-white/25" style={{ width: `${view.continuousProb}%` }} />
               </div>
-              <div className="mt-1.5 flex items-center justify-between font-mono text-[10px] uppercase tracking-wider text-textMuted">
+              <div className="mt-1.5 flex items-center justify-between font-mono text-micro uppercase tracking-wider text-textMuted">
                 <span>Overnight gap</span>
                 <span>Continuation</span>
               </div>
@@ -464,26 +464,26 @@ const EarningsIntel = ({ event }: EarningsIntelProps) => {
               const max = Math.max(a.impliedPct, a.realizedPct, 1);
               return (
                 <div key={a.tag} className="px-3.5 py-2 grid grid-cols-[54px_1fr_58px_54px] items-center gap-3">
-                  <span className="font-mono text-[11px] font-semibold text-textPrimary">{a.tag}</span>
+                  <span className="font-mono text-label font-semibold text-textPrimary">{a.tag}</span>
                   <div className="flex flex-col gap-1">
                     <span className="flex items-center gap-1.5">
-                      <span className="w-6 font-mono text-[10px] uppercase text-textMuted">imp</span>
+                      <span className="w-6 font-mono text-micro uppercase text-textMuted">imp</span>
                       <span className="flex-1 h-[3px] rounded-full bg-white/[0.06] overflow-hidden">
                         <span className="block h-full rounded-full bg-white/30" style={{ width: `${(a.impliedPct / max) * 100}%` }} />
                       </span>
-                      <span className="w-9 text-right font-mono text-[10px] text-textSecondary tnum">{a.impliedPct.toFixed(1)}%</span>
+                      <span className="w-9 text-right font-mono text-micro text-textSecondary tnum">{a.impliedPct.toFixed(1)}%</span>
                     </span>
                     <span className="flex items-center gap-1.5">
-                      <span className="w-6 font-mono text-[10px] uppercase text-textMuted">real</span>
+                      <span className="w-6 font-mono text-micro uppercase text-textMuted">real</span>
                       <span className="flex-1 h-[3px] rounded-full bg-white/[0.06] overflow-hidden">
                         <span className="block h-full rounded-full holo-bar" style={{ width: `${(a.realizedPct / max) * 100}%` }} />
                       </span>
-                      <span className={`w-9 text-right font-mono text-[10px] tnum ${a.direction === 'UP' ? 'text-bull' : 'text-bear'}`}>
+                      <span className={`w-9 text-right font-mono text-micro tnum ${a.direction === 'UP' ? 'text-bull' : 'text-bear'}`}>
                         {a.direction === 'UP' ? '+' : '−'}{a.realizedPct.toFixed(1)}%
                       </span>
                     </span>
                   </div>
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted text-center">{a.gapped ? 'gapped' : 'grind'}</span>
+                  <span className="font-mono text-micro uppercase tracking-wider text-textMuted text-center">{a.gapped ? 'gapped' : 'grind'}</span>
                   <div className="flex justify-end">
                     <SignalBadge tone={a.covered ? 'bull' : 'warn'}>{a.covered ? 'COVER' : 'BUST'}</SignalBadge>
                   </div>
@@ -505,7 +505,7 @@ const EarningsIntel = ({ event }: EarningsIntelProps) => {
         actions={<ReportTimeChip daysOut={view.daysOut} />}
       >
         <ScenarioTree view={view} />
-        <p className="mt-3 font-mono text-[11px] text-textMuted leading-relaxed">
+        <p className="mt-3 font-mono text-label text-textMuted leading-relaxed">
           Each branch sums the state probabilities into a down / pin / up outcome; the bar is the odds, the white tick
           where the straddle + skew prices it. CHEAP = the read carries more of that branch than the market charges; the
           highlighted branch is where the recommended structure lives.

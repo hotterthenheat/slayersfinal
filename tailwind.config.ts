@@ -7,6 +7,22 @@ export default {
   ],
   theme: {
     extend: {
+      // One motion hand: every bare `transition-*` inherits the house
+      // easeOutExpo curve at DUR.fast (120ms), so CSS transitions read the same
+      // as the framer-motion ones instead of Tailwind's generic default.
+      transitionTimingFunction: {
+        DEFAULT: 'cubic-bezier(0.16, 1, 0.3, 1)',
+      },
+      transitionDuration: {
+        DEFAULT: '120ms',
+      },
+      // One elevation for every floating surface — menus, drawers, toasts,
+      // tooltips, modals. Replaces a scattered `shadow-2xl shadow-black` (a
+      // 50px, fully-opaque black shadow) with a tight, restrained lift: the
+      // hairline border owns the edge, the shadow just sets it off the canvas.
+      boxShadow: {
+        overlay: '0 12px 32px -12px rgba(0,0,0,0.75), 0 4px 10px -6px rgba(0,0,0,0.55)',
+      },
       colors: {
         // Surfaces
         canvas: '#050505',
@@ -54,9 +70,21 @@ export default {
         gammaNeg: '#FF3B30',
         warning: '#FF9500',
       },
+      // Terminal type ramp. Every size below `text-lg` came from ~1,180
+      // scattered `text-[Npx]` utilities; these name them as one system.
+      // Deliberately font-size ONLY (string form, no bundled line-height) —
+      // unlike Tailwind's built-in text-xs/sm/base — so the leading each call
+      // site already set via `leading-*` is preserved untouched. The dense
+      // 10–13px micro-steps are the terminal's label tiers; 14–16px carry
+      // prose and inline copy. Headings keep the rem-based display scale.
       fontSize: {
-        'xxs': '0.7rem',
-        'xxxs': '0.6rem',
+        micro: '10px', // axis ticks, densest legends
+        label: '11px', // the dominant uppercase mono label
+        caption: '12px', // table cells, secondary text
+        data: '13px', // readable panel body / data rows
+        body: '14px', // prose in guide / legal / landing
+        read: '15px', // prose emphasis, card titles
+        lead: '16px', // largest inline copy
       },
       fontFamily: {
         sans: ['Inter', 'sans-serif'],

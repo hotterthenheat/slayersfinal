@@ -74,13 +74,13 @@ const WindowRow = ({ w }: { w: HedgeImpactView['windows'][number] }) => {
   const buy = w.flowUsd >= 0;
   return (
     <div className="px-3.5 py-2.5 grid grid-cols-[62px_1fr_92px] items-center gap-3">
-      <span className="font-mono text-[12px] font-semibold text-textPrimary">{w.label}</span>
+      <span className="font-mono text-caption font-semibold text-textPrimary">{w.label}</span>
       <div className="min-w-0">
         <div className="flex items-center justify-between mb-1">
-          <span className={`font-mono text-[11px] tnum ${buy ? 'text-bull' : 'text-bear'}`}>
+          <span className={`font-mono text-label tnum ${buy ? 'text-bull' : 'text-bear'}`}>
             {buy ? 'BUY' : 'SELL'} {fmtUsd(Math.abs(w.flowUsd))}
           </span>
-          <span className="font-mono text-[10px] text-textMuted tnum">
+          <span className="font-mono text-micro text-textMuted tnum">
             {fmtNum(w.shares)} sh · {fmtNum(w.futures)} fut · depth {fmtUsd(w.depthUsd)}
           </span>
         </div>
@@ -104,7 +104,7 @@ const WindowRow = ({ w }: { w: HedgeImpactView['windows'][number] }) => {
 /** Neutral provenance chip — chrome only, never a directional/status color. */
 const ProvTag = ({ children, muted = true }: { children: string; muted?: boolean }) => (
   <span
-    className={`font-mono text-[10px] font-medium uppercase tracking-wider border border-borderSubtle bg-white/[0.03] rounded px-1.5 py-0.5 shrink-0 ${
+    className={`font-mono text-micro font-medium uppercase tracking-wider border border-borderSubtle bg-white/[0.03] rounded px-1.5 py-0.5 shrink-0 ${
       muted ? 'text-textMuted' : 'text-textSecondary'
     }`}
   >
@@ -128,7 +128,7 @@ const AssumptionsDrawer = ({ view }: { view: HedgeImpactView }) => {
           type="button"
           onClick={() => setOpen(o => !o)}
           aria-expanded={open}
-          className="inline-flex items-center gap-1 font-mono text-[11px] font-semibold uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
+          className="inline-flex items-center gap-1 font-mono text-label font-semibold uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
         >
           {open ? 'Hide' : 'Show'}
           <ChevronDown className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
@@ -137,12 +137,12 @@ const AssumptionsDrawer = ({ view }: { view: HedgeImpactView }) => {
       bodyClassName={open ? 'py-3.5' : 'py-2.5'}
     >
       {!open ? (
-        <p className="font-mono text-[11px] text-textMuted leading-relaxed">
+        <p className="font-mono text-label text-textMuted leading-relaxed">
           HEX divides a live-chain hedge requirement by the available market depth. Expand for the depth inputs behind the read.
         </p>
       ) : (
         <div className="flex flex-col gap-3">
-          <p className="text-[11px] text-textSecondary leading-relaxed">
+          <p className="text-label text-textSecondary leading-relaxed">
             The hedge requirement (numerator) comes from the live options chain. The liquidity that absorbs it
             (denominator) is the desk's depth read per name — the depth values behind each forecast window are shown
             below.
@@ -152,11 +152,11 @@ const AssumptionsDrawer = ({ view }: { view: HedgeImpactView }) => {
             {/* Modeled ADV — the liquidity denominator */}
             <div className="flex items-center justify-between gap-3 px-3 py-2.5">
               <div className="min-w-0">
-                <div className="font-mono text-[12px] font-semibold text-textPrimary">Avg daily $ volume</div>
-                <div className="text-[10px] text-textMuted leading-tight mt-0.5">liquidity denominator · per name</div>
+                <div className="font-mono text-caption font-semibold text-textPrimary">Avg daily $ volume</div>
+                <div className="text-micro text-textMuted leading-tight mt-0.5">liquidity denominator · per name</div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <span className="font-mono text-[13px] font-semibold tnum text-textPrimary">{fmtUsd(view.advUsd)}</span>
+                <span className="font-mono text-data font-semibold tnum text-textPrimary">{fmtUsd(view.advUsd)}</span>
                 <ProvTag>depth</ProvTag>
               </div>
             </div>
@@ -165,16 +165,16 @@ const AssumptionsDrawer = ({ view }: { view: HedgeImpactView }) => {
             <div className="px-3 py-2.5">
               <div className="flex items-start justify-between gap-3 mb-2">
                 <div className="min-w-0">
-                  <div className="font-mono text-[12px] font-semibold text-textPrimary">Available depth by window</div>
-                  <div className="text-[10px] text-textMuted leading-tight mt-0.5">ADV scaled to each 5–60 min forecast window</div>
+                  <div className="font-mono text-caption font-semibold text-textPrimary">Available depth by window</div>
+                  <div className="text-micro text-textMuted leading-tight mt-0.5">ADV scaled to each 5–60 min forecast window</div>
                 </div>
                 <ProvTag>depth</ProvTag>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {view.windows.map(w => (
                   <div key={w.mins} className="rounded bg-white/[0.03] border border-borderSubtle px-2 py-1.5">
-                    <div className="font-mono text-[10px] uppercase tracking-wider text-textMuted">{w.label}</div>
-                    <div className="font-mono text-[12px] font-semibold tnum text-textPrimary mt-0.5">{fmtUsd(w.depthUsd)}</div>
+                    <div className="font-mono text-micro uppercase tracking-wider text-textMuted">{w.label}</div>
+                    <div className="font-mono text-caption font-semibold tnum text-textPrimary mt-0.5">{fmtUsd(w.depthUsd)}</div>
                   </div>
                 ))}
               </div>
@@ -183,11 +183,11 @@ const AssumptionsDrawer = ({ view }: { view: HedgeImpactView }) => {
             {/* Live-chain hedge requirement — the numerator, shown for contrast */}
             <div className="flex items-center justify-between gap-3 px-3 py-2.5">
               <div className="min-w-0">
-                <div className="font-mono text-[12px] font-semibold text-textPrimary">Hedge required · per 1% move</div>
-                <div className="text-[10px] text-textMuted leading-tight mt-0.5">{fmtNum(view.hedgeSharesPer1pct)} shares · from the live chain</div>
+                <div className="font-mono text-caption font-semibold text-textPrimary">Hedge required · per 1% move</div>
+                <div className="text-micro text-textMuted leading-tight mt-0.5">{fmtNum(view.hedgeSharesPer1pct)} shares · from the live chain</div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <span className="font-mono text-[13px] font-semibold tnum text-textPrimary">{fmtUsd(view.hedgePer1pctUsd)}</span>
+                <span className="font-mono text-data font-semibold tnum text-textPrimary">{fmtUsd(view.hedgePer1pctUsd)}</span>
                 <ProvTag muted={false}>live chain</ProvTag>
               </div>
             </div>
@@ -205,7 +205,7 @@ const HedgeImpact = () => {
   if (!view) {
     return (
       <Panel className="h-64" bodyClassName="flex items-center justify-center">
-        <span className="font-mono text-[11px] text-textMuted uppercase tracking-widest">Modeling hedge impact…</span>
+        <span className="font-mono text-label text-textMuted uppercase tracking-widest">Modeling hedge impact…</span>
       </Panel>
     );
   }
@@ -239,8 +239,8 @@ const HedgeImpact = () => {
       </MetricGrid>
 
       <Panel tone={headTone} bodyClassName="py-3.5" emphasis>
-        <p className="text-[15px] text-textPrimary leading-relaxed">
-          <span className={`font-mono text-[10px] font-semibold uppercase tracking-widest mr-2.5 ${view.longGamma ? 'text-bull' : 'text-bear'}`}>
+        <p className="text-data text-textPrimary leading-relaxed">
+          <span className={`font-mono text-micro font-semibold uppercase tracking-widest mr-2.5 ${view.longGamma ? 'text-bull' : 'text-bear'}`}>
             HEX read
           </span>
           {view.headline}
@@ -266,7 +266,7 @@ const HedgeImpact = () => {
               <WindowRow key={w.mins} w={w} />
             ))}
           </div>
-          <p className="px-3.5 py-2.5 border-t border-borderSubtle font-mono text-[10px] text-textMuted leading-relaxed">
+          <p className="px-3.5 py-2.5 border-t border-borderSubtle font-mono text-micro text-textMuted leading-relaxed">
             HEX = required hedge ÷ liquidity available in the window. Under 1, dealers rebalance quietly; over 1, their own
             hedging is the flow that moves price.
           </p>
@@ -312,7 +312,7 @@ const HedgeImpact = () => {
                 <span key={t} className="absolute top-0 bottom-0 w-px bg-white/25" style={{ left: `${t}%` }} aria-hidden />
               ))}
             </div>
-            <div className="mt-1.5 flex items-center justify-between font-mono text-[10px] uppercase tracking-wider text-textMuted">
+            <div className="mt-1.5 flex items-center justify-between font-mono text-micro uppercase tracking-wider text-textMuted">
               <span>Light</span>
               <span>Building</span>
               <span>Stretched</span>

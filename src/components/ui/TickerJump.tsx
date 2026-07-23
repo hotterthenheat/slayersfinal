@@ -12,7 +12,7 @@ interface TickerJumpProps {
 }
 
 const btn =
-  'inline-flex items-center gap-1 px-2 py-1 rounded border border-borderSubtle bg-white/[0.02] font-mono text-[10px] uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:border-borderMuted transition-colors';
+  'inline-flex items-center gap-1 px-2 py-1 rounded border border-borderSubtle bg-white/[0.02] font-mono text-micro uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:border-borderMuted transition-colors';
 
 /** Cross-module jump chips — send a research name straight into the terminals. */
 const TickerJump = ({ ticker, show = ['pulse', 'compass', 'pinpoint'], horizon, className = '' }: TickerJumpProps) => {

@@ -67,12 +67,12 @@ const Field = ({
   className?: string;
 }) => (
   <label className={`flex flex-col gap-1 ${className}`}>
-    <span className="font-mono text-[11px] uppercase tracking-wider text-textMuted">{label}</span>
+    <span className="font-mono text-label uppercase tracking-wider text-textMuted">{label}</span>
     <input
       value={value}
       onChange={e => onChange(e.target.value)}
       placeholder={placeholder}
-      className="w-full bg-inputBg border border-borderSubtle rounded-md px-2.5 py-1.5 font-mono text-[12px] text-textPrimary placeholder:text-textMuted focus:border-borderMuted outline-none transition-colors"
+      className="w-full bg-inputBg border border-borderSubtle rounded-md px-2.5 py-1.5 font-mono text-caption text-textPrimary placeholder:text-textMuted focus:border-borderMuted outline-none transition-colors"
     />
   </label>
 );
@@ -158,11 +158,11 @@ const Ideas = () => {
           <div className="flex flex-wrap items-end gap-x-5 gap-y-3">
             <Field label="Ticker" value={ticker} onChange={v => setTicker(v.toUpperCase())} placeholder="SPY" className="w-32" />
             <label className="flex flex-col gap-1">
-              <span className="font-mono text-[11px] uppercase tracking-wider text-textMuted">Direction</span>
+              <span className="font-mono text-label uppercase tracking-wider text-textMuted">Direction</span>
               <SegmentedControl ariaLabel="Direction" options={POST_DIR_OPTIONS} value={direction} onChange={setDirection} />
             </label>
             <label className="flex flex-col gap-1">
-              <span className="font-mono text-[11px] uppercase tracking-wider text-textMuted">Horizon</span>
+              <span className="font-mono text-label uppercase tracking-wider text-textMuted">Horizon</span>
               <SegmentedControl ariaLabel="Horizon" options={HORIZON_OPTIONS} value={horizon} onChange={setHorizon} />
             </label>
           </div>
@@ -177,7 +177,7 @@ const Ideas = () => {
 
           {/* Position disclosure */}
           <label className="flex flex-col gap-1">
-            <span className="font-mono text-[11px] uppercase tracking-wider text-textMuted">Your position</span>
+            <span className="font-mono text-label uppercase tracking-wider text-textMuted">Your position</span>
             <div>
               <SegmentedControl ariaLabel="Your position" options={POSITION_OPTIONS} value={position} onChange={setPosition} />
             </div>
@@ -185,13 +185,13 @@ const Ideas = () => {
 
           {/* Narrative */}
           <label className="flex flex-col gap-1">
-            <span className="font-mono text-[11px] uppercase tracking-wider text-textMuted">Thesis</span>
+            <span className="font-mono text-label uppercase tracking-wider text-textMuted">Thesis</span>
             <textarea
               value={thesis}
               onChange={e => setThesis(e.target.value)}
               placeholder="What's the setup? Levels, flow, reasoning — in your own words…"
               rows={2}
-              className="w-full bg-inputBg border border-borderSubtle rounded-md px-2.5 py-2 text-[12px] text-textPrimary placeholder:text-textMuted focus:border-borderMuted outline-none transition-colors resize-y"
+              className="w-full bg-inputBg border border-borderSubtle rounded-md px-2.5 py-2 text-caption text-textPrimary placeholder:text-textMuted focus:border-borderMuted outline-none transition-colors resize-y"
             />
           </label>
 
@@ -199,11 +199,11 @@ const Ideas = () => {
             <button
               onClick={post}
               disabled={!canPost}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-select/40 bg-select/[0.06] hover:bg-select/[0.12] font-mono text-[11px] font-semibold uppercase tracking-wider text-select transition-colors disabled:opacity-40 disabled:pointer-events-none"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-select/40 bg-select/[0.06] hover:bg-select/[0.12] font-mono text-label font-semibold uppercase tracking-wider text-select transition-colors disabled:opacity-40 disabled:pointer-events-none"
             >
               <Send className="w-3.5 h-3.5" /> Post thesis
             </button>
-            <span className="font-mono text-[11px] text-textMuted">
+            <span className="font-mono text-label text-textMuted">
               Ticker and thesis required · levels optional · saved to this browser
             </span>
           </div>
@@ -214,7 +214,7 @@ const Ideas = () => {
       <div className="flex items-center gap-3 flex-wrap">
         <SegmentedControl ariaLabel="Direction filter" options={DIR_OPTIONS} value={dirFilter} onChange={setDirFilter} />
         <SegmentedControl ariaLabel="Sort" options={SORT_OPTIONS} value={sort} onChange={setSort} />
-        <span className="ml-auto font-mono text-[11px] text-textMuted uppercase tracking-widest tnum">
+        <span className="ml-auto font-mono text-label text-textMuted uppercase tracking-widest tnum">
           {shown.length} ideas
         </span>
       </div>
@@ -238,25 +238,25 @@ const Ideas = () => {
                 aria-label="Vote"
               >
                 <ChevronUp className="w-4 h-4" />
-                <span className="font-mono text-[11px] font-bold tnum">{idea.votes}</span>
+                <span className="font-mono text-label font-bold tnum">{idea.votes}</span>
               </button>
               <div className="min-w-0 flex-grow">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-mono text-[12px] font-bold text-textPrimary">{idea.ticker}</span>
+                  <span className="font-mono text-caption font-bold text-textPrimary">{idea.ticker}</span>
                   <SignalBadge tone={idea.direction === 'BULLISH' ? 'bull' : 'bear'}>{idea.direction}</SignalBadge>
-                  <span className="ml-auto font-mono text-[10px] text-textMuted tnum">
+                  <span className="ml-auto font-mono text-micro text-textMuted tnum">
                     {idea.author === 'you' ? <span className="text-select">you</span> : idea.author} · {timeAgo(idea.createdAt)}
                   </span>
                 </div>
-                <p className="mt-1.5 text-[12px] text-textSecondary leading-relaxed">“{text}”</p>
+                <p className="mt-1.5 text-caption text-textSecondary leading-relaxed">“{text}”</p>
 
                 {hasStructure && (
                   <div className="mt-2.5 flex flex-wrap gap-x-5 gap-y-2 border-t border-borderSubtle/40 pt-2.5">
                     {fields.map(f => (
                       <div key={f.key} className="flex flex-col gap-0.5">
-                        <span className="font-mono text-[11px] uppercase tracking-wider text-textMuted">{f.label}</span>
+                        <span className="font-mono text-label uppercase tracking-wider text-textMuted">{f.label}</span>
                         <span
-                          className={`font-mono text-[12px] tnum ${
+                          className={`font-mono text-caption tnum ${
                             f.tone === 'warn' ? 'text-warn' : 'text-textPrimary'
                           }`}
                         >
@@ -266,7 +266,7 @@ const Ideas = () => {
                     ))}
                     {meta.position && (
                       <div className="flex flex-col gap-0.5">
-                        <span className="font-mono text-[11px] uppercase tracking-wider text-textMuted">Position</span>
+                        <span className="font-mono text-label uppercase tracking-wider text-textMuted">Position</span>
                         <span className="inline-flex">
                           <SignalBadge tone={positionTone(meta.position)}>
                             {meta.position === 'FLAT' ? 'No position' : meta.position}
@@ -282,7 +282,7 @@ const Ideas = () => {
         })}
         {shown.length === 0 && (
           <Panel className="h-40" bodyClassName="flex items-center justify-center">
-            <span className="font-mono text-[11px] text-textMuted uppercase tracking-widest">
+            <span className="font-mono text-label text-textMuted uppercase tracking-widest">
               No ideas match this filter
             </span>
           </Panel>

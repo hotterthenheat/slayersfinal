@@ -60,7 +60,7 @@ const ScannerRowDrawer = ({ row, spot, onClose }: ScannerRowDrawerProps) => {
           <>
             <div className="flex items-center gap-2 flex-wrap">
               <span
-                className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[13px] font-semibold ${
+                className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-data font-semibold ${
                   row.right === 'C'
                     ? 'border-bull/30 bg-bull/10 text-bull'
                     : 'border-bear/30 bg-bear/10 text-bear'
@@ -71,7 +71,7 @@ const ScannerRowDrawer = ({ row, spot, onClose }: ScannerRowDrawerProps) => {
               </span>
               <SignalBadge tone={SENT_TONE[row.sentiment]}>{row.sentiment}</SignalBadge>
             </div>
-            <div className="mt-1 flex items-center gap-2 font-mono text-[11px] text-textSecondary tnum">
+            <div className="mt-1 flex items-center gap-2 font-mono text-label text-textSecondary tnum">
               <span>{row.expiry} · {row.dte}d</span>
               <span className="text-textMuted">·</span>
               <span className="uppercase">last {row.last}</span>
@@ -85,7 +85,7 @@ const ScannerRowDrawer = ({ row, spot, onClose }: ScannerRowDrawerProps) => {
           {/* Headline premium + conviction */}
           <div className="inst-surface rounded-md px-4 py-3 flex items-end justify-between gap-3">
             <div className="flex flex-col gap-0.5 min-w-0">
-              <span className="font-mono text-[11px] uppercase tracking-widest text-textMuted">Contract Premium</span>
+              <span className="font-mono text-label uppercase tracking-widest text-textMuted">Contract Premium</span>
               <span
                 className={`font-mono text-xl font-bold tnum ${
                   row.premium >= 1_000_000 ? 'text-king' : 'text-textPrimary'
@@ -95,7 +95,7 @@ const ScannerRowDrawer = ({ row, spot, onClose }: ScannerRowDrawerProps) => {
               </span>
             </div>
             <div className="flex flex-col items-end gap-0.5 shrink-0">
-              <span className="font-mono text-[11px] uppercase tracking-widest text-textMuted">Conviction</span>
+              <span className="font-mono text-label uppercase tracking-widest text-textMuted">Conviction</span>
               <span
                 className={`font-mono text-base font-bold tnum ${
                   row.bullScore > 15 ? 'text-bull' : row.bullScore < -15 ? 'text-bear' : 'text-textMuted'
@@ -110,7 +110,7 @@ const ScannerRowDrawer = ({ row, spot, onClose }: ScannerRowDrawerProps) => {
           {/* Contract drilldown — this contract's flow + underlying net premium */}
           <Suspense
             fallback={
-              <div className="h-[380px] rounded-md inst-surface flex items-center justify-center font-mono text-[11px] text-textMuted uppercase tracking-widest">
+              <div className="h-[380px] rounded-md inst-surface flex items-center justify-center font-mono text-label text-textMuted uppercase tracking-widest">
                 Loading drilldown…
               </div>
             }

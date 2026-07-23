@@ -97,13 +97,32 @@ function buildNodes(snapshot: MarketSnapshot, metric: GexMetric, range: StrikeRa
 }
 
 // ---- strike × expiry matrix ---------------------------------------------------
+// Keyed by days-to-expiry; the header shows the real calendar date, not "7D",
+// since nobody converts a day-count to a date in their head at the tape.
 const MATRIX_EXPIRIES = [
-  { label: '0DTE', t: 0.003, decay: 1 },
-  { label: '1D', t: 0.008, decay: 0.52 },
-  { label: '2D', t: 0.012, decay: 0.38 },
-  { label: '5D', t: 0.024, decay: 0.22 },
-  { label: '7D', t: 0.032, decay: 0.16 },
+  { dte: 0, t: 0.003, decay: 1 },
+  { dte: 1, t: 0.008, decay: 0.52 },
+  { dte: 2, t: 0.012, decay: 0.38 },
+  { dte: 5, t: 0.024, decay: 0.22 },
+  { dte: 7, t: 0.032, decay: 0.16 },
 ];
+
+const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** Days-to-expiry → label. Same-day keeps "0DTE" (traders read it instantly);
+    every later expiry shows its actual date (e.g. "Jul 24"), skipping weekends
+    since listed options expire on trading days. */
+function expiryLabel(dte: number): string {
+  if (dte === 0) return '0DTE';
+  const d = new Date();
+  let added = 0;
+  while (added < dte) {
+    d.setDate(d.getDate() + 1);
+    const wd = d.getDay();
+    if (wd !== 0 && wd !== 6) added += 1; // skip Sat/Sun
+  }
+  return `${MONTH_ABBR[d.getMonth()]} ${d.getDate()}`;
+}
 
 function buildMatrix(snapshot: MarketSnapshot, metric: GexMetric, range: StrikeRange, kingStrike: number): GexMatrixData {
   const { ticker, chain, spot, plan } = snapshot;
@@ -118,7 +137,7 @@ function buildMatrix(snapshot: MarketSnapshot, metric: GexMetric, range: StrikeR
   const cells: MatrixCell[][] = window.map(node => {
     const base = metricValue(node, metric);
     return MATRIX_EXPIRIES.map((exp, c) => {
-      const noise = h01(`${ticker}-${node.strike}-${exp.label}`);
+      const noise = h01(`${ticker}-${node.strike}-${exp.dte}`);
       // Farther expiries decay and occasionally flip sign (charm/vanna migration)
       const flip = c > 0 && noise > 0.86 ? -1 : 1;
       const value = base * exp.decay * (0.55 + noise * 0.9) * flip;
@@ -144,7 +163,7 @@ function buildMatrix(snapshot: MarketSnapshot, metric: GexMetric, range: StrikeR
   };
 
   return {
-    expiries: MATRIX_EXPIRIES.map(e => e.label),
+    expiries: MATRIX_EXPIRIES.map(e => expiryLabel(e.dte)),
     strikes,
     cells,
     maxAbs,

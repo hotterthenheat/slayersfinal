@@ -44,7 +44,7 @@ const SetupsFeed = ({ groups, selectedSetupId, onSelectSetup, onOpenAnalysis }: 
               <span className="font-mono text-xs font-semibold text-textPrimary tnum">
                 ${group.spot.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
-              <span className="ml-auto font-mono text-[10px] uppercase tracking-widest text-textMuted">
+              <span className="ml-auto font-mono text-micro uppercase tracking-widest text-textMuted">
                 Strongest → weakest
               </span>
             </div>
@@ -80,7 +80,7 @@ const SetupsFeed = ({ groups, selectedSetupId, onSelectSetup, onOpenAnalysis }: 
       </AnimatePresence>
 
       {groups.length === 0 && (
-        <div className="inst-surface rounded-md py-12 text-center font-mono text-[11px] text-textMuted">
+        <div className="inst-surface rounded-md py-12 text-center font-mono text-label text-textMuted">
           No setups meet this scanner's threshold right now
         </div>
       )}

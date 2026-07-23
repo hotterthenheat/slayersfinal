@@ -81,24 +81,24 @@ function dteFromISO(iso: string): number {
 const FactorRow = ({ label, weight, score, detail }: { label: string; weight: number; score: number; detail: string }) => (
   <div className="flex flex-col gap-1">
     <div className="flex items-center gap-2">
-      <span className="w-32 shrink-0 font-mono text-[11px] uppercase tracking-wider text-textSecondary">{label}</span>
-      <span className="font-mono text-[10px] text-textMuted tnum">×{weight.toFixed(2)}</span>
+      <span className="w-32 shrink-0 font-mono text-label uppercase tracking-wider text-textSecondary">{label}</span>
+      <span className="font-mono text-micro text-textMuted tnum">×{weight.toFixed(2)}</span>
       <span className="flex-1 h-[4px] rounded-full bg-white/[0.06] overflow-hidden">
         <span
           className={`block h-full rounded-full ${score >= 60 ? 'holo-bar' : score >= 40 ? 'bg-white/30' : 'bg-bear/70'}`}
           style={{ width: `${score}%` }}
         />
       </span>
-      <span className="w-7 shrink-0 font-mono text-[12px] font-semibold text-textPrimary tnum text-right">{score}</span>
+      <span className="w-7 shrink-0 font-mono text-caption font-semibold text-textPrimary tnum text-right">{score}</span>
     </div>
-    <p className="pl-32 text-[11px] text-textMuted leading-snug">{detail}</p>
+    <p className="pl-32 text-label text-textMuted leading-snug">{detail}</p>
   </div>
 );
 
 /** Small label/value cell for the analysis stat grid. */
 const Cell = ({ k, v, tone = 'neutral' }: { k: string; v: string; tone?: Tone }) => (
   <div className="border border-borderSubtle bg-inset rounded-md px-2.5 py-2">
-    <div className="font-mono text-[11px] uppercase tracking-widest text-textMuted">{k}</div>
+    <div className="font-mono text-label uppercase tracking-widest text-textMuted">{k}</div>
     <div className={`mt-1 font-mono text-sm font-semibold tnum ${tone === 'bull' ? 'text-bull' : tone === 'bear' ? 'text-bear' : tone === 'warn' ? 'text-warn' : 'text-textPrimary'}`}>{v}</div>
   </div>
 );
@@ -118,17 +118,17 @@ const Field = ({
   children: ReactNode;
 }) => (
   <div className={`flex flex-col gap-1.5 min-w-0 ${className}`}>
-    <span className="inline-flex items-center gap-1.5 font-mono text-[11px] font-medium uppercase tracking-wider text-textSecondary">
+    <span className="inline-flex items-center gap-1.5 font-mono text-label font-medium uppercase tracking-wider text-textSecondary">
       {icon}
       {label}
     </span>
     {children}
-    {hint != null && <span className="font-mono text-[10px] text-textMuted leading-tight tnum">{hint}</span>}
+    {hint != null && <span className="font-mono text-micro text-textMuted leading-tight tnum">{hint}</span>}
   </div>
 );
 
 const inputBase =
-  'w-full bg-inputBg border border-borderSubtle focus:border-borderMuted rounded-md px-2.5 py-1.5 font-mono text-[12px] text-textPrimary placeholder:text-textMuted outline-none tnum';
+  'w-full bg-inputBg border border-borderSubtle focus:border-borderMuted rounded-md px-2.5 py-1.5 font-mono text-caption text-textPrimary placeholder:text-textMuted outline-none tnum';
 
 interface ContractWeigherProps {
   snapshot: MarketSnapshot;
@@ -325,7 +325,7 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
 
             {/* Side */}
             <Field label="Side">
-              <div className="inline-flex w-full rounded-md overflow-hidden border border-borderSubtle font-mono text-[12px]">
+              <div className="inline-flex w-full rounded-md overflow-hidden border border-borderSubtle font-mono text-caption">
                 {(['C', 'P'] as const).map(r => (
                   <button
                     key={r}
@@ -358,7 +358,7 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
                     const v = parseFloat(e.target.value);
                     if (Number.isFinite(v)) setStrike(v);
                   }}
-                  className="min-w-0 flex-1 bg-transparent text-center font-mono text-[12px] text-textPrimary outline-none focus:text-select tnum"
+                  className="min-w-0 flex-1 bg-transparent text-center font-mono text-caption text-textPrimary outline-none focus:text-select tnum"
                 />
                 <button onClick={() => setStrike(s => s + step)} className="px-2.5 py-1.5 text-textMuted hover:text-textPrimary" aria-label="Raise strike">
                   +
@@ -385,7 +385,7 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
                     <button
                       key={d}
                       onClick={() => setExpiryDte(d)}
-                      className={`px-2 py-0.5 rounded border font-mono text-[11px] transition-colors ${
+                      className={`px-2 py-0.5 rounded border font-mono text-label transition-colors ${
                         dte === d ? 'border-borderMuted bg-white/[0.06] text-textPrimary' : 'border-borderSubtle text-textMuted hover:text-textSecondary'
                       }`}
                     >
@@ -426,7 +426,7 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
                   onChange={e => setExpMoveInput(e.target.value)}
                   className={`${inputBase} pr-6`}
                 />
-                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 font-mono text-[11px] text-textMuted">%</span>
+                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 font-mono text-label text-textMuted">%</span>
               </div>
             </Field>
 
@@ -437,7 +437,7 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
               hint={`$${costPerContract.toFixed(0)} / contract at mid`}
             >
               <div className="relative">
-                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 font-mono text-[11px] text-textMuted">$</span>
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 font-mono text-label text-textMuted">$</span>
                 <input
                   type="number"
                   value={budgetInput}
@@ -453,7 +453,7 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
           <div className="border-t border-borderSubtle pt-3">
             <button
               onClick={() => setShowCmd(s => !s)}
-              className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-textMuted hover:text-textSecondary transition-colors"
+              className="inline-flex items-center gap-1.5 font-mono text-label uppercase tracking-wider text-textMuted hover:text-textSecondary transition-colors"
             >
               <Terminal className="w-3 h-3" />
               Command shortcut
@@ -468,12 +468,12 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
                     onChange={e => setQuery(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && submitQuery()}
                     placeholder="e.g. SPY 500C 7  ·  strike · call/put · days"
-                    className="w-full bg-inputBg border border-borderSubtle focus:border-borderMuted rounded-md pl-8 pr-3 py-2 font-mono text-[12px] text-textPrimary placeholder:text-textMuted outline-none"
+                    className="w-full bg-inputBg border border-borderSubtle focus:border-borderMuted rounded-md pl-8 pr-3 py-2 font-mono text-caption text-textPrimary placeholder:text-textMuted outline-none"
                   />
                 </div>
                 <button
                   onClick={submitQuery}
-                  className="px-3 py-2 rounded-md border border-borderMuted bg-white/[0.04] text-textPrimary font-mono text-[11px] font-semibold uppercase tracking-wider hover:bg-white/[0.07] transition-colors"
+                  className="px-3 py-2 rounded-md border border-borderMuted bg-white/[0.04] text-textPrimary font-mono text-label font-semibold uppercase tracking-wider hover:bg-white/[0.07] transition-colors"
                 >
                   Parse
                 </button>
@@ -498,7 +498,7 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
           actions={
             <button
               onClick={toggleTrack}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border font-mono text-[11px] font-semibold uppercase tracking-wider transition-colors ${
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border font-mono text-label font-semibold uppercase tracking-wider transition-colors ${
                 tracked ? 'border-bull/40 bg-bull/10 text-bull' : 'border-borderSubtle text-textSecondary hover:text-textPrimary hover:border-borderMuted'
               }`}
             >
@@ -513,7 +513,7 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
                 {weighed.composite}
               </span>
               <SignalBadge tone={tone}>{verdictLabel[weighed.verdict]}</SignalBadge>
-              <span className="ml-auto font-mono text-[11px] text-textMuted tnum">
+              <span className="ml-auto font-mono text-label text-textMuted tnum">
                 ${weighed.mid.toFixed(2)} mid · Δ{weighed.delta.toFixed(2)} · IV {weighed.ivPct.toFixed(0)}%
               </span>
             </div>
@@ -537,11 +537,11 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
 
             <div className="border-t border-borderSubtle pt-3 flex flex-col gap-2">
               <p className="text-xs leading-relaxed">
-                <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-bull mr-2">Edge</span>
+                <span className="font-mono text-label font-semibold uppercase tracking-wider text-bull mr-2">Edge</span>
                 <span className="text-textSecondary">{weighed.edge}</span>
               </p>
               <p className="text-xs leading-relaxed">
-                <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-bear mr-2">Risk</span>
+                <span className="font-mono text-label font-semibold uppercase tracking-wider text-bear mr-2">Risk</span>
                 <span className="text-textSecondary">{weighed.risk}</span>
               </p>
             </div>
@@ -563,7 +563,7 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
               <SignalBadge tone={clearsBreakeven ? 'bull' : 'warn'} dot>
                 {clearsBreakeven ? 'Clears breakeven' : 'Short of breakeven'}
               </SignalBadge>
-              <span className="font-mono text-[11px] text-textMuted tnum">
+              <span className="font-mono text-label text-textMuted tnum">
                 your {effExpMove.toFixed(1)}% vs {weighed.breakevenMovePct.toFixed(1)}% BE
               </span>
             </div>
@@ -588,7 +588,7 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
                   ? ` Your $${budget.toFixed(0)} budget clears ${contractsInBudget} contract${contractsInBudget > 1 ? 's' : ''} at the $${costPerContract.toFixed(0)} mid.`
                   : ` Your $${budget.toFixed(0)} budget is under the $${costPerContract.toFixed(0)} single-contract mid.`)}
             </p>
-            <p className="font-mono text-[10px] text-textMuted leading-relaxed border-t border-borderSubtle pt-2.5">
+            <p className="font-mono text-micro text-textMuted leading-relaxed border-t border-borderSubtle pt-2.5">
               Sizing off the mid × {CONTRACT_MULTIPLIER}-share multiplier. Expected-move field defaults to the 1σ move; override it to stress your own thesis.
             </p>
           </div>
@@ -674,7 +674,7 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
               ? `Spread round-trip plus a day of theta (${friction.toFixed(1)}%) is wider than the 1σ move (${weighed.expectedMovePct.toFixed(1)}%) — you'd need a fast, above-expected move just to clear the toll.`
               : `The 1σ move (${weighed.expectedMovePct.toFixed(1)}%) clears the friction (${friction.toFixed(1)}%) — the edge is capturable if you work a limit near $${expFill.toFixed(2)} instead of paying the offer.`}
           </p>
-          <p className="font-mono text-[10px] text-textMuted leading-relaxed border-t border-borderSubtle pt-2.5">
+          <p className="font-mono text-micro text-textMuted leading-relaxed border-t border-borderSubtle pt-2.5">
             Fills & slippage read from the spread and open interest — work a limit near the mid rather than paying the offer.
           </p>
         </div>

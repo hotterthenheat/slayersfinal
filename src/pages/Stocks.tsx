@@ -64,14 +64,14 @@ const betaOf = (ticker: string) => lookup(ticker)?.beta ?? null;
 /** Sleeve meter — one thin bar per scoring sleeve; the composite's anatomy. */
 const SleeveBar = ({ label, value, title }: { label: string; value: number; title?: string }) => (
   <div className="flex items-center gap-2 min-w-0" title={title}>
-    <span className="w-9 shrink-0 font-mono text-[11px] uppercase tracking-wider text-textSecondary">{label}</span>
+    <span className="w-9 shrink-0 font-mono text-label uppercase tracking-wider text-textSecondary">{label}</span>
     <span className="flex-1 h-[3px] rounded-full bg-white/[0.06] overflow-hidden">
       <span
         className={`block h-full rounded-full ${value >= 60 ? 'bg-bull/90' : value >= 40 ? 'bg-white/30' : 'bg-bear/70'}`}
         style={{ width: `${value}%` }}
       />
     </span>
-    <span className="w-6 shrink-0 font-mono text-[11px] text-textSecondary tnum text-right">{value}</span>
+    <span className="w-6 shrink-0 font-mono text-label text-textSecondary tnum text-right">{value}</span>
   </div>
 );
 
@@ -105,14 +105,14 @@ const ScopeSelect = ({
         aria-expanded={open}
         className="flex items-center gap-2 border border-borderSubtle hover:border-borderMuted bg-panel rounded-md pl-2.5 pr-2 py-1.5 font-mono text-xs transition-colors min-w-[160px]"
       >
-        <span className="text-[11px] uppercase tracking-widest text-textMuted">{label}</span>
+        <span className="text-label uppercase tracking-widest text-textMuted">{label}</span>
         <span className="font-semibold text-textPrimary truncate">{value}</span>
         <ChevronDown className={`w-3.5 h-3.5 text-textMuted ml-auto transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
         <div
           role="listbox"
-          className="absolute left-0 top-full mt-1.5 z-40 w-60 max-h-72 overflow-y-auto border border-borderMuted bg-panel rounded-lg shadow-2xl shadow-black py-1 animate-slide-in"
+          className="absolute left-0 top-full mt-1.5 z-40 w-60 max-h-72 overflow-y-auto border border-borderMuted bg-panel rounded-lg shadow-overlay py-1 animate-slide-in"
         >
           {options.map(opt => {
             const active = opt.value === value;
@@ -132,7 +132,7 @@ const ScopeSelect = ({
                 <span className={`font-mono text-xs truncate flex-1 ${active ? 'text-select' : 'text-textPrimary'}`}>
                   {opt.label}
                 </span>
-                <span className="font-mono text-[11px] text-textMuted tnum">{opt.count}</span>
+                <span className="font-mono text-label text-textMuted tnum">{opt.count}</span>
               </button>
             );
           })}
@@ -296,7 +296,7 @@ const Stocks = () => {
       render: p => (
         <span className="flex flex-col">
           <span className="font-mono text-xs font-bold text-textPrimary">{p.ticker}</span>
-          <span className="text-[10px] text-textMuted truncate">{p.name}</span>
+          <span className="text-micro text-textMuted truncate">{p.name}</span>
         </span>
       ),
     },
@@ -304,7 +304,7 @@ const Stocks = () => {
       key: 'sector',
       header: 'Sector',
       sortValue: p => p.sector,
-      render: p => <span className="font-mono text-[11px] text-textSecondary">{p.sector}</span>,
+      render: p => <span className="font-mono text-label text-textSecondary">{p.sector}</span>,
     },
     {
       key: 'price',
@@ -314,7 +314,7 @@ const Stocks = () => {
       render: p => (
         <span className="flex flex-col items-end">
           <span className="font-mono text-xs text-textPrimary tnum">${p.price.toFixed(2)}</span>
-          <span className={`font-mono text-[10px] tnum ${p.changePct >= 0 ? 'text-bull' : 'text-bear'}`}>
+          <span className={`font-mono text-micro tnum ${p.changePct >= 0 ? 'text-bull' : 'text-bear'}`}>
             {p.changePct >= 0 ? '+' : ''}
             {p.changePct.toFixed(2)}%
           </span>
@@ -328,7 +328,7 @@ const Stocks = () => {
       sortValue: p => betaOf(p.ticker) ?? 0,
       render: p => {
         const b = betaOf(p.ticker);
-        return <span className="font-mono text-[11px] text-textSecondary tnum">{b != null ? b.toFixed(2) : '—'}</span>;
+        return <span className="font-mono text-label text-textSecondary tnum">{b != null ? b.toFixed(2) : '—'}</span>;
       },
     },
     {
@@ -418,14 +418,14 @@ const Stocks = () => {
                 }`}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-mono text-[11px] font-semibold text-textPrimary truncate">{s.sector}</span>
+                  <span className="font-mono text-label font-semibold text-textPrimary truncate">{s.sector}</span>
                   <SignalBadge tone={phaseTone[s.phase]}>{s.phase}</SignalBadge>
                 </div>
                 <div className="flex items-baseline gap-2">
                   <span className={`font-mono text-xl font-bold tnum ${s.verdict === 'OVERWEIGHT' ? 'text-bull' : s.verdict === 'UNDERWEIGHT' ? 'text-bear' : 'text-textPrimary'}`}>
                     {s.score}
                   </span>
-                  <span className={`font-mono text-[10px] uppercase tracking-wider ${sectorTone[s.verdict] === 'bull' ? 'text-bull' : sectorTone[s.verdict] === 'bear' ? 'text-bear' : 'text-textMuted'}`}>
+                  <span className={`font-mono text-micro uppercase tracking-wider ${sectorTone[s.verdict] === 'bull' ? 'text-bull' : sectorTone[s.verdict] === 'bear' ? 'text-bear' : 'text-textMuted'}`}>
                     {s.verdict}
                   </span>
                 </div>
@@ -435,7 +435,7 @@ const Stocks = () => {
                     style={{ width: `${s.score}%` }}
                   />
                 </div>
-                <div className="flex items-center justify-between font-mono text-[10px] tnum">
+                <div className="flex items-center justify-between font-mono text-micro tnum">
                   <span className={s.rs1w >= 0 ? 'text-bull' : 'text-bear'}>
                     1w {s.rs1w >= 0 ? '+' : ''}
                     {s.rs1w.toFixed(1)}%
@@ -446,7 +446,7 @@ const Stocks = () => {
                   </span>
                   <span className="text-textMuted">br {s.breadthPct}%</span>
                 </div>
-                <p className="text-[10px] text-textMuted leading-snug">{s.note}</p>
+                <p className="text-micro text-textMuted leading-snug">{s.note}</p>
               </div>
             );
           })}
@@ -466,7 +466,7 @@ const Stocks = () => {
           actions={
             <button
               onClick={() => setCompareSet(new Set())}
-              className="inline-flex items-center gap-1 px-2 py-1 rounded border border-borderSubtle bg-white/[0.02] font-mono text-[11px] uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:border-borderMuted transition-colors"
+              className="inline-flex items-center gap-1 px-2 py-1 rounded border border-borderSubtle bg-white/[0.02] font-mono text-label uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:border-borderMuted transition-colors"
             >
               <X className="w-3 h-3" /> Clear
             </button>
@@ -479,7 +479,7 @@ const Stocks = () => {
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="font-mono text-sm font-bold text-textPrimary">{p.ticker}</div>
-                    <div className="text-[10px] text-textMuted truncate">{p.name}</div>
+                    <div className="text-micro text-textMuted truncate">{p.name}</div>
                   </div>
                   <button
                     onClick={() => toggleCompare(p.ticker)}
@@ -491,7 +491,7 @@ const Stocks = () => {
                 </div>
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="font-mono text-xs text-textPrimary tnum">${p.price.toFixed(2)}</span>
-                  <span className={`font-mono text-[11px] tnum ${p.changePct >= 0 ? 'text-bull' : 'text-bear'}`}>
+                  <span className={`font-mono text-label tnum ${p.changePct >= 0 ? 'text-bull' : 'text-bear'}`}>
                     {p.changePct >= 0 ? '+' : ''}
                     {p.changePct.toFixed(2)}%
                   </span>
@@ -501,7 +501,7 @@ const Stocks = () => {
                   <span className={`font-mono text-lg font-bold tnum ${p.composite >= 68 ? 'text-bull' : p.composite <= 46 ? 'text-bear' : 'text-textPrimary'}`}>
                     {p.composite}
                   </span>
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted">score</span>
+                  <span className="font-mono text-micro uppercase tracking-wider text-textMuted">score</span>
                 </div>
                 <div className="flex flex-col gap-1 pt-0.5">
                   <SleeveBar label="Mom" value={p.sleeves.momentum} />
@@ -526,33 +526,33 @@ const Stocks = () => {
         flush
         actions={
           <div className="flex items-center gap-2">
-            <span className="hidden sm:inline font-mono text-[11px] text-textMuted tnum">
+            <span className="hidden sm:inline font-mono text-label text-textMuted tnum">
               {rows.length}/{picks.length}
             </span>
             <div className="relative">
               <button
                 onClick={() => setFactorsOpen(o => !o)}
                 aria-expanded={factorsOpen}
-                className="inline-flex items-center gap-1 px-2 py-1 rounded border border-borderSubtle bg-white/[0.02] font-mono text-[11px] uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:border-borderMuted transition-colors"
+                className="inline-flex items-center gap-1 px-2 py-1 rounded border border-borderSubtle bg-white/[0.02] font-mono text-label uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:border-borderMuted transition-colors"
               >
                 <Info className="w-3 h-3" /> Factors
               </button>
               {factorsOpen && (
                 <>
                   <div className="fixed inset-0 z-30" onClick={() => setFactorsOpen(false)} />
-                  <div className="absolute right-0 top-full mt-1.5 z-40 w-72 border border-borderMuted bg-panel rounded-lg shadow-2xl shadow-black p-3 animate-slide-in">
-                    <div className="font-mono text-[11px] uppercase tracking-widest text-textSecondary mb-2">
+                  <div className="absolute right-0 top-full mt-1.5 z-40 w-72 border border-borderMuted bg-panel rounded-lg shadow-overlay p-3 animate-slide-in">
+                    <div className="font-mono text-label uppercase tracking-widest text-textSecondary mb-2">
                       What the sleeves mean
                     </div>
                     <div className="flex flex-col gap-2.5">
                       {FACTOR_GUIDE.map(f => (
                         <div key={f.key} className="flex flex-col gap-0.5">
-                          <span className="font-mono text-[12px] font-semibold text-textPrimary">{f.name}</span>
-                          <span className="text-[11px] text-textMuted leading-snug">{f.desc}</span>
+                          <span className="font-mono text-caption font-semibold text-textPrimary">{f.name}</span>
+                          <span className="text-label text-textMuted leading-snug">{f.desc}</span>
                         </div>
                       ))}
                     </div>
-                    <p className="mt-2.5 pt-2.5 border-t border-borderSubtle text-[11px] text-textMuted leading-snug">
+                    <p className="mt-2.5 pt-2.5 border-t border-borderSubtle text-label text-textMuted leading-snug">
                       The composite blends all four; ACCUMULATE / HOLD / AVOID follow from where a name's composite lands.
                     </p>
                   </div>
@@ -562,7 +562,7 @@ const Stocks = () => {
             <button
               onClick={() => setCompareMode(m => !m)}
               aria-pressed={compareMode}
-              className={`inline-flex items-center gap-1 px-2 py-1 rounded border font-mono text-[11px] uppercase tracking-wider transition-colors ${
+              className={`inline-flex items-center gap-1 px-2 py-1 rounded border font-mono text-label uppercase tracking-wider transition-colors ${
                 compareMode
                   ? 'border-select/40 bg-select/10 text-select'
                   : 'border-borderSubtle bg-white/[0.02] text-textSecondary hover:text-textPrimary hover:border-borderMuted'
@@ -578,17 +578,17 @@ const Stocks = () => {
           <SlidersHorizontal className="w-3.5 h-3.5 text-textMuted shrink-0" />
           <ScopeSelect value={scopeLabel} label="Universe" options={scopeOptions} onChange={setScope} />
           <div className="flex items-center gap-1.5" title="Size / liquidity lens — share price stands in as the size proxy">
-            <span className="font-mono text-[11px] uppercase tracking-widest text-textMuted">Price</span>
+            <span className="font-mono text-label uppercase tracking-widest text-textMuted">Price</span>
             <SegmentedControl ariaLabel="Price band" options={PRICE_OPTIONS} value={priceBand} onChange={setPriceBand} />
           </div>
           <div className="flex items-center gap-1.5" title="Beta lens — defensive vs cyclical from the shared universe">
-            <span className="font-mono text-[11px] uppercase tracking-widest text-textMuted">Risk</span>
+            <span className="font-mono text-label uppercase tracking-widest text-textMuted">Risk</span>
             <SegmentedControl ariaLabel="Beta band" options={BETA_OPTIONS} value={betaBand} onChange={setBetaBand} />
           </div>
           {activeFilters > 0 && (
             <button
               onClick={clearFilters}
-              className="inline-flex items-center gap-1 px-2 py-1 rounded border border-borderSubtle bg-white/[0.02] font-mono text-[11px] uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:border-borderMuted transition-colors"
+              className="inline-flex items-center gap-1 px-2 py-1 rounded border border-borderSubtle bg-white/[0.02] font-mono text-label uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:border-borderMuted transition-colors"
             >
               <X className="w-3 h-3" /> Clear {activeFilters}
             </button>

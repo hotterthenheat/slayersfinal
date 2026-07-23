@@ -75,7 +75,7 @@ const ExposureProfile = () => {
   if (!data) {
     return (
       <Panel className="h-64" bodyClassName="flex items-center justify-center">
-        <span className="font-mono text-[11px] text-textMuted uppercase tracking-widest">
+        <span className="font-mono text-label text-textMuted uppercase tracking-widest">
           Awaiting feed initialization…
         </span>
       </Panel>
@@ -107,13 +107,13 @@ const ExposureProfile = () => {
           value={windowHalf}
           onChange={v => setWindowHalf(v as '10' | '15')}
         />
-        <span className="ml-auto font-mono text-[10px] text-textMuted uppercase tracking-widest tnum">
+        <span className="ml-auto font-mono text-micro text-textMuted uppercase tracking-widest tnum">
           scan {lastScanAt} · 10s
         </span>
       </div>
 
       {/* Header note — dealer-sign convention + units (read the same way across every panel) */}
-      <p className="font-mono text-[11px] leading-relaxed text-textMuted">
+      <p className="font-mono text-label leading-relaxed text-textMuted">
         <span className="text-textSecondary font-semibold uppercase tracking-wider">Sign</span> positive net = dealer short
         gamma <span className="text-textSecondary">(upside supply)</span> · negative = dealer long gamma{' '}
         <span className="text-textSecondary">(downside support)</span>.{' '}
@@ -131,11 +131,11 @@ const ExposureProfile = () => {
             transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
             className="flex items-center gap-4 flex-wrap border border-select/30 bg-select/[0.04] rounded-md px-3 py-2"
           >
-            <span className="inline-flex items-center rounded-full border border-select/40 bg-select/10 px-2 py-0.5 font-mono text-[11px] font-semibold text-select tnum">
+            <span className="inline-flex items-center rounded-full border border-select/40 bg-select/10 px-2 py-0.5 font-mono text-label font-semibold text-select tnum">
               {data.ticker} {selectedRow.strike % 1 === 0 ? selectedRow.strike.toFixed(0) : selectedRow.strike.toFixed(2)}
             </span>
             {(['gex', 'dex', 'vex'] as const).map(k => (
-              <span key={k} className="font-mono text-[10px] uppercase tracking-wider text-textMuted tnum">
+              <span key={k} className="font-mono text-micro uppercase tracking-wider text-textMuted tnum">
                 {k}{' '}
                 <span className="text-bear">{fmtUsd(selectedRow[k].put)}</span>
                 {' / '}
@@ -147,7 +147,7 @@ const ExposureProfile = () => {
             <span className="ml-auto flex items-center gap-2">
               <button
                 onClick={() => navigate('/pulse', { state: { focusPrice: selectedRow.strike } })}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-borderSubtle bg-white/[0.03] hover:bg-white/[0.06] font-mono text-[10px] font-semibold uppercase tracking-wider text-textPrimary transition-colors"
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-borderSubtle bg-white/[0.03] hover:bg-white/[0.06] font-mono text-micro font-semibold uppercase tracking-wider text-textPrimary transition-colors"
               >
                 View on chart <ArrowUpRight className="w-3 h-3" />
               </button>

@@ -45,8 +45,8 @@ type ViewKey = (typeof VIEWS)[number]['value'];
 
 const VIEW_HINT: Record<ViewKey, string> = {
   active: 'live watch — nothing flagged yet',
-  triggered: 'engine currently reads ENTER',
-  invalidated: 'engine currently reads EXIT',
+  triggered: 'engine currently reads QUALIFIED',
+  invalidated: 'engine currently reads FADED',
   expiring: 'inside a day of expiry',
   closed: 'expired or marked closed',
   alerts: 'flags recomputed from the current read',
@@ -183,7 +183,7 @@ function inView(row: Row, view: ViewKey): boolean {
 const StatusChip = ({ status, pinned }: { status: UserStatus; pinned: boolean }) => {
   if (status === 'closed') {
     return (
-      <span className="font-mono text-[11px] uppercase tracking-wider text-textMuted">
+      <span className="font-mono text-label uppercase tracking-wider text-textMuted">
         {STATUS_LABEL.closed}
         {pinned && <span className="ml-1 text-select" title="Pinned by you">•</span>}
       </span>
@@ -199,8 +199,8 @@ const StatusChip = ({ status, pinned }: { status: UserStatus; pinned: boolean })
 
 const MiniStat = ({ label, children }: { label: string; children: ReactNode }) => (
   <div className="inst-surface rounded px-2.5 py-2">
-    <div className="font-mono text-[10px] uppercase tracking-widest text-textSecondary">{label}</div>
-    <div className="mt-0.5 font-mono text-[13px] font-semibold tnum text-textPrimary">{children}</div>
+    <div className="font-mono text-micro uppercase tracking-widest text-textSecondary">{label}</div>
+    <div className="mt-0.5 font-mono text-data font-semibold tnum text-textPrimary">{children}</div>
   </div>
 );
 
@@ -225,7 +225,7 @@ const ItemDetail = ({ row, onStatus, onNotes, onReview, onUntrack }: ItemDetailP
         <span className="font-mono text-sm font-bold text-textPrimary tracking-tight">{live.contract}</span>
         {expired ? <SignalBadge tone="neutral">EXPIRED</SignalBadge> : <VerdictBadge verdict={live.verdict} dot />}
         {row.expiringSoon && !expired && <SignalBadge tone="warn">EXPIRING</SignalBadge>}
-        <span className="ml-auto font-mono text-[11px] text-textMuted uppercase tracking-wider">
+        <span className="ml-auto font-mono text-label text-textMuted uppercase tracking-wider">
           Tracked {new Date(tracked.trackedAt).toLocaleDateString()}
         </span>
       </div>
@@ -236,7 +236,7 @@ const ItemDetail = ({ row, onStatus, onNotes, onReview, onUntrack }: ItemDetailP
           <span className="flex items-baseline gap-1.5">
             {live.score}
             {scoreDelta !== 0 && (
-              <span className={`text-[11px] ${scoreDelta > 0 ? 'text-bull' : 'text-bear'}`}>
+              <span className={`text-label ${scoreDelta > 0 ? 'text-bull' : 'text-bear'}`}>
                 {scoreDelta > 0 ? '+' : ''}
                 {scoreDelta}
               </span>
@@ -256,8 +256,8 @@ const ItemDetail = ({ row, onStatus, onNotes, onReview, onUntrack }: ItemDetailP
       {/* Invalidation context — straight from the live setup */}
       {!expired && (
         <div className="border-l-2 border-borderSubtle pl-3">
-          <div className="font-mono text-[10px] uppercase tracking-widest text-textSecondary">Invalidation</div>
-          <p className="mt-0.5 text-[12px] text-textSecondary leading-snug">
+          <div className="font-mono text-micro uppercase tracking-widest text-textSecondary">Invalidation</div>
+          <p className="mt-0.5 text-caption text-textSecondary leading-snug">
             {live.invalidationReason}{' '}
             <span className="text-textMuted">— below ${live.invalidationPrice.toFixed(2)}</span>
           </p>
@@ -270,7 +270,7 @@ const ItemDetail = ({ row, onStatus, onNotes, onReview, onUntrack }: ItemDetailP
           {row.attention.map(a => (
             <span
               key={a}
-              className="inline-flex items-center rounded border border-warn/25 bg-warn/10 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-warn"
+              className="inline-flex items-center rounded border border-warn/25 bg-warn/10 px-1.5 py-0.5 font-mono text-micro uppercase tracking-wider text-warn"
             >
               {a}
             </span>
@@ -280,7 +280,7 @@ const ItemDetail = ({ row, onStatus, onNotes, onReview, onUntrack }: ItemDetailP
 
       {/* Status picker */}
       <div>
-        <div className="font-mono text-[11px] uppercase tracking-widest text-textSecondary mb-1.5">Status</div>
+        <div className="font-mono text-label uppercase tracking-widest text-textSecondary mb-1.5">Status</div>
         <div className="flex flex-wrap gap-1.5">
           {STATUS_PICKS.map(o => {
             const active = current === o.value;
@@ -289,7 +289,7 @@ const ItemDetail = ({ row, onStatus, onNotes, onReview, onUntrack }: ItemDetailP
                 key={o.value}
                 onClick={() => onStatus(tracked.id, o.value === 'auto' ? null : o.value)}
                 aria-pressed={active}
-                className={`px-2.5 py-1 rounded border font-mono text-[11px] uppercase tracking-wider transition-colors ${
+                className={`px-2.5 py-1 rounded border font-mono text-label uppercase tracking-wider transition-colors ${
                   active
                     ? STATUS_PICK_ACTIVE[o.value]
                     : 'border-borderSubtle text-textSecondary hover:text-textPrimary hover:bg-white/[0.03]'
@@ -300,7 +300,7 @@ const ItemDetail = ({ row, onStatus, onNotes, onReview, onUntrack }: ItemDetailP
             );
           })}
         </div>
-        <p className="mt-1.5 font-mono text-[10px] text-textMuted leading-relaxed">
+        <p className="mt-1.5 font-mono text-micro text-textMuted leading-relaxed">
           Auto follows the live engine read ({STATUS_LABEL[autoStatus(live, expired)].toLowerCase()}). Pin one to keep it in a
           view regardless.
         </p>
@@ -308,32 +308,32 @@ const ItemDetail = ({ row, onStatus, onNotes, onReview, onUntrack }: ItemDetailP
 
       {/* Notes */}
       <div>
-        <div className="font-mono text-[11px] uppercase tracking-widest text-textSecondary mb-1.5">Notes</div>
+        <div className="font-mono text-label uppercase tracking-widest text-textSecondary mb-1.5">Notes</div>
         <textarea
           value={row.notes}
           onChange={e => onNotes(tracked.id, e.target.value)}
           rows={4}
           placeholder="Your read on this setup — thesis, level to watch, why you're in or out…"
-          className="w-full resize-none rounded-md bg-inset border border-borderSubtle px-3 py-2 font-mono text-[12px] leading-relaxed text-textPrimary placeholder:text-textMuted focus:outline-none focus:border-white/20"
+          className="w-full resize-none rounded-md bg-inset border border-borderSubtle px-3 py-2 font-mono text-caption leading-relaxed text-textPrimary placeholder:text-textMuted focus:outline-none focus:border-white/20"
         />
-        <p className="mt-1 font-mono text-[10px] text-textMuted">Saved in this browser.</p>
+        <p className="mt-1 font-mono text-micro text-textMuted">Saved in this browser.</p>
       </div>
 
       {/* Actions */}
       <div className="flex items-center gap-2 pt-1 border-t border-borderSubtle">
         {expired ? (
-          <span className="font-mono text-[11px] text-textMuted uppercase tracking-wider">Expired — no live setup to review</span>
+          <span className="font-mono text-label text-textMuted uppercase tracking-wider">Expired — no live setup to review</span>
         ) : (
           <button
             onClick={() => onReview(tracked)}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-md border border-borderSubtle bg-white/[0.03] hover:bg-white/[0.06] font-mono text-[11px] text-textSecondary hover:text-textPrimary uppercase tracking-wider transition-colors"
+            className="flex items-center gap-1 px-3 py-1.5 rounded-md border border-borderSubtle bg-white/[0.03] hover:bg-white/[0.06] font-mono text-label text-textSecondary hover:text-textPrimary uppercase tracking-wider transition-colors"
           >
             <ArrowUpRight className="w-3 h-3" /> Review in Compass
           </button>
         )}
         <button
           onClick={() => onUntrack(tracked.id)}
-          className="flex items-center gap-1 px-3 py-1.5 rounded-md border border-bear/20 bg-bear/5 hover:bg-bear/10 font-mono text-[11px] text-bear uppercase tracking-wider transition-colors ml-auto"
+          className="flex items-center gap-1 px-3 py-1.5 rounded-md border border-bear/20 bg-bear/5 hover:bg-bear/10 font-mono text-label text-bear uppercase tracking-wider transition-colors ml-auto"
         >
           <Trash2 className="w-3 h-3" /> Untrack
         </button>
@@ -351,7 +351,7 @@ const COLUMNS: Column<Row>[] = [
     render: r => (
       <span className="flex flex-col">
         <span className="font-semibold text-textPrimary">{r.live.contract}</span>
-        <span className="text-[10px] text-textMuted uppercase tracking-wider">{r.tracked.scanner}</span>
+        <span className="text-micro text-textMuted uppercase tracking-wider">{r.tracked.scanner}</span>
       </span>
     ),
   },
@@ -381,7 +381,7 @@ const COLUMNS: Column<Row>[] = [
       <span className="flex items-center justify-end gap-1.5">
         <span className="text-textPrimary tnum">{r.live.score}</span>
         {r.scoreDelta !== 0 && (
-          <span className={`text-[10px] tnum ${r.scoreDelta > 0 ? 'text-bull' : 'text-bear'}`}>
+          <span className={`text-micro tnum ${r.scoreDelta > 0 ? 'text-bull' : 'text-bear'}`}>
             {r.scoreDelta > 0 ? '+' : ''}
             {r.scoreDelta}
           </span>
@@ -510,7 +510,7 @@ const Tracker = () => {
 
         const attention: string[] = [];
         if (status !== 'closed') {
-          if (live.verdict === 'EXIT') attention.push('Engine reads EXIT');
+          if (live.verdict === 'EXIT') attention.push('Engine reads FADED');
           if (expiringSoon) attention.push('Expires within a day');
           if (scoreDelta < 0) attention.push(`Score ${scoreDelta} vs track`);
         }
@@ -558,13 +558,13 @@ const Tracker = () => {
       {/* Empty state — a dense "get started" surface, not a blank panel */}
       {trackedSetups.length === 0 ? (
         <div className="flex flex-col gap-4 animate-view-in">
-          <Panel className="w-full" bodyClassName="py-8 px-6 flex flex-col md:flex-row md:items-center gap-6">
+          <Panel className="w-full" bodyClassName="py-6 px-6 flex flex-col md:flex-row md:items-center gap-6">
             <div className="flex-1 min-w-0">
               <div className="inline-flex w-11 h-11 rounded-lg border border-borderSubtle bg-inset items-center justify-center mb-3">
                 <Bookmark className="w-5 h-5 holo-text" />
               </div>
               <h2 className="text-lg font-semibold text-textPrimary">Nothing on watch yet</h2>
-              <p className="mt-1.5 text-[13px] text-textSecondary leading-relaxed max-w-xl">
+              <p className="mt-1.5 text-data text-textSecondary leading-relaxed max-w-xl">
                 The Tracker keeps your best ideas in one table and re-reads each one's score, signal and confidence from the
                 current market read every time you open it. Bookmark something from any desk below, then set a status and keep
                 notes as your thesis plays out.
@@ -577,9 +577,9 @@ const Tracker = () => {
                 { k: 'Notes', v: 'saved', s: 'in this browser' },
               ].map(x => (
                 <div key={x.k} className="border border-borderSubtle bg-inset rounded-lg px-3 py-2.5 text-center min-w-[92px]">
-                  <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted">{x.k}</div>
+                  <div className="font-mono text-micro uppercase tracking-widest text-textMuted">{x.k}</div>
                   <div className="mt-1 font-mono text-sm font-semibold holo-text">{x.v}</div>
-                  <div className="mt-0.5 text-[10px] text-textMuted">{x.s}</div>
+                  <div className="mt-0.5 text-micro text-textMuted">{x.s}</div>
                 </div>
               ))}
             </div>
@@ -587,20 +587,20 @@ const Tracker = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
             {[
-              { icon: Compass, title: 'Compass setups', body: 'Graded ENTER / EXIT trade setups with a full plan.', to: '/compass', cta: 'Open Compass' },
-              { icon: Scale, title: 'Contract Weigher', body: 'Weeklies, swings & LEAPS scored BUY / WATCH / FADE.', to: '/compass', cta: 'Weigh contracts' },
-              { icon: Radar, title: 'Trace flow', body: 'Notable options prints and dark-pool blocks.', to: '/trace/tracker', cta: 'Open Trace' },
+              { icon: Compass, title: 'Compass setups', body: 'Graded QUALIFIED / WATCH / FADED setups with a full plan.', to: '/compass', cta: 'Open Compass' },
+              { icon: Scale, title: 'Contract Weigher', body: 'Weeklies, swings & LEAPS scored STRONG / WATCH / WEAK.', to: '/compass', cta: 'Weigh contracts' },
+              { icon: Radar, title: 'Trace flow', body: 'Notable options prints and dark-pool blocks.', to: '/trace/scanner', cta: 'Open Trace' },
               { icon: CalendarClock, title: 'Earnings plays', body: 'Implied-vs-realized PLAY / FADE calls into prints.', to: '/earnings', cta: 'Open Earnings' },
             ].map(card => (
               <div key={card.title} className="inst-surface rounded-md p-4 flex flex-col gap-2.5">
                 <span className="inline-flex w-8 h-8 rounded-md border border-borderSubtle bg-inset items-center justify-center">
                   <card.icon className="w-4 h-4 text-textSecondary" />
                 </span>
-                <h3 className="font-mono text-[11px] font-semibold uppercase tracking-wider text-textPrimary">{card.title}</h3>
-                <p className="text-[11px] text-textMuted leading-relaxed flex-1">{card.body}</p>
+                <h3 className="font-mono text-label font-semibold uppercase tracking-wider text-textPrimary">{card.title}</h3>
+                <p className="text-label text-textMuted leading-relaxed flex-1">{card.body}</p>
                 <button
                   onClick={() => navigate(card.to)}
-                  className="mt-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md border border-borderSubtle bg-white/[0.03] hover:bg-white/[0.06] text-textSecondary hover:text-textPrimary font-mono text-[10px] font-semibold uppercase tracking-wider transition-colors"
+                  className="mt-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md border border-borderSubtle bg-white/[0.03] hover:bg-white/[0.06] text-textSecondary hover:text-textPrimary font-mono text-micro font-semibold uppercase tracking-wider transition-colors"
                 >
                   {card.cta} <ArrowUpRight className="w-3 h-3" />
                 </button>
@@ -610,7 +610,7 @@ const Tracker = () => {
         </div>
       ) : !marketData ? (
         <Panel className="h-64" bodyClassName="flex items-center justify-center">
-          <span className="font-mono text-[11px] text-textMuted uppercase tracking-widest">Reading tracked setups…</span>
+          <span className="font-mono text-label text-textMuted uppercase tracking-widest">Reading tracked setups…</span>
         </Panel>
       ) : (
         <div className="flex flex-col gap-4 animate-view-in">
@@ -620,7 +620,7 @@ const Tracker = () => {
             <StatCard
               label="Triggered"
               value={`${counts.triggered}`}
-              sub="engine reads ENTER"
+              sub="engine reads QUALIFIED"
               tone={counts.triggered > 0 ? 'bull' : 'neutral'}
             />
             <StatCard
@@ -640,7 +640,7 @@ const Tracker = () => {
           {/* Saved-view tabs */}
           <div className="flex items-center gap-3 flex-wrap">
             <SegmentedControl ariaLabel="Tracker view" options={viewOptions} value={view} onChange={setView} />
-            <span className="font-mono text-[11px] text-textMuted uppercase tracking-wider">{VIEW_HINT[view]}</span>
+            <span className="font-mono text-label text-textMuted uppercase tracking-wider">{VIEW_HINT[view]}</span>
           </div>
 
           {/* One primary table + per-item editor */}
@@ -677,8 +677,8 @@ const Tracker = () => {
               ) : (
                 <div className="h-48 flex flex-col items-center justify-center gap-2 text-center">
                   <Bookmark className="w-5 h-5 text-textMuted" />
-                  <span className="font-mono text-[11px] text-textSecondary uppercase tracking-wider">No item selected</span>
-                  <span className="text-[11px] text-textMuted max-w-[220px] leading-relaxed">
+                  <span className="font-mono text-label text-textSecondary uppercase tracking-wider">No item selected</span>
+                  <span className="text-label text-textMuted max-w-[220px] leading-relaxed">
                     Nothing in this view. Pick another tab, or select a row to set its status and notes.
                   </span>
                 </div>

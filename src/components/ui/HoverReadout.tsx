@@ -27,7 +27,7 @@ const HoverReadout = ({ x, y, children }: HoverReadoutProps) => {
   const vh = typeof window !== 'undefined' ? window.innerHeight : 900;
   return (
     <div
-      className="pointer-events-none fixed z-[60] rounded-md border border-borderMuted bg-panelRaised px-3 py-2 shadow-2xl shadow-black"
+      className="pointer-events-none fixed z-[60] rounded-md border border-borderMuted bg-panelRaised px-3 py-2 shadow-overlay"
       style={{ left: Math.min(x + 14, vw - 240), top: Math.min(y + 14, vh - 130) }}
     >
       {children}

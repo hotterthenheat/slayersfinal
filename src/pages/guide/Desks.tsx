@@ -147,7 +147,7 @@ const RESEARCH: { icon: LucideIcon; name: string; to: string; blurb: string }[] 
 
 const Block = ({ title, children }: { title: string; children: React.ReactNode }) => (
   <div>
-    <div className="font-mono text-[10px] font-semibold uppercase tracking-widest text-textMuted mb-1.5">{title}</div>
+    <div className="font-mono text-micro font-semibold uppercase tracking-widest text-textMuted mb-1.5">{title}</div>
     {children}
   </div>
 );
@@ -161,16 +161,16 @@ const Desks = () => (
             <span className="flex h-8 w-8 items-center justify-center rounded-md border border-borderSubtle bg-inset">
               <d.icon className="w-4 h-4 text-textSecondary" />
             </span>
-            <span className="font-mono text-[15px] font-bold uppercase tracking-wider text-textPrimary">{d.name}</span>
+            <span className="font-mono text-read font-bold uppercase tracking-wider text-textPrimary">{d.name}</span>
           </div>
           <Link
             to={d.to}
-            className="font-mono text-[11px] uppercase tracking-wider text-textMuted hover:text-textPrimary transition-colors"
+            className="font-mono text-label uppercase tracking-wider text-textMuted hover:text-textPrimary transition-colors"
           >
             Open {d.name} →
           </Link>
         </div>
-        <p className="text-[13.5px] text-textSecondary leading-relaxed -mt-1">{d.tagline}</p>
+        <p className="text-data text-textSecondary leading-relaxed -mt-1">{d.tagline}</p>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-4">
           <Block title="What it shows">
             <Points items={d.shows} />
@@ -182,7 +182,7 @@ const Desks = () => (
             <Points items={d.controls} />
           </Block>
           <Block title="A worked read">
-            <p className="text-[13px] text-textSecondary leading-relaxed rounded-md border border-borderSubtle bg-white/[0.02] px-3 py-2.5">
+            <p className="text-data text-textSecondary leading-relaxed rounded-md border border-borderSubtle bg-white/[0.02] px-3 py-2.5">
               {d.example}
             </p>
           </Block>
@@ -191,7 +191,7 @@ const Desks = () => (
     ))}
 
     <div>
-      <div className="font-mono text-[11px] font-semibold uppercase tracking-widest text-textMuted mb-3">
+      <div className="font-mono text-label font-semibold uppercase tracking-widest text-textMuted mb-3">
         Research desks
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
@@ -203,9 +203,9 @@ const Desks = () => (
           >
             <div className="flex items-center gap-2">
               <d.icon className="w-4 h-4 text-textSecondary group-hover:text-textPrimary transition-colors" />
-              <span className="font-mono text-[12px] font-bold uppercase tracking-wider text-textPrimary">{d.name}</span>
+              <span className="font-mono text-caption font-bold uppercase tracking-wider text-textPrimary">{d.name}</span>
             </div>
-            <p className="text-[12px] text-textMuted leading-relaxed">{d.blurb}</p>
+            <p className="text-caption text-textMuted leading-relaxed">{d.blurb}</p>
           </Link>
         ))}
       </div>

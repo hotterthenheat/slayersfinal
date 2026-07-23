@@ -77,7 +77,7 @@ const TickerSearch = ({ value, onChange }: TickerSearchProps) => {
 
       {open && (
         <div
-          className="absolute right-0 top-full mt-1.5 z-40 w-72 border border-borderMuted bg-panel rounded-lg shadow-2xl shadow-black overflow-hidden animate-slide-in"
+          className="absolute right-0 top-full mt-1.5 z-40 w-72 border border-borderMuted bg-panel rounded-lg shadow-overlay overflow-hidden animate-slide-in"
           onKeyDown={onKeyDown}
         >
           <div className="flex items-center gap-2 px-3 border-b border-borderSubtle">
@@ -92,9 +92,9 @@ const TickerSearch = ({ value, onChange }: TickerSearchProps) => {
           </div>
           <div className="max-h-72 overflow-y-auto py-1">
             {!mod ? (
-              <div className="px-3 py-6 text-center font-mono text-[11px] text-textMuted">Loading tickers…</div>
+              <div className="px-3 py-6 text-center font-mono text-label text-textMuted">Loading tickers…</div>
             ) : results.length === 0 ? (
-              <div className="px-3 py-6 text-center font-mono text-[11px] text-textMuted">No matches</div>
+              <div className="px-3 py-6 text-center font-mono text-label text-textMuted">No matches</div>
             ) : (
               results.map((t, i) => (
                 <button
@@ -112,7 +112,7 @@ const TickerSearch = ({ value, onChange }: TickerSearchProps) => {
                   >
                     {t.symbol}
                   </span>
-                  <span className="text-[11px] text-textSecondary truncate">{t.name}</span>
+                  <span className="text-label text-textSecondary truncate">{t.name}</span>
                 </button>
               ))
             )}

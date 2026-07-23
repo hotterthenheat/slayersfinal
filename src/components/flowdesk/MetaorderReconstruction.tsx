@@ -119,8 +119,8 @@ const Cell = ({ label, value, tone = 'neutral' }: { label: string; value: ReactN
               : 'text-textPrimary';
   return (
     <div className="min-w-0">
-      <div className="font-mono text-[11px] uppercase tracking-wider text-textMuted truncate">{label}</div>
-      <div className={`mt-0.5 font-mono text-[13px] font-semibold tnum truncate ${color}`}>{value}</div>
+      <div className="font-mono text-label uppercase tracking-wider text-textMuted truncate">{label}</div>
+      <div className={`mt-0.5 font-mono text-data font-semibold tnum truncate ${color}`}>{value}</div>
     </div>
   );
 };
@@ -177,20 +177,20 @@ const Timeline = ({ prints }: { prints: ChildPrint[] }) => {
       {hover && (
         <HoverReadout x={hover.x} y={hover.y}>
           <div className="flex items-center justify-between gap-3">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">{hover.p.time}</span>
+            <span className="font-mono text-micro uppercase tracking-widest text-textMuted">{hover.p.time}</span>
             <span
-              className={`font-mono text-[10px] font-semibold uppercase tracking-wider ${
+              className={`font-mono text-micro font-semibold uppercase tracking-wider ${
                 hover.p.side === 'ASK' ? 'text-bull' : 'text-textSecondary'
               }`}
             >
               {hover.p.side === 'ASK' ? 'ask-lift' : 'bid'}
             </span>
           </div>
-          <div className="mt-1 font-mono text-[13px] font-bold tnum text-textPrimary">
+          <div className="mt-1 font-mono text-data font-bold tnum text-textPrimary">
             {hover.p.strike}
             {hover.p.right} · {fmtNum(hover.p.size)}
           </div>
-          <div className="mt-0.5 flex items-center gap-2.5 font-mono text-[10px] tnum text-textSecondary">
+          <div className="mt-0.5 flex items-center gap-2.5 font-mono text-micro tnum text-textSecondary">
             <span>{fmtUsd(hover.p.premium)}</span>
             <span className={hover.p.orderType === 'SWEEP' ? 'text-warn' : 'text-textMuted'}>{hover.p.orderType}</span>
           </div>
@@ -203,9 +203,9 @@ const Timeline = ({ prints }: { prints: ChildPrint[] }) => {
 /** Expandable table of the individual child prints the parent was inferred from. */
 const ChildPrintTable = ({ prints }: { prints: ChildPrint[] }) => (
   <div className="mt-2 overflow-x-auto rounded-md border border-borderSubtle">
-    <table className="w-full text-left font-mono text-[11px] tnum">
+    <table className="w-full text-left font-mono text-label tnum">
       <thead>
-        <tr className="border-b border-borderSubtle text-[10px] uppercase tracking-wider text-textMuted">
+        <tr className="border-b border-borderSubtle text-micro uppercase tracking-wider text-textMuted">
           <th className="px-2.5 py-1.5 font-medium">Time</th>
           <th className="px-2.5 py-1.5 font-medium">Strike</th>
           <th className="px-2.5 py-1.5 font-medium text-right">Size</th>
@@ -245,10 +245,10 @@ const MetaorderRow = ({ m }: { m: Metaorder }) => {
       {/* header — inferred strategy + classification */}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="min-w-0">
-          <span className="font-mono text-[12px] font-bold uppercase tracking-wider text-textPrimary">
+          <span className="font-mono text-caption font-bold uppercase tracking-wider text-textPrimary">
             {m.strategy}
           </span>
-          <span className="ml-2 font-mono text-[11px] text-textMuted">
+          <span className="ml-2 font-mono text-label text-textMuted">
             inferred · {m.childCount} clips · {m.legs.length} leg{m.legs.length > 1 ? 's' : ''}
           </span>
         </div>
@@ -261,26 +261,26 @@ const MetaorderRow = ({ m }: { m: Metaorder }) => {
       </div>
 
       {/* the reconstruction, stated */}
-      <p className="text-[13px] text-textPrimary leading-relaxed">{m.headline}</p>
+      <p className="text-data text-textPrimary leading-relaxed">{m.headline}</p>
 
       {/* inferred confidence range — size floor→ceiling and finish window, both already computed */}
       <div className="rounded-md border border-borderSubtle bg-white/[0.02] px-3 py-2 flex flex-wrap items-center gap-x-6 gap-y-2">
         <div className="flex flex-col min-w-0">
-          <span className="font-mono text-[11px] uppercase tracking-wider text-textMuted">Inferred size range</span>
-          <span className="font-mono text-[13px] font-semibold tnum text-textPrimary">
+          <span className="font-mono text-label uppercase tracking-wider text-textMuted">Inferred size range</span>
+          <span className="font-mono text-data font-semibold tnum text-textPrimary">
             {fmtUsd(m.filledUsd)} <span className="text-textMuted">confirmed →</span> {fmtUsd(m.estTotalUsd)}{' '}
             <span className="text-textMuted">inferred</span>
           </span>
         </div>
         <div className="flex flex-col min-w-0">
-          <span className="font-mono text-[11px] uppercase tracking-wider text-textMuted">Inferred confidence</span>
-          <span className={`font-mono text-[13px] font-semibold uppercase ${printedClass(m)}`}>
+          <span className="font-mono text-label uppercase tracking-wider text-textMuted">Inferred confidence</span>
+          <span className={`font-mono text-data font-semibold uppercase ${printedClass(m)}`}>
             {printedWord(m)} · {m.pctComplete}% printed
           </span>
         </div>
         <div className="flex flex-col min-w-0">
-          <span className="font-mono text-[11px] uppercase tracking-wider text-textMuted">Finish window</span>
-          <span className="font-mono text-[13px] font-semibold tnum text-textPrimary">
+          <span className="font-mono text-label uppercase tracking-wider text-textMuted">Finish window</span>
+          <span className="font-mono text-data font-semibold tnum text-textPrimary">
             {m.minsRemainingLo}–{m.minsRemainingHi}m
           </span>
         </div>
@@ -288,7 +288,7 @@ const MetaorderRow = ({ m }: { m: Metaorder }) => {
 
       {/* inferred completion bar */}
       <div>
-        <div className="flex items-center justify-between mb-1 font-mono text-[11px]">
+        <div className="flex items-center justify-between mb-1 font-mono text-label">
           <span className="uppercase tracking-wider text-textMuted">{m.pctComplete}% inferred complete</span>
           <span className="tnum text-textSecondary">
             {fmtUsd(m.filledUsd)} worked of {fmtUsd(m.estTotalUsd)} est.
@@ -311,9 +311,9 @@ const MetaorderRow = ({ m }: { m: Metaorder }) => {
 
       {/* legs */}
       <div className="flex items-center gap-x-3 gap-y-1 flex-wrap border-t border-borderSubtle pt-2.5">
-        <span className="font-mono text-[11px] uppercase tracking-wider text-textMuted">Legs</span>
+        <span className="font-mono text-label uppercase tracking-wider text-textMuted">Legs</span>
         {m.legs.map(leg => (
-          <span key={`${leg.strike}-${leg.right}`} className="inline-flex items-center gap-1.5 font-mono text-[11px]">
+          <span key={`${leg.strike}-${leg.right}`} className="inline-flex items-center gap-1.5 font-mono text-label">
             <span className={leg.action === 'BOUGHT' ? 'text-bull' : 'text-bear'}>
               {leg.action === 'BOUGHT' ? 'LONG' : 'SHORT'}
             </span>
@@ -328,14 +328,14 @@ const MetaorderRow = ({ m }: { m: Metaorder }) => {
 
       {/* why these prints were grouped into one inferred parent */}
       <div className="border-t border-borderSubtle pt-2.5">
-        <span className="font-mono text-[11px] uppercase tracking-wider text-textMuted mr-2">Why grouped</span>
-        <span className="text-[12px] text-textSecondary leading-relaxed">{whyGrouped(m)}</span>
+        <span className="font-mono text-label uppercase tracking-wider text-textMuted mr-2">Why grouped</span>
+        <span className="text-caption text-textSecondary leading-relaxed">{whyGrouped(m)}</span>
       </div>
 
       {/* execution timeline */}
       <div>
         <Timeline prints={m.children} />
-        <div className="mt-0.5 flex items-center justify-between font-mono text-[10px] text-textMuted tnum">
+        <div className="mt-0.5 flex items-center justify-between font-mono text-micro text-textMuted tnum">
           <span>{first?.time}</span>
           <span className="uppercase tracking-widest">
             worked over ~{m.minsElapsed}m · {m.sweepShare.toFixed(0)}% sweeps
@@ -345,14 +345,14 @@ const MetaorderRow = ({ m }: { m: Metaorder }) => {
       </div>
 
       {/* the inferred read */}
-      <p className="text-[11px] text-textMuted leading-relaxed">{m.read}</p>
+      <p className="text-label text-textMuted leading-relaxed">{m.read}</p>
 
       {/* expandable disclosure — child prints + alternates + what would invalidate this */}
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2 pt-0.5">
         <button
           type="button"
           onClick={() => setShowPrints(v => !v)}
-          className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
+          className="inline-flex items-center gap-1.5 font-mono text-label uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
           aria-expanded={showPrints}
         >
           <ChevronRight className={`w-3.5 h-3.5 transition-transform ${showPrints ? 'rotate-90' : ''}`} />
@@ -362,7 +362,7 @@ const MetaorderRow = ({ m }: { m: Metaorder }) => {
         <button
           type="button"
           onClick={() => setShowBasis(v => !v)}
-          className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
+          className="inline-flex items-center gap-1.5 font-mono text-label uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
           aria-expanded={showBasis}
         >
           <ChevronRight className={`w-3.5 h-3.5 transition-transform ${showBasis ? 'rotate-90' : ''}`} />
@@ -375,12 +375,12 @@ const MetaorderRow = ({ m }: { m: Metaorder }) => {
       {showBasis && (
         <div className="rounded-md border border-borderSubtle bg-white/[0.02] p-3 flex flex-col gap-3">
           <div>
-            <div className="font-mono text-[11px] uppercase tracking-wider text-textMuted mb-1.5">
+            <div className="font-mono text-label uppercase tracking-wider text-textMuted mb-1.5">
               Alternate structures these prints could be
             </div>
             <ul className="flex flex-col gap-1.5">
               {alternates(m).map((a, idx) => (
-                <li key={idx} className="text-[12px] text-textSecondary leading-relaxed flex gap-2">
+                <li key={idx} className="text-caption text-textSecondary leading-relaxed flex gap-2">
                   <span className="text-textMuted shrink-0 tnum">{idx + 1}.</span>
                   <span>{a}</span>
                 </li>
@@ -388,12 +388,12 @@ const MetaorderRow = ({ m }: { m: Metaorder }) => {
             </ul>
           </div>
           <div>
-            <div className="font-mono text-[11px] uppercase tracking-wider text-warn mb-1 inline-flex items-center gap-1.5">
+            <div className="font-mono text-label uppercase tracking-wider text-warn mb-1 inline-flex items-center gap-1.5">
               <AlertTriangle className="w-3 h-3" /> What would invalidate this
             </div>
-            <p className="text-[12px] text-textSecondary leading-relaxed">{invalidation(m)}</p>
+            <p className="text-caption text-textSecondary leading-relaxed">{invalidation(m)}</p>
           </div>
-          <p className="text-[11px] text-textMuted leading-relaxed border-t border-borderSubtle pt-2.5">
+          <p className="text-label text-textMuted leading-relaxed border-t border-borderSubtle pt-2.5">
             {PER_OUTPUT_CAVEAT}
           </p>
         </div>
@@ -409,7 +409,7 @@ const MetaorderReconstruction = () => {
   if (!view) {
     return (
       <Panel className="h-64" bodyClassName="flex items-center justify-center">
-        <span className="font-mono text-[11px] text-textMuted uppercase tracking-widest">
+        <span className="font-mono text-label text-textMuted uppercase tracking-widest">
           Inferring parent orders…
         </span>
       </Panel>
@@ -455,8 +455,8 @@ const MetaorderReconstruction = () => {
       </MetricGrid>
 
       <Panel tone={biasTone} bodyClassName="py-3.5" emphasis>
-        <p className="text-[15px] text-textPrimary leading-relaxed">
-          <span className={`font-mono text-[11px] font-semibold uppercase tracking-widest mr-2.5 ${biasLabelColor}`}>
+        <p className="text-read text-textPrimary leading-relaxed">
+          <span className={`font-mono text-label font-semibold uppercase tracking-widest mr-2.5 ${biasLabelColor}`}>
             TRACE read
           </span>
           {view.headline}
@@ -477,7 +477,7 @@ const MetaorderReconstruction = () => {
             <MetaorderRow key={m.id} m={m} />
           ))}
         </div>
-        <p className="px-4 py-2.5 border-t border-borderSubtle font-mono text-[11px] text-textMuted leading-relaxed inline-flex items-center gap-3 flex-wrap">
+        <p className="px-4 py-2.5 border-t border-borderSubtle font-mono text-label text-textMuted leading-relaxed inline-flex items-center gap-3 flex-wrap">
           <span className="inline-flex items-center gap-1.5">
             <Zap className="w-3 h-3" /> ask-lift = buy aggression
           </span>

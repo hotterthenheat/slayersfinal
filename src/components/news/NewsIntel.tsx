@@ -47,8 +47,8 @@ const DivergingRow = ({ label, value, word, wordClass }: { label: string; value:
   return (
     <div>
       <div className="flex items-center justify-between">
-        <span className="font-mono text-[11px] uppercase tracking-wider text-textMuted">{label}</span>
-        <span className={`font-mono text-[11px] uppercase tracking-wider ${wordClass}`}>{word}</span>
+        <span className="font-mono text-label uppercase tracking-wider text-textMuted">{label}</span>
+        <span className={`font-mono text-label uppercase tracking-wider ${wordClass}`}>{word}</span>
       </div>
       <div className="relative mt-1 h-1.5 rounded-full bg-white/[0.06]">
         <span className="absolute top-0 bottom-0 left-1/2 w-px bg-white/25" aria-hidden />
@@ -61,19 +61,19 @@ const DivergingRow = ({ label, value, word, wordClass }: { label: string; value:
 /** Compact bordered metric cell — the News-page idiom. */
 const Cell = ({ label, value, valueClass = 'text-textPrimary', sub }: { label: string; value: string; valueClass?: string; sub?: string }) => (
   <div className="border border-borderSubtle bg-inset rounded-md px-2.5 py-2">
-    <div className="font-mono text-[11px] uppercase tracking-wider text-textMuted truncate">{label}</div>
+    <div className="font-mono text-label uppercase tracking-wider text-textMuted truncate">{label}</div>
     <div className={`mt-1 font-mono text-sm font-semibold tnum ${valueClass}`}>{value}</div>
-    {sub && <div className="mt-0.5 text-[10px] text-textMuted leading-tight truncate">{sub}</div>}
+    {sub && <div className="mt-0.5 text-micro text-textMuted leading-tight truncate">{sub}</div>}
   </div>
 );
 
 /** One analog event row: match strength · when · how it resolved. */
 const AnalogRow = ({ a }: { a: HeadlineIntel['analogs'][number] }) => (
   <div className="flex items-center gap-2 py-1.5">
-    <span className="w-8 shrink-0 font-mono text-[12px] font-semibold text-textPrimary tnum text-right">{a.similarityPct}</span>
-    <span className="w-14 shrink-0 font-mono text-[10px] text-textMuted">{a.when}</span>
-    <span className="flex-1 min-w-0 truncate text-[11px] text-textSecondary leading-snug">{a.descriptor}</span>
-    <span className={`w-12 shrink-0 text-right font-mono text-[11px] font-semibold tnum ${a.outcome1dPct >= 0 ? 'text-bull' : 'text-bear'}`}>
+    <span className="w-8 shrink-0 font-mono text-caption font-semibold text-textPrimary tnum text-right">{a.similarityPct}</span>
+    <span className="w-14 shrink-0 font-mono text-micro text-textMuted">{a.when}</span>
+    <span className="flex-1 min-w-0 truncate text-label text-textSecondary leading-snug">{a.descriptor}</span>
+    <span className={`w-12 shrink-0 text-right font-mono text-label font-semibold tnum ${a.outcome1dPct >= 0 ? 'text-bull' : 'text-bear'}`}>
       {signed1(a.outcome1dPct)}%
     </span>
     <SignalBadge tone={a.followThrough ? 'bull' : 'neutral'}>{a.followThrough ? 'held' : 'faded'}</SignalBadge>
@@ -88,8 +88,8 @@ const DeepBreakdown = ({ h, positioningLean, positioningLabel }: { h: HeadlineIn
     <div className="flex flex-col gap-3.5">
       <div className="flex items-center gap-2 flex-wrap">
         <SignalBadge tone={catTone[h.category]}>{h.category}</SignalBadge>
-        <span className="font-mono text-[11px] text-textMuted tnum">seen {h.time}</span>
-        <span className={`ml-auto font-mono text-[11px] font-semibold tnum ${h.expMove1dPct >= 0 ? 'text-bull' : 'text-bear'}`}>
+        <span className="font-mono text-label text-textMuted tnum">seen {h.time}</span>
+        <span className={`ml-auto font-mono text-label font-semibold tnum ${h.expMove1dPct >= 0 ? 'text-bull' : 'text-bear'}`}>
           {signed1(h.expMove1dPct)}% exp
         </span>
       </div>
@@ -103,8 +103,8 @@ const DeepBreakdown = ({ h, positioningLean, positioningLabel }: { h: HeadlineIn
 
       <div>
         <div className="flex items-center justify-between">
-          <span className="font-mono text-[11px] uppercase tracking-wider text-textMuted">Priced-in progress</span>
-          <span className={`font-mono text-[11px] font-semibold tnum ${toneText[piTone]}`}>{h.pricedInPct}%</span>
+          <span className="font-mono text-label uppercase tracking-wider text-textMuted">Priced-in progress</span>
+          <span className={`font-mono text-label font-semibold tnum ${toneText[piTone]}`}>{h.pricedInPct}%</span>
         </div>
         <div className="mt-1 h-2 rounded-full bg-white/[0.06] overflow-hidden">
           <span className="block h-full rounded-full holo-bar" style={{ width: `${h.pricedInPct}%` }} />
@@ -113,20 +113,20 @@ const DeepBreakdown = ({ h, positioningLean, positioningLabel }: { h: HeadlineIn
 
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <span className="font-mono text-[11px] uppercase tracking-widest text-textMuted">Narrative vs positioning</span>
+          <span className="font-mono text-label uppercase tracking-widest text-textMuted">Narrative vs positioning</span>
           <SignalBadge tone={agreeTone[h.agreement]} dot>{h.agreement}</SignalBadge>
         </div>
         <DivergingRow label="Wire lean" value={Math.tanh(h.sentiment * 1.8)} word={sentimentWord(h.sentiment)} wordClass={toneText[sentTone]} />
         <DivergingRow label="Book" value={positioningLean} word={positioningLabel} wordClass="holo-text" />
-        <p className="text-[11px] text-textSecondary leading-snug">{h.agreementNote}</p>
+        <p className="text-label text-textSecondary leading-snug">{h.agreementNote}</p>
       </div>
 
       <div className="border-t border-borderSubtle pt-3">
         <div className="flex items-center justify-between mb-1.5">
-          <span className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-textMuted">
+          <span className="inline-flex items-center gap-1.5 font-mono text-label uppercase tracking-widest text-textMuted">
             <Radar className="w-3 h-3" /> Closest analogs
           </span>
-          <span className="font-mono text-[10px] text-textMuted uppercase tracking-wider">sim · when · 1d</span>
+          <span className="font-mono text-micro text-textMuted uppercase tracking-wider">sim · when · 1d</span>
         </div>
         <div className="flex flex-col divide-y divide-borderSubtle">
           {h.analogs.map((a, i) => (
@@ -137,12 +137,12 @@ const DeepBreakdown = ({ h, positioningLean, positioningLabel }: { h: HeadlineIn
 
       <div className="flex items-start gap-2">
         <SignalBadge tone={natureTone[h.nature]}>{h.nature}</SignalBadge>
-        <span className="text-[11px] text-textSecondary leading-snug">{h.natureNote}</span>
+        <span className="text-label text-textSecondary leading-snug">{h.natureNote}</span>
       </div>
 
       <div className="border border-borderSubtle bg-inset rounded-md px-2.5 py-2">
-        <div className="font-mono text-[11px] uppercase tracking-widest text-textMuted">Invalidation</div>
-        <p className="mt-1 text-[11px] text-textSecondary leading-snug">{h.invalidation}</p>
+        <div className="font-mono text-label uppercase tracking-widest text-textMuted">Invalidation</div>
+        <p className="mt-1 text-label text-textSecondary leading-snug">{h.invalidation}</p>
       </div>
     </div>
   );
@@ -165,14 +165,14 @@ const NoBreakdown = ({ view, selectedItem, onSelect }: { view: NewsIntelView; se
             onClick={() => onSelect?.(h.id)}
             className="inline-flex items-center gap-1.5 px-2 py-1 rounded border border-borderSubtle bg-white/[0.02] hover:border-borderMuted hover:bg-white/[0.04] transition-colors"
           >
-            <span className="font-mono text-[11px] font-semibold text-textPrimary">{h.scope === 'MACRO' ? 'Macro' : h.ticker}</span>
+            <span className="font-mono text-label font-semibold text-textPrimary">{h.scope === 'MACRO' ? 'Macro' : h.ticker}</span>
             <SignalBadge tone={catTone[h.category]}>{h.category}</SignalBadge>
-            <span className={`font-mono text-[11px] font-semibold tnum ${h.expMove1dPct >= 0 ? 'text-bull' : 'text-bear'}`}>{signed1(h.expMove1dPct)}%</span>
+            <span className={`font-mono text-label font-semibold tnum ${h.expMove1dPct >= 0 ? 'text-bull' : 'text-bear'}`}>{signed1(h.expMove1dPct)}%</span>
           </button>
         ))}
       </div>
     ) : (
-      <span className="font-mono text-[11px] text-textMuted">No live catalyst on {view.ticker} today — positioning reads {view.positioningLabel}.</span>
+      <span className="font-mono text-label text-textMuted">No live catalyst on {view.ticker} today — positioning reads {view.positioningLabel}.</span>
     )}
   </div>
 );
@@ -197,7 +197,7 @@ const NewsIntel = ({ selectedItem, onSelect }: NewsIntelProps) => {
   if (!view) {
     return (
       <div className="flex items-center justify-center h-32">
-        <span className="font-mono text-[11px] text-textMuted uppercase tracking-widest">Reading positioning…</span>
+        <span className="font-mono text-label text-textMuted uppercase tracking-widest">Reading positioning…</span>
       </div>
     );
   }
@@ -208,10 +208,10 @@ const NewsIntel = ({ selectedItem, onSelect }: NewsIntelProps) => {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="inline-flex items-center gap-1.5 font-mono text-[11px] font-semibold uppercase tracking-widest holo-text">
+        <span className="inline-flex items-center gap-1.5 font-mono text-label font-semibold uppercase tracking-widest holo-text">
           <Radar className="w-3.5 h-3.5" /> Positioning read
         </span>
-        <span className="font-mono text-[11px] font-bold text-textPrimary">{view.ticker}</span>
+        <span className="font-mono text-label font-bold text-textPrimary">{view.ticker}</span>
         <SignalBadge tone="neutral" className="ml-auto">
           {view.nameCount} live · {view.macroCount} macro
         </SignalBadge>
@@ -230,7 +230,7 @@ const NewsIntel = ({ selectedItem, onSelect }: NewsIntelProps) => {
       </div>
 
       <div className={`border-l-2 pl-3 ${readTone === 'bull' ? 'border-bull/40' : readTone === 'bear' ? 'border-bear/40' : 'border-borderMuted'}`}>
-        <span className={`font-mono text-[11px] font-semibold uppercase tracking-widest ${readTone === 'bull' ? 'text-bull' : readTone === 'bear' ? 'text-bear' : 'holo-text'}`}>
+        <span className={`font-mono text-label font-semibold uppercase tracking-widest ${readTone === 'bull' ? 'text-bull' : readTone === 'bear' ? 'text-bear' : 'holo-text'}`}>
           The read
         </span>
         <p className="mt-1 text-xs text-textSecondary leading-relaxed">{view.headline}</p>

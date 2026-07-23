@@ -42,7 +42,7 @@ const IvSurface = ({ data }: IvSurfaceProps) => {
         <div className="flex-grow flex flex-col gap-[2px]">
           {dte.map((t, r) => (
             <div key={t} className="flex items-stretch gap-[2px] flex-1 min-h-[18px]">
-              <span className="w-8 shrink-0 flex items-center font-mono text-[10px] tnum text-textMuted">{t}d</span>
+              <span className="w-8 shrink-0 flex items-center font-mono text-micro tnum text-textMuted">{t}d</span>
               {cells[r].map((iv, c) => (
                 <span
                   key={c}
@@ -58,12 +58,12 @@ const IvSurface = ({ data }: IvSurfaceProps) => {
         </div>
         <div className="flex items-center gap-[2px] pl-8">
           {moneyness.map((m, c) => (
-            <span key={m} className="flex-1 text-center font-mono text-[10px] tnum text-textMuted">
+            <span key={m} className="flex-1 text-center font-mono text-micro tnum text-textMuted">
               {c % 4 === 0 ? m.toFixed(2) : ''}
             </span>
           ))}
         </div>
-        <div className="flex items-center justify-between font-mono text-[10px] text-textMuted uppercase tracking-wider pl-8">
+        <div className="flex items-center justify-between font-mono text-micro text-textMuted uppercase tracking-wider pl-8">
           <span>strike / forward</span>
           <span className="tnum normal-case">Fwd {forward.toFixed(2)}</span>
         </div>
@@ -71,28 +71,28 @@ const IvSurface = ({ data }: IvSurfaceProps) => {
 
       {/* Scale */}
       <div className="shrink-0 w-9 flex flex-col items-center py-1 select-none">
-        <span className="font-mono text-[10px] tnum text-textPrimary">{max.toFixed(0)}%</span>
+        <span className="font-mono text-micro tnum text-textPrimary">{max.toFixed(0)}%</span>
         <div
           className="flex-grow w-2.5 my-1.5 rounded-full border border-borderSubtle"
           style={{
             background: 'linear-gradient(to bottom, #EFE8E0 0%, #9788C4 25%, #4a4470 55%, #121214 100%)',
           }}
         />
-        <span className="font-mono text-[10px] tnum text-textSecondary">{min.toFixed(0)}%</span>
-        <span className="mt-1 font-mono text-[10px] text-textMuted uppercase">iv</span>
+        <span className="font-mono text-micro tnum text-textSecondary">{min.toFixed(0)}%</span>
+        <span className="mt-1 font-mono text-micro text-textMuted uppercase">iv</span>
       </div>
 
       {hover && (
         <HoverReadout x={hover.x} y={hover.y}>
           <div className="flex items-baseline gap-2">
-            <span className="font-mono text-[12px] font-bold text-textPrimary tnum">{hover.iv.toFixed(1)}%</span>
-            <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">IV</span>
+            <span className="font-mono text-caption font-bold text-textPrimary tnum">{hover.iv.toFixed(1)}%</span>
+            <span className="font-mono text-micro uppercase tracking-widest text-textMuted">IV</span>
           </div>
-          <div className="mt-0.5 flex items-center gap-3 font-mono text-[10px] tnum text-textSecondary">
+          <div className="mt-0.5 flex items-center gap-3 font-mono text-micro tnum text-textSecondary">
             <span>{hover.t}DTE</span>
             <span>{hover.m.toFixed(2)} K/F</span>
           </div>
-          <div className="mt-0.5 font-mono text-[10px] text-textMuted tnum">Fwd {forward.toFixed(2)}</div>
+          <div className="mt-0.5 font-mono text-micro text-textMuted tnum">Fwd {forward.toFixed(2)}</div>
         </HoverReadout>
       )}
     </div>

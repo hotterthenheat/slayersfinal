@@ -80,7 +80,7 @@ interface Cuml {
 /** Ranked largest contributors — biggest |Δ net GEX| under the scenario. */
 const ContributorList = ({ rows, max }: { rows: Contrib[]; max: number }) => (
   <div className="flex flex-col">
-    <div className="flex items-center gap-3 px-2 py-1.5 border-b border-borderSubtle font-mono text-[11px] font-semibold uppercase tracking-widest text-textMuted select-none">
+    <div className="flex items-center gap-3 px-2 py-1.5 border-b border-borderSubtle font-mono text-label font-semibold uppercase tracking-widest text-textMuted select-none">
       <span className="w-16 shrink-0">Strike</span>
       <span className="flex-1 min-w-0">Shift |Δ|</span>
       <span className="w-44 shrink-0 text-right">Now → Proj</span>
@@ -94,9 +94,9 @@ const ContributorList = ({ rows, max }: { rows: Contrib[]; max: number }) => (
           key={r.strike}
           className={`flex items-center gap-3 px-2 py-2 border-b border-borderSubtle/30 last:border-0 ${r.pin ? 'bg-white/[0.03]' : ''}`}
         >
-          <span className="w-16 shrink-0 font-mono text-[12px] font-semibold tnum text-textSecondary">
+          <span className="w-16 shrink-0 font-mono text-caption font-semibold tnum text-textSecondary">
             {fmtStrike(r.strike)}
-            {r.pin && <span className="ml-1 font-mono text-[10px] font-bold uppercase text-textPrimary">pin</span>}
+            {r.pin && <span className="ml-1 font-mono text-micro font-bold uppercase text-textPrimary">pin</span>}
           </span>
           <span className="relative flex-1 min-w-0 h-[6px] rounded-sm bg-white/[0.04] overflow-hidden">
             <span
@@ -104,10 +104,10 @@ const ContributorList = ({ rows, max }: { rows: Contrib[]; max: number }) => (
               style={{ width: `${w}%` }}
             />
           </span>
-          <span className="w-44 shrink-0 text-right font-mono text-[11px] tnum text-textSecondary">
+          <span className="w-44 shrink-0 text-right font-mono text-label tnum text-textSecondary">
             {fmtUsd(r.current)} <span className="text-textMuted">→</span> {fmtUsd(r.projected)}
           </span>
-          <span className={`w-24 shrink-0 text-right font-mono text-[12px] font-bold tnum ${up ? 'text-bull' : 'text-bear'}`}>
+          <span className={`w-24 shrink-0 text-right font-mono text-caption font-bold tnum ${up ? 'text-bull' : 'text-bear'}`}>
             {signedUsd(r.delta)}
           </span>
         </div>
@@ -130,7 +130,7 @@ const CumulativePanel = ({ c }: { c: Cuml }) => (
       />
     </div>
     <div className="rounded-md inst-surface">
-      <div className="grid grid-cols-[1fr_repeat(3,6rem)] gap-x-3 px-3 py-2 border-b border-borderSubtle font-mono text-[11px] font-semibold uppercase tracking-widest text-textMuted select-none">
+      <div className="grid grid-cols-[1fr_repeat(3,6rem)] gap-x-3 px-3 py-2 border-b border-borderSubtle font-mono text-label font-semibold uppercase tracking-widest text-textMuted select-none">
         <span>Region</span>
         <span className="text-right">Now</span>
         <span className="text-right">Proj</span>
@@ -144,18 +144,18 @@ const CumulativePanel = ({ c }: { c: Cuml }) => (
           key={r.label}
           className="grid grid-cols-[1fr_repeat(3,6rem)] gap-x-3 items-center px-3 py-2 border-b border-borderSubtle/30 last:border-0"
         >
-          <span className="font-mono text-[12px] font-semibold uppercase tracking-wider text-textSecondary">{r.label}</span>
-          <span className="text-right font-mono text-[11px] tnum text-textPrimary">{signedUsd(r.now)}</span>
-          <span className="text-right font-mono text-[11px] tnum text-textPrimary">{signedUsd(r.proj)}</span>
+          <span className="font-mono text-caption font-semibold uppercase tracking-wider text-textSecondary">{r.label}</span>
+          <span className="text-right font-mono text-label tnum text-textPrimary">{signedUsd(r.now)}</span>
+          <span className="text-right font-mono text-label tnum text-textPrimary">{signedUsd(r.proj)}</span>
           <span
-            className={`text-right font-mono text-[12px] font-bold tnum ${r.d > 0 ? 'text-bull' : r.d < 0 ? 'text-bear' : 'text-textMuted'}`}
+            className={`text-right font-mono text-caption font-bold tnum ${r.d > 0 ? 'text-bull' : r.d < 0 ? 'text-bear' : 'text-textMuted'}`}
           >
             {signedUsd(r.d)}
           </span>
         </div>
       ))}
     </div>
-    <p className="font-mono text-[11px] text-textMuted leading-relaxed">
+    <p className="font-mono text-label text-textMuted leading-relaxed">
       Σ sums net GEX across the {c.n} strikes shown. Δ is the projected − now migration: positive builds toward long
       gamma (stabilizing), negative bleeds toward short gamma (accelerant).
     </p>
@@ -197,7 +197,7 @@ const VannaCharm = () => {
   if (!data) {
     return (
       <Panel className="h-64" bodyClassName="flex items-center justify-center">
-        <span className="font-mono text-[11px] text-textMuted uppercase tracking-widest">
+        <span className="font-mono text-label text-textMuted uppercase tracking-widest">
           Awaiting feed initialization…
         </span>
       </Panel>
@@ -258,23 +258,23 @@ const VannaCharm = () => {
         )}
         <span className="h-4 w-px bg-borderSubtle hidden sm:block" />
         <SegmentedControl ariaLabel="Strike focus" options={FOCUS_OPTIONS} value={focus} onChange={setFocus} />
-        <span className="ml-auto font-mono text-[11px] text-textMuted uppercase tracking-widest tnum">
+        <span className="ml-auto font-mono text-label text-textMuted uppercase tracking-widest tnum">
           scan {lastScanAt} · 10s
         </span>
       </div>
 
       {/* Sign convention — stated up front so every value below reads unambiguously */}
       <div className="flex items-center gap-x-4 gap-y-2 flex-wrap rounded-md inst-surface px-3 py-2">
-        <span className="font-mono text-[11px] font-semibold uppercase tracking-widest text-textSecondary">
+        <span className="font-mono text-label font-semibold uppercase tracking-widest text-textSecondary">
           Net GEX sign
         </span>
-        <span className="flex items-center gap-2 font-mono text-[11px] text-textMuted">
+        <span className="flex items-center gap-2 font-mono text-label text-textMuted">
           <SignalBadge tone="bull">+ long gamma</SignalBadge> dealers dampen moves · stabilizing
         </span>
-        <span className="flex items-center gap-2 font-mono text-[11px] text-textMuted">
+        <span className="flex items-center gap-2 font-mono text-label text-textMuted">
           <SignalBadge tone="bear">− short gamma</SignalBadge> dealers amplify moves · accelerant
         </span>
-        <span className="ml-auto font-mono text-[11px] text-textMuted uppercase tracking-wider">
+        <span className="ml-auto font-mono text-label text-textMuted uppercase tracking-wider">
           {mode === 'CHARM'
             ? 'Δ = into-close projection − now'
             : `Δ = IV ${ivNum > 0 ? '+' : ''}${ivNum} ${ivNum > 0 ? 'expansion' : 'crush'} − now`}
@@ -302,7 +302,7 @@ const VannaCharm = () => {
           <Panel title="Migration Read" subtitle="dominant flow, in english" className="w-full flex-1">
             <ul className="flex flex-col gap-2">
               {data.insights.map((line, i) => (
-                <li key={i} className="flex items-start gap-2 text-[11px] text-textSecondary leading-relaxed">
+                <li key={i} className="flex items-start gap-2 text-label text-textSecondary leading-relaxed">
                   <span className="text-textMuted mt-px select-none">›</span>
                   <span className="tnum">{line}</span>
                 </li>
@@ -321,7 +321,7 @@ const VannaCharm = () => {
         flush={view === 'STRIKE'}
       >
         {focusRows.length === 0 ? (
-          <div className="py-6 text-center font-mono text-[11px] text-textMuted uppercase tracking-widest">
+          <div className="py-6 text-center font-mono text-label text-textMuted uppercase tracking-widest">
             No strikes in focus
           </div>
         ) : view === 'STRIKE' ? (

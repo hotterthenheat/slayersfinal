@@ -70,7 +70,7 @@ const ConfidenceChip = ({ tier, className = '' }: { tier: Tier; className?: stri
           <span key={i} className={`w-1 h-1 rounded-full ${i < m.dots ? 'bg-textSecondary' : 'bg-white/15'}`} />
         ))}
       </span>
-      <span className={`font-mono text-[11px] uppercase tracking-wider ${m.text}`}>{m.label}</span>
+      <span className={`font-mono text-label uppercase tracking-wider ${m.text}`}>{m.label}</span>
     </span>
   );
 };
@@ -107,12 +107,12 @@ const FlowRow = ({ level, maxForced }: { level: ForcedFlowLevel; maxForced: numb
       </span>
       {hx && (
         <HoverReadout x={hx.x} y={hx.y}>
-          <div className="font-mono text-[11px] font-bold text-textPrimary tnum">${level.price.toFixed(2)} · forced flow</div>
+          <div className="font-mono text-label font-bold text-textPrimary tnum">${level.price.toFixed(2)} · forced flow</div>
           <div className="mt-1 flex flex-col gap-0.5">
             {PARTS.map(p => {
               const v = Math.abs(level[p.key] as number);
               return v > 0 ? (
-                <div key={p.key} className="flex items-center gap-2 font-mono text-[10px] tnum">
+                <div key={p.key} className="flex items-center gap-2 font-mono text-micro tnum">
                   <span className="w-2 h-2 rounded-[2px] shrink-0" style={{ background: p.color }} />
                   <span className="text-textSecondary w-20">{p.label}</span>
                   <span className="text-textPrimary ml-auto">{fmtUsd(v)}</span>
@@ -120,7 +120,7 @@ const FlowRow = ({ level, maxForced }: { level: ForcedFlowLevel; maxForced: numb
               ) : null;
             })}
           </div>
-          <div className="mt-1 pt-1 border-t border-borderSubtle font-mono text-[10px] text-textMuted tnum">
+          <div className="mt-1 pt-1 border-t border-borderSubtle font-mono text-micro text-textMuted tnum">
             {fmtUsd(Math.abs(level.totalForced))} forced vs {fmtUsd(level.latentLiquidity)} latent · {level.absorption.toFixed(2)}×
           </div>
         </HoverReadout>
@@ -136,7 +136,7 @@ const FlowRow = ({ level, maxForced }: { level: ForcedFlowLevel; maxForced: numb
           />
           <span className="absolute top-0 bottom-0" style={{ left: `${(100 / 150) * 100}%`, width: '1px', background: 'rgba(255,255,255,0.5)' }} />
         </span>
-        <span className="font-mono text-[10px] text-textMuted tnum">
+        <span className="font-mono text-micro text-textMuted tnum">
           {fmtUsd(Math.abs(level.totalForced))} vs {fmtUsd(level.latentLiquidity)} · {level.absorption.toFixed(2)}×
         </span>
       </span>
@@ -158,7 +158,7 @@ const CascadeFan = ({ paths, spot, trigger }: { paths: number[][]; spot: number;
   const X = (i: number) => (i / (maxLen - 1)) * W;
   const Y = (v: number) => H - ((v - lo) / (hi - lo)) * H;
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none" role="img" aria-label="Reflexive cascade fan chart — simulated feedback price paths">
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none" role="img" aria-label="Reflexive cascade fan chart — modeled feedback price paths">
       <line x1={0} x2={W} y1={Y(spot)} y2={Y(spot)} stroke={SPOT} strokeOpacity={0.35} strokeWidth={1} strokeDasharray="3 3" />
       <line x1={0} x2={W} y1={Y(trigger)} y2={Y(trigger)} stroke={BEAR} strokeOpacity={0.5} strokeWidth={1} strokeDasharray="4 3" />
       {paths.map((p, i) => (
@@ -188,7 +188,7 @@ const Fracture = () => {
   if (!view || !marketData) {
     return (
       <Panel className="h-64" bodyClassName="flex items-center justify-center">
-        <span className="font-mono text-[11px] text-textMuted uppercase tracking-widest">Reading forced flow…</span>
+        <span className="font-mono text-label text-textMuted uppercase tracking-widest">Reading forced flow…</span>
       </Panel>
     );
   }
@@ -252,8 +252,8 @@ const Fracture = () => {
 
       {/* Headline read */}
       <Panel tone={headTone} bodyClassName="py-3.5" emphasis>
-        <p className="text-[15px] text-textPrimary leading-relaxed">
-          <span className={`font-mono text-[10px] font-semibold uppercase tracking-widest mr-2.5 ${headTone === 'bear' ? 'text-bear' : headTone === 'bull' ? 'text-bull' : 'text-textSecondary'}`}>
+        <p className="text-data text-textPrimary leading-relaxed">
+          <span className={`font-mono text-micro font-semibold uppercase tracking-widest mr-2.5 ${headTone === 'bear' ? 'text-bear' : headTone === 'bull' ? 'text-bull' : 'text-textSecondary'}`}>
             The read
           </span>
           {view.headline}
@@ -271,17 +271,17 @@ const Fracture = () => {
           subtitle="who must transact at each level, vs the liquidity to absorb it"
           flush
           className="xl:col-span-7"
-          actions={
-            <span className="hidden sm:flex items-center gap-2">
+        >
+          <div className="flex flex-col">
+            {/* Legend strip — lives above the rows (not crammed into the header,
+                where it truncated the title) since it keys the stacked bars below. */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 border-b border-borderSubtle/60">
               {PARTS.map(p => (
-                <span key={p.key} className="inline-flex items-center gap-1 font-mono text-[11px] uppercase tracking-wider text-textMuted">
+                <span key={p.key} className="inline-flex items-center gap-1 font-mono text-label uppercase tracking-wider text-textMuted">
                   <span className="w-2 h-2 rounded-sm inline-block" style={{ background: p.color }} /> {p.label}
                 </span>
               ))}
-            </span>
-          }
-        >
-          <div className="flex flex-col">
+            </div>
             {view.levels.map((level, i) => (
               <div key={level.price}>
                 <FlowRow level={level} maxForced={maxForced} />
@@ -310,40 +310,40 @@ const Fracture = () => {
           {/* Explicit trigger / invalidation — the level that arms the move and the one that voids it */}
           <div className="mt-3 grid grid-cols-2 gap-2">
             <div className="border border-borderSubtle bg-inset rounded-md px-2.5 py-2">
-              <div className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-textMuted">
+              <div className="flex items-center gap-1.5 font-mono text-label uppercase tracking-widest text-textMuted">
                 <Crosshair className="w-3 h-3" /> Trigger
               </div>
               <div className="mt-1 font-mono text-sm font-semibold text-textPrimary tnum">${view.cascade.triggerPrice.toFixed(2)}</div>
-              <div className="mt-0.5 font-mono text-[10px] text-textMuted">{triggerNote}</div>
+              <div className="mt-0.5 font-mono text-micro text-textMuted">{triggerNote}</div>
             </div>
             <div className="border border-borderSubtle bg-inset rounded-md px-2.5 py-2">
-              <div className="font-mono text-[11px] uppercase tracking-widest text-textMuted">Invalidation</div>
+              <div className="font-mono text-label uppercase tracking-widest text-textMuted">Invalidation</div>
               <div className="mt-1 font-mono text-sm font-semibold text-textPrimary tnum">{invalidationValue}</div>
-              <div className="mt-0.5 font-mono text-[10px] text-textMuted">{invalidationNote}</div>
+              <div className="mt-0.5 font-mono text-micro text-textMuted">{invalidationNote}</div>
             </div>
           </div>
           <div className="mt-2 grid grid-cols-2 gap-2">
             <div className="border border-borderSubtle bg-inset rounded-md px-2.5 py-2">
-              <div className="font-mono text-[11px] uppercase tracking-widest text-textMuted">Median terminus</div>
+              <div className="font-mono text-label uppercase tracking-widest text-textMuted">Median terminus</div>
               <div className="mt-1 font-mono text-sm font-semibold text-bear tnum">${view.cascade.medianTerminus.toFixed(2)}</div>
             </div>
             <div className="border border-borderSubtle bg-inset rounded-md px-2.5 py-2">
-              <div className="font-mono text-[11px] uppercase tracking-widest text-textMuted">Exhaustion zone</div>
+              <div className="font-mono text-label uppercase tracking-widest text-textMuted">Exhaustion zone</div>
               <div className="mt-1 font-mono text-sm font-semibold text-textPrimary tnum">
                 ${view.cascade.exhaustionLo.toFixed(2)}–${view.cascade.exhaustionHi.toFixed(2)}
               </div>
             </div>
           </div>
           <div className="mt-2.5 flex flex-col gap-1.5">
-            <div className="flex items-center justify-between gap-2 font-mono text-[11px]">
-              <span className="text-textMuted uppercase tracking-wider text-[11px]">Primary amplifier</span>
+            <div className="flex items-center justify-between gap-2 font-mono text-label">
+              <span className="text-textMuted uppercase tracking-wider text-label">Primary amplifier</span>
               <span className="flex items-center gap-2 min-w-0">
                 <span className="text-textPrimary truncate">{view.cascade.primaryAmplifier}</span>
                 {AMP_TIER[view.cascade.primaryAmplifier] && <ConfidenceChip tier={AMP_TIER[view.cascade.primaryAmplifier]} />}
               </span>
             </div>
-            <div className="flex items-center justify-between gap-2 font-mono text-[11px]">
-              <span className="text-textMuted uppercase tracking-wider text-[11px]">Secondary</span>
+            <div className="flex items-center justify-between gap-2 font-mono text-label">
+              <span className="text-textMuted uppercase tracking-wider text-label">Secondary</span>
               <span className="flex items-center gap-2 min-w-0">
                 <span className="text-textSecondary truncate">{view.cascade.secondaryAmplifier}</span>
                 {AMP_TIER[view.cascade.secondaryAmplifier] && <ConfidenceChip tier={AMP_TIER[view.cascade.secondaryAmplifier]} />}
@@ -362,7 +362,7 @@ const Fracture = () => {
         }
         subtitle="who is forced — and how knowable each one is"
         actions={
-          <span className="hidden sm:flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-wider">
+          <span className="hidden sm:flex items-center gap-2.5 font-mono text-label uppercase tracking-wider">
             {tierSummary.map(t => (
               <span key={t.tier} className="inline-flex items-center gap-1.5">
                 <ConfidenceChip tier={t.tier} />
@@ -378,7 +378,7 @@ const Fracture = () => {
             <span key={c.key} style={{ width: `${(c.usd / contribTotal) * 100}%`, background: c.color }} title={`${c.label} · ${c.pct}% · ${fmtUsd(c.usd)}`} />
           ))}
         </div>
-        <div className="mt-1.5 flex items-center justify-between font-mono text-[10px] uppercase tracking-wider text-textMuted">
+        <div className="mt-1.5 flex items-center justify-between font-mono text-micro uppercase tracking-wider text-textMuted">
           <span>most knowable</span>
           <span>share of forced flow, summed across ±{ladderRangePct.toFixed(0)}%</span>
           <span>most assumed</span>
@@ -395,24 +395,24 @@ const Fracture = () => {
                 <div className="flex items-center gap-2 mb-2">
                   <ConfidenceChip tier={tier} />
                   <span className="h-px flex-1 bg-borderSubtle" />
-                  <span className="font-mono text-[10px] text-textMuted lowercase tracking-wide">{m.hint}</span>
+                  <span className="font-mono text-micro text-textMuted lowercase tracking-wide">{m.hint}</span>
                 </div>
                 <div className="flex flex-col">
                   {rows.map(c => (
                     <div key={c.key} className="grid grid-cols-[132px_1fr_92px] items-center gap-3 py-1.5" title={`${c.label} — ${c.basis}`}>
                       <span className="flex items-center gap-2 min-w-0">
                         <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: c.color }} />
-                        <span className="font-mono text-[12px] text-textPrimary truncate">{c.label}</span>
+                        <span className="font-mono text-caption text-textPrimary truncate">{c.label}</span>
                       </span>
                       <span className="flex items-center gap-2 min-w-0">
                         <span className="flex-1 h-2 rounded-full bg-white/[0.05] overflow-hidden">
                           <span className="block h-full rounded-full" style={{ width: `${(c.usd / maxContrib) * 100}%`, background: c.color }} />
                         </span>
-                        <span className="hidden md:inline font-mono text-[10px] text-textMuted truncate max-w-[220px]">{c.basis}</span>
+                        <span className="hidden md:inline font-mono text-micro text-textMuted truncate max-w-[220px]">{c.basis}</span>
                       </span>
-                      <span className="text-right font-mono text-[12px] text-textPrimary tnum">
+                      <span className="text-right font-mono text-caption text-textPrimary tnum">
                         {fmtUsd(c.usd)}
-                        <span className="ml-1.5 text-[10px] text-textMuted">{c.pct}%</span>
+                        <span className="ml-1.5 text-micro text-textMuted">{c.pct}%</span>
                       </span>
                     </div>
                   ))}
@@ -437,7 +437,7 @@ const Fracture = () => {
           <div className="flex flex-col gap-4">
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <span className="font-mono text-[11px] uppercase tracking-widest text-textMuted">Branching ratio</span>
+                <span className="font-mono text-label uppercase tracking-widest text-textMuted">Branching ratio</span>
                 <SignalBadge tone={critTone} dot>
                   {crit.label}
                 </SignalBadge>
@@ -449,11 +449,11 @@ const Fracture = () => {
                 />
                 <span className="absolute top-0 bottom-0" style={{ left: '80%', width: '1px', background: 'rgba(255,255,255,0.4)' }} />
               </div>
-              <p className="mt-2 text-[11px] text-textSecondary leading-relaxed">{crit.note}</p>
+              <p className="mt-2 text-label text-textSecondary leading-relaxed">{crit.note}</p>
             </div>
 
             <div className="border-t border-borderSubtle pt-3">
-              <div className="font-mono text-[11px] uppercase tracking-widest text-textMuted mb-2">
+              <div className="font-mono text-label uppercase tracking-widest text-textMuted mb-2">
                 What's driving the current move
               </div>
               <div className="flex h-3 rounded-sm overflow-hidden bg-white/[0.04]">
@@ -463,13 +463,13 @@ const Fracture = () => {
               </div>
               <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-1">
                 {DECOMP.filter(d => view.decomposition[d.key] >= 4).map(d => (
-                  <span key={d.key} className="inline-flex items-center gap-1.5 font-mono text-[11px] text-textSecondary">
+                  <span key={d.key} className="inline-flex items-center gap-1.5 font-mono text-label text-textSecondary">
                     <span className="w-2 h-2 rounded-sm inline-block" style={{ background: d.color }} />
                     {d.label} <span className="text-textMuted tnum ml-auto">{view.decomposition[d.key]}%</span>
                   </span>
                 ))}
               </div>
-              <p className="mt-2.5 text-[11px] text-textMuted leading-relaxed">
+              <p className="mt-2.5 text-label text-textMuted leading-relaxed">
                 {view.decomposition.dealerHedging + view.decomposition.systematic + view.decomposition.liquidation >= 55
                   ? 'Mechanically driven — this move can reverse hard once the forced flow behind it is done.'
                   : 'Information leads — the move has a fundamental driver and is more likely to persist.'}

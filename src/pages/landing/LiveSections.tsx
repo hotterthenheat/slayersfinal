@@ -27,6 +27,7 @@ import WorkspaceLoop, { type WorkspaceTile } from './WorkspaceLoop';
 import type { MarketSnapshot } from '../../types/market';
 import type { CommandView, ExposureProfileData, GexMatrixData, GexView } from '../../types/gex';
 import type { Setup, SkyVisionData } from '../../types/skyvision';
+import { VERDICT_LABEL } from '../../components/skyvision/verdict';
 
 const SCAN_INTERVAL_MS = 10_000;
 
@@ -112,7 +113,7 @@ const hotMatrix = (matrix: GexMatrixData): GexMatrixData => ({
 // ---- shared chrome ----------------------------------------------------------
 
 const LivePill = () => (
-  <span className="inline-flex items-center gap-1.5 font-mono text-[10px] font-bold uppercase tracking-widest text-select">
+  <span className="inline-flex items-center gap-1.5 font-mono text-micro font-bold uppercase tracking-widest text-select">
     <span className="w-1.5 h-1.5 rounded-full bg-select animate-pulse" />
     Live
   </span>
@@ -130,11 +131,11 @@ const EngineBox = ({ name, line, accent, to, children }: EngineBoxProps) => (
   <TiltBox className="flex flex-col">
     <div className="flex items-center gap-2.5 px-4 h-11 border-b border-borderSubtle shrink-0">
       <span className={`w-1.5 h-1.5 rounded-full ${accent}`} />
-      <span className="font-mono text-[11px] font-bold uppercase tracking-widest text-textPrimary">{name}</span>
-      <span className="hidden sm:block text-[11px] text-textSecondary truncate">{line}</span>
+      <span className="font-mono text-label font-bold uppercase tracking-widest text-textPrimary">{name}</span>
+      <span className="hidden sm:block text-label text-textSecondary truncate">{line}</span>
       <Link
         to={to}
-        className="ml-auto inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-textSecondary hover:text-select transition-colors"
+        className="ml-auto inline-flex items-center gap-1 font-mono text-micro uppercase tracking-wider text-textSecondary hover:text-select transition-colors"
       >
         Open <ArrowRight className="w-3 h-3" />
       </Link>
@@ -164,25 +165,25 @@ const DemoTape = ({ snapshot }: { snapshot: MarketSnapshot }) => {
             transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
             className="flex items-center gap-2.5 px-4 h-[38px] border-b border-borderSubtle/40"
           >
-            <span className="font-mono text-[10px] text-textMuted tnum shrink-0">{p.time}</span>
+            <span className="font-mono text-micro text-textMuted tnum shrink-0">{p.time}</span>
             <span
-              className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[10px] font-semibold shrink-0 ${
+              className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-micro font-semibold shrink-0 ${
                 p.right === 'C' ? 'border-bull/30 bg-bull/10 text-bull' : 'border-bear/30 bg-bear/10 text-bear'
               }`}
             >
               {p.ticker} {p.strike}{p.right}
             </span>
-            <span className="font-mono text-[11px] text-textPrimary tnum shrink-0">
+            <span className="hidden sm:inline font-mono text-label text-textPrimary tnum shrink-0">
               {p.size} <span className="text-textMuted">@</span> {p.fill.toFixed(2)}
             </span>
-            <span className="ml-auto font-mono text-[11px] font-semibold text-textPrimary tnum shrink-0">
+            <span className="ml-auto font-mono text-label font-semibold text-textPrimary tnum shrink-0">
               {fmtUsd(p.premium)}
             </span>
             {p.sweep && (
-              <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-warn shrink-0">Sweep</span>
+              <span className="hidden sm:inline font-mono text-micro font-bold uppercase tracking-wider text-warn shrink-0">Sweep</span>
             )}
             <span
-              className={`inline-flex items-center rounded px-1.5 py-0.5 font-mono text-[10px] font-bold shrink-0 ${
+              className={`inline-flex items-center rounded px-1.5 py-0.5 font-mono text-micro font-bold shrink-0 ${
                 p.side === 'ASK'
                   ? 'bg-bull/90 text-[#0a0a0a]'
                   : p.side === 'BID'
@@ -211,22 +212,22 @@ const DemoSetup = ({ setups }: { setups: SkyVisionData }) => {
     <div className="h-full p-4 flex flex-col gap-3 select-none">
       <div className="flex items-center gap-2">
         <span
-          className={`inline-flex items-center rounded-full border px-2.5 py-1 font-mono text-[11px] font-semibold ${
+          className={`inline-flex items-center rounded-full border px-2.5 py-1 font-mono text-label font-semibold ${
             bull ? 'border-bull/30 bg-bull/10 text-bull' : 'border-bear/30 bg-bear/10 text-bear'
           }`}
         >
           {setup.contract}
         </span>
-        <span className="inline-flex items-center rounded px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider bg-king/10 text-king">
+        <span className="inline-flex items-center rounded px-2 py-0.5 font-mono text-micro font-bold uppercase tracking-wider bg-king/10 text-king">
           Top pick
         </span>
         <span
-          className={`ml-auto inline-flex items-center rounded px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-[#0a0a0a] ${
+          className={`ml-auto inline-flex items-center rounded px-2 py-0.5 font-mono text-micro font-bold uppercase tracking-wider text-[#0a0a0a] ${
             bull ? 'holo-bg' : ''
           }`}
           style={bull ? undefined : { background: 'rgba(255,59,48,0.85)' }}
         >
-          {setup.verdict}
+          {VERDICT_LABEL[setup.verdict]}
         </span>
       </div>
 
@@ -241,8 +242,8 @@ const DemoSetup = ({ setups }: { setups: SkyVisionData }) => {
           },
         ].map(cell => (
           <div key={cell.label} className="border border-borderSubtle rounded-md px-2.5 py-2">
-            <span className="block font-mono text-[10px] uppercase tracking-widest text-textMuted">{cell.label}</span>
-            <span className={`block mt-0.5 font-mono text-[15px] font-bold tnum ${cell.tone ?? 'text-textPrimary'}`}>
+            <span className="block font-mono text-micro uppercase tracking-widest text-textMuted">{cell.label}</span>
+            <span className={`block mt-0.5 font-mono text-read font-bold tnum ${cell.tone ?? 'text-textPrimary'}`}>
               {cell.value}
             </span>
           </div>
@@ -251,8 +252,8 @@ const DemoSetup = ({ setups }: { setups: SkyVisionData }) => {
 
       <div>
         <div className="flex items-center justify-between">
-          <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Confidence</span>
-          <span className="font-mono text-[11px] font-semibold text-textPrimary tnum">{setup.confidence}%</span>
+          <span className="font-mono text-micro uppercase tracking-widest text-textMuted">Confidence</span>
+          <span className="font-mono text-label font-semibold text-textPrimary tnum">{setup.confidence}%</span>
         </div>
         <div className="mt-1.5 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
           <motion.div
@@ -263,7 +264,7 @@ const DemoSetup = ({ setups }: { setups: SkyVisionData }) => {
         </div>
       </div>
 
-      <p className="text-[11px] text-textSecondary leading-relaxed line-clamp-3">{setup.whyText}</p>
+      <p className="text-label text-textSecondary leading-relaxed line-clamp-3">{setup.whyText}</p>
     </div>
   );
 };
@@ -271,7 +272,7 @@ const DemoSetup = ({ setups }: { setups: SkyVisionData }) => {
 // ---- the sections ------------------------------------------------------------
 
 const SectionKicker = ({ children }: { children: React.ReactNode }) => (
-  <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.25em] text-textSecondary">{children}</span>
+  <span className="font-mono text-label font-semibold uppercase tracking-[0.25em] text-textSecondary">{children}</span>
 );
 
 /** "Same card, opposite call" — one real setup shown in both of its states. */
@@ -301,7 +302,7 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
       <div>
         <SectionKicker>Entries are easy</SectionKicker>
         <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">It calls the exit, too.</h2>
-        <p className="mt-4 text-[14px] text-textSecondary leading-relaxed max-w-md">
+        <p className="mt-4 text-body text-textSecondary leading-relaxed max-w-md">
           Most tools flag a setup and go quiet. Here, the same card that read QUALIFIED watches its own
           setup — and when the structure under it breaks, it turns red and says so. This is one real card from
           the terminal, shown in both of its states.
@@ -314,7 +315,7 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
                 lockedRef.current = true;
                 setMode(m);
               }}
-              className={`px-4 py-1.5 font-mono text-[11px] font-bold uppercase tracking-wider transition-colors ${
+              className={`px-4 py-1.5 font-mono text-label font-bold uppercase tracking-wider transition-colors ${
                 mode === m
                   ? m === 'ENTER'
                     ? 'text-[#0a0a0a] holo-bg'
@@ -325,7 +326,7 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
                 mode === m && m === 'EXIT' ? { background: 'rgba(255,59,48,0.85)' } : undefined
               }
             >
-              {m}
+              {m === 'ENTER' ? 'QUALIFIED' : 'FADED'}
             </button>
           ))}
         </div>
@@ -333,8 +334,8 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
 
       <TiltBox maxTilt={5} className="p-0">
         <div className="flex items-center gap-2.5 px-4 h-11 border-b border-borderSubtle">
-          <span className="font-mono text-[10px] font-bold uppercase tracking-widest text-textMuted">The setup</span>
-          <span className="font-mono text-[11px] font-semibold text-textPrimary">{setup.contract}</span>
+          <span className="font-mono text-micro font-bold uppercase tracking-widest text-textMuted">The setup</span>
+          <span className="font-mono text-label font-semibold text-textPrimary">{setup.contract}</span>
           <span className="ml-auto">
             <LivePill />
           </span>
@@ -349,12 +350,12 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
               transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
             >
               <h3
-                className="font-mono text-[17px] font-bold tracking-tight"
+                className="font-mono text-lead font-bold tracking-tight"
                 style={{ color: entering ? '#30D158' : '#FF3B30' }}
               >
                 {entering ? `STRONG ${bull ? 'CALL' : 'PUT'} — CONDITIONS ALIGNED` : 'FADING — LOW CONVICTION'}
               </h3>
-              <p className="mt-3 text-[12px] text-textSecondary leading-relaxed">
+              <p className="mt-3 text-caption text-textSecondary leading-relaxed">
                 {entering
                   ? setup.whyText
                   : `${setup.invalidationReason} is gone below $${setup.invalidationPrice.toFixed(2)} — the floor this
@@ -363,8 +364,8 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
 
               <div className="mt-4">
                 <div className="flex items-center justify-between">
-                  <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Confidence</span>
-                  <span className="font-mono text-[11px] font-semibold text-textPrimary tnum">{confidence}%</span>
+                  <span className="font-mono text-micro uppercase tracking-widest text-textMuted">Confidence</span>
+                  <span className="font-mono text-label font-semibold text-textPrimary tnum">{confidence}%</span>
                 </div>
                 <div className="mt-1.5 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
                   <motion.div
@@ -387,8 +388,8 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
                   { label: 'IV', value: `${setup.greeks.iv.toFixed(1)}%` },
                 ].map(g => (
                   <div key={g.label} className="border border-borderSubtle rounded-md px-2 py-1.5">
-                    <span className="block font-mono text-[10px] uppercase tracking-widest text-textMuted">{g.label}</span>
-                    <span className={`block mt-0.5 font-mono text-[12px] font-semibold tnum ${g.tone ?? 'text-textPrimary'}`}>
+                    <span className="block font-mono text-micro uppercase tracking-widest text-textMuted">{g.label}</span>
+                    <span className={`block mt-0.5 font-mono text-caption font-semibold tnum ${g.tone ?? 'text-textPrimary'}`}>
                       {g.value}
                     </span>
                   </div>
@@ -399,7 +400,7 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
                 {setup.whyChips.map(chip => (
                   <span
                     key={chip}
-                    className="inline-flex items-center rounded border border-borderSubtle px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-textSecondary"
+                    className="inline-flex items-center rounded border border-borderSubtle px-2 py-0.5 font-mono text-micro font-semibold uppercase tracking-wider text-textSecondary"
                   >
                     {chip}
                   </span>
@@ -415,37 +416,35 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
 
 // ---- chart showcase (the "first product hit" right after the hero) ---------
 
-/** Floating callout chip pinned over the showcase frame. */
+/** A static annotation tag pinned over the showcase frame — a legend teaching
+    the level colors (walls / flip / king), not a floating marketing pill. */
 const FloatChip = ({
   label,
   dot,
   className,
-  delay = 0,
 }: {
   label: string;
   dot: string;
   className: string;
   delay?: number;
 }) => (
-  <motion.span
-    animate={{ y: [0, -6, 0] }}
-    transition={{ duration: 4.2, repeat: Infinity, ease: 'easeInOut', delay }}
-    className={`absolute z-20 inline-flex items-center gap-2 rounded-full border border-borderMuted bg-panelRaised/90 px-3 py-1.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-textPrimary shadow-lg shadow-black/50 pointer-events-none ${className}`}
+  <span
+    className={`absolute z-20 inline-flex items-center gap-2 rounded border border-borderMuted bg-panelRaised/95 px-2.5 py-1 font-mono text-micro font-semibold uppercase tracking-wider text-textPrimary pointer-events-none ${className}`}
   >
     <span className="w-1.5 h-1.5 rounded-full" style={{ background: dot }} />
     {label}
-  </motion.span>
+  </span>
 );
 
 /** A big framed chart, done live — the terminal's own chart actually running, not a screenshot. */
 const ChartShowcase = ({ ctx }: { ctx: LandingCtx | null }) => (
   <section id="showcase" className="px-6 md:px-10 pt-24 pb-20 max-w-6xl mx-auto">
-    <div className="text-center">
+    <div>
       <SectionKicker>Charting</SectionKicker>
       <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">
         The chart that knows where dealers stand.
       </h2>
-      <p className="mt-4 text-[14px] text-textSecondary leading-relaxed max-w-xl mx-auto">
+      <p className="mt-4 text-body text-textSecondary leading-relaxed max-w-xl">
         Walls, the gamma flip, the king strike — drawn straight on the candles and repriced as the
         session moves. This isn't a screenshot; it's the terminal's chart, running live.
       </p>
@@ -472,7 +471,7 @@ const ChartShowcase = ({ ctx }: { ctx: LandingCtx | null }) => (
         </>
       )}
     </div>
-    <p className="mt-4 text-center font-mono text-[10px] uppercase tracking-widest text-textMuted">
+    <p className="mt-4 text-center font-mono text-micro uppercase tracking-widest text-textMuted">
       live tick feed · levels on a 10s scan
     </p>
   </section>
@@ -504,19 +503,19 @@ const Pillars = () => (
   <section className="px-6 md:px-10 py-20 max-w-6xl mx-auto">
     <SectionKicker>What the terminal reads</SectionKicker>
     <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">Price doesn't move randomly.</h2>
-    <p className="mt-4 text-[14px] text-textSecondary leading-relaxed max-w-2xl">
-      Options dealers have to hedge, and their hedging concentrates around a few price levels every
-      session — mechanically. That structure is what actually pushes and pins price. Slayer maps it
-      live, then grades the contracts that trade it.
+    <p className="mt-4 text-body text-textSecondary leading-relaxed max-w-2xl">
+      That hedging leaves fingerprints. The same three keep showing up on every chain — where the
+      move gets capped, where dealers flip from calming price to chasing it, and where the size hits
+      the tape before it hits the print.
     </p>
     <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-8">
       {PILLARS.map(p => (
         <div key={p.n} className="border-l border-borderSubtle pl-5">
           <div className="flex items-baseline gap-2.5">
-            <span className={`font-mono text-[11px] font-bold ${p.tone}`}>{p.n}</span>
-            <h3 className="text-[15px] font-bold text-textPrimary tracking-tight">{p.title}</h3>
+            <span className={`font-mono text-label font-bold ${p.tone}`}>{p.n}</span>
+            <h3 className="text-read font-bold text-textPrimary tracking-tight">{p.title}</h3>
           </div>
-          <p className="mt-2.5 text-[12px] text-textSecondary leading-relaxed">{p.body}</p>
+          <p className="mt-2.5 text-caption text-textSecondary leading-relaxed">{p.body}</p>
         </div>
       ))}
     </div>
@@ -535,7 +534,7 @@ const LiveSections = () => {
       <section id="live" className="px-6 md:px-10 py-20 max-w-6xl mx-auto">
         <div className="flex items-baseline gap-3 flex-wrap">
           <SectionKicker>The terminal, live</SectionKicker>
-          <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted">
+          <span className="font-mono text-micro uppercase tracking-wider text-textMuted">
             these panels are running right now
           </span>
         </div>
@@ -562,7 +561,7 @@ const LiveSections = () => {
                   name="Pinpoint"
                   line="Strike × expiry heat — repriced every second"
                   accent="bg-select"
-                  to="/pinpoint/exposure-profile"
+                  to="/pinpoint/levels"
                 >
                   <div className="h-full p-2 pointer-events-none select-none">
                     <GexMatrix data={hotMatrix(ctx.matrix)} spot={ctx.gex.levels.spot} />
@@ -610,10 +609,10 @@ const LiveSections = () => {
             <div className="mt-5 h-[440px]">
               <TiltBox maxTilt={2.5} glare={false} className="flex flex-col">
                 <div className="flex items-center gap-2.5 px-4 h-11 border-b border-borderSubtle shrink-0">
-                  <span className="font-mono text-[11px] font-bold uppercase tracking-widest text-textPrimary">
+                  <span className="font-mono text-label font-bold uppercase tracking-widest text-textPrimary">
                     Dealer positioning map
                   </span>
-                  <span className="hidden sm:block text-[11px] text-textSecondary">
+                  <span className="hidden sm:block text-label text-textSecondary">
                     net dealer pressure by strike — hover a bar, it answers
                   </span>
                   <span className="ml-auto">
@@ -638,7 +637,7 @@ const LiveSections = () => {
             <div>
               <SectionKicker>Workspace</SectionKicker>
               <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">Your desk, your layout.</h2>
-              <p className="mt-4 text-[14px] text-textSecondary leading-relaxed max-w-xl">
+              <p className="mt-4 text-body text-textSecondary leading-relaxed max-w-xl">
                 Every panel in the terminal pulls into a workspace — drag, resize, duplicate. It saves
                 the moment you touch it. These are the real panels, rearranging themselves so you don't
                 have to imagine it.
@@ -646,7 +645,7 @@ const LiveSections = () => {
             </div>
             <Link
               to="/pulse"
-              className="md:ml-auto shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-md border border-borderMuted font-mono text-[12px] uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-white/[0.03] transition-colors"
+              className="md:ml-auto shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-md border border-borderMuted font-mono text-caption uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-white/[0.03] transition-colors"
             >
               Try the workspace <ArrowRight className="w-3.5 h-3.5" />
             </Link>

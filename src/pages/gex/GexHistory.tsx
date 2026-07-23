@@ -174,7 +174,7 @@ const GexHistory = () => {
   if (!view) {
     return (
       <Panel title="History & Replay">
-        <div className="h-40 flex items-center justify-center font-mono text-[11px] uppercase tracking-widest text-textMuted">Reconstructing session…</div>
+        <div className="h-40 flex items-center justify-center font-mono text-label uppercase tracking-widest text-textMuted">Reconstructing session…</div>
       </Panel>
     );
   }
@@ -242,8 +242,8 @@ const GexHistory = () => {
         tone="select"
         actions={
           <span className="inline-flex items-center gap-2 font-mono">
-            <span className="text-[11px] uppercase tracking-widest text-textMuted">Showing state as of</span>
-            <span className="text-[13px] font-semibold tnum text-select">{hp.time}</span>
+            <span className="text-label uppercase tracking-widest text-textMuted">Showing state as of</span>
+            <span className="text-data font-semibold tnum text-select">{hp.time}</span>
           </span>
         }
       >
@@ -251,15 +251,15 @@ const GexHistory = () => {
           {/* session picker + jump anchors */}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="inline-flex items-center gap-2">
-              <span className="font-mono text-[11px] uppercase tracking-widest text-textMuted">Session</span>
-              <span className="inline-flex items-center gap-1.5 rounded border border-select/25 bg-select/[0.06] px-2 py-1 font-mono text-[12px] text-textPrimary">
+              <span className="font-mono text-label uppercase tracking-widest text-textMuted">Session</span>
+              <span className="inline-flex items-center gap-1.5 rounded border border-select/25 bg-select/[0.06] px-2 py-1 font-mono text-caption text-textPrimary">
                 <CalendarDays size={12} className="text-select" />
                 {sessionDate}
                 <span className="text-textMuted">· Regular 09:30–16:00</span>
               </span>
             </div>
             <div className="inline-flex items-center gap-1.5">
-              <span className="font-mono text-[11px] uppercase tracking-widest text-textMuted mr-1">Jump</span>
+              <span className="font-mono text-label uppercase tracking-widest text-textMuted mr-1">Jump</span>
               {anchors.map(a => {
                 const active = cursorIdx === a.i && hover === null;
                 return (
@@ -267,7 +267,7 @@ const GexHistory = () => {
                     key={a.label}
                     onClick={() => scrubTo(a.i)}
                     aria-pressed={active}
-                    className={`rounded-md h-7 px-2.5 font-mono text-[11px] uppercase tracking-wider transition-colors border ${
+                    className={`rounded-md h-7 px-2.5 font-mono text-label uppercase tracking-wider transition-colors border ${
                       active
                         ? 'bg-select/[0.10] text-select border-select/30'
                         : 'bg-white/[0.02] text-textSecondary hover:text-textPrimary border-borderSubtle'
@@ -292,7 +292,7 @@ const GexHistory = () => {
               onClick={togglePlay}
               aria-label={playing ? 'Pause replay' : 'Play replay'}
               title={playing ? 'Pause' : 'Play'}
-              className="rounded-md h-8 px-3.5 inline-flex items-center gap-1.5 border border-select/30 bg-select/[0.10] text-select hover:bg-select/[0.16] transition-colors font-mono text-[11px] uppercase tracking-wider"
+              className="rounded-md h-8 px-3.5 inline-flex items-center gap-1.5 border border-select/30 bg-select/[0.10] text-select hover:bg-select/[0.16] transition-colors font-mono text-label uppercase tracking-wider"
             >
               {playing ? <Pause size={13} /> : <Play size={13} />}
               {playing ? 'Pause' : 'Play'}
@@ -305,7 +305,7 @@ const GexHistory = () => {
             </TBtn>
 
             <div className="ml-auto inline-flex items-center gap-2">
-              <span className="font-mono text-[11px] uppercase tracking-widest text-textMuted">Speed</span>
+              <span className="font-mono text-label uppercase tracking-widest text-textMuted">Speed</span>
               <SegmentedControl<SpeedKey> options={SPEEDS} value={speed} onChange={setSpeed} ariaLabel="Replay speed" />
             </div>
           </div>
@@ -332,7 +332,7 @@ const GexHistory = () => {
                 />
               ))}
             </div>
-            <div className="flex items-center justify-between font-mono text-[11px] tnum text-textMuted select-none">
+            <div className="flex items-center justify-between font-mono text-label tnum text-textMuted select-none">
               <span>{view.open.time}</span>
               <span className="uppercase tracking-wider">
                 {view.points.length} snapshots · {events.length} events
@@ -343,11 +343,11 @@ const GexHistory = () => {
 
           {/* legend + current-moment event note */}
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-0.5 border-t border-borderSubtle">
-            <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-textSecondary">
+            <span className="inline-flex items-center gap-1.5 font-mono text-label text-textSecondary">
               <span className="w-2 h-2 rounded-full" style={{ background: EV_FLIP }} /> Flip cross
               <span className="text-textMuted">({view.flipCrosses})</span>
             </span>
-            <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-textSecondary">
+            <span className="inline-flex items-center gap-1.5 font-mono text-label text-textSecondary">
               <span className="w-2 h-2 rounded-full" style={{ background: EV_GEX }} /> Net GEX sign flip
               <span className="text-textMuted">({view.netGexFlips})</span>
             </span>
@@ -359,7 +359,7 @@ const GexHistory = () => {
                   </SignalBadge>
                 ))
               ) : (
-                <span className="font-mono text-[11px] text-textMuted">no structural event at this snapshot</span>
+                <span className="font-mono text-label text-textMuted">no structural event at this snapshot</span>
               )}
             </span>
           </div>
@@ -382,7 +382,7 @@ const GexHistory = () => {
           actions={
             <span className="hidden sm:flex items-center gap-2.5">
               {SERIES.map(s => (
-                <span key={s.key} className="inline-flex items-center gap-1 font-mono text-[11px] uppercase tracking-wider text-textMuted">
+                <span key={s.key} className="inline-flex items-center gap-1 font-mono text-label uppercase tracking-wider text-textMuted">
                   <span className="w-2.5 h-[2px] inline-block" style={{ background: s.color }} /> {s.label}
                 </span>
               ))}
@@ -396,7 +396,7 @@ const GexHistory = () => {
           <div className="flex flex-col gap-3">
             {view.shifts.map(s => (
               <div key={s.label} className="flex items-center justify-between gap-2 border-b border-borderSubtle pb-2.5 last:border-0">
-                <span className="font-mono text-[11px] text-textSecondary">{s.label}</span>
+                <span className="font-mono text-label text-textSecondary">{s.label}</span>
                 <span className="flex items-center gap-2 font-mono text-xs tnum">
                   <span className="text-textMuted">${s.from.toFixed(2)}</span>
                   <span className="text-textMuted">→</span>
@@ -408,7 +408,7 @@ const GexHistory = () => {
                 </span>
               </div>
             ))}
-            <p className="text-[11px] text-textMuted leading-relaxed mt-1">
+            <p className="text-label text-textMuted leading-relaxed mt-1">
               {widthDelta <= 0
                 ? 'Dealer walls tightened through the session — a compressing, pin-prone regime into the close.'
                 : 'Walls widened as the session ran — structure loosened, giving price more room to trend.'}

@@ -62,6 +62,7 @@ export const PULSE_PRESETS: PulseLayout[] = [
       { id: 'c-levels', key: 'key-levels' },
       { id: 'c-flow', key: 'order-flow' },
       { id: 'c-dp', key: 'dark-pool' },
+      { id: 'c-liq', key: 'liquidity-map' },
     ],
     layout: [
       L('c-chart', 0, 0, 8, 6, 4, 4),
@@ -70,6 +71,7 @@ export const PULSE_PRESETS: PulseLayout[] = [
       L('c-levels', 5, 6, 3, 5, 3, 3),
       L('c-flow', 8, 6, 4, 5, 3, 4),
       L('c-dp', 0, 11, 12, 4, 4, 3),
+      L('c-liq', 0, 15, 12, 4, 4, 3),
     ],
   },
   {

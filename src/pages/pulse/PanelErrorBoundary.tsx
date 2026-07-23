@@ -46,15 +46,15 @@ class PanelErrorBoundary extends Component<Props, State> {
           <span className="inline-flex w-8 h-8 rounded-md border border-warn/30 bg-warn/[0.06] items-center justify-center">
             <AlertTriangle className="w-4 h-4 text-warn" />
           </span>
-          <span className="font-mono text-[11px] font-semibold uppercase tracking-widest text-warn">
+          <span className="font-mono text-label font-semibold uppercase tracking-widest text-warn">
             Panel error
           </span>
-          <span className="text-[11px] text-textMuted leading-relaxed max-w-[240px]">
+          <span className="text-label text-textMuted leading-relaxed max-w-[240px]">
             This panel hit a runtime error and was isolated so the rest of your desk keeps running.
           </span>
           <button
             onClick={this.retry}
-            className="mt-1 inline-flex items-center px-2.5 py-1 rounded border border-borderSubtle font-mono text-[11px] uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-white/[0.04] transition-colors"
+            className="mt-1 inline-flex items-center px-2.5 py-1 rounded border border-borderSubtle font-mono text-label uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-white/[0.04] transition-colors"
           >
             Retry
           </button>
