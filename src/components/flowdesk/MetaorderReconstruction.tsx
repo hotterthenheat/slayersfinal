@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState } from 'react';
 import { GitMerge, Zap, Timer, ChevronRight, AlertTriangle, Layers } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { BULL } from '../gex/palette';
@@ -11,6 +11,7 @@ import {
 } from '../../data/metaorder';
 import Panel from '../ui/Panel';
 import StatCard from '../ui/StatCard';
+import Stat from '../ui/Stat';
 import MetricGrid from '../ui/MetricGrid';
 import SignalBadge from '../ui/SignalBadge';
 import HoverReadout from '../ui/HoverReadout';
@@ -102,28 +103,6 @@ const invalidation = (m: Metaorder): string => {
 
 const PER_OUTPUT_CAVEAT =
   'Inferred from the session tape — no order-audit trail or ticket IDs confirm these prints belong to one parent.';
-
-/** One micro-labelled reading in a card's stat row. */
-const Cell = ({ label, value, tone = 'neutral' }: { label: string; value: ReactNode; tone?: Tone }) => {
-  const color =
-    tone === 'bull'
-      ? 'text-bull'
-      : tone === 'bear'
-        ? 'text-bear'
-        : tone === 'warn'
-          ? 'text-warn'
-          : tone === 'select'
-            ? 'text-select'
-            : tone === 'magenta'
-              ? 'text-king'
-              : 'text-textPrimary';
-  return (
-    <div className="min-w-0">
-      <div className="font-mono text-label uppercase tracking-wider text-textMuted truncate">{label}</div>
-      <div className={`mt-0.5 font-mono text-data font-semibold tnum truncate ${color}`}>{value}</div>
-    </div>
-  );
-};
 
 /** Child-print execution timeline — clip size = radius, ask-lifts read green. */
 const Timeline = ({ prints }: { prints: ChildPrint[] }) => {
@@ -301,12 +280,12 @@ const MetaorderRow = ({ m }: { m: Metaorder }) => {
 
       {/* inferred readings */}
       <div className="grid grid-cols-3 lg:grid-cols-6 gap-x-4 gap-y-2.5 pt-0.5">
-        <Cell label="Inferred total" value={fmtUsd(m.estTotalUsd)} tone={tone} />
-        <Cell label="Time left" value={`${m.minsRemainingLo}–${m.minsRemainingHi}m`} tone={urgencyTone[m.urgency]} />
-        <Cell label="Flow half-life" value={`${m.halfLifeMin}m`} />
-        <Cell label="Opening prob" value={`${m.openingProb}%`} tone={m.openingProb >= 55 ? 'select' : 'neutral'} />
-        <Cell label="Ask-lift" value={`${m.askPct.toFixed(0)}%`} />
-        <Cell label="Dir. info" value={`${signed(m.infoScore)} · ${m.infoLabel}`} tone={tone} />
+        <Stat label="Inferred total" value={fmtUsd(m.estTotalUsd)} tone={tone} />
+        <Stat label="Time left" value={`${m.minsRemainingLo}–${m.minsRemainingHi}m`} tone={urgencyTone[m.urgency]} />
+        <Stat label="Flow half-life" value={`${m.halfLifeMin}m`} />
+        <Stat label="Opening prob" value={`${m.openingProb}%`} tone={m.openingProb >= 55 ? 'select' : 'neutral'} />
+        <Stat label="Ask-lift" value={`${m.askPct.toFixed(0)}%`} />
+        <Stat label="Dir. info" value={`${signed(m.infoScore)} · ${m.infoLabel}`} tone={tone} />
       </div>
 
       {/* legs */}

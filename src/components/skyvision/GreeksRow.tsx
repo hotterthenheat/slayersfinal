@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+import Stat from '../ui/Stat';
 import type { SetupGreeks } from '../../types/skyvision';
 
 interface GreeksRowProps {
@@ -6,34 +8,27 @@ interface GreeksRowProps {
   fourth?: 'vega' | 'iv';
 }
 
-interface CellProps {
-  label: string;
-  value: string;
-  arrow?: 'up' | 'down' | null;
-  tone?: string;
-}
-
-const Cell = ({ label, value, arrow = null, tone = 'text-textPrimary' }: CellProps) => (
-  <div className="flex flex-col gap-1 px-3 py-2">
-    <span className="font-mono text-micro uppercase tracking-widest text-textMuted">{label}</span>
-    <span className={`font-mono text-xs font-semibold tnum flex items-center gap-1 ${tone}`}>
-      {arrow === 'up' && <span className="text-bull">▲</span>}
-      {arrow === 'down' && <span className="text-bear">▼</span>}
+/** Prefix a directional arrow onto a value — ▲ bull / ▼ bear, colour independent of the value's tone. */
+const withArrow = (value: string, arrow?: 'up' | 'down'): ReactNode =>
+  arrow ? (
+    <span className="flex items-center gap-1">
+      <span className={arrow === 'up' ? 'text-bull' : 'text-bear'}>{arrow === 'up' ? '▲' : '▼'}</span>
       {value}
     </span>
-  </div>
-);
+  ) : (
+    value
+  );
 
 const GreeksRow = ({ greeks, fourth = 'vega' }: GreeksRowProps) => {
   return (
-    <div className="grid grid-cols-4 border border-borderSubtle bg-inset rounded-md divide-x divide-borderSubtle">
-      <Cell label="Delta" value={greeks.delta.toFixed(2)} arrow={greeks.delta >= 0 ? 'up' : 'down'} />
-      <Cell label="Gamma" value={greeks.gamma.toFixed(4)} />
-      <Cell label="Theta" value={greeks.theta.toFixed(2)} tone="text-warn" />
+    <div className="grid grid-cols-4 gap-2">
+      <Stat label="Delta" value={withArrow(greeks.delta.toFixed(2), greeks.delta >= 0 ? 'up' : 'down')} />
+      <Stat label="Gamma" value={greeks.gamma.toFixed(4)} />
+      <Stat label="Theta" value={greeks.theta.toFixed(2)} tone="warn" />
       {fourth === 'vega' ? (
-        <Cell label="Vega" value={greeks.vega.toFixed(2)} arrow="up" tone="text-select" />
+        <Stat label="Vega" value={withArrow(greeks.vega.toFixed(2), 'up')} tone="select" />
       ) : (
-        <Cell label="IV" value={`${greeks.iv.toFixed(1)}%`} />
+        <Stat label="IV" value={`${greeks.iv.toFixed(1)}%`} />
       )}
     </div>
   );

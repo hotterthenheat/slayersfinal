@@ -29,6 +29,7 @@ import {
 import type { MarketSnapshot } from '../../types/market';
 import Panel from '../ui/Panel';
 import SignalBadge from '../ui/SignalBadge';
+import Stat from '../ui/Stat';
 import TickerSearch from '../ui/TickerSearch';
 import DataTable, { type Column } from '../ui/DataTable';
 import type { Tone } from '../ui/tones';
@@ -92,14 +93,6 @@ const FactorRow = ({ label, weight, score, detail }: { label: string; weight: nu
       <span className="w-7 shrink-0 font-mono text-caption font-semibold text-textPrimary tnum text-right">{score}</span>
     </div>
     <p className="pl-32 text-label text-textMuted leading-snug">{detail}</p>
-  </div>
-);
-
-/** Small label/value cell for the analysis stat grid. */
-const Cell = ({ k, v, tone = 'neutral' }: { k: string; v: string; tone?: Tone }) => (
-  <div className="border border-borderSubtle bg-inset rounded-md px-2.5 py-2">
-    <div className="font-mono text-label uppercase tracking-widest text-textMuted">{k}</div>
-    <div className={`mt-1 font-mono text-sm font-semibold tnum ${tone === 'bull' ? 'text-bull' : tone === 'bear' ? 'text-bear' : tone === 'warn' ? 'text-warn' : 'text-textPrimary'}`}>{v}</div>
   </div>
 );
 
@@ -519,14 +512,14 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <Cell k="Mid" v={`$${weighed.mid.toFixed(2)}`} />
-              <Cell k="Δ delta" v={weighed.delta.toFixed(2)} />
-              <Cell k="θ / day" v={`−${weighed.thetaPerDayPct.toFixed(1)}%`} tone={weighed.thetaPerDayPct > 5 ? 'bear' : 'neutral'} />
-              <Cell k="Spread" v={`${weighed.spreadPct.toFixed(1)}%`} />
-              <Cell k="IV rank" v={`${weighed.ivRank}`} />
-              <Cell k="Open int" v={weighed.oi.toLocaleString()} />
-              <Cell k="1σ move" v={`${weighed.expectedMovePct.toFixed(1)}%`} tone="bull" />
-              <Cell k="Breakeven" v={`${weighed.breakevenMovePct.toFixed(1)}%`} tone={coverage >= 1 ? 'bull' : 'warn'} />
+              <Stat label="Mid" value={`$${weighed.mid.toFixed(2)}`} />
+              <Stat label="Δ delta" value={weighed.delta.toFixed(2)} />
+              <Stat label="θ / day" value={`−${weighed.thetaPerDayPct.toFixed(1)}%`} tone={weighed.thetaPerDayPct > 5 ? 'bear' : 'neutral'} />
+              <Stat label="Spread" value={`${weighed.spreadPct.toFixed(1)}%`} />
+              <Stat label="IV rank" value={`${weighed.ivRank}`} />
+              <Stat label="Open int" value={weighed.oi.toLocaleString()} />
+              <Stat label="1σ move" value={`${weighed.expectedMovePct.toFixed(1)}%`} tone="bull" />
+              <Stat label="Breakeven" value={`${weighed.breakevenMovePct.toFixed(1)}%`} tone={coverage >= 1 ? 'bull' : 'warn'} />
             </div>
 
             <div className="border-t border-borderSubtle pt-3 flex flex-col gap-2.5">
@@ -569,14 +562,14 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
             </div>
 
             <div className="grid grid-cols-2 gap-2">
-              <Cell k="Days to expiry" v={`${dte}d`} />
-              <Cell k="Hold to target" v={`${daysToTarget}d`} />
-              <Cell k="Runway to expiry" v={`${runway}d`} tone={runway <= 0 ? 'warn' : 'neutral'} />
-              <Cell k="Your exp. move" v={`${effExpMove.toFixed(1)}%`} tone={clearsBreakeven ? 'bull' : 'warn'} />
-              <Cell k="Cost / contract" v={`$${costPerContract.toFixed(0)}`} />
-              <Cell k="Contracts in budget" v={contractsInBudget != null ? `${contractsInBudget}` : '—'} tone={contractsInBudget === 0 ? 'warn' : 'neutral'} />
-              <Cell k="Est. outlay" v={outlay != null ? `$${outlay.toFixed(0)}` : '—'} />
-              <Cell k="1σ move" v={`${weighed.expectedMovePct.toFixed(1)}%`} tone="bull" />
+              <Stat label="Days to expiry" value={`${dte}d`} />
+              <Stat label="Hold to target" value={`${daysToTarget}d`} />
+              <Stat label="Runway to expiry" value={`${runway}d`} tone={runway <= 0 ? 'warn' : 'neutral'} />
+              <Stat label="Your exp. move" value={`${effExpMove.toFixed(1)}%`} tone={clearsBreakeven ? 'bull' : 'warn'} />
+              <Stat label="Cost / contract" value={`$${costPerContract.toFixed(0)}`} />
+              <Stat label="Contracts in budget" value={contractsInBudget != null ? `${contractsInBudget}` : '—'} tone={contractsInBudget === 0 ? 'warn' : 'neutral'} />
+              <Stat label="Est. outlay" value={outlay != null ? `$${outlay.toFixed(0)}` : '—'} />
+              <Stat label="1σ move" value={`${weighed.expectedMovePct.toFixed(1)}%`} tone="bull" />
             </div>
 
             <p className="text-xs text-textSecondary leading-relaxed">
@@ -660,14 +653,14 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
             )}
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <Cell k="Expected fill" v={`$${expFill.toFixed(2)}`} />
-            <Cell k="Spread round-trip" v={`${weighed.spreadPct.toFixed(1)}%`} tone={weighed.spreadPct > 4 ? 'bear' : 'neutral'} />
-            <Cell k="Exit slippage" v={`~${halfSpread.toFixed(1)}%`} />
-            <Cell k="Fill probability" v={`${fillProb}%`} tone={fillProb >= 70 ? 'bull' : fillProb < 45 ? 'bear' : 'warn'} />
-            <Cell k="Theta drag" v={`−${weighed.thetaPerDayPct.toFixed(1)}%/d`} tone={weighed.thetaPerDayPct > 5 ? 'bear' : 'neutral'} />
-            <Cell k="1σ move" v={`${weighed.expectedMovePct.toFixed(1)}%`} tone="bull" />
-            <Cell k="Breakeven" v={`${weighed.breakevenMovePct.toFixed(1)}%`} />
-            <Cell k="Total friction" v={`${friction.toFixed(1)}%`} tone={costEatsEdge ? 'bear' : 'neutral'} />
+            <Stat label="Expected fill" value={`$${expFill.toFixed(2)}`} />
+            <Stat label="Spread round-trip" value={`${weighed.spreadPct.toFixed(1)}%`} tone={weighed.spreadPct > 4 ? 'bear' : 'neutral'} />
+            <Stat label="Exit slippage" value={`~${halfSpread.toFixed(1)}%`} />
+            <Stat label="Fill probability" value={`${fillProb}%`} tone={fillProb >= 70 ? 'bull' : fillProb < 45 ? 'bear' : 'warn'} />
+            <Stat label="Theta drag" value={`−${weighed.thetaPerDayPct.toFixed(1)}%/d`} tone={weighed.thetaPerDayPct > 5 ? 'bear' : 'neutral'} />
+            <Stat label="1σ move" value={`${weighed.expectedMovePct.toFixed(1)}%`} tone="bull" />
+            <Stat label="Breakeven" value={`${weighed.breakevenMovePct.toFixed(1)}%`} />
+            <Stat label="Total friction" value={`${friction.toFixed(1)}%`} tone={costEatsEdge ? 'bear' : 'neutral'} />
           </div>
           <p className="text-xs text-textSecondary leading-relaxed">
             {costEatsEdge

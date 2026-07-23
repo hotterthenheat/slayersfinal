@@ -10,6 +10,7 @@ import {
 } from '../../data/newsintel';
 import type { NewsCategory, NewsItem } from '../../data/news';
 import SignalBadge from '../ui/SignalBadge';
+import Stat from '../ui/Stat';
 import { toneText, type Tone } from '../ui/tones';
 
 const signed1 = (v: number): string => `${v >= 0 ? '+' : ''}${v.toFixed(1)}`;
@@ -58,15 +59,6 @@ const DivergingRow = ({ label, value, word, wordClass }: { label: string; value:
   );
 };
 
-/** Compact bordered metric cell — the News-page idiom. */
-const Cell = ({ label, value, valueClass = 'text-textPrimary', sub }: { label: string; value: string; valueClass?: string; sub?: string }) => (
-  <div className="border border-borderSubtle bg-inset rounded-md px-2.5 py-2">
-    <div className="font-mono text-label uppercase tracking-wider text-textMuted truncate">{label}</div>
-    <div className={`mt-1 font-mono text-sm font-semibold tnum ${valueClass}`}>{value}</div>
-    {sub && <div className="mt-0.5 text-micro text-textMuted leading-tight truncate">{sub}</div>}
-  </div>
-);
-
 /** One analog event row: match strength · when · how it resolved. */
 const AnalogRow = ({ a }: { a: HeadlineIntel['analogs'][number] }) => (
   <div className="flex items-center gap-2 py-1.5">
@@ -95,10 +87,10 @@ const DeepBreakdown = ({ h, positioningLean, positioningLabel }: { h: HeadlineIn
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        <Cell label="Half-life" value={h.halfLifeLabel} sub={`${h.category.toLowerCase()} decay`} />
-        <Cell label="Priced in" value={`${h.pricedInPct}%`} valueClass={toneText[piTone]} sub="already discounted" />
-        <Cell label="Event vol" value={`±${h.eventVolPct.toFixed(1)}%`} valueClass="text-select" sub="implied move" />
-        <Cell label="Prob up" value={`${h.probUpPct}%`} valueClass={toneText[sentTone]} sub="model, next session" />
+        <Stat label="Half-life" value={h.halfLifeLabel} sub={`${h.category.toLowerCase()} decay`} />
+        <Stat label="Priced in" value={`${h.pricedInPct}%`} tone={piTone} sub="already discounted" />
+        <Stat label="Event vol" value={`±${h.eventVolPct.toFixed(1)}%`} tone="select" sub="implied move" />
+        <Stat label="Prob up" value={`${h.probUpPct}%`} tone={sentTone} sub="model, next session" />
       </div>
 
       <div>
@@ -218,15 +210,15 @@ const NewsIntel = ({ selectedItem, onSelect }: NewsIntelProps) => {
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        <Cell label="Priced in" value={`${view.aggPricedInPct}%`} valueClass={toneText[pricedInTone(view.aggPricedInPct)]} sub="of move discounted" />
-        <Cell
+        <Stat label="Priced in" value={`${view.aggPricedInPct}%`} tone={pricedInTone(view.aggPricedInPct)} sub="of move discounted" />
+        <Stat
           label="Wire vs book"
           value={view.netAgreement}
-          valueClass={toneText[agreeTone[view.netAgreement]]}
+          tone={agreeTone[view.netAgreement]}
           sub={`${view.agreementScore >= 0 ? '+' : ''}${view.agreementScore} lean gap`}
         />
-        <Cell label="Median half-life" value={view.medianHalfLifeLabel} sub="catalyst decay" />
-        <Cell label="Event vol" value={`±${view.eventVolPct.toFixed(1)}%`} valueClass="text-select" sub="implied event move" />
+        <Stat label="Median half-life" value={view.medianHalfLifeLabel} sub="catalyst decay" />
+        <Stat label="Event vol" value={`±${view.eventVolPct.toFixed(1)}%`} tone="select" sub="implied event move" />
       </div>
 
       <div className={`border-l-2 pl-3 ${readTone === 'bull' ? 'border-bull/40' : readTone === 'bear' ? 'border-bear/40' : 'border-borderMuted'}`}>
