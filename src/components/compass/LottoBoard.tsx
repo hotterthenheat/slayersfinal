@@ -5,6 +5,7 @@ import { weighContracts, type WeighedContract } from '../../core/contractScore';
 import type { MocRead } from '../../types/fracture';
 import type { MarketSnapshot } from '../../types/market';
 import Panel from '../ui/Panel';
+import EmptyState from '../ui/EmptyState';
 import StatCard from '../ui/StatCard';
 import MetricGrid from '../ui/MetricGrid';
 import SignalBadge from '../ui/SignalBadge';
@@ -320,7 +321,7 @@ const LottoBoard = ({ snapshot }: { snapshot: MarketSnapshot }) => {
               </button>
             </div>
           ) : lottos.length === 0 ? (
-            <div className="py-12 text-center font-mono text-label text-textMuted uppercase tracking-widest">No 0DTE candidates</div>
+            <EmptyState size="lg" title="No 0DTE candidates" />
           ) : (
             <div className="flex flex-col divide-y divide-borderSubtle">
               {lottos.map((c, i) => (

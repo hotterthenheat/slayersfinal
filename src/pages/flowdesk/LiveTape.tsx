@@ -4,6 +4,7 @@ import { useMarketData } from '../../context/MarketDataContext';
 import { enrichPrint, sentimentOf, summarizeTape } from '../../data/flowtape';
 import { buildGexView, fmtUsd } from '../../data/gex';
 import Panel from '../../components/ui/Panel';
+import EmptyState from '../../components/ui/EmptyState';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import StatCard from '../../components/ui/StatCard';
 import MetricGrid from '../../components/ui/MetricGrid';
@@ -908,8 +909,8 @@ const LiveTape = () => {
               <tbody>
                 {total === 0 && (
                   <tr>
-                    <td colSpan={colCount} className="py-10 text-center font-mono text-label text-textMuted uppercase tracking-widest">
-                      {base.length === 0 ? 'Awaiting first prints…' : 'No prints match the filters'}
+                    <td colSpan={colCount}>
+                      <EmptyState size="lg" title={base.length === 0 ? 'Awaiting first prints…' : 'No prints match the filters'} />
                     </td>
                   </tr>
                 )}
