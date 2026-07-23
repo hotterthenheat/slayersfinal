@@ -58,7 +58,7 @@ const ShiftHoverCard = ({
 
   return (
     <div
-      className={`absolute z-20 w-60 pointer-events-none border border-borderSubtle bg-panelRaised/95 rounded-md shadow-lg p-3 animate-soft-in ${
+      className={`absolute z-20 w-60 pointer-events-none border border-borderSubtle bg-panelRaised/95 rounded-md shadow-overlay p-3 animate-soft-in ${
         row.current >= 0 ? 'left-16' : 'right-4'
       }`}
       style={{ top: Math.max(4, y - 90) }}

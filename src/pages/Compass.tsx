@@ -434,7 +434,7 @@ const Compass = () => {
                   {tickerFilter ?? 'All Tickers'}
                 </button>
                 {showTickerDropdown && (
-                  <div className="absolute right-0 top-full mt-1 z-20 min-w-[140px] border border-borderSubtle bg-panel rounded-md shadow-lg overflow-hidden animate-slide-in">
+                  <div className="absolute right-0 top-full mt-1 z-20 min-w-[140px] border border-borderSubtle bg-panel rounded-md shadow-overlay overflow-hidden animate-slide-in">
                     <button
                       onClick={() => { setTickerFilter(null); setShowTickerDropdown(false); }}
                       className={`w-full text-left px-3 py-2 font-mono text-label transition-colors ${

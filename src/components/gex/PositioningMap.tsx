@@ -76,7 +76,7 @@ const StrikeHoverCard = ({ row, ticker, y }: { row: StrikeExposure; ticker: stri
 
   return (
     <div
-      className={`absolute z-20 w-60 pointer-events-none border border-borderSubtle bg-panelRaised/95 rounded-md shadow-lg p-3 animate-soft-in ${
+      className={`absolute z-20 w-60 pointer-events-none border border-borderSubtle bg-panelRaised/95 rounded-md shadow-overlay p-3 animate-soft-in ${
         callHeavy ? 'right-24' : 'left-16'
       }`}
       style={{ top: Math.max(4, y - 110) }}
