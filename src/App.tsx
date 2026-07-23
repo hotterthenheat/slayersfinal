@@ -22,7 +22,6 @@ import GexHistory from './pages/gex/GexHistory';
 import FlowDeskLayout from './pages/flowdesk/FlowDeskLayout';
 import LiveTape from './pages/flowdesk/LiveTape';
 import FlowScanner from './pages/flowdesk/FlowScanner';
-import FlowTracker from './pages/flowdesk/FlowTracker';
 import MetaorderReconstruction from './components/flowdesk/MetaorderReconstruction';
 import DarkPool from './pages/flowdesk/DarkPool';
 import Stocks from './pages/Stocks';
@@ -123,7 +122,9 @@ const App = () => {
               <Route path="dark-feed" element={<Navigate to="/trace/dark-pool" replace />} />
               <Route path="scanner" element={<FlowScanner />} />
               <Route path="reconstruction" element={<MetaorderReconstruction />} />
-              <Route path="tracker" element={<FlowTracker />} />
+              {/* FlowTracker folded away — Scanner is the single flow-hunting
+                  surface, /tracker the single persistent watch home. */}
+              <Route path="tracker" element={<Navigate to="/trace/scanner" replace />} />
             </Route>
             <Route path="/liquidity" element={<Navigate to="/pulse" replace />} />
             {/* Legacy section paths from before the rebrand — jump straight to the

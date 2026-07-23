@@ -11,13 +11,12 @@
 */
 
 import { useEffect, useState } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronDown, Search, Menu, X, Settings, type LucideIcon } from 'lucide-react';
 import { useMarketData, useTicker } from '../../context/MarketDataContext';
 import AnimatedNumber from '../ui/AnimatedNumber';
 import TickerSearch from '../ui/TickerSearch';
-import { useLaunch } from './LaunchTransition';
 import { NAV_GROUPS, itemsByGroup, NAV_ITEMS, type NavGroup, type NavItem } from './nav';
 
 interface TopBarProps {
@@ -29,8 +28,10 @@ type SubLink = { path: string; label: string; icon?: LucideIcon };
 
 const Wordmark = ({ onClick, size = 'sm' }: { onClick: (e: React.MouseEvent) => void; size?: 'sm' | 'md' }) => (
   <a
-    href="/"
+    href="/pulse"
     onClick={onClick}
+    aria-label="Terminal home"
+    title="Terminal home"
     className={`shrink-0 font-mono font-bold tracking-tight select-none ${size === 'md' ? 'text-read' : 'text-data'}`}
   >
     <span className="text-textMuted">&gt; </span>
@@ -41,7 +42,7 @@ const Wordmark = ({ onClick, size = 'sm' }: { onClick: (e: React.MouseEvent) => 
 
 const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
   const { activeTicker, changeTicker } = useTicker();
-  const { launch } = useLaunch();
+  const navigate = useNavigate();
   const location = useLocation();
   const [clock, setClock] = useState(() => new Date().toLocaleTimeString('en-US', { hour12: false }));
   const [dropdown, setDropdown] = useState<string | null>(null);
@@ -55,9 +56,11 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
   // Close the mobile drawer whenever the route changes
   useEffect(() => setMobileOpen(false), [location.pathname]);
 
+  // Inside the shell the wordmark is Home — it returns to the terminal dashboard
+  // (/pulse), the convention for an app logo, rather than exiting to marketing.
   const goHome = (e: React.MouseEvent) => {
     e.preventDefault();
-    launch('/');
+    navigate('/pulse');
   };
   const section = `/${location.pathname.split('/')[1] ?? ''}`;
 
