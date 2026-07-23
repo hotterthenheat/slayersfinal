@@ -63,7 +63,7 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
   const section = `/${location.pathname.split('/')[1] ?? ''}`;
 
   return (
-    <header className="h-14 shrink-0 border-b border-borderSubtle bg-canvas/90 backdrop-blur flex items-center gap-3 px-4 relative z-40">
+    <header className="glass absolute top-0 inset-x-0 h-14 border-b border-white/[0.07] flex items-center gap-3 px-4 z-40">
       {/* Left zone: mobile menu + wordmark. Reserved, high-stacking so nav can
           never paint over it. */}
       <div className="flex items-center gap-2 shrink-0 relative z-10">

@@ -69,7 +69,7 @@ const SubNav = ({ items, ariaLabel }: SubNavProps) => {
       <nav
         ref={navRef}
         aria-label={ariaLabel}
-        className="flex items-center gap-0.5 border border-borderSubtle bg-panel rounded-md p-0.5 max-w-full overflow-x-auto no-scrollbar"
+        className="glass flex items-center gap-0.5 border border-white/[0.08] rounded-md p-0.5 max-w-full overflow-x-auto no-scrollbar"
       >
         {items.map(item => (
           <Tab key={item.path} item={item} pillId={pillId} />
@@ -92,7 +92,7 @@ const SubNav = ({ items, ariaLabel }: SubNavProps) => {
           <span className="px-1 font-mono text-micro font-medium uppercase tracking-[0.18em] text-textMuted select-none">
             {g}
           </span>
-          <div className="flex items-center gap-0.5 border border-borderSubtle bg-panel rounded-md p-0.5 max-w-full overflow-x-auto no-scrollbar">
+          <div className="glass flex items-center gap-0.5 border border-white/[0.08] rounded-md p-0.5 max-w-full overflow-x-auto no-scrollbar">
             {items
               .filter(i => (i.group ?? '') === g)
               .map(item => (

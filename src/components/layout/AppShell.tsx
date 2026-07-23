@@ -64,9 +64,11 @@ const AppShell = () => {
   }, [changeTicker]);
 
   return (
-    <div className="h-screen flex flex-col bg-canvas text-textPrimary overflow-hidden">
+    <div className="h-screen relative bg-canvas text-textPrimary overflow-hidden">
       <TopBar onOpenPalette={openPalette} onOpenSettings={openSettings} />
-      <main className="flex-grow overflow-y-auto">
+      {/* pt-14 clears the overlaid glass bar; content scrolls under it so the
+          blur has the live desk behind it to refract. */}
+      <main className="h-full overflow-y-auto pt-14">
         {/* Keyed by top-level section only — subpage changes animate inside
             their section layout so the header/tabs never remount */}
         {/* Opacity-only crossfade — no vertical translate (which nudged the whole
