@@ -20,7 +20,8 @@ import ContractWeigher from '../components/compass/ContractWeigher';
 import LottoBoard from '../components/compass/LottoBoard';
 import type { Horizon } from '../core/contractScore';
 import SegmentedControl from '../components/ui/SegmentedControl';
-import { setupState, StateBadge, STATE_META } from '../components/skyvision/SetupState';
+import { StateBadge } from '../components/skyvision/SetupState';
+import { setupState, STATE_META } from '../components/skyvision/setupState';
 import { SkeletonRows } from '../components/ui/Skeleton';
 
 type CompassMode = 'setups' | 'weigher' | 'lotto';

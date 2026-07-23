@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- provider component + its consumer hook are colocated by design (the React context pattern); fast-refresh's component-only rule does not apply here. */
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import Simulator from '../core/simulator';
 import type { MarketSnapshot, TickerSymbol } from '../types/market';

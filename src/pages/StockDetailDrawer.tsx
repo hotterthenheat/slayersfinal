@@ -5,52 +5,16 @@ import { X, Star, GitCompare, Info } from 'lucide-react';
 import SignalBadge from '../components/ui/SignalBadge';
 import TickerJump from '../components/ui/TickerJump';
 import Sparkline from '../components/skyvision/Sparkline';
-import type { StockPick, StockVerdict, StockSleeves } from '../data/stocks';
+import type { StockPick, StockVerdict } from '../data/stocks';
 import type { Tone } from '../components/ui/tones';
 import { useFocusTrap } from '../hooks/useFocusTrap';
+import { FACTOR_GUIDE } from '../data/factorGuide';
 
 const verdictTone: Record<StockVerdict, Tone> = {
   ACCUMULATE: 'bull',
   HOLD: 'neutral',
   AVOID: 'bear',
 };
-
-/**
- * Factor guide — plain-language definition of each scoring sleeve, drawn from
- * the engine's own thesis vocabulary. Shared by the drawer and the board-level
- * "Factors" popover so the definitions never drift between the two surfaces.
- */
-export const FACTOR_GUIDE: {
-  key: keyof StockSleeves;
-  short: string;
-  name: string;
-  desc: string;
-}[] = [
-  {
-    key: 'momentum',
-    short: 'Mom',
-    name: 'Momentum',
-    desc: 'Trend & RSI posture — is price working with the trade or against it.',
-  },
-  {
-    key: 'quality',
-    short: 'Qual',
-    name: 'Quality',
-    desc: 'Fundamental screen — margins, growth and balance-sheet health.',
-  },
-  {
-    key: 'flow',
-    short: 'Flow',
-    name: 'Flow',
-    desc: 'Positioning — options flow and dark-pool lean, accumulation vs distribution.',
-  },
-  {
-    key: 'news',
-    short: 'News',
-    name: 'News',
-    desc: 'News-tape sentiment — headline tailwind against live headline risk.',
-  },
-];
 
 const barClass = (v: number) => (v >= 60 ? 'holo-bar' : v >= 40 ? 'bg-white/30' : 'bg-bear/70');
 const valueClass = (v: number) => (v >= 60 ? 'text-textPrimary' : v >= 40 ? 'text-textSecondary' : 'text-bear');

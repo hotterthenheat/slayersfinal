@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import SignalBadge from '../../ui/SignalBadge';
 import ChartLegend from '../../ui/ChartLegend';
-import HoverReadout, { svgHoverIndex } from '../../ui/HoverReadout';
+import HoverReadout from '../../ui/HoverReadout';
+import { svgHoverIndex } from '../../ui/svgHover';
 import type { RegimeData, VolRegime } from '../../../types/gex';
 import type { Tone } from '../../ui/tones';
 

@@ -7,7 +7,8 @@ import Panel from '../../components/ui/Panel';
 import StatCard from '../../components/ui/StatCard';
 import MetricGrid from '../../components/ui/MetricGrid';
 import SegmentedControl from '../../components/ui/SegmentedControl';
-import HoverReadout, { svgHoverIndex } from '../../components/ui/HoverReadout';
+import HoverReadout from '../../components/ui/HoverReadout';
+import { svgHoverIndex } from '../../components/ui/svgHover';
 import { fmtUsd } from '../../data/gex';
 import type { Tone } from '../../components/ui/tones';
 

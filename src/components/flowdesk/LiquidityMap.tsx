@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- DEFAULT_OVERLAYS is this component's own default config, coupled to types it defines; splitting it out adds no value. */
 import { useEffect, useRef } from 'react';
 import { createLiquidityBook, thermal, type LiqColumn, type LiquidityBook } from '../../data/liquiditymap';
 import { BULL, BEAR } from '../gex/palette';

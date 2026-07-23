@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- provider component + its consumer hook are colocated by design (the React context pattern); fast-refresh's component-only rule does not apply here. */
 /*
 ==================================================
   SLAYER TERMINAL - FOCUS MODE
