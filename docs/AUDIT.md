@@ -23,13 +23,15 @@ Each item marked ☐ (open) / ☑ (done) as waves land.
 1. ☑ Verdict-lexicon unification → QUALIFIED / WATCH / FADED everywhere user-facing (COPY-1..7)
 2. ☑ Fracture `aria-label` "simulated" → "modeled" (COPY-8, banned word, screen-reader-audible)
 3. ☑ Delete dead `StatRibbon.tsx` + unused `widgetByKey` export; audit dev-deps reverted before commit (DEAD-1..3)
-4. ☐ Loading/empty copy register unified ("Awaiting feed…") (COPY-9) — deferred to Wave 3
+4. ☑ Loading copy register unified — dev-flavored "Awaiting feed initialization…" → "Awaiting feed…" (COPY-9, 7e0b902)
 
 **Wave 2 — Performance (measurable)** ☑ SHIPPED (79b1ba5)
 5. ☑ Split MarketDataContext into stable `useTicker()` + volatile `useMarketData()` (PERF-1); AppShell→useTicker
 6. ☑ Hoist `PanelChrome` out of PulseWorkspace render body (PERF-2); isolate `<LivePrice/>` in TopBar (PERF-6)
-7. ☐ Move darkpool/Monte-Carlo off the 1s pulse path; memoize panel bodies (PERF-3/4) — deferred
-8. ☑ Kill impure `++revRef.current` pattern in Pulse (PERF-5); ☐ remaining 4 sites (Compass×2, LiveSections, ComplexBoard, GammaChart) deferred
+7. ☑ Move darkpool/Monte-Carlo off the 1s pulse path; memoize panel bodies (PERF-3/4, 17672b7) — non-heatmap
+   panels render from the stable 10s ctx via a memoized body; only gex-heatmap takes the 1s matrix pulse.
+8. ☑ Kill impure `++revRef.current` pattern — Pulse + the remaining 3 sites (LiveSections, ComplexBoard,
+   GammaChart) → state+effect; the 2 Compass useMemos documented as intentional tick-triggers (PERF-5, 7e0b902). Lint 19→13.
 
 **Wave 4 — Information architecture (full consolidation)** ☑ SHIPPED (a4ae167, 7de647e) — merged in PR #30
 14. ☑ Pinpoint 11 → 6 desks with `?view=` sub-tabs (IA-F3..F7); all 8 old paths redirect
