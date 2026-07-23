@@ -37,7 +37,7 @@ const CrossDeskLinks = ({ ticker, strike, right, onNavigate }: CrossDeskLinksPro
           onClick={() =>
             go(() => {
               changeTicker(ticker);
-              navigate('/pinpoint/exposure-profile');
+              navigate('/pinpoint/levels');
             })
           }
           className={btn}
