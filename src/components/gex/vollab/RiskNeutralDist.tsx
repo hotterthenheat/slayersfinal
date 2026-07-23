@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { RndData } from '../../../types/gex';
-import HoverReadout, { svgHoverIndex } from '../../ui/HoverReadout';
+import HoverReadout from '../../ui/HoverReadout';
+import { svgHoverIndex } from '../../ui/svgHover';
 
 interface RiskNeutralDistProps {
   data: RndData;

@@ -56,10 +56,10 @@ const SignalMonitor = ({ setup, onBack }: SignalMonitorProps) => {
             <ArrowLeft className="w-3.5 h-3.5" /> Scanner
           </button>
           <VerdictBadge verdict={setup.verdict} dot />
-          <span className="font-mono text-sm font-bold text-textPrimary">{setup.contract}</span>
+          <span className="font-mono text-body font-bold text-textPrimary leading-5">{setup.contract}</span>
           <div className="ml-auto text-right border border-borderSubtle bg-inset rounded-md px-3 py-1.5">
             <div className="font-mono text-micro uppercase tracking-widest text-textMuted">Live Mid</div>
-            <div className="font-mono text-sm font-semibold text-textPrimary tnum">
+            <div className="font-mono text-body font-semibold text-textPrimary tnum leading-5">
               <AnimatedNumber value={setup.liveMid} format={v => `$${v.toFixed(2)}`} />
             </div>
           </div>
@@ -95,7 +95,7 @@ const SignalMonitor = ({ setup, onBack }: SignalMonitorProps) => {
                 <span className="font-mono text-micro uppercase tracking-widest text-textMuted flex items-center gap-1.5">
                   Confidence <SignalBadge tone="bull" dot pulse>Live</SignalBadge>
                 </span>
-                <span className="font-mono text-xs font-semibold text-textPrimary tnum">
+                <span className="font-mono text-caption font-semibold text-textPrimary tnum leading-4">
                   <AnimatedNumber value={setup.confidence} format={v => `${Math.round(v)}%`} />
                 </span>
               </div>
@@ -116,7 +116,7 @@ const SignalMonitor = ({ setup, onBack }: SignalMonitorProps) => {
               <span className="font-mono text-micro uppercase tracking-widest text-textMuted flex items-center gap-1.5">
                 Expected Move <SignalBadge tone="bull" dot pulse>Live</SignalBadge>
               </span>
-              <span className="font-mono text-sm font-semibold text-select tnum">
+              <span className="font-mono text-body font-semibold text-select tnum leading-5">
                 <AnimatedNumber value={setup.expectedMovePct} format={v => `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`} />
               </span>
             </div>

@@ -4,6 +4,7 @@ import { useMarketData } from '../../context/MarketDataContext';
 import { buildFractureView } from '../../core/fracture';
 import { SPOT, BULL, BEAR } from '../../components/gex/palette';
 import HoverReadout from '../../components/ui/HoverReadout';
+import ChartLegend from '../../components/ui/ChartLegend';
 import Panel from '../../components/ui/Panel';
 import StatCard from '../../components/ui/StatCard';
 import MetricGrid from '../../components/ui/MetricGrid';
@@ -91,7 +92,7 @@ const FlowRow = ({ level, maxForced }: { level: ForcedFlowLevel; maxForced: numb
   const [hx, setHx] = useState<{ x: number; y: number } | null>(null);
   return (
     <div className="px-4 py-2 grid grid-cols-[76px_1fr_120px_92px] items-center gap-3">
-      <span className="font-mono text-xs font-semibold text-textPrimary tnum">${level.price.toFixed(2)}</span>
+      <span className="font-mono text-caption font-semibold text-textPrimary tnum leading-4">${level.price.toFixed(2)}</span>
       {/* forced-flow stacked bar */}
       <span
         className="flex h-3 rounded-sm overflow-hidden bg-white/[0.04] cursor-crosshair"
@@ -275,13 +276,10 @@ const Fracture = () => {
           <div className="flex flex-col">
             {/* Legend strip — lives above the rows (not crammed into the header,
                 where it truncated the title) since it keys the stacked bars below. */}
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 border-b border-borderSubtle/60">
-              {PARTS.map(p => (
-                <span key={p.key} className="inline-flex items-center gap-1 font-mono text-label uppercase tracking-wider text-textMuted">
-                  <span className="w-2 h-2 rounded-sm inline-block" style={{ background: p.color }} /> {p.label}
-                </span>
-              ))}
-            </div>
+            <ChartLegend
+              className="px-4 py-2 border-b border-borderSubtle/60"
+              items={PARTS.map(p => ({ label: p.label, color: p.color }))}
+            />
             {view.levels.map((level, i) => (
               <div key={level.price}>
                 <FlowRow level={level} maxForced={maxForced} />
@@ -313,23 +311,23 @@ const Fracture = () => {
               <div className="flex items-center gap-1.5 font-mono text-label uppercase tracking-widest text-textMuted">
                 <Crosshair className="w-3 h-3" /> Trigger
               </div>
-              <div className="mt-1 font-mono text-sm font-semibold text-textPrimary tnum">${view.cascade.triggerPrice.toFixed(2)}</div>
+              <div className="mt-1 font-mono text-body font-semibold text-textPrimary tnum leading-5">${view.cascade.triggerPrice.toFixed(2)}</div>
               <div className="mt-0.5 font-mono text-micro text-textMuted">{triggerNote}</div>
             </div>
             <div className="border border-borderSubtle bg-inset rounded-md px-2.5 py-2">
               <div className="font-mono text-label uppercase tracking-widest text-textMuted">Invalidation</div>
-              <div className="mt-1 font-mono text-sm font-semibold text-textPrimary tnum">{invalidationValue}</div>
+              <div className="mt-1 font-mono text-body font-semibold text-textPrimary tnum leading-5">{invalidationValue}</div>
               <div className="mt-0.5 font-mono text-micro text-textMuted">{invalidationNote}</div>
             </div>
           </div>
           <div className="mt-2 grid grid-cols-2 gap-2">
             <div className="border border-borderSubtle bg-inset rounded-md px-2.5 py-2">
               <div className="font-mono text-label uppercase tracking-widest text-textMuted">Median terminus</div>
-              <div className="mt-1 font-mono text-sm font-semibold text-bear tnum">${view.cascade.medianTerminus.toFixed(2)}</div>
+              <div className="mt-1 font-mono text-body font-semibold text-bear tnum leading-5">${view.cascade.medianTerminus.toFixed(2)}</div>
             </div>
             <div className="border border-borderSubtle bg-inset rounded-md px-2.5 py-2">
               <div className="font-mono text-label uppercase tracking-widest text-textMuted">Exhaustion zone</div>
-              <div className="mt-1 font-mono text-sm font-semibold text-textPrimary tnum">
+              <div className="mt-1 font-mono text-body font-semibold text-textPrimary tnum leading-5">
                 ${view.cascade.exhaustionLo.toFixed(2)}–${view.cascade.exhaustionHi.toFixed(2)}
               </div>
             </div>
@@ -480,7 +478,7 @@ const Fracture = () => {
       </div>
 
       <Panel bodyClassName="py-3">
-        <p className="text-xs text-textSecondary leading-relaxed">
+        <p className="text-caption text-textSecondary leading-relaxed">
           <span className="font-mono font-semibold uppercase tracking-wider mr-2 holo-text">Beyond GEX</span>
           GEX estimates which way dealers must hedge. Fracture estimates whether the market can absorb that hedging — it combines
           the forced flow from every mechanical participant, the liquidity actually available to take the other side, and how close

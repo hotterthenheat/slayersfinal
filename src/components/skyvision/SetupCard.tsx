@@ -23,7 +23,7 @@ const SetupCard = ({ setup, expanded, isSelected, isTop, onToggle, onSelect, onO
   return (
     <div className={`border rounded-md overflow-hidden transition-colors ${
       isSelected
-        ? 'border-select/40 bg-select/[0.03] shadow-[inset_3px_0_0_0_rgba(199,211,232,0.5)]'
+        ? 'border-select/40 bg-select/[0.03] rail-silver'
         : 'border-borderSubtle bg-panel'
     }`}>
       {/* Collapsed header row */}
@@ -44,7 +44,7 @@ const SetupCard = ({ setup, expanded, isSelected, isTop, onToggle, onSelect, onO
           </span>
           <span className="text-right">
             <span className="block font-mono text-label text-textMuted uppercase tracking-wider">Exp Move</span>
-            <span className={`font-mono text-xs font-semibold tnum ${moveUp ? 'text-bull' : 'text-bear'}`}>
+            <span className={`font-mono text-caption font-semibold tnum ${moveUp ? 'text-bull' : 'text-bear'} leading-4`}>
               {moveUp ? '+' : ''}
               {setup.expectedMovePct}%
             </span>
@@ -60,12 +60,12 @@ const SetupCard = ({ setup, expanded, isSelected, isTop, onToggle, onSelect, onO
           <div className="grid grid-cols-2 gap-2">
             <div className="border border-borderSubtle bg-inset rounded-md px-3 py-2">
               <div className="font-mono text-label uppercase tracking-widest text-textMuted">Swing Target</div>
-              <div className="mt-1 font-mono text-sm font-semibold text-textPrimary tnum">${setup.swingTarget.price.toFixed(2)}</div>
+              <div className="mt-1 font-mono text-body font-semibold text-textPrimary tnum leading-5">${setup.swingTarget.price.toFixed(2)}</div>
               <div className="font-mono text-label text-bull">+{setup.swingTarget.pct}%</div>
             </div>
             <div className="border border-borderSubtle bg-inset rounded-md px-3 py-2">
               <div className="font-mono text-label uppercase tracking-widest text-textMuted">Scalp Exit</div>
-              <div className="mt-1 font-mono text-sm font-semibold text-warn tnum">${setup.scalpExit.price.toFixed(2)}</div>
+              <div className="mt-1 font-mono text-body font-semibold text-warn tnum leading-5">${setup.scalpExit.price.toFixed(2)}</div>
               <div className="font-mono text-label text-warn">+{setup.scalpExit.pct}%</div>
             </div>
           </div>
@@ -85,12 +85,9 @@ const SetupCard = ({ setup, expanded, isSelected, isTop, onToggle, onSelect, onO
               <div className="font-mono text-label uppercase tracking-widest text-textMuted mb-1.5">Evidence</div>
               <div className="flex flex-wrap gap-1.5">
                 {setup.whyChips.map(chip => (
-                  <span
-                    key={chip}
-                    className="inline-flex items-center rounded border border-bull/20 bg-bull/[0.06] px-1.5 py-0.5 font-mono text-label uppercase tracking-wider text-bull"
-                  >
+                  <SignalBadge key={chip} tone="bull">
                     {chip}
-                  </span>
+                  </SignalBadge>
                 ))}
               </div>
             </div>
@@ -119,7 +116,7 @@ const SetupCard = ({ setup, expanded, isSelected, isTop, onToggle, onSelect, onO
 
           <button
             onClick={onOpenAnalysis}
-            className="w-full rounded-md border border-borderSubtle bg-[#0a0a0a] hover:border-borderMuted hover:bg-[#141414] py-2 text-xs font-semibold text-textPrimary transition-colors"
+            className="w-full rounded-md border border-borderSubtle bg-panel hover:border-borderMuted hover:bg-[#141414] py-2 text-caption font-semibold text-textPrimary transition-colors leading-4"
           >
             Open Full Analysis →
           </button>

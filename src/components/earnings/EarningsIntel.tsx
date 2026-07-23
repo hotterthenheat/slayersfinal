@@ -165,7 +165,7 @@ const ExpressionCard = ({ expr, recommended }: { expr: Expression; recommended: 
           <div className="font-mono text-label text-textSecondary leading-tight">{expr.maxLabel}</div>
         </div>
       </div>
-      <p className="mt-2.5 text-xs text-textSecondary leading-relaxed">{expr.fit}</p>
+      <p className="mt-2.5 text-caption text-textSecondary leading-relaxed">{expr.fit}</p>
     </Panel>
   );
 };
@@ -250,7 +250,7 @@ const ScenarioTree = ({ view }: { view: EarningsIntelView }) => {
       <div className="inst-surface rounded-md px-3.5 py-2.5 flex items-center justify-between gap-3">
         <div className="flex flex-col">
           <span className="font-mono text-label uppercase tracking-widest text-textMuted">Print</span>
-          <span className="font-mono text-sm font-bold text-textPrimary">
+          <span className="font-mono text-body font-bold text-textPrimary leading-5">
             {view.ticker} · implied ±{view.impliedMovePct.toFixed(1)}%
           </span>
         </div>
@@ -361,7 +361,7 @@ const EarningsIntel = ({ event }: EarningsIntelProps) => {
         actions={<SignalBadge tone={componentTone[view.mispricing.component]} dot>{componentLabel[view.mispricing.component]}</SignalBadge>}
       >
         <p className="text-read text-textPrimary leading-relaxed">{view.mispricing.headline}</p>
-        <p className="mt-2 text-sm text-textSecondary leading-relaxed">
+        <p className="mt-2 text-body text-textSecondary leading-relaxed">
           <span className={`font-mono text-micro font-semibold uppercase tracking-widest mr-2 ${componentTone[view.mispricing.component] === 'neutral' ? 'holo-text' : ''}`}>
             Verdict
           </span>
@@ -382,7 +382,7 @@ const EarningsIntel = ({ event }: EarningsIntelProps) => {
           tone="warn"
         >
           <CrushPath view={view} />
-          <p className="mt-2 text-xs text-textSecondary leading-relaxed">
+          <p className="mt-2 text-caption text-textSecondary leading-relaxed">
             Front-month IV ramps to <span className="text-textPrimary tnum">{view.frontIv.toFixed(0)}%</span> holding the {view.eventVolPct.toFixed(1)}% jump, then
             collapses to the <span className="text-textPrimary tnum">{view.baseIv.toFixed(0)}%</span> baseline overnight — a{' '}
             <span className="text-warn tnum">{view.ivCrushPct.toFixed(0)}%</span> crush any long-premium structure has to out-run.
@@ -514,7 +514,7 @@ const EarningsIntel = ({ event }: EarningsIntelProps) => {
 
       {/* Honest explainer */}
       <Panel bodyClassName="py-3">
-        <p className="text-xs text-textSecondary leading-relaxed">
+        <p className="text-caption text-textSecondary leading-relaxed">
           <span className="font-mono font-semibold uppercase tracking-wider mr-2 holo-text">Beyond the straddle</span>
           A single implied move hides the trade. This dossier strips the jump vol out of the front-month IV, traces the crush the
           overnight brings, and splits the reaction into an outcome distribution — so the edge is not &ldquo;vol is rich&rdquo; but

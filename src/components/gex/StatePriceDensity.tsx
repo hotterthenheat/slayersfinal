@@ -363,7 +363,7 @@ const StatePriceDensity = ({ snapshot }: StatePriceDensityProps) => {
       </Panel>
 
       <Panel bodyClassName="py-3">
-        <p className="text-xs text-textSecondary leading-relaxed">
+        <p className="text-caption text-textSecondary leading-relaxed">
           <span className="font-mono font-semibold uppercase tracking-wider mr-2 holo-text">Beyond the smile</span>
           A single IV number is one moment of one curve. Reconstructing the whole state-price density turns the option book into
           an explicit set of odds over where price lands — so you can watch probability mass MOVE. The migration read is the tell

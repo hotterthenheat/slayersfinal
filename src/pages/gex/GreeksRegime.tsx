@@ -7,7 +7,8 @@ import Panel from '../../components/ui/Panel';
 import StatCard from '../../components/ui/StatCard';
 import MetricGrid from '../../components/ui/MetricGrid';
 import SegmentedControl from '../../components/ui/SegmentedControl';
-import HoverReadout, { svgHoverIndex } from '../../components/ui/HoverReadout';
+import HoverReadout from '../../components/ui/HoverReadout';
+import { svgHoverIndex } from '../../components/ui/svgHover';
 import { fmtUsd } from '../../data/gex';
 import type { Tone } from '../../components/ui/tones';
 
@@ -20,8 +21,10 @@ const fmtDelta = (v: number): string => {
   return `${s}${a.toFixed(0)}`;
 };
 
-/** The three greeks a dealer-flow read leans on; the rest are specialist. */
-const CORE_KEYS: GreekKey[] = ['gamma', 'vanna', 'charm'];
+/** The core greeks a dealer-flow read leans on; the rest are specialist. Four
+    (not three) so the matrix fills a desktop width with heat instead of leaving
+    the strike column a wide black gutter. */
+const CORE_KEYS: GreekKey[] = ['delta', 'gamma', 'vanna', 'charm'];
 
 const fmtC = (v: number): string => {
   const a = Math.abs(v);
@@ -264,7 +267,17 @@ const GreeksRegime = () => {
           )}
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
+          {/* table-fixed + colgroup: pin Strike/Dist narrow so the heat-filled
+              greek columns absorb the desktop width, instead of Strike ballooning
+              into a wide black gutter next to a cluster of numbers. */}
+          <table className="w-full min-w-[640px] table-fixed border-collapse">
+            <colgroup>
+              <col className="w-[104px]" />
+              <col className="w-[76px]" />
+              {visibleGreeks.map(g => (
+                <col key={g.key} />
+              ))}
+            </colgroup>
             <thead>
               <tr className="bg-panelRaised border-b border-borderSubtle">
                 <th className="sticky left-0 z-10 bg-inset px-3 py-2 text-left font-mono text-label font-semibold uppercase tracking-wider text-textMuted">Strike</th>
@@ -306,7 +319,7 @@ const GreeksRegime = () => {
               <div key={rg.regime}>
                 <div className="flex items-center justify-between mb-1">
                   <span className={`font-mono text-label font-semibold uppercase tracking-wider ${rg === view.topRegime ? 'text-textPrimary' : 'text-textSecondary'}`}>{rg.regime}</span>
-                  <span className="font-mono text-xs font-semibold text-textPrimary tnum">{rg.prob}%</span>
+                  <span className="font-mono text-caption font-semibold text-textPrimary tnum leading-4">{rg.prob}%</span>
                 </div>
                 <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
                   <span
@@ -376,7 +389,7 @@ const RowWithSpot = ({
   <>
     <tr className="border-b border-borderSubtle/40 hover:bg-white/[0.02]">
       <td
-        className="sticky left-0 z-10 px-3 py-1.5 font-mono text-xs font-semibold text-textPrimary tnum whitespace-nowrap bg-inset"
+        className="sticky left-0 z-10 px-3 py-1.5 font-mono text-caption font-semibold text-textPrimary tnum whitespace-nowrap bg-inset leading-4"
         style={isTop ? { boxShadow: 'inset 3px 0 0 0 rgba(199,211,232,0.85)' } : undefined}
       >
         ${r.strike.toFixed(2)}
@@ -396,7 +409,7 @@ const RowWithSpot = ({
           <span className="flex items-center gap-2 select-none">
             <span className="h-px flex-grow bg-gradient-to-r from-textPrimary/10 via-textPrimary/40 to-textPrimary/50" />
             <span className="font-mono text-micro uppercase tracking-wider text-textSecondary">{ticker}</span>
-            <span className="inline-flex items-center rounded-[3px] bg-textPrimary px-1.5 py-px font-mono text-micro font-bold tnum text-[#0a0a0a]">{spot.toFixed(2)}</span>
+            <span className="inline-flex items-center rounded-[3px] bg-textPrimary px-1.5 py-px font-mono text-micro font-bold tnum text-ink">{spot.toFixed(2)}</span>
             <span className="h-px w-3 shrink-0 bg-textPrimary/50" />
           </span>
         </td>

@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import SignalBadge from '../../ui/SignalBadge';
-import HoverReadout, { svgHoverIndex } from '../../ui/HoverReadout';
+import ChartLegend from '../../ui/ChartLegend';
+import HoverReadout from '../../ui/HoverReadout';
+import { svgHoverIndex } from '../../ui/svgHover';
 import type { RegimeData, VolRegime } from '../../../types/gex';
 import type { Tone } from '../../ui/tones';
 
@@ -53,16 +55,13 @@ const RegimePanel = ({ data }: RegimePanelProps) => {
     <div className="flex flex-col gap-3 h-full min-h-0">
       {/* Legend + current badge */}
       <div className="flex items-center gap-3 flex-wrap select-none">
-        {[
-          { label: 'Low vol', cls: 'bg-bull/60' },
-          { label: 'Normal', cls: 'bg-white/[0.18]' },
-          { label: 'High vol', cls: 'bg-bear/50' },
-        ].map(item => (
-          <span key={item.label} className="flex items-center gap-1.5 font-mono text-micro uppercase tracking-wider text-textMuted">
-            <span className={`inline-block w-2.5 h-2 rounded-[2px] ${item.cls}`} />
-            {item.label}
-          </span>
-        ))}
+        <ChartLegend
+          items={[
+            { label: 'Low vol', swatchClass: 'bg-bull/60' },
+            { label: 'Normal', swatchClass: 'bg-white/[0.18]' },
+            { label: 'High vol', swatchClass: 'bg-bear/50' },
+          ]}
+        />
         <span className="ml-auto">
           <SignalBadge tone={regimeTone[current]} dot>
             {current}

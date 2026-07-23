@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { X, Trash2, Database, ShieldCheck } from 'lucide-react';
 import { useToast } from '../ui/Toast';
 import { LOCAL_DATA_GROUPS, clearGroup, clearAllLocalData, groupStoredCount } from '../../core/localData';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 interface SettingsPanelProps {
   open: boolean;
@@ -15,6 +16,7 @@ interface SettingsPanelProps {
     this browser only; this panel lists it and lets you clear it. */
 const SettingsPanel = ({ open, onClose }: SettingsPanelProps) => {
   const toast = useToast();
+  const trapRef = useFocusTrap<HTMLElement>(open);
   // bump to re-read stored counts after a clear
   const [, setTick] = useState(0);
   const refresh = useCallback(() => setTick(t => t + 1), []);
@@ -64,10 +66,12 @@ const SettingsPanel = ({ open, onClose }: SettingsPanelProps) => {
             onClick={onClose}
           />
           <motion.aside
+            ref={trapRef}
+            tabIndex={-1}
             role="dialog"
             aria-modal="true"
             aria-label="Settings"
-            className="fixed inset-y-0 right-0 z-[70] w-full max-w-[440px] bg-panel border-l border-borderMuted shadow-overlay overflow-y-auto"
+            className="fixed inset-y-0 right-0 z-[70] w-full max-w-[440px] bg-panel border-l border-borderMuted shadow-overlay overflow-y-auto focus:outline-none"
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}

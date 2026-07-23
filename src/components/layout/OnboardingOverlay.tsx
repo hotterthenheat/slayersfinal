@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { LayoutDashboard, Compass, Radio, Crosshair, Sigma, ArrowRight } from 'lucide-react';
 import { EASE, DUR } from '../../lib/motion';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 const STORAGE_KEY = 'slayer_onboarded_v1';
 
@@ -29,6 +30,7 @@ const OnboardingOverlay = () => {
   // The welcome greets you on a desk — not on the informational legal/guide
   // pages. It stays armed until dismissed, so it still fires on the next desk.
   const suppressed = /^\/(legal|guide)/.test(pathname);
+  const trapRef = useFocusTrap<HTMLDivElement>(open && !suppressed);
 
   const dismiss = () => {
     try {
@@ -60,10 +62,12 @@ const OnboardingOverlay = () => {
         >
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={dismiss} aria-hidden />
           <motion.div
+            ref={trapRef}
+            tabIndex={-1}
             role="dialog"
             aria-modal="true"
             aria-label="Welcome to Slayer Terminal"
-            className="relative w-full max-w-lg rounded-xl border border-borderMuted bg-panelRaised shadow-overlay overflow-hidden"
+            className="relative w-full max-w-lg rounded-xl border border-borderMuted bg-panelRaised shadow-overlay overflow-hidden focus:outline-none"
             initial={{ opacity: 0, y: 14, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.98 }}

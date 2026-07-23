@@ -200,9 +200,16 @@ function perceivedLuminance([r, g, b]: RGB): number {
   return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
 }
 
+// Perceptual lift for the low/mid end: raw magnitude is near-linear, which
+// leaves weak cells hovering around flat NEUTRAL gray (a weak + reads the same
+// as a weak −). A gamma < 1 pushes small values toward their hue sooner while
+// leaving the poles (t=1) untouched, so the ordering never inverts.
+const heatT = (value: number, maxAbs: number): number =>
+  Math.pow(Math.min(1, Math.abs(value) / (maxAbs || 1)), 0.7);
+
 /** Raw ramp color for a signed value — used by the on-chart node overlay. */
 export function heatRgb(value: number, maxAbs: number): RGB {
-  const t = Math.min(1, Math.abs(value) / (maxAbs || 1));
+  const t = heatT(value, maxAbs);
   const r = RAMPS[HEAT_MODE as keyof typeof RAMPS];
   if (r) return rampColor(value >= 0 ? r.pos : r.neg, t);
   // grayscale fallback for the legacy mono/hybrid/diverging modes
@@ -219,22 +226,30 @@ const TINT_MAX = 0.5;
 const ramp = RAMPS[HEAT_MODE as keyof typeof RAMPS];
 
 export function heatCellStyle(value: number, maxAbs: number): CSSProperties {
-  const t = Math.min(1, Math.abs(value) / (maxAbs || 1));
+  const t = heatT(value, maxAbs);
 
   if (ramp) {
     const rgb = rampColor(value >= 0 ? ramp.pos : ramp.neg, t);
+    // Flip to dark ink once the cell is bright enough to carry it (0.5, not 0.55,
+    // so saturated greens — which read far better on dark ink — get it). A 1px
+    // shadow lifts legibility on the mid-tone cells where no single ink hits AA.
+    const dark = perceivedLuminance(rgb) > 0.5;
     return {
       backgroundColor: `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`,
-      color: perceivedLuminance(rgb) > 0.55 ? '#0a0a0a' : '#ededed',
+      color: dark ? '#0a0a0a' : '#ededed',
+      textShadow: dark ? '0 1px 1px rgba(255,255,255,0.3)' : '0 1px 1px rgba(0,0,0,0.6)',
     };
   }
 
   if (HEAT_MODE === 'diverging') {
     const alpha = 0.05 + t * 0.5;
+    const base = value >= 0 ? [48, 209, 88] : [255, 59, 48];
+    const comp = base.map(ch => Math.round(ch * alpha + 10 * (1 - alpha))) as [number, number, number];
+    const dark = perceivedLuminance(comp) > 0.5;
     return {
-      backgroundColor:
-        value >= 0 ? `rgba(48,209,88,${alpha.toFixed(3)})` : `rgba(255,59,48,${alpha.toFixed(3)})`,
-      color: '#ededed',
+      backgroundColor: `rgba(${base[0]},${base[1]},${base[2]},${alpha.toFixed(3)})`,
+      color: dark ? '#0a0a0a' : '#ededed',
+      textShadow: dark ? '0 1px 1px rgba(255,255,255,0.3)' : '0 1px 1px rgba(0,0,0,0.6)',
     };
   }
 

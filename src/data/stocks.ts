@@ -140,12 +140,16 @@ export function buildSectorBoard(picks: StockPick[]): SectorRow[] {
       rs1m >= 0 && rs1w >= 0 ? 'LEADING' : rs1m < 0 && rs1w >= 0 ? 'IMPROVING' : rs1m >= 0 && rs1w < 0 ? 'WEAKENING' : 'LAGGING';
     const verdict: SectorVerdict = score >= 64 && phase !== 'LAGGING' ? 'OVERWEIGHT' : score <= 48 || phase === 'LAGGING' ? 'UNDERWEIGHT' : 'NEUTRAL';
     const leaders = members.slice(0, 2).map(m => m.ticker);
+    // Weave each sector's own leaders + breadth/RS into the note so no two
+    // cards print byte-identical copy (the old static NEUTRAL/UNDERWEIGHT
+    // strings repeated verbatim across every card in the bucket).
+    const lead = leaders.join(' & ') || sector;
     const note =
       verdict === 'OVERWEIGHT'
-        ? `${phase === 'LEADING' ? 'Leadership intact' : 'Turning up'} — money is rotating in; ${leaders.join(' & ')} carry the group.`
+        ? `${phase === 'LEADING' ? 'Leadership intact' : 'Turning up'} — money rotating in; ${lead} carry the group at ${breadthPct}% breadth.`
         : verdict === 'UNDERWEIGHT'
-          ? `${phase === 'LAGGING' ? 'Lagging on both windows' : 'Rolling over'} — relative strength argues against fresh exposure.`
-          : 'Middle of the pack — own the single names that screen well, not the group.';
+          ? `${phase === 'LAGGING' ? 'Lagging on both windows' : 'Rolling over'} — ${rs1m >= 0 ? '+' : ''}${rs1m.toFixed(1)}% monthly RS; even ${lead} don't argue for fresh exposure.`
+          : `Middle of the pack — ${lead} screen best; own the names, not the group (${breadthPct}% breadth).`;
     return { sector, score, rs1w, rs1m, breadthPct, phase, verdict, note, leaders };
   }).sort((a, b) => b.score - a.score || phaseRank(b.phase) - phaseRank(a.phase));
 }

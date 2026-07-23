@@ -45,9 +45,9 @@ const OverlayRail = ({ overlays, onToggle, chartType, onChartType, dense }: Over
             key={def.key}
             onClick={() => onToggle(def.key)}
             aria-pressed={on}
-            className={`shrink-0 whitespace-nowrap px-3 py-1.5 font-mono text-xs font-medium transition-colors ${
+            className={`shrink-0 whitespace-nowrap px-3 py-1.5 font-mono text-caption font-medium transition-colors ${
               i > 0 ? 'border-l border-borderSubtle' : ''
-            } ${on ? 'bg-white/[0.08] text-textPrimary' : 'text-textSecondary hover:text-textPrimary hover:bg-white/[0.03]'}`}
+            } ${on ? 'bg-white/[0.08] text-textPrimary' : 'text-textSecondary hover:text-textPrimary hover:bg-white/[0.03]'} leading-4`}
           >
             {def.label}
           </button>

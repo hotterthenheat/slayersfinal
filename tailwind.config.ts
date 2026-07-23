@@ -27,6 +27,9 @@ export default {
         // Surfaces
         canvas: '#050505',
         panel: '#0a0a0a',
+        // Dark ink for text/icons ON a light chrome surface (holo pills, silver
+        // CTAs). Same value as the canvas-dark family, named for its role.
+        ink: '#0a0a0a',
         panelHover: '#101010',
         // Raised surface — sticky table headers, tooltips, hover cards (was a
         // repeated raw #0c0c0c across 17+ files; single-sourced here).

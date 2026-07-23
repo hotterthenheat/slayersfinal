@@ -212,7 +212,7 @@ const News = () => {
       </MetricGrid>
 
       <Panel tone={moodTone} bodyClassName="py-3">
-        <p className="text-xs text-textSecondary leading-relaxed">
+        <p className="text-caption text-textSecondary leading-relaxed">
           <span className={`font-mono font-semibold uppercase tracking-wider mr-2 ${moodTone === 'bull' ? 'text-bull' : moodTone === 'bear' ? 'text-bear' : 'text-textPrimary'}`}>
             The read
           </span>
@@ -281,7 +281,7 @@ const News = () => {
                 <div
                   key={unit.key}
                   className={`border-b border-borderSubtle last:border-b-0 transition-colors ${isMuted ? 'opacity-45' : ''} ${
-                    isSel ? 'bg-select/[0.05] shadow-[inset_2px_0_0_0_rgba(228,232,244,0.7)]' : isWatched ? 'bg-select/[0.02]' : ''
+                    isSel ? 'bg-select/[0.05] rail-select' : isWatched ? 'bg-select/[0.02]' : ''
                   }`}
                 >
                   <div className="flex items-stretch">
@@ -404,30 +404,30 @@ const News = () => {
                 <div className="grid grid-cols-3 gap-2">
                   <div className="border border-borderSubtle bg-inset rounded-md px-2.5 py-2">
                     <div className="font-mono text-label uppercase tracking-wider text-textMuted">1-day exp</div>
-                    <div className={`mt-1 font-mono text-sm font-semibold tnum ${selected.prediction.expMove1dPct >= 0 ? 'text-bull' : 'text-bear'}`}>
+                    <div className={`mt-1 font-mono text-body font-semibold tnum ${selected.prediction.expMove1dPct >= 0 ? 'text-bull' : 'text-bear'} leading-5`}>
                       {signedPct(selected.prediction.expMove1dPct)}
                     </div>
                   </div>
                   <div className="border border-borderSubtle bg-inset rounded-md px-2.5 py-2">
                     <div className="font-mono text-label uppercase tracking-wider text-textMuted">5-day exp</div>
-                    <div className={`mt-1 font-mono text-sm font-semibold tnum ${selected.prediction.expMove5dPct >= 0 ? 'text-bull' : 'text-bear'}`}>
+                    <div className={`mt-1 font-mono text-body font-semibold tnum ${selected.prediction.expMove5dPct >= 0 ? 'text-bull' : 'text-bear'} leading-5`}>
                       {signedPct(selected.prediction.expMove5dPct)}
                     </div>
                   </div>
                   <div className="border border-borderSubtle bg-inset rounded-md px-2.5 py-2">
                     <div className="font-mono text-label uppercase tracking-wider text-textMuted">Confidence</div>
-                    <div className="mt-1 font-mono text-sm font-semibold text-textPrimary tnum">{selected.prediction.confidencePct}%</div>
+                    <div className="mt-1 font-mono text-body font-semibold text-textPrimary tnum leading-5">{selected.prediction.confidencePct}%</div>
                   </div>
                 </div>
 
                 <div>
                   <div className="font-mono text-label uppercase tracking-widest text-textMuted">Historical analog</div>
-                  <p className="mt-1.5 text-xs text-textSecondary leading-relaxed">{selected.prediction.analog}</p>
+                  <p className="mt-1.5 text-caption text-textSecondary leading-relaxed">{selected.prediction.analog}</p>
                 </div>
 
                 <div className="border-t border-borderSubtle pt-3">
                   <div className="font-mono text-label uppercase tracking-widest text-textMuted">Playbook</div>
-                  <p className="mt-1.5 text-xs text-textSecondary leading-relaxed">{selected.prediction.playbook}</p>
+                  <p className="mt-1.5 text-caption text-textSecondary leading-relaxed">{selected.prediction.playbook}</p>
                 </div>
               </div>
             ) : (

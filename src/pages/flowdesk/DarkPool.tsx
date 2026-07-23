@@ -80,7 +80,7 @@ const DarkPool = () => {
   if (!view) {
     return (
       <Panel title="Dark Pool">
-        <div className="h-40 flex items-center justify-center font-mono text-xs text-textMuted">Connecting…</div>
+        <div className="h-40 flex items-center justify-center font-mono text-caption text-textMuted leading-4">Connecting…</div>
       </Panel>
     );
   }
@@ -104,13 +104,13 @@ const DarkPool = () => {
   const nextDown = view.levels.filter(l => l.price < view.spot).sort((a, b) => b.price - a.price)[0];
 
   const columns: Column<DarkPoolPrint>[] = [
-    { key: 'time', header: 'Time', width: '64px', render: p => <span className="font-mono text-xs text-textSecondary tnum">{p.time}</span> },
+    { key: 'time', header: 'Time', width: '64px', render: p => <span className="font-mono text-caption text-textSecondary tnum leading-4">{p.time}</span> },
     {
       key: 'price',
       header: 'Price',
       align: 'right',
       sortValue: p => p.price,
-      render: p => <span className="font-mono text-xs text-textPrimary tnum">${p.price.toFixed(2)}</span>,
+      render: p => <span className="font-mono text-caption text-textPrimary tnum leading-4">${p.price.toFixed(2)}</span>,
     },
     {
       key: 'vs',
@@ -118,7 +118,7 @@ const DarkPool = () => {
       align: 'right',
       sortValue: p => p.vsSpotPct,
       render: p => (
-        <span className={`font-mono text-xs tnum ${p.vsSpotPct >= 0 ? 'text-bull' : 'text-bear'}`}>
+        <span className={`font-mono text-caption tnum ${p.vsSpotPct >= 0 ? 'text-bull' : 'text-bear'} leading-4`}>
           {p.vsSpotPct >= 0 ? '+' : ''}
           {p.vsSpotPct.toFixed(2)}%
         </span>
@@ -129,16 +129,16 @@ const DarkPool = () => {
       header: 'Size',
       align: 'right',
       sortValue: p => p.size,
-      render: p => <span className="font-mono text-xs text-textSecondary tnum">{p.size.toLocaleString()}</span>,
+      render: p => <span className="font-mono text-caption text-textSecondary tnum leading-4">{p.size.toLocaleString()}</span>,
     },
     {
       key: 'notional',
       header: 'Notional',
       align: 'right',
       sortValue: p => p.notional,
-      render: p => <span className="font-mono text-xs font-semibold text-textPrimary tnum">{fmtUsd(p.notional)}</span>,
+      render: p => <span className="font-mono text-caption font-semibold text-textPrimary tnum leading-4">{fmtUsd(p.notional)}</span>,
     },
-    { key: 'venue', header: 'Venue', render: p => <span className="font-mono text-xs text-textMuted">{p.venue}</span> },
+    { key: 'venue', header: 'Venue', render: p => <span className="font-mono text-caption text-textMuted leading-4">{p.venue}</span> },
     {
       key: 'intent',
       header: 'Inferred read',
@@ -156,7 +156,7 @@ const DarkPool = () => {
       align: 'right',
       sortValue: p => p.conviction,
       render: p => (
-        <span className={`font-mono text-xs tnum ${p.conviction < 55 ? 'text-warn' : 'text-textSecondary'}`}>
+        <span className={`font-mono text-caption tnum ${p.conviction < 55 ? 'text-warn' : 'text-textSecondary'} leading-4`}>
           {p.conviction}%
         </span>
       ),
@@ -196,7 +196,7 @@ const DarkPool = () => {
         <StatCard
           label="Nearest shelves"
           value={
-            <span className="text-sm">
+            <span className="text-body leading-5">
               {nextDown ? `$${nextDown.price.toFixed(2)}` : '--'} / {nextUp ? `$${nextUp.price.toFixed(2)}` : '--'}
             </span>
           }
@@ -205,7 +205,7 @@ const DarkPool = () => {
       </MetricGrid>
 
       <Panel tone={postureTone} bodyClassName="py-3">
-        <p className="text-xs text-textSecondary leading-relaxed">
+        <p className="text-caption text-textSecondary leading-relaxed">
           <span className={`font-mono font-semibold uppercase tracking-wider mr-2 ${postureTone === 'bull' ? 'text-bull' : postureTone === 'bear' ? 'text-bear' : 'text-textPrimary'}`}>
             Inferred read
           </span>
@@ -231,10 +231,10 @@ const DarkPool = () => {
                   <button
                     onClick={() => setSelectedPrice(level.price)}
                     className={`w-full text-left px-4 py-2.5 grid grid-cols-[88px_92px_1fr_72px_64px] items-center gap-3 transition-colors ${
-                      isSelected ? 'bg-select/[0.05] shadow-[inset_2px_0_0_0_rgba(228,232,244,0.7)]' : 'hover:bg-white/[0.02]'
+                      isSelected ? 'bg-select/[0.05] rail-select' : 'hover:bg-white/[0.02]'
                     }`}
                   >
-                    <span className="font-mono text-sm font-semibold text-textPrimary tnum">${level.price.toFixed(2)}</span>
+                    <span className="font-mono text-body font-semibold text-textPrimary tnum leading-5">${level.price.toFixed(2)}</span>
                     <SignalBadge tone={roleTone[level.role]}>{level.role}</SignalBadge>
                     <span className="min-w-0">
                       <ShelfBar level={level} max={maxNotional} />
@@ -242,7 +242,7 @@ const DarkPool = () => {
                         {fmtUsd(level.notional)} · {level.prints} prints · {level.sharePct.toFixed(0)}% of DP
                       </span>
                     </span>
-                    <span className={`font-mono text-xs tnum text-right ${level.distPct >= 0 ? 'text-bull' : 'text-bear'}`}>
+                    <span className={`font-mono text-caption tnum text-right ${level.distPct >= 0 ? 'text-bull' : 'text-bear'} leading-4`}>
                       {level.distPct >= 0 ? '+' : ''}
                       {level.distPct.toFixed(2)}%
                     </span>
@@ -277,21 +277,21 @@ const DarkPool = () => {
                 {selected.sharePct.toFixed(0)}% of session DP · {selected.defended > 0 ? `${selected.defended} retest${selected.defended > 1 ? 's' : ''} held` : 'untested'}
               </span>
             </div>
-            <p className="text-xs text-textSecondary leading-relaxed">{selected.usage}</p>
+            <p className="text-caption text-textSecondary leading-relaxed">{selected.usage}</p>
             <div className="border-t border-borderSubtle pt-3 flex flex-col gap-2">
-              <div className="flex items-center justify-between font-mono text-xs">
+              <div className="flex items-center justify-between font-mono text-caption leading-4">
                 <span className="text-textMuted uppercase tracking-wider text-micro">Above the shelf</span>
                 <span className="text-bull">
                   {selected.role === 'RESISTANCE' ? 'breakout confirms — supply cleared' : 'bias long against it'}
                 </span>
               </div>
-              <div className="flex items-center justify-between font-mono text-xs">
+              <div className="flex items-center justify-between font-mono text-caption leading-4">
                 <span className="text-textMuted uppercase tracking-wider text-micro">Below the shelf</span>
                 <span className="text-bear">
                   {selected.role === 'SUPPORT' ? 'read invalid — step aside' : 'supply in control'}
                 </span>
               </div>
-              <div className="flex items-center justify-between font-mono text-xs">
+              <div className="flex items-center justify-between font-mono text-caption leading-4">
                 <span className="text-textMuted uppercase tracking-wider text-micro">Next shelf</span>
                 <span className="text-textPrimary tnum">
                   {selected.distPct >= 0
@@ -329,7 +329,7 @@ const DarkPool = () => {
                 </span>
               )}
             </div>
-            <p className="text-xs text-textSecondary leading-relaxed">{activePrint.read}</p>
+            <p className="text-caption text-textSecondary leading-relaxed">{activePrint.read}</p>
             <div className="flex items-start gap-2 border-t border-borderSubtle pt-2.5">
               <span className="font-mono text-label uppercase tracking-wider text-textMuted whitespace-nowrap mt-px">
                 Competing read

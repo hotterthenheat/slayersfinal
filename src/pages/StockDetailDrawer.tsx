@@ -5,51 +5,16 @@ import { X, Star, GitCompare, Info } from 'lucide-react';
 import SignalBadge from '../components/ui/SignalBadge';
 import TickerJump from '../components/ui/TickerJump';
 import Sparkline from '../components/skyvision/Sparkline';
-import type { StockPick, StockVerdict, StockSleeves } from '../data/stocks';
+import type { StockPick, StockVerdict } from '../data/stocks';
 import type { Tone } from '../components/ui/tones';
+import { useFocusTrap } from '../hooks/useFocusTrap';
+import { FACTOR_GUIDE } from '../data/factorGuide';
 
 const verdictTone: Record<StockVerdict, Tone> = {
   ACCUMULATE: 'bull',
   HOLD: 'neutral',
   AVOID: 'bear',
 };
-
-/**
- * Factor guide — plain-language definition of each scoring sleeve, drawn from
- * the engine's own thesis vocabulary. Shared by the drawer and the board-level
- * "Factors" popover so the definitions never drift between the two surfaces.
- */
-export const FACTOR_GUIDE: {
-  key: keyof StockSleeves;
-  short: string;
-  name: string;
-  desc: string;
-}[] = [
-  {
-    key: 'momentum',
-    short: 'Mom',
-    name: 'Momentum',
-    desc: 'Trend & RSI posture — is price working with the trade or against it.',
-  },
-  {
-    key: 'quality',
-    short: 'Qual',
-    name: 'Quality',
-    desc: 'Fundamental screen — margins, growth and balance-sheet health.',
-  },
-  {
-    key: 'flow',
-    short: 'Flow',
-    name: 'Flow',
-    desc: 'Positioning — options flow and dark-pool lean, accumulation vs distribution.',
-  },
-  {
-    key: 'news',
-    short: 'News',
-    name: 'News',
-    desc: 'News-tape sentiment — headline tailwind against live headline risk.',
-  },
-];
 
 const barClass = (v: number) => (v >= 60 ? 'holo-bar' : v >= 40 ? 'bg-white/30' : 'bg-bear/70');
 const valueClass = (v: number) => (v >= 60 ? 'text-textPrimary' : v >= 40 ? 'text-textSecondary' : 'text-bear');
@@ -90,6 +55,7 @@ const StockDetailDrawer = ({
   onToggleCompare,
   beta,
 }: StockDetailDrawerProps) => {
+  const trapRef = useFocusTrap<HTMLElement>(!!pick);
   useEffect(() => {
     if (!pick) return;
     const onKey = (e: KeyboardEvent) => {
@@ -111,9 +77,12 @@ const StockDetailDrawer = ({
             onClick={onClose}
           />
           <motion.aside
+            ref={trapRef}
+            tabIndex={-1}
             role="dialog"
+            aria-modal="true"
             aria-label={`${pick.ticker} detail`}
-            className="fixed inset-y-0 right-0 z-[60] w-full max-w-[440px] bg-panel border-l border-borderMuted shadow-overlay overflow-y-auto"
+            className="fixed inset-y-0 right-0 z-[60] w-full max-w-[440px] bg-panel border-l border-borderMuted shadow-overlay overflow-y-auto focus:outline-none"
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
@@ -143,7 +112,7 @@ const StockDetailDrawer = ({
               <div className="grid grid-cols-3 gap-px bg-borderSubtle rounded-md overflow-hidden">
                 <div className="bg-inset px-3 py-2.5 flex flex-col gap-0.5">
                   <span className="font-mono text-micro uppercase tracking-widest text-textMuted">Last</span>
-                  <span className="font-mono text-sm font-semibold text-textPrimary tnum">${pick.price.toFixed(2)}</span>
+                  <span className="font-mono text-body font-semibold text-textPrimary tnum leading-5">${pick.price.toFixed(2)}</span>
                   <span className={`font-mono text-label tnum ${pick.changePct >= 0 ? 'text-bull' : 'text-bear'}`}>
                     {pick.changePct >= 0 ? '+' : ''}
                     {pick.changePct.toFixed(2)}%
@@ -152,9 +121,9 @@ const StockDetailDrawer = ({
                 <div className="bg-inset px-3 py-2.5 flex flex-col gap-0.5">
                   <span className="font-mono text-micro uppercase tracking-widest text-textMuted">Score</span>
                   <span
-                    className={`font-mono text-sm font-bold tnum ${
+                    className={`font-mono text-body font-bold tnum ${
                       pick.composite >= 68 ? 'text-bull' : pick.composite <= 46 ? 'text-bear' : 'text-textPrimary'
-                    }`}
+                    } leading-5`}
                   >
                     {pick.composite}
                   </span>
@@ -162,7 +131,7 @@ const StockDetailDrawer = ({
                 </div>
                 <div className="bg-inset px-3 py-2.5 flex flex-col gap-0.5">
                   <span className="font-mono text-micro uppercase tracking-widest text-textMuted">Beta</span>
-                  <span className="font-mono text-sm font-semibold text-textPrimary tnum">
+                  <span className="font-mono text-body font-semibold text-textPrimary tnum leading-5">
                     {beta != null ? beta.toFixed(2) : '—'}
                   </span>
                   <span className="font-mono text-label text-textMuted">{beta == null ? 'risk lens' : beta < 1 ? 'defensive' : 'cyclical'}</span>

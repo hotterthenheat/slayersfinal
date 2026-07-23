@@ -66,7 +66,7 @@ const ExposureMatrix = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
   ];
 
   return (
-    <div className="overflow-auto h-full min-h-0">
+    <div tabIndex={0} role="region" aria-label="Exposure matrix — scrollable" className="overflow-auto h-full min-h-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/50">
       {/* min-width so the 10-column greek matrix scrolls on a phone instead of
           squeezing every value until the DEX column clips. */}
       <table className="w-full min-w-[560px] border-collapse">
@@ -113,7 +113,7 @@ const ExposureMatrix = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
                   onSelectStrike ? 'cursor-pointer' : ''
                 } ${
                   selectedStrike === row.strike
-                    ? 'bg-select/[0.05] shadow-[inset_2px_0_0_0_rgba(199,211,232,0.7)]'
+                    ? 'bg-select/[0.05] rail-silver'
                     : hoverStrike === row.strike
                       ? 'bg-white/[0.04]'
                       : ''

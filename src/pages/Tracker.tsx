@@ -27,6 +27,7 @@ import VerdictBadge from '../components/skyvision/VerdictBadge';
 import DataTable, { type Column } from '../components/ui/DataTable';
 import StatCard from '../components/ui/StatCard';
 import MetricGrid from '../components/ui/MetricGrid';
+import Skeleton, { SkeletonRows } from '../components/ui/Skeleton';
 import type { Tone } from '../components/ui/tones';
 
 // ---- Saved views -----------------------------------------------------------
@@ -222,7 +223,7 @@ const ItemDetail = ({ row, onStatus, onNotes, onReview, onUntrack }: ItemDetailP
     <div className="flex flex-col gap-4">
       {/* Identity */}
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="font-mono text-sm font-bold text-textPrimary tracking-tight">{live.contract}</span>
+        <span className="font-mono text-body font-bold text-textPrimary tracking-tight leading-5">{live.contract}</span>
         {expired ? <SignalBadge tone="neutral">EXPIRED</SignalBadge> : <VerdictBadge verdict={live.verdict} dot />}
         {row.expiringSoon && !expired && <SignalBadge tone="warn">EXPIRING</SignalBadge>}
         <span className="ml-auto font-mono text-label text-textMuted uppercase tracking-wider">
@@ -268,12 +269,9 @@ const ItemDetail = ({ row, onStatus, onNotes, onReview, onUntrack }: ItemDetailP
       {row.attention.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {row.attention.map(a => (
-            <span
-              key={a}
-              className="inline-flex items-center rounded border border-warn/25 bg-warn/10 px-1.5 py-0.5 font-mono text-micro uppercase tracking-wider text-warn"
-            >
+            <SignalBadge key={a} tone="warn">
               {a}
-            </span>
+            </SignalBadge>
           ))}
         </div>
       )}
@@ -425,7 +423,7 @@ const COLUMNS: Column<Row>[] = [
     render: r =>
       r.notes.trim() ? (
         <span className="inline-flex items-center gap-1.5 text-textSecondary">
-          <StickyNote className="w-3 h-3 holo-text shrink-0" />
+          <StickyNote className="w-3 h-3 text-select shrink-0" />
           {truncate(r.notes.trim(), 22)}
         </span>
       ) : (
@@ -561,7 +559,7 @@ const Tracker = () => {
           <Panel className="w-full" bodyClassName="py-6 px-6 flex flex-col md:flex-row md:items-center gap-6">
             <div className="flex-1 min-w-0">
               <div className="inline-flex w-11 h-11 rounded-lg border border-borderSubtle bg-inset items-center justify-center mb-3">
-                <Bookmark className="w-5 h-5 holo-text" />
+                <Bookmark className="w-5 h-5 text-select" />
               </div>
               <h2 className="text-lg font-semibold text-textPrimary">Nothing on watch yet</h2>
               <p className="mt-1.5 text-data text-textSecondary leading-relaxed max-w-xl">
@@ -578,7 +576,7 @@ const Tracker = () => {
               ].map(x => (
                 <div key={x.k} className="border border-borderSubtle bg-inset rounded-lg px-3 py-2.5 text-center min-w-[92px]">
                   <div className="font-mono text-micro uppercase tracking-widest text-textMuted">{x.k}</div>
-                  <div className="mt-1 font-mono text-sm font-semibold holo-text">{x.v}</div>
+                  <div className="mt-1 font-mono text-body font-semibold holo-text leading-5">{x.v}</div>
                   <div className="mt-0.5 text-micro text-textMuted">{x.s}</div>
                 </div>
               ))}
@@ -609,9 +607,16 @@ const Tracker = () => {
           </div>
         </div>
       ) : !marketData ? (
-        <Panel className="h-64" bodyClassName="flex items-center justify-center">
-          <span className="font-mono text-label text-textMuted uppercase tracking-widest">Reading tracked setups…</span>
-        </Panel>
+        <div className="flex flex-col gap-4 animate-view-in">
+          <MetricGrid min="150px">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-[68px] rounded-md" />
+            ))}
+          </MetricGrid>
+          <Panel flush bodyClassName="p-4">
+            <SkeletonRows rows={6} />
+          </Panel>
+        </div>
       ) : (
         <div className="flex flex-col gap-4 animate-view-in">
           {/* Summary strip — counts over the tracked book */}

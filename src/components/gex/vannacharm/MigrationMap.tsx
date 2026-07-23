@@ -58,7 +58,7 @@ const ShiftHoverCard = ({
 
   return (
     <div
-      className={`absolute z-20 w-60 pointer-events-none border border-borderSubtle bg-panelRaised/95 rounded-md shadow-lg p-3 animate-soft-in ${
+      className={`absolute z-20 w-60 pointer-events-none border border-borderSubtle bg-panelRaised/95 rounded-md shadow-overlay p-3 animate-soft-in ${
         row.current >= 0 ? 'left-16' : 'right-4'
       }`}
       style={{ top: Math.max(4, y - 90) }}
@@ -74,14 +74,14 @@ const ShiftHoverCard = ({
       <div className="mt-2 grid grid-cols-2 gap-2">
         <div>
           <div className="font-mono text-micro uppercase tracking-widest text-textMuted">Now</div>
-          <div className={`font-mono text-sm font-bold tnum ${row.current >= 0 ? 'text-bull' : 'text-bear'}`}>
+          <div className={`font-mono text-body font-bold tnum ${row.current >= 0 ? 'text-bull' : 'text-bear'} leading-5`}>
             {row.current >= 0 ? '+' : ''}
             {fmtUsd(row.current)}
           </div>
         </div>
         <div>
           <div className="font-mono text-micro uppercase tracking-widest text-textMuted">Projected</div>
-          <div className={`font-mono text-sm font-bold tnum ${row.projected >= 0 ? 'text-bull' : 'text-bear'}`}>
+          <div className={`font-mono text-body font-bold tnum ${row.projected >= 0 ? 'text-bull' : 'text-bear'} leading-5`}>
             {row.projected >= 0 ? '+' : ''}
             {fmtUsd(row.projected)}
           </div>
@@ -161,7 +161,10 @@ const MigrationMap = ({ data }: MigrationMapProps) => {
       {/* Rows */}
       <div
         ref={bodyRef}
-        className="flex-grow overflow-y-auto min-h-0"
+        tabIndex={0}
+        role="region"
+        aria-label="Exposure migration — scrollable"
+        className="flex-grow overflow-y-auto min-h-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/50"
         onMouseMove={e => {
           const rect = bodyRef.current?.getBoundingClientRect();
           if (rect) setHoverY(e.clientY - rect.top + (bodyRef.current?.offsetTop ?? 0));

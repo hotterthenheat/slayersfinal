@@ -205,18 +205,18 @@ const GexHistory = () => {
   ];
 
   const columns: Column<LevelPoint>[] = [
-    { key: 'time', header: 'Time', render: p => <span className="font-mono text-xs text-textSecondary tnum">{p.time}</span> },
-    { key: 'spot', header: 'Spot', align: 'right', sortValue: p => p.spot, render: p => <span className="font-mono text-xs text-textPrimary tnum">${p.spot.toFixed(2)}</span> },
-    { key: 'callWall', header: 'Call Wall', align: 'right', sortValue: p => p.callWall, render: p => <span className="font-mono text-xs tnum text-bull">${p.callWall.toFixed(2)}</span> },
-    { key: 'flip', header: 'Flip', align: 'right', sortValue: p => p.flip, render: p => <span className="font-mono text-xs tnum text-flip">${p.flip.toFixed(2)}</span> },
-    { key: 'putWall', header: 'Put Wall', align: 'right', sortValue: p => p.putWall, render: p => <span className="font-mono text-xs tnum text-bear">${p.putWall.toFixed(2)}</span> },
-    { key: 'king', header: 'King', align: 'right', sortValue: p => p.king, render: p => <span className="font-mono text-xs tnum text-king">${p.king.toFixed(2)}</span> },
+    { key: 'time', header: 'Time', render: p => <span className="font-mono text-caption text-textSecondary tnum leading-4">{p.time}</span> },
+    { key: 'spot', header: 'Spot', align: 'right', sortValue: p => p.spot, render: p => <span className="font-mono text-caption text-textPrimary tnum leading-4">${p.spot.toFixed(2)}</span> },
+    { key: 'callWall', header: 'Call Wall', align: 'right', sortValue: p => p.callWall, render: p => <span className="font-mono text-caption tnum text-bull leading-4">${p.callWall.toFixed(2)}</span> },
+    { key: 'flip', header: 'Flip', align: 'right', sortValue: p => p.flip, render: p => <span className="font-mono text-caption tnum text-flip leading-4">${p.flip.toFixed(2)}</span> },
+    { key: 'putWall', header: 'Put Wall', align: 'right', sortValue: p => p.putWall, render: p => <span className="font-mono text-caption tnum text-bear leading-4">${p.putWall.toFixed(2)}</span> },
+    { key: 'king', header: 'King', align: 'right', sortValue: p => p.king, render: p => <span className="font-mono text-caption tnum text-king leading-4">${p.king.toFixed(2)}</span> },
     {
       key: 'netGex',
       header: 'Net GEX',
       align: 'right',
       sortValue: p => p.netGex,
-      render: p => <span className={`font-mono text-xs tnum ${p.netGex >= 0 ? 'text-bull' : 'text-bear'}`}>{fmtUsd(p.netGex)}</span>,
+      render: p => <span className={`font-mono text-caption tnum ${p.netGex >= 0 ? 'text-bull' : 'text-bear'} leading-4`}>{fmtUsd(p.netGex)}</span>,
     },
   ];
 
@@ -397,7 +397,7 @@ const GexHistory = () => {
             {view.shifts.map(s => (
               <div key={s.label} className="flex items-center justify-between gap-2 border-b border-borderSubtle pb-2.5 last:border-0">
                 <span className="font-mono text-label text-textSecondary">{s.label}</span>
-                <span className="flex items-center gap-2 font-mono text-xs tnum">
+                <span className="flex items-center gap-2 font-mono text-caption tnum leading-4">
                   <span className="text-textMuted">${s.from.toFixed(2)}</span>
                   <span className="text-textMuted">→</span>
                   <span className="text-textPrimary">${s.to.toFixed(2)}</span>

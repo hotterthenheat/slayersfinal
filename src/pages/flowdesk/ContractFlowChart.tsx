@@ -44,7 +44,7 @@ const Stat = ({ k, v, tone = 'text-textPrimary' }: { k: string; v: string; tone?
 );
 
 const Box = ({ children }: { children: React.ReactNode }) => (
-  <div className="rounded border border-borderMuted bg-panel px-2.5 py-1.5 shadow-lg shadow-black/50 font-mono text-label">{children}</div>
+  <div className="rounded border border-borderMuted bg-panel px-2.5 py-1.5 shadow-overlay font-mono text-label">{children}</div>
 );
 
 interface FlowTip {

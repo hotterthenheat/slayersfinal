@@ -23,28 +23,47 @@ Each item marked ☐ (open) / ☑ (done) as waves land.
 1. ☑ Verdict-lexicon unification → QUALIFIED / WATCH / FADED everywhere user-facing (COPY-1..7)
 2. ☑ Fracture `aria-label` "simulated" → "modeled" (COPY-8, banned word, screen-reader-audible)
 3. ☑ Delete dead `StatRibbon.tsx` + unused `widgetByKey` export; audit dev-deps reverted before commit (DEAD-1..3)
-4. ☐ Loading/empty copy register unified ("Awaiting feed…") (COPY-9) — deferred to Wave 3
+4. ☑ Loading copy register unified — dev-flavored "Awaiting feed initialization…" → "Awaiting feed…" (COPY-9, 7e0b902)
 
 **Wave 2 — Performance (measurable)** ☑ SHIPPED (79b1ba5)
 5. ☑ Split MarketDataContext into stable `useTicker()` + volatile `useMarketData()` (PERF-1); AppShell→useTicker
 6. ☑ Hoist `PanelChrome` out of PulseWorkspace render body (PERF-2); isolate `<LivePrice/>` in TopBar (PERF-6)
-7. ☐ Move darkpool/Monte-Carlo off the 1s pulse path; memoize panel bodies (PERF-3/4) — deferred
-8. ☑ Kill impure `++revRef.current` pattern in Pulse (PERF-5); ☐ remaining 4 sites (Compass×2, LiveSections, ComplexBoard, GammaChart) deferred
+7. ☑ Move darkpool/Monte-Carlo off the 1s pulse path; memoize panel bodies (PERF-3/4, 17672b7) — non-heatmap
+   panels render from the stable 10s ctx via a memoized body; only gex-heatmap takes the 1s matrix pulse.
+8. ☑ Kill impure `++revRef.current` pattern — Pulse + the remaining 3 sites (LiveSections, ComplexBoard,
+   GammaChart) → state+effect; the 2 Compass useMemos documented as intentional tick-triggers (PERF-5, 7e0b902). Lint 19→13.
 
-**Wave 3 — Component consolidation / one design system**
-9. `<Stat>` primitive (or `StatCard size="sm"`) → delete 7 private tile clones (D1)
-10. `<EmptyState>` + promote `PanelErrorBoundary` and a `<Skeleton>` into `ui/` (D3 + state gaps)
-11. `.inst-selected` selection-rail utility keyed to Tone → kill 10 hardcoded rgba copies (D4)
-12. `<ChartLegend>` (D2), `<LevelPill>` (D5), inline `SignalBadge`/`Section` folds (D6/D8)
-13. Token sweep: `text-xs/sm → ramp` (152), `shadow-lg → shadow-overlay` (5), `text-ink` token, radius scale (TOKENS)
+**Wave 4 — Information architecture (full consolidation)** ☑ SHIPPED (a4ae167, 7de647e) — merged in PR #30
+14. ☑ Pinpoint 11 → 6 desks with `?view=` sub-tabs (IA-F3..F7); all 8 old paths redirect
+15. ☑ Trace 5 → 4; FlowTracker removed, `/trace/tracker` → Scanner (IA-F1/F2)
+16. ☑ One Tracker home; cross-link repointed off the removed route (IA-F1)
+17. ☑ Surface Liquidity Map in Pulse Classic (IA-F8); wordmark → Home/`/pulse` (IA-F9).
+    ☐ Nav grouping (IA-F10) — evaluated, held: moving Trace under Analyze thins Discover to 2 and doesn't clearly improve; current taxonomy is coherent.
 
-**Wave 4 — Information architecture (CONFIRMED: full consolidation)**
-14. Pinpoint 11 → 6 desks with sub-tabs (IA-F3..F7)
-15. Trace 5 → 4; fold FlowTracker into Scanner "Surfaced" view (IA-F1/F2)
-16. One Tracker home; pins write to TrackerContext (IA-F1)
-17. Surface Liquidity Map (Pulse Classic preset) (IA-F8); add a Home→/pulse affordance (IA-F9); nav grouping (IA-F10)
+**Wave 3 — Component consolidation / one design system** ☑ SHIPPED on PR #31 (genuine scope complete)
+Note: on inspection the audit over-counted several "duplications" — like the 7 "clones"
+that were really 4. The genuine consolidations are done; items that turned out NOT to be
+real duplication, or that carried regression risk, are held with rationale below.
+9. ☑ `<Stat>` primitive (16059d4): migrated the **4** clones that are genuinely this boxed tile
+   (ContractWeigher, MetaorderReconstruction, NewsIntel, GreeksRow). The other 3 flagged "clones"
+   are **different patterns** (OrderFlowPanel/ContractFlowChart borderless inline; Tracker MiniStat
+   holds a score-bar child) — folding regresses layout; held.
+10. ☑ `<EmptyState>` primitive (e54c17a) — adopted on short-label empties (LottoBoard, LiveTape,
+   DataUnavailablePanel). Sentence-length empties stay plain (uppercase label doesn't fit a sentence).
+   `<Skeleton>`/`PanelErrorBoundary`→ui held: data is synchronous (no loading states to speak of),
+   and per-desk error-boundary wiring is architectural, not a dedup.
+11. ☑ `.rail-{select,silver,neutral,king,warn}` selection-rail utilities (a3cd26b) — 11 static
+   sites migrated. Dynamic (RankedTargets CLASS_EDGE) + full-border (ContractChain) kept inline.
+12. ☑ inline `SignalBadge` folds (D6, 75e3f5d); ☑ `<ChartLegend>` (D2, 0dcb8c7) — Fracture + RegimePanel,
+   available for the rest. `<LevelPill>` (D5) held: 3 tone-varied pills embedded in marker components,
+   marginal. `Section` (D8) held: the two defs are **different components** (page `<section>`+`<h2>` vs
+   drawer 3-col stat grid), not a real duplicate.
+13. ☑ `shadow-lg → shadow-overlay` (697cb17, 5 sites); ☑ `text-ink` token + 17 swaps (2ec43f5).
+    ☐ **`text-xs/sm → ramp` (152) — HELD**: Tailwind's `text-xs/sm` bundle a line-height the ramp
+    tokens (font-size only) don't, so a blind swap changes vertical rhythm. Not value-preserving —
+    needs per-site review; deferred as invisible relative to the regression risk. Radius scale — likewise low-value.
 
-**Wave 5 — Responsive/visual fixes** — populated from the Playwright scan (below).
+**Wave 5 — Responsive + a11y** — VERIFIED CLEAN on a representative sample (see §6/7)
 
 ---
 
@@ -151,7 +170,52 @@ Interval/subscription hygiene otherwise clean (all timers/listeners cleared on u
 
 ## 6. Accessibility (axe-core) & 7. Responsive (Playwright)
 
-_First full-route scan (all 35 routes × 4 viewports + axe) was aborted: `networkidle`
-never settles on the live-animation routes, so it crawled. Wave 5 reruns a fast
-variant (domcontentloaded + fixed wait, overflow measurement, axe on key routes)
-to produce the objective overflow/a11y table. Findings land here then._
+**Tooling reality:** the full 30-route × 4-viewport scan is not runnable in this
+software-rendered headless container — Playwright is pathologically slow on the
+live-animation routes (≈14s/route for axe alone; the batch scans stalled). So
+instead of an unreliable full sweep, a **representative sample** was checked
+uncontended, one route at a time.
+
+**Accessibility (axe-core, WCAG 2.0 A + AA):** **clean** on every sampled route —
+`/` (landing), `/pulse` (dashboard), `/compass`, `/pinpoint/gamma` (dense greek
+matrix), `/trace/live-tape` (streaming tape). 0 violations. The sample spans the
+landing, the dashboard, and all three desk families incl. dense tables and live
+charts. (Earlier "serious" counts were artifacts of the scanner hammering a
+contended / mid-load server — they did not reproduce in isolated runs.) This
+confirms the prior a11y work (icon-button aria-labels, chart roles, focus rings)
+holds up.
+
+**Responsive / overflow:** **no horizontal overflow** on the sampled routes at
+mobile (390) / tablet (768) / desktop (1440) / ultrawide (2560). Consistent with
+the earlier mobile-responsiveness waves and the glass-nav 0-overflow verification.
+
+**Conclusion:** no responsive/a11y fix batch is warranted from the evidence
+gathered — the foundation is solid. A full exhaustive sweep would need a
+hardware-GL environment where Playwright runs at normal speed.
+
+## 8. Critic fix wave (post-verification)
+
+Six independent visual critics graded valid content screenshots (avg ≈7.1/10)
+and flagged 11 items. Each was re-checked against a live render before any change
+— echoing the ProveIt "crash" that turned out to be a scan-during-rebuild artifact.
+
+**Confirmed real → fixed**
+
+| Fix | Root cause | Files |
+|-----|-----------|-------|
+| Invisible icons | `.holo-text` (`background-clip:text; color:transparent`) makes SVG icons vanish (Bookmark, StickyNote, News Radar). Icons now get `text-select`. | Tracker.tsx, news/NewsIntel.tsx |
+| Pulse pill collision | KING often equals PUT/CALL wall → axis-label pills stack. Dedupe coincident price-line labels (walls > king > flip); every coloured line still drawn. | gex/StrikeChart.tsx |
+| Pulse mobile heatmap clip | 36px colour rail stole width from the cramped grid → hide it below `sm` (every cell already prints its signed colour-coded value). | gex/GexMatrix.tsx |
+| Data-table dead space | Greeks `w-full` + few cols → ~480px black strike gutter; GexMatrix strike col `30%` = ~420px on desktop. Fixed: `table-fixed`+colgroup, 4 default greeks, strike col 112px. | gex/GreeksRegime.tsx, gex/GexMatrix.tsx |
+| Mobile orphan stat card | `MetricGrid` auto-fit left the odd 5th card at half-width. Now flex-wrap so a lone last card fills the row; even counts unchanged. | ui/MetricGrid.tsx |
+| Two-level Pinpoint nav | Desk tabs + SubtabDesk toggle read as one ambiguous bar. Added a "View" eyebrow so the sub-toggle is visibly subordinate. | gex/desks.tsx |
+| DarkPool empty quadrant | `xl:columns-4` starved the 4th column → `xl:columns-3` balances the sector masonry. | flowdesk/DarkPoolFeed.tsx |
+| Legal wide measure / empty rails | Added a sticky section TOC in the left rail on desktop; prose stays `max-w-3xl`. | legal/LegalLayout.tsx |
+| Low-end heatmap contrast | Near-linear `t` left weak cells near flat NEUTRAL. Gamma lift (`t^0.7`) pushes low/mid values toward hue; poles untouched. | gex/heatmap.ts |
+| Templated repeated copy | News template pool too small (Apple & J&J printed identical headlines) + static sector notes. Added templates + salted feed-level dedupe; sector notes weave in leaders/breadth. | data/news.ts, data/stocks.ts |
+
+**Flagged but verified NOT bugs (critic misreads of net-vs-component data)** — no change:
+- *Compass ±sign* — puts show a green "+ exp move" by the app-wide favourable-move framing (consistent with swing/scalp targets); `expectedMovePct = moveBias × …`.
+- *Reconstruction +20 / −28* — top card is **net** directional info across 4 parents; the −28 is the largest single parent's own `DIR. INFO`. Already labelled net vs per-parent.
+- *News 15/18/18* — clustered stories vs raw wire vs total tracked; three distinct, already-labelled metrics.
+- *Earnings SLATE / Shortcuts / Feedback "air"* — reference/form/calendar pages; bottom whitespace is native to the page type, not a dashboard void.

@@ -170,7 +170,7 @@ const ALL_COLUMNS: Column<ScannerRow>[] = [
     sortValue: r => r.strike,
     render: r => (
       <span className="flex flex-col">
-        <span className="font-mono text-xs font-bold text-textPrimary">
+        <span className="font-mono text-caption font-bold text-textPrimary leading-4">
           {r.ticker} {r.strike}
           <span className={r.right === 'C' ? 'text-bull' : 'text-bear'}>{r.right}</span>
         </span>
@@ -181,16 +181,16 @@ const ALL_COLUMNS: Column<ScannerRow>[] = [
       </span>
     ),
   },
-  { key: 'last', header: 'Last', render: r => <span className="font-mono text-xs text-textSecondary tnum">{r.last}</span> },
-  { key: 'volume', header: 'Vol', align: 'right', sortValue: r => r.volume, render: r => <span className="font-mono text-xs text-textPrimary tnum">{r.volume.toLocaleString()}</span> },
-  { key: 'oi', header: 'OI', align: 'right', sortValue: r => r.oi, render: r => <span className="font-mono text-xs text-textSecondary tnum">{r.oi.toLocaleString()}</span> },
+  { key: 'last', header: 'Last', render: r => <span className="font-mono text-caption text-textSecondary tnum leading-4">{r.last}</span> },
+  { key: 'volume', header: 'Vol', align: 'right', sortValue: r => r.volume, render: r => <span className="font-mono text-caption text-textPrimary tnum leading-4">{r.volume.toLocaleString()}</span> },
+  { key: 'oi', header: 'OI', align: 'right', sortValue: r => r.oi, render: r => <span className="font-mono text-caption text-textSecondary tnum leading-4">{r.oi.toLocaleString()}</span> },
   {
     key: 'doi',
     header: 'Est ΔOI/d',
     align: 'right',
     sortValue: r => r.deltaOi,
     render: r => (
-      <span className={`font-mono text-xs tnum ${r.deltaOi >= 0 ? 'text-bull' : 'text-bear'}`}>
+      <span className={`font-mono text-caption tnum ${r.deltaOi >= 0 ? 'text-bull' : 'text-bear'} leading-4`}>
         {r.deltaOi >= 0 ? '+' : ''}
         {r.deltaOi.toLocaleString()}
       </span>
@@ -201,10 +201,10 @@ const ALL_COLUMNS: Column<ScannerRow>[] = [
     header: 'Vol/OI',
     align: 'right',
     sortValue: r => r.volOverOi,
-    render: r => <span className={`font-mono text-xs tnum ${r.volOverOi > 1 ? 'text-warn' : 'text-textSecondary'}`}>{r.volOverOi.toFixed(2)}</span>,
+    render: r => <span className={`font-mono text-caption tnum ${r.volOverOi > 1 ? 'text-warn' : 'text-textSecondary'} leading-4`}>{r.volOverOi.toFixed(2)}</span>,
   },
-  { key: 'premium', header: 'Premium', align: 'right', sortValue: r => r.premium, render: r => <span className="font-mono text-xs font-semibold text-textPrimary tnum">{fmtUsd(r.premium)}</span> },
-  { key: 'iv', header: 'IV', align: 'right', sortValue: r => r.iv, render: r => <span className="font-mono text-xs text-textSecondary tnum">{r.iv.toFixed(0)}%</span> },
+  { key: 'premium', header: 'Premium', align: 'right', sortValue: r => r.premium, render: r => <span className="font-mono text-caption font-semibold text-textPrimary tnum leading-4">{fmtUsd(r.premium)}</span> },
+  { key: 'iv', header: 'IV', align: 'right', sortValue: r => r.iv, render: r => <span className="font-mono text-caption text-textSecondary tnum leading-4">{r.iv.toFixed(0)}%</span> },
   { key: 'score', header: 'Conviction', width: '150px', sortValue: r => r.bullScore, render: r => <ScoreBar score={r.bullScore} /> },
   { key: 'sent', header: 'Read', sortValue: r => r.sentiment, render: r => <SignalBadge tone={sentTone[r.sentiment]}>{r.sentiment}</SignalBadge> },
 ];

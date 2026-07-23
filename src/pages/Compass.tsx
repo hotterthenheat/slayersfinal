@@ -9,6 +9,7 @@ import { buildSkyVision, makeSetup } from '../data/skyvision';
 import { SCANNERS, type ScannerKey, type Setup } from '../types/skyvision';
 import PageHeader from '../components/ui/PageHeader';
 import Panel from '../components/ui/Panel';
+import SignalBadge from '../components/ui/SignalBadge';
 import DataTable, { type Column } from '../components/ui/DataTable';
 import SetupsFeed from '../components/skyvision/SetupsFeed';
 import ContractChain, { type ChainSelection } from '../components/skyvision/ContractChain';
@@ -19,7 +20,9 @@ import ContractWeigher from '../components/compass/ContractWeigher';
 import LottoBoard from '../components/compass/LottoBoard';
 import type { Horizon } from '../core/contractScore';
 import SegmentedControl from '../components/ui/SegmentedControl';
-import { setupState, StateBadge, STATE_META } from '../components/skyvision/SetupState';
+import { StateBadge } from '../components/skyvision/SetupState';
+import { setupState, STATE_META } from '../components/skyvision/setupState';
+import { SkeletonRows } from '../components/ui/Skeleton';
 
 type CompassMode = 'setups' | 'weigher' | 'lotto';
 type SetupsView = 'list' | 'table';
@@ -135,6 +138,8 @@ const Compass = () => {
     Simulator.ensureTicker(monitorTarget.ticker);
     const cfg = Simulator.TICKERS[monitorTarget.ticker];
     return makeSetup(monitorTarget.ticker, cfg.currentPrice, monitorTarget.strike, monitorTarget.right, scanner, cfg.iv);
+    // marketData is a re-tick trigger — the body reads live prices from Simulator.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [monitorTarget, scanner, marketData]);
 
   // Also rebuild the selected preview setup live so metrics stay current
@@ -143,6 +148,8 @@ const Compass = () => {
     Simulator.ensureTicker(selectedSetup.ticker);
     const cfg = Simulator.TICKERS[selectedSetup.ticker];
     return makeSetup(selectedSetup.ticker, cfg.currentPrice, selectedSetup.strike, selectedSetup.right, scanner, cfg.iv);
+    // marketData is a re-tick trigger — the body reads live prices from Simulator.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSetup, scanner, marketData]);
 
   // Filtered groups for browse mode — ticker universe only. (The lifecycle-state
@@ -251,12 +258,9 @@ const Compass = () => {
         render: s => (
           <span className="inline-flex flex-wrap items-center gap-1">
             {s.whyChips.slice(0, 2).map(c => (
-              <span
-                key={c}
-                className="inline-flex items-center rounded border border-bull/20 bg-bull/[0.06] px-1.5 py-0.5 text-label uppercase tracking-wider text-bull"
-              >
+              <SignalBadge key={c} tone="bull">
                 {c}
-              </span>
+              </SignalBadge>
             ))}
             {s.whyChips.length > 2 && <span className="text-textMuted text-label">+{s.whyChips.length - 2}</span>}
           </span>
@@ -350,11 +354,14 @@ const Compass = () => {
     return (
       <>
         {browseHeader}
-        <Panel className="h-64" bodyClassName="flex items-center justify-center">
-          <span className="font-mono text-label text-textMuted uppercase tracking-widest">
-            Awaiting feed initialization…
-          </span>
-        </Panel>
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start animate-view-in">
+          <Panel flush className="xl:col-span-7" bodyClassName="p-4">
+            <SkeletonRows rows={6} />
+          </Panel>
+          <Panel flush className="xl:col-span-5" bodyClassName="p-4">
+            <SkeletonRows rows={4} />
+          </Panel>
+        </div>
       </>
     );
   }
@@ -384,7 +391,7 @@ const Compass = () => {
               onClick={() => handleScanner(s.key)}
               className={`relative inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md font-mono text-label uppercase tracking-wider transition-colors ${
                 isActive
-                  ? 'text-[#0a0a0a] font-semibold'
+                  ? 'text-ink font-semibold'
                   : 'text-textMuted font-medium hover:text-textSecondary hover:bg-white/[0.03]'
               }`}
             >
@@ -396,7 +403,7 @@ const Compass = () => {
                 />
               )}
               <span className="relative z-10">{s.label}</span>
-              <span className={`relative z-10 font-mono text-micro tnum ${isActive ? 'text-[#0a0a0a]/70' : 'text-textMuted/60'}`}>
+              <span className={`relative z-10 font-mono text-micro tnum ${isActive ? 'text-ink/70' : 'text-textMuted'}`}>
                 {count}
               </span>
             </button>
@@ -436,7 +443,7 @@ const Compass = () => {
                   {tickerFilter ?? 'All Tickers'}
                 </button>
                 {showTickerDropdown && (
-                  <div className="absolute right-0 top-full mt-1 z-20 min-w-[140px] border border-borderSubtle bg-panel rounded-md shadow-lg overflow-hidden animate-slide-in">
+                  <div className="absolute right-0 top-full mt-1 z-20 min-w-[140px] border border-borderSubtle bg-panel rounded-md shadow-overlay overflow-hidden animate-slide-in">
                     <button
                       onClick={() => { setTickerFilter(null); setShowTickerDropdown(false); }}
                       className={`w-full text-left px-3 py-2 font-mono text-label transition-colors ${

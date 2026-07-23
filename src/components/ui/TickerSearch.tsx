@@ -68,7 +68,7 @@ const TickerSearch = ({ value, onChange }: TickerSearchProps) => {
     <div ref={wrapRef} className="relative">
       <button
         onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-2 border border-borderSubtle hover:border-borderMuted bg-panel rounded-md pl-2.5 pr-2 py-1.5 font-mono text-xs transition-colors min-w-[104px]"
+        className="flex items-center gap-2 border border-borderSubtle hover:border-borderMuted bg-panel rounded-md pl-2.5 pr-2 py-1.5 font-mono text-caption transition-colors min-w-[104px] leading-4"
       >
         <Search className="w-3.5 h-3.5 text-textMuted" />
         <span className="font-semibold text-textPrimary">{value}</span>
@@ -87,7 +87,7 @@ const TickerSearch = ({ value, onChange }: TickerSearchProps) => {
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Search all tickers…"
-              className="w-full bg-transparent py-2.5 text-sm text-textPrimary placeholder:text-textMuted focus:outline-none"
+              className="w-full bg-transparent py-2.5 text-body text-textPrimary placeholder:text-textMuted focus:outline-none leading-5"
             />
           </div>
           <div className="max-h-72 overflow-y-auto py-1">
@@ -106,9 +106,9 @@ const TickerSearch = ({ value, onChange }: TickerSearchProps) => {
                   }`}
                 >
                   <span
-                    className={`font-mono text-xs font-semibold w-16 shrink-0 ${
+                    className={`font-mono text-caption font-semibold w-16 shrink-0 ${
                       t.symbol === value ? 'text-select' : 'text-textPrimary'
-                    }`}
+                    } leading-4`}
                   >
                     {t.symbol}
                   </span>

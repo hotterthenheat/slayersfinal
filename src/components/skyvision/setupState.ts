@@ -1,0 +1,59 @@
+/*
+==================================================
+  SLAYER TERMINAL - SETUP LIFECYCLE STATE (logic)
+  Maps a setup to an observational lifecycle state,
+  read entirely from fields the engine already
+  computes (verdict + take-profit ladder). This is a
+  relabel of the actionable ENTER/EXIT verdict into a
+  state that describes where a setup SITS — never an
+  instruction to place an order. No new math here.
+  Kept apart from the StateBadge component so that
+  file only exports a component (fast-refresh).
+==================================================
+*/
+
+import type { Tone } from '../ui/tones';
+import type { Setup } from '../../types/skyvision';
+
+/**
+ * Lifecycle state for a setup, derived from existing fields:
+ *   WAITING     — a score is present but no trigger has formed (still building)
+ *   ARMED       — entry conditions are met, no trigger has fired yet
+ *   TRIGGERED   — entry conditions met AND a take-profit level is live or hit
+ *   INVALIDATED — the thesis has faded and the engine has stepped aside
+ */
+export type SetupState = 'WAITING' | 'ARMED' | 'TRIGGERED' | 'INVALIDATED';
+
+export const SETUP_STATES: SetupState[] = ['WAITING', 'ARMED', 'TRIGGERED', 'INVALIDATED'];
+
+/**
+ * Derive the lifecycle state from values the setup already carries.
+ * A score with no trigger present resolves to WAITING.
+ */
+export function setupState(setup: Setup): SetupState {
+  // Engine has faded the thesis — nothing left to arm or trigger.
+  if (setup.verdict === 'EXIT') return 'INVALIDATED';
+  // A live/hit take-profit rung is the trigger having fired.
+  const triggered = setup.takeProfits.some(tp => tp.status === 'HIT' || tp.status === 'IN PROGRESS');
+  if (setup.verdict === 'ENTER') return triggered ? 'TRIGGERED' : 'ARMED';
+  // Score present, conditions building, no trigger yet.
+  return 'WAITING';
+}
+
+export interface StateMeta {
+  tone: Tone;
+  pulse: boolean;
+  /** Actionability rank for sorting — hotter states sort higher (desc). */
+  rank: number;
+  hint: string;
+}
+
+// Lifecycle is a PROCESS, not a direction — it uses a neutral/selection language
+// so green & red stay reserved for market direction (call/put, bull/bear). Silver
+// (select) = primed/live, grey = dormant/faded; only the live state pulses.
+export const STATE_META: Record<SetupState, StateMeta> = {
+  WAITING: { tone: 'neutral', pulse: false, rank: 1, hint: 'Score present, no trigger yet — still building' },
+  ARMED: { tone: 'select', pulse: false, rank: 2, hint: 'Entry conditions met — no trigger fired yet' },
+  TRIGGERED: { tone: 'select', pulse: true, rank: 3, hint: 'Trigger fired — a take-profit level is live' },
+  INVALIDATED: { tone: 'neutral', pulse: false, rank: 0, hint: 'Thesis faded — engine has stepped aside' },
+};

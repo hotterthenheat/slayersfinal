@@ -32,8 +32,8 @@ const GammaChart = () => {
   const fullChain = focusedId === HEATMAP_FOCUS_ID;
   // Expiry spotlight — null = all columns even; else the highlighted column index.
   const [highlightCol, setHighlightCol] = useState<number | null>(null);
-  const revRef = useRef(0);
-  const revision = useMemo(() => ++revRef.current, [marketData]);
+  const [revision, setRevision] = useState(0);
+  useEffect(() => setRevision(r => r + 1), [marketData]);
 
   // Scan-tier snapshot (10s; ticker switch is immediate).
   const [scan, setScan] = useState<MarketSnapshot | null>(null);
