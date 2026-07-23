@@ -21,7 +21,7 @@ const StatCard = ({ label, value, sub, tone = 'neutral', emphasis = false, class
       <div className="font-mono text-label uppercase tracking-widest text-textSecondary truncate">{label}</div>
       <div
         className={`mt-1.5 font-mono text-lg font-semibold leading-none tnum ${
-          emphasis && tone === 'neutral' ? 'holo-text' : toneText[tone]
+          emphasis && tone === 'neutral' ? 'text-textPrimary' : toneText[tone]
         }`}
       >
         {value}

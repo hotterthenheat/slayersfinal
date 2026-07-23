@@ -56,9 +56,9 @@ const Panel = ({
   bodyClassName = '',
   children,
 }: PanelProps) => {
-  // Scope-reticle corner ticks read as a deliberate "this is the hero instrument"
-  // cue — reserved for emphasis panels, not scattered on every box.
-  const surface = emphasis ? 'inst-emphasis holo-glow inst-ticks' : 'inst-surface';
+  // Emphasis is now a quiet static lift (brighter hairline) — no animated
+  // holo frame, glow, or corner ticks. Hierarchy from contrast, not ornament.
+  const surface = emphasis ? 'inst-emphasis' : 'inst-surface';
   const uid = useId();
   const { focusedId, overlayEl, focus, close } = useFocus();
   const isFocused = focusable && focusedId === uid;

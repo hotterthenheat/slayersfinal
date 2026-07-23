@@ -271,17 +271,17 @@ const Fracture = () => {
           subtitle="who must transact at each level, vs the liquidity to absorb it"
           flush
           className="xl:col-span-7"
-          actions={
-            <span className="hidden sm:flex items-center gap-2">
+        >
+          <div className="flex flex-col">
+            {/* Legend strip — lives above the rows (not crammed into the header,
+                where it truncated the title) since it keys the stacked bars below. */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 border-b border-borderSubtle/60">
               {PARTS.map(p => (
                 <span key={p.key} className="inline-flex items-center gap-1 font-mono text-label uppercase tracking-wider text-textMuted">
                   <span className="w-2 h-2 rounded-sm inline-block" style={{ background: p.color }} /> {p.label}
                 </span>
               ))}
-            </span>
-          }
-        >
-          <div className="flex flex-col">
+            </div>
             {view.levels.map((level, i) => (
               <div key={level.price}>
                 <FlowRow level={level} maxForced={maxForced} />

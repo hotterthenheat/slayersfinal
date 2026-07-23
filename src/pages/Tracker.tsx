@@ -558,7 +558,7 @@ const Tracker = () => {
       {/* Empty state — a dense "get started" surface, not a blank panel */}
       {trackedSetups.length === 0 ? (
         <div className="flex flex-col gap-4 animate-view-in">
-          <Panel className="w-full" bodyClassName="py-8 px-6 flex flex-col md:flex-row md:items-center gap-6">
+          <Panel className="w-full" bodyClassName="py-6 px-6 flex flex-col md:flex-row md:items-center gap-6">
             <div className="flex-1 min-w-0">
               <div className="inline-flex w-11 h-11 rounded-lg border border-borderSubtle bg-inset items-center justify-center mb-3">
                 <Bookmark className="w-5 h-5 holo-text" />

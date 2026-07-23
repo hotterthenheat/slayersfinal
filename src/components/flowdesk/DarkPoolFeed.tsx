@@ -27,9 +27,12 @@ const DarkPoolFeed = () => {
       subtitle="off-exchange prints across the universe — where the size is going today"
       flush
     >
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-px bg-borderSubtle">
+      {/* Masonry columns, not a grid: sectors vary in row count (Tech 6, Utilities 1),
+          so a fixed grid left a ragged half-empty last row. Columns balance by height
+          and fill evenly; gap-px + mb-px keep the fused hairline look. */}
+      <div className="columns-1 md:columns-2 xl:columns-4 gap-px bg-borderSubtle">
         {sectors.map(sec => (
-          <div key={sec.sector} className="bg-panel flex flex-col">
+          <div key={sec.sector} className="bg-panel flex flex-col break-inside-avoid mb-px">
             {/* Sector header */}
             <div className="px-3 pt-2.5 pb-2 border-b border-borderSubtle/60">
               <div className="flex items-baseline justify-between gap-2">

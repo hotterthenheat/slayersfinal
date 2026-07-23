@@ -161,8 +161,18 @@ const News = () => {
   const selected: NewsItem = rows.find(n => n.id === selectedId) ?? units[0]?.lead ?? feed[0];
 
   const moodTone: Tone = mood.label === 'RISK-ON' ? 'bull' : mood.label === 'RISK-OFF' ? 'bear' : 'neutral';
-  const movers = [...feed]
-    .filter(n => n.ticker)
+  // One card per ticker — keep each ticker's biggest-move headline, then take
+  // the top three. Sorting the raw feed let one ticker (e.g. NVDA) fill two
+  // cards and labelled all three "Top catalyst"; this dedupes and ranks them.
+  const moversByTicker = new Map<string, NewsItem>();
+  for (const n of feed) {
+    if (!n.ticker) continue;
+    const cur = moversByTicker.get(n.ticker);
+    if (!cur || Math.abs(n.prediction.expMove1dPct) > Math.abs(cur.prediction.expMove1dPct)) {
+      moversByTicker.set(n.ticker, n);
+    }
+  }
+  const movers = [...moversByTicker.values()]
     .sort((a, b) => Math.abs(b.prediction.expMove1dPct) - Math.abs(a.prediction.expMove1dPct))
     .slice(0, 3);
 
@@ -190,10 +200,10 @@ const News = () => {
           tone={moodTone}
         />
         <StatCard label="Headlines tracked" value={feed.length} sub="this session, model-scored" />
-        {movers.map(m => (
+        {movers.map((m, i) => (
           <StatCard
             key={m.id}
-            label={`Top catalyst · ${m.ticker}`}
+            label={`${['Top', '2nd', '3rd'][i]} catalyst · ${m.ticker}`}
             value={signedPct(m.prediction.expMove1dPct)}
             sub={m.category}
             tone={sentimentTone(m.sentiment)}

@@ -152,23 +152,16 @@
   border-right: 1px solid #c7d3e8;
 }
 
-/* Emphasis frame — the single hero surface on a page. A living holo
-   hairline rides the border-box under a panel-dark pad (same trick as
-   .holo-border) so the top instrument reads brighter than its siblings. */
+/* Emphasis surface — the hero panel/metric on a page. A quiet static lift:
+   a slightly brighter hairline (borderMuted over the #1c1c1c default) and a
+   touch more top-light. No animation, no silver chrome — the hierarchy reads
+   from contrast, not ornament. */
 .inst-emphasis {
-  border: 1px solid transparent;
-  background-image: linear-gradient(#0b0b0b, #0b0b0b),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0) 46%), var(--holo-gradient);
-  background-origin: border-box;
-  background-clip: padding-box, padding-box, border-box;
-  background-size: 100% 100%, 100% 100%, 250% 250%;
-  animation: holo-pan 4.5s ease-in-out infinite alternate;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .inst-emphasis {
-    animation: none;
-  }
+  background-color: #0b0b0b;
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0) 46%);
+  border: 1px solid #2a2a2a;
+  border-top-color: #3a3a3a;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 /* Eyebrow tick — the 3px vertical mark that leads a label. Shape only;
