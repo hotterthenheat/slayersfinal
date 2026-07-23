@@ -128,7 +128,7 @@ const ExposureLedger = ({
       className="min-w-0"
       bodyClassName="flex flex-col max-h-[560px]"
     >
-      <div className="overflow-auto h-full min-h-0">
+      <div tabIndex={0} role="region" aria-label="Exposure ledger — scrollable" className="overflow-auto h-full min-h-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/50">
         {/* Sticky legend — stays pinned while the rows scroll */}
         <div className="sticky top-0 z-20 flex items-center gap-3 h-9 px-2.5 bg-panelRaised border-b border-borderSubtle overflow-hidden whitespace-nowrap">
           <span className="flex items-center gap-1.5 font-mono text-label font-semibold uppercase tracking-wider text-textPrimary">

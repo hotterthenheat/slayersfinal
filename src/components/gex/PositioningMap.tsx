@@ -228,7 +228,10 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
       {/* Rows */}
       <div
         ref={bodyRef}
-        className="flex-grow overflow-y-auto min-h-0"
+        tabIndex={0}
+        role="region"
+        aria-label="Dealer positioning — scrollable"
+        className="flex-grow overflow-y-auto min-h-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/50"
         onMouseMove={e => {
           const rect = bodyRef.current?.getBoundingClientRect();
           if (rect) setHoverY(e.clientY - rect.top + (bodyRef.current?.offsetTop ?? 0));

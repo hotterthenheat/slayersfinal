@@ -112,7 +112,7 @@ const OrderFlowPanel = ({ data }: OrderFlowPanelProps) => (
       <div className="font-mono text-micro uppercase tracking-widest text-textMuted mb-1">Cumulative Delta</div>
       <CumulativeDelta data={data} />
     </div>
-    <div className="flex-grow min-h-0 overflow-y-auto">
+    <div tabIndex={0} role="region" aria-label="Order flow — scrollable" className="flex-grow min-h-0 overflow-y-auto focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/50">
       <div className="font-mono text-micro uppercase tracking-widest text-textMuted mb-1.5">Delta by Price</div>
       <DeltaByPriceBars data={data} />
     </div>
