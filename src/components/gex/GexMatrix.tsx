@@ -49,7 +49,7 @@ const GexMatrix = ({ data, highlightCol = null }: GexMatrixProps) => {
 
   return (
     <div className="relative flex gap-2 h-full min-h-0">
-      <div ref={scrollRef} className="flex-grow overflow-auto min-w-0">
+      <div ref={scrollRef} tabIndex={0} role="region" aria-label="Gamma heatmap — scrollable" className="flex-grow overflow-auto min-w-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/50">
         {/* table-fixed: geometry is tick-independent, so the pulse only swaps glyphs
             (fmtUsd char-count changes each second) instead of reflowing columns */}
         {/* min-width keeps the dense grid legible on a phone: the overflow-auto

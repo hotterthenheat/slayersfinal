@@ -22,7 +22,7 @@ const Terms = () => (
         body: (
           <p>
             The Service is informational and educational and does not provide investment advice. See our{' '}
-            <Link to="/legal/disclaimer" className="text-textPrimary hover:underline">
+            <Link to="/legal/disclaimer" className="text-textPrimary underline underline-offset-2 decoration-white/40 hover:decoration-white/80">
               Disclaimer
             </Link>{' '}
             for the full terms, which are incorporated here by reference.

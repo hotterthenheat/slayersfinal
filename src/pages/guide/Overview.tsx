@@ -20,9 +20,9 @@ const DESKS: { icon: LucideIcon; name: string; to: string; blurb: string }[] = [
 
 const STEPS = [
   <>Pick a ticker from the top bar — or press <Kbd>]</Kbd> / <Kbd>[</Kbd> to step through the watchlist. Every desk follows the active ticker.</>,
-  <>Open <Link to="/pulse" className="text-textPrimary hover:underline">Pulse</Link> and load a desk profile (Scalper, Swing, Macro, Earnings) — an instant workspace for how you trade.</>,
-  <>Head to <Link to="/pinpoint" className="text-textPrimary hover:underline">Pinpoint</Link> to see the dealer positioning: the GEX heatmap, the call/put walls, and the gamma flip.</>,
-  <>Cross-check the live tape in <Link to="/trace" className="text-textPrimary hover:underline">Trace</Link> — is real size printing where the positioning says it should?</>,
+  <>Open <Link to="/pulse" className="text-textPrimary underline underline-offset-2 decoration-white/40 hover:decoration-white/80">Pulse</Link> and load a desk profile (Scalper, Swing, Macro, Earnings) — an instant workspace for how you trade.</>,
+  <>Head to <Link to="/pinpoint" className="text-textPrimary underline underline-offset-2 decoration-white/40 hover:decoration-white/80">Pinpoint</Link> to see the dealer positioning: the GEX heatmap, the call/put walls, and the gamma flip.</>,
+  <>Cross-check the live tape in <Link to="/trace" className="text-textPrimary underline underline-offset-2 decoration-white/40 hover:decoration-white/80">Trace</Link> — is real size printing where the positioning says it should?</>,
   <>Press <Kbd>⌘</Kbd><Kbd>K</Kbd> any time to jump between desks, tickers and actions without leaving the keyboard.</>,
 ];
 
@@ -79,9 +79,9 @@ const Overview = () => (
 
     <Callout>
       New to the vocabulary — GEX, walls, gamma flip, charm/vanna? The{' '}
-      <Link to="/guide/concepts" className="text-textPrimary hover:underline">Concepts</Link> tab defines every term you
+      <Link to="/guide/concepts" className="text-textPrimary underline underline-offset-2 decoration-white/40 hover:decoration-white/80">Concepts</Link> tab defines every term you
       will see on the desks. For how to treat what is shown, read the{' '}
-      <Link to="/legal/disclaimer" className="text-textPrimary hover:underline">Disclaimer</Link> — the terminal is a
+      <Link to="/legal/disclaimer" className="text-textPrimary underline underline-offset-2 decoration-white/40 hover:decoration-white/80">Disclaimer</Link> — the terminal is a
       research tool, not investment advice.
     </Callout>
   </>

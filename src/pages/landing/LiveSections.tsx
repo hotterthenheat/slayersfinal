@@ -187,7 +187,7 @@ const DemoTape = ({ snapshot }: { snapshot: MarketSnapshot }) => {
                 p.side === 'ASK'
                   ? 'bg-bull/90 text-ink'
                   : p.side === 'BID'
-                    ? 'bg-bear/80 text-ink'
+                    ? 'bg-bear/80 text-white'
                     : 'bg-white/10 text-textSecondary'
               }`}
             >

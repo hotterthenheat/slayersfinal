@@ -13,7 +13,7 @@ const FAQ: QA[] = [
     a: (
       <>No. Slayer Terminal is a research and educational tool. Nothing here is a recommendation to buy, sell or hold
       any security — see the{' '}
-      <Link to="/legal/disclaimer" className="text-textPrimary hover:underline">Disclaimer</Link> for the full terms.</>
+      <Link to="/legal/disclaimer" className="text-textPrimary underline underline-offset-2 decoration-white/40 hover:decoration-white/80">Disclaimer</Link> for the full terms.</>
     ),
   },
   {
@@ -21,7 +21,7 @@ const FAQ: QA[] = [
     a: (
       <>Prices, levels and flow update continuously while the terminal is open. How to treat what is shown — and its
       limits — is covered in the{' '}
-      <Link to="/legal/disclaimer" className="text-textPrimary hover:underline">Disclaimer</Link>: data may be delayed
+      <Link to="/legal/disclaimer" className="text-textPrimary underline underline-offset-2 decoration-white/40 hover:decoration-white/80">Disclaimer</Link>: data may be delayed
       or incomplete, and should not be the sole basis for any trading decision.</>
     ),
   },
@@ -34,16 +34,16 @@ const FAQ: QA[] = [
     a: (
       <>Your workspace layout, watchlists, tracker, journal and saved views live in your browser's local storage on
       your device — nothing is sent to a server. You can wipe it any time from Settings. See the{' '}
-      <Link to="/legal/privacy" className="text-textPrimary hover:underline">Privacy Policy</Link>.</>
+      <Link to="/legal/privacy" className="text-textPrimary underline underline-offset-2 decoration-white/40 hover:decoration-white/80">Privacy Policy</Link>.</>
     ),
   },
   {
     q: 'Which desk should I start with?',
     a: (
-      <><Link to="/pulse" className="text-textPrimary hover:underline">Pulse</Link> is the cockpit — start there.
-      Use <Link to="/compass" className="text-textPrimary hover:underline">Compass</Link> to find a setup,{' '}
-      <Link to="/pinpoint" className="text-textPrimary hover:underline">Pinpoint</Link> to read the dealer positioning
-      behind it, and <Link to="/trace" className="text-textPrimary hover:underline">Trace</Link> to confirm it on the
+      <><Link to="/pulse" className="text-textPrimary underline underline-offset-2 decoration-white/40 hover:decoration-white/80">Pulse</Link> is the cockpit — start there.
+      Use <Link to="/compass" className="text-textPrimary underline underline-offset-2 decoration-white/40 hover:decoration-white/80">Compass</Link> to find a setup,{' '}
+      <Link to="/pinpoint" className="text-textPrimary underline underline-offset-2 decoration-white/40 hover:decoration-white/80">Pinpoint</Link> to read the dealer positioning
+      behind it, and <Link to="/trace" className="text-textPrimary underline underline-offset-2 decoration-white/40 hover:decoration-white/80">Trace</Link> to confirm it on the
       tape.</>
     ),
   },
@@ -57,7 +57,7 @@ const FAQ: QA[] = [
   {
     q: 'Can I customize my workspace?',
     a: (
-      <>Yes — <Link to="/pulse" className="text-textPrimary hover:underline">Pulse</Link> is fully arrangeable: drag and
+      <>Yes — <Link to="/pulse" className="text-textPrimary underline underline-offset-2 decoration-white/40 hover:decoration-white/80">Pulse</Link> is fully arrangeable: drag and
       resize panels, load a desk profile (Scalper / Swing / Macro / Earnings), and your layout is remembered in your
       browser.</>
     ),
@@ -69,7 +69,7 @@ const FAQ: QA[] = [
   {
     q: 'Can I track my trades?',
     a: (
-      <>Yes — <Link to="/tracker" className="text-textPrimary hover:underline">Tracker</Link> keeps your setups and a
+      <>Yes — <Link to="/tracker" className="text-textPrimary underline underline-offset-2 decoration-white/40 hover:decoration-white/80">Tracker</Link> keeps your setups and a
       journal, and the exposure ledger can export to CSV. Everything is stored locally in your browser.</>
     ),
   },
@@ -82,15 +82,15 @@ const FAQ: QA[] = [
     a: (
       <>Yes. <Kbd>⌘</Kbd><Kbd>K</Kbd> opens the command palette for pages, tickers and actions; <Kbd>?</Kbd> shows every
       shortcut; <Kbd>[</Kbd> / <Kbd>]</Kbd> change ticker. See the{' '}
-      <Link to="/guide/shortcuts" className="text-textPrimary hover:underline">Shortcuts</Link> tab.</>
+      <Link to="/guide/shortcuts" className="text-textPrimary underline underline-offset-2 decoration-white/40 hover:decoration-white/80">Shortcuts</Link> tab.</>
     ),
   },
   {
     q: 'How do I get help or send feedback?',
     a: (
-      <>Post in <Link to="/community" className="text-textPrimary hover:underline">Community</Link> (ideas, feature
+      <>Post in <Link to="/community" className="text-textPrimary underline underline-offset-2 decoration-white/40 hover:decoration-white/80">Community</Link> (ideas, feature
       requests, feedback) or email{' '}
-      <a href="mailto:info@slayerterminal.com" className="text-textPrimary hover:underline">info@slayerterminal.com</a>.</>
+      <a href="mailto:info@slayerterminal.com" className="text-textPrimary underline underline-offset-2 decoration-white/40 hover:decoration-white/80">info@slayerterminal.com</a>.</>
     ),
   },
 ];

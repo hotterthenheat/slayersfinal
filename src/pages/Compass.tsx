@@ -398,7 +398,7 @@ const Compass = () => {
                 />
               )}
               <span className="relative z-10">{s.label}</span>
-              <span className={`relative z-10 font-mono text-micro tnum ${isActive ? 'text-ink/70' : 'text-textMuted/60'}`}>
+              <span className={`relative z-10 font-mono text-micro tnum ${isActive ? 'text-ink/70' : 'text-textMuted'}`}>
                 {count}
               </span>
             </button>

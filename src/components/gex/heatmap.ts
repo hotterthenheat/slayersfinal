@@ -223,18 +223,26 @@ export function heatCellStyle(value: number, maxAbs: number): CSSProperties {
 
   if (ramp) {
     const rgb = rampColor(value >= 0 ? ramp.pos : ramp.neg, t);
+    // Flip to dark ink once the cell is bright enough to carry it (0.5, not 0.55,
+    // so saturated greens — which read far better on dark ink — get it). A 1px
+    // shadow lifts legibility on the mid-tone cells where no single ink hits AA.
+    const dark = perceivedLuminance(rgb) > 0.5;
     return {
       backgroundColor: `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`,
-      color: perceivedLuminance(rgb) > 0.55 ? '#0a0a0a' : '#ededed',
+      color: dark ? '#0a0a0a' : '#ededed',
+      textShadow: dark ? '0 1px 1px rgba(255,255,255,0.3)' : '0 1px 1px rgba(0,0,0,0.6)',
     };
   }
 
   if (HEAT_MODE === 'diverging') {
     const alpha = 0.05 + t * 0.5;
+    const base = value >= 0 ? [48, 209, 88] : [255, 59, 48];
+    const comp = base.map(ch => Math.round(ch * alpha + 10 * (1 - alpha))) as [number, number, number];
+    const dark = perceivedLuminance(comp) > 0.5;
     return {
-      backgroundColor:
-        value >= 0 ? `rgba(48,209,88,${alpha.toFixed(3)})` : `rgba(255,59,48,${alpha.toFixed(3)})`,
-      color: '#ededed',
+      backgroundColor: `rgba(${base[0]},${base[1]},${base[2]},${alpha.toFixed(3)})`,
+      color: dark ? '#0a0a0a' : '#ededed',
+      textShadow: dark ? '0 1px 1px rgba(255,255,255,0.3)' : '0 1px 1px rgba(0,0,0,0.6)',
     };
   }
 
