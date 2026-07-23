@@ -9,6 +9,7 @@ import StatCard from '../../components/ui/StatCard';
 import MetricGrid from '../../components/ui/MetricGrid';
 import type { Tone } from '../../components/ui/tones';
 import { useToast } from '../../components/ui/Toast';
+import TickerTag from '../../components/ui/TickerTag';
 import TapeRowDrawer from './TapeRowDrawer';
 import type { FlowPrint, PrintSentiment, TapeSummary } from '../../types/flowdesk';
 
@@ -979,9 +980,10 @@ const LiveTape = () => {
               )}
               {topTickers.map((t, i) => (
                 <div key={t.ticker} className="flex items-center gap-2">
-                  <span className={`w-12 shrink-0 font-mono text-label font-semibold ${i === 0 ? 'text-king' : 'text-textPrimary'}`}>
-                    {t.ticker}
-                  </span>
+                  <TickerTag
+                    symbol={t.ticker}
+                    className={`w-12 shrink-0 text-left font-mono text-label font-semibold ${i === 0 ? 'text-king' : 'text-textPrimary'}`}
+                  />
                   <span className="relative flex-1 h-[5px] rounded-full bg-white/[0.05]">
                     <span
                       className={`absolute inset-y-0 left-0 rounded-full ${i === 0 ? 'bg-king/70' : 'bg-white/25'}`}

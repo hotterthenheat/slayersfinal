@@ -3,6 +3,7 @@ import { Layers } from 'lucide-react';
 import { buildDarkPoolFeed } from '../../data/darkpoolfeed';
 import { fmtUsd } from '../../data/gex';
 import Panel from '../../components/ui/Panel';
+import TickerTag from '../../components/ui/TickerTag';
 
 /** Shares → compact (13.51M / 820K). */
 const fmtShares = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(2)}M` : `${Math.round(n / 1e3)}K`);
@@ -66,7 +67,7 @@ const DarkPoolFeed = () => {
                   className="flex items-center px-3 py-1.5 border-b border-borderSubtle/25 last:border-0 hover:bg-white/[0.02] transition-colors"
                 >
                   <span className="w-12 shrink-0 flex flex-col leading-none">
-                    <span className="font-mono text-label font-bold text-textPrimary">{r.ticker}</span>
+                    <TickerTag symbol={r.ticker} className="font-mono text-label font-bold text-textPrimary" />
                     <span className={`font-mono text-micro tnum ${r.changePct >= 0 ? 'text-bull' : 'text-bear'}`}>
                       {r.changePct >= 0 ? '+' : ''}
                       {r.changePct.toFixed(2)}%
