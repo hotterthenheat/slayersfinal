@@ -109,9 +109,11 @@ const MATRIX_EXPIRIES = [
 
 const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-/** Days-to-expiry → the actual expiry date (e.g. "Jul 23"), skipping weekends
+/** Days-to-expiry → label. Same-day keeps "0DTE" (traders read it instantly);
+    every later expiry shows its actual date (e.g. "Jul 24"), skipping weekends
     since listed options expire on trading days. */
 function expiryLabel(dte: number): string {
+  if (dte === 0) return '0DTE';
   const d = new Date();
   let added = 0;
   while (added < dte) {

@@ -16,6 +16,9 @@ interface PanelProps {
   emphasis?: boolean;
   /** Opt in to Focus Mode — a header control blooms this panel full-bleed */
   focusable?: boolean;
+  /** Stable focus id so a page can detect its own panel's focus state (e.g. to
+      render more data when expanded). Falls back to an auto-generated id. */
+  focusId?: string;
   className?: string;
   bodyClassName?: string;
   children: React.ReactNode;
@@ -52,6 +55,7 @@ const Panel = ({
   tone = 'neutral',
   emphasis = false,
   focusable = false,
+  focusId,
   className = '',
   bodyClassName = '',
   children,
@@ -59,7 +63,8 @@ const Panel = ({
   // Emphasis is now a quiet static lift (brighter hairline) — no animated
   // holo frame, glow, or corner ticks. Hierarchy from contrast, not ornament.
   const surface = emphasis ? 'inst-emphasis' : 'inst-surface';
-  const uid = useId();
+  const generatedId = useId();
+  const uid = focusId ?? generatedId;
   const { focusedId, overlayEl, focus, close } = useFocus();
   const isFocused = focusable && focusedId === uid;
   const bodyPad = flush ? '' : 'p-4';

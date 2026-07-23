@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, Grid3x3, Info } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
+import { useFocus } from '../../context/FocusContext';
 import { buildExposureProfile } from '../../data/exposure';
 import { buildGexView, fmtUsd, pulseMatrix } from '../../data/gex';
 import { buildCommandView } from '../../data/command';
@@ -12,6 +13,10 @@ import GexMatrix from '../../components/gex/GexMatrix';
     tick; the live glyph pulse still folds in per tick via `revision`. */
 const SCAN_INTERVAL_MS = 10_000;
 
+// Stable focus id so we can tell when this heatmap is expanded and, only then,
+// build the full strike range instead of the spot-centred window.
+const HEATMAP_FOCUS_ID = 'pinpoint-gamma-heatmap';
+
 const LevelChip = ({ label, value, tone }: { label: string; value: number; tone: string }) => (
   <span className="inline-flex flex-col leading-tight">
     <span className="font-mono text-micro uppercase tracking-widest text-textMuted">{label}</span>
@@ -21,6 +26,10 @@ const LevelChip = ({ label, value, tone }: { label: string; value: number; tone:
 
 const GammaChart = () => {
   const { activeTicker, marketData } = useMarketData();
+  const { focusedId } = useFocus();
+  // Expanded (Focus Mode) shows the full chain — every strike; the inline view
+  // stays a tighter window centred on spot so it reads without scrolling.
+  const fullChain = focusedId === HEATMAP_FOCUS_ID;
   const revRef = useRef(0);
   const revision = useMemo(() => ++revRef.current, [marketData]);
 
@@ -41,7 +50,7 @@ const GammaChart = () => {
   }, [marketData]);
 
   const exposure = useMemo(() => (scan ? buildExposureProfile(scan, '0DTE', 10) : null), [scan]);
-  const gexView = useMemo(() => (scan ? buildGexView(scan, 'GEX', 10) : null), [scan]);
+  const gexView = useMemo(() => (scan ? buildGexView(scan, 'GEX', fullChain ? 20 : 10) : null), [scan, fullChain]);
   const gexLevels = gexView?.levels ?? null;
   // Pulse the matrix glyphs each tick for a live read (geometry stays fixed).
   const matrix = useMemo(() => (gexView ? pulseMatrix(gexView.matrix, revision) : null), [gexView, revision]);
@@ -105,10 +114,12 @@ const GammaChart = () => {
             </span>
           </span>
         }
-        subtitle="net GEX by strike × expiry"
+        subtitle={fullChain ? 'full chain · every strike × expiry' : 'net GEX by strike × expiry · expand for the full chain'}
         flush
         focusable
-        bodyClassName="h-[calc(100dvh-27rem)] min-h-[340px] max-h-[520px] p-2"
+        focusId={HEATMAP_FOCUS_ID}
+        // Capped inline; uncapped when expanded so the overlay shows every strike.
+        bodyClassName={fullChain ? 'p-2' : 'h-[calc(100dvh-27rem)] min-h-[340px] max-h-[520px] p-2'}
       >
         <GexMatrix data={matrix} spot={scan.spot} />
       </Panel>
@@ -119,7 +130,7 @@ const GammaChart = () => {
         <span>
           <span className="font-mono font-semibold uppercase tracking-wider mr-1.5 holo-text">Reading the gamma</span>
           Each cell is net dealer gamma at that strike and expiry — <span className="text-bull">green</span> is dealer support
-          (long γ, dips get bought toward the walls); <span className="text-bear">red</span> is where hedging amplifies the move.
+          (long gamma, dips get bought toward the walls); <span className="text-bear">red</span> is where hedging amplifies the move.
           The nearest expiries carry the most gamma; the flip is the price where the sign turns. Candlesticks live on Pulse — this
           is the positioning read.
         </span>
