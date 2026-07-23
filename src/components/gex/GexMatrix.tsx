@@ -50,7 +50,7 @@ const GexMatrix = ({ data }: GexMatrixProps) => {
               {expiries.map((exp, i) => (
                 <th
                   key={exp}
-                  className={`px-2 py-1.5 text-right font-mono text-micro font-semibold uppercase tracking-widest border-b border-borderSubtle ${
+                  className={`px-2 py-1.5 text-right font-mono text-micro font-semibold uppercase tracking-wide border-b border-borderSubtle ${
                     i === 0 ? 'text-textSecondary' : 'text-textMuted'
                   }`}
                 >

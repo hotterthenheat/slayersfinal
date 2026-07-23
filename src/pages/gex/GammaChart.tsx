@@ -77,7 +77,7 @@ const GammaChart = () => {
                 }`}
               >
                 <Activity className="w-3 h-3" />
-                {longGamma ? 'Long Γ' : 'Short Γ'}
+                {longGamma ? 'Long gamma' : 'Short gamma'}
               </span>
             </div>
             <div className="mt-0.5 font-mono text-micro text-textSecondary">

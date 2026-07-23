@@ -91,7 +91,7 @@ const ComplexBoard = () => {
                   col.longGamma ? 'bg-bull/10 text-bull' : 'bg-bear/10 text-bear'
                 }`}
               >
-                {col.longGamma ? 'Long Γ' : 'Short Γ'}
+                {col.longGamma ? 'Long gamma' : 'Short gamma'}
               </span>
             </header>
 
