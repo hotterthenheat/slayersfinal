@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import RGL, { WidthProvider, type Layout } from 'react-grid-layout';
@@ -229,6 +229,18 @@ const PanelChrome = ({
   );
 };
 
+/** Keys whose render actually consumes the 1s pulsing matrix. Only these re-run
+    on the heat pulse; every other panel's data is on the 10s scan cadence, so it
+    renders from the stable ctx and is memoized — killing the per-second re-render
+    (and the per-second buildDarkPoolView / runMonteCarlo that rode on it). */
+const PULSE_KEYS = new Set(['gex-heatmap']);
+
+/** Memoized panel body — bails out unless its render fn or ctx identity changes,
+    so stable-ctx panels don't re-render on the 1s pulse tick. */
+const MemoPanelBody = memo(({ render, ctx }: { render: (c: WorkspaceCtx) => ReactNode; ctx: WorkspaceCtx }) => (
+  <>{render(ctx)}</>
+));
+
 const PulseWorkspace = () => {
   const { activeTicker, marketData, changeTicker } = useMarketData();
   const location = useLocation();
@@ -355,13 +367,6 @@ const PulseWorkspace = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scanSnapshot, usedTickers.join('|'), focus?.ticker, focus?.price]);
 
-  // Apply the 1s heatmap pulse on top (only the matrix changes).
-  const pulsedByTicker = useMemo(() => {
-    const m = new Map<string, WorkspaceCtx>();
-    ctxByTicker.forEach((ctx, t) => m.set(t, { ...ctx, matrix: pulseMatrix(ctx.gex.matrix, pulseTick) }));
-    return m;
-  }, [ctxByTicker, pulseTick]);
-
   // ---- mutations ----------------------------------------------------------
   const mutate = (fn: (l: PulseLayout) => PulseLayout) =>
     setWs(prev => ({ ...prev, layouts: prev.layouts.map(l => (l.id === prev.activeId ? fn(l) : l)) }));
@@ -470,18 +475,21 @@ const PulseWorkspace = () => {
 
   const renderPanelBody = (key: string, ticker: string) => {
     const def = pulsePanelByKey(key);
-    const ctx = pulsedByTicker.get(ticker);
+    const base = ctxByTicker.get(ticker);
     if (!def) return null;
-    if (!ctx)
+    if (!base)
       return (
         <div className="h-full flex items-center justify-center font-mono text-label text-textMuted uppercase tracking-widest">
-          loading…
+          Awaiting feed…
         </div>
       );
+    // Only pulse-consuming panels take the fresh per-second matrix; the rest get
+    // the stable scan ctx so their memoized body skips the 1s churn.
+    const ctx = PULSE_KEYS.has(key) ? { ...base, matrix: pulseMatrix(base.gex.matrix, pulseTick) } : base;
     // Isolate each body so one throwing panel can't take down the whole grid.
     return (
       <PanelErrorBoundary resetKey={`${key}:${ticker}`} label={def.title}>
-        {def.render(ctx)}
+        <MemoPanelBody render={def.render} ctx={ctx} />
       </PanelErrorBoundary>
     );
   };
