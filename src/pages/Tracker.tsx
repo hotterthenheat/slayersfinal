@@ -27,6 +27,7 @@ import VerdictBadge from '../components/skyvision/VerdictBadge';
 import DataTable, { type Column } from '../components/ui/DataTable';
 import StatCard from '../components/ui/StatCard';
 import MetricGrid from '../components/ui/MetricGrid';
+import Skeleton, { SkeletonRows } from '../components/ui/Skeleton';
 import type { Tone } from '../components/ui/tones';
 
 // ---- Saved views -----------------------------------------------------------
@@ -222,7 +223,7 @@ const ItemDetail = ({ row, onStatus, onNotes, onReview, onUntrack }: ItemDetailP
     <div className="flex flex-col gap-4">
       {/* Identity */}
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="font-mono text-sm font-bold text-textPrimary tracking-tight">{live.contract}</span>
+        <span className="font-mono text-body font-bold text-textPrimary tracking-tight leading-5">{live.contract}</span>
         {expired ? <SignalBadge tone="neutral">EXPIRED</SignalBadge> : <VerdictBadge verdict={live.verdict} dot />}
         {row.expiringSoon && !expired && <SignalBadge tone="warn">EXPIRING</SignalBadge>}
         <span className="ml-auto font-mono text-label text-textMuted uppercase tracking-wider">
@@ -575,7 +576,7 @@ const Tracker = () => {
               ].map(x => (
                 <div key={x.k} className="border border-borderSubtle bg-inset rounded-lg px-3 py-2.5 text-center min-w-[92px]">
                   <div className="font-mono text-micro uppercase tracking-widest text-textMuted">{x.k}</div>
-                  <div className="mt-1 font-mono text-sm font-semibold holo-text">{x.v}</div>
+                  <div className="mt-1 font-mono text-body font-semibold holo-text leading-5">{x.v}</div>
                   <div className="mt-0.5 text-micro text-textMuted">{x.s}</div>
                 </div>
               ))}
@@ -606,9 +607,16 @@ const Tracker = () => {
           </div>
         </div>
       ) : !marketData ? (
-        <Panel className="h-64" bodyClassName="flex items-center justify-center">
-          <span className="font-mono text-label text-textMuted uppercase tracking-widest">Reading tracked setups…</span>
-        </Panel>
+        <div className="flex flex-col gap-4 animate-view-in">
+          <MetricGrid min="150px">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-[68px] rounded-md" />
+            ))}
+          </MetricGrid>
+          <Panel flush bodyClassName="p-4">
+            <SkeletonRows rows={6} />
+          </Panel>
+        </div>
       ) : (
         <div className="flex flex-col gap-4 animate-view-in">
           {/* Summary strip — counts over the tracked book */}

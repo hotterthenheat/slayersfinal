@@ -91,7 +91,7 @@ const TradeDossier = ({ t }: { t: LedgerTrade }) => {
   return (
     <div className="flex flex-col gap-3.5">
       <div className="flex items-center gap-2">
-        <span className="font-mono text-sm font-bold text-textPrimary tracking-tight">{t.contract}</span>
+        <span className="font-mono text-body font-bold text-textPrimary tracking-tight leading-5">{t.contract}</span>
         <span className="font-mono text-micro text-textMuted uppercase tracking-wider">{t.setup}</span>
         <SignalBadge tone={win ? 'bull' : 'bear'} dot className="ml-auto">
           {t.outcome} {fmtR(t.rMultiple)}
@@ -395,7 +395,7 @@ const EdgeLedger = () => {
       </div>
 
       <Panel bodyClassName="py-3">
-        <p className="text-xs text-textSecondary leading-relaxed">
+        <p className="text-caption text-textSecondary leading-relaxed">
           <span className="font-mono font-semibold uppercase tracking-wider mr-2 holo-text">Beyond the P/L screen</span>
           A P/L blotter tells you what you made; the edge ledger tells you why, and whether it still works. It reconstructs each
           closed trade the way a review should — thesis, entry conditions, actual fill, the market state you took it in, the max

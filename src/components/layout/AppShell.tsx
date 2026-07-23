@@ -65,10 +65,17 @@ const AppShell = () => {
 
   return (
     <div className="h-screen relative bg-canvas text-textPrimary overflow-hidden">
+      {/* Keyboard/screen-reader escape hatch past the nav straight to the desk. */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[100] focus:rounded-md focus:border focus:border-select/50 focus:bg-panel focus:px-3 focus:py-2 focus:font-mono focus:text-label focus:uppercase focus:tracking-wider focus:text-textPrimary focus:shadow-overlay"
+      >
+        Skip to content
+      </a>
       <TopBar onOpenPalette={openPalette} onOpenSettings={openSettings} />
       {/* pt-14 clears the overlaid glass bar; content scrolls under it so the
           blur has the live desk behind it to refract. */}
-      <main className="h-full overflow-y-auto pt-14">
+      <main id="main-content" tabIndex={-1} className="h-full overflow-y-auto pt-14 focus:outline-none">
         {/* Keyed by top-level section only — subpage changes animate inside
             their section layout so the header/tabs never remount */}
         {/* Opacity-only crossfade — no vertical translate (which nudged the whole

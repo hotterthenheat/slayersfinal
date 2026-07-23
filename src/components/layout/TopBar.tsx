@@ -137,7 +137,7 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
         <button
           onClick={onOpenPalette}
           aria-label="Search or jump to…"
-          className="flex items-center gap-2 border border-borderSubtle bg-panel hover:border-borderMuted rounded-md px-2.5 py-1.5 text-xs text-textMuted transition-colors"
+          className="flex items-center gap-2 border border-borderSubtle bg-panel hover:border-borderMuted rounded-md px-2.5 py-1.5 text-caption text-textMuted transition-colors leading-4"
         >
           <Search className="w-3.5 h-3.5" />
           <kbd className="hidden sm:inline font-mono text-micro border border-borderSubtle rounded px-1 py-0.5 text-textMuted bg-inset">
@@ -153,11 +153,11 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
         </button>
         {/* Global ticker switcher — click the symbol from any page to change it.
             Visible on mobile too (price/change collapse to save room). */}
-        <div className="flex items-center gap-2.5 font-mono text-xs">
+        <div className="flex items-center gap-2.5 font-mono text-caption leading-4">
           <TickerSearch value={activeTicker} onChange={changeTicker} />
           <LivePrice />
         </div>
-        <span className="hidden xl:block font-mono text-xs text-textSecondary tnum select-none">{clock}</span>
+        <span className="hidden xl:block font-mono text-caption text-textSecondary tnum select-none leading-4">{clock}</span>
       </div>
 
     </header>

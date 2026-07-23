@@ -136,16 +136,16 @@ const DataTable = <T,>({
                       : ''
                   } ${
                     selected
-                      ? 'bg-select/[0.06] rail-select'
+                      ? 'inst-selected'
                       : 'hover:bg-white/[0.02]'
                   }`}
                 >
                   {columns.map(col => (
                     <td
                       key={col.key}
-                      className={`px-3 py-2 font-mono text-xs tnum whitespace-nowrap ${
+                      className={`px-3 py-2 font-mono text-caption tnum whitespace-nowrap ${
                         col.align === 'right' ? 'text-right' : 'text-left'
-                      }`}
+                      } leading-4`}
                     >
                       {col.render(row)}
                     </td>

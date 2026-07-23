@@ -284,7 +284,7 @@ const HedgeImpact = () => {
           tone={view.failureBoundaryPct < 1 ? 'warn' : 'neutral'}
         >
           <HexCurve view={view} />
-          <p className="mt-3 text-xs text-textSecondary leading-relaxed">{view.note}</p>
+          <p className="mt-3 text-caption text-textSecondary leading-relaxed">{view.note}</p>
         </Panel>
       </div>
 
@@ -326,7 +326,7 @@ const HedgeImpact = () => {
       </Panel>
 
       <Panel bodyClassName="py-3">
-        <p className="text-xs text-textSecondary leading-relaxed">
+        <p className="text-caption text-textSecondary leading-relaxed">
           <span className="font-mono font-semibold uppercase tracking-wider mr-2 holo-text">Beyond GEX</span>
           Two sessions can carry identical gamma and trade nothing alike — the difference is depth. HEX divides the hedge dealers
           are forced to do by the liquidity available to absorb it, so it reads the outcome GEX only implies. The forecast turns

@@ -278,7 +278,7 @@ const LottoBoard = ({ snapshot }: { snapshot: MarketSnapshot }) => {
               ].map(x => (
                 <div key={x.k} className="border border-borderSubtle bg-inset rounded-md px-2.5 py-2">
                   <div className="font-mono text-micro uppercase tracking-widest text-textMuted">{x.k}</div>
-                  <div className="mt-1 font-mono text-sm font-semibold text-textPrimary tnum">{x.v}</div>
+                  <div className="mt-1 font-mono text-body font-semibold text-textPrimary tnum leading-5">{x.v}</div>
                 </div>
               ))}
             </div>
@@ -287,7 +287,7 @@ const LottoBoard = ({ snapshot }: { snapshot: MarketSnapshot }) => {
               <GrowthTimeline moc={moc} />
             </div>
 
-            <p className="text-xs text-textSecondary leading-relaxed">{moc.note}</p>
+            <p className="text-caption text-textSecondary leading-relaxed">{moc.note}</p>
             <p className="flex items-center gap-1.5 font-mono text-micro text-textMuted leading-relaxed border-t border-borderSubtle pt-2.5">
               <Clock className="w-3 h-3 shrink-0" />
               Trade the imbalance change, not the 3:50 headline — read growth, indicative displacement and absorption in the
@@ -333,7 +333,7 @@ const LottoBoard = ({ snapshot }: { snapshot: MarketSnapshot }) => {
       </div>
 
       <Panel bodyClassName="py-3">
-        <p className="text-xs text-textSecondary leading-relaxed">
+        <p className="text-caption text-textSecondary leading-relaxed">
           <span className="font-mono font-semibold uppercase tracking-wider mr-2 holo-text">The 0DTE desk</span>
           On 0DTE the math is nearly a coin flip, so the tape decides: the board weighs dealer flow and liquidity above the
           breakeven arithmetic, and the closing auction — the one scheduled, forced, size-on-size event of the session — gets a

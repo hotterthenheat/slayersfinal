@@ -39,7 +39,7 @@ const PageHeader = ({ breadcrumb, title, subtitle, actions, ribbon }: PageHeader
           )}
           <h1 className="text-xl font-semibold tracking-tight text-textPrimary leading-none">{title}</h1>
         </div>
-        {subtitle && <p className="text-xs text-textSecondary mt-1.5">{subtitle}</p>}
+        {subtitle && <p className="text-caption text-textSecondary mt-1.5 leading-4">{subtitle}</p>}
       </div>
       {/* Center band — the dense stat strip fills what was empty whitespace */}
       {ribbon && <div className="hidden md:flex flex-1 min-w-0 justify-center">{ribbon}</div>}

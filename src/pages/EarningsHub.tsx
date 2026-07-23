@@ -243,7 +243,7 @@ const AlertCountdown = ({
         </span>
         <button
           onClick={onOpen}
-          className="text-left font-mono text-sm font-bold text-textPrimary hover:text-select transition-colors truncate"
+          className="text-left font-mono text-body font-bold text-textPrimary hover:text-select transition-colors truncate leading-5"
         >
           {event.ticker} · {event.dateLabel} {event.slot} · {st.label}
         </button>
@@ -412,7 +412,7 @@ const EarningsHub = () => {
       sortValue: e => e.ticker,
       render: e => (
         <span className="flex flex-col">
-          <span className="font-mono text-xs font-bold text-textPrimary">{e.ticker}</span>
+          <span className="font-mono text-caption font-bold text-textPrimary leading-4">{e.ticker}</span>
           <span className="text-label text-textMuted truncate">{e.name}</span>
         </span>
       ),
@@ -423,7 +423,7 @@ const EarningsHub = () => {
       sortValue: e => e.daysOut,
       render: e => (
         <span className="flex flex-col gap-0.5">
-          <span className="font-mono text-xs text-textPrimary">{e.dateLabel}</span>
+          <span className="font-mono text-caption text-textPrimary leading-4">{e.dateLabel}</span>
           <span className="font-mono text-label text-textMuted">
             {e.slot} · {e.daysOut === 0 ? 'today' : `${e.daysOut}d out`}
           </span>
@@ -444,7 +444,7 @@ const EarningsHub = () => {
       align: 'right',
       sortValue: e => e.richness,
       render: e => (
-        <span className={`font-mono text-xs font-semibold tnum ${e.richness >= 1.3 ? 'text-warn' : e.richness <= 0.85 ? 'text-bull' : 'text-textSecondary'}`}>
+        <span className={`font-mono text-caption font-semibold tnum ${e.richness >= 1.3 ? 'text-warn' : e.richness <= 0.85 ? 'text-bull' : 'text-textSecondary'} leading-4`}>
           {e.richness.toFixed(2)}×
         </span>
       ),
@@ -454,7 +454,7 @@ const EarningsHub = () => {
       header: 'Beat 8q',
       align: 'right',
       sortValue: e => e.beatRate8q,
-      render: e => <span className="font-mono text-xs text-textSecondary tnum">{e.beatRate8q}%</span>,
+      render: e => <span className="font-mono text-caption text-textSecondary tnum leading-4">{e.beatRate8q}%</span>,
     },
     {
       key: 'rev',
@@ -462,7 +462,7 @@ const EarningsHub = () => {
       align: 'right',
       sortValue: e => e.revisionTrend,
       render: e => (
-        <span className={`font-mono text-xs tnum ${e.revisionTrend > 0.15 ? 'text-bull' : e.revisionTrend < -0.15 ? 'text-bear' : 'text-textMuted'}`}>
+        <span className={`font-mono text-caption tnum ${e.revisionTrend > 0.15 ? 'text-bull' : e.revisionTrend < -0.15 ? 'text-bear' : 'text-textMuted'} leading-4`}>
           {e.revisionTrend > 0.15 ? '▲ rising' : e.revisionTrend < -0.15 ? '▼ falling' : '— flat'}
         </span>
       ),
@@ -473,7 +473,7 @@ const EarningsHub = () => {
       align: 'right',
       sortValue: e => e.technicalScore,
       render: e => (
-        <span className={`font-mono text-xs tnum ${e.technicalScore >= 62 ? 'text-bull' : e.technicalScore <= 40 ? 'text-bear' : 'text-textSecondary'}`}>
+        <span className={`font-mono text-caption tnum ${e.technicalScore >= 62 ? 'text-bull' : e.technicalScore <= 40 ? 'text-bear' : 'text-textSecondary'} leading-4`}>
           {e.technicalScore}
         </span>
       ),
@@ -483,7 +483,7 @@ const EarningsHub = () => {
       header: 'IVR',
       align: 'right',
       sortValue: e => e.ivRank,
-      render: e => <span className="font-mono text-xs text-textSecondary tnum">{e.ivRank}</span>,
+      render: e => <span className="font-mono text-caption text-textSecondary tnum leading-4">{e.ivRank}</span>,
     },
     {
       key: 'call',
@@ -603,7 +603,7 @@ const EarningsHub = () => {
                 <div key={e.ticker} className="bg-panel px-3.5 py-3 flex flex-col gap-2.5 min-w-[220px]">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="font-mono text-sm font-bold text-textPrimary">{e.ticker}</div>
+                      <div className="font-mono text-body font-bold text-textPrimary leading-5">{e.ticker}</div>
                       <div className="text-label text-textMuted truncate">
                         {e.dateLabel} {e.slot}
                       </div>
@@ -712,7 +712,7 @@ const EarningsHub = () => {
             <div className="flex items-center gap-2 flex-wrap">
               <WatchStar on={watchlist.has(selected.ticker)} onClick={() => toggleWatch(selected.ticker)} />
               <SignalBadge tone={verdictTone[selected.verdict]}>{selected.verdict}</SignalBadge>
-              <span className="font-mono text-xs font-bold text-textPrimary">
+              <span className="font-mono text-caption font-bold text-textPrimary leading-4">
                 {selected.ticker} · {selected.dateLabel} {selected.slot}
               </span>
               <ReportTimeTag e={selected} />
@@ -733,7 +733,7 @@ const EarningsHub = () => {
                   <>
                     <div className="inst-surface rounded-md px-3 py-2">
                       <div className="font-mono text-label uppercase tracking-widest text-textMuted">Edge</div>
-                      <div className={`mt-1 font-mono text-sm font-semibold ${toneText[edge.tone]}`}>
+                      <div className={`mt-1 font-mono text-body font-semibold ${toneText[edge.tone]} leading-5`}>
                         {edge.label} <span className="text-textMuted tnum text-caption">{edgePtsLabel(selected)}</span>
                       </div>
                     </div>
@@ -742,13 +742,13 @@ const EarningsHub = () => {
                         <span className="font-mono text-label uppercase tracking-widest text-textMuted">Conviction</span>
                         <VoteChips e={selected} />
                       </div>
-                      <div className={`mt-1 font-mono text-sm font-semibold ${toneText[conv.tone]}`}>
+                      <div className={`mt-1 font-mono text-body font-semibold ${toneText[conv.tone]} leading-5`}>
                         {conv.dir === 'MIXED' ? 'Split signals' : `${conv.dir} · ${conv.label}`}
                       </div>
                     </div>
                     <div className="inst-surface rounded-md px-3 py-2">
                       <div className="font-mono text-label uppercase tracking-widest text-textMuted">Structure</div>
-                      <div className={`mt-1 font-mono text-sm font-semibold ${toneText[st.tone]}`}>{st.label}</div>
+                      <div className={`mt-1 font-mono text-body font-semibold ${toneText[st.tone]} leading-5`}>{st.label}</div>
                       <div className="font-mono text-label text-textMuted">{st.risk}</div>
                     </div>
                   </>
@@ -756,8 +756,8 @@ const EarningsHub = () => {
               })()}
             </div>
 
-            <p className="text-xs text-textPrimary leading-relaxed">{selected.strategy}</p>
-            <p className="text-xs text-textSecondary leading-relaxed">{selected.rationale}</p>
+            <p className="text-caption text-textPrimary leading-relaxed">{selected.strategy}</p>
+            <p className="text-caption text-textSecondary leading-relaxed">{selected.rationale}</p>
           </div>
         )}
         <DataTable

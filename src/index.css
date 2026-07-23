@@ -195,6 +195,28 @@
 .rail-king { box-shadow: inset 2px 0 0 0 rgba(234, 0, 255, 0.75); }
 .rail-warn { box-shadow: inset 2px 0 0 0 rgba(255, 149, 0, 0.5); }
 
+/* Selected-row treatment in one class — the silver rail plus the faint select
+   wash that tables/lists were otherwise spelling out inline as
+   `rail-select bg-select/[0.05]`. */
+.inst-selected {
+  box-shadow: inset 2px 0 0 0 rgba(228, 232, 244, 0.7);
+  background-color: rgba(228, 232, 244, 0.05);
+}
+
+/* Loading placeholder — a faint block with a slow sheen sweep. Reduced-motion
+   collapses it to a static block (see the media query below). */
+@keyframes skeleton-sweep {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.skeleton {
+  background-color: rgba(255, 255, 255, 0.04);
+  background-image: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.06) 50%, transparent 100%);
+  background-size: 200% 100%;
+  border-radius: 4px;
+  animation: skeleton-sweep 1.6s ease-in-out infinite;
+}
+
 /* Eyebrow tick — the 3px vertical mark that leads a label. Shape only;
    the component supplies the fill (tone color, holo-bar, or dim). */
 .inst-eyebrow {
@@ -371,6 +393,7 @@
   .animate-marquee,
   .animate-tick-up,
   .animate-tick-down,
+  .skeleton,
   .custom-pulse {
     animation: none;
   }

@@ -529,11 +529,11 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
             </div>
 
             <div className="border-t border-borderSubtle pt-3 flex flex-col gap-2">
-              <p className="text-xs leading-relaxed">
+              <p className="text-caption leading-relaxed">
                 <span className="font-mono text-label font-semibold uppercase tracking-wider text-bull mr-2">Edge</span>
                 <span className="text-textSecondary">{weighed.edge}</span>
               </p>
-              <p className="text-xs leading-relaxed">
+              <p className="text-caption leading-relaxed">
                 <span className="font-mono text-label font-semibold uppercase tracking-wider text-bear mr-2">Risk</span>
                 <span className="text-textSecondary">{weighed.risk}</span>
               </p>
@@ -572,7 +572,7 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
               <Stat label="1σ move" value={`${weighed.expectedMovePct.toFixed(1)}%`} tone="bull" />
             </div>
 
-            <p className="text-xs text-textSecondary leading-relaxed">
+            <p className="text-caption text-textSecondary leading-relaxed">
               {clearsBreakeven
                 ? `A ${effExpMove.toFixed(1)}% move clears the ${weighed.breakevenMovePct.toFixed(1)}% breakeven with room to spare.`
                 : `A ${effExpMove.toFixed(1)}% move falls short of the ${weighed.breakevenMovePct.toFixed(1)}% breakeven — you're leaning on the tail.`}
@@ -600,7 +600,7 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
         tone={better ? 'bull' : 'neutral'}
       >
         <div className="px-4 pt-3">
-          <p className="text-xs text-textSecondary leading-relaxed">
+          <p className="text-caption text-textSecondary leading-relaxed">
             {better ? (
               <>
                 <span className="inline-flex items-center gap-1 text-bull font-semibold">
@@ -662,7 +662,7 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
             <Stat label="Breakeven" value={`${weighed.breakevenMovePct.toFixed(1)}%`} />
             <Stat label="Total friction" value={`${friction.toFixed(1)}%`} tone={costEatsEdge ? 'bear' : 'neutral'} />
           </div>
-          <p className="text-xs text-textSecondary leading-relaxed">
+          <p className="text-caption text-textSecondary leading-relaxed">
             {costEatsEdge
               ? `Spread round-trip plus a day of theta (${friction.toFixed(1)}%) is wider than the 1σ move (${weighed.expectedMovePct.toFixed(1)}%) — you'd need a fast, above-expected move just to clear the toll.`
               : `The 1σ move (${weighed.expectedMovePct.toFixed(1)}%) clears the friction (${friction.toFixed(1)}%) — the edge is capturable if you work a limit near $${expFill.toFixed(2)} instead of paying the offer.`}

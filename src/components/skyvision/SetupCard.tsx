@@ -44,7 +44,7 @@ const SetupCard = ({ setup, expanded, isSelected, isTop, onToggle, onSelect, onO
           </span>
           <span className="text-right">
             <span className="block font-mono text-label text-textMuted uppercase tracking-wider">Exp Move</span>
-            <span className={`font-mono text-xs font-semibold tnum ${moveUp ? 'text-bull' : 'text-bear'}`}>
+            <span className={`font-mono text-caption font-semibold tnum ${moveUp ? 'text-bull' : 'text-bear'} leading-4`}>
               {moveUp ? '+' : ''}
               {setup.expectedMovePct}%
             </span>
@@ -60,12 +60,12 @@ const SetupCard = ({ setup, expanded, isSelected, isTop, onToggle, onSelect, onO
           <div className="grid grid-cols-2 gap-2">
             <div className="border border-borderSubtle bg-inset rounded-md px-3 py-2">
               <div className="font-mono text-label uppercase tracking-widest text-textMuted">Swing Target</div>
-              <div className="mt-1 font-mono text-sm font-semibold text-textPrimary tnum">${setup.swingTarget.price.toFixed(2)}</div>
+              <div className="mt-1 font-mono text-body font-semibold text-textPrimary tnum leading-5">${setup.swingTarget.price.toFixed(2)}</div>
               <div className="font-mono text-label text-bull">+{setup.swingTarget.pct}%</div>
             </div>
             <div className="border border-borderSubtle bg-inset rounded-md px-3 py-2">
               <div className="font-mono text-label uppercase tracking-widest text-textMuted">Scalp Exit</div>
-              <div className="mt-1 font-mono text-sm font-semibold text-warn tnum">${setup.scalpExit.price.toFixed(2)}</div>
+              <div className="mt-1 font-mono text-body font-semibold text-warn tnum leading-5">${setup.scalpExit.price.toFixed(2)}</div>
               <div className="font-mono text-label text-warn">+{setup.scalpExit.pct}%</div>
             </div>
           </div>
@@ -116,7 +116,7 @@ const SetupCard = ({ setup, expanded, isSelected, isTop, onToggle, onSelect, onO
 
           <button
             onClick={onOpenAnalysis}
-            className="w-full rounded-md border border-borderSubtle bg-panel hover:border-borderMuted hover:bg-[#141414] py-2 text-xs font-semibold text-textPrimary transition-colors"
+            className="w-full rounded-md border border-borderSubtle bg-panel hover:border-borderMuted hover:bg-[#141414] py-2 text-caption font-semibold text-textPrimary transition-colors leading-4"
           >
             Open Full Analysis →
           </button>

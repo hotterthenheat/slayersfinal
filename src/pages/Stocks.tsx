@@ -103,7 +103,7 @@ const ScopeSelect = ({
         onClick={() => setOpen(o => !o)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="flex items-center gap-2 border border-borderSubtle hover:border-borderMuted bg-panel rounded-md pl-2.5 pr-2 py-1.5 font-mono text-xs transition-colors min-w-[160px]"
+        className="flex items-center gap-2 border border-borderSubtle hover:border-borderMuted bg-panel rounded-md pl-2.5 pr-2 py-1.5 font-mono text-caption transition-colors min-w-[160px] leading-4"
       >
         <span className="text-label uppercase tracking-widest text-textMuted">{label}</span>
         <span className="font-semibold text-textPrimary truncate">{value}</span>
@@ -129,7 +129,7 @@ const ScopeSelect = ({
                   active ? 'bg-white/[0.05]' : 'hover:bg-white/[0.03]'
                 }`}
               >
-                <span className={`font-mono text-xs truncate flex-1 ${active ? 'text-select' : 'text-textPrimary'}`}>
+                <span className={`font-mono text-caption truncate flex-1 ${active ? 'text-select' : 'text-textPrimary'} leading-4`}>
                   {opt.label}
                 </span>
                 <span className="font-mono text-label text-textMuted tnum">{opt.count}</span>
@@ -238,6 +238,9 @@ const Stocks = () => {
         if (!inBetaBand(p)) return false;
         return true;
       }),
+    // inPriceBand/inBetaBand close over priceBand/betaBand, which ARE listed —
+    // the predicates are recreated each render, so the memo can't miss a change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [picks, view, scope, watchlist, priceBand, betaBand]
   );
 
@@ -295,7 +298,7 @@ const Stocks = () => {
       sortValue: p => p.ticker,
       render: p => (
         <span className="flex flex-col">
-          <span className="font-mono text-xs font-bold text-textPrimary">{p.ticker}</span>
+          <span className="font-mono text-caption font-bold text-textPrimary leading-4">{p.ticker}</span>
           <span className="text-micro text-textMuted truncate">{p.name}</span>
         </span>
       ),
@@ -313,7 +316,7 @@ const Stocks = () => {
       sortValue: p => p.price,
       render: p => (
         <span className="flex flex-col items-end">
-          <span className="font-mono text-xs text-textPrimary tnum">${p.price.toFixed(2)}</span>
+          <span className="font-mono text-caption text-textPrimary tnum leading-4">${p.price.toFixed(2)}</span>
           <span className={`font-mono text-micro tnum ${p.changePct >= 0 ? 'text-bull' : 'text-bear'}`}>
             {p.changePct >= 0 ? '+' : ''}
             {p.changePct.toFixed(2)}%
@@ -355,7 +358,7 @@ const Stocks = () => {
       align: 'right',
       sortValue: p => p.composite,
       render: p => (
-        <span className={`font-mono text-sm font-bold tnum ${p.composite >= 68 ? 'text-bull' : p.composite <= 46 ? 'text-bear' : 'text-textPrimary'}`}>
+        <span className={`font-mono text-body font-bold tnum ${p.composite >= 68 ? 'text-bull' : p.composite <= 46 ? 'text-bear' : 'text-textPrimary'} leading-5`}>
           {p.composite}
         </span>
       ),
@@ -478,7 +481,7 @@ const Stocks = () => {
               <div key={p.ticker} className="bg-panel px-3.5 py-3 flex flex-col gap-2 min-w-[190px]">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <div className="font-mono text-sm font-bold text-textPrimary">{p.ticker}</div>
+                    <div className="font-mono text-body font-bold text-textPrimary leading-5">{p.ticker}</div>
                     <div className="text-micro text-textMuted truncate">{p.name}</div>
                   </div>
                   <button
@@ -490,7 +493,7 @@ const Stocks = () => {
                   </button>
                 </div>
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="font-mono text-xs text-textPrimary tnum">${p.price.toFixed(2)}</span>
+                  <span className="font-mono text-caption text-textPrimary tnum leading-4">${p.price.toFixed(2)}</span>
                   <span className={`font-mono text-label tnum ${p.changePct >= 0 ? 'text-bull' : 'text-bear'}`}>
                     {p.changePct >= 0 ? '+' : ''}
                     {p.changePct.toFixed(2)}%

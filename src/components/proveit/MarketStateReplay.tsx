@@ -355,7 +355,7 @@ const MarketStateReplay = ({ snapshot }: MarketStateReplayProps) => {
               {view.calibrationErrorPct}pt error
             </SignalBadge>
           </div>
-          <p className="mt-2 text-xs text-textSecondary leading-relaxed">{view.note}</p>
+          <p className="mt-2 text-caption text-textSecondary leading-relaxed">{view.note}</p>
         </Panel>
 
         <Panel
@@ -371,22 +371,22 @@ const MarketStateReplay = ({ snapshot }: MarketStateReplayProps) => {
           <div className="mt-2 grid grid-cols-3 gap-2">
             <div>
               <div className="font-mono text-micro uppercase tracking-wider text-textMuted">Peak edge</div>
-              <div className="font-mono text-sm font-semibold tnum holo-text">
+              <div className="font-mono text-body font-semibold tnum holo-text leading-5">
                 {Math.max(...view.edgeDecay.map(p => p.edgePct)).toFixed(0)}pt
               </div>
             </div>
             <div>
               <div className="font-mono text-micro uppercase tracking-wider text-textMuted">MFE / MAE</div>
-              <div className="font-mono text-sm font-semibold tnum text-textPrimary">{view.edgeRatio.toFixed(2)}×</div>
+              <div className="font-mono text-body font-semibold tnum text-textPrimary leading-5">{view.edgeRatio.toFixed(2)}×</div>
             </div>
             <div>
               <div className="font-mono text-micro uppercase tracking-wider text-textMuted">Avg excursion</div>
-              <div className="font-mono text-sm font-semibold tnum text-textPrimary">
+              <div className="font-mono text-body font-semibold tnum text-textPrimary leading-5">
                 +{view.avgMfePct.toFixed(1)}/−{view.avgMaePct.toFixed(1)}%
               </div>
             </div>
           </div>
-          <p className="mt-2 text-xs text-textSecondary leading-relaxed">
+          <p className="mt-2 text-caption text-textSecondary leading-relaxed">
             The white line is net edge (target minus stop) captured by each checkpoint; it climbs early then flattens as the
             winners resolve — the decay is the marginal edge, not the level. The faint green and red lines are cumulative
             target and stop hits.
@@ -432,7 +432,7 @@ const MarketStateReplay = ({ snapshot }: MarketStateReplayProps) => {
 
       {/* Honest explainer */}
       <Panel bodyClassName="py-3">
-        <p className="text-xs text-textSecondary leading-relaxed">
+        <p className="text-caption text-textSecondary leading-relaxed">
           <span className="font-mono font-semibold uppercase tracking-wider mr-2 holo-text">How this reads</span>
           Market-State Replay asks the only question a backtest should: not "what does the pattern say" but "what happened the last
           time the whole board looked like this." It scores {view.pool} prior sessions against today's eight-factor state, keeps the{' '}

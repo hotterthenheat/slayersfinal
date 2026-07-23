@@ -38,10 +38,10 @@ const SetupsFeed = ({ groups, selectedSetupId, onSelectSetup, onOpenAnalysis }: 
           >
             {/* Group header */}
             <div className="flex items-center gap-3 px-3 h-10 border-b border-borderSubtle">
-              <span className="font-mono text-xs font-bold text-textPrimary tracking-wide">{group.ticker}</span>
+              <span className="font-mono text-caption font-bold text-textPrimary tracking-wide leading-4">{group.ticker}</span>
               <SignalBadge tone="neutral">{group.found} found</SignalBadge>
               <Sparkline data={group.sparkline} up={up} />
-              <span className="font-mono text-xs font-semibold text-textPrimary tnum">
+              <span className="font-mono text-caption font-semibold text-textPrimary tnum leading-4">
                 ${group.spot.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
               <span className="ml-auto font-mono text-micro uppercase tracking-widest text-textMuted">

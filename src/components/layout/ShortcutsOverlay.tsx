@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { X } from 'lucide-react';
 import { EASE } from '../../lib/motion';
 import { SHORTCUT_GROUPS as GROUPS } from '../../lib/shortcuts';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 interface ShortcutsOverlayProps {
   open: boolean;
@@ -18,6 +19,7 @@ const Key = ({ children }: { children: string }) => (
 
 /** Keyboard-shortcut cheat sheet, opened with `?`. */
 const ShortcutsOverlay = ({ open, onClose }: ShortcutsOverlayProps) => {
+  const trapRef = useFocusTrap<HTMLDivElement>(open);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -39,10 +41,12 @@ const ShortcutsOverlay = ({ open, onClose }: ShortcutsOverlayProps) => {
             onClick={onClose}
           />
           <motion.div
+            ref={trapRef}
+            tabIndex={-1}
             role="dialog"
             aria-modal="true"
             aria-label="Keyboard shortcuts"
-            className="relative w-full max-w-lg border border-borderMuted bg-panel rounded-lg shadow-overlay overflow-hidden"
+            className="relative w-full max-w-lg border border-borderMuted bg-panel rounded-lg shadow-overlay overflow-hidden focus:outline-none"
             initial={{ opacity: 0, scale: 0.97, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: 8 }}

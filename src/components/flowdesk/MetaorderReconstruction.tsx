@@ -467,7 +467,7 @@ const MetaorderReconstruction = () => {
       </Panel>
 
       <Panel bodyClassName="py-3">
-        <p className="text-xs text-textSecondary leading-relaxed">
+        <p className="text-caption text-textSecondary leading-relaxed">
           <span className="font-mono font-semibold uppercase tracking-wider mr-2 holo-text">Beyond the tape</span>
           A parent order never prints as one ticket — a desk works a clip over minutes, and the tape only shows the
           children. TRACE clusters those prints by strike geometry, aggressor side and timing, then infers the strategy,

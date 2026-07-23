@@ -63,7 +63,7 @@ const SamplePreview = ({ setup, scanner, onReviewSetup }: SamplePreviewProps) =>
           </div>
           <div className="border border-borderSubtle bg-inset rounded-md px-3 py-2">
             <div className="font-mono text-micro uppercase tracking-widest text-textMuted">Conviction</div>
-            <div className="mt-1 font-mono text-sm font-semibold text-textPrimary">
+            <div className="mt-1 font-mono text-body font-semibold text-textPrimary leading-5">
               {setup.score >= 93 ? 'High' : setup.score >= 85 ? 'Medium' : 'Low'}
             </div>
           </div>
@@ -73,19 +73,19 @@ const SamplePreview = ({ setup, scanner, onReviewSetup }: SamplePreviewProps) =>
         <div className="grid grid-cols-3 gap-2">
           <div className="border border-borderSubtle bg-inset rounded-md px-3 py-2">
             <div className="font-mono text-micro uppercase tracking-widest text-textMuted">Premium</div>
-            <div className="mt-1 font-mono text-sm font-semibold text-textPrimary tnum">
+            <div className="mt-1 font-mono text-body font-semibold text-textPrimary tnum leading-5">
               <AnimatedNumber value={setup.mid} format={v => `$${v.toFixed(2)}`} />
             </div>
           </div>
           <div className="border border-borderSubtle bg-inset rounded-md px-3 py-2">
             <div className="font-mono text-micro uppercase tracking-widest text-textMuted">Live Mid</div>
-            <div className="mt-1 font-mono text-sm font-semibold text-textPrimary tnum">
+            <div className="mt-1 font-mono text-body font-semibold text-textPrimary tnum leading-5">
               <AnimatedNumber value={setup.liveMid} format={v => `$${v.toFixed(2)}`} />
             </div>
           </div>
           <div className="border border-borderSubtle bg-inset rounded-md px-3 py-2">
             <div className="font-mono text-micro uppercase tracking-widest text-textMuted">Exp. Move</div>
-            <div className={`mt-1 font-mono text-sm font-semibold tnum ${bullish ? 'text-bull' : 'text-bear'}`}>
+            <div className={`mt-1 font-mono text-body font-semibold tnum ${bullish ? 'text-bull' : 'text-bear'} leading-5`}>
               <AnimatedNumber value={setup.expectedMovePct} format={v => `${bullish ? '+' : '−'}${Math.abs(v).toFixed(1)}%`} />
             </div>
           </div>
@@ -101,12 +101,12 @@ const SamplePreview = ({ setup, scanner, onReviewSetup }: SamplePreviewProps) =>
         <div className="grid grid-cols-2 gap-2">
           <div className="border border-borderSubtle bg-inset rounded-md px-3 py-2">
             <div className="font-mono text-micro uppercase tracking-widest text-textMuted">Swing Target</div>
-            <div className="mt-1 font-mono text-sm font-semibold text-textPrimary tnum">${setup.swingTarget.price.toFixed(2)}</div>
+            <div className="mt-1 font-mono text-body font-semibold text-textPrimary tnum leading-5">${setup.swingTarget.price.toFixed(2)}</div>
             <div className="font-mono text-micro text-bull">+{setup.swingTarget.pct}%</div>
           </div>
           <div className="border border-borderSubtle bg-inset rounded-md px-3 py-2">
             <div className="font-mono text-micro uppercase tracking-widest text-textMuted">Scalp Exit</div>
-            <div className="mt-1 font-mono text-sm font-semibold text-warn tnum">${setup.scalpExit.price.toFixed(2)}</div>
+            <div className="mt-1 font-mono text-body font-semibold text-warn tnum leading-5">${setup.scalpExit.price.toFixed(2)}</div>
             <div className="font-mono text-micro text-warn">+{setup.scalpExit.pct}%</div>
           </div>
         </div>
@@ -127,7 +127,7 @@ const SamplePreview = ({ setup, scanner, onReviewSetup }: SamplePreviewProps) =>
               <Droplets className="w-3 h-3 text-textMuted" />
               <span className="font-mono text-micro uppercase tracking-widest text-textMuted">Liquidity</span>
             </div>
-            <div className={`font-mono text-sm font-semibold ${liquidityTone === 'bull' ? 'text-bull' : liquidityTone === 'warn' ? 'text-warn' : 'text-bear'}`}>
+            <div className={`font-mono text-body font-semibold ${liquidityTone === 'bull' ? 'text-bull' : liquidityTone === 'warn' ? 'text-warn' : 'text-bear'} leading-5`}>
               {setup.liquidityLabel}
             </div>
             <div className="font-mono text-micro text-textMuted tnum">{setup.liquiditySpread}</div>
@@ -137,7 +137,7 @@ const SamplePreview = ({ setup, scanner, onReviewSetup }: SamplePreviewProps) =>
               <AlertTriangle className="w-3 h-3 text-warn" />
               <span className="font-mono text-micro uppercase tracking-widest text-textMuted">Invalidation</span>
             </div>
-            <div className="font-mono text-sm font-semibold text-warn tnum">
+            <div className="font-mono text-body font-semibold text-warn tnum leading-5">
               {bullish ? 'Below' : 'Above'} ${setup.invalidationPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
             <div className="font-mono text-micro text-textMuted">{setup.invalidationReason}</div>
@@ -148,17 +148,17 @@ const SamplePreview = ({ setup, scanner, onReviewSetup }: SamplePreviewProps) =>
         <div className="grid grid-cols-2 gap-2 pt-1 mt-auto">
           <button
             onClick={onReviewSetup}
-            className="flex items-center justify-center gap-1.5 py-2.5 rounded-md border border-borderSubtle bg-white/[0.03] hover:bg-white/[0.06] text-textPrimary text-xs font-semibold font-mono uppercase tracking-wider transition-colors"
+            className="flex items-center justify-center gap-1.5 py-2.5 rounded-md border border-borderSubtle bg-white/[0.03] hover:bg-white/[0.06] text-textPrimary text-caption font-semibold font-mono uppercase tracking-wider transition-colors leading-4"
           >
             Review Setup <ArrowUpRight className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={() => tracked ? untrackSetup(setup.id) : trackSetup(setup, scanner)}
-            className={`flex items-center justify-center gap-1.5 py-2.5 rounded-md text-xs font-semibold font-mono uppercase tracking-wider transition-all ${
+            className={`flex items-center justify-center gap-1.5 py-2.5 rounded-md text-caption font-semibold font-mono uppercase tracking-wider transition-all ${
               tracked
                 ? 'border border-select/30 bg-select/[0.08] text-select hover:bg-select/[0.12]'
                 : 'border border-borderSubtle bg-white/[0.03] text-textSecondary hover:bg-white/[0.06] hover:text-textPrimary'
-            }`}
+            } leading-4`}
           >
             {tracked ? (
               <><BookmarkCheck className="w-3.5 h-3.5" /> Tracked</>

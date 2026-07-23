@@ -143,7 +143,7 @@ const DeepBreakdown = ({ h, positioningLean, positioningLabel }: { h: HeadlineIn
 /** Shown when the selected wire item is outside the terminal's covered chain. */
 const NoBreakdown = ({ view, selectedItem, onSelect }: { view: NewsIntelView; selectedItem: NewsItem | null; onSelect?: (id: string) => void }) => (
   <div className="flex flex-col gap-3">
-    <p className="text-xs text-textSecondary leading-relaxed">
+    <p className="text-caption text-textSecondary leading-relaxed">
       No positioning breakdown for{' '}
       {selectedItem?.ticker ? <span className="font-mono text-textPrimary">{selectedItem.ticker}</span> : 'this macro print'} yet — the deep
       read needs the live options chain, which the terminal keeps for the active name{' '}
@@ -225,7 +225,7 @@ const NewsIntel = ({ selectedItem, onSelect }: NewsIntelProps) => {
         <span className={`font-mono text-label font-semibold uppercase tracking-widest ${readTone === 'bull' ? 'text-bull' : readTone === 'bear' ? 'text-bear' : 'holo-text'}`}>
           The read
         </span>
-        <p className="mt-1 text-xs text-textSecondary leading-relaxed">{view.headline}</p>
+        <p className="mt-1 text-caption text-textSecondary leading-relaxed">{view.headline}</p>
       </div>
 
       <div className="border-t border-borderSubtle pt-3.5">

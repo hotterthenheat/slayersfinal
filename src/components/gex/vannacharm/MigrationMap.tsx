@@ -74,14 +74,14 @@ const ShiftHoverCard = ({
       <div className="mt-2 grid grid-cols-2 gap-2">
         <div>
           <div className="font-mono text-micro uppercase tracking-widest text-textMuted">Now</div>
-          <div className={`font-mono text-sm font-bold tnum ${row.current >= 0 ? 'text-bull' : 'text-bear'}`}>
+          <div className={`font-mono text-body font-bold tnum ${row.current >= 0 ? 'text-bull' : 'text-bear'} leading-5`}>
             {row.current >= 0 ? '+' : ''}
             {fmtUsd(row.current)}
           </div>
         </div>
         <div>
           <div className="font-mono text-micro uppercase tracking-widest text-textMuted">Projected</div>
-          <div className={`font-mono text-sm font-bold tnum ${row.projected >= 0 ? 'text-bull' : 'text-bear'}`}>
+          <div className={`font-mono text-body font-bold tnum ${row.projected >= 0 ? 'text-bull' : 'text-bear'} leading-5`}>
             {row.projected >= 0 ? '+' : ''}
             {fmtUsd(row.projected)}
           </div>

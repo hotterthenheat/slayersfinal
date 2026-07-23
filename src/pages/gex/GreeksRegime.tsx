@@ -318,7 +318,7 @@ const GreeksRegime = () => {
               <div key={rg.regime}>
                 <div className="flex items-center justify-between mb-1">
                   <span className={`font-mono text-label font-semibold uppercase tracking-wider ${rg === view.topRegime ? 'text-textPrimary' : 'text-textSecondary'}`}>{rg.regime}</span>
-                  <span className="font-mono text-xs font-semibold text-textPrimary tnum">{rg.prob}%</span>
+                  <span className="font-mono text-caption font-semibold text-textPrimary tnum leading-4">{rg.prob}%</span>
                 </div>
                 <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
                   <span
@@ -388,7 +388,7 @@ const RowWithSpot = ({
   <>
     <tr className="border-b border-borderSubtle/40 hover:bg-white/[0.02]">
       <td
-        className="sticky left-0 z-10 px-3 py-1.5 font-mono text-xs font-semibold text-textPrimary tnum whitespace-nowrap bg-inset"
+        className="sticky left-0 z-10 px-3 py-1.5 font-mono text-caption font-semibold text-textPrimary tnum whitespace-nowrap bg-inset leading-4"
         style={isTop ? { boxShadow: 'inset 3px 0 0 0 rgba(199,211,232,0.85)' } : undefined}
       >
         ${r.strike.toFixed(2)}

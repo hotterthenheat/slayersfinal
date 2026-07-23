@@ -8,6 +8,7 @@ import { COMMUNITY_SUBPAGES } from '../../pages/community/subnav';
 import { GUIDE_SUBPAGES } from '../../pages/guide/subnav';
 import { useMarketData } from '../../context/MarketDataContext';
 import Simulator from '../../core/simulator';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 interface CommandPaletteProps {
   open: boolean;
@@ -32,6 +33,7 @@ const CommandPalette = ({ open, onClose, onOpenSettings, onOpenShortcuts }: Comm
   const [highlight, setHighlight] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const trapRef = useFocusTrap<HTMLDivElement>(open);
 
   const actions = useMemo<PaletteAction[]>(() => {
     const commands: PaletteAction[] = [
@@ -155,15 +157,15 @@ const CommandPalette = ({ open, onClose, onOpenSettings, onOpenShortcuts }: Comm
   let lastGroup: string | null = null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-[18vh] px-4" onKeyDown={onKeyDown}>
+    <div ref={trapRef} tabIndex={-1} className="fixed inset-0 z-50 flex items-start justify-center pt-[18vh] px-4 focus:outline-none" onKeyDown={onKeyDown}>
       <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" onClick={onClose} />
-      <div className="relative w-full max-w-lg border border-borderMuted bg-panel rounded-lg shadow-overlay overflow-hidden animate-slide-in">
+      <div role="dialog" aria-modal="true" aria-label="Command palette" className="relative w-full max-w-lg border border-borderMuted bg-panel rounded-lg shadow-overlay overflow-hidden animate-slide-in">
         <input
           ref={inputRef}
           value={query}
           onChange={e => setQuery(e.target.value)}
           placeholder="Type a command or destination…"
-          className="w-full bg-transparent px-4 py-3 text-sm text-textPrimary placeholder:text-textMuted focus:outline-none border-b border-borderSubtle"
+          className="w-full bg-transparent px-4 py-3 text-body text-textPrimary placeholder:text-textMuted focus:outline-none border-b border-borderSubtle leading-5"
         />
         <div ref={listRef} className="max-h-72 overflow-y-auto py-1.5">
           {filtered.length === 0 && (

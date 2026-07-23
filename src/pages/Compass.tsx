@@ -21,6 +21,7 @@ import LottoBoard from '../components/compass/LottoBoard';
 import type { Horizon } from '../core/contractScore';
 import SegmentedControl from '../components/ui/SegmentedControl';
 import { setupState, StateBadge, STATE_META } from '../components/skyvision/SetupState';
+import { SkeletonRows } from '../components/ui/Skeleton';
 
 type CompassMode = 'setups' | 'weigher' | 'lotto';
 type SetupsView = 'list' | 'table';
@@ -352,11 +353,14 @@ const Compass = () => {
     return (
       <>
         {browseHeader}
-        <Panel className="h-64" bodyClassName="flex items-center justify-center">
-          <span className="font-mono text-label text-textMuted uppercase tracking-widest">
-            Awaiting feed…
-          </span>
-        </Panel>
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start animate-view-in">
+          <Panel flush className="xl:col-span-7" bodyClassName="p-4">
+            <SkeletonRows rows={6} />
+          </Panel>
+          <Panel flush className="xl:col-span-5" bodyClassName="p-4">
+            <SkeletonRows rows={4} />
+          </Panel>
+        </div>
       </>
     );
   }
