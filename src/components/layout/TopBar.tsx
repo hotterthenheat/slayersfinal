@@ -63,6 +63,7 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
     navigate('/pulse');
   };
   const section = `/${location.pathname.split('/')[1] ?? ''}`;
+  const activeItem = NAV_ITEMS.find(i => i.path === section);
 
   return (
     <>
@@ -107,6 +108,12 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
                 }`}
               >
                 {group}
+                {active && activeItem && (
+                  <span className="text-select">
+                    <span className="mx-1 text-textMuted font-normal">·</span>
+                    {activeItem.label}
+                  </span>
+                )}
                 <ChevronDown className={`w-3 h-3 ${active ? 'text-textSecondary' : 'text-textMuted'}`} />
                 {active && (
                   <motion.span
