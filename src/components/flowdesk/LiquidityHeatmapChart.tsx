@@ -119,9 +119,12 @@ const LiquidityHeatmapChart = ({
 
   const loadedRef = useRef<{ ticker: string; timeframe: Timeframe }>({ ticker: '', timeframe: '1m' });
   const barCountRef = useRef(0);
+  const barsRef = useRef<Candle[]>([]);
   const lut = useMemo(() => makeLiquidityLUT(), []);
 
-  const VISIBLE_BARS = 130;
+  // Show a full intraday session of thin bars (like a real terminal chart),
+  // not a handful of fat candles. One seeded session is 390 1m bars.
+  const VISIBLE_BARS = 360;
   const showRecent = useCallback(() => {
     const chart = chartRef.current;
     if (!chart) return;
@@ -157,7 +160,7 @@ const LiquidityHeatmapChart = ({
       // Linear scale — the heat field maps row→y affinely, so a log scale would
       // shear the bands off their prices.
       rightPriceScale: { borderColor: '#1c1c1c', mode: PriceScaleMode.Normal },
-      timeScale: { borderColor: '#1c1c1c', timeVisible: true, secondsVisible: false, rightOffset: 6, barSpacing: 7 },
+      timeScale: { borderColor: '#1c1c1c', timeVisible: true, secondsVisible: false, rightOffset: 4, barSpacing: 3 },
       crosshair: {
         vertLine: { color: 'rgba(255,255,255,0.3)', labelBackgroundColor: '#262626' },
         horzLine: { color: 'rgba(255,255,255,0.3)', labelBackgroundColor: '#262626' },
@@ -174,26 +177,46 @@ const LiquidityHeatmapChart = ({
       priceLineVisible: true,
       priceLineColor: 'rgba(237,237,237,0.4)',
       priceLineStyle: LineStyle.Dotted,
-      // Frame on the PRICE action, like any trading chart — the candles fill the
-      // pane. Walls are pulled in only when they sit within ~0.6% of spot; a far
-      // wall (e.g. a put wall 1% below) would otherwise drag the scale down and
-      // leave price crammed in a strip with a dead zone. Far walls still annotate
-      // from the axis edge via their clamped price-line label. The heat field is a
-      // superset of the window, so it always paints edge-to-edge without driving
-      // the scale.
+      // Frame on the CANDLES, computed straight from the visible bars, so the
+      // price lines (walls, dark-pool shelves) never stretch the scale and cram
+      // price into a strip — lightweight-charts folds price lines into original(),
+      // which is exactly what squeezed the candles. Walls are pulled in only when
+      // within ~0.3% of spot; far walls keep their clamped edge label and scroll
+      // into frame as price runs toward them. The heat field is a superset of the
+      // window, so it always paints edge-to-edge without driving the scale.
       autoscaleInfoProvider: (original: () => { priceRange: { minValue: number; maxValue: number } } | null) => {
-        const base = original();
         const lv = levelsRef.current;
-        if (!base) {
-          const xs = [lv.putWall, lv.callWall, lv.spot].filter(v => Number.isFinite(v));
-          return { priceRange: { minValue: Math.min(...xs), maxValue: Math.max(...xs) } };
+        const bars = barsRef.current;
+        const chart = chartRef.current;
+        let min = Infinity;
+        let max = -Infinity;
+        if (bars.length) {
+          // Use the visible window only when it's a sane recent slice — on a
+          // 0-width mount getVisibleLogicalRange briefly reports the whole history,
+          // which would frame the scale to the entire month and cram today into a
+          // sliver. In that case fall back to the last VISIBLE_BARS.
+          const total = bars.length;
+          const lr = chart?.timeScale().getVisibleLogicalRange();
+          const sane =
+            lr && lr.to > lr.from && lr.to - lr.from <= VISIBLE_BARS * 1.5 && lr.to >= total - VISIBLE_BARS * 1.5;
+          const from = sane ? Math.max(0, Math.floor(lr.from)) : Math.max(0, total - VISIBLE_BARS);
+          const to = sane ? Math.min(total - 1, Math.ceil(lr.to)) : total - 1;
+          for (let i = from; i <= to; i++) {
+            const b = bars[i];
+            if (!b) continue;
+            if (b.low < min) min = b.low;
+            if (b.high > max) max = b.high;
+          }
         }
-        let min = base.priceRange.minValue;
-        let max = base.priceRange.maxValue;
-        // Only pull in levels that sit right on the action (~0.3% of spot). Walls
-        // are usually further out while price is calm; forcing them in leaves the
-        // candles in a strip. Far walls keep their clamped edge label, and scroll
-        // into frame naturally as price runs toward them.
+        if (!Number.isFinite(min) || !Number.isFinite(max)) {
+          const base = original();
+          if (!base) {
+            const xs = [lv.putWall, lv.callWall, lv.spot].filter(v => Number.isFinite(v));
+            return { priceRange: { minValue: Math.min(...xs), maxValue: Math.max(...xs) } };
+          }
+          min = base.priceRange.minValue;
+          max = base.priceRange.maxValue;
+        }
         const band = (Number.isFinite(lv.spot) ? lv.spot : (min + max) / 2) * 0.003;
         for (const v of [lv.callWall, lv.putWall, lv.flip]) {
           if (Number.isFinite(v) && Math.abs(v - lv.spot) <= band) {
@@ -201,7 +224,7 @@ const LiquidityHeatmapChart = ({
             if (v > max) max = v;
           }
         }
-        const pad = Math.max((max - min) * 0.18, (lv.spot || max) * 0.0022);
+        const pad = Math.max((max - min) * 0.12, (lv.spot || max) * 0.0022);
         return { priceRange: { minValue: min - pad, maxValue: max + pad } };
       },
     });
@@ -252,6 +275,7 @@ const LiquidityHeatmapChart = ({
     const mins = tfMinutes(timeframe);
     const bars = aggregateCandles(base, mins);
     barCountRef.current = bars.length;
+    barsRef.current = bars;
 
     const loaded = loadedRef.current;
     const changed = loaded.ticker !== ticker || loaded.timeframe !== timeframe;
@@ -259,6 +283,10 @@ const LiquidityHeatmapChart = ({
       candleSeries.setData(bars.map(toCandle));
       volumeSeries.setData(bars.map(toVolume));
       showRecent();
+      // On a 0-width mount the range doesn't stick; re-apply once the chart has
+      // been laid out so the compact tile opens on the recent session, not zoomed
+      // out to the whole month.
+      requestAnimationFrame(() => requestAnimationFrame(() => showRecent()));
       loadedRef.current = { ticker, timeframe };
     } else {
       const last = bars[bars.length - 1];
@@ -423,7 +451,7 @@ const LiquidityHeatmapChart = ({
         <span className="flex items-center gap-1.5 font-mono text-micro text-textSecondary">
           <span
             className="inline-block w-4 h-2 rounded-sm"
-            style={{ background: 'linear-gradient(to right, rgba(58,67,86,0.5), #c6d0e6)' }}
+            style={{ background: 'linear-gradient(to right, rgba(74,52,148,0.5), #A78BFA)' }}
           />
           Resting liquidity
         </span>

@@ -117,8 +117,10 @@ export class LiquidityHeatmapPrimitive implements ISeriesPrimitive<Time> {
     for (let r = 0; r < rows; r++) {
       const t = field.intensity[r];
       // Glow only at real shelves — near-zero rows contribute nothing, so the
-      // field reads as distinct bands instead of a gray wash.
-      const a = t <= 0.04 ? 0 : Math.min(1, Math.pow(t, 1.2) * 0.62);
+      // field reads as bold, distinct bands instead of a wash. Peak alpha is high
+      // so the strongest shelves read as solid translucent zones, like a
+      // dark-pool liquidity heatmap.
+      const a = t <= 0.05 ? 0 : Math.min(1, Math.pow(t, 0.85) * 0.82);
       const li = Math.min(255, (t * 255) | 0) * 3;
       const p = (rows - 1 - r) * 4; // image row 0 = top = high price
       d[p] = lut[li];

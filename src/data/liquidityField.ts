@@ -136,20 +136,20 @@ export function buildLiquidityField(args: LiquidityFieldArgs): LiquidityField {
   return { rows, priceMin, priceMax, rowToPrice, priceToRow, intensity };
 }
 
-/* ---- house liquidity colormap ------------------------------------------------
-   Deliberately NOT the electric-blue Bookmap thermal. Liquidity is STRUCTURE,
-   so it uses the terminal's silver/steel selection language: near-invisible at
-   the low end (recedes into the inset), rising through cool steel to a bright
-   holo-silver at the densest shelves. Direction stays green/red on the candles;
-   structure stays silver — the same grammar as the rest of the app. */
+/* ---- liquidity colormap ------------------------------------------------------
+   Resting liquidity gets its own hue — a bold indigo/violet that pops on the dark
+   inset and never collides with the green/red candles, green/red walls or
+   baby-blue flip. Reads as glowing horizontal shelves: near-invisible in the gaps,
+   rising through indigo to a bright lavender at the densest levels (the same
+   "here is where size rests" read a Bookmap/dark-pool heatmap gives). */
 const LIQ_STOPS: { s: number; c: [number, number, number] }[] = [
-  { s: 0.0, c: [10, 11, 15] }, // ≈ inset background — a weak row all but vanishes
-  { s: 0.18, c: [30, 35, 46] }, // faint slate
-  { s: 0.4, c: [58, 67, 86] }, // dim steel
-  { s: 0.62, c: [98, 110, 138] }, // steel
-  { s: 0.8, c: [150, 162, 194] }, // light steel
-  { s: 0.92, c: [198, 208, 230] }, // silver
-  { s: 1.0, c: [228, 232, 244] }, // holo silver (#E4E8F4 family)
+  { s: 0.0, c: [14, 12, 24] }, // ≈ inset background — a weak row all but vanishes
+  { s: 0.2, c: [42, 30, 78] }, // deep indigo
+  { s: 0.42, c: [74, 52, 148] }, // indigo
+  { s: 0.62, c: [110, 84, 210] }, // violet (#6E54D2)
+  { s: 0.8, c: [139, 92, 246] }, // house violet (#8B5CF6)
+  { s: 0.92, c: [167, 139, 250] }, // light violet (#A78BFA)
+  { s: 1.0, c: [199, 178, 255] }, // bright lavender
 ];
 
 function liqColor(v: number, out: [number, number, number]): void {
