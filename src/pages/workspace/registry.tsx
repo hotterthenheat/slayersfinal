@@ -96,9 +96,9 @@ export const WIDGETS: WidgetDef[] = [
     title: 'Liquidity Map',
     description: 'Resting-liquidity heatmap on a TradingView chart — walls, dark pool & VWAP',
     w: 8,
-    h: 6,
+    h: 9,
     minW: 4,
-    minH: 4,
+    minH: 5,
     render: ctx => {
       const dp = buildDarkPoolView(ctx.snapshot);
       return (

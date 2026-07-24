@@ -69,7 +69,7 @@ export const PULSE_PRESETS: PulseLayout[] = [
       L('c-pos', 0, 6, 8, 5, 3, 4),
       L('c-flow', 8, 6, 4, 5, 3, 4),
       L('c-dp', 0, 11, 12, 4, 4, 3),
-      L('c-liq', 0, 15, 12, 4, 4, 3),
+      L('c-liq', 0, 15, 12, 8, 4, 5),
     ],
   },
   {
@@ -90,11 +90,11 @@ export const PULSE_PRESETS: PulseLayout[] = [
       // left column — flow / dark-pool feed
       L('cmd-dp', 0, 0, 3, 6, 3, 4),
       L('cmd-flow', 0, 6, 3, 5, 3, 4),
-      // center column — liquidity chart (flagship) over the live chart
-      L('cmd-liq', 3, 0, 5, 7, 4, 4),
-      L('cmd-chart', 3, 7, 5, 4, 4, 4),
-      // right column — GEX heatmap grid, full height
-      L('cmd-gex', 8, 0, 4, 11, 3, 4),
+      // center column — liquidity chart (flagship, tall) over the live chart
+      L('cmd-liq', 3, 0, 5, 9, 4, 5),
+      L('cmd-chart', 3, 9, 5, 4, 4, 4),
+      // right column — GEX heatmap grid, full height (matches the center stack)
+      L('cmd-gex', 8, 0, 4, 13, 3, 4),
     ],
   },
   {
@@ -203,7 +203,7 @@ export const PULSE_PRESETS: PulseLayout[] = [
     layout: [
       L('sc-chart', 0, 0, 8, 7, 4, 4),
       L('sc-flow', 8, 0, 4, 7, 3, 4),
-      L('sc-liq', 0, 7, 12, 4, 4, 3),
+      L('sc-liq', 0, 7, 12, 7, 4, 5),
     ],
   },
   {
