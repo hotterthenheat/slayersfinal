@@ -7,6 +7,7 @@ import type { LiqOverlays } from './liquidityTypes';
  */
 const OVERLAY_DEFS: { key: keyof LiqOverlays; label: string }[] = [
   { key: 'liquidity', label: 'Liquidity' },
+  { key: 'flow', label: 'Flow' },
   { key: 'walls', label: 'Walls' },
   { key: 'volume', label: 'Volume' },
   { key: 'darkpool', label: 'Dark Pool' },

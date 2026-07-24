@@ -21,7 +21,9 @@ import { CALL_WALL, PUT_WALL, FLIP, DARK_POOL, FOCUS, SPOT } from '../gex/palett
 // direction, silver = structure, same grammar as the rest of the terminal.
 const theme = CANDLE_THEMES.classic;
 import { LiquidityHeatmapPrimitive } from './liquidityHeatmapPrimitive';
+import { FlowPillsPrimitive } from './flowPillsPrimitive';
 import { makeLiquidityLUT, type LiquidityField } from '../../data/liquidityField';
+import { buildFlowSweeps, type FlowSweep } from '../../data/flowSweeps';
 import type { Candle } from '../../types/market';
 import type { KeyLevels } from '../../types/gex';
 import type { LiqDPLevel, LiqOverlays } from './liquidityTypes';
@@ -103,6 +105,8 @@ const LiquidityHeatmapChart = ({
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
   const heatRef = useRef<LiquidityHeatmapPrimitive | null>(null);
+  const flowRef = useRef<FlowPillsPrimitive | null>(null);
+  const sweepsRef = useRef<FlowSweep[]>([]);
 
   const wallLinesRef = useRef<Partial<Record<LevelKey, IPriceLine>>>({});
   const shownLevelsRef = useRef<KeyLevels | null>(null);
@@ -239,11 +243,14 @@ const LiquidityHeatmapChart = ({
 
     const heat = new LiquidityHeatmapPrimitive(lut);
     candles.attachPrimitive(heat);
+    const flow = new FlowPillsPrimitive();
+    candles.attachPrimitive(flow);
 
     chartRef.current = chart;
     candleSeriesRef.current = candles;
     volumeSeriesRef.current = volume;
     heatRef.current = heat;
+    flowRef.current = flow;
 
     return () => {
       cancelAnimationFrame(levelRafRef.current);
@@ -252,6 +259,7 @@ const LiquidityHeatmapChart = ({
       candleSeriesRef.current = null;
       volumeSeriesRef.current = null;
       heatRef.current = null;
+      flowRef.current = null;
       wallLinesRef.current = {};
       dpLinesRef.current = [];
       flowLinesRef.current = [];
@@ -282,6 +290,10 @@ const LiquidityHeatmapChart = ({
     if (changed) {
       candleSeries.setData(bars.map(toCandle));
       volumeSeries.setData(bars.map(toVolume));
+      // Flow-sweep prints are deterministic per ticker/day — rebuild only on a
+      // symbol/timeframe switch, not every tick.
+      sweepsRef.current = buildFlowSweeps(ticker, bars);
+      flowRef.current?.setData(sweepsRef.current, overlays.flow);
       showRecent();
       // On a 0-width mount the range doesn't stick; re-apply once the chart has
       // been laid out so the compact tile opens on the recent session, not zoomed
@@ -295,12 +307,17 @@ const LiquidityHeatmapChart = ({
     }
 
     heat.setData(field, overlays.liquidity);
-  }, [ticker, revision, timeframe, overlays.liquidity, field, showRecent]);
+  }, [ticker, revision, timeframe, overlays.liquidity, overlays.flow, field, showRecent]);
 
   // Volume strip visibility
   useEffect(() => {
     volumeSeriesRef.current?.applyOptions({ visible: overlays.volume });
   }, [overlays.volume]);
+
+  // Flow-sweep pills on/off (data is rebuilt with the candles above)
+  useEffect(() => {
+    flowRef.current?.setData(sweepsRef.current, overlays.flow);
+  }, [overlays.flow]);
 
   // Wall / flip structure lines — create/destroy on toggle or ticker
   useEffect(() => {

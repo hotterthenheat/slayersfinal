@@ -12,7 +12,9 @@
 export interface LiqOverlays {
   /** The resting-liquidity heat field painted behind the candles */
   liquidity: boolean;
-  /** Call / put wall, flip & king structure lines */
+  /** Big options-sweep prints pinned to the candles as pills */
+  flow: boolean;
+  /** Call / put wall & flip structure lines */
   walls: boolean;
   /** Volume histogram in the lower strip */
   volume: boolean;
@@ -24,6 +26,7 @@ export interface LiqOverlays {
 
 export const DEFAULT_OVERLAYS: LiqOverlays = {
   liquidity: true,
+  flow: true,
   walls: true,
   volume: true,
   darkpool: true,
