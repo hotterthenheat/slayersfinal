@@ -468,7 +468,7 @@ const LiquidityHeatmapChart = ({
         <span className="flex items-center gap-1.5 font-mono text-micro text-textSecondary">
           <span
             className="inline-block w-4 h-2 rounded-sm"
-            style={{ background: 'linear-gradient(to right, rgba(74,52,148,0.5), #A78BFA)' }}
+            style={{ background: 'linear-gradient(to right, rgba(110,74,16,0.5), #F0C45C)' }}
           />
           Resting liquidity
         </span>

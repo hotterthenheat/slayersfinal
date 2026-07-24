@@ -137,19 +137,19 @@ export function buildLiquidityField(args: LiquidityFieldArgs): LiquidityField {
 }
 
 /* ---- liquidity colormap ------------------------------------------------------
-   Resting liquidity gets its own hue — a bold indigo/violet that pops on the dark
-   inset and never collides with the green/red candles, green/red walls or
-   baby-blue flip. Reads as glowing horizontal shelves: near-invisible in the gaps,
-   rising through indigo to a bright lavender at the densest levels (the same
-   "here is where size rests" read a Bookmap/dark-pool heatmap gives). */
+   Resting liquidity glows amber/gold — a warm hue that pops on the dark inset and
+   never collides with the silver/purple candles, the green/red walls or the teal
+   dark-pool lines (and echoes the gold+purple dealer-flow palette). Reads as
+   glowing horizontal shelves: near-invisible in the gaps, rising through amber to
+   a bright gold at the densest levels. */
 const LIQ_STOPS: { s: number; c: [number, number, number] }[] = [
-  { s: 0.0, c: [14, 12, 24] }, // ≈ inset background — a weak row all but vanishes
-  { s: 0.2, c: [42, 30, 78] }, // deep indigo
-  { s: 0.42, c: [74, 52, 148] }, // indigo
-  { s: 0.62, c: [110, 84, 210] }, // violet (#6E54D2)
-  { s: 0.8, c: [139, 92, 246] }, // house violet (#8B5CF6)
-  { s: 0.92, c: [167, 139, 250] }, // light violet (#A78BFA)
-  { s: 1.0, c: [199, 178, 255] }, // bright lavender
+  { s: 0.0, c: [16, 12, 6] }, // ≈ inset background — a weak row all but vanishes
+  { s: 0.2, c: [50, 34, 10] }, // deep amber-brown
+  { s: 0.42, c: [110, 74, 16] }, // amber
+  { s: 0.62, c: [176, 122, 28] }, // gold
+  { s: 0.8, c: [218, 164, 46] }, // bright gold
+  { s: 0.92, c: [242, 196, 92] }, // pale gold
+  { s: 1.0, c: [255, 226, 150] }, // light gold
 ];
 
 function liqColor(v: number, out: [number, number, number]): void {

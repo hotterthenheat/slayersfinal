@@ -178,29 +178,47 @@ interface PanelChromeHandlers {
   onClose: (panelId: string) => void;
 }
 
-/** Panel header — title, per-panel ticker, and edit/maximize affordances. */
+/** Panel header — title, per-panel ticker, a live quote, and edit/maximize
+    affordances. The quote makes every panel read as a live instrument the way a
+    pro terminal does. */
 const PanelChrome = ({
   panelId,
   panelKey,
   ticker,
+  price,
+  changePct,
   maximizedView,
   h,
 }: {
   panelId: string;
   panelKey: string;
   ticker: string;
+  price?: number;
+  changePct?: number;
   maximizedView?: boolean;
   h: PanelChromeHandlers;
 }) => {
   const def = pulsePanelByKey(panelKey);
   const draggable = !maximizedView && h.editLayout;
+  const up = (changePct ?? 0) >= 0;
   return (
-    <div className={`${draggable ? 'widget-drag cursor-grab active:cursor-grabbing' : ''} flex items-center gap-2 px-3.5 h-10 border-b border-borderSubtle shrink-0 select-none`}>
+    <div className={`${draggable ? 'widget-drag cursor-grab active:cursor-grabbing' : ''} flex items-center gap-2 px-3.5 h-10 border-b border-borderSubtle bg-white/[0.015] shrink-0 select-none`}>
       {draggable && <GripHorizontal className="w-3.5 h-3.5 text-textMuted shrink-0" />}
       <span className="font-mono text-label font-semibold uppercase tracking-widest text-textPrimary truncate">
         {def?.title ?? panelKey}
       </span>
       <PanelTicker value={ticker} onChange={t => h.onTicker(panelId, t)} />
+      {price != null && Number.isFinite(price) && (
+        <span className="hidden md:flex items-baseline gap-1.5 font-mono tnum whitespace-nowrap" onMouseDown={e => e.stopPropagation()}>
+          <span className="text-caption text-textPrimary">${price.toFixed(2)}</span>
+          {changePct != null && Number.isFinite(changePct) && (
+            <span className={`text-micro ${up ? 'text-bull' : 'text-bear'}`}>
+              {up ? '+' : ''}
+              {changePct.toFixed(2)}%
+            </span>
+          )}
+        </span>
+      )}
       <div className="ml-auto flex items-center gap-1.5 shrink-0" onMouseDown={e => e.stopPropagation()}>
         {draggable && (
           <>
@@ -506,6 +524,9 @@ const PulseWorkspace = () => {
     onClose: removePanel,
   };
 
+  // Live quote for a panel's ticker (scan cadence — no per-second header churn).
+  const snapFor = (t: string) => ctxByTicker.get(t)?.snapshot;
+
   const barBtn = 'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-borderSubtle bg-white/[0.02] hover:bg-white/[0.05] font-mono text-label uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors';
 
   return (
@@ -666,7 +687,15 @@ const PulseWorkspace = () => {
           className={`${fullscreen ? 'flex-1' : ''} min-h-0 inst-surface rounded-md overflow-hidden flex flex-col`}
           style={{ height: fullscreen ? 'auto' : '78vh' }}
         >
-          <PanelChrome panelId={maximized.id} panelKey={maximized.key} ticker={maximized.ticker ?? activeTicker} maximizedView h={chromeHandlers} />
+          <PanelChrome
+            panelId={maximized.id}
+            panelKey={maximized.key}
+            ticker={maximized.ticker ?? activeTicker}
+            price={snapFor(maximized.ticker ?? activeTicker)?.spot}
+            changePct={snapFor(maximized.ticker ?? activeTicker)?.changePercent}
+            maximizedView
+            h={chromeHandlers}
+          />
           <div className="flex-grow min-h-0 overflow-hidden">{renderPanelBody(maximized.key, maximized.ticker ?? activeTicker)}</div>
         </div>
       ) : active.panels.length === 0 ? (
@@ -695,7 +724,7 @@ const PulseWorkspace = () => {
                   className="inst-surface rounded-md overflow-hidden flex flex-col"
                   style={{ height: p.minimized ? undefined : h }}
                 >
-                  <PanelChrome panelId={p.id} panelKey={p.key} ticker={ticker} h={chromeHandlers} />
+                  <PanelChrome panelId={p.id} panelKey={p.key} ticker={ticker} price={snapFor(ticker)?.spot} changePct={snapFor(ticker)?.changePercent} h={chromeHandlers} />
                   {!p.minimized && (
                     <div className="flex-grow min-h-0 overflow-hidden">{renderPanelBody(p.key, ticker)}</div>
                   )}
@@ -733,7 +762,7 @@ const PulseWorkspace = () => {
                 const minimized = p.minimized;
                 return (
                   <div key={p.id} className="inst-surface rounded-md overflow-hidden flex flex-col">
-                    <PanelChrome panelId={p.id} panelKey={p.key} ticker={ticker} h={chromeHandlers} />
+                    <PanelChrome panelId={p.id} panelKey={p.key} ticker={ticker} price={snapFor(ticker)?.spot} changePct={snapFor(ticker)?.changePercent} h={chromeHandlers} />
                     {!minimized && <div className="flex-grow min-h-0 overflow-hidden">{renderPanelBody(p.key, ticker)}</div>}
                   </div>
                 );

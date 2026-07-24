@@ -14,16 +14,16 @@ export interface CandleTheme {
 }
 
 export const CANDLE_THEMES = {
-  // Slayer signature — luminous mint up / rose down. Its OWN two-tone (the way a
-  // terminal reads at a glance as "yours"), distinct from the green/red the walls
-  // and GEX nodes already own, and from the washed-out mono.
+  // Slayer signature — holographic silver up / violet down. The house look: the
+  // brand's holo-silver for strength, a luminous purple for weakness. Its OWN
+  // two-tone, distinct from the green/red the walls & GEX nodes own.
   slayer: {
-    up: '#2EE6A6',
-    down: '#FF4D7A',
-    wickUp: '#5CF2C0',
-    wickDown: '#FF7699',
-    volUp: 'rgba(46,230,166,0.26)',
-    volDown: 'rgba(255,77,122,0.26)',
+    up: '#DCE3F5',
+    down: '#A47CF2',
+    wickUp: '#F1F4FF',
+    wickDown: '#C0A2FF',
+    volUp: 'rgba(220,227,245,0.22)',
+    volDown: 'rgba(164,124,242,0.26)',
   },
   // Neutral, premium — near-white up / slate down
   mono: {
