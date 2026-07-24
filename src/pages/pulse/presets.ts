@@ -75,6 +75,33 @@ export const PULSE_PRESETS: PulseLayout[] = [
     ],
   },
   {
+    // Three-column command deck: institutional flow feed on the left, the
+    // liquidity chart + price in the center, the GEX grid + levels on the right —
+    // the whole desk on one screen, dealer-flow-terminal style.
+    id: 'flow-command',
+    name: 'Flow Command',
+    preset: true,
+    panels: [
+      { id: 'cmd-dp', key: 'dark-pool' },
+      { id: 'cmd-flow', key: 'order-flow' },
+      { id: 'cmd-liq', key: 'liquidity-map' },
+      { id: 'cmd-chart', key: 'live-chart' },
+      { id: 'cmd-gex', key: 'gex-heatmap' },
+      { id: 'cmd-levels', key: 'key-levels' },
+    ],
+    layout: [
+      // left column — flow / dark-pool feed
+      L('cmd-dp', 0, 0, 3, 6, 3, 4),
+      L('cmd-flow', 0, 6, 3, 5, 3, 4),
+      // center column — liquidity chart (flagship) over the live chart
+      L('cmd-liq', 3, 0, 5, 7, 4, 4),
+      L('cmd-chart', 3, 7, 5, 4, 4, 4),
+      // right column — GEX heatmap grid over key levels
+      L('cmd-gex', 8, 0, 4, 6, 3, 4),
+      L('cmd-levels', 8, 6, 4, 5, 3, 3),
+    ],
+  },
+  {
     id: 'gex-orderflow',
     name: 'GEX + Order Flow',
     preset: true,
