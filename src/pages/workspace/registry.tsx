@@ -11,7 +11,6 @@ import StrikeChart from '../../components/gex/StrikeChart';
 import PositioningMap from '../../components/gex/PositioningMap';
 import ExposureMatrix from '../../components/gex/ExposureMatrix';
 import GexMatrix from '../../components/gex/GexMatrix';
-import KeyLevelsRail from '../../components/gex/KeyLevelsRail';
 import OrderFlowPanel from '../../components/gex/OrderFlowPanel';
 import WallDrift from '../../components/gex/vannacharm/WallDrift';
 import RegimePanel from '../../components/gex/vollab/RegimePanel';
@@ -163,23 +162,6 @@ export const WIDGETS: WidgetDef[] = [
     render: ctx => (
       <div className="h-full min-h-0 p-2">
         <GexMatrix data={ctx.matrix} spot={ctx.gex.levels.spot} />
-      </div>
-    ),
-  },
-  {
-    key: 'key-levels',
-    title: 'Key Levels',
-    description: 'Walls, pin, flip & king with distance',
-    w: 4,
-    h: 4,
-    minW: 3,
-    minH: 3,
-    render: ctx => (
-      <div className="h-full min-h-0 overflow-y-auto">
-        <KeyLevelsRail
-          rows={ctx.cmd.keyLevels}
-          maxPressure={ctx.cmd.keyLevels.reduce((a, l) => Math.max(a, l.pressure), 1)}
-        />
       </div>
     ),
   },
