@@ -14,6 +14,17 @@ export interface CandleTheme {
 }
 
 export const CANDLE_THEMES = {
+  // Slayer signature — luminous mint up / rose down. Its OWN two-tone (the way a
+  // terminal reads at a glance as "yours"), distinct from the green/red the walls
+  // and GEX nodes already own, and from the washed-out mono.
+  slayer: {
+    up: '#2EE6A6',
+    down: '#FF4D7A',
+    wickUp: '#5CF2C0',
+    wickDown: '#FF7699',
+    volUp: 'rgba(46,230,166,0.26)',
+    volDown: 'rgba(255,77,122,0.26)',
+  },
   // Neutral, premium — near-white up / slate down
   mono: {
     up: '#eef1f5',
@@ -45,6 +56,6 @@ export const CANDLE_THEMES = {
 
 export type CandleThemeKey = keyof typeof CANDLE_THEMES;
 
-export const CANDLE_THEME_KEY: CandleThemeKey = 'mono';
+export const CANDLE_THEME_KEY: CandleThemeKey = 'slayer';
 
 export const candleTheme: CandleTheme = CANDLE_THEMES[CANDLE_THEME_KEY];

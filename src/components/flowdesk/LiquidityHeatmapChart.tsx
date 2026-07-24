@@ -13,13 +13,13 @@ import {
 } from 'lightweight-charts';
 import Simulator from '../../core/simulator';
 import { aggregateCandles, tfMinutes, type Timeframe } from '../../data/timeframe';
-import { CANDLE_THEMES } from '../gex/candleTheme';
+import { candleTheme } from '../gex/candleTheme';
 import { CALL_WALL, PUT_WALL, FLIP, DARK_POOL, FOCUS, SPOT } from '../gex/palette';
 
-// Green/red candles here (not the Live Chart's neutral mono): direction reads in
-// colour so it pops against the silver, unsigned liquidity field — colour =
-// direction, silver = structure, same grammar as the rest of the terminal.
-const theme = CANDLE_THEMES.classic;
+// Slayer signature candles (mint/rose) — direction reads in colour so it pops
+// against the violet liquidity field without duplicating the green/red the walls
+// own.
+const theme = candleTheme;
 import { LiquidityHeatmapPrimitive } from './liquidityHeatmapPrimitive';
 import { FlowPillsPrimitive } from './flowPillsPrimitive';
 import { makeLiquidityLUT, type LiquidityField } from '../../data/liquidityField';

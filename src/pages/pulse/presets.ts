@@ -102,6 +102,25 @@ export const PULSE_PRESETS: PulseLayout[] = [
     ],
   },
   {
+    // Dual daily swing desk — price-estimation targets side by side, the way you
+    // scan the majors for the next swing. Setups + levels underneath.
+    id: 'swing-desk',
+    name: 'Swing Desk',
+    preset: true,
+    panels: [
+      { id: 'sw-spy', key: 'swing-map', ticker: 'SPY' },
+      { id: 'sw-qqq', key: 'swing-map', ticker: 'QQQ' },
+      { id: 'sw-setups', key: 'top-setups' },
+      { id: 'sw-levels', key: 'key-levels' },
+    ],
+    layout: [
+      L('sw-spy', 0, 0, 6, 7, 4, 4),
+      L('sw-qqq', 6, 0, 6, 7, 4, 4),
+      L('sw-setups', 0, 7, 6, 4, 3, 3),
+      L('sw-levels', 6, 7, 6, 4, 3, 3),
+    ],
+  },
+  {
     id: 'gex-orderflow',
     name: 'GEX + Order Flow',
     preset: true,
