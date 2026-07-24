@@ -120,12 +120,17 @@ export function buildLiquidityField(args: LiquidityFieldArgs): LiquidityField {
   blend((args.nodes ?? []).map(n => ({ price: n.strike, weight: Math.abs(n.value) })), WEIGHTS.node);
   blend((args.deltaByPrice ?? []).map(d => ({ price: d.price, weight: Math.abs(d.value) })), WEIGHTS.delta);
 
-  // fixed normalize of the blended field so colours are stable over time
+  // fixed normalize of the blended field to 0..1, then a contrast curve so the
+  // broad low/mid book recedes and only genuine shelves stay bright — the field
+  // reads as a few clean glowing bands, not a muddy wash across every strike.
   let max = 0;
   for (let r = 0; r < rows; r++) if (intensity[r] > max) max = intensity[r];
   if (max > 0) {
     const inv = 1 / max;
-    for (let r = 0; r < rows; r++) intensity[r] *= inv;
+    for (let r = 0; r < rows; r++) {
+      const t = intensity[r] * inv;
+      intensity[r] = Math.pow(t, 1.5);
+    }
   }
 
   return { rows, priceMin, priceMax, rowToPrice, priceToRow, intensity };

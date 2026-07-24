@@ -3,13 +3,14 @@ import type { LiquidityField } from '../../data/liquidityField';
 
 /*
   Lightweight Charts custom series primitive that paints the resting-liquidity
-  FIELD as a horizontal heat gradient behind the candles. The field is a function
-  of PRICE only (a liquidity profile), so every row spans the full chart width at
-  its price — anchored via series.priceToCoordinate, recomputed every draw so it
-  tracks pan/zoom/autoscale. zOrder 'bottom' keeps it under price.
+  FIELD as a soft horizontal glow behind the candles. The field is a function of
+  PRICE only (a liquidity profile), so it's baked once into a 1×rows RGBA strip
+  (colour + alpha per price row) and, each frame, stretched vertically to the
+  field's on-screen price extent with smoothing on — buttery bands, no per-row
+  seams, no time-axis shear. zOrder 'bottom' keeps it under price.
 
-  The price scale is linear, so row→y is affine: we anchor the two ends and
-  interpolate, which keeps the bands seamless without 240 priceToCoordinate calls.
+  The price scale is linear, so the row→y map is affine: anchor the two ends via
+  priceToCoordinate and stretch between them.
 */
 
 interface BitmapScope {
@@ -28,40 +29,26 @@ class HeatPaneRenderer {
   draw(target: DrawTarget): void {
     const src = this.source;
     const field = src.field;
-    if (!src.enabled || !src.series || !field || field.rows < 2) return;
+    const strip = src.strip;
+    if (!src.enabled || !src.series || !field || !strip || field.rows < 2) return;
     const series = src.series;
-    const lut = src.lut;
 
-    // Anchor the field's price extent to screen coordinates. Linear scale ⇒ the
-    // row→y map is affine between these two ends.
-    const yLo = series.priceToCoordinate(field.priceMin); // low price → large y
-    const yHi = series.priceToCoordinate(field.priceMax); // high price → small y
+    const yLo = series.priceToCoordinate(field.priceMin); // low price → large y (bottom)
+    const yHi = series.priceToCoordinate(field.priceMax); // high price → small y (top)
     if (yLo === null || yHi === null) return;
-
-    const rows = field.rows;
-    const intensity = field.intensity;
 
     target.useBitmapCoordinateSpace(scope => {
       const ctx = scope.context;
       const hr = scope.horizontalPixelRatio;
       const vr = scope.verticalPixelRatio;
       const wPx = scope.mediaSize.width * hr;
-
-      // css-px y for a given row (row 0 = priceMin = yLo, row rows-1 = yHi)
-      const yOf = (r: number) => yLo + (yHi - yLo) * (r / (rows - 1));
-      const rowHcss = Math.abs((yHi - yLo) / (rows - 1));
-      const hPx = rowHcss * vr + 1; // +1 device-px overlap so bands never seam
-
-      for (let r = 0; r < rows; r++) {
-        const t = intensity[r];
-        if (t <= 0.008) continue; // skip near-empty rows — let the inset show
-        const li = (Math.min(255, (t * 255) | 0)) * 3;
-        // colour rises silver-steel; alpha rises with density so shelves glow and
-        // faint rows stay a whisper over the grid
-        const a = 0.05 + t * 0.6;
-        ctx.fillStyle = `rgba(${lut[li]},${lut[li + 1]},${lut[li + 2]},${a.toFixed(3)})`;
-        ctx.fillRect(0, (yOf(r) - rowHcss / 2) * vr, wPx, hPx);
-      }
+      const top = yHi * vr;
+      const height = (yLo - yHi) * vr;
+      if (height <= 0) return;
+      const prev = ctx.imageSmoothingEnabled;
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(strip, 0, 0, 1, field.rows, 0, top, wPx, height);
+      ctx.imageSmoothingEnabled = prev;
     });
   }
 }
@@ -84,12 +71,16 @@ export class LiquidityHeatmapPrimitive implements ISeriesPrimitive<Time> {
   series: ISeriesApi<'Candlestick'> | null = null;
   requestUpdate?: () => void;
   field: LiquidityField | null = null;
-  lut: Uint8ClampedArray;
   enabled = true;
+  /** 1×rows RGBA strip: colour + alpha per price row, top = high price */
+  strip: HTMLCanvasElement | null = null;
+  private _lut: Uint8ClampedArray;
+  private _sctx: CanvasRenderingContext2D | null = null;
+  private _img: ImageData | null = null;
   private _paneViews: HeatPaneView[];
 
   constructor(lut: Uint8ClampedArray) {
-    this.lut = lut;
+    this._lut = lut;
     this._paneViews = [new HeatPaneView(this)];
   }
 
@@ -111,9 +102,37 @@ export class LiquidityHeatmapPrimitive implements ISeriesPrimitive<Time> {
     return this._paneViews;
   }
 
+  private bakeStrip(field: LiquidityField): void {
+    const rows = field.rows;
+    if (!this.strip || this.strip.height !== rows) {
+      this.strip = document.createElement('canvas');
+      this.strip.width = 1;
+      this.strip.height = rows;
+      this._sctx = this.strip.getContext('2d');
+      this._img = this._sctx ? this._sctx.createImageData(1, rows) : null;
+    }
+    if (!this._sctx || !this._img) return;
+    const lut = this._lut;
+    const d = this._img.data;
+    for (let r = 0; r < rows; r++) {
+      const t = field.intensity[r];
+      // Glow only at real shelves — near-zero rows contribute nothing, so the
+      // field reads as distinct bands instead of a gray wash.
+      const a = t <= 0.04 ? 0 : Math.min(1, Math.pow(t, 1.2) * 0.62);
+      const li = Math.min(255, (t * 255) | 0) * 3;
+      const p = (rows - 1 - r) * 4; // image row 0 = top = high price
+      d[p] = lut[li];
+      d[p + 1] = lut[li + 1];
+      d[p + 2] = lut[li + 2];
+      d[p + 3] = (a * 255) | 0;
+    }
+    this._sctx.putImageData(this._img, 0, 0);
+  }
+
   setData(field: LiquidityField | null, enabled: boolean): void {
     this.field = field;
     this.enabled = enabled;
+    if (field) this.bakeStrip(field);
     this.requestUpdate?.();
   }
 }

@@ -13,8 +13,13 @@ import {
 } from 'lightweight-charts';
 import Simulator from '../../core/simulator';
 import { aggregateCandles, tfMinutes, type Timeframe } from '../../data/timeframe';
-import { candleTheme } from '../gex/candleTheme';
-import { CALL_WALL, PUT_WALL, FLIP, KING, DARK_POOL, FOCUS, SPOT } from '../gex/palette';
+import { CANDLE_THEMES } from '../gex/candleTheme';
+import { CALL_WALL, PUT_WALL, FLIP, DARK_POOL, FOCUS, SPOT } from '../gex/palette';
+
+// Green/red candles here (not the Live Chart's neutral mono): direction reads in
+// colour so it pops against the silver, unsigned liquidity field — colour =
+// direction, silver = structure, same grammar as the rest of the terminal.
+const theme = CANDLE_THEMES.classic;
 import { LiquidityHeatmapPrimitive } from './liquidityHeatmapPrimitive';
 import { makeLiquidityLUT, type LiquidityField } from '../../data/liquidityField';
 import type { Candle } from '../../types/market';
@@ -37,28 +42,22 @@ interface LiquidityHeatmapChartProps {
   focusPrice?: number | null;
 }
 
-// Wall / flip / king structure lines. Same grammar as the Live Chart so the two
-// read as one system — green call wall, red put wall, baby-blue flip, magenta king.
-const LEVEL_SPEC: {
-  key: 'callWall' | 'putWall' | 'flip' | 'king';
-  color: string;
-  title: string;
-  style: LineStyle;
-  width: 1 | 2;
-}[] = [
+// Wall / flip structure lines — the levels that matter for reading price against
+// liquidity. King is deliberately omitted (it's a loud magenta line that mostly
+// coincides with a wall and clutters this chart; the Live Chart still carries it).
+type LevelKey = 'callWall' | 'putWall' | 'flip';
+const LEVEL_SPEC: { key: LevelKey; color: string; title: string; style: LineStyle; width: 1 | 2 }[] = [
   { key: 'callWall', color: CALL_WALL, title: 'CALL WALL', style: LineStyle.Solid, width: 1 },
   { key: 'putWall', color: PUT_WALL, title: 'PUT WALL', style: LineStyle.Solid, width: 1 },
   { key: 'flip', color: FLIP, title: 'FLIP', style: LineStyle.Dashed, width: 1 },
-  { key: 'king', color: KING, title: 'KING', style: LineStyle.Solid, width: 2 },
 ];
 
-// One axis pill per price — walls claim it first, then king, then flip — so
-// coincident levels don't stack into an unreadable overlap. (Same rule as the
-// Live Chart; the full breakdown still lives in the Key Levels panel.)
-const LABEL_PRIORITY: ('callWall' | 'putWall' | 'king' | 'flip')[] = ['callWall', 'putWall', 'king', 'flip'];
-const labelVisibility = (L: KeyLevels): Record<'callWall' | 'putWall' | 'flip' | 'king', boolean> => {
+// One axis pill per price — walls claim it first, then flip — so coincident
+// levels don't stack into an unreadable overlap.
+const LABEL_PRIORITY: LevelKey[] = ['callWall', 'putWall', 'flip'];
+const labelVisibility = (L: KeyLevels): Record<LevelKey, boolean> => {
   const claimed = new Set<string>();
-  const vis = { callWall: true, putWall: true, flip: true, king: true };
+  const vis: Record<LevelKey, boolean> = { callWall: true, putWall: true, flip: true };
   for (const key of LABEL_PRIORITY) {
     const priceKey = L[key].toFixed(2);
     if (claimed.has(priceKey)) vis[key] = false;
@@ -77,7 +76,7 @@ const toCandle = (b: Candle) => ({
 const toVolume = (b: Candle) => ({
   time: b.time as UTCTimestamp,
   value: b.volume,
-  color: b.close >= b.open ? candleTheme.volUp : candleTheme.volDown,
+  color: b.close >= b.open ? theme.volUp : theme.volDown,
 });
 
 /**
@@ -105,7 +104,7 @@ const LiquidityHeatmapChart = ({
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
   const heatRef = useRef<LiquidityHeatmapPrimitive | null>(null);
 
-  const wallLinesRef = useRef<Partial<Record<'callWall' | 'putWall' | 'flip' | 'king', IPriceLine>>>({});
+  const wallLinesRef = useRef<Partial<Record<LevelKey, IPriceLine>>>({});
   const shownLevelsRef = useRef<KeyLevels | null>(null);
   const levelRafRef = useRef(0);
   const levelTickerRef = useRef('');
@@ -166,32 +165,43 @@ const LiquidityHeatmapChart = ({
     });
 
     const candles = chart.addSeries(CandlestickSeries, {
-      upColor: candleTheme.up,
-      downColor: candleTheme.down,
-      borderUpColor: candleTheme.up,
-      borderDownColor: candleTheme.down,
-      wickUpColor: candleTheme.wickUp,
-      wickDownColor: candleTheme.wickDown,
+      upColor: theme.up,
+      downColor: theme.down,
+      borderUpColor: theme.up,
+      borderDownColor: theme.down,
+      wickUpColor: theme.wickUp,
+      wickDownColor: theme.wickDown,
       priceLineVisible: true,
       priceLineColor: 'rgba(237,237,237,0.4)',
       priceLineStyle: LineStyle.Dotted,
-      // Keep the whole liquidity window (which spans the walls) on screen so the
-      // shelves line up with the candles rather than just the couple around spot.
-      // Frame the candles exactly like the Live Chart: the real price range unioned
-      // with the walls & spot. The heat field is a SUPERSET of this window, so it
-      // always paints edge-to-edge — but it never drives the scale (that would
-      // stretch the candles into a sliver). King / far nodes stay out on purpose.
+      // Frame on the PRICE action, like any trading chart — the candles fill the
+      // pane. Walls are pulled in only when they sit within ~0.6% of spot; a far
+      // wall (e.g. a put wall 1% below) would otherwise drag the scale down and
+      // leave price crammed in a strip with a dead zone. Far walls still annotate
+      // from the axis edge via their clamped price-line label. The heat field is a
+      // superset of the window, so it always paints edge-to-edge without driving
+      // the scale.
       autoscaleInfoProvider: (original: () => { priceRange: { minValue: number; maxValue: number } } | null) => {
         const base = original();
         const lv = levelsRef.current;
-        const extras = [lv.putWall, lv.callWall, lv.spot].filter(v => Number.isFinite(v));
-        let min = base?.priceRange.minValue ?? Math.min(...extras);
-        let max = base?.priceRange.maxValue ?? Math.max(...extras);
-        for (const v of extras) {
-          if (v < min) min = v;
-          if (v > max) max = v;
+        if (!base) {
+          const xs = [lv.putWall, lv.callWall, lv.spot].filter(v => Number.isFinite(v));
+          return { priceRange: { minValue: Math.min(...xs), maxValue: Math.max(...xs) } };
         }
-        const pad = Math.max((max - min) * 0.08, 0.01);
+        let min = base.priceRange.minValue;
+        let max = base.priceRange.maxValue;
+        // Only pull in levels that sit right on the action (~0.3% of spot). Walls
+        // are usually further out while price is calm; forcing them in leaves the
+        // candles in a strip. Far walls keep their clamped edge label, and scroll
+        // into frame naturally as price runs toward them.
+        const band = (Number.isFinite(lv.spot) ? lv.spot : (min + max) / 2) * 0.003;
+        for (const v of [lv.callWall, lv.putWall, lv.flip]) {
+          if (Number.isFinite(v) && Math.abs(v - lv.spot) <= band) {
+            if (v < min) min = v;
+            if (v > max) max = v;
+          }
+        }
+        const pad = Math.max((max - min) * 0.18, (lv.spot || max) * 0.0022);
         return { priceRange: { minValue: min - pad, maxValue: max + pad } };
       },
     });
@@ -264,7 +274,7 @@ const LiquidityHeatmapChart = ({
     volumeSeriesRef.current?.applyOptions({ visible: overlays.volume });
   }, [overlays.volume]);
 
-  // Wall / flip / king structure lines — create/destroy on toggle or ticker
+  // Wall / flip structure lines — create/destroy on toggle or ticker
   useEffect(() => {
     const candleSeries = candleSeriesRef.current;
     if (!candleSeries) return;
@@ -339,7 +349,7 @@ const LiquidityHeatmapChart = ({
     for (const line of dpLinesRef.current) candleSeries.removePriceLine(line);
     dpLinesRef.current = [];
     if (!overlays.darkpool || !darkPoolLevels?.length) return;
-    const top = [...darkPoolLevels].sort((a, b) => b.notional - a.notional).slice(0, 5);
+    const top = [...darkPoolLevels].sort((a, b) => b.notional - a.notional).slice(0, 3);
     for (const lv of top) {
       dpLinesRef.current.push(
         candleSeries.createPriceLine({
