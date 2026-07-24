@@ -94,7 +94,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     key: 'liquidity-map',
     title: 'Liquidity Map',
-    description: 'Order-flow heatmap — flow, volume, delta, dark-pool & a live DOM',
+    description: 'Resting-liquidity heatmap on a TradingView chart — walls, dark pool & VWAP',
     w: 8,
     h: 6,
     minW: 4,
@@ -105,7 +105,14 @@ export const WIDGETS: WidgetDef[] = [
         <LiquidityPanel
           ticker={ctx.ticker}
           spot={ctx.snapshot.spot}
+          revision={ctx.revision}
+          levels={ctx.gex.levels}
           darkPoolLevels={dp.levels.map(l => ({ price: l.price, notional: l.notional }))}
+          nodes={ctx.gex.nodes}
+          oiByStrike={ctx.snapshot.chain.map(n => ({ strike: n.strike, oi: n.callOI + n.putOI }))}
+          deltaByPrice={ctx.cmd.orderFlow.deltaByPrice}
+          orderFlow={{ vwap: ctx.cmd.orderFlow.vwap, poc: ctx.cmd.orderFlow.poc }}
+          focusPrice={ctx.focusPrice ?? null}
         />
       );
     },
