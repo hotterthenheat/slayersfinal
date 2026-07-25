@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { Crosshair, Compass, ScanLine } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
+import { useToast } from '../ui/Toast';
 
 interface CrossDeskLinksProps {
   ticker: string;
@@ -18,7 +19,8 @@ interface CrossDeskLinksProps {
  */
 const CrossDeskLinks = ({ ticker, strike, right, onNavigate }: CrossDeskLinksProps) => {
   const navigate = useNavigate();
-  const { changeTicker } = useMarketData();
+  const { activeTicker, changeTicker } = useMarketData();
+  const toast = useToast();
 
   const go = (fn: () => void) => {
     onNavigate?.();
@@ -37,6 +39,7 @@ const CrossDeskLinks = ({ ticker, strike, right, onNavigate }: CrossDeskLinksPro
           onClick={() =>
             go(() => {
               changeTicker(ticker);
+              if (ticker !== activeTicker) toast.info(`Now viewing ${ticker}`);
               navigate('/pinpoint/levels');
             })
           }

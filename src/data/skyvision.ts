@@ -60,19 +60,24 @@ interface ScannerProfile {
 }
 
 const PROFILES: Record<ScannerKey, ScannerProfile> = {
-  'top-setups': { expiry: '0DTE', swingMul: 0.38, scalpMul: 0.18, moveBias: 1.0, scoreFloor: 90 },
-  'quick-scalp': { expiry: '0DTE', swingMul: 0.22, scalpMul: 0.1, moveBias: 0.7, scoreFloor: 88 },
-  discounted: { expiry: '1DTE', swingMul: 0.6, scalpMul: 0.28, moveBias: 1.35, scoreFloor: 86 },
-  rebounds: { expiry: '1DTE', swingMul: 0.45, scalpMul: 0.22, moveBias: 1.15, scoreFloor: 85 },
-  'whale-sweeps': { expiry: '0DTE', swingMul: 0.42, scalpMul: 0.2, moveBias: 1.1, scoreFloor: 89 },
-  all: { expiry: '0DTE', swingMul: 0.38, scalpMul: 0.18, moveBias: 1.0, scoreFloor: 80 },
+  'top-setups': { expiry: '0DTE', swingMul: 0.38, scalpMul: 0.18, moveBias: 1.0, scoreFloor: 84 },
+  'quick-scalp': { expiry: '0DTE', swingMul: 0.22, scalpMul: 0.1, moveBias: 0.7, scoreFloor: 82 },
+  discounted: { expiry: '1DTE', swingMul: 0.6, scalpMul: 0.28, moveBias: 1.35, scoreFloor: 78 },
+  rebounds: { expiry: '1DTE', swingMul: 0.45, scalpMul: 0.22, moveBias: 1.15, scoreFloor: 76 },
+  'whale-sweeps': { expiry: '0DTE', swingMul: 0.42, scalpMul: 0.2, moveBias: 1.1, scoreFloor: 83 },
+  all: { expiry: '0DTE', swingMul: 0.38, scalpMul: 0.18, moveBias: 1.0, scoreFloor: 65 },
 };
 
-const WHY_LIBRARY: Record<ScannerKey, { chips: string[]; text: (t: string, k: number) => string }> = {
+// Thesis prose is DIRECTIONAL — a put setup must never carry a buy-wall
+// "protective floor under our entry" story. Each scanner supplies a bull and
+// a bear variant; the setup's right picks which one renders.
+const WHY_LIBRARY: Record<ScannerKey, { chips: string[]; text: (t: string, k: number, bullish: boolean) => string }> = {
   'top-setups': {
     chips: ['TREND ALIGNED', 'DEALER SUPPORT', 'RSI CONFIRM'],
-    text: (t, k) =>
-      `Solid institutional buy walls are supporting price at ${k}. Market makers are heavily short this strike and must buy ${t} to stay hedged, forming an automatic protective floor under our entry.`,
+    text: (t, k, bullish) =>
+      bullish
+        ? `Solid institutional buy walls are supporting price at ${k}. Market makers are heavily short this strike and must buy ${t} to stay hedged, forming an automatic protective floor under our entry.`
+        : `Heavy institutional supply caps price at ${k}. Market makers unload ${t} delta into every push toward the strike, forming an automatic ceiling pressing on each bounce.`,
   },
   'quick-scalp': {
     chips: ['HIGH GAMMA', 'FAST DECAY', 'TIGHT STOP'],
@@ -86,13 +91,17 @@ const WHY_LIBRARY: Record<ScannerKey, { chips: string[]; text: (t: string, k: nu
   },
   rebounds: {
     chips: ['OVERSOLD', 'STRUCTURE SUPPORT', 'MEAN REVERSION'],
-    text: (t, k) =>
-      `${t} is oversold near key support at ${k}. Price has compressed into a structure floor where dealer hedging creates a natural bounce zone. Reversal probability is elevated.`,
+    text: (t, k, bullish) =>
+      bullish
+        ? `${t} is oversold near key support at ${k}. Price has compressed into a structure floor where dealer hedging creates a natural bounce zone. Reversal probability is elevated.`
+        : `${t} is overbought into key resistance at ${k}. Price has stretched into a structure ceiling where dealer hedging leans against the move. Rejection probability is elevated.`,
   },
   'whale-sweeps': {
     chips: ['BLOCK PRINTS', 'SMART MONEY', 'ACCUMULATION'],
-    text: (t, k) =>
-      `Repeated large sweep orders are accumulating ${t} exposure near ${k}. Following the institutional footprint — size and persistence of prints suggest informed positioning.`,
+    text: (t, k, bullish) =>
+      bullish
+        ? `Repeated large sweep orders are accumulating ${t} upside exposure near ${k}. Following the institutional footprint — size and persistence of prints suggest informed positioning.`
+        : `Repeated large sweep orders are stacking ${t} downside protection near ${k}. Following the institutional footprint — size and persistence of prints suggest informed hedging or an outright short lean.`,
   },
   all: {
     chips: ['MULTI-SIGNAL', 'COMPOSITE', 'BROAD SCAN'],
@@ -102,10 +111,19 @@ const WHY_LIBRARY: Record<ScannerKey, { chips: string[]; text: (t: string, k: nu
 };
 
 // ---- premium / greeks model ----------------------------------------------
-function estimatePremium(spot: number, strike: number, right: OptionRight, iv: number): number {
+/** DTE for a profile expiry label; 0DTE floors at half a trading day. */
+function dteOf(expiry: string): number {
+  return expiry === '0DTE' ? 0.5 : 1;
+}
+
+/** Intrinsic + normal-shaped time value with a REAL √T term, so a 0DTE
+    contract prices cheaper than a 1DTE and OTM decay width scales with vol. */
+function estimatePremium(spot: number, strike: number, right: OptionRight, iv: number, dte: number): number {
+  const t = Math.max(0.5, dte) / 252;
+  const width = iv * Math.sqrt(t);
+  const m = Math.log(strike / spot) / (width || 1e-6);
+  const timeValue = spot * width * 0.4 * Math.exp(-(m * m) / 2);
   const intrinsic = right === 'C' ? Math.max(spot - strike, 0) : Math.max(strike - spot, 0);
-  const moneyness = (strike - spot) / spot;
-  const timeValue = spot * iv * 0.06 * Math.exp(-Math.pow(moneyness * 22, 2) / 2);
   return Math.max(0.05, intrinsic + timeValue);
 }
 
@@ -163,8 +181,13 @@ export function makeSetup(
   const strikeLabel = strike % 1 === 0 ? strike.toFixed(0) : strike.toFixed(2);
   const contract = `${ticker} ${strikeLabel}${right}`;
 
-  const mid = Number(estimatePremium(spot, strike, right, iv).toFixed(2));
-  const spread = Math.max(0.02, mid * 0.03);
+  const dte = dteOf(profile.expiry);
+  const mid = Number(estimatePremium(spot, strike, right, iv, dte).toFixed(2));
+  // Spread widens with distance from spot and 0DTE urgency — liquidity is a
+  // real variable here, not a constant 3% decoration
+  const otmDist = Math.abs(strike - spot) / spot;
+  const spreadPctModel = clamp(1.2 + otmDist * 180 + (dte <= 0.5 ? 0.6 : 0), 0.8, 7);
+  const spread = Math.max(0.02, mid * (spreadPctModel / 100));
   const bid = Number((mid - spread / 2).toFixed(2));
   const ask = Number((mid + spread / 2).toFixed(2));
   const liveMid = Number((mid * (0.9 + rng() * 0.2)).toFixed(2));
@@ -180,9 +203,11 @@ export function makeSetup(
   const score = Math.round(
     clamp(96 * (0.4 + 0.6 * proximity) * (aligned ? 1 : 0.55) + (rng() - 0.5) * 8, 8, 99)
   );
-  const expectedMovePct = Number((profile.moveBias * (24 + rng() * 22)).toFixed(1));
+  // ±1σ expected move of the UNDERLYING over the contract's life — real math
+  // (iv·√t), not a decorative random percentage
+  const expectedMovePct = Number((iv * Math.sqrt(Math.max(0.5, dte) / 252) * 100).toFixed(1));
 
-  const greeks = Simulator.getGreeks(spot, strike, 0.01, iv);
+  const greeks = Simulator.getGreeks(spot, strike, Math.max(0.5, dte) / 252, iv);
   const delta = right === 'C' ? greeks.deltaCall : greeks.deltaPut;
   const verdict: Verdict = score >= 88 ? 'ENTER' : score >= 72 ? 'WATCH' : 'EXIT';
 
@@ -230,11 +255,11 @@ export function makeSetup(
     scalpExit: { price: Number((mid * (1 + profile.scalpMul)).toFixed(2)), pct: Math.round(profile.scalpMul * 100) },
     headline,
     whyChips: why.chips,
-    whyText: why.text(ticker, strike),
+    whyText: why.text(ticker, strike, right === 'C'),
     greeks: {
       delta: Number(delta.toFixed(2)),
       gamma: Number(greeks.gamma.toFixed(4)),
-      theta: Number((-Math.abs(greeks.vega) * 0.4 - rng() * 4).toFixed(2)),
+      theta: Number((-(mid - Math.max(right === 'C' ? spot - strike : strike - spot, 0)) / (2 * Math.max(0.5, dte))).toFixed(2)),
       vega: Number(greeks.vega.toFixed(2)),
       iv: Number((iv * 100).toFixed(1)),
     },
@@ -266,9 +291,18 @@ function buildSparkline(ticker: string, spot: number): number[] {
   return out;
 }
 
-/** Deterministic directional lean per ticker+scanner. Shared by feed and monitor. */
+/** Directional lean per ticker+scanner, read from the ACTUAL tape — hour
+    momentum plus day direction — so "TREND ALIGNED" means what it says.
+    Mean-reversion scanners (rebounds) fade the trend instead of following it. */
 function tickerLean(ticker: string, scanner: ScannerKey): boolean {
-  return mulberry(hash(`${ticker}-${scanner}-group`))() > 0.42;
+  const candles = Simulator.getCandles(ticker) ?? [];
+  const n = candles.length;
+  if (n < 120) return true;
+  const last = candles[n - 1].close;
+  const hourAgo = candles[n - 61].close;
+  const dayAgo = candles[Math.max(0, n - 391)].close;
+  const up = last - hourAgo + 0.5 * (last - dayAgo) >= 0;
+  return scanner === 'rebounds' ? !up : up;
 }
 
 function buildGroup(ticker: string, spot: number, iv: number, step: number, scanner: ScannerKey): SetupGroup | null {
@@ -308,7 +342,7 @@ function buildChain(snapshot: MarketSnapshot, iv: number): ContractChain {
     return {
       strike: node.strike,
       call: {
-        premium: Number(estimatePremium(spot, node.strike, 'C', iv).toFixed(2)),
+        premium: Number(estimatePremium(spot, node.strike, 'C', iv, 1).toFixed(2)),
         // Centered noise so OTM strikes can print red — a change column that
         // can never go negative reads fake.
         changePct: Math.round(clamp((spot - node.strike) / spot * 800 + (callRng() - 0.35) * 30, -60, 130)),
@@ -317,7 +351,7 @@ function buildChain(snapshot: MarketSnapshot, iv: number): ContractChain {
         action: actionFromHealth(callHealth),
       },
       put: {
-        premium: Number(estimatePremium(spot, node.strike, 'P', iv).toFixed(2)),
+        premium: Number(estimatePremium(spot, node.strike, 'P', iv, 1).toFixed(2)),
         changePct: Math.round(clamp((node.strike - spot) / spot * 800 + (putRng() - 0.35) * 30, -60, 130)),
         health: putHealth,
         momentum: momentumFromHealth(putHealth),

@@ -9,6 +9,7 @@ import type { MarketSnapshot } from '../../types/market';
 import type { ExposureExpiry } from '../../types/gex';
 import Panel from '../../components/ui/Panel';
 import SegmentedControl from '../../components/ui/SegmentedControl';
+import { SkeletonRows } from '../../components/ui/Skeleton';
 import AnimatedNumber from '../../components/ui/AnimatedNumber';
 import StatCard from '../../components/ui/StatCard';
 import MetricGrid from '../../components/ui/MetricGrid';
@@ -74,10 +75,8 @@ const ExposureProfile = () => {
 
   if (!data) {
     return (
-      <Panel className="h-64" bodyClassName="flex items-center justify-center">
-        <span className="font-mono text-label text-textMuted uppercase tracking-widest">
-          Awaiting feed…
-        </span>
+      <Panel className="h-64" bodyClassName="overflow-hidden">
+        <SkeletonRows rows={5} />
       </Panel>
     );
   }
@@ -114,11 +113,11 @@ const ExposureProfile = () => {
 
       {/* Header note — dealer-sign convention + units (read the same way across every panel) */}
       <p className="font-mono text-label leading-relaxed text-textMuted">
-        <span className="text-textSecondary font-semibold uppercase tracking-wider">Sign</span> positive net = dealer short
-        gamma <span className="text-textSecondary">(upside supply)</span> · negative = dealer long gamma{' '}
-        <span className="text-textSecondary">(downside support)</span>.{' '}
+        <span className="text-textSecondary font-semibold uppercase tracking-wider">Sign</span> positive net = dealer long
+        gamma <span className="text-textSecondary">(dips absorbed)</span> · negative = dealer short gamma{' '}
+        <span className="text-textSecondary">(moves amplified)</span>.{' '}
         <span className="text-textSecondary font-semibold uppercase tracking-wider">Units</span> signed $ — GEX per 1%
-        move, DEX per 1σ move, VEX per 1% vol.
+        move, DEX delta notional, VEX per 1% vol.
       </p>
 
       {/* Selected-strike detail bar */}
@@ -205,7 +204,7 @@ const ExposureProfile = () => {
           <MetricGrid min="170px">
             <StatCard label="Net GEX" value={<AnimatedNumber value={data.netGex} format={fmtUsd} />} tone={data.netGex >= 0 ? 'bull' : 'bear'} sub={data.netGex >= 0 ? 'Net supportive' : 'Net negative'} />
             <StatCard label="Net DEX" value={<AnimatedNumber value={data.netDex} format={fmtUsd} />} sub="Delta exposure" />
-            <StatCard label="Net VEX" value={<AnimatedNumber value={data.netVex} format={fmtUsd} />} sub="Vega exposure" />
+            <StatCard label="Net VEX" value={<AnimatedNumber value={data.netVex} format={fmtUsd} />} sub="Vanna exposure · per 1% vol" />
             <StatCard label="Spot" value={<AnimatedNumber value={levels.spot} format={v => `$${v.toFixed(2)}`} />} sub="Live underlying" />
             <div className="h-full" onMouseEnter={() => setHoverStrike(levels.putWall)} onMouseLeave={() => setHoverStrike(null)}>
               <StatCard className="h-full" label="Put Wall" value={<AnimatedNumber value={levels.putWall} format={strikeFmt} />} tone="bear" sub={wallDist(levels.putWall)} />

@@ -4,9 +4,11 @@ import { ArrowUpRight, ArrowUp, ArrowDown, ChevronUp, ChevronDown } from 'lucide
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildRankedTargets } from '../../data/rankedtargets';
 import { fmtUsd } from '../../data/gex';
+import { TERMS, type TermKey } from '../../data/terms';
 import Panel from '../../components/ui/Panel';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import SignalBadge from '../../components/ui/SignalBadge';
+import HoverReadout from '../../components/ui/HoverReadout';
 import type { MarketSnapshot } from '../../types/market';
 import type { HedgingClass, RankedTarget, TargetTag } from '../../types/gex';
 import type { Tone } from '../../components/ui/tones';
@@ -19,7 +21,7 @@ type Isolator = 'ALL' | 'TOP10' | 'NBR' | 'WALLS' | 'NEAR';
 const ISOLATOR_OPTIONS = [
   { value: 'ALL', label: 'All strikes' },
   { value: 'TOP10', label: 'Top 10' },
-  { value: 'NBR', label: 'NBR 1.5x+' },
+  { value: 'NBR', label: 'NBR 1.5x+' }, // NBR = strike volume vs neighbors (see TERMS)
   { value: 'WALLS', label: 'Walls' },
   { value: 'NEAR', label: 'Near spot' },
 ] as const;
@@ -48,6 +50,16 @@ const CLASS_EDGE: Record<HedgingClass, string> = {
 
 const fmtStrike = (v: number) => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
 
+/** One-line NBR read — volume vs the neighboring strikes. */
+const nbrRead = (nbr: number) =>
+  nbr >= 1.5
+    ? `${nbr.toFixed(1)}× its neighbors — isolated magnet`
+    : nbr >= 1.15
+      ? `${nbr.toFixed(1)}× its neighbors — locally elevated`
+      : nbr <= 0.75
+        ? `${nbr.toFixed(1)}× its neighbors — volume sits elsewhere`
+        : 'in line with neighbors';
+
 /** Rank-change vs the previous scan: ▲ moved toward #1, ▼ slipped. */
 const RankDelta = ({ delta }: { delta: number | undefined }) => {
   if (delta === undefined || delta === 0)
@@ -68,18 +80,18 @@ const RankDelta = ({ delta }: { delta: number | undefined }) => {
 
 type SortKey = 'rank' | 'strike' | 'score' | 'bps' | 'nbr' | 'volume' | 'openInterest' | 'netGex' | 'hedgingClass';
 
-const COLUMNS: { key: SortKey; label: string; align: 'left' | 'right'; cls: string; num: boolean }[] = [
+const COLUMNS: { key: SortKey; label: string; align: 'left' | 'right'; cls: string; num: boolean; help?: TermKey }[] = [
   // Rank column dropped — rows already sort by rank and the top cards call out
   // #1/#2/#3, so an explicit rank number was redundant. The rank-movement arrow
   // moves next to the strike below (that's the non-redundant part).
   { key: 'strike', label: 'Strike', align: 'left', cls: 'w-44', num: true },
   { key: 'score', label: 'Score', align: 'left', cls: 'w-28', num: true },
-  { key: 'bps', label: 'Dist', align: 'right', cls: 'w-16', num: true },
-  { key: 'nbr', label: 'NBR', align: 'right', cls: 'w-16', num: true },
+  { key: 'bps', label: 'Dist', align: 'right', cls: 'w-16', num: true, help: 'Dist' },
+  { key: 'nbr', label: 'NBR', align: 'right', cls: 'w-16', num: true, help: 'NBR' },
   { key: 'volume', label: 'Volume', align: 'right', cls: 'hidden lg:table-cell w-24', num: true },
-  { key: 'openInterest', label: 'Open Int', align: 'right', cls: 'hidden lg:table-cell w-24', num: true },
+  { key: 'openInterest', label: 'OI', align: 'right', cls: 'hidden lg:table-cell w-24', num: true, help: 'OI' },
   { key: 'netGex', label: 'Net GEX', align: 'right', cls: 'w-28', num: true },
-  { key: 'hedgingClass', label: 'Class', align: 'right', cls: 'hidden sm:table-cell w-40', num: false },
+  { key: 'hedgingClass', label: 'Class', align: 'right', cls: 'hidden sm:table-cell w-40', num: false, help: 'Class' },
 ];
 
 const RankedTargets = () => {
@@ -89,6 +101,7 @@ const RankedTargets = () => {
   // Default to Score-desc (same order as engine rank) so the active-sort indicator
   // shows on a real column header instead of a phantom 'rank' key.
   const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'score', dir: 'desc' });
+  const [hover, setHover] = useState<{ t: RankedTarget; x: number; y: number } | null>(null);
 
   const [scanSnapshot, setScanSnapshot] = useState<MarketSnapshot | null>(null);
   const [lastScanAt, setLastScanAt] = useState('');
@@ -242,6 +255,7 @@ const RankedTargets = () => {
                       <th key={col.key} className={`${col.cls} px-3 py-2 select-none sticky top-0 z-10 bg-panelRaised`}>
                         <button
                           onClick={() => toggleSort(col.key)}
+                          title={col.help ? TERMS[col.help] : undefined}
                           className={`w-full inline-flex items-center gap-1 font-mono text-micro uppercase tracking-widest transition-colors ${
                             col.align === 'right' ? 'justify-end' : 'justify-start'
                           } ${activeSort ? 'text-textPrimary' : 'text-textSecondary hover:text-textPrimary'}`}
@@ -264,6 +278,9 @@ const RankedTargets = () => {
                     key={t.strike}
                     onClick={() => flash(t)}
                     title="Flash on chart"
+                    onMouseEnter={e => setHover({ t, x: e.clientX, y: e.clientY })}
+                    onMouseMove={e => setHover({ t, x: e.clientX, y: e.clientY })}
+                    onMouseLeave={() => setHover(h => (h && h.t.strike === t.strike ? null : h))}
                     className="group cursor-pointer border-b border-borderSubtle/30 last:border-0 hover:bg-white/[0.03] transition-colors"
                     style={{ boxShadow: `inset 2px 0 0 0 ${CLASS_EDGE[t.hedgingClass]}` }}
                   >
@@ -315,6 +332,26 @@ const RankedTargets = () => {
           </div>
         )}
       </Panel>
+
+      {hover && (
+        <HoverReadout x={hover.x} y={hover.y}>
+          <div className="flex items-baseline gap-2">
+            <span className="font-mono text-caption font-bold text-textPrimary tnum">{fmtStrike(hover.t.strike)}</span>
+            <span className={`font-mono text-micro font-bold uppercase tracking-wider ${hover.t.pressure === 'SUPPORT' ? 'text-bull' : 'text-bear'}`}>
+              {hover.t.pressure}
+            </span>
+          </div>
+          <div className="mt-0.5 flex items-baseline gap-3 font-mono text-micro uppercase tracking-wider text-textMuted">
+            <span>
+              Calls <span className="text-bull tnum">{hover.t.callVol.toLocaleString()}</span>
+            </span>
+            <span>
+              Puts <span className="text-bear tnum">{hover.t.putVol.toLocaleString()}</span>
+            </span>
+          </div>
+          <div className="mt-0.5 font-mono text-micro text-textSecondary">{nbrRead(hover.t.nbr)}</div>
+        </HoverReadout>
+      )}
     </>
   );
 };

@@ -4,6 +4,7 @@ import { fmtUsd } from '../../data/gex';
 import Panel from '../../components/ui/Panel';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import SpotRule from '../../components/ui/SpotRule';
+import { useToast } from '../../components/ui/Toast';
 import type { ExposureProfileData } from '../../types/gex';
 
 interface ExposureLedgerProps {
@@ -41,7 +42,7 @@ const LEG_NAME: Record<Leg, string> = { call: 'CALLS', put: 'PUTS', net: 'NET' }
 
 const GREEKS: { key: 'gex' | 'dex' | 'vex'; label: string; unit: string }[] = [
   { key: 'gex', label: 'GEX', unit: '1% move' },
-  { key: 'dex', label: 'DEX', unit: '1σ move' },
+  { key: 'dex', label: 'DEX', unit: 'Δ notional' },
   { key: 'vex', label: 'VEX', unit: '1% vol' },
 ];
 
@@ -61,6 +62,7 @@ const ExposureLedger = ({
   onHoverStrike,
   onSelectStrike,
 }: ExposureLedgerProps) => {
+  const toast = useToast();
   const [leg, setLeg] = useState<Leg>('net');
   const [normalize, setNormalize] = useState(false);
 
@@ -87,10 +89,12 @@ const ExposureLedger = ({
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
+    const filename = `${ticker}-${data.expiry}-${leg}-exposure.csv`;
     a.href = url;
-    a.download = `${ticker}-${data.expiry}-${leg}-exposure.csv`;
+    a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
+    toast.success(`Exported ${filename} · ${body.length} ${body.length === 1 ? 'row' : 'rows'}`);
   };
 
   const SpotRow = () => (

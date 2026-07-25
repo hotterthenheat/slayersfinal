@@ -57,9 +57,12 @@ const Simulator = (() => {
     // Vanna
     const vanna = -Np_d1 * d2 / v;
 
-    // Charm (Delta decay)
+    // Charm (Delta decay). With no dividend yield modeled (q = 0), put charm
+    // equals call charm exactly — deltaPut = deltaCall − 1, a constant apart,
+    // so their time-decay is identical. (A nonzero adjustment only appears
+    // with a dividend yield: charmPut = charmCall + q·e^(−qt).)
     const charmCall = -Np_d1 * (r / (v * Math.sqrt(t)) - d2 / (2 * t));
-    const charmPut = charmCall + r * Math.exp(-r * t);
+    const charmPut = charmCall;
 
     return {
       deltaCall,
@@ -116,26 +119,55 @@ const Simulator = (() => {
     return h >>> 0;
   }
 
+  // ---- seeded per-symbol RNG --------------------------------------------------
+  // The terminal is designed to be reproducible ("the same seed always paints
+  // the same tape" — core/rng.ts). Every stochastic draw below comes from a
+  // per-symbol mulberry32 stream seeded from the symbol and the calendar day,
+  // so a reload replays the identical month of candles and session tape.
+  const daySeed = Math.floor(Date.now() / 86400000);
+  const rngStreams: Record<string, () => number> = {};
+  function mulberry32(a: number): () => number {
+    return () => {
+      a |= 0;
+      a = (a + 0x6d2b79f5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function rand(sym: string): number {
+    let s = rngStreams[sym];
+    if (!s) s = rngStreams[sym] = mulberry32(symbolHash(sym) ^ Math.imul(daySeed, 2654435761));
+    return s();
+  }
+
   // Seed a historical price buffer with realistic values
   function seedHistory(sym: string): void {
     const cfg = TICKERS[sym];
     let p = cfg.basePrice;
     priceHistory[sym] = [];
     for (let i = 0; i < historyLimit; i++) {
-      p += (Math.random() - 0.5) * cfg.step * 0.5;
+      p += (rand(sym) - 0.5) * cfg.step * 0.5;
       priceHistory[sym].push(p);
     }
     cfg.currentPrice = Number(p.toFixed(2));
     seedCandles(sym);
   }
 
+  /** Markets don't trade weekends — sessions must land on weekdays only. */
+  function isWeekend(sec: number): boolean {
+    const d = new Date(sec * 1000).getUTCDay();
+    return d === 0 || d === 6;
+  }
+
   // Seed a multi-session OHLC candle buffer walking back from the current price.
-  // Sessions are one calendar day apart (overnight gap) so daily/weekly
+  // Sessions sit one TRADING day apart (weekends skipped) so daily/weekly
   // aggregation produces sensible bars.
   function seedCandles(sym: string): void {
     const cfg = TICKERS[sym];
     const nowSec = Math.floor(Date.now() / 1000);
-    const alignedNow = nowSec - (nowSec % BAR_SECONDS);
+    let alignedNow = nowSec - (nowSec % BAR_SECONDS);
+    while (isWeekend(alignedNow)) alignedNow -= 86400; // anchor the live session to a weekday
     const overnightGap = 86400 - (SESSION_BARS - 1) * BAR_SECONDS; // jump to same slot, prev day
     const bars: Candle[] = [];
     let close = cfg.currentPrice;
@@ -144,23 +176,28 @@ const Simulator = (() => {
     // Build newest→oldest, then reverse
     for (let s = 0; s < SESSIONS; s++) {
       for (let i = 0; i < SESSION_BARS; i++) {
-        const range = cfg.basePrice * cfg.iv * 0.0035 * (0.4 + Math.random());
-        const open = close + (Math.random() - 0.5) * range;
-        const high = Math.max(open, close) + Math.random() * range * 0.5;
-        const low = Math.min(open, close) - Math.random() * range * 0.5;
+        const range = cfg.basePrice * cfg.iv * 0.0035 * (0.4 + rand(sym));
+        const open = close + (rand(sym) - 0.5) * range;
+        const high = Math.max(open, close) + rand(sym) * range * 0.5;
+        const low = Math.min(open, close) - rand(sym) * range * 0.5;
         bars.push({
           time: t,
           open: Number(open.toFixed(2)),
           high: Number(high.toFixed(2)),
           low: Number(low.toFixed(2)),
           close: Number(close.toFixed(2)),
-          volume: Math.round(2000 + Math.random() * 18000),
+          volume: Math.round(2000 + rand(sym) * 18000),
         });
         close = open;
-        t -= i === SESSION_BARS - 1 ? overnightGap : BAR_SECONDS;
+        if (i === SESSION_BARS - 1) {
+          t -= overnightGap;
+          while (isWeekend(t)) t -= 86400; // skip Sat/Sun when crossing sessions
+        } else {
+          t -= BAR_SECONDS;
+        }
       }
       // Overnight price gap between sessions
-      close += (Math.random() - 0.5) * cfg.basePrice * cfg.iv * 0.02;
+      close += (rand(sym) - 0.5) * cfg.basePrice * cfg.iv * 0.02;
     }
 
     bars.reverse();
@@ -195,7 +232,7 @@ const Simulator = (() => {
         high: Math.max(last.close, price),
         low: Math.min(last.close, price),
         close: price,
-        volume: Math.round(1500 + Math.random() * 9000),
+        volume: Math.round(1500 + rand(sym) * 9000),
       });
       if (bars.length > CANDLE_LIMIT) bars.shift();
 
@@ -207,7 +244,7 @@ const Simulator = (() => {
       last.close = price;
       last.high = Math.max(last.high, price);
       last.low = Math.min(last.low, price);
-      last.volume += Math.round(500 + Math.random() * 4000);
+      last.volume += Math.round(500 + rand(sym) * 4000);
 
       // Keep the forming bar's node snapshot live — only for the visible (active) ticker
       if (gh && gh.length && sym === activeTicker) {
@@ -272,19 +309,18 @@ const Simulator = (() => {
       rsi = 100 - (100 / (1 + rs));
     }
 
-    // TTM Squeeze Approximation: Bollinger Bands inside Keltner Channel
+    // TTM-style squeeze: volatility compression — the recent 20-tick dispersion
+    // sits well inside the longer-run dispersion. (The classic BB-inside-KC test
+    // is unsatisfiable when the Keltner "ATR" is derived from the SAME stdDev:
+    // 2σ < 1.35σ can never hold. The channel needs an independent, longer
+    // baseline, which is what the full-buffer dispersion provides here.)
     const slice = prices.slice(-20);
     const sma20 = slice.reduce((a, b) => a + b, 0) / 20;
     const variance = slice.reduce((a, b) => a + Math.pow(b - sma20, 2), 0) / 20;
     const stdDev = Math.sqrt(variance);
-    const atrProxy = stdDev * 0.9; // Simplified range proxy
-
-    const bbUpper = sma20 + 2 * stdDev;
-    const bbLower = sma20 - 2 * stdDev;
-    const kUpper = sma20 + 1.5 * atrProxy;
-    const kLower = sma20 - 1.5 * atrProxy;
-
-    const squeeze = (bbUpper < kUpper) && (bbLower > kLower);
+    const smaAll = prices.reduce((a, b) => a + b, 0) / len;
+    const varAll = prices.reduce((a, b) => a + Math.pow(b - smaAll, 2), 0) / len;
+    const squeeze = stdDev < Math.sqrt(varAll) * 0.72;
 
     return { rsi, ema9, ema21, ema50, squeeze };
   }
@@ -300,33 +336,57 @@ const Simulator = (() => {
     const baseStrike = Math.round(spot / step) * step;
     const strikeRange = 15;
 
+    // Daily positioning regime: the price where customer call-overwriting supply
+    // gives way to put-hedging demand. It pivots the OI skew — and therefore the
+    // gamma flip — so the flip is a real structural level that sits away from
+    // spot and moves day to day, not an artifact glued half a step above price.
+    // Mostly a touch below spot (positive-gamma days), sometimes above.
+    const regime01 = (symbolHash(`${tickerKey}:regime:${Math.floor(Date.now() / 86400000)}`) % 1000) / 1000;
+    const pivot = spot * (1 + (regime01 * 0.014 - 0.011)); // −1.1% … +0.3% of spot
+
     for (let i = -strikeRange; i <= strikeRange; i++) {
       const strike = baseStrike + i * step;
 
       const distance = Math.abs(strike - spot) / spot;
       const baseOI = Math.max(100, Math.round(20000 * Math.exp(-Math.pow(distance * 15, 2))));
 
-      let callOI = Math.round(baseOI * (i > 0 ? 1.4 : 0.8));
-      let putOI = Math.round(baseOI * (i < 0 ? 1.6 : 0.7));
+      // Per-strike positioning noise so the book has texture and the flip zone
+      // is a zone, not a razor edge.
+      const sh = symbolHash(`${tickerKey}:${strike.toFixed(2)}:oi`);
+      const noiseC = 0.75 + ((sh % 1000) / 1000) * 0.5;
+      const noiseP = 0.75 + (((sh >>> 10) % 1000) / 1000) * 0.5;
+
+      let callOI = Math.round(baseOI * (strike > pivot ? 1.5 : 0.8) * noiseC);
+      let putOI = Math.round(baseOI * (strike < pivot ? 1.5 : 0.7) * noiseP);
 
       if (strike % (step * 5) === 0) {
         callOI = Math.round(callOI * 2.2);
-        putOI = Math.round(putOI * 2.5);
+        putOI = Math.round(putOI * 2.2);
       }
 
       const t = 0.003; // 0DTE
       const greeks = calculateGreeks(spot, strike, t, iv);
 
-      const dealerCallDirection = -0.4; // Net short calls
-      const dealerPutDirection = -0.6;  // Net short puts
+      // Dealer book, standard convention: net LONG calls (customers overwrite
+      // calls, dealers absorb them) and net SHORT puts (customers buy downside
+      // hedges). Long-call gamma supports price (positive GEX); short-put gamma
+      // amplifies it (negative GEX). Both legs' vega follow the same book.
+      // Weights balanced so the BOOK TOTAL's sign follows the daily regime:
+      // pivot below spot → call-supported book, net positive; pivot above →
+      // put-dominated, net negative. Neither sign is structurally locked in.
+      const dealerCallDirection = 0.5; // Net long calls
+      const dealerPutDirection = -0.6; // Net short puts
 
       const callGex = callOI * 100 * greeks.gamma * spot * spot * 0.01 * dealerCallDirection;
-      const putGex = putOI * 100 * greeks.gamma * spot * spot * 0.01 * dealerPutDirection * -1;
+      const putGex = putOI * 100 * greeks.gamma * spot * spot * 0.01 * dealerPutDirection;
 
       const netGex = callGex + putGex;
 
-      const callDex = callOI * 100 * greeks.deltaCall * spot * dealerCallDirection;
-      const putDex = putOI * 100 * greeks.deltaPut * spot * dealerPutDirection;
+      // DEX uses the standard delta-weighted-OI display convention: call delta
+      // is positive, put delta negative, so the profile reads call-heavy above /
+      // put-heavy below without a dealer-direction overlay.
+      const callDex = callOI * 100 * greeks.deltaCall * spot;
+      const putDex = putOI * 100 * greeks.deltaPut * spot;
       const netDex = callDex + putDex;
 
       const callVex = callOI * 100 * greeks.vega * dealerCallDirection;
@@ -375,9 +435,18 @@ const Simulator = (() => {
       }
     });
 
+    // Gamma flip: first upward zero-crossing of the (3-strike smoothed) net-GEX
+    // profile — put-dominated (negative) below, call-supported (positive) above.
+    // Smoothing keeps a single noisy strike from faking the crossover.
     let flipStrike = spot;
+    const smoothGex = (i: number) => {
+      const a = chain[Math.max(0, i - 1)].netGex;
+      const b = chain[i].netGex;
+      const c = chain[Math.min(chain.length - 1, i + 1)].netGex;
+      return (a + b + c) / 3;
+    };
     for (let i = 1; i < chain.length; i++) {
-      if (Math.sign(chain[i - 1].netGex) !== Math.sign(chain[i].netGex)) {
+      if (smoothGex(i - 1) < 0 && smoothGex(i) >= 0) {
         flipStrike = (chain[i - 1].strike + chain[i].strike) / 2;
         break;
       }
@@ -402,7 +471,8 @@ const Simulator = (() => {
     score = Math.max(10, Math.min(90, score));
 
     const direction = score >= 50 ? 'BULLISH' : 'BEARISH';
-    const confidence = Math.abs(score - 50) * 2 + 50;
+    // Conviction stays a true percentage: score ∈ [10, 90] maps to [50, 100].
+    const confidence = 50 + Math.abs(score - 50) * 1.25;
 
     const entry = spot;
     let stopLoss = direction === 'BULLISH' ? supportWall - config.step * 0.5 : resistanceWall + config.step * 0.5;
@@ -435,11 +505,11 @@ const Simulator = (() => {
       const config = TICKERS[ticker];
       const history = priceHistory[ticker];
 
-      const drift = 0.02 * (Math.random() - 0.48);
+      const drift = 0.02 * (rand(ticker) - 0.48);
       const volatility = config.iv * 0.15;
-      const shock = Math.random() > 0.98 ? (Math.random() - 0.5) * 3 : 1;
+      const shock = rand(ticker) > 0.98 ? (rand(ticker) - 0.5) * 3 : 1;
 
-      let deltaPrice = (drift + (Math.random() - 0.5) * volatility * shock) * config.basePrice * 0.01;
+      let deltaPrice = (drift + (rand(ticker) - 0.5) * volatility * shock) * config.basePrice * 0.01;
       deltaPrice = Math.max(-config.step * 2, Math.min(config.step * 2, deltaPrice));
 
       config.currentPrice = Number((config.currentPrice + deltaPrice).toFixed(2));
@@ -464,21 +534,21 @@ const Simulator = (() => {
       const cfg = TICKERS[sym];
       const count =
         sym === activeTicker
-          ? Math.floor(Math.random() * 2) + 1
-          : Math.random() > 0.45
-            ? Math.floor(Math.random() * 2) + 1
+          ? Math.floor(rand(sym) * 2) + 1
+          : rand(sym) > 0.45
+            ? Math.floor(rand(sym) * 2) + 1
             : 0;
       for (let i = 0; i < count; i++) {
-        const offset = (Math.floor(Math.random() * 7) - 3) * cfg.step;
+        const offset = (Math.floor(rand(sym) * 7) - 3) * cfg.step;
         const strike = Math.round(cfg.currentPrice / cfg.step) * cfg.step + offset;
         tape.push({
           time: new Date().toLocaleTimeString(),
           ticker: sym,
           strike: strike.toFixed(2),
-          type: Math.random() > 0.5 ? 'C' : 'P',
-          size: Math.floor(Math.random() * 250) + 10,
-          orderType: Math.random() > 0.65 ? 'SWEEP' : 'BLOCK',
-          side: Math.random() > 0.48 ? 'ASK' : 'BID'
+          type: rand(sym) > 0.5 ? 'C' : 'P',
+          size: Math.floor(rand(sym) * 250) + 10,
+          orderType: rand(sym) > 0.65 ? 'SWEEP' : 'BLOCK',
+          side: rand(sym) > 0.48 ? 'ASK' : 'BID'
         });
       }
     }
@@ -531,18 +601,18 @@ const Simulator = (() => {
       const indicators = getIndicators(priceHistory[key]);
       const plan = generateTradePlan(key, cfg.currentPrice, chain, indicators);
       const tape: TapeOrder[] = [];
-      const count = Math.floor(Math.random() * 3);
+      const count = Math.floor(rand(key) * 3);
       for (let i = 0; i < count; i++) {
-        const offset = (Math.floor(Math.random() * 7) - 3) * cfg.step;
+        const offset = (Math.floor(rand(key) * 7) - 3) * cfg.step;
         const strike = Math.round(cfg.currentPrice / cfg.step) * cfg.step + offset;
         tape.push({
           time: new Date().toLocaleTimeString(),
           ticker: key,
           strike: strike.toFixed(2),
-          type: Math.random() > 0.5 ? 'C' : 'P',
-          size: Math.floor(Math.random() * 250) + 10,
-          orderType: Math.random() > 0.65 ? 'SWEEP' : 'BLOCK',
-          side: Math.random() > 0.48 ? 'ASK' : 'BID',
+          type: rand(key) > 0.5 ? 'C' : 'P',
+          size: Math.floor(rand(key) * 250) + 10,
+          orderType: rand(key) > 0.65 ? 'SWEEP' : 'BLOCK',
+          side: rand(key) > 0.48 ? 'ASK' : 'BID',
         });
       }
       return {

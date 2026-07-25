@@ -61,7 +61,7 @@ const ExposureMatrix = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
 
   const GROUPS: { key: 'gex' | 'dex' | 'vex'; label: string; unit: string }[] = [
     { key: 'gex', label: 'GEX', unit: '1% move' },
-    { key: 'dex', label: 'DEX', unit: '1σ move' },
+    { key: 'dex', label: 'DEX', unit: 'Δ notional' },
     { key: 'vex', label: 'VEX', unit: '1% vol' },
   ];
 
@@ -122,7 +122,10 @@ const ExposureMatrix = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
                 <td className="px-2 py-1 bg-inset border-r border-borderSubtle/40 font-mono text-micro font-semibold tnum text-textSecondary whitespace-nowrap">
                   {row.strike % 1 === 0 ? row.strike.toFixed(0) : row.strike.toFixed(2)}
                   {row.pin && (
-                    <span className="ml-1.5 font-mono text-micro font-bold uppercase tracking-wider text-textPrimary">
+                    <span
+                      title="Pin — max open-interest strike"
+                      className="ml-1.5 font-mono text-micro font-bold uppercase tracking-wider text-textPrimary"
+                    >
                       pin
                     </span>
                   )}

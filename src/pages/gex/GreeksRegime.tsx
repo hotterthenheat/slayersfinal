@@ -87,7 +87,7 @@ const CharmChart = ({ points }: { points: { time: string; deltaShift: number }[]
         <rect x={X(points.length - 3)} y={0} width={W - X(points.length - 3)} height={H} fill="rgba(255,149,0,0.06)" />
         <path d={area} fill={up ? 'rgba(48,209,88,0.14)' : 'rgba(255,59,48,0.14)'} />
         <path d={points.map((p, i) => `${i === 0 ? 'M' : 'L'}${X(i).toFixed(1)},${Y(p.deltaShift).toFixed(1)}`).join(' ')} fill="none" stroke={up ? BULL : BEAR} strokeWidth={1.75} />
-        <text x={X(points.length - 3) + 4} y={12} fontSize={10} fill="#FF9500" fontFamily="monospace">POWER HOUR</text>
+        <text x={X(points.length - 3) + 4} y={12} fontSize={10} className="fill-warn" fontFamily="monospace">POWER HOUR</text>
         {h && (
           <>
             <line x1={X(h.i)} x2={X(h.i)} y1={0} y2={H} stroke="rgba(255,255,255,0.35)" strokeWidth={0.6} />
@@ -131,13 +131,13 @@ const VannaChart = ({ points }: { points: { volShockPct: number; hedgeUsd: numbe
       >
         <line x1={W / 2} x2={W / 2} y1={0} y2={H} stroke="#fff" strokeOpacity={0.12} strokeDasharray="3 3" />
         <line x1={0} x2={W} y1={Y(0)} y2={Y(0)} stroke="#fff" strokeOpacity={0.12} />
-        <path d={points.map((p, i) => `${i === 0 ? 'M' : 'L'}${X(i).toFixed(1)},${Y(p.hedgeUsd).toFixed(1)}`).join(' ')} fill="none" stroke="#ededed" strokeWidth={1.75} />
-        <text x={6} y={H - 4} fontSize={10} fill="#7d7d7d" fontFamily="monospace">−3% IV</text>
-        <text x={W - 40} y={H - 4} fontSize={10} fill="#7d7d7d" fontFamily="monospace">+3% IV</text>
+        <path d={points.map((p, i) => `${i === 0 ? 'M' : 'L'}${X(i).toFixed(1)},${Y(p.hedgeUsd).toFixed(1)}`).join(' ')} fill="none" className="stroke-textPrimary" strokeWidth={1.75} />
+        <text x={6} y={H - 4} fontSize={10} className="fill-textMuted" fontFamily="monospace">−3% IV</text>
+        <text x={W - 40} y={H - 4} fontSize={10} className="fill-textMuted" fontFamily="monospace">+3% IV</text>
         {h && (
           <>
             <line x1={X(h.i)} x2={X(h.i)} y1={0} y2={H} stroke="rgba(255,255,255,0.35)" strokeWidth={0.6} />
-            <circle cx={X(h.i)} cy={Y(points[h.i].hedgeUsd)} r={2.6} fill="#ededed" />
+            <circle cx={X(h.i)} cy={Y(points[h.i].hedgeUsd)} r={2.6} className="fill-textPrimary" />
           </>
         )}
       </svg>

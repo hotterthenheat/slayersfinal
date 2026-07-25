@@ -50,7 +50,7 @@ const AnimatedNumber = ({ value, format = v => v.toFixed(2), flash = true, class
         <span
           key={pulse.n}
           aria-hidden
-          className={`pointer-events-none absolute inset-y-0 -inset-x-[0.15em] rounded-[2px] ${
+          className={`pointer-events-none absolute inset-y-0 -inset-x-[0.15em] rounded-sm ${
             pulse.dir === 'up' ? 'animate-tick-up' : 'animate-tick-down'
           }`}
         />

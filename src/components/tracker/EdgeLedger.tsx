@@ -180,6 +180,7 @@ const EdgeLedger = () => {
       {
         key: 'mfe',
         header: 'MFE',
+        help: 'MFE',
         align: 'right',
         sortValue: t => t.mfePct,
         render: t => <span className="text-textSecondary tnum">{fmtPct(t.mfePct)}</span>,
@@ -187,6 +188,7 @@ const EdgeLedger = () => {
       {
         key: 'mae',
         header: 'MAE',
+        help: 'MAE',
         align: 'right',
         sortValue: t => t.maePct,
         render: t => <span className="text-bear/80 tnum">{fmtPct(t.maePct)}</span>,
@@ -201,6 +203,7 @@ const EdgeLedger = () => {
       {
         key: 'r',
         header: 'R',
+        help: 'R',
         align: 'right',
         sortValue: t => t.rMultiple,
         render: t => <span className={`tnum ${t.rMultiple >= 0 ? 'text-bull' : 'text-bear'}`}>{fmtR(t.rMultiple)}</span>,

@@ -11,6 +11,8 @@ import MetricGrid from '../../components/ui/MetricGrid';
 import type { Tone } from '../../components/ui/tones';
 import { useToast } from '../../components/ui/Toast';
 import TickerTag from '../../components/ui/TickerTag';
+import Term from '../../components/ui/Term';
+import type { TermKey } from '../../data/terms';
 import TapeRowDrawer from './TapeRowDrawer';
 import type { FlowPrint, PrintSentiment, TapeSummary } from '../../types/flowdesk';
 
@@ -177,6 +179,8 @@ interface TapeCol {
   group: GroupName;
   label: string;
   align?: 'right';
+  /** Dictionary key — wraps the header label in a <Term> jargon explainer */
+  help?: TermKey;
   /** static td text/colour classes */
   cls: string;
   /** row-dependent tone classes */
@@ -209,6 +213,7 @@ const ALL_COLS: TapeCol[] = [
     id: 'expdte',
     group: 'Contract',
     label: 'Exp · DTE',
+    help: 'DTE',
     align: 'right',
     cls: 'text-label tnum text-textSecondary',
     cell: r => (
@@ -221,6 +226,7 @@ const ALL_COLS: TapeCol[] = [
     id: 'otm',
     group: 'Contract',
     label: 'OTM',
+    help: 'OTM%',
     align: 'right',
     cls: 'text-label tnum',
     dyn: r => (r.otmPct >= 0 ? 'text-bull' : 'text-bear'),
@@ -286,6 +292,7 @@ const ALL_COLS: TapeCol[] = [
     id: 'oi',
     group: 'Activity',
     label: 'OI',
+    help: 'OI',
     align: 'right',
     cls: 'text-label tnum text-textSecondary',
     cell: r => r.oi.toLocaleString(),
@@ -294,6 +301,7 @@ const ALL_COLS: TapeCol[] = [
     id: 'doi',
     group: 'Activity',
     label: 'ΔOI',
+    help: 'ΔOI',
     align: 'right',
     cls: 'text-label tnum',
     cell: r =>
@@ -310,6 +318,7 @@ const ALL_COLS: TapeCol[] = [
     id: 'voi',
     group: 'Activity',
     label: 'V/OI',
+    help: 'Vol/OI',
     align: 'right',
     cls: 'text-label tnum',
     dyn: r => (r.volOverOI >= 5 ? 'text-warn font-semibold' : 'text-textSecondary'),
@@ -319,6 +328,7 @@ const ALL_COLS: TapeCol[] = [
     id: 'iv',
     group: 'Activity',
     label: 'IV',
+    help: 'IV',
     align: 'right',
     cls: 'text-label tnum text-textSecondary',
     cell: r => `${r.iv.toFixed(1)}%`,
@@ -900,7 +910,7 @@ const LiveTape = () => {
                           groupStart ? 'border-l' : ''
                         } ${c.align === 'right' ? 'text-right' : 'text-left'}`}
                       >
-                        {c.label}
+                        {c.help ? <Term k={c.help}>{c.label}</Term> : c.label}
                       </th>
                     );
                   })}

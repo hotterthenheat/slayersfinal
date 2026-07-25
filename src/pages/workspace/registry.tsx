@@ -16,6 +16,10 @@ import WallDrift from '../../components/gex/vannacharm/WallDrift';
 import RegimePanel from '../../components/gex/vollab/RegimePanel';
 import MonteCarloPanel from '../proveit/MonteCarloPanel';
 import LiquidityPanel from '../../components/flowdesk/LiquidityPanel';
+import NetPremiumPanel from '../../components/flowdesk/NetPremiumPanel';
+import PulseFlowTape from '../../components/flowdesk/PulseFlowTape';
+import FlowAlertsPanel from '../../components/flowdesk/FlowAlertsPanel';
+import GradientChart from '../../components/gex/GradientChart';
 import SwingMapChart from '../../components/swing/SwingMapChart';
 import SignalBadge from '../../components/ui/SignalBadge';
 import type { Tone } from '../../components/ui/tones';
@@ -92,9 +96,53 @@ export const WIDGETS: WidgetDef[] = [
     ),
   },
   {
+    key: 'gradient-chart',
+    title: 'Gradient Chart',
+    description: 'Dealer gamma / charm field across the session — the tape drawn over it',
+    w: 8,
+    h: 6,
+    minW: 4,
+    minH: 4,
+    render: ctx => (
+      <div className="h-full min-h-0 p-2 flex flex-col">
+        <GradientChart ticker={ctx.ticker} revision={ctx.revision} levels={ctx.gex.levels} height={200} />
+      </div>
+    ),
+  },
+  {
+    key: 'flow-tape',
+    title: 'Options Flow',
+    description: 'Session print stream — premium, aggressor, sweeps & SigScore; click to isolate a contract',
+    w: 8,
+    h: 6,
+    minW: 4,
+    minH: 4,
+    render: ctx => <PulseFlowTape ticker={ctx.ticker} revision={ctx.revision} />,
+  },
+  {
+    key: 'flow-alerts',
+    title: 'Flow Alerts',
+    description: 'Typed alerts from the print stream — repeaters, grenades & sizable sweeps',
+    w: 4,
+    h: 6,
+    minW: 3,
+    minH: 3,
+    render: ctx => <FlowAlertsPanel ticker={ctx.ticker} revision={ctx.revision} />,
+  },
+  {
+    key: 'net-premium',
+    title: 'Net Premium',
+    description: 'Net call vs put premium tide through the session, next to price',
+    w: 4,
+    h: 6,
+    minW: 3,
+    minH: 3,
+    render: ctx => <NetPremiumPanel ticker={ctx.ticker} revision={ctx.revision} />,
+  },
+  {
     key: 'liquidity-map',
     title: 'Liquidity Map',
-    description: 'Resting-liquidity heatmap on a TradingView chart — walls, dark pool & VWAP',
+    description: 'Order-book heatmap over time — resting shelves, pulls & absorption behind price',
     w: 8,
     h: 9,
     minW: 4,
@@ -110,7 +158,6 @@ export const WIDGETS: WidgetDef[] = [
           darkPoolLevels={dp.levels.map(l => ({ price: l.price, notional: l.notional }))}
           nodes={ctx.gex.nodes}
           oiByStrike={ctx.snapshot.chain.map(n => ({ strike: n.strike, oi: n.callOI + n.putOI }))}
-          deltaByPrice={ctx.cmd.orderFlow.deltaByPrice}
           orderFlow={{ vwap: ctx.cmd.orderFlow.vwap, poc: ctx.cmd.orderFlow.poc }}
           focusPrice={ctx.focusPrice ?? null}
         />

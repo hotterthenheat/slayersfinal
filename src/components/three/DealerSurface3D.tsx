@@ -4,6 +4,7 @@ import { OrbitControls, Html, Line } from '@react-three/drei';
 import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { rampColor } from '../experience/surfaceRamps';
+import { fmtUsd } from '../../data/gex';
 
 /*
   A READABLE dealer-exposure surface. The old render was a glowing shape with no
@@ -21,14 +22,6 @@ const RISE = 1.15;
 const xForCol = (c: number, cols: number) => (c / (cols - 1) - 0.5) * WIDTH;
 const zForRow = (r: number, rows: number) => (0.5 - r / (rows - 1)) * DEPTH; // r=0 (near) toward camera
 
-function fmtUsd(v: number): string {
-  const a = Math.abs(v);
-  const s = v < 0 ? '−' : '';
-  if (a >= 1e9) return `${s}$${(a / 1e9).toFixed(1)}B`;
-  if (a >= 1e6) return `${s}$${(a / 1e6).toFixed(0)}M`;
-  if (a >= 1e3) return `${s}$${(a / 1e3).toFixed(0)}K`;
-  return `${s}$${a.toFixed(0)}`;
-}
 
 function buildGeometry(grid: number[][]): THREE.BufferGeometry {
   const rows = grid.length;

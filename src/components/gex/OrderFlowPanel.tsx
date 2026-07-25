@@ -3,14 +3,24 @@ import { fmtUsd } from '../../data/gex';
 import type { OrderFlowData } from '../../types/gex';
 import { BULL, BEAR } from './palette';
 import HoverReadout from '../ui/HoverReadout';
+import Term from '../ui/Term';
+import type { TermKey } from '../../data/terms';
+import { svgHoverIndex } from '../ui/svgHover';
 
 interface OrderFlowPanelProps {
   data: OrderFlowData;
 }
 
+/** Minutes into the session → HH:MM wall clock off the 09:30 open. */
+const sessionClock = (minute: number): string => {
+  const t = 9 * 60 + 30 + minute;
+  return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
+};
+
 /** SVG area chart of session cumulative delta — sign decides the fill tone. */
 const CumulativeDelta = ({ data }: { data: OrderFlowData }) => {
   const points = data.cumulativeDelta;
+  const [hover, setHover] = useState<{ i: number; x: number; y: number } | null>(null);
   if (points.length < 2) return null;
 
   const W = 100;
@@ -31,13 +41,39 @@ const CumulativeDelta = ({ data }: { data: OrderFlowData }) => {
   const negative = (points[points.length - 1]?.value ?? 0) < 0;
   const stroke = negative ? BEAR : BULL;
   const fill = negative ? 'rgba(255,59,48,0.10)' : 'rgba(48,209,88,0.10)';
+  const hp = hover ? points[hover.i] : null;
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-24" role="img" aria-label="Session cumulative delta">
-      <line x1="0" y1={zeroY} x2={W} y2={zeroY} stroke="rgba(255,255,255,0.08)" strokeWidth="0.4" />
-      <path d={area} fill={fill} />
-      <path d={line} fill="none" stroke={stroke} strokeWidth="0.7" vectorEffect="non-scaling-stroke" />
-    </svg>
+    <>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="none"
+        className="w-full h-24 cursor-crosshair"
+        role="img"
+        aria-label="Session cumulative delta"
+        onMouseMove={e => setHover({ i: svgHoverIndex(e, points.length), x: e.clientX, y: e.clientY })}
+        onMouseLeave={() => setHover(null)}
+      >
+        <line x1="0" y1={zeroY} x2={W} y2={zeroY} stroke="rgba(255,255,255,0.08)" strokeWidth="0.4" />
+        <path d={area} fill={fill} />
+        <path d={line} fill="none" stroke={stroke} strokeWidth="0.7" vectorEffect="non-scaling-stroke" />
+        {hover && (
+          <line x1={x(hover.i)} x2={x(hover.i)} y1={0} y2={H} stroke="rgba(255,255,255,0.25)" strokeWidth="0.5" vectorEffect="non-scaling-stroke" />
+        )}
+      </svg>
+      {hover && hp && (
+        <HoverReadout x={hover.x} y={hover.y}>
+          <div className="font-mono text-caption font-bold text-textPrimary tnum">{sessionClock(hp.minute)}</div>
+          <div className={`mt-0.5 font-mono text-data font-bold tnum ${hp.value >= 0 ? 'text-bull' : 'text-bear'}`}>
+            {hp.value >= 0 ? '+' : '−'}
+            {fmtUsd(Math.abs(hp.value))}
+          </div>
+          <div className="mt-0.5 font-mono text-micro text-textSecondary">
+            {hp.value >= 0 ? 'net buying pressure building' : 'net selling pressure building'}
+          </div>
+        </HoverReadout>
+      )}
+    </>
   );
 };
 
@@ -98,9 +134,11 @@ const DeltaByPriceBars = ({ data }: { data: OrderFlowData }) => {
   );
 };
 
-const Stat = ({ label, value, tone = 'text-textPrimary' }: { label: string; value: string; tone?: string }) => (
+const Stat = ({ label, help, value, tone = 'text-textPrimary' }: { label: string; help?: TermKey; value: string; tone?: string }) => (
   <span className="min-w-0">
-    <span className="block font-mono text-micro uppercase tracking-widest text-textMuted">{label}</span>
+    <span className="block font-mono text-micro uppercase tracking-widest text-textMuted">
+      {help ? <Term k={help}>{label}</Term> : label}
+    </span>
     <span className={`block font-mono text-micro font-semibold tnum ${tone}`}>{value}</span>
   </span>
 );
@@ -117,11 +155,11 @@ const OrderFlowPanel = ({ data }: OrderFlowPanelProps) => (
       <DeltaByPriceBars data={data} />
     </div>
     <div className="grid grid-cols-5 gap-2 pt-2 border-t border-borderSubtle">
-      <Stat label="Buy Vol" value={fmtUsd(data.buyVolume)} tone="text-bull" />
-      <Stat label="Sell Vol" value={fmtUsd(data.sellVolume)} tone="text-bear" />
+      <Stat label="Buy $" value={fmtUsd(data.buyVolume)} tone="text-bull" />
+      <Stat label="Sell $" value={fmtUsd(data.sellVolume)} tone="text-bear" />
       <Stat label="Delta" value={fmtUsd(data.netDelta)} tone={data.netDelta >= 0 ? 'text-bull' : 'text-bear'} />
-      <Stat label="VWAP" value={data.vwap.toFixed(2)} />
-      <Stat label="POC" value={data.poc.toFixed(2)} />
+      <Stat label="VWAP" help="VWAP" value={`$${data.vwap.toFixed(2)}`} />
+      <Stat label="POC" help="POC" value={`$${data.poc.toFixed(2)}`} />
     </div>
   </div>
 );

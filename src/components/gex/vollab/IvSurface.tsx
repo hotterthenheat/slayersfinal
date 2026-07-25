@@ -39,9 +39,9 @@ const IvSurface = ({ data }: IvSurfaceProps) => {
   return (
     <div className="flex gap-2 h-full min-h-0">
       <div className="flex-grow min-w-0 flex flex-col gap-1">
-        <div className="flex-grow flex flex-col gap-[2px]">
+        <div className="flex-grow flex flex-col gap-0.5">
           {dte.map((t, r) => (
-            <div key={t} className="flex items-stretch gap-[2px] flex-1 min-h-[18px]">
+            <div key={t} className="flex items-stretch gap-0.5 flex-1 min-h-[18px]">
               <span className="w-8 shrink-0 flex items-center font-mono text-micro tnum text-textMuted">{t}d</span>
               {cells[r].map((iv, c) => (
                 <span
@@ -49,14 +49,14 @@ const IvSurface = ({ data }: IvSurfaceProps) => {
                   onMouseEnter={e => setHover({ t, m: moneyness[c], iv, x: e.clientX, y: e.clientY })}
                   onMouseMove={e => setHover({ t, m: moneyness[c], iv, x: e.clientX, y: e.clientY })}
                   onMouseLeave={() => setHover(h => (h && h.t === t && h.m === moneyness[c] ? null : h))}
-                  className="flex-1 rounded-[2px] cursor-crosshair hover:brightness-125"
+                  className="flex-1 rounded-sm cursor-crosshair hover:brightness-125"
                   style={{ background: rampColor((iv - min) / span) }}
                 />
               ))}
             </div>
           ))}
         </div>
-        <div className="flex items-center gap-[2px] pl-8">
+        <div className="flex items-center gap-0.5 pl-8">
           {moneyness.map((m, c) => (
             <span key={m} className="flex-1 text-center font-mono text-micro tnum text-textMuted">
               {c % 4 === 0 ? m.toFixed(2) : ''}

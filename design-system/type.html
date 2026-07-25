@@ -1,0 +1,67 @@
+<!-- @dsCard group="Type" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slayer Terminal — Type Ramp</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #050505;
+    color: #ededed;
+    font-family: Inter, -apple-system, "Segoe UI", sans-serif;
+    padding: 24px;
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+  .mono { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
+  h1 {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em;
+    margin-bottom: 4px;
+  }
+  .sub { font-size: 11px; color: #7d7d7d; margin-bottom: 20px; max-width: 560px; line-height: 1.6; }
+  .spec { display: flex; align-items: baseline; gap: 16px; padding: 10px 0; border-bottom: 1px solid rgba(28,28,28,0.6); }
+  .spec:last-child { border-bottom: 0; }
+  .meta {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 10px; color: #7d7d7d; width: 150px; flex: none;
+    text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  h2 {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.18em;
+    color: #7d7d7d; margin: 24px 0 4px;
+  }
+  .tnum { font-variant-numeric: tabular-nums; }
+  .numcol {
+    display: inline-block; text-align: right;
+    font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12px;
+    background: #070707; border: 1px solid #1c1c1c; border-radius: 6px; padding: 8px 12px;
+    line-height: 1.7;
+  }
+</style>
+</head>
+<body>
+  <h1>Type Ramp</h1>
+  <div class="sub">tailwind.config.ts — font-size tokens only (no bundled line-height; leading is set per call site via leading-*). JetBrains Mono carries all data; Inter carries prose. Mono labels run uppercase with 0.05–0.1em tracking.</div>
+
+  <h2>Mono — the data tiers (JetBrains Mono)</h2>
+  <div class="spec"><span class="meta">text-micro · 10px</span><span class="mono" style="font-size:10px; text-transform:uppercase; letter-spacing:0.05em; color:#7d7d7d;">Axis ticks · densest legends · corner chips</span></div>
+  <div class="spec"><span class="meta">text-label · 11px</span><span class="mono" style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:#a3a3a3;">The dominant uppercase label — table headers, badges</span></div>
+  <div class="spec"><span class="meta">text-caption · 12px</span><span class="mono tnum" style="font-size:12px; line-height:16px;">Table cells · 4,821 × $12.40 · secondary text</span></div>
+  <div class="spec"><span class="meta">text-data · 13px</span><span class="mono tnum" style="font-size:13px; font-weight:600;">Panel body / data rows · $482.19 · −$1.2M</span></div>
+  <div class="spec"><span class="meta">text-lg · 18px</span><span class="mono tnum" style="font-size:18px; font-weight:600; line-height:1;">$1.84B — StatCard hero value (leading-none)</span></div>
+
+  <h2>Sans — the prose tiers (Inter)</h2>
+  <div class="spec"><span class="meta">text-body · 14px</span><span style="font-size:14px; color:#a3a3a3;">Prose in guide, legal and landing copy.</span></div>
+  <div class="spec"><span class="meta">text-read · 15px</span><span style="font-size:15px;">Prose emphasis and card titles.</span></div>
+  <div class="spec"><span class="meta">text-lead · 16px</span><span style="font-size:16px;">The largest inline copy in the terminal.</span></div>
+  <div class="spec"><span class="meta">text-xl · 20px</span><span style="font-size:20px; font-weight:600; letter-spacing:-0.025em;">Page title (PageHeader)</span></div>
+
+  <h2>The tnum rule — every numeric column</h2>
+  <div class="sub" style="margin-bottom:8px;">.tnum { font-variant-numeric: tabular-nums; } on every cell, stat value and read-out, so digits align and never shift as values tick. Negative money uses the typographic minus U+2212 via the shared fmtUsd.</div>
+  <span class="numcol tnum">$1,204.50<br>−$318.20<br>$92.07<br>−$4.1M</span>
+</body>
+</html>

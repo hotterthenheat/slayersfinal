@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Target, TrendingDown, Layers, Scale, History, ArrowDownUp, GitBranch } from 'lucide-react';
 import {
   buildEarningsIntel,
@@ -12,6 +12,8 @@ import Panel from '../ui/Panel';
 import StatCard from '../ui/StatCard';
 import MetricGrid from '../ui/MetricGrid';
 import SignalBadge from '../ui/SignalBadge';
+import HoverReadout from '../ui/HoverReadout';
+import { svgHoverIndex } from '../ui/svgHover';
 import { toneText, type Tone } from '../ui/tones';
 
 interface EarningsIntelProps {
@@ -69,24 +71,36 @@ const CrushPath = ({ view }: { view: EarningsIntelView }) => {
   const printIdx = pts.findIndex(p => p.phase === 'print');
   const px = X(printIdx);
   const baseY = Y(view.baseIv);
+  const [hover, setHover] = useState<{ i: number; x: number; y: number } | null>(null);
+  const hp = hover ? pts[hover.i] : null;
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none" role="img" aria-label="Expected IV-crush path — ATM implied volatility around the earnings print">
+    <>
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      className="w-full cursor-crosshair"
+      style={{ height: H }}
+      preserveAspectRatio="none"
+      role="img"
+      aria-label="Expected IV-crush path — ATM implied volatility around the earnings print"
+      onMouseMove={e => setHover({ i: svgHoverIndex(e, n), x: e.clientX, y: e.clientY })}
+      onMouseLeave={() => setHover(null)}
+    >
       {/* post-print crush zone */}
       <rect x={px} y={0} width={W - px} height={H} fill="rgba(255,149,0,0.05)" />
       {/* post-crush baseline */}
       <line x1={6} x2={W - 6} y1={baseY} y2={baseY} stroke="#6b6b6b" strokeOpacity={0.6} strokeWidth={1} strokeDasharray="4 3" />
-      <text x={8} y={baseY - 4} fontSize={10} fill="#7d7d7d" fontFamily="monospace">
+      <text x={8} y={baseY - 4} fontSize={10} className="fill-textMuted" fontFamily="monospace">
         base IV {view.baseIv.toFixed(0)}%
       </text>
       {/* print marker */}
-      <line x1={px} x2={px} y1={6} y2={H - 4} stroke="#FF9500" strokeOpacity={0.65} strokeWidth={1} />
-      <text x={px + 4} y={14} fontSize={10} fill="#FF9500" fontFamily="monospace">
+      <line x1={px} x2={px} y1={6} y2={H - 4} className="stroke-warn" strokeOpacity={0.65} strokeWidth={1} />
+      <text x={px + 4} y={14} fontSize={10} className="fill-warn" fontFamily="monospace">
         PRINT · {view.frontIv.toFixed(0)}% → crush {view.ivCrushPct.toFixed(0)}%
       </text>
       {/* IV path */}
-      <path d={line} fill="none" stroke="#ededed" strokeWidth={1.9} strokeLinejoin="round" />
+      <path d={line} fill="none" className="stroke-textPrimary" strokeWidth={1.9} strokeLinejoin="round" />
       {pts.map((p, i) => (
-        <circle key={p.day} cx={X(i)} cy={Y(p.iv)} r={p.phase === 'print' ? 3 : 1.8} fill={p.phase === 'print' ? '#FF9500' : '#ededed'} />
+        <circle key={p.day} cx={X(i)} cy={Y(p.iv)} r={p.phase === 'print' ? 3 : 1.8} className={p.phase === 'print' ? 'fill-warn' : 'fill-textPrimary'} />
       ))}
       {/* x labels */}
       {pts.map((p, i) =>
@@ -96,7 +110,55 @@ const CrushPath = ({ view }: { view: EarningsIntelView }) => {
           </text>
         ) : null
       )}
+      {hover && (
+        <line x1={X(hover.i)} x2={X(hover.i)} y1={0} y2={H} stroke="rgba(255,255,255,0.25)" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+      )}
     </svg>
+    {hover && hp && (
+      <HoverReadout x={hover.x} y={hover.y}>
+        <div className="font-mono text-caption font-bold text-textPrimary tnum">{hp.label}</div>
+        <div className="mt-0.5 font-mono text-data font-bold tnum text-textPrimary">{hp.iv.toFixed(1)}% ATM IV</div>
+        <div className={`font-mono text-micro tnum ${hp.iv - view.baseIv >= 0 ? 'text-warn' : 'text-bull'}`}>
+          {hp.iv - view.baseIv >= 0 ? '+' : '−'}
+          {Math.abs(hp.iv - view.baseIv).toFixed(1)} pts vs base
+        </div>
+        <div className="mt-0.5 font-mono text-micro text-textSecondary">
+          {hp.phase === 'print' ? 'the print — crush hits overnight' : hp.phase === 'ramp' ? 'pre-print · event premium building' : 'post-print · premium crushed'}
+        </div>
+      </HoverReadout>
+    )}
+    </>
+  );
+};
+
+/** Shared prob-vs-priced hover body — the delta is the number behind CHEAP/RICH. */
+const ProbReadout = ({ label, movePct, prob, priced }: { label: string; movePct?: number; prob: number; priced: number }) => {
+  const deltaPts = (prob - priced) * 100;
+  return (
+    <>
+      <div className="flex items-baseline gap-2">
+        <span className="font-mono text-caption font-bold text-textPrimary">{label}</span>
+        {movePct != null && (
+          <span className={`font-mono text-micro tnum ${movePct > 0.05 ? 'text-bull' : movePct < -0.05 ? 'text-bear' : 'text-textSecondary'}`}>
+            {fmtMove(movePct)}
+          </span>
+        )}
+      </div>
+      <div className="mt-1 flex flex-col gap-0.5 font-mono text-micro tnum">
+        <div className="flex items-center gap-3">
+          <span className="text-textMuted uppercase tracking-wider">model</span>
+          <span className="ml-auto text-textPrimary">{(prob * 100).toFixed(0)}%</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-textMuted uppercase tracking-wider">priced</span>
+          <span className="ml-auto text-textPrimary">{(priced * 100).toFixed(0)}%</span>
+        </div>
+      </div>
+      <div className={`mt-1 font-mono text-micro font-semibold tnum ${deltaPts >= 0 ? 'text-bull' : 'text-warn'}`}>
+        {deltaPts >= 0 ? '+' : '−'}
+        {Math.abs(deltaPts).toFixed(1)} pts vs priced · {deltaPts > 3 ? 'CHEAP' : deltaPts < -3 ? 'RICH' : 'fair'}
+      </div>
+    </>
   );
 };
 
@@ -106,8 +168,14 @@ const StateRow = ({ s, maxP }: { s: StateNode; maxP: number }) => {
   const delta = s.prob - s.priced;
   const mis: { tone: Tone; label: string } | null =
     delta > 0.03 ? { tone: 'bull', label: 'CHEAP' } : delta < -0.03 ? { tone: 'warn', label: 'RICH' } : null;
+  const [hx, setHx] = useState<{ x: number; y: number } | null>(null);
   return (
-    <div className="px-3.5 py-2 grid grid-cols-[92px_1fr_88px] items-center gap-3">
+    <div
+      className="px-3.5 py-2 grid grid-cols-[92px_1fr_88px] items-center gap-3 cursor-crosshair hover:bg-white/[0.03]"
+      onMouseEnter={e => setHx({ x: e.clientX, y: e.clientY })}
+      onMouseMove={e => setHx({ x: e.clientX, y: e.clientY })}
+      onMouseLeave={() => setHx(null)}
+    >
       <span className="flex flex-col">
         <span className="font-mono text-label font-semibold text-textPrimary">{s.label}</span>
         <span className={`font-mono text-micro tnum ${moveTone}`}>{fmtMove(s.movePct)}</span>
@@ -121,6 +189,11 @@ const StateRow = ({ s, maxP }: { s: StateNode; maxP: number }) => {
         <span className="font-mono text-label tnum text-textSecondary">{(s.prob * 100).toFixed(0)}%</span>
         {mis && <SignalBadge tone={mis.tone}>{mis.label}</SignalBadge>}
       </div>
+      {hx && (
+        <HoverReadout x={hx.x} y={hx.y}>
+          <ProbReadout label={s.label} movePct={s.movePct} prob={s.prob} priced={s.priced} />
+        </HoverReadout>
+      )}
     </div>
   );
 };
@@ -204,12 +277,27 @@ const TreeRow = ({ last = false, children }: { last?: boolean; children: ReactNo
 );
 
 /** Model prob bar with the white priced tick — same grammar as the state rows. */
-const ProbBar = ({ model, priced }: { model: number; priced: number }) => (
-  <span className="relative block h-2 rounded-full bg-white/[0.06] overflow-hidden">
-    <span className="block h-full rounded-full holo-bar" style={{ width: `${Math.min(100, model * 100)}%` }} />
-    <span className="absolute top-0 bottom-0 w-px bg-white/70" style={{ left: `${Math.min(100, priced * 100)}%` }} aria-hidden />
-  </span>
-);
+const ProbBar = ({ model, priced, label, movePct }: { model: number; priced: number; label?: string; movePct?: number }) => {
+  const [hx, setHx] = useState<{ x: number; y: number } | null>(null);
+  return (
+    <>
+      <span
+        className="relative block h-2 rounded-full bg-white/[0.06] overflow-hidden cursor-crosshair"
+        onMouseEnter={e => setHx({ x: e.clientX, y: e.clientY })}
+        onMouseMove={e => setHx({ x: e.clientX, y: e.clientY })}
+        onMouseLeave={() => setHx(null)}
+      >
+        <span className="block h-full rounded-full holo-bar" style={{ width: `${Math.min(100, model * 100)}%` }} />
+        <span className="absolute top-0 bottom-0 w-px bg-white/70" style={{ left: `${Math.min(100, priced * 100)}%` }} aria-hidden />
+      </span>
+      {hx && label != null && (
+        <HoverReadout x={hx.x} y={hx.y}>
+          <ProbReadout label={label} movePct={movePct} prob={model} priced={priced} />
+        </HoverReadout>
+      )}
+    </>
+  );
+};
 
 /**
  * Post-earnings scenario tree — a structural branch of the reaction the model and
@@ -281,7 +369,7 @@ const ScenarioTree = ({ view }: { view: EarningsIntelView }) => {
                   <span className="flex items-center gap-1.5">
                     <span className={`font-mono text-caption font-semibold ${toneText[g.tone]}`}>{g.label}</span>
                   </span>
-                  <ProbBar model={stat.model} priced={stat.priced} />
+                  <ProbBar model={stat.model} priced={stat.priced} label={g.label} />
                   <span className="flex items-center justify-end gap-1.5">
                     <span className="font-mono text-caption tnum text-textSecondary">{(stat.model * 100).toFixed(0)}%</span>
                     {stat.mis && <SignalBadge tone={stat.mis.tone}>{stat.mis.label}</SignalBadge>}
@@ -308,7 +396,7 @@ const ScenarioTree = ({ view }: { view: EarningsIntelView }) => {
                             <span className="font-mono text-caption text-textPrimary">{s.label}</span>
                             <span className={`font-mono text-label tnum ${moveTone}`}>{fmtMove(s.movePct)}</span>
                           </span>
-                          <ProbBar model={s.prob} priced={s.priced} />
+                          <ProbBar model={s.prob} priced={s.priced} label={s.label} movePct={s.movePct} />
                           <span className="font-mono text-caption tnum text-textSecondary text-right">
                             {(s.prob * 100).toFixed(0)}%
                           </span>

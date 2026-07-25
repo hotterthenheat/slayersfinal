@@ -9,6 +9,7 @@ import MetricGrid from '../../components/ui/MetricGrid';
 import SignalBadge from '../../components/ui/SignalBadge';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import DataTable, { type Column } from '../../components/ui/DataTable';
+import HoverReadout from '../../components/ui/HoverReadout';
 import { Play, Pause, SkipBack, SkipForward, ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react';
 
 const SERIES = [
@@ -71,6 +72,9 @@ const MigrationChart = ({
   onHover: (i: number | null) => void;
   onScrub: (i: number) => void;
 }) => {
+  // Cursor position for the floating read-out — the crosshair index lives in
+  // the parent (it also drives the "Showing as of" card), only x/y is local.
+  const [mouse, setMouse] = useState<{ x: number; y: number } | null>(null);
   const W = 1000;
   const H = 340;
   const padL = 4;
@@ -87,13 +91,20 @@ const MigrationChart = ({
     Math.max(0, Math.min(points.length - 1, Math.round(((clientX - rect.left) / rect.width) * (points.length - 1))));
 
   return (
+    <>
     <svg
       viewBox={`0 0 ${W} ${H}`}
       className="w-full cursor-pointer"
       style={{ height: H }}
       preserveAspectRatio="none"
-      onMouseLeave={() => onHover(null)}
-      onMouseMove={e => onHover(idxFrom(e.clientX, (e.currentTarget as SVGElement).getBoundingClientRect()))}
+      onMouseLeave={() => {
+        onHover(null);
+        setMouse(null);
+      }}
+      onMouseMove={e => {
+        onHover(idxFrom(e.clientX, (e.currentTarget as SVGElement).getBoundingClientRect()));
+        setMouse({ x: e.clientX, y: e.clientY });
+      }}
       onClick={e => onScrub(idxFrom(e.clientX, (e.currentTarget as SVGElement).getBoundingClientRect()))}
     >
       {/* event markers sit behind the level lines */}
@@ -122,6 +133,32 @@ const MigrationChart = ({
       <line x1={X(cursor)} x2={X(cursor)} y1={padY - 8} y2={H - padY} stroke={FOCUS} strokeOpacity={0.9} strokeWidth={1.5} />
       <circle cx={X(cursor)} cy={Y(points[cursor].spot)} r={3.5} fill={FOCUS} />
     </svg>
+    {hover !== null && mouse && (
+      <HoverReadout x={mouse.x} y={mouse.y}>
+        <div className="flex items-baseline gap-2">
+          <span className="font-mono text-caption font-bold text-textPrimary tnum">{points[hover].time}</span>
+          <span className="font-mono text-micro text-textMuted tnum">spot ${points[hover].spot.toFixed(2)}</span>
+        </div>
+        <div className="mt-1 flex flex-col gap-0.5">
+          {SERIES.map(s => (
+            <div key={s.key} className="flex items-center justify-between gap-4 font-mono text-micro">
+              <span className="flex items-center gap-1.5 text-textSecondary">
+                <span className="inline-block w-2 h-0.5 rounded-full" style={{ background: s.color }} />
+                {s.label}
+              </span>
+              <span className="tnum text-textPrimary">${(points[hover][s.key] as number).toFixed(2)}</span>
+            </div>
+          ))}
+          <div className="flex items-center justify-between gap-4 font-mono text-micro">
+            <span className="text-textSecondary">Net GEX</span>
+            <span className={`tnum font-semibold ${points[hover].netGex >= 0 ? 'text-bull' : 'text-bear'}`}>
+              {fmtUsd(points[hover].netGex)}
+            </span>
+          </div>
+        </div>
+      </HoverReadout>
+    )}
+  </>
   );
 };
 
@@ -208,12 +245,13 @@ const GexHistory = () => {
     { key: 'time', header: 'Time', render: p => <span className="font-mono text-caption text-textSecondary tnum leading-4">{p.time}</span> },
     { key: 'spot', header: 'Spot', align: 'right', sortValue: p => p.spot, render: p => <span className="font-mono text-caption text-textPrimary tnum leading-4">${p.spot.toFixed(2)}</span> },
     { key: 'callWall', header: 'Call Wall', align: 'right', sortValue: p => p.callWall, render: p => <span className="font-mono text-caption tnum text-bull leading-4">${p.callWall.toFixed(2)}</span> },
-    { key: 'flip', header: 'Flip', align: 'right', sortValue: p => p.flip, render: p => <span className="font-mono text-caption tnum text-flip leading-4">${p.flip.toFixed(2)}</span> },
+    { key: 'flip', header: 'Flip', help: 'Flip', align: 'right', sortValue: p => p.flip, render: p => <span className="font-mono text-caption tnum text-flip leading-4">${p.flip.toFixed(2)}</span> },
     { key: 'putWall', header: 'Put Wall', align: 'right', sortValue: p => p.putWall, render: p => <span className="font-mono text-caption tnum text-bear leading-4">${p.putWall.toFixed(2)}</span> },
-    { key: 'king', header: 'King', align: 'right', sortValue: p => p.king, render: p => <span className="font-mono text-caption tnum text-king leading-4">${p.king.toFixed(2)}</span> },
+    { key: 'king', header: 'King', help: 'King', align: 'right', sortValue: p => p.king, render: p => <span className="font-mono text-caption tnum text-king leading-4">${p.king.toFixed(2)}</span> },
     {
       key: 'netGex',
       header: 'Net GEX',
+      help: 'GEX',
       align: 'right',
       sortValue: p => p.netGex,
       render: p => <span className={`font-mono text-caption tnum ${p.netGex >= 0 ? 'text-bull' : 'text-bear'} leading-4`}>{fmtUsd(p.netGex)}</span>,

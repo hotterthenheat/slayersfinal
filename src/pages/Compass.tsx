@@ -227,22 +227,21 @@ const Compass = () => {
       },
       {
         key: 'move',
-        header: 'Exp Move',
+        header: '1σ Move',
         align: 'right',
         sortValue: s => s.expectedMovePct,
-        render: s => (
-          <span className={s.expectedMovePct >= 0 ? 'text-bull' : 'text-bear'}>
-            {s.expectedMovePct >= 0 ? '+' : ''}
-            {s.expectedMovePct}%
-          </span>
-        ),
+        render: s => <span className="text-textPrimary">±{s.expectedMovePct}%</span>,
       },
       {
         key: 'health',
         header: 'Health',
         align: 'right',
         sortValue: s => s.health,
-        render: s => <span className="text-textSecondary">{s.health}</span>,
+        render: s => (
+          <span className="text-textSecondary">
+            {s.health}<span className="text-textMuted">/100</span>
+          </span>
+        ),
       },
       {
         key: 'conf',

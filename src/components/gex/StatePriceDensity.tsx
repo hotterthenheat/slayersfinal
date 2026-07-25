@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Activity, GitCompareArrows, Layers, TrendingDown } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildStateDensity, type StateDensityView, type MassShift, type SkewLabel } from '../../data/statedensity';
@@ -6,7 +6,9 @@ import type { MarketSnapshot } from '../../types/market';
 import Panel from '../ui/Panel';
 import StatCard from '../ui/StatCard';
 import MetricGrid from '../ui/MetricGrid';
-import { BULL, BEAR } from './palette';
+import { BULL, BEAR, SPOT } from './palette';
+import HoverReadout from '../ui/HoverReadout';
+import { svgHoverIndex } from '../ui/svgHover';
 import SignalBadge from '../ui/SignalBadge';
 import PriceThresholdOdds from './PriceThresholdOdds';
 import type { Tone } from '../ui/tones';
@@ -32,6 +34,7 @@ const DensityChart = ({ view }: { view: StateDensityView }) => {
   const W = 560;
   const H = 190;
   const { density: D, realizedDensity: R, sigma2, forward, spot } = view;
+  const [hover, setHover] = useState<{ i: number; x: number; y: number } | null>(null);
   const lo = D[0].price;
   const hi = D[D.length - 1].price;
   const span = hi - lo || 1;
@@ -47,27 +50,65 @@ const DensityChart = ({ view }: { view: StateDensityView }) => {
   const rTail = X(sigma2[1]);
   const sx = X(spot);
   const fx = X(forward);
+  const hp = hover ? D[hover.i] : null;
+  const hr = hover ? R[hover.i] : null;
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none" role="img" aria-label="Risk-neutral terminal-price density — implied versus realized">
+    <>
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      className="w-full cursor-crosshair"
+      style={{ height: H }}
+      preserveAspectRatio="none"
+      role="img"
+      aria-label="Risk-neutral terminal-price density — implied versus realized"
+      onMouseMove={e => setHover({ i: svgHoverIndex(e, D.length), x: e.clientX, y: e.clientY })}
+      onMouseLeave={() => setHover(null)}
+    >
       {/* shaded 2σ tails */}
       <rect x={0} y={0} width={Math.max(0, lTail)} height={H} fill="rgba(255,59,48,0.06)" />
       <rect x={rTail} y={0} width={Math.max(0, W - rTail)} height={H} fill="rgba(48,209,88,0.06)" />
       {/* implied density */}
       <path d={impArea} fill="rgba(151,136,196,0.12)" />
-      <path d={impLine} fill="none" stroke="#ededed" strokeWidth={1.75} vectorEffect="non-scaling-stroke" />
+      <path d={impLine} fill="none" className="stroke-textPrimary" strokeWidth={1.75} vectorEffect="non-scaling-stroke" />
       {/* realized density — dotted overlay */}
       <path d={realLine} fill="none" stroke="#8f8f8f" strokeWidth={1.1} strokeDasharray="2 2.5" vectorEffect="non-scaling-stroke" />
       {/* forward marker */}
       <line x1={fx} x2={fx} y1={0} y2={H} stroke="#6b6b6b" strokeOpacity={0.7} strokeWidth={1} strokeDasharray="3 3" />
       <text x={fx + 3} y={12} fontSize={10} fill="#6b6b6b" fontFamily="monospace">FWD {forward.toFixed(0)}</text>
       {/* spot marker — white, "where the market is" */}
-      <line x1={sx} x2={sx} y1={0} y2={H} stroke="#ededed" strokeOpacity={0.85} strokeWidth={1.25} />
-      <text x={sx + 3} y={H - 5} fontSize={10} fill="#ededed" fontFamily="monospace">SPOT {spot.toFixed(2)}</text>
+      <line x1={sx} x2={sx} y1={0} y2={H} stroke={SPOT} strokeOpacity={0.85} strokeWidth={1.25} />
+      <text x={sx + 3} y={H - 5} fontSize={10} fill={SPOT} fontFamily="monospace">SPOT {spot.toFixed(2)}</text>
       {/* 2σ tick labels */}
       <text x={Math.max(2, lTail - 2)} y={H - 5} fontSize={10} fill={BEAR} fontFamily="monospace" textAnchor="end">−2σ</text>
       <text x={Math.min(W - 2, rTail + 2)} y={12} fontSize={10} fill={BULL} fontFamily="monospace">+2σ</text>
+      {hp && (
+        <line x1={X(hp.price)} x2={X(hp.price)} y1={0} y2={H} stroke="rgba(255,255,255,0.25)" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+      )}
     </svg>
+    {hover && hp && (
+      <HoverReadout x={hover.x} y={hover.y}>
+        <div className="font-mono text-caption font-bold text-textPrimary tnum">{hp.price.toFixed(2)}</div>
+        <div className="font-mono text-micro text-textMuted uppercase tracking-wider">
+          terminal price · {signed(((hp.price - spot) / spot) * 100, 1)}% vs spot
+        </div>
+        <div className="mt-1 flex flex-col gap-0.5 font-mono text-micro tnum">
+          <div className="flex items-center gap-3">
+            <span className="text-textMuted uppercase tracking-wider">implied</span>
+            <span className="ml-auto text-textPrimary">{hp.density.toFixed(4)}</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-textMuted uppercase tracking-wider">realized</span>
+            <span className="ml-auto text-textPrimary">{(hr?.density ?? 0).toFixed(4)}</span>
+          </div>
+        </div>
+        <div className="mt-1 flex items-center gap-2.5 font-mono text-micro font-semibold tnum">
+          <span className="text-bear">P&lt; {(hp.cdf * 100).toFixed(1)}%</span>
+          <span className="text-bull">P&gt; {((1 - hp.cdf) * 100).toFixed(1)}%</span>
+        </div>
+      </HoverReadout>
+    )}
+    </>
   );
 };
 
@@ -120,12 +161,12 @@ const ForwardVolChart = ({ view }: { view: StateDensityView }) => {
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none" role="img" aria-label="Forward-vol curve — volatility priced between tenors">
       <path d={spotLine} fill="none" stroke="#6b6b6b" strokeWidth={1.1} strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
-      <path d={fwdLine} fill="none" stroke="#ededed" strokeWidth={1.75} vectorEffect="non-scaling-stroke" />
+      <path d={fwdLine} fill="none" className="stroke-textPrimary" strokeWidth={1.75} vectorEffect="non-scaling-stroke" />
       {pts.map((p, i) => (
         <g key={p.label}>
-          <circle cx={X(i)} cy={Y(p.forwardVol)} r={2.4} fill="#ededed" />
+          <circle cx={X(i)} cy={Y(p.forwardVol)} r={2.4} className="fill-textPrimary" />
           <text x={X(i)} y={H - 6} fontSize={10} fill="#6b6b6b" fontFamily="monospace" textAnchor="middle">{p.label}</text>
-          <text x={X(i)} y={Y(p.forwardVol) - 6} fontSize={10} fill="#ededed" fontFamily="monospace" textAnchor="middle">
+          <text x={X(i)} y={Y(p.forwardVol) - 6} fontSize={10} className="fill-textPrimary" fontFamily="monospace" textAnchor="middle">
             {p.forwardVol.toFixed(1)}
           </text>
         </g>

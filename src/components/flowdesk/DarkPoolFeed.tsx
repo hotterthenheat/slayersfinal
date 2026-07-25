@@ -1,9 +1,10 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Layers } from 'lucide-react';
-import { buildDarkPoolFeed } from '../../data/darkpoolfeed';
+import { buildDarkPoolFeed, type DarkPoolFeedRow } from '../../data/darkpoolfeed';
 import { fmtUsd } from '../../data/gex';
 import Panel from '../../components/ui/Panel';
 import TickerTag from '../../components/ui/TickerTag';
+import HoverReadout from '../../components/ui/HoverReadout';
 
 /** Shares → compact (13.51M / 820K). */
 const fmtShares = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(2)}M` : `${Math.round(n / 1e3)}K`);
@@ -17,6 +18,7 @@ const fmtShares = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(2)}M` : `${Mat
 const DarkPoolFeed = () => {
   const sectors = useMemo(() => buildDarkPoolFeed(), []);
   const maxSectorNotional = Math.max(...sectors.map(s => s.notional), 1);
+  const [hover, setHover] = useState<{ row: DarkPoolFeedRow; sector: string; sectorPct: number; x: number; y: number } | null>(null);
 
   return (
     <Panel
@@ -64,7 +66,10 @@ const DarkPoolFeed = () => {
               {sec.rows.map(r => (
                 <div
                   key={r.ticker}
-                  className="flex items-center px-3 py-1.5 border-b border-borderSubtle/25 last:border-0 hover:bg-white/[0.02] transition-colors"
+                  onMouseEnter={e => setHover({ row: r, sector: sec.sector, sectorPct: (r.notional / sec.notional) * 100, x: e.clientX, y: e.clientY })}
+                  onMouseMove={e => setHover({ row: r, sector: sec.sector, sectorPct: (r.notional / sec.notional) * 100, x: e.clientX, y: e.clientY })}
+                  onMouseLeave={() => setHover(h => (h && h.row.ticker === r.ticker ? null : h))}
+                  className="flex items-center px-3 py-1.5 border-b border-borderSubtle/25 last:border-0 cursor-crosshair hover:bg-white/[0.02] transition-colors"
                 >
                   <span className="w-12 shrink-0 flex flex-col leading-none">
                     <TickerTag symbol={r.ticker} className="font-mono text-label font-bold text-textPrimary" />
@@ -84,6 +89,25 @@ const DarkPoolFeed = () => {
           </div>
         ))}
       </div>
+      {hover && (
+        <HoverReadout x={hover.x} y={hover.y}>
+          <div className="flex items-baseline gap-2">
+            <span className="font-mono text-caption font-bold text-textPrimary">{hover.row.name}</span>
+            <span className="font-mono text-micro text-textMuted tnum">${hover.row.price.toFixed(2)}</span>
+          </div>
+          <div className="mt-0.5 flex items-baseline gap-3 font-mono text-micro uppercase tracking-wider text-textMuted">
+            <span>
+              Notional <span className="text-textPrimary tnum">{fmtUsd(hover.row.notional)}</span>
+            </span>
+            <span>
+              Prints <span className="text-textPrimary tnum">{hover.row.prints}</span>
+            </span>
+          </div>
+          <div className="mt-0.5 font-mono text-micro text-textSecondary">
+            <span className="tnum">{hover.sectorPct.toFixed(1)}%</span> of {hover.sector} dark-pool notional
+          </div>
+        </HoverReadout>
+      )}
     </Panel>
   );
 };

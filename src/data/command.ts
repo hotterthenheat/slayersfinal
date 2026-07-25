@@ -8,6 +8,7 @@
 ==================================================
 */
 
+import Simulator from '../core/simulator';
 import type { MarketSnapshot } from '../types/market';
 import type {
   CommandView,
@@ -114,49 +115,82 @@ function buildKeyLevels(snapshot: MarketSnapshot, levels: KeyLevels, pin: number
 }
 
 // ---- order flow ---------------------------------------------------------------
-function buildOrderFlow(snapshot: MarketSnapshot): OrderFlowData {
-  const { ticker, spot, priceHistory } = snapshot;
+const SESSION_BARS = 390; // one cash session of 1m bars (mirrors the simulator)
 
-  // Cumulative delta follows intraday price impulses with deterministic noise
+/**
+ * Session order flow built from the live session's 1m candles, so every stat
+ * is genuinely session-scoped and internally consistent:
+ * - ONE per-bar signed delta feeds BOTH the cumulative line and the by-price
+ *   histogram, so the histogram sums to the net delta by construction.
+ * - VWAP is truly volume-weighted (Σ typical·vol / Σ vol) and POC is the
+ *   max-VOLUME price bucket, not the most-visited one.
+ * - Buy/sell $ volume derive from the session's actual traded notional.
+ */
+function buildOrderFlow(snapshot: MarketSnapshot): OrderFlowData {
+  const { ticker, spot } = snapshot;
+  const all = Simulator.getCandles(ticker) ?? [];
+  // Trailing session-sized window. NOT length % SESSION_BARS — live bars roll
+  // in one at a time, and a modulo window would collapse the "session" stats
+  // to a couple of bars the minute after load.
+  const bars = all.slice(-SESSION_BARS);
+
+  if (!bars.length) {
+    return { cumulativeDelta: [], deltaByPrice: [], buyVolume: 0, sellVolume: 0, netDelta: 0, vwap: spot, poc: spot };
+  }
+
+  // One signed dollar-delta per bar — bar body × traded shares (× a flow
+  // multiplier standing in for the unobserved aggressor split), plus
+  // deterministic microstructure noise on the body.
+  const totalVol = bars.reduce((a, b) => a + b.volume, 0) || 1;
+  const notional = totalVol * spot; // session $ traded
+  const barDelta = bars.map((b, i) => {
+    const noise = (h01(`${ticker}-cd-${i}`) - 0.5) * 0.0004 * spot;
+    return (b.close - b.open + noise) * b.volume * 1000;
+  });
+
   const cumulativeDelta: DeltaPoint[] = [];
   let cum = 0;
-  for (let i = 1; i < priceHistory.length; i++) {
-    const move = priceHistory[i] - priceHistory[i - 1];
-    const noise = (h01(`${ticker}-cd-${i}`) - 0.5) * 0.4;
-    cum += (move / spot) * 8e9 + noise * 2e7;
+  for (let i = 0; i < bars.length; i++) {
+    cum += barDelta[i];
     cumulativeDelta.push({ minute: i, value: cum });
   }
+  const netDelta = cum;
 
-  // Delta by price — bucketed around the session range
-  const lo = Math.min(...priceHistory);
-  const hi = Math.max(...priceHistory);
+  // Volume-at-price + delta-by-price over the same bars and buckets
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const b of bars) {
+    if (b.low < lo) lo = b.low;
+    if (b.high > hi) hi = b.high;
+  }
   const BUCKETS = 12;
   const width = (hi - lo) / BUCKETS || 1;
+  const bucketDelta = new Array<number>(BUCKETS).fill(0);
+  const bucketVol = new Array<number>(BUCKETS).fill(0);
+  for (let i = 0; i < bars.length; i++) {
+    const b = Math.min(BUCKETS - 1, Math.max(0, Math.floor((bars[i].close - lo) / width)));
+    bucketDelta[b] += barDelta[i];
+    bucketVol[b] += bars[i].volume;
+  }
   const deltaByPrice: DeltaByPrice[] = [];
   let poc = spot;
-  let pocVol = 0;
+  let pocVol = -1;
   for (let b = 0; b < BUCKETS; b++) {
     const price = lo + width * (b + 0.5);
-    let value = 0;
-    let vol = 0;
-    for (let i = 1; i < priceHistory.length; i++) {
-      if (priceHistory[i] >= lo + width * b && priceHistory[i] < lo + width * (b + 1)) {
-        value += (priceHistory[i] - priceHistory[i - 1]) * 4e7;
-        vol += 1;
-      }
-    }
-    if (vol > pocVol) {
-      pocVol = vol;
+    if (bucketVol[b] > pocVol) {
+      pocVol = bucketVol[b];
       poc = price;
     }
-    deltaByPrice.push({ price: Number(price.toFixed(2)), value });
+    deltaByPrice.push({ price: Number(price.toFixed(2)), value: bucketDelta[b] });
   }
 
-  const netDelta = cumulativeDelta[cumulativeDelta.length - 1]?.value ?? 0;
-  const gross = Math.abs(netDelta) + 6e8 + h01(`${ticker}-gross`) * 4e8;
-  const buyVolume = (gross + netDelta) / 2;
-  const sellVolume = (gross - netDelta) / 2;
-  const vwap = priceHistory.reduce((a, p) => a + p, 0) / (priceHistory.length || 1);
+  // True session VWAP: typical price weighted by bar volume
+  let pv = 0;
+  for (const b of bars) pv += ((b.high + b.low + b.close) / 3) * b.volume;
+  const vwap = pv / totalVol;
+
+  const buyVolume = (notional + netDelta) / 2;
+  const sellVolume = (notional - netDelta) / 2;
 
   return {
     cumulativeDelta,
@@ -182,9 +216,11 @@ export function makeAutoNote(snapshot: MarketSnapshot, levels: KeyLevels, bias: 
     return `Spot pressing ${fmt(levels.putWall)} put wall; dealer support being tested.`;
   if (pct(spot, levels.flip) < 0.12)
     return `Price is at the ${fmt(levels.flip)} gamma flip — dealer hedging switches direction here.`;
-  if (spot < levels.flip)
+  // Regime notes defer to the book-derived bias (the badge next to this note),
+  // so the note can never claim short gamma while the badge reads supportive.
+  if (spot < levels.flip && bias !== 'BULLISH')
     return `Trading below the ${fmt(levels.flip)} flip; dealers short gamma — expect amplified moves.`;
-  if (bias === 'BULLISH')
+  if (spot > levels.flip && bias === 'BULLISH')
     return `Supportive positioning above ${fmt(levels.flip)}; dips into ${fmt(levels.putWall)} likely absorbed.`;
   return null;
 }

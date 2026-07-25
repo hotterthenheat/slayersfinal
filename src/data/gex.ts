@@ -39,7 +39,7 @@ function h01(seed: string): number {
 
 // ---- formatting -------------------------------------------------------------
 export function fmtUsd(v: number): string {
-  const sign = v < 0 ? '-' : '';
+  const sign = v < 0 ? '−' : '';
   const a = Math.abs(v);
   if (a >= 1e9) return `${sign}$${(a / 1e9).toFixed(1)}B`;
   if (a >= 1e6) return `${sign}$${(a / 1e6).toFixed(1)}M`;
@@ -53,7 +53,7 @@ function metricValue(node: StrikeNode, metric: GexMetric): number {
     case 'GEX':
       return node.netGex;
     case 'VEX':
-      return node.netVex * 40; // scale VEX into a comparable dollar magnitude
+      return node.netVex; // true $ per 1% vol — each metric view scales to its own max
     case 'GEX+VEX':
       return node.netGex * 0.7 + node.netVex * 28;
   }
@@ -212,7 +212,10 @@ function buildPrints(ticker: string, spot: number): DarkPoolPrint[] {
     const daysAgo = 1 + (hash(`${ticker}-dp-${i}-d`) % 12);
     const when = new Date(now.getTime() - daysAgo * 86400000);
     const price = Number((spot * (0.995 + n1 * 0.01)).toFixed(2));
-    const notional = Number((0.8 + n2 * 3.4).toFixed(2));
+    // Shares-first like the Dark Pool desk (5K–255K shares, small-skewed tail),
+    // so the same cross prints the same size on both surfaces.
+    const shares = Math.round(5000 + Math.pow(n2, 2.5) * 250000);
+    const notional = shares * price;
     const hh = 9 + (hash(`${ticker}-dp-${i}-h`) % 7);
     const mm = hash(`${ticker}-dp-${i}-m`) % 60;
     const ss = hash(`${ticker}-dp-${i}-s`) % 60;
@@ -220,7 +223,7 @@ function buildPrints(ticker: string, spot: number): DarkPoolPrint[] {
       price,
       notional,
       date: `${when.getMonth() + 1}/${when.getDate()}`,
-      size: Math.round((notional * 1e9) / price / 100) * 100,
+      size: Math.round(shares / 100) * 100,
       time: `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`,
     });
   }
@@ -258,7 +261,9 @@ export function pulseMatrix(matrix: GexMatrixData, tick: number): GexMatrixData 
       const p = h01(`${matrix.strikes[r]}-${c}-pulse`);
       const slow = Math.sin(2 * Math.PI * (phase01 + p));
       const fast = Math.sin(2 * Math.PI * (phase01 * 3 + p * 7));
-      return { ...cell, value: cell.value * (1 + 0.14 * slow + 0.05 * fast) };
+      // Normalized by the wave's own peak (1.19) so a pulsed cell can never
+      // exceed the ±maxAbs the color rail prints — the scale stays honest.
+      return { ...cell, value: (cell.value * (1 + 0.14 * slow + 0.05 * fast)) / 1.19 };
     })
   );
   return { ...matrix, cells };

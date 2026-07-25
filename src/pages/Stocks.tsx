@@ -152,6 +152,7 @@ const WatchStar = ({ on, onClick }: { on: boolean; onClick: () => void }) => (
     }}
     aria-pressed={on}
     aria-label={on ? 'Remove from watchlist' : 'Add to watchlist'}
+    title={on ? 'Remove from watchlist' : 'Add to watchlist'}
     className={`inline-flex items-center justify-center w-6 h-6 rounded transition-colors ${
       on ? 'text-select' : 'text-textMuted hover:text-textSecondary'
     }`}
@@ -281,6 +282,7 @@ const Stocks = () => {
                 }}
                 aria-pressed={compareSet.has(p.ticker)}
                 aria-label={compareSet.has(p.ticker) ? 'Remove from compare' : 'Add to compare'}
+                title={compareSet.has(p.ticker) ? 'Remove from compare' : 'Add to compare'}
                 className={`inline-flex items-center justify-center w-5 h-5 rounded border transition-colors ${
                   compareSet.has(p.ticker)
                     ? 'border-select/40 bg-select/15 text-select'
@@ -300,7 +302,7 @@ const Stocks = () => {
       render: p => (
         <span className="flex flex-col">
           <span className="font-mono text-caption font-bold text-textPrimary leading-4">{p.ticker}</span>
-          <span className="text-micro text-textMuted truncate">{p.name}</span>
+          <span title={p.name} className="text-micro text-textMuted truncate">{p.name}</span>
         </span>
       ),
     },

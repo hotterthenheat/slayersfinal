@@ -49,7 +49,7 @@ export interface GexMatrixData {
 
 export interface DarkPoolPrint {
   price: number;
-  /** Notional in $B */
+  /** Notional in $ (shares x price) */
   notional: number;
   date: string;
   /** Shares crossed */

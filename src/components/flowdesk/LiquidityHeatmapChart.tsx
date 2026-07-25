@@ -14,15 +14,16 @@ import {
 import Simulator from '../../core/simulator';
 import { aggregateCandles, tfMinutes, type Timeframe } from '../../data/timeframe';
 import { candleTheme } from '../gex/candleTheme';
+import ChartLegend from '../ui/ChartLegend';
 import { CALL_WALL, PUT_WALL, FLIP, DARK_POOL, FOCUS, SPOT } from '../gex/palette';
 
-// Slayer signature candles (mint/rose) — direction reads in colour so it pops
-// against the violet liquidity field without duplicating the green/red the walls
-// own.
+// Slayer signature candles (holo-silver/purple) — direction reads in colour so
+// it pops against the gold liquidity book without duplicating the green/red the
+// walls own.
 const theme = candleTheme;
 import { LiquidityHeatmapPrimitive } from './liquidityHeatmapPrimitive';
 import { FlowPillsPrimitive } from './flowPillsPrimitive';
-import { makeLiquidityLUT, type LiquidityField } from '../../data/liquidityField';
+import { buildLiquidityBook, makeLiquidityLUT, type LiquidityBook } from '../../data/liquidityField';
 import { buildFlowSweeps, type FlowSweep } from '../../data/flowSweeps';
 import type { Candle } from '../../types/market';
 import type { KeyLevels } from '../../types/gex';
@@ -32,11 +33,13 @@ interface LiquidityHeatmapChartProps {
   ticker: string;
   /** Bumped every simulator tick so the chart folds in the newest bar */
   revision: number;
+  spot: number;
   levels: KeyLevels;
-  /** Resting-liquidity profile painted behind the candles */
-  field: LiquidityField;
   overlays: LiqOverlays;
   darkPoolLevels?: LiqDPLevel[];
+  /** Strike open interest + GEX nodes — the structural resting book */
+  oiByStrike?: { strike: number; oi: number }[];
+  nodes?: { strike: number; value: number }[];
   /** Session VWAP & point-of-control for the reference lines */
   orderFlow?: { vwap: number; poc: number };
   timeframe?: Timeframe;
@@ -91,10 +94,12 @@ const toVolume = (b: Candle) => ({
 const LiquidityHeatmapChart = ({
   ticker,
   revision,
+  spot,
   levels,
-  field,
   overlays,
   darkPoolLevels,
+  oiByStrike,
+  nodes,
   orderFlow,
   timeframe = '1m',
   height = 320,
@@ -125,6 +130,38 @@ const LiquidityHeatmapChart = ({
   const barCountRef = useRef(0);
   const barsRef = useRef<Candle[]>([]);
   const lut = useMemo(() => makeLiquidityLUT(), []);
+
+  // Cursor depth read-out — written imperatively from the crosshair handler
+  // (fires per-pixel; going through React state would re-render 60×/s for a
+  // three-span chip).
+  const bookRef = useRef<LiquidityBook | null>(null);
+  const readoutRef = useRef<HTMLDivElement | null>(null);
+  const roPriceRef = useRef<HTMLSpanElement | null>(null);
+  const roTimeRef = useRef<HTMLSpanElement | null>(null);
+  const roDepthRef = useRef<HTMLSpanElement | null>(null);
+
+  // Bars re-aggregate when the session advances; the liquidity book — the full
+  // TIME x PRICE resting-order field — re-simulates from them. Both are keyed on
+  // the tick revision: every input below derives from the same snapshot.
+  const bars = useMemo(
+    () => aggregateCandles(Simulator.getCandles(ticker) ?? [], tfMinutes(timeframe)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ticker, timeframe, revision]
+  );
+  const book = useMemo(
+    () =>
+      buildLiquidityBook({
+        ticker,
+        bars,
+        spot,
+        levels,
+        darkPool: darkPoolLevels,
+        oi: oiByStrike,
+        nodes,
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ticker, bars]
+  );
 
   // Show a full intraday session of thin bars (like a real terminal chart),
   // not a handful of fat candles. One seeded session is 390 1m bars.
@@ -246,6 +283,39 @@ const LiquidityHeatmapChart = ({
     const flow = new FlowPillsPrimitive();
     candles.attachPrimitive(flow);
 
+    // Depth-at-cursor read-out: cursor → (price row, time column) in the book
+    // grid. The axis crosshair already labels price/time; this adds the number
+    // a book map exists for — how much is resting under the cursor.
+    chart.subscribeCrosshairMove(param => {
+      const el = readoutRef.current;
+      if (!el) return;
+      const bk = bookRef.current;
+      const price = param.point ? candles.coordinateToPrice(param.point.y) : null;
+      if (!param.point || param.logical == null || price == null || !bk || bk.cols === 0) {
+        el.style.opacity = '0';
+        return;
+      }
+      const bars = barsRef.current;
+      const bi = Math.max(0, Math.min(bars.length - 1, Math.round(param.logical)));
+      const span = bk.priceMax - bk.priceMin || 1;
+      const rowF = ((price - bk.priceMin) / span) * (bk.rows - 1);
+      const col = Math.max(0, Math.min(bk.cols - 1, Math.floor((param.logical - bk.firstBar) / bk.barsPerCol)));
+      const depth =
+        rowF >= 0 && rowF <= bk.rows - 1 ? bk.intensity[col * bk.rows + Math.round(rowF)] : 0;
+      const when = bars[bi] ? new Date(bars[bi].time * 1000) : null;
+      if (roPriceRef.current) roPriceRef.current.textContent = `$${price.toFixed(2)}`;
+      if (roTimeRef.current)
+        roTimeRef.current.textContent = when
+          ? `${String(when.getHours()).padStart(2, '0')}:${String(when.getMinutes()).padStart(2, '0')}`
+          : '';
+      if (roDepthRef.current) {
+        const label = depth >= 0.65 ? 'deep shelf' : depth >= 0.3 ? 'moderate' : depth > 0.06 ? 'thin' : 'open';
+        roDepthRef.current.textContent = `depth ${Math.round(depth * 100)}% · ${label}`;
+        roDepthRef.current.style.color = depth >= 0.65 ? '#F0C45C' : depth >= 0.3 ? '#C89B3C' : '#7d7d7d';
+      }
+      el.style.opacity = '1';
+    });
+
     chartRef.current = chart;
     candleSeriesRef.current = candles;
     volumeSeriesRef.current = volume;
@@ -269,19 +339,16 @@ const LiquidityHeatmapChart = ({
     };
   }, [lut]);
 
-  // Candle + volume data and the heat field: full load on ticker/timeframe change,
-  // incremental per tick. The field re-blends upstream (memoized) and is pushed here.
+  // Candle + volume data and the liquidity book: full load on ticker/timeframe
+  // change, incremental per tick. The book re-simulates upstream (memoized) and
+  // its baked bitmap is pushed to the primitive here.
   useEffect(() => {
     const candleSeries = candleSeriesRef.current;
     const volumeSeries = volumeSeriesRef.current;
     const heat = heatRef.current;
     if (!candleSeries || !volumeSeries || !heat) return;
+    if (bars.length === 0) return;
 
-    const base = Simulator.getCandles(ticker);
-    if (!base || base.length === 0) return;
-
-    const mins = tfMinutes(timeframe);
-    const bars = aggregateCandles(base, mins);
     barCountRef.current = bars.length;
     barsRef.current = bars;
 
@@ -306,8 +373,9 @@ const LiquidityHeatmapChart = ({
       volumeSeries.update(toVolume(last));
     }
 
-    heat.setData(field, overlays.liquidity);
-  }, [ticker, revision, timeframe, overlays.liquidity, overlays.flow, field, showRecent]);
+    heat.setData(book, overlays.liquidity);
+    bookRef.current = book;
+  }, [ticker, timeframe, overlays.liquidity, overlays.flow, bars, book, showRecent]);
 
   // Volume strip visibility
   useEffect(() => {
@@ -472,19 +540,14 @@ const LiquidityHeatmapChart = ({
           />
           Resting liquidity
         </span>
-        {[
-          { label: 'Call Wall', cls: 'bg-bull' },
-          { label: 'Put Wall', cls: 'bg-bear' },
-          { label: 'Dark Pool', color: DARK_POOL },
-        ].map((item: { label: string; cls?: string; color?: string }) => (
-          <span key={item.label} className="flex items-center gap-1.5 font-mono text-micro text-textSecondary">
-            <span
-              className={`inline-block w-3 h-0.5 rounded-full ${item.cls ?? ''}`}
-              style={item.color ? { background: item.color } : undefined}
-            />
-            {item.label}
-          </span>
-        ))}
+        <ChartLegend
+          variant="line"
+          items={[
+            { label: 'Call Wall', swatchClass: 'bg-bull' },
+            { label: 'Put Wall', swatchClass: 'bg-bear' },
+            { label: 'Dark Pool', color: DARK_POOL },
+          ]}
+        />
         <span className="ml-auto font-mono text-micro text-textMuted uppercase tracking-wider hidden sm:inline">
           scroll zoom · drag pan · dbl-click reset
         </span>
@@ -502,6 +565,15 @@ const LiquidityHeatmapChart = ({
         onDoubleClick={resetView}
       >
         <div ref={containerRef} className="absolute inset-0" />
+        <div
+          ref={readoutRef}
+          aria-hidden
+          className="pointer-events-none absolute left-2 top-2 z-10 flex items-center gap-2 rounded border border-borderSubtle bg-panel/85 px-2 py-1 font-mono text-micro opacity-0 transition-opacity"
+        >
+          <span ref={roPriceRef} className="text-textPrimary tnum" />
+          <span ref={roTimeRef} className="text-textMuted tnum" />
+          <span ref={roDepthRef} className="tnum" />
+        </div>
       </div>
     </div>
   );

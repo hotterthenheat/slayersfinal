@@ -9,6 +9,7 @@
 ==================================================
 */
 
+import Simulator from '../core/simulator';
 import { dayKey, h01, hRange } from '../core/rng';
 import type { MarketSnapshot } from '../types/market';
 
@@ -62,7 +63,7 @@ function expiryLabel(dte: number): string {
 export function buildScannerRows(snapshot: MarketSnapshot): ScannerRow[] {
   const { ticker, spot, chain } = snapshot;
   const day = dayKey();
-  const cfgIv = 0.2;
+  const cfgIv = Simulator.TICKERS[ticker]?.iv ?? 0.2;
 
   const nodes = [...chain].sort((a, b) => Math.abs(a.strike - spot) - Math.abs(b.strike - spot)).slice(0, 22);
   const rows: ScannerRow[] = [];

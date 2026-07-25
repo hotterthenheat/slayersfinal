@@ -413,7 +413,7 @@ const EarningsHub = () => {
       render: e => (
         <span className="flex flex-col">
           <span className="font-mono text-caption font-bold text-textPrimary leading-4">{e.ticker}</span>
-          <span className="text-label text-textMuted truncate">{e.name}</span>
+          <span title={e.name} className="text-label text-textMuted truncate">{e.name}</span>
         </span>
       ),
     },

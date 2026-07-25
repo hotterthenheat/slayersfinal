@@ -48,8 +48,12 @@ export function buildDarkPoolFeed(): DarkPoolFeedSector[] {
     const liq = Math.log10(u.px + 10);
     const spike = hash(seed('spike')) % 9 === 0 ? hRange(seed('spikex'), 2.4, 4.2) : 1;
     const notional = hRange(seed('notional'), 40e6, 520e6) * liq * spike;
-    const avgVolPct = hRange(seed('avgvol'), 3, 60) * (hash(seed('hot')) % 7 === 0 ? hRange(seed('hotx'), 2.6, 4) : 1);
-    const size = hRange(seed('size'), 220e3, 9e6) * (spike > 1 ? 1.8 : 1);
+    // Ratio-to-own-average must center near 100% — most names trade around
+    // their norm, hot names run a multiple of it.
+    const avgVolPct = hRange(seed('avgvol'), 55, 160) * (hash(seed('hot')) % 7 === 0 ? hRange(seed('hotx'), 2.2, 2.8) : 1);
+    // Largest cross is a FRACTION of the day's own off-exchange dollars (5–35%),
+    // so a single print can never exceed the total printed beside it.
+    const size = Math.round((notional * hRange(seed('size'), 0.05, 0.35)) / u.px / 100) * 100;
     const prints = Math.round(hRange(seed('prints'), 8, 46));
     return {
       ticker: u.ticker,

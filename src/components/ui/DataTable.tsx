@@ -1,9 +1,14 @@
 import React, { useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
+import EmptyState from './EmptyState';
+import Term from './Term';
+import type { TermKey } from '../../data/terms';
 
 export interface Column<T> {
   key: string;
   header: string;
+  /** Dictionary key — wraps the header in a <Term> jargon explainer */
+  help?: TermKey;
   align?: 'left' | 'right';
   width?: string;
   /** Provide to make the column sortable */
@@ -94,7 +99,7 @@ const DataTable = <T,>({
                   {col.align === 'right' && sort?.key === col.key && (
                     sort.dir === 'desc' ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />
                   )}
-                  {col.header}
+                  {col.help ? <Term k={col.help}>{col.header}</Term> : col.header}
                   {col.align !== 'right' && sort?.key === col.key && (
                     sort.dir === 'desc' ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />
                   )}
@@ -106,8 +111,8 @@ const DataTable = <T,>({
         <tbody>
           {sortedRows.length === 0 ? (
             <tr>
-              <td colSpan={columns.length} className="px-3 py-8 text-center font-mono text-label text-textMuted">
-                {emptyText}
+              <td colSpan={columns.length}>
+                <EmptyState size="sm" title={emptyText} />
               </td>
             </tr>
           ) : (

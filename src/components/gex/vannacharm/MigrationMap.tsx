@@ -109,7 +109,7 @@ const ShiftHoverCard = ({
 };
 
 const FlipMark = ({ price, projected }: { price: number; projected?: boolean }) => (
-  <div className="flex items-center gap-1.5 px-2 py-[2px]">
+  <div className="flex items-center gap-1.5 px-2 py-0.5">
     <span className={`h-0 flex-grow border-t border-dashed ${projected ? 'border-flip/35' : 'border-flip/70'}`} />
     <span
       className={`inline-flex items-center rounded-[3px] border bg-canvas px-1.5 py-px font-mono text-micro font-bold uppercase tracking-wider whitespace-nowrap ${
@@ -151,7 +151,7 @@ const MigrationMap = ({ data }: MigrationMapProps) => {
           { label: 'Projected', cls: 'bg-white/30' },
         ].map(item => (
           <span key={item.label} className="flex items-center gap-1.5 font-mono text-micro uppercase tracking-wider text-textSecondary">
-            <span className={`inline-block w-2.5 h-[5px] rounded-[2px] ${item.cls}`} />
+            <span className={`inline-block w-2.5 h-[5px] rounded-sm ${item.cls}`} />
             {item.label}
           </span>
         ))}
@@ -181,7 +181,7 @@ const MigrationMap = ({ data }: MigrationMapProps) => {
                 hoverRow?.strike === row.strike ? 'bg-white/[0.04]' : ''
               }`}
             >
-              <span className="w-14 shrink-0 px-2 py-[4px] bg-inset border-r border-borderSubtle/40 font-mono text-micro font-semibold tnum text-textSecondary">
+              <span className="w-14 shrink-0 px-2 py-1 bg-inset border-r border-borderSubtle/40 font-mono text-micro font-semibold tnum text-textSecondary">
                 {row.strike % 1 === 0 ? row.strike.toFixed(0) : row.strike.toFixed(2)}
                 {row.pin && <span className="ml-1 font-mono text-micro font-bold uppercase text-textPrimary">pin</span>}
               </span>

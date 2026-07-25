@@ -11,6 +11,7 @@ import {
   type UTCTimestamp,
 } from 'lightweight-charts';
 import { candleTheme } from '../gex/candleTheme';
+import ChartLegend from '../ui/ChartLegend';
 import { CALL_WALL, PUT_WALL, FLIP, FOCUS } from '../gex/palette';
 import { SwingPrimitive } from './swingPrimitive';
 import { buildSwingModel, type SwingModel } from '../../data/swingModel';
@@ -41,7 +42,7 @@ const toCandle = (b: Candle) => ({
  * with its percent target, on a TradingView-grade candle chart. The daily series
  * is deterministic per ticker and ends at the live spot.
  */
-const SwingMapChart = ({ ticker, spot, height = 300, focusPrice = null, nowSec }: SwingMapChartProps) => {
+const SwingMapChart = ({ ticker, spot, revision = 0, height = 300, focusPrice = null, nowSec }: SwingMapChartProps) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
@@ -51,13 +52,21 @@ const SwingMapChart = ({ ticker, spot, height = 300, focusPrice = null, nowSec }
   const modelRef = useRef<SwingModel | null>(null);
   const loadedTickerRef = useRef('');
 
-  // Stable per ticker — the intraday tick shouldn't redraw a daily chart. The
-  // model anchors its last close to the spot captured on (re)build.
+  // Zone-under-cursor read-out — imperative (crosshair fires per-pixel)
+  const zoneChipRef = useRef<HTMLDivElement | null>(null);
+  const zcZoneRef = useRef<HTMLSpanElement | null>(null);
+  const zcBandRef = useRef<HTMLSpanElement | null>(null);
+  const zcProjRef = useRef<HTMLSpanElement | null>(null);
+
+  // Stable per ticker — the intraday tick shouldn't redraw a daily chart — but
+  // re-anchored on a coarse cadence (every ~20 scan revisions) so the daily
+  // series' last close doesn't drift away from the live spot for good.
   const now = useMemo(() => nowSec ?? Math.floor(Date.now() / 1000), [nowSec]);
+  const epoch = Math.floor(revision / 20);
   const model = useMemo(
     () => buildSwingModel(ticker, spot, now),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ticker, now]
+    [ticker, now, epoch]
   );
   modelRef.current = model;
 
@@ -127,6 +136,42 @@ const SwingMapChart = ({ ticker, spot, height = 300, focusPrice = null, nowSec }
     });
     const swing = new SwingPrimitive();
     candles.attachPrimitive(swing);
+
+    // Zone-under-cursor read-out: names the band the cursor price sits in
+    // (resistance / support / open air), its bounds, and the live distance to
+    // the projection target — the numbers the drawn shapes only imply.
+    chart.subscribeCrosshairMove(param => {
+      const el = zoneChipRef.current;
+      if (!el) return;
+      const m = modelRef.current;
+      const price = param.point ? candles.coordinateToPrice(param.point.y) : null;
+      if (!param.point || price == null || !m) {
+        el.style.opacity = '0';
+        return;
+      }
+      const inRes = price >= m.resistance.lo && price <= m.resistance.hi;
+      const inSup = price >= m.support.lo && price <= m.support.hi;
+      if (zcZoneRef.current) {
+        zcZoneRef.current.textContent = inRes ? 'resistance zone' : inSup ? 'support zone' : `$${price.toFixed(2)}`;
+        zcZoneRef.current.style.color = inRes ? PUT_WALL : inSup ? CALL_WALL : '#ededed';
+      }
+      if (zcBandRef.current)
+        zcBandRef.current.textContent = inRes
+          ? `${m.resistance.lo.toFixed(2)}–${m.resistance.hi.toFixed(2)}`
+          : inSup
+            ? `${m.support.lo.toFixed(2)}–${m.support.hi.toFixed(2)}`
+            : inRes || inSup
+              ? ''
+              : price > m.resistance.hi
+                ? 'above resistance'
+                : price < m.support.lo
+                  ? 'below support'
+                  : 'between zones';
+      if (zcProjRef.current)
+        zcProjRef.current.textContent = `target ${m.projection.to.toFixed(2)} (${m.projection.pct >= 0 ? '+' : ''}${m.projection.pct.toFixed(1)}%) · ${(((m.projection.to - price) / price) * 100).toFixed(1)}% from cursor`;
+      el.style.opacity = '1';
+    });
+
     chartRef.current = chart;
     candleSeriesRef.current = candles;
     swingRef.current = swing;
@@ -191,17 +236,15 @@ const SwingMapChart = ({ ticker, spot, height = 300, focusPrice = null, nowSec }
   return (
     <div className="flex flex-col gap-2 h-full">
       <div className="flex items-center gap-3.5 px-1 flex-wrap select-none">
-        {[
-          { label: 'Resistance', cls: 'bg-bear' },
-          { label: 'Support', cls: 'bg-bull' },
-          { label: 'Trend', color: '#E0B84E' },
-          { label: 'Proj. move', color: FLIP },
-        ].map(item => (
-          <span key={item.label} className="flex items-center gap-1.5 font-mono text-micro text-textSecondary">
-            <span className={`inline-block w-3 h-0.5 rounded-full ${item.cls ?? ''}`} style={item.color ? { background: item.color } : undefined} />
-            {item.label}
-          </span>
-        ))}
+        <ChartLegend
+          variant="line"
+          items={[
+            { label: 'Resistance', swatchClass: 'bg-bear' },
+            { label: 'Support', swatchClass: 'bg-bull' },
+            { label: 'Trend', color: '#E0B84E' },
+            { label: 'Proj. move', color: FLIP },
+          ]}
+        />
         <span className="ml-auto font-mono text-micro text-textMuted uppercase tracking-wider hidden sm:inline">daily · swing targets</span>
         <button
           onClick={resetView}
@@ -217,6 +260,15 @@ const SwingMapChart = ({ ticker, spot, height = 300, focusPrice = null, nowSec }
         onDoubleClick={resetView}
       >
         <div ref={containerRef} className="absolute inset-0" />
+        <div
+          ref={zoneChipRef}
+          aria-hidden
+          className="pointer-events-none absolute left-2 top-2 z-10 flex items-center gap-2 rounded border border-borderSubtle bg-panel/85 px-2 py-1 font-mono text-micro opacity-0 transition-opacity"
+        >
+          <span ref={zcZoneRef} className="tnum" />
+          <span ref={zcBandRef} className="text-textSecondary tnum" />
+          <span ref={zcProjRef} className="text-textMuted tnum" />
+        </div>
       </div>
     </div>
   );

@@ -22,7 +22,9 @@ import {
 import { GexNodesPrimitive } from './gexNodesPrimitive';
 import { heatPoles } from './heatmap';
 import { candleTheme } from './candleTheme';
-import type { Candle } from '../../types/market';
+import { fmtUsd } from '../../data/gex';
+import ChartLegend from '../ui/ChartLegend';
+import type { Candle, GexSnapshot } from '../../types/market';
 import type { KeyLevels, OverlayMode } from '../../types/gex';
 
 interface StrikeChartProps {
@@ -105,6 +107,17 @@ const StrikeChart = ({ ticker, revision, levels, overlay, timeframe, height = 46
   const levelsRef = useRef<KeyLevels>(levels);
   const barCountRef = useRef(0);
   const loadedRef = useRef<{ ticker: string; timeframe: Timeframe }>({ ticker: '', timeframe: '1m' });
+
+  // Node-under-cursor read-out — written imperatively from the crosshair
+  // handler (per-pixel frequency; React state would re-render the tree 60×/s).
+  const snapMapRef = useRef<Map<number, GexSnapshot>>(new Map());
+  const nodeMaxAbsRef = useRef(1);
+  const nodesShownRef = useRef(false);
+  const strikeStepRef = useRef(1);
+  const nodeChipRef = useRef<HTMLDivElement | null>(null);
+  const ncStrikeRef = useRef<HTMLSpanElement | null>(null);
+  const ncGexRef = useRef<HTMLSpanElement | null>(null);
+  const ncNoteRef = useRef<HTMLSpanElement | null>(null);
 
   // Keep the autoscale provider reading the freshest levels without re-mounting
   levelsRef.current = levels;
@@ -190,6 +203,41 @@ const StrikeChart = ({ ticker, revision, levels, overlay, timeframe, height = 46
     const nodes = new GexNodesPrimitive();
     candles.attachPrimitive(nodes);
 
+    // Node-under-cursor read-out: resolve the hovered bar's snapshot, then the
+    // strike band nearest the cursor price — using the same visibility threshold
+    // the renderer paints with, so the chip only speaks for nodes you can see.
+    chart.subscribeCrosshairMove(param => {
+      const el = nodeChipRef.current;
+      if (!el) return;
+      const hide = () => {
+        el.style.opacity = '0';
+      };
+      if (!nodesShownRef.current || !param.point || param.time == null) return hide();
+      const snap = snapMapRef.current.get(param.time as number);
+      const price = candles.coordinateToPrice(param.point.y);
+      if (!snap || price == null) return hide();
+      let best: { strike: number; value: number } | null = null;
+      let bestDist = Infinity;
+      for (const lvl of snap.levels) {
+        const d = Math.abs(lvl.strike - price);
+        if (d < bestDist) {
+          bestDist = d;
+          best = lvl;
+        }
+      }
+      const maxAbs = nodeMaxAbsRef.current;
+      if (!best || bestDist > strikeStepRef.current * 0.45 || Math.abs(best.value) < maxAbs * 0.045) return hide();
+      const pos = best.value >= 0;
+      if (ncStrikeRef.current) ncStrikeRef.current.textContent = best.strike.toFixed(2);
+      if (ncGexRef.current) {
+        ncGexRef.current.textContent = `${pos ? '+' : '−'}${fmtUsd(Math.abs(best.value))} GEX · ${Math.round((Math.abs(best.value) / maxAbs) * 100)}%`;
+        ncGexRef.current.style.color = pos ? heatPoles.pos : heatPoles.neg;
+      }
+      if (ncNoteRef.current)
+        ncNoteRef.current.textContent = pos ? 'long-gamma node — dips absorbed' : 'short-gamma node — moves amplified';
+      el.style.opacity = '1';
+    });
+
     chartRef.current = chart;
     candleSeriesRef.current = candles;
     volumeSeriesRef.current = volume;
@@ -246,6 +294,16 @@ const StrikeChart = ({ ticker, revision, levels, overlay, timeframe, height = 46
     // Node overlay is intraday-only
     const showNodes = (overlay === 'NODES' || overlay === 'BOTH') && mins <= INTRADAY_MAX_MINUTES;
     nodes.setData(snaps, maxAbs, showNodes);
+
+    // Mirror the overlay state into the cursor read-out's refs
+    snapMapRef.current = new Map(snaps.map(s => [s.time as number, s]));
+    nodeMaxAbsRef.current = maxAbs;
+    nodesShownRef.current = showNodes;
+    const strikes = snaps[0]?.levels.map(l => l.strike).sort((a, b) => a - b) ?? [];
+    let step = Infinity;
+    for (let i = 1; i < strikes.length; i++) step = Math.min(step, strikes[i] - strikes[i - 1]);
+    strikeStepRef.current = Number.isFinite(step) ? step : 1;
+    if (!showNodes && nodeChipRef.current) nodeChipRef.current.style.opacity = '0';
   }, [ticker, revision, timeframe, overlay, showRecent]);
 
   // Key-level price lines — create/destroy only when overlay or ticker changes
@@ -342,22 +400,17 @@ const StrikeChart = ({ ticker, revision, levels, overlay, timeframe, height = 46
   return (
     <div className="flex flex-col gap-2 h-full">
       <div className="flex items-center gap-3.5 px-1 flex-wrap select-none">
-        {[
-          { label: 'Call Wall', cls: 'bg-bull' },
-          { label: 'Put Wall', cls: 'bg-bear' },
-          { label: 'Flip', cls: 'bg-flip' },
-          { label: 'King', cls: 'bg-king' },
-          { label: '+GEX node', color: heatPoles.pos },
-          { label: '−GEX node', color: heatPoles.neg },
-        ].map((item: { label: string; cls?: string; color?: string }) => (
-          <span key={item.label} className="flex items-center gap-1.5 font-mono text-micro text-textSecondary">
-            <span
-              className={`inline-block w-3 h-0.5 rounded-full ${item.cls ?? ''}`}
-              style={item.color ? { background: item.color } : undefined}
-            />
-            {item.label}
-          </span>
-        ))}
+        <ChartLegend
+          variant="line"
+          items={[
+            { label: 'Call Wall', swatchClass: 'bg-bull' },
+            { label: 'Put Wall', swatchClass: 'bg-bear' },
+            { label: 'Flip', swatchClass: 'bg-flip' },
+            { label: 'King', swatchClass: 'bg-king' },
+            { label: '+GEX node', color: heatPoles.pos },
+            { label: '−GEX node', color: heatPoles.neg },
+          ]}
+        />
         <span className="ml-auto font-mono text-micro text-textMuted uppercase tracking-wider">
           scroll zoom · drag pan · dbl-click reset
         </span>
@@ -375,6 +428,15 @@ const StrikeChart = ({ ticker, revision, levels, overlay, timeframe, height = 46
         onDoubleClick={resetView}
       >
         <div ref={containerRef} className="absolute inset-0" />
+        <div
+          ref={nodeChipRef}
+          aria-hidden
+          className="pointer-events-none absolute left-2 top-2 z-10 flex items-center gap-2 rounded border border-borderSubtle bg-panel/85 px-2 py-1 font-mono text-micro opacity-0 transition-opacity"
+        >
+          <span ref={ncStrikeRef} className="text-textPrimary tnum" />
+          <span ref={ncGexRef} className="tnum" />
+          <span ref={ncNoteRef} className="text-textMuted" />
+        </div>
       </div>
     </div>
   );
