@@ -84,14 +84,15 @@ shadows. Reads bottom-up: `canvas` → `inset` (recessed) → `panel` (resting) 
 | `inputBg` | `#050505` | Form fields |
 | `ink` | `#0a0a0a` | Dark text/icons **on** light chrome (holo pills, silver CTAs) |
 
-The machined `.inst-surface` treatment, exactly as the cards render it:
+The machined `.inst-surface` treatment, exactly as `src/index.css` defines it —
+it is paint-only, so radius is **not** part of the class; call sites add
+`rounded-md` (or `rounded`, 4px, for the densest chips):
 ```css
 background-color: #0a0a0a;
 background-image: linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0) 46%);
 border: 1px solid #1c1c1c;
 border-top-color: #333333;
 box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
-border-radius: 6px;
 ```
 `.inst-emphasis` is the quiet static lift — same shape, brighter hairline, no
 animated chrome: `background-color: #0b0b0b`, gradient top stop `0.04`,
@@ -138,8 +139,12 @@ strike) · `darkpool #2dd4bf` teal, institutional off-exchange prints.
 `gammaPos #C7D3E8` · `gammaNeg #FF3B30` · `warning #FF9500`
 
 ### Holographic silver — the house accent
-One shared animated gradient, panned back and forth (`holo-pan`, 4.5s
-alternate) so every accented element carries the same living-foil sheen.
+One shared animated gradient, panned back and forth (`holo-pan`, `ease-in-out`,
+`infinite alternate`) so every accented element carries the same living-foil
+sheen. `.holo-bg` / `.holo-text` / `.holo-border` pan at **4.5s**, their gradient
+layer sized `250% 250%`; `.holo-bar` runs denser and faster (`350% 350%`,
+**3.5s**); `.holo-glow` is not a pan at all — it cycles `holo-glow-shift`, a
+**5s** box-shadow breathe.
 
 `--holo-gradient` stops: `#aeb9cf → #eef1f8 → #a8c4e8 → #d6c6ee → #f7f8fc →
 #b2c8e2 → #e2d4ee → #aeb9cf` (chrome → ice blue → pale violet → white).
@@ -147,9 +152,9 @@ alternate) so every accented element carries the same living-foil sheen.
 - `.holo-bg` — filled surface (active pills, CTAs). Uses the brighter
   `--holo-gradient-bright` run; pairs with dark `ink` text (≥7:1 at every stop).
 - `.holo-text` — gradient ink for brand marks and hero numbers.
-- `.holo-bar` — meter fills and thin rails (denser 350% pan).
+- `.holo-bar` — meter fills and thin rails (denser 350% pan, 3.5s).
 - `.holo-border` — 1px living border under a `#0a0a0a` pad.
-- `.holo-glow` — breathing chrome halo, highest-emphasis card/CTA only.
+- `.holo-glow` — breathing chrome halo (5s `holo-glow-shift`), highest-emphasis card/CTA only.
 
 All degrade to plain silver / no animation under `prefers-reduced-motion`.
 
@@ -227,15 +232,23 @@ labels, `tracking-[0.18em]` SubNav group eyebrows.
 price pill and read-out that renders a number, so digits align and never shift
 as values tick.
 
-**Radii** — Tailwind defaults, used deliberately: `2px` legend swatches ·
-`3px` SpotRule price pill, TickerTag · `4px` badges, chips, toast action,
-skeleton · `5px` SubNav pill · `6px` (`rounded-md`) the standard panel / card /
+**Radii** — mostly Tailwind defaults, plus two arbitrary steps (there is no
+`borderRadius` extension in the config): `2px` (`rounded-sm`) legend swatches ·
+`3px` (`rounded-[3px]`, arbitrary) SpotRule price pill, TickerTag · `4px`
+(`rounded`) badges, chips, toast action, skeleton · `5px` (`rounded-[5px]`,
+arbitrary) SubNav pill · `6px` (`rounded-md`) the standard panel / card /
 table / toast radius · `8px` (`rounded-lg`) floating menus and the Focus overlay.
 
 **Shadow** — one elevation for every floating surface:
 `shadow-overlay: 0 12px 32px -12px rgba(0,0,0,0.75), 0 4px 10px -6px rgba(0,0,0,0.55)`.
-The hairline border owns the edge; the shadow just sets it off the canvas. This
-is the **only** drop shadow in the system.
+The hairline border owns the edge; the shadow just sets it off the canvas. It is
+the only drop shadow any *component* uses; two exceptions live in
+`src/index.css` as house skin rather than tokens — the `.holo-glow` breathing
+chrome halo (`holo-glow-shift`, `0 0 18–20px -6px` in holo tints) and the
+react-grid-layout drag state (`.react-grid-item.react-draggable-dragging`,
+`0 12px 40px rgba(0,0,0,0.6)`). Everything else is an *inset* shadow
+(`.inst-surface` / `.inst-emphasis` top-light, `.rail-*` / `.inst-selected`
+rails, `.glass` specular edge).
 
 **Spacing** — Tailwind's 4px scale. The values that recur: panel header height
 40px with `px-3.5`; DataTable cells `px-3 py-2 leading-4`; Stat `px-2.5 py-2`;
@@ -292,9 +305,12 @@ carrying an `action` stays up 2×** — it's a decision, not a note.
 the viewport, pointer-events pass through.
 
 **Term** — inline jargon explainer. Dotted-underline `cursor-help` anchor (hover
-OR keyboard focus) revealing a fixed 224px card: mono uppercase key,
-"glossary →" link, one-line sans definition from `TERMS`. Opens upward in the
-lower half of the viewport; any scroll dismisses it.
+OR keyboard focus) revealing a fixed 224px card **portaled to `<body>`** (like
+HoverReadout — inside transformed containers `fixed` would anchor to the tile and
+clip): mono uppercase key, "glossary →" link, one-line sans definition from
+`TERMS`. The card stays hoverable and closes on a 140ms delay, so the cursor can
+bridge the anchor→card gap and reach the link. Opens upward in the lower half of
+the viewport; any scroll dismisses it.
 
 **AnimatedNumber** — rolls between values on a spring that lands well under one
 1.5s tick. **Jumps instead of rolling when the formatted width changes**, so
@@ -315,8 +331,13 @@ in `text-select`.
 axis pill (white `bg-textPrimary`, dark `text-ink` price, `tnum`). The
 TradingView price-label idiom. White = "where the market is".
 
-**ChartLegend** — wrap of 10×8px `2px`-radius swatches + 10px mono uppercase
-labels.
+**ChartLegend** — two swatch grammars, chosen by `variant`. `square` (default) is
+a wrap of 10×8px `rounded-sm` (2px) swatches + 10px mono uppercase `textMuted`
+labels — area/band fills. `line` is a 12×2px `rounded-full` rule + 10px mono
+sentence-case `textSecondary` label, spaced `gap-x-3.5` — the chart-toolbar look,
+used by StrikeChart, SwingMapChart and LiquidityHeatmapChart. Each entry passes
+either `color` (a raw CSS chart color, applied inline) or `swatchClass` (a token
+bg class such as `bg-bull`).
 
 **PageHeader** — breadcrumb → icon chip (**resolved from the nav registry**, so
 page/nav identity can't drift) + 20px title → caption subtitle; optional center
@@ -406,9 +427,12 @@ One motion hand. Sources: `tailwind.config.ts`, `src/lib/motion.ts`,
 The design layer itself is close to stateless, but these are the state hooks the
 primitives assume exist:
 
-- **Global session symbol** — the active ticker, read by `TickerTag`,
-  `TickerSearch`, `TickerJump`. Setting it loads that symbol terminal-wide and
-  fires an info toast.
+- **Global session symbol** — the active ticker, held in `MarketDataContext`
+  (`useTicker` for identity, `useMarketData` for the live snapshot) and switched
+  via `changeTicker`. Setting it loads that symbol terminal-wide; the setter
+  itself is silent. `TickerTag` adds its own "Now viewing X" info toast on click;
+  `TickerSearch` (a controlled `value`/`onChange` menu) and `TickerJump` (which
+  also routes to the destination desk via `useTickerNav`) switch without one.
 - **Toast queue** — `ToastProvider` + `useToast()`; max 4 stacked, 3.4s
   auto-dismiss, 2× for action toasts.
 - **Focus Mode** — which Panel (if any) is focused; the focused panel portals
