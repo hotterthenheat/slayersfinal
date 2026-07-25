@@ -16,13 +16,13 @@ import { aggregateCandles, tfMinutes, type Timeframe } from '../../data/timefram
 import { candleTheme } from '../gex/candleTheme';
 import { CALL_WALL, PUT_WALL, FLIP, DARK_POOL, FOCUS, SPOT } from '../gex/palette';
 
-// Slayer signature candles (mint/rose) — direction reads in colour so it pops
-// against the violet liquidity field without duplicating the green/red the walls
-// own.
+// Slayer signature candles (holo-silver/purple) — direction reads in colour so
+// it pops against the gold liquidity book without duplicating the green/red the
+// walls own.
 const theme = candleTheme;
 import { LiquidityHeatmapPrimitive } from './liquidityHeatmapPrimitive';
 import { FlowPillsPrimitive } from './flowPillsPrimitive';
-import { makeLiquidityLUT, type LiquidityField } from '../../data/liquidityField';
+import { buildLiquidityBook, makeLiquidityLUT } from '../../data/liquidityField';
 import { buildFlowSweeps, type FlowSweep } from '../../data/flowSweeps';
 import type { Candle } from '../../types/market';
 import type { KeyLevels } from '../../types/gex';
@@ -32,11 +32,13 @@ interface LiquidityHeatmapChartProps {
   ticker: string;
   /** Bumped every simulator tick so the chart folds in the newest bar */
   revision: number;
+  spot: number;
   levels: KeyLevels;
-  /** Resting-liquidity profile painted behind the candles */
-  field: LiquidityField;
   overlays: LiqOverlays;
   darkPoolLevels?: LiqDPLevel[];
+  /** Strike open interest + GEX nodes — the structural resting book */
+  oiByStrike?: { strike: number; oi: number }[];
+  nodes?: { strike: number; value: number }[];
   /** Session VWAP & point-of-control for the reference lines */
   orderFlow?: { vwap: number; poc: number };
   timeframe?: Timeframe;
@@ -91,10 +93,12 @@ const toVolume = (b: Candle) => ({
 const LiquidityHeatmapChart = ({
   ticker,
   revision,
+  spot,
   levels,
-  field,
   overlays,
   darkPoolLevels,
+  oiByStrike,
+  nodes,
   orderFlow,
   timeframe = '1m',
   height = 320,
@@ -125,6 +129,29 @@ const LiquidityHeatmapChart = ({
   const barCountRef = useRef(0);
   const barsRef = useRef<Candle[]>([]);
   const lut = useMemo(() => makeLiquidityLUT(), []);
+
+  // Bars re-aggregate when the session advances; the liquidity book — the full
+  // TIME x PRICE resting-order field — re-simulates from them. Both are keyed on
+  // the tick revision: every input below derives from the same snapshot.
+  const bars = useMemo(
+    () => aggregateCandles(Simulator.getCandles(ticker) ?? [], tfMinutes(timeframe)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ticker, timeframe, revision]
+  );
+  const book = useMemo(
+    () =>
+      buildLiquidityBook({
+        ticker,
+        bars,
+        spot,
+        levels,
+        darkPool: darkPoolLevels,
+        oi: oiByStrike,
+        nodes,
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ticker, bars]
+  );
 
   // Show a full intraday session of thin bars (like a real terminal chart),
   // not a handful of fat candles. One seeded session is 390 1m bars.
@@ -269,19 +296,16 @@ const LiquidityHeatmapChart = ({
     };
   }, [lut]);
 
-  // Candle + volume data and the heat field: full load on ticker/timeframe change,
-  // incremental per tick. The field re-blends upstream (memoized) and is pushed here.
+  // Candle + volume data and the liquidity book: full load on ticker/timeframe
+  // change, incremental per tick. The book re-simulates upstream (memoized) and
+  // its baked bitmap is pushed to the primitive here.
   useEffect(() => {
     const candleSeries = candleSeriesRef.current;
     const volumeSeries = volumeSeriesRef.current;
     const heat = heatRef.current;
     if (!candleSeries || !volumeSeries || !heat) return;
+    if (bars.length === 0) return;
 
-    const base = Simulator.getCandles(ticker);
-    if (!base || base.length === 0) return;
-
-    const mins = tfMinutes(timeframe);
-    const bars = aggregateCandles(base, mins);
     barCountRef.current = bars.length;
     barsRef.current = bars;
 
@@ -306,8 +330,8 @@ const LiquidityHeatmapChart = ({
       volumeSeries.update(toVolume(last));
     }
 
-    heat.setData(field, overlays.liquidity);
-  }, [ticker, revision, timeframe, overlays.liquidity, overlays.flow, field, showRecent]);
+    heat.setData(book, overlays.liquidity);
+  }, [ticker, timeframe, overlays.liquidity, overlays.flow, bars, book, showRecent]);
 
   // Volume strip visibility
   useEffect(() => {
