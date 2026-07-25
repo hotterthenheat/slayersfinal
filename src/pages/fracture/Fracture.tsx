@@ -4,6 +4,7 @@ import { useMarketData } from '../../context/MarketDataContext';
 import { buildFractureView } from '../../core/fracture';
 import { SPOT, BULL, BEAR } from '../../components/gex/palette';
 import HoverReadout from '../../components/ui/HoverReadout';
+import { svgHoverIndex } from '../../components/ui/svgHover';
 import ChartLegend from '../../components/ui/ChartLegend';
 import Panel from '../../components/ui/Panel';
 import StatCard from '../../components/ui/StatCard';
@@ -12,14 +13,8 @@ import SignalBadge from '../../components/ui/SignalBadge';
 import SpotRule from '../../components/ui/SpotRule';
 import type { AbsorptionRegime, ForcedFlowLevel, MoveDecomposition } from '../../types/fracture';
 import type { Tone } from '../../components/ui/tones';
+import { fmtUsd } from '../../data/gex';
 
-const fmtUsd = (v: number): string => {
-  const a = Math.abs(v);
-  const s = v < 0 ? '−' : '';
-  if (a >= 1e9) return `${s}$${(a / 1e9).toFixed(1)}B`;
-  if (a >= 1e6) return `${s}$${(a / 1e6).toFixed(0)}M`;
-  return `${s}$${(a / 1e3).toFixed(0)}K`;
-};
 
 // Severity ramp: absorbed (calm) green → neutral → amber → red (never brand silver).
 const regimeTone: Record<AbsorptionRegime, Tone> = {
@@ -158,8 +153,27 @@ const CascadeFan = ({ paths, spot, trigger }: { paths: number[][]; spot: number;
   const hi = Math.max(...all, spot) * 1.001;
   const X = (i: number) => (i / (maxLen - 1)) * W;
   const Y = (v: number) => H - ((v - lo) / (hi - lo)) * H;
+  const [hover, setHover] = useState<{ i: number; x: number; y: number } | null>(null);
+
+  // Fan cross-section at the hovered step — ended paths carry their last price.
+  let band: { p10: number; p50: number; p90: number; below: number; n: number } | null = null;
+  if (hover && paths.length) {
+    const vals = paths.map(p => p[Math.min(hover.i, p.length - 1)]).sort((a, b) => a - b);
+    const q = (f: number) => vals[Math.round(f * (vals.length - 1))];
+    band = { p10: q(0.1), p50: q(0.5), p90: q(0.9), below: vals.filter(v => v < trigger).length, n: vals.length };
+  }
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none" role="img" aria-label="Reflexive cascade fan chart — modeled feedback price paths">
+    <>
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      className="w-full cursor-crosshair"
+      style={{ height: H }}
+      preserveAspectRatio="none"
+      role="img"
+      aria-label="Reflexive cascade fan chart — modeled feedback price paths"
+      onMouseMove={e => setHover({ i: svgHoverIndex(e, maxLen), x: e.clientX, y: e.clientY })}
+      onMouseLeave={() => setHover(null)}
+    >
       <line x1={0} x2={W} y1={Y(spot)} y2={Y(spot)} stroke={SPOT} strokeOpacity={0.35} strokeWidth={1} strokeDasharray="3 3" />
       <line x1={0} x2={W} y1={Y(trigger)} y2={Y(trigger)} stroke={BEAR} strokeOpacity={0.5} strokeWidth={1} strokeDasharray="4 3" />
       {paths.map((p, i) => (
@@ -178,7 +192,36 @@ const CascadeFan = ({ paths, spot, trigger }: { paths: number[][]; spot: number;
       <text x={4} y={Y(trigger) + 11} fontSize={10} fill={BEAR} fontFamily="monospace">
         trigger ${trigger.toFixed(0)}
       </text>
+      {hover && (
+        <line x1={X(hover.i)} x2={X(hover.i)} y1={0} y2={H} stroke="rgba(255,255,255,0.25)" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+      )}
     </svg>
+    {hover && band && (
+      <HoverReadout x={hover.x} y={hover.y}>
+        <div className="font-mono text-caption font-bold text-textPrimary tnum">step {hover.i} / {maxLen - 1}</div>
+        <div className="mt-1 flex flex-col gap-0.5 font-mono text-micro tnum">
+          <div className="flex items-center gap-3">
+            <span className="text-textMuted uppercase tracking-wider">p90</span>
+            <span className="ml-auto text-bull">${band.p90.toFixed(2)}</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-textMuted uppercase tracking-wider">median</span>
+            <span className="ml-auto text-textPrimary">${band.p50.toFixed(2)}</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-textMuted uppercase tracking-wider">p10</span>
+            <span className="ml-auto text-bear">${band.p10.toFixed(2)}</span>
+          </div>
+        </div>
+        <div className={`mt-1 font-mono text-micro font-semibold tnum ${band.below ? 'text-bear' : 'text-textMuted'}`}>
+          {band.below}/{band.n} paths below trigger ({((band.below / band.n) * 100).toFixed(0)}%)
+        </div>
+        <div className="mt-0.5 font-mono text-micro text-textSecondary tnum">
+          trigger ${trigger.toFixed(2)} · {(((trigger - spot) / spot) * 100).toFixed(1)}% from spot
+        </div>
+      </HoverReadout>
+    )}
+    </>
   );
 };
 

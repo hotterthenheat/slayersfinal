@@ -138,7 +138,7 @@ const DarkPool = () => {
       sortValue: p => p.notional,
       render: p => <span className="font-mono text-caption font-semibold text-textPrimary tnum leading-4">{fmtUsd(p.notional)}</span>,
     },
-    { key: 'venue', header: 'Venue', render: p => <span className="font-mono text-caption text-textMuted leading-4">{p.venue}</span> },
+    { key: 'venue', header: 'Venue', render: p => <span title="Alternative trading system — off-exchange venue" className="font-mono text-caption text-textMuted leading-4">{p.venue}</span> },
     {
       key: 'intent',
       header: 'Inferred read',
@@ -146,7 +146,11 @@ const DarkPool = () => {
       render: p => (
         <span className="inline-flex items-center gap-2">
           <SignalBadge tone={intentTone[p.intent]}>{p.intent}</SignalBadge>
-          {p.atLevel && <ShieldCheck className="w-3.5 h-3.5 text-flip" aria-label="printed on a tracked shelf" />}
+          {p.atLevel && (
+            <span title="Printed on a tracked shelf">
+              <ShieldCheck className="w-3.5 h-3.5 text-flip" aria-label="printed on a tracked shelf" />
+            </span>
+          )}
         </span>
       ),
     },

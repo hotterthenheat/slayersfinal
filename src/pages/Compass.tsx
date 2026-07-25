@@ -237,7 +237,11 @@ const Compass = () => {
         header: 'Health',
         align: 'right',
         sortValue: s => s.health,
-        render: s => <span className="text-textSecondary">{s.health}</span>,
+        render: s => (
+          <span className="text-textSecondary">
+            {s.health}<span className="text-textMuted">/100</span>
+          </span>
+        ),
       },
       {
         key: 'conf',

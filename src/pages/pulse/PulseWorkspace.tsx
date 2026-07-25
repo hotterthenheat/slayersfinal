@@ -27,6 +27,8 @@ import {
   Check,
 } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
+import { useToast } from '../../components/ui/Toast';
+import { SkeletonRows } from '../../components/ui/Skeleton';
 import Simulator from '../../core/simulator';
 import { buildGexView, pulseMatrix } from '../../data/gex';
 import { buildExposureProfile } from '../../data/exposure';
@@ -262,11 +264,16 @@ const MemoPanelBody = memo(({ render, ctx }: { render: (c: WorkspaceCtx) => Reac
 const PulseWorkspace = () => {
   const { activeTicker, marketData, changeTicker } = useMarketData();
   const location = useLocation();
+  const toast = useToast();
 
   const [ws, setWs] = useState<PulseWorkspaceState>(loadState);
   const [addOpen, setAddOpen] = useState(false);
   const [addQuery, setAddQuery] = useState('');
   const [wsMenuOpen, setWsMenuOpen] = useState(false);
+  // Inline name editor for "Save as" / "Rename" (no window.prompt).
+  const [nameEditor, setNameEditor] = useState<{ mode: 'saveAs' | 'rename'; value: string } | null>(null);
+  // Two-step arm/confirm for the destructive layout ops.
+  const [confirmOp, setConfirmOp] = useState<'delete' | 'reset' | null>(null);
   const [maximizedId, setMaximizedId] = useState<string | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   // Layout edit mode. Pulse is a finished dashboard by DEFAULT — locked, clean,
@@ -443,18 +450,19 @@ const PulseWorkspace = () => {
     setWsMenuOpen(false);
     setMaximizedId(null);
   };
-  const saveAs = () => {
-    const name = window.prompt('Name this layout', `${active.name} copy`);
+  const commitName = () => {
+    if (!nameEditor) return;
+    const name = nameEditor.value.trim();
     if (!name) return;
-    const id = `ws-${++counterRef.current}-${name.toLowerCase().replace(/\s+/g, '-')}`;
-    const copy: PulseLayout = { ...clonePreset(active), id, name, preset: false };
-    setWs(prev => ({ ...prev, layouts: [...prev.layouts, copy], activeId: id }));
-    setWsMenuOpen(false);
-  };
-  const rename = () => {
-    const name = window.prompt('Rename layout', active.name);
-    if (!name) return;
-    mutate(l => ({ ...l, name }));
+    if (nameEditor.mode === 'saveAs') {
+      const id = `ws-${++counterRef.current}-${name.toLowerCase().replace(/\s+/g, '-')}`;
+      const copy: PulseLayout = { ...clonePreset(active), id, name, preset: false };
+      setWs(prev => ({ ...prev, layouts: [...prev.layouts, copy], activeId: id }));
+      setWsMenuOpen(false);
+    } else {
+      mutate(l => ({ ...l, name }));
+    }
+    setNameEditor(null);
   };
   const duplicateLayout = () => {
     const id = `ws-${++counterRef.current}-dup`;
@@ -463,17 +471,42 @@ const PulseWorkspace = () => {
   };
   const deleteLayout = () => {
     if (ws.layouts.length <= 1) return;
+    if (confirmOp !== 'delete') {
+      setConfirmOp('delete');
+      return;
+    }
+    const name = active.name;
     setWs(prev => {
       const layouts = prev.layouts.filter(l => l.id !== prev.activeId);
       return { ...prev, layouts, activeId: layouts[0].id };
     });
+    setConfirmOp(null);
     setWsMenuOpen(false);
+    toast.success(`Deleted layout "${name}"`);
   };
   const resetLayout = () => {
     // Restore the active layout from its matching preset when possible.
     const preset = PULSE_PRESETS.find(p => p.id === active.id);
-    if (preset) mutate(() => clonePreset(preset));
+    if (!preset) {
+      toast.info('This layout has no preset to restore');
+      return;
+    }
+    if (confirmOp !== 'reset') {
+      setConfirmOp('reset');
+      return;
+    }
+    mutate(() => clonePreset(preset));
+    setConfirmOp(null);
+    toast.success(`Reset "${preset.name}" to its preset arrangement`);
   };
+
+  // Fresh menu each open — no stale armed confirm or half-typed name.
+  useEffect(() => {
+    if (!wsMenuOpen) {
+      setNameEditor(null);
+      setConfirmOp(null);
+    }
+  }, [wsMenuOpen]);
 
   const maximized = maximizedId ? active.panels.find(p => p.id === maximizedId) : null;
 
@@ -497,8 +530,8 @@ const PulseWorkspace = () => {
     if (!def) return null;
     if (!base)
       return (
-        <div className="h-full flex items-center justify-center font-mono text-label text-textMuted uppercase tracking-widest">
-          Awaiting feed…
+        <div className="h-full p-4 overflow-hidden">
+          <SkeletonRows rows={4} />
         </div>
       );
     // Only pulse-consuming panels take the fresh per-second matrix; the rest get
@@ -562,13 +595,34 @@ const PulseWorkspace = () => {
                 ))}
               </div>
               {/* Layout-management ops only surface inside Customize mode */}
-              {editLayout && (
+              {editLayout && nameEditor && (
+                <div className="border-t border-borderSubtle flex items-center gap-1.5 p-1.5">
+                  <input
+                    autoFocus
+                    value={nameEditor.value}
+                    onChange={e => setNameEditor(ne => (ne ? { ...ne, value: e.target.value } : ne))}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') commitName();
+                      if (e.key === 'Escape') setNameEditor(null);
+                    }}
+                    placeholder={nameEditor.mode === 'saveAs' ? 'New layout name…' : 'Layout name…'}
+                    className="flex-1 min-w-0 bg-inset border border-borderSubtle rounded px-2 py-1 font-mono text-caption text-textPrimary placeholder:text-textMuted focus:outline-none focus:border-borderMuted"
+                  />
+                  <button
+                    onClick={commitName}
+                    className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded border border-borderSubtle hover:border-borderMuted font-mono text-label text-textSecondary hover:text-textPrimary transition-colors"
+                  >
+                    <Check className="w-3 h-3" /> {nameEditor.mode === 'saveAs' ? 'Save' : 'Rename'}
+                  </button>
+                </div>
+              )}
+              {editLayout && !nameEditor && (
                 <div className="border-t border-borderSubtle p-1.5 grid grid-cols-2 gap-1">
-                  <button onClick={saveAs} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-micro text-textSecondary hover:bg-white/[0.04] transition-colors"><Save className="w-3 h-3" /> Save as</button>
-                  <button onClick={rename} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-micro text-textSecondary hover:bg-white/[0.04] transition-colors">Rename</button>
+                  <button onClick={() => setNameEditor({ mode: 'saveAs', value: `${active.name} copy` })} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-micro text-textSecondary hover:bg-white/[0.04] transition-colors"><Save className="w-3 h-3" /> Save as</button>
+                  <button onClick={() => setNameEditor({ mode: 'rename', value: active.name })} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-micro text-textSecondary hover:bg-white/[0.04] transition-colors">Rename</button>
                   <button onClick={duplicateLayout} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-micro text-textSecondary hover:bg-white/[0.04] transition-colors"><Copy className="w-3 h-3" /> Duplicate</button>
-                  <button onClick={resetLayout} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-micro text-textSecondary hover:bg-white/[0.04] transition-colors"><RotateCcw className="w-3 h-3" /> Reset</button>
-                  <button onClick={deleteLayout} disabled={ws.layouts.length <= 1} className="col-span-2 flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-micro text-bear/80 hover:bg-bear/[0.08] disabled:opacity-40 transition-colors"><Trash2 className="w-3 h-3" /> Delete layout</button>
+                  <button onClick={resetLayout} className={`flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-micro transition-colors ${confirmOp === 'reset' ? 'text-bear bg-bear/[0.12]' : 'text-textSecondary hover:bg-white/[0.04]'}`}><RotateCcw className="w-3 h-3" /> {confirmOp === 'reset' ? 'Confirm reset' : 'Reset'}</button>
+                  <button onClick={deleteLayout} disabled={ws.layouts.length <= 1} className={`col-span-2 flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-micro disabled:opacity-40 transition-colors ${confirmOp === 'delete' ? 'text-bear bg-bear/[0.12]' : 'text-bear/80 hover:bg-bear/[0.08]'}`}><Trash2 className="w-3 h-3" /> {confirmOp === 'delete' ? 'Click again to confirm delete' : 'Delete layout'}</button>
                 </div>
               )}
             </div>

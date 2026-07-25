@@ -1,7 +1,26 @@
 import { useMemo, useState } from 'react';
 import { X } from 'lucide-react';
-import { buildPulseFlow, contractKey } from '../../data/pulseflow';
+import { buildPulseFlow, contractKey, type SessionPrint } from '../../data/pulseflow';
+import HoverReadout from '../ui/HoverReadout';
 import { fmtUsd } from '../../data/gex';
+import Term from '../ui/Term';
+import type { TermKey } from '../../data/terms';
+
+// Jargon columns carry an in-place explainer (hover/focus) — the tape is the
+// first place a new reader meets X-count, OTM% and SigScore.
+const HEADERS: { label: string; term?: TermKey }[] = [
+  { label: 'Time' },
+  { label: 'Value' },
+  { label: 'Spot' },
+  { label: 'Strike' },
+  { label: 'PC', term: 'P/C' },
+  { label: 'Exp' },
+  { label: 'X', term: 'X' },
+  { label: 'Type', term: 'Type' },
+  { label: 'Size' },
+  { label: 'OTM%', term: 'OTM%' },
+  { label: 'Sig', term: 'Sig' },
+];
 
 /*
   Pulse flow tape — the pro options-flow feed: time / premium / spot / strike /
@@ -36,6 +55,7 @@ const PulseFlowTape = ({ ticker, revision }: PulseFlowTapeProps) => {
     [ticker, revision]
   );
   const [isolated, setIsolated] = useState<string | null>(null);
+  const [hover, setHover] = useState<{ p: SessionPrint; x: number; y: number } | null>(null);
 
   const rows = useMemo(() => {
     if (!view) return [];
@@ -107,9 +127,9 @@ const PulseFlowTape = ({ ticker, revision }: PulseFlowTapeProps) => {
         <table className="w-full border-collapse">
           <thead className="sticky top-0 bg-panel z-10">
             <tr className="border-b border-borderSubtle">
-              {['Time', 'Value', 'Spot', 'Strike', 'PC', 'Exp', 'X', 'Type', 'Size', 'OTM%', 'Sig'].map(h => (
-                <th key={h} className="px-2 py-1 text-left font-mono text-micro uppercase tracking-wider text-textMuted whitespace-nowrap">
-                  {h}
+              {HEADERS.map(h => (
+                <th key={h.label} className="px-2 py-1 text-left font-mono text-micro uppercase tracking-wider text-textMuted whitespace-nowrap">
+                  {h.term ? <Term k={h.term}>{h.label}</Term> : h.label}
                 </th>
               ))}
             </tr>
@@ -119,6 +139,9 @@ const PulseFlowTape = ({ ticker, revision }: PulseFlowTapeProps) => {
               <tr
                 key={p.id}
                 onClick={() => setIsolated(prev => (prev === contractKey(p) ? null : contractKey(p)))}
+                onMouseEnter={e => setHover({ p, x: e.clientX, y: e.clientY })}
+                onMouseMove={e => setHover({ p, x: e.clientX, y: e.clientY })}
+                onMouseLeave={() => setHover(h => (h && h.p.id === p.id ? null : h))}
                 className="border-b border-borderSubtle/30 hover:bg-white/[0.04] cursor-pointer transition-colors"
               >
                 <td className="px-2 py-[5px] font-mono text-label text-textMuted tnum whitespace-nowrap">{p.time}</td>
@@ -144,6 +167,31 @@ const PulseFlowTape = ({ ticker, revision }: PulseFlowTapeProps) => {
             ))}
           </tbody>
         </table>
+        {hover && (
+          <HoverReadout x={hover.x} y={hover.y}>
+            <div className="flex items-baseline gap-2">
+              <span className={`font-mono text-caption font-bold tnum ${hover.p.pc === 'C' ? 'text-bull' : 'text-bear'}`}>
+                {hover.p.ticker} {hover.p.strike % 1 === 0 ? hover.p.strike.toFixed(0) : hover.p.strike.toFixed(2)}
+                {hover.p.pc}
+              </span>
+              <span className="font-mono text-micro text-textMuted tnum">
+                {hover.p.exp} · {hover.p.dte === 0 ? '0DTE' : `${hover.p.dte}d`}
+              </span>
+            </div>
+            <div className="mt-0.5 font-mono text-micro text-textSecondary tnum">
+              {hover.p.size.toLocaleString()} × ${hover.p.price.toFixed(2)} × 100 = {fmtUsd(hover.p.value)}
+            </div>
+            <div className="mt-0.5 font-mono text-micro text-textSecondary">
+              {hover.p.x === 'Ask'
+                ? 'lifted the ask — buyer paying up'
+                : hover.p.x === 'Bid'
+                  ? 'hit the bid — seller aggressive'
+                  : 'priced mid — negotiated'}
+              {' · '}
+              {hover.p.type === 'SWEEP' ? 'swept multiple exchanges' : 'crossed in one block'}
+            </div>
+          </HoverReadout>
+        )}
       </div>
     </div>
   );

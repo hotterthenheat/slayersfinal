@@ -21,10 +21,13 @@ const SettingsPanel = ({ open, onClose }: SettingsPanelProps) => {
   const [, setTick] = useState(0);
   const refresh = useCallback(() => setTick(t => t + 1), []);
   const [confirmAll, setConfirmAll] = useState(false);
+  // Which group's clear is armed — clears are permanent, so they two-step too.
+  const [confirmGroupId, setConfirmGroupId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setConfirmAll(false);
+    setConfirmGroupId(null);
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
@@ -35,6 +38,11 @@ const SettingsPanel = ({ open, onClose }: SettingsPanelProps) => {
   const onClearGroup = (id: string) => {
     const group = LOCAL_DATA_GROUPS.find(g => g.id === id);
     if (!group) return;
+    if (confirmGroupId !== id) {
+      setConfirmGroupId(id);
+      return;
+    }
+    setConfirmGroupId(null);
     const n = clearGroup(group);
     refresh();
     if (n > 0) toast.success(`Cleared ${group.label.toLowerCase()}`);
@@ -113,22 +121,33 @@ const SettingsPanel = ({ open, onClose }: SettingsPanelProps) => {
                 <div className="flex flex-col gap-px bg-borderSubtle rounded-md overflow-hidden">
                   {LOCAL_DATA_GROUPS.map(group => {
                     const count = groupStoredCount(group);
+                    const armed = confirmGroupId === group.id;
                     return (
                       <div key={group.id} className="flex items-center gap-3 bg-inset px-3.5 py-2.5">
                         <div className="min-w-0 flex-1">
                           <div className="text-caption font-semibold text-textPrimary">{group.label}</div>
                           <div className="text-label text-textMuted truncate">{group.description}</div>
                         </div>
+                        {armed && (
+                          <button
+                            onClick={() => setConfirmGroupId(null)}
+                            className="shrink-0 font-mono text-micro uppercase tracking-wider text-textMuted hover:text-textPrimary transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        )}
                         <button
                           onClick={() => onClearGroup(group.id)}
                           disabled={count === 0}
                           className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded border font-mono text-micro uppercase tracking-wider transition-colors ${
                             count === 0
                               ? 'border-borderSubtle text-textMuted cursor-not-allowed opacity-50'
-                              : 'border-borderSubtle text-textSecondary hover:text-bear hover:border-bear/40'
+                              : armed
+                                ? 'border-bear/50 bg-bear/15 text-bear'
+                                : 'border-borderSubtle text-textSecondary hover:text-bear hover:border-bear/40'
                           }`}
                         >
-                          <Trash2 className="w-3 h-3" /> Clear
+                          <Trash2 className="w-3 h-3" /> {armed ? 'Confirm' : 'Clear'}
                         </button>
                       </div>
                     );

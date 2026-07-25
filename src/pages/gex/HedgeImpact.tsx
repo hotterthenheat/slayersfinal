@@ -3,20 +3,15 @@ import { Gauge, Waves, TrendingDown, SlidersHorizontal, ChevronDown } from 'luci
 import { useMarketData } from '../../context/MarketDataContext';
 import { BEAR } from '../../components/gex/palette';
 import { buildHedgeImpact, type HedgeImpactView, type StressLabel } from '../../data/hedgeimpact';
+import HoverReadout from '../../components/ui/HoverReadout';
+import { svgHoverIndex } from '../../components/ui/svgHover';
 import Panel from '../../components/ui/Panel';
 import StatCard from '../../components/ui/StatCard';
 import MetricGrid from '../../components/ui/MetricGrid';
 import SignalBadge from '../../components/ui/SignalBadge';
 import type { Tone } from '../../components/ui/tones';
+import { fmtUsd } from '../../data/gex';
 
-const fmtUsd = (v: number): string => {
-  const a = Math.abs(v);
-  const s = v < 0 ? '−' : '';
-  if (a >= 1e9) return `${s}$${(a / 1e9).toFixed(2)}B`;
-  if (a >= 1e6) return `${s}$${(a / 1e6).toFixed(0)}M`;
-  if (a >= 1e3) return `${s}$${(a / 1e3).toFixed(0)}K`;
-  return `${s}$${a.toFixed(0)}`;
-};
 
 const fmtNum = (v: number): string => {
   const a = Math.abs(v);
@@ -46,8 +41,20 @@ const HexCurve = ({ view }: { view: HedgeImpactView }) => {
   const oneY = Y(1);
   const line = view.curve.map((c, i) => `${i === 0 ? 'M' : 'L'}${X(c.movePct).toFixed(1)},${Y(c.hex).toFixed(1)}`).join(' ');
   const bx = X(Math.min(maxMove, view.failureBoundaryPct));
+  const [hover, setHover] = useState<{ i: number; x: number; y: number } | null>(null);
+  const hp = hover ? view.curve[hover.i] : null;
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none" role="img" aria-label="Hedge failure boundary — HEX versus the size of the move">
+    <>
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      className="w-full cursor-crosshair"
+      style={{ height: H }}
+      preserveAspectRatio="none"
+      role="img"
+      aria-label="Hedge failure boundary — HEX versus the size of the move"
+      onMouseMove={e => setHover({ i: svgHoverIndex(e, view.curve.length), x: e.clientX, y: e.clientY })}
+      onMouseLeave={() => setHover(null)}
+    >
       {/* danger zone above HEX = 1 */}
       <rect x={0} y={0} width={W} height={oneY} fill="rgba(255,59,48,0.05)" />
       <line x1={0} x2={W} y1={oneY} y2={oneY} stroke={BEAR} strokeOpacity={0.5} strokeWidth={1} strokeDasharray="4 3" />
@@ -63,7 +70,24 @@ const HexCurve = ({ view }: { view: HedgeImpactView }) => {
       {[0, 1, 2, 3].map(m => (
         <text key={m} x={X(m)} y={12} fontSize={10} fill="#6b6b6b" fontFamily="monospace">{m}%</text>
       ))}
+      {hp && (
+        <line x1={X(hp.movePct)} x2={X(hp.movePct)} y1={0} y2={H} stroke="rgba(255,255,255,0.25)" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+      )}
     </svg>
+    {hover && hp && (
+      <HoverReadout x={hover.x} y={hover.y}>
+        <div className="font-mono text-caption font-bold text-textPrimary tnum">±{hp.movePct.toFixed(2)}% move</div>
+        <div className="font-mono text-micro text-textMuted uppercase tracking-wider">15-min window</div>
+        <div className={`mt-1 font-mono text-data font-bold tnum ${hp.hex >= 1 ? 'text-bear' : hp.hex >= 0.7 ? 'text-warn' : 'text-bull'}`}>
+          HEX {hp.hex.toFixed(2)}
+        </div>
+        <div className="font-mono text-micro text-textMuted tnum">hedge ≈ {fmtUsd(view.hedgePer1pctUsd * hp.movePct)}</div>
+        <div className="mt-0.5 font-mono text-micro text-textSecondary">
+          {hp.hex >= 1 ? 'over 1 — hedging outruns liquidity and amplifies the move' : 'under 1 — the book absorbs the hedge'}
+        </div>
+      </HoverReadout>
+    )}
+    </>
   );
 };
 

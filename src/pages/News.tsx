@@ -7,6 +7,7 @@ import StatCard from '../components/ui/StatCard';
 import MetricGrid from '../components/ui/MetricGrid';
 import SignalBadge from '../components/ui/SignalBadge';
 import SegmentedControl from '../components/ui/SegmentedControl';
+import HoverReadout from '../components/ui/HoverReadout';
 import { buildNewsFeed, marketMood, type NewsCategory, type NewsItem } from '../data/news';
 import NewsIntel from '../components/news/NewsIntel';
 import type { Tone } from '../components/ui/tones';
@@ -34,6 +35,8 @@ const RIGHT_OPTIONS = [
 ] as const;
 
 const sentimentTone = (s: number): Tone => (s > 0.12 ? 'bull' : s < -0.12 ? 'bear' : 'neutral');
+const sentimentLabel = (s: number): string => (s > 0.12 ? 'bullish' : s < -0.12 ? 'bearish' : 'neutral');
+const sentimentText = (s: number): string => (s > 0.12 ? 'text-bull' : s < -0.12 ? 'text-bear' : 'text-textSecondary');
 
 const catTone: Record<NewsCategory, Tone> = {
   Earnings: 'magenta',
@@ -112,6 +115,7 @@ const News = () => {
   const [muted, setMuted] = useState<Set<string>>(new Set());
   const [hideMuted, setHideMuted] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [hover, setHover] = useState<{ n: NewsItem; x: number; y: number } | null>(null);
 
   const toggle = (setter: React.Dispatch<React.SetStateAction<Set<string>>>, key: string) =>
     setter(prev => {
@@ -285,7 +289,13 @@ const News = () => {
                   }`}
                 >
                   <div className="flex items-stretch">
-                    <button onClick={() => setSelectedId(lead.id)} className={`flex-1 min-w-0 text-left px-4 py-3 ${!isSel ? 'hover:bg-white/[0.02]' : ''}`}>
+                    <button
+                      onClick={() => setSelectedId(lead.id)}
+                      onMouseEnter={e => setHover({ n: lead, x: e.clientX, y: e.clientY })}
+                      onMouseMove={e => setHover({ n: lead, x: e.clientX, y: e.clientY })}
+                      onMouseLeave={() => setHover(h => (h && h.n.id === lead.id ? null : h))}
+                      className={`flex-1 min-w-0 text-left px-4 py-3 ${!isSel ? 'hover:bg-white/[0.02]' : ''}`}
+                    >
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-mono text-label text-textMuted tnum">{lead.time}</span>
                         <span className="font-mono text-label text-textMuted">{lead.source}</span>
@@ -361,6 +371,9 @@ const News = () => {
                           <button
                             key={i.id}
                             onClick={() => setSelectedId(i.id)}
+                            onMouseEnter={e => setHover({ n: i, x: e.clientX, y: e.clientY })}
+                            onMouseMove={e => setHover({ n: i, x: e.clientX, y: e.clientY })}
+                            onMouseLeave={() => setHover(h => (h && h.n.id === i.id ? null : h))}
                             className={`w-full text-left pl-6 pr-3 py-2 border-t border-borderSubtle flex items-center gap-2 transition-colors ${
                               iSel ? 'bg-select/[0.05]' : 'hover:bg-white/[0.02]'
                             }`}
@@ -436,6 +449,31 @@ const News = () => {
           </Panel>
         )}
       </div>
+
+      {hover && (
+        <HoverReadout x={hover.x} y={hover.y}>
+          <div className="flex items-baseline gap-2">
+            <span className="font-mono text-caption font-bold text-textPrimary">{hover.n.category}</span>
+            <span className={`font-mono text-micro font-bold uppercase tracking-wider ${sentimentText(hover.n.sentiment)}`}>
+              {sentimentLabel(hover.n.sentiment)}
+            </span>
+          </div>
+          <div className="mt-0.5 flex items-baseline gap-3 font-mono text-micro uppercase tracking-wider text-textMuted">
+            <span>
+              Mag <span className="text-textPrimary tnum">{Math.round(hover.n.magnitude * 100)}%</span>
+            </span>
+            <span>
+              P(up) <span className="text-textPrimary tnum">{hover.n.prediction.probUpPct}%</span>
+            </span>
+          </div>
+          <div className="mt-0.5 font-mono text-micro text-textSecondary">
+            ±5d expected move{' '}
+            <span className={`tnum ${hover.n.prediction.expMove5dPct >= 0 ? 'text-bull' : 'text-bear'}`}>
+              {signedPct(hover.n.prediction.expMove5dPct)}
+            </span>
+          </div>
+        </HoverReadout>
+      )}
     </>
   );
 };

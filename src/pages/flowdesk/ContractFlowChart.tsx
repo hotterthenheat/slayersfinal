@@ -61,6 +61,8 @@ const FlowTooltip = ({ active, payload }: FlowTip) => {
       <div className="text-textPrimary">
         ${p.price.toFixed(2)} · <span style={{ color: c }}>{p.side}</span> · {p.size.toLocaleString()}x
       </div>
+      {/* premium = price × contracts × 100 — the number the rest of the desk sorts on */}
+      <div className="text-textSecondary">prem {fmtUsd(p.price * p.size * 100)}</div>
     </Box>
   );
 };

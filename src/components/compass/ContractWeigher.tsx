@@ -261,7 +261,7 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
         </span>
       ),
     },
-    { key: 'dte', header: 'DTE', align: 'right', sortValue: c => c.dte, render: c => <span className="text-textSecondary">{c.dte}d</span> },
+    { key: 'dte', header: 'DTE', help: 'DTE', align: 'right', sortValue: c => c.dte, render: c => <span className="text-textSecondary">{c.dte}d</span> },
     {
       key: 'score',
       header: 'Score',
@@ -275,10 +275,11 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
     },
     { key: 'verdict', header: 'Verdict', align: 'right', sortValue: c => c.composite, render: c => <SignalBadge tone={verdictTone[c.verdict]}>{verdictLabel[c.verdict]}</SignalBadge> },
     { key: 'mid', header: 'Mid', align: 'right', sortValue: c => c.mid, render: c => `$${c.mid.toFixed(2)}` },
-    { key: 'delta', header: 'Δ', align: 'right', sortValue: c => Math.abs(c.delta), render: c => c.delta.toFixed(2) },
+    { key: 'delta', header: 'Δ', help: 'Delta', align: 'right', sortValue: c => Math.abs(c.delta), render: c => c.delta.toFixed(2) },
     {
       key: 'theta',
       header: 'θ / day',
+      help: 'Theta',
       align: 'right',
       sortValue: c => c.thetaPerDayPct,
       render: c => <span className={c.thetaPerDayPct > 5 ? 'text-bear' : 'text-textSecondary'}>−{c.thetaPerDayPct.toFixed(1)}%</span>,

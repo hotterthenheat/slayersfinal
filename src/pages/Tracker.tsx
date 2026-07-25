@@ -26,8 +26,10 @@ import SignalBadge from '../components/ui/SignalBadge';
 import VerdictBadge from '../components/skyvision/VerdictBadge';
 import DataTable, { type Column } from '../components/ui/DataTable';
 import StatCard from '../components/ui/StatCard';
+import { useToast } from '../components/ui/Toast';
 import MetricGrid from '../components/ui/MetricGrid';
 import Skeleton, { SkeletonRows } from '../components/ui/Skeleton';
+import HoverReadout from '../components/ui/HoverReadout';
 import type { Tone } from '../components/ui/tones';
 
 // ---- Saved views -----------------------------------------------------------
@@ -452,10 +454,12 @@ const STATUS_LANES: { key: ViewKey; label: string; bar: string; dot: string }[] 
 
 const Tracker = () => {
   const navigate = useNavigate();
-  const { trackedSetups, untrackSetup } = useTracker();
+  const { trackedSetups, untrackSetup, restoreSetup } = useTracker();
+  const { toast } = useToast();
   const { marketData } = useMarketData();
   const [view, setView] = useState<ViewKey>('active');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [laneHover, setLaneHover] = useState<{ label: string; count: number; pct: number; x: number; y: number } | null>(null);
   const [journal, setJournal] = useState<JournalMap>(loadJournal);
 
   useEffect(() => {
@@ -472,7 +476,11 @@ const Tracker = () => {
   const setNotes = (id: string, notes: string) =>
     setJournal(prev => ({ ...prev, [id]: { status: prev[id]?.status ?? null, notes } }));
 
+  // Untrack is destructive (it also drops the journal notes) — snapshot both
+  // before removal so the toast's Undo can restore them verbatim.
   const handleUntrack = (id: string) => {
+    const removed = trackedSetups.find(t => t.id === id);
+    const removedJournal = journal[id];
     untrackSetup(id);
     setJournal(prev => {
       if (!(id in prev)) return prev;
@@ -480,6 +488,15 @@ const Tracker = () => {
       delete next[id];
       return next;
     });
+    if (removed) {
+      toast(`Untracked ${removed.contract}${removedJournal?.notes ? ' — notes removed' : ''}`, 'info', {
+        label: 'Undo',
+        onClick: () => {
+          restoreSetup(removed);
+          if (removedJournal) setJournal(prev => ({ ...prev, [id]: removedJournal }));
+        },
+      });
+    }
   };
 
   // Straight into review mode on this exact setup — not the browse feed
@@ -679,12 +696,31 @@ const Tracker = () => {
                   <span className="font-mono text-micro tnum text-textMuted">{rows.length} tracked</span>
                 </div>
                 <div className="flex h-2 rounded-full overflow-hidden bg-white/[0.05]" role="img" aria-label="Distribution of tracked setups across status lanes">
-                  {STATUS_LANES.map(s =>
-                    counts[s.key] > 0 ? (
-                      <span key={s.key} className={s.bar} style={{ width: `${(counts[s.key] / (rows.length || 1)) * 100}%` }} />
-                    ) : null
-                  )}
+                  {STATUS_LANES.map(s => {
+                    const pct = (counts[s.key] / (rows.length || 1)) * 100;
+                    return counts[s.key] > 0 ? (
+                      <span
+                        key={s.key}
+                        onMouseEnter={e => setLaneHover({ label: s.label, count: counts[s.key], pct, x: e.clientX, y: e.clientY })}
+                        onMouseMove={e => setLaneHover({ label: s.label, count: counts[s.key], pct, x: e.clientX, y: e.clientY })}
+                        onMouseLeave={() => setLaneHover(h => (h && h.label === s.label ? null : h))}
+                        className={`${s.bar} cursor-crosshair`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    ) : null;
+                  })}
                 </div>
+                {laneHover && (
+                  <HoverReadout x={laneHover.x} y={laneHover.y}>
+                    <div className="font-mono text-caption font-bold text-textPrimary">{laneHover.label}</div>
+                    <div className="mt-0.5 font-mono text-micro uppercase tracking-wider text-textMuted">
+                      <span className="text-textPrimary tnum">{laneHover.count}</span> tracked
+                    </div>
+                    <div className="mt-0.5 font-mono text-micro text-textSecondary">
+                      <span className="tnum">{laneHover.pct.toFixed(0)}%</span> of book
+                    </div>
+                  </HoverReadout>
+                )}
                 <div className="flex flex-wrap gap-1.5">
                   {STATUS_LANES.map(s => (
                     <button

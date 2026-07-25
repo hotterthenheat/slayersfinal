@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Activity, GitCompareArrows, Layers, TrendingDown } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildStateDensity, type StateDensityView, type MassShift, type SkewLabel } from '../../data/statedensity';
@@ -7,6 +7,8 @@ import Panel from '../ui/Panel';
 import StatCard from '../ui/StatCard';
 import MetricGrid from '../ui/MetricGrid';
 import { BULL, BEAR } from './palette';
+import HoverReadout from '../ui/HoverReadout';
+import { svgHoverIndex } from '../ui/svgHover';
 import SignalBadge from '../ui/SignalBadge';
 import PriceThresholdOdds from './PriceThresholdOdds';
 import type { Tone } from '../ui/tones';
@@ -32,6 +34,7 @@ const DensityChart = ({ view }: { view: StateDensityView }) => {
   const W = 560;
   const H = 190;
   const { density: D, realizedDensity: R, sigma2, forward, spot } = view;
+  const [hover, setHover] = useState<{ i: number; x: number; y: number } | null>(null);
   const lo = D[0].price;
   const hi = D[D.length - 1].price;
   const span = hi - lo || 1;
@@ -47,9 +50,21 @@ const DensityChart = ({ view }: { view: StateDensityView }) => {
   const rTail = X(sigma2[1]);
   const sx = X(spot);
   const fx = X(forward);
+  const hp = hover ? D[hover.i] : null;
+  const hr = hover ? R[hover.i] : null;
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none" role="img" aria-label="Risk-neutral terminal-price density — implied versus realized">
+    <>
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      className="w-full cursor-crosshair"
+      style={{ height: H }}
+      preserveAspectRatio="none"
+      role="img"
+      aria-label="Risk-neutral terminal-price density — implied versus realized"
+      onMouseMove={e => setHover({ i: svgHoverIndex(e, D.length), x: e.clientX, y: e.clientY })}
+      onMouseLeave={() => setHover(null)}
+    >
       {/* shaded 2σ tails */}
       <rect x={0} y={0} width={Math.max(0, lTail)} height={H} fill="rgba(255,59,48,0.06)" />
       <rect x={rTail} y={0} width={Math.max(0, W - rTail)} height={H} fill="rgba(48,209,88,0.06)" />
@@ -67,7 +82,33 @@ const DensityChart = ({ view }: { view: StateDensityView }) => {
       {/* 2σ tick labels */}
       <text x={Math.max(2, lTail - 2)} y={H - 5} fontSize={10} fill={BEAR} fontFamily="monospace" textAnchor="end">−2σ</text>
       <text x={Math.min(W - 2, rTail + 2)} y={12} fontSize={10} fill={BULL} fontFamily="monospace">+2σ</text>
+      {hp && (
+        <line x1={X(hp.price)} x2={X(hp.price)} y1={0} y2={H} stroke="rgba(255,255,255,0.25)" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+      )}
     </svg>
+    {hover && hp && (
+      <HoverReadout x={hover.x} y={hover.y}>
+        <div className="font-mono text-caption font-bold text-textPrimary tnum">{hp.price.toFixed(2)}</div>
+        <div className="font-mono text-micro text-textMuted uppercase tracking-wider">
+          terminal price · {signed(((hp.price - spot) / spot) * 100, 1)}% vs spot
+        </div>
+        <div className="mt-1 flex flex-col gap-0.5 font-mono text-micro tnum">
+          <div className="flex items-center gap-3">
+            <span className="text-textMuted uppercase tracking-wider">implied</span>
+            <span className="ml-auto text-textPrimary">{hp.density.toFixed(4)}</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-textMuted uppercase tracking-wider">realized</span>
+            <span className="ml-auto text-textPrimary">{(hr?.density ?? 0).toFixed(4)}</span>
+          </div>
+        </div>
+        <div className="mt-1 flex items-center gap-2.5 font-mono text-micro font-semibold tnum">
+          <span className="text-bear">P&lt; {(hp.cdf * 100).toFixed(1)}%</span>
+          <span className="text-bull">P&gt; {((1 - hp.cdf) * 100).toFixed(1)}%</span>
+        </div>
+      </HoverReadout>
+    )}
+    </>
   );
 };
 

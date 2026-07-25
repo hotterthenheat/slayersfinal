@@ -6,14 +6,20 @@ import { Check, AlertTriangle, Info, X, TriangleAlert } from 'lucide-react';
 
 export type ToastTone = 'success' | 'error' | 'warn' | 'info';
 
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+
 interface ToastItem {
   id: number;
   tone: ToastTone;
   message: string;
+  action?: ToastAction;
 }
 
 interface ToastApi {
-  toast: (message: string, tone?: ToastTone) => void;
+  toast: (message: string, tone?: ToastTone, action?: ToastAction) => void;
   success: (message: string) => void;
   error: (message: string) => void;
   warn: (message: string) => void;
@@ -53,10 +59,11 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const push = useCallback(
-    (message: string, tone: ToastTone = 'info') => {
+    (message: string, tone: ToastTone = 'info', action?: ToastAction) => {
       const id = ++seq.current;
-      setItems(prev => [...prev.slice(-3), { id, tone, message }]);
-      timers.current[id] = setTimeout(() => dismiss(id), DURATION);
+      setItems(prev => [...prev.slice(-3), { id, tone, message, action }]);
+      // A toast carrying an action stays up longer — it's a decision, not a note.
+      timers.current[id] = setTimeout(() => dismiss(id), action ? DURATION * 2 : DURATION);
     },
     [dismiss]
   );
@@ -93,6 +100,17 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
                 >
                   <span className={`mt-0.5 shrink-0 ${tone.text}`}>{tone.icon}</span>
                   <span className="flex-1 text-caption leading-snug text-textPrimary">{t.message}</span>
+                  {t.action && (
+                    <button
+                      onClick={() => {
+                        t.action?.onClick();
+                        dismiss(t.id);
+                      }}
+                      className="shrink-0 self-center rounded border border-borderMuted px-2 py-0.5 font-mono text-micro font-semibold uppercase tracking-wider text-textPrimary hover:bg-white/[0.06] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-select/60 active:scale-[0.97]"
+                    >
+                      {t.action.label}
+                    </button>
+                  )}
                   <button
                     onClick={() => dismiss(t.id)}
                     aria-label="Dismiss"

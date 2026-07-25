@@ -48,6 +48,8 @@ interface TrackerContextValue {
   trackSetup: (setup: Setup, scanner: ScannerKey) => void;
   trackContract: (c: TrackContractInput) => void;
   untrackSetup: (id: string) => void;
+  /** Reinsert a previously untracked setup verbatim — the undo path */
+  restoreSetup: (setup: TrackedSetup) => void;
   isTracked: (id: string) => boolean;
 }
 
@@ -108,13 +110,22 @@ export const TrackerProvider = ({ children }: { children: React.ReactNode }) => 
     });
   }, []);
 
+  const restoreSetup = useCallback((setup: TrackedSetup) => {
+    setTrackedSetups(prev => {
+      if (prev.some(t => t.id === setup.id)) return prev;
+      const next = [...prev, setup].sort((a, b) => a.trackedAt - b.trackedAt);
+      saveToStorage(next);
+      return next;
+    });
+  }, []);
+
   const isTracked = useCallback(
     (id: string) => trackedSetups.some(t => t.id === id),
     [trackedSetups]
   );
 
   return (
-    <TrackerContext.Provider value={{ trackedSetups, trackSetup, trackContract, untrackSetup, isTracked }}>
+    <TrackerContext.Provider value={{ trackedSetups, trackSetup, trackContract, untrackSetup, restoreSetup, isTracked }}>
       {children}
     </TrackerContext.Provider>
   );

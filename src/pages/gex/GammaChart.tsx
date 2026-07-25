@@ -7,6 +7,7 @@ import { buildGexView, fmtUsd, pulseMatrix } from '../../data/gex';
 import { buildCommandView } from '../../data/command';
 import type { MarketSnapshot } from '../../types/market';
 import Panel from '../../components/ui/Panel';
+import { SkeletonRows } from '../../components/ui/Skeleton';
 import GexMatrix from '../../components/gex/GexMatrix';
 
 /** The heatmap sweeps on its own cadence (10s) so cells don't vibrate every
@@ -61,8 +62,8 @@ const GammaChart = () => {
   if (!scan || !exposure || !gexLevels || !matrix) {
     return (
       <Panel>
-        <div className="h-64 flex items-center justify-center font-mono text-label uppercase tracking-widest text-textMuted">
-          loading…
+        <div className="h-64 overflow-hidden">
+          <SkeletonRows rows={5} />
         </div>
       </Panel>
     );

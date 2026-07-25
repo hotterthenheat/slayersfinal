@@ -4,6 +4,7 @@ import { buildVannaCharm } from '../../data/vannacharm';
 import { fmtUsd } from '../../data/gex';
 import Panel from '../../components/ui/Panel';
 import SegmentedControl from '../../components/ui/SegmentedControl';
+import { SkeletonRows } from '../../components/ui/Skeleton';
 import SignalBadge from '../../components/ui/SignalBadge';
 import StatCard from '../../components/ui/StatCard';
 import MigrationMap from '../../components/gex/vannacharm/MigrationMap';
@@ -196,10 +197,8 @@ const VannaCharm = () => {
 
   if (!data) {
     return (
-      <Panel className="h-64" bodyClassName="flex items-center justify-center">
-        <span className="font-mono text-label text-textMuted uppercase tracking-widest">
-          Awaiting feed…
-        </span>
+      <Panel className="h-64" bodyClassName="overflow-hidden">
+        <SkeletonRows rows={5} />
       </Panel>
     );
   }

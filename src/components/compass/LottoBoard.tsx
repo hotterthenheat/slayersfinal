@@ -5,19 +5,14 @@ import { weighContracts, type WeighedContract } from '../../core/contractScore';
 import type { MocRead } from '../../types/fracture';
 import type { MarketSnapshot } from '../../types/market';
 import Panel from '../ui/Panel';
+import HoverReadout from '../ui/HoverReadout';
 import EmptyState from '../ui/EmptyState';
 import StatCard from '../ui/StatCard';
 import MetricGrid from '../ui/MetricGrid';
 import SignalBadge from '../ui/SignalBadge';
 import type { Tone } from '../ui/tones';
+import { fmtUsd } from '../../data/gex';
 
-const fmtUsd = (v: number): string => {
-  const a = Math.abs(v);
-  const s = v < 0 ? '−' : '';
-  if (a >= 1e9) return `${s}$${(a / 1e9).toFixed(1)}B`;
-  if (a >= 1e6) return `${s}$${(a / 1e6).toFixed(0)}M`;
-  return `${s}$${(a / 1e3).toFixed(0)}K`;
-};
 
 const mocToneOf = (moc: MocRead): Tone =>
   moc.classification === 'CONTINUATION'
@@ -119,6 +114,7 @@ const GrowthTimeline = ({ moc }: { moc: MocRead }) => {
     return { t, z: finalZ * shape };
   });
   const side = finalZ >= 0 ? 'bull' : 'bear';
+  const [hover, setHover] = useState<{ t: string; z: number; dz: number | null; x: number; y: number } | null>(null);
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
@@ -126,10 +122,17 @@ const GrowthTimeline = ({ moc }: { moc: MocRead }) => {
         <SignalBadge tone={growing ? (side as Tone) : 'neutral'}>{growing ? 'building into cross' : 'fading pre-cross'}</SignalBadge>
       </div>
       <div className="flex items-end gap-1.5 h-16">
-        {series.map(pt => {
+        {series.map((pt, i) => {
           const h = Math.max(6, (Math.abs(pt.z) / maxAbs) * 100);
+          const dz = i === 0 ? null : pt.z - series[i - 1].z;
           return (
-            <div key={pt.t} className="flex-1 h-full flex flex-col justify-end">
+            <div
+              key={pt.t}
+              onMouseEnter={e => setHover({ t: pt.t, z: pt.z, dz, x: e.clientX, y: e.clientY })}
+              onMouseMove={e => setHover({ t: pt.t, z: pt.z, dz, x: e.clientX, y: e.clientY })}
+              onMouseLeave={() => setHover(prev => (prev && prev.t === pt.t ? null : prev))}
+              className="flex-1 h-full flex flex-col justify-end cursor-crosshair rounded-sm hover:bg-white/[0.03]"
+            >
               <span className={`w-full rounded-sm ${pt.z >= 0 ? 'bg-bull/70' : 'bg-bear/70'}`} style={{ height: `${h}%` }} />
             </div>
           );
@@ -142,6 +145,29 @@ const GrowthTimeline = ({ moc }: { moc: MocRead }) => {
           </span>
         ))}
       </div>
+      {hover && (
+        <HoverReadout x={hover.x} y={hover.y}>
+          <div className="flex items-baseline gap-2">
+            <span className="font-mono text-caption font-bold text-textPrimary tnum">{hover.t}</span>
+            <span className="font-mono text-micro uppercase tracking-wider text-textMuted">publication</span>
+          </div>
+          <div className={`mt-0.5 font-mono text-data font-bold tnum ${hover.z >= 0 ? 'text-bull' : 'text-bear'}`}>
+            {hover.z >= 0 ? '+' : ''}
+            {hover.z.toFixed(2)}σ
+          </div>
+          <div className="mt-0.5 font-mono text-micro">
+            {hover.dz === null ? (
+              <span className="text-textSecondary">first print of the window</span>
+            ) : (
+              // building/fading is magnitude vs prior; hover.z − hover.dz is the prior print's σ
+              <span className={`tnum ${hover.dz >= 0 ? 'text-bull' : 'text-bear'}`}>
+                {Math.abs(hover.z) >= Math.abs(hover.z - hover.dz) ? 'building' : 'fading'} {hover.dz >= 0 ? '+' : ''}
+                {hover.dz.toFixed(2)}σ vs prior
+              </span>
+            )}
+          </div>
+        </HoverReadout>
+      )}
     </div>
   );
 };

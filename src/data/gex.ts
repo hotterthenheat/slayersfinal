@@ -39,7 +39,7 @@ function h01(seed: string): number {
 
 // ---- formatting -------------------------------------------------------------
 export function fmtUsd(v: number): string {
-  const sign = v < 0 ? '-' : '';
+  const sign = v < 0 ? '−' : '';
   const a = Math.abs(v);
   if (a >= 1e9) return `${sign}$${(a / 1e9).toFixed(1)}B`;
   if (a >= 1e6) return `${sign}$${(a / 1e6).toFixed(1)}M`;

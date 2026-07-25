@@ -68,6 +68,13 @@ const NetPremiumPanel = ({ ticker, revision }: NetPremiumPanelProps) => {
           <span className="inline-block w-2.5 h-0.5 rounded-full" style={{ background: '#E0B84E' }} /> Price
           <span className="tnum font-semibold text-textPrimary">{at.price.toFixed(2)}</span>
         </span>
+        {/* the "who is paying up" number — calls minus the put drag */}
+        <span className="flex items-center gap-1.5 text-textSecondary">
+          Net
+          <span className={`tnum font-semibold ${at.call + at.put >= 0 ? 'text-bull' : 'text-bear'}`}>
+            {fmtUsd(at.call + at.put)}
+          </span>
+        </span>
         <span className="ml-auto text-textMuted tnum">{whenLabel}</span>
       </div>
 

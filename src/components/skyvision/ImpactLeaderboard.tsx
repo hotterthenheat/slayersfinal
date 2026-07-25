@@ -3,6 +3,7 @@ import { Layers } from 'lucide-react';
 import Panel from '../ui/Panel';
 import SegmentedControl from '../ui/SegmentedControl';
 import DataTable, { type Column } from '../ui/DataTable';
+import { fmtUsd } from '../../data/gex';
 import type { ImpactMetric, ImpactRow } from '../../types/skyvision';
 
 interface ImpactLeaderboardProps {
@@ -44,7 +45,8 @@ const COLUMNS: Column<ImpactRow>[] = [
   { key: 'exp', header: 'Exp', render: r => <span className="text-textSecondary">{r.expiry}</span> },
   {
     key: 'oi',
-    header: 'Open Int',
+    header: 'OI',
+    help: 'OI',
     align: 'right',
     sortValue: r => r.openInterest,
     render: r => <span className="text-textSecondary">{r.openInterest.toLocaleString()}</span>,
@@ -59,9 +61,10 @@ const COLUMNS: Column<ImpactRow>[] = [
   {
     key: 'notional',
     header: 'Delta Notional',
+    help: 'DEX',
     align: 'right',
     sortValue: r => r.deltaNotional,
-    render: r => <span className="text-textPrimary">${r.deltaNotional.toFixed(2)}B</span>,
+    render: r => <span className="text-textPrimary">{fmtUsd(r.deltaNotional * 1e9)}</span>,
   },
   {
     key: 'gamma',

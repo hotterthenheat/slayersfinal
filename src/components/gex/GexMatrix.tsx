@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { fmtUsd } from '../../data/gex';
+import HoverReadout from '../ui/HoverReadout';
 import { heatCellStyle, heatScaleGradient, heatScaleLabels } from './heatmap';
 import type { GexMatrixData } from '../../types/gex';
 
@@ -102,17 +103,17 @@ const GexMatrix = ({ data, highlightCol = null }: GexMatrixProps) => {
                       {strike % 1 === 0 ? strike.toFixed(0) : strike.toFixed(2)}
                     </span>
                     {isSpot && (
-                      <span className="ml-1.5 font-mono text-micro font-bold uppercase tracking-wider text-textMuted">
+                      <span title="Spot" className="ml-1.5 font-mono text-micro font-bold uppercase tracking-wider text-textMuted">
                         spot
                       </span>
                     )}
                     {isCallWall && !isSpot && (
-                      <span className="ml-1.5 font-mono text-micro font-bold uppercase tracking-wider text-bull">
+                      <span title="Call wall" className="ml-1.5 font-mono text-micro font-bold uppercase tracking-wider text-bull">
                         cw
                       </span>
                     )}
                     {isPutWall && !isSpot && (
-                      <span className="ml-1.5 font-mono text-micro font-bold uppercase tracking-wider text-bear">
+                      <span title="Put wall" className="ml-1.5 font-mono text-micro font-bold uppercase tracking-wider text-bear">
                         pw
                       </span>
                     )}
@@ -156,10 +157,7 @@ const GexMatrix = ({ data, highlightCol = null }: GexMatrixProps) => {
 
       {/* Hover read-out — strike × expiry detail on the cell under the cursor */}
       {hover && hovered && (
-        <div
-          className="pointer-events-none fixed z-50 rounded-md border border-borderMuted bg-panelRaised px-3 py-2 shadow-overlay"
-          style={{ left: Math.min(hover.x + 14, window.innerWidth - 200), top: hover.y + 14 }}
-        >
+        <HoverReadout x={hover.x} y={hover.y}>
           <div className="flex items-baseline gap-2">
             <span className="font-mono text-caption font-bold text-textPrimary tnum">
               {strikes[hover.r] % 1 === 0 ? strikes[hover.r].toFixed(0) : strikes[hover.r].toFixed(2)}
@@ -177,7 +175,7 @@ const GexMatrix = ({ data, highlightCol = null }: GexMatrixProps) => {
             {hovered.value >= 0 ? 'dealer support · long γ' : 'negative gamma · short γ'}
             {marker(hover.r) && <span className="text-textMuted"> · {marker(hover.r)}</span>}
           </div>
-        </div>
+        </HoverReadout>
       )}
     </div>
   );

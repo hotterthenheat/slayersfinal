@@ -51,6 +51,12 @@ const SwingMapChart = ({ ticker, spot, revision = 0, height = 300, focusPrice = 
   const modelRef = useRef<SwingModel | null>(null);
   const loadedTickerRef = useRef('');
 
+  // Zone-under-cursor read-out — imperative (crosshair fires per-pixel)
+  const zoneChipRef = useRef<HTMLDivElement | null>(null);
+  const zcZoneRef = useRef<HTMLSpanElement | null>(null);
+  const zcBandRef = useRef<HTMLSpanElement | null>(null);
+  const zcProjRef = useRef<HTMLSpanElement | null>(null);
+
   // Stable per ticker — the intraday tick shouldn't redraw a daily chart — but
   // re-anchored on a coarse cadence (every ~20 scan revisions) so the daily
   // series' last close doesn't drift away from the live spot for good.
@@ -129,6 +135,42 @@ const SwingMapChart = ({ ticker, spot, revision = 0, height = 300, focusPrice = 
     });
     const swing = new SwingPrimitive();
     candles.attachPrimitive(swing);
+
+    // Zone-under-cursor read-out: names the band the cursor price sits in
+    // (resistance / support / open air), its bounds, and the live distance to
+    // the projection target — the numbers the drawn shapes only imply.
+    chart.subscribeCrosshairMove(param => {
+      const el = zoneChipRef.current;
+      if (!el) return;
+      const m = modelRef.current;
+      const price = param.point ? candles.coordinateToPrice(param.point.y) : null;
+      if (!param.point || price == null || !m) {
+        el.style.opacity = '0';
+        return;
+      }
+      const inRes = price >= m.resistance.lo && price <= m.resistance.hi;
+      const inSup = price >= m.support.lo && price <= m.support.hi;
+      if (zcZoneRef.current) {
+        zcZoneRef.current.textContent = inRes ? 'resistance zone' : inSup ? 'support zone' : `$${price.toFixed(2)}`;
+        zcZoneRef.current.style.color = inRes ? PUT_WALL : inSup ? CALL_WALL : '#ededed';
+      }
+      if (zcBandRef.current)
+        zcBandRef.current.textContent = inRes
+          ? `${m.resistance.lo.toFixed(2)}–${m.resistance.hi.toFixed(2)}`
+          : inSup
+            ? `${m.support.lo.toFixed(2)}–${m.support.hi.toFixed(2)}`
+            : inRes || inSup
+              ? ''
+              : price > m.resistance.hi
+                ? 'above resistance'
+                : price < m.support.lo
+                  ? 'below support'
+                  : 'between zones';
+      if (zcProjRef.current)
+        zcProjRef.current.textContent = `target ${m.projection.to.toFixed(2)} (${m.projection.pct >= 0 ? '+' : ''}${m.projection.pct.toFixed(1)}%) · ${(((m.projection.to - price) / price) * 100).toFixed(1)}% from cursor`;
+      el.style.opacity = '1';
+    });
+
     chartRef.current = chart;
     candleSeriesRef.current = candles;
     swingRef.current = swing;
@@ -219,6 +261,15 @@ const SwingMapChart = ({ ticker, spot, revision = 0, height = 300, focusPrice = 
         onDoubleClick={resetView}
       >
         <div ref={containerRef} className="absolute inset-0" />
+        <div
+          ref={zoneChipRef}
+          aria-hidden
+          className="pointer-events-none absolute left-2 top-2 z-10 flex items-center gap-2 rounded border border-borderSubtle bg-panel/85 px-2 py-1 font-mono text-micro opacity-0 transition-opacity"
+        >
+          <span ref={zcZoneRef} className="tnum" />
+          <span ref={zcBandRef} className="text-textSecondary tnum" />
+          <span ref={zcProjRef} className="text-textMuted tnum" />
+        </div>
       </div>
     </div>
   );

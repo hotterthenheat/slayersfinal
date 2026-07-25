@@ -22,7 +22,7 @@ import { CALL_WALL, PUT_WALL, FLIP, DARK_POOL, FOCUS, SPOT } from '../gex/palett
 const theme = candleTheme;
 import { LiquidityHeatmapPrimitive } from './liquidityHeatmapPrimitive';
 import { FlowPillsPrimitive } from './flowPillsPrimitive';
-import { buildLiquidityBook, makeLiquidityLUT } from '../../data/liquidityField';
+import { buildLiquidityBook, makeLiquidityLUT, type LiquidityBook } from '../../data/liquidityField';
 import { buildFlowSweeps, type FlowSweep } from '../../data/flowSweeps';
 import type { Candle } from '../../types/market';
 import type { KeyLevels } from '../../types/gex';
@@ -129,6 +129,15 @@ const LiquidityHeatmapChart = ({
   const barCountRef = useRef(0);
   const barsRef = useRef<Candle[]>([]);
   const lut = useMemo(() => makeLiquidityLUT(), []);
+
+  // Cursor depth read-out — written imperatively from the crosshair handler
+  // (fires per-pixel; going through React state would re-render 60×/s for a
+  // three-span chip).
+  const bookRef = useRef<LiquidityBook | null>(null);
+  const readoutRef = useRef<HTMLDivElement | null>(null);
+  const roPriceRef = useRef<HTMLSpanElement | null>(null);
+  const roTimeRef = useRef<HTMLSpanElement | null>(null);
+  const roDepthRef = useRef<HTMLSpanElement | null>(null);
 
   // Bars re-aggregate when the session advances; the liquidity book — the full
   // TIME x PRICE resting-order field — re-simulates from them. Both are keyed on
@@ -273,6 +282,39 @@ const LiquidityHeatmapChart = ({
     const flow = new FlowPillsPrimitive();
     candles.attachPrimitive(flow);
 
+    // Depth-at-cursor read-out: cursor → (price row, time column) in the book
+    // grid. The axis crosshair already labels price/time; this adds the number
+    // a book map exists for — how much is resting under the cursor.
+    chart.subscribeCrosshairMove(param => {
+      const el = readoutRef.current;
+      if (!el) return;
+      const bk = bookRef.current;
+      const price = param.point ? candles.coordinateToPrice(param.point.y) : null;
+      if (!param.point || param.logical == null || price == null || !bk || bk.cols === 0) {
+        el.style.opacity = '0';
+        return;
+      }
+      const bars = barsRef.current;
+      const bi = Math.max(0, Math.min(bars.length - 1, Math.round(param.logical)));
+      const span = bk.priceMax - bk.priceMin || 1;
+      const rowF = ((price - bk.priceMin) / span) * (bk.rows - 1);
+      const col = Math.max(0, Math.min(bk.cols - 1, Math.floor((param.logical - bk.firstBar) / bk.barsPerCol)));
+      const depth =
+        rowF >= 0 && rowF <= bk.rows - 1 ? bk.intensity[col * bk.rows + Math.round(rowF)] : 0;
+      const when = bars[bi] ? new Date(bars[bi].time * 1000) : null;
+      if (roPriceRef.current) roPriceRef.current.textContent = `$${price.toFixed(2)}`;
+      if (roTimeRef.current)
+        roTimeRef.current.textContent = when
+          ? `${String(when.getHours()).padStart(2, '0')}:${String(when.getMinutes()).padStart(2, '0')}`
+          : '';
+      if (roDepthRef.current) {
+        const label = depth >= 0.65 ? 'deep shelf' : depth >= 0.3 ? 'moderate' : depth > 0.06 ? 'thin' : 'open';
+        roDepthRef.current.textContent = `depth ${Math.round(depth * 100)}% · ${label}`;
+        roDepthRef.current.style.color = depth >= 0.65 ? '#F0C45C' : depth >= 0.3 ? '#C89B3C' : '#7d7d7d';
+      }
+      el.style.opacity = '1';
+    });
+
     chartRef.current = chart;
     candleSeriesRef.current = candles;
     volumeSeriesRef.current = volume;
@@ -331,6 +373,7 @@ const LiquidityHeatmapChart = ({
     }
 
     heat.setData(book, overlays.liquidity);
+    bookRef.current = book;
   }, [ticker, timeframe, overlays.liquidity, overlays.flow, bars, book, showRecent]);
 
   // Volume strip visibility
@@ -526,6 +569,15 @@ const LiquidityHeatmapChart = ({
         onDoubleClick={resetView}
       >
         <div ref={containerRef} className="absolute inset-0" />
+        <div
+          ref={readoutRef}
+          aria-hidden
+          className="pointer-events-none absolute left-2 top-2 z-10 flex items-center gap-2 rounded border border-borderSubtle bg-panel/85 px-2 py-1 font-mono text-micro opacity-0 transition-opacity"
+        >
+          <span ref={roPriceRef} className="text-textPrimary tnum" />
+          <span ref={roTimeRef} className="text-textMuted tnum" />
+          <span ref={roDepthRef} className="tnum" />
+        </div>
       </div>
     </div>
   );

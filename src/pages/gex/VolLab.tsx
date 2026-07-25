@@ -4,6 +4,7 @@ import Simulator from '../../core/simulator';
 import { buildVolLab } from '../../data/vollab';
 import Panel from '../../components/ui/Panel';
 import SegmentedControl from '../../components/ui/SegmentedControl';
+import { SkeletonRows } from '../../components/ui/Skeleton';
 import IvSurface from '../../components/gex/vollab/IvSurface';
 import TermStructure from '../../components/gex/vollab/TermStructure';
 import RiskNeutralDist from '../../components/gex/vollab/RiskNeutralDist';
@@ -75,10 +76,8 @@ const VolLab = () => {
 
   if (!data) {
     return (
-      <Panel className="h-64" bodyClassName="flex items-center justify-center">
-        <span className="font-mono text-label text-textMuted uppercase tracking-widest">
-          Awaiting feed…
-        </span>
+      <Panel className="h-64" bodyClassName="overflow-hidden">
+        <SkeletonRows rows={5} />
       </Panel>
     );
   }

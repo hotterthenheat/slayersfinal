@@ -16,15 +16,8 @@ import MetricGrid from '../ui/MetricGrid';
 import SignalBadge from '../ui/SignalBadge';
 import HoverReadout from '../ui/HoverReadout';
 import type { Tone } from '../ui/tones';
+import { fmtUsd } from '../../data/gex';
 
-const fmtUsd = (v: number): string => {
-  const a = Math.abs(v);
-  const s = v < 0 ? '−' : '';
-  if (a >= 1e9) return `${s}$${(a / 1e9).toFixed(2)}B`;
-  if (a >= 1e6) return `${s}$${(a / 1e6).toFixed(1)}M`;
-  if (a >= 1e3) return `${s}$${(a / 1e3).toFixed(0)}K`;
-  return `${s}$${a.toFixed(0)}`;
-};
 
 const fmtNum = (v: number): string => {
   const a = Math.abs(v);
