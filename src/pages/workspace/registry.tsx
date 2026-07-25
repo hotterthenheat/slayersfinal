@@ -16,6 +16,8 @@ import WallDrift from '../../components/gex/vannacharm/WallDrift';
 import RegimePanel from '../../components/gex/vollab/RegimePanel';
 import MonteCarloPanel from '../proveit/MonteCarloPanel';
 import LiquidityPanel from '../../components/flowdesk/LiquidityPanel';
+import NetPremiumPanel from '../../components/flowdesk/NetPremiumPanel';
+import GradientChart from '../../components/gex/GradientChart';
 import SwingMapChart from '../../components/swing/SwingMapChart';
 import SignalBadge from '../../components/ui/SignalBadge';
 import type { Tone } from '../../components/ui/tones';
@@ -90,6 +92,30 @@ export const WIDGETS: WidgetDef[] = [
         />
       </div>
     ),
+  },
+  {
+    key: 'gradient-chart',
+    title: 'Gradient Chart',
+    description: 'Dealer gamma / charm field across the session — the tape drawn over it',
+    w: 8,
+    h: 6,
+    minW: 4,
+    minH: 4,
+    render: ctx => (
+      <div className="h-full min-h-0 p-2 flex flex-col">
+        <GradientChart ticker={ctx.ticker} revision={ctx.revision} levels={ctx.gex.levels} height={200} />
+      </div>
+    ),
+  },
+  {
+    key: 'net-premium',
+    title: 'Net Premium',
+    description: 'Net call vs put premium tide through the session, next to price',
+    w: 4,
+    h: 6,
+    minW: 3,
+    minH: 3,
+    render: ctx => <NetPremiumPanel ticker={ctx.ticker} revision={ctx.revision} />,
   },
   {
     key: 'liquidity-map',

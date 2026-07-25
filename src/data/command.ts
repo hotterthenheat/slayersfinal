@@ -129,8 +129,10 @@ const SESSION_BARS = 390; // one cash session of 1m bars (mirrors the simulator)
 function buildOrderFlow(snapshot: MarketSnapshot): OrderFlowData {
   const { ticker, spot } = snapshot;
   const all = Simulator.getCandles(ticker) ?? [];
-  const n = all.length % SESSION_BARS || SESSION_BARS;
-  const bars = all.slice(-Math.min(n, all.length));
+  // Trailing session-sized window. NOT length % SESSION_BARS — live bars roll
+  // in one at a time, and a modulo window would collapse the "session" stats
+  // to a couple of bars the minute after load.
+  const bars = all.slice(-SESSION_BARS);
 
   if (!bars.length) {
     return { cumulativeDelta: [], deltaByPrice: [], buyVolume: 0, sellVolume: 0, netDelta: 0, vwap: spot, poc: spot };

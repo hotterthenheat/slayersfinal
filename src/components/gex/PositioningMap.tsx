@@ -23,23 +23,55 @@ const ZONE_STYLE: Record<ZoneKind, { rail: string; text: string }> = {
   friction: { rail: 'bg-textMuted/40', text: 'text-textMuted' },
 };
 
+// Positions-by-strike palette: dealer SHORT gamma prints gold (amplifying
+// inventory), dealer LONG gamma prints blue (absorbing inventory) — one net
+// bar per strike, the pro dealer-positioning read.
+const SHORT_GAMMA = '#E0B84E';
+const LONG_GAMMA = '#5EA0EF';
+
 /**
- * One side's pressure bar, anchored at the center line, direction by sign.
+ * The strike's NET positioning bar, anchored at the center zero line —
+ * gold left when dealers are short gamma there, blue right when long.
  * Widths animate between scans so the map breathes instead of snapping.
  */
-const CenterBar = ({ value, max, color, top }: { value: number; max: number; color: string; top: boolean }) => {
+const NetBar = ({ value, max }: { value: number; max: number }) => {
   const pct = Math.min(48, (Math.abs(value) / (max || 1)) * 48);
   const neg = value < 0;
   return (
     <motion.span
-      className={`absolute ${top ? 'top-[2px]' : 'bottom-[2px]'} h-[4px] rounded-sm`}
+      className="absolute top-1/2 -translate-y-1/2 h-[7px] rounded-[2px]"
       initial={false}
       animate={{ left: `${neg ? 50 - pct : 50}%`, width: `${pct}%`, opacity: pct < 0.5 ? 0 : 1 }}
       transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-      style={{ background: color }}
+      style={{ background: neg ? SHORT_GAMMA : LONG_GAMMA }}
     />
   );
 };
+
+/** Where this strike's net stood ~15 minutes ago — a silver ghost dot. */
+const PriorDot = ({ value, max }: { value: number; max: number }) => {
+  const off = Math.max(-48, Math.min(48, (value / (max || 1)) * 48));
+  return (
+    <motion.span
+      className="absolute top-1/2 w-[4px] h-[4px] rounded-full bg-textPrimary/55 pointer-events-none"
+      initial={false}
+      animate={{ left: `calc(${50 + off}% - 2px)`, y: '-50%' }}
+      transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+    />
+  );
+};
+
+/** ±1σ expected-move rule — the straddle-implied daily range, VS3D-style. */
+const EmMarker = ({ price, delta }: { price: number; delta: number }) => (
+  <div className="flex items-center gap-1.5 px-2 py-[2px]">
+    <span className="h-0 flex-grow border-t border-dashed border-textSecondary/40" />
+    <span className="inline-flex items-center rounded-[3px] border border-borderMuted bg-canvas px-1.5 py-px font-mono text-micro font-semibold tracking-wider text-textSecondary whitespace-nowrap tnum">
+      {price.toFixed(2)} ({delta >= 0 ? '+' : '−'}
+      {Math.abs(delta).toFixed(2)})
+    </span>
+    <span className="h-0 w-3 shrink-0 border-t border-dashed border-textSecondary/40" />
+  </div>
+);
 
 const SpotMarker = ({ ticker, spot }: { ticker: string; spot: number }) => (
   <div className="px-2 py-1">
@@ -173,9 +205,11 @@ const FlipMarker = ({ price }: { price: number }) => (
 );
 
 /**
- * Net dealer pressure by strike — put/call bars diverge from a center zero
- * line; wall / friction zones annotate the right rail. Sign convention is
- * spelled out in the footer so color is never the only signal.
+ * Positions by strike — ONE net dealer-gamma bar per strike (gold short /
+ * blue long) with a ghost dot marking where it stood 15 minutes ago, spot and
+ * ±1σ expected-move rules between the rows, and wall / friction zones on the
+ * right rail. Sign convention is spelled out in the footer so color is never
+ * the only signal.
  */
 const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSelectStrike }: PositioningMapProps) => {
   const { ticker, strikes, maxAbs, levels, zones, spotAfterIndex } = data;
@@ -186,11 +220,38 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
   const [hoverRow, setHoverRow] = useState<StrikeExposure | null>(null);
   const [hoverY, setHoverY] = useState(0);
 
-  // Flip marker slot — sits after the last strike above the flip level (rows descending)
-  let flipAfterIndex = strikes.findIndex(
-    (row, i) => row.strike >= levels.flip && (strikes[i + 1]?.strike ?? -Infinity) < levels.flip
-  );
-  if (flipAfterIndex === -1) flipAfterIndex = levels.flip > (strikes[0]?.strike ?? 0) ? -0.5 : strikes.length - 1;
+  // Ghost dots: raw whole-book values ~15 minutes back, rescaled per strike by
+  // the SAME effective multiplier this view applied to the live value — so the
+  // dot and the bar are always on one scale, never a raw-vs-scaled mismatch.
+  const priorScaled = useMemo(() => {
+    const snaps = Simulator.getGexHistory(ticker) ?? [];
+    if (snaps.length < 2) return new Map<number, number>();
+    const nowMap = new Map(snaps[snaps.length - 1].levels.map(l => [l.strike, l.value]));
+    const pastMap = new Map(snaps[Math.max(0, snaps.length - 16)].levels.map(l => [l.strike, l.value]));
+    const out = new Map<number, number>();
+    for (const row of strikes) {
+      const rawNow = nowMap.get(row.strike);
+      const rawPast = pastMap.get(row.strike);
+      if (rawNow == null || rawPast == null || rawNow === 0) continue;
+      out.set(row.strike, rawPast * (row.gex.net / rawNow));
+    }
+    return out;
+  }, [ticker, strikes]);
+
+  // ±1σ expected move off the symbol's IV — the straddle-implied daily range
+  const iv = Simulator.TICKERS[ticker]?.iv ?? 0.2;
+  const em = levels.spot * iv * Math.sqrt(1 / 252);
+
+  // Marker slots — each rule sits after the last strike above its level (rows descending)
+  const slotFor = (level: number): number => {
+    const idx = strikes.findIndex(
+      (row, i) => row.strike >= level && (strikes[i + 1]?.strike ?? -Infinity) < level
+    );
+    return idx === -1 ? (level > (strikes[0]?.strike ?? 0) ? -0.5 : strikes.length - 1) : idx;
+  };
+  const flipAfterIndex = slotFor(levels.flip);
+  const emUpAfterIndex = slotFor(levels.spot + em);
+  const emDownAfterIndex = slotFor(levels.spot - em);
 
   const zoneFor = (strike: number): ZoneBand | undefined =>
     zones.find(z => strike <= z.from && strike >= z.to);
@@ -206,14 +267,15 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
       {/* Legend */}
       <div className="flex items-center gap-3 px-2 py-1.5 border-b border-borderSubtle flex-wrap select-none">
         {[
-          { label: 'Put pressure', cls: 'w-2.5 h-0.5 rounded-full bg-bear/80' },
-          { label: 'Call pressure', cls: 'w-2.5 h-0.5 rounded-full bg-bull/90' },
+          { label: 'Short γ', style: { background: SHORT_GAMMA }, cls: 'w-2.5 h-[5px] rounded-[2px]' },
+          { label: 'Long γ', style: { background: LONG_GAMMA }, cls: 'w-2.5 h-[5px] rounded-[2px]' },
+          { label: '15m ago', cls: 'w-[4px] h-[4px] rounded-full bg-textPrimary/60' },
           { label: 'Spot', cls: 'w-2.5 h-0.5 rounded-full bg-textPrimary' },
-          { label: 'Pin', cls: 'w-3 h-0 border-t border-dashed border-textPrimary/70' },
+          { label: '±1σ', cls: 'w-3 h-0 border-t border-dashed border-textSecondary/60' },
           { label: 'Flip', cls: 'w-3 h-0 border-t border-dashed border-flip/80' },
-        ].map(item => (
+        ].map((item: { label: string; cls: string; style?: React.CSSProperties }) => (
           <span key={item.label} className="flex items-center gap-1.5 font-mono text-micro uppercase tracking-wider text-textSecondary">
-            <span className={`inline-block ${item.cls}`} />
+            <span className={`inline-block ${item.cls}`} style={item.style} />
             {item.label}
           </span>
         ))}
@@ -243,6 +305,7 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
         }}
         onMouseLeave={() => setHoverRow(null)}
       >
+        {emUpAfterIndex === -0.5 && <EmMarker price={levels.spot + em} delta={em} />}
         {spotAfterIndex === -0.5 && <SpotMarker ticker={ticker} spot={levels.spot} />}
         {strikes.map((row, i) => {
           const zone = zoneFor(row.strike);
@@ -269,15 +332,15 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
                 <span className="w-14 shrink-0 px-2 py-[3px] bg-inset border-r border-borderSubtle/40 font-mono text-micro font-semibold tnum text-textSecondary">
                   {row.strike % 1 === 0 ? row.strike.toFixed(0) : row.strike.toFixed(2)}
                 </span>
-                <div className="relative flex-1 h-[14px]">
+                <div className="relative flex-1 h-[15px]">
                   {/* quarter gridlines + center zero line */}
                   <span className="absolute left-1/4 top-0 bottom-0 w-px bg-white/[0.04]" />
                   <span className="absolute left-3/4 top-0 bottom-0 w-px bg-white/[0.04]" />
                   <span className="absolute left-1/2 top-0 bottom-0 w-px bg-borderMuted" />
                   {/* Pin magnet rule — behind the bars, unmistakable */}
                   {row.pin && <span className="absolute inset-x-0 top-1/2 border-t border-dashed border-textPrimary/30" />}
-                  <CenterBar value={row.gex.call} max={max} color="rgba(48,209,88,0.9)" top />
-                  <CenterBar value={row.gex.put} max={max} color="rgba(255,59,48,0.78)" top={false} />
+                  <NetBar value={row.gex.net} max={max} />
+                  {priorScaled.has(row.strike) && <PriorDot value={priorScaled.get(row.strike) as number} max={max} />}
                   {row.pin && (
                     <span className="absolute right-1 top-1/2 -translate-y-1/2 inline-flex items-center rounded-[3px] border border-textPrimary/60 bg-canvas px-1.5 py-px font-mono text-micro font-bold uppercase tracking-wider text-textPrimary">
                       PIN {row.strike % 1 === 0 ? row.strike.toFixed(0) : row.strike.toFixed(2)}
@@ -294,7 +357,9 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
                   )}
                 </span>
               </div>
+              {i === emUpAfterIndex && <EmMarker price={levels.spot + em} delta={em} />}
               {i === spotAfterIndex && <SpotMarker ticker={ticker} spot={levels.spot} />}
+              {i === emDownAfterIndex && <EmMarker price={levels.spot - em} delta={-em} />}
               {i === flipAfterIndex && <FlipMarker price={levels.flip} />}
             </Fragment>
           );
@@ -306,8 +371,9 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
 
       {/* Sign convention */}
       <div className="px-2.5 py-1.5 border-t border-borderSubtle font-mono text-micro text-textMuted leading-relaxed select-none">
-        Positive = dealer long gamma <span className="text-textSecondary">(dips absorbed)</span> · Negative = dealer
-        short gamma <span className="text-textSecondary">(moves amplified)</span>
+        <span style={{ color: LONG_GAMMA }}>Blue</span> = dealer long gamma{' '}
+        <span className="text-textSecondary">(dips absorbed)</span> · <span style={{ color: SHORT_GAMMA }}>Gold</span> =
+        dealer short gamma <span className="text-textSecondary">(moves amplified)</span> · dot = 15m ago
       </div>
     </div>
   );

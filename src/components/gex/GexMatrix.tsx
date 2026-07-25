@@ -83,15 +83,22 @@ const GexMatrix = ({ data, highlightCol = null }: GexMatrixProps) => {
               const isSpot = r === spotRowIndex;
               const isCallWall = r === callWallIndex;
               const isPutWall = r === putWallIndex;
+              // round-number strikes are the OI magnets — gold-ringed key rows
+              const step = strikes.length > 1 ? Math.abs(strikes[0] - strikes[1]) : 1;
+              const isKeyRow = Math.abs(strike % (step * 5)) < step * 0.01;
               return (
                 <tr
                   key={strike}
-                  className={`border-b border-borderSubtle/40 last:border-0 ${
-                    isSpot ? 'rail-neutral' : ''
-                  }`}
+                  className={`border-b last:border-0 ${
+                    isKeyRow ? 'border-[#E0B84E]/25 border-t border-t-[#E0B84E]/25' : 'border-borderSubtle/40'
+                  } ${isSpot ? 'rail-neutral' : ''}`}
                 >
                   <td className="px-2 py-1 font-mono text-label whitespace-nowrap">
-                    <span className={isSpot ? 'text-textPrimary font-bold' : 'text-textPrimary font-semibold'}>
+                    <span
+                      className={`${isSpot ? 'text-textPrimary font-bold' : 'text-textPrimary font-semibold'} ${
+                        isKeyRow && !isSpot ? 'text-[#E0B84E]' : ''
+                      }`}
+                    >
                       {strike % 1 === 0 ? strike.toFixed(0) : strike.toFixed(2)}
                     </span>
                     {isSpot && (
