@@ -1,41 +1,30 @@
-import type { LiqChartType, LiqOverlays } from './LiquidityMap';
-import SegmentedControl from '../ui/SegmentedControl';
+import type { LiqOverlays } from './liquidityTypes';
 
 /**
- * The overlay control rail — a row of mini switches that flip each overlay on
- * the shared order-flow heatmap, plus the price-rendering selector.
- * Presentational only; state lives in the host.
+ * The overlay control rail — a segmented group of toggles that flip each layer on
+ * the liquidity chart. Presentational only; state lives in the host. Matches the
+ * house SegmentedControl look (active = filled) so it reads as one control family.
  */
 const OVERLAY_DEFS: { key: keyof LiqOverlays; label: string }[] = [
+  { key: 'liquidity', label: 'Liquidity' },
   { key: 'flow', label: 'Flow' },
+  { key: 'walls', label: 'Walls' },
   { key: 'volume', label: 'Volume' },
-  { key: 'delta', label: 'Delta' },
   { key: 'darkpool', label: 'Dark Pool' },
-  { key: 'crosshair', label: 'Crosshair' },
+  { key: 'vwap', label: 'VWAP' },
 ];
-
-const CHART_OPTIONS = [
-  { value: 'candle', label: 'Candles' },
-  { value: 'line', label: 'Line' },
-  { value: 'bubbles', label: 'Bubbles' },
-] as const;
 
 interface OverlayRailProps {
   overlays: LiqOverlays;
   onToggle: (key: keyof LiqOverlays) => void;
-  chartType: LiqChartType;
-  onChartType: (t: LiqChartType) => void;
   dense?: boolean;
 }
 
-const OverlayRail = ({ overlays, onToggle, chartType, onChartType, dense }: OverlayRailProps) => (
+const OverlayRail = ({ overlays, onToggle, dense }: OverlayRailProps) => (
   <div className={`flex items-center gap-3 flex-wrap ${dense ? 'px-2 py-1.5' : 'px-3 py-2'}`}>
-    {/* Overlays are independent toggles, but rendered as one segmented group so
-        the control matches the house SegmentedControl used everywhere else
-        (active = filled) instead of an off-pattern row of sliding switches. */}
     <div
       role="group"
-      aria-label="Chart overlays"
+      aria-label="Chart layers"
       className="inline-flex items-center inst-surface rounded-md overflow-hidden max-w-full overflow-x-auto no-scrollbar"
     >
       {OVERLAY_DEFS.map((def, i) => {
@@ -45,17 +34,14 @@ const OverlayRail = ({ overlays, onToggle, chartType, onChartType, dense }: Over
             key={def.key}
             onClick={() => onToggle(def.key)}
             aria-pressed={on}
-            className={`shrink-0 whitespace-nowrap px-3 py-1.5 font-mono text-caption font-medium transition-colors ${
+            className={`shrink-0 whitespace-nowrap px-3 py-1.5 font-mono text-caption font-medium transition-colors leading-4 ${
               i > 0 ? 'border-l border-borderSubtle' : ''
-            } ${on ? 'bg-white/[0.08] text-textPrimary' : 'text-textSecondary hover:text-textPrimary hover:bg-white/[0.03]'} leading-4`}
+            } ${on ? 'bg-white/[0.08] text-textPrimary' : 'text-textSecondary hover:text-textPrimary hover:bg-white/[0.03]'}`}
           >
             {def.label}
           </button>
         );
       })}
-    </div>
-    <div className="ml-auto">
-      <SegmentedControl options={CHART_OPTIONS} value={chartType} onChange={onChartType} ariaLabel="Price rendering" />
     </div>
   </div>
 );

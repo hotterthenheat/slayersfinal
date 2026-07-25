@@ -59,7 +59,6 @@ export const PULSE_PRESETS: PulseLayout[] = [
       { id: 'c-chart', key: 'live-chart' },
       { id: 'c-heat', key: 'gex-heatmap' },
       { id: 'c-pos', key: 'positioning-map' },
-      { id: 'c-levels', key: 'key-levels' },
       { id: 'c-flow', key: 'order-flow' },
       { id: 'c-dp', key: 'dark-pool' },
       { id: 'c-liq', key: 'liquidity-map' },
@@ -67,11 +66,52 @@ export const PULSE_PRESETS: PulseLayout[] = [
     layout: [
       L('c-chart', 0, 0, 8, 6, 4, 4),
       L('c-heat', 8, 0, 4, 6, 3, 4),
-      L('c-pos', 0, 6, 5, 5, 3, 4),
-      L('c-levels', 5, 6, 3, 5, 3, 3),
+      L('c-pos', 0, 6, 8, 5, 3, 4),
       L('c-flow', 8, 6, 4, 5, 3, 4),
       L('c-dp', 0, 11, 12, 4, 4, 3),
-      L('c-liq', 0, 15, 12, 4, 4, 3),
+      L('c-liq', 0, 15, 12, 8, 4, 5),
+    ],
+  },
+  {
+    // Three-column command deck: institutional flow feed on the left, the
+    // liquidity chart + price in the center, the GEX grid + levels on the right —
+    // the whole desk on one screen, dealer-flow-terminal style.
+    id: 'flow-command',
+    name: 'Flow Command',
+    preset: true,
+    panels: [
+      { id: 'cmd-dp', key: 'dark-pool' },
+      { id: 'cmd-flow', key: 'order-flow' },
+      { id: 'cmd-liq', key: 'liquidity-map' },
+      { id: 'cmd-chart', key: 'live-chart' },
+      { id: 'cmd-gex', key: 'gex-heatmap' },
+    ],
+    layout: [
+      // left column — flow / dark-pool feed
+      L('cmd-dp', 0, 0, 3, 6, 3, 4),
+      L('cmd-flow', 0, 6, 3, 5, 3, 4),
+      // center column — liquidity chart (flagship, tall) over the live chart
+      L('cmd-liq', 3, 0, 5, 9, 4, 5),
+      L('cmd-chart', 3, 9, 5, 4, 4, 4),
+      // right column — GEX heatmap grid, full height (matches the center stack)
+      L('cmd-gex', 8, 0, 4, 13, 3, 4),
+    ],
+  },
+  {
+    // Dual daily swing desk — price-estimation targets side by side, the way you
+    // scan the majors for the next swing. Setups + levels underneath.
+    id: 'swing-desk',
+    name: 'Swing Desk',
+    preset: true,
+    panels: [
+      { id: 'sw-spy', key: 'swing-map', ticker: 'SPY' },
+      { id: 'sw-qqq', key: 'swing-map', ticker: 'QQQ' },
+      { id: 'sw-setups', key: 'top-setups' },
+    ],
+    layout: [
+      L('sw-spy', 0, 0, 6, 7, 4, 4),
+      L('sw-qqq', 6, 0, 6, 7, 4, 4),
+      L('sw-setups', 0, 7, 12, 4, 3, 3),
     ],
   },
   {
@@ -82,13 +122,11 @@ export const PULSE_PRESETS: PulseLayout[] = [
       { id: 'g-chart', key: 'live-chart' },
       { id: 'g-exp', key: 'exposure-matrix' },
       { id: 'g-flow', key: 'order-flow' },
-      { id: 'g-levels', key: 'key-levels' },
     ],
     layout: [
       L('g-chart', 0, 0, 8, 6, 4, 4),
       L('g-exp', 8, 0, 4, 6, 3, 4),
-      L('g-flow', 0, 6, 8, 4, 4, 4),
-      L('g-levels', 8, 6, 4, 4, 3, 3),
+      L('g-flow', 0, 6, 12, 4, 4, 4),
     ],
   },
   {
@@ -130,12 +168,10 @@ export const PULSE_PRESETS: PulseLayout[] = [
     panels: [
       { id: 'a-chart', key: 'live-chart' },
       { id: 'a-moc', key: 'moc-read' },
-      { id: 'a-levels', key: 'key-levels' },
     ],
     layout: [
-      L('a-chart', 0, 0, 7, 6, 4, 4),
-      L('a-moc', 7, 0, 5, 6, 4, 4),
-      L('a-levels', 0, 6, 12, 4, 4, 3),
+      L('a-chart', 0, 0, 7, 8, 4, 4),
+      L('a-moc', 7, 0, 5, 8, 4, 4),
     ],
   },
   {
@@ -162,14 +198,12 @@ export const PULSE_PRESETS: PulseLayout[] = [
     panels: [
       { id: 'sc-chart', key: 'live-chart' },
       { id: 'sc-flow', key: 'order-flow' },
-      { id: 'sc-levels', key: 'key-levels' },
       { id: 'sc-liq', key: 'liquidity-map' },
     ],
     layout: [
       L('sc-chart', 0, 0, 8, 7, 4, 4),
-      L('sc-flow', 8, 0, 4, 4, 3, 4),
-      L('sc-levels', 8, 4, 4, 3, 3, 3),
-      L('sc-liq', 0, 7, 12, 4, 4, 3),
+      L('sc-flow', 8, 0, 4, 7, 3, 4),
+      L('sc-liq', 0, 7, 12, 7, 4, 5),
     ],
   },
   {
@@ -180,13 +214,11 @@ export const PULSE_PRESETS: PulseLayout[] = [
       { id: 'sw-chart', key: 'live-chart' },
       { id: 'sw-setups', key: 'top-setups' },
       { id: 'sw-pos', key: 'positioning-map' },
-      { id: 'sw-levels', key: 'key-levels' },
     ],
     layout: [
       L('sw-chart', 0, 0, 8, 6, 4, 4),
       L('sw-setups', 8, 0, 4, 6, 3, 4),
-      L('sw-pos', 0, 6, 7, 5, 4, 4),
-      L('sw-levels', 7, 6, 5, 5, 3, 3),
+      L('sw-pos', 0, 6, 12, 5, 4, 4),
     ],
   },
   {

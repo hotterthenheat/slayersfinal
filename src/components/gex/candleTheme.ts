@@ -14,6 +14,17 @@ export interface CandleTheme {
 }
 
 export const CANDLE_THEMES = {
+  // Slayer signature — holographic silver up / violet down. The house look: the
+  // brand's holo-silver for strength, a luminous purple for weakness. Its OWN
+  // two-tone, distinct from the green/red the walls & GEX nodes own.
+  slayer: {
+    up: '#DCE3F5',
+    down: '#A47CF2',
+    wickUp: '#F1F4FF',
+    wickDown: '#C0A2FF',
+    volUp: 'rgba(220,227,245,0.22)',
+    volDown: 'rgba(164,124,242,0.26)',
+  },
   // Neutral, premium — near-white up / slate down
   mono: {
     up: '#eef1f5',
@@ -45,6 +56,6 @@ export const CANDLE_THEMES = {
 
 export type CandleThemeKey = keyof typeof CANDLE_THEMES;
 
-export const CANDLE_THEME_KEY: CandleThemeKey = 'mono';
+export const CANDLE_THEME_KEY: CandleThemeKey = 'slayer';
 
 export const candleTheme: CandleTheme = CANDLE_THEMES[CANDLE_THEME_KEY];

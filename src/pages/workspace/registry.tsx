@@ -11,12 +11,12 @@ import StrikeChart from '../../components/gex/StrikeChart';
 import PositioningMap from '../../components/gex/PositioningMap';
 import ExposureMatrix from '../../components/gex/ExposureMatrix';
 import GexMatrix from '../../components/gex/GexMatrix';
-import KeyLevelsRail from '../../components/gex/KeyLevelsRail';
 import OrderFlowPanel from '../../components/gex/OrderFlowPanel';
 import WallDrift from '../../components/gex/vannacharm/WallDrift';
 import RegimePanel from '../../components/gex/vollab/RegimePanel';
 import MonteCarloPanel from '../proveit/MonteCarloPanel';
 import LiquidityPanel from '../../components/flowdesk/LiquidityPanel';
+import SwingMapChart from '../../components/swing/SwingMapChart';
 import SignalBadge from '../../components/ui/SignalBadge';
 import type { Tone } from '../../components/ui/tones';
 import { buildDarkPoolView } from '../../data/darkpool';
@@ -94,21 +94,42 @@ export const WIDGETS: WidgetDef[] = [
   {
     key: 'liquidity-map',
     title: 'Liquidity Map',
-    description: 'Order-flow heatmap — flow, volume, delta, dark-pool & a live DOM',
+    description: 'Resting-liquidity heatmap on a TradingView chart — walls, dark pool & VWAP',
     w: 8,
-    h: 6,
+    h: 9,
     minW: 4,
-    minH: 4,
+    minH: 5,
     render: ctx => {
       const dp = buildDarkPoolView(ctx.snapshot);
       return (
         <LiquidityPanel
           ticker={ctx.ticker}
           spot={ctx.snapshot.spot}
+          revision={ctx.revision}
+          levels={ctx.gex.levels}
           darkPoolLevels={dp.levels.map(l => ({ price: l.price, notional: l.notional }))}
+          nodes={ctx.gex.nodes}
+          oiByStrike={ctx.snapshot.chain.map(n => ({ strike: n.strike, oi: n.callOI + n.putOI }))}
+          deltaByPrice={ctx.cmd.orderFlow.deltaByPrice}
+          orderFlow={{ vwap: ctx.cmd.orderFlow.vwap, poc: ctx.cmd.orderFlow.poc }}
+          focusPrice={ctx.focusPrice ?? null}
         />
       );
     },
+  },
+  {
+    key: 'swing-map',
+    title: 'Swing Map',
+    description: 'Daily swing targets — support/resistance zones, trend & measured move',
+    w: 6,
+    h: 6,
+    minW: 4,
+    minH: 4,
+    render: ctx => (
+      <div className="h-full min-h-0 p-2 flex flex-col">
+        <SwingMapChart ticker={ctx.ticker} spot={ctx.snapshot.spot} revision={ctx.revision} height={200} focusPrice={ctx.focusPrice ?? null} />
+      </div>
+    ),
   },
   {
     key: 'positioning-map',
@@ -141,23 +162,6 @@ export const WIDGETS: WidgetDef[] = [
     render: ctx => (
       <div className="h-full min-h-0 p-2">
         <GexMatrix data={ctx.matrix} spot={ctx.gex.levels.spot} />
-      </div>
-    ),
-  },
-  {
-    key: 'key-levels',
-    title: 'Key Levels',
-    description: 'Walls, pin, flip & king with distance',
-    w: 4,
-    h: 4,
-    minW: 3,
-    minH: 3,
-    render: ctx => (
-      <div className="h-full min-h-0 overflow-y-auto">
-        <KeyLevelsRail
-          rows={ctx.cmd.keyLevels}
-          maxPressure={ctx.cmd.keyLevels.reduce((a, l) => Math.max(a, l.pressure), 1)}
-        />
       </div>
     ),
   },

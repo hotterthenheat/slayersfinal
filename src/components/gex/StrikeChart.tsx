@@ -109,7 +109,9 @@ const StrikeChart = ({ ticker, revision, levels, overlay, timeframe, height = 46
   // Keep the autoscale provider reading the freshest levels without re-mounting
   levelsRef.current = levels;
 
-  const VISIBLE_BARS = 130;
+  // A full intraday session of thin bars — reads like a real terminal chart
+  // rather than a handful of fat candles. One seeded session is 390 1m bars.
+  const VISIBLE_BARS = 340;
   const showRecent = useCallback(() => {
     const chart = chartRef.current;
     if (!chart) return;
@@ -143,7 +145,7 @@ const StrikeChart = ({ ticker, revision, levels, overlay, timeframe, height = 46
         horzLines: { color: 'rgba(255,255,255,0.03)' },
       },
       rightPriceScale: { borderColor: '#1c1c1c' },
-      timeScale: { borderColor: '#1c1c1c', timeVisible: true, secondsVisible: false, rightOffset: 6, barSpacing: 7 },
+      timeScale: { borderColor: '#1c1c1c', timeVisible: true, secondsVisible: false, rightOffset: 4, barSpacing: 3 },
       crosshair: {
         vertLine: { color: 'rgba(255,255,255,0.3)', labelBackgroundColor: '#262626' },
         horzLine: { color: 'rgba(255,255,255,0.3)', labelBackgroundColor: '#262626' },
@@ -231,6 +233,9 @@ const StrikeChart = ({ ticker, revision, levels, overlay, timeframe, height = 46
       candleSeries.setData(bars.map(toCandle));
       volumeSeries.setData(bars.map(toVolume));
       showRecent();
+      // On a 0-width mount the range doesn't stick; re-apply once laid out so the
+      // compact tile opens on the recent session, not zoomed out to the month.
+      requestAnimationFrame(() => requestAnimationFrame(() => showRecent()));
       loadedRef.current = { ticker, timeframe };
     } else {
       const last = bars[bars.length - 1];
