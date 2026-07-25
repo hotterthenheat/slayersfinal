@@ -114,11 +114,11 @@ const ExposureProfile = () => {
 
       {/* Header note — dealer-sign convention + units (read the same way across every panel) */}
       <p className="font-mono text-label leading-relaxed text-textMuted">
-        <span className="text-textSecondary font-semibold uppercase tracking-wider">Sign</span> positive net = dealer short
-        gamma <span className="text-textSecondary">(upside supply)</span> · negative = dealer long gamma{' '}
-        <span className="text-textSecondary">(downside support)</span>.{' '}
+        <span className="text-textSecondary font-semibold uppercase tracking-wider">Sign</span> positive net = dealer long
+        gamma <span className="text-textSecondary">(dips absorbed)</span> · negative = dealer short gamma{' '}
+        <span className="text-textSecondary">(moves amplified)</span>.{' '}
         <span className="text-textSecondary font-semibold uppercase tracking-wider">Units</span> signed $ — GEX per 1%
-        move, DEX per 1σ move, VEX per 1% vol.
+        move, DEX delta notional, VEX per 1% vol.
       </p>
 
       {/* Selected-strike detail bar */}

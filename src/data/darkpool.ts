@@ -119,35 +119,16 @@ export function buildDarkPoolView(snapshot: MarketSnapshot): DarkPoolView {
   const hi = Math.max(...priceHistory, spot);
   const range = Math.max(hi - lo, spot * 0.004);
 
-  // ---- liquidity shelves ----------------------------------------------------
-  // Anchor shelves inside the session range with a bias toward the extremes —
-  // that's where institutional resting interest actually concentrates.
-  const rawLevels = Array.from({ length: LEVEL_COUNT }, (_, i) => {
+  // ---- shelf anchors ----------------------------------------------------------
+  // Shelf PRICES first (edge-biased inside the session range — where resting
+  // institutional interest concentrates); their notionals are derived from the
+  // prints that actually land on them, so a shelf can never be smaller than the
+  // blocks it hosts and the '% of DP' shares agree with the session total.
+  const shelfPrices = Array.from({ length: LEVEL_COUNT }, (_, i) => {
     const t = h01(seed(`lvl-${i}`));
     const edgeBiased = t < 0.5 ? Math.pow(t * 2, 1.5) / 2 : 1 - Math.pow((1 - t) * 2, 1.5) / 2;
-    const price = lo + edgeBiased * range;
-    const notional = hRange(seed(`lvln-${i}`), 18e6, 220e6);
-    return { price, notional };
-  }).sort((a, b) => b.price - a.price);
-
-  const totalLevelNotional = rawLevels.reduce((a, l) => a + l.notional, 0);
-
-  const levels: DarkPoolLevel[] = rawLevels.map((l, i) => {
-    const distPct = ((l.price - spot) / spot) * 100;
-    const defended = Math.min(defendedCount(priceHistory, l.price, 0.0012) + (h01(seed(`lvld-${i}`)) > 0.6 ? 1 : 0), 5);
-    const role: LevelRole = Math.abs(distPct) < 0.12 ? 'PIVOT' : distPct < 0 ? 'SUPPORT' : 'RESISTANCE';
-    const sharePct = (l.notional / totalLevelNotional) * 100;
-    return {
-      price: Number(l.price.toFixed(2)),
-      notional: l.notional,
-      prints: Math.round(hRange(seed(`lvlp-${i}`), 4, 26)),
-      sharePct,
-      role,
-      defended,
-      distPct,
-      usage: levelUsage(role, l.price, defended, sharePct),
-    };
-  });
+    return lo + edgeBiased * range;
+  }).sort((a, b) => b - a);
 
   // ---- prints -----------------------------------------------------------------
   const now = Date.now();
@@ -155,15 +136,17 @@ export function buildDarkPoolView(snapshot: MarketSnapshot): DarkPoolView {
     const pSeed = seed(`p-${i}`);
     // Prints gravitate to shelves ~55% of the time; the rest scatter in range.
     const nearShelf = h01(`${pSeed}-at`) < 0.55;
-    const shelf = levels[Math.floor(h01(`${pSeed}-which`) * levels.length)];
+    const shelfPrice = shelfPrices[Math.floor(h01(`${pSeed}-which`) * shelfPrices.length)];
     const price = nearShelf
-      ? shelf.price * (1 + hRange(`${pSeed}-jit`, -0.0008, 0.0008))
+      ? shelfPrice * (1 + hRange(`${pSeed}-jit`, -0.0008, 0.0008))
       : lo + h01(`${pSeed}-px`) * range;
+    // Block sizes skew small with a rare institutional tail (5K–255K shares) —
+    // scaled so a single cross stays a plausible fraction of the day's DP flow.
     const sizePercentile = Math.pow(h01(`${pSeed}-sz`), 0.6);
-    const size = Math.round(20000 + sizePercentile * 980000);
+    const size = Math.round(5000 + Math.pow(sizePercentile, 2.5) * 250000);
     const notional = size * price;
     const vsSpotPct = ((price - spot) / spot) * 100;
-    const atLevel = nearShelf && Math.abs(price - shelf.price) / shelf.price < 0.001;
+    const atLevel = nearShelf && Math.abs(price - shelfPrice) / shelfPrice < 0.001;
     const cls = classify(pSeed, vsSpotPct, sizePercentile, atLevel, sessionUp);
     const minutesAgo = Math.floor(Math.pow(h01(`${pSeed}-t`), 1.3) * 380);
     const ts = new Date(now - minutesAgo * 60000);
@@ -181,6 +164,31 @@ export function buildDarkPoolView(snapshot: MarketSnapshot): DarkPoolView {
     };
   }).sort((a, b) => (a.time < b.time ? 1 : -1));
 
+  const totalNotional = prints.reduce((a, p) => a + p.notional, 0);
+
+  // ---- liquidity shelves from the prints ---------------------------------------
+  const levels: DarkPoolLevel[] = shelfPrices.map((price, i) => {
+    const cluster = prints.filter(p => Math.abs(p.price - price) / price < 0.001);
+    const clusterNotional = cluster.reduce((a, p) => a + p.notional, 0);
+    // Resting interest beyond today's tape keeps an empty shelf from reading $0
+    const notional = clusterNotional + hRange(seed(`lvln-${i}`), 6e6, 24e6);
+    const distPct = ((price - spot) / spot) * 100;
+    const defended = Math.min(defendedCount(priceHistory, price, 0.0012) + (h01(seed(`lvld-${i}`)) > 0.6 ? 1 : 0), 5);
+    const role: LevelRole = Math.abs(distPct) < 0.12 ? 'PIVOT' : distPct < 0 ? 'SUPPORT' : 'RESISTANCE';
+    // Share of the SESSION dark-pool notional — the same total the page reports
+    const sharePct = (notional / (totalNotional || 1)) * 100;
+    return {
+      price: Number(price.toFixed(2)),
+      notional,
+      prints: cluster.length + Math.round(hRange(seed(`lvlp-${i}`), 1, 4)),
+      sharePct,
+      role,
+      defended,
+      distPct,
+      usage: levelUsage(role, price, defended, sharePct),
+    };
+  });
+
   // ---- posture ------------------------------------------------------------------
   let accW = 0;
   let distW = 0;
@@ -191,7 +199,15 @@ export function buildDarkPoolView(snapshot: MarketSnapshot): DarkPoolView {
   const gross = accW + distW || 1;
   const netPosturePct = ((accW - distW) / gross) * 100;
   const posture: Posture = netPosturePct > 18 ? 'ACCUMULATING' : netPosturePct < -18 ? 'DISTRIBUTING' : 'BALANCED';
-  const strongest = [...levels].sort((a, b) => b.notional - a.notional)[0];
+  // Anchor the note on the strongest shelf on the MATCHING side of spot, so an
+  // accumulation read never cites a resistance shelf overhead (and vice versa).
+  const byNotional = [...levels].sort((a, b) => b.notional - a.notional);
+  const strongest =
+    (posture === 'ACCUMULATING'
+      ? byNotional.find(l => l.price < spot)
+      : posture === 'DISTRIBUTING'
+        ? byNotional.find(l => l.price > spot)
+        : byNotional[0]) ?? byNotional[0];
   const postureNote =
     posture === 'ACCUMULATING'
       ? `Sized prints skew to the buy side — dips into the $${strongest.price.toFixed(2)} shelf are being absorbed.`
@@ -199,7 +215,6 @@ export function buildDarkPoolView(snapshot: MarketSnapshot): DarkPoolView {
         ? `Sized prints skew to the sell side — strength into $${strongest.price.toFixed(2)} keeps meeting supply.`
         : 'Buy and sell blocks roughly offset — institutions rotating, not committing. Let a shelf break decide direction.';
 
-  const totalNotional = prints.reduce((a, p) => a + p.notional, 0);
   const largest = prints.reduce<DarkPoolPrint | null>((a, p) => (a === null || p.notional > a.notional ? p : a), null);
 
   return {

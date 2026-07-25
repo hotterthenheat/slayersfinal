@@ -119,14 +119,17 @@ export function buildSwingModel(ticker: string, spot: number, nowSec: number): S
   const price = spot;
 
   // Resistance / support from the recent swing range; band ≈ ±0.35% so the zone
-  // reads as a shelf, not a hairline.
+  // reads as a shelf, not a hairline. The zones must STRADDLE the live price —
+  // when the last bars walk the close outside the lookback range, the raw
+  // extremes would put "support" above price (or resistance below), so each is
+  // clamped to its own side of spot.
   const { hi, lo } = windowExtremes(bars, 70, 2);
   const band = (kind: 'support' | 'resistance', center: number): SwingZone => {
     const w = center * 0.0035;
     return { lo: center - w, hi: center + w, mid: center, kind, pct: ((center - price) / price) * 100 };
   };
-  const resistance = band('resistance', hi);
-  const support = band('support', lo);
+  const resistance = band('resistance', Math.max(hi, price * 1.006));
+  const support = band('support', Math.min(lo, price * 0.994));
 
   // Trend rail through the two dominant swing lows (first half → second half).
   const mid = Math.floor(bars.length / 2);

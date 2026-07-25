@@ -41,7 +41,7 @@ const toCandle = (b: Candle) => ({
  * with its percent target, on a TradingView-grade candle chart. The daily series
  * is deterministic per ticker and ends at the live spot.
  */
-const SwingMapChart = ({ ticker, spot, height = 300, focusPrice = null, nowSec }: SwingMapChartProps) => {
+const SwingMapChart = ({ ticker, spot, revision = 0, height = 300, focusPrice = null, nowSec }: SwingMapChartProps) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
@@ -51,13 +51,15 @@ const SwingMapChart = ({ ticker, spot, height = 300, focusPrice = null, nowSec }
   const modelRef = useRef<SwingModel | null>(null);
   const loadedTickerRef = useRef('');
 
-  // Stable per ticker — the intraday tick shouldn't redraw a daily chart. The
-  // model anchors its last close to the spot captured on (re)build.
+  // Stable per ticker — the intraday tick shouldn't redraw a daily chart — but
+  // re-anchored on a coarse cadence (every ~20 scan revisions) so the daily
+  // series' last close doesn't drift away from the live spot for good.
   const now = useMemo(() => nowSec ?? Math.floor(Date.now() / 1000), [nowSec]);
+  const epoch = Math.floor(revision / 20);
   const model = useMemo(
     () => buildSwingModel(ticker, spot, now),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ticker, now]
+    [ticker, now, epoch]
   );
   modelRef.current = model;
 

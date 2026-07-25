@@ -34,14 +34,15 @@ function h01(seed: string): number {
   return (hash(seed) % 1000) / 1000;
 }
 
-// Farther expiries carry less gamma; ALL aggregates the pipeline.
+// Farther expiries carry less gamma; ALL is exactly the SUM of the five
+// expiry factors, so the aggregate view always equals the sum of its parts.
 const EXPIRY_DECAY: Record<ExposureExpiry, number> = {
   '0DTE': 1,
   '1D': 0.52,
   '2D': 0.38,
   '5D': 0.22,
   '7D': 0.16,
-  ALL: 3.13,
+  ALL: 1 + 0.52 + 0.38 + 0.22 + 0.16,
 };
 
 function scaleSplit(put: number, call: number, factor: number, jitter: number): GreekSplit {
@@ -152,7 +153,7 @@ export function buildExposureProfile(
     inFriction
       ? `Price sits between key levels (${fmtK(putWall)} – ${fmtK(callWall)}) inside the friction zone.`
       : `Price is ${spot >= callWall ? 'above the call wall' : 'below the put wall'} — outside the friction zone.`,
-    `Strongest dealer support sits at ${fmtK(pinStrike)} (pin level).`,
+    `Heaviest OI magnet sits at ${fmtK(pinStrike)} (pin level) — price gravitates there into expiry.`,
     `A break below ${fmtK(putWall)} shifts pressure toward ${fmtK(putWall - step * 2)}.`,
     `A break above ${fmtK(callWall)} opens quick supply up to ${fmtK(callWall + step * 2)}.`,
   ];

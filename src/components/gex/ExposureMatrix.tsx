@@ -61,7 +61,7 @@ const ExposureMatrix = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
 
   const GROUPS: { key: 'gex' | 'dex' | 'vex'; label: string; unit: string }[] = [
     { key: 'gex', label: 'GEX', unit: '1% move' },
-    { key: 'dex', label: 'DEX', unit: '1σ move' },
+    { key: 'dex', label: 'DEX', unit: 'Δ notional' },
     { key: 'vex', label: 'VEX', unit: '1% vol' },
   ];
 

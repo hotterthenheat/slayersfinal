@@ -69,9 +69,14 @@ const StrikeHoverCard = ({ row, ticker, y }: { row: StrikeExposure; ticker: stri
   }, [ticker, row.strike]);
 
   const callHeavy = Math.abs(row.gex.call) >= Math.abs(row.gex.put);
+  // Headline, trend and rate-of-change all read from the SAME series (the raw
+  // whole-book per-strike history), so the card never shows two contradictory
+  // values for one quantity. Building/draining follows the MAGNITUDE of the
+  // exposure — a put wall deepening from −$400M to −$800M is building, not
+  // draining.
   const now = series[series.length - 1] ?? row.gex.net;
   const recent = series.slice(-16);
-  const rising = recent.length > 1 && recent[recent.length - 1] >= recent[0];
+  const rising = recent.length > 1 && Math.abs(recent[recent.length - 1]) >= Math.abs(recent[0]);
   const strikeLabel = row.strike % 1 === 0 ? row.strike.toFixed(0) : row.strike.toFixed(2);
 
   return (
@@ -93,9 +98,9 @@ const StrikeHoverCard = ({ row, ticker, y }: { row: StrikeExposure; ticker: stri
       {/* Current value */}
       <div className="mt-2">
         <div className="font-mono text-micro uppercase tracking-widest text-textMuted">Net GEX · now</div>
-        <div className={`font-mono text-base font-bold tnum ${row.gex.net >= 0 ? 'text-bull' : 'text-bear'}`}>
-          {row.gex.net >= 0 ? '+' : ''}
-          {fmtUsd(row.gex.net)}
+        <div className={`font-mono text-base font-bold tnum ${now >= 0 ? 'text-bull' : 'text-bear'}`}>
+          {now >= 0 ? '+' : ''}
+          {fmtUsd(now)}
         </div>
         <div className={`font-mono text-micro uppercase tracking-wider ${rising ? 'text-bull' : 'text-bear'}`}>
           {rising ? '↗ exposure building' : '↘ exposure draining'}
@@ -301,8 +306,8 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
 
       {/* Sign convention */}
       <div className="px-2.5 py-1.5 border-t border-borderSubtle font-mono text-micro text-textMuted leading-relaxed select-none">
-        Positive = dealer short gamma <span className="text-textSecondary">(upside supply)</span> · Negative = dealer
-        long gamma <span className="text-textSecondary">(downside support)</span>
+        Positive = dealer long gamma <span className="text-textSecondary">(dips absorbed)</span> · Negative = dealer
+        short gamma <span className="text-textSecondary">(moves amplified)</span>
       </div>
     </div>
   );
