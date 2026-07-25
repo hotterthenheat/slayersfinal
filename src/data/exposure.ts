@@ -81,7 +81,7 @@ export function buildExposureProfile(
     const jitter = h01(`${ticker}-${n.strike}-${expiry}-exp`);
     const gex = scaleSplit(n.putGex, n.callGex, factor, jitter);
     const dex = scaleSplit(n.putDex, n.callDex, factor, jitter);
-    const vex = scaleSplit(n.putVex * 40, n.callVex * 40, factor, jitter); // dollar-comparable
+    const vex = scaleSplit(n.putVex, n.callVex, factor, jitter); // true $ per 1% vol
     maxAbs.gex = Math.max(maxAbs.gex, Math.abs(gex.put), Math.abs(gex.call), Math.abs(gex.net));
     maxAbs.dex = Math.max(maxAbs.dex, Math.abs(dex.put), Math.abs(dex.call), Math.abs(dex.net));
     maxAbs.vex = Math.max(maxAbs.vex, Math.abs(vex.put), Math.abs(vex.call), Math.abs(vex.net));
@@ -147,9 +147,9 @@ export function buildExposureProfile(
   const fmtK = (v: number) => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
   const inFriction = spot > putWall && spot < callWall;
   const insights = [
-    `Net GEX is ${netGex < 0 ? 'negative' : 'positive'} (${fmtUsd(netGex)}). Dealers ${
-      netGex < 0 ? 'amplify moves' : 'dampen moves'
-    } ${netGex < 0 ? 'below' : 'above'} ${fmtK(flip)}, ${netGex < 0 ? 'stabilize' : 'accelerate'} beyond it.`,
+    // The sides are a property of the FLIP (short gamma below, long above),
+    // not of the aggregate sign — the sentence anchors on where spot sits.
+    `Net GEX is ${netGex < 0 ? 'negative' : 'positive'} (${fmtUsd(netGex)}). Dealers amplify moves below ${fmtK(flip)} and dampen them above it — spot is ${spot >= flip ? 'above' : 'below'} the flip.`,
     inFriction
       ? `Price sits between key levels (${fmtK(putWall)} – ${fmtK(callWall)}) inside the friction zone.`
       : `Price is ${spot >= callWall ? 'above the call wall' : 'below the put wall'} — outside the friction zone.`,

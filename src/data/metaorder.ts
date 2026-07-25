@@ -22,6 +22,7 @@
 ==================================================
 */
 
+import Simulator from '../core/simulator';
 import { dayKey, h01, hRange, hGauss, hPick } from '../core/rng';
 import type { MarketSnapshot } from '../types/market';
 
@@ -244,12 +245,16 @@ export function buildMetaorderView(snapshot: MarketSnapshot): MetaorderView {
   const callLadder = window.filter(n => n.strike >= spot).sort((a, b) => a.strike - b.strike);
   const putLadder = window.filter(n => n.strike < spot).sort((a, b) => b.strike - a.strike);
 
-  // Modeled IV proxy — sets the child-print premiums off strike distance.
-  const ivProxy = 0.18 + hRange(`${ticker}-${day}-mo-iv`, 0, 0.22) + (indicators.squeeze ? -0.02 : 0.02);
+  // Modeled IV proxy — anchored to the ticker's real vol, pricing the clips at
+  // the short-dated horizon they're worked over (≈1 trading day), with a
+  // vol-scaled gaussian OTM decay — keeps the panel's premiums on the same
+  // curve as the live tape instead of ~4x rich.
+  const ivProxy = (Simulator.TICKERS[ticker]?.iv ?? 0.2) + hRange(`${ticker}-${day}-mo-iv`, 0, 0.08) + (indicators.squeeze ? -0.02 : 0.02);
+  const width = ivProxy * Math.sqrt(1 / 252);
   const unitPx = (strike: number, right: 'C' | 'P'): number => {
     const intrinsic = right === 'C' ? Math.max(spot - strike, 0) : Math.max(strike - spot, 0);
     const m = Math.abs(strike - spot) / spot;
-    const timeValue = spot * ivProxy * 0.11 * Math.exp(-m * 6);
+    const timeValue = spot * width * 0.4 * Math.exp(-Math.pow(m / (width || 1e-6), 2) / 2);
     return Math.max(0.05, intrinsic + timeValue);
   };
 

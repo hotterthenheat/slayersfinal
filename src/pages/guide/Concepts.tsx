@@ -14,9 +14,9 @@ const GROUPS: Group[] = [
     title: 'Dealer positioning & gamma',
     terms: [
       { term: 'GEX — Gamma Exposure', def: 'Net market-maker gamma per strike. Long gamma (dealers dampen moves) reads green; short gamma (dealers amplify moves) reads red.' },
-      { term: 'DEX — Delta Exposure', def: 'Net dealer delta. It sets the direction dealers must hedge in as price moves.' },
+      { term: 'DEX — Delta Exposure', def: 'Delta notional by strike — calls positive, puts negative. It shows where directional exposure is stacked, not a dealer-signed hedge requirement.' },
       { term: 'VEX — Vanna Exposure', def: "Sensitivity of dealer delta to a change in implied vol — the hedging that fires when IV moves rather than price." },
-      { term: 'Call wall / Put wall', def: 'The strikes carrying the heaviest call or put positioning. The call wall often caps as resistance; the put wall often holds as support.' },
+      { term: 'Call wall / Put wall', def: 'The strikes above and below spot carrying the heaviest net dealer gamma. The call wall often caps as resistance; the put wall often holds as support.' },
       { term: 'Gamma flip', def: 'The price level where net dealer gamma changes sign. Above it dealers tend to dampen moves; below it they tend to accelerate them.' },
       { term: 'King strike', def: 'The single strike carrying the most exposure — the strongest pin on the board.' },
       { term: 'Long / short gamma regime', def: 'In a long-gamma regime moves get sold into and fade; in a short-gamma regime moves get chased and extend.' },

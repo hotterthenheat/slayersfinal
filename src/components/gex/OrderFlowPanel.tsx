@@ -117,8 +117,8 @@ const OrderFlowPanel = ({ data }: OrderFlowPanelProps) => (
       <DeltaByPriceBars data={data} />
     </div>
     <div className="grid grid-cols-5 gap-2 pt-2 border-t border-borderSubtle">
-      <Stat label="Buy Vol" value={fmtUsd(data.buyVolume)} tone="text-bull" />
-      <Stat label="Sell Vol" value={fmtUsd(data.sellVolume)} tone="text-bear" />
+      <Stat label="Buy $" value={fmtUsd(data.buyVolume)} tone="text-bull" />
+      <Stat label="Sell $" value={fmtUsd(data.sellVolume)} tone="text-bear" />
       <Stat label="Delta" value={fmtUsd(data.netDelta)} tone={data.netDelta >= 0 ? 'text-bull' : 'text-bear'} />
       <Stat label="VWAP" value={data.vwap.toFixed(2)} />
       <Stat label="POC" value={data.poc.toFixed(2)} />

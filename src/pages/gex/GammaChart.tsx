@@ -100,7 +100,7 @@ const GammaChart = () => {
             <LevelChip label="Flip" value={gexLevels.flip} tone="text-flip" />
             <LevelChip label="Put Wall" value={gexLevels.putWall} tone="text-bear" />
             <LevelChip label="King" value={gexLevels.king} tone="text-king" />
-            <LevelChip label="Max Pain" value={exposure.levels.pin} tone="text-textSecondary" />
+            <LevelChip label="Pin · Max OI" value={exposure.levels.pin} tone="text-textSecondary" />
             {vwap != null && <LevelChip label="VWAP" value={vwap} tone="text-textSecondary" />}
           </div>
         </div>

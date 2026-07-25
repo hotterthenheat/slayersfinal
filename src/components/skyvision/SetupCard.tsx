@@ -15,7 +15,6 @@ interface SetupCardProps {
 }
 
 const SetupCard = ({ setup, expanded, isSelected, isTop, onToggle, onSelect, onOpenAnalysis }: SetupCardProps) => {
-  const moveUp = setup.expectedMovePct >= 0;
   const isCall = setup.right === 'C';
   // Green for calls, red for puts (house tokens) — holographic-silver lettering on top.
   const pillTone = isCall ? 'border-bull/50 bg-bull/20 text-bull' : 'border-bear/50 bg-bear/20 text-bear';
@@ -43,10 +42,9 @@ const SetupCard = ({ setup, expanded, isSelected, isTop, onToggle, onSelect, onO
             </span>
           </span>
           <span className="text-right">
-            <span className="block font-mono text-label text-textMuted uppercase tracking-wider">Exp Move</span>
-            <span className={`font-mono text-caption font-semibold tnum ${moveUp ? 'text-bull' : 'text-bear'} leading-4`}>
-              {moveUp ? '+' : ''}
-              {setup.expectedMovePct}%
+            <span className="block font-mono text-label text-textMuted uppercase tracking-wider">1σ Move</span>
+            <span className="font-mono text-caption font-semibold tnum text-textPrimary leading-4">
+              ±{setup.expectedMovePct}%
             </span>
           </span>
           <ChevronDown className={`w-4 h-4 text-textMuted transition-transform ${expanded ? 'rotate-180' : ''}`} />
@@ -85,7 +83,7 @@ const SetupCard = ({ setup, expanded, isSelected, isTop, onToggle, onSelect, onO
               <div className="font-mono text-label uppercase tracking-widest text-textMuted mb-1.5">Evidence</div>
               <div className="flex flex-wrap gap-1.5">
                 {setup.whyChips.map(chip => (
-                  <SignalBadge key={chip} tone="bull">
+                  <SignalBadge key={chip} tone={isCall ? 'bull' : 'bear'}>
                     {chip}
                   </SignalBadge>
                 ))}

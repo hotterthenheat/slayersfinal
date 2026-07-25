@@ -167,16 +167,35 @@ export function buildDarkPoolView(snapshot: MarketSnapshot): DarkPoolView {
   const totalNotional = prints.reduce((a, p) => a + p.notional, 0);
 
   // ---- liquidity shelves from the prints ---------------------------------------
+  // Each print belongs to its NEAREST shelf only, and the "% of DP" share counts
+  // only today's prints against the same session total the page reports — so the
+  // six shares can never sum past 100%. The small resting-interest base pads the
+  // shelf's displayed notional (an empty shelf isn't $0) but never the share.
+  const clusterOf = new Map<number, DarkPoolPrint[]>();
+  for (const p of prints) {
+    let best = -1;
+    let bestDist = Infinity;
+    shelfPrices.forEach((sp, i) => {
+      const d = Math.abs(p.price - sp) / sp;
+      if (d < bestDist) {
+        bestDist = d;
+        best = i;
+      }
+    });
+    if (best >= 0 && bestDist < 0.001) {
+      const g = clusterOf.get(best);
+      if (g) g.push(p);
+      else clusterOf.set(best, [p]);
+    }
+  }
   const levels: DarkPoolLevel[] = shelfPrices.map((price, i) => {
-    const cluster = prints.filter(p => Math.abs(p.price - price) / price < 0.001);
+    const cluster = clusterOf.get(i) ?? [];
     const clusterNotional = cluster.reduce((a, p) => a + p.notional, 0);
-    // Resting interest beyond today's tape keeps an empty shelf from reading $0
     const notional = clusterNotional + hRange(seed(`lvln-${i}`), 6e6, 24e6);
     const distPct = ((price - spot) / spot) * 100;
     const defended = Math.min(defendedCount(priceHistory, price, 0.0012) + (h01(seed(`lvld-${i}`)) > 0.6 ? 1 : 0), 5);
     const role: LevelRole = Math.abs(distPct) < 0.12 ? 'PIVOT' : distPct < 0 ? 'SUPPORT' : 'RESISTANCE';
-    // Share of the SESSION dark-pool notional — the same total the page reports
-    const sharePct = (notional / (totalNotional || 1)) * 100;
+    const sharePct = (clusterNotional / (totalNotional || 1)) * 100;
     return {
       price: Number(price.toFixed(2)),
       notional,

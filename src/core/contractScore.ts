@@ -119,7 +119,7 @@ const HORIZON_SHAPE: Record<Horizon, { dtes: number[]; otm: number[] }> = {
   LOTTO: { dtes: [0, 1], otm: [0, 0.003, 0.006, 0.011] },
   WEEKLIES: { dtes: [2, 5, 7], otm: [0, 0.01, 0.02, 0.035] },
   SWINGS: { dtes: [21, 30, 45], otm: [0, 0.02, 0.045, 0.07] },
-  LEAPS: { dtes: [365, 480], otm: [0, 0.05, 0.1, 0.18] },
+  LEAPS: { dtes: [365, 480], otm: [-0.15, -0.07, 0, 0.08] },
 };
 
 const WEIGHTS: Record<Horizon, Record<string, number>> = {
@@ -132,7 +132,7 @@ const WEIGHTS: Record<Horizon, Record<string, number>> = {
 
 // Theta scored against a horizon-realistic ceiling — 0DTE burns a huge % of
 // premium per day, so it needs its own scale or every lotto reads as a zero.
-const DECAY_CEILING: Record<Horizon, number> = { LOTTO: 60, WEEKLIES: 9, SWINGS: 3.5, LEAPS: 0.8 };
+const DECAY_CEILING: Record<Horizon, number> = { LOTTO: 250, WEEKLIES: 30, SWINGS: 3.5, LEAPS: 0.8 };
 
 function expiryLabel(dte: number): string {
   const d = new Date(Date.now() + dte * 86400000);
@@ -206,7 +206,7 @@ function scoreCandidate(
   // OI thins out the further the strike sits past the chain window
   const baseOi = node ? (right === 'C' ? node.callOI : node.putOI) : 500;
   const oiCount = Math.max(50, Math.round(baseOi * Math.exp((-Math.abs(strike - (node?.strike ?? strike)) / spot) * 24)));
-  const spreadPct = clamp(6 - Math.log10(Math.max(oiCount, 10)) * 1.4, 0.4, 6) * (dte > 180 ? 1.5 : 1);
+  const spreadPct = clamp((6 - Math.log10(Math.max(oiCount, 10)) * 1.4) * (dte > 180 ? 1.5 : 1), 0.4, 6);
 
   // Effective time floors at half a day so 0DTE still carries a real 1σ move
   const tYears = Math.max(dte, 0.5) / 365;
@@ -308,7 +308,7 @@ export function weighContracts(snapshot: MarketSnapshot, horizon: Horizon): Weig
 
   (['C', 'P'] as const).forEach(right => {
     shape.otm.forEach((otm, oi) => {
-      const dte = shape.dtes[(oi + (right === 'P' ? 1 : 0)) % shape.dtes.length];
+      const dte = shape.dtes[oi % shape.dtes.length];
       const rawStrike = right === 'C' ? spot * (1 + otm) : spot * (1 - otm);
       out.push(scoreCandidate(snapshot, ctx, horizon, right, rawStrike, dte));
     });

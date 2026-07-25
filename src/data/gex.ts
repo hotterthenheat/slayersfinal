@@ -53,7 +53,7 @@ function metricValue(node: StrikeNode, metric: GexMetric): number {
     case 'GEX':
       return node.netGex;
     case 'VEX':
-      return node.netVex * 40; // scale VEX into a comparable dollar magnitude
+      return node.netVex; // true $ per 1% vol — each metric view scales to its own max
     case 'GEX+VEX':
       return node.netGex * 0.7 + node.netVex * 28;
   }
@@ -212,9 +212,10 @@ function buildPrints(ticker: string, spot: number): DarkPoolPrint[] {
     const daysAgo = 1 + (hash(`${ticker}-dp-${i}-d`) % 12);
     const when = new Date(now.getTime() - daysAgo * 86400000);
     const price = Number((spot * (0.995 + n1 * 0.01)).toFixed(2));
-    // $30M–$420M per cross — the same scale the Dark Pool desk models, so the
-    // two surfaces never disagree about the size of the same flow by 10x.
-    const notional = Math.round(30 + n2 * 390);
+    // Shares-first like the Dark Pool desk (5K–255K shares, small-skewed tail),
+    // so the same cross prints the same size on both surfaces.
+    const shares = Math.round(5000 + Math.pow(n2, 2.5) * 250000);
+    const notional = shares * price;
     const hh = 9 + (hash(`${ticker}-dp-${i}-h`) % 7);
     const mm = hash(`${ticker}-dp-${i}-m`) % 60;
     const ss = hash(`${ticker}-dp-${i}-s`) % 60;
@@ -222,7 +223,7 @@ function buildPrints(ticker: string, spot: number): DarkPoolPrint[] {
       price,
       notional,
       date: `${when.getMonth() + 1}/${when.getDate()}`,
-      size: Math.round((notional * 1e6) / price / 100) * 100,
+      size: Math.round(shares / 100) * 100,
       time: `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`,
     });
   }
