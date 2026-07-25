@@ -109,7 +109,7 @@ const FlowRow = ({ level, maxForced }: { level: ForcedFlowLevel; maxForced: numb
               const v = Math.abs(level[p.key] as number);
               return v > 0 ? (
                 <div key={p.key} className="flex items-center gap-2 font-mono text-micro tnum">
-                  <span className="w-2 h-2 rounded-[2px] shrink-0" style={{ background: p.color }} />
+                  <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: p.color }} />
                   <span className="text-textSecondary w-20">{p.label}</span>
                   <span className="text-textPrimary ml-auto">{fmtUsd(v)}</span>
                 </div>

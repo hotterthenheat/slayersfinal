@@ -1,5 +1,6 @@
 import type { ISeriesPrimitive, SeriesAttachedParameter, Time, IChartApi, ISeriesApi } from 'lightweight-charts';
 import type { SwingModel } from '../../data/swingModel';
+import { FLIP } from '../gex/palette';
 
 /*
   Custom series primitive for the Swing Map: draws the swing read a trader marks
@@ -22,7 +23,7 @@ interface DrawTarget {
 const SUPPORT = '48,209,88'; // green
 const RESIST = '255,59,48'; // red
 const TREND = '#E0B84E'; // gold rail
-const ARROW = '#7DD3FC'; // baby-blue measured move (house flip colour)
+const ARROW = FLIP; // baby-blue measured move (house flip colour)
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
   const rr = Math.min(r, h / 2, w / 2);

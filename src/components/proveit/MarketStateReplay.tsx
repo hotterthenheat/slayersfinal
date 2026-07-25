@@ -14,6 +14,7 @@ import StatCard from '../ui/StatCard';
 import MetricGrid from '../ui/MetricGrid';
 import SignalBadge from '../ui/SignalBadge';
 import type { Tone } from '../ui/tones';
+import { BULL, BEAR, SPOT } from '../gex/palette';
 
 interface MarketStateReplayProps {
   snapshot: MarketSnapshot;
@@ -39,9 +40,9 @@ const matchTone: Record<MatchQuality, Tone> = {
 };
 
 // neutral analytical series = white ("where the market is"); silver is selection-only
-const SERIES = '#ededed';
-const GREEN = '#30D158';
-const RED = '#FF3B30';
+const SERIES = SPOT;
+const GREEN = BULL;
+const RED = BEAR;
 const AMBER = '#FF9500';
 const MUTED = '#6b6b6b';
 
@@ -102,8 +103,8 @@ const CalibrationPlot = ({ view }: { view: StateReplayView }) => {
           diagonal), so it's capped and centered rather than stretched full-width */}
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-[250px] mx-auto block" style={{ height: H }} role="img" aria-label="Probability calibration — predicted target rate versus realized frequency">
         {/* frame */}
-        <line x1={pad} y1={H - pad} x2={W - 6} y2={H - pad} stroke="#2a2a2a" strokeWidth={1} />
-        <line x1={pad} y1={8} x2={pad} y2={H - pad} stroke="#2a2a2a" strokeWidth={1} />
+        <line x1={pad} y1={H - pad} x2={W - 6} y2={H - pad} className="stroke-borderMuted" strokeWidth={1} />
+        <line x1={pad} y1={8} x2={pad} y2={H - pad} className="stroke-borderMuted" strokeWidth={1} />
         {/* perfect-calibration diagonal */}
         <line x1={X(0)} y1={Y(0)} x2={X(100)} y2={Y(100)} stroke={MUTED} strokeOpacity={0.5} strokeWidth={1} strokeDasharray="3 3" />
         <text x={X(100) - 2} y={Y(100) + 2} fontSize={10} fill={MUTED} fontFamily="monospace" textAnchor="end">
@@ -161,8 +162,8 @@ const EdgeDecayChart = ({ view }: { view: StateReplayView }) => {
     <>
       {/* edge-decay is a time series — fill the panel width like the app's other bar charts */}
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none" role="img" aria-label="Edge decay — net edge captured as the trade is held longer">
-        <line x1={pad} y1={H - pad} x2={W - 6} y2={H - pad} stroke="#2a2a2a" strokeWidth={1} />
-        <line x1={pad} y1={8} x2={pad} y2={H - pad} stroke="#2a2a2a" strokeWidth={1} />
+        <line x1={pad} y1={H - pad} x2={W - 6} y2={H - pad} className="stroke-borderMuted" strokeWidth={1} />
+        <line x1={pad} y1={8} x2={pad} y2={H - pad} className="stroke-borderMuted" strokeWidth={1} />
         {/* cumulative target / stop as faint context */}
         <path d={path(p => p.cumStopPct)} fill="none" stroke={RED} strokeOpacity={0.4} strokeWidth={1} />
         <path d={path(p => p.cumTargetPct)} fill="none" stroke={GREEN} strokeOpacity={0.4} strokeWidth={1} />

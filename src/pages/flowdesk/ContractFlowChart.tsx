@@ -15,6 +15,7 @@ import {
 } from 'recharts';
 import { buildContractFlow, flowClock, type ContractRef } from '../../data/contractflow';
 import { fmtUsd } from '../../data/gex';
+import { BULL, BEAR, SPOT } from '../../components/gex/palette';
 
 /*
   Contract drilldown rendered on recharts — this contract's
@@ -26,11 +27,11 @@ import { fmtUsd } from '../../data/gex';
   Values come from the deterministic contract-flow builder.
 */
 
-const ASK = '#30D158';
-const BID = '#FF3B30';
+const ASK = BULL;
+const BID = BEAR;
 const MID = '#8b8f96';
 // neutral price/avg reference line — white ("where the market is"); silver is selection-only
-const PRICE_LINE = '#ededed';
+const PRICE_LINE = SPOT;
 const AXIS = '#6b6b6b';
 const GRID = 'rgba(255,255,255,0.05)';
 

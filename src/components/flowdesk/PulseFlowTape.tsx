@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 import { buildPulseFlow, contractKey, type SessionPrint } from '../../data/pulseflow';
 import HoverReadout from '../ui/HoverReadout';
+import { BULL } from '../gex/palette';
 import { fmtUsd } from '../../data/gex';
 import Term from '../ui/Term';
 import type { TermKey } from '../../data/terms';
@@ -36,11 +37,11 @@ interface PulseFlowTapeProps {
 }
 
 const SigBar = ({ v }: { v: number }) => (
-  <span className="inline-flex flex-col gap-[2px] w-12">
+  <span className="inline-flex flex-col gap-0.5 w-12">
     <span className="h-[4px] rounded-full bg-white/[0.08] overflow-hidden">
       <span
         className="block h-full rounded-full"
-        style={{ width: `${Math.round(v * 100)}%`, background: v >= 0.6 ? '#30D158' : '#E8963C' }}
+        style={{ width: `${Math.round(v * 100)}%`, background: v >= 0.6 ? BULL : '#E8963C' }}
       />
     </span>
     <span className="font-mono text-micro text-textMuted tnum leading-none">{v.toFixed(2)}</span>

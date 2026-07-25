@@ -97,7 +97,7 @@ const TermStructure = ({ data }: TermStructureProps) => {
               vectorEffect="non-scaling-stroke"
             />
           ))}
-          <path d={pathFor(data.current, min, span)} fill="none" stroke="#ededed" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+          <path d={pathFor(data.current, min, span)} fill="none" className="stroke-textPrimary" strokeWidth="1" vectorEffect="non-scaling-stroke" />
           {h && (
             <line x1={cx(h.i)} x2={cx(h.i)} y1={0} y2={H} stroke="rgba(255,255,255,0.35)" strokeWidth="0.4" vectorEffect="non-scaling-stroke" />
           )}

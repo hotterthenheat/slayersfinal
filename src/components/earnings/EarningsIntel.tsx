@@ -89,18 +89,18 @@ const CrushPath = ({ view }: { view: EarningsIntelView }) => {
       <rect x={px} y={0} width={W - px} height={H} fill="rgba(255,149,0,0.05)" />
       {/* post-crush baseline */}
       <line x1={6} x2={W - 6} y1={baseY} y2={baseY} stroke="#6b6b6b" strokeOpacity={0.6} strokeWidth={1} strokeDasharray="4 3" />
-      <text x={8} y={baseY - 4} fontSize={10} fill="#7d7d7d" fontFamily="monospace">
+      <text x={8} y={baseY - 4} fontSize={10} className="fill-textMuted" fontFamily="monospace">
         base IV {view.baseIv.toFixed(0)}%
       </text>
       {/* print marker */}
-      <line x1={px} x2={px} y1={6} y2={H - 4} stroke="#FF9500" strokeOpacity={0.65} strokeWidth={1} />
-      <text x={px + 4} y={14} fontSize={10} fill="#FF9500" fontFamily="monospace">
+      <line x1={px} x2={px} y1={6} y2={H - 4} className="stroke-warn" strokeOpacity={0.65} strokeWidth={1} />
+      <text x={px + 4} y={14} fontSize={10} className="fill-warn" fontFamily="monospace">
         PRINT · {view.frontIv.toFixed(0)}% → crush {view.ivCrushPct.toFixed(0)}%
       </text>
       {/* IV path */}
-      <path d={line} fill="none" stroke="#ededed" strokeWidth={1.9} strokeLinejoin="round" />
+      <path d={line} fill="none" className="stroke-textPrimary" strokeWidth={1.9} strokeLinejoin="round" />
       {pts.map((p, i) => (
-        <circle key={p.day} cx={X(i)} cy={Y(p.iv)} r={p.phase === 'print' ? 3 : 1.8} fill={p.phase === 'print' ? '#FF9500' : '#ededed'} />
+        <circle key={p.day} cx={X(i)} cy={Y(p.iv)} r={p.phase === 'print' ? 3 : 1.8} className={p.phase === 'print' ? 'fill-warn' : 'fill-textPrimary'} />
       ))}
       {/* x labels */}
       {pts.map((p, i) =>

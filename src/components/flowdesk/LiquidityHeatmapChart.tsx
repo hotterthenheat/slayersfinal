@@ -14,6 +14,7 @@ import {
 import Simulator from '../../core/simulator';
 import { aggregateCandles, tfMinutes, type Timeframe } from '../../data/timeframe';
 import { candleTheme } from '../gex/candleTheme';
+import ChartLegend from '../ui/ChartLegend';
 import { CALL_WALL, PUT_WALL, FLIP, DARK_POOL, FOCUS, SPOT } from '../gex/palette';
 
 // Slayer signature candles (holo-silver/purple) — direction reads in colour so
@@ -539,19 +540,14 @@ const LiquidityHeatmapChart = ({
           />
           Resting liquidity
         </span>
-        {[
-          { label: 'Call Wall', cls: 'bg-bull' },
-          { label: 'Put Wall', cls: 'bg-bear' },
-          { label: 'Dark Pool', color: DARK_POOL },
-        ].map((item: { label: string; cls?: string; color?: string }) => (
-          <span key={item.label} className="flex items-center gap-1.5 font-mono text-micro text-textSecondary">
-            <span
-              className={`inline-block w-3 h-0.5 rounded-full ${item.cls ?? ''}`}
-              style={item.color ? { background: item.color } : undefined}
-            />
-            {item.label}
-          </span>
-        ))}
+        <ChartLegend
+          variant="line"
+          items={[
+            { label: 'Call Wall', swatchClass: 'bg-bull' },
+            { label: 'Put Wall', swatchClass: 'bg-bear' },
+            { label: 'Dark Pool', color: DARK_POOL },
+          ]}
+        />
         <span className="ml-auto font-mono text-micro text-textMuted uppercase tracking-wider hidden sm:inline">
           scroll zoom · drag pan · dbl-click reset
         </span>

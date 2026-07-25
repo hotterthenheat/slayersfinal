@@ -1,0 +1,109 @@
+<!-- @dsCard group="Components" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slayer Terminal — StatCard</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #050505;
+    color: #ededed;
+    font-family: Inter, -apple-system, "Segoe UI", sans-serif;
+    padding: 24px;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em;
+    margin-bottom: 4px;
+  }
+  .sub { font-size: 11px; color: #7d7d7d; margin-bottom: 20px; max-width: 540px; line-height: 1.6; }
+  h2 {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.18em;
+    color: #7d7d7d; margin: 18px 0 8px;
+  }
+  /* MetricGrid: flex-wrap, gap-3, flex-basis 150px */
+  .grid { display: flex; flex-wrap: wrap; gap: 12px; }
+  .grid > * { flex: 1 1 150px; min-width: 0; }
+  /* .inst-surface */
+  .card {
+    background-color: #0a0a0a;
+    background-image: linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0) 46%);
+    border: 1px solid #1c1c1c; border-top-color: #333333;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+    border-radius: 6px; padding: 12px 14px;
+  }
+  /* .inst-emphasis — the hero metric */
+  .card.emphasis {
+    background-color: #0b0b0b;
+    background-image: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0) 46%);
+    border: 1px solid #2a2a2a; border-top-color: #3a3a3a;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+  }
+  .label {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: #a3a3a3;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .value {
+    margin-top: 6px;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 18px; font-weight: 600; line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .subline { margin-top: 4px; font-size: 11px; color: #7d7d7d; line-height: 1.25;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* Stat — the compact sibling */
+  .stat { padding: 8px 10px; }
+  .stat .label { font-size: 10px; color: #7d7d7d; }
+  .stat .value { margin-top: 2px; font-size: 13px; }
+</style>
+</head>
+<body>
+  <h1>StatCard</h1>
+  <div class="sub">Compact data-first metric cell on the machined inst-surface. Tone lives in the value, never in ornament. emphasis swaps to inst-emphasis — a quiet static lift (brighter hairline), no animated chrome.</div>
+
+  <h2>MetricGrid of StatCards</h2>
+  <div class="grid">
+    <div class="card emphasis">
+      <div class="label">Net GEX</div>
+      <div class="value" style="color:#ededed;">$1.84B</div>
+      <div class="subline">dealers dampen moves</div>
+    </div>
+    <div class="card">
+      <div class="label">Call wall</div>
+      <div class="value" style="color:#30D158;">485</div>
+      <div class="subline">strongest above</div>
+    </div>
+    <div class="card">
+      <div class="label">Put wall</div>
+      <div class="value" style="color:#FF3B30;">462</div>
+      <div class="subline">strongest below</div>
+    </div>
+    <div class="card">
+      <div class="label">Net premium</div>
+      <div class="value" style="color:#FF3B30;">−$4.1M</div>
+      <div class="subline">typographic minus U+2212</div>
+    </div>
+  </div>
+
+  <h2>Stat — dense sibling for inline grids (px-2.5 py-2, micro label, data value)</h2>
+  <div class="grid" style="max-width:520px;">
+    <div class="card stat">
+      <div class="label">Flip</div>
+      <div class="value" style="color:#7DD3FC;">471.50</div>
+    </div>
+    <div class="card stat">
+      <div class="label">King</div>
+      <div class="value" style="color:#EA00FF;">480</div>
+    </div>
+    <div class="card stat">
+      <div class="label">Spot</div>
+      <div class="value" style="color:#ededed;">476.82</div>
+    </div>
+  </div>
+</body>
+</html>

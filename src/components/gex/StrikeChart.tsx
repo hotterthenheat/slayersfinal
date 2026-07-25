@@ -23,6 +23,7 @@ import { GexNodesPrimitive } from './gexNodesPrimitive';
 import { heatPoles } from './heatmap';
 import { candleTheme } from './candleTheme';
 import { fmtUsd } from '../../data/gex';
+import ChartLegend from '../ui/ChartLegend';
 import type { Candle, GexSnapshot } from '../../types/market';
 import type { KeyLevels, OverlayMode } from '../../types/gex';
 
@@ -399,22 +400,17 @@ const StrikeChart = ({ ticker, revision, levels, overlay, timeframe, height = 46
   return (
     <div className="flex flex-col gap-2 h-full">
       <div className="flex items-center gap-3.5 px-1 flex-wrap select-none">
-        {[
-          { label: 'Call Wall', cls: 'bg-bull' },
-          { label: 'Put Wall', cls: 'bg-bear' },
-          { label: 'Flip', cls: 'bg-flip' },
-          { label: 'King', cls: 'bg-king' },
-          { label: '+GEX node', color: heatPoles.pos },
-          { label: '−GEX node', color: heatPoles.neg },
-        ].map((item: { label: string; cls?: string; color?: string }) => (
-          <span key={item.label} className="flex items-center gap-1.5 font-mono text-micro text-textSecondary">
-            <span
-              className={`inline-block w-3 h-0.5 rounded-full ${item.cls ?? ''}`}
-              style={item.color ? { background: item.color } : undefined}
-            />
-            {item.label}
-          </span>
-        ))}
+        <ChartLegend
+          variant="line"
+          items={[
+            { label: 'Call Wall', swatchClass: 'bg-bull' },
+            { label: 'Put Wall', swatchClass: 'bg-bear' },
+            { label: 'Flip', swatchClass: 'bg-flip' },
+            { label: 'King', swatchClass: 'bg-king' },
+            { label: '+GEX node', color: heatPoles.pos },
+            { label: '−GEX node', color: heatPoles.neg },
+          ]}
+        />
         <span className="ml-auto font-mono text-micro text-textMuted uppercase tracking-wider">
           scroll zoom · drag pan · dbl-click reset
         </span>

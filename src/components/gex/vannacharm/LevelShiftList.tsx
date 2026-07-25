@@ -29,7 +29,7 @@ const LevelShiftList = ({ shifts }: LevelShiftListProps) => (
       return (
         <div
           key={s.kind}
-          className="grid grid-cols-[1fr_auto] gap-x-3 items-center px-2.5 py-[8px] border-b border-borderSubtle/30 last:border-0"
+          className="grid grid-cols-[1fr_auto] gap-x-3 items-center px-2.5 py-2 border-b border-borderSubtle/30 last:border-0"
         >
           <span className={`font-mono text-micro font-semibold uppercase tracking-wider ${KIND_TEXT[s.kind]}`}>
             {s.label}

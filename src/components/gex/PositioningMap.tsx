@@ -39,7 +39,7 @@ const NetBar = ({ value, max }: { value: number; max: number }) => {
   const neg = value < 0;
   return (
     <motion.span
-      className="absolute top-1/2 -translate-y-1/2 h-[7px] rounded-[2px]"
+      className="absolute top-1/2 -translate-y-1/2 h-[7px] rounded-sm"
       initial={false}
       animate={{ left: `${neg ? 50 - pct : 50}%`, width: `${pct}%`, opacity: pct < 0.5 ? 0 : 1 }}
       transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
@@ -63,7 +63,7 @@ const PriorDot = ({ value, max }: { value: number; max: number }) => {
 
 /** ±1σ expected-move rule — the straddle-implied daily range, VS3D-style. */
 const EmMarker = ({ price, delta }: { price: number; delta: number }) => (
-  <div className="flex items-center gap-1.5 px-2 py-[2px]">
+  <div className="flex items-center gap-1.5 px-2 py-0.5">
     <span className="h-0 flex-grow border-t border-dashed border-textSecondary/40" />
     <span className="inline-flex items-center rounded-[3px] border border-borderMuted bg-canvas px-1.5 py-px font-mono text-micro font-semibold tracking-wider text-textSecondary whitespace-nowrap tnum">
       {price.toFixed(2)} ({delta >= 0 ? '+' : '−'}
@@ -195,7 +195,7 @@ const StrikeHoverCard = ({ row, ticker, y }: { row: StrikeExposure; ticker: stri
 
 /** Gamma flip — the sticky/slippery regime line. Hero orange, spottable in <2s. */
 const FlipMarker = ({ price }: { price: number }) => (
-  <div className="flex items-center gap-1.5 px-2 py-[2px]">
+  <div className="flex items-center gap-1.5 px-2 py-0.5">
     <span className="h-0 flex-grow border-t border-dashed border-flip/70" />
     <span className="inline-flex items-center rounded-[3px] border border-flip/60 bg-canvas px-1.5 py-px font-mono text-micro font-bold uppercase tracking-wider text-flip whitespace-nowrap">
       FLIP {price % 1 === 0 ? price.toFixed(0) : price.toFixed(2)}
@@ -267,8 +267,8 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
       {/* Legend */}
       <div className="flex items-center gap-3 px-2 py-1.5 border-b border-borderSubtle flex-wrap select-none">
         {[
-          { label: 'Short γ', style: { background: SHORT_GAMMA }, cls: 'w-2.5 h-[5px] rounded-[2px]' },
-          { label: 'Long γ', style: { background: LONG_GAMMA }, cls: 'w-2.5 h-[5px] rounded-[2px]' },
+          { label: 'Short γ', style: { background: SHORT_GAMMA }, cls: 'w-2.5 h-[5px] rounded-sm' },
+          { label: 'Long γ', style: { background: LONG_GAMMA }, cls: 'w-2.5 h-[5px] rounded-sm' },
           { label: '15m ago', cls: 'w-[4px] h-[4px] rounded-full bg-textPrimary/60' },
           { label: 'Spot', cls: 'w-2.5 h-0.5 rounded-full bg-textPrimary' },
           { label: '±1σ', cls: 'w-3 h-0 border-t border-dashed border-textSecondary/60' },

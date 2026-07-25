@@ -11,6 +11,7 @@ import {
   type UTCTimestamp,
 } from 'lightweight-charts';
 import { candleTheme } from '../gex/candleTheme';
+import ChartLegend from '../ui/ChartLegend';
 import { CALL_WALL, PUT_WALL, FLIP, FOCUS } from '../gex/palette';
 import { SwingPrimitive } from './swingPrimitive';
 import { buildSwingModel, type SwingModel } from '../../data/swingModel';
@@ -235,17 +236,15 @@ const SwingMapChart = ({ ticker, spot, revision = 0, height = 300, focusPrice = 
   return (
     <div className="flex flex-col gap-2 h-full">
       <div className="flex items-center gap-3.5 px-1 flex-wrap select-none">
-        {[
-          { label: 'Resistance', cls: 'bg-bear' },
-          { label: 'Support', cls: 'bg-bull' },
-          { label: 'Trend', color: '#E0B84E' },
-          { label: 'Proj. move', color: FLIP },
-        ].map(item => (
-          <span key={item.label} className="flex items-center gap-1.5 font-mono text-micro text-textSecondary">
-            <span className={`inline-block w-3 h-0.5 rounded-full ${item.cls ?? ''}`} style={item.color ? { background: item.color } : undefined} />
-            {item.label}
-          </span>
-        ))}
+        <ChartLegend
+          variant="line"
+          items={[
+            { label: 'Resistance', swatchClass: 'bg-bear' },
+            { label: 'Support', swatchClass: 'bg-bull' },
+            { label: 'Trend', color: '#E0B84E' },
+            { label: 'Proj. move', color: FLIP },
+          ]}
+        />
         <span className="ml-auto font-mono text-micro text-textMuted uppercase tracking-wider hidden sm:inline">daily · swing targets</span>
         <button
           onClick={resetView}
