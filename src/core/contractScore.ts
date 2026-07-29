@@ -11,6 +11,7 @@
 */
 
 import { dayKey, hRange } from './rng';
+import { expiryFor } from './calendar';
 import { buildDarkPoolView } from '../data/darkpool';
 import { tickerSentiment } from '../data/news';
 import type { MarketSnapshot } from '../types/market';
@@ -135,8 +136,7 @@ const WEIGHTS: Record<Horizon, Record<string, number>> = {
 const DECAY_CEILING: Record<Horizon, number> = { LOTTO: 250, WEEKLIES: 30, SWINGS: 3.5, LEAPS: 0.8 };
 
 function expiryLabel(dte: number): string {
-  const d = new Date(Date.now() + dte * 86400000);
-  return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${String(d.getFullYear()).slice(2)}`;
+  return expiryFor(dte).label;
 }
 
 function clamp(v: number, lo: number, hi: number): number {
