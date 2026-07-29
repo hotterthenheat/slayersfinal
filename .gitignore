@@ -38,3 +38,8 @@ Thumbs.db
 # Scratch / screenshot scripts
 _shot.mjs
 _scratch*
+
+# Throwaway Playwright probes. These have to live in the repo root so node
+# resolves the local playwright install, but they are never deliverables —
+# they drive the preview server, print a measurement, and get deleted.
+/.*.mjs
