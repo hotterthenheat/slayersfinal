@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RotateCcw } from 'lucide-react';
 import {
   createChart,
@@ -15,6 +15,7 @@ import Simulator from '../../core/simulator';
 import { aggregateCandles, tfMinutes, type Timeframe } from '../../data/timeframe';
 import { candleTheme } from '../gex/candleTheme';
 import ChartLegend from '../ui/ChartLegend';
+import TimeframePicker from '../ui/TimeframePicker';
 import { CALL_WALL, PUT_WALL, FLIP, DARK_POOL, FOCUS, SPOT } from '../gex/palette';
 
 // Slayer signature candles (holo-silver/purple) — direction reads in colour so
@@ -42,7 +43,10 @@ interface LiquidityHeatmapChartProps {
   nodes?: { strike: number; value: number }[];
   /** Session VWAP & point-of-control for the reference lines */
   orderFlow?: { vwap: number; poc: number };
+  /** Starting interval. The chart owns the live value from here on. */
   timeframe?: Timeframe;
+  /** Hide the interval picker where the chart is decoration, not an instrument. */
+  showTimeframePicker?: boolean;
   height?: number;
   focusPrice?: number | null;
 }
@@ -101,10 +105,16 @@ const LiquidityHeatmapChart = ({
   oiByStrike,
   nodes,
   orderFlow,
-  timeframe = '1m',
+  timeframe: initialTimeframe = '1m',
+  showTimeframePicker = true,
   height = 320,
   focusPrice = null,
 }: LiquidityHeatmapChartProps) => {
+  // The chart owns the live interval; the prop only seeds it, so two tiles of
+  // this chart can sit on different intervals side by side in Pulse.
+  const [timeframe, setTimeframe] = useState<Timeframe>(initialTimeframe);
+  useEffect(() => setTimeframe(initialTimeframe), [initialTimeframe]);
+
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
@@ -548,9 +558,12 @@ const LiquidityHeatmapChart = ({
             { label: 'Dark Pool', color: DARK_POOL },
           ]}
         />
-        <span className="ml-auto font-mono text-micro text-textMuted uppercase tracking-wider hidden sm:inline">
+        <span className="ml-auto font-mono text-micro text-textMuted uppercase tracking-wider hidden xl:inline">
           scroll zoom · drag pan · dbl-click reset
         </span>
+        {/* Below xl the hint is hidden, so the picker takes over the ml-auto
+            push that keeps the controls right-aligned against the legend. */}
+        {showTimeframePicker && <TimeframePicker value={timeframe} onChange={setTimeframe} className="ml-auto xl:ml-0" />}
         <button
           onClick={resetView}
           title="Reset view (or double-click the chart)"

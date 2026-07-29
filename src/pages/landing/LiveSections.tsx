@@ -465,6 +465,8 @@ const ChartShowcase = ({ ctx }: { ctx: LandingCtx | null }) => (
               levels={ctx.gex.levels}
               overlay="BOTH"
               timeframe="1m"
+              /* Landing hero — a preview of the read, not a desk to operate. */
+              showTimeframePicker={false}
               height={400}
             />
           </TiltBox>

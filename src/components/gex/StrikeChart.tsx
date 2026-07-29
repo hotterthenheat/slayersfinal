@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { RotateCcw } from 'lucide-react';
 import {
   createChart,
@@ -24,6 +24,7 @@ import { heatPoles } from './heatmap';
 import { candleTheme } from './candleTheme';
 import { fmtUsd } from '../../data/gex';
 import ChartLegend from '../ui/ChartLegend';
+import TimeframePicker from '../ui/TimeframePicker';
 import type { Candle, GexSnapshot } from '../../types/market';
 import type { KeyLevels, OverlayMode } from '../../types/gex';
 
@@ -33,7 +34,11 @@ interface StrikeChartProps {
   revision: number;
   levels: KeyLevels;
   overlay: OverlayMode;
+  /** Starting interval. The chart owns the live value from here on, so two
+      instances of this chart can sit on different intervals side by side. */
   timeframe: Timeframe;
+  /** Hide the interval picker where the chart is decoration, not an instrument. */
+  showTimeframePicker?: boolean;
   height?: number;
   /** Transient user-focused price — renders a cyan FOCUS line while set */
   focusPrice?: number | null;
@@ -93,7 +98,21 @@ const toVolume = (b: Candle) => ({
  * series.update() on the last (current-bucket) bar; full setData + fitContent
  * only on ticker/timeframe change. Pan/zoom is never fought.
  */
-const StrikeChart = ({ ticker, revision, levels, overlay, timeframe, height = 460, focusPrice = null }: StrikeChartProps) => {
+const StrikeChart = ({
+  ticker,
+  revision,
+  levels,
+  overlay,
+  timeframe: initialTimeframe,
+  showTimeframePicker = true,
+  height = 460,
+  focusPrice = null,
+}: StrikeChartProps) => {
+  // The chart owns the live interval; the prop only seeds it. Re-seeding on a
+  // prop change keeps a controlled caller working if one ever appears.
+  const [timeframe, setTimeframe] = useState<Timeframe>(initialTimeframe);
+  useEffect(() => setTimeframe(initialTimeframe), [initialTimeframe]);
+
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
@@ -411,9 +430,12 @@ const StrikeChart = ({ ticker, revision, levels, overlay, timeframe, height = 46
             { label: '−GEX node', color: heatPoles.neg },
           ]}
         />
-        <span className="ml-auto font-mono text-micro text-textMuted uppercase tracking-wider">
+        <span className="ml-auto font-mono text-micro text-textMuted uppercase tracking-wider hidden xl:inline">
           scroll zoom · drag pan · dbl-click reset
         </span>
+        {/* Below xl the hint is hidden, so the picker takes over the ml-auto
+            push that keeps the controls right-aligned against the legend. */}
+        {showTimeframePicker && <TimeframePicker value={timeframe} onChange={setTimeframe} className="ml-auto xl:ml-0" />}
         <button
           onClick={resetView}
           title="Reset view (or double-click the chart)"

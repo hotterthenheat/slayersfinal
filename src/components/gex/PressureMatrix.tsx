@@ -1,0 +1,134 @@
+import { CALL_WALL, PUT_WALL, FLIP, KING } from './palette';
+import { fmtUsd } from '../../data/gex';
+import HoverReadout from '../ui/HoverReadout';
+import EmptyState from '../ui/EmptyState';
+import { useState } from 'react';
+import type { PressureRow } from '../../types/gex';
+
+interface PressureMatrixProps {
+  rows: PressureRow[];
+  /** Max |pressure| across the window — every bar scales against this. */
+  maxAbs: number;
+  spot: number;
+}
+
+/**
+ * Dealer pressure ladder — call exposure growing left, put exposure growing
+ * right, from a shared centre rail at each strike. The read is the asymmetry:
+ * where one side dwarfs the other is where dealer hedging has to lean, and the
+ * PIN and FLIP rows say which of those strikes the book is anchored to.
+ *
+ * Bars are scaled against one shared `maxAbs` rather than per-row, so a strike
+ * with real size looks bigger than one without — per-row normalisation would
+ * make every row look equally loaded.
+ */
+const PressureMatrix = ({ rows, maxAbs, spot }: PressureMatrixProps) => {
+  const [hover, setHover] = useState<{ r: PressureRow; x: number; y: number } | null>(null);
+
+  if (!rows.length) return <EmptyState size="sm" title="No chain in range" />;
+
+  // The strike the spot currently sits on — drawn as the live rail.
+  let spotStrike = rows[0].strike;
+  let best = Infinity;
+  for (const r of rows) {
+    const d = Math.abs(r.strike - spot);
+    if (d < best) {
+      best = d;
+      spotStrike = r.strike;
+    }
+  }
+
+  const pct = (v: number) => `${Math.min(100, (Math.abs(v) / maxAbs) * 100)}%`;
+
+  return (
+    <div className="h-full min-h-0 flex flex-col">
+      <div className="flex items-center gap-3 px-2.5 py-1.5 border-b border-borderSubtle select-none font-mono text-micro uppercase tracking-wider text-textMuted">
+        <span className="text-bull">Calls</span>
+        <span className="ml-auto">Strike</span>
+        <span className="ml-auto text-bear">Puts</span>
+      </div>
+
+      <div className="flex-grow overflow-y-auto min-h-0">
+        {rows.map(r => {
+          const isSpot = r.strike === spotStrike;
+          return (
+            <div
+              key={r.strike}
+              onMouseEnter={e => setHover({ r, x: e.clientX, y: e.clientY })}
+              onMouseMove={e => setHover({ r, x: e.clientX, y: e.clientY })}
+              onMouseLeave={() => setHover(h => (h && h.r.strike === r.strike ? null : h))}
+              className={`flex items-center gap-1.5 px-2 py-[3px] border-b border-borderSubtle/30 transition-colors hover:bg-white/[0.04] ${
+                isSpot ? 'bg-white/[0.05]' : ''
+              }`}
+            >
+              {/* Calls grow leftward from the centre rail. Colour is fixed per
+                  side, not signed: the dealer book is net long calls and net
+                  short puts, so call pressure is always positive and put
+                  pressure always negative. A signed colour would be a branch
+                  that never fires. The sign that does move is the net, and the
+                  hover read-out carries it. */}
+              <div className="flex-1 flex justify-end">
+                <span className="h-[9px] rounded-sm" style={{ width: pct(r.call.pressure), background: CALL_WALL, opacity: 0.75 }} />
+              </div>
+
+              <span
+                className={`w-14 shrink-0 text-center font-mono text-label tnum ${
+                  isSpot ? 'text-textPrimary font-semibold' : 'text-textSecondary'
+                }`}
+              >
+                {r.strike % 1 === 0 ? r.strike.toFixed(0) : r.strike.toFixed(2)}
+              </span>
+
+              {/* Flags ride between the strike and the put bar so the ladder
+                  stays scannable — a row is either anchored or it isn't. */}
+              <span className="w-9 shrink-0 flex items-center gap-0.5">
+                {r.pin && (
+                  <span className="font-mono text-micro leading-none" style={{ color: KING }} title="Pin — highest total OI in range">
+                    PIN
+                  </span>
+                )}
+                {r.flip && (
+                  <span className="font-mono text-micro leading-none" style={{ color: FLIP }} title="Gamma flip strike">
+                    FLIP
+                  </span>
+                )}
+              </span>
+
+              <div className="flex-1">
+                <span className="block h-[9px] rounded-sm" style={{ width: pct(r.put.pressure), background: PUT_WALL, opacity: 0.75 }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {hover && (
+        <HoverReadout x={hover.x} y={hover.y}>
+          <div className="font-mono text-caption font-bold text-textPrimary tnum">
+            {hover.r.strike % 1 === 0 ? hover.r.strike.toFixed(0) : hover.r.strike.toFixed(2)}
+            {hover.r.pin && <span className="ml-1.5 text-micro font-normal" style={{ color: KING }}>pin</span>}
+            {hover.r.flip && <span className="ml-1.5 text-micro font-normal" style={{ color: FLIP }}>flip</span>}
+          </div>
+          <div className="mt-0.5 font-mono text-micro text-textSecondary tnum">
+            calls {fmtUsd(hover.r.call.pressure)} · ΔOI {hover.r.call.deltaOI.toLocaleString()} · vol{' '}
+            {hover.r.call.volume.toLocaleString()}
+          </div>
+          <div className="font-mono text-micro text-textSecondary tnum">
+            puts {fmtUsd(hover.r.put.pressure)} · ΔOI {hover.r.put.deltaOI.toLocaleString()} · vol{' '}
+            {hover.r.put.volume.toLocaleString()}
+          </div>
+          <div className="mt-0.5 font-mono text-micro tnum">
+            <span className="text-textMuted">net </span>
+            <span className={hover.r.net >= 0 ? 'text-bull' : 'text-bear'}>{fmtUsd(hover.r.net)}</span>
+            <span className="text-textMuted">
+              {' '}
+              — {hover.r.net >= 0 ? 'dealers long gamma here; moves into it get absorbed' : 'dealers short gamma here; moves get amplified'}
+            </span>
+          </div>
+        </HoverReadout>
+      )}
+    </div>
+  );
+};
+
+export default PressureMatrix;
