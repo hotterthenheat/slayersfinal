@@ -133,3 +133,49 @@ describe('expiryFor', () => {
     expect(e.dte).toBe(0);
   });
 });
+
+describe('matrix column horizons resolve to distinct sessions', () => {
+  // The GEX matrix asks for [0,1,2,5,7] calendar days. Two horizons can resolve
+  // to the same session (from a Thursday, 1d and 2d are both that Friday), which
+  // would render two columns under one date. Reproduced here for every weekday
+  // start so the de-dup rule in gex.ts can't silently regress.
+  const HORIZONS = [0, 1, 2, 5, 7];
+
+  const columns = (from: Date) => {
+    const out: Date[] = [];
+    let prev: Date | null = null;
+    for (const h of HORIZONS) {
+      let date = expiryFor(h, from).date;
+      if (prev !== null && date <= prev) {
+        const after = new Date(prev);
+        after.setDate(after.getDate() + 1);
+        date = nextSession(after);
+      }
+      prev = date;
+      out.push(date);
+    }
+    return out;
+  };
+
+  it('collides without the de-dup rule (the bug this guards)', () => {
+    // Thu Jul 30 2026: 1d -> Fri Jul 31, and 2d -> Sat Aug 1 -> back to Fri Jul 31
+    const raw = HORIZONS.map(h => isoDate(expiryFor(h, d(2026, 7, 30)).date));
+    expect(new Set(raw).size).toBeLessThan(HORIZONS.length);
+  });
+
+  it('yields strictly increasing distinct sessions from every day of a full year', () => {
+    const start = d(2026, 7, 1);
+    for (let i = 0; i < 365; i++) {
+      const from = new Date(start);
+      from.setDate(from.getDate() + i);
+      const cols = columns(from);
+      const keys = cols.map(isoDate);
+      expect({ from: isoDate(from), unique: new Set(keys).size }).toEqual({
+        from: isoDate(from),
+        unique: HORIZONS.length,
+      });
+      for (let k = 1; k < cols.length; k++) expect(cols[k].getTime()).toBeGreaterThan(cols[k - 1].getTime());
+      for (const c of cols) expect(isTradingDay(c)).toBe(true);
+    }
+  });
+});
