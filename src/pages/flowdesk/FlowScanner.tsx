@@ -411,7 +411,10 @@ const TemplatesMenu = ({
             />
             <button
               onClick={commit}
-              className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded border border-borderSubtle hover:border-borderMuted font-mono text-label text-textSecondary hover:text-textPrimary transition-colors"
+              // Enabled-but-inert was the bug: commit() early-returns on an empty
+              // name, so the button invited a click and silently did nothing.
+              disabled={!name.trim()}
+              className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded border border-borderSubtle hover:border-borderMuted disabled:opacity-40 disabled:hover:border-borderSubtle font-mono text-label text-textSecondary hover:text-textPrimary transition-colors"
             >
               <Plus className="w-3 h-3" /> Save
             </button>

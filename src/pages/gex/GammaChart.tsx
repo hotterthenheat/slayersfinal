@@ -131,7 +131,7 @@ const GammaChart = () => {
                   key={label}
                   onClick={() => setHighlightCol(col)}
                   aria-pressed={on}
-                  className={`shrink-0 rounded px-2 py-1 font-mono text-micro font-semibold uppercase tracking-wide transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 ${
+                  className={`shrink-0 inline-flex items-center min-h-6 rounded px-2 py-1 font-mono text-micro font-semibold uppercase tracking-wide transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 ${
                     on ? 'bg-select/15 text-select' : 'text-textMuted hover:text-textPrimary'
                   }`}
                 >

@@ -95,6 +95,11 @@ const IconToggle = ({
     type="button"
     onClick={onClick}
     title={title}
+    // aria-label as well as title: these are icon-only, so `title` was carrying
+    // the whole name. It is the last resort in the accessible-name calculation
+    // and several screen readers skip it, which left 36 buttons on this page
+    // announcing nothing but "button".
+    aria-label={title}
     aria-pressed={active}
     className={`inline-flex items-center justify-center w-6 h-6 rounded border transition-colors ${
       active ? activeClass : 'border-borderSubtle text-textMuted/60 hover:text-textPrimary hover:border-borderMuted'
@@ -335,6 +340,7 @@ const News = () => {
                             type="button"
                             onClick={() => toggle(setExpanded, unit.key)}
                             title={isExpanded ? 'Collapse cluster' : 'Expand cluster'}
+                            aria-label={isExpanded ? 'Collapse cluster' : 'Expand cluster'}
                             aria-pressed={isExpanded}
                             className="inline-flex items-center justify-center w-6 h-6 rounded border border-borderSubtle text-textMuted hover:text-textPrimary hover:border-borderMuted transition-colors"
                           >

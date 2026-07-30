@@ -324,7 +324,7 @@ const MetaorderRow = ({ m }: { m: Metaorder }) => {
         <button
           type="button"
           onClick={() => setShowPrints(v => !v)}
-          className="inline-flex items-center gap-1.5 font-mono text-label uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
+          className="-my-1 py-1 inline-flex items-center gap-1.5 font-mono text-label uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
           aria-expanded={showPrints}
         >
           <ChevronRight className={`w-3.5 h-3.5 transition-transform ${showPrints ? 'rotate-90' : ''}`} />
@@ -334,7 +334,7 @@ const MetaorderRow = ({ m }: { m: Metaorder }) => {
         <button
           type="button"
           onClick={() => setShowBasis(v => !v)}
-          className="inline-flex items-center gap-1.5 font-mono text-label uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
+          className="-my-1 py-1 inline-flex items-center gap-1.5 font-mono text-label uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
           aria-expanded={showBasis}
         >
           <ChevronRight className={`w-3.5 h-3.5 transition-transform ${showBasis ? 'rotate-90' : ''}`} />

@@ -152,7 +152,7 @@ const AssumptionsDrawer = ({ view }: { view: HedgeImpactView }) => {
           type="button"
           onClick={() => setOpen(o => !o)}
           aria-expanded={open}
-          className="inline-flex items-center gap-1 font-mono text-label font-semibold uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
+          className="-my-1 py-1 inline-flex items-center gap-1 font-mono text-label font-semibold uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
         >
           {open ? 'Hide' : 'Show'}
           <ChevronDown className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />

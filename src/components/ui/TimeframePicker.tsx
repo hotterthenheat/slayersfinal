@@ -26,7 +26,11 @@ const TimeframePicker = ({ value, onChange, className = '' }: TimeframePickerPro
           onClick={() => onChange(tf.value)}
           aria-pressed={active}
           title={`${tf.label} bars`}
-          className={`px-1.5 py-1 font-mono text-micro uppercase tracking-wider transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 ${
+          /* min-h-6 (24px), not more padding: this picker is deliberately denser
+             than SegmentedControl and lives in a 40px panel header, so growing
+             it vertically would push the header. py-1 alone rendered 23px —
+             one pixel under the WCAG 2.2 SC 2.5.8 target floor. */
+          className={`px-1.5 py-1 min-h-6 font-mono text-micro uppercase tracking-wider transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 ${
             active ? 'bg-white/[0.12] text-textPrimary' : 'text-textSecondary hover:bg-rowHover hover:text-textPrimary'
           }`}
         >

@@ -218,7 +218,7 @@ const LandingNav = () => {
       <div className="mx-auto max-w-6xl flex items-center gap-6 px-4 lg:px-6 py-3">
         <button
           onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-          className="font-mono text-data font-bold tracking-tight whitespace-nowrap select-none"
+          className="-my-1 py-1 font-mono text-data font-bold tracking-tight whitespace-nowrap select-none"
         >
           <span className="text-textMuted">&gt; </span>
           <span className="holo-text">slayer_terminal</span>

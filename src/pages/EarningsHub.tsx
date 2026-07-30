@@ -260,7 +260,7 @@ const AlertCountdown = ({
         </span>
         <button
           onClick={onOpen}
-          className="text-left font-mono text-body font-bold text-textPrimary hover:text-select transition-colors truncate leading-5"
+          className="-my-1 py-1 text-left font-mono text-body font-bold text-textPrimary hover:text-select transition-colors truncate leading-5"
         >
           {event.ticker} · {event.dateLabel} {event.slot} · {st.label}
         </button>

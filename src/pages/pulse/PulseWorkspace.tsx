@@ -149,7 +149,7 @@ const PanelTicker = ({ value, onChange }: { value: string; onChange: (t: string)
     <button
       onMouseDown={e => e.stopPropagation()}
       onClick={() => setEditing(true)}
-      className="font-mono text-micro font-semibold text-select hover:text-textPrimary px-1 rounded transition-colors"
+      className="inline-flex items-center min-h-6 -my-1 font-mono text-micro font-semibold text-select hover:text-textPrimary px-1 rounded transition-colors"
       title="Change this panel's ticker"
     >
       {value}
@@ -690,7 +690,10 @@ const PulseWorkspace = () => {
                   />
                   <button
                     onClick={commitName}
-                    className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded border border-borderSubtle hover:border-borderMuted font-mono text-label text-textSecondary hover:text-textPrimary transition-colors"
+                    // commitName() early-returns on an empty name — same
+                    // enabled-but-inert shape as the two tape Save buttons.
+                    disabled={!nameEditor.value.trim()}
+                    className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded border border-borderSubtle hover:border-borderMuted disabled:opacity-40 disabled:hover:border-borderSubtle font-mono text-label text-textSecondary hover:text-textPrimary transition-colors"
                   >
                     <Check className="w-3 h-3" /> {nameEditor.mode === 'saveAs' ? 'Save' : 'Rename'}
                   </button>

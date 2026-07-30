@@ -138,7 +138,7 @@ const ProveIt = () => {
               type="button"
               onClick={() => setAssumptionsOpen(o => !o)}
               aria-expanded={assumptionsOpen}
-              className="flex items-center gap-1.5 font-mono text-label uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
+              className="-my-1 py-1 flex items-center gap-1.5 font-mono text-label uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
             >
               <ChevronRight className={`w-3.5 h-3.5 transition-transform ${assumptionsOpen ? 'rotate-90' : ''}`} />
               Assumptions
