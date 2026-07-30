@@ -614,7 +614,7 @@ const Tracker = () => {
               { icon: Compass, title: 'Compass setups', body: 'Graded QUALIFIED / WATCH / FADED setups with a full plan.', to: '/compass', cta: 'Open Compass' },
               { icon: Scale, title: 'Contract Weigher', body: 'Weeklies, swings & LEAPS scored STRONG / WATCH / WEAK.', to: '/compass', cta: 'Weigh contracts' },
               { icon: Radar, title: 'Trace flow', body: 'Notable options prints and dark-pool blocks.', to: '/trace/scanner', cta: 'Open Trace' },
-              { icon: CalendarClock, title: 'Earnings plays', body: 'Implied-vs-realized PLAY / FADE calls into prints.', to: '/earnings', cta: 'Open Earnings' },
+              { icon: CalendarClock, title: 'Earnings prints', body: 'Implied-vs-realized reads graded QUALIFIED / RICH / NO EDGE.', to: '/earnings', cta: 'Open Earnings' },
             ].map(card => (
               <div key={card.title} className="inst-surface rounded-md p-4 flex flex-col gap-2.5">
                 <span className="inline-flex w-8 h-8 rounded-md border border-borderSubtle bg-inset items-center justify-center">
