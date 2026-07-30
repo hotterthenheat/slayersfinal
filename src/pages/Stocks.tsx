@@ -20,8 +20,8 @@ type BetaBand = 'ALL' | 'DEF' | 'CYC';
 
 const VIEW_OPTIONS = [
   { value: 'ALL', label: 'All' },
-  { value: 'ACCUMULATE', label: 'Buys' },
-  { value: 'AVOID', label: 'Avoids' },
+  { value: 'ACCUMULATE', label: 'Strong' },
+  { value: 'AVOID', label: 'Weak' },
 ] as const;
 
 // Size / liquidity lens — filtered on the real share price the board carries.
@@ -45,6 +45,20 @@ const verdictTone: Record<StockVerdict, Tone> = {
   ACCUMULATE: 'bull',
   HOLD: 'neutral',
   AVOID: 'bear',
+};
+
+/**
+ * The board speaks observationally, same rule the setups desk follows in
+ * `skyvision/verdict.ts`: the engine identifier stays ACCUMULATE/HOLD/AVOID,
+ * but the screen says what the composite MEASURES rather than issuing a verb at
+ * the reader. The verdict is a pure threshold on the composite (≥68 / ≤46), so
+ * STRONG / NEUTRAL / WEAK is the literal reading — "ACCUMULATE" was an
+ * instruction the number does not support on its own.
+ */
+const VERDICT_LABEL: Record<StockVerdict, string> = {
+  ACCUMULATE: 'STRONG',
+  HOLD: 'NEUTRAL',
+  AVOID: 'WEAK',
 };
 
 const sectorTone: Record<SectorRow['verdict'], Tone> = {
@@ -373,7 +387,7 @@ const Stocks = () => {
       key: 'verdict',
       header: 'Verdict',
       sortValue: p => p.verdict,
-      render: p => <SignalBadge tone={verdictTone[p.verdict]}>{p.verdict}</SignalBadge>,
+      render: p => <SignalBadge tone={verdictTone[p.verdict]}>{VERDICT_LABEL[p.verdict]}</SignalBadge>,
     },
   ];
 
@@ -387,8 +401,8 @@ const Stocks = () => {
       />
 
       <MetricGrid min="170px">
-        <StatCard label="Accumulate list" value={buys.length} sub={`of ${picks.length} names screened`} tone="bull" />
-        <StatCard label="Avoid list" value={avoids.length} sub="screens argue against owning" tone="bear" />
+        <StatCard label="Strong names" value={buys.length} sub={`of ${picks.length} names screened`} tone="bull" />
+        <StatCard label="Weak names" value={avoids.length} sub="screens read as supply, not a base" tone="bear" />
         <StatCard label="Breadth" value={`${breadth}%`} sub="names above trend" tone={breadth >= 55 ? 'bull' : breadth <= 40 ? 'bear' : 'neutral'} />
         <StatCard label="Strongest sector" value={topSector.sector} sub={`score ${topSector.score} · ${topSector.phase}`} tone="bull" />
         <StatCard label="Weakest sector" value={bottomSector.sector} sub={`score ${bottomSector.score} · ${bottomSector.phase}`} tone="bear" />
@@ -504,7 +518,7 @@ const Stocks = () => {
                     {p.changePct >= 0 ? '+' : ''}
                     {p.changePct.toFixed(2)}%
                   </span>
-                  <SignalBadge tone={verdictTone[p.verdict]}>{p.verdict}</SignalBadge>
+                  <SignalBadge tone={verdictTone[p.verdict]}>{VERDICT_LABEL[p.verdict]}</SignalBadge>
                 </div>
                 <div className="flex items-baseline gap-2">
                   <span className={`font-mono text-lg font-bold tnum ${p.composite >= 68 ? 'text-bull' : p.composite <= 46 ? 'text-bear' : 'text-textPrimary'}`}>
@@ -562,7 +576,7 @@ const Stocks = () => {
                       ))}
                     </div>
                     <p className="mt-2.5 pt-2.5 border-t border-borderSubtle text-label text-textMuted leading-snug">
-                      The composite blends all four; ACCUMULATE / HOLD / AVOID follow from where a name's composite lands.
+                      The composite blends all four; STRONG / NEUTRAL / WEAK follow from where a name's composite lands.
                     </p>
                   </div>
                 </>

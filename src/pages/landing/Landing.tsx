@@ -17,6 +17,7 @@ import { ComparePlans, Faq } from './PricingExtras';
 import HeroScene from './HeroScene';
 import LiveSections from './LiveSections';
 import TiltBox from './TiltBox';
+import { PILL } from '../../lib/motion';
 
 // Top tabs open the actual products (into the terminal); Pricing stays an
 // on-page anchor.
@@ -197,7 +198,7 @@ const LandingNav = () => {
                   <motion.span
                     layoutId="landing-nav-pill"
                     className="absolute inset-0 rounded-md holo-bg"
-                    transition={{ type: 'spring', stiffness: 320, damping: 30 }}
+                    transition={PILL}
                   />
                 )}
                 <span

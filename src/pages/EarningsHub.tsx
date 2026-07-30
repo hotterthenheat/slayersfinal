@@ -16,9 +16,9 @@ type VerdictFilter = 'ALL' | EarningsVerdict;
 
 const FILTER_OPTIONS = [
   { value: 'ALL', label: 'All' },
-  { value: 'PLAY', label: 'Plays' },
-  { value: 'FADE', label: 'Fades' },
-  { value: 'SKIP', label: 'Skips' },
+  { value: 'PLAY', label: 'Qualified' },
+  { value: 'FADE', label: 'Rich' },
+  { value: 'SKIP', label: 'No edge' },
 ] as const;
 
 // Date/week windows read straight off the existing daysOut field — no new data.
@@ -38,12 +38,29 @@ const inWindow = (e: EarningsEvent, w: WindowFilter): boolean => {
 
 const WATCHLIST_KEY = 'slayer.earnings.watchlist';
 
-// PLAY = green (buy the event), FADE = amber caution (premium's too rich), SKIP = neutral.
+// QUALIFIED = green (a structure qualifies), RICH = amber caution (premium favours the seller), NO EDGE = neutral.
 // Magenta stays reserved for the king/standout signal, not a verdict.
 const verdictTone: Record<EarningsVerdict, Tone> = {
   PLAY: 'bull',
   FADE: 'warn',
   SKIP: 'neutral',
+};
+
+/**
+ * Observational labels, same rule as `skyvision/verdict.ts` and the Stocks
+ * board: the engine keeps PLAY/FADE/SKIP, the screen states the condition.
+ *
+ * PLAY deliberately does NOT map to a price word — it fires on three different
+ * conditions (rich premium with strong direction, cheap premium, fair premium
+ * with direction), so anything about the premium would be wrong for two of the
+ * three. What all three share is that a defined structure qualifies. FADE is
+ * the one branch that IS a premium statement (richness >= 1.3 with no
+ * direction), and SKIP is the absence of an edge.
+ */
+const VERDICT_LABEL: Record<EarningsVerdict, string> = {
+  PLAY: 'QUALIFIED',
+  FADE: 'RICH',
+  SKIP: 'NO EDGE',
 };
 
 /*
@@ -278,7 +295,7 @@ const AlertCountdown = ({
   );
 };
 
-/** The three-part read that replaces a bare PLAY / FADE. */
+/** The three-part read that replaces a bare QUALIFIED / RICH badge. */
 const TradeRead = ({ e }: { e: EarningsEvent }) => {
   const edge = edgeRead(e);
   const conv = convictionRead(e);
@@ -286,7 +303,7 @@ const TradeRead = ({ e }: { e: EarningsEvent }) => {
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center gap-1.5">
-        <SignalBadge tone={verdictTone[e.verdict]}>{e.verdict}</SignalBadge>
+        <SignalBadge tone={verdictTone[e.verdict]}>{VERDICT_LABEL[e.verdict]}</SignalBadge>
         <span className="font-mono text-label text-textPrimary">{st.label}</span>
       </div>
       <div className="flex items-center gap-2 font-mono text-label whitespace-nowrap">
@@ -507,8 +524,8 @@ const EarningsHub = () => {
 
       <MetricGrid min="170px">
         <StatCard label="Reports tracked" value={events.length} sub="next two weeks" />
-        <StatCard label="Playable" value={plays.length} sub="edge worth taking" tone="bull" />
-        <StatCard label="Fade list" value={fades.length} sub="premium overpriced" tone="magenta" />
+        <StatCard label="Qualified" value={plays.length} sub="a defined structure fits" tone="bull" />
+        <StatCard label="Premium rich" value={fades.length} sub="implied over realized" tone="magenta" />
         <StatCard
           label="Richest straddle"
           value={richest ? `${richest.ticker} ${richest.richness.toFixed(2)}×` : '--'}
@@ -566,7 +583,7 @@ const EarningsHub = () => {
                     <span className="font-mono text-caption font-bold text-textPrimary">{e.ticker}</span>
                     <span className="font-mono text-micro text-textMuted">{e.slot}</span>
                     <SignalBadge tone={verdictTone[e.verdict]} className="ml-auto">
-                      {e.verdict}
+                      {VERDICT_LABEL[e.verdict]}
                     </SignalBadge>
                   </button>
                 ))}
@@ -620,7 +637,7 @@ const EarningsHub = () => {
                   </div>
 
                   <div className="flex items-center justify-between gap-2">
-                    <SignalBadge tone={verdictTone[e.verdict]}>{e.verdict}</SignalBadge>
+                    <SignalBadge tone={verdictTone[e.verdict]}>{VERDICT_LABEL[e.verdict]}</SignalBadge>
                     <ReportTimeTag e={e} />
                   </div>
 
@@ -713,7 +730,7 @@ const EarningsHub = () => {
           <div className="px-4 py-3 border-b border-borderSubtle bg-inset flex flex-col gap-2.5 animate-soft-in">
             <div className="flex items-center gap-2 flex-wrap">
               <WatchStar on={watchlist.has(selected.ticker)} onClick={() => toggleWatch(selected.ticker)} />
-              <SignalBadge tone={verdictTone[selected.verdict]}>{selected.verdict}</SignalBadge>
+              <SignalBadge tone={verdictTone[selected.verdict]}>{VERDICT_LABEL[selected.verdict]}</SignalBadge>
               <span className="font-mono text-caption font-bold text-textPrimary leading-4">
                 {selected.ticker} · {selected.dateLabel} {selected.slot}
               </span>

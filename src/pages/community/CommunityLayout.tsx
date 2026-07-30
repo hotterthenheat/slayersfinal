@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import PageHeader from '../../components/ui/PageHeader';
 import SubNav from '../../components/ui/SubNav';
 import { COMMUNITY_SUBPAGES } from './subnav';
+import { DUR, EASE } from '../../lib/motion';
 
 /** Section shell for Community — header and subpage tabs; body cross-fades. */
 const CommunityLayout = () => {
@@ -25,7 +26,7 @@ const CommunityLayout = () => {
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -4 }}
-          transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+          transition={{ duration: DUR.base, ease: EASE }}
           className="flex flex-col gap-4"
         >
           {outlet}

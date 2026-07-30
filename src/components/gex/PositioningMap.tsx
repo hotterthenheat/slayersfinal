@@ -9,6 +9,7 @@ import SpotRule from '../ui/SpotRule';
 import SignalBadge from '../ui/SignalBadge';
 import TrendLine from './TrendLine';
 import type { ExposureProfileData, StrikeExposure, ZoneBand, ZoneKind } from '../../types/gex';
+import { DUR, EASE } from '../../lib/motion';
 
 interface PositioningMapProps {
   data: ExposureProfileData;
@@ -43,7 +44,7 @@ const NetBar = ({ value, max }: { value: number; max: number }) => {
       className="absolute top-1/2 -translate-y-1/2 h-[7px] rounded-sm"
       initial={false}
       animate={{ left: `${neg ? 50 - pct : 50}%`, width: `${pct}%`, opacity: pct < 0.5 ? 0 : 1 }}
-      transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: DUR.data, ease: EASE }}
       style={{ background: neg ? SHORT_GAMMA : LONG_GAMMA }}
     />
   );
@@ -57,7 +58,7 @@ const PriorDot = ({ value, max }: { value: number; max: number }) => {
       className="absolute top-1/2 w-[4px] h-[4px] rounded-full bg-textPrimary/55 pointer-events-none"
       initial={false}
       animate={{ left: `calc(${50 + off}% - 2px)`, y: '-50%' }}
-      transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: DUR.data, ease: EASE }}
     />
   );
 };

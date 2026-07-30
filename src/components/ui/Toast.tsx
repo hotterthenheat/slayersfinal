@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useMemo, useRef, useState, type
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Check, AlertTriangle, Info, X, TriangleAlert } from 'lucide-react';
+import { DUR, EASE } from '../../lib/motion';
 
 export type ToastTone = 'success' | 'error' | 'warn' | 'info';
 
@@ -117,7 +118,7 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
                   initial={{ opacity: 0, x: 24, scale: 0.96 }}
                   animate={{ opacity: 1, x: 0, scale: 1 }}
                   exit={{ opacity: 0, x: 24, scale: 0.96 }}
-                  transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                  transition={{ duration: DUR.base, ease: EASE }}
                   className={`pointer-events-auto flex items-start gap-2.5 min-w-[240px] max-w-[360px] rounded-md border ${tone.ring} bg-panel/95 backdrop-blur px-3 py-2.5 shadow-overlay`}
                   role="status"
                   onMouseEnter={() => hold(t.id)}

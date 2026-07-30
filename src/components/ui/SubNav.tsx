@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import type { LucideIcon } from 'lucide-react';
+import { PILL } from '../../lib/motion';
 
 export interface SubNavItem {
   path: string;
@@ -33,7 +34,7 @@ const Tab = ({ item, pillId }: { item: SubNavItem; pillId: string }) => (
           <motion.span
             layoutId={pillId}
             className="absolute inset-0 rounded-[5px] holo-bg"
-            transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+            transition={PILL}
           />
         )}
         <span className="relative z-10 inline-flex items-center gap-1.5">

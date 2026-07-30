@@ -28,6 +28,7 @@ import type { MarketSnapshot } from '../../types/market';
 import type { CommandView, ExposureProfileData, GexMatrixData, GexView } from '../../types/gex';
 import type { Setup, SkyVisionData } from '../../types/skyvision';
 import { VERDICT_LABEL } from '../../components/skyvision/verdict';
+import { DUR, EASE } from '../../lib/motion';
 
 const SCAN_INTERVAL_MS = 10_000;
 
@@ -162,7 +163,7 @@ const DemoTape = ({ snapshot }: { snapshot: MarketSnapshot }) => {
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: DUR.reflow, ease: EASE }}
             className="flex items-center gap-2.5 px-4 h-[38px] border-b border-borderSubtle/40"
           >
             <span className="font-mono text-micro text-textMuted tnum shrink-0">{p.time}</span>
@@ -259,7 +260,7 @@ const DemoSetup = ({ setups }: { setups: SkyVisionData }) => {
           <motion.div
             className="h-full rounded-full data-bar"
             animate={{ width: `${setup.confidence}%` }}
-            transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: DUR.data, ease: EASE }}
           />
         </div>
       </div>
@@ -347,7 +348,7 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ duration: DUR.slow, ease: EASE }}
             >
               <h3
                 className="font-mono text-lead font-bold tracking-tight"
@@ -375,7 +376,7 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
                       width: `${confidence}%`,
                       background: entering ? 'rgba(48,209,88,0.92)' : 'rgba(255,59,48,0.85)',
                     }}
-                    transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+                    transition={{ duration: DUR.data, ease: EASE }}
                   />
                 </div>
               </div>

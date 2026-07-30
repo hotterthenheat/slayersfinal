@@ -18,6 +18,7 @@ import { useMarketData, useTicker } from '../../context/MarketDataContext';
 import AnimatedNumber from '../ui/AnimatedNumber';
 import TickerSearch from '../ui/TickerSearch';
 import { NAV_GROUPS, itemsByGroup, NAV_ITEMS, type NavGroup, type NavItem } from './nav';
+import { DUR, EASE, PILL } from '../../lib/motion';
 
 interface TopBarProps {
   onOpenPalette: () => void;
@@ -125,7 +126,7 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
                   <motion.span
                     layoutId="topnav-underline"
                     className="absolute left-2.5 right-2.5 -bottom-2 h-[2px] rounded-full holo-bar"
-                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                    transition={PILL}
                   />
                 )}
               </button>
@@ -193,7 +194,7 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ duration: DUR.quick, ease: EASE }}
             >
               <MobileNav section={section} onPick={() => setMobileOpen(false)} />
             </motion.div>
@@ -244,7 +245,7 @@ const DropMenu = ({
     initial={{ opacity: 0, y: -6 }}
     animate={{ opacity: 1, y: 0 }}
     exit={{ opacity: 0, y: -6 }}
-    transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+    transition={{ duration: DUR.quick, ease: EASE }}
   >
     <div className="mt-1 min-w-[248px] border border-borderMuted bg-panel rounded-md shadow-overlay overflow-hidden">
       <div className="flex items-center justify-between gap-3 px-3 py-2 border-b border-borderSubtle">

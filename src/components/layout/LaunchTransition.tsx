@@ -14,7 +14,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { EASE } from '../../lib/motion';
+import { DUR, EASE } from '../../lib/motion';
 
 interface LaunchCtxValue {
   /** Play the gate, then navigate (defaults to the terminal's front door). */
@@ -114,7 +114,7 @@ export const LaunchProvider = ({ children }: { children: ReactNode }) => {
             initial={bootRef.current ? false : { opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.3, ease: EASE }}
+            transition={{ duration: DUR.slow, ease: EASE }}
             className="fixed inset-0 z-[100] bg-canvas flex flex-col items-center justify-center gap-6"
           >
             <span className="font-mono text-xl font-bold tracking-tight select-none">

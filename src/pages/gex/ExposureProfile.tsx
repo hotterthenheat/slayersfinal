@@ -18,6 +18,7 @@ import ExposureMatrix from '../../components/gex/ExposureMatrix';
 import PositioningMap from '../../components/gex/PositioningMap';
 import ExposureInsight from '../../components/gex/ExposureInsight';
 import ExposureLedger from './ExposureLedger';
+import { DUR, EASE } from '../../lib/motion';
 
 /** Exposure sweeps on its own cadence — bars must not vibrate with every tick. */
 const SCAN_INTERVAL_MS = 10_000;
@@ -127,7 +128,7 @@ const ExposureProfile = () => {
             initial={{ opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: DUR.quick, ease: EASE }}
             className="flex items-center gap-4 flex-wrap border border-select/30 bg-select/[0.04] rounded-md px-3 py-2"
           >
             <span className="inline-flex items-center rounded-full border border-select/40 bg-select/10 px-2 py-0.5 font-mono text-label font-semibold text-select tnum">

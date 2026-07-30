@@ -41,7 +41,7 @@ import type { MarketSnapshot } from '../../types/market';
 import type { WorkspaceCtx } from '../workspace/registry';
 import { PULSE_ADDABLE_PANELS, PULSE_DATA_CONNECTIONS, pulsePanelByKey } from './pulseRegistry';
 import PanelErrorBoundary from './PanelErrorBoundary';
-import { EASE } from '../../lib/motion';
+import { DUR, EASE } from '../../lib/motion';
 import {
   PULSE_PRESETS,
   PULSE_STORAGE_KEY,
@@ -877,7 +877,7 @@ const PulseWorkspace = () => {
             initial={{ opacity: 0, scale: 0.985 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.99 }}
-            transition={{ duration: 0.24, ease: EASE }}
+            transition={{ duration: DUR.slow, ease: EASE }}
           >
             <Grid
               layout={active.layout}

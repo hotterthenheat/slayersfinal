@@ -23,6 +23,7 @@ import SegmentedControl from '../components/ui/SegmentedControl';
 import { StateBadge } from '../components/skyvision/StateBadge';
 import { setupState, STATE_META } from '../components/skyvision/setupState';
 import { SkeletonRows } from '../components/ui/Skeleton';
+import { DUR, EASE, PILL } from '../lib/motion';
 
 type CompassMode = 'setups' | 'weigher' | 'lotto';
 type SetupsView = 'list' | 'table';
@@ -398,7 +399,7 @@ const Compass = () => {
                 <motion.span
                   layoutId="skyvision-scanner-pill"
                   className="absolute inset-0 rounded-md holo-bg"
-                  transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                  transition={PILL}
                 />
               )}
               <span className="relative z-10">{s.label}</span>
@@ -486,7 +487,7 @@ const Compass = () => {
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ duration: DUR.base, ease: EASE }}
             >
               {inReviewMode && monitoredSetup ? (
                 <SignalMonitor setup={monitoredSetup} onBack={handleBackToBrowse} />
@@ -530,7 +531,7 @@ const Compass = () => {
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ duration: DUR.base, ease: EASE }}
               className="flex-1 flex flex-col xl:relative"
             >
               {inReviewMode && liveChain ? (

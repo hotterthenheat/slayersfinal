@@ -1,5 +1,6 @@
 import { useId } from 'react';
 import { motion } from 'framer-motion';
+import { PILL } from '../../lib/motion';
 
 interface SegmentedControlProps<V extends string> {
   options: readonly { value: V; label: string }[];
@@ -34,7 +35,7 @@ const SegmentedControl = <V extends string>({ options, value, onChange, ariaLabe
               <motion.span
                 layoutId={pill}
                 className="absolute inset-0 bg-white/[0.12]"
-                transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+                transition={PILL}
               />
             )}
             <span className="relative z-10">{opt.label}</span>

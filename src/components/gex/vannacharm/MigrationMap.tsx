@@ -6,6 +6,7 @@ import { heatRgb } from '../heatmap';
 import SignalBadge from '../../ui/SignalBadge';
 import TrendLine from '../TrendLine';
 import type { ShiftBarRow, VannaCharmView } from '../../../types/gex';
+import { DUR, EASE } from '../../../lib/motion';
 
 interface MigrationMapProps {
   data: VannaCharmView;
@@ -24,7 +25,7 @@ const Bar = ({ value, max, top, ghost }: { value: number; max: number; top: bool
       className={`absolute ${top ? 'top-[2px]' : 'bottom-[2px]'} h-[4px] rounded-sm`}
       initial={false}
       animate={{ left: `${neg ? 50 - pct : 50}%`, width: `${pct}%`, opacity: pct < 0.5 ? 0 : 1 }}
-      transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: DUR.data, ease: EASE }}
       style={{ background: `rgba(${r},${g},${b},${ghost ? 0.35 : 0.95})` }}
     />
   );
