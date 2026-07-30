@@ -101,9 +101,37 @@ export default {
         read: '15px', // prose emphasis, card titles
         lead: '16px', // largest inline copy
       },
+      /*
+        Real fallback stacks, not a bare generic.
+        Both families load from Google Fonts with `display=swap`, so the first
+        paint of every session — and the whole session if that host is blocked or
+        slow — renders in whatever `sans-serif`/`monospace` resolves to. On Linux
+        that is often DejaVu, which is markedly wider than Inter and JetBrains
+        Mono: dense uppercase labels and fixed-width table columns reflow when
+        the real face lands. These stacks keep the metrics close enough that the
+        swap is a refinement rather than a re-layout.
+      */
       fontFamily: {
-        sans: ['Inter', 'sans-serif'],
-        mono: ['JetBrains Mono', 'monospace'],
+        sans: [
+          'Inter',
+          'ui-sans-serif',
+          'system-ui',
+          '-apple-system',
+          'Segoe UI',
+          'Roboto',
+          'Helvetica Neue',
+          'Arial',
+          'sans-serif',
+        ],
+        mono: [
+          'JetBrains Mono',
+          'ui-monospace',
+          'SFMono-Regular',
+          'Menlo',
+          'Consolas',
+          'Liberation Mono',
+          'monospace',
+        ],
       }
     },
   },
