@@ -577,7 +577,7 @@ const LiquidityHeatmapChart = ({
         style={{ minHeight: height }}
         onDoubleClick={resetView}
       >
-        <div ref={containerRef} className="absolute inset-0" />
+        <div ref={containerRef} className="absolute inset-0" role="img" aria-label={`${ticker} liquidity chart — candles with the resting-liquidity heat field, dealer walls, dark-pool shelves and VWAP`} />
         <div
           ref={readoutRef}
           aria-hidden

@@ -51,6 +51,9 @@ import {
 } from './presets';
 
 const Grid = WidthProvider(RGL);
+/** Grid columns — shared by the layout and the keyboard nudge clamp. */
+const GRID_COLS = 12;
+
 const SCAN_INTERVAL_MS = 10_000;
 
 /** One shared data context per ticker, built once per scan. */
@@ -178,6 +181,8 @@ interface PanelChromeHandlers {
   onMinimize: (panelId: string) => void;
   onMaximize: (panelId: string | null) => void;
   onClose: (panelId: string) => void;
+  /** Keyboard move/resize. Returns the new position or size, for announcing. */
+  onNudge: (panelId: string, dx: number, dy: number, dw: number, dh: number) => string;
 }
 
 /** Panel header — title, per-panel ticker, a live quote, and edit/maximize
@@ -201,14 +206,51 @@ const PanelChrome = ({
   h: PanelChromeHandlers;
 }) => {
   const def = pulsePanelByKey(panelKey);
+  const [nudged, setNudged] = useState('');
   const draggable = !maximizedView && h.editLayout;
   const up = (changePct ?? 0) >= 0;
   return (
     <div className={`${draggable ? 'widget-drag cursor-grab active:cursor-grabbing' : ''} flex items-center gap-2 px-3.5 h-10 border-b border-borderSubtle bg-white/[0.015] shrink-0 select-none`}>
-      {draggable && <GripHorizontal className="w-3.5 h-3.5 text-textMuted shrink-0" />}
-      <span className="font-mono text-label font-semibold uppercase tracking-widest text-textPrimary truncate">
+      {draggable && (
+        <>
+          {/* react-grid-layout's handle is a bare div, so Customize mode
+              advertised a rearrangeable desk that no keyboard could rearrange.
+              The grip is a real button: arrows move, Shift+arrows resize, and
+              the result goes to a live region rather than a toast (one toast per
+              arrow press would bury the desk). Mouse dragging still works from
+              anywhere in the header — the handle class stays on the row. */}
+          <button
+            type="button"
+            aria-label={`Move or resize ${def?.title ?? panelKey} panel. Arrow keys move, Shift plus arrow keys resize.`}
+            aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight"
+            onKeyDown={e => {
+              const step: Record<string, [number, number]> = {
+                ArrowLeft: [-1, 0],
+                ArrowRight: [1, 0],
+                ArrowUp: [0, -1],
+                ArrowDown: [0, 1],
+              };
+              const d = step[e.key];
+              if (!d) return;
+              e.preventDefault();
+              const [ax, ay] = d;
+              setNudged(e.shiftKey ? h.onNudge(panelId, 0, 0, ax, ay) : h.onNudge(panelId, ax, ay, 0, 0));
+            }}
+            className="-m-1 p-1 rounded shrink-0 text-textMuted hover:text-textPrimary transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60"
+          >
+            <GripHorizontal className="w-3.5 h-3.5" />
+          </button>
+          <span className="sr-only" aria-live="polite">
+            {nudged}
+          </span>
+        </>
+      )}
+      {/* h2, matching Panel's level. These were spans carrying Panel's exact
+          class string, which left /pulse — the flagship desk — with zero
+          headings of any level. */}
+      <h2 className="font-mono text-label font-semibold uppercase tracking-widest text-textPrimary truncate">
         {def?.title ?? panelKey}
-      </span>
+      </h2>
       <PanelTicker value={ticker} onChange={t => h.onTicker(panelId, t)} />
       {price != null && Number.isFinite(price) && (
         <span className="hidden md:flex items-baseline gap-1.5 font-mono tnum whitespace-nowrap" onMouseDown={e => e.stopPropagation()}>
@@ -460,6 +502,34 @@ const PulseWorkspace = () => {
 
   const onLayoutChange = (next: Layout[]) => mutate(l => ({ ...l, layout: next }));
 
+  /**
+   * Keyboard move/resize. react-grid-layout ships no keyboard path — its drag
+   * and resize handles are bare divs — so Customize mode advertised a
+   * rearrangeable desk that a keyboard user could not rearrange at all. Writing
+   * the geometry straight into the layout is the same thing a drag produces, and
+   * RGL re-runs its vertical compaction from it.
+   */
+  const nudgePanel = (id: string, dx: number, dy: number, dw: number, dh: number): string => {
+    const panel = active.panels.find(p => p.id === id);
+    const def = panel ? pulsePanelByKey(panel.key) : undefined;
+    const minW = def?.minW ?? 2;
+    const minH = def?.minH ?? 2;
+    let announced = '';
+    mutate(l => ({
+      ...l,
+      layout: l.layout.map(g => {
+        if (g.i !== id) return g;
+        const w = Math.max(minW, Math.min(GRID_COLS, g.w + dw));
+        const h = Math.max(minH, g.h + dh);
+        const x = Math.max(0, Math.min(GRID_COLS - w, g.x + dx));
+        const y = Math.max(0, g.y + dy);
+        announced = dw || dh ? `${w} by ${h}` : `column ${x + 1}, row ${y + 1}`;
+        return { ...g, x, y, w, h };
+      }),
+    }));
+    return announced;
+  };
+
   const doArrange = (mode: 'one' | 'cols' | 'rows' | 'quad') =>
     mutate(l => ({ ...l, layout: arrange(mode, l.panels.map(p => p.id)) }));
 
@@ -574,6 +644,7 @@ const PulseWorkspace = () => {
     onMinimize: toggleMin,
     onMaximize: setMaximizedId,
     onClose: removePanel,
+    onNudge: nudgePanel,
   };
 
   // Live quote for a panel's ticker (scan cadence — no per-second header churn).
@@ -583,6 +654,10 @@ const PulseWorkspace = () => {
 
   return (
     <div className={fullscreen ? 'fixed inset-0 z-50 bg-canvas p-3 flex flex-col gap-4 overflow-auto' : 'flex flex-col gap-4'}>
+      {/* The desk is deliberately chromeless — no page title bar — so the H1
+          every other route renders is here for the document outline and for
+          assistive tech, not for the eye. */}
+      <h1 className="sr-only">Pulse — {active.name} workspace</h1>
       {/* Workspace bar */}
       <div className="flex items-center gap-2 flex-wrap">
         {/* View switcher — the hero control (present in both modes) */}
@@ -820,7 +895,7 @@ const PulseWorkspace = () => {
           >
             <Grid
               layout={active.layout}
-              cols={12}
+              cols={GRID_COLS}
               rowHeight={64}
               margin={[12, 12]}
               containerPadding={[0, 0]}

@@ -449,7 +449,7 @@ const StrikeChart = ({
         style={{ minHeight: height }}
         onDoubleClick={resetView}
       >
-        <div ref={containerRef} className="absolute inset-0" />
+        <div ref={containerRef} className="absolute inset-0" role="img" aria-label={`${ticker} price chart — candles with dealer walls, gamma flip, king strike and net-GEX nodes`} />
         <div
           ref={nodeChipRef}
           aria-hidden

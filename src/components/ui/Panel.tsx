@@ -4,6 +4,20 @@ import { Maximize2, Minimize2 } from 'lucide-react';
 import type { Tone } from './tones';
 import { useFocus } from '../../context/FocusContext';
 
+/** Renders the panel title at the requested level without four near-copies. */
+const Heading = ({
+  level,
+  className,
+  children,
+}: {
+  level: 2 | 3 | 4;
+  className?: string;
+  children: React.ReactNode;
+}) => {
+  const Tag = (`h${level}` as const) as 'h2' | 'h3' | 'h4';
+  return <Tag className={className}>{children}</Tag>;
+};
+
 interface PanelProps {
   title?: React.ReactNode;
   subtitle?: React.ReactNode;
@@ -19,6 +33,8 @@ interface PanelProps {
   /** Stable focus id so a page can detect its own panel's focus state (e.g. to
       render more data when expanded). Falls back to an auto-generated id. */
   focusId?: string;
+  /** Heading level for `title`. Defaults to 2 — panels sit under the page H1. */
+  headingLevel?: 2 | 3 | 4;
   className?: string;
   bodyClassName?: string;
   children: React.ReactNode;
@@ -56,6 +72,7 @@ const Panel = ({
   emphasis = false,
   focusable = false,
   focusId,
+  headingLevel = 2,
   className = '',
   bodyClassName = '',
   children,
@@ -79,9 +96,12 @@ const Panel = ({
         >
           <div className="flex items-baseline gap-2 min-w-0">
             {title && (
-              <h3 className="font-mono text-label font-semibold uppercase tracking-widest text-textPrimary truncate">
+              // h2 by default: on all 13 routes that mount panels they are direct
+              // children of the page H1, so h3 skipped a level. `headingLevel`
+              // exists for a page that genuinely nests panels inside a section.
+              <Heading level={headingLevel} className="font-mono text-label font-semibold uppercase tracking-widest text-textPrimary truncate">
                 {title}
-              </h3>
+              </Heading>
             )}
             {subtitle && (
               // Hidden on phones: the title + subtitle + actions can't share one

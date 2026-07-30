@@ -259,7 +259,7 @@ const SwingMapChart = ({ ticker, spot, revision = 0, height = 300, focusPrice = 
         style={{ minHeight: height }}
         onDoubleClick={resetView}
       >
-        <div ref={containerRef} className="absolute inset-0" />
+        <div ref={containerRef} className="absolute inset-0" role="img" aria-label={`${ticker} daily swing chart — support and resistance zones, trend rail and the measured-move projection`} />
         <div
           ref={zoneChipRef}
           aria-hidden

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ROW_INTERACTIVE, interactiveRowProps } from '../../components/ui/interactiveRow';
 import { Bookmark, Check, Pause, Play, Plus, Save, Search, SlidersHorizontal, Trash2, X } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { enrichPrint, sentimentOf, summarizeTape } from '../../data/flowtape';
@@ -934,7 +935,8 @@ const LiveTape = () => {
                     key={r.id}
                     ref={idx === 0 ? firstRowRef : undefined}
                     onClick={() => setSelected(r)}
-                    className={`cursor-pointer border-b border-borderSubtle/30 last:border-0 ${
+                    {...interactiveRowProps(() => setSelected(r), selected?.id === r.id)}
+                    className={`${ROW_INTERACTIVE} border-b border-borderSubtle/30 last:border-0 ${
                       selected?.id === r.id ? 'inst-selected' : 'hover:bg-rowHover'
                     } ${rowAccent(r.premium)}`}
                   >

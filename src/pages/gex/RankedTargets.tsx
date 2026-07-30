@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { ROW_INTERACTIVE, interactiveRowProps } from '../../components/ui/interactiveRow';
 import { CALL_WALL, PUT_WALL, KING } from '../../components/gex/palette';
 import { useNavigate } from 'react-router-dom';
 import { ArrowUpRight, ArrowUp, ArrowDown, ChevronUp, ChevronDown } from 'lucide-react';
@@ -280,11 +281,12 @@ const RankedTargets = () => {
                   <tr
                     key={t.strike}
                     onClick={() => flash(t)}
+                    {...interactiveRowProps(() => flash(t))}
                     title="Flash on chart"
                     onMouseEnter={e => setHover({ t, x: e.clientX, y: e.clientY })}
                     onMouseMove={e => setHover({ t, x: e.clientX, y: e.clientY })}
                     onMouseLeave={() => setHover(h => (h && h.t.strike === t.strike ? null : h))}
-                    className="group cursor-pointer border-b border-borderSubtle/30 last:border-0 hover:bg-rowHover transition-colors"
+                    className={`group ${ROW_INTERACTIVE} border-b border-borderSubtle/30 last:border-0 hover:bg-rowHover transition-colors`}
                     style={{ boxShadow: `inset 2px 0 0 0 ${CLASS_EDGE[t.hedgingClass]}` }}
                   >
                     <td className="px-3 py-2.5">

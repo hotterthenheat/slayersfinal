@@ -22,6 +22,19 @@ interface PressureMatrixProps {
  * with real size looks bigger than one without — per-row normalisation would
  * make every row look equally loaded.
  */
+/** One spoken line per row — the same facts the hover card shows. */
+const rowLabel = (r: PressureRow): string =>
+  [
+    `Strike ${r.strike % 1 === 0 ? r.strike.toFixed(0) : r.strike.toFixed(2)}`,
+    r.pin ? 'pin' : '',
+    r.flip ? 'gamma flip' : '',
+    `calls ${fmtUsd(r.call.pressure)}, delta OI ${r.call.deltaOI.toLocaleString()}, volume ${r.call.volume.toLocaleString()}`,
+    `puts ${fmtUsd(r.put.pressure)}, delta OI ${r.put.deltaOI.toLocaleString()}, volume ${r.put.volume.toLocaleString()}`,
+    `net ${fmtUsd(r.net)} — dealers ${r.net >= 0 ? 'long gamma here, moves into it get absorbed' : 'short gamma here, moves get amplified'}`,
+  ]
+    .filter(Boolean)
+    .join('. ');
+
 const PressureMatrix = ({ rows, maxAbs, spot }: PressureMatrixProps) => {
   const [hover, setHover] = useState<{ r: PressureRow; x: number; y: number } | null>(null);
 
@@ -48,7 +61,12 @@ const PressureMatrix = ({ rows, maxAbs, spot }: PressureMatrixProps) => {
         <span className="ml-auto text-bear">Puts</span>
       </div>
 
-      <div className="flex-grow overflow-y-auto min-h-0">
+      <div
+        className="flex-grow overflow-y-auto min-h-0"
+        tabIndex={0}
+        role="region"
+        aria-label="Dealer pressure ladder — scrollable"
+      >
         {rows.map(r => {
           const isSpot = r.strike === spotStrike;
           return (
@@ -57,7 +75,18 @@ const PressureMatrix = ({ rows, maxAbs, spot }: PressureMatrixProps) => {
               onMouseEnter={e => setHover({ r, x: e.clientX, y: e.clientY })}
               onMouseMove={e => setHover({ r, x: e.clientX, y: e.clientY })}
               onMouseLeave={() => setHover(h => (h && h.r.strike === r.strike ? null : h))}
-              className={`flex items-center gap-1.5 px-2 py-[3px] border-b border-borderSubtle/30 transition-colors hover:bg-rowHover ${
+              /* Everything this ladder knows beyond bar length — ΔOI, volume,
+                 net, and whether dealers absorb or amplify here — lived only in
+                 the hover card. Focus opens the same read-out, and the label
+                 carries the figures so they are announced without it. */
+              tabIndex={0}
+              onFocus={e => {
+                const b = e.currentTarget.getBoundingClientRect();
+                setHover({ r, x: b.left + b.width / 2, y: b.bottom });
+              }}
+              onBlur={() => setHover(h => (h && h.r.strike === r.strike ? null : h))}
+              aria-label={rowLabel(r)}
+              className={`flex items-center gap-1.5 px-2 py-[3px] border-b border-borderSubtle/30 transition-colors hover:bg-rowHover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 ${
                 isSpot ? 'bg-white/[0.05]' : ''
               }`}
             >
