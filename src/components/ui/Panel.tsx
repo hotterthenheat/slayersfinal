@@ -100,7 +100,11 @@ const Panel = ({
                   onClick={() => (isFocused ? close() : focus(uid, title ?? subtitle))}
                   aria-label={isFocused ? 'Exit focus' : 'Focus this panel'}
                   title={isFocused ? 'Exit focus (Esc)' : 'Focus'}
-                  className="text-textMuted hover:text-textPrimary transition-colors"
+                  /* The icon is 14px, which is a hard target even with a mouse.
+                     Padding grows the hit box to 30px and the matching negative
+                     margin cancels the layout growth, so the header row keeps
+                     its density and the glyph does not move. */
+                  className="-m-2 p-2 text-textMuted hover:text-textPrimary transition-colors"
                 >
                   {isFocused ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
                 </button>

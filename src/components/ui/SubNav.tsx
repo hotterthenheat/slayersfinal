@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import type { LucideIcon } from 'lucide-react';
@@ -45,6 +45,70 @@ const Tab = ({ item, pillId }: { item: SubNavItem; pillId: string }) => (
   </NavLink>
 );
 
+const FADE = 18; // px of fade at an overflowing edge
+
+/**
+ * The bordered pill that holds a row of tabs, with the tab strip scrolling
+ * inside it.
+ *
+ * The strip hides its scrollbar (a 4px bar under a 28px tab row reads as grit),
+ * which left no signal at all that more tabs existed — on a phone the Pinpoint
+ * rail hid 211px, so Volatility, Stress and History were simply invisible. The
+ * overflowing edge now fades, and only that edge: a fade on the left when you
+ * have scrolled, on the right while more remains, neither when it all fits.
+ *
+ * The fade is a mask on the inner strip rather than the pill, so the pill's
+ * border and glass stay crisp instead of dissolving with the tabs.
+ */
+const ScrollRail = ({ children }: { children: React.ReactNode }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  const [edges, setEdges] = useState({ left: false, right: false });
+
+  const measure = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    const max = el.scrollWidth - el.clientWidth;
+    const left = el.scrollLeft > 2;
+    const right = max > 2 && el.scrollLeft < max - 2;
+    setEdges(prev => (prev.left === left && prev.right === right ? prev : { left, right }));
+  }, []);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    measure();
+    el.addEventListener('scroll', measure, { passive: true });
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    for (const child of el.children) ro.observe(child);
+    return () => {
+      el.removeEventListener('scroll', measure);
+      ro.disconnect();
+    };
+  }, [measure]);
+
+  const mask =
+    edges.left && edges.right
+      ? `linear-gradient(to right, transparent 0, #000 ${FADE}px, #000 calc(100% - ${FADE}px), transparent 100%)`
+      : edges.right
+        ? `linear-gradient(to right, #000 calc(100% - ${FADE}px), transparent 100%)`
+        : edges.left
+          ? `linear-gradient(to right, transparent 0, #000 ${FADE}px)`
+          : undefined;
+
+  return (
+    <div className="glass border border-white/[0.08] rounded-md p-0.5 max-w-full">
+      <div
+        ref={ref}
+        className="flex items-center gap-0.5 overflow-x-auto no-scrollbar"
+        style={mask ? { maskImage: mask, WebkitMaskImage: mask } : undefined}
+      >
+        {children}
+      </div>
+    </div>
+  );
+};
+
 /**
  * Route-driven sub-page tabs. The active tab wears a holographic-silver pill
  * with dark text; the pill is a framer-motion shared element, so it slides
@@ -66,14 +130,12 @@ const SubNav = ({ items, ariaLabel }: SubNavProps) => {
 
   if (!grouped) {
     return (
-      <nav
-        ref={navRef}
-        aria-label={ariaLabel}
-        className="glass flex items-center gap-0.5 border border-white/[0.08] rounded-md p-0.5 max-w-full overflow-x-auto no-scrollbar"
-      >
-        {items.map(item => (
-          <Tab key={item.path} item={item} pillId={pillId} />
-        ))}
+      <nav ref={navRef} aria-label={ariaLabel} className="flex max-w-full">
+        <ScrollRail>
+          {items.map(item => (
+            <Tab key={item.path} item={item} pillId={pillId} />
+          ))}
+        </ScrollRail>
       </nav>
     );
   }
@@ -92,13 +154,13 @@ const SubNav = ({ items, ariaLabel }: SubNavProps) => {
           <span className="px-1 font-mono text-micro font-medium uppercase tracking-[0.18em] text-textMuted select-none">
             {g}
           </span>
-          <div className="glass flex items-center gap-0.5 border border-white/[0.08] rounded-md p-0.5 max-w-full overflow-x-auto no-scrollbar">
+          <ScrollRail>
             {items
               .filter(i => (i.group ?? '') === g)
               .map(item => (
                 <Tab key={item.path} item={item} pillId={pillId} />
               ))}
-          </div>
+          </ScrollRail>
         </div>
       ))}
     </nav>

@@ -35,7 +35,13 @@ const Wordmark = ({ onClick, size = 'sm' }: { onClick: (e: React.MouseEvent) => 
     className={`shrink-0 font-mono font-bold tracking-tight select-none ${size === 'md' ? 'text-read' : 'text-data'}`}
   >
     <span className="text-textMuted">&gt; </span>
-    <span className="holo-text">slayer_terminal</span>
+    {/* Abbreviated on phone. The full wordmark is 138px and the right cluster
+        needs that room — the global ticker switcher was being clipped off the
+        edge at 390px and below. Branding yields to the instrument; the
+        aria-label and title still read "Terminal home" either way. */}
+    <span className="holo-text">
+      slayer<span className="hidden sm:inline">_terminal</span>
+    </span>
     <span className="inline-block w-[6px] h-[12px] ml-1 bg-textPrimary align-middle animate-cursor-blink" />
   </a>
 );
@@ -140,7 +146,7 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
       </nav>
 
       {/* Right cluster: search + live context */}
-      <div className="flex items-center justify-end gap-3 shrink-0 ml-auto lg:ml-0">
+      <div className="flex items-center justify-end gap-2 sm:gap-3 shrink-0 ml-auto lg:ml-0">
         <button
           onClick={onOpenPalette}
           aria-label="Search or jump to…"

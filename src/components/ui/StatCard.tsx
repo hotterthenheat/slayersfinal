@@ -1,5 +1,6 @@
 import React from 'react';
 import { toneText, type Tone } from './tones';
+import { titleOf } from './truncation';
 
 interface StatCardProps {
   label: string;
@@ -18,7 +19,11 @@ interface StatCardProps {
 const StatCard = ({ label, value, sub, tone = 'neutral', emphasis = false, className = '', children }: StatCardProps) => {
   return (
     <div className={`${emphasis ? 'inst-emphasis' : 'inst-surface'} rounded-md px-3.5 py-3 min-w-0 ${className}`}>
-      <div className="font-mono text-label uppercase tracking-widest text-textSecondary truncate">{label}</div>
+      {/* Label and sub-line truncate — carry the text as a native title so a
+          clipped metric is still readable. */}
+      <div title={label} className="font-mono text-label uppercase tracking-widest text-textSecondary truncate">
+        {label}
+      </div>
       <div
         className={`mt-1.5 font-mono text-lg font-semibold leading-none tnum ${
           emphasis && tone === 'neutral' ? 'text-textPrimary' : toneText[tone]
@@ -26,7 +31,11 @@ const StatCard = ({ label, value, sub, tone = 'neutral', emphasis = false, class
       >
         {value}
       </div>
-      {sub && <div className="mt-1 text-label text-textMuted leading-tight truncate">{sub}</div>}
+      {sub && (
+        <div title={titleOf(sub)} className="mt-1 text-label text-textMuted leading-tight truncate">
+          {sub}
+        </div>
+      )}
       {children && <div className="mt-1.5">{children}</div>}
     </div>
   );
