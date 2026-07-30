@@ -117,7 +117,7 @@ const Feedback = () => {
               onChange={e => setMessage(e.target.value)}
               placeholder="What slowed you down, confused you, or looked wrong?"
               rows={4}
-              className="w-full bg-inputBg border border-borderSubtle rounded-md px-2.5 py-2 text-caption text-textPrimary placeholder:text-textMuted focus:border-borderMuted outline-none transition-colors resize-y"
+              className="w-full bg-inputBg border border-borderSubtle rounded-md px-2.5 py-2 text-caption text-textPrimary placeholder:text-textMuted focus:border-borderMuted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 transition-colors resize-y"
             />
 
             {/* Auto-captured context saved with the note */}
@@ -132,7 +132,7 @@ const Feedback = () => {
                     value={route}
                     onChange={e => setRoute(e.target.value)}
                     placeholder="/community/feedback"
-                    className="w-full bg-inputBg border border-borderSubtle rounded-md px-2.5 py-1.5 font-mono text-caption text-textPrimary placeholder:text-textMuted focus:border-borderMuted outline-none transition-colors"
+                    className="w-full bg-inputBg border border-borderSubtle rounded-md px-2.5 py-1.5 font-mono text-caption text-textPrimary placeholder:text-textMuted focus:border-borderMuted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 transition-colors"
                   />
                 </label>
                 <ReadOnlyField label="App version" value={APP_VERSION} />
@@ -144,7 +144,7 @@ const Feedback = () => {
               <button
                 onClick={submit}
                 disabled={message.trim().length < 10}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-select/40 bg-select/[0.06] hover:bg-select/[0.12] font-mono text-label font-semibold uppercase tracking-wider text-select transition-colors disabled:opacity-40 disabled:pointer-events-none"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-select/40 bg-select/[0.06] hover:bg-select/[0.12] font-mono text-label font-semibold uppercase tracking-wider text-select transition-colors disabled:opacity-40 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60"
               >
                 <Send className="w-3.5 h-3.5" /> Save note
               </button>

@@ -513,7 +513,7 @@ const SavedViews = ({
                 if (e.key === 'Enter') commit();
               }}
               placeholder="Name this view…"
-              className="flex-1 min-w-0 bg-inset border border-borderSubtle rounded px-2 py-1 font-mono text-caption text-textPrimary placeholder:text-textMuted focus:outline-none focus:border-borderMuted"
+              className="flex-1 min-w-0 bg-inset border border-borderSubtle rounded px-2 py-1 font-mono text-caption text-textPrimary placeholder:text-textMuted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 focus:border-borderMuted"
             />
             <button
               onClick={commit}
@@ -834,7 +834,7 @@ const LiveTape = () => {
             onChange={e => setSearch(e.target.value)}
             placeholder="Ticker / contract…"
             aria-label="Search ticker or contract"
-            className="w-44 bg-panel border border-borderSubtle hover:border-borderMuted focus:border-borderMuted rounded-md pl-8 pr-7 py-1.5 font-mono text-label text-textPrimary placeholder:text-textMuted focus:outline-none transition-colors"
+            className="w-44 bg-panel border border-borderSubtle hover:border-borderMuted focus:border-borderMuted rounded-md pl-8 pr-7 py-1.5 font-mono text-label text-textPrimary placeholder:text-textMuted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 transition-colors"
           />
           {search && (
             <button

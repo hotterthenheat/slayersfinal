@@ -407,7 +407,7 @@ const TemplatesMenu = ({
                 if (e.key === 'Enter') commit();
               }}
               placeholder="Save current filters…"
-              className="flex-1 min-w-0 bg-inset border border-borderSubtle rounded px-2 py-1 font-mono text-caption text-textPrimary placeholder:text-textMuted focus:outline-none focus:border-borderMuted"
+              className="flex-1 min-w-0 bg-inset border border-borderSubtle rounded px-2 py-1 font-mono text-caption text-textPrimary placeholder:text-textMuted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 focus:border-borderMuted"
             />
             <button
               onClick={commit}

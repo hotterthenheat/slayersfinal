@@ -121,7 +121,7 @@ const Field = ({
 );
 
 const inputBase =
-  'w-full bg-inputBg border border-borderSubtle focus:border-borderMuted rounded-md px-2.5 py-1.5 font-mono text-caption text-textPrimary placeholder:text-textMuted outline-none tnum';
+  'w-full bg-inputBg border border-borderSubtle focus:border-borderMuted rounded-md px-2.5 py-1.5 font-mono text-caption text-textPrimary placeholder:text-textMuted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 tnum';
 
 interface ContractWeigherProps {
   snapshot: MarketSnapshot;
@@ -352,7 +352,7 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
                     const v = parseFloat(e.target.value);
                     if (Number.isFinite(v)) setStrike(v);
                   }}
-                  className="min-w-0 flex-1 bg-transparent text-center font-mono text-caption text-textPrimary outline-none focus:text-select tnum"
+                  className="min-w-0 flex-1 bg-transparent text-center font-mono text-caption text-textPrimary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 focus:text-select tnum"
                 />
                 <button onClick={() => setStrike(s => s + step)} className="px-2.5 py-1.5 text-textMuted hover:text-textPrimary" aria-label="Raise strike">
                   +
@@ -462,7 +462,7 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
                     onChange={e => setQuery(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && submitQuery()}
                     placeholder="e.g. SPY 500C 7  ·  strike · call/put · days"
-                    className="w-full bg-inputBg border border-borderSubtle focus:border-borderMuted rounded-md pl-8 pr-3 py-2 font-mono text-caption text-textPrimary placeholder:text-textMuted outline-none"
+                    className="w-full bg-inputBg border border-borderSubtle focus:border-borderMuted rounded-md pl-8 pr-3 py-2 font-mono text-caption text-textPrimary placeholder:text-textMuted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60"
                   />
                 </div>
                 <button

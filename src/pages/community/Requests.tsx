@@ -114,7 +114,7 @@ const Requests = () => {
               value={title}
               onChange={e => setTitle(e.target.value)}
               placeholder="One-line summary (e.g. Alerts when a wall breaks)"
-              className="flex-grow min-w-[240px] bg-inputBg border border-borderSubtle rounded-md px-2.5 py-1.5 text-caption text-textPrimary placeholder:text-textMuted focus:border-borderMuted outline-none transition-colors"
+              className="flex-grow min-w-[240px] bg-inputBg border border-borderSubtle rounded-md px-2.5 py-1.5 text-caption text-textPrimary placeholder:text-textMuted focus:border-borderMuted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 transition-colors"
             />
             <SegmentedControl ariaLabel="Request type" options={KIND_OPTIONS} value={kind} onChange={setKind} />
           </div>
@@ -123,13 +123,13 @@ const Requests = () => {
             onChange={e => setDetail(e.target.value)}
             placeholder="Optional detail — what problem does it solve for you?"
             rows={2}
-            className="w-full bg-inputBg border border-borderSubtle rounded-md px-2.5 py-2 text-caption text-textPrimary placeholder:text-textMuted focus:border-borderMuted outline-none transition-colors resize-y"
+            className="w-full bg-inputBg border border-borderSubtle rounded-md px-2.5 py-2 text-caption text-textPrimary placeholder:text-textMuted focus:border-borderMuted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 transition-colors resize-y"
           />
           <div className="flex items-center gap-3">
             <button
               onClick={submit}
               disabled={title.trim().length < 4}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-select/40 bg-select/[0.06] hover:bg-select/[0.12] font-mono text-label font-semibold uppercase tracking-wider text-select transition-colors disabled:opacity-40 disabled:pointer-events-none"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-select/40 bg-select/[0.06] hover:bg-select/[0.12] font-mono text-label font-semibold uppercase tracking-wider text-select transition-colors disabled:opacity-40 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60"
             >
               <Send className="w-3.5 h-3.5" /> Add request
             </button>

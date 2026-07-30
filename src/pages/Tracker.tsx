@@ -314,7 +314,7 @@ const ItemDetail = ({ row, onStatus, onNotes, onReview, onUntrack }: ItemDetailP
           onChange={e => onNotes(tracked.id, e.target.value)}
           rows={4}
           placeholder="Your read on this setup — thesis, level to watch, why you're in or out…"
-          className="w-full resize-none rounded-md bg-inset border border-borderSubtle px-3 py-2 font-mono text-caption leading-relaxed text-textPrimary placeholder:text-textMuted focus:outline-none focus:border-white/20"
+          className="w-full resize-none rounded-md bg-inset border border-borderSubtle px-3 py-2 font-mono text-caption leading-relaxed text-textPrimary placeholder:text-textMuted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 focus:border-white/20"
         />
         <p className="mt-1 font-mono text-micro text-textMuted">Saved in this browser.</p>
       </div>
@@ -727,7 +727,7 @@ const Tracker = () => {
                       key={s.key}
                       onClick={() => setView(s.key)}
                       aria-pressed={view === s.key}
-                      className={`inline-flex items-center gap-1.5 px-2 py-1 rounded border font-mono text-label uppercase tracking-wider transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-select/50 ${
+                      className={`inline-flex items-center gap-1.5 px-2 py-1 rounded border font-mono text-label uppercase tracking-wider transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 ${
                         view === s.key
                           ? 'border-select/40 bg-select/[0.06] text-textPrimary'
                           : 'border-borderSubtle text-textSecondary hover:text-textPrimary hover:bg-white/[0.03]'

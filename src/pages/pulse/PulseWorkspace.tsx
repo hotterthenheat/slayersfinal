@@ -153,7 +153,7 @@ const PanelTicker = ({ value, onChange }: { value: string; onChange: (t: string)
           if (e.key === 'Escape') setEditing(false);
         }}
         onMouseDown={e => e.stopPropagation()}
-        className="w-16 bg-inputBg border border-borderMuted rounded px-1 py-0.5 font-mono text-micro text-textPrimary outline-none focus:border-select"
+        className="w-16 bg-inputBg border border-borderMuted rounded px-1 py-0.5 font-mono text-micro text-textPrimary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 focus:border-select"
       />
     );
   return (
@@ -221,13 +221,13 @@ const PanelChrome = ({
           )}
         </span>
       )}
-      <div className="ml-auto flex items-center gap-1.5 shrink-0" onMouseDown={e => e.stopPropagation()}>
+      <div className="ml-auto flex items-center gap-0.5 shrink-0" onMouseDown={e => e.stopPropagation()}>
         {draggable && (
           <>
-            <button onClick={() => h.onDuplicate(panelId)} title="Duplicate" className="text-textMuted hover:text-textPrimary transition-colors">
+            <button onClick={() => h.onDuplicate(panelId)} title="Duplicate" aria-label={`Duplicate ${def?.title ?? panelKey} panel`} className="p-1.5 rounded text-textMuted hover:text-textPrimary transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60">
               <Copy className="w-3 h-3" />
             </button>
-            <button onClick={() => h.onMinimize(panelId)} title="Minimize" className="text-textMuted hover:text-textPrimary transition-colors">
+            <button onClick={() => h.onMinimize(panelId)} title="Minimize" aria-label={`Minimize ${def?.title ?? panelKey} panel`} className="p-1.5 rounded text-textMuted hover:text-textPrimary transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60">
               <Minus className="w-3.5 h-3.5" />
             </button>
           </>
@@ -235,12 +235,13 @@ const PanelChrome = ({
         <button
           onClick={() => h.onMaximize(maximizedView ? null : panelId)}
           title={maximizedView ? 'Restore' : 'Maximize'}
-          className="text-textMuted hover:text-textPrimary transition-colors"
+          aria-label={`${maximizedView ? 'Restore' : 'Maximize'} ${def?.title ?? panelKey} panel`}
+          className="p-1.5 rounded text-textMuted hover:text-textPrimary transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60"
         >
           {maximizedView ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3 h-3" />}
         </button>
         {draggable && (
-          <button onClick={() => h.onClose(panelId)} title="Close" className="text-textMuted hover:text-bear transition-colors">
+          <button onClick={() => h.onClose(panelId)} title="Close" aria-label={`Close ${def?.title ?? panelKey} panel`} className="p-1.5 rounded text-textMuted hover:text-bear transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60">
             <X className="w-3.5 h-3.5" />
           </button>
         )}
@@ -408,8 +409,26 @@ const PulseWorkspace = () => {
     setAddOpen(false);
   };
 
-  const removePanel = (id: string) =>
+  const removePanel = (id: string) => {
+    // Snapshot the panel and its geometry BEFORE removing, so Undo restores it
+    // where it was rather than dropping it at the bottom of the grid. Closing a
+    // panel was instant and irreversible; the toast system already carries an
+    // action, and Tracker already uses it for exactly this.
+    const panel = active.panels.find(p => p.id === id);
+    const geo = active.layout.find(g => g.i === id);
+    const title = (panel && pulsePanelByKey(panel.key)?.title) ?? 'Panel';
     mutate(l => ({ ...l, panels: l.panels.filter(p => p.id !== id), layout: l.layout.filter(g => g.i !== id) }));
+    if (!panel || !geo) return;
+    toast.toast(`Closed ${title}`, 'info', {
+      label: 'Undo',
+      onClick: () =>
+        mutate(l =>
+          l.panels.some(p => p.id === id)
+            ? l
+            : { ...l, panels: [...l.panels, panel], layout: [...l.layout, geo] }
+        ),
+    });
+  };
 
   const duplicatePanel = (id: string) => {
     const panel = active.panels.find(p => p.id === id);
@@ -606,7 +625,7 @@ const PulseWorkspace = () => {
                       if (e.key === 'Escape') setNameEditor(null);
                     }}
                     placeholder={nameEditor.mode === 'saveAs' ? 'New layout name…' : 'Layout name…'}
-                    className="flex-1 min-w-0 bg-inset border border-borderSubtle rounded px-2 py-1 font-mono text-caption text-textPrimary placeholder:text-textMuted focus:outline-none focus:border-borderMuted"
+                    className="flex-1 min-w-0 bg-inset border border-borderSubtle rounded px-2 py-1 font-mono text-caption text-textPrimary placeholder:text-textMuted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 focus:border-borderMuted"
                   />
                   <button
                     onClick={commitName}
@@ -658,7 +677,7 @@ const PulseWorkspace = () => {
                       if (e.key === 'Enter' && addableMatches.length > 0) addPanel(addableMatches[0].key);
                     }}
                     placeholder="Search panels…"
-                    className="w-full bg-inputBg border border-borderMuted rounded pl-7 pr-2 py-1.5 font-mono text-label text-textPrimary placeholder:text-textMuted outline-none focus:border-select/40"
+                    className="w-full bg-inputBg border border-borderMuted rounded pl-7 pr-2 py-1.5 font-mono text-label text-textPrimary placeholder:text-textMuted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 focus:border-select/40"
                   />
                 </div>
               </div>

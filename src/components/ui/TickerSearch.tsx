@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Search } from 'lucide-react';
+import EmptyState from './EmptyState';
 import type { TickerListing } from '../../data/tickers';
 
 type TickerModule = typeof import('../../data/tickers');
@@ -16,6 +17,8 @@ const TickerSearch = ({ value, onChange }: TickerSearchProps) => {
   const [highlight, setHighlight] = useState(0);
   const [mod, setMod] = useState<TickerModule | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const listId = useId();
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const results: TickerListing[] = useMemo(
@@ -34,6 +37,14 @@ const TickerSearch = ({ value, onChange }: TickerSearchProps) => {
 
   useEffect(() => setHighlight(0), [query]);
 
+  // Keep the keyboard highlight visible. The list is a 288px scroll box; the
+  // highlight moved but never scrolled, so ArrowDown past row ~10 had no
+  // visible effect at all.
+  useEffect(() => {
+    if (!open) return;
+    listRef.current?.querySelector<HTMLElement>(`[data-idx="${highlight}"]`)?.scrollIntoView({ block: 'nearest' });
+  }, [highlight, open]);
+
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
@@ -42,6 +53,8 @@ const TickerSearch = ({ value, onChange }: TickerSearchProps) => {
     window.addEventListener('mousedown', onDown);
     return () => window.removeEventListener('mousedown', onDown);
   }, [open]);
+
+  const optionId = (i: number) => `${listId}-opt-${i}`;
 
   const pick = (symbol: string) => {
     onChange(symbol);
@@ -87,18 +100,31 @@ const TickerSearch = ({ value, onChange }: TickerSearchProps) => {
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Search all tickers…"
-              className="w-full bg-transparent py-2.5 text-body text-textPrimary placeholder:text-textMuted focus:outline-none leading-5"
+              role="combobox"
+              aria-expanded
+              aria-controls={listId}
+              aria-autocomplete="list"
+              aria-activedescendant={results[highlight] ? optionId(highlight) : undefined}
+              aria-label="Search all tickers"
+              className="w-full bg-transparent py-2.5 text-body text-textPrimary placeholder:text-textMuted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 leading-5"
             />
           </div>
-          <div className="max-h-72 overflow-y-auto py-1">
+          <div ref={listRef} id={listId} role="listbox" aria-label="Tickers" className="max-h-72 overflow-y-auto py-1">
             {!mod ? (
               <div className="px-3 py-6 text-center font-mono text-label text-textMuted">Loading tickers…</div>
             ) : results.length === 0 ? (
-              <div className="px-3 py-6 text-center font-mono text-label text-textMuted">No matches</div>
+              <EmptyState size="sm" title="No matches" body={`Nothing matches “${query}”`} />
             ) : (
               results.map((t, i) => (
                 <button
                   key={t.symbol}
+                  id={optionId(i)}
+                  data-idx={i}
+                  role="option"
+                  aria-selected={i === highlight}
+                  /* Tab should leave the popover, not walk 60 stops through it —
+                     the arrow keys drive this list. */
+                  tabIndex={-1}
                   onClick={() => pick(t.symbol)}
                   onMouseEnter={() => setHighlight(i)}
                   className={`w-full flex items-center gap-3 px-3 py-1.5 text-left transition-colors ${
