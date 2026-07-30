@@ -205,7 +205,7 @@ export const Faq = () => {
             <div key={item.q} className="border-b border-borderSubtle/60 last:border-0">
               <button
                 onClick={() => setOpen(isOpen ? null : i)}
-                className="w-full flex items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-white/[0.02]"
+                className="w-full flex items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-rowHover"
               >
                 <span className={`flex-grow text-body font-semibold tracking-tight ${isOpen ? 'text-textPrimary' : 'text-textSecondary'}`}>
                   {item.q}

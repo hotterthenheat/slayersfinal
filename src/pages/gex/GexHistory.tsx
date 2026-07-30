@@ -50,7 +50,7 @@ const TBtn = ({
     disabled={disabled}
     aria-label={label}
     title={label}
-    className="inst-surface rounded-md h-8 w-8 flex items-center justify-center text-textSecondary hover:text-textPrimary hover:bg-white/[0.05] transition-colors disabled:opacity-25 disabled:pointer-events-none"
+    className="inst-surface rounded-md h-8 w-8 flex items-center justify-center text-textSecondary hover:text-textPrimary hover:bg-rowHover transition-colors disabled:opacity-25 disabled:pointer-events-none"
   >
     {children}
   </button>

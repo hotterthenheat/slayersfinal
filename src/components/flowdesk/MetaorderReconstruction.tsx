@@ -267,7 +267,7 @@ const MetaorderRow = ({ m }: { m: Metaorder }) => {
           </span>
         </div>
         <div className="relative h-2 rounded-full bg-white/[0.06] overflow-hidden">
-          <span className="block h-full rounded-full holo-bar" style={{ width: `${m.pctComplete}%` }} />
+          <span className="block h-full rounded-full data-bar" style={{ width: `${m.pctComplete}%` }} />
         </div>
       </div>
 
@@ -389,7 +389,7 @@ const MetaorderReconstruction = () => {
   }
 
   const biasTone: Tone = view.netBias === 'BULLISH' ? 'bull' : view.netBias === 'BEARISH' ? 'bear' : 'neutral';
-  const biasLabelColor = biasTone === 'bull' ? 'text-bull' : biasTone === 'bear' ? 'text-bear' : 'holo-text';
+  const biasLabelColor = biasTone === 'bull' ? 'text-bull' : biasTone === 'bear' ? 'text-bear' : 'text-textPrimary';
 
   return (
     <>
@@ -461,7 +461,7 @@ const MetaorderReconstruction = () => {
 
       <Panel bodyClassName="py-3">
         <p className="text-caption text-textSecondary leading-relaxed">
-          <span className="font-mono font-semibold uppercase tracking-wider mr-2 holo-text">Beyond the tape</span>
+          <span className="font-mono font-semibold uppercase tracking-wider mr-2 text-textSecondary">Beyond the tape</span>
           A parent order never prints as one ticket — a desk works a clip over minutes, and the tape only shows the
           children. TRACE clusters those prints by strike geometry, aggressor side and timing, then infers the strategy,
           projects the full size from what is already done, and estimates the time and urgency to finish. The child-print

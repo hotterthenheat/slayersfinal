@@ -324,7 +324,7 @@ const GreeksRegime = () => {
                 <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
                   <span
                     className={`block h-full rounded-full ${
-                      rg.regime === 'LIQUIDATION CASCADE' ? 'bg-bear' : rg.regime === 'UNSTABLE BREAKOUT' ? 'bg-warn' : rg.regime === 'CONTROLLED TREND' ? 'holo-bar' : 'bg-white/40'
+                      rg.regime === 'LIQUIDATION CASCADE' ? 'bg-bear' : rg.regime === 'UNSTABLE BREAKOUT' ? 'bg-warn' : rg.regime === 'CONTROLLED TREND' ? 'data-bar' : 'bg-white/40'
                     }`}
                     style={{ width: `${rg.prob}%` }}
                   />
@@ -387,7 +387,7 @@ const RowWithSpot = ({
   spot: number;
 }) => (
   <>
-    <tr className="border-b border-borderSubtle/40 hover:bg-white/[0.02]">
+    <tr className="border-b border-borderSubtle/40 hover:bg-rowHover">
       <td
         className="sticky left-0 z-10 px-3 py-1.5 font-mono text-caption font-semibold text-textPrimary tnum whitespace-nowrap bg-inset leading-4"
         style={isTop ? { boxShadow: 'inset 3px 0 0 0 rgba(199,211,232,0.85)' } : undefined}

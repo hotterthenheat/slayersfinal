@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { SHORT_GAMMA, LONG_GAMMA } from './palette';
 
 /*
   Heatmap cell coloring for the GEX matrix + ladders.
@@ -176,7 +177,9 @@ const RAMPS: Record<'green-red' | 'pastel' | 'spectrum' | 'amber' | 'redwood' | 
       [1.0, [110, 140, 198]],
     ],
     gradient:
-      'linear-gradient(to bottom, #E0B84E 0%, #C49E3C 22%, #2a2a2a 50%, #5270A8 78%, #6E8CC6 100%)',
+      // Endpoints read the tokens; the 22%/78% stops are genuine ramp
+      // intermediates, not drifted duplicates.
+      `linear-gradient(to bottom, ${SHORT_GAMMA} 0%, #C49E3C 22%, #2a2a2a 50%, #5270A8 78%, ${LONG_GAMMA} 100%)`,
   },
 };
 

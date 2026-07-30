@@ -113,7 +113,7 @@ const ExposureMatrix = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
                   onSelectStrike ? 'cursor-pointer' : ''
                 } ${
                   selectedStrike === row.strike
-                    ? 'bg-select/[0.05] rail-silver'
+                    ? 'inst-selected'
                     : hoverStrike === row.strike
                       ? 'bg-white/[0.04]'
                       : ''

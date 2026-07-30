@@ -273,7 +273,7 @@ const Landing = () => (
           </SmartLink>
           <a
             href="#showcase"
-            className="pointer-events-auto inline-flex items-center px-5 py-2.5 rounded-md border border-borderMuted bg-canvas/40 font-mono text-data uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-white/[0.04] transition-colors"
+            className="pointer-events-auto inline-flex items-center px-5 py-2.5 rounded-md border border-borderMuted bg-canvas/40 font-mono text-data uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-rowHover transition-colors"
           >
             See it live
           </a>
@@ -361,7 +361,7 @@ const Landing = () => (
         ))}
         <Link
           to="/community"
-          className="flex items-center justify-center gap-1.5 py-3 font-mono text-label uppercase tracking-wider text-textSecondary hover:text-select hover:bg-white/[0.02] transition-colors"
+          className="flex items-center justify-center gap-1.5 py-3 font-mono text-label uppercase tracking-wider text-textSecondary hover:text-select hover:bg-rowHover transition-colors"
         >
           Open the community <ArrowRight className="w-3.5 h-3.5" />
         </Link>
@@ -413,7 +413,7 @@ const Landing = () => (
                 className={`mt-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-md font-mono text-caption font-semibold uppercase tracking-wider transition-colors ${
                   tier.featured
                     ? 'holo-bg text-ink'
-                    : 'border border-borderMuted text-textSecondary hover:text-textPrimary hover:bg-white/[0.03]'
+                    : 'border border-borderMuted text-textSecondary hover:text-textPrimary hover:bg-rowHover'
                 }`}
               >
                 {tier.cta}
@@ -448,7 +448,7 @@ const Landing = () => (
         </SmartLink>
         <a
           href="#pricing"
-          className="inline-flex items-center px-5 py-2.5 rounded-md border border-borderMuted font-mono text-data uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-white/[0.03] transition-colors"
+          className="inline-flex items-center px-5 py-2.5 rounded-md border border-borderMuted font-mono text-data uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-rowHover transition-colors"
         >
           See pricing
         </a>

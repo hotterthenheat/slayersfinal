@@ -292,7 +292,7 @@ const ItemDetail = ({ row, onStatus, onNotes, onReview, onUntrack }: ItemDetailP
                 className={`px-2.5 py-1 rounded border font-mono text-label uppercase tracking-wider transition-colors ${
                   active
                     ? STATUS_PICK_ACTIVE[o.value]
-                    : 'border-borderSubtle text-textSecondary hover:text-textPrimary hover:bg-white/[0.03]'
+                    : 'border-borderSubtle text-textSecondary hover:text-textPrimary hover:bg-rowHover'
                 }`}
               >
                 {o.label}
@@ -326,7 +326,7 @@ const ItemDetail = ({ row, onStatus, onNotes, onReview, onUntrack }: ItemDetailP
         ) : (
           <button
             onClick={() => onReview(tracked)}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-md border border-borderSubtle bg-white/[0.03] hover:bg-white/[0.06] font-mono text-label text-textSecondary hover:text-textPrimary uppercase tracking-wider transition-colors"
+            className="flex items-center gap-1 px-3 py-1.5 rounded-md border border-borderSubtle bg-white/[0.03] hover:bg-rowHover font-mono text-label text-textSecondary hover:text-textPrimary uppercase tracking-wider transition-colors"
           >
             <ArrowUpRight className="w-3 h-3" /> Review in Compass
           </button>
@@ -602,7 +602,7 @@ const Tracker = () => {
               ].map(x => (
                 <div key={x.k} className="border border-borderSubtle bg-inset rounded-lg px-3 py-2.5 text-center min-w-[92px]">
                   <div className="font-mono text-micro uppercase tracking-widest text-textMuted">{x.k}</div>
-                  <div className="mt-1 font-mono text-body font-semibold holo-text leading-5">{x.v}</div>
+                  <div className="mt-1 font-mono text-body font-semibold text-textPrimary leading-5">{x.v}</div>
                   <div className="mt-0.5 text-micro text-textMuted">{x.s}</div>
                 </div>
               ))}
@@ -624,7 +624,7 @@ const Tracker = () => {
                 <p className="text-label text-textMuted leading-relaxed flex-1">{card.body}</p>
                 <button
                   onClick={() => navigate(card.to)}
-                  className="mt-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md border border-borderSubtle bg-white/[0.03] hover:bg-white/[0.06] text-textSecondary hover:text-textPrimary font-mono text-micro font-semibold uppercase tracking-wider transition-colors"
+                  className="mt-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md border border-borderSubtle bg-white/[0.03] hover:bg-rowHover text-textSecondary hover:text-textPrimary font-mono text-micro font-semibold uppercase tracking-wider transition-colors"
                 >
                   {card.cta} <ArrowUpRight className="w-3 h-3" />
                 </button>
@@ -730,7 +730,7 @@ const Tracker = () => {
                       className={`inline-flex items-center gap-1.5 px-2 py-1 rounded border font-mono text-label uppercase tracking-wider transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 ${
                         view === s.key
                           ? 'border-select/40 bg-select/[0.06] text-textPrimary'
-                          : 'border-borderSubtle text-textSecondary hover:text-textPrimary hover:bg-white/[0.03]'
+                          : 'border-borderSubtle text-textSecondary hover:text-textPrimary hover:bg-rowHover'
                       }`}
                     >
                       <span className={`inline-block w-1.5 h-1.5 rounded-full ${s.dot}`} />

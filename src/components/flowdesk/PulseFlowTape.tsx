@@ -143,7 +143,7 @@ const PulseFlowTape = ({ ticker, revision }: PulseFlowTapeProps) => {
                 onMouseEnter={e => setHover({ p, x: e.clientX, y: e.clientY })}
                 onMouseMove={e => setHover({ p, x: e.clientX, y: e.clientY })}
                 onMouseLeave={() => setHover(h => (h && h.p.id === p.id ? null : h))}
-                className="border-b border-borderSubtle/30 hover:bg-white/[0.04] cursor-pointer transition-colors"
+                className="border-b border-borderSubtle/30 hover:bg-rowHover cursor-pointer transition-colors"
               >
                 <td className="px-2 py-[5px] font-mono text-label text-textMuted tnum whitespace-nowrap">{p.time}</td>
                 <td className="px-2 py-[5px] font-mono text-label font-semibold text-textPrimary tnum whitespace-nowrap">{fmtUsd(p.value)}</td>
@@ -156,7 +156,7 @@ const PulseFlowTape = ({ ticker, revision }: PulseFlowTapeProps) => {
                 </td>
                 <td className="px-2 py-[5px] font-mono text-label text-textMuted tnum whitespace-nowrap">{p.exp}</td>
                 <td className="px-2 py-[5px] font-mono text-label text-textSecondary">{p.x}</td>
-                <td className={`px-2 py-[5px] font-mono text-label font-semibold ${p.type === 'SWEEP' ? 'text-[#E0B84E]' : 'text-[#5EA0EF]'}`}>
+                <td className={`px-2 py-[5px] font-mono text-label font-semibold ${p.type === 'SWEEP' ? 'text-shortGamma' : 'text-longGamma'}`}>
                   {p.type === 'SWEEP' ? 'Sweep' : 'Block'}
                 </td>
                 <td className="px-2 py-[5px] font-mono text-label text-textSecondary tnum">{p.size.toLocaleString()}</td>

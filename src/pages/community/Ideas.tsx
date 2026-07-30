@@ -233,7 +233,7 @@ const Ideas = () => {
                 className={`shrink-0 self-start flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-md border transition-colors ${
                   voted
                     ? 'border-select/50 bg-select/[0.08] text-select'
-                    : 'border-borderSubtle text-textSecondary hover:text-textPrimary hover:bg-white/[0.03]'
+                    : 'border-borderSubtle text-textSecondary hover:text-textPrimary hover:bg-rowHover'
                 }`}
                 aria-label="Vote"
               >

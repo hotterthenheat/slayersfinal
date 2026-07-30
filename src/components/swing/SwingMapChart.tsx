@@ -12,7 +12,7 @@ import {
 } from 'lightweight-charts';
 import { candleTheme } from '../gex/candleTheme';
 import ChartLegend from '../ui/ChartLegend';
-import { CALL_WALL, PUT_WALL, FLIP, FOCUS, MUTED_INK } from '../gex/palette';
+import { CALL_WALL, PUT_WALL, FLIP, FOCUS, MUTED_INK, SHORT_GAMMA } from '../gex/palette';
 import { SwingPrimitive } from './swingPrimitive';
 import { buildSwingModel, type SwingModel } from '../../data/swingModel';
 import type { Candle } from '../../types/market';
@@ -241,7 +241,7 @@ const SwingMapChart = ({ ticker, spot, revision = 0, height = 300, focusPrice = 
           items={[
             { label: 'Resistance', swatchClass: 'bg-bear' },
             { label: 'Support', swatchClass: 'bg-bull' },
-            { label: 'Trend', color: '#E0B84E' },
+            { label: 'Trend', color: SHORT_GAMMA },
             { label: 'Proj. move', color: FLIP },
           ]}
         />

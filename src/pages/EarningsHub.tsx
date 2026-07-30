@@ -120,7 +120,7 @@ const MoveCompare = ({ implied, hist }: { implied: number; hist: number }) => {
       <span className="flex items-center gap-1.5">
         <span className="w-7 font-mono text-micro uppercase text-textMuted">imp</span>
         <span className="flex-1 h-[4px] rounded-full bg-white/[0.06] overflow-hidden">
-          <span className="block h-full rounded-full holo-bar" style={{ width: `${(implied / max) * 100}%` }} />
+          <span className="block h-full rounded-full data-bar" style={{ width: `${(implied / max) * 100}%` }} />
         </span>
         <span className="w-11 font-mono text-label text-textPrimary tnum text-right">{implied.toFixed(1)}%</span>
       </span>
@@ -557,7 +557,7 @@ const EarningsHub = () => {
                     key={e.ticker}
                     onClick={() => setSelectedTicker(prev => (prev === e.ticker ? null : e.ticker))}
                     className={`flex items-center gap-2 rounded px-1.5 py-1 text-left transition-colors ${
-                      selectedTicker === e.ticker ? 'bg-select/[0.08]' : 'hover:bg-white/[0.03]'
+                      selectedTicker === e.ticker ? 'bg-select/[0.08]' : 'hover:bg-rowHover'
                     }`}
                   >
                     {watchlist.has(e.ticker) && <Star className="w-3 h-3 shrink-0 text-select fill-current" />}

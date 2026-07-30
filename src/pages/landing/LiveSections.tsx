@@ -257,7 +257,7 @@ const DemoSetup = ({ setups }: { setups: SkyVisionData }) => {
         </div>
         <div className="mt-1.5 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
           <motion.div
-            className="h-full rounded-full holo-bar"
+            className="h-full rounded-full data-bar"
             animate={{ width: `${setup.confidence}%` }}
             transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
           />
@@ -647,7 +647,7 @@ const LiveSections = () => {
             </div>
             <Link
               to="/pulse"
-              className="md:ml-auto shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-md border border-borderMuted font-mono text-caption uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-white/[0.03] transition-colors"
+              className="md:ml-auto shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-md border border-borderMuted font-mono text-caption uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-rowHover transition-colors"
             >
               Try the workspace <ArrowRight className="w-3.5 h-3.5" />
             </Link>

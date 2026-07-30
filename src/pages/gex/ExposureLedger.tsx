@@ -116,7 +116,7 @@ const ExposureLedger = ({
       />
       <button
         onClick={exportCsv}
-        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-borderSubtle bg-white/[0.03] hover:bg-white/[0.06] font-mono text-label font-semibold uppercase tracking-wider text-textPrimary transition-colors"
+        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-borderSubtle bg-white/[0.03] hover:bg-rowHover font-mono text-label font-semibold uppercase tracking-wider text-textPrimary transition-colors"
       >
         <Download className="w-3.5 h-3.5" /> Export CSV
       </button>
@@ -178,7 +178,7 @@ const ExposureLedger = ({
                     onSelectStrike ? 'cursor-pointer' : ''
                   } ${
                     selectedStrike === row.strike
-                      ? 'bg-select/[0.05] rail-silver'
+                      ? 'inst-selected'
                       : hoverStrike === row.strike
                         ? 'bg-white/[0.04]'
                         : ''

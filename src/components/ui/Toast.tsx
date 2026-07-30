@@ -133,7 +133,7 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
                         t.action?.onClick();
                         dismiss(t.id);
                       }}
-                      className="shrink-0 self-center rounded border border-borderMuted px-2 py-0.5 font-mono text-micro font-semibold uppercase tracking-wider text-textPrimary hover:bg-white/[0.06] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 active:scale-[0.97]"
+                      className="shrink-0 self-center rounded border border-borderMuted px-2 py-0.5 font-mono text-micro font-semibold uppercase tracking-wider text-textPrimary hover:bg-rowHover transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 active:scale-[0.97]"
                     >
                       {t.action.label}
                     </button>

@@ -579,7 +579,7 @@ const PulseWorkspace = () => {
   // Live quote for a panel's ticker (scan cadence — no per-second header churn).
   const snapFor = (t: string) => ctxByTicker.get(t)?.snapshot;
 
-  const barBtn = 'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-borderSubtle bg-white/[0.02] hover:bg-white/[0.05] font-mono text-label uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors';
+  const barBtn = 'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-borderSubtle bg-white/[0.02] hover:bg-rowHover font-mono text-label uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors';
 
   return (
     <div className={fullscreen ? 'fixed inset-0 z-50 bg-canvas p-3 flex flex-col gap-4 overflow-auto' : 'flex flex-col gap-4'}>
@@ -589,7 +589,7 @@ const PulseWorkspace = () => {
         <div className="relative">
           <button
             onClick={() => setWsMenuOpen(o => !o)}
-            className="inline-flex items-center gap-2 pl-2.5 pr-2 py-1.5 rounded-md border border-borderMuted bg-white/[0.03] hover:bg-white/[0.06] transition-colors"
+            className="inline-flex items-center gap-2 pl-2.5 pr-2 py-1.5 rounded-md border border-borderMuted bg-white/[0.03] hover:bg-rowHover transition-colors"
           >
             <LayoutGrid className="w-3.5 h-3.5 text-select" />
             <span className="font-mono text-caption font-semibold text-textPrimary">{active.name}</span>
@@ -605,7 +605,7 @@ const PulseWorkspace = () => {
                     key={l.id}
                     onClick={() => switchLayout(l.id)}
                     className={`w-full text-left px-3 py-2 font-mono text-label flex items-center gap-2 transition-colors ${
-                      l.id === active.id ? 'text-select bg-select/[0.06]' : 'text-textSecondary hover:bg-white/[0.03]'
+                      l.id === active.id ? 'text-select bg-select/[0.06]' : 'text-textSecondary hover:bg-rowHover'
                     }`}
                   >
                     {l.name}
@@ -637,10 +637,10 @@ const PulseWorkspace = () => {
               )}
               {editLayout && !nameEditor && (
                 <div className="border-t border-borderSubtle p-1.5 grid grid-cols-2 gap-1">
-                  <button onClick={() => setNameEditor({ mode: 'saveAs', value: `${active.name} copy` })} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-micro text-textSecondary hover:bg-white/[0.04] transition-colors"><Save className="w-3 h-3" /> Save as</button>
-                  <button onClick={() => setNameEditor({ mode: 'rename', value: active.name })} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-micro text-textSecondary hover:bg-white/[0.04] transition-colors">Rename</button>
-                  <button onClick={duplicateLayout} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-micro text-textSecondary hover:bg-white/[0.04] transition-colors"><Copy className="w-3 h-3" /> Duplicate</button>
-                  <button onClick={resetLayout} className={`flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-micro transition-colors ${confirmOp === 'reset' ? 'text-bear bg-bear/[0.12]' : 'text-textSecondary hover:bg-white/[0.04]'}`}><RotateCcw className="w-3 h-3" /> {confirmOp === 'reset' ? 'Confirm reset' : 'Reset'}</button>
+                  <button onClick={() => setNameEditor({ mode: 'saveAs', value: `${active.name} copy` })} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-micro text-textSecondary hover:bg-rowHover transition-colors"><Save className="w-3 h-3" /> Save as</button>
+                  <button onClick={() => setNameEditor({ mode: 'rename', value: active.name })} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-micro text-textSecondary hover:bg-rowHover transition-colors">Rename</button>
+                  <button onClick={duplicateLayout} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-micro text-textSecondary hover:bg-rowHover transition-colors"><Copy className="w-3 h-3" /> Duplicate</button>
+                  <button onClick={resetLayout} className={`flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-micro transition-colors ${confirmOp === 'reset' ? 'text-bear bg-bear/[0.12]' : 'text-textSecondary hover:bg-rowHover'}`}><RotateCcw className="w-3 h-3" /> {confirmOp === 'reset' ? 'Confirm reset' : 'Reset'}</button>
                   <button onClick={deleteLayout} disabled={ws.layouts.length <= 1} className={`col-span-2 flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-micro disabled:opacity-40 transition-colors ${confirmOp === 'delete' ? 'text-bear bg-bear/[0.12]' : 'text-bear/80 hover:bg-bear/[0.08]'}`}><Trash2 className="w-3 h-3" /> {confirmOp === 'delete' ? 'Click again to confirm delete' : 'Delete layout'}</button>
                 </div>
               )}
@@ -652,10 +652,10 @@ const PulseWorkspace = () => {
         {editLayout && (
           <>
             <div className="inline-flex items-center rounded-md border border-borderSubtle overflow-hidden">
-              <button onClick={() => doArrange('one')} title="One panel" className="px-2 py-1.5 text-textMuted hover:text-textPrimary hover:bg-white/[0.04]"><Square className="w-3.5 h-3.5" /></button>
-              <button onClick={() => doArrange('cols')} title="Columns" className="px-2 py-1.5 text-textMuted hover:text-textPrimary hover:bg-white/[0.04] border-l border-borderSubtle"><Columns className="w-3.5 h-3.5" /></button>
-              <button onClick={() => doArrange('rows')} title="Rows" className="px-2 py-1.5 text-textMuted hover:text-textPrimary hover:bg-white/[0.04] border-l border-borderSubtle"><Rows className="w-3.5 h-3.5" /></button>
-              <button onClick={() => doArrange('quad')} title="Grid" className="px-2 py-1.5 text-textMuted hover:text-textPrimary hover:bg-white/[0.04] border-l border-borderSubtle"><Grid2x2 className="w-3.5 h-3.5" /></button>
+              <button onClick={() => doArrange('one')} title="One panel" className="px-2 py-1.5 text-textMuted hover:text-textPrimary hover:bg-rowHover"><Square className="w-3.5 h-3.5" /></button>
+              <button onClick={() => doArrange('cols')} title="Columns" className="px-2 py-1.5 text-textMuted hover:text-textPrimary hover:bg-rowHover border-l border-borderSubtle"><Columns className="w-3.5 h-3.5" /></button>
+              <button onClick={() => doArrange('rows')} title="Rows" className="px-2 py-1.5 text-textMuted hover:text-textPrimary hover:bg-rowHover border-l border-borderSubtle"><Rows className="w-3.5 h-3.5" /></button>
+              <button onClick={() => doArrange('quad')} title="Grid" className="px-2 py-1.5 text-textMuted hover:text-textPrimary hover:bg-rowHover border-l border-borderSubtle"><Grid2x2 className="w-3.5 h-3.5" /></button>
             </div>
 
             <div className="relative">
@@ -687,7 +687,7 @@ const PulseWorkspace = () => {
                   <button
                     key={def.key}
                     onClick={() => addPanel(def.key)}
-                    className="w-full text-left px-3 py-2 hover:bg-white/[0.03] transition-colors border-b border-borderSubtle/40 last:border-0"
+                    className="w-full text-left px-3 py-2 hover:bg-rowHover transition-colors border-b border-borderSubtle/40 last:border-0"
                   >
                     <span className="block font-mono text-label font-semibold text-textPrimary">{def.title}</span>
                     <span className="block text-micro text-textSecondary">{def.description}</span>
@@ -716,7 +716,7 @@ const PulseWorkspace = () => {
                         key={def.key}
                         onClick={() => addPanel(def.key)}
                         title={`Requires ${def.requires}`}
-                        className="w-full text-left px-3 py-2 flex items-start gap-2 hover:bg-white/[0.03] transition-colors border-b border-borderSubtle/40 last:border-0"
+                        className="w-full text-left px-3 py-2 flex items-start gap-2 hover:bg-rowHover transition-colors border-b border-borderSubtle/40 last:border-0"
                       >
                         <Lock className="w-3 h-3 text-textMuted mt-0.5 shrink-0" />
                         <span className="min-w-0">

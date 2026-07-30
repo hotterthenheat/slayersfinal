@@ -127,7 +127,7 @@ const ScopeSelect = ({
                   setOpen(false);
                 }}
                 className={`w-full flex items-center gap-3 px-3 py-1.5 text-left transition-colors ${
-                  active ? 'bg-white/[0.05]' : 'hover:bg-white/[0.03]'
+                  active ? 'bg-white/[0.05]' : 'hover:bg-rowHover'
                 }`}
               >
                 <span className={`font-mono text-caption truncate flex-1 ${active ? 'text-select' : 'text-textPrimary'} leading-4`}>

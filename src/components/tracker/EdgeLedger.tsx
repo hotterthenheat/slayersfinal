@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
+import Stat from '../ui/Stat';
 import { BookOpen, Layers, AlertTriangle, ScrollText, Target, ChevronDown } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import {
@@ -101,21 +102,12 @@ const TradeDossier = ({ t }: { t: LedgerTrade }) => {
       <Field label="Thesis">{t.thesis}</Field>
       <Field label="Entry conditions">{t.entryConditions}</Field>
 
+      {/* Three clones of Stat once lived here, differing only by a 4px radius
+          and a brighter label ink. */}
       <div className="grid grid-cols-3 gap-2">
-        <div className="inst-surface rounded px-2.5 py-2">
-          <div className="font-mono text-micro uppercase tracking-widest text-textSecondary">Planned</div>
-          <div className="mt-0.5 font-mono text-data font-semibold text-textPrimary tnum">${t.plannedEntry.toFixed(2)}</div>
-        </div>
-        <div className="inst-surface rounded px-2.5 py-2">
-          <div className="font-mono text-micro uppercase tracking-widest text-textSecondary">Actual fill</div>
-          <div className="mt-0.5 font-mono text-data font-semibold text-textPrimary tnum">${t.actualFill.toFixed(2)}</div>
-        </div>
-        <div className="inst-surface rounded px-2.5 py-2">
-          <div className="font-mono text-micro uppercase tracking-widest text-textSecondary">Slippage</div>
-          <div className={`mt-0.5 font-mono text-data font-semibold tnum ${t.slippagePct > 0 ? 'text-bear' : 'text-bull'}`}>
-            {fmtPct(t.slippagePct)}
-          </div>
-        </div>
+        <Stat label="Planned" value={`$${t.plannedEntry.toFixed(2)}`} />
+        <Stat label="Actual fill" value={`$${t.actualFill.toFixed(2)}`} />
+        <Stat label="Slippage" value={fmtPct(t.slippagePct)} tone={t.slippagePct > 0 ? 'bear' : 'bull'} />
       </div>
 
       <Field label="Entry-time state">{t.entryState}</Field>
@@ -268,7 +260,7 @@ const EdgeLedger = () => {
 
       <Panel tone={expTone} bodyClassName="py-3.5">
         <p className="text-read text-textPrimary leading-relaxed">
-          <span className={`font-mono text-micro font-semibold uppercase tracking-widest mr-2.5 ${expTone === 'bear' ? 'text-bear' : 'holo-text'}`}>
+          <span className={`font-mono text-micro font-semibold uppercase tracking-widest mr-2.5 ${expTone === 'bear' ? 'text-bear' : 'text-textSecondary'}`}>
             Ledger read
           </span>
           {view.headline}
@@ -317,7 +309,7 @@ const EdgeLedger = () => {
         <button
           onClick={() => setShowAnalytics(s => !s)}
           aria-expanded={showAnalytics}
-          className="inst-surface rounded-md px-3.5 h-10 flex items-center gap-2 font-mono text-label font-semibold uppercase tracking-widest text-textPrimary hover:bg-white/[0.02] transition-colors"
+          className="inst-surface rounded-md px-3.5 h-10 flex items-center gap-2 font-mono text-label font-semibold uppercase tracking-widest text-textPrimary hover:bg-rowHover transition-colors"
         >
           <Layers className="w-3.5 h-3.5" />
           Expectancy &amp; edge-decay
@@ -399,7 +391,7 @@ const EdgeLedger = () => {
 
       <Panel bodyClassName="py-3">
         <p className="text-caption text-textSecondary leading-relaxed">
-          <span className="font-mono font-semibold uppercase tracking-wider mr-2 holo-text">Beyond the P/L screen</span>
+          <span className="font-mono font-semibold uppercase tracking-wider mr-2 text-textSecondary">Beyond the P/L screen</span>
           A P/L blotter tells you what you made; the edge ledger tells you why, and whether it still works. It reconstructs each
           closed trade the way a review should — thesis, entry conditions, actual fill, the market state you took it in, the max
           favorable and adverse excursion, and the better contract you could have held — then rolls that into expectancy by setup

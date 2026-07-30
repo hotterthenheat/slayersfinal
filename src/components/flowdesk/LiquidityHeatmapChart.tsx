@@ -16,7 +16,7 @@ import { aggregateCandles, tfMinutes, type Timeframe } from '../../data/timefram
 import { candleTheme } from '../gex/candleTheme';
 import ChartLegend from '../ui/ChartLegend';
 import TimeframePicker from '../ui/TimeframePicker';
-import { CALL_WALL, PUT_WALL, FLIP, DARK_POOL, FOCUS, SPOT, MUTED_INK } from '../gex/palette';
+import { CALL_WALL, PUT_WALL, FLIP, DARK_POOL, FOCUS, SPOT, MUTED_INK, SHORT_GAMMA } from '../gex/palette';
 
 // Slayer signature candles (holo-silver/purple) — direction reads in colour so
 // it pops against the gold liquidity book without duplicating the green/red the
@@ -321,7 +321,7 @@ const LiquidityHeatmapChart = ({
       if (roDepthRef.current) {
         const label = depth >= 0.65 ? 'deep shelf' : depth >= 0.3 ? 'moderate' : depth > 0.06 ? 'thin' : 'open';
         roDepthRef.current.textContent = `depth ${Math.round(depth * 100)}% · ${label}`;
-        roDepthRef.current.style.color = depth >= 0.65 ? '#F0C45C' : depth >= 0.3 ? '#C89B3C' : MUTED_INK;
+        roDepthRef.current.style.color = depth >= 0.65 ? SHORT_GAMMA : depth >= 0.3 ? SHORT_GAMMA : MUTED_INK;
       }
       el.style.opacity = '1';
     });
@@ -546,7 +546,7 @@ const LiquidityHeatmapChart = ({
         <span className="flex items-center gap-1.5 font-mono text-micro text-textSecondary">
           <span
             className="inline-block w-4 h-2 rounded-sm"
-            style={{ background: 'linear-gradient(to right, rgba(110,74,16,0.5), #F0C45C)' }}
+            style={{ background: 'linear-gradient(to right, rgba(110,74,16,0.5), ${SHORT_GAMMA})' }}
           />
           Resting liquidity
         </span>

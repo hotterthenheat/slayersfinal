@@ -16,7 +16,7 @@ const verdictTone: Record<StockVerdict, Tone> = {
   AVOID: 'bear',
 };
 
-const barClass = (v: number) => (v >= 60 ? 'holo-bar' : v >= 40 ? 'bg-white/30' : 'bg-bear/70');
+const barClass = (v: number) => (v >= 60 ? 'data-bar' : v >= 40 ? 'bg-white/30' : 'bg-bear/70');
 const valueClass = (v: number) => (v >= 60 ? 'text-textPrimary' : v >= 40 ? 'text-textSecondary' : 'text-bear');
 
 /** Full-width factor bar with a definition line — the drawer's richer sleeve. */

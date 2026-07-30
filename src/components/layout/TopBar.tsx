@@ -110,7 +110,7 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
                 className={`relative self-stretch flex items-center gap-1 px-3 my-2 rounded-md font-mono text-label font-semibold uppercase tracking-wider transition-colors ${
                   active
                     ? 'text-textPrimary bg-white/[0.06]'
-                    : 'text-textMuted hover:text-textPrimary hover:bg-white/[0.03]'
+                    : 'text-textMuted hover:text-textPrimary hover:bg-rowHover'
                 }`}
               >
                 {group}
@@ -263,7 +263,7 @@ const DropMenu = ({
               className={`flex items-center gap-2 px-2.5 py-1.5 rounded font-mono text-caption whitespace-nowrap transition-colors ${
                 isActive
                   ? 'bg-white/[0.06] text-textPrimary'
-                  : 'text-textSecondary hover:text-textPrimary hover:bg-white/[0.03]'
+                  : 'text-textSecondary hover:text-textPrimary hover:bg-rowHover'
               }`}
             >
               {sub.icon && <sub.icon className="w-3.5 h-3.5 text-textMuted" />}

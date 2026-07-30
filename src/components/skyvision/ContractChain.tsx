@@ -51,7 +51,7 @@ const ChainCell = ({ side, right, strike, ticker, isSelected, onSelect }: CellPr
     <button
       onClick={onSelect}
       className={`text-left px-2.5 py-2 transition-colors ${
-        isSelected ? 'bg-select/[0.07] shadow-[inset_0_0_0_1px_rgba(199,211,232,0.5)]' : 'hover:bg-white/[0.02]'
+        isSelected ? 'bg-select/[0.07] shadow-[inset_0_0_0_1px_rgba(199,211,232,0.5)]' : 'hover:bg-rowHover'
       }`}
     >
       <div className="flex items-center justify-between gap-2">

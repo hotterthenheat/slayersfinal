@@ -86,7 +86,7 @@ const FactorRow = ({ label, weight, score, detail }: { label: string; weight: nu
       <span className="font-mono text-micro text-textMuted tnum">×{weight.toFixed(2)}</span>
       <span className="flex-1 h-[4px] rounded-full bg-white/[0.06] overflow-hidden">
         <span
-          className={`block h-full rounded-full ${score >= 60 ? 'holo-bar' : score >= 40 ? 'bg-white/30' : 'bg-bear/70'}`}
+          className={`block h-full rounded-full ${score >= 60 ? 'data-bar' : score >= 40 ? 'bg-white/30' : 'bg-bear/70'}`}
           style={{ width: `${score}%` }}
         />
       </span>
@@ -467,7 +467,7 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
                 </div>
                 <button
                   onClick={submitQuery}
-                  className="px-3 py-2 rounded-md border border-borderMuted bg-white/[0.04] text-textPrimary font-mono text-label font-semibold uppercase tracking-wider hover:bg-white/[0.07] transition-colors"
+                  className="px-3 py-2 rounded-md border border-borderMuted bg-white/[0.04] text-textPrimary font-mono text-label font-semibold uppercase tracking-wider hover:bg-rowHover transition-colors"
                 >
                   Parse
                 </button>

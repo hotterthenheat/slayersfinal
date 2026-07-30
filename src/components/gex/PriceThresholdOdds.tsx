@@ -90,7 +90,7 @@ const PriceThresholdOdds = ({ view }: { view: StateDensityView }) => {
               <button
                 key={a.label}
                 onClick={() => setThreshold(a.value)}
-                className="font-mono text-label uppercase tracking-wider px-2 py-1 rounded border border-borderSubtle text-textSecondary hover:text-textPrimary hover:bg-white/[0.04] transition-colors"
+                className="font-mono text-label uppercase tracking-wider px-2 py-1 rounded border border-borderSubtle text-textSecondary hover:text-textPrimary hover:bg-rowHover transition-colors"
               >
                 {preserveGreek(a.label)}
               </button>

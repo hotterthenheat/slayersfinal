@@ -94,7 +94,7 @@ const DeltaByPriceBars = ({ data }: { data: OrderFlowData }) => {
             onMouseEnter={e => setHover({ price: r.price, value: r.value, x: e.clientX, y: e.clientY })}
             onMouseMove={e => setHover({ price: r.price, value: r.value, x: e.clientX, y: e.clientY })}
             onMouseLeave={() => setHover(h => (h && h.price === r.price ? null : h))}
-            className="flex items-center gap-1.5 cursor-crosshair rounded-sm hover:bg-white/[0.03]"
+            className="flex items-center gap-1.5 cursor-crosshair rounded-sm hover:bg-rowHover"
           >
             <span className={`w-12 shrink-0 text-right font-mono text-micro tnum ${isPoc ? 'text-textPrimary font-semibold' : 'text-textMuted'}`}>
               {r.price.toFixed(2)}

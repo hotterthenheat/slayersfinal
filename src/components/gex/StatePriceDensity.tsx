@@ -326,7 +326,7 @@ const StatePriceDensity = ({ snapshot }: StatePriceDensityProps) => {
                         ? 'bg-warn'
                         : view.skewLabel === 'NORMAL'
                           ? 'bg-select'
-                          : 'holo-bar'
+                          : 'data-bar'
                   }`}
                   style={{ width: `${view.skewStress}%` }}
                 />
@@ -405,7 +405,7 @@ const StatePriceDensity = ({ snapshot }: StatePriceDensityProps) => {
 
       <Panel bodyClassName="py-3">
         <p className="text-caption text-textSecondary leading-relaxed">
-          <span className="font-mono font-semibold uppercase tracking-wider mr-2 holo-text">Beyond the smile</span>
+          <span className="font-mono font-semibold uppercase tracking-wider mr-2 text-textSecondary">Beyond the smile</span>
           A single IV number is one moment of one curve. Reconstructing the whole state-price density turns the option book into
           an explicit set of odds over where price lands — so you can watch probability mass MOVE. The migration read is the tell
           the smile hides: mass can slide toward a strike while spot sits still, repricing the tail before the tape does. Realized

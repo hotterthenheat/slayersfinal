@@ -351,7 +351,7 @@ const HedgeImpact = () => {
 
       <Panel bodyClassName="py-3">
         <p className="text-caption text-textSecondary leading-relaxed">
-          <span className="font-mono font-semibold uppercase tracking-wider mr-2 holo-text">Beyond GEX</span>
+          <span className="font-mono font-semibold uppercase tracking-wider mr-2 text-textSecondary">Beyond GEX</span>
           Two sessions can carry identical gamma and trade nothing alike — the difference is depth. HEX divides the hedge dealers
           are forced to do by the liquidity available to absorb it, so it reads the outcome GEX only implies. The forecast turns
           gamma into shares and futures over the next 5–60 minutes; the failure boundary is the move where that hedging outruns the

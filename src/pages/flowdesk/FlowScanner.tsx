@@ -296,7 +296,7 @@ const FilterMenu = ({
             <FilterRow label="Unusualness (vol/OI pct)" options={UNUSUAL_OPTIONS} value={filters.unusual} onChange={v => patch({ unusual: v })} />
             <button
               onClick={() => patch({ sweepsOnly: !filters.sweepsOnly })}
-              className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-white/[0.03] transition-colors"
+              className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-rowHover transition-colors"
             >
               <span
                 className={`inline-flex items-center justify-center w-4 h-4 rounded border ${
@@ -364,7 +364,7 @@ const TemplatesMenu = ({
                   key={p.name}
                   onClick={() => apply(f)}
                   className={`w-full text-left px-3 py-1.5 font-mono text-caption transition-colors ${
-                    on ? 'text-select bg-select/[0.06]' : 'text-textPrimary hover:text-select hover:bg-white/[0.03]'
+                    on ? 'text-select bg-select/[0.06]' : 'text-textPrimary hover:text-select hover:bg-rowHover'
                   }`}
                 >
                   {p.name}
@@ -464,7 +464,7 @@ const ColumnChooser = ({
                   onClick={() => !c.locked && onToggle(c.key)}
                   disabled={c.locked}
                   className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-left transition-colors ${
-                    c.locked ? 'cursor-default' : 'hover:bg-white/[0.03]'
+                    c.locked ? 'cursor-default' : 'hover:bg-rowHover'
                   }`}
                 >
                   <span

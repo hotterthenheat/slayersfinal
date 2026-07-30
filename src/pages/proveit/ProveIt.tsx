@@ -211,7 +211,7 @@ const ProveIt = () => {
 
       <Panel bodyClassName="py-3">
         <p className="text-caption text-textSecondary leading-relaxed">
-          <span className="font-mono font-semibold uppercase tracking-wider mr-2 holo-text">How to read this</span>
+          <span className="font-mono font-semibold uppercase tracking-wider mr-2 text-textSecondary">How to read this</span>
           The cone is not a prediction — it is the honest distribution of outcomes given current volatility. Trade ideas
           from Compass and Trace should live inside the cone's fat part; anything that needs a path outside the 90% band
           is a lottery ticket, whatever the chart pattern says. The scoreboard exists so the terminal has to prove it —

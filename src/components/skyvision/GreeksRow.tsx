@@ -27,7 +27,7 @@ const GreeksRow = ({ greeks, fourth = 'vega' }: GreeksRowProps) => {
       onMouseEnter={e => setHover({ x: e.clientX, y: e.clientY })}
       onMouseMove={e => setHover({ x: e.clientX, y: e.clientY })}
       onMouseLeave={() => setHover(null)}
-      className="grid grid-cols-4 gap-2 cursor-crosshair rounded-md hover:bg-white/[0.03]"
+      className="grid grid-cols-4 gap-2 cursor-crosshair rounded-md hover:bg-rowHover"
     >
       <Stat label="Delta" value={withArrow(greeks.delta.toFixed(2), greeks.delta >= 0 ? 'up' : 'down')} />
       <Stat label="Gamma" value={greeks.gamma.toFixed(4)} />

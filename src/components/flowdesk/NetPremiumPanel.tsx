@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { buildNetPremium } from '../../data/netpremium';
 import { fmtUsd } from '../../data/gex';
-import { BULL, BEAR } from '../gex/palette';
+import { BULL, BEAR, SHORT_GAMMA } from '../gex/palette';
 
 /*
   Net Premium tide — cumulative net call premium (green) vs net put premium
@@ -61,12 +61,14 @@ const NetPremiumPanel = ({ ticker, revision }: NetPremiumPanelProps) => {
           <span className="inline-block w-2.5 h-0.5 rounded-full bg-bull" /> Net call prem
           <span className={`tnum font-semibold ${at.call >= 0 ? 'text-bull' : 'text-bear'}`}>{fmtUsd(at.call)}</span>
         </span>
+        {/* Deliberately not ChartLegend: every key here carries a live value,
+            so this is a cursor read-out row that happens to be colour-keyed. */}
         <span className="flex items-center gap-1.5 text-textSecondary">
           <span className="inline-block w-2.5 h-0.5 rounded-full bg-bear" /> Net put prem
           <span className={`tnum font-semibold ${at.put >= 0 ? 'text-bear' : 'text-bull'}`}>{fmtUsd(at.put)}</span>
         </span>
         <span className="flex items-center gap-1.5 text-textSecondary">
-          <span className="inline-block w-2.5 h-0.5 rounded-full" style={{ background: '#E0B84E' }} /> Price
+          <span className="inline-block w-2.5 h-0.5 rounded-full" style={{ background: SHORT_GAMMA }} /> Price
           <span className="tnum font-semibold text-textPrimary">{at.price.toFixed(2)}</span>
         </span>
         {/* the "who is paying up" number — calls minus the put drag */}
@@ -95,7 +97,7 @@ const NetPremiumPanel = ({ ticker, revision }: NetPremiumPanelProps) => {
           {/* zero line */}
           <line x1={0} y1={VB_H / 2} x2={VB_W} y2={VB_H / 2} stroke="rgba(255,255,255,0.12)" strokeDasharray="3 4" vectorEffect="non-scaling-stroke" />
           {/* price context first, under the premium lines */}
-          <path d={path(p => p.price, yPrice)} fill="none" stroke="#E0B84E" strokeOpacity={0.75} strokeWidth={1.2} vectorEffect="non-scaling-stroke" />
+          <path d={path(p => p.price, yPrice)} fill="none" stroke={SHORT_GAMMA} strokeOpacity={0.75} strokeWidth={1.2} vectorEffect="non-scaling-stroke" />
           <path d={path(p => p.call, yPrem)} fill="none" stroke={BULL} strokeWidth={1.6} vectorEffect="non-scaling-stroke" />
           <path d={path(p => p.put, yPrem)} fill="none" stroke={BEAR} strokeWidth={1.6} vectorEffect="non-scaling-stroke" />
           {hoverIdx != null && (

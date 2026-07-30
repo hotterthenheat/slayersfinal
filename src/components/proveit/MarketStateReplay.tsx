@@ -77,7 +77,7 @@ const SessionRow = ({ s }: { s: SimSession }) => {
       <span className="font-mono text-micro text-textSecondary tnum">{s.id}</span>
       <div className="min-w-0">
         <div className="relative h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
-          <span className="holo-bar block h-full rounded-full" style={{ width: `${Math.round(s.sim * 100)}%` }} />
+          <span className="data-bar block h-full rounded-full" style={{ width: `${Math.round(s.sim * 100)}%` }} />
         </div>
         <span className="mt-0.5 block font-mono text-micro text-textMuted tnum">
           sim {Math.round(s.sim * 100)}% · {s.daysAgo}d ago · +{s.mfePct.toFixed(1)}/−{s.maePct.toFixed(1)}%
@@ -215,12 +215,12 @@ const StateFingerprint = ({ view }: { view: StateReplayView }) => (
       <div key={f.key} className="grid grid-cols-[110px_1fr_58px] items-center gap-2.5">
         <span className="font-mono text-micro uppercase tracking-wider text-textSecondary truncate">{f.label}</span>
         <div className="relative h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
-          <span className="holo-bar block h-full rounded-full" style={{ width: `${Math.round(f.value * 100)}%` }} />
+          <span className="data-bar block h-full rounded-full" style={{ width: `${Math.round(f.value * 100)}%` }} />
         </div>
         <span className="flex items-center justify-end gap-1.5">
           <span className="font-mono text-micro tnum text-textPrimary">{Math.round(f.value * 100)}</span>
           <span
-            className={`font-mono text-micro uppercase tracking-wider ${f.live ? 'holo-text' : 'text-textMuted'}`}
+            className={`font-mono text-micro uppercase tracking-wider ${f.live ? 'text-textSecondary' : 'text-textMuted'}`}
             title={f.live ? 'read from the live chain/tape' : 'macro context'}
           >
             {f.live ? 'live' : 'mdl'}
@@ -330,7 +330,7 @@ const MarketStateReplay = ({ snapshot }: MarketStateReplayProps) => {
         >
           <StateFingerprint view={view} />
           <p className="mt-3 font-mono text-micro text-textMuted leading-relaxed">
-            Similarity is Euclidean distance over these eight axes. <span className="holo-text">Live</span> factors read off the chain
+            Similarity is Euclidean distance over these eight axes. <span className="text-textPrimary">Live</span> factors read off the chain
             and tape; the rest are the macro context — breadth, rates, news, session phase — that rounds out the eight-axis
             fingerprint.
           </p>
@@ -372,7 +372,7 @@ const MarketStateReplay = ({ snapshot }: MarketStateReplayProps) => {
           <div className="mt-2 grid grid-cols-3 gap-2">
             <div>
               <div className="font-mono text-micro uppercase tracking-wider text-textMuted">Peak edge</div>
-              <div className="font-mono text-body font-semibold tnum holo-text leading-5">
+              <div className="font-mono text-body font-semibold tnum text-textPrimary leading-5">
                 {Math.max(...view.edgeDecay.map(p => p.edgePct)).toFixed(0)}pt
               </div>
             </div>
@@ -413,7 +413,7 @@ const MarketStateReplay = ({ snapshot }: MarketStateReplayProps) => {
           </div>
           <div className="flex flex-col gap-1">
             <span className="font-mono text-micro uppercase tracking-wider text-textMuted">Out-of-sample</span>
-            <span className={`font-mono text-2xl font-bold tnum ${Math.abs(view.oos.degradationPts) <= 5 ? 'holo-text' : 'text-warn'}`}>
+            <span className={`font-mono text-2xl font-bold tnum ${Math.abs(view.oos.degradationPts) <= 5 ? 'text-textPrimary' : 'text-warn'}`}>
               {view.oos.outSampleTargetPct}%
             </span>
             <span className="font-mono text-micro text-textMuted tnum">recent {view.oos.outSampleN} held out · target first</span>
@@ -434,7 +434,7 @@ const MarketStateReplay = ({ snapshot }: MarketStateReplayProps) => {
       {/* Honest explainer */}
       <Panel bodyClassName="py-3">
         <p className="text-caption text-textSecondary leading-relaxed">
-          <span className="font-mono font-semibold uppercase tracking-wider mr-2 holo-text">How this reads</span>
+          <span className="font-mono font-semibold uppercase tracking-wider mr-2 text-textSecondary">How this reads</span>
           Market-State Replay asks the only question a backtest should: not "what does the pattern say" but "what happened the last
           time the whole board looked like this." It scores {view.pool} prior sessions against today's eight-factor state, keeps the{' '}
           {view.n} closest, and replays their outcomes against this setup's actual target and stop. Dealer positioning, vol and options

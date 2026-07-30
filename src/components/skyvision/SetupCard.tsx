@@ -38,10 +38,10 @@ const SetupCard = ({ setup, expanded, isSelected, isTop, onToggle, onSelect, onO
         onMouseEnter={e => setHover({ x: e.clientX, y: e.clientY })}
         onMouseMove={e => setHover({ x: e.clientX, y: e.clientY })}
         onMouseLeave={() => setHover(null)}
-        className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-white/[0.02] transition-colors"
+        className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-rowHover transition-colors"
       >
         <span className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-label font-semibold ${pillTone}`}>
-          <span className="holo-text">{setup.contract}</span>
+          <span className="text-textPrimary">{setup.contract}</span>
         </span>
         {isTop && <SignalBadge tone="magenta">TOP PICK</SignalBadge>}
 

@@ -148,7 +148,7 @@ const SamplePreview = ({ setup, scanner, onReviewSetup }: SamplePreviewProps) =>
         <div className="grid grid-cols-2 gap-2 pt-1 mt-auto">
           <button
             onClick={onReviewSetup}
-            className="flex items-center justify-center gap-1.5 py-2.5 rounded-md border border-borderSubtle bg-white/[0.03] hover:bg-white/[0.06] text-textPrimary text-caption font-semibold font-mono uppercase tracking-wider transition-colors leading-4"
+            className="flex items-center justify-center gap-1.5 py-2.5 rounded-md border border-borderSubtle bg-white/[0.03] hover:bg-rowHover text-textPrimary text-caption font-semibold font-mono uppercase tracking-wider transition-colors leading-4"
           >
             Review Setup <ArrowUpRight className="w-3.5 h-3.5" />
           </button>
@@ -157,7 +157,7 @@ const SamplePreview = ({ setup, scanner, onReviewSetup }: SamplePreviewProps) =>
             className={`flex items-center justify-center gap-1.5 py-2.5 rounded-md text-caption font-semibold font-mono uppercase tracking-wider transition-all ${
               tracked
                 ? 'border border-select/30 bg-select/[0.08] text-select hover:bg-select/[0.12]'
-                : 'border border-borderSubtle bg-white/[0.03] text-textSecondary hover:bg-white/[0.06] hover:text-textPrimary'
+                : 'border border-borderSubtle bg-white/[0.03] text-textSecondary hover:bg-rowHover hover:text-textPrimary'
             } leading-4`}
           >
             {tracked ? (

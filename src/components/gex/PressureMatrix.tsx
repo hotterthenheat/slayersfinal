@@ -57,7 +57,7 @@ const PressureMatrix = ({ rows, maxAbs, spot }: PressureMatrixProps) => {
               onMouseEnter={e => setHover({ r, x: e.clientX, y: e.clientY })}
               onMouseMove={e => setHover({ r, x: e.clientX, y: e.clientY })}
               onMouseLeave={() => setHover(h => (h && h.r.strike === r.strike ? null : h))}
-              className={`flex items-center gap-1.5 px-2 py-[3px] border-b border-borderSubtle/30 transition-colors hover:bg-white/[0.04] ${
+              className={`flex items-center gap-1.5 px-2 py-[3px] border-b border-borderSubtle/30 transition-colors hover:bg-rowHover ${
                 isSpot ? 'bg-white/[0.05]' : ''
               }`}
             >

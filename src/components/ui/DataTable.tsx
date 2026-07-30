@@ -143,7 +143,7 @@ const DataTable = <T,>({
                   } ${
                     selected
                       ? 'inst-selected'
-                      : 'hover:bg-white/[0.02]'
+                      : 'hover:bg-rowHover'
                   }`}
                 >
                   {columns.map(col => (

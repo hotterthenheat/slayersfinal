@@ -410,7 +410,7 @@ const ColumnChooser = ({
                     <button
                       key={c.id}
                       onClick={() => onToggle(c.id)}
-                      className="w-full flex items-center gap-2.5 px-3 py-1.5 text-left hover:bg-white/[0.03] transition-colors"
+                      className="w-full flex items-center gap-2.5 px-3 py-1.5 text-left hover:bg-rowHover transition-colors"
                     >
                       <span
                         className={`inline-flex items-center justify-center w-4 h-4 rounded border ${
@@ -935,7 +935,7 @@ const LiveTape = () => {
                     ref={idx === 0 ? firstRowRef : undefined}
                     onClick={() => setSelected(r)}
                     className={`cursor-pointer border-b border-borderSubtle/30 last:border-0 ${
-                      selected?.id === r.id ? 'bg-select/[0.08]' : 'hover:bg-white/[0.02]'
+                      selected?.id === r.id ? 'inst-selected' : 'hover:bg-rowHover'
                     } ${rowAccent(r.premium)}`}
                   >
                     {/* Time rail */}
@@ -1036,7 +1036,7 @@ const LiveTape = () => {
                       <tr
                         key={p.key}
                         title={`${p.date} · ${p.time}`}
-                        className="border-b border-borderSubtle/30 last:border-0 hover:bg-white/[0.02] transition-colors"
+                        className="border-b border-borderSubtle/30 last:border-0 hover:bg-rowHover transition-colors"
                       >
                         <td className="px-2 py-2 whitespace-nowrap">
                           <span className="flex items-center gap-1.5">

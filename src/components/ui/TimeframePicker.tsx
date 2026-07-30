@@ -27,7 +27,7 @@ const TimeframePicker = ({ value, onChange, className = '' }: TimeframePickerPro
           aria-pressed={active}
           title={`${tf.label} bars`}
           className={`px-1.5 py-1 font-mono text-micro uppercase tracking-wider transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 ${
-            active ? 'bg-white/[0.12] text-textPrimary' : 'text-textSecondary hover:bg-white/[0.04] hover:text-textPrimary'
+            active ? 'bg-white/[0.12] text-textPrimary' : 'text-textSecondary hover:bg-rowHover hover:text-textPrimary'
           }`}
         >
           {tf.label}

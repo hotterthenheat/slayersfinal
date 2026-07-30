@@ -294,7 +294,7 @@ const News = () => {
                       onMouseEnter={e => setHover({ n: lead, x: e.clientX, y: e.clientY })}
                       onMouseMove={e => setHover({ n: lead, x: e.clientX, y: e.clientY })}
                       onMouseLeave={() => setHover(h => (h && h.n.id === lead.id ? null : h))}
-                      className={`flex-1 min-w-0 text-left px-4 py-3 ${!isSel ? 'hover:bg-white/[0.02]' : ''}`}
+                      className={`flex-1 min-w-0 text-left px-4 py-3 ${!isSel ? 'hover:bg-rowHover' : ''}`}
                     >
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-mono text-label text-textMuted tnum">{lead.time}</span>
@@ -375,7 +375,7 @@ const News = () => {
                             onMouseMove={e => setHover({ n: i, x: e.clientX, y: e.clientY })}
                             onMouseLeave={() => setHover(h => (h && h.n.id === i.id ? null : h))}
                             className={`w-full text-left pl-6 pr-3 py-2 border-t border-borderSubtle flex items-center gap-2 transition-colors ${
-                              iSel ? 'bg-select/[0.05]' : 'hover:bg-white/[0.02]'
+                              iSel ? 'bg-select/[0.05]' : 'hover:bg-rowHover'
                             }`}
                           >
                             <span className="font-mono text-micro text-textMuted tnum shrink-0">{i.time}</span>

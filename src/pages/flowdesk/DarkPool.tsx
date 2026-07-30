@@ -235,7 +235,7 @@ const DarkPool = () => {
                   <button
                     onClick={() => setSelectedPrice(level.price)}
                     className={`w-full text-left px-4 py-2.5 grid grid-cols-[88px_92px_1fr_72px_64px] items-center gap-3 transition-colors ${
-                      isSelected ? 'bg-select/[0.05] rail-select' : 'hover:bg-white/[0.02]'
+                      isSelected ? 'bg-select/[0.05] rail-select' : 'hover:bg-rowHover'
                     }`}
                   >
                     <span className="font-mono text-body font-semibold text-textPrimary tnum leading-5">${level.price.toFixed(2)}</span>

@@ -391,7 +391,7 @@ const Compass = () => {
               className={`relative inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md font-mono text-label uppercase tracking-wider transition-colors ${
                 isActive
                   ? 'text-ink font-semibold'
-                  : 'text-textMuted font-medium hover:text-textSecondary hover:bg-white/[0.03]'
+                  : 'text-textMuted font-medium hover:text-textSecondary hover:bg-rowHover'
               }`}
             >
               {isActive && (
@@ -446,7 +446,7 @@ const Compass = () => {
                     <button
                       onClick={() => { setTickerFilter(null); setShowTickerDropdown(false); }}
                       className={`w-full text-left px-3 py-2 font-mono text-label transition-colors ${
-                        !tickerFilter ? 'text-select bg-select/[0.06]' : 'text-textSecondary hover:bg-white/[0.03]'
+                        !tickerFilter ? 'text-select bg-select/[0.06]' : 'text-textSecondary hover:bg-rowHover'
                       }`}
                     >
                       All Tickers
@@ -456,7 +456,7 @@ const Compass = () => {
                         key={t}
                         onClick={() => { setTickerFilter(t); setShowTickerDropdown(false); }}
                         className={`w-full text-left px-3 py-2 font-mono text-label transition-colors ${
-                          tickerFilter === t ? 'text-select bg-select/[0.06]' : 'text-textSecondary hover:bg-white/[0.03]'
+                          tickerFilter === t ? 'text-select bg-select/[0.06]' : 'text-textSecondary hover:bg-rowHover'
                         }`}
                       >
                         {t}

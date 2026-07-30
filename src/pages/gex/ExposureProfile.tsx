@@ -146,7 +146,7 @@ const ExposureProfile = () => {
             <span className="ml-auto flex items-center gap-2">
               <button
                 onClick={() => navigate('/pulse', { state: { focusPrice: selectedRow.strike } })}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-borderSubtle bg-white/[0.03] hover:bg-white/[0.06] font-mono text-micro font-semibold uppercase tracking-wider text-textPrimary transition-colors"
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-borderSubtle bg-white/[0.03] hover:bg-rowHover font-mono text-micro font-semibold uppercase tracking-wider text-textPrimary transition-colors"
               >
                 View on chart <ArrowUpRight className="w-3 h-3" />
               </button>
