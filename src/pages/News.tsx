@@ -273,7 +273,7 @@ const News = () => {
             </div>
           )}
 
-          <div className="flex flex-col max-h-[560px] overflow-auto">
+          <div className="flex flex-col max-h-[max(560px,62vh)] overflow-auto">
             {units.map(unit => {
               const lead = unit.lead;
               const isMuted = muted.has(unit.subject);

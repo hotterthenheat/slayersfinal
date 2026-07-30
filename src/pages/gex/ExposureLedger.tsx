@@ -7,6 +7,7 @@ import SegmentedControl from '../../components/ui/SegmentedControl';
 import SpotRule from '../../components/ui/SpotRule';
 import { useToast } from '../../components/ui/Toast';
 import type { ExposureProfileData } from '../../types/gex';
+import Term from '../../components/ui/Term';
 
 interface ExposureLedgerProps {
   data: ExposureProfileData;
@@ -41,10 +42,10 @@ const LEG_BAR: Record<Leg, string> = {
 
 const LEG_NAME: Record<Leg, string> = { call: 'CALLS', put: 'PUTS', net: 'NET' };
 
-const GREEKS: { key: 'gex' | 'dex' | 'vex'; label: string; unit: string }[] = [
-  { key: 'gex', label: 'GEX', unit: '1% move' },
-  { key: 'dex', label: 'DEX', unit: 'Δ notional' },
-  { key: 'vex', label: 'VEX', unit: '1% vol' },
+const GREEKS: { key: 'gex' | 'dex' | 'vex'; label: React.ReactNode; unit: string }[] = [
+  { key: 'gex', label: <Term k="GEX">GEX</Term>, unit: '1% move' },
+  { key: 'dex', label: <Term k="DEX">DEX</Term>, unit: 'Δ notional' },
+  { key: 'vex', label: <Term k="VEX">VEX</Term>, unit: '1% vol' },
 ];
 
 const strikeLabel = (v: number) => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
@@ -131,7 +132,7 @@ const ExposureLedger = ({
       actions={actions}
       flush
       className="min-w-0"
-      bodyClassName="flex flex-col max-h-[560px]"
+      bodyClassName="flex flex-col max-h-[max(560px,62vh)]"
     >
       <div tabIndex={0} role="region" aria-label="Exposure ledger — scrollable" className="overflow-auto h-full min-h-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60">
         {/* Sticky legend — stays pinned while the rows scroll */}

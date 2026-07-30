@@ -338,22 +338,30 @@ const Landing = () => (
       </p>
       <div className="mt-8 border border-borderSubtle bg-panel rounded-lg overflow-hidden">
         {SEED_IDEAS.slice(0, 3).map(idea => (
+          // Phones stack: the vote box, ticker and direction chip take ~176px of a
+          // 342px row, which left the thesis 137px and truncated roughly 80% of
+          // every quote away. The quote is the whole point of the row, so below
+          // `sm` it gets its own full-width line and clamps to two instead.
           <div
             key={idea.id}
-            className="flex items-center gap-4 px-5 py-4 border-b border-borderSubtle/50 last:border-0"
+            className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 px-5 py-4 border-b border-borderSubtle/50 last:border-0"
           >
-            <span className="flex flex-col items-center w-9 shrink-0 border border-borderSubtle rounded-md py-1.5">
-              <span className="font-mono text-caption font-bold text-textPrimary tnum">{idea.votes}</span>
+            <span className="flex items-center gap-3 sm:gap-4 shrink-0">
+              <span className="flex flex-col items-center w-9 shrink-0 border border-borderSubtle rounded-md py-1.5">
+                <span className="font-mono text-caption font-bold text-textPrimary tnum">{idea.votes}</span>
+              </span>
+              <span className="font-mono text-caption font-bold text-textPrimary shrink-0">{idea.ticker}</span>
+              <span
+                className={`inline-flex items-center rounded px-1.5 py-0.5 font-mono text-micro font-bold uppercase tracking-wider shrink-0 ${
+                  idea.direction === 'BULLISH' ? 'bg-bull/10 text-bull' : 'bg-bear/10 text-bear'
+                }`}
+              >
+                {idea.direction}
+              </span>
             </span>
-            <span className="font-mono text-caption font-bold text-textPrimary shrink-0">{idea.ticker}</span>
-            <span
-              className={`inline-flex items-center rounded px-1.5 py-0.5 font-mono text-micro font-bold uppercase tracking-wider shrink-0 ${
-                idea.direction === 'BULLISH' ? 'bg-bull/10 text-bull' : 'bg-bear/10 text-bear'
-              }`}
-            >
-              {idea.direction}
+            <span className="min-w-0 flex-1 text-caption text-textSecondary line-clamp-3 sm:line-clamp-none sm:truncate">
+              "{idea.thesis}"
             </span>
-            <span className="min-w-0 flex-1 text-caption text-textSecondary truncate">"{idea.thesis}"</span>
             <span className="ml-auto hidden md:block font-mono text-micro text-textMuted shrink-0">
               {idea.author}
             </span>

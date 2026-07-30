@@ -3,6 +3,7 @@ import { ROW_INTERACTIVE, interactiveRowProps } from '../ui/interactiveRow';
 import { fmtUsd } from '../../data/gex';
 import SpotRule from '../ui/SpotRule';
 import type { ExposureProfileData, GreekSplit } from '../../types/gex';
+import Term from '../ui/Term';
 
 interface ExposureMatrixProps {
   data: ExposureProfileData;
@@ -60,10 +61,10 @@ const SpotRow = ({ ticker, spot }: { ticker: string; spot: number }) => (
 const ExposureMatrix = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSelectStrike }: ExposureMatrixProps) => {
   const { ticker, strikes, maxAbs, spotAfterIndex, levels } = data;
 
-  const GROUPS: { key: 'gex' | 'dex' | 'vex'; label: string; unit: string }[] = [
-    { key: 'gex', label: 'GEX', unit: '1% move' },
-    { key: 'dex', label: 'DEX', unit: 'Δ notional' },
-    { key: 'vex', label: 'VEX', unit: '1% vol' },
+  const GROUPS: { key: 'gex' | 'dex' | 'vex'; label: React.ReactNode; unit: string }[] = [
+    { key: 'gex', label: <Term k="GEX">GEX</Term>, unit: '1% move' },
+    { key: 'dex', label: <Term k="DEX">DEX</Term>, unit: 'Δ notional' },
+    { key: 'vex', label: <Term k="VEX">VEX</Term>, unit: '1% vol' },
   ];
 
   return (

@@ -19,7 +19,7 @@ interface StatCardProps {
 /** Compact data-first metric cell. Tone lives in the value, not in ornament. */
 const StatCard = ({ label, value, sub, tone = 'neutral', emphasis = false, className = '', children }: StatCardProps) => {
   return (
-    <div className={`${emphasis ? 'inst-emphasis' : 'inst-surface'} rounded-md px-3.5 py-3 min-w-0 ${className}`}>
+    <div className={`${emphasis ? 'inst-emphasis' : 'inst-surface'} rounded-md px-3.5 py-3 min-w-0 h-full ${className}`}>
       {/* Label and sub-line truncate — carry the text as a native title so a
           clipped metric is still readable. */}
       <div title={label} className="font-mono text-label uppercase tracking-widest text-textSecondary truncate">

@@ -249,7 +249,7 @@ const RankedTargets = () => {
         {sorted.length === 0 ? (
           <div className="py-10 text-center font-mono text-label text-textMuted uppercase tracking-widest">No strikes match this isolator</div>
         ) : (
-          <div className="overflow-auto max-h-[560px]">
+          <div className="overflow-auto max-h-[max(560px,62vh)]">
             <table className="w-full border-collapse">
               <thead>
                 <tr className="border-b border-borderSubtle">

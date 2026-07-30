@@ -407,6 +407,12 @@
   .custom-pulse {
     animation: none;
   }
+  /* Tailwind's own two. This block only ever listed the house animations, so
+     the stock utilities kept running under `reduce` — a bouncing scroll chevron
+     and four looping skeleton placeholders on the landing page. They come from
+     the utilities layer, so they need !important to beat it. */
+  .animate-pulse,
+  .animate-bounce,
   .rain-col,
   .rain-tw,
   .rain-tw-hi {

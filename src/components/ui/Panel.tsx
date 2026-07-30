@@ -3,19 +3,26 @@ import { createPortal } from 'react-dom';
 import { Maximize2, Minimize2 } from 'lucide-react';
 import type { Tone } from './tones';
 import { useFocus } from '../../context/FocusContext';
+import { titleOf } from './truncation';
 
 /** Renders the panel title at the requested level without four near-copies. */
 const Heading = ({
   level,
   className,
+  title,
   children,
 }: {
   level: 2 | 3 | 4;
   className?: string;
+  title?: string;
   children: React.ReactNode;
 }) => {
   const Tag = (`h${level}` as const) as 'h2' | 'h3' | 'h4';
-  return <Tag className={className}>{children}</Tag>;
+  return (
+    <Tag className={className} title={title}>
+      {children}
+    </Tag>
+  );
 };
 
 interface PanelProps {
@@ -99,7 +106,11 @@ const Panel = ({
               // h2 by default: on all 13 routes that mount panels they are direct
               // children of the page H1, so h3 skipped a level. `headingLevel`
               // exists for a page that genuinely nests panels inside a section.
-              <Heading level={headingLevel} className="font-mono text-label font-semibold uppercase tracking-widest text-textPrimary truncate">
+              <Heading
+                level={headingLevel}
+                title={titleOf(title)}
+                className="font-mono text-label font-semibold uppercase tracking-widest text-textPrimary truncate"
+              >
                 {title}
               </Heading>
             )}
@@ -107,7 +118,10 @@ const Panel = ({
               // Hidden on phones: the title + subtitle + actions can't share one
               // narrow row without the title truncating to a few letters, and a
               // clipped subtitle reads as nothing. Title wins; subtitle returns at sm.
-              <span className="hidden sm:inline font-mono text-label text-textSecondary uppercase tracking-wider truncate">
+              <span
+                title={titleOf(subtitle)}
+                className="hidden sm:inline font-mono text-label text-textSecondary uppercase tracking-wider truncate"
+              >
                 {subtitle}
               </span>
             )}

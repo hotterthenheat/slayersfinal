@@ -693,7 +693,7 @@ const FlowScanner = () => {
           onRowClick={r => setSelectedId(r.id)}
           selectedKey={selectedId}
           initialSort={{ key: 'premium', dir: 'desc' }}
-          maxHeight="560px"
+          maxHeight="max(560px, 62vh)"
           emptyText="No contracts match these filters"
         />
       </Panel>

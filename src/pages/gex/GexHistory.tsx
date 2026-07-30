@@ -430,7 +430,7 @@ const GexHistory = () => {
           <MigrationChart points={view.points} hover={hover} cursor={cursorIdx} events={events} onHover={setHover} onScrub={scrubTo} />
         </Panel>
 
-        <Panel title="How structure moved" subtitle={`open ${view.open.time} → now`} className="xl:col-span-4">
+        <Panel title="How structure moved" subtitle={`open ${view.open.time} → now`} className="xl:col-span-4 xl:sticky xl:top-4 xl:self-start">
           <div className="flex flex-col gap-3">
             {view.shifts.map(s => (
               <div key={s.label} className="flex items-center justify-between gap-2 border-b border-borderSubtle pb-2.5 last:border-0">

@@ -421,13 +421,26 @@ const StrikeChart = ({
       <div className="flex items-center gap-3.5 px-1 flex-wrap select-none">
         <ChartLegend
           variant="line"
+          /* Walls are LINES, nodes are FILLED BANDS — and both resolved to the
+             same green and the same red, so the legend showed six entries in
+             four colours and the CALL WALL rule was invisible inside the +GEX
+             bands. The keys now differ in shape the way the chart does, and the
+             node keys carry the ramp they are actually drawn from. */
           items={[
-            { label: 'Call Wall', swatchClass: 'bg-bull' },
-            { label: 'Put Wall', swatchClass: 'bg-bear' },
-            { label: 'Flip', swatchClass: 'bg-flip' },
-            { label: 'King', swatchClass: 'bg-king' },
-            { label: '+GEX node', color: heatPoles.pos },
-            { label: '−GEX node', color: heatPoles.neg },
+            { label: 'Call Wall', kind: 'line', swatchClass: 'bg-bull' },
+            { label: 'Put Wall', kind: 'line', swatchClass: 'bg-bear' },
+            { label: 'Flip', kind: 'dashed', swatchClass: 'border-flip' },
+            { label: 'King', kind: 'line', swatchClass: 'bg-king' },
+            {
+              label: '+GEX node',
+              kind: 'gradient',
+              gradient: `linear-gradient(to right, transparent, ${heatPoles.pos})`,
+            },
+            {
+              label: '−GEX node',
+              kind: 'gradient',
+              gradient: `linear-gradient(to right, transparent, ${heatPoles.neg})`,
+            },
           ]}
         />
         <span className="ml-auto font-mono text-micro text-textMuted uppercase tracking-wider hidden xl:inline">

@@ -27,6 +27,7 @@ import {
   Check,
 } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
+import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { useToast } from '../../components/ui/Toast';
 import { SkeletonRows } from '../../components/ui/Skeleton';
 import Simulator from '../../core/simulator';
@@ -74,21 +75,6 @@ function buildCtx(snapshot: MarketSnapshot, revision: number, focusPrice: number
     setups: buildSkyVision(snapshot, 'top-setups'),
     focusPrice,
   };
-}
-
-/** Client-only media-query subscription. */
-function useMediaQuery(query: string): boolean {
-  const [matches, setMatches] = useState(() =>
-    typeof window !== 'undefined' ? window.matchMedia(query).matches : true
-  );
-  useEffect(() => {
-    const mq = window.matchMedia(query);
-    const on = () => setMatches(mq.matches);
-    on();
-    mq.addEventListener('change', on);
-    return () => mq.removeEventListener('change', on);
-  }, [query]);
-  return matches;
 }
 
 // ---- persistence ---------------------------------------------------------

@@ -55,10 +55,22 @@ const PressureMatrix = ({ rows, maxAbs, spot }: PressureMatrixProps) => {
 
   return (
     <div className="h-full min-h-0 flex flex-col">
-      <div className="flex items-center gap-3 px-2.5 py-1.5 border-b border-borderSubtle select-none font-mono text-micro uppercase tracking-wider text-textMuted">
-        <span className="text-bull">Calls</span>
-        <span className="ml-auto">Strike</span>
-        <span className="ml-auto text-bear">Puts</span>
+      {/* Same column grid as a body row (flex-1 / w-14 / w-9 / flex-1), so each
+          label sits over the column it names — STRIKE used to float 24px off its
+          own column. The outer ticks are the axis the ladder had none of: bars
+          are scaled against one shared maxAbs, and without a number on it the
+          lengths were unreadable in absolute terms. */}
+      <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-borderSubtle select-none font-mono text-micro uppercase tracking-wider text-textMuted">
+        <span className="flex-1 flex items-baseline justify-between">
+          <span className="tnum normal-case text-textSecondary">{fmtUsd(maxAbs)}</span>
+          <span className="text-bull">Calls</span>
+        </span>
+        <span className="w-14 shrink-0 text-center">Strike</span>
+        <span className="w-9 shrink-0" />
+        <span className="flex-1 flex items-baseline justify-between">
+          <span className="text-bear">Puts</span>
+          <span className="tnum normal-case text-textSecondary">{fmtUsd(maxAbs)}</span>
+        </span>
       </div>
 
       <div

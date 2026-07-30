@@ -170,9 +170,6 @@ const DarkPool = () => {
   return (
     <>
       {/* Market-wide off-exchange flow first — scan the sectors, then drill the active name */}
-      <DarkPoolFeed />
-
-      {/* Session posture at a glance */}
       <MetricGrid min="170px">
         <StatCard
           label="Off-exchange share"
@@ -208,6 +205,9 @@ const DarkPool = () => {
         />
       </MetricGrid>
 
+      <DarkPoolFeed />
+
+      {/* Session posture at a glance */}
       <Panel tone={postureTone} bodyClassName="py-3">
         <p className="text-caption text-textSecondary leading-relaxed">
           <span className={`font-mono font-semibold uppercase tracking-wider mr-2 ${postureTone === 'bull' ? 'text-bull' : postureTone === 'bear' ? 'text-bear' : 'text-textPrimary'}`}>
@@ -349,7 +349,7 @@ const DarkPool = () => {
           onRowClick={p => setSelectedPrint(prev => (prev === p.id ? null : p.id))}
           selectedKey={activePrint ? String(activePrint.id) : null}
           initialSort={{ key: 'notional', dir: 'desc' }}
-          maxHeight="420px"
+          maxHeight="max(420px, 48vh)"
         />
       </Panel>
     </>

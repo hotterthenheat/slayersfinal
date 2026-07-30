@@ -665,8 +665,14 @@ const LiveTape = () => {
 
   useEffect(() => {
     const now = Date.now();
-    if (now - lastReadRef.current < READ_INTERVAL_MS && rows.length > 3) return;
-    lastReadRef.current = now;
+    // The empty first render must not arm the throttle. It used to: the mount
+    // pass stamped `lastReadRef`, then the opening batch of prints arrived all at
+    // once — so `rows.length > 3` was already true and the throttle swallowed the
+    // first real read. "Awaiting prints…" then sat under a "7 of 7 prints" count
+    // for a full 8s on every load. Only a read taken over real rows arms it.
+    const armed = lastReadRef.current !== 0;
+    if (armed && rows.length > 3 && now - lastReadRef.current < READ_INTERVAL_MS) return;
+    if (rows.length > 0) lastReadRef.current = now;
     setRead(tapeRead(rows, summary));
   }, [rows, summary]);
 
@@ -713,21 +719,45 @@ const LiveTape = () => {
 
   // ---- virtualization ----------------------------------------------------------
   const scrollRef = useRef<HTMLDivElement>(null);
+  const tableRef = useRef<HTMLTableElement>(null);
   const firstRowRef = useRef<HTMLTableRowElement>(null);
   const rafRef = useRef<number | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportH, setViewportH] = useState(640);
   const [rowH, setRowH] = useState(ROW_H_ESTIMATE);
+  /** Columns whose right edge sits past the scroll box — silently amputated
+      without this, since the h-scrollbar is 640px down at the foot of the tape. */
+  const [clipped, setClipped] = useState(0);
+
+  // One read of the scroll box serves both axes: the vertical size drives the
+  // virtualization window, the horizontal drives the clipped-column count.
+  const measureBox = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setViewportH(el.clientHeight);
+    const right = el.getBoundingClientRect().right;
+    let past = 0;
+    el.querySelectorAll('thead tr:last-child th').forEach(th => {
+      if (th.getBoundingClientRect().right > right + 1) past++;
+    });
+    setClipped(past);
+  }, []);
 
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const measure = () => setViewportH(el.clientHeight);
-    measure();
-    const ro = new ResizeObserver(measure);
+    measureBox();
+    // The TABLE has to be observed as well as the box. The box keeps its size
+    // while the table's intrinsic width changes — a column set toggling, or the
+    // first prints arriving and widening every cell — and the clipped count is a
+    // fact about the table, not the box.
+    const ro = new ResizeObserver(measureBox);
     ro.observe(el);
+    if (tableRef.current) ro.observe(tableRef.current);
     return () => ro.disconnect();
-  }, []);
+  }, [measureBox]);
+
+  useEffect(measureBox, [colCount, measureBox]);
 
   // Self-correct the row height from the first mounted row so the padding math
   // matches real layout regardless of borders, fonts, or content. Only re-measures
@@ -751,6 +781,7 @@ const LiveTape = () => {
     rafRef.current = requestAnimationFrame(() => {
       rafRef.current = null;
       if (scrollRef.current) setScrollTop(scrollRef.current.scrollTop);
+      measureBox();
     });
   };
 
@@ -861,6 +892,14 @@ const LiveTape = () => {
         />
         <ColumnChooser visible={visibleCols} onToggle={toggleCol} onReset={resetCols} />
 
+        {/* Says out loud what the viewport is cutting off. Without it the only
+            hint is a horizontal scrollbar at the foot of a 640px tape. */}
+        {clipped > 0 && (
+          <span className="font-mono text-label text-warn uppercase tracking-wider tnum">
+            {clipped} {clipped === 1 ? 'column' : 'columns'} off-screen — scroll or hide some
+          </span>
+        )}
+
         <span className="ml-auto font-mono text-label text-textMuted uppercase tracking-wider tnum">
           {view.length} of {base.length} prints · {marked.size} marked
         </span>
@@ -877,11 +916,24 @@ const LiveTape = () => {
 
       {/* Tape + concentration */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-stretch">
-        <Panel title="Options Tape" subtitle={paused ? 'rendering paused — tape still collecting' : 'streaming prints — newest first'} flush className="xl:col-span-9 min-w-0">
+        {/* The tape takes the whole row until the rail can sit beside it WITHOUT
+            amputating columns. At xl it had 9 of 12 — 918px for a 1305px table —
+            so seven columns sat off-screen behind a scrollbar 640px down the page.
+            1840px is where 9/12 of the content width finally clears 1305, so the
+            handoff is monotonic: it used to go through `2xl` (1536), where 1600px
+            hid four columns while 1440px hid none. */}
+        <Panel title="Options Tape" subtitle={paused ? 'rendering paused — tape still collecting' : 'streaming prints — newest first'} flush className="xl:col-span-12 min-[1840px]:col-span-9 min-w-0">
           {/* FIXED height (not max-h) — the tape never grows or shrinks as prints
               arrive; it always scrolls inside a stable 640px viewport. */}
+          <div className="relative">
+            {clipped > 0 && (
+              <span
+                aria-hidden
+                className="pointer-events-none absolute top-0 bottom-3 right-0 w-12 z-20 bg-gradient-to-l from-panel to-transparent"
+              />
+            )}
           <div ref={scrollRef} onScroll={onScroll} className="overflow-auto h-[640px]">
-            <table className="w-full border-collapse min-w-[640px]">
+            <table ref={tableRef} className="w-full border-collapse min-w-[640px]">
               <thead className="sticky top-0 z-10">
                 <tr className="bg-panelRaised">
                   <th rowSpan={2} className="px-2 py-1.5 text-left font-mono text-label font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle w-24">
@@ -980,10 +1032,12 @@ const LiveTape = () => {
               </tbody>
             </table>
           </div>
+          </div>
         </Panel>
 
-        {/* Right rail: concentration summary on top, dark-pool feed below */}
-        <div className="xl:col-span-3 min-w-0 flex flex-col gap-4 h-full min-h-0">
+        {/* Right rail: concentration summary on top, dark-pool feed below.
+            Stacks under the tape until 1840px — see the Panel above. */}
+        <div className="xl:col-span-12 min-[1840px]:col-span-3 min-w-0 flex flex-col gap-4 h-full min-h-0">
           <Panel title="Top Tickers" subtitle="session premium concentration" className="w-full">
             <div className="flex flex-col gap-2.5">
               {topTickers.length === 0 && (

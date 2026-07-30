@@ -272,7 +272,7 @@ const MetaorderRow = ({ m }: { m: Metaorder }) => {
       </div>
 
       {/* inferred readings */}
-      <div className="grid grid-cols-3 lg:grid-cols-6 gap-x-4 gap-y-2.5 pt-0.5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-4 gap-y-2.5 pt-0.5">
         <Stat label="Inferred total" value={fmtUsd(m.estTotalUsd)} tone={tone} />
         <Stat label="Time left" value={`${m.minsRemainingLo}–${m.minsRemainingHi}m`} tone={urgencyTone[m.urgency]} />
         <Stat label="Flow half-life" value={`${m.halfLifeMin}m`} />

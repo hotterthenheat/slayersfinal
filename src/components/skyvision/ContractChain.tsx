@@ -103,7 +103,7 @@ const ContractChain = ({ data, selected, onSelect }: ContractChainProps) => {
         <div className="px-3 py-1.5 font-mono text-micro font-semibold uppercase tracking-widest text-bear">Puts</div>
       </div>
 
-      <div className="overflow-y-auto flex-1 min-h-0 max-h-[560px] xl:max-h-none">
+      <div className="overflow-y-auto flex-1 min-h-0 max-h-[max(560px,62vh)] xl:max-h-none">
         {rows.map((row, i) => (
           <div key={row.strike}>
             <div className="grid grid-cols-2 border-b border-borderSubtle/50 divide-x divide-borderSubtle">

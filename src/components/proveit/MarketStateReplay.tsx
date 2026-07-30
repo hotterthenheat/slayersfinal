@@ -101,7 +101,7 @@ const CalibrationPlot = ({ view }: { view: StateReplayView }) => {
     <>
       {/* calibration scatter keeps its 1:1 aspect (the y=x diagonal must stay
           diagonal), so it's capped and centered rather than stretched full-width */}
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-[250px] mx-auto block" style={{ height: H }} role="img" aria-label="Probability calibration — predicted target rate versus realized frequency">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-[340px] mx-auto block" style={{ height: H }} role="img" aria-label="Probability calibration — predicted target rate versus realized frequency">
         {/* frame */}
         <line x1={pad} y1={H - pad} x2={W - 6} y2={H - pad} className="stroke-borderMuted" strokeWidth={1} />
         <line x1={pad} y1={8} x2={pad} y2={H - pad} className="stroke-borderMuted" strokeWidth={1} />
@@ -160,8 +160,13 @@ const EdgeDecayChart = ({ view }: { view: StateReplayView }) => {
   const [h, setH] = useState<{ p: (typeof pts)[number]; x: number; y: number } | null>(null);
   return (
     <>
-      {/* edge-decay is a time series — fill the panel width like the app's other bar charts */}
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none" role="img" aria-label="Edge decay — net edge captured as the trade is held longer">
+      {/* edge-decay is a time series — fill the panel width like the app's other
+          bar charts. The stretch that buys that (preserveAspectRatio="none" with
+          a fixed height) scales x ~2.9x and y 1x, which is correct for the paths
+          and wrong for glyphs, so the axis captions are HTML siblings positioned
+          over the plot rather than <text> inside it. */}
+      <div className="relative" style={{ height: H }}>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-full" preserveAspectRatio="none" role="img" aria-label="Edge decay — net edge captured as the trade is held longer">
         <line x1={pad} y1={H - pad} x2={W - 6} y2={H - pad} className="stroke-borderMuted" strokeWidth={1} />
         <line x1={pad} y1={8} x2={pad} y2={H - pad} className="stroke-borderMuted" strokeWidth={1} />
         {/* cumulative target / stop as faint context */}
@@ -184,13 +189,17 @@ const EdgeDecayChart = ({ view }: { view: StateReplayView }) => {
             />
           </g>
         ))}
-        <text x={pad} y={H - 6} fontSize={10} fill={MUTED} fontFamily="monospace">
-          bars held →
-        </text>
-        <text x={6} y={14} fontSize={10} fill={MUTED} fontFamily="monospace">
-          net edge ↑
-        </text>
       </svg>
+        <span
+          className="pointer-events-none absolute font-mono text-micro"
+          style={{ color: MUTED, left: pad, bottom: 2 }}
+        >
+          bars held →
+        </span>
+        <span className="pointer-events-none absolute left-1.5 top-1 font-mono text-micro" style={{ color: MUTED }}>
+          net edge ↑
+        </span>
+      </div>
       {h && (
         <HoverReadout x={h.x} y={h.y}>
           <div className="font-mono text-micro uppercase tracking-widest text-textMuted">{h.p.bar} bars held</div>
@@ -286,7 +295,7 @@ const MarketStateReplay = ({ snapshot }: MarketStateReplayProps) => {
         <p className="mt-1.5 font-mono text-label text-textSecondary tnum">{view.receipts}</p>
       </Panel>
 
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-stretch">
         {/* Comparable sessions + outcome distribution */}
         <Panel
           title={
@@ -327,9 +336,14 @@ const MarketStateReplay = ({ snapshot }: MarketStateReplayProps) => {
           }
           subtitle="the 8 factors today is matched on"
           className="xl:col-span-5"
+          /* The row stretches, so this panel is as tall as the analog list beside
+             it. Flex the body and pin the footnote to the bottom: the slack lands
+             between the axes and their explanation instead of as ~200px of dead
+             rail hanging off the bottom of the column. */
+          bodyClassName="flex flex-col"
         >
           <StateFingerprint view={view} />
-          <p className="mt-3 font-mono text-micro text-textMuted leading-relaxed">
+          <p className="mt-auto pt-3 font-mono text-micro text-textMuted leading-relaxed">
             Similarity is Euclidean distance over these eight axes. <span className="text-textPrimary">Live</span> factors read off the chain
             and tape; the rest are the macro context — breadth, rates, news, session phase — that rounds out the eight-axis
             fingerprint.
@@ -338,7 +352,7 @@ const MarketStateReplay = ({ snapshot }: MarketStateReplayProps) => {
       </div>
 
       {/* Calibration & edge decay */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-stretch">
         <Panel
           title={
             <span className="inline-flex items-center gap-1.5">

@@ -410,19 +410,19 @@ const Compass = () => {
         })}
       </div>
 
-      {/* Controls (browse mode only) — blurb + count, then lifecycle-state
-          filter, view toggle and ticker universe filter */}
+      {/* Controls (browse mode only) — one row: what this scan is, how much it
+          found, and the two controls that act on it.
+          This used to be two stacked rows, which put a third full-width control
+          strip under the mode switch and the scanner tabs. Three same-weight
+          strips in the top 260px read as three levels of tabs; the view toggle
+          belongs beside the count it re-renders, not on a rail of its own. */}
       {!inReviewMode && (
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-3 flex-wrap">
-            <span className="font-mono text-label text-textMuted uppercase tracking-wider">{activeScanner.blurb}</span>
+        <div className="flex items-center gap-x-3 gap-y-2 flex-wrap">
+          <span className="font-mono text-label text-textMuted uppercase tracking-wider">{activeScanner.blurb}</span>
             <span className="ml-auto font-mono text-label text-textMuted uppercase tracking-widest tnum">
               Showing {filteredShown} of {data.totalFound} setups · scan {lastScanAt} · 10s
             </span>
-          </div>
-
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="ml-auto inline-flex items-center gap-2">
+            <span className="inline-flex items-center gap-2">
               <SegmentedControl
                 ariaLabel="Setups view"
                 options={SETUPS_VIEW_OPTIONS}
@@ -466,7 +466,6 @@ const Compass = () => {
                 )}
               </div>
             </span>
-          </div>
         </div>
       )}
 
@@ -524,7 +523,7 @@ const Compass = () => {
         </div>
 
         {/* RIGHT COLUMN */}
-        <div className="xl:col-span-5 min-w-0 flex flex-col">
+        <div className="xl:col-span-5 min-w-0 flex flex-col xl:sticky xl:top-4 xl:self-start">
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={inReviewMode ? 'chain' : 'preview'}

@@ -273,6 +273,7 @@ const Stocks = () => {
           {
             key: 'compare',
             header: 'Cmp',
+            help: 'Cmp' as const,
             width: '40px',
             render: (p: StockPick) => (
               <button
@@ -330,6 +331,7 @@ const Stocks = () => {
     {
       key: 'beta',
       header: 'β',
+      help: 'β',
       align: 'right',
       sortValue: p => betaOf(p.ticker) ?? 0,
       render: p => {
@@ -340,6 +342,7 @@ const Stocks = () => {
     {
       key: 'trend',
       header: '30d RS',
+      help: '30d RS',
       render: p => <Sparkline data={p.trend} up={p.trend[p.trend.length - 1] >= p.trend[0]} width={72} height={22} />,
     },
     {

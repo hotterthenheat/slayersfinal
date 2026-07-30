@@ -117,6 +117,10 @@ const ProveIt = () => {
         <StatCard label="Model composite" value={`${composite}%`} sub="engines' blended hit rate" tone={composite >= 60 ? 'bull' : 'neutral'} />
       </MetricGrid>
 
+      {/* Start-aligned on purpose: the Dealer surface beside this is `xl:sticky`
+          with a fixed-height canvas, and a sticky item that stretches to the row
+          height cannot pin. Its 62px of slack is the sticky behaviour, not a
+          stranded rail — hence `xl:self-start` on that panel. */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
         <Panel
           title={
@@ -169,7 +173,7 @@ const ProveIt = () => {
             </span>
           }
           subtitle="net exposure — strikes × expiries × GEX"
-          className="xl:col-span-5"
+          className="xl:col-span-5 xl:sticky xl:top-4 xl:self-start"
           bodyClassName="p-0"
         >
           <Surface3D snapshot={marketData} height={352} />

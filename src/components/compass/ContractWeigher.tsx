@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import SegmentedControl from '../ui/SegmentedControl';
 import {
   Search,
   Scale,
@@ -319,23 +320,15 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
 
             {/* Side */}
             <Field label="Side">
-              <div className="inline-flex w-full rounded-md overflow-hidden border border-borderSubtle font-mono text-caption">
-                {(['C', 'P'] as const).map(r => (
-                  <button
-                    key={r}
-                    onClick={() => setRight(r)}
-                    className={`flex-1 px-2.5 py-1.5 font-semibold transition-colors ${
-                      right === r
-                        ? r === 'C'
-                          ? 'bg-bull text-ink'
-                          : 'bg-bear text-white'
-                        : 'text-textMuted hover:text-textSecondary'
-                    }`}
-                  >
-                    {r === 'C' ? 'CALL' : 'PUT'}
-                  </button>
-                ))}
-              </div>
+              <SegmentedControl
+                  ariaLabel="Contract right"
+                  options={[
+                    { value: 'C', label: 'Call' },
+                    { value: 'P', label: 'Put' },
+                  ]}
+                  value={right}
+                  onChange={setRight}
+                />
             </Field>
 
             {/* Strike */}

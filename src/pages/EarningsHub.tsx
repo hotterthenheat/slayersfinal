@@ -385,6 +385,7 @@ const EarningsHub = () => {
           {
             key: 'compare',
             header: 'Cmp',
+            help: 'Cmp' as const,
             width: '44px',
             render: (e: EarningsEvent) => (
               <button
@@ -481,6 +482,7 @@ const EarningsHub = () => {
     {
       key: 'ivr',
       header: 'IVR',
+      help: 'IVR',
       align: 'right',
       sortValue: e => e.ivRank,
       render: e => <span className="font-mono text-caption text-textSecondary tnum leading-4">{e.ivRank}</span>,
@@ -767,7 +769,7 @@ const EarningsHub = () => {
           onRowClick={e => setSelectedTicker(prev => (prev === e.ticker ? null : e.ticker))}
           selectedKey={selectedTicker}
           initialSort={{ key: 'date', dir: 'asc' }}
-          maxHeight="560px"
+          maxHeight="max(560px, 62vh)"
           emptyText="No prints match these filters"
         />
       </Panel>
