@@ -16,7 +16,7 @@ import { aggregateCandles, tfMinutes, type Timeframe } from '../../data/timefram
 import { candleTheme } from '../gex/candleTheme';
 import ChartLegend from '../ui/ChartLegend';
 import TimeframePicker from '../ui/TimeframePicker';
-import { CALL_WALL, PUT_WALL, FLIP, DARK_POOL, FOCUS, SPOT } from '../gex/palette';
+import { CALL_WALL, PUT_WALL, FLIP, DARK_POOL, FOCUS, SPOT, MUTED_INK } from '../gex/palette';
 
 // Slayer signature candles (holo-silver/purple) — direction reads in colour so
 // it pops against the gold liquidity book without duplicating the green/red the
@@ -199,7 +199,7 @@ const LiquidityHeatmapChart = ({
       autoSize: true,
       layout: {
         background: { color: 'transparent' },
-        textColor: '#7d7d7d',
+        textColor: MUTED_INK,
         fontFamily: 'JetBrains Mono, monospace',
         fontSize: 10,
         attributionLogo: false,
@@ -321,7 +321,7 @@ const LiquidityHeatmapChart = ({
       if (roDepthRef.current) {
         const label = depth >= 0.65 ? 'deep shelf' : depth >= 0.3 ? 'moderate' : depth > 0.06 ? 'thin' : 'open';
         roDepthRef.current.textContent = `depth ${Math.round(depth * 100)}% · ${label}`;
-        roDepthRef.current.style.color = depth >= 0.65 ? '#F0C45C' : depth >= 0.3 ? '#C89B3C' : '#7d7d7d';
+        roDepthRef.current.style.color = depth >= 0.65 ? '#F0C45C' : depth >= 0.3 ? '#C89B3C' : MUTED_INK;
       }
       el.style.opacity = '1';
     });

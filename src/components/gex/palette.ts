@@ -19,3 +19,10 @@ export const FOCUS = '#E4E8F4'; // holo silver — what the user clicked (select
 // to color a line that isn't a wall.
 export const BULL = '#30D158'; // up / support (Apple system green)
 export const BEAR = '#FF3B30'; // down (hot red)
+
+// Muted ink for SVG / JS-API chart consumers — axis ticks, reference-line
+// labels, forward markers. Matches the `textMuted` Tailwind token, which was
+// lifted #6b6b6b → #7d7d7d precisely so sub-12px labels clear AA (the old value
+// measured ~3.7:1). Exported so a chart that can't reach a Tailwind class can't
+// fork the old value back in.
+export const MUTED_INK = '#7d7d7d';

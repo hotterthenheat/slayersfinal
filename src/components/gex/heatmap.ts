@@ -225,18 +225,75 @@ const TINT_MAX = 0.5;
 
 const ramp = RAMPS[HEAT_MODE as keyof typeof RAMPS];
 
+// The two inks a heat cell can wear, and the WCAG relative-luminance formula
+// used to choose between them. `perceivedLuminance` above is the cheap
+// YIQ approximation — fine for deciding a tint, wrong for deciding legibility.
+const INK_DARK = '#0a0a0a';
+const INK_LIGHT = '#ededed';
+const INK_DARK_RGB: RGB = [10, 10, 10];
+const INK_LIGHT_RGB: RGB = [237, 237, 237];
+
+const relLuminance = ([r, g, b]: RGB): number => {
+  const lin = (v: number) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+};
+
+const contrastRatio = (a: RGB, b: RGB): number => {
+  const la = relLuminance(a);
+  const lb = relLuminance(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+};
+
+const AA = 4.5;
+const mix = ([r, g, b]: RGB, [tr, tg, tb]: RGB, k: number): RGB => [
+  Math.round(r + (tr - r) * k),
+  Math.round(g + (tg - g) * k),
+  Math.round(b + (tb - b) * k),
+];
+
+/**
+ * Choose the ink, and where the fill sits in the crossover band — mid-tones
+ * where NEITHER ink clears 4.5:1 (a mid green tops out around 4.46) — nudge the
+ * fill the short way until one does.
+ *
+ * The old code acknowledged this band and shipped a text-shadow instead, which
+ * does not make 11px digits legible. Pushing the fill toward whichever pole its
+ * best ink already prefers costs a few percent of saturation in a narrow slice
+ * of the ramp and buys a readable number, which is the point of the cell.
+ */
+function inkFor(fill: RGB): { bg: RGB; ink: string; dark: boolean } {
+  let bg = fill;
+  for (let step = 0; step <= 12; step++) {
+    const dRatio = contrastRatio(INK_DARK_RGB, bg);
+    const lRatio = contrastRatio(INK_LIGHT_RGB, bg);
+    const dark = dRatio >= lRatio;
+    if (Math.max(dRatio, lRatio) >= AA) return { bg, ink: dark ? INK_DARK : INK_LIGHT, dark };
+    // Dark ink wants a lighter cell; light ink wants a darker one.
+    bg = mix(fill, dark ? INK_LIGHT_RGB : INK_DARK_RGB, (step + 1) * 0.04);
+  }
+  // Unreachable for any real ramp stop, but never return an unreadable cell.
+  return { bg, ink: contrastRatio(INK_DARK_RGB, bg) >= contrastRatio(INK_LIGHT_RGB, bg) ? INK_DARK : INK_LIGHT, dark: true };
+}
+
 export function heatCellStyle(value: number, maxAbs: number): CSSProperties {
   const t = heatT(value, maxAbs);
 
   if (ramp) {
     const rgb = rampColor(value >= 0 ? ramp.pos : ramp.neg, t);
-    // Flip to dark ink once the cell is bright enough to carry it (0.5, not 0.55,
-    // so saturated greens — which read far better on dark ink — get it). A 1px
-    // shadow lifts legibility on the mid-tone cells where no single ink hits AA.
-    const dark = perceivedLuminance(rgb) > 0.5;
+    // Pick the ink that actually wins the contrast, rather than guessing from a
+    // brightness threshold. The old rule flipped at perceivedLuminance > 0.5,
+    // and a saturated green like rgb(42,177,79) computes 0.497 — it missed the
+    // flip by 0.003, kept the light ink and landed at 2.4:1. That inverted the
+    // whole panel: the strongest cells, the ones a reader most wants, were the
+    // least legible while dim cells sat above 12:1. Same two candidates, chosen
+    // by measurement.
+    const { bg, ink, dark } = inkFor(rgb);
     return {
-      backgroundColor: `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`,
-      color: dark ? '#0a0a0a' : '#ededed',
+      backgroundColor: `rgb(${bg[0]},${bg[1]},${bg[2]})`,
+      color: ink,
       textShadow: dark ? '0 1px 1px rgba(255,255,255,0.3)' : '0 1px 1px rgba(0,0,0,0.6)',
     };
   }

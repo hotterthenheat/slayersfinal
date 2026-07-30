@@ -14,7 +14,7 @@ import StatCard from '../ui/StatCard';
 import MetricGrid from '../ui/MetricGrid';
 import SignalBadge from '../ui/SignalBadge';
 import type { Tone } from '../ui/tones';
-import { BULL, BEAR, SPOT } from '../gex/palette';
+import { BULL, BEAR, SPOT, MUTED_INK } from '../gex/palette';
 
 interface MarketStateReplayProps {
   snapshot: MarketSnapshot;
@@ -44,7 +44,7 @@ const SERIES = SPOT;
 const GREEN = BULL;
 const RED = BEAR;
 const AMBER = '#FF9500';
-const MUTED = '#6b6b6b';
+const MUTED = MUTED_INK;
 
 /** Stacked outcome distribution — target (foil) / stop (red) / neither (dim). */
 const OutcomeBar = ({ view }: { view: StateReplayView }) => (

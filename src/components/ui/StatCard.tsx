@@ -1,6 +1,7 @@
 import React from 'react';
 import { toneText, type Tone } from './tones';
 import { titleOf } from './truncation';
+import { preserveGreek } from './greek';
 
 interface StatCardProps {
   label: string;
@@ -22,7 +23,7 @@ const StatCard = ({ label, value, sub, tone = 'neutral', emphasis = false, class
       {/* Label and sub-line truncate — carry the text as a native title so a
           clipped metric is still readable. */}
       <div title={label} className="font-mono text-label uppercase tracking-widest text-textSecondary truncate">
-        {label}
+        {preserveGreek(label)}
       </div>
       <div
         className={`mt-1.5 font-mono text-lg font-semibold leading-none tnum ${

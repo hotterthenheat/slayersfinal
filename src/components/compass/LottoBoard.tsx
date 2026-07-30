@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { preserveGreek } from '../ui/greek';
 import { Gavel, Ticket, AlertTriangle, Clock, ShieldAlert } from 'lucide-react';
 import { buildMocRead } from '../../core/fracture';
 import { weighContracts, type WeighedContract } from '../../core/contractScore';
@@ -191,11 +192,11 @@ const LottoRow = ({ c, best }: { c: WeighedContract; best: boolean }) => {
         <div className="mt-1 font-mono text-label text-textMuted truncate">{c.edge}</div>
       </div>
       <div className="hidden sm:flex flex-col items-end shrink-0 w-14">
-        <span className="font-mono text-micro uppercase tracking-wider text-textMuted">±1σ</span>
+        <span className="font-mono text-micro uppercase tracking-wider text-textMuted">{preserveGreek('±1σ')}</span>
         <span className="font-mono text-caption text-textSecondary tnum">{c.expectedMovePct.toFixed(1)}%</span>
       </div>
       <div className="hidden md:flex flex-col items-end shrink-0 w-16">
-        <span className="font-mono text-micro uppercase tracking-wider text-textMuted">θ/day</span>
+        <span className="font-mono text-micro uppercase tracking-wider text-textMuted">{preserveGreek('θ/day')}</span>
         <span className="font-mono text-caption text-warn tnum">−{c.thetaPerDayPct.toFixed(0)}%</span>
       </div>
       <div className="flex flex-col items-end shrink-0 w-14">

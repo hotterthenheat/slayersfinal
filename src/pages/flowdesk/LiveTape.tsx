@@ -946,7 +946,7 @@ const LiveTape = () => {
                             e.stopPropagation();
                             toggleMark(r.id);
                           }}
-                          className={`transition-colors ${marked.has(r.id) ? 'text-select' : 'text-textMuted/40 hover:text-textSecondary'}`}
+                          className={`-m-1.5 p-1.5 transition-colors ${marked.has(r.id) ? 'text-select' : 'text-textMuted hover:text-textPrimary'}`}
                           aria-label="Track print"
                         >
                           <Bookmark className="w-3 h-3" fill={marked.has(r.id) ? 'currentColor' : 'none'} />

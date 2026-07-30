@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Gauge, Waves, TrendingDown, SlidersHorizontal, ChevronDown } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
-import { BEAR } from '../../components/gex/palette';
+import { BEAR, MUTED_INK } from '../../components/gex/palette';
 import { buildHedgeImpact, type HedgeImpactView, type StressLabel } from '../../data/hedgeimpact';
 import HoverReadout from '../../components/ui/HoverReadout';
 import { svgHoverIndex } from '../../components/ui/svgHover';
@@ -68,7 +68,7 @@ const HexCurve = ({ view }: { view: HedgeImpactView }) => {
       )}
       <path d={line} fill="none" className="stroke-textPrimary" strokeWidth={1.75} />
       {[0, 1, 2, 3].map(m => (
-        <text key={m} x={X(m)} y={12} fontSize={10} fill="#6b6b6b" fontFamily="monospace">{m}%</text>
+        <text key={m} x={X(m)} y={12} fontSize={10} fill={MUTED_INK} fontFamily="monospace">{m}%</text>
       ))}
       {hp && (
         <line x1={X(hp.movePct)} x2={X(hp.movePct)} y1={0} y2={H} stroke="rgba(255,255,255,0.25)" strokeWidth={1} vectorEffect="non-scaling-stroke" />

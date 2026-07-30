@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import EmptyState from './EmptyState';
 import Term from './Term';
+import { preserveGreek } from './greek';
 import type { TermKey } from '../../data/terms';
 
 export interface Column<T> {
@@ -99,7 +100,7 @@ const DataTable = <T,>({
                   {col.align === 'right' && sort?.key === col.key && (
                     sort.dir === 'desc' ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />
                   )}
-                  {col.help ? <Term k={col.help}>{col.header}</Term> : col.header}
+                  {col.help ? <Term k={col.help}>{preserveGreek(col.header)}</Term> : preserveGreek(col.header)}
                   {col.align !== 'right' && sort?.key === col.key && (
                     sort.dir === 'desc' ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />
                   )}

@@ -38,7 +38,7 @@ const LegalLayout = ({ title, intro, sections }: LegalLayoutProps) => (
             href={`#${slug(i)}`}
             className="group inline-flex gap-2 font-mono text-label text-textMuted hover:text-textPrimary transition-colors focus-visible:outline-none focus-visible:text-textPrimary"
           >
-            <span className="tnum text-textMuted/70 group-hover:text-textSecondary">{String(i + 1).padStart(2, '0')}</span>
+            <span className="tnum text-textMuted group-hover:text-textSecondary">{String(i + 1).padStart(2, '0')}</span>
             <span className="capitalize leading-snug">{s.heading}</span>
           </a>
         ))}

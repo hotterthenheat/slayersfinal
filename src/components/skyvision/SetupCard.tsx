@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { preserveGreek } from '../ui/greek';
 import { ChevronDown, Info, AlertTriangle } from 'lucide-react';
 import SignalBadge from '../ui/SignalBadge';
 import GreeksRow from './GreeksRow';
@@ -51,7 +52,7 @@ const SetupCard = ({ setup, expanded, isSelected, isTop, onToggle, onSelect, onO
             </span>
           </span>
           <span className="text-right">
-            <span className="block font-mono text-label text-textMuted uppercase tracking-wider">1σ Move</span>
+            <span className="block font-mono text-label text-textMuted uppercase tracking-wider">{preserveGreek('1σ Move')}</span>
             <span className="font-mono text-caption font-semibold tnum text-textPrimary leading-4">
               ±{setup.expectedMovePct}%
             </span>

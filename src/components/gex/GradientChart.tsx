@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { MUTED_INK } from './palette';
 import SegmentedControl from '../ui/SegmentedControl';
 import { buildGradientField, type GradientField, type GradientMetric } from '../../data/gradientField';
 import { fmtUsd } from '../../data/gex';
@@ -146,7 +147,7 @@ const GradientChart = ({ ticker, revision, levels, height = 260 }: GradientChart
       ctx.moveTo(0, y);
       ctx.lineTo(plotW, y);
       ctx.stroke();
-      ctx.fillStyle = '#7d7d7d';
+      ctx.fillStyle = MUTED_INK;
       ctx.fillText(price.toFixed(2), plotW + 6, Math.min(plotH - 6, Math.max(6, y)));
     }
 
@@ -189,7 +190,7 @@ const GradientChart = ({ ticker, revision, levels, height = 260 }: GradientChart
     ctx.fillText(last.toFixed(2), plotW + 6, ly);
 
     // time axis
-    ctx.fillStyle = '#7d7d7d';
+    ctx.fillStyle = MUTED_INK;
     ctx.textBaseline = 'alphabetic';
     const tTicks = Math.min(5, f.cols - 1);
     for (let i = 0; i <= tTicks; i++) {

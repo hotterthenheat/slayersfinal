@@ -12,7 +12,7 @@ import {
 } from 'lightweight-charts';
 import { candleTheme } from '../gex/candleTheme';
 import ChartLegend from '../ui/ChartLegend';
-import { CALL_WALL, PUT_WALL, FLIP, FOCUS } from '../gex/palette';
+import { CALL_WALL, PUT_WALL, FLIP, FOCUS, MUTED_INK } from '../gex/palette';
 import { SwingPrimitive } from './swingPrimitive';
 import { buildSwingModel, type SwingModel } from '../../data/swingModel';
 import type { Candle } from '../../types/market';
@@ -92,7 +92,7 @@ const SwingMapChart = ({ ticker, spot, revision = 0, height = 300, focusPrice = 
       autoSize: true,
       layout: {
         background: { color: 'transparent' },
-        textColor: '#7d7d7d',
+        textColor: MUTED_INK,
         fontFamily: 'JetBrains Mono, monospace',
         fontSize: 10,
         attributionLogo: false,

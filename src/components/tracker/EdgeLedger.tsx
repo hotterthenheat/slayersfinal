@@ -191,7 +191,7 @@ const EdgeLedger = () => {
         help: 'MAE',
         align: 'right',
         sortValue: t => t.maePct,
-        render: t => <span className="text-bear/80 tnum">{fmtPct(t.maePct)}</span>,
+        render: t => <span className="text-bear font-normal tnum">{fmtPct(t.maePct)}</span>,
       },
       {
         key: 'exit',

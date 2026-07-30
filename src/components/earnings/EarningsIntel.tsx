@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
+import { MUTED_INK } from '../gex/palette';
 import { Target, TrendingDown, Layers, Scale, History, ArrowDownUp, GitBranch } from 'lucide-react';
 import {
   buildEarningsIntel,
@@ -88,7 +89,7 @@ const CrushPath = ({ view }: { view: EarningsIntelView }) => {
       {/* post-print crush zone */}
       <rect x={px} y={0} width={W - px} height={H} fill="rgba(255,149,0,0.05)" />
       {/* post-crush baseline */}
-      <line x1={6} x2={W - 6} y1={baseY} y2={baseY} stroke="#6b6b6b" strokeOpacity={0.6} strokeWidth={1} strokeDasharray="4 3" />
+      <line x1={6} x2={W - 6} y1={baseY} y2={baseY} stroke={MUTED_INK} strokeOpacity={0.6} strokeWidth={1} strokeDasharray="4 3" />
       <text x={8} y={baseY - 4} fontSize={10} className="fill-textMuted" fontFamily="monospace">
         base IV {view.baseIv.toFixed(0)}%
       </text>
@@ -105,7 +106,7 @@ const CrushPath = ({ view }: { view: EarningsIntelView }) => {
       {/* x labels */}
       {pts.map((p, i) =>
         p.day % 2 === 0 || p.phase === 'print' ? (
-          <text key={`l${p.day}`} x={X(i)} y={H - 2} fontSize={10} fill="#6b6b6b" fontFamily="monospace" textAnchor="middle">
+          <text key={`l${p.day}`} x={X(i)} y={H - 2} fontSize={10} fill={MUTED_INK} fontFamily="monospace" textAnchor="middle">
             {p.label}
           </text>
         ) : null

@@ -1,6 +1,7 @@
 import React from 'react';
 import { toneText, type Tone } from './tones';
 import { titleOf } from './truncation';
+import { preserveGreek } from './greek';
 
 interface StatProps {
   /** Micro-caps label above the value. */
@@ -26,7 +27,7 @@ interface StatProps {
 const Stat = ({ label, value, sub, tone = 'neutral', align = 'left', className = '' }: StatProps) => (
   <div className={`inst-surface rounded-md px-2.5 py-2 min-w-0 ${align === 'right' ? 'text-right' : ''} ${className}`}>
     <div title={titleOf(label)} className="font-mono text-micro uppercase tracking-widest text-textMuted truncate">
-      {label}
+      {preserveGreek(label)}
     </div>
     <div title={titleOf(value)} className={`mt-0.5 font-mono text-data font-semibold tnum truncate ${toneText[tone]}`}>
       {value}
