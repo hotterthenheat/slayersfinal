@@ -7,7 +7,7 @@
 ==================================================
 */
 
-import { useState, type MouseEvent } from 'react';
+import { useEffect, useState, type MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowRight, Check, ChevronDown } from 'lucide-react';
@@ -19,13 +19,24 @@ import LiveSections from './LiveSections';
 import TiltBox from './TiltBox';
 import { PILL } from '../../lib/motion';
 
-// Top tabs open the actual products (into the terminal); Pricing stays an
-// on-page anchor.
+/**
+ * Top tabs scroll to the section of THIS page that demonstrates each desk.
+ *
+ * They used to call `launch()` and throw the visitor straight into the terminal.
+ * That made four of the five tabs exits rather than tabs: someone clicking
+ * "Compass" is asking what Compass is, and the answer was being dropped into a
+ * live trading desk before being told anything. It also left the page's own
+ * sections unreachable from the nav, and made the active pill unreachable for
+ * those four (the state was only ever set on the `#` branch).
+ *
+ * The way into the app is the "Launch terminal" button on the right, which is
+ * where a visitor expects it.
+ */
 const NAV_LINKS = [
-  { label: 'Pulse', to: '/pulse' },
-  { label: 'Compass', to: '/compass' },
-  { label: 'Trace', to: '/trace' },
-  { label: 'Pinpoint', to: '/pinpoint' },
+  { label: 'Pulse', to: '#workspace' },
+  { label: 'Compass', to: '#setups' },
+  { label: 'Trace', to: '#live' },
+  { label: 'Pinpoint', to: '#showcase' },
   { label: 'Pricing', to: '#pricing' },
 ];
 
@@ -109,8 +120,12 @@ const FOOTER_COLS = [
   {
     title: 'Access',
     links: [
+      // "Log in / Sign up" used to sit here pointing at /pulse. There is no
+      // auth in the product, so it promised an account flow and silently opened
+      // the terminal — the same thing the line above it does, under a label
+      // that isn't true. Removed rather than relabelled: two entries doing one
+      // job is the other half of the problem.
       { label: 'Launch Terminal', to: '/pulse' },
-      { label: 'Log in / Sign up', to: '/pulse' },
       { label: 'Guide', to: '/guide' },
     ],
   },
@@ -157,18 +172,46 @@ const SmartLink = ({ to, className, children }: { to: string; className: string;
     Clicking a tab glides to its section while a holo pill springs across. */
 const LandingNav = () => {
   const [active, setActive] = useState<string | null>(null);
-  const { launch } = useLaunch();
 
   const handle = (to: string) => (e: MouseEvent) => {
     e.preventDefault();
-    if (to.startsWith('#')) {
-      setActive(to);
-      document.querySelector(to)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    } else {
-      // A product tab opens the actual desk through the launch gate.
-      launch(to);
-    }
+    setActive(to);
+    document.querySelector(to)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
+
+  // The pill follows the page, not the last click. Marking a tab active because
+  // it was clicked is a lie the moment the reader scrolls away from it — and
+  // most people scroll this page rather than click through it, so without this
+  // the pill would sit on a section they left ten screens ago.
+  useEffect(() => {
+    const ids = NAV_LINKS.map(l => l.to);
+    const onScroll = () => {
+      // A section counts as current once its top has passed under the fixed nav.
+      // 100 sits just below where a scrolled-to section comes to rest (84px, the
+      // scroll-margin) — at 80 a section you had just jumped to did not count as
+      // current, so the pill lagged one behind on every click.
+      const line = 100;
+      // Pick the section closest to that line from above, NOT the last one in
+      // NAV_LINKS order: the tabs are ordered by product, the page is ordered by
+      // narrative, and the two do not match. Comparing measured positions keeps
+      // this correct however the nav is reordered.
+      let current: string | null = null;
+      let best = -Infinity;
+      for (const id of ids) {
+        const el = document.querySelector(id);
+        if (!el) continue;
+        const top = el.getBoundingClientRect().top;
+        if (top <= line && top > best) {
+          best = top;
+          current = id;
+        }
+      }
+      setActive(prev => (prev === current ? prev : current));
+    };
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   return (
     <header className="glass fixed top-0 inset-x-0 z-40 border-b border-white/[0.07]">
@@ -272,8 +315,13 @@ const Landing = () => (
           >
             Launch terminal <ArrowRight className="w-4 h-4" />
           </SmartLink>
+          {/* Points at `#live` — the section headed "Not screenshots. The actual
+              panels, printing." It used to point at `#showcase`, which is the
+              charting section, and which the scroll cue directly below already
+              covers. Two affordances that mean different things were doing the
+              same jump; this one now lands on the section its label promises. */}
           <a
-            href="#showcase"
+            href="#live"
             className="pointer-events-auto inline-flex items-center px-5 py-2.5 rounded-md border border-borderMuted bg-canvas/40 font-mono text-data uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-rowHover transition-colors"
           >
             See it live

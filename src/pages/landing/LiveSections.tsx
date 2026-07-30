@@ -299,7 +299,9 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
   const confidence = entering ? setup.confidence : Math.max(4, 100 - setup.confidence);
 
   return (
-    <section className="px-6 md:px-10 py-20 max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
+    // `setups` is the Compass tab's target in the landing nav — this is the
+    // section that shows a setup card in both of its states.
+    <section id="setups" className="px-6 md:px-10 py-20 max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
       <div>
         <SectionKicker>Entries are easy</SectionKicker>
         <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">It calls the exit, too.</h2>
