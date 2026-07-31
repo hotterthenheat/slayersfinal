@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { ROW_INTERACTIVE, interactiveRowProps } from '../../components/ui/interactiveRow';
-import { Bookmark, Check, Pause, Play, Plus, Save, Search, SlidersHorizontal, Trash2, X } from 'lucide-react';
+import { ArrowUp, Bookmark, Check, Pause, Play, Plus, Save, Search, SlidersHorizontal, Trash2, X } from 'lucide-react';
+import { DUR, EASE, PILL } from '../../lib/motion';
 import { useMarketData } from '../../context/MarketDataContext';
 import { enrichPrint, sentimentOf, summarizeTape } from '../../data/flowtape';
 import { buildGexView, fmtUsd } from '../../data/gex';
@@ -24,6 +26,9 @@ const READ_INTERVAL_MS = 8_000;
 // structurally identical so a single measured height drives the scroll math.
 const ROW_H_ESTIMATE = 40;
 const OVERSCAN = 8;
+/** Close enough to the newest print to count as caught up — a couple of pixels
+    of scroll drift shouldn't start hoarding an unread count. */
+const TOP_EPSILON = 24;
 
 const COLS_KEY = 'slayer.livetape.cols.v1';
 const VIEWS_KEY = 'slayer.livetape.views.v1';
@@ -578,6 +583,8 @@ const LiveTape = () => {
   const lastReadRef = useRef(0);
   const rowsRef = useRef<FlowPrint[]>([]);
   rowsRef.current = rows;
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
 
   // Collection never stops — the tape keeps ingesting prints even while paused.
   useEffect(() => {
@@ -585,6 +592,10 @@ const LiveTape = () => {
     const fresh = marketData.tape.map(o => enrichPrint(o, ++idRef.current));
     if (fresh.length === 0) return;
     setRows(prev => [...fresh, ...prev].slice(0, MAX_ROWS));
+    // Reading row 60 while the tape runs, the browser's scroll anchoring holds
+    // your place — which is right, and also why prints pile up above you with
+    // nothing to say so. Count them; the pill below is the way back.
+    if (!atTopRef.current && !pausedRef.current) setUnread(n => n + fresh.length);
   }, [marketData]);
 
   // Persist chooser + saved views
@@ -731,6 +742,12 @@ const LiveTape = () => {
   /** Columns whose right edge sits past the scroll box — silently amputated
       without this, since the h-scrollbar is 640px down at the foot of the tape. */
   const [clipped, setClipped] = useState(0);
+  /** Prints that landed above the reader while they were scrolled into the tape. */
+  const [unread, setUnread] = useState(0);
+  const atTopRef = useRef(true);
+  /** Header height, so the unread pill floats under the column names instead of
+      over them — the header is two rows of variable content, never a fixed 47px. */
+  const [headH, setHeadH] = useState(0);
 
   // One read of the scroll box serves both axes: the vertical size drives the
   // virtualization window, the horizontal drives the clipped-column count.
@@ -738,6 +755,7 @@ const LiveTape = () => {
     const el = scrollRef.current;
     if (!el) return;
     setViewportH(el.clientHeight);
+    setHeadH(el.querySelector('thead')?.getBoundingClientRect().height ?? 0);
     const right = el.getBoundingClientRect().right;
     let past = 0;
     el.querySelectorAll('thead tr:last-child th').forEach(th => {
@@ -783,8 +801,27 @@ const LiveTape = () => {
     if (rafRef.current != null) return;
     rafRef.current = requestAnimationFrame(() => {
       rafRef.current = null;
-      if (scrollRef.current) setScrollTop(scrollRef.current.scrollTop);
+      if (scrollRef.current) {
+        setScrollTop(scrollRef.current.scrollTop);
+        // Back at the newest print means caught up — nothing left unread.
+        const top = scrollRef.current.scrollTop <= TOP_EPSILON;
+        if (top !== atTopRef.current) {
+          atTopRef.current = top;
+          if (top) setUnread(0);
+        }
+      }
       measureBox();
+    });
+  };
+
+  /** Scroll back to the newest print. Also how the unread count is cleared —
+      arriving at the top is what "read" means here. */
+  const jumpToNewest = () => {
+    atTopRef.current = true;
+    setUnread(0);
+    scrollRef.current?.scrollTo({
+      top: 0,
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
     });
   };
 
@@ -793,6 +830,8 @@ const LiveTape = () => {
     if (!paused) {
       if (scrollRef.current) scrollRef.current.scrollTop = 0;
       setScrollTop(0);
+      atTopRef.current = true;
+      setUnread(0);
     }
   }, [paused]);
 
@@ -935,6 +974,34 @@ const LiveTape = () => {
                 className="pointer-events-none absolute top-0 bottom-3 right-0 w-12 z-20 bg-gradient-to-l from-panel to-transparent"
               />
             )}
+            {/* Sits below the sticky header rather than over them — the column
+                names are what you are reading the tape against. */}
+            <AnimatePresence initial={false}>
+              {unread > 0 && (
+                <motion.div
+                  className="pointer-events-none absolute inset-x-0 z-30 flex justify-center"
+                  style={{ top: headH + 8 }}
+                  initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.96, transition: { duration: DUR.fast, ease: EASE } }}
+                  transition={PILL}
+                >
+                  <button
+                    onClick={jumpToNewest}
+                    // Holo, not another panel surface: this floats over live rows
+                    // and has to read as an object above the tape rather than a
+                    // smudge on it — and it is the one silver thing in a field of
+                    // red and green, so it can't be mistaken for a print.
+                    className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full holo-bg pl-2 pr-2.5 py-1 font-mono text-micro font-semibold uppercase tracking-wide text-ink shadow-[0_2px_12px_rgba(0,0,0,0.65)] ring-1 ring-black/40 transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-select active:scale-[0.98]"
+                  >
+                    <ArrowUp className="w-3 h-3" />
+                    <span className="tabular-nums">
+                      {unread > 99 ? '99+' : unread} new {unread === 1 ? 'print' : 'prints'}
+                    </span>
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
           <div ref={scrollRef} onScroll={onScroll} className="overflow-auto h-[640px]">
             <table ref={tableRef} className="w-full border-collapse min-w-[640px]">
               <thead className="sticky top-0 z-10">

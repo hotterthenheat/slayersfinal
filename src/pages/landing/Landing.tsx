@@ -7,7 +7,6 @@
 ==================================================
 */
 
-import { useEffect, useState, type MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowRight, Check, ChevronDown } from 'lucide-react';
@@ -18,6 +17,7 @@ import HeroScene from './HeroScene';
 import LiveSections from './LiveSections';
 import TiltBox from './TiltBox';
 import { PILL } from '../../lib/motion';
+import { useScrollSpy } from '../../hooks/useScrollSpy';
 
 /**
  * Top tabs scroll to the section of THIS page that demonstrates each desk.
@@ -168,50 +168,19 @@ const SmartLink = ({ to, className, children }: { to: string; className: string;
   );
 };
 
+const NAV_TARGETS = NAV_LINKS.map(l => l.to);
+
 /** Flush hairline nav — the terminal's own chrome, not a floating glass bar.
-    Clicking a tab glides to its section while a holo pill springs across. */
+    Clicking a tab glides to its section while a holo pill springs across.
+
+    The pill follows the page, not the last click. Marking a tab active because
+    it was clicked is a lie the moment the reader scrolls away from it — and most
+    people scroll this page rather than click through it. 100 is the detection
+    line: just below where a scrolled-to section comes to rest (84px, the
+    scroll-margin), since at 80 a section you had just jumped to did not count as
+    current and the pill lagged one behind on every click. */
 const LandingNav = () => {
-  const [active, setActive] = useState<string | null>(null);
-
-  const handle = (to: string) => (e: MouseEvent) => {
-    e.preventDefault();
-    setActive(to);
-    document.querySelector(to)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-
-  // The pill follows the page, not the last click. Marking a tab active because
-  // it was clicked is a lie the moment the reader scrolls away from it — and
-  // most people scroll this page rather than click through it, so without this
-  // the pill would sit on a section they left ten screens ago.
-  useEffect(() => {
-    const ids = NAV_LINKS.map(l => l.to);
-    const onScroll = () => {
-      // A section counts as current once its top has passed under the fixed nav.
-      // 100 sits just below where a scrolled-to section comes to rest (84px, the
-      // scroll-margin) — at 80 a section you had just jumped to did not count as
-      // current, so the pill lagged one behind on every click.
-      const line = 100;
-      // Pick the section closest to that line from above, NOT the last one in
-      // NAV_LINKS order: the tabs are ordered by product, the page is ordered by
-      // narrative, and the two do not match. Comparing measured positions keeps
-      // this correct however the nav is reordered.
-      let current: string | null = null;
-      let best = -Infinity;
-      for (const id of ids) {
-        const el = document.querySelector(id);
-        if (!el) continue;
-        const top = el.getBoundingClientRect().top;
-        if (top <= line && top > best) {
-          best = top;
-          current = id;
-        }
-      }
-      setActive(prev => (prev === current ? prev : current));
-    };
-    onScroll();
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
+  const { active, getLinkProps } = useScrollSpy(NAV_TARGETS, { offset: 100 });
 
   return (
     <header className="glass fixed top-0 inset-x-0 z-40 border-b border-white/[0.07]">
@@ -230,8 +199,7 @@ const LandingNav = () => {
             return (
               <motion.a
                 key={l.label}
-                href={l.to}
-                onClick={handle(l.to)}
+                {...getLinkProps(l.to)}
                 whileHover={{ y: -1 }}
                 whileTap={{ scale: 0.98 }}
                 transition={{ type: 'spring', stiffness: 400, damping: 30 }}
