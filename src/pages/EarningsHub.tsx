@@ -787,7 +787,11 @@ const EarningsHub = () => {
           selectedKey={selectedTicker}
           initialSort={{ key: 'date', dir: 'asc' }}
           maxHeight="max(560px, 62vh)"
-          emptyText="No prints match these filters"
+          // "prints" is Trace vocabulary — this desk lists earnings reports, and
+          // it had inherited the flow desk's empty state verbatim. Every other
+          // table in the app names its own object (contracts, names, setups,
+          // alternatives); this was the one that named someone else's.
+          emptyText="No reports match these filters"
         />
       </Panel>
 
