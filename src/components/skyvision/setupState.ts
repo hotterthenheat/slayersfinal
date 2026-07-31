@@ -48,9 +48,12 @@ export interface StateMeta {
   hint: string;
 }
 
-// Lifecycle is a PROCESS, not a direction — it uses a neutral/selection language
-// so green & red stay reserved for market direction (call/put, bull/bear). Silver
-// (select) = primed/live, grey = dormant/faded; only the live state pulses.
+// THE CHROME TONE RULE, stated once for the whole desk. Green & red are the
+// market's own language (call/put, bull/bear, a price that moved), so nothing
+// that is merely a PROCESS may borrow them — not this lifecycle, not a verdict
+// (see ./verdict.ts), not a status pill. Process states speak silver/amber/grey:
+// select = primed or live, warn = caution, neutral = dormant or faded. Only the
+// live state pulses. A verdict that renders green is this rule being broken.
 export const STATE_META: Record<SetupState, StateMeta> = {
   WAITING: { tone: 'neutral', pulse: false, rank: 1, hint: 'Score present, no trigger yet — still building' },
   ARMED: { tone: 'select', pulse: false, rank: 2, hint: 'Entry conditions met — no trigger fired yet' },

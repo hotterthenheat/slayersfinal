@@ -1,0 +1,189 @@
+/*
+==================================================
+  SLAYER TERMINAL - SITE FOOTER
+  One footer, two densities. `full` is the marketing
+  sitemap the landing page ends on; `compact` is the
+  single bar the terminal shell can carry without
+  stealing height from a desk. Both close on the same
+  legal line, so the disclaimer is never a page the
+  visitor has to go looking for.
+==================================================
+*/
+
+import { Link } from 'react-router-dom';
+import { useLaunch } from './LaunchTransition';
+
+const LEGAL_LINKS = [
+  { label: 'Disclaimer', to: '/legal/disclaimer' },
+  { label: 'Terms', to: '/legal/terms' },
+  { label: 'Privacy', to: '/legal/privacy' },
+];
+
+const FOOTER_COLS = [
+  {
+    title: 'Products',
+    links: [
+      { label: 'Pulse', to: '/pulse' },
+      { label: 'Compass', to: '/compass' },
+      { label: 'Trace', to: '/trace' },
+      { label: 'Pinpoint', to: '/pinpoint' },
+      { label: 'Prove It', to: '/prove-it' },
+      { label: 'Stocks', to: '/stocks' },
+      { label: 'News', to: '/news' },
+      { label: 'Earnings Hub', to: '/earnings' },
+      { label: 'Tracker', to: '/tracker' },
+    ],
+  },
+  {
+    title: 'Company',
+    links: [
+      { label: 'Pricing', to: '#pricing' },
+      { label: 'FAQ', to: '#faq' },
+      { label: 'Community', to: '/community' },
+      { label: 'Feedback', to: '/community/feedback' },
+      { label: 'Contact', to: 'mailto:info@slayerterminal.com' },
+    ],
+  },
+  {
+    title: 'Access',
+    links: [
+      // "Log in / Sign up" used to sit here pointing at /pulse. There is no
+      // auth in the product, so it promised an account flow and silently opened
+      // the terminal — the same thing the line above it does, under a label
+      // that isn't true. Removed rather than relabelled: two entries doing one
+      // job is the other half of the problem.
+      { label: 'Launch Terminal', to: '/pulse' },
+      { label: 'Guide', to: '/guide' },
+    ],
+  },
+  { title: 'Legal', links: LEGAL_LINKS },
+];
+
+/** Anchor / route / mailto — one link component so columns stay declarative.
+    Links into the terminal play the launch gate instead of jumping. */
+const SmartLink = ({ to, className, children }: { to: string; className: string; children: React.ReactNode }) => {
+  const { launch } = useLaunch();
+  if (to === '/pulse') {
+    return (
+      <a
+        href={to}
+        className={className}
+        onClick={e => {
+          e.preventDefault();
+          launch(to);
+        }}
+      >
+        {children}
+      </a>
+    );
+  }
+  return to.startsWith('/') ? (
+    <Link to={to} className={className}>
+      {children}
+    </Link>
+  ) : (
+    <a href={to} className={className}>
+      {children}
+    </a>
+  );
+};
+
+/** The caret is the site's signature, but a permanent blink inside a working
+    desk competes with the data, so the compact bar wears the wordmark still. */
+const Wordmark = ({ caret }: { caret: boolean }) => (
+  <span className="font-mono text-data font-bold text-textPrimary">
+    <span className="text-textMuted">&gt; </span>slayer_terminal
+    {caret && (
+      <span className="inline-block w-[6px] h-[12px] ml-1 bg-textPrimary align-middle animate-cursor-blink" />
+    )}
+  </span>
+);
+
+const COPYRIGHT = '© 2026 Slayer Terminal · Compass · Pinpoint';
+const DISCLAIMER = 'For informational purposes only. Not investment advice.';
+
+interface SiteFooterProps {
+  /** `compact` drops the sitemap: one bar, wordmark and legal line only. */
+  variant?: 'full' | 'compact';
+}
+
+const SiteFooter = ({ variant = 'full' }: SiteFooterProps) => {
+  if (variant === 'compact') {
+    return (
+      <footer className="border-t border-borderSubtle">
+        <div className="px-4 lg:px-6 py-4 flex flex-wrap items-center gap-x-5 gap-y-2">
+          <Wordmark caret={false} />
+          <span className="font-mono text-micro uppercase tracking-wider text-textMuted">{COPYRIGHT}</span>
+          <span className="font-mono text-micro tracking-wide text-textMuted">{DISCLAIMER}</span>
+          <span className="flex items-center gap-4 ml-auto">
+            {LEGAL_LINKS.map(l => (
+              <SmartLink
+                key={l.label}
+                to={l.to}
+                className="font-mono text-micro uppercase tracking-wider text-textMuted hover:text-textSecondary transition-colors"
+              >
+                {l.label}
+              </SmartLink>
+            ))}
+          </span>
+        </div>
+      </footer>
+    );
+  }
+
+  return (
+    <footer className="border-t border-borderSubtle">
+      <div className="px-6 md:px-10 py-14 max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-6 gap-10">
+        <div className="col-span-2">
+          <Wordmark caret />
+          <p className="mt-3 text-caption text-textSecondary leading-relaxed max-w-[36ch]">
+            The options terminal. Compass finds the setup, Pinpoint reads the flow.
+          </p>
+          <a
+            href="https://x.com/JoinSlayer"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-4 inline-flex items-center gap-2 font-mono text-label text-textSecondary hover:text-textPrimary transition-colors"
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5" aria-hidden="true">
+              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+            </svg>
+            @JoinSlayer
+          </a>
+        </div>
+        {FOOTER_COLS.map(col => (
+          <div key={col.title}>
+            <span className="font-mono text-micro font-bold uppercase tracking-widest text-textMuted">
+              {col.title}
+            </span>
+            <ul className="mt-3.5 flex flex-col gap-2.5">
+              {col.links.map(l => (
+                <li key={l.label}>
+                  <SmartLink
+                    to={l.to}
+                    className="text-caption text-textSecondary hover:text-textPrimary transition-colors"
+                  >
+                    {l.label}
+                  </SmartLink>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+      <div className="border-t border-borderSubtle/60">
+        <div className="px-6 md:px-10 py-5 max-w-6xl mx-auto flex flex-col md:flex-row gap-2 md:items-center">
+          <span className="font-mono text-micro uppercase tracking-wider text-textMuted">{COPYRIGHT}</span>
+          <SmartLink
+            to="/legal/disclaimer"
+            className="md:ml-auto font-mono text-micro tracking-wide text-textMuted hover:text-textSecondary transition-colors"
+          >
+            {DISCLAIMER}
+          </SmartLink>
+        </div>
+      </div>
+    </footer>
+  );
+};
+
+export default SiteFooter;

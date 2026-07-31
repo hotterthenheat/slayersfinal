@@ -12,6 +12,7 @@ import { motion } from 'framer-motion';
 import { ArrowRight, Check, ChevronDown } from 'lucide-react';
 import { SEED_IDEAS } from '../../data/community';
 import { useLaunch } from '../../components/layout/LaunchTransition';
+import SiteFooter from '../../components/layout/SiteFooter';
 import { ComparePlans, Faq } from './PricingExtras';
 import HeroScene from './HeroScene';
 import LiveSections from './LiveSections';
@@ -47,11 +48,11 @@ const TIERS = [
     price: '$125',
     period: '/mo',
     features: [
-      'Live dealer positioning — GEX · DEX · VEX',
+      'Dealer positioning · GEX · DEX · VEX',
       'Gamma exposure by strike',
       '0DTE levels & dealer dynamics',
       'Trace + Pulse',
-      'Tracker — setups & trade history',
+      'Tracker · setups & trade history',
       'Real-time Discord chat & alerts',
     ],
     cta: 'Select plan',
@@ -66,10 +67,10 @@ const TIERS = [
     features: [
       'Everything in Pinpoint',
       'Tells you which options to trade',
-      'Volatility Lab — IV surface & expected move',
-      'Contract health scores, live',
-      'Prove It — Monte Carlo, model scoreboard & 3D dealer surface',
-      'Research suite — Stocks, News & Earnings Hub',
+      'Volatility Lab · IV surface & expected move',
+      'Contract health scores',
+      'Prove It · Monte Carlo, model scoreboard & 3D dealer surface',
+      'Research suite · Stocks, News & Earnings Hub',
     ],
     cta: 'Select plan',
     to: '/pulse',
@@ -81,7 +82,7 @@ const TIERS = [
     price: 'Custom',
     period: 'talk to us',
     features: [
-      'Everything in Compass — forever',
+      'Everything in Compass · forever',
       'One payment, no recurring billing',
       'Private 1-on-1 onboarding',
       'Early beta access to new tools',
@@ -89,53 +90,6 @@ const TIERS = [
     cta: 'Contact us',
     to: 'mailto:info@slayerterminal.com',
     featured: false,
-  },
-];
-
-const FOOTER_COLS = [
-  {
-    title: 'Products',
-    links: [
-      { label: 'Pulse', to: '/pulse' },
-      { label: 'Compass', to: '/compass' },
-      { label: 'Trace', to: '/trace' },
-      { label: 'Pinpoint', to: '/pinpoint' },
-      { label: 'Prove It', to: '/prove-it' },
-      { label: 'Stocks', to: '/stocks' },
-      { label: 'News', to: '/news' },
-      { label: 'Earnings Hub', to: '/earnings' },
-      { label: 'Tracker', to: '/tracker' },
-    ],
-  },
-  {
-    title: 'Company',
-    links: [
-      { label: 'Pricing', to: '#pricing' },
-      { label: 'FAQ', to: '#faq' },
-      { label: 'Community', to: '/community' },
-      { label: 'Feedback', to: '/community/feedback' },
-      { label: 'Contact', to: 'mailto:info@slayerterminal.com' },
-    ],
-  },
-  {
-    title: 'Access',
-    links: [
-      // "Log in / Sign up" used to sit here pointing at /pulse. There is no
-      // auth in the product, so it promised an account flow and silently opened
-      // the terminal — the same thing the line above it does, under a label
-      // that isn't true. Removed rather than relabelled: two entries doing one
-      // job is the other half of the problem.
-      { label: 'Launch Terminal', to: '/pulse' },
-      { label: 'Guide', to: '/guide' },
-    ],
-  },
-  {
-    title: 'Legal',
-    links: [
-      { label: 'Disclaimer', to: '/legal/disclaimer' },
-      { label: 'Terms', to: '/legal/terms' },
-      { label: 'Privacy', to: '/legal/privacy' },
-    ],
   },
 ];
 
@@ -273,7 +227,7 @@ const Landing = () => (
         </h1>
         <p className="mt-6 max-w-xl text-read md:text-base text-textSecondary leading-relaxed">
           Market makers have to hedge. That hedging pushes price toward some levels and away from
-          others — every session, mechanically. Slayer maps those forces, then grades the trades.
+          others, every session, mechanically. Slayer maps those forces, then grades the trades.
         </p>
 
         <div className="mt-9 flex items-center gap-4 flex-wrap justify-center">
@@ -284,15 +238,15 @@ const Landing = () => (
             Launch terminal <ArrowRight className="w-4 h-4" />
           </SmartLink>
           {/* Points at `#live` — the section headed "Not screenshots. The actual
-              panels, printing." It used to point at `#showcase`, which is the
-              charting section, and which the scroll cue directly below already
-              covers. Two affordances that mean different things were doing the
-              same jump; this one now lands on the section its label promises. */}
+              panels." It used to point at `#showcase`, which is the charting
+              section, and which the scroll cue directly below already covers.
+              Two affordances that mean different things were doing the same
+              jump; this one now lands on the section its label promises. */}
           <a
             href="#live"
             className="pointer-events-auto inline-flex items-center px-5 py-2.5 rounded-md border border-borderMuted bg-canvas/40 font-mono text-data uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-rowHover transition-colors"
           >
-            See it live
+            See the panels
           </a>
         </div>
       </div>
@@ -317,14 +271,14 @@ const Landing = () => (
       </span>
       <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">One chain, five desks.</h2>
       <p className="mt-4 text-body text-textSecondary leading-relaxed max-w-xl">
-        Watch on Pulse, choose on Compass, read the flow on Trace, map the dealers on Pinpoint — and let Prove It keep the
+        Watch on Pulse, choose on Compass, read the flow on Trace, map the dealers on Pinpoint, and let Prove It keep the
         receipts. Every desk feeds the next.
       </p>
       <div className="mt-10 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {[
-          { n: '01', name: 'Pulse', sub: 'Live workspace you arrange', to: '/pulse' },
+          { n: '01', name: 'Pulse', sub: 'The workspace you arrange', to: '/pulse' },
           { n: '02', name: 'Compass', sub: 'Scores the setup', to: '/compass' },
-          { n: '03', name: 'Trace', sub: 'Reads the live flow', to: '/trace' },
+          { n: '03', name: 'Trace', sub: 'Reads the flow', to: '/trace' },
           { n: '04', name: 'Pinpoint', sub: 'Maps dealer positioning', to: '/pinpoint' },
           { n: '05', name: 'Prove It', sub: 'Keeps the receipts', to: '/prove-it' },
         ].map(d => (
@@ -350,7 +304,7 @@ const Landing = () => (
       </span>
       <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">Built in the open.</h2>
       <p className="mt-4 text-body text-textSecondary leading-relaxed max-w-xl">
-        Trade ideas, feature requests, feedback — posted inside the terminal, voted on by the people
+        Trade ideas, feature requests and feedback, posted inside the terminal, voted on by the people
         trading with it. What ships next is decided out loud.
       </p>
       <div className="mt-8 border border-borderSubtle bg-panel rounded-lg overflow-hidden">
@@ -448,7 +402,7 @@ const Landing = () => (
         ))}
       </div>
       <p className="mt-6 text-center font-mono text-micro uppercase tracking-wider text-textMuted">
-        Prices in USD · sign in to check out — access is granted at payment · cancel anytime
+        Prices in USD · sign in to check out · access is granted at payment · cancel anytime
       </p>
 
       <ComparePlans />
@@ -480,63 +434,7 @@ const Landing = () => (
       </div>
     </section>
 
-    {/* ── Footer ── */}
-    <footer className="border-t border-borderSubtle">
-      <div className="px-6 md:px-10 py-14 max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-6 gap-10">
-        <div className="col-span-2">
-          <span className="font-mono text-data font-bold text-textPrimary">
-            <span className="text-textMuted">&gt; </span>slayer_terminal
-            <span className="inline-block w-[6px] h-[12px] ml-1 bg-textPrimary align-middle animate-cursor-blink" />
-          </span>
-          <p className="mt-3 text-caption text-textSecondary leading-relaxed max-w-[36ch]">
-            The options terminal. Compass finds the setup, Pinpoint reads the flow.
-          </p>
-          <a
-            href="https://x.com/JoinSlayer"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-4 inline-flex items-center gap-2 font-mono text-label text-textSecondary hover:text-textPrimary transition-colors"
-          >
-            <svg viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5" aria-hidden="true">
-              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-            </svg>
-            @JoinSlayer
-          </a>
-        </div>
-        {FOOTER_COLS.map(col => (
-          <div key={col.title}>
-            <span className="font-mono text-micro font-bold uppercase tracking-widest text-textMuted">
-              {col.title}
-            </span>
-            <ul className="mt-3.5 flex flex-col gap-2.5">
-              {col.links.map(l => (
-                <li key={l.label}>
-                  <SmartLink
-                    to={l.to}
-                    className="text-caption text-textSecondary hover:text-textPrimary transition-colors"
-                  >
-                    {l.label}
-                  </SmartLink>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
-      </div>
-      <div className="border-t border-borderSubtle/60">
-        <div className="px-6 md:px-10 py-5 max-w-6xl mx-auto flex flex-col md:flex-row gap-2 md:items-center">
-          <span className="font-mono text-micro uppercase tracking-wider text-textMuted">
-            © 2026 Slayer Terminal · Compass · Pinpoint
-          </span>
-          <SmartLink
-            to="/legal/disclaimer"
-            className="md:ml-auto font-mono text-micro tracking-wide text-textMuted hover:text-textSecondary transition-colors"
-          >
-            For informational purposes only. Not investment advice.
-          </SmartLink>
-        </div>
-      </div>
-    </footer>
+    <SiteFooter />
   </div>
 );
 

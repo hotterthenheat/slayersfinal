@@ -35,7 +35,9 @@ import TickerSearch from '../ui/TickerSearch';
 import DataTable, { type Column } from '../ui/DataTable';
 import type { Tone } from '../ui/tones';
 
-const verdictTone: Record<ContractVerdict, Tone> = { BUY: 'bull', WATCH: 'warn', FADE: 'bear' };
+// A verdict is a process state, so it takes the chrome tones — see the rule in
+// skyvision/setupState.ts.
+const verdictTone: Record<ContractVerdict, Tone> = { BUY: 'select', WATCH: 'warn', FADE: 'neutral' };
 // Observational grade, never a directive — describes the contract's quality.
 const verdictLabel: Record<ContractVerdict, string> = { BUY: 'STRONG', WATCH: 'WATCH', FADE: 'WEAK' };
 const dteForHorizon: Record<Horizon, number> = { LOTTO: 0, WEEKLIES: 5, SWINGS: 30, LEAPS: 365 };

@@ -103,22 +103,7 @@ function useLandingScan(): LandingCtx | null {
   }, [base, marketData, revision, pulseTick]);
 }
 
-/** Demo-only hotter color scale: the real page normalizes against the single
-    largest cell, which leaves most of the matrix gray. Compressing maxAbs
-    saturates the pastel ramp so the identity reads at marketing distance. */
-const hotMatrix = (matrix: GexMatrixData): GexMatrixData => ({
-  ...matrix,
-  maxAbs: matrix.maxAbs * 0.32,
-});
-
 // ---- shared chrome ----------------------------------------------------------
-
-const LivePill = () => (
-  <span className="inline-flex items-center gap-1.5 font-mono text-micro font-bold uppercase tracking-widest text-select">
-    <span className="w-1.5 h-1.5 rounded-full bg-select animate-pulse" />
-    Live
-  </span>
-);
 
 interface EngineBoxProps {
   name: string;
@@ -339,9 +324,6 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
         <div className="flex items-center gap-2.5 px-4 h-11 border-b border-borderSubtle">
           <span className="font-mono text-micro font-bold uppercase tracking-widest text-textMuted">The setup</span>
           <span className="font-mono text-label font-semibold text-textPrimary">{setup.contract}</span>
-          <span className="ml-auto">
-            <LivePill />
-          </span>
         </div>
         <div className="p-5 min-h-[290px]">
           <AnimatePresence mode="wait" initial={false}>
@@ -569,7 +551,7 @@ const LiveSections = () => {
                   to="/pinpoint/levels"
                 >
                   <div className="h-full p-2 pointer-events-none select-none">
-                    <GexMatrix data={hotMatrix(ctx.matrix)} spot={ctx.gex.levels.spot} />
+                    <GexMatrix data={ctx.matrix} spot={ctx.gex.levels.spot} />
                   </div>
                 </EngineBox>
               </div>
@@ -618,10 +600,7 @@ const LiveSections = () => {
                     Dealer positioning map
                   </span>
                   <span className="hidden sm:block text-label text-textSecondary">
-                    net dealer pressure by strike — hover a bar, it answers
-                  </span>
-                  <span className="ml-auto">
-                    <LivePill />
+                    net dealer pressure by strike, hover a bar and it answers
                   </span>
                 </div>
                 <div className="flex-grow min-h-0 p-2">
@@ -663,7 +642,7 @@ const LiveSections = () => {
                   title: 'GEX heatmap',
                   node: (
                     <div className="h-full p-2">
-                      <GexMatrix data={hotMatrix(ctx.matrix)} spot={ctx.gex.levels.spot} />
+                      <GexMatrix data={ctx.matrix} spot={ctx.gex.levels.spot} />
                     </div>
                   ),
                 },

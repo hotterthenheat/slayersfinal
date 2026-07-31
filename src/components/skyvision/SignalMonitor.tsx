@@ -2,16 +2,11 @@ import { ArrowLeft } from 'lucide-react';
 import Panel from '../ui/Panel';
 import AnimatedNumber from '../ui/AnimatedNumber';
 import SignalBadge from '../ui/SignalBadge';
-import { toneText, type Tone } from '../ui/tones';
+import { toneText } from '../ui/tones';
 import VerdictBadge from './VerdictBadge';
+import { VERDICT_TONE } from './verdict';
 import GreeksRow from './GreeksRow';
-import type { Setup, TakeProfit, Verdict } from '../../types/skyvision';
-
-const verdictTone: Record<Verdict, Tone> = {
-  ENTER: 'bull',
-  EXIT: 'bear',
-  WATCH: 'warn',
-};
+import type { Setup, TakeProfit } from '../../types/skyvision';
 
 interface SignalMonitorProps {
   setup: Setup;
@@ -42,7 +37,7 @@ const TakeProfitCard = ({ tp }: { tp: TakeProfit }) => (
 );
 
 const SignalMonitor = ({ setup, onBack }: SignalMonitorProps) => {
-  const tone = verdictTone[setup.verdict];
+  const tone = VERDICT_TONE[setup.verdict];
 
   return (
     <div className="flex flex-col gap-4">
@@ -93,7 +88,7 @@ const SignalMonitor = ({ setup, onBack }: SignalMonitorProps) => {
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <span className="font-mono text-micro uppercase tracking-widest text-textMuted flex items-center gap-1.5">
-                  Confidence <SignalBadge tone="bull" dot pulse>Live</SignalBadge>
+                  Confidence <SignalBadge tone="select" dot pulse>Live</SignalBadge>
                 </span>
                 <span className="font-mono text-caption font-semibold text-textPrimary tnum leading-4">
                   <AnimatedNumber value={setup.confidence} format={v => `${Math.round(v)}%`} />
@@ -101,7 +96,7 @@ const SignalMonitor = ({ setup, onBack }: SignalMonitorProps) => {
               </div>
               <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
                 <span
-                  className={`block h-full rounded-full transition-[width] duration-700 ease-out ${tone === 'bull' ? 'bg-bull/95' : tone === 'warn' ? 'bg-warn/80' : 'bg-bear/80'}`}
+                  className={`block h-full rounded-full transition-[width] duration-700 ease-out ${tone === 'warn' ? 'bg-warn/80' : 'data-bar'}`}
                   style={{ width: `${setup.confidence}%` }}
                 />
               </div>
@@ -114,7 +109,7 @@ const SignalMonitor = ({ setup, onBack }: SignalMonitorProps) => {
 
             <div className="mt-auto flex items-center justify-between border-t border-borderSubtle pt-3">
               <span className="font-mono text-micro uppercase tracking-widest text-textMuted flex items-center gap-1.5">
-                Expected Move <SignalBadge tone="bull" dot pulse>Live</SignalBadge>
+                Expected Move <SignalBadge tone="select" dot pulse>Live</SignalBadge>
               </span>
               <span className="font-mono text-body font-semibold text-select tnum leading-5">
                 <AnimatedNumber value={setup.expectedMovePct} format={v => `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`} />

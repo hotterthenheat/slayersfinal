@@ -9,10 +9,13 @@ import type { Verdict } from '../../types/skyvision';
  * WATCH / FADED — so the same state never shows two different words. Kept in a
  * value-only module (no component export) so importing it doesn't trip
  * react-refresh.
+ *
+ * A verdict is a process state, so it is toned by the chrome rule in
+ * ./setupState.ts rather than by direction.
  */
 export const VERDICT_TONE: Record<Verdict, Tone> = {
-  ENTER: 'bull',
-  EXIT: 'bear',
+  ENTER: 'select',
+  EXIT: 'neutral',
   WATCH: 'warn',
 };
 

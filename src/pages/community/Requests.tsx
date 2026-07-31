@@ -13,11 +13,13 @@ const KIND_OPTIONS = [
   { value: 'IMPROVEMENT', label: 'Improvement' },
 ] as const;
 
+// Roadmap status is a process, not a direction — chrome tones only, per the rule
+// in components/skyvision/setupState.ts.
 const STATUS_TONE: Record<RequestStatus, Tone> = {
   'UNDER REVIEW': 'neutral',
   PLANNED: 'info',
   BUILDING: 'warn',
-  SHIPPED: 'bull',
+  SHIPPED: 'select',
 };
 
 // Left-edge rail per status — the fastest read of where an item sits.
@@ -25,7 +27,7 @@ const STATUS_RAIL: Record<RequestStatus, string> = {
   'UNDER REVIEW': 'border-l-textMuted/50',
   PLANNED: 'border-l-flip/60',
   BUILDING: 'border-l-warn/70',
-  SHIPPED: 'border-l-bull/70',
+  SHIPPED: 'border-l-select/70',
 };
 
 // Plain-language line under each section header.

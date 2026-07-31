@@ -38,10 +38,12 @@ const inWindow = (e: EarningsEvent, w: WindowFilter): boolean => {
 
 const WATCHLIST_KEY = 'slayer.earnings.watchlist';
 
-// QUALIFIED = green (a structure qualifies), RICH = amber caution (premium favours the seller), NO EDGE = neutral.
-// Magenta stays reserved for the king/standout signal, not a verdict.
+// A verdict is a process state, so it takes the chrome tones — see the rule in
+// skyvision/setupState.ts. QUALIFIED = silver (a structure qualifies), RICH =
+// amber caution (premium favours the seller), NO EDGE = grey. Magenta stays
+// reserved for the king/standout signal, not a verdict.
 const verdictTone: Record<EarningsVerdict, Tone> = {
-  PLAY: 'bull',
+  PLAY: 'select',
   FADE: 'warn',
   SKIP: 'neutral',
 };
@@ -524,7 +526,7 @@ const EarningsHub = () => {
 
       <MetricGrid min="170px">
         <StatCard label="Reports tracked" value={events.length} sub="next two weeks" />
-        <StatCard label="Qualified" value={plays.length} sub="a defined structure fits" tone="bull" />
+        <StatCard label="Qualified" value={plays.length} sub="a defined structure fits" tone="select" />
         <StatCard label="Premium rich" value={fades.length} sub="implied over realized" tone="magenta" />
         <StatCard
           label="Richest straddle"
