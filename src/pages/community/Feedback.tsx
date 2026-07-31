@@ -149,7 +149,7 @@ const Feedback = () => {
                 <Send className="w-3.5 h-3.5" /> Save note
               </button>
               {justSaved && (
-                <span className="inline-flex items-center gap-1.5 font-mono text-label text-bull animate-slide-in">
+                <span className="inline-flex items-center gap-1.5 font-mono text-label text-select animate-slide-in">
                   <Check className="w-3.5 h-3.5" /> Saved to this browser
                 </span>
               )}
@@ -187,21 +187,23 @@ const Feedback = () => {
         )}
       </div>
 
-      {/* The whole loop — where notes go: shipped, being built, being weighed. */}
+      {/* The whole loop — where notes go: shipped, being built, being weighed.
+          Tones track the roadmap statuses in community/Requests.tsx so the two
+          pages describe the same stage the same way. */}
       <div className="xl:col-span-5 min-w-0 flex flex-col gap-4">
         <LoopStage
           title="Shipped from feedback"
           subtitle="already live on the desk"
           items={SHIPPED_FROM_FEEDBACK}
           icon={Check}
-          iconClass="text-bull"
+          iconClass="text-select"
         />
         <LoopStage
           title="In progress"
           subtitle="on the bench right now"
           items={IN_PROGRESS_FROM_FEEDBACK}
           icon={CircleDot}
-          iconClass="text-select"
+          iconClass="text-warn"
         />
         <LoopStage
           title="Considering"

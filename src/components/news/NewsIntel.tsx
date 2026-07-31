@@ -118,7 +118,7 @@ const DeepBreakdown = ({ h, positioningLean, positioningLabel }: { h: HeadlineIn
           <span className="inline-flex items-center gap-1.5 font-mono text-label uppercase tracking-widest text-textMuted">
             <Radar className="w-3 h-3" /> Closest analogs
           </span>
-          <span className="font-mono text-micro text-textMuted uppercase tracking-wider">sim · when · 1d</span>
+          <span className="font-mono text-micro text-textMuted uppercase tracking-wider">match · when · 1d</span>
         </div>
         <div className="flex flex-col divide-y divide-borderSubtle">
           {h.analogs.map((a, i) => (
@@ -146,7 +146,7 @@ const NoBreakdown = ({ view, selectedItem, onSelect }: { view: NewsIntelView; se
     <p className="text-caption text-textSecondary leading-relaxed">
       No positioning breakdown for{' '}
       {selectedItem?.ticker ? <span className="font-mono text-textPrimary">{selectedItem.ticker}</span> : 'this macro print'} yet — the deep
-      read needs the live options chain, which the terminal keeps for the active name{' '}
+      read needs the current options chain, which the terminal keeps for the active name{' '}
       <span className="font-mono text-textPrimary">{view.ticker}</span> and the macro tape. Open a covered catalyst:
     </p>
     {view.headlines.length > 0 ? (
@@ -164,7 +164,7 @@ const NoBreakdown = ({ view, selectedItem, onSelect }: { view: NewsIntelView; se
         ))}
       </div>
     ) : (
-      <span className="font-mono text-label text-textMuted">No live catalyst on {view.ticker} today — positioning reads {view.positioningLabel}.</span>
+      <span className="font-mono text-label text-textMuted">No catalyst on {view.ticker} today — positioning reads {view.positioningLabel}.</span>
     )}
   </div>
 );
@@ -205,7 +205,7 @@ const NewsIntel = ({ selectedItem, onSelect }: NewsIntelProps) => {
         </span>
         <span className="font-mono text-label font-bold text-textPrimary">{view.ticker}</span>
         <SignalBadge tone="neutral" className="ml-auto">
-          {view.nameCount} live · {view.macroCount} macro
+          {view.nameCount} single-name · {view.macroCount} macro
         </SignalBadge>
       </div>
 

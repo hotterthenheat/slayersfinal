@@ -358,7 +358,7 @@ const Compass = () => {
           ? `Monitoring ${monitorTarget.ticker} ${monitorTarget.strike}${monitorTarget.right}`
           : 'Signal Monitor'
       }
-      subtitle="Watching one setup live — the card that graded it now tracks whether the structure under it holds"
+      subtitle="Watching one setup as it moves — the card that graded it now tracks whether the structure under it holds"
       actions={modeSwitch}
     />
   );

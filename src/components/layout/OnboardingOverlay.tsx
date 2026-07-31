@@ -27,9 +27,13 @@ const seen = (): boolean => {
 const OnboardingOverlay = () => {
   const [open, setOpen] = useState(() => !seen());
   const { pathname } = useLocation();
-  // The welcome greets you on a desk — not on the informational legal/guide
-  // pages. It stays armed until dismissed, so it still fires on the next desk.
-  const suppressed = /^\/(legal|guide)/.test(pathname);
+  // The welcome greets you on a desk, not on the informational legal/guide pages
+  // and not on the index. The index is now where "Launch terminal" lands, so
+  // without /terminal here a first-ever visitor watches the launch gate and
+  // arrives at a page listing all ten desks covered by a modal listing five of
+  // them. It stays armed until dismissed, so it still fires on the first desk
+  // they actually open, which is where it was always meant to land.
+  const suppressed = /^\/(legal|guide|terminal)/.test(pathname);
   const trapRef = useFocusTrap<HTMLDivElement>(open && !suppressed);
 
   const dismiss = () => {

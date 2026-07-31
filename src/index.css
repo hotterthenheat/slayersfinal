@@ -258,20 +258,37 @@
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
 }
 
-/* Custom Scrollbar */
+/* Custom Scrollbar — the shell hides the native page scrollbar, so this thumb
+   is the only length-of-page cue the terminal has. At #2a2a2a on #0a0a0a it
+   read as nothing and every desk felt like it ended at the fold. */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 10px;
+  height: 10px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #2a2a2a;
-  border-radius: 3px;
+  background: rgba(237, 237, 237, 0.18);
+  border-radius: 5px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #444444;
+  background: rgba(237, 237, 237, 0.34);
+}
+/* Firefox has no thumb pseudo-element, so it needs the standard property — but
+   declaring that unguarded makes Chromium drop the ::-webkit rules above and
+   fall back to a 15px system bar. Gated to engines without the pseudo-element. */
+@supports (scrollbar-width: thin) and (not selector(::-webkit-scrollbar)) {
+  :root {
+    scrollbar-color: rgba(237, 237, 237, 0.18) transparent;
+  }
+}
+
+/* The shell's single scroll container. Reserving the gutter unconditionally
+   keeps column widths identical whether or not a desk crosses the fold, so
+   nothing reflows the moment live data pushes the page past one screen. */
+#main-content {
+  scrollbar-gutter: stable;
 }
 
 /* Tabular figures for aligned numeric columns */

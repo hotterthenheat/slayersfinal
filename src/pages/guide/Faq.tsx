@@ -17,7 +17,7 @@ const FAQ: QA[] = [
     ),
   },
   {
-    q: 'Is the data live?',
+    q: 'How current is the data?',
     a: (
       <>Prices, levels and flow update continuously while the terminal is open. How to treat what is shown — and its
       limits — is covered in the{' '}
@@ -32,7 +32,7 @@ const FAQ: QA[] = [
   {
     q: 'Where is my data stored?',
     a: (
-      <>Your workspace layout, watchlists, tracker, journal and saved views live in your browser's local storage on
+      <>Your workspace layout, watchlists, tracker, journal and saved views stay in your browser's local storage on
       your device — nothing is sent to a server. You can wipe it any time from Settings. See the{' '}
       <Link to="/legal/privacy" className="text-textPrimary underline underline-offset-2 decoration-white/40 hover:decoration-white/80">Privacy Policy</Link>.</>
     ),
@@ -74,7 +74,7 @@ const FAQ: QA[] = [
     ),
   },
   {
-    q: 'Why do a few panels say “live data unavailable”?',
+    q: 'Why do a few panels say “data unavailable”?',
     a: <>Some surfaces need feeds the current build does not carry — full Level-2 depth or tick-by-aggressor prints, for example. Those panels say so honestly rather than showing filler, and will light up when the feed is connected.</>,
   },
   {

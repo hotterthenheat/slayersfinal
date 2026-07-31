@@ -11,8 +11,9 @@ import { useFocusTrap } from '../hooks/useFocusTrap';
 import { FACTOR_GUIDE } from '../data/factorGuide';
 import { DUR, EASE } from '../lib/motion';
 
+// Mirrors the board in Stocks.tsx, which carries the reasoning.
 const verdictTone: Record<StockVerdict, Tone> = {
-  ACCUMULATE: 'bull',
+  ACCUMULATE: 'select',
   HOLD: 'neutral',
   AVOID: 'bear',
 };

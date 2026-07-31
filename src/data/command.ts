@@ -9,6 +9,7 @@
 */
 
 import Simulator from '../core/simulator';
+import { buildLevels, pinStrike } from './gex';
 import type { MarketSnapshot } from '../types/market';
 import type {
   CommandView,
@@ -36,22 +37,18 @@ function h01(seed: string): number {
 }
 
 // ---- dealer pressure matrix -------------------------------------------------
-function buildPressure(snapshot: MarketSnapshot, levels: KeyLevels, half: number): { rows: PressureRow[]; maxAbs: number } {
+function buildPressure(
+  snapshot: MarketSnapshot,
+  levels: KeyLevels,
+  half: number,
+  pin: number
+): { rows: PressureRow[]; maxAbs: number } {
   const { ticker, spot, chain } = snapshot;
   const desc = [...chain].sort((a, b) => b.strike - a.strike);
   const spotIdx = Math.max(0, desc.findIndex(n => n.strike <= spot));
   const start = Math.max(0, spotIdx - half);
   const window = desc.slice(start, start + half * 2 + 1);
 
-  // Pin = max total OI in the window
-  let pinStrike = window[0]?.strike ?? spot;
-  let pinOI = 0;
-  for (const n of window) {
-    if (n.callOI + n.putOI > pinOI) {
-      pinOI = n.callOI + n.putOI;
-      pinStrike = n.strike;
-    }
-  }
   // Flip row = strike nearest the flip level
   let flipStrike = window[0]?.strike ?? spot;
   let flipDist = Infinity;
@@ -79,7 +76,7 @@ function buildPressure(snapshot: MarketSnapshot, levels: KeyLevels, half: number
     };
     const net = call.pressure + put.pressure;
     maxAbs = Math.max(maxAbs, Math.abs(call.pressure), Math.abs(put.pressure), Math.abs(net));
-    return { strike: n.strike, pin: n.strike === pinStrike, flip: n.strike === flipStrike, call, put, net };
+    return { strike: n.strike, pin: n.strike === pin, flip: n.strike === flipStrike, call, put, net };
   });
 
   return { rows, maxAbs };
@@ -118,7 +115,7 @@ function buildKeyLevels(snapshot: MarketSnapshot, levels: KeyLevels, pin: number
 const SESSION_BARS = 390; // one cash session of 1m bars (mirrors the simulator)
 
 /**
- * Session order flow built from the live session's 1m candles, so every stat
+ * Session order flow built from the current session's 1m candles, so every stat
  * is genuinely session-scoped and internally consistent:
  * - ONE per-bar signed delta feeds BOTH the cumulative line and the by-price
  *   histogram, so the histogram sums to the net delta by construction.
@@ -129,9 +126,9 @@ const SESSION_BARS = 390; // one cash session of 1m bars (mirrors the simulator)
 function buildOrderFlow(snapshot: MarketSnapshot): OrderFlowData {
   const { ticker, spot } = snapshot;
   const all = Simulator.getCandles(ticker) ?? [];
-  // Trailing session-sized window. NOT length % SESSION_BARS — live bars roll
-  // in one at a time, and a modulo window would collapse the "session" stats
-  // to a couple of bars the minute after load.
+  // Trailing session-sized window. NOT length % SESSION_BARS — bars roll in one
+  // at a time, and a modulo window would collapse the "session" stats to a
+  // couple of bars the minute after load.
   const bars = all.slice(-SESSION_BARS);
 
   if (!bars.length) {
@@ -215,41 +212,32 @@ export function makeAutoNote(snapshot: MarketSnapshot, levels: KeyLevels, bias: 
   if (pct(spot, levels.putWall) < 0.15)
     return `Spot pressing ${fmt(levels.putWall)} put wall; dealer support being tested.`;
   if (pct(spot, levels.flip) < 0.12)
-    return `Price is at the ${fmt(levels.flip)} gamma flip — dealer hedging switches direction here.`;
+    return `Price is at the ${fmt(levels.flip)} gamma flip; dealer hedging switches direction here.`;
   // Regime notes defer to the book-derived bias (the badge next to this note),
   // so the note can never claim short gamma while the badge reads supportive.
   if (spot < levels.flip && bias !== 'BULLISH')
-    return `Trading below the ${fmt(levels.flip)} flip; dealers short gamma — expect amplified moves.`;
+    return `Trading below the ${fmt(levels.flip)} flip; dealers short gamma, so expect amplified moves.`;
   if (spot > levels.flip && bias === 'BULLISH')
     return `Supportive positioning above ${fmt(levels.flip)}; dips into ${fmt(levels.putWall)} likely absorbed.`;
   return null;
 }
 
 // ---- top-level assembly ----------------------------------------------------------
+/** Strikes each side of spot in the pressure window; matches the exposure map's default. */
+const PRESSURE_HALF = 10;
+
 export function buildCommandView(snapshot: MarketSnapshot): CommandView {
-  const { chain, spot, plan } = snapshot;
+  const { chain } = snapshot;
 
-  // King = max |netGex| strike (same rule as the chart levels)
-  let king = spot;
-  let kingAbs = 0;
-  for (const n of chain) {
-    if (Math.abs(n.netGex) > kingAbs) {
-      kingAbs = Math.abs(n.netGex);
-      king = n.strike;
-    }
-  }
-  const levels: KeyLevels = {
-    spot,
-    callWall: plan.resistanceWall,
-    putWall: plan.supportWall,
-    flip: plan.flipZone,
-    king,
-  };
-
-  const { rows, maxAbs } = buildPressure(snapshot, levels, 10);
-  const pin = rows.find(r => r.pin)?.strike ?? spot;
+  // gex.ts owns the level derivation. The cockpit reads it rather than keeping a
+  // second opinion: the rail and the positioning map share a screen, so a
+  // re-derived flip or king shows up as one panel contradicting the other.
+  const levels = buildLevels(snapshot);
+  const pin = pinStrike(snapshot, PRESSURE_HALF);
+  const { rows, maxAbs } = buildPressure(snapshot, levels, PRESSURE_HALF, pin);
 
   const netGex = chain.reduce((a, n) => a + n.netGex, 0);
+  const kingAbs = Math.abs(chain.find(n => n.strike === levels.king)?.netGex ?? 0);
   const threshold = kingAbs * 0.8;
   let bias: DealerBias = 'NEUTRAL';
   let biasNote = 'Balanced positioning';

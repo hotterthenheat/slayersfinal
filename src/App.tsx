@@ -1,6 +1,6 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { SkeletonRows } from './components/ui/Skeleton';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { MotionConfig } from 'framer-motion';
 import { MarketDataProvider } from './context/MarketDataContext';
 import { TrackerProvider } from './context/TrackerContext';
@@ -29,6 +29,8 @@ import Stocks from './pages/Stocks';
 import News from './pages/News';
 import EarningsHub from './pages/EarningsHub';
 import Landing from './pages/landing/Landing';
+import TerminalIndex from './pages/terminal/TerminalIndex';
+import { writeLastDesk } from './pages/terminal/lastDesk';
 import CommunityLayout from './pages/community/CommunityLayout';
 import Ideas from './pages/community/Ideas';
 import Requests from './pages/community/Requests';
@@ -51,6 +53,18 @@ const RouteFallback = () => (
   </div>
 );
 
+/** The terminal index's Resume row is the only reader of this. It records where
+    the user was, never what the market did; `writeLastDesk` ignores everything
+    that is not a desk, so the index, the Guide and the legal pages never
+    overwrite a real destination. */
+const LastDeskRecorder = () => {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    writeLastDesk(pathname);
+  }, [pathname]);
+  return null;
+};
+
 const App = () => {
   return (
     <MotionConfig reducedMotion="user">
@@ -59,9 +73,10 @@ const App = () => {
         <TrackerProvider>
         <LaunchProvider>
         <FocusProvider>
+        <LastDeskRecorder />
         <Routes>
           {/* Public landing — full-bleed, outside the app shell. First thing a
-              visitor sees; "Launch terminal" plays the gate into /pulse. */}
+              visitor sees; "Launch terminal" plays the gate into /terminal. */}
           <Route path="/" element={<Landing />} />
           <Route path="/welcome" element={<Navigate to="/" replace />} />
           {/* Retired routes → the quant desk is Prove It */}
@@ -69,7 +84,12 @@ const App = () => {
           <Route path="/quant-lab" element={<Navigate to="/prove-it" replace />} />
           <Route path="/immersive" element={<Navigate to="/prove-it" replace />} />
           <Route element={<AppShell />}>
-            <Route path="/home" element={<Navigate to="/pulse" replace />} />
+            {/* Home is the index, not a desk: it inherits the top bar, so the
+                nav is there to guide the visitor the moment they arrive. Not
+                lazy — a Suspense fallback on the app's front door is the wrong
+                trade for a page that loads no data. */}
+            <Route path="/terminal" element={<TerminalIndex />} />
+            <Route path="/home" element={<Navigate to="/terminal" replace />} />
             <Route path="/pulse" element={<PulseWorkspace />} />
             <Route path="/live-terminal" element={<Navigate to="/pulse" replace />} />
             {/* Workspace folded into Pulse — Pulse is the one customizable desk */}
@@ -147,8 +167,9 @@ const App = () => {
             <Route path="/auditor-log" element={<Navigate to="/tracker" replace />} />
           </Route>
           {/* Any unmatched URL (typo, stale bookmark, removed path) falls back to
-              the terminal home instead of rendering a blank page. */}
-          <Route path="*" element={<Navigate to="/pulse" replace />} />
+              the terminal index instead of rendering a blank page: a stale
+              bookmark should land somewhere neutral, not inside a desk. */}
+          <Route path="*" element={<Navigate to="/terminal" replace />} />
         </Routes>
         </FocusProvider>
         </LaunchProvider>

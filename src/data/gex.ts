@@ -61,7 +61,24 @@ function metricValue(node: StrikeNode, metric: GexMetric): number {
 }
 
 // ---- levels & nodes ---------------------------------------------------------
-function buildLevels(snapshot: MarketSnapshot): KeyLevels {
+/**
+ * The structural levels, derived once. Anything that names a wall, a flip or a
+ * king reads this — a panel that re-derives its own answers the same question
+ * with a different number, and two panels on one screen then contradict each
+ * other about where the regime turns.
+ *
+ * Walls and flip come off `plan`, which the simulator computes from the raw book
+ * (simulator.ts:422-453). The flip in particular is the first UPWARD zero
+ * crossing of the 3-strike-smoothed net-GEX profile: smoothed so one noisy
+ * strike cannot fake a crossover, and upward because short-gamma-below /
+ * long-gamma-above is what a desk means by the gamma flip. A first-sign-change
+ * scan over a rescaled per-strike copy of the chain satisfies neither and lands
+ * a strike away often enough to be seen.
+ *
+ * King is argmax |netGex| over the WHOLE chain, not a window: the largest
+ * exposure in the book does not move because a panel is showing fewer strikes.
+ */
+export function buildLevels(snapshot: MarketSnapshot): KeyLevels {
   const { chain, spot, plan } = snapshot;
   let king = spot;
   let maxAbs = 0;
@@ -78,6 +95,32 @@ function buildLevels(snapshot: MarketSnapshot): KeyLevels {
     flip: plan.flipZone,
     king,
   };
+}
+
+/**
+ * Pin: the heaviest total-OI strike in the `half`-wide window around spot.
+ *
+ * Off `KeyLevels` because it is the one level that legitimately depends on how
+ * many strikes a panel is showing, so it takes the window as an argument instead
+ * of pretending to be window-free. Open interest is raw — no view rescales it —
+ * so two panels on the same window always land on the same strike.
+ */
+export function pinStrike(snapshot: MarketSnapshot, half: number): number {
+  const { chain, spot } = snapshot;
+  const desc = [...chain].sort((a, b) => b.strike - a.strike);
+  const spotIdx = Math.max(0, desc.findIndex(n => n.strike <= spot));
+  const start = Math.max(0, spotIdx - half);
+  const window = desc.slice(start, start + half * 2 + 1);
+
+  let pin = window[0]?.strike ?? spot;
+  let heaviest = 0;
+  for (const n of window) {
+    if (n.callOI + n.putOI > heaviest) {
+      heaviest = n.callOI + n.putOI;
+      pin = n.strike;
+    }
+  }
+  return pin;
 }
 
 function buildNodes(snapshot: MarketSnapshot, metric: GexMetric, range: StrikeRange): { nodes: NodeLevel[]; maxAbs: number } {
@@ -136,8 +179,8 @@ function matrixExpiryLabels(): string[] {
   return out;
 }
 
-function buildMatrix(snapshot: MarketSnapshot, metric: GexMetric, range: StrikeRange, kingStrike: number): GexMatrixData {
-  const { ticker, chain, spot, plan } = snapshot;
+function buildMatrix(snapshot: MarketSnapshot, metric: GexMetric, range: StrikeRange, levels: KeyLevels): GexMatrixData {
+  const { ticker, chain, spot } = snapshot;
   const sorted = [...chain].sort((a, b) => b.strike - a.strike); // descending
   const spotIdx = Math.max(0, sorted.findIndex(n => n.strike <= spot));
   const half = range === 10 ? 10 : 15; // strikes per side (chain carries 15 max)
@@ -156,7 +199,7 @@ function buildMatrix(snapshot: MarketSnapshot, metric: GexMetric, range: StrikeR
       const abs = Math.abs(value);
       if (abs > maxAbs) maxAbs = abs;
       // King crowns the 0DTE cell at the book's max-exposure strike (matches the chart level)
-      return { value, king: c === 0 && node.strike === kingStrike };
+      return { value, king: c === 0 && node.strike === levels.king };
     });
   });
 
@@ -179,9 +222,9 @@ function buildMatrix(snapshot: MarketSnapshot, metric: GexMetric, range: StrikeR
     strikes,
     cells,
     maxAbs,
-    spotRowIndex: nearest(spot) ?? -1,
-    callWallIndex: nearest(plan.resistanceWall),
-    putWallIndex: nearest(plan.supportWall),
+    spotRowIndex: nearest(levels.spot),
+    callWallIndex: nearest(levels.callWall),
+    putWallIndex: nearest(levels.putWall),
   };
 }
 
@@ -257,10 +300,10 @@ function buildBoard(): BoardTicker[] {
   });
 }
 
-// ---- live pulse ------------------------------------------------------------------
+// ---- matrix pulse ----------------------------------------------------------------
 /**
  * Per-second modulation of the matrix cells — a looping (self-recycling)
- * wave per cell so the heatmap breathes in real time between scans. Sign is
+ * wave per cell so the heatmap breathes between scans. Sign is
  * preserved and maxAbs is untouched, so colors morph without the scale or
  * the strike window moving.
  */
@@ -289,7 +332,7 @@ export function buildGexView(snapshot: MarketSnapshot, metric: GexMetric, range:
     levels,
     nodes,
     nodesMaxAbs: maxAbs,
-    matrix: buildMatrix(snapshot, metric, range, levels.king),
+    matrix: buildMatrix(snapshot, metric, range, levels),
     board: buildBoard(),
   };
 }

@@ -1,4 +1,5 @@
 import { fmtUsd } from '../../data/gex';
+import { ROW_INTERACTIVE, interactiveRowProps } from '../ui/interactiveRow';
 import type { KeyLevelKind, KeyLevelRow } from '../../types/gex';
 
 interface KeyLevelsRailProps {
@@ -27,6 +28,11 @@ const KIND_BAR: Record<KeyLevelKind, string> = {
   spot: 'bg-textPrimary/60',
 };
 
+const fmtPrice = (v: number) => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
+
+/** Distance and pressure are measured FROM spot, so on the spot row there is nothing to print. */
+const NIL = '·';
+
 /** Price-ordered ladder of structural levels: distance from spot + parked exposure. */
 const KeyLevelsRail = ({ rows, maxPressure, onSelect }: KeyLevelsRailProps) => (
   <div className="flex flex-col">
@@ -38,34 +44,37 @@ const KeyLevelsRail = ({ rows, maxPressure, onSelect }: KeyLevelsRailProps) => (
     {rows.map(row => {
       const isSpot = row.kind === 'spot';
       const pct = Math.min(100, (row.pressure / (maxPressure || 1)) * 100);
+      const price = fmtPrice(row.price);
+      const activate = () => onSelect?.(row.price);
       return (
         <div
           key={row.kind}
-          role={onSelect ? 'button' : undefined}
-          onClick={onSelect ? () => onSelect(row.price) : undefined}
-          title={onSelect ? 'Flash on chart' : undefined}
+          {...(onSelect && {
+            ...interactiveRowProps(activate),
+            'aria-label': `${row.label} ${price}, flash on chart`,
+            onClick: activate,
+            title: 'Flash on chart',
+          })}
           className={`grid grid-cols-[1fr_auto_auto] gap-x-3 items-center px-2.5 py-[7px] border-b border-borderSubtle/30 last:border-0 transition-colors ${
             isSpot ? 'bg-white/[0.04]' : ''
-          } ${onSelect ? 'cursor-pointer hover:bg-rowHover' : ''}`}
+          } ${onSelect ? `${ROW_INTERACTIVE} hover:bg-rowHover` : ''}`}
         >
           <span className="min-w-0">
             <span className={`block font-mono text-micro font-semibold uppercase tracking-wider ${KIND_TEXT[row.kind]}`}>
               {row.label}
             </span>
-            <span className="block font-mono text-label font-bold tnum text-textPrimary">
-              {row.price % 1 === 0 ? row.price.toFixed(0) : row.price.toFixed(2)}
-            </span>
+            <span className="block font-mono text-label font-bold tnum text-textPrimary">{price}</span>
           </span>
           <span
             className={`w-14 text-right font-mono text-micro tnum ${
               isSpot ? 'text-textMuted' : row.distPct >= 0 ? 'text-bull' : 'text-bear'
             }`}
           >
-            {isSpot ? '—' : `${row.distPct >= 0 ? '+' : ''}${row.distPct.toFixed(2)}%`}
+            {isSpot ? NIL : `${row.distPct >= 0 ? '+' : ''}${row.distPct.toFixed(2)}%`}
           </span>
           <span className="w-16 text-right">
             <span className="block font-mono text-micro tnum text-textSecondary">
-              {isSpot ? '—' : fmtUsd(row.pressure)}
+              {isSpot ? NIL : fmtUsd(row.pressure)}
             </span>
             {!isSpot && (
               <span className="mt-0.5 ml-auto block h-[2px] w-full rounded-full bg-white/[0.04]">

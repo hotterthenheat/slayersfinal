@@ -41,8 +41,11 @@ const BETA_OPTIONS = [
 
 const WATCHLIST_KEY = 'slayer.stocks.watchlist';
 
+// A verdict is a process state, so it takes the chrome tones — see the rule in
+// skyvision/setupState.ts. AVOID keeps bear because HOLD already owns neutral
+// and WEAK must stay distinguishable from NEUTRAL.
 const verdictTone: Record<StockVerdict, Tone> = {
-  ACCUMULATE: 'bull',
+  ACCUMULATE: 'select',
   HOLD: 'neutral',
   AVOID: 'bear',
 };

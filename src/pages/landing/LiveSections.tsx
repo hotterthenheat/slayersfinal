@@ -103,22 +103,7 @@ function useLandingScan(): LandingCtx | null {
   }, [base, marketData, revision, pulseTick]);
 }
 
-/** Demo-only hotter color scale: the real page normalizes against the single
-    largest cell, which leaves most of the matrix gray. Compressing maxAbs
-    saturates the pastel ramp so the identity reads at marketing distance. */
-const hotMatrix = (matrix: GexMatrixData): GexMatrixData => ({
-  ...matrix,
-  maxAbs: matrix.maxAbs * 0.32,
-});
-
 // ---- shared chrome ----------------------------------------------------------
-
-const LivePill = () => (
-  <span className="inline-flex items-center gap-1.5 font-mono text-micro font-bold uppercase tracking-widest text-select">
-    <span className="w-1.5 h-1.5 rounded-full bg-select animate-pulse" />
-    Live
-  </span>
-);
 
 interface EngineBoxProps {
   name: string;
@@ -276,7 +261,15 @@ const SectionKicker = ({ children }: { children: React.ReactNode }) => (
   <span className="font-mono text-label font-semibold uppercase tracking-[0.25em] text-textSecondary">{children}</span>
 );
 
-/** "Same card, opposite call" — one real setup shown in both of its states. */
+/** The landing scan runs the `top-setups` feed, whose score floor sits far above
+    the band that produces an EXIT verdict, so a genuinely faded card can never
+    reach this section. The faded panel is therefore a projection of the live
+    card past its own invalidation, and the copy beside it says so. Reading the
+    engine's confidence curve inside the faded band beats the old inversion,
+    which made the strongest cards read as the hardest fades. */
+const FADED_CONFIDENCE = 31;
+
+/** "Same card, projected forward" — the live read and the downgrade it prints. */
 const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
   const [mode, setMode] = useState<'ENTER' | 'EXIT'>('ENTER');
   const lockedRef = useRef(false);
@@ -296,7 +289,7 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
 
   const entering = mode === 'ENTER';
   const bull = setup.right === 'C';
-  const confidence = entering ? setup.confidence : Math.max(4, 100 - setup.confidence);
+  const confidence = entering ? setup.confidence : FADED_CONFIDENCE;
 
   return (
     // `setups` is the Compass tab's target in the landing nav — this is the
@@ -306,9 +299,10 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
         <SectionKicker>Entries are easy</SectionKicker>
         <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">It calls the exit, too.</h2>
         <p className="mt-4 text-body text-textSecondary leading-relaxed max-w-md">
-          Most tools flag a setup and go quiet. Here, the same card that read QUALIFIED watches its own
-          setup — and when the structure under it breaks, it turns red and says so. This is one real card from
-          the terminal, shown in both of its states.
+          Most tools flag a setup and go quiet. Here, the same card that read QUALIFIED keeps watching its
+          own setup, and when the structure under it breaks it downgrades and says so. The QUALIFIED read is
+          the live one. FADED shows that same card projected past its invalidation, so you can see the call
+          it makes before it has to make it.
         </p>
         <div className="mt-6 inline-flex rounded-md border border-borderSubtle overflow-hidden">
           {(['ENTER', 'EXIT'] as const).map(m => (
@@ -339,9 +333,6 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
         <div className="flex items-center gap-2.5 px-4 h-11 border-b border-borderSubtle">
           <span className="font-mono text-micro font-bold uppercase tracking-widest text-textMuted">The setup</span>
           <span className="font-mono text-label font-semibold text-textPrimary">{setup.contract}</span>
-          <span className="ml-auto">
-            <LivePill />
-          </span>
         </div>
         <div className="p-5 min-h-[290px]">
           <AnimatePresence mode="wait" initial={false}>
@@ -352,17 +343,20 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: DUR.slow, ease: EASE }}
             >
+              {/* A verdict is a process state, so it takes the chrome tones, not
+                  direction: green here painted a PUT the colour of a rally. */}
               <h3
-                className="font-mono text-lead font-bold tracking-tight"
-                style={{ color: entering ? '#30D158' : '#FF3B30' }}
+                className={`font-mono text-lead font-bold tracking-tight ${
+                  entering ? 'text-select' : 'text-textMuted'
+                }`}
               >
-                {entering ? `STRONG ${bull ? 'CALL' : 'PUT'} — CONDITIONS ALIGNED` : 'FADING — LOW CONVICTION'}
+                {entering ? `STRONG ${bull ? 'CALL' : 'PUT'}: CONDITIONS ALIGNED` : 'FADING: LOW CONVICTION'}
               </h3>
               <p className="mt-3 text-caption text-textSecondary leading-relaxed">
                 {entering
                   ? setup.whyText
-                  : `${setup.invalidationReason} is gone below $${setup.invalidationPrice.toFixed(2)} — the floor this
-                     entry stood on no longer holds. The engine downgrades the card and tells you to step aside.`}
+                  : `${setup.invalidationReason} is gone below $${setup.invalidationPrice.toFixed(2)}. The floor this
+                     entry stood on no longer holds, so the engine downgrades the card and tells you to step aside.`}
               </p>
 
               <div className="mt-4">
@@ -448,8 +442,8 @@ const ChartShowcase = ({ ctx }: { ctx: LandingCtx | null }) => (
         The chart that knows where dealers stand.
       </h2>
       <p className="mt-4 text-body text-textSecondary leading-relaxed max-w-xl">
-        Walls, the gamma flip, the king strike — drawn straight on the candles and repriced as the
-        session moves. This isn't a screenshot; it's the terminal's chart, running live.
+        Walls, the gamma flip and the king strike, drawn straight on the candles and repriced as the
+        session moves. This isn't a screenshot; it's the terminal's own chart.
       </p>
     </div>
 
@@ -477,7 +471,7 @@ const ChartShowcase = ({ ctx }: { ctx: LandingCtx | null }) => (
       )}
     </div>
     <p className="mt-4 text-center font-mono text-micro uppercase tracking-widest text-textMuted">
-      live tick feed · levels on a 10s scan
+      tick feed · levels on a 10s scan
     </p>
   </section>
 );
@@ -488,7 +482,7 @@ const PILLARS = [
     n: '01',
     tone: 'text-select',
     title: 'The walls',
-    body: 'Dealer hedging piles up at a handful of strikes — the call and put walls that cap and floor the move.',
+    body: 'Dealer hedging piles up at a handful of strikes: the call and put walls that cap and floor the move.',
   },
   {
     n: '02',
@@ -500,7 +494,7 @@ const PILLARS = [
     n: '03',
     tone: 'text-darkpool',
     title: 'The flow',
-    body: 'Sweeps, blocks and dark-pool prints — positioning that shows up on the tape before it shows up in price.',
+    body: 'Sweeps, blocks and dark-pool prints. Positioning that shows up on the tape before it shows up in price.',
   },
 ];
 
@@ -509,7 +503,7 @@ const Pillars = () => (
     <SectionKicker>What the terminal reads</SectionKicker>
     <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">Price doesn't move randomly.</h2>
     <p className="mt-4 text-body text-textSecondary leading-relaxed max-w-2xl">
-      That hedging leaves fingerprints. The same three keep showing up on every chain — where the
+      That hedging leaves fingerprints. The same three keep showing up on every chain: where the
       move gets capped, where dealers flip from calming price to chasing it, and where the size hits
       the tape before it hits the print.
     </p>
@@ -538,13 +532,13 @@ const LiveSections = () => {
 
       <section id="live" className="px-6 md:px-10 py-20 max-w-6xl mx-auto">
         <div className="flex items-baseline gap-3 flex-wrap">
-          <SectionKicker>The terminal, live</SectionKicker>
+          <SectionKicker>The terminal itself</SectionKicker>
           <span className="font-mono text-micro uppercase tracking-wider text-textMuted">
-            these panels are running right now
+            the same components the desks render
           </span>
         </div>
         <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight max-w-2xl">
-          Not screenshots. The actual panels, printing.
+          Not screenshots. The actual panels.
         </h2>
 
         {!ctx ? (
@@ -564,12 +558,12 @@ const LiveSections = () => {
               <div className="h-[340px]">
                 <EngineBox
                   name="Pinpoint"
-                  line="Strike × expiry heat — repriced every second"
+                  line="Strike × expiry heat · repriced every second"
                   accent="bg-select"
                   to="/pinpoint/levels"
                 >
                   <div className="h-full p-2 pointer-events-none select-none">
-                    <GexMatrix data={hotMatrix(ctx.matrix)} spot={ctx.gex.levels.spot} />
+                    <GexMatrix data={ctx.matrix} spot={ctx.gex.levels.spot} />
                   </div>
                 </EngineBox>
               </div>
@@ -596,7 +590,7 @@ const LiveSections = () => {
               <div className="h-[340px]">
                 <EngineBox
                   name="Pulse"
-                  line="Walls, pin, flip & king — with distance"
+                  line="Walls, pin, flip & king · with distance"
                   accent="bg-flip"
                   to="/pulse"
                 >
@@ -618,10 +612,7 @@ const LiveSections = () => {
                     Dealer positioning map
                   </span>
                   <span className="hidden sm:block text-label text-textSecondary">
-                    net dealer pressure by strike — hover a bar, it answers
-                  </span>
-                  <span className="ml-auto">
-                    <LivePill />
+                    net dealer pressure by strike, hover a bar and it answers
                   </span>
                 </div>
                 <div className="flex-grow min-h-0 p-2">
@@ -643,7 +634,7 @@ const LiveSections = () => {
               <SectionKicker>Workspace</SectionKicker>
               <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">Your desk, your layout.</h2>
               <p className="mt-4 text-body text-textSecondary leading-relaxed max-w-xl">
-                Every panel in the terminal pulls into a workspace — drag, resize, duplicate. It saves
+                Every panel in the terminal pulls into a workspace: drag, resize, duplicate. It saves
                 the moment you touch it. These are the real panels, rearranging themselves so you don't
                 have to imagine it.
               </p>
@@ -663,7 +654,7 @@ const LiveSections = () => {
                   title: 'GEX heatmap',
                   node: (
                     <div className="h-full p-2">
-                      <GexMatrix data={hotMatrix(ctx.matrix)} spot={ctx.gex.levels.spot} />
+                      <GexMatrix data={ctx.matrix} spot={ctx.gex.levels.spot} />
                     </div>
                   ),
                 },

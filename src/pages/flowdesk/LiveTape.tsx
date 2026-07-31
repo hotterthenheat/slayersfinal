@@ -879,7 +879,7 @@ const LiveTape = () => {
           className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border font-mono text-label font-semibold uppercase tracking-wider transition-colors ${
             paused
               ? 'border-warn/40 bg-warn/[0.06] text-warn hover:bg-warn/[0.1]'
-              : 'border-bull/40 bg-bull/[0.06] text-bull hover:bg-bull/[0.1]'
+              : 'border-select/40 bg-select/[0.06] text-select hover:bg-select/[0.12]'
           }`}
         >
           {paused ? (

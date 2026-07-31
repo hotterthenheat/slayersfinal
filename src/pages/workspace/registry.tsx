@@ -78,7 +78,7 @@ const biasTone: Record<DealerBias, Tone> = { BULLISH: 'bull', BEARISH: 'bear', N
 export const WIDGETS: WidgetDef[] = [
   {
     key: 'live-chart',
-    title: 'Live Chart',
+    title: 'Chart',
     description: 'Candles with walls, flip, king & GEX nodes',
     w: 8,
     h: 5,
@@ -226,7 +226,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     key: 'gex-heatmap',
     title: 'GEX Heatmap',
-    description: 'Strike × expiry heat, live 1s pulse',
+    description: 'Strike × expiry heat, 1s pulse',
     w: 5,
     h: 5,
     minW: 4,

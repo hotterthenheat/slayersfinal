@@ -81,7 +81,7 @@ export const LaunchProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const launch = useCallback(
-    (to: string = '/pulse') => {
+    (to: string = '/terminal') => {
       // A click must never no-op: if the boot gate (or another launch) is still
       // in flight, skip the animation and navigate straight through.
       if (busyRef.current) {

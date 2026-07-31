@@ -162,12 +162,12 @@ const AssumptionsDrawer = ({ view }: { view: HedgeImpactView }) => {
     >
       {!open ? (
         <p className="font-mono text-label text-textMuted leading-relaxed">
-          HEX divides a live-chain hedge requirement by the available market depth. Expand for the depth inputs behind the read.
+          HEX divides a current-chain hedge requirement by the available market depth. Expand for the depth inputs behind the read.
         </p>
       ) : (
         <div className="flex flex-col gap-3">
           <p className="text-label text-textSecondary leading-relaxed">
-            The hedge requirement (numerator) comes from the live options chain. The liquidity that absorbs it
+            The hedge requirement (numerator) comes from the current options chain. The liquidity that absorbs it
             (denominator) is the desk's depth read per name — the depth values behind each forecast window are shown
             below.
           </p>
@@ -208,11 +208,11 @@ const AssumptionsDrawer = ({ view }: { view: HedgeImpactView }) => {
             <div className="flex items-center justify-between gap-3 px-3 py-2.5">
               <div className="min-w-0">
                 <div className="font-mono text-caption font-semibold text-textPrimary">Hedge required · per 1% move</div>
-                <div className="text-micro text-textMuted leading-tight mt-0.5">{fmtNum(view.hedgeSharesPer1pct)} shares · from the live chain</div>
+                <div className="text-micro text-textMuted leading-tight mt-0.5">{fmtNum(view.hedgeSharesPer1pct)} shares · from the current chain</div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <span className="font-mono text-data font-semibold tnum text-textPrimary">{fmtUsd(view.hedgePer1pctUsd)}</span>
-                <ProvTag muted={false}>live chain</ProvTag>
+                <ProvTag muted={false}>chain</ProvTag>
               </div>
             </div>
           </div>
@@ -355,7 +355,7 @@ const HedgeImpact = () => {
           Two sessions can carry identical gamma and trade nothing alike — the difference is depth. HEX divides the hedge dealers
           are forced to do by the liquidity available to absorb it, so it reads the outcome GEX only implies. The forecast turns
           gamma into shares and futures over the next 5–60 minutes; the failure boundary is the move where that hedging outruns the
-          book and starts feeding itself. Gamma and OI are the live chain; depth is the desk's liquidity read per name.
+          book and starts feeding itself. Gamma and OI are the current chain; depth is the desk's liquidity read per name.
         </p>
       </Panel>
     </>

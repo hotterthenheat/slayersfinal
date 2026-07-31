@@ -29,13 +29,13 @@ const DESKS: DeskDoc[] = [
     icon: LayoutDashboard,
     name: 'Pulse',
     to: '/pulse',
-    tagline: 'Your customizable live workspace — the cockpit you build once and live in.',
+    tagline: 'Your customizable workspace — the cockpit you build once and work from.',
     shows: [
-      'A grid of panels you arrange yourself: live chart, GEX heatmap, dealer positioning, key levels, order flow, dark pool, the liquidity map and more.',
+      'A grid of panels you arrange yourself: chart, GEX heatmap, dealer positioning, key levels, order flow, dark pool, the liquidity map and more.',
       'Each panel is a compact version of a full desk, all following the active ticker (or its own ticker, if you pin one).',
     ],
     read: [
-      'Think of it as a dashboard: the chart for price, the heatmap and positioning for where dealers sit, order flow for what is printing now.',
+      'It is a dashboard: the chart for price, the heatmap and positioning for where dealers sit, order flow for what is printing now.',
       'Below 1024px the drag-grid collapses into a clean vertical stack so it stays readable on a phone.',
     ],
     controls: [
@@ -75,9 +75,9 @@ const DESKS: DeskDoc[] = [
     icon: Radio,
     name: 'Trace',
     to: '/trace',
-    tagline: 'Reads the flow — the live options tape and where size is printing.',
+    tagline: 'Reads the flow — the options tape and where size is printing.',
     shows: [
-      'Live Tape: streaming prints with sweep / block tags. Dark Pool: off-exchange crosses. Scanner: filter the tape. Reconstruction: child prints clustered into the parent order behind them. Tracker: your saved flow.',
+      'Tape: streaming prints with sweep / block tags. Dark Pool: off-exchange crosses. Scanner: filter the tape. Reconstruction: child prints clustered into the parent order behind them. Tracker: your saved flow.',
     ],
     read: [
       <><span className="text-textPrimary">Sweep</span> = urgency — the order took multiple exchanges at once. <span className="text-textPrimary">Block</span> = negotiated size crossed in one clip.</>,
