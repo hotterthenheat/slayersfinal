@@ -8,6 +8,7 @@
 */
 
 import Simulator from '../core/simulator';
+import { expiryFor, fmtExpiryLong } from '../core/calendar';
 import type { TapeOrder } from '../types/market';
 import type { FlowPrint, PrintSentiment, StratTag, TapeSummary } from '../types/flowdesk';
 
@@ -40,8 +41,7 @@ export function enrichPrint(order: TapeOrder, id: number): FlowPrint {
 
   // Short-dated skew on expiry selection
   const dte = DTE_POOL[Math.floor(Math.pow(h('dte'), 1.6) * DTE_POOL.length)];
-  const expDate = new Date(Date.now() + dte * 86400000);
-  const expiry = `${String(expDate.getMonth() + 1).padStart(2, '0')}/${String(expDate.getDate()).padStart(2, '0')}/${expDate.getFullYear()}`;
+  const expiry = fmtExpiryLong(expiryFor(dte).date);
 
   // Premium estimate: intrinsic + gaussian time value scaled by DTE
   const intrinsic = right === 'C' ? Math.max(spot - strike, 0) : Math.max(strike - spot, 0);

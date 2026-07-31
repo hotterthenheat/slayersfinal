@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { preserveGreek } from '../ui/greek';
 import { Gavel, Ticket, AlertTriangle, Clock, ShieldAlert } from 'lucide-react';
 import { buildMocRead } from '../../core/fracture';
 import { weighContracts, type WeighedContract } from '../../core/contractScore';
@@ -131,7 +132,7 @@ const GrowthTimeline = ({ moc }: { moc: MocRead }) => {
               onMouseEnter={e => setHover({ t: pt.t, z: pt.z, dz, x: e.clientX, y: e.clientY })}
               onMouseMove={e => setHover({ t: pt.t, z: pt.z, dz, x: e.clientX, y: e.clientY })}
               onMouseLeave={() => setHover(prev => (prev && prev.t === pt.t ? null : prev))}
-              className="flex-1 h-full flex flex-col justify-end cursor-crosshair rounded-sm hover:bg-white/[0.03]"
+              className="flex-1 h-full flex flex-col justify-end cursor-crosshair rounded-sm hover:bg-rowHover"
             >
               <span className={`w-full rounded-sm ${pt.z >= 0 ? 'bg-bull/70' : 'bg-bear/70'}`} style={{ height: `${h}%` }} />
             </div>
@@ -191,11 +192,11 @@ const LottoRow = ({ c, best }: { c: WeighedContract; best: boolean }) => {
         <div className="mt-1 font-mono text-label text-textMuted truncate">{c.edge}</div>
       </div>
       <div className="hidden sm:flex flex-col items-end shrink-0 w-14">
-        <span className="font-mono text-micro uppercase tracking-wider text-textMuted">±1σ</span>
+        <span className="font-mono text-micro uppercase tracking-wider text-textMuted">{preserveGreek('±1σ')}</span>
         <span className="font-mono text-caption text-textSecondary tnum">{c.expectedMovePct.toFixed(1)}%</span>
       </div>
       <div className="hidden md:flex flex-col items-end shrink-0 w-16">
-        <span className="font-mono text-micro uppercase tracking-wider text-textMuted">θ/day</span>
+        <span className="font-mono text-micro uppercase tracking-wider text-textMuted">{preserveGreek('θ/day')}</span>
         <span className="font-mono text-caption text-warn tnum">−{c.thetaPerDayPct.toFixed(0)}%</span>
       </div>
       <div className="flex flex-col items-end shrink-0 w-14">
@@ -360,7 +361,7 @@ const LottoBoard = ({ snapshot }: { snapshot: MarketSnapshot }) => {
 
       <Panel bodyClassName="py-3">
         <p className="text-caption text-textSecondary leading-relaxed">
-          <span className="font-mono font-semibold uppercase tracking-wider mr-2 holo-text">The 0DTE desk</span>
+          <span className="font-mono font-semibold uppercase tracking-wider mr-2 text-textSecondary">The 0DTE desk</span>
           On 0DTE the math is nearly a coin flip, so the tape decides: the board weighs dealer flow and liquidity above the
           breakeven arithmetic, and the closing auction — the one scheduled, forced, size-on-size event of the session — gets a
           full engine instead of a single imbalance number. Built from the live chain and the dealer read.

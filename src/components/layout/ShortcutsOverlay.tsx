@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { X } from 'lucide-react';
-import { EASE } from '../../lib/motion';
+import { DUR, EASE } from '../../lib/motion';
 import { SHORTCUT_GROUPS as GROUPS } from '../../lib/shortcuts';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 
@@ -50,7 +50,7 @@ const ShortcutsOverlay = ({ open, onClose }: ShortcutsOverlayProps) => {
             initial={{ opacity: 0, scale: 0.97, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: 8 }}
-            transition={{ duration: 0.18, ease: EASE }}
+            transition={{ duration: DUR.quick, ease: EASE }}
           >
             <header className="flex items-center justify-between px-4 py-3 border-b border-borderSubtle">
               <span className="font-mono text-label uppercase tracking-widest text-textSecondary">Keyboard shortcuts</span>

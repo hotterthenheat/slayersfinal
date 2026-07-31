@@ -1,7 +1,9 @@
 import { Fragment } from 'react';
+import { ROW_INTERACTIVE, interactiveRowProps } from '../ui/interactiveRow';
 import { fmtUsd } from '../../data/gex';
 import SpotRule from '../ui/SpotRule';
 import type { ExposureProfileData, GreekSplit } from '../../types/gex';
+import Term from '../ui/Term';
 
 interface ExposureMatrixProps {
   data: ExposureProfileData;
@@ -59,14 +61,14 @@ const SpotRow = ({ ticker, spot }: { ticker: string; spot: number }) => (
 const ExposureMatrix = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSelectStrike }: ExposureMatrixProps) => {
   const { ticker, strikes, maxAbs, spotAfterIndex, levels } = data;
 
-  const GROUPS: { key: 'gex' | 'dex' | 'vex'; label: string; unit: string }[] = [
-    { key: 'gex', label: 'GEX', unit: '1% move' },
-    { key: 'dex', label: 'DEX', unit: 'Δ notional' },
-    { key: 'vex', label: 'VEX', unit: '1% vol' },
+  const GROUPS: { key: 'gex' | 'dex' | 'vex'; label: React.ReactNode; unit: string }[] = [
+    { key: 'gex', label: <Term k="GEX">GEX</Term>, unit: '1% move' },
+    { key: 'dex', label: <Term k="DEX">DEX</Term>, unit: 'Δ notional' },
+    { key: 'vex', label: <Term k="VEX">VEX</Term>, unit: '1% vol' },
   ];
 
   return (
-    <div tabIndex={0} role="region" aria-label="Exposure matrix — scrollable" className="overflow-auto h-full min-h-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/50">
+    <div tabIndex={0} role="region" aria-label="Exposure matrix — scrollable" className="overflow-auto h-full min-h-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60">
       {/* min-width so the 10-column greek matrix scrolls on a phone instead of
           squeezing every value until the DEX column clips. */}
       <table className="w-full min-w-[560px] border-collapse">
@@ -109,11 +111,12 @@ const ExposureMatrix = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
                 onMouseEnter={onHoverStrike ? () => onHoverStrike(row.strike) : undefined}
                 onMouseLeave={onHoverStrike ? () => onHoverStrike(null) : undefined}
                 onClick={onSelectStrike ? () => onSelectStrike(row.strike) : undefined}
+                {...(onSelectStrike ? interactiveRowProps(() => onSelectStrike(row.strike), selectedStrike === row.strike) : {})}
                 className={`border-b border-borderSubtle/30 transition-colors ${row.pin ? 'bg-white/[0.03]' : ''} ${
-                  onSelectStrike ? 'cursor-pointer' : ''
+                  onSelectStrike ? ROW_INTERACTIVE : ''
                 } ${
                   selectedStrike === row.strike
-                    ? 'bg-select/[0.05] rail-silver'
+                    ? 'inst-selected'
                     : hoverStrike === row.strike
                       ? 'bg-white/[0.04]'
                       : ''

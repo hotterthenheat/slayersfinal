@@ -36,7 +36,7 @@ const OverlayRail = ({ overlays, onToggle, dense }: OverlayRailProps) => (
             aria-pressed={on}
             className={`shrink-0 whitespace-nowrap px-3 py-1.5 font-mono text-caption font-medium transition-colors leading-4 ${
               i > 0 ? 'border-l border-borderSubtle' : ''
-            } ${on ? 'bg-white/[0.08] text-textPrimary' : 'text-textSecondary hover:text-textPrimary hover:bg-white/[0.03]'}`}
+            } ${on ? 'bg-white/[0.08] text-textPrimary' : 'text-textSecondary hover:text-textPrimary hover:bg-rowHover'}`}
           >
             {def.label}
           </button>

@@ -117,6 +117,10 @@ const ProveIt = () => {
         <StatCard label="Model composite" value={`${composite}%`} sub="engines' blended hit rate" tone={composite >= 60 ? 'bull' : 'neutral'} />
       </MetricGrid>
 
+      {/* Start-aligned on purpose: the Dealer surface beside this is `xl:sticky`
+          with a fixed-height canvas, and a sticky item that stretches to the row
+          height cannot pin. Its 62px of slack is the sticky behaviour, not a
+          stranded rail — hence `xl:self-start` on that panel. */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
         <Panel
           title={
@@ -134,7 +138,7 @@ const ProveIt = () => {
               type="button"
               onClick={() => setAssumptionsOpen(o => !o)}
               aria-expanded={assumptionsOpen}
-              className="flex items-center gap-1.5 font-mono text-label uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
+              className="-my-1 py-1 flex items-center gap-1.5 font-mono text-label uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
             >
               <ChevronRight className={`w-3.5 h-3.5 transition-transform ${assumptionsOpen ? 'rotate-90' : ''}`} />
               Assumptions
@@ -169,7 +173,7 @@ const ProveIt = () => {
             </span>
           }
           subtitle="net exposure — strikes × expiries × GEX"
-          className="xl:col-span-5"
+          className="xl:col-span-5 xl:sticky xl:top-4 xl:self-start"
           bodyClassName="p-0"
         >
           <Surface3D snapshot={marketData} height={352} />
@@ -211,7 +215,7 @@ const ProveIt = () => {
 
       <Panel bodyClassName="py-3">
         <p className="text-caption text-textSecondary leading-relaxed">
-          <span className="font-mono font-semibold uppercase tracking-wider mr-2 holo-text">How to read this</span>
+          <span className="font-mono font-semibold uppercase tracking-wider mr-2 text-textSecondary">How to read this</span>
           The cone is not a prediction — it is the honest distribution of outcomes given current volatility. Trade ideas
           from Compass and Trace should live inside the cone's fat part; anything that needs a path outside the 90% band
           is a lottery ticket, whatever the chart pattern says. The scoreboard exists so the terminal has to prove it —

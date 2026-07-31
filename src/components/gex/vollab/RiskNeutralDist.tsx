@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { RndData } from '../../../types/gex';
 import HoverReadout from '../../ui/HoverReadout';
 import { svgHoverIndex } from '../../ui/svgHover';
+import { preserveGreek } from '../../ui/greek';
 
 interface RiskNeutralDistProps {
   data: RndData;
@@ -39,14 +40,19 @@ const RiskNeutralDist = ({ data }: RiskNeutralDistProps) => {
     { price: sigma2[1], label: '+2σ', cls: 'rgba(48,209,88,0.85)', dash: '2 2' },
   ];
 
-  const statCells: { label: string; value: string; tone?: string }[] = [
+  // `full` is the long name for the `title` tooltip. Seven cells of a panel-width
+  // strip are ~100px each, and "RISK REV 25Δ" at tracking-widest needed ~110 —
+  // so the Δ was the character that got cut off, on the two cells whose whole
+  // meaning is the 25-delta wing. Abbreviated to the desk shorthand instead of
+  // truncated to something that reads as a different statistic.
+  const statCells: { label: string; value: string; tone?: string; full?: string }[] = [
     { label: 'Exp Move', value: `±${stats.expMoveAbs.toFixed(1)} (±${stats.expMovePct.toFixed(2)}%)` },
     { label: 'Skew', value: stats.skew.toFixed(2), tone: 'text-bear' },
     { label: 'Kurtosis', value: stats.kurtosis.toFixed(2) },
     { label: 'P(>+2σ)', value: `${stats.pAbove2.toFixed(2)}%` },
     { label: 'P(<-2σ)', value: `${stats.pBelow2.toFixed(2)}%` },
-    { label: 'Risk Rev 25Δ', value: `${stats.riskReversal.toFixed(2)} vol`, tone: 'text-bear' },
-    { label: 'Butterfly 25Δ', value: `${stats.butterfly.toFixed(2)} vol` },
+    { label: 'RR 25Δ', full: 'Risk reversal, 25-delta wings', value: `${stats.riskReversal.toFixed(2)} vol`, tone: 'text-bear' },
+    { label: 'Fly 25Δ', full: 'Butterfly, 25-delta wings', value: `${stats.butterfly.toFixed(2)} vol` },
   ];
 
   return (
@@ -117,7 +123,12 @@ const RiskNeutralDist = ({ data }: RiskNeutralDistProps) => {
       <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 pt-2 border-t border-borderSubtle">
         {statCells.map(s => (
           <span key={s.label} className="min-w-0">
-            <span className="block font-mono text-micro uppercase tracking-widest text-textMuted truncate">{s.label}</span>
+            <span
+              title={s.full}
+              className="block font-mono text-micro uppercase tracking-widest text-textMuted truncate"
+            >
+              {preserveGreek(s.label)}
+            </span>
             <span className={`block font-mono text-micro font-semibold tnum ${s.tone ?? 'text-textPrimary'}`}>{s.value}</span>
           </span>
         ))}

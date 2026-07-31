@@ -4,11 +4,12 @@ import SignalBadge from '../ui/SignalBadge';
 import Sparkline from './Sparkline';
 import SetupCard from './SetupCard';
 import type { Setup, SetupGroup } from '../../types/skyvision';
+import { DUR, EASE } from '../../lib/motion';
 
 // Shared FLIP transition — groups/cards glide to their new rank on each scan
 const flip = {
-  layout: { duration: 0.35, ease: [0.16, 1, 0.3, 1] as const },
-  opacity: { duration: 0.2 },
+  layout: { duration: DUR.reflow, ease: EASE },
+  opacity: { duration: DUR.base },
 };
 
 interface SetupsFeedProps {

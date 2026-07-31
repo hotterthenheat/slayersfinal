@@ -2,6 +2,7 @@ import { useEffect, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { X } from 'lucide-react';
+import { DUR, EASE } from '../../lib/motion';
 
 /** One labelled value inside a drilldown section grid. Shared across desk drawers. */
 export const Field = ({
@@ -75,7 +76,7 @@ const DrilldownDrawer = ({ open, onClose, ariaLabel, header, children }: Drilldo
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
-            transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: DUR.slow, ease: EASE }}
           >
             <header className="sticky top-0 z-10 flex items-start justify-between gap-3 px-4 py-3 border-b border-borderSubtle bg-panel/95 backdrop-blur">
               <div className="min-w-0">{header}</div>

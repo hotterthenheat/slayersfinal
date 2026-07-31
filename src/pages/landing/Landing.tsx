@@ -7,7 +7,6 @@
 ==================================================
 */
 
-import { useState, type MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowRight, Check, ChevronDown } from 'lucide-react';
@@ -17,14 +16,27 @@ import { ComparePlans, Faq } from './PricingExtras';
 import HeroScene from './HeroScene';
 import LiveSections from './LiveSections';
 import TiltBox from './TiltBox';
+import { PILL } from '../../lib/motion';
+import { useScrollSpy } from '../../hooks/useScrollSpy';
 
-// Top tabs open the actual products (into the terminal); Pricing stays an
-// on-page anchor.
+/**
+ * Top tabs scroll to the section of THIS page that demonstrates each desk.
+ *
+ * They used to call `launch()` and throw the visitor straight into the terminal.
+ * That made four of the five tabs exits rather than tabs: someone clicking
+ * "Compass" is asking what Compass is, and the answer was being dropped into a
+ * live trading desk before being told anything. It also left the page's own
+ * sections unreachable from the nav, and made the active pill unreachable for
+ * those four (the state was only ever set on the `#` branch).
+ *
+ * The way into the app is the "Launch terminal" button on the right, which is
+ * where a visitor expects it.
+ */
 const NAV_LINKS = [
-  { label: 'Pulse', to: '/pulse' },
-  { label: 'Compass', to: '/compass' },
-  { label: 'Trace', to: '/trace' },
-  { label: 'Pinpoint', to: '/pinpoint' },
+  { label: 'Pulse', to: '#workspace' },
+  { label: 'Compass', to: '#setups' },
+  { label: 'Trace', to: '#live' },
+  { label: 'Pinpoint', to: '#showcase' },
   { label: 'Pricing', to: '#pricing' },
 ];
 
@@ -108,8 +120,12 @@ const FOOTER_COLS = [
   {
     title: 'Access',
     links: [
+      // "Log in / Sign up" used to sit here pointing at /pulse. There is no
+      // auth in the product, so it promised an account flow and silently opened
+      // the terminal — the same thing the line above it does, under a label
+      // that isn't true. Removed rather than relabelled: two entries doing one
+      // job is the other half of the problem.
       { label: 'Launch Terminal', to: '/pulse' },
-      { label: 'Log in / Sign up', to: '/pulse' },
       { label: 'Guide', to: '/guide' },
     ],
   },
@@ -152,29 +168,26 @@ const SmartLink = ({ to, className, children }: { to: string; className: string;
   );
 };
 
-/** Flush hairline nav — the terminal's own chrome, not a floating glass bar.
-    Clicking a tab glides to its section while a holo pill springs across. */
-const LandingNav = () => {
-  const [active, setActive] = useState<string | null>(null);
-  const { launch } = useLaunch();
+const NAV_TARGETS = NAV_LINKS.map(l => l.to);
 
-  const handle = (to: string) => (e: MouseEvent) => {
-    e.preventDefault();
-    if (to.startsWith('#')) {
-      setActive(to);
-      document.querySelector(to)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    } else {
-      // A product tab opens the actual desk through the launch gate.
-      launch(to);
-    }
-  };
+/** Flush hairline nav — the terminal's own chrome, not a floating glass bar.
+    Clicking a tab glides to its section while a holo pill springs across.
+
+    The pill follows the page, not the last click. Marking a tab active because
+    it was clicked is a lie the moment the reader scrolls away from it — and most
+    people scroll this page rather than click through it. 100 is the detection
+    line: just below where a scrolled-to section comes to rest (84px, the
+    scroll-margin), since at 80 a section you had just jumped to did not count as
+    current and the pill lagged one behind on every click. */
+const LandingNav = () => {
+  const { active, getLinkProps } = useScrollSpy(NAV_TARGETS, { offset: 100 });
 
   return (
     <header className="glass fixed top-0 inset-x-0 z-40 border-b border-white/[0.07]">
       <div className="mx-auto max-w-6xl flex items-center gap-6 px-4 lg:px-6 py-3">
         <button
           onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-          className="font-mono text-data font-bold tracking-tight whitespace-nowrap select-none"
+          className="-my-1 py-1 font-mono text-data font-bold tracking-tight whitespace-nowrap select-none"
         >
           <span className="text-textMuted">&gt; </span>
           <span className="holo-text">slayer_terminal</span>
@@ -186,8 +199,7 @@ const LandingNav = () => {
             return (
               <motion.a
                 key={l.label}
-                href={l.to}
-                onClick={handle(l.to)}
+                {...getLinkProps(l.to)}
                 whileHover={{ y: -1 }}
                 whileTap={{ scale: 0.98 }}
                 transition={{ type: 'spring', stiffness: 400, damping: 30 }}
@@ -197,7 +209,7 @@ const LandingNav = () => {
                   <motion.span
                     layoutId="landing-nav-pill"
                     className="absolute inset-0 rounded-md holo-bg"
-                    transition={{ type: 'spring', stiffness: 320, damping: 30 }}
+                    transition={PILL}
                   />
                 )}
                 <span
@@ -271,9 +283,14 @@ const Landing = () => (
           >
             Launch terminal <ArrowRight className="w-4 h-4" />
           </SmartLink>
+          {/* Points at `#live` — the section headed "Not screenshots. The actual
+              panels, printing." It used to point at `#showcase`, which is the
+              charting section, and which the scroll cue directly below already
+              covers. Two affordances that mean different things were doing the
+              same jump; this one now lands on the section its label promises. */}
           <a
-            href="#showcase"
-            className="pointer-events-auto inline-flex items-center px-5 py-2.5 rounded-md border border-borderMuted bg-canvas/40 font-mono text-data uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-white/[0.04] transition-colors"
+            href="#live"
+            className="pointer-events-auto inline-flex items-center px-5 py-2.5 rounded-md border border-borderMuted bg-canvas/40 font-mono text-data uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-rowHover transition-colors"
           >
             See it live
           </a>
@@ -338,22 +355,30 @@ const Landing = () => (
       </p>
       <div className="mt-8 border border-borderSubtle bg-panel rounded-lg overflow-hidden">
         {SEED_IDEAS.slice(0, 3).map(idea => (
+          // Phones stack: the vote box, ticker and direction chip take ~176px of a
+          // 342px row, which left the thesis 137px and truncated roughly 80% of
+          // every quote away. The quote is the whole point of the row, so below
+          // `sm` it gets its own full-width line and clamps to two instead.
           <div
             key={idea.id}
-            className="flex items-center gap-4 px-5 py-4 border-b border-borderSubtle/50 last:border-0"
+            className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 px-5 py-4 border-b border-borderSubtle/50 last:border-0"
           >
-            <span className="flex flex-col items-center w-9 shrink-0 border border-borderSubtle rounded-md py-1.5">
-              <span className="font-mono text-caption font-bold text-textPrimary tnum">{idea.votes}</span>
+            <span className="flex items-center gap-3 sm:gap-4 shrink-0">
+              <span className="flex flex-col items-center w-9 shrink-0 border border-borderSubtle rounded-md py-1.5">
+                <span className="font-mono text-caption font-bold text-textPrimary tnum">{idea.votes}</span>
+              </span>
+              <span className="font-mono text-caption font-bold text-textPrimary shrink-0">{idea.ticker}</span>
+              <span
+                className={`inline-flex items-center rounded px-1.5 py-0.5 font-mono text-micro font-bold uppercase tracking-wider shrink-0 ${
+                  idea.direction === 'BULLISH' ? 'bg-bull/10 text-bull' : 'bg-bear/10 text-bear'
+                }`}
+              >
+                {idea.direction}
+              </span>
             </span>
-            <span className="font-mono text-caption font-bold text-textPrimary shrink-0">{idea.ticker}</span>
-            <span
-              className={`inline-flex items-center rounded px-1.5 py-0.5 font-mono text-micro font-bold uppercase tracking-wider shrink-0 ${
-                idea.direction === 'BULLISH' ? 'bg-bull/10 text-bull' : 'bg-bear/10 text-bear'
-              }`}
-            >
-              {idea.direction}
+            <span className="min-w-0 flex-1 text-caption text-textSecondary line-clamp-3 sm:line-clamp-none sm:truncate">
+              "{idea.thesis}"
             </span>
-            <span className="min-w-0 flex-1 text-caption text-textSecondary truncate">"{idea.thesis}"</span>
             <span className="ml-auto hidden md:block font-mono text-micro text-textMuted shrink-0">
               {idea.author}
             </span>
@@ -361,7 +386,7 @@ const Landing = () => (
         ))}
         <Link
           to="/community"
-          className="flex items-center justify-center gap-1.5 py-3 font-mono text-label uppercase tracking-wider text-textSecondary hover:text-select hover:bg-white/[0.02] transition-colors"
+          className="flex items-center justify-center gap-1.5 py-3 font-mono text-label uppercase tracking-wider text-textSecondary hover:text-select hover:bg-rowHover transition-colors"
         >
           Open the community <ArrowRight className="w-3.5 h-3.5" />
         </Link>
@@ -413,7 +438,7 @@ const Landing = () => (
                 className={`mt-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-md font-mono text-caption font-semibold uppercase tracking-wider transition-colors ${
                   tier.featured
                     ? 'holo-bg text-ink'
-                    : 'border border-borderMuted text-textSecondary hover:text-textPrimary hover:bg-white/[0.03]'
+                    : 'border border-borderMuted text-textSecondary hover:text-textPrimary hover:bg-rowHover'
                 }`}
               >
                 {tier.cta}
@@ -448,7 +473,7 @@ const Landing = () => (
         </SmartLink>
         <a
           href="#pricing"
-          className="inline-flex items-center px-5 py-2.5 rounded-md border border-borderMuted font-mono text-data uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-white/[0.03] transition-colors"
+          className="inline-flex items-center px-5 py-2.5 rounded-md border border-borderMuted font-mono text-data uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-rowHover transition-colors"
         >
           See pricing
         </a>

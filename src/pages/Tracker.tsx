@@ -292,7 +292,7 @@ const ItemDetail = ({ row, onStatus, onNotes, onReview, onUntrack }: ItemDetailP
                 className={`px-2.5 py-1 rounded border font-mono text-label uppercase tracking-wider transition-colors ${
                   active
                     ? STATUS_PICK_ACTIVE[o.value]
-                    : 'border-borderSubtle text-textSecondary hover:text-textPrimary hover:bg-white/[0.03]'
+                    : 'border-borderSubtle text-textSecondary hover:text-textPrimary hover:bg-rowHover'
                 }`}
               >
                 {o.label}
@@ -314,7 +314,7 @@ const ItemDetail = ({ row, onStatus, onNotes, onReview, onUntrack }: ItemDetailP
           onChange={e => onNotes(tracked.id, e.target.value)}
           rows={4}
           placeholder="Your read on this setup — thesis, level to watch, why you're in or out…"
-          className="w-full resize-none rounded-md bg-inset border border-borderSubtle px-3 py-2 font-mono text-caption leading-relaxed text-textPrimary placeholder:text-textMuted focus:outline-none focus:border-white/20"
+          className="w-full resize-none rounded-md bg-inset border border-borderSubtle px-3 py-2 font-mono text-caption leading-relaxed text-textPrimary placeholder:text-textMuted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 focus:border-white/20"
         />
         <p className="mt-1 font-mono text-micro text-textMuted">Saved in this browser.</p>
       </div>
@@ -326,7 +326,7 @@ const ItemDetail = ({ row, onStatus, onNotes, onReview, onUntrack }: ItemDetailP
         ) : (
           <button
             onClick={() => onReview(tracked)}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-md border border-borderSubtle bg-white/[0.03] hover:bg-white/[0.06] font-mono text-label text-textSecondary hover:text-textPrimary uppercase tracking-wider transition-colors"
+            className="flex items-center gap-1 px-3 py-1.5 rounded-md border border-borderSubtle bg-white/[0.03] hover:bg-rowHover font-mono text-label text-textSecondary hover:text-textPrimary uppercase tracking-wider transition-colors"
           >
             <ArrowUpRight className="w-3 h-3" /> Review in Compass
           </button>
@@ -602,7 +602,7 @@ const Tracker = () => {
               ].map(x => (
                 <div key={x.k} className="border border-borderSubtle bg-inset rounded-lg px-3 py-2.5 text-center min-w-[92px]">
                   <div className="font-mono text-micro uppercase tracking-widest text-textMuted">{x.k}</div>
-                  <div className="mt-1 font-mono text-body font-semibold holo-text leading-5">{x.v}</div>
+                  <div className="mt-1 font-mono text-body font-semibold text-textPrimary leading-5">{x.v}</div>
                   <div className="mt-0.5 text-micro text-textMuted">{x.s}</div>
                 </div>
               ))}
@@ -614,7 +614,7 @@ const Tracker = () => {
               { icon: Compass, title: 'Compass setups', body: 'Graded QUALIFIED / WATCH / FADED setups with a full plan.', to: '/compass', cta: 'Open Compass' },
               { icon: Scale, title: 'Contract Weigher', body: 'Weeklies, swings & LEAPS scored STRONG / WATCH / WEAK.', to: '/compass', cta: 'Weigh contracts' },
               { icon: Radar, title: 'Trace flow', body: 'Notable options prints and dark-pool blocks.', to: '/trace/scanner', cta: 'Open Trace' },
-              { icon: CalendarClock, title: 'Earnings plays', body: 'Implied-vs-realized PLAY / FADE calls into prints.', to: '/earnings', cta: 'Open Earnings' },
+              { icon: CalendarClock, title: 'Earnings prints', body: 'Implied-vs-realized reads graded QUALIFIED / RICH / NO EDGE.', to: '/earnings', cta: 'Open Earnings' },
             ].map(card => (
               <div key={card.title} className="inst-surface rounded-md p-4 flex flex-col gap-2.5">
                 <span className="inline-flex w-8 h-8 rounded-md border border-borderSubtle bg-inset items-center justify-center">
@@ -624,7 +624,7 @@ const Tracker = () => {
                 <p className="text-label text-textMuted leading-relaxed flex-1">{card.body}</p>
                 <button
                   onClick={() => navigate(card.to)}
-                  className="mt-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md border border-borderSubtle bg-white/[0.03] hover:bg-white/[0.06] text-textSecondary hover:text-textPrimary font-mono text-micro font-semibold uppercase tracking-wider transition-colors"
+                  className="mt-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md border border-borderSubtle bg-white/[0.03] hover:bg-rowHover text-textSecondary hover:text-textPrimary font-mono text-micro font-semibold uppercase tracking-wider transition-colors"
                 >
                   {card.cta} <ArrowUpRight className="w-3 h-3" />
                 </button>
@@ -685,7 +685,7 @@ const Tracker = () => {
                 rowKey={r => r.tracked.id}
                 onRowClick={r => setSelectedId(r.tracked.id)}
                 selectedKey={selected?.tracked.id ?? null}
-                maxHeight="560px"
+                maxHeight="max(560px, 62vh)"
                 emptyText={`Nothing in ${VIEWS.find(v => v.value === view)?.label}`}
               />
               {/* Book across lanes — anchors the base of the panel and doubles as
@@ -727,10 +727,10 @@ const Tracker = () => {
                       key={s.key}
                       onClick={() => setView(s.key)}
                       aria-pressed={view === s.key}
-                      className={`inline-flex items-center gap-1.5 px-2 py-1 rounded border font-mono text-label uppercase tracking-wider transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-select/50 ${
+                      className={`inline-flex items-center gap-1.5 px-2 py-1 rounded border font-mono text-label uppercase tracking-wider transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 ${
                         view === s.key
                           ? 'border-select/40 bg-select/[0.06] text-textPrimary'
-                          : 'border-borderSubtle text-textSecondary hover:text-textPrimary hover:bg-white/[0.03]'
+                          : 'border-borderSubtle text-textSecondary hover:text-textPrimary hover:bg-rowHover'
                       }`}
                     >
                       <span className={`inline-block w-1.5 h-1.5 rounded-full ${s.dot}`} />

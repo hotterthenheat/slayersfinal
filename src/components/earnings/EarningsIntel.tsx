@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
+import { MUTED_INK } from '../gex/palette';
 import { Target, TrendingDown, Layers, Scale, History, ArrowDownUp, GitBranch } from 'lucide-react';
 import {
   buildEarningsIntel,
@@ -88,7 +89,7 @@ const CrushPath = ({ view }: { view: EarningsIntelView }) => {
       {/* post-print crush zone */}
       <rect x={px} y={0} width={W - px} height={H} fill="rgba(255,149,0,0.05)" />
       {/* post-crush baseline */}
-      <line x1={6} x2={W - 6} y1={baseY} y2={baseY} stroke="#6b6b6b" strokeOpacity={0.6} strokeWidth={1} strokeDasharray="4 3" />
+      <line x1={6} x2={W - 6} y1={baseY} y2={baseY} stroke={MUTED_INK} strokeOpacity={0.6} strokeWidth={1} strokeDasharray="4 3" />
       <text x={8} y={baseY - 4} fontSize={10} className="fill-textMuted" fontFamily="monospace">
         base IV {view.baseIv.toFixed(0)}%
       </text>
@@ -105,7 +106,7 @@ const CrushPath = ({ view }: { view: EarningsIntelView }) => {
       {/* x labels */}
       {pts.map((p, i) =>
         p.day % 2 === 0 || p.phase === 'print' ? (
-          <text key={`l${p.day}`} x={X(i)} y={H - 2} fontSize={10} fill="#6b6b6b" fontFamily="monospace" textAnchor="middle">
+          <text key={`l${p.day}`} x={X(i)} y={H - 2} fontSize={10} fill={MUTED_INK} fontFamily="monospace" textAnchor="middle">
             {p.label}
           </text>
         ) : null
@@ -171,7 +172,7 @@ const StateRow = ({ s, maxP }: { s: StateNode; maxP: number }) => {
   const [hx, setHx] = useState<{ x: number; y: number } | null>(null);
   return (
     <div
-      className="px-3.5 py-2 grid grid-cols-[92px_1fr_88px] items-center gap-3 cursor-crosshair hover:bg-white/[0.03]"
+      className="px-3.5 py-2 grid grid-cols-[92px_1fr_88px] items-center gap-3 cursor-crosshair hover:bg-rowHover"
       onMouseEnter={e => setHx({ x: e.clientX, y: e.clientY })}
       onMouseMove={e => setHx({ x: e.clientX, y: e.clientY })}
       onMouseLeave={() => setHx(null)}
@@ -181,7 +182,7 @@ const StateRow = ({ s, maxP }: { s: StateNode; maxP: number }) => {
         <span className={`font-mono text-micro tnum ${moveTone}`}>{fmtMove(s.movePct)}</span>
       </span>
       <div className="relative h-2.5 rounded-full bg-white/[0.06] overflow-hidden">
-        <span className="block h-full rounded-full holo-bar" style={{ width: `${(s.prob / maxP) * 100}%` }} />
+        <span className="block h-full rounded-full data-bar" style={{ width: `${(s.prob / maxP) * 100}%` }} />
         {/* what the market prices this state at */}
         <span className="absolute top-0 bottom-0 w-px bg-white/70" style={{ left: `${Math.min(100, (s.priced / maxP) * 100)}%` }} aria-hidden />
       </div>
@@ -287,7 +288,7 @@ const ProbBar = ({ model, priced, label, movePct }: { model: number; priced: num
         onMouseMove={e => setHx({ x: e.clientX, y: e.clientY })}
         onMouseLeave={() => setHx(null)}
       >
-        <span className="block h-full rounded-full holo-bar" style={{ width: `${Math.min(100, model * 100)}%` }} />
+        <span className="block h-full rounded-full data-bar" style={{ width: `${Math.min(100, model * 100)}%` }} />
         <span className="absolute top-0 bottom-0 w-px bg-white/70" style={{ left: `${Math.min(100, priced * 100)}%` }} aria-hidden />
       </span>
       {hx && label != null && (
@@ -450,7 +451,7 @@ const EarningsIntel = ({ event }: EarningsIntelProps) => {
       >
         <p className="text-read text-textPrimary leading-relaxed">{view.mispricing.headline}</p>
         <p className="mt-2 text-body text-textSecondary leading-relaxed">
-          <span className={`font-mono text-micro font-semibold uppercase tracking-widest mr-2 ${componentTone[view.mispricing.component] === 'neutral' ? 'holo-text' : ''}`}>
+          <span className={`font-mono text-micro font-semibold uppercase tracking-widest mr-2 ${componentTone[view.mispricing.component] === 'neutral' ? 'text-textSecondary' : ''}`}>
             Verdict
           </span>
           {view.mispricing.verdict}
@@ -521,7 +522,7 @@ const EarningsIntel = ({ event }: EarningsIntelProps) => {
             <span className="font-mono text-2xl font-bold tnum text-textPrimary">{view.gapProb.toFixed(0)}%</span>
             <div className="flex-1">
               <div className="flex h-2.5 rounded-full overflow-hidden bg-white/[0.06]">
-                <span className="h-full holo-bar" style={{ width: `${view.gapProb}%` }} />
+                <span className="h-full data-bar" style={{ width: `${view.gapProb}%` }} />
                 <span className="h-full bg-white/25" style={{ width: `${view.continuousProb}%` }} />
               </div>
               <div className="mt-1.5 flex items-center justify-between font-mono text-micro uppercase tracking-wider text-textMuted">
@@ -564,7 +565,7 @@ const EarningsIntel = ({ event }: EarningsIntelProps) => {
                     <span className="flex items-center gap-1.5">
                       <span className="w-6 font-mono text-micro uppercase text-textMuted">real</span>
                       <span className="flex-1 h-[3px] rounded-full bg-white/[0.06] overflow-hidden">
-                        <span className="block h-full rounded-full holo-bar" style={{ width: `${(a.realizedPct / max) * 100}%` }} />
+                        <span className="block h-full rounded-full data-bar" style={{ width: `${(a.realizedPct / max) * 100}%` }} />
                       </span>
                       <span className={`w-9 text-right font-mono text-micro tnum ${a.direction === 'UP' ? 'text-bull' : 'text-bear'}`}>
                         {a.direction === 'UP' ? '+' : '−'}{a.realizedPct.toFixed(1)}%
@@ -603,7 +604,7 @@ const EarningsIntel = ({ event }: EarningsIntelProps) => {
       {/* Honest explainer */}
       <Panel bodyClassName="py-3">
         <p className="text-caption text-textSecondary leading-relaxed">
-          <span className="font-mono font-semibold uppercase tracking-wider mr-2 holo-text">Beyond the straddle</span>
+          <span className="font-mono font-semibold uppercase tracking-wider mr-2 text-textSecondary">Beyond the straddle</span>
           A single implied move hides the trade. This dossier strips the jump vol out of the front-month IV, traces the crush the
           overnight brings, and splits the reaction into an outcome distribution — so the edge is not &ldquo;vol is rich&rdquo; but
           which slice of that distribution the market has wrong. The recommended expression is the one that harvests exactly that slice,

@@ -53,7 +53,7 @@ const DivergingRow = ({ label, value, word, wordClass }: { label: string; value:
       </div>
       <div className="relative mt-1 h-1.5 rounded-full bg-white/[0.06]">
         <span className="absolute top-0 bottom-0 left-1/2 w-px bg-white/25" aria-hidden />
-        <span className="absolute top-0 bottom-0 rounded-full holo-bar" style={{ left: `${left}%`, width: `${w}%` }} />
+        <span className="absolute top-0 bottom-0 rounded-full data-bar" style={{ left: `${left}%`, width: `${w}%` }} />
       </div>
     </div>
   );
@@ -99,7 +99,7 @@ const DeepBreakdown = ({ h, positioningLean, positioningLabel }: { h: HeadlineIn
           <span className={`font-mono text-label font-semibold tnum ${toneText[piTone]}`}>{h.pricedInPct}%</span>
         </div>
         <div className="mt-1 h-2 rounded-full bg-white/[0.06] overflow-hidden">
-          <span className="block h-full rounded-full holo-bar" style={{ width: `${h.pricedInPct}%` }} />
+          <span className="block h-full rounded-full data-bar" style={{ width: `${h.pricedInPct}%` }} />
         </div>
       </div>
 
@@ -109,7 +109,7 @@ const DeepBreakdown = ({ h, positioningLean, positioningLabel }: { h: HeadlineIn
           <SignalBadge tone={agreeTone[h.agreement]} dot>{h.agreement}</SignalBadge>
         </div>
         <DivergingRow label="Wire lean" value={Math.tanh(h.sentiment * 1.8)} word={sentimentWord(h.sentiment)} wordClass={toneText[sentTone]} />
-        <DivergingRow label="Book" value={positioningLean} word={positioningLabel} wordClass="holo-text" />
+        <DivergingRow label="Book" value={positioningLean} word={positioningLabel} wordClass="text-textPrimary" />
         <p className="text-label text-textSecondary leading-snug">{h.agreementNote}</p>
       </div>
 
@@ -147,7 +147,7 @@ const NoBreakdown = ({ view, selectedItem, onSelect }: { view: NewsIntelView; se
       No positioning breakdown for{' '}
       {selectedItem?.ticker ? <span className="font-mono text-textPrimary">{selectedItem.ticker}</span> : 'this macro print'} yet — the deep
       read needs the live options chain, which the terminal keeps for the active name{' '}
-      <span className="font-mono holo-text">{view.ticker}</span> and the macro tape. Open a covered catalyst:
+      <span className="font-mono text-textPrimary">{view.ticker}</span> and the macro tape. Open a covered catalyst:
     </p>
     {view.headlines.length > 0 ? (
       <div className="flex flex-wrap gap-1.5">
@@ -155,7 +155,7 @@ const NoBreakdown = ({ view, selectedItem, onSelect }: { view: NewsIntelView; se
           <button
             key={h.id}
             onClick={() => onSelect?.(h.id)}
-            className="inline-flex items-center gap-1.5 px-2 py-1 rounded border border-borderSubtle bg-white/[0.02] hover:border-borderMuted hover:bg-white/[0.04] transition-colors"
+            className="inline-flex items-center gap-1.5 px-2 py-1 rounded border border-borderSubtle bg-white/[0.02] hover:border-borderMuted hover:bg-rowHover transition-colors"
           >
             <span className="font-mono text-label font-semibold text-textPrimary">{h.scope === 'MACRO' ? 'Macro' : h.ticker}</span>
             <SignalBadge tone={catTone[h.category]}>{h.category}</SignalBadge>
@@ -200,7 +200,7 @@ const NewsIntel = ({ selectedItem, onSelect }: NewsIntelProps) => {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="inline-flex items-center gap-1.5 font-mono text-label font-semibold uppercase tracking-widest holo-text">
+        <span className="inline-flex items-center gap-1.5 font-mono text-label font-semibold uppercase tracking-widest text-textSecondary">
           <Radar className="w-3.5 h-3.5 text-select" /> Positioning read
         </span>
         <span className="font-mono text-label font-bold text-textPrimary">{view.ticker}</span>
@@ -222,7 +222,7 @@ const NewsIntel = ({ selectedItem, onSelect }: NewsIntelProps) => {
       </div>
 
       <div className={`border-l-2 pl-3 ${readTone === 'bull' ? 'border-bull/40' : readTone === 'bear' ? 'border-bear/40' : 'border-borderMuted'}`}>
-        <span className={`font-mono text-label font-semibold uppercase tracking-widest ${readTone === 'bull' ? 'text-bull' : readTone === 'bear' ? 'text-bear' : 'holo-text'}`}>
+        <span className={`font-mono text-label font-semibold uppercase tracking-widest ${readTone === 'bull' ? 'text-bull' : readTone === 'bear' ? 'text-bear' : 'text-textSecondary'}`}>
           The read
         </span>
         <p className="mt-1 text-caption text-textSecondary leading-relaxed">{view.headline}</p>

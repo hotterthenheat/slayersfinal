@@ -1,15 +1,21 @@
+import { preserveGreek } from '../ui/greek';
+import ChartLegend from '../ui/ChartLegend';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import SegmentedControl from '../ui/SegmentedControl';
 import { buildGradientField, type GradientField, type GradientMetric } from '../../data/gradientField';
 import { fmtUsd } from '../../data/gex';
-import { CALL_WALL, PUT_WALL, FLIP } from '../gex/palette';
+import { CALL_WALL, PUT_WALL, FLIP, MUTED_INK, SHORT_GAMMA, LONG_GAMMA, CHARM_POS, CHARM_NEG } from './palette';
 import type { KeyLevels } from '../../types/gex';
 
 /*
   VS3D-style gradient chart: the dealer gamma (or charm) field across the live
   session as a smooth TIME x PRICE gradient — posterized into contour bands so
-  it reads like a topo map — with the tape drawn over it. Gamma paints
-  green (long) / red (short); charm paints blue (+) / gold (−).
+  it reads like a topo map — with the tape drawn over it.
+
+  Gamma paints the house sign pair: GOLD for short gamma, BLUE for long. It used
+  to paint green/red off-token while charm took the gold/blue — so a gamma panel
+  and a charm panel stacked in the default Pulse column said opposite things in
+  the same two colours. Charm now owns cyan (+) / magenta (−).
 */
 
 interface GradientChartProps {
@@ -23,30 +29,28 @@ const AXIS_W = 54;
 const AXIS_H = 18;
 const FONT = '10px "JetBrains Mono", monospace';
 
-/** Posterized diverging colormaps — [r,g,b] at |t| in 0..1, by sign. */
+/** Posterized diverging colormaps — [r,g,b] at |t| in 0..1, by sign. Both ramps
+    interpolate from the palette so the chart cannot drift off the token. */
+const hexRgb = (hex: string): [number, number, number] => {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+};
+const FLOOR: [number, number, number] = [12, 12, 12]; // near-black at |t| = 0
+const rampTo = (target: [number, number, number], a: number, out: [number, number, number]): void => {
+  out[0] = FLOOR[0] + (target[0] - FLOOR[0]) * a;
+  out[1] = FLOOR[1] + (target[1] - FLOOR[1]) * a;
+  out[2] = FLOOR[2] + (target[2] - FLOOR[2]) * a;
+};
+const LONG_RGB = hexRgb(LONG_GAMMA);
+const SHORT_RGB = hexRgb(SHORT_GAMMA);
+const CHARM_P_RGB = hexRgb(CHARM_POS);
+const CHARM_N_RGB = hexRgb(CHARM_NEG);
+
 function gammaColor(t: number, out: [number, number, number]): void {
-  const a = Math.abs(t);
-  if (t >= 0) {
-    out[0] = 8 + 30 * a;
-    out[1] = 26 + 150 * a;
-    out[2] = 16 + 70 * a;
-  } else {
-    out[0] = 30 + 160 * a;
-    out[1] = 12 + 30 * a;
-    out[2] = 12 + 28 * a;
-  }
+  rampTo(t >= 0 ? LONG_RGB : SHORT_RGB, Math.abs(t), out);
 }
 function charmColor(t: number, out: [number, number, number]): void {
-  const a = Math.abs(t);
-  if (t >= 0) {
-    out[0] = 10 + 60 * a;
-    out[1] = 24 + 120 * a;
-    out[2] = 36 + 190 * a;
-  } else {
-    out[0] = 34 + 190 * a;
-    out[1] = 26 + 130 * a;
-    out[2] = 10 + 50 * a;
-  }
+  rampTo(t >= 0 ? CHARM_P_RGB : CHARM_N_RGB, Math.abs(t), out);
 }
 
 const METRIC_OPTIONS = [
@@ -146,7 +150,7 @@ const GradientChart = ({ ticker, revision, levels, height = 260 }: GradientChart
       ctx.moveTo(0, y);
       ctx.lineTo(plotW, y);
       ctx.stroke();
-      ctx.fillStyle = '#7d7d7d';
+      ctx.fillStyle = MUTED_INK;
       ctx.fillText(price.toFixed(2), plotW + 6, Math.min(plotH - 6, Math.max(6, y)));
     }
 
@@ -189,7 +193,7 @@ const GradientChart = ({ ticker, revision, levels, height = 260 }: GradientChart
     ctx.fillText(last.toFixed(2), plotW + 6, ly);
 
     // time axis
-    ctx.fillStyle = '#7d7d7d';
+    ctx.fillStyle = MUTED_INK;
     ctx.textBaseline = 'alphabetic';
     const tTicks = Math.min(5, f.cols - 1);
     for (let i = 0; i <= tTicks; i++) {
@@ -246,18 +250,19 @@ const GradientChart = ({ ticker, revision, levels, height = 260 }: GradientChart
           value={metric}
           onChange={v => setMetric(v as GradientMetric)}
         />
-        <span className="flex items-center gap-1.5 font-mono text-micro text-textSecondary">
-          <span
-            className="inline-block w-4 h-2 rounded-sm"
-            style={{
-              background:
+        <ChartLegend
+          variant="line"
+          items={[
+            {
+              label: preserveGreek(metric === 'gamma' ? 'short γ → long γ' : '−charm → +charm'),
+              kind: 'gradient',
+              gradient:
                 metric === 'gamma'
-                  ? 'linear-gradient(to right, #C24030, #101010, #26B45C)'
-                  : 'linear-gradient(to right, #E0B84E, #101010, #4E9EF0)',
-            }}
-          />
-          {metric === 'gamma' ? 'short γ → long γ' : '−charm → +charm'}
-        </span>
+                  ? `linear-gradient(to right, ${SHORT_GAMMA}, #101010, ${LONG_GAMMA})`
+                  : `linear-gradient(to right, ${CHARM_NEG}, #101010, ${CHARM_POS})`,
+            },
+          ]}
+        />
         <span className="ml-auto font-mono text-micro text-textMuted uppercase tracking-wider hidden sm:inline">
           session field · tape overlaid
         </span>

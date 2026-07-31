@@ -81,7 +81,17 @@
   animation: holo-pan 4.5s ease-in-out infinite alternate;
 }
 
-/* Meter fills & thin rails — same foil, denser pan so short bars still shift. */
+/* Data-magnitude fill. Holo-silver is SELECTION language, so using it for score
+   and probability bars meant a desk at rest had six to nine gradients panning
+   continuously, and a strong score wore the same treatment as the active nav
+   tab. Magnitude reads from length; tone, where it matters, lives in the number
+   beside the bar — never in the chrome. */
+.data-bar {
+  background-color: rgba(237, 237, 237, 0.45);
+}
+
+/* Meter fills & thin rails — same foil, denser pan so short bars still shift.
+   Reserved for selection: the active-workflow underline and the launch gate. */
 .holo-bar {
   background-image: var(--holo-gradient);
   background-size: 350% 350%;
@@ -397,6 +407,12 @@
   .custom-pulse {
     animation: none;
   }
+  /* Tailwind's own two. This block only ever listed the house animations, so
+     the stock utilities kept running under `reduce` — a bouncing scroll chevron
+     and four looping skeleton placeholders on the landing page. They come from
+     the utilities layer, so they need !important to beat it. */
+  .animate-pulse,
+  .animate-bounce,
   .rain-col,
   .rain-tw,
   .rain-tw-hi {

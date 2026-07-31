@@ -11,6 +11,7 @@ import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Check, ChevronDown, Clock, Minus } from 'lucide-react';
 import SignalBadge from '../../components/ui/SignalBadge';
+import { DUR, EASE } from '../../lib/motion';
 
 // ---- compare plans -----------------------------------------------------------
 
@@ -205,12 +206,12 @@ export const Faq = () => {
             <div key={item.q} className="border-b border-borderSubtle/60 last:border-0">
               <button
                 onClick={() => setOpen(isOpen ? null : i)}
-                className="w-full flex items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-white/[0.02]"
+                className="w-full flex items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-rowHover"
               >
                 <span className={`flex-grow text-body font-semibold tracking-tight ${isOpen ? 'text-textPrimary' : 'text-textSecondary'}`}>
                   {item.q}
                 </span>
-                <motion.span animate={{ rotate: isOpen ? 180 : 0 }} transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}>
+                <motion.span animate={{ rotate: isOpen ? 180 : 0 }} transition={{ duration: DUR.slow, ease: EASE }}>
                   <ChevronDown className="w-4 h-4 text-textMuted" />
                 </motion.span>
               </button>
@@ -220,7 +221,7 @@ export const Faq = () => {
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: 'auto', opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+                    transition={{ duration: DUR.slow, ease: EASE }}
                     className="overflow-hidden"
                   >
                     <p className="px-5 pb-5 text-data text-textSecondary leading-relaxed">{item.a}</p>

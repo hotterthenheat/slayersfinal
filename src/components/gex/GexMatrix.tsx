@@ -50,7 +50,7 @@ const GexMatrix = ({ data, highlightCol = null }: GexMatrixProps) => {
 
   return (
     <div className="relative flex gap-2 h-full min-h-0">
-      <div ref={scrollRef} tabIndex={0} role="region" aria-label="Gamma heatmap — scrollable" className="flex-grow overflow-auto min-w-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/50">
+      <div ref={scrollRef} tabIndex={0} role="region" aria-label="Gamma heatmap — scrollable" className="flex-grow overflow-auto min-w-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60">
         {/* table-fixed: geometry is tick-independent, so the pulse only swaps glyphs
             (fmtUsd char-count changes each second) instead of reflowing columns */}
         {/* min-width keeps the dense grid legible on a phone: the overflow-auto
@@ -91,13 +91,13 @@ const GexMatrix = ({ data, highlightCol = null }: GexMatrixProps) => {
                 <tr
                   key={strike}
                   className={`border-b last:border-0 ${
-                    isKeyRow ? 'border-[#E0B84E]/25 border-t border-t-[#E0B84E]/25' : 'border-borderSubtle/40'
+                    isKeyRow ? 'border-shortGamma/25 border-t border-t-shortGamma/25' : 'border-borderSubtle/40'
                   } ${isSpot ? 'rail-neutral' : ''}`}
                 >
                   <td className="px-2 py-1 font-mono text-label whitespace-nowrap">
                     <span
                       className={`${isSpot ? 'text-textPrimary font-bold' : 'text-textPrimary font-semibold'} ${
-                        isKeyRow && !isSpot ? 'text-[#E0B84E]' : ''
+                        isKeyRow && !isSpot ? 'text-shortGamma' : ''
                       }`}
                     >
                       {strike % 1 === 0 ? strike.toFixed(0) : strike.toFixed(2)}

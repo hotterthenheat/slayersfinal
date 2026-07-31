@@ -522,7 +522,7 @@ const Fracture = () => {
 
       <Panel bodyClassName="py-3">
         <p className="text-caption text-textSecondary leading-relaxed">
-          <span className="font-mono font-semibold uppercase tracking-wider mr-2 holo-text">Beyond GEX</span>
+          <span className="font-mono font-semibold uppercase tracking-wider mr-2 text-textSecondary">Beyond GEX</span>
           GEX estimates which way dealers must hedge. Fracture estimates whether the market can absorb that hedging — it combines
           the forced flow from every mechanical participant, the liquidity actually available to take the other side, and how close
           activity is to self-sustaining, then runs the feedback loop forward. The fracture line is where that balance breaks. Built

@@ -131,7 +131,7 @@ const GammaChart = () => {
                   key={label}
                   onClick={() => setHighlightCol(col)}
                   aria-pressed={on}
-                  className={`shrink-0 rounded px-2 py-1 font-mono text-micro font-semibold uppercase tracking-wide transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-select/60 ${
+                  className={`shrink-0 inline-flex items-center min-h-6 rounded px-2 py-1 font-mono text-micro font-semibold uppercase tracking-wide transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 ${
                     on ? 'bg-select/15 text-select' : 'text-textMuted hover:text-textPrimary'
                   }`}
                 >
@@ -151,7 +151,7 @@ const GammaChart = () => {
       <p className="flex items-start gap-2 text-caption text-textSecondary leading-relaxed px-1">
         <Info className="w-3.5 h-3.5 text-textMuted mt-px shrink-0" />
         <span>
-          <span className="font-mono font-semibold uppercase tracking-wider mr-1.5 holo-text">Reading the gamma</span>
+          <span className="font-mono font-semibold uppercase tracking-wider mr-1.5 text-textSecondary">Reading the gamma</span>
           Each cell is net dealer gamma at that strike and expiry — <span className="text-bull">green</span> is dealer support
           (long gamma, dips get bought toward the walls); <span className="text-bear">red</span> is where hedging amplifies the move.
           The nearest expiries carry the most gamma; the flip is the price where the sign turns. Candlesticks live on Pulse — this

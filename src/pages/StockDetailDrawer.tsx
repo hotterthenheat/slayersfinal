@@ -9,6 +9,7 @@ import type { StockPick, StockVerdict } from '../data/stocks';
 import type { Tone } from '../components/ui/tones';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { FACTOR_GUIDE } from '../data/factorGuide';
+import { DUR, EASE } from '../lib/motion';
 
 const verdictTone: Record<StockVerdict, Tone> = {
   ACCUMULATE: 'bull',
@@ -16,7 +17,7 @@ const verdictTone: Record<StockVerdict, Tone> = {
   AVOID: 'bear',
 };
 
-const barClass = (v: number) => (v >= 60 ? 'holo-bar' : v >= 40 ? 'bg-white/30' : 'bg-bear/70');
+const barClass = (v: number) => (v >= 60 ? 'data-bar' : v >= 40 ? 'bg-white/30' : 'bg-bear/70');
 const valueClass = (v: number) => (v >= 60 ? 'text-textPrimary' : v >= 40 ? 'text-textSecondary' : 'text-bear');
 
 /** Full-width factor bar with a definition line — the drawer's richer sleeve. */
@@ -86,7 +87,7 @@ const StockDetailDrawer = ({
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
-            transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: DUR.slow, ease: EASE }}
           >
             {/* Header */}
             <header className="sticky top-0 z-10 flex items-start justify-between gap-3 px-4 h-auto py-3 border-b border-borderSubtle bg-panel/95 backdrop-blur">

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RotateCcw } from 'lucide-react';
 import {
   createChart,
@@ -15,7 +15,8 @@ import Simulator from '../../core/simulator';
 import { aggregateCandles, tfMinutes, type Timeframe } from '../../data/timeframe';
 import { candleTheme } from '../gex/candleTheme';
 import ChartLegend from '../ui/ChartLegend';
-import { CALL_WALL, PUT_WALL, FLIP, DARK_POOL, FOCUS, SPOT } from '../gex/palette';
+import TimeframePicker from '../ui/TimeframePicker';
+import { CALL_WALL, PUT_WALL, FLIP, DARK_POOL, FOCUS, SPOT, MUTED_INK, SHORT_GAMMA } from '../gex/palette';
 
 // Slayer signature candles (holo-silver/purple) — direction reads in colour so
 // it pops against the gold liquidity book without duplicating the green/red the
@@ -42,7 +43,10 @@ interface LiquidityHeatmapChartProps {
   nodes?: { strike: number; value: number }[];
   /** Session VWAP & point-of-control for the reference lines */
   orderFlow?: { vwap: number; poc: number };
+  /** Starting interval. The chart owns the live value from here on. */
   timeframe?: Timeframe;
+  /** Hide the interval picker where the chart is decoration, not an instrument. */
+  showTimeframePicker?: boolean;
   height?: number;
   focusPrice?: number | null;
 }
@@ -101,10 +105,16 @@ const LiquidityHeatmapChart = ({
   oiByStrike,
   nodes,
   orderFlow,
-  timeframe = '1m',
+  timeframe: initialTimeframe = '1m',
+  showTimeframePicker = true,
   height = 320,
   focusPrice = null,
 }: LiquidityHeatmapChartProps) => {
+  // The chart owns the live interval; the prop only seeds it, so two tiles of
+  // this chart can sit on different intervals side by side in Pulse.
+  const [timeframe, setTimeframe] = useState<Timeframe>(initialTimeframe);
+  useEffect(() => setTimeframe(initialTimeframe), [initialTimeframe]);
+
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
@@ -189,7 +199,7 @@ const LiquidityHeatmapChart = ({
       autoSize: true,
       layout: {
         background: { color: 'transparent' },
-        textColor: '#7d7d7d',
+        textColor: MUTED_INK,
         fontFamily: 'JetBrains Mono, monospace',
         fontSize: 10,
         attributionLogo: false,
@@ -311,7 +321,7 @@ const LiquidityHeatmapChart = ({
       if (roDepthRef.current) {
         const label = depth >= 0.65 ? 'deep shelf' : depth >= 0.3 ? 'moderate' : depth > 0.06 ? 'thin' : 'open';
         roDepthRef.current.textContent = `depth ${Math.round(depth * 100)}% · ${label}`;
-        roDepthRef.current.style.color = depth >= 0.65 ? '#F0C45C' : depth >= 0.3 ? '#C89B3C' : '#7d7d7d';
+        roDepthRef.current.style.color = depth >= 0.65 ? SHORT_GAMMA : depth >= 0.3 ? SHORT_GAMMA : MUTED_INK;
       }
       el.style.opacity = '1';
     });
@@ -536,7 +546,7 @@ const LiquidityHeatmapChart = ({
         <span className="flex items-center gap-1.5 font-mono text-micro text-textSecondary">
           <span
             className="inline-block w-4 h-2 rounded-sm"
-            style={{ background: 'linear-gradient(to right, rgba(110,74,16,0.5), #F0C45C)' }}
+            style={{ background: 'linear-gradient(to right, rgba(110,74,16,0.5), ${SHORT_GAMMA})' }}
           />
           Resting liquidity
         </span>
@@ -548,9 +558,12 @@ const LiquidityHeatmapChart = ({
             { label: 'Dark Pool', color: DARK_POOL },
           ]}
         />
-        <span className="ml-auto font-mono text-micro text-textMuted uppercase tracking-wider hidden sm:inline">
+        <span className="ml-auto font-mono text-micro text-textMuted uppercase tracking-wider hidden xl:inline">
           scroll zoom · drag pan · dbl-click reset
         </span>
+        {/* Below xl the hint is hidden, so the picker takes over the ml-auto
+            push that keeps the controls right-aligned against the legend. */}
+        {showTimeframePicker && <TimeframePicker value={timeframe} onChange={setTimeframe} className="ml-auto xl:ml-0" />}
         <button
           onClick={resetView}
           title="Reset view (or double-click the chart)"
@@ -564,7 +577,7 @@ const LiquidityHeatmapChart = ({
         style={{ minHeight: height }}
         onDoubleClick={resetView}
       >
-        <div ref={containerRef} className="absolute inset-0" />
+        <div ref={containerRef} className="absolute inset-0" role="img" aria-label={`${ticker} liquidity chart — candles with the resting-liquidity heat field, dealer walls, dark-pool shelves and VWAP`} />
         <div
           ref={readoutRef}
           aria-hidden

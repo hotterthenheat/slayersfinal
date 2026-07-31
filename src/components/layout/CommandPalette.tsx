@@ -165,7 +165,7 @@ const CommandPalette = ({ open, onClose, onOpenSettings, onOpenShortcuts }: Comm
           value={query}
           onChange={e => setQuery(e.target.value)}
           placeholder="Type a command or destination…"
-          className="w-full bg-transparent px-4 py-3 text-body text-textPrimary placeholder:text-textMuted focus:outline-none border-b border-borderSubtle leading-5"
+          className="w-full bg-transparent px-4 py-3 text-body text-textPrimary placeholder:text-textMuted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 border-b border-borderSubtle leading-5"
         />
         <div ref={listRef} className="max-h-72 overflow-y-auto py-1.5">
           {filtered.length === 0 && (

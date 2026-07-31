@@ -28,7 +28,11 @@ const TickerTag = ({ symbol, className = '' }: TickerTagProps) => {
         toast.info(`Now viewing ${symbol}`);
       }}
       title={active ? `${symbol} — active symbol` : `Switch the terminal to ${symbol}`}
-      className={`rounded-[3px] -mx-0.5 px-0.5 cursor-pointer transition-colors hover:bg-select/15 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-select/60 ${className}`}
+      /* Padded out to a ~23px hit box with matching negative margins, so the
+         tag stays inline at its text size and rows keep their height. At the
+         bare text height these were 11px tall — 30 of them on the Dark Pool
+         desk at phone width, none of them reliably tappable. */
+      className={`inline-flex items-center min-h-6 rounded-[3px] -mx-1 px-1 -my-1.5 py-1.5 cursor-pointer transition-colors hover:bg-select/15 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 ${className}`}
     >
       {symbol}
     </button>

@@ -10,6 +10,7 @@
 */
 
 import { dayKey, hGauss, h01, hRange } from '../core/rng';
+import { expiryFor, fmtExpiryShort } from '../core/calendar';
 import { tickerSentiment } from './news';
 import { UNIVERSE } from './universe';
 import type { Sector } from './universe';
@@ -46,11 +47,12 @@ export interface EarningsEvent {
   rationale: string;
 }
 
-const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-function dateLabelFor(daysOut: number): string {
-  const d = new Date(Date.now() + daysOut * 86400000);
-  return `${DAY_NAMES[d.getDay()]} ${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+/** Companies report on trading days, so a raw "N days out" draw has to be
+    resolved to a real session — and `daysOut` re-derived from it, or the
+    countdown and the printed weekday disagree. */
+function reportDate(rawDaysOut: number): { daysOut: number; dateLabel: string } {
+  const e = expiryFor(rawDaysOut);
+  return { daysOut: e.dte, dateLabel: `${e.weekday} ${fmtExpiryShort(e.date)}` };
 }
 
 function decide(e: Omit<EarningsEvent, 'verdict' | 'strategy' | 'rationale'>): Pick<EarningsEvent, 'verdict' | 'strategy' | 'rationale'> {
@@ -129,7 +131,7 @@ export function buildEarningsCalendar(): EarningsEvent[] {
   return reporters
     .map(u => {
       const s = (tag: string) => `${u.ticker}-${day}-er-${tag}`;
-      const daysOut = Math.floor(h01(s('d')) * 10);
+      const { daysOut, dateLabel } = reportDate(Math.floor(h01(s('d')) * 10));
       const histAvgMovePct = hRange(s('hist'), 2.2, 9.5) * (0.7 + u.beta * 0.35);
       const richness = hRange(s('rich'), 0.7, 1.75);
       const impliedMovePct = histAvgMovePct * richness;
@@ -139,7 +141,7 @@ export function buildEarningsCalendar(): EarningsEvent[] {
         sector: u.sector,
         price: u.px,
         daysOut,
-        dateLabel: dateLabelFor(daysOut),
+        dateLabel,
         slot: (h01(s('slot')) > 0.45 ? 'AMC' : 'BMO') as ReportSlot,
         impliedMovePct,
         histAvgMovePct,

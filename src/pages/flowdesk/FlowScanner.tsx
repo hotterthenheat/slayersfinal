@@ -296,7 +296,7 @@ const FilterMenu = ({
             <FilterRow label="Unusualness (vol/OI pct)" options={UNUSUAL_OPTIONS} value={filters.unusual} onChange={v => patch({ unusual: v })} />
             <button
               onClick={() => patch({ sweepsOnly: !filters.sweepsOnly })}
-              className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-white/[0.03] transition-colors"
+              className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-rowHover transition-colors"
             >
               <span
                 className={`inline-flex items-center justify-center w-4 h-4 rounded border ${
@@ -364,7 +364,7 @@ const TemplatesMenu = ({
                   key={p.name}
                   onClick={() => apply(f)}
                   className={`w-full text-left px-3 py-1.5 font-mono text-caption transition-colors ${
-                    on ? 'text-select bg-select/[0.06]' : 'text-textPrimary hover:text-select hover:bg-white/[0.03]'
+                    on ? 'text-select bg-select/[0.06]' : 'text-textPrimary hover:text-select hover:bg-rowHover'
                   }`}
                 >
                   {p.name}
@@ -407,11 +407,14 @@ const TemplatesMenu = ({
                 if (e.key === 'Enter') commit();
               }}
               placeholder="Save current filters…"
-              className="flex-1 min-w-0 bg-inset border border-borderSubtle rounded px-2 py-1 font-mono text-caption text-textPrimary placeholder:text-textMuted focus:outline-none focus:border-borderMuted"
+              className="flex-1 min-w-0 bg-inset border border-borderSubtle rounded px-2 py-1 font-mono text-caption text-textPrimary placeholder:text-textMuted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 focus:border-borderMuted"
             />
             <button
               onClick={commit}
-              className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded border border-borderSubtle hover:border-borderMuted font-mono text-label text-textSecondary hover:text-textPrimary transition-colors"
+              // Enabled-but-inert was the bug: commit() early-returns on an empty
+              // name, so the button invited a click and silently did nothing.
+              disabled={!name.trim()}
+              className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded border border-borderSubtle hover:border-borderMuted disabled:opacity-40 disabled:hover:border-borderSubtle font-mono text-label text-textSecondary hover:text-textPrimary transition-colors"
             >
               <Plus className="w-3 h-3" /> Save
             </button>
@@ -464,7 +467,7 @@ const ColumnChooser = ({
                   onClick={() => !c.locked && onToggle(c.key)}
                   disabled={c.locked}
                   className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-left transition-colors ${
-                    c.locked ? 'cursor-default' : 'hover:bg-white/[0.03]'
+                    c.locked ? 'cursor-default' : 'hover:bg-rowHover'
                   }`}
                 >
                   <span
@@ -693,7 +696,7 @@ const FlowScanner = () => {
           onRowClick={r => setSelectedId(r.id)}
           selectedKey={selectedId}
           initialSort={{ key: 'premium', dir: 'desc' }}
-          maxHeight="560px"
+          maxHeight="max(560px, 62vh)"
           emptyText="No contracts match these filters"
         />
       </Panel>

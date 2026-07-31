@@ -1,4 +1,7 @@
 import { Fragment, useMemo, useRef, useState } from 'react';
+import { preserveGreek } from '../ui/greek';
+import ChartLegend from '../ui/ChartLegend';
+import { LONG_GAMMA, SHORT_GAMMA } from './palette';
 import { motion } from 'framer-motion';
 import Simulator from '../../core/simulator';
 import { fmtUsd } from '../../data/gex';
@@ -6,6 +9,7 @@ import SpotRule from '../ui/SpotRule';
 import SignalBadge from '../ui/SignalBadge';
 import TrendLine from './TrendLine';
 import type { ExposureProfileData, StrikeExposure, ZoneBand, ZoneKind } from '../../types/gex';
+import { DUR, EASE } from '../../lib/motion';
 
 interface PositioningMapProps {
   data: ExposureProfileData;
@@ -26,8 +30,6 @@ const ZONE_STYLE: Record<ZoneKind, { rail: string; text: string }> = {
 // Positions-by-strike palette: dealer SHORT gamma prints gold (amplifying
 // inventory), dealer LONG gamma prints blue (absorbing inventory) — one net
 // bar per strike, the pro dealer-positioning read.
-const SHORT_GAMMA = '#E0B84E';
-const LONG_GAMMA = '#5EA0EF';
 
 /**
  * The strike's NET positioning bar, anchored at the center zero line —
@@ -42,7 +44,7 @@ const NetBar = ({ value, max }: { value: number; max: number }) => {
       className="absolute top-1/2 -translate-y-1/2 h-[7px] rounded-sm"
       initial={false}
       animate={{ left: `${neg ? 50 - pct : 50}%`, width: `${pct}%`, opacity: pct < 0.5 ? 0 : 1 }}
-      transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: DUR.data, ease: EASE }}
       style={{ background: neg ? SHORT_GAMMA : LONG_GAMMA }}
     />
   );
@@ -56,7 +58,7 @@ const PriorDot = ({ value, max }: { value: number; max: number }) => {
       className="absolute top-1/2 w-[4px] h-[4px] rounded-full bg-textPrimary/55 pointer-events-none"
       initial={false}
       animate={{ left: `calc(${50 + off}% - 2px)`, y: '-50%' }}
-      transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: DUR.data, ease: EASE }}
     />
   );
 };
@@ -265,20 +267,18 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
   return (
     <div className="flex flex-col h-full min-h-0 relative">
       {/* Legend */}
-      <div className="flex items-center gap-3 px-2 py-1.5 border-b border-borderSubtle flex-wrap select-none">
-        {[
-          { label: 'Short γ', style: { background: SHORT_GAMMA }, cls: 'w-2.5 h-[5px] rounded-sm' },
-          { label: 'Long γ', style: { background: LONG_GAMMA }, cls: 'w-2.5 h-[5px] rounded-sm' },
-          { label: '15m ago', cls: 'w-[4px] h-[4px] rounded-full bg-textPrimary/60' },
-          { label: 'Spot', cls: 'w-2.5 h-0.5 rounded-full bg-textPrimary' },
-          { label: '±1σ', cls: 'w-3 h-0 border-t border-dashed border-textSecondary/60' },
-          { label: 'Flip', cls: 'w-3 h-0 border-t border-dashed border-flip/80' },
-        ].map((item: { label: string; cls: string; style?: React.CSSProperties }) => (
-          <span key={item.label} className="flex items-center gap-1.5 font-mono text-micro uppercase tracking-wider text-textSecondary">
-            <span className={`inline-block ${item.cls}`} style={item.style} />
-            {item.label}
-          </span>
-        ))}
+      <div className="px-2 py-1.5 border-b border-borderSubtle">
+        <ChartLegend
+          variant="line"
+          items={[
+            { label: preserveGreek('Short γ'), kind: 'square', color: SHORT_GAMMA },
+            { label: preserveGreek('Long γ'), kind: 'square', color: LONG_GAMMA },
+            { label: '15m ago', kind: 'dot', swatchClass: 'bg-textPrimary/60' },
+            { label: 'Spot', kind: 'line', swatchClass: 'bg-textPrimary' },
+            { label: preserveGreek('±1σ'), kind: 'dashed', swatchClass: 'border-textSecondary/60' },
+            { label: 'Flip', kind: 'dashed', swatchClass: 'border-flip/80' },
+          ]}
+        />
       </div>
 
       {/* Scale header */}
@@ -298,7 +298,7 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
         tabIndex={0}
         role="region"
         aria-label="Dealer positioning — scrollable"
-        className="flex-grow overflow-y-auto min-h-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/50"
+        className="flex-grow overflow-y-auto min-h-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60"
         onMouseMove={e => {
           const rect = bodyRef.current?.getBoundingClientRect();
           if (rect) setHoverY(e.clientY - rect.top + (bodyRef.current?.offsetTop ?? 0));

@@ -50,7 +50,7 @@ const TBtn = ({
     disabled={disabled}
     aria-label={label}
     title={label}
-    className="inst-surface rounded-md h-8 w-8 flex items-center justify-center text-textSecondary hover:text-textPrimary hover:bg-white/[0.05] transition-colors disabled:opacity-25 disabled:pointer-events-none"
+    className="inst-surface rounded-md h-8 w-8 flex items-center justify-center text-textSecondary hover:text-textPrimary hover:bg-rowHover transition-colors disabled:opacity-25 disabled:pointer-events-none"
   >
     {children}
   </button>
@@ -430,7 +430,7 @@ const GexHistory = () => {
           <MigrationChart points={view.points} hover={hover} cursor={cursorIdx} events={events} onHover={setHover} onScrub={scrubTo} />
         </Panel>
 
-        <Panel title="How structure moved" subtitle={`open ${view.open.time} → now`} className="xl:col-span-4">
+        <Panel title="How structure moved" subtitle={`open ${view.open.time} → now`} className="xl:col-span-4 xl:sticky xl:top-4 xl:self-start">
           <div className="flex flex-col gap-3">
             {view.shifts.map(s => (
               <div key={s.label} className="flex items-center justify-between gap-2 border-b border-borderSubtle pb-2.5 last:border-0">

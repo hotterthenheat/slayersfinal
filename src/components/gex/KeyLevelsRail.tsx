@@ -46,7 +46,7 @@ const KeyLevelsRail = ({ rows, maxPressure, onSelect }: KeyLevelsRailProps) => (
           title={onSelect ? 'Flash on chart' : undefined}
           className={`grid grid-cols-[1fr_auto_auto] gap-x-3 items-center px-2.5 py-[7px] border-b border-borderSubtle/30 last:border-0 transition-colors ${
             isSpot ? 'bg-white/[0.04]' : ''
-          } ${onSelect ? 'cursor-pointer hover:bg-white/[0.03]' : ''}`}
+          } ${onSelect ? 'cursor-pointer hover:bg-rowHover' : ''}`}
         >
           <span className="min-w-0">
             <span className={`block font-mono text-micro font-semibold uppercase tracking-wider ${KIND_TEXT[row.kind]}`}>

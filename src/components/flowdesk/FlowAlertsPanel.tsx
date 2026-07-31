@@ -17,10 +17,10 @@ interface FlowAlertsPanelProps {
 }
 
 const KIND_META: Record<FlowAlertKind, { icon: typeof Zap; tone: string }> = {
-  'URGENT REPEATER': { icon: Zap, tone: 'text-[#E0B84E]' },
+  'URGENT REPEATER': { icon: Zap, tone: 'text-shortGamma' },
   REPEATER: { icon: Repeat, tone: 'text-textSecondary' },
   'GRENADE TRADE': { icon: AlertTriangle, tone: 'text-bear' },
-  'SIZABLE SWEEP': { icon: Landmark, tone: 'text-[#5EA0EF]' },
+  'SIZABLE SWEEP': { icon: Landmark, tone: 'text-longGamma' },
 };
 
 const FlowAlertsPanel = ({ ticker, revision }: FlowAlertsPanelProps) => {
@@ -48,7 +48,7 @@ const FlowAlertsPanel = ({ ticker, revision }: FlowAlertsPanelProps) => {
           <div
             key={a.id}
             className={`rounded-md border bg-panel px-2.5 py-2 ${
-              i === 0 ? 'border-[#E0B84E]/60' : 'border-borderSubtle'
+              i === 0 ? 'border-shortGamma/60' : 'border-borderSubtle'
             }`}
           >
             <div className="flex items-center gap-1.5">

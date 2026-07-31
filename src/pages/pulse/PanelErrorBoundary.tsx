@@ -54,7 +54,7 @@ class PanelErrorBoundary extends Component<Props, State> {
           </span>
           <button
             onClick={this.retry}
-            className="mt-1 inline-flex items-center px-2.5 py-1 rounded border border-borderSubtle font-mono text-label uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-white/[0.04] transition-colors"
+            className="mt-1 inline-flex items-center px-2.5 py-1 rounded border border-borderSubtle font-mono text-label uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-rowHover transition-colors"
           >
             Retry
           </button>

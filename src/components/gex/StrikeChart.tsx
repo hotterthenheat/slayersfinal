@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { RotateCcw } from 'lucide-react';
 import {
   createChart,
@@ -24,6 +24,7 @@ import { heatPoles } from './heatmap';
 import { candleTheme } from './candleTheme';
 import { fmtUsd } from '../../data/gex';
 import ChartLegend from '../ui/ChartLegend';
+import TimeframePicker from '../ui/TimeframePicker';
 import type { Candle, GexSnapshot } from '../../types/market';
 import type { KeyLevels, OverlayMode } from '../../types/gex';
 
@@ -33,14 +34,18 @@ interface StrikeChartProps {
   revision: number;
   levels: KeyLevels;
   overlay: OverlayMode;
+  /** Starting interval. The chart owns the live value from here on, so two
+      instances of this chart can sit on different intervals side by side. */
   timeframe: Timeframe;
+  /** Hide the interval picker where the chart is decoration, not an instrument. */
+  showTimeframePicker?: boolean;
   height?: number;
   /** Transient user-focused price — renders a cyan FOCUS line while set */
   focusPrice?: number | null;
 }
 
 // Wall / flip / king overlay colors (independent of candle theme)
-import { CALL_WALL, PUT_WALL, FLIP, KING, FOCUS } from './palette';
+import { CALL_WALL, PUT_WALL, FLIP, KING, FOCUS, MUTED_INK } from './palette';
 
 // Level lines are created once per overlay/ticker, then their prices are
 // TWEENED (rAF + easeOutCubic) so scan-tier level moves glide instead of jumping.
@@ -93,7 +98,21 @@ const toVolume = (b: Candle) => ({
  * series.update() on the last (current-bucket) bar; full setData + fitContent
  * only on ticker/timeframe change. Pan/zoom is never fought.
  */
-const StrikeChart = ({ ticker, revision, levels, overlay, timeframe, height = 460, focusPrice = null }: StrikeChartProps) => {
+const StrikeChart = ({
+  ticker,
+  revision,
+  levels,
+  overlay,
+  timeframe: initialTimeframe,
+  showTimeframePicker = true,
+  height = 460,
+  focusPrice = null,
+}: StrikeChartProps) => {
+  // The chart owns the live interval; the prop only seeds it. Re-seeding on a
+  // prop change keeps a controlled caller working if one ever appears.
+  const [timeframe, setTimeframe] = useState<Timeframe>(initialTimeframe);
+  useEffect(() => setTimeframe(initialTimeframe), [initialTimeframe]);
+
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
@@ -148,7 +167,7 @@ const StrikeChart = ({ ticker, revision, levels, overlay, timeframe, height = 46
       autoSize: true,
       layout: {
         background: { color: 'transparent' },
-        textColor: '#7d7d7d',
+        textColor: MUTED_INK,
         fontFamily: 'JetBrains Mono, monospace',
         fontSize: 10,
         attributionLogo: false,
@@ -402,18 +421,34 @@ const StrikeChart = ({ ticker, revision, levels, overlay, timeframe, height = 46
       <div className="flex items-center gap-3.5 px-1 flex-wrap select-none">
         <ChartLegend
           variant="line"
+          /* Walls are LINES, nodes are FILLED BANDS — and both resolved to the
+             same green and the same red, so the legend showed six entries in
+             four colours and the CALL WALL rule was invisible inside the +GEX
+             bands. The keys now differ in shape the way the chart does, and the
+             node keys carry the ramp they are actually drawn from. */
           items={[
-            { label: 'Call Wall', swatchClass: 'bg-bull' },
-            { label: 'Put Wall', swatchClass: 'bg-bear' },
-            { label: 'Flip', swatchClass: 'bg-flip' },
-            { label: 'King', swatchClass: 'bg-king' },
-            { label: '+GEX node', color: heatPoles.pos },
-            { label: '−GEX node', color: heatPoles.neg },
+            { label: 'Call Wall', kind: 'line', swatchClass: 'bg-bull' },
+            { label: 'Put Wall', kind: 'line', swatchClass: 'bg-bear' },
+            { label: 'Flip', kind: 'dashed', swatchClass: 'border-flip' },
+            { label: 'King', kind: 'line', swatchClass: 'bg-king' },
+            {
+              label: '+GEX node',
+              kind: 'gradient',
+              gradient: `linear-gradient(to right, transparent, ${heatPoles.pos})`,
+            },
+            {
+              label: '−GEX node',
+              kind: 'gradient',
+              gradient: `linear-gradient(to right, transparent, ${heatPoles.neg})`,
+            },
           ]}
         />
-        <span className="ml-auto font-mono text-micro text-textMuted uppercase tracking-wider">
+        <span className="ml-auto font-mono text-micro text-textMuted uppercase tracking-wider hidden xl:inline">
           scroll zoom · drag pan · dbl-click reset
         </span>
+        {/* Below xl the hint is hidden, so the picker takes over the ml-auto
+            push that keeps the controls right-aligned against the legend. */}
+        {showTimeframePicker && <TimeframePicker value={timeframe} onChange={setTimeframe} className="ml-auto xl:ml-0" />}
         <button
           onClick={resetView}
           title="Reset view (or double-click the chart)"
@@ -427,7 +462,7 @@ const StrikeChart = ({ ticker, revision, levels, overlay, timeframe, height = 46
         style={{ minHeight: height }}
         onDoubleClick={resetView}
       >
-        <div ref={containerRef} className="absolute inset-0" />
+        <div ref={containerRef} className="absolute inset-0" role="img" aria-label={`${ticker} price chart — candles with dealer walls, gamma flip, king strike and net-GEX nodes`} />
         <div
           ref={nodeChipRef}
           aria-hidden

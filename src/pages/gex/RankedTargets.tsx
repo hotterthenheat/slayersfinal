@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { ROW_INTERACTIVE, interactiveRowProps } from '../../components/ui/interactiveRow';
+import { CALL_WALL, PUT_WALL, KING } from '../../components/gex/palette';
 import { useNavigate } from 'react-router-dom';
 import { ArrowUpRight, ArrowUp, ArrowDown, ChevronUp, ChevronDown } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
@@ -40,11 +42,13 @@ const CLASS_TEXT: Record<HedgingClass, string> = {
   NEUTRAL: 'text-textSecondary',
 };
 
-/** Left edge accent per hedging class — the whale-print grammar. */
+/** Left edge accent per hedging class. Reads the palette rather than three
+    invented rgba alphas — the inset rail is the selection primitive, so a
+    category rail has to at least share its inks. */
 const CLASS_EDGE: Record<HedgingClass, string> = {
-  'DOWNSIDE CUSHION': 'rgba(48,209,88,0.85)',
-  'UPSIDE RESISTANCE': 'rgba(255,59,48,0.75)',
-  MAGNET: 'rgba(234,0,255,0.8)',
+  'DOWNSIDE CUSHION': CALL_WALL,
+  'UPSIDE RESISTANCE': PUT_WALL,
+  MAGNET: KING,
   NEUTRAL: 'transparent',
 };
 
@@ -245,7 +249,7 @@ const RankedTargets = () => {
         {sorted.length === 0 ? (
           <div className="py-10 text-center font-mono text-label text-textMuted uppercase tracking-widest">No strikes match this isolator</div>
         ) : (
-          <div className="overflow-auto max-h-[560px]">
+          <div className="overflow-auto max-h-[max(560px,62vh)]">
             <table className="w-full border-collapse">
               <thead>
                 <tr className="border-b border-borderSubtle">
@@ -277,11 +281,12 @@ const RankedTargets = () => {
                   <tr
                     key={t.strike}
                     onClick={() => flash(t)}
+                    {...interactiveRowProps(() => flash(t))}
                     title="Flash on chart"
                     onMouseEnter={e => setHover({ t, x: e.clientX, y: e.clientY })}
                     onMouseMove={e => setHover({ t, x: e.clientX, y: e.clientY })}
                     onMouseLeave={() => setHover(h => (h && h.t.strike === t.strike ? null : h))}
-                    className="group cursor-pointer border-b border-borderSubtle/30 last:border-0 hover:bg-white/[0.03] transition-colors"
+                    className={`group ${ROW_INTERACTIVE} border-b border-borderSubtle/30 last:border-0 hover:bg-rowHover transition-colors`}
                     style={{ boxShadow: `inset 2px 0 0 0 ${CLASS_EDGE[t.hedgingClass]}` }}
                   >
                     <td className="px-3 py-2.5">

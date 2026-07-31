@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Gauge, Waves, TrendingDown, SlidersHorizontal, ChevronDown } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
-import { BEAR } from '../../components/gex/palette';
+import { BEAR, MUTED_INK } from '../../components/gex/palette';
 import { buildHedgeImpact, type HedgeImpactView, type StressLabel } from '../../data/hedgeimpact';
 import HoverReadout from '../../components/ui/HoverReadout';
 import { svgHoverIndex } from '../../components/ui/svgHover';
@@ -68,7 +68,7 @@ const HexCurve = ({ view }: { view: HedgeImpactView }) => {
       )}
       <path d={line} fill="none" className="stroke-textPrimary" strokeWidth={1.75} />
       {[0, 1, 2, 3].map(m => (
-        <text key={m} x={X(m)} y={12} fontSize={10} fill="#6b6b6b" fontFamily="monospace">{m}%</text>
+        <text key={m} x={X(m)} y={12} fontSize={10} fill={MUTED_INK} fontFamily="monospace">{m}%</text>
       ))}
       {hp && (
         <line x1={X(hp.movePct)} x2={X(hp.movePct)} y1={0} y2={H} stroke="rgba(255,255,255,0.25)" strokeWidth={1} vectorEffect="non-scaling-stroke" />
@@ -152,7 +152,7 @@ const AssumptionsDrawer = ({ view }: { view: HedgeImpactView }) => {
           type="button"
           onClick={() => setOpen(o => !o)}
           aria-expanded={open}
-          className="inline-flex items-center gap-1 font-mono text-label font-semibold uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
+          className="-my-1 py-1 inline-flex items-center gap-1 font-mono text-label font-semibold uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
         >
           {open ? 'Hide' : 'Show'}
           <ChevronDown className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
@@ -351,7 +351,7 @@ const HedgeImpact = () => {
 
       <Panel bodyClassName="py-3">
         <p className="text-caption text-textSecondary leading-relaxed">
-          <span className="font-mono font-semibold uppercase tracking-wider mr-2 holo-text">Beyond GEX</span>
+          <span className="font-mono font-semibold uppercase tracking-wider mr-2 text-textSecondary">Beyond GEX</span>
           Two sessions can carry identical gamma and trade nothing alike — the difference is depth. HEX divides the hedge dealers
           are forced to do by the liquidity available to absorb it, so it reads the outcome GEX only implies. The forecast turns
           gamma into shares and futures over the next 5–60 minutes; the failure boundary is the move where that hedging outruns the

@@ -23,6 +23,7 @@ import SegmentedControl from '../components/ui/SegmentedControl';
 import { StateBadge } from '../components/skyvision/StateBadge';
 import { setupState, STATE_META } from '../components/skyvision/setupState';
 import { SkeletonRows } from '../components/ui/Skeleton';
+import { DUR, EASE, PILL } from '../lib/motion';
 
 type CompassMode = 'setups' | 'weigher' | 'lotto';
 type SetupsView = 'list' | 'table';
@@ -339,12 +340,25 @@ const Compass = () => {
     />
   );
 
-  // Review mode header — mode switch top-right (ticker lives in the top bar)
+  /*
+    Review mode header — mode switch top-right (ticker lives in the top bar).
+
+    This existed as its own code path and then rendered the browse header
+    verbatim: breadcrumb "… / Setups", title "Trade Setups", the browse
+    subtitle. So arriving here from "Monitor strike" on the Trace drawer, or
+    from Review in the Tracker, put the signal monitor on screen under a header
+    still claiming you were browsing the setups feed. The destination was right
+    and the wayfinding was wrong. It now names the contract being watched.
+  */
   const reviewHeader = (
     <PageHeader
-      breadcrumb={['Terminal', 'Compass', 'Setups']}
-      title="Trade Setups"
-      subtitle={SETUPS_SUBTITLE}
+      breadcrumb={['Terminal', 'Compass', 'Monitor']}
+      title={
+        monitorTarget
+          ? `Monitoring ${monitorTarget.ticker} ${monitorTarget.strike}${monitorTarget.right}`
+          : 'Signal Monitor'
+      }
+      subtitle="Watching one setup live — the card that graded it now tracks whether the structure under it holds"
       actions={modeSwitch}
     />
   );
@@ -391,14 +405,14 @@ const Compass = () => {
               className={`relative inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md font-mono text-label uppercase tracking-wider transition-colors ${
                 isActive
                   ? 'text-ink font-semibold'
-                  : 'text-textMuted font-medium hover:text-textSecondary hover:bg-white/[0.03]'
+                  : 'text-textMuted font-medium hover:text-textSecondary hover:bg-rowHover'
               }`}
             >
               {isActive && (
                 <motion.span
                   layoutId="skyvision-scanner-pill"
                   className="absolute inset-0 rounded-md holo-bg"
-                  transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                  transition={PILL}
                 />
               )}
               <span className="relative z-10">{s.label}</span>
@@ -410,19 +424,19 @@ const Compass = () => {
         })}
       </div>
 
-      {/* Controls (browse mode only) — blurb + count, then lifecycle-state
-          filter, view toggle and ticker universe filter */}
+      {/* Controls (browse mode only) — one row: what this scan is, how much it
+          found, and the two controls that act on it.
+          This used to be two stacked rows, which put a third full-width control
+          strip under the mode switch and the scanner tabs. Three same-weight
+          strips in the top 260px read as three levels of tabs; the view toggle
+          belongs beside the count it re-renders, not on a rail of its own. */}
       {!inReviewMode && (
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-3 flex-wrap">
-            <span className="font-mono text-label text-textMuted uppercase tracking-wider">{activeScanner.blurb}</span>
+        <div className="flex items-center gap-x-3 gap-y-2 flex-wrap">
+          <span className="font-mono text-label text-textMuted uppercase tracking-wider">{activeScanner.blurb}</span>
             <span className="ml-auto font-mono text-label text-textMuted uppercase tracking-widest tnum">
               Showing {filteredShown} of {data.totalFound} setups · scan {lastScanAt} · 10s
             </span>
-          </div>
-
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="ml-auto inline-flex items-center gap-2">
+            <span className="inline-flex items-center gap-2">
               <SegmentedControl
                 ariaLabel="Setups view"
                 options={SETUPS_VIEW_OPTIONS}
@@ -446,7 +460,7 @@ const Compass = () => {
                     <button
                       onClick={() => { setTickerFilter(null); setShowTickerDropdown(false); }}
                       className={`w-full text-left px-3 py-2 font-mono text-label transition-colors ${
-                        !tickerFilter ? 'text-select bg-select/[0.06]' : 'text-textSecondary hover:bg-white/[0.03]'
+                        !tickerFilter ? 'text-select bg-select/[0.06]' : 'text-textSecondary hover:bg-rowHover'
                       }`}
                     >
                       All Tickers
@@ -456,7 +470,7 @@ const Compass = () => {
                         key={t}
                         onClick={() => { setTickerFilter(t); setShowTickerDropdown(false); }}
                         className={`w-full text-left px-3 py-2 font-mono text-label transition-colors ${
-                          tickerFilter === t ? 'text-select bg-select/[0.06]' : 'text-textSecondary hover:bg-white/[0.03]'
+                          tickerFilter === t ? 'text-select bg-select/[0.06]' : 'text-textSecondary hover:bg-rowHover'
                         }`}
                       >
                         {t}
@@ -466,7 +480,6 @@ const Compass = () => {
                 )}
               </div>
             </span>
-          </div>
         </div>
       )}
 
@@ -487,7 +500,7 @@ const Compass = () => {
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ duration: DUR.base, ease: EASE }}
             >
               {inReviewMode && monitoredSetup ? (
                 <SignalMonitor setup={monitoredSetup} onBack={handleBackToBrowse} />
@@ -524,14 +537,14 @@ const Compass = () => {
         </div>
 
         {/* RIGHT COLUMN */}
-        <div className="xl:col-span-5 min-w-0 flex flex-col">
+        <div className="xl:col-span-5 min-w-0 flex flex-col xl:sticky xl:top-4 xl:self-start">
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={inReviewMode ? 'chain' : 'preview'}
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ duration: DUR.base, ease: EASE }}
               className="flex-1 flex flex-col xl:relative"
             >
               {inReviewMode && liveChain ? (

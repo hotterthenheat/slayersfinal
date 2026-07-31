@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { MUTED_INK } from '../../components/gex/palette';
 import { histogram, type MonteCarloResult } from '../../core/quant';
 import HoverReadout from '../../components/ui/HoverReadout';
 
@@ -71,7 +72,7 @@ const MonteCarloPanel = ({ mc, spot, height = 260 }: MonteCarloPanelProps) => {
         ctx.moveTo(4, y);
         ctx.lineTo(w - 2, y);
         ctx.stroke();
-        ctx.fillStyle = '#7d7d7d';
+        ctx.fillStyle = MUTED_INK;
         ctx.fillText(px.toFixed(0), w - 3, y - 6);
       }
 
@@ -117,7 +118,7 @@ const MonteCarloPanel = ({ mc, spot, height = 260 }: MonteCarloPanelProps) => {
       ctx.fillText(`spot ${spot.toFixed(0)}`, 5, Y(spot) - 6);
 
       // day (x) axis labels
-      ctx.fillStyle = '#7d7d7d';
+      ctx.fillStyle = MUTED_INK;
       ctx.textBaseline = 'alphabetic';
       ctx.textAlign = 'left';
       ctx.fillText('0d', 4, h - 3);

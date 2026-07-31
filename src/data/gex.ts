@@ -9,6 +9,7 @@
 */
 
 import Simulator from '../core/simulator';
+import { expiryFor, nextSession, fmtMonthDay } from '../core/calendar';
 import type { MarketSnapshot, StrikeNode } from '../types/market';
 import type {
   BoardTicker,
@@ -107,21 +108,32 @@ const MATRIX_EXPIRIES = [
   { dte: 7, t: 0.032, decay: 0.16 },
 ];
 
-const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-/** Days-to-expiry → label. Same-day keeps "0DTE" (traders read it instantly);
-    every later expiry shows its actual date (e.g. "Jul 24"), skipping weekends
-    since listed options expire on trading days. */
-function expiryLabel(dte: number): string {
-  if (dte === 0) return '0DTE';
-  const d = new Date();
-  let added = 0;
-  while (added < dte) {
-    d.setDate(d.getDate() + 1);
-    const wd = d.getDay();
-    if (wd !== 0 && wd !== 6) added += 1; // skip Sat/Sun
+/**
+ * Column labels for the expiry matrix. Same-day keeps "0DTE" (traders read it
+ * instantly); every later column shows its actual date (e.g. "Jul 24").
+ *
+ * Each horizon is calendar days — what a trader means by "7 DTE" — but two
+ * horizons can resolve to the SAME session: standing on a Thursday, both "1 day"
+ * and "2 days" land on that Friday, and two columns sharing a header reads as a
+ * rendering bug. Horizons are ascending, so resolving them in order and forcing
+ * each column strictly past the previous one keeps every column on its own
+ * expiry.
+ */
+function matrixExpiryLabels(): string[] {
+  const out: string[] = [];
+  let prev: Date | null = null;
+  for (let i = 0; i < MATRIX_EXPIRIES.length; i++) {
+    const { dte } = MATRIX_EXPIRIES[i];
+    let date = expiryFor(dte).date;
+    if (prev !== null && date <= prev) {
+      const after = new Date(prev);
+      after.setDate(after.getDate() + 1);
+      date = nextSession(after);
+    }
+    prev = date;
+    out.push(i === 0 && dte === 0 ? '0DTE' : fmtMonthDay(date));
   }
-  return `${MONTH_ABBR[d.getMonth()]} ${d.getDate()}`;
+  return out;
 }
 
 function buildMatrix(snapshot: MarketSnapshot, metric: GexMetric, range: StrikeRange, kingStrike: number): GexMatrixData {
@@ -163,7 +175,7 @@ function buildMatrix(snapshot: MarketSnapshot, metric: GexMetric, range: StrikeR
   };
 
   return {
-    expiries: MATRIX_EXPIRIES.map(e => expiryLabel(e.dte)),
+    expiries: matrixExpiryLabels(),
     strikes,
     cells,
     maxAbs,

@@ -99,7 +99,7 @@ const Faq = () => (
   <div className="rounded-lg border border-borderSubtle bg-panel divide-y divide-borderSubtle overflow-hidden">
     {FAQ.map(item => (
       <details key={item.q} className="group">
-        <summary className="flex items-center gap-3 px-4 py-3.5 cursor-pointer list-none [&::-webkit-details-marker]:hidden hover:bg-white/[0.02] transition-colors">
+        <summary className="flex items-center gap-3 px-4 py-3.5 cursor-pointer list-none [&::-webkit-details-marker]:hidden hover:bg-rowHover transition-colors">
           <ChevronRight className="w-4 h-4 text-textMuted shrink-0 transition-transform group-open:rotate-90" />
           <span className="text-body font-medium text-textPrimary">{item.q}</span>
         </summary>

@@ -6,7 +6,7 @@ import type { MarketSnapshot } from '../../types/market';
 import Panel from '../ui/Panel';
 import StatCard from '../ui/StatCard';
 import MetricGrid from '../ui/MetricGrid';
-import { BULL, BEAR, SPOT } from './palette';
+import { BULL, BEAR, SPOT, MUTED_INK } from './palette';
 import HoverReadout from '../ui/HoverReadout';
 import { svgHoverIndex } from '../ui/svgHover';
 import SignalBadge from '../ui/SignalBadge';
@@ -74,8 +74,8 @@ const DensityChart = ({ view }: { view: StateDensityView }) => {
       {/* realized density — dotted overlay */}
       <path d={realLine} fill="none" stroke="#8f8f8f" strokeWidth={1.1} strokeDasharray="2 2.5" vectorEffect="non-scaling-stroke" />
       {/* forward marker */}
-      <line x1={fx} x2={fx} y1={0} y2={H} stroke="#6b6b6b" strokeOpacity={0.7} strokeWidth={1} strokeDasharray="3 3" />
-      <text x={fx + 3} y={12} fontSize={10} fill="#6b6b6b" fontFamily="monospace">FWD {forward.toFixed(0)}</text>
+      <line x1={fx} x2={fx} y1={0} y2={H} stroke={MUTED_INK} strokeOpacity={0.7} strokeWidth={1} strokeDasharray="3 3" />
+      <text x={fx + 3} y={12} fontSize={10} fill={MUTED_INK} fontFamily="monospace">FWD {forward.toFixed(0)}</text>
       {/* spot marker — white, "where the market is" */}
       <line x1={sx} x2={sx} y1={0} y2={H} stroke={SPOT} strokeOpacity={0.85} strokeWidth={1.25} />
       <text x={sx + 3} y={H - 5} fontSize={10} fill={SPOT} fontFamily="monospace">SPOT {spot.toFixed(2)}</text>
@@ -160,12 +160,12 @@ const ForwardVolChart = ({ view }: { view: StateDensityView }) => {
   const spotLine = pts.map((p, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(p.spotVol).toFixed(1)}`).join(' ');
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none" role="img" aria-label="Forward-vol curve — volatility priced between tenors">
-      <path d={spotLine} fill="none" stroke="#6b6b6b" strokeWidth={1.1} strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
+      <path d={spotLine} fill="none" stroke={MUTED_INK} strokeWidth={1.1} strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
       <path d={fwdLine} fill="none" className="stroke-textPrimary" strokeWidth={1.75} vectorEffect="non-scaling-stroke" />
       {pts.map((p, i) => (
         <g key={p.label}>
           <circle cx={X(i)} cy={Y(p.forwardVol)} r={2.4} className="fill-textPrimary" />
-          <text x={X(i)} y={H - 6} fontSize={10} fill="#6b6b6b" fontFamily="monospace" textAnchor="middle">{p.label}</text>
+          <text x={X(i)} y={H - 6} fontSize={10} fill={MUTED_INK} fontFamily="monospace" textAnchor="middle">{p.label}</text>
           <text x={X(i)} y={Y(p.forwardVol) - 6} fontSize={10} className="fill-textPrimary" fontFamily="monospace" textAnchor="middle">
             {p.forwardVol.toFixed(1)}
           </text>
@@ -326,7 +326,7 @@ const StatePriceDensity = ({ snapshot }: StatePriceDensityProps) => {
                         ? 'bg-warn'
                         : view.skewLabel === 'NORMAL'
                           ? 'bg-select'
-                          : 'holo-bar'
+                          : 'data-bar'
                   }`}
                   style={{ width: `${view.skewStress}%` }}
                 />
@@ -405,7 +405,7 @@ const StatePriceDensity = ({ snapshot }: StatePriceDensityProps) => {
 
       <Panel bodyClassName="py-3">
         <p className="text-caption text-textSecondary leading-relaxed">
-          <span className="font-mono font-semibold uppercase tracking-wider mr-2 holo-text">Beyond the smile</span>
+          <span className="font-mono font-semibold uppercase tracking-wider mr-2 text-textSecondary">Beyond the smile</span>
           A single IV number is one moment of one curve. Reconstructing the whole state-price density turns the option book into
           an explicit set of odds over where price lands — so you can watch probability mass MOVE. The migration read is the tell
           the smile hides: mass can slide toward a strike while spot sits still, repricing the tail before the tape does. Realized

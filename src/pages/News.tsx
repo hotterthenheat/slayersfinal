@@ -95,6 +95,11 @@ const IconToggle = ({
     type="button"
     onClick={onClick}
     title={title}
+    // aria-label as well as title: these are icon-only, so `title` was carrying
+    // the whole name. It is the last resort in the accessible-name calculation
+    // and several screen readers skip it, which left 36 buttons on this page
+    // announcing nothing but "button".
+    aria-label={title}
     aria-pressed={active}
     className={`inline-flex items-center justify-center w-6 h-6 rounded border transition-colors ${
       active ? activeClass : 'border-borderSubtle text-textMuted/60 hover:text-textPrimary hover:border-borderMuted'
@@ -273,7 +278,7 @@ const News = () => {
             </div>
           )}
 
-          <div className="flex flex-col max-h-[560px] overflow-auto">
+          <div className="flex flex-col max-h-[max(560px,62vh)] overflow-auto">
             {units.map(unit => {
               const lead = unit.lead;
               const isMuted = muted.has(unit.subject);
@@ -294,7 +299,7 @@ const News = () => {
                       onMouseEnter={e => setHover({ n: lead, x: e.clientX, y: e.clientY })}
                       onMouseMove={e => setHover({ n: lead, x: e.clientX, y: e.clientY })}
                       onMouseLeave={() => setHover(h => (h && h.n.id === lead.id ? null : h))}
-                      className={`flex-1 min-w-0 text-left px-4 py-3 ${!isSel ? 'hover:bg-white/[0.02]' : ''}`}
+                      className={`flex-1 min-w-0 text-left px-4 py-3 ${!isSel ? 'hover:bg-rowHover' : ''}`}
                     >
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-mono text-label text-textMuted tnum">{lead.time}</span>
@@ -335,6 +340,7 @@ const News = () => {
                             type="button"
                             onClick={() => toggle(setExpanded, unit.key)}
                             title={isExpanded ? 'Collapse cluster' : 'Expand cluster'}
+                            aria-label={isExpanded ? 'Collapse cluster' : 'Expand cluster'}
                             aria-pressed={isExpanded}
                             className="inline-flex items-center justify-center w-6 h-6 rounded border border-borderSubtle text-textMuted hover:text-textPrimary hover:border-borderMuted transition-colors"
                           >
@@ -375,7 +381,7 @@ const News = () => {
                             onMouseMove={e => setHover({ n: i, x: e.clientX, y: e.clientY })}
                             onMouseLeave={() => setHover(h => (h && h.n.id === i.id ? null : h))}
                             className={`w-full text-left pl-6 pr-3 py-2 border-t border-borderSubtle flex items-center gap-2 transition-colors ${
-                              iSel ? 'bg-select/[0.05]' : 'hover:bg-white/[0.02]'
+                              iSel ? 'bg-select/[0.05]' : 'hover:bg-rowHover'
                             }`}
                           >
                             <span className="font-mono text-micro text-textMuted tnum shrink-0">{i.time}</span>

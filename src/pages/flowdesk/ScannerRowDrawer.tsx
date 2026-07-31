@@ -1,4 +1,5 @@
 import { lazy, Suspense } from 'react';
+import { SkeletonRows } from '../../components/ui/Skeleton';
 import SignalBadge from '../../components/ui/SignalBadge';
 import DrilldownDrawer, { Field, Section } from '../../components/flowdesk/DrilldownDrawer';
 import CrossDeskLinks from '../../components/flowdesk/CrossDeskLinks';
@@ -110,9 +111,7 @@ const ScannerRowDrawer = ({ row, spot, onClose }: ScannerRowDrawerProps) => {
           {/* Contract drilldown — this contract's flow + underlying net premium */}
           <Suspense
             fallback={
-              <div className="h-[380px] rounded-md inst-surface flex items-center justify-center font-mono text-label text-textMuted uppercase tracking-widest">
-                Loading drilldown…
-              </div>
+              <SkeletonRows rows={6} className="h-[380px] rounded-md inst-surface p-3" />
             }
           >
             <ContractFlowChart contract={scannerToRef(row, spot)} />

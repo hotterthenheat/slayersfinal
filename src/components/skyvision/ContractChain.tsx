@@ -51,7 +51,7 @@ const ChainCell = ({ side, right, strike, ticker, isSelected, onSelect }: CellPr
     <button
       onClick={onSelect}
       className={`text-left px-2.5 py-2 transition-colors ${
-        isSelected ? 'bg-select/[0.07] shadow-[inset_0_0_0_1px_rgba(199,211,232,0.5)]' : 'hover:bg-white/[0.02]'
+        isSelected ? 'bg-select/[0.07] shadow-[inset_0_0_0_1px_rgba(199,211,232,0.5)]' : 'hover:bg-rowHover'
       }`}
     >
       <div className="flex items-center justify-between gap-2">
@@ -103,7 +103,7 @@ const ContractChain = ({ data, selected, onSelect }: ContractChainProps) => {
         <div className="px-3 py-1.5 font-mono text-micro font-semibold uppercase tracking-widest text-bear">Puts</div>
       </div>
 
-      <div className="overflow-y-auto flex-1 min-h-0 max-h-[560px] xl:max-h-none">
+      <div className="overflow-y-auto flex-1 min-h-0 max-h-[max(560px,62vh)] xl:max-h-none">
         {rows.map((row, i) => (
           <div key={row.strike}>
             <div className="grid grid-cols-2 border-b border-borderSubtle/50 divide-x divide-borderSubtle">

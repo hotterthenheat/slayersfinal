@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import Stat from '../ui/Stat';
 import HoverReadout from '../ui/HoverReadout';
+import Term from '../ui/Term';
 import type { SetupGreeks } from '../../types/skyvision';
 
 interface GreeksRowProps {
@@ -27,15 +28,18 @@ const GreeksRow = ({ greeks, fourth = 'vega' }: GreeksRowProps) => {
       onMouseEnter={e => setHover({ x: e.clientX, y: e.clientY })}
       onMouseMove={e => setHover({ x: e.clientX, y: e.clientY })}
       onMouseLeave={() => setHover(null)}
-      className="grid grid-cols-4 gap-2 cursor-crosshair rounded-md hover:bg-white/[0.03]"
+      className="grid grid-cols-4 gap-2 cursor-crosshair rounded-md hover:bg-rowHover"
     >
-      <Stat label="Delta" value={withArrow(greeks.delta.toFixed(2), greeks.delta >= 0 ? 'up' : 'down')} />
-      <Stat label="Gamma" value={greeks.gamma.toFixed(4)} />
-      <Stat label="Theta" value={greeks.theta.toFixed(2)} tone="warn" />
+      {/* Every label carries its own explainer — this row is the first place a
+          new reader meets the greeks, and the dictionary already defined all
+          four. `Stat.label` takes a node, so <Term> drops straight in. */}
+      <Stat label={<Term k="Delta">Delta</Term>} value={withArrow(greeks.delta.toFixed(2), greeks.delta >= 0 ? 'up' : 'down')} />
+      <Stat label={<Term k="Gamma">Gamma</Term>} value={greeks.gamma.toFixed(4)} />
+      <Stat label={<Term k="Theta">Theta</Term>} value={greeks.theta.toFixed(2)} tone="warn" />
       {fourth === 'vega' ? (
-        <Stat label="Vega" value={withArrow(greeks.vega.toFixed(2), 'up')} tone="select" />
+        <Stat label={<Term k="Vega">Vega</Term>} value={withArrow(greeks.vega.toFixed(2), 'up')} tone="select" />
       ) : (
-        <Stat label="IV" value={`${greeks.iv.toFixed(1)}%`} />
+        <Stat label={<Term k="IV">IV</Term>} value={`${greeks.iv.toFixed(1)}%`} />
       )}
       {/* Full set on hover — the visible row only fits four, so vega/iv never both show */}
       {hover && (

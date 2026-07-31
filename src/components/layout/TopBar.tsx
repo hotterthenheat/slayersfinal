@@ -18,6 +18,7 @@ import { useMarketData, useTicker } from '../../context/MarketDataContext';
 import AnimatedNumber from '../ui/AnimatedNumber';
 import TickerSearch from '../ui/TickerSearch';
 import { NAV_GROUPS, itemsByGroup, NAV_ITEMS, type NavGroup, type NavItem } from './nav';
+import { DUR, EASE, PILL } from '../../lib/motion';
 
 interface TopBarProps {
   onOpenPalette: () => void;
@@ -35,7 +36,13 @@ const Wordmark = ({ onClick, size = 'sm' }: { onClick: (e: React.MouseEvent) => 
     className={`shrink-0 font-mono font-bold tracking-tight select-none ${size === 'md' ? 'text-read' : 'text-data'}`}
   >
     <span className="text-textMuted">&gt; </span>
-    <span className="holo-text">slayer_terminal</span>
+    {/* Abbreviated on phone. The full wordmark is 138px and the right cluster
+        needs that room — the global ticker switcher was being clipped off the
+        edge at 390px and below. Branding yields to the instrument; the
+        aria-label and title still read "Terminal home" either way. */}
+    <span className="holo-text">
+      slayer<span className="hidden sm:inline">_terminal</span>
+    </span>
     <span className="inline-block w-[6px] h-[12px] ml-1 bg-textPrimary align-middle animate-cursor-blink" />
   </a>
 );
@@ -104,7 +111,7 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
                 className={`relative self-stretch flex items-center gap-1 px-3 my-2 rounded-md font-mono text-label font-semibold uppercase tracking-wider transition-colors ${
                   active
                     ? 'text-textPrimary bg-white/[0.06]'
-                    : 'text-textMuted hover:text-textPrimary hover:bg-white/[0.03]'
+                    : 'text-textMuted hover:text-textPrimary hover:bg-rowHover'
                 }`}
               >
                 {group}
@@ -119,7 +126,7 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
                   <motion.span
                     layoutId="topnav-underline"
                     className="absolute left-2.5 right-2.5 -bottom-2 h-[2px] rounded-full holo-bar"
-                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                    transition={PILL}
                   />
                 )}
               </button>
@@ -140,7 +147,7 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
       </nav>
 
       {/* Right cluster: search + live context */}
-      <div className="flex items-center justify-end gap-3 shrink-0 ml-auto lg:ml-0">
+      <div className="flex items-center justify-end gap-2 sm:gap-3 shrink-0 ml-auto lg:ml-0">
         <button
           onClick={onOpenPalette}
           aria-label="Search or jump to…"
@@ -187,7 +194,7 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ duration: DUR.quick, ease: EASE }}
             >
               <MobileNav section={section} onPick={() => setMobileOpen(false)} />
             </motion.div>
@@ -238,7 +245,7 @@ const DropMenu = ({
     initial={{ opacity: 0, y: -6 }}
     animate={{ opacity: 1, y: 0 }}
     exit={{ opacity: 0, y: -6 }}
-    transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+    transition={{ duration: DUR.quick, ease: EASE }}
   >
     <div className="mt-1 min-w-[248px] border border-borderMuted bg-panel rounded-md shadow-overlay overflow-hidden">
       <div className="flex items-center justify-between gap-3 px-3 py-2 border-b border-borderSubtle">
@@ -257,7 +264,7 @@ const DropMenu = ({
               className={`flex items-center gap-2 px-2.5 py-1.5 rounded font-mono text-caption whitespace-nowrap transition-colors ${
                 isActive
                   ? 'bg-white/[0.06] text-textPrimary'
-                  : 'text-textSecondary hover:text-textPrimary hover:bg-white/[0.03]'
+                  : 'text-textSecondary hover:text-textPrimary hover:bg-rowHover'
               }`}
             >
               {sub.icon && <sub.icon className="w-3.5 h-3.5 text-textMuted" />}

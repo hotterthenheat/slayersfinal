@@ -1,4 +1,5 @@
 import { Fragment, useState } from 'react';
+import { ROW_INTERACTIVE, interactiveRowProps } from '../../components/ui/interactiveRow';
 import { Download } from 'lucide-react';
 import { fmtUsd } from '../../data/gex';
 import Panel from '../../components/ui/Panel';
@@ -6,6 +7,7 @@ import SegmentedControl from '../../components/ui/SegmentedControl';
 import SpotRule from '../../components/ui/SpotRule';
 import { useToast } from '../../components/ui/Toast';
 import type { ExposureProfileData } from '../../types/gex';
+import Term from '../../components/ui/Term';
 
 interface ExposureLedgerProps {
   data: ExposureProfileData;
@@ -40,10 +42,10 @@ const LEG_BAR: Record<Leg, string> = {
 
 const LEG_NAME: Record<Leg, string> = { call: 'CALLS', put: 'PUTS', net: 'NET' };
 
-const GREEKS: { key: 'gex' | 'dex' | 'vex'; label: string; unit: string }[] = [
-  { key: 'gex', label: 'GEX', unit: '1% move' },
-  { key: 'dex', label: 'DEX', unit: 'Δ notional' },
-  { key: 'vex', label: 'VEX', unit: '1% vol' },
+const GREEKS: { key: 'gex' | 'dex' | 'vex'; label: React.ReactNode; unit: string }[] = [
+  { key: 'gex', label: <Term k="GEX">GEX</Term>, unit: '1% move' },
+  { key: 'dex', label: <Term k="DEX">DEX</Term>, unit: 'Δ notional' },
+  { key: 'vex', label: <Term k="VEX">VEX</Term>, unit: '1% vol' },
 ];
 
 const strikeLabel = (v: number) => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
@@ -116,7 +118,7 @@ const ExposureLedger = ({
       />
       <button
         onClick={exportCsv}
-        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-borderSubtle bg-white/[0.03] hover:bg-white/[0.06] font-mono text-label font-semibold uppercase tracking-wider text-textPrimary transition-colors"
+        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-borderSubtle bg-white/[0.03] hover:bg-rowHover font-mono text-label font-semibold uppercase tracking-wider text-textPrimary transition-colors"
       >
         <Download className="w-3.5 h-3.5" /> Export CSV
       </button>
@@ -130,9 +132,9 @@ const ExposureLedger = ({
       actions={actions}
       flush
       className="min-w-0"
-      bodyClassName="flex flex-col max-h-[560px]"
+      bodyClassName="flex flex-col max-h-[max(560px,62vh)]"
     >
-      <div tabIndex={0} role="region" aria-label="Exposure ledger — scrollable" className="overflow-auto h-full min-h-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/50">
+      <div tabIndex={0} role="region" aria-label="Exposure ledger — scrollable" className="overflow-auto h-full min-h-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60">
         {/* Sticky legend — stays pinned while the rows scroll */}
         <div className="sticky top-0 z-20 flex items-center gap-3 h-9 px-2.5 bg-panelRaised border-b border-borderSubtle overflow-hidden whitespace-nowrap">
           <span className="flex items-center gap-1.5 font-mono text-label font-semibold uppercase tracking-wider text-textPrimary">
@@ -174,11 +176,12 @@ const ExposureLedger = ({
                   onMouseEnter={onHoverStrike ? () => onHoverStrike(row.strike) : undefined}
                   onMouseLeave={onHoverStrike ? () => onHoverStrike(null) : undefined}
                   onClick={onSelectStrike ? () => onSelectStrike(row.strike) : undefined}
+                  {...(onSelectStrike ? interactiveRowProps(() => onSelectStrike(row.strike), selectedStrike === row.strike) : {})}
                   className={`border-b border-borderSubtle/30 transition-colors ${row.pin ? 'bg-white/[0.03]' : ''} ${
-                    onSelectStrike ? 'cursor-pointer' : ''
+                    onSelectStrike ? ROW_INTERACTIVE : ''
                   } ${
                     selectedStrike === row.strike
-                      ? 'bg-select/[0.05] rail-silver'
+                      ? 'inst-selected'
                       : hoverStrike === row.strike
                         ? 'bg-white/[0.04]'
                         : ''

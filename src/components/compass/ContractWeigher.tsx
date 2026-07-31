@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import SegmentedControl from '../ui/SegmentedControl';
 import {
   Search,
   Scale,
@@ -86,7 +87,7 @@ const FactorRow = ({ label, weight, score, detail }: { label: string; weight: nu
       <span className="font-mono text-micro text-textMuted tnum">×{weight.toFixed(2)}</span>
       <span className="flex-1 h-[4px] rounded-full bg-white/[0.06] overflow-hidden">
         <span
-          className={`block h-full rounded-full ${score >= 60 ? 'holo-bar' : score >= 40 ? 'bg-white/30' : 'bg-bear/70'}`}
+          className={`block h-full rounded-full ${score >= 60 ? 'data-bar' : score >= 40 ? 'bg-white/30' : 'bg-bear/70'}`}
           style={{ width: `${score}%` }}
         />
       </span>
@@ -121,7 +122,7 @@ const Field = ({
 );
 
 const inputBase =
-  'w-full bg-inputBg border border-borderSubtle focus:border-borderMuted rounded-md px-2.5 py-1.5 font-mono text-caption text-textPrimary placeholder:text-textMuted outline-none tnum';
+  'w-full bg-inputBg border border-borderSubtle focus:border-borderMuted rounded-md px-2.5 py-1.5 font-mono text-caption text-textPrimary placeholder:text-textMuted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 tnum';
 
 interface ContractWeigherProps {
   snapshot: MarketSnapshot;
@@ -319,23 +320,15 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
 
             {/* Side */}
             <Field label="Side">
-              <div className="inline-flex w-full rounded-md overflow-hidden border border-borderSubtle font-mono text-caption">
-                {(['C', 'P'] as const).map(r => (
-                  <button
-                    key={r}
-                    onClick={() => setRight(r)}
-                    className={`flex-1 px-2.5 py-1.5 font-semibold transition-colors ${
-                      right === r
-                        ? r === 'C'
-                          ? 'bg-bull text-ink'
-                          : 'bg-bear text-white'
-                        : 'text-textMuted hover:text-textSecondary'
-                    }`}
-                  >
-                    {r === 'C' ? 'CALL' : 'PUT'}
-                  </button>
-                ))}
-              </div>
+              <SegmentedControl
+                  ariaLabel="Contract right"
+                  options={[
+                    { value: 'C', label: 'Call' },
+                    { value: 'P', label: 'Put' },
+                  ]}
+                  value={right}
+                  onChange={setRight}
+                />
             </Field>
 
             {/* Strike */}
@@ -352,7 +345,7 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
                     const v = parseFloat(e.target.value);
                     if (Number.isFinite(v)) setStrike(v);
                   }}
-                  className="min-w-0 flex-1 bg-transparent text-center font-mono text-caption text-textPrimary outline-none focus:text-select tnum"
+                  className="min-w-0 flex-1 bg-transparent text-center font-mono text-caption text-textPrimary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 focus:text-select tnum"
                 />
                 <button onClick={() => setStrike(s => s + step)} className="px-2.5 py-1.5 text-textMuted hover:text-textPrimary" aria-label="Raise strike">
                   +
@@ -462,12 +455,12 @@ const ContractWeigher = ({ snapshot, initialHorizon }: ContractWeigherProps) => 
                     onChange={e => setQuery(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && submitQuery()}
                     placeholder="e.g. SPY 500C 7  ·  strike · call/put · days"
-                    className="w-full bg-inputBg border border-borderSubtle focus:border-borderMuted rounded-md pl-8 pr-3 py-2 font-mono text-caption text-textPrimary placeholder:text-textMuted outline-none"
+                    className="w-full bg-inputBg border border-borderSubtle focus:border-borderMuted rounded-md pl-8 pr-3 py-2 font-mono text-caption text-textPrimary placeholder:text-textMuted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60"
                   />
                 </div>
                 <button
                   onClick={submitQuery}
-                  className="px-3 py-2 rounded-md border border-borderMuted bg-white/[0.04] text-textPrimary font-mono text-label font-semibold uppercase tracking-wider hover:bg-white/[0.07] transition-colors"
+                  className="px-3 py-2 rounded-md border border-borderMuted bg-white/[0.04] text-textPrimary font-mono text-label font-semibold uppercase tracking-wider hover:bg-rowHover transition-colors"
                 >
                   Parse
                 </button>

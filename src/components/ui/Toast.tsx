@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useMemo, useRef, useState, type
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Check, AlertTriangle, Info, X, TriangleAlert } from 'lucide-react';
+import { DUR, EASE } from '../../lib/motion';
 
 export type ToastTone = 'success' | 'error' | 'warn' | 'info';
 
@@ -48,6 +49,10 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
   const [items, setItems] = useState<ToastItem[]>([]);
   const seq = useRef(0);
   const timers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+  // How long each toast was granted, so a paused timer can be restarted with
+  // the same budget rather than silently promoted to the longer one.
+  const lifetimes = useRef<Record<number, number>>({});
+
 
   const dismiss = useCallback((id: number) => {
     setItems(prev => prev.filter(t => t.id !== id));
@@ -56,6 +61,24 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
       clearTimeout(timer);
       delete timers.current[id];
     }
+    delete lifetimes.current[id];
+  }, []);
+
+  const arm = useCallback(
+    (id: number) => {
+      const ms = lifetimes.current[id];
+      if (ms == null) return;
+      clearTimeout(timers.current[id]);
+      timers.current[id] = setTimeout(() => dismiss(id), ms);
+    },
+    [dismiss]
+  );
+
+  /** Hold the toast open while the pointer is on it or focus is inside it. The
+      only Undo in the app lives here, and it was expiring at 3.25s of
+      *continuous* hover — the timer never knew you were reaching for it. */
+  const hold = useCallback((id: number) => {
+    clearTimeout(timers.current[id]);
   }, []);
 
   const push = useCallback(
@@ -63,9 +86,10 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
       const id = ++seq.current;
       setItems(prev => [...prev.slice(-3), { id, tone, message, action }]);
       // A toast carrying an action stays up longer — it's a decision, not a note.
-      timers.current[id] = setTimeout(() => dismiss(id), action ? DURATION * 2 : DURATION);
+      lifetimes.current[id] = action ? DURATION * 2 : DURATION;
+      arm(id);
     },
-    [dismiss]
+    [arm]
   );
 
   const api = useMemo<ToastApi>(
@@ -94,9 +118,13 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
                   initial={{ opacity: 0, x: 24, scale: 0.96 }}
                   animate={{ opacity: 1, x: 0, scale: 1 }}
                   exit={{ opacity: 0, x: 24, scale: 0.96 }}
-                  transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                  transition={{ duration: DUR.base, ease: EASE }}
                   className={`pointer-events-auto flex items-start gap-2.5 min-w-[240px] max-w-[360px] rounded-md border ${tone.ring} bg-panel/95 backdrop-blur px-3 py-2.5 shadow-overlay`}
                   role="status"
+                  onMouseEnter={() => hold(t.id)}
+                  onMouseLeave={() => arm(t.id)}
+                  onFocusCapture={() => hold(t.id)}
+                  onBlurCapture={() => arm(t.id)}
                 >
                   <span className={`mt-0.5 shrink-0 ${tone.text}`}>{tone.icon}</span>
                   <span className="flex-1 text-caption leading-snug text-textPrimary">{t.message}</span>
@@ -106,7 +134,7 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
                         t.action?.onClick();
                         dismiss(t.id);
                       }}
-                      className="shrink-0 self-center rounded border border-borderMuted px-2 py-0.5 font-mono text-micro font-semibold uppercase tracking-wider text-textPrimary hover:bg-white/[0.06] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-select/60 active:scale-[0.97]"
+                      className="shrink-0 self-center rounded border border-borderMuted px-2 py-0.5 font-mono text-micro font-semibold uppercase tracking-wider text-textPrimary hover:bg-rowHover transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 active:scale-[0.97]"
                     >
                       {t.action.label}
                     </button>
@@ -114,7 +142,7 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
                   <button
                     onClick={() => dismiss(t.id)}
                     aria-label="Dismiss"
-                    className="shrink-0 rounded text-textMuted hover:text-textPrimary transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-select/60 active:scale-[0.9]"
+                    className="shrink-0 rounded text-textMuted hover:text-textPrimary transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 active:scale-[0.9]"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>

@@ -14,7 +14,7 @@ import StatCard from '../ui/StatCard';
 import MetricGrid from '../ui/MetricGrid';
 import SignalBadge from '../ui/SignalBadge';
 import type { Tone } from '../ui/tones';
-import { BULL, BEAR, SPOT } from '../gex/palette';
+import { BULL, BEAR, SPOT, MUTED_INK } from '../gex/palette';
 
 interface MarketStateReplayProps {
   snapshot: MarketSnapshot;
@@ -44,7 +44,7 @@ const SERIES = SPOT;
 const GREEN = BULL;
 const RED = BEAR;
 const AMBER = '#FF9500';
-const MUTED = '#6b6b6b';
+const MUTED = MUTED_INK;
 
 /** Stacked outcome distribution — target (foil) / stop (red) / neither (dim). */
 const OutcomeBar = ({ view }: { view: StateReplayView }) => (
@@ -77,7 +77,7 @@ const SessionRow = ({ s }: { s: SimSession }) => {
       <span className="font-mono text-micro text-textSecondary tnum">{s.id}</span>
       <div className="min-w-0">
         <div className="relative h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
-          <span className="holo-bar block h-full rounded-full" style={{ width: `${Math.round(s.sim * 100)}%` }} />
+          <span className="data-bar block h-full rounded-full" style={{ width: `${Math.round(s.sim * 100)}%` }} />
         </div>
         <span className="mt-0.5 block font-mono text-micro text-textMuted tnum">
           sim {Math.round(s.sim * 100)}% · {s.daysAgo}d ago · +{s.mfePct.toFixed(1)}/−{s.maePct.toFixed(1)}%
@@ -101,7 +101,7 @@ const CalibrationPlot = ({ view }: { view: StateReplayView }) => {
     <>
       {/* calibration scatter keeps its 1:1 aspect (the y=x diagonal must stay
           diagonal), so it's capped and centered rather than stretched full-width */}
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-[250px] mx-auto block" style={{ height: H }} role="img" aria-label="Probability calibration — predicted target rate versus realized frequency">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-[340px] mx-auto block" style={{ height: H }} role="img" aria-label="Probability calibration — predicted target rate versus realized frequency">
         {/* frame */}
         <line x1={pad} y1={H - pad} x2={W - 6} y2={H - pad} className="stroke-borderMuted" strokeWidth={1} />
         <line x1={pad} y1={8} x2={pad} y2={H - pad} className="stroke-borderMuted" strokeWidth={1} />
@@ -160,8 +160,13 @@ const EdgeDecayChart = ({ view }: { view: StateReplayView }) => {
   const [h, setH] = useState<{ p: (typeof pts)[number]; x: number; y: number } | null>(null);
   return (
     <>
-      {/* edge-decay is a time series — fill the panel width like the app's other bar charts */}
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none" role="img" aria-label="Edge decay — net edge captured as the trade is held longer">
+      {/* edge-decay is a time series — fill the panel width like the app's other
+          bar charts. The stretch that buys that (preserveAspectRatio="none" with
+          a fixed height) scales x ~2.9x and y 1x, which is correct for the paths
+          and wrong for glyphs, so the axis captions are HTML siblings positioned
+          over the plot rather than <text> inside it. */}
+      <div className="relative" style={{ height: H }}>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-full" preserveAspectRatio="none" role="img" aria-label="Edge decay — net edge captured as the trade is held longer">
         <line x1={pad} y1={H - pad} x2={W - 6} y2={H - pad} className="stroke-borderMuted" strokeWidth={1} />
         <line x1={pad} y1={8} x2={pad} y2={H - pad} className="stroke-borderMuted" strokeWidth={1} />
         {/* cumulative target / stop as faint context */}
@@ -184,13 +189,17 @@ const EdgeDecayChart = ({ view }: { view: StateReplayView }) => {
             />
           </g>
         ))}
-        <text x={pad} y={H - 6} fontSize={10} fill={MUTED} fontFamily="monospace">
-          bars held →
-        </text>
-        <text x={6} y={14} fontSize={10} fill={MUTED} fontFamily="monospace">
-          net edge ↑
-        </text>
       </svg>
+        <span
+          className="pointer-events-none absolute font-mono text-micro"
+          style={{ color: MUTED, left: pad, bottom: 2 }}
+        >
+          bars held →
+        </span>
+        <span className="pointer-events-none absolute left-1.5 top-1 font-mono text-micro" style={{ color: MUTED }}>
+          net edge ↑
+        </span>
+      </div>
       {h && (
         <HoverReadout x={h.x} y={h.y}>
           <div className="font-mono text-micro uppercase tracking-widest text-textMuted">{h.p.bar} bars held</div>
@@ -215,12 +224,12 @@ const StateFingerprint = ({ view }: { view: StateReplayView }) => (
       <div key={f.key} className="grid grid-cols-[110px_1fr_58px] items-center gap-2.5">
         <span className="font-mono text-micro uppercase tracking-wider text-textSecondary truncate">{f.label}</span>
         <div className="relative h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
-          <span className="holo-bar block h-full rounded-full" style={{ width: `${Math.round(f.value * 100)}%` }} />
+          <span className="data-bar block h-full rounded-full" style={{ width: `${Math.round(f.value * 100)}%` }} />
         </div>
         <span className="flex items-center justify-end gap-1.5">
           <span className="font-mono text-micro tnum text-textPrimary">{Math.round(f.value * 100)}</span>
           <span
-            className={`font-mono text-micro uppercase tracking-wider ${f.live ? 'holo-text' : 'text-textMuted'}`}
+            className={`font-mono text-micro uppercase tracking-wider ${f.live ? 'text-textSecondary' : 'text-textMuted'}`}
             title={f.live ? 'read from the live chain/tape' : 'macro context'}
           >
             {f.live ? 'live' : 'mdl'}
@@ -286,7 +295,7 @@ const MarketStateReplay = ({ snapshot }: MarketStateReplayProps) => {
         <p className="mt-1.5 font-mono text-label text-textSecondary tnum">{view.receipts}</p>
       </Panel>
 
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-stretch">
         {/* Comparable sessions + outcome distribution */}
         <Panel
           title={
@@ -327,10 +336,15 @@ const MarketStateReplay = ({ snapshot }: MarketStateReplayProps) => {
           }
           subtitle="the 8 factors today is matched on"
           className="xl:col-span-5"
+          /* The row stretches, so this panel is as tall as the analog list beside
+             it. Flex the body and pin the footnote to the bottom: the slack lands
+             between the axes and their explanation instead of as ~200px of dead
+             rail hanging off the bottom of the column. */
+          bodyClassName="flex flex-col"
         >
           <StateFingerprint view={view} />
-          <p className="mt-3 font-mono text-micro text-textMuted leading-relaxed">
-            Similarity is Euclidean distance over these eight axes. <span className="holo-text">Live</span> factors read off the chain
+          <p className="mt-auto pt-3 font-mono text-micro text-textMuted leading-relaxed">
+            Similarity is Euclidean distance over these eight axes. <span className="text-textPrimary">Live</span> factors read off the chain
             and tape; the rest are the macro context — breadth, rates, news, session phase — that rounds out the eight-axis
             fingerprint.
           </p>
@@ -338,7 +352,7 @@ const MarketStateReplay = ({ snapshot }: MarketStateReplayProps) => {
       </div>
 
       {/* Calibration & edge decay */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-stretch">
         <Panel
           title={
             <span className="inline-flex items-center gap-1.5">
@@ -372,7 +386,7 @@ const MarketStateReplay = ({ snapshot }: MarketStateReplayProps) => {
           <div className="mt-2 grid grid-cols-3 gap-2">
             <div>
               <div className="font-mono text-micro uppercase tracking-wider text-textMuted">Peak edge</div>
-              <div className="font-mono text-body font-semibold tnum holo-text leading-5">
+              <div className="font-mono text-body font-semibold tnum text-textPrimary leading-5">
                 {Math.max(...view.edgeDecay.map(p => p.edgePct)).toFixed(0)}pt
               </div>
             </div>
@@ -413,7 +427,7 @@ const MarketStateReplay = ({ snapshot }: MarketStateReplayProps) => {
           </div>
           <div className="flex flex-col gap-1">
             <span className="font-mono text-micro uppercase tracking-wider text-textMuted">Out-of-sample</span>
-            <span className={`font-mono text-2xl font-bold tnum ${Math.abs(view.oos.degradationPts) <= 5 ? 'holo-text' : 'text-warn'}`}>
+            <span className={`font-mono text-2xl font-bold tnum ${Math.abs(view.oos.degradationPts) <= 5 ? 'text-textPrimary' : 'text-warn'}`}>
               {view.oos.outSampleTargetPct}%
             </span>
             <span className="font-mono text-micro text-textMuted tnum">recent {view.oos.outSampleN} held out · target first</span>
@@ -434,7 +448,7 @@ const MarketStateReplay = ({ snapshot }: MarketStateReplayProps) => {
       {/* Honest explainer */}
       <Panel bodyClassName="py-3">
         <p className="text-caption text-textSecondary leading-relaxed">
-          <span className="font-mono font-semibold uppercase tracking-wider mr-2 holo-text">How this reads</span>
+          <span className="font-mono font-semibold uppercase tracking-wider mr-2 text-textSecondary">How this reads</span>
           Market-State Replay asks the only question a backtest should: not "what does the pattern say" but "what happened the last
           time the whole board looked like this." It scores {view.pool} prior sessions against today's eight-factor state, keeps the{' '}
           {view.n} closest, and replays their outcomes against this setup's actual target and stop. Dealer positioning, vol and options

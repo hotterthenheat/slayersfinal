@@ -28,6 +28,7 @@ import type { MarketSnapshot } from '../../types/market';
 import type { CommandView, ExposureProfileData, GexMatrixData, GexView } from '../../types/gex';
 import type { Setup, SkyVisionData } from '../../types/skyvision';
 import { VERDICT_LABEL } from '../../components/skyvision/verdict';
+import { DUR, EASE } from '../../lib/motion';
 
 const SCAN_INTERVAL_MS = 10_000;
 
@@ -162,7 +163,7 @@ const DemoTape = ({ snapshot }: { snapshot: MarketSnapshot }) => {
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: DUR.reflow, ease: EASE }}
             className="flex items-center gap-2.5 px-4 h-[38px] border-b border-borderSubtle/40"
           >
             <span className="font-mono text-micro text-textMuted tnum shrink-0">{p.time}</span>
@@ -257,9 +258,9 @@ const DemoSetup = ({ setups }: { setups: SkyVisionData }) => {
         </div>
         <div className="mt-1.5 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
           <motion.div
-            className="h-full rounded-full holo-bar"
+            className="h-full rounded-full data-bar"
             animate={{ width: `${setup.confidence}%` }}
-            transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: DUR.data, ease: EASE }}
           />
         </div>
       </div>
@@ -298,7 +299,9 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
   const confidence = entering ? setup.confidence : Math.max(4, 100 - setup.confidence);
 
   return (
-    <section className="px-6 md:px-10 py-20 max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
+    // `setups` is the Compass tab's target in the landing nav — this is the
+    // section that shows a setup card in both of its states.
+    <section id="setups" className="px-6 md:px-10 py-20 max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
       <div>
         <SectionKicker>Entries are easy</SectionKicker>
         <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">It calls the exit, too.</h2>
@@ -347,7 +350,7 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ duration: DUR.slow, ease: EASE }}
             >
               <h3
                 className="font-mono text-lead font-bold tracking-tight"
@@ -375,7 +378,7 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
                       width: `${confidence}%`,
                       background: entering ? 'rgba(48,209,88,0.92)' : 'rgba(255,59,48,0.85)',
                     }}
-                    transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+                    transition={{ duration: DUR.data, ease: EASE }}
                   />
                 </div>
               </div>
@@ -465,6 +468,8 @@ const ChartShowcase = ({ ctx }: { ctx: LandingCtx | null }) => (
               levels={ctx.gex.levels}
               overlay="BOTH"
               timeframe="1m"
+              /* Landing hero — a preview of the read, not a desk to operate. */
+              showTimeframePicker={false}
               height={400}
             />
           </TiltBox>
@@ -645,7 +650,7 @@ const LiveSections = () => {
             </div>
             <Link
               to="/pulse"
-              className="md:ml-auto shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-md border border-borderMuted font-mono text-caption uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-white/[0.03] transition-colors"
+              className="md:ml-auto shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-md border border-borderMuted font-mono text-caption uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-rowHover transition-colors"
             >
               Try the workspace <ArrowRight className="w-3.5 h-3.5" />
             </Link>

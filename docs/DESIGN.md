@@ -116,13 +116,16 @@ rgba(228,232,244,0.6); outline-offset: 1px; }` (components echo it as
 
 One shared animated gradient (`--holo-gradient`, chrome → ice blue → pale
 violet → white; stops `#aeb9cf → #eef1f8 → #a8c4e8 → #d6c6ee → #f7f8fc →
-#b2c8e2 → #e2d4ee → #aeb9cf`) panned back and forth (`holo-pan`, 4.5s
-alternate) so every accented element carries the same living-foil sheen:
+#b2c8e2 → #e2d4ee → #aeb9cf`) panned back and forth (`holo-pan`, `ease-in-out`,
+`infinite alternate`) so every accented element carries the same living-foil
+sheen. `.holo-bg` / `.holo-text` / `.holo-border` pan at 4.5s over a `250% 250%`
+layer; `.holo-bar` is denser and faster (`350% 350%`, 3.5s); `.holo-glow` is not
+a pan — it cycles `holo-glow-shift`, a 5s box-shadow breathe:
 
 - `.holo-bg` — filled surface (active pills, CTAs). Uses the brighter
   `--holo-gradient-bright` run and pairs with dark `ink` text (≥7:1 at every stop).
 - `.holo-text` — gradient ink for brand marks, hero numbers.
-- `.holo-bar` — meter fills and thin rails (denser 350% pan).
+- `.holo-bar` — meter fills and thin rails (denser 350% pan, 3.5s).
 - `.holo-border` — 1px living border under a `#0a0a0a` pad.
 - `.holo-glow` — breathing chrome halo for the highest-emphasis card/CTA.
 

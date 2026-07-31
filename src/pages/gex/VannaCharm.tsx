@@ -289,7 +289,7 @@ const VannaCharm = () => {
           }${focus === 'ALL' ? '' : ` · ${FOCUS_LABEL[focus]}`}`}
           flush
           className="xl:col-span-7 min-w-0"
-          bodyClassName="flex flex-col max-h-[560px]"
+          bodyClassName="flex flex-col max-h-[max(560px,62vh)]"
         >
           <MigrationMap data={mapData} />
         </Panel>

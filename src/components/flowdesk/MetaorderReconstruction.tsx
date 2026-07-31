@@ -267,12 +267,12 @@ const MetaorderRow = ({ m }: { m: Metaorder }) => {
           </span>
         </div>
         <div className="relative h-2 rounded-full bg-white/[0.06] overflow-hidden">
-          <span className="block h-full rounded-full holo-bar" style={{ width: `${m.pctComplete}%` }} />
+          <span className="block h-full rounded-full data-bar" style={{ width: `${m.pctComplete}%` }} />
         </div>
       </div>
 
       {/* inferred readings */}
-      <div className="grid grid-cols-3 lg:grid-cols-6 gap-x-4 gap-y-2.5 pt-0.5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-4 gap-y-2.5 pt-0.5">
         <Stat label="Inferred total" value={fmtUsd(m.estTotalUsd)} tone={tone} />
         <Stat label="Time left" value={`${m.minsRemainingLo}–${m.minsRemainingHi}m`} tone={urgencyTone[m.urgency]} />
         <Stat label="Flow half-life" value={`${m.halfLifeMin}m`} />
@@ -324,7 +324,7 @@ const MetaorderRow = ({ m }: { m: Metaorder }) => {
         <button
           type="button"
           onClick={() => setShowPrints(v => !v)}
-          className="inline-flex items-center gap-1.5 font-mono text-label uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
+          className="-my-1 py-1 inline-flex items-center gap-1.5 font-mono text-label uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
           aria-expanded={showPrints}
         >
           <ChevronRight className={`w-3.5 h-3.5 transition-transform ${showPrints ? 'rotate-90' : ''}`} />
@@ -334,7 +334,7 @@ const MetaorderRow = ({ m }: { m: Metaorder }) => {
         <button
           type="button"
           onClick={() => setShowBasis(v => !v)}
-          className="inline-flex items-center gap-1.5 font-mono text-label uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
+          className="-my-1 py-1 inline-flex items-center gap-1.5 font-mono text-label uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
           aria-expanded={showBasis}
         >
           <ChevronRight className={`w-3.5 h-3.5 transition-transform ${showBasis ? 'rotate-90' : ''}`} />
@@ -389,7 +389,7 @@ const MetaorderReconstruction = () => {
   }
 
   const biasTone: Tone = view.netBias === 'BULLISH' ? 'bull' : view.netBias === 'BEARISH' ? 'bear' : 'neutral';
-  const biasLabelColor = biasTone === 'bull' ? 'text-bull' : biasTone === 'bear' ? 'text-bear' : 'holo-text';
+  const biasLabelColor = biasTone === 'bull' ? 'text-bull' : biasTone === 'bear' ? 'text-bear' : 'text-textPrimary';
 
   return (
     <>
@@ -461,7 +461,7 @@ const MetaorderReconstruction = () => {
 
       <Panel bodyClassName="py-3">
         <p className="text-caption text-textSecondary leading-relaxed">
-          <span className="font-mono font-semibold uppercase tracking-wider mr-2 holo-text">Beyond the tape</span>
+          <span className="font-mono font-semibold uppercase tracking-wider mr-2 text-textSecondary">Beyond the tape</span>
           A parent order never prints as one ticket — a desk works a clip over minutes, and the tape only shows the
           children. TRACE clusters those prints by strike geometry, aggressor side and timing, then infers the strategy,
           projects the full size from what is already done, and estimates the time and urgency to finish. The child-print

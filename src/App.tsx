@@ -1,4 +1,5 @@
 import { lazy, Suspense } from 'react';
+import { SkeletonRows } from './components/ui/Skeleton';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { MotionConfig } from 'framer-motion';
 import { MarketDataProvider } from './context/MarketDataContext';
@@ -41,9 +42,12 @@ import Privacy from './pages/legal/Privacy';
 // page and every other desk paint without downloading the 3D engine.
 const ProveIt = lazy(() => import('./pages/proveit/ProveIt'));
 
+/** One loading grammar for the whole app — the Skeleton sheen, not a second
+    animation. `animate-pulse` here was a third language competing with the
+    launch gate and the skeletons. */
 const RouteFallback = () => (
-  <div className="flex items-center justify-center h-[60vh]">
-    <span className="font-mono text-label uppercase tracking-widest text-textMuted animate-pulse">Loading…</span>
+  <div className="p-4">
+    <SkeletonRows rows={8} />
   </div>
 );
 

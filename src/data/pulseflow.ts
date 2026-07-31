@@ -18,6 +18,7 @@
 */
 
 import Simulator from '../core/simulator';
+import { expiryFor, fmtExpiryIso } from '../core/calendar';
 import { dayKey, h01, hRange } from '../core/rng';
 
 export interface SessionPrint {
@@ -69,22 +70,10 @@ const SESSION_BARS = 390;
 const PRINT_COUNT = 34;
 const DTE_CHOICES = [0, 2, 5, 21, 45];
 
-/** Expiry `dte` TRADING days out, formatted yy-mm-dd. */
-function expiryFor(dte: number): string {
-  const d = new Date();
-  let added = 0;
-  while (added < dte) {
-    d.setDate(d.getDate() + 1);
-    const wd = d.getDay();
-    if (wd !== 0 && wd !== 6) added += 1;
-  }
-  const yy = String(d.getFullYear() % 100).padStart(2, '0');
-  return `${yy}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-/** Rough option price: intrinsic + normal-shaped time value. */
-function optionPrice(spot: number, strike: number, pc: 'C' | 'P', dte: number, iv: number): number {
-  const t = Math.max(0.003, dte / 252);
+/** Rough option price: intrinsic + normal-shaped time value. Priced off
+    TRADING sessions, not calendar days — /252 is a session count. */
+function optionPrice(spot: number, strike: number, pc: 'C' | 'P', sessions: number, iv: number): number {
+  const t = Math.max(0.003, sessions / 252);
   const width = iv * Math.sqrt(t);
   const m = Math.log(strike / spot) / (width || 1e-6);
   const tv = spot * width * 0.4 * Math.exp((-m * m) / 2);
@@ -118,13 +107,17 @@ export function buildPulseFlow(ticker: string): PulseFlowView | null {
     const cSeed = (tag: string) => `${ticker}-${day}-ftc-${tag}`;
     const pcRoll = campaign ? h01(cSeed('pc')) : h01(seed('pc'));
     const pc: 'C' | 'P' = pcRoll < (sessionUp ? 0.62 : 0.45) ? 'C' : 'P';
-    const dte = DTE_CHOICES[Math.floor((campaign ? h01(cSeed('dte')) : h01(seed('dte'))) * DTE_CHOICES.length)];
+    // DTE_CHOICES are calendar days — what "45d" means on a tape. The calendar
+    // resolves that to a real session and hands back both numbers, so the
+    // printed dte, the expiry date and the price all describe one contract.
+    const exp = expiryFor(DTE_CHOICES[Math.floor((campaign ? h01(cSeed('dte')) : h01(seed('dte'))) * DTE_CHOICES.length)]);
+    const dte = exp.dte;
     const offRoll = campaign ? h01(cSeed('off')) : h01(seed('off'));
     const offset = (pc === 'C' ? 1 : -1) * (0.002 + Math.pow(offRoll, 1.6) * 0.03);
     const anchor = campaign ? bars[Math.floor(n * 0.35)].close : spot;
     const strike = Math.round((anchor * (1 + offset)) / cfg.step) * cfg.step;
 
-    const price = optionPrice(spot, strike, pc, dte, cfg.iv);
+    const price = optionPrice(spot, strike, pc, exp.sessions, cfg.iv);
     const size = Math.round(40 + Math.pow(h01(seed('sz')), 2.2) * 2960);
     const type: SessionPrint['type'] = h01(seed('ty')) < 0.42 ? 'SWEEP' : 'BLOCK';
     const xRoll = h01(seed('x'));
@@ -164,7 +157,7 @@ export function buildPulseFlow(ticker: string): PulseFlowView | null {
       spot: Number(spot.toFixed(2)),
       strike: Number(strike.toFixed(2)),
       pc,
-      exp: expiryFor(dte),
+      exp: fmtExpiryIso(exp.date),
       dte,
       x,
       type,

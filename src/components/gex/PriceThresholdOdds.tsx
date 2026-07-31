@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { preserveGreek } from '../ui/greek';
 import { Crosshair } from 'lucide-react';
 import Panel from '../ui/Panel';
 import SegmentedControl from '../ui/SegmentedControl';
@@ -89,9 +90,9 @@ const PriceThresholdOdds = ({ view }: { view: StateDensityView }) => {
               <button
                 key={a.label}
                 onClick={() => setThreshold(a.value)}
-                className="font-mono text-label uppercase tracking-wider px-2 py-1 rounded border border-borderSubtle text-textSecondary hover:text-textPrimary hover:bg-white/[0.04] transition-colors"
+                className="font-mono text-label uppercase tracking-wider px-2 py-1 rounded border border-borderSubtle text-textSecondary hover:text-textPrimary hover:bg-rowHover transition-colors"
               >
-                {a.label}
+                {preserveGreek(a.label)}
               </button>
             ))}
           </div>

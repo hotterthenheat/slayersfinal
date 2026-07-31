@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { preserveGreek } from '../ui/greek';
 import { ChevronDown, Info, AlertTriangle } from 'lucide-react';
 import SignalBadge from '../ui/SignalBadge';
 import GreeksRow from './GreeksRow';
@@ -37,10 +38,10 @@ const SetupCard = ({ setup, expanded, isSelected, isTop, onToggle, onSelect, onO
         onMouseEnter={e => setHover({ x: e.clientX, y: e.clientY })}
         onMouseMove={e => setHover({ x: e.clientX, y: e.clientY })}
         onMouseLeave={() => setHover(null)}
-        className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-white/[0.02] transition-colors"
+        className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-rowHover transition-colors"
       >
         <span className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-label font-semibold ${pillTone}`}>
-          <span className="holo-text">{setup.contract}</span>
+          <span className="text-textPrimary">{setup.contract}</span>
         </span>
         {isTop && <SignalBadge tone="magenta">TOP PICK</SignalBadge>}
 
@@ -51,7 +52,7 @@ const SetupCard = ({ setup, expanded, isSelected, isTop, onToggle, onSelect, onO
             </span>
           </span>
           <span className="text-right">
-            <span className="block font-mono text-label text-textMuted uppercase tracking-wider">1σ Move</span>
+            <span className="block font-mono text-label text-textMuted uppercase tracking-wider">{preserveGreek('1σ Move')}</span>
             <span className="font-mono text-caption font-semibold tnum text-textPrimary leading-4">
               ±{setup.expectedMovePct}%
             </span>

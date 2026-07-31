@@ -1,0 +1,176 @@
+/**
+ * Market calendar — one source of truth for "is the market open that day", and
+ * for turning a horizon in days into a REAL expiry.
+ *
+ * Six places used to answer this question and three of them answered it wrong:
+ * `new Date(Date.now() + dte * 86400000)` happily lists contracts that expire on
+ * a Saturday. The other three skipped weekends by hand but knew nothing about
+ * holidays, and silently redefined `dte` as *trading* days while the pricing
+ * math around them divided by 365. Anything that names an expiry comes through
+ * here now, and `Expiry` carries both numbers so a caller never has to guess
+ * which one it holds.
+ */
+
+/** US equity market holidays. Weekend-falling holidays are listed on their
+    observed weekday (e.g. Jul 4 2026 is a Saturday → observed Fri Jul 3). */
+export const MARKET_HOLIDAYS = new Set([
+  // 2026
+  '2026-01-01', '2026-01-19', '2026-02-16', '2026-04-03', '2026-05-25',
+  '2026-06-19', '2026-07-03', '2026-09-07', '2026-11-26', '2026-12-25',
+  // 2027
+  '2027-01-01', '2027-01-18', '2027-02-15', '2027-03-26', '2027-05-31',
+  '2027-06-18', '2027-07-05', '2027-09-06', '2027-11-25', '2027-12-24',
+  // 2028 — New Year's Day falls on a Saturday and is NOT pulled back to the
+  // preceding Friday, which is the one case the observed-weekday rule skips.
+  '2028-01-17', '2028-02-21', '2028-04-14', '2028-05-29', '2028-06-19',
+  '2028-07-04', '2028-09-04', '2028-11-23', '2028-12-25',
+]);
+
+const DAY_MS = 86400000;
+const WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+const p2 = (n: number) => String(n).padStart(2, '0');
+
+/** Local-date ISO key. NOT toISOString — that shifts across the UTC boundary. */
+export function isoDate(d: Date): string {
+  return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
+}
+
+/** Midnight local — dates used as calendar keys must not carry a time. */
+function atMidnight(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+/** Parsed once — `sessionsBetween` subtracts from this instead of re-parsing. */
+const HOLIDAY_DATES: Date[] = [...MARKET_HOLIDAYS]
+  .map(k => {
+    const [y, m, d] = k.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  })
+  .sort((a, b) => a.getTime() - b.getTime());
+
+const isWeekend = (d: Date) => d.getDay() === 0 || d.getDay() === 6;
+
+export function isTradingDay(d: Date): boolean {
+  return !isWeekend(d) && !MARKET_HOLIDAYS.has(isoDate(d));
+}
+
+export function today(): Date {
+  return atMidnight(new Date());
+}
+
+/** Walk in `step` days until a session is found. Bounded — never spins. The
+    longest real closure is a holiday Friday plus the weekend, so 10 is slack. */
+function walkToSession(from: Date, step: 1 | -1): Date {
+  const d = new Date(from);
+  for (let i = 0; i < 10 && !isTradingDay(d); i++) d.setDate(d.getDate() + step);
+  return d;
+}
+
+/** The next date the market is open — today included if today is a session. */
+export function nextSession(from: Date = today()): Date {
+  return walkToSession(atMidnight(from), 1);
+}
+
+/**
+ * Trading days in `(from, to]`. Every 7 consecutive days hold exactly 5
+ * weekdays, so whole weeks are arithmetic and only the remainder is walked —
+ * this runs per scored contract, and LEAPS are 480 days out.
+ */
+export function sessionsBetween(from: Date, to: Date): number {
+  const a = atMidnight(from);
+  const b = atMidnight(to);
+  if (b <= a) return 0;
+
+  const days = Math.round((b.getTime() - a.getTime()) / DAY_MS);
+  const weeks = Math.floor(days / 7);
+  let n = weeks * 5;
+
+  const cur = new Date(a);
+  cur.setDate(cur.getDate() + weeks * 7);
+  while (cur < b) {
+    cur.setDate(cur.getDate() + 1);
+    if (!isWeekend(cur)) n++;
+  }
+
+  for (const h of HOLIDAY_DATES) {
+    if (h > b) break;
+    if (h > a && !isWeekend(h)) n--;
+  }
+  return n;
+}
+
+export interface Expiry {
+  /** The real expiry — always a trading day. */
+  date: Date;
+  /** MM/DD/YY */
+  label: string;
+  /** Weekday name, e.g. "Fri" — the tell that makes a bad date obvious. */
+  weekday: string;
+  /** CALENDAR days to that date. What a trader means by "45 DTE". */
+  dte: number;
+  /** TRADING sessions left. The number that actually decays the contract. */
+  sessions: number;
+}
+
+/** MM/DD/YY */
+export function fmtExpiry(d: Date): string {
+  return `${p2(d.getMonth() + 1)}/${p2(d.getDate())}/${String(d.getFullYear()).slice(2)}`;
+}
+
+/** MM/DD */
+export function fmtExpiryShort(d: Date): string {
+  return `${p2(d.getMonth() + 1)}/${p2(d.getDate())}`;
+}
+
+/** MM/DD/YYYY */
+export function fmtExpiryLong(d: Date): string {
+  return `${p2(d.getMonth() + 1)}/${p2(d.getDate())}/${d.getFullYear()}`;
+}
+
+/** yy-mm-dd */
+export function fmtExpiryIso(d: Date): string {
+  return `${p2(d.getFullYear() % 100)}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
+}
+
+/** "Jul 24" */
+export function fmtMonthDay(d: Date): string {
+  return `${MONTH_ABBR[d.getMonth()]} ${d.getDate()}`;
+}
+
+/**
+ * Resolve a horizon in CALENDAR days to a real expiry.
+ *
+ * Prefer walking BACK off a closed day — a "7 day" weekly is that Friday, not
+ * the Saturday after it. Backward alone has a hole though: two days out from a
+ * Friday is Sunday, and stepping back from there lands on the Friday you are
+ * standing on, turning a 2-day request into a same-day contract. So when the
+ * backward walk reaches today or earlier, go FORWARD from the target instead.
+ *
+ * `dte` 0 is its own case: it means today when the market is open, and the next
+ * session when it is not — asking for a same-day contract on a Saturday.
+ */
+export function expiryFor(dte: number, from: Date = today()): Expiry {
+  const base = atMidnight(from);
+  const want = Math.max(0, Math.round(dte));
+
+  const target = new Date(base);
+  target.setDate(target.getDate() + want);
+
+  let date: Date;
+  if (want === 0) {
+    date = nextSession(base);
+  } else {
+    date = walkToSession(target, -1);
+    if (date <= base) date = walkToSession(target, 1);
+  }
+
+  return {
+    date,
+    label: fmtExpiry(date),
+    weekday: WEEKDAY[date.getDay()],
+    dte: Math.round((date.getTime() - base.getTime()) / DAY_MS),
+    sessions: sessionsBetween(base, date),
+  };
+}

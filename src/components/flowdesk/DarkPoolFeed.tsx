@@ -69,7 +69,7 @@ const DarkPoolFeed = () => {
                   onMouseEnter={e => setHover({ row: r, sector: sec.sector, sectorPct: (r.notional / sec.notional) * 100, x: e.clientX, y: e.clientY })}
                   onMouseMove={e => setHover({ row: r, sector: sec.sector, sectorPct: (r.notional / sec.notional) * 100, x: e.clientX, y: e.clientY })}
                   onMouseLeave={() => setHover(h => (h && h.row.ticker === r.ticker ? null : h))}
-                  className="flex items-center px-3 py-1.5 border-b border-borderSubtle/25 last:border-0 cursor-crosshair hover:bg-white/[0.02] transition-colors"
+                  className="flex items-center px-3 py-1.5 border-b border-borderSubtle/25 last:border-0 cursor-crosshair hover:bg-rowHover transition-colors"
                 >
                   <span className="w-12 shrink-0 flex flex-col leading-none">
                     <TickerTag symbol={r.ticker} className="font-mono text-label font-bold text-textPrimary" />

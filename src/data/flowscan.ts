@@ -11,6 +11,7 @@
 
 import Simulator from '../core/simulator';
 import { dayKey, h01, hRange } from '../core/rng';
+import { expiryFor, fmtExpiryShort } from '../core/calendar';
 import type { MarketSnapshot } from '../types/market';
 
 export type FlowSentiment = 'BULLISH' | 'BEARISH' | 'NEUTRAL';
@@ -56,8 +57,7 @@ export interface ScannerSummary {
 const DTE_POOL = [0, 1, 2, 5, 9, 16, 30, 44];
 
 function expiryLabel(dte: number): string {
-  const d = new Date(Date.now() + dte * 86400000);
-  return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+  return fmtExpiryShort(expiryFor(dte).date);
 }
 
 export function buildScannerRows(snapshot: MarketSnapshot): ScannerRow[] {

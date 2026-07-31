@@ -53,6 +53,18 @@ export default {
         // selection + brand only (see `select`), never for bullishness.
         bull: '#30D158',
         bear: '#FF3B30',
+        // Dealer-gamma sign. Gold = SHORT gamma (hedging amplifies the move),
+        // blue = LONG gamma (dips absorbed). Mirrors SHORT_GAMMA / LONG_GAMMA in
+        // components/gex/palette.ts, which serves the JS-API chart consumers —
+        // these two exist so class call sites stop reaching for text-[#E0B84E].
+        shortGamma: '#E0B84E',
+        longGamma: '#5EA0EF',
+        // One hover tint for every subtle interactive surface. Eight
+        // white-alpha spellings had accumulated (0.02 → 0.07) and the
+        // most-used, 0.03, measured 1.09:1 on a dark panel — below the
+        // perceptual floor, so rows barely answered the pointer. Selection
+        // keeps its own select-tinted language.
+        rowHover: 'rgba(255,255,255,0.055)',
         // True orange — caution reads clearly apart from silver and hot red
         warn: '#FF9500',
         // Interface accent — holographic silver, ~14:1 on canvas. Interface only, never data.
@@ -89,9 +101,37 @@ export default {
         read: '15px', // prose emphasis, card titles
         lead: '16px', // largest inline copy
       },
+      /*
+        Real fallback stacks, not a bare generic.
+        Both families load from Google Fonts with `display=swap`, so the first
+        paint of every session — and the whole session if that host is blocked or
+        slow — renders in whatever `sans-serif`/`monospace` resolves to. On Linux
+        that is often DejaVu, which is markedly wider than Inter and JetBrains
+        Mono: dense uppercase labels and fixed-width table columns reflow when
+        the real face lands. These stacks keep the metrics close enough that the
+        swap is a refinement rather than a re-layout.
+      */
       fontFamily: {
-        sans: ['Inter', 'sans-serif'],
-        mono: ['JetBrains Mono', 'monospace'],
+        sans: [
+          'Inter',
+          'ui-sans-serif',
+          'system-ui',
+          '-apple-system',
+          'Segoe UI',
+          'Roboto',
+          'Helvetica Neue',
+          'Arial',
+          'sans-serif',
+        ],
+        mono: [
+          'JetBrains Mono',
+          'ui-monospace',
+          'SFMono-Regular',
+          'Menlo',
+          'Consolas',
+          'Liberation Mono',
+          'monospace',
+        ],
       }
     },
   },

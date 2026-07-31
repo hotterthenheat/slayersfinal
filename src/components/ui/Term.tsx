@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { TERMS, type TermKey } from '../../data/terms';
@@ -22,6 +22,7 @@ interface TermProps {
 const Term = ({ k, children, className = '' }: TermProps) => {
   const anchorRef = useRef<HTMLSpanElement | null>(null);
   const closeTimer = useRef(0);
+  const tipId = useId();
   const [pos, setPos] = useState<{ x: number; y: number; up: boolean } | null>(null);
 
   const show = () => {
@@ -52,11 +53,32 @@ const Term = ({ k, children, className = '' }: TermProps) => {
     <span
       ref={anchorRef}
       tabIndex={0}
+      role="button"
+      aria-expanded={pos != null}
+      aria-describedby={pos ? tipId : undefined}
       onMouseEnter={show}
       onMouseLeave={hide}
       onFocus={show}
       onBlur={hide}
-      className={`cursor-help underline decoration-dotted decoration-textMuted/60 underline-offset-2 outline-none focus-visible:rounded-sm focus-visible:ring-1 focus-visible:ring-select/60 ${className}`}
+      onKeyDown={e => {
+        if (e.key === 'Escape' && pos) {
+          // Escape closes the card without moving focus, per APG.
+          e.stopPropagation();
+          window.clearTimeout(closeTimer.current);
+          setPos(null);
+          return;
+        }
+        if (e.key === 'Enter' || e.key === ' ') {
+          // A Term often sits inside a sortable table header. Left to bubble,
+          // Enter on the definition re-sorted the table instead of toggling
+          // the explainer.
+          e.preventDefault();
+          e.stopPropagation();
+          if (pos) setPos(null);
+          else show();
+        }
+      }}
+      className={`cursor-help underline decoration-dotted decoration-textMuted/60 underline-offset-2 outline-none focus-visible:rounded-sm focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 ${className}`}
     >
       {children ?? k}
       {pos &&
@@ -64,6 +86,7 @@ const Term = ({ k, children, className = '' }: TermProps) => {
         // `fixed` would anchor to the tile and clip.
         createPortal(
         <span
+          id={tipId}
           role="tooltip"
           onMouseEnter={show}
           onMouseLeave={hide}

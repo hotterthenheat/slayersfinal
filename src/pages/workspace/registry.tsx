@@ -20,9 +20,12 @@ import NetPremiumPanel from '../../components/flowdesk/NetPremiumPanel';
 import PulseFlowTape from '../../components/flowdesk/PulseFlowTape';
 import FlowAlertsPanel from '../../components/flowdesk/FlowAlertsPanel';
 import GradientChart from '../../components/gex/GradientChart';
+import PressureMatrix from '../../components/gex/PressureMatrix';
+import MarketNotes from '../../components/gex/MarketNotes';
 import SwingMapChart from '../../components/swing/SwingMapChart';
 import SignalBadge from '../../components/ui/SignalBadge';
 import type { Tone } from '../../components/ui/tones';
+import { makeAutoNote } from '../../data/command';
 import { buildDarkPoolView } from '../../data/darkpool';
 import { buildStockBoard } from '../../data/stocks';
 import { buildNewsFeed } from '../../data/news';
@@ -107,6 +110,28 @@ export const WIDGETS: WidgetDef[] = [
       <div className="h-full min-h-0 p-2 flex flex-col">
         <GradientChart ticker={ctx.ticker} revision={ctx.revision} levels={ctx.gex.levels} height={200} />
       </div>
+    ),
+  },
+  {
+    key: 'pressure-matrix',
+    title: 'Dealer Pressure',
+    description: 'Call vs put exposure at every strike in range, with the pin and flip rows flagged',
+    w: 4,
+    h: 6,
+    minW: 3,
+    minH: 4,
+    render: ctx => <PressureMatrix rows={ctx.cmd.pressure} maxAbs={ctx.cmd.pressureMaxAbs} spot={ctx.snapshot.spot} />,
+  },
+  {
+    key: 'market-notes',
+    title: 'Session Notes',
+    description: 'Generated observations as the book moves, plus your own lines',
+    w: 4,
+    h: 4,
+    minW: 3,
+    minH: 3,
+    render: ctx => (
+      <MarketNotes autoNote={makeAutoNote(ctx.snapshot, ctx.gex.levels, ctx.cmd.bias)} revision={ctx.revision} />
     ),
   },
   {

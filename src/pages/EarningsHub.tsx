@@ -16,9 +16,9 @@ type VerdictFilter = 'ALL' | EarningsVerdict;
 
 const FILTER_OPTIONS = [
   { value: 'ALL', label: 'All' },
-  { value: 'PLAY', label: 'Plays' },
-  { value: 'FADE', label: 'Fades' },
-  { value: 'SKIP', label: 'Skips' },
+  { value: 'PLAY', label: 'Qualified' },
+  { value: 'FADE', label: 'Rich' },
+  { value: 'SKIP', label: 'No edge' },
 ] as const;
 
 // Date/week windows read straight off the existing daysOut field — no new data.
@@ -38,12 +38,29 @@ const inWindow = (e: EarningsEvent, w: WindowFilter): boolean => {
 
 const WATCHLIST_KEY = 'slayer.earnings.watchlist';
 
-// PLAY = green (buy the event), FADE = amber caution (premium's too rich), SKIP = neutral.
+// QUALIFIED = green (a structure qualifies), RICH = amber caution (premium favours the seller), NO EDGE = neutral.
 // Magenta stays reserved for the king/standout signal, not a verdict.
 const verdictTone: Record<EarningsVerdict, Tone> = {
   PLAY: 'bull',
   FADE: 'warn',
   SKIP: 'neutral',
+};
+
+/**
+ * Observational labels, same rule as `skyvision/verdict.ts` and the Stocks
+ * board: the engine keeps PLAY/FADE/SKIP, the screen states the condition.
+ *
+ * PLAY deliberately does NOT map to a price word — it fires on three different
+ * conditions (rich premium with strong direction, cheap premium, fair premium
+ * with direction), so anything about the premium would be wrong for two of the
+ * three. What all three share is that a defined structure qualifies. FADE is
+ * the one branch that IS a premium statement (richness >= 1.3 with no
+ * direction), and SKIP is the absence of an edge.
+ */
+const VERDICT_LABEL: Record<EarningsVerdict, string> = {
+  PLAY: 'QUALIFIED',
+  FADE: 'RICH',
+  SKIP: 'NO EDGE',
 };
 
 /*
@@ -120,7 +137,7 @@ const MoveCompare = ({ implied, hist }: { implied: number; hist: number }) => {
       <span className="flex items-center gap-1.5">
         <span className="w-7 font-mono text-micro uppercase text-textMuted">imp</span>
         <span className="flex-1 h-[4px] rounded-full bg-white/[0.06] overflow-hidden">
-          <span className="block h-full rounded-full holo-bar" style={{ width: `${(implied / max) * 100}%` }} />
+          <span className="block h-full rounded-full data-bar" style={{ width: `${(implied / max) * 100}%` }} />
         </span>
         <span className="w-11 font-mono text-label text-textPrimary tnum text-right">{implied.toFixed(1)}%</span>
       </span>
@@ -243,7 +260,7 @@ const AlertCountdown = ({
         </span>
         <button
           onClick={onOpen}
-          className="text-left font-mono text-body font-bold text-textPrimary hover:text-select transition-colors truncate leading-5"
+          className="-my-1 py-1 text-left font-mono text-body font-bold text-textPrimary hover:text-select transition-colors truncate leading-5"
         >
           {event.ticker} · {event.dateLabel} {event.slot} · {st.label}
         </button>
@@ -278,7 +295,7 @@ const AlertCountdown = ({
   );
 };
 
-/** The three-part read that replaces a bare PLAY / FADE. */
+/** The three-part read that replaces a bare QUALIFIED / RICH badge. */
 const TradeRead = ({ e }: { e: EarningsEvent }) => {
   const edge = edgeRead(e);
   const conv = convictionRead(e);
@@ -286,7 +303,7 @@ const TradeRead = ({ e }: { e: EarningsEvent }) => {
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center gap-1.5">
-        <SignalBadge tone={verdictTone[e.verdict]}>{e.verdict}</SignalBadge>
+        <SignalBadge tone={verdictTone[e.verdict]}>{VERDICT_LABEL[e.verdict]}</SignalBadge>
         <span className="font-mono text-label text-textPrimary">{st.label}</span>
       </div>
       <div className="flex items-center gap-2 font-mono text-label whitespace-nowrap">
@@ -385,6 +402,7 @@ const EarningsHub = () => {
           {
             key: 'compare',
             header: 'Cmp',
+            help: 'Cmp' as const,
             width: '44px',
             render: (e: EarningsEvent) => (
               <button
@@ -481,6 +499,7 @@ const EarningsHub = () => {
     {
       key: 'ivr',
       header: 'IVR',
+      help: 'IVR',
       align: 'right',
       sortValue: e => e.ivRank,
       render: e => <span className="font-mono text-caption text-textSecondary tnum leading-4">{e.ivRank}</span>,
@@ -505,8 +524,8 @@ const EarningsHub = () => {
 
       <MetricGrid min="170px">
         <StatCard label="Reports tracked" value={events.length} sub="next two weeks" />
-        <StatCard label="Playable" value={plays.length} sub="edge worth taking" tone="bull" />
-        <StatCard label="Fade list" value={fades.length} sub="premium overpriced" tone="magenta" />
+        <StatCard label="Qualified" value={plays.length} sub="a defined structure fits" tone="bull" />
+        <StatCard label="Premium rich" value={fades.length} sub="implied over realized" tone="magenta" />
         <StatCard
           label="Richest straddle"
           value={richest ? `${richest.ticker} ${richest.richness.toFixed(2)}×` : '--'}
@@ -557,14 +576,14 @@ const EarningsHub = () => {
                     key={e.ticker}
                     onClick={() => setSelectedTicker(prev => (prev === e.ticker ? null : e.ticker))}
                     className={`flex items-center gap-2 rounded px-1.5 py-1 text-left transition-colors ${
-                      selectedTicker === e.ticker ? 'bg-select/[0.08]' : 'hover:bg-white/[0.03]'
+                      selectedTicker === e.ticker ? 'bg-select/[0.08]' : 'hover:bg-rowHover'
                     }`}
                   >
                     {watchlist.has(e.ticker) && <Star className="w-3 h-3 shrink-0 text-select fill-current" />}
                     <span className="font-mono text-caption font-bold text-textPrimary">{e.ticker}</span>
                     <span className="font-mono text-micro text-textMuted">{e.slot}</span>
                     <SignalBadge tone={verdictTone[e.verdict]} className="ml-auto">
-                      {e.verdict}
+                      {VERDICT_LABEL[e.verdict]}
                     </SignalBadge>
                   </button>
                 ))}
@@ -618,7 +637,7 @@ const EarningsHub = () => {
                   </div>
 
                   <div className="flex items-center justify-between gap-2">
-                    <SignalBadge tone={verdictTone[e.verdict]}>{e.verdict}</SignalBadge>
+                    <SignalBadge tone={verdictTone[e.verdict]}>{VERDICT_LABEL[e.verdict]}</SignalBadge>
                     <ReportTimeTag e={e} />
                   </div>
 
@@ -711,7 +730,7 @@ const EarningsHub = () => {
           <div className="px-4 py-3 border-b border-borderSubtle bg-inset flex flex-col gap-2.5 animate-soft-in">
             <div className="flex items-center gap-2 flex-wrap">
               <WatchStar on={watchlist.has(selected.ticker)} onClick={() => toggleWatch(selected.ticker)} />
-              <SignalBadge tone={verdictTone[selected.verdict]}>{selected.verdict}</SignalBadge>
+              <SignalBadge tone={verdictTone[selected.verdict]}>{VERDICT_LABEL[selected.verdict]}</SignalBadge>
               <span className="font-mono text-caption font-bold text-textPrimary leading-4">
                 {selected.ticker} · {selected.dateLabel} {selected.slot}
               </span>
@@ -767,8 +786,12 @@ const EarningsHub = () => {
           onRowClick={e => setSelectedTicker(prev => (prev === e.ticker ? null : e.ticker))}
           selectedKey={selectedTicker}
           initialSort={{ key: 'date', dir: 'asc' }}
-          maxHeight="560px"
-          emptyText="No prints match these filters"
+          maxHeight="max(560px, 62vh)"
+          // "prints" is Trace vocabulary — this desk lists earnings reports, and
+          // it had inherited the flow desk's empty state verbatim. Every other
+          // table in the app names its own object (contracts, names, setups,
+          // alternatives); this was the one that named someone else's.
+          emptyText="No reports match these filters"
         />
       </Panel>
 

@@ -27,6 +27,7 @@ import {
   Check,
 } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
+import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { useToast } from '../../components/ui/Toast';
 import { SkeletonRows } from '../../components/ui/Skeleton';
 import Simulator from '../../core/simulator';
@@ -40,7 +41,7 @@ import type { MarketSnapshot } from '../../types/market';
 import type { WorkspaceCtx } from '../workspace/registry';
 import { PULSE_ADDABLE_PANELS, PULSE_DATA_CONNECTIONS, pulsePanelByKey } from './pulseRegistry';
 import PanelErrorBoundary from './PanelErrorBoundary';
-import { EASE } from '../../lib/motion';
+import { DUR, EASE } from '../../lib/motion';
 import {
   PULSE_PRESETS,
   PULSE_STORAGE_KEY,
@@ -51,6 +52,9 @@ import {
 } from './presets';
 
 const Grid = WidthProvider(RGL);
+/** Grid columns — shared by the layout and the keyboard nudge clamp. */
+const GRID_COLS = 12;
+
 const SCAN_INTERVAL_MS = 10_000;
 
 /** One shared data context per ticker, built once per scan. */
@@ -71,21 +75,6 @@ function buildCtx(snapshot: MarketSnapshot, revision: number, focusPrice: number
     setups: buildSkyVision(snapshot, 'top-setups'),
     focusPrice,
   };
-}
-
-/** Client-only media-query subscription. */
-function useMediaQuery(query: string): boolean {
-  const [matches, setMatches] = useState(() =>
-    typeof window !== 'undefined' ? window.matchMedia(query).matches : true
-  );
-  useEffect(() => {
-    const mq = window.matchMedia(query);
-    const on = () => setMatches(mq.matches);
-    on();
-    mq.addEventListener('change', on);
-    return () => mq.removeEventListener('change', on);
-  }, [query]);
-  return matches;
 }
 
 // ---- persistence ---------------------------------------------------------
@@ -153,14 +142,14 @@ const PanelTicker = ({ value, onChange }: { value: string; onChange: (t: string)
           if (e.key === 'Escape') setEditing(false);
         }}
         onMouseDown={e => e.stopPropagation()}
-        className="w-16 bg-inputBg border border-borderMuted rounded px-1 py-0.5 font-mono text-micro text-textPrimary outline-none focus:border-select"
+        className="w-16 bg-inputBg border border-borderMuted rounded px-1 py-0.5 font-mono text-micro text-textPrimary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 focus:border-select"
       />
     );
   return (
     <button
       onMouseDown={e => e.stopPropagation()}
       onClick={() => setEditing(true)}
-      className="font-mono text-micro font-semibold text-select hover:text-textPrimary px-1 rounded transition-colors"
+      className="inline-flex items-center min-h-6 -my-1 font-mono text-micro font-semibold text-select hover:text-textPrimary px-1 rounded transition-colors"
       title="Change this panel's ticker"
     >
       {value}
@@ -178,6 +167,8 @@ interface PanelChromeHandlers {
   onMinimize: (panelId: string) => void;
   onMaximize: (panelId: string | null) => void;
   onClose: (panelId: string) => void;
+  /** Keyboard move/resize. Returns the new position or size, for announcing. */
+  onNudge: (panelId: string, dx: number, dy: number, dw: number, dh: number) => string;
 }
 
 /** Panel header — title, per-panel ticker, a live quote, and edit/maximize
@@ -201,14 +192,51 @@ const PanelChrome = ({
   h: PanelChromeHandlers;
 }) => {
   const def = pulsePanelByKey(panelKey);
+  const [nudged, setNudged] = useState('');
   const draggable = !maximizedView && h.editLayout;
   const up = (changePct ?? 0) >= 0;
   return (
     <div className={`${draggable ? 'widget-drag cursor-grab active:cursor-grabbing' : ''} flex items-center gap-2 px-3.5 h-10 border-b border-borderSubtle bg-white/[0.015] shrink-0 select-none`}>
-      {draggable && <GripHorizontal className="w-3.5 h-3.5 text-textMuted shrink-0" />}
-      <span className="font-mono text-label font-semibold uppercase tracking-widest text-textPrimary truncate">
+      {draggable && (
+        <>
+          {/* react-grid-layout's handle is a bare div, so Customize mode
+              advertised a rearrangeable desk that no keyboard could rearrange.
+              The grip is a real button: arrows move, Shift+arrows resize, and
+              the result goes to a live region rather than a toast (one toast per
+              arrow press would bury the desk). Mouse dragging still works from
+              anywhere in the header — the handle class stays on the row. */}
+          <button
+            type="button"
+            aria-label={`Move or resize ${def?.title ?? panelKey} panel. Arrow keys move, Shift plus arrow keys resize.`}
+            aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight"
+            onKeyDown={e => {
+              const step: Record<string, [number, number]> = {
+                ArrowLeft: [-1, 0],
+                ArrowRight: [1, 0],
+                ArrowUp: [0, -1],
+                ArrowDown: [0, 1],
+              };
+              const d = step[e.key];
+              if (!d) return;
+              e.preventDefault();
+              const [ax, ay] = d;
+              setNudged(e.shiftKey ? h.onNudge(panelId, 0, 0, ax, ay) : h.onNudge(panelId, ax, ay, 0, 0));
+            }}
+            className="-m-1 p-1 rounded shrink-0 text-textMuted hover:text-textPrimary transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60"
+          >
+            <GripHorizontal className="w-3.5 h-3.5" />
+          </button>
+          <span className="sr-only" aria-live="polite">
+            {nudged}
+          </span>
+        </>
+      )}
+      {/* h2, matching Panel's level. These were spans carrying Panel's exact
+          class string, which left /pulse — the flagship desk — with zero
+          headings of any level. */}
+      <h2 className="font-mono text-label font-semibold uppercase tracking-widest text-textPrimary truncate">
         {def?.title ?? panelKey}
-      </span>
+      </h2>
       <PanelTicker value={ticker} onChange={t => h.onTicker(panelId, t)} />
       {price != null && Number.isFinite(price) && (
         <span className="hidden md:flex items-baseline gap-1.5 font-mono tnum whitespace-nowrap" onMouseDown={e => e.stopPropagation()}>
@@ -221,13 +249,13 @@ const PanelChrome = ({
           )}
         </span>
       )}
-      <div className="ml-auto flex items-center gap-1.5 shrink-0" onMouseDown={e => e.stopPropagation()}>
+      <div className="ml-auto flex items-center gap-0.5 shrink-0" onMouseDown={e => e.stopPropagation()}>
         {draggable && (
           <>
-            <button onClick={() => h.onDuplicate(panelId)} title="Duplicate" className="text-textMuted hover:text-textPrimary transition-colors">
+            <button onClick={() => h.onDuplicate(panelId)} title="Duplicate" aria-label={`Duplicate ${def?.title ?? panelKey} panel`} className="p-1.5 rounded text-textMuted hover:text-textPrimary transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60">
               <Copy className="w-3 h-3" />
             </button>
-            <button onClick={() => h.onMinimize(panelId)} title="Minimize" className="text-textMuted hover:text-textPrimary transition-colors">
+            <button onClick={() => h.onMinimize(panelId)} title="Minimize" aria-label={`Minimize ${def?.title ?? panelKey} panel`} className="p-1.5 rounded text-textMuted hover:text-textPrimary transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60">
               <Minus className="w-3.5 h-3.5" />
             </button>
           </>
@@ -235,12 +263,13 @@ const PanelChrome = ({
         <button
           onClick={() => h.onMaximize(maximizedView ? null : panelId)}
           title={maximizedView ? 'Restore' : 'Maximize'}
-          className="text-textMuted hover:text-textPrimary transition-colors"
+          aria-label={`${maximizedView ? 'Restore' : 'Maximize'} ${def?.title ?? panelKey} panel`}
+          className="p-1.5 rounded text-textMuted hover:text-textPrimary transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60"
         >
           {maximizedView ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3 h-3" />}
         </button>
         {draggable && (
-          <button onClick={() => h.onClose(panelId)} title="Close" className="text-textMuted hover:text-bear transition-colors">
+          <button onClick={() => h.onClose(panelId)} title="Close" aria-label={`Close ${def?.title ?? panelKey} panel`} className="p-1.5 rounded text-textMuted hover:text-bear transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60">
             <X className="w-3.5 h-3.5" />
           </button>
         )}
@@ -408,8 +437,26 @@ const PulseWorkspace = () => {
     setAddOpen(false);
   };
 
-  const removePanel = (id: string) =>
+  const removePanel = (id: string) => {
+    // Snapshot the panel and its geometry BEFORE removing, so Undo restores it
+    // where it was rather than dropping it at the bottom of the grid. Closing a
+    // panel was instant and irreversible; the toast system already carries an
+    // action, and Tracker already uses it for exactly this.
+    const panel = active.panels.find(p => p.id === id);
+    const geo = active.layout.find(g => g.i === id);
+    const title = (panel && pulsePanelByKey(panel.key)?.title) ?? 'Panel';
     mutate(l => ({ ...l, panels: l.panels.filter(p => p.id !== id), layout: l.layout.filter(g => g.i !== id) }));
+    if (!panel || !geo) return;
+    toast.toast(`Closed ${title}`, 'info', {
+      label: 'Undo',
+      onClick: () =>
+        mutate(l =>
+          l.panels.some(p => p.id === id)
+            ? l
+            : { ...l, panels: [...l.panels, panel], layout: [...l.layout, geo] }
+        ),
+    });
+  };
 
   const duplicatePanel = (id: string) => {
     const panel = active.panels.find(p => p.id === id);
@@ -440,6 +487,34 @@ const PulseWorkspace = () => {
     });
 
   const onLayoutChange = (next: Layout[]) => mutate(l => ({ ...l, layout: next }));
+
+  /**
+   * Keyboard move/resize. react-grid-layout ships no keyboard path — its drag
+   * and resize handles are bare divs — so Customize mode advertised a
+   * rearrangeable desk that a keyboard user could not rearrange at all. Writing
+   * the geometry straight into the layout is the same thing a drag produces, and
+   * RGL re-runs its vertical compaction from it.
+   */
+  const nudgePanel = (id: string, dx: number, dy: number, dw: number, dh: number): string => {
+    const panel = active.panels.find(p => p.id === id);
+    const def = panel ? pulsePanelByKey(panel.key) : undefined;
+    const minW = def?.minW ?? 2;
+    const minH = def?.minH ?? 2;
+    let announced = '';
+    mutate(l => ({
+      ...l,
+      layout: l.layout.map(g => {
+        if (g.i !== id) return g;
+        const w = Math.max(minW, Math.min(GRID_COLS, g.w + dw));
+        const h = Math.max(minH, g.h + dh);
+        const x = Math.max(0, Math.min(GRID_COLS - w, g.x + dx));
+        const y = Math.max(0, g.y + dy);
+        announced = dw || dh ? `${w} by ${h}` : `column ${x + 1}, row ${y + 1}`;
+        return { ...g, x, y, w, h };
+      }),
+    }));
+    return announced;
+  };
 
   const doArrange = (mode: 'one' | 'cols' | 'rows' | 'quad') =>
     mutate(l => ({ ...l, layout: arrange(mode, l.panels.map(p => p.id)) }));
@@ -555,22 +630,27 @@ const PulseWorkspace = () => {
     onMinimize: toggleMin,
     onMaximize: setMaximizedId,
     onClose: removePanel,
+    onNudge: nudgePanel,
   };
 
   // Live quote for a panel's ticker (scan cadence — no per-second header churn).
   const snapFor = (t: string) => ctxByTicker.get(t)?.snapshot;
 
-  const barBtn = 'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-borderSubtle bg-white/[0.02] hover:bg-white/[0.05] font-mono text-label uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors';
+  const barBtn = 'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-borderSubtle bg-white/[0.02] hover:bg-rowHover font-mono text-label uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors';
 
   return (
     <div className={fullscreen ? 'fixed inset-0 z-50 bg-canvas p-3 flex flex-col gap-4 overflow-auto' : 'flex flex-col gap-4'}>
+      {/* The desk is deliberately chromeless — no page title bar — so the H1
+          every other route renders is here for the document outline and for
+          assistive tech, not for the eye. */}
+      <h1 className="sr-only">Pulse — {active.name} workspace</h1>
       {/* Workspace bar */}
       <div className="flex items-center gap-2 flex-wrap">
         {/* View switcher — the hero control (present in both modes) */}
         <div className="relative">
           <button
             onClick={() => setWsMenuOpen(o => !o)}
-            className="inline-flex items-center gap-2 pl-2.5 pr-2 py-1.5 rounded-md border border-borderMuted bg-white/[0.03] hover:bg-white/[0.06] transition-colors"
+            className="inline-flex items-center gap-2 pl-2.5 pr-2 py-1.5 rounded-md border border-borderMuted bg-white/[0.03] hover:bg-rowHover transition-colors"
           >
             <LayoutGrid className="w-3.5 h-3.5 text-select" />
             <span className="font-mono text-caption font-semibold text-textPrimary">{active.name}</span>
@@ -586,7 +666,7 @@ const PulseWorkspace = () => {
                     key={l.id}
                     onClick={() => switchLayout(l.id)}
                     className={`w-full text-left px-3 py-2 font-mono text-label flex items-center gap-2 transition-colors ${
-                      l.id === active.id ? 'text-select bg-select/[0.06]' : 'text-textSecondary hover:bg-white/[0.03]'
+                      l.id === active.id ? 'text-select bg-select/[0.06]' : 'text-textSecondary hover:bg-rowHover'
                     }`}
                   >
                     {l.name}
@@ -606,11 +686,14 @@ const PulseWorkspace = () => {
                       if (e.key === 'Escape') setNameEditor(null);
                     }}
                     placeholder={nameEditor.mode === 'saveAs' ? 'New layout name…' : 'Layout name…'}
-                    className="flex-1 min-w-0 bg-inset border border-borderSubtle rounded px-2 py-1 font-mono text-caption text-textPrimary placeholder:text-textMuted focus:outline-none focus:border-borderMuted"
+                    className="flex-1 min-w-0 bg-inset border border-borderSubtle rounded px-2 py-1 font-mono text-caption text-textPrimary placeholder:text-textMuted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 focus:border-borderMuted"
                   />
                   <button
                     onClick={commitName}
-                    className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded border border-borderSubtle hover:border-borderMuted font-mono text-label text-textSecondary hover:text-textPrimary transition-colors"
+                    // commitName() early-returns on an empty name — same
+                    // enabled-but-inert shape as the two tape Save buttons.
+                    disabled={!nameEditor.value.trim()}
+                    className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded border border-borderSubtle hover:border-borderMuted disabled:opacity-40 disabled:hover:border-borderSubtle font-mono text-label text-textSecondary hover:text-textPrimary transition-colors"
                   >
                     <Check className="w-3 h-3" /> {nameEditor.mode === 'saveAs' ? 'Save' : 'Rename'}
                   </button>
@@ -618,10 +701,10 @@ const PulseWorkspace = () => {
               )}
               {editLayout && !nameEditor && (
                 <div className="border-t border-borderSubtle p-1.5 grid grid-cols-2 gap-1">
-                  <button onClick={() => setNameEditor({ mode: 'saveAs', value: `${active.name} copy` })} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-micro text-textSecondary hover:bg-white/[0.04] transition-colors"><Save className="w-3 h-3" /> Save as</button>
-                  <button onClick={() => setNameEditor({ mode: 'rename', value: active.name })} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-micro text-textSecondary hover:bg-white/[0.04] transition-colors">Rename</button>
-                  <button onClick={duplicateLayout} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-micro text-textSecondary hover:bg-white/[0.04] transition-colors"><Copy className="w-3 h-3" /> Duplicate</button>
-                  <button onClick={resetLayout} className={`flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-micro transition-colors ${confirmOp === 'reset' ? 'text-bear bg-bear/[0.12]' : 'text-textSecondary hover:bg-white/[0.04]'}`}><RotateCcw className="w-3 h-3" /> {confirmOp === 'reset' ? 'Confirm reset' : 'Reset'}</button>
+                  <button onClick={() => setNameEditor({ mode: 'saveAs', value: `${active.name} copy` })} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-micro text-textSecondary hover:bg-rowHover transition-colors"><Save className="w-3 h-3" /> Save as</button>
+                  <button onClick={() => setNameEditor({ mode: 'rename', value: active.name })} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-micro text-textSecondary hover:bg-rowHover transition-colors">Rename</button>
+                  <button onClick={duplicateLayout} className="flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-micro text-textSecondary hover:bg-rowHover transition-colors"><Copy className="w-3 h-3" /> Duplicate</button>
+                  <button onClick={resetLayout} className={`flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-micro transition-colors ${confirmOp === 'reset' ? 'text-bear bg-bear/[0.12]' : 'text-textSecondary hover:bg-rowHover'}`}><RotateCcw className="w-3 h-3" /> {confirmOp === 'reset' ? 'Confirm reset' : 'Reset'}</button>
                   <button onClick={deleteLayout} disabled={ws.layouts.length <= 1} className={`col-span-2 flex items-center gap-1.5 px-2 py-1.5 rounded font-mono text-micro disabled:opacity-40 transition-colors ${confirmOp === 'delete' ? 'text-bear bg-bear/[0.12]' : 'text-bear/80 hover:bg-bear/[0.08]'}`}><Trash2 className="w-3 h-3" /> {confirmOp === 'delete' ? 'Click again to confirm delete' : 'Delete layout'}</button>
                 </div>
               )}
@@ -633,10 +716,10 @@ const PulseWorkspace = () => {
         {editLayout && (
           <>
             <div className="inline-flex items-center rounded-md border border-borderSubtle overflow-hidden">
-              <button onClick={() => doArrange('one')} title="One panel" className="px-2 py-1.5 text-textMuted hover:text-textPrimary hover:bg-white/[0.04]"><Square className="w-3.5 h-3.5" /></button>
-              <button onClick={() => doArrange('cols')} title="Columns" className="px-2 py-1.5 text-textMuted hover:text-textPrimary hover:bg-white/[0.04] border-l border-borderSubtle"><Columns className="w-3.5 h-3.5" /></button>
-              <button onClick={() => doArrange('rows')} title="Rows" className="px-2 py-1.5 text-textMuted hover:text-textPrimary hover:bg-white/[0.04] border-l border-borderSubtle"><Rows className="w-3.5 h-3.5" /></button>
-              <button onClick={() => doArrange('quad')} title="Grid" className="px-2 py-1.5 text-textMuted hover:text-textPrimary hover:bg-white/[0.04] border-l border-borderSubtle"><Grid2x2 className="w-3.5 h-3.5" /></button>
+              <button onClick={() => doArrange('one')} title="One panel" className="px-2 py-1.5 text-textMuted hover:text-textPrimary hover:bg-rowHover"><Square className="w-3.5 h-3.5" /></button>
+              <button onClick={() => doArrange('cols')} title="Columns" className="px-2 py-1.5 text-textMuted hover:text-textPrimary hover:bg-rowHover border-l border-borderSubtle"><Columns className="w-3.5 h-3.5" /></button>
+              <button onClick={() => doArrange('rows')} title="Rows" className="px-2 py-1.5 text-textMuted hover:text-textPrimary hover:bg-rowHover border-l border-borderSubtle"><Rows className="w-3.5 h-3.5" /></button>
+              <button onClick={() => doArrange('quad')} title="Grid" className="px-2 py-1.5 text-textMuted hover:text-textPrimary hover:bg-rowHover border-l border-borderSubtle"><Grid2x2 className="w-3.5 h-3.5" /></button>
             </div>
 
             <div className="relative">
@@ -658,7 +741,7 @@ const PulseWorkspace = () => {
                       if (e.key === 'Enter' && addableMatches.length > 0) addPanel(addableMatches[0].key);
                     }}
                     placeholder="Search panels…"
-                    className="w-full bg-inputBg border border-borderMuted rounded pl-7 pr-2 py-1.5 font-mono text-label text-textPrimary placeholder:text-textMuted outline-none focus:border-select/40"
+                    className="w-full bg-inputBg border border-borderMuted rounded pl-7 pr-2 py-1.5 font-mono text-label text-textPrimary placeholder:text-textMuted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 focus:border-select/40"
                   />
                 </div>
               </div>
@@ -668,7 +751,7 @@ const PulseWorkspace = () => {
                   <button
                     key={def.key}
                     onClick={() => addPanel(def.key)}
-                    className="w-full text-left px-3 py-2 hover:bg-white/[0.03] transition-colors border-b border-borderSubtle/40 last:border-0"
+                    className="w-full text-left px-3 py-2 hover:bg-rowHover transition-colors border-b border-borderSubtle/40 last:border-0"
                   >
                     <span className="block font-mono text-label font-semibold text-textPrimary">{def.title}</span>
                     <span className="block text-micro text-textSecondary">{def.description}</span>
@@ -697,7 +780,7 @@ const PulseWorkspace = () => {
                         key={def.key}
                         onClick={() => addPanel(def.key)}
                         title={`Requires ${def.requires}`}
-                        className="w-full text-left px-3 py-2 flex items-start gap-2 hover:bg-white/[0.03] transition-colors border-b border-borderSubtle/40 last:border-0"
+                        className="w-full text-left px-3 py-2 flex items-start gap-2 hover:bg-rowHover transition-colors border-b border-borderSubtle/40 last:border-0"
                       >
                         <Lock className="w-3 h-3 text-textMuted mt-0.5 shrink-0" />
                         <span className="min-w-0">
@@ -797,11 +880,11 @@ const PulseWorkspace = () => {
             initial={{ opacity: 0, scale: 0.985 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.99 }}
-            transition={{ duration: 0.24, ease: EASE }}
+            transition={{ duration: DUR.slow, ease: EASE }}
           >
             <Grid
               layout={active.layout}
-              cols={12}
+              cols={GRID_COLS}
               rowHeight={64}
               margin={[12, 12]}
               containerPadding={[0, 0]}

@@ -94,7 +94,7 @@ const DeltaByPriceBars = ({ data }: { data: OrderFlowData }) => {
             onMouseEnter={e => setHover({ price: r.price, value: r.value, x: e.clientX, y: e.clientY })}
             onMouseMove={e => setHover({ price: r.price, value: r.value, x: e.clientX, y: e.clientY })}
             onMouseLeave={() => setHover(h => (h && h.price === r.price ? null : h))}
-            className="flex items-center gap-1.5 cursor-crosshair rounded-sm hover:bg-white/[0.03]"
+            className="flex items-center gap-1.5 cursor-crosshair rounded-sm hover:bg-rowHover"
           >
             <span className={`w-12 shrink-0 text-right font-mono text-micro tnum ${isPoc ? 'text-textPrimary font-semibold' : 'text-textMuted'}`}>
               {r.price.toFixed(2)}
@@ -150,7 +150,7 @@ const OrderFlowPanel = ({ data }: OrderFlowPanelProps) => (
       <div className="font-mono text-micro uppercase tracking-widest text-textMuted mb-1">Cumulative Delta</div>
       <CumulativeDelta data={data} />
     </div>
-    <div tabIndex={0} role="region" aria-label="Order flow — scrollable" className="flex-grow min-h-0 overflow-y-auto focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/50">
+    <div tabIndex={0} role="region" aria-label="Order flow — scrollable" className="flex-grow min-h-0 overflow-y-auto focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60">
       <div className="font-mono text-micro uppercase tracking-widest text-textMuted mb-1.5">Delta by Price</div>
       <DeltaByPriceBars data={data} />
     </div>

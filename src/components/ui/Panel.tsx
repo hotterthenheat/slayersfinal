@@ -3,6 +3,27 @@ import { createPortal } from 'react-dom';
 import { Maximize2, Minimize2 } from 'lucide-react';
 import type { Tone } from './tones';
 import { useFocus } from '../../context/FocusContext';
+import { titleOf } from './truncation';
+
+/** Renders the panel title at the requested level without four near-copies. */
+const Heading = ({
+  level,
+  className,
+  title,
+  children,
+}: {
+  level: 2 | 3 | 4;
+  className?: string;
+  title?: string;
+  children: React.ReactNode;
+}) => {
+  const Tag = (`h${level}` as const) as 'h2' | 'h3' | 'h4';
+  return (
+    <Tag className={className} title={title}>
+      {children}
+    </Tag>
+  );
+};
 
 interface PanelProps {
   title?: React.ReactNode;
@@ -19,6 +40,8 @@ interface PanelProps {
   /** Stable focus id so a page can detect its own panel's focus state (e.g. to
       render more data when expanded). Falls back to an auto-generated id. */
   focusId?: string;
+  /** Heading level for `title`. Defaults to 2 — panels sit under the page H1. */
+  headingLevel?: 2 | 3 | 4;
   className?: string;
   bodyClassName?: string;
   children: React.ReactNode;
@@ -56,6 +79,7 @@ const Panel = ({
   emphasis = false,
   focusable = false,
   focusId,
+  headingLevel = 2,
   className = '',
   bodyClassName = '',
   children,
@@ -79,15 +103,25 @@ const Panel = ({
         >
           <div className="flex items-baseline gap-2 min-w-0">
             {title && (
-              <h3 className="font-mono text-label font-semibold uppercase tracking-widest text-textPrimary truncate">
+              // h2 by default: on all 13 routes that mount panels they are direct
+              // children of the page H1, so h3 skipped a level. `headingLevel`
+              // exists for a page that genuinely nests panels inside a section.
+              <Heading
+                level={headingLevel}
+                title={titleOf(title)}
+                className="font-mono text-label font-semibold uppercase tracking-widest text-textPrimary truncate"
+              >
                 {title}
-              </h3>
+              </Heading>
             )}
             {subtitle && (
               // Hidden on phones: the title + subtitle + actions can't share one
               // narrow row without the title truncating to a few letters, and a
               // clipped subtitle reads as nothing. Title wins; subtitle returns at sm.
-              <span className="hidden sm:inline font-mono text-label text-textSecondary uppercase tracking-wider truncate">
+              <span
+                title={titleOf(subtitle)}
+                className="hidden sm:inline font-mono text-label text-textSecondary uppercase tracking-wider truncate"
+              >
                 {subtitle}
               </span>
             )}
@@ -100,7 +134,11 @@ const Panel = ({
                   onClick={() => (isFocused ? close() : focus(uid, title ?? subtitle))}
                   aria-label={isFocused ? 'Exit focus' : 'Focus this panel'}
                   title={isFocused ? 'Exit focus (Esc)' : 'Focus'}
-                  className="text-textMuted hover:text-textPrimary transition-colors"
+                  /* The icon is 14px, which is a hard target even with a mouse.
+                     Padding grows the hit box to 30px and the matching negative
+                     margin cancels the layout growth, so the header row keeps
+                     its density and the glyph does not move. */
+                  className="-m-2 p-2 text-textMuted hover:text-textPrimary transition-colors"
                 >
                   {isFocused ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
                 </button>

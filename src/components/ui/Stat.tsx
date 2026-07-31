@@ -1,5 +1,7 @@
 import React from 'react';
 import { toneText, type Tone } from './tones';
+import { titleOf } from './truncation';
+import { preserveGreek } from './greek';
 
 interface StatProps {
   /** Micro-caps label above the value. */
@@ -23,10 +25,18 @@ interface StatProps {
  * is a hero readout that wants the larger frame.
  */
 const Stat = ({ label, value, sub, tone = 'neutral', align = 'left', className = '' }: StatProps) => (
-  <div className={`inst-surface rounded-md px-2.5 py-2 min-w-0 ${align === 'right' ? 'text-right' : ''} ${className}`}>
-    <div className="font-mono text-micro uppercase tracking-widest text-textMuted truncate">{label}</div>
-    <div className={`mt-0.5 font-mono text-data font-semibold tnum truncate ${toneText[tone]}`}>{value}</div>
-    {sub && <div className="mt-0.5 text-micro text-textMuted leading-tight truncate">{sub}</div>}
+  <div className={`inst-surface rounded-md px-2.5 py-2 min-w-0 h-full ${align === 'right' ? 'text-right' : ''} ${className}`}>
+    <div title={titleOf(label)} className="font-mono text-micro uppercase tracking-widest text-textMuted truncate">
+      {preserveGreek(label)}
+    </div>
+    <div title={titleOf(value)} className={`mt-0.5 font-mono text-data font-semibold tnum truncate ${toneText[tone]}`}>
+      {value}
+    </div>
+    {sub && (
+      <div title={titleOf(sub)} className="mt-0.5 text-micro text-textMuted leading-tight truncate">
+        {sub}
+      </div>
+    )}
   </div>
 );
 
