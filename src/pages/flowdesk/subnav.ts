@@ -11,7 +11,7 @@ export interface FlowDeskSubpage {
 export const FLOWDESK_SUBPAGES: FlowDeskSubpage[] = [
   {
     path: '/trace/live-tape',
-    label: 'Live Tape',
+    label: 'Tape',
     subtitle: 'Streaming options prints, dark-pool crosses & session flow',
     icon: Radio,
   },

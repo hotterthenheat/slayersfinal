@@ -13,7 +13,7 @@ const DataUnavailablePanel = ({ requires }: { requires: string }) => (
   <EmptyState
     fill
     icon={Lock}
-    title="Live data unavailable"
+    title="Data unavailable"
     body={`This module needs ${requires} for the active symbol. It stays dark until the feed is connected — wire it and the module activates behind the same contract.`}
   />
 );

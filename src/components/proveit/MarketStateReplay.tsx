@@ -80,7 +80,7 @@ const SessionRow = ({ s }: { s: SimSession }) => {
           <span className="data-bar block h-full rounded-full" style={{ width: `${Math.round(s.sim * 100)}%` }} />
         </div>
         <span className="mt-0.5 block font-mono text-micro text-textMuted tnum">
-          sim {Math.round(s.sim * 100)}% · {s.daysAgo}d ago · +{s.mfePct.toFixed(1)}/−{s.maePct.toFixed(1)}%
+          match {Math.round(s.sim * 100)}% · {s.daysAgo}d ago · +{s.mfePct.toFixed(1)}/−{s.maePct.toFixed(1)}%
         </span>
       </div>
       <SignalBadge tone={tone}>{outcomeLabel[s.outcome]}</SignalBadge>
@@ -230,9 +230,9 @@ const StateFingerprint = ({ view }: { view: StateReplayView }) => (
           <span className="font-mono text-micro tnum text-textPrimary">{Math.round(f.value * 100)}</span>
           <span
             className={`font-mono text-micro uppercase tracking-wider ${f.live ? 'text-textSecondary' : 'text-textMuted'}`}
-            title={f.live ? 'read from the live chain/tape' : 'macro context'}
+            title={f.live ? 'read from the option chain and tape' : 'macro context'}
           >
-            {f.live ? 'live' : 'mdl'}
+            {f.live ? 'chain' : 'macro'}
           </span>
         </span>
       </div>
@@ -344,9 +344,9 @@ const MarketStateReplay = ({ snapshot }: MarketStateReplayProps) => {
         >
           <StateFingerprint view={view} />
           <p className="mt-auto pt-3 font-mono text-micro text-textMuted leading-relaxed">
-            Similarity is Euclidean distance over these eight axes. <span className="text-textPrimary">Live</span> factors read off the chain
-            and tape; the rest are the macro context — breadth, rates, news, session phase — that rounds out the eight-axis
-            fingerprint.
+            Similarity is Euclidean distance over these eight axes. <span className="text-textPrimary">Chain</span> factors read off the
+            option chain and tape; the macro ones are the wider context — breadth, rates, news, session phase — that rounds out the
+            eight-axis fingerprint.
           </p>
         </Panel>
       </div>
@@ -449,10 +449,10 @@ const MarketStateReplay = ({ snapshot }: MarketStateReplayProps) => {
       <Panel bodyClassName="py-3">
         <p className="text-caption text-textSecondary leading-relaxed">
           <span className="font-mono font-semibold uppercase tracking-wider mr-2 text-textSecondary">How this reads</span>
-          Market-State Replay asks the only question a backtest should: not "what does the pattern say" but "what happened the last
-          time the whole board looked like this." It scores {view.pool} prior sessions against today's eight-factor state, keeps the{' '}
-          {view.n} closest, and replays their outcomes against this setup's actual target and stop. Dealer positioning, vol and options
-          flow are read from the live chain and tape; breadth, rates, news and time-of-day round out the macro context. The calibration
+          Market-State Replay asks what happened the last time the whole board looked like this. It scores {view.pool} prior sessions
+          against today's eight-factor state, keeps the {view.n} closest, and replays their outcomes against this setup's actual target
+          and stop. Dealer positioning, vol and options flow are read from the current chain and tape; breadth, rates, news and
+          time-of-day round out the macro context. The calibration
           and out-of-sample panels exist so the read has to prove it holds on data it wasn't fit to, rather than asking you to take the
           headline number on faith.
         </p>

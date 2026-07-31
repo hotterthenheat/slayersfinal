@@ -364,7 +364,7 @@ const LottoBoard = ({ snapshot }: { snapshot: MarketSnapshot }) => {
           <span className="font-mono font-semibold uppercase tracking-wider mr-2 text-textSecondary">The 0DTE desk</span>
           On 0DTE the math is nearly a coin flip, so the tape decides: the board weighs dealer flow and liquidity above the
           breakeven arithmetic, and the closing auction — the one scheduled, forced, size-on-size event of the session — gets a
-          full engine instead of a single imbalance number. Built from the live chain and the dealer read.
+          full engine instead of a single imbalance number. Built from the current chain and the dealer read.
         </p>
       </Panel>
     </div>

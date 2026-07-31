@@ -772,7 +772,7 @@ const PulseWorkspace = () => {
                         Data connections
                       </span>
                       <span className="ml-auto font-mono text-micro uppercase tracking-wider text-textMuted">
-                        requires a live feed
+                        requires a market feed
                       </span>
                     </div>
                     {connectionMatches.map(def => (

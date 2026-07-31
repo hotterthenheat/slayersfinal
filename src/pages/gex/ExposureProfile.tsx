@@ -206,7 +206,7 @@ const ExposureProfile = () => {
             <StatCard label="Net GEX" value={<AnimatedNumber value={data.netGex} format={fmtUsd} />} tone={data.netGex >= 0 ? 'bull' : 'bear'} sub={data.netGex >= 0 ? 'Net supportive' : 'Net negative'} />
             <StatCard label="Net DEX" value={<AnimatedNumber value={data.netDex} format={fmtUsd} />} sub="Delta exposure" />
             <StatCard label="Net VEX" value={<AnimatedNumber value={data.netVex} format={fmtUsd} />} sub="Vanna exposure · per 1% vol" />
-            <StatCard label="Spot" value={<AnimatedNumber value={levels.spot} format={v => `$${v.toFixed(2)}`} />} sub="Live underlying" />
+            <StatCard label="Spot" value={<AnimatedNumber value={levels.spot} format={v => `$${v.toFixed(2)}`} />} sub="Underlying" />
             <div className="h-full" onMouseEnter={() => setHoverStrike(levels.putWall)} onMouseLeave={() => setHoverStrike(null)}>
               <StatCard className="h-full" label="Put Wall" value={<AnimatedNumber value={levels.putWall} format={strikeFmt} />} tone="bear" sub={wallDist(levels.putWall)} />
             </div>

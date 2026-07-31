@@ -7,6 +7,7 @@ import CommandPalette from './CommandPalette';
 import SettingsPanel from './SettingsPanel';
 import ShortcutsOverlay from './ShortcutsOverlay';
 import RouteErrorBoundary from './RouteErrorBoundary';
+import SiteFooter from './SiteFooter';
 import { useTicker } from '../../context/MarketDataContext';
 import Simulator from '../../core/simulator';
 import { DUR } from '../../lib/motion';
@@ -87,13 +88,21 @@ const AppShell = () => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: DUR.fast, ease: 'easeOut' }}
-            className="w-full px-4 lg:px-6 2xl:px-8 py-5 flex flex-col gap-4"
+            className="w-full min-h-full px-4 lg:px-6 2xl:px-8 py-5 flex flex-col gap-4"
           >
             {/* One broken desk should never blank the whole terminal; the key
                 resets the boundary whenever the route changes. */}
             <RouteErrorBoundary resetKey={location.pathname}>
               <Outlet />
             </RouteErrorBoundary>
+            {/* min-h-full above + mt-auto here pin the bar to the bottom of the
+                viewport on short desks instead of letting it float mid-page;
+                on tall desks it simply trails the content. The negative margins
+                undo the column gutters so the rule runs edge to edge — the
+                compact bar carries its own padding. */}
+            <div className="mt-auto -mx-4 -mb-5 lg:-mx-6 2xl:-mx-8">
+              <SiteFooter variant="compact" />
+            </div>
           </motion.div>
         </AnimatePresence>
       </main>

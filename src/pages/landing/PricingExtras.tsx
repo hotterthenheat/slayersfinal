@@ -35,12 +35,12 @@ const ROWS: FeatureRow[] = [
   },
   {
     label: 'Pinpoint',
-    detail: 'GEX · DEX · VEX by strike — exposure matrix & positioning map',
+    detail: 'GEX · DEX · VEX by strike: exposure matrix & positioning map',
     tiers: [true, true, true],
   },
   {
     label: 'Ranked Targets',
-    detail: 'Every strike scored 0–100 — the levels that matter today',
+    detail: 'Every strike scored 0–100: the levels that matter today',
     tiers: [true, true, true],
   },
   {
@@ -168,7 +168,7 @@ export const ComparePlans = () => (
 const FAQS = [
   {
     q: 'Do you offer alerts and signals?',
-    a: "Yes — that's Compass. Every setup is graded 0–100 and carries a live read: QUALIFIED, WATCH or FADED, with the reasoning in plain English. Discord alerts fire the moment a setup is detected. The terminal reads the tape — you decide and you place it.",
+    a: "Yes, that's Compass. Every setup is graded 0–100 and carries a live read: QUALIFIED, WATCH or FADED, with the reasoning in plain English. Discord alerts fire the moment a setup is detected. The terminal reads the tape; you decide and you place it.",
   },
   {
     q: 'Is the data live?',
@@ -176,15 +176,15 @@ const FAQS = [
   },
   {
     q: 'What makes Slayer different from other GEX tools?',
-    a: "Most tools show you a chart of gamma and leave you to figure it out. Slayer maps the structure — walls, flip, pin, king strike — then grades the actual contracts that trade it, and keeps watching after you enter. It's the difference between a weather map and a pilot.",
+    a: "Most tools show you a chart of gamma and leave you to figure it out. Slayer maps the structure (walls, flip, pin, king strike), then grades the actual contracts that trade it, and keeps watching after you enter. It's the difference between a weather map and a pilot.",
   },
   {
     q: 'Do I need to be an options expert?',
-    a: 'No. Every page explains itself in plain English — what a wall is, why the flip matters, what dealers are forced to do at each level. Real trading terms stay; jargon and buzzwords were deliberately purged.',
+    a: 'No. Every page explains itself in plain English: what a wall is, why the flip matters, what dealers are forced to do at each level. Real trading terms stay; jargon and buzzwords were deliberately purged.',
   },
   {
     q: 'Can I cancel anytime?',
-    a: 'Yes — subscriptions are month to month and stop at the end of your billing cycle, no questions. Lifetime is a single payment, forever. Billing questions: info@slayerterminal.com.',
+    a: 'Yes. Subscriptions are month to month and stop at the end of your billing cycle, no questions. Lifetime is a single payment, forever. Billing questions: info@slayerterminal.com.',
   },
 ];
 
@@ -195,9 +195,7 @@ export const Faq = () => {
     <section id="faq" className="px-6 md:px-10 py-20 max-w-3xl mx-auto">
       <div>
         <span className="font-mono text-label font-semibold uppercase tracking-[0.25em] text-textSecondary">FAQ</span>
-        <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">
-          Questions, <span className="text-textMuted">answered.</span>
-        </h2>
+        <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">Before you ask.</h2>
       </div>
       <div className="mt-10 border border-borderSubtle bg-panel rounded-lg overflow-hidden">
         {FAQS.map((item, i) => {

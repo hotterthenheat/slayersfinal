@@ -47,7 +47,7 @@ const VIEWS = [
 type ViewKey = (typeof VIEWS)[number]['value'];
 
 const VIEW_HINT: Record<ViewKey, string> = {
-  active: 'live watch — nothing flagged yet',
+  active: 'on watch — nothing flagged yet',
   triggered: 'engine currently reads QUALIFIED',
   invalidated: 'engine currently reads FADED',
   expiring: 'inside a day of expiry',
@@ -301,7 +301,7 @@ const ItemDetail = ({ row, onStatus, onNotes, onReview, onUntrack }: ItemDetailP
           })}
         </div>
         <p className="mt-1.5 font-mono text-micro text-textMuted leading-relaxed">
-          Auto follows the live engine read ({STATUS_LABEL[autoStatus(live, expired)].toLowerCase()}). Pin one to keep it in a
+          Auto follows the current engine read ({STATUS_LABEL[autoStatus(live, expired)].toLowerCase()}). Pin one to keep it in a
           view regardless.
         </p>
       </div>
@@ -322,7 +322,7 @@ const ItemDetail = ({ row, onStatus, onNotes, onReview, onUntrack }: ItemDetailP
       {/* Actions */}
       <div className="flex items-center gap-2 pt-1 border-t border-borderSubtle">
         {expired ? (
-          <span className="font-mono text-label text-textMuted uppercase tracking-wider">Expired — no live setup to review</span>
+          <span className="font-mono text-label text-textMuted uppercase tracking-wider">Expired — no current setup to review</span>
         ) : (
           <button
             onClick={() => onReview(tracked)}
@@ -576,7 +576,7 @@ const Tracker = () => {
       <PageHeader
         breadcrumb={['Terminal', 'Tracker']}
         title="Setup Tracker"
-        subtitle="Every tracked setup in one table — set a status, keep notes, and read each one's live signal. Saved in this browser."
+        subtitle="Every tracked setup in one table — set a status, keep notes, and read each one's current signal. Saved in this browser."
       />
 
       {/* Empty state — a dense "get started" surface, not a blank panel */}
@@ -597,7 +597,7 @@ const Tracker = () => {
             <div className="grid grid-cols-3 gap-3 shrink-0">
               {[
                 { k: 'Setups', v: 'one table', s: 'seven saved views' },
-                { k: 'Read', v: 'live', s: 'recomputed on open' },
+                { k: 'Read', v: 'current', s: 'recomputed on open' },
                 { k: 'Notes', v: 'saved', s: 'in this browser' },
               ].map(x => (
                 <div key={x.k} className="border border-borderSubtle bg-inset rounded-lg px-3 py-2.5 text-center min-w-[92px]">

@@ -32,7 +32,7 @@ type Tier = 'observed' | 'estimated' | 'assumed';
 // Forced participants — one color each, stable across every view. `tier` records
 // how directly each one is knowable; `basis` says why.
 const PARTS: { key: keyof ForcedFlowLevel; label: string; color: string; tier: Tier; basis: string }[] = [
-  { key: 'dealerHedge', label: 'Dealer', color: '#C7D3E8', tier: 'observed', basis: 'inferred from the live option-chain gamma' },
+  { key: 'dealerHedge', label: 'Dealer', color: '#C7D3E8', tier: 'observed', basis: 'inferred from the current option-chain gamma' },
   { key: 'volControl', label: 'Vol-control', color: '#7DD3FC', tier: 'estimated', basis: 'inferred from realized vol and vol-target sizing' },
   { key: 'cta', label: 'CTA', color: '#FF9500', tier: 'assumed', basis: 'inferred from trend thresholds and crowding' },
   { key: 'letf', label: 'LETF', color: '#EA00FF', tier: 'estimated', basis: 'estimated from leveraged-ETF assets and the daily rebalance rule' },
@@ -51,7 +51,7 @@ const AMP_TIER: Record<string, Tier> = {
 
 const TIER_ORDER: Tier[] = ['observed', 'estimated', 'assumed'];
 const TIER_META: Record<Tier, { label: string; dots: number; hint: string; text: string }> = {
-  observed: { label: 'Observed', dots: 3, hint: 'grounded in live market data', text: 'text-textPrimary' },
+  observed: { label: 'Observed', dots: 3, hint: 'grounded in chain and tape data', text: 'text-textPrimary' },
   estimated: { label: 'Estimated', dots: 2, hint: 'inferred from proxies', text: 'text-textSecondary' },
   assumed: { label: 'Assumed', dots: 1, hint: 'inferred from assumptions', text: 'text-textMuted' },
 };
@@ -526,7 +526,7 @@ const Fracture = () => {
           GEX estimates which way dealers must hedge. Fracture estimates whether the market can absorb that hedging — it combines
           the forced flow from every mechanical participant, the liquidity actually available to take the other side, and how close
           activity is to self-sustaining, then runs the feedback loop forward. The fracture line is where that balance breaks. Built
-          from the live chain and price path.
+          from the current chain and price path.
         </p>
       </Panel>
     </>

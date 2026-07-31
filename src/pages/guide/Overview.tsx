@@ -11,9 +11,9 @@ import {
 import { Section, Card, Callout, Kbd } from './parts';
 
 const DESKS: { icon: LucideIcon; name: string; to: string; blurb: string }[] = [
-  { icon: LayoutDashboard, name: 'Pulse', to: '/pulse', blurb: 'Your customizable live workspace — the home desk.' },
+  { icon: LayoutDashboard, name: 'Pulse', to: '/pulse', blurb: 'Your customizable workspace — the home desk.' },
   { icon: Compass, name: 'Compass', to: '/compass', blurb: 'Finds the setup — scores contracts across weeklies, swings and LEAPS.' },
-  { icon: Radio, name: 'Trace', to: '/trace', blurb: 'Reads the flow — the live options tape and where size prints.' },
+  { icon: Radio, name: 'Trace', to: '/trace', blurb: 'Reads the flow — the options tape and where size prints.' },
   { icon: Crosshair, name: 'Pinpoint', to: '/pinpoint', blurb: 'Dealer positioning — where market-makers are hedged and what that pins.' },
   { icon: Sigma, name: 'Prove It', to: '/prove-it', blurb: 'The receipts — quant modeling and how each engine has tracked.' },
 ];
@@ -22,7 +22,7 @@ const STEPS = [
   <>Pick a ticker from the top bar — or press <Kbd>]</Kbd> / <Kbd>[</Kbd> to step through the watchlist. Every desk follows the active ticker.</>,
   <>Open <Link to="/pulse" className="text-textPrimary underline underline-offset-2 decoration-white/40 hover:decoration-white/80">Pulse</Link> and load a desk profile (Scalper, Swing, Macro, Earnings) — an instant workspace for how you trade.</>,
   <>Head to <Link to="/pinpoint" className="text-textPrimary underline underline-offset-2 decoration-white/40 hover:decoration-white/80">Pinpoint</Link> to see the dealer positioning: the GEX heatmap, the call/put walls, and the gamma flip.</>,
-  <>Cross-check the live tape in <Link to="/trace" className="text-textPrimary underline underline-offset-2 decoration-white/40 hover:decoration-white/80">Trace</Link> — is real size printing where the positioning says it should?</>,
+  <>Cross-check the tape in <Link to="/trace" className="text-textPrimary underline underline-offset-2 decoration-white/40 hover:decoration-white/80">Trace</Link> — is real size printing where the positioning says it should?</>,
   <>Press <Kbd>⌘</Kbd><Kbd>K</Kbd> any time to jump between desks, tickers and actions without leaving the keyboard.</>,
 ];
 
