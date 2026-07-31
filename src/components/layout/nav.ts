@@ -29,13 +29,13 @@ export interface NavItem {
 }
 
 export const NAV_ITEMS: NavItem[] = [
-  // ── Discover — find what is moving and what to trade ──
+  // ── Discover ──
   {
     path: '/compass',
     label: 'Compass',
     code: '01',
     icon: Compass,
-    description: 'Options chooser — weeklies, swings & LEAPS weighed and graded',
+    description: 'Options chooser: weeklies, swings and LEAPS, weighed and graded',
     group: 'Discover',
   },
   {
@@ -43,7 +43,7 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Stocks',
     code: '02',
     icon: BarChart3,
-    description: 'Ranked equity picks & sector rotation',
+    description: 'Ranked equity picks and sector rotation',
     group: 'Discover',
   },
   {
@@ -51,16 +51,16 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Trace',
     code: '03',
     icon: Radar,
-    description: 'Options flow & dark-pool intelligence — what the prints actually mean',
+    description: 'Options flow and dark-pool prints, and what they mean',
     group: 'Discover',
   },
-  // ── Analyze — study the tape, the dealers, the catalysts ──
+  // ── Analyze ──
   {
     path: '/pulse',
     label: 'Pulse',
     code: '04',
     icon: Activity,
-    description: 'Live market terminal — chart, dealer pressure, order flow & key levels',
+    description: 'The market desk: chart, dealer pressure, order flow and key levels',
     group: 'Analyze',
   },
   {
@@ -68,7 +68,7 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Pinpoint',
     code: '05',
     icon: Crosshair,
-    description: 'GEX, dealer positioning, hedge impact & the fracture line',
+    description: 'GEX, dealer positioning, hedge impact and the fracture line',
     group: 'Analyze',
   },
   {
@@ -76,7 +76,7 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'News',
     code: '06',
     icon: Newspaper,
-    description: 'Stock news + predicted outcomes per headline',
+    description: 'Stock news with a predicted outcome per headline',
     group: 'Analyze',
   },
   {
@@ -84,16 +84,16 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Earnings',
     code: '07',
     icon: CalendarClock,
-    description: 'Earnings hub — implied vs. realized, play it or fade it',
+    description: 'Earnings hub: implied against realized, play it or fade it',
     group: 'Analyze',
   },
-  // ── Manage — track what you are in and talk to the desk ──
+  // ── Manage ──
   {
     path: '/tracker',
     label: 'Tracker',
     code: '08',
     icon: Bookmark,
-    description: 'Bookmarked setups, contracts & names — monitoring in one place',
+    description: 'Bookmarked setups, contracts and names, watched in one place',
     group: 'Manage',
   },
   {
@@ -101,20 +101,45 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Community',
     code: '09',
     icon: Users,
-    description: 'Trade ideas, requests & feedback',
+    description: 'Trade ideas, requests and feedback',
     group: 'Manage',
   },
-  // ── Review — audit the models and the calls ──
+  // ── Review ──
   {
     path: '/prove-it',
     label: 'Prove It',
     code: '10',
     icon: Sigma,
-    description: 'Quantitative modeling & predictive analytics',
+    description: 'Quantitative modeling and predictive analytics',
     group: 'Review',
   },
 ];
 
 export const NAV_GROUPS: NavGroup[] = ['Discover', 'Analyze', 'Manage', 'Review'];
+
+/** What each workflow is for. Promoted out of the section comments above: the
+    index is the first surface that shows all four groups at once and needs to
+    say what they mean. */
+export const NAV_GROUP_PURPOSE: Record<NavGroup, string> = {
+  Discover: 'Find what is moving and what to trade',
+  Analyze: 'Study the tape, the dealers, the catalysts',
+  Manage: 'Track what you are in and talk to the desk',
+  Review: 'Audit the models and the calls',
+};
+
+export interface ReferenceItem {
+  path: string;
+  label: string;
+}
+
+/** Guide and Legal, deliberately outside NAV_ITEMS: putting them there would
+    file them under a workflow dropdown, underline a group they do not belong
+    to, and resolve a PageHeader icon for pages that carry none. */
+export const REFERENCE_ITEMS: ReferenceItem[] = [
+  { path: '/guide', label: 'Guide' },
+  { path: '/legal/disclaimer', label: 'Disclaimer' },
+  { path: '/legal/terms', label: 'Terms' },
+  { path: '/legal/privacy', label: 'Privacy' },
+];
 
 export const itemsByGroup = (group: NavGroup): NavItem[] => NAV_ITEMS.filter(i => i.group === group);

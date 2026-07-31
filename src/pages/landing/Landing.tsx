@@ -56,7 +56,7 @@ const TIERS = [
       'Real-time Discord chat & alerts',
     ],
     cta: 'Select plan',
-    to: '/pulse',
+    to: '/terminal',
     featured: false,
   },
   {
@@ -73,7 +73,7 @@ const TIERS = [
       'Research suite · Stocks, News & Earnings Hub',
     ],
     cta: 'Select plan',
-    to: '/pulse',
+    to: '/terminal',
     featured: true,
   },
   {
@@ -94,10 +94,11 @@ const TIERS = [
 ];
 
 /** Anchor / route / mailto — one link component so columns stay declarative.
-    Links into the terminal play the launch gate instead of jumping. */
+    Only the front door plays the gate: a single-value test, never a widened
+    `startsWith('/')`, which would drag the legal pages through it too. */
 const SmartLink = ({ to, className, children }: { to: string; className: string; children: React.ReactNode }) => {
   const { launch } = useLaunch();
-  if (to === '/pulse') {
+  if (to === '/terminal') {
     return (
       <a
         href={to}
@@ -178,7 +179,7 @@ const LandingNav = () => {
           })}
         </nav>
         <SmartLink
-          to="/pulse"
+          to="/terminal"
           className="ml-auto md:ml-0 shrink-0 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-md font-mono text-label font-semibold uppercase tracking-wider text-ink holo-bg transition-transform active:scale-[0.98]"
         >
           Launch terminal <ArrowRight className="w-3.5 h-3.5" />
@@ -232,7 +233,7 @@ const Landing = () => (
 
         <div className="mt-9 flex items-center gap-4 flex-wrap justify-center">
           <SmartLink
-            to="/pulse"
+            to="/terminal"
             className="pointer-events-auto inline-flex items-center gap-2 px-5 py-2.5 rounded-md font-mono text-data font-semibold uppercase tracking-wider text-ink holo-bg holo-glow transition-transform hover:scale-[1.03]"
           >
             Launch terminal <ArrowRight className="w-4 h-4" />
@@ -420,7 +421,7 @@ const Landing = () => (
       </h2>
       <div className="mt-8 flex items-center justify-center gap-4 flex-wrap">
         <SmartLink
-          to="/pulse"
+          to="/terminal"
           className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md font-mono text-data font-semibold uppercase tracking-wider text-ink holo-bg holo-glow transition-transform hover:scale-[1.03]"
         >
           Launch terminal <ArrowRight className="w-4 h-4" />

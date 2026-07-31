@@ -52,6 +52,12 @@ export const LOCAL_DATA_GROUPS: LocalDataGroup[] = [
     description: 'Ideas, requests and feedback you posted locally',
     keys: ['slayer_community_v1'],
   },
+  {
+    id: 'terminal',
+    label: 'Terminal index',
+    description: 'The desk you were last on, so the index can offer it back',
+    keys: ['slayer.terminal.last'],
+  },
 ];
 
 /** Count how many of a group's keys currently hold data. */

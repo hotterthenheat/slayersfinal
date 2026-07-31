@@ -52,7 +52,7 @@ const FOOTER_COLS = [
       // the terminal — the same thing the line above it does, under a label
       // that isn't true. Removed rather than relabelled: two entries doing one
       // job is the other half of the problem.
-      { label: 'Launch Terminal', to: '/pulse' },
+      { label: 'Launch Terminal', to: '/terminal' },
       { label: 'Guide', to: '/guide' },
     ],
   },
@@ -63,7 +63,7 @@ const FOOTER_COLS = [
     Links into the terminal play the launch gate instead of jumping. */
 const SmartLink = ({ to, className, children }: { to: string; className: string; children: React.ReactNode }) => {
   const { launch } = useLaunch();
-  if (to === '/pulse') {
+  if (to === '/terminal') {
     return (
       <a
         href={to}

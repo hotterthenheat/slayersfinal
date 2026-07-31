@@ -119,6 +119,10 @@ export interface ExposureLevels {
   putWall: number;
   pin: number;
   flip: number;
+  /** Heaviest |net GEX| strike in the whole book. Carried here so a panel marks
+      the book's king rather than crowning the biggest bar it happens to be
+      drawing, which made two panels on one screen name different kings. */
+  king: number;
 }
 
 export interface ExposureProfileData {

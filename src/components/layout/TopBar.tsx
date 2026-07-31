@@ -29,7 +29,7 @@ type SubLink = { path: string; label: string; icon?: LucideIcon };
 
 const Wordmark = ({ onClick, size = 'sm' }: { onClick: (e: React.MouseEvent) => void; size?: 'sm' | 'md' }) => (
   <a
-    href="/pulse"
+    href="/terminal"
     onClick={onClick}
     aria-label="Terminal home"
     title="Terminal home"
@@ -63,11 +63,14 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
   // Close the mobile drawer whenever the route changes
   useEffect(() => setMobileOpen(false), [location.pathname]);
 
-  // Inside the shell the wordmark is Home — it returns to the terminal dashboard
-  // (/pulse), the convention for an app logo, rather than exiting to marketing.
+  // Inside the shell the wordmark is Home, the convention for an app logo, and
+  // it goes to the index rather than to Pulse. It has always been labelled
+  // "Terminal home" while landing on one particular desk; now the label is true,
+  // and the index is reachable from inside the terminal instead of being a page
+  // you can only arrive at once.
   const goHome = (e: React.MouseEvent) => {
     e.preventDefault();
-    navigate('/pulse');
+    navigate('/terminal');
   };
   const section = `/${location.pathname.split('/')[1] ?? ''}`;
   const activeItem = NAV_ITEMS.find(i => i.path === section);
