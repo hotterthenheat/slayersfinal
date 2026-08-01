@@ -1,15 +1,17 @@
 /*
 ==================================================
   SLAYER TERMINAL - GEX HISTORY (gexhistory.ts)
-  Reconstructs how the session's structural levels —
-  call wall, put wall, gamma flip, king strike and net
-  GEX — migrated across the day, from the simulator's
-  price history. Deterministic per ticker + day; the
-  real intraday snapshot store fills the same shape.
+  Replays how the session's structural levels — call
+  wall, put wall, gamma flip, king strike and net GEX
+  — actually moved, read off the simulator's recorded
+  net-GEX-per-strike snapshots. Every point is a book
+  that existed at a bar; nothing here invents a level.
 ==================================================
 */
 
-import { h01, hGauss } from '../core/rng';
+import Simulator from '../core/simulator';
+import { buildLevels } from './gex';
+import { levelsOfProfile } from './vannacharm';
 import type { MarketSnapshot } from '../types/market';
 
 export interface LevelPoint {
@@ -41,75 +43,88 @@ export interface GexHistoryView {
   widthOpen: number;
 }
 
-const MAX_POINTS = 46;
+const SESSION_BARS = 390; // one 6.5h session of the store's 1-minute bars
+const MAX_POINTS = 46; // a scrubbable timeline, not one row per minute
 
-function sessionTime(frac: number): string {
-  // 09:30 → 16:00, 6.5h session
-  const mins = Math.round(frac * 390);
-  const h = 9 + Math.floor((30 + mins) / 60);
-  const m = (30 + mins) % 60;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+/** HH:MM off the bar's own timestamp — the moment that was recorded, not an
+    index mapped onto a nominal 09:30–16:00 clock. */
+function barClock(sec: number): string {
+  const d = new Date(sec * 1000);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
-export function buildGexHistory(snapshot: MarketSnapshot): GexHistoryView {
-  const { ticker, priceHistory, plan, chain, spot } = snapshot;
-  const day = `${new Date().getFullYear()}-${new Date().getMonth() + 1}-${new Date().getDate()}`;
-  const seed = (t: string) => `${ticker}-${day}-hist-${t}`;
+/**
+ * The session's level migration, sampled from the recorded book.
+ *
+ * The simulator keeps a net-GEX-per-strike snapshot beside every candle
+ * (`Simulator.getGexHistory`), so "where was the call wall at 11:40" is a
+ * question the engine can answer rather than one this module has to guess at.
+ * Each sampled bar's whole profile goes through `levelsOfProfile` — the same
+ * wall / flip / king rules `buildLevels` applies to today's chain, which
+ * levels.test.ts pins to each other — so the line the chart draws at 11:40 is
+ * the number the rail would have printed at 11:40.
+ *
+ * What this replaced: mean-reverting Gaussian walks around today's closing
+ * levels, plus a `netGex` ramp of `now × (0.35 … 1.0)`. The shape was
+ * plausible, and the page counts sign flips and flip crosses off it and prints
+ * them as "N sign flips today" — a measurement of noise. Reading the store
+ * costs the same and the counts become real.
+ *
+ * Returns null when nothing is recorded yet; the page shows its reconstructing
+ * state rather than a session drawn from numbers no bar produced.
+ */
+export function buildGexHistory(snapshot: MarketSnapshot): GexHistoryView | null {
+  const { ticker, chain } = snapshot;
+  const candles = Simulator.getCandles(ticker);
+  const snaps = Simulator.getGexHistory(ticker);
+  const bars = Math.min(SESSION_BARS, candles?.length ?? 0, snaps?.length ?? 0);
+  if (bars < 2) return null;
 
-  const n = Math.min(MAX_POINTS, Math.max(12, priceHistory.length));
-  const step = priceHistory.length / n;
+  // The two stores are appended together, so their tails line up bar for bar.
+  const firstCandle = candles.length - bars;
+  const firstSnap = snaps.length - bars;
 
-  // Current king = max |netGex| strike
-  let kingNow = spot;
-  let kingAbs = 0;
-  let netGexNow = 0;
-  for (const nd of chain) {
-    netGexNow += nd.netGex;
-    if (Math.abs(nd.netGex) > kingAbs) {
-      kingAbs = Math.abs(nd.netGex);
-      kingNow = nd.strike;
-    }
-  }
+  // Even stride, plus the final bar unconditionally: the right edge of this
+  // chart is "now" and the shift table measures open → now across it, so a
+  // stride that stops short would date the session's last reading.
+  const stride = Math.max(1, Math.ceil(bars / MAX_POINTS));
+  const sampled: number[] = [];
+  for (let i = 0; i < bars; i += stride) sampled.push(i);
+  if (sampled[sampled.length - 1] !== bars - 1) sampled.push(bars - 1);
 
-  // Mean-reverting walks that END near today's real levels — levels start wider
-  // and tighten toward the close, the way real dealer structure consolidates.
-  const points: LevelPoint[] = [];
-  for (let i = 0; i < n; i++) {
-    const frac = i / (n - 1);
-    const idx = Math.min(priceHistory.length - 1, Math.floor(i * step));
-    const sp = priceHistory[idx];
-    // early-session slack shrinks toward 0 at the close
-    const slack = (1 - frac) * 0.6;
-    const wob = (tag: string, amp: number) => hGauss(seed(`${tag}-${i}`)) * amp * (0.4 + slack);
-    const callWall = plan.resistanceWall * (1 + slack * 0.012) + wob('cw', spot * 0.004);
-    const putWall = plan.supportWall * (1 - slack * 0.012) + wob('pw', spot * 0.004);
-    const flip = plan.flipZone + wob('fl', spot * 0.0035);
-    const king = kingNow + wob('kg', spot * 0.006) * (i < n - 1 ? 1 : 0);
-    const netGex = netGexNow * (0.35 + frac * 0.65) + hGauss(seed(`ng-${i}`)) * kingAbs * 0.5 * slack;
-    points.push({
-      t: i,
-      time: sessionTime(frac),
+  const points: LevelPoint[] = sampled.map((i, t) => {
+    const recorded = snaps[firstSnap + i];
+    const sp = candles[firstCandle + i].close;
+    const { callWall, putWall, flip, king } = levelsOfProfile(recorded.levels, sp);
+    return {
+      t,
+      time: barClock(recorded.time),
       spot: Number(sp.toFixed(2)),
-      callWall: Number(callWall.toFixed(2)),
-      putWall: Number(putWall.toFixed(2)),
-      flip: Number(flip.toFixed(2)),
-      king: Number(king.toFixed(2)),
-      netGex,
-    });
-  }
+      callWall,
+      putWall,
+      flip,
+      king,
+      netGex: recorded.levels.reduce((a, l) => a + l.value, 0),
+    };
+  });
 
-  // Snap the final point exactly to current structure
+  // The last row is the rail's reading, not the last capture. The store only
+  // refreshes the forming bar for the ticker on screen, so a background name's
+  // newest snapshot can be minutes stale — and this page sits on the same
+  // screen as the key-levels rail, which must never name a different wall for
+  // the same instrument. Taken unrounded so the row IS the rail's number rather
+  // than a re-formatted copy of it.
+  const levels = buildLevels(snapshot);
   const now: LevelPoint = {
-    t: n - 1,
-    time: sessionTime(1),
-    spot: Number(spot.toFixed(2)),
-    callWall: Number(plan.resistanceWall.toFixed(2)),
-    putWall: Number(plan.supportWall.toFixed(2)),
-    flip: Number(plan.flipZone.toFixed(2)),
-    king: Number(kingNow.toFixed(2)),
-    netGex: netGexNow,
+    ...points[points.length - 1],
+    spot: levels.spot,
+    callWall: levels.callWall,
+    putWall: levels.putWall,
+    flip: levels.flip,
+    king: levels.king,
+    netGex: chain.reduce((a, n) => a + n.netGex, 0),
   };
-  points[n - 1] = now;
+  points[points.length - 1] = now;
   const open = points[0];
 
   const pct = (from: number, to: number) => ((to - from) / from) * 100;
@@ -120,6 +135,8 @@ export function buildGexHistory(snapshot: MarketSnapshot): GexHistoryView {
     { label: 'King Strike', from: open.king, to: now.king, deltaPct: pct(open.king, now.king) },
   ];
 
+  // Counted over the sampled series the page draws, so the badge, the event
+  // markers on the scrubber and the line on the chart can never disagree.
   let netGexFlips = 0;
   let flipCrosses = 0;
   for (let i = 1; i < points.length; i++) {
@@ -129,7 +146,6 @@ export function buildGexHistory(snapshot: MarketSnapshot): GexHistoryView {
     if (wasAbove !== isAbove) flipCrosses++;
   }
 
-  void h01; // (reserved seed helper)
   return {
     points,
     now,

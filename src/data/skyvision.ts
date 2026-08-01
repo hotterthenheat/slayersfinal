@@ -120,20 +120,26 @@ export function scannerExpiry(scanner: ScannerKey): string {
 }
 
 // Thesis prose is DIRECTIONAL — a put setup must never carry a buy-wall
-// "protective floor under our entry" story. Each scanner supplies a bull and
+// story about a floor under the strike. Each scanner supplies a bull and
 // a bear variant; the setup's right picks which one renders.
+//
+// It is also OBSERVATIONAL. Every string here describes the book and what that
+// implies for price, and none of them instructs or claims a position: the app
+// holds nothing, so there is no "our entry" for a wall to sit under, and the
+// top-setups variant renders on the public landing page where a sentence
+// telling a reader to scalp a pop is the product speaking, not the model.
 const WHY_LIBRARY: Record<ScannerKey, { chips: string[]; text: (t: string, k: number, bullish: boolean) => string }> = {
   'top-setups': {
     chips: ['TREND ALIGNED', 'DEALER SUPPORT', 'RSI CONFIRM'],
     text: (t, k, bullish) =>
       bullish
-        ? `Solid institutional buy walls are supporting price at ${k}. Market makers are heavily short this strike and must buy ${t} to stay hedged, forming an automatic protective floor under our entry.`
+        ? `Solid institutional buy walls are supporting price at ${k}. Market makers are heavily short this strike and must buy ${t} to stay hedged, forming an automatic protective floor beneath the level.`
         : `Heavy institutional supply caps price at ${k}. Market makers unload ${t} delta into every push toward the strike, forming an automatic ceiling pressing on each bounce.`,
   },
   'quick-scalp': {
-    chips: ['HIGH GAMMA', 'FAST DECAY', 'TIGHT STOP'],
+    chips: ['HIGH GAMMA', 'FAST DECAY', 'NARROW WINDOW'],
     text: (t) =>
-      `Concentrated gamma at this strike makes ${t} whippy, and dealer re-hedging amplifies small moves. Scalp the pop and take profit fast before theta bleeds the premium.`,
+      `Concentrated gamma at this strike makes ${t} whippy, and dealer re-hedging amplifies small moves. That same concentration comes with steep decay, so the window in which a move outruns theta is a narrow one.`,
   },
   discounted: {
     chips: ['CHEAP PREMIUM', 'ASYMMETRIC', 'VALUE'],
@@ -151,8 +157,8 @@ const WHY_LIBRARY: Record<ScannerKey, { chips: string[]; text: (t: string, k: nu
     chips: ['BLOCK PRINTS', 'SMART MONEY', 'ACCUMULATION'],
     text: (t, k, bullish) =>
       bullish
-        ? `Repeated large sweep orders are accumulating ${t} upside exposure near ${k}. Following the institutional footprint: size and persistence of prints suggest informed positioning.`
-        : `Repeated large sweep orders are stacking ${t} downside protection near ${k}. Following the institutional footprint: size and persistence of prints suggest informed hedging or an outright short lean.`,
+        ? `Repeated large sweep orders are accumulating ${t} upside exposure near ${k}. Size and persistence of the prints read as informed positioning rather than incidental flow.`
+        : `Repeated large sweep orders are stacking ${t} downside protection near ${k}. Size and persistence of the prints read as informed hedging, or an outright short lean.`,
   },
   all: {
     chips: ['MULTI-SIGNAL', 'COMPOSITE', 'BROAD SCAN'],

@@ -1,10 +1,10 @@
 /*
 ==================================================
   SLAYER TERMINAL - NEWS INTEL (newsintel.ts)
-  HALF-LIFE & CATALYST SIMILARITY. The wire tells you
-  what happened; this engine tells you what it usually
-  MEANS for price. For the active name's headlines it
-  reads:
+  HALF-LIFE & CATALYST SIMILARITY. The catalyst feed
+  says what the model generated; this engine reads what
+  that usually MEANS for price. For the active name's
+  headlines it reads:
     · News half-life — how long this catalyst TYPE
       keeps moving price before the effect decays
     · Catalyst-similarity — the nearest catalysts in
@@ -33,6 +33,7 @@
 
 import { dayKey, h01, hRange, hGauss } from '../core/rng';
 import type { MarketSnapshot } from '../types/market';
+import { buildLevels } from './gex';
 import { buildNewsFeed, catalystPriors, type CatalystPrior, type NewsCategory, type NewsItem } from './news';
 import { lookup } from './universe';
 
@@ -100,7 +101,7 @@ export interface NewsIntelView {
   /** Options positioning lean read off the chain, −1…+1 (+ = call-heavy) */
   positioningLean: number;
   positioningLabel: string;
-  /** Magnitude-weighted narrative lean of the name's wire, −1…+1 */
+  /** Magnitude-weighted narrative lean of the name's catalyst feed, −1…+1 */
   narrativeLean: number;
   /** Dominant catalyst category across the read */
   dominantCategory: NewsCategory | null;
@@ -111,7 +112,7 @@ export interface NewsIntelView {
   aggPricedInPct: number;
   /** Net narrative-vs-positioning agreement */
   netAgreement: PositioningAgreement;
-  /** Signed agreement, −100…100 (+ = book confirms the wire) */
+  /** Signed agreement, −100…100 (+ = book confirms the feed) */
   agreementScore: number;
   /** Magnitude-weighted implied event move, % */
   eventVolPct: number;
@@ -119,7 +120,7 @@ export interface NewsIntelView {
   natureSplit: string;
   /*
     There is deliberately no summary `headline` here. This view used to build one
-    — "The wire leans bullish and options are positioned call-heavy, so the book
+    — "The feed leans bullish and options are positioned call-heavy, so the book
     confirms it. Roughly 62% looks priced in…" — which the screen dropped because
     it opened on a judgement and then restated the four Stats beside it. Dropping
     the consumer left the producer, and an unrendered sentence is a sentence that
@@ -214,7 +215,7 @@ function buildAnalogs(category: NewsCategory, sentiment: number, magnitude: numb
     }));
 }
 
-/** Per-headline intelligence for one wire item. */
+/** Per-headline intelligence for one catalyst-feed item. */
 function analyzeItem(item: NewsItem, scope: HeadlineScope, snapshot: MarketSnapshot, positioningLean: number): HeadlineIntel {
   const { category, sentiment, magnitude, prediction } = item;
   const seed = `${dayKey()}-ni-${item.id}`;
@@ -232,10 +233,13 @@ function analyzeItem(item: NewsItem, scope: HeadlineScope, snapshot: MarketSnaps
   // --- Informational vs mechanical ---
   const infoScore = NATURE_BASE[category] * (0.7 + magnitude * 0.5) - pricedFrac * 0.28 + hRange(`${seed}-nat`, -0.06, 0.06);
   const nature: CatalystNature = infoScore >= 0.5 ? 'INFORMATIONAL' : 'MECHANICAL';
+  // Names which input drives the path. Both lines used to end on an order
+  // ("Trade the direction", "Fade exhaustion, watch the unwind"); what they were
+  // really saying is which variable the read hangs on, so they say that instead.
   const natureNote =
     nature === 'INFORMATIONAL'
-      ? 'Fresh-information repricing — the path tracks the fundamentals, not the book. Trade the direction, not the flow.'
-      : 'Positioning-driven — hedging and crowded flow, not new information, set the path. Fade exhaustion, watch the unwind.';
+      ? 'Fresh-information repricing — the path tracks the fundamentals rather than the book. Direction is the live variable here; flow is secondary to it.'
+      : 'Positioning-driven — hedging and crowded flow, not new information, set the path. It resolves on exhaustion and the unwind, not on the story.';
 
   // --- Event-vol extraction: the implied straddle move the catalyst injects ---
   const evMag = Math.abs(prediction.expMove1dPct);
@@ -259,18 +263,24 @@ function analyzeItem(item: NewsItem, scope: HeadlineScope, snapshot: MarketSnaps
     agreement === 'CONFIRMS'
       ? `The book agrees — a ${narrWord} headline into ${posWord} positioning. Aligned flow tends to extend the move.`
       : agreement === 'DIVERGES'
-        ? `The book disagrees — a ${narrWord} headline into ${posWord} positioning. Someone is offside; expect a squeeze or a fade, not a clean trend.`
+        ? `The book disagrees — a ${narrWord} headline into ${posWord} positioning. Someone is offside, which resolves as a squeeze or a fade rather than a clean trend.`
         : 'Positioning is roughly neutral to the headline — the book adds little edge either way here.';
 
   // --- Invalidation ---
+  // The flip and the call wall come off gex.ts buildLevels, which owns them for
+  // the whole terminal. They were read straight off `snapshot.plan` here, which
+  // happens to hold the same two numbers today — but the moment the rail changes
+  // how a flip is defined, this sentence would keep quoting the old one, and a
+  // reader would see FLIP at one price in the levels rail and another inside an
+  // invalidation clause on the same name.
   const bull = sentiment >= 0;
-  const { plan } = snapshot;
+  const levels = buildLevels(snapshot);
   const invalidation =
     scope === 'MACRO'
       ? `Read voids if a same-session counter-print reverses the macro lean, or ${snapshot.ticker} decouples from the tape and trades on its own flow.`
       : bull
-        ? `Read voids if ${snapshot.ticker} loses the flip zone $${plan.flipZone.toFixed(2)}, or the day-one gain fully round-trips inside ${halfLifeLabel(halfLifeHours)}.`
-        : `Read voids if ${snapshot.ticker} reclaims $${plan.resistanceWall.toFixed(2)}, or a same-session rebuttal headline lands and holds.`;
+        ? `Read voids if ${snapshot.ticker} loses the flip zone $${levels.flip.toFixed(2)}, or the day-one gain fully round-trips inside ${halfLifeLabel(halfLifeHours)}.`
+        : `Read voids if ${snapshot.ticker} reclaims $${levels.callWall.toFixed(2)}, or a same-session rebuttal headline lands and holds.`;
 
   return {
     id: item.id,
@@ -319,7 +329,7 @@ export function buildNewsIntel(snapshot: MarketSnapshot): NewsIntelView {
   const positioningLean = clamp(Math.tanh(pcSkew * 3) * 0.7 + dexLean * 0.3, -1, 1);
   const positioningLabel = positioningLean > 0.1 ? 'CALL-HEAVY' : positioningLean < -0.1 ? 'PUT-HEAVY' : 'BALANCED';
 
-  // --- Split the wire: this name's catalysts, plus a little macro context ---
+  // --- Split the feed: this name's catalysts, plus a little macro context ---
   const feed = buildNewsFeed();
   const nameItems = feed.filter(n => n.ticker === ticker);
   const macroItems = feed.filter(n => n.ticker === null).slice(0, 2);
@@ -363,14 +373,19 @@ export function buildNewsIntel(snapshot: MarketSnapshot): NewsIntelView {
   const mechN = headlines.length - infoN;
   const natureSplit = `${infoN} informational · ${mechN} mechanical`;
 
-  // --- Timing read: what the priced-in / agreement combination means to do ---
+  // --- Timing read: what the priced-in / agreement combination DESCRIBES ---
+  // The comment above this block used to end "…means to do", and the copy below
+  // it obliged: wait, size, trade inside that window, treat macro as the driver.
+  // The desk observes. Each branch now states what the combination of priced-in
+  // and agreement leaves unresolved, and lets the reader decide what that is
+  // worth.
   const note = hasNameHeadlines
     ? aggPricedInPct >= 65
-      ? 'Most of the expected move is already discounted — chasing the headline is late. Wait for a positioning-driven overshoot to fade, or a fresh print to reset the clock.'
+      ? 'Most of the expected move is already discounted, so the headline itself is late information. What is left is a positioning-driven overshoot, or a fresh print that resets the clock.'
       : netAgreement === 'DIVERGES'
-        ? 'Wire and book disagree: the edge is in who capitulates, not the headline itself. Size for a squeeze or a fade rather than a clean trend.'
-        : 'Room left before the move is fully priced. The half-life says how long the catalyst keeps working — trade inside that window, not after it.'
-    : 'Positioning-only read: with no name catalyst, the book leans without a story behind it. Treat macro items as the tape driver until a single-name headline prints.';
+        ? 'Feed and book disagree: the unresolved question is who capitulates, not what the headline said. That shape resolves as a squeeze or a fade rather than a clean trend.'
+        : 'Room left before the move is fully priced. The half-life is the window the catalyst is still working in; past it, the read is stale rather than wrong.'
+    : 'Positioning-only read: with no name catalyst, the book leans without a story behind it. Macro items are the only catalyst in the read until a single-name headline prints.';
 
   return {
     ticker,

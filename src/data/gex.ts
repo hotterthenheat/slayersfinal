@@ -193,9 +193,15 @@ function buildMatrix(snapshot: MarketSnapshot, metric: GexMetric, range: StrikeR
     const base = metricValue(node, metric);
     return MATRIX_EXPIRIES.map((exp, c) => {
       const noise = h01(`${ticker}-${node.strike}-${exp.dte}`);
-      // Farther expiries decay and occasionally flip sign (charm/vanna migration)
+      // 0DTE is not a projection — the chain IS today's book at that expiry, so
+      // that column prints the strike's own exposure untouched. GexMatrix puts
+      // `fmtUsd(cell.value)` inside the cell and repeats it in the hover
+      // read-out, and the exposure profile quotes the same strike a panel away;
+      // a per-strike jitter here had one book quoting two dollar figures, and
+      // could hand the crown to a cell that was no longer the column's largest.
+      // Farther expiries decay and occasionally flip sign (charm/vanna migration).
       const flip = c > 0 && noise > 0.86 ? -1 : 1;
-      const value = base * exp.decay * (0.55 + noise * 0.9) * flip;
+      const value = c === 0 ? base : base * exp.decay * (0.55 + noise * 0.9) * flip;
       const abs = Math.abs(value);
       if (abs > maxAbs) maxAbs = abs;
       // King crowns the 0DTE cell at the book's max-exposure strike (matches the chart level)
@@ -300,32 +306,34 @@ function buildBoard(): BoardTicker[] {
   });
 }
 
-// ---- matrix pulse ----------------------------------------------------------------
+// ---- retired: matrix pulse -------------------------------------------------------
 /**
- * Retired. Returns the matrix untouched, and exists only so the call sites that
- * still wrap it keep compiling; they should drop the wrapper.
+ * @deprecated Returns the matrix untouched. It survives only so the call sites
+ * that still wrap it type-check; each should read the view's `matrix` directly
+ * and delete its import, at which point this goes.
  *
- * This used to multiply every cell by a two-term sine once a second so the
- * heatmap "breathed" between scans. A liveness cue is a fair design choice — but
+ * The pulse multiplied every cell by a two-term sine once a second so the
+ * heatmap "breathed" between scans. A liveness cue is a fair design choice —
  * this one moved the DATA, not the presentation. GexMatrix prints
  * `fmtUsd(cell.value)` inside every cell and the hover read-out repeats it,
- * signed and labelled ("dealer support · long γ"). So the dollar figure a reader
- * takes off the grid swung across 31% of its own magnitude while the book had
- * not moved, and the 1/1.19 normalisation meant a cell peaked at 99.6% of its
- * true value and spent the rest of the cycle understating it — down to 68% — so
- * the ±maxAbs the colour rail advertises was a number no cell could reach.
- * Nothing in the dealer book produces that wobble; it was there to look alive.
+ * signed and labelled ("dealer support · long γ"), so the dollar figure a reader
+ * took off the grid swung across 31% of its own magnitude while the book had not
+ * moved; the 1/1.19 normalisation meant a cell peaked at 99.6% of its true value
+ * and spent the rest of the cycle understating it — down to 68% — so the ±maxAbs
+ * the colour rail advertises was a number no cell could reach. Nothing in the
+ * dealer book produces that wobble; it was there to look alive.
  *
- * A cue that no read-out reports would be legitimate — a per-cell `pulse` weight
+ * A cue no read-out reports would be legitimate — a per-cell `pulse` weight
  * carried alongside `value` and spent on opacity or glow in GexMatrix. That
  * needs a field on MatrixCell and a change in the component, so it is not
  * smuggled back in here on the value.
+ *
+ * The tick argument is declared on the signature and absent from the body: the
+ * shim accepts what call sites still pass and ignores it, without a lint escape
+ * hatch parked over a parameter nothing reads.
  */
-export function pulseMatrix(
-  matrix: GexMatrixData,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the tick that used to drive the wobble; kept so existing call sites still type-check
-  tick?: number
-): GexMatrixData {
+export function pulseMatrix(matrix: GexMatrixData, tick?: number): GexMatrixData;
+export function pulseMatrix(matrix: GexMatrixData): GexMatrixData {
   return matrix;
 }
 

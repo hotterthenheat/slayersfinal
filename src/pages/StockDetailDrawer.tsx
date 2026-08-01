@@ -118,32 +118,46 @@ const NewsCard = ({ n }: { n: NewsItem }) => {
 /** The reporting record earnings.ts already models for this name. The verdict
     word is deliberately absent: the earnings desk owns that lexicon, and a
     second copy of it here is how two screens end up calling one state two
-    different things. The observations below are what the verdict is made of. */
+    different things. The observations below are what the verdict is made of.
+
+    The record itself is generated — earnings.ts measures both the average
+    reaction and the beat rate over the eight reports it models for the name —
+    so the labels say so. "Avg of last 8" over a figure nothing had counted was
+    the same claim about evidence that news.ts had to take out of its base
+    rates. */
 const EarningsBlock = ({ e }: { e: EarningsEvent }) => (
   <div className="flex flex-col gap-3">
     <div className="grid grid-cols-4 gap-1.5">
       <Stat label="Reports" value={e.dateLabel} sub={e.slot} />
       <Stat label="Sessions out" value={e.daysOut} sub={e.daysOut === 0 ? 'today' : 'until the print'} />
       <Stat label="Implied" value={`${e.impliedMovePct.toFixed(1)}%`} sub="straddle move" />
-      <Stat label="Realized" value={`${e.histAvgMovePct.toFixed(1)}%`} sub="avg of last 8" />
+      <Stat label="Modeled avg" value={`${e.histAvgMovePct.toFixed(1)}%`} sub="8 modeled reports" />
     </div>
     <div className="inst-surface rounded-md px-3 py-2.5 flex flex-col gap-1">
       <KV
-        k="Richness (implied ÷ realized)"
+        k="Richness (implied ÷ modeled avg)"
         v={`${e.richness.toFixed(2)}×`}
         tone={e.richness >= 1.3 ? 'warn' : e.richness <= 0.9 ? 'select' : 'neutral'}
       />
-      <KV k="Beat rate, last 8 quarters" v={`${e.beatRate8q}%`} />
+      <KV k="Cleared consensus, those 8 reports" v={`${e.beatRate8q}%`} />
       <KV k="Estimate drift into the print" v={leanIdx(e.revisionTrend)} tone={moveTone(e.revisionTrend)} />
       <KV k="IV rank" v={`${e.ivRank}%`} />
       <KV k="Setup quality" v={e.technicalScore} />
       <KV k="Options lean" v={leanIdx(e.flowLean)} tone={moveTone(e.flowLean)} />
       <p className="mt-1 text-micro text-textMuted leading-snug">
-        Drift and lean are engine indices on a −100 to +100 scale, not percentages.
+        Drift and lean are engine indices on a −100 to +100 scale, not percentages. The average and the beat rate are measured
+        over the eight reports this model generates for the name — no market history stands behind them.
       </p>
     </div>
     <div className="flex flex-col gap-1.5">
-      <p className="text-data text-textPrimary leading-snug inst-surface rounded-md px-3 py-2.5">{e.strategy}</p>
+      {/* `strategy` names the structure the mispricing describes. It reads
+          observationally because earnings.ts authors it that way; the earnings
+          board dropped this field when it was still written as an order, which
+          left the drawer rendering the instruction nobody had looked at. */}
+      <p className="text-data text-textPrimary leading-snug inst-surface rounded-md px-3 py-2.5">
+        <span className="font-mono text-label uppercase tracking-wider text-textMuted">Structure </span>
+        {e.strategy}
+      </p>
       <p className="text-label text-textMuted leading-snug">{e.rationale}</p>
     </div>
   </div>

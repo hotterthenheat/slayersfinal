@@ -4,6 +4,8 @@ import * as positioningMap from '../components/gex/positioningMapModel';
 import { buildCommandView } from './command';
 import { buildExposureProfile } from './exposure';
 import { buildGexView, buildLevels, pinStrike } from './gex';
+import * as gexHistoryModule from './gexhistory';
+import { buildGexHistory } from './gexhistory';
 import { buildRankedTargets } from './rankedtargets';
 import { buildVannaCharm, levelsOfProfile } from './vannacharm';
 import type { IvShift, KeyLevelKind, KeyLevelRow, ShiftMode, TargetTag } from '../types/gex';
@@ -73,6 +75,28 @@ describe('structural levels: one derivation, every panel', () => {
       .flatMap((row, r) => row.map((cell, col) => (cell.king ? [matrix.strikes[r], col] : null)))
       .filter(Boolean);
     expect(crowned).toEqual(matrix.strikes.includes(levels.king) ? [[levels.king, 0]] : []);
+  });
+
+  /*
+    The crown names the book's max-|net GEX| strike and the 0DTE column IS the
+    book at that expiry, so the crowned cell must be that column's largest. It
+    was not: every cell carried a per-strike jitter of 0.55×–1.45× on top of its
+    own value, including 0DTE. GexMatrix prints `fmtUsd(cell.value)` inside the
+    cell and repeats it in the hover read-out, so the grid quoted a dollar figure
+    the exposure panel beside it contradicted — and the crown could land on a
+    cell another cell in the same column outweighed.
+  */
+  it.each(snapshots)('$ticker the 0DTE column is the book, not a rescaled copy of it', ({ snap }) => {
+    const { matrix } = buildGexView(snap, 'GEX', 10);
+    const netAt = new Map(snap.chain.map(n => [n.strike, n.netGex]));
+
+    matrix.strikes.forEach((strike, r) => {
+      expect(matrix.cells[r][0].value).toBe(netAt.get(strike));
+    });
+
+    const col0 = matrix.cells.map(row => Math.abs(row[0].value));
+    const crowned = matrix.cells.findIndex(row => row[0].king);
+    if (crowned >= 0) expect(col0[crowned]).toBe(Math.max(...col0));
   });
 
   it.each(snapshots)('$ticker levels hold their definitions and are pure in the snapshot', ({ snap }) => {
@@ -390,6 +414,109 @@ describe('single derivation: the panels that used to roll their own', () => {
       'priceScale',
       'tierFor',
     ]);
+  });
+});
+
+/*
+  The fourth module, and the reason this file needed a section of its own for it:
+  gexhistory.ts did not import gex.ts at all, so three sweeps over "who
+  re-derives a level" walked straight past it. It took its own max-|netGex|
+  argmax across the chain for the king strike and read the walls and flip off
+  `plan` by hand — then drew every earlier point of the session as a Gaussian
+  walk around those numbers, and History & Replay counts sign flips and flip
+  crosses off that series and prints them as "N sign flips today".
+
+  It reads the simulator's recorded per-bar net-GEX snapshots now
+  (`Simulator.getGexHistory`, the same store the wall-drift timeline reads),
+  through the same `levelsOfProfile` rules, and snaps its last row to
+  `buildLevels`. Both halves are asserted below: the right edge is the rail's
+  number, and every earlier row is a book the session actually recorded.
+*/
+describe('session replay: the fourth derivation', () => {
+  it.each(snapshots)('$ticker the timeline ends on the levels the rail prints', ({ snap }) => {
+    const levels = buildLevels(snap);
+    const view = buildGexHistory(snap);
+    expect(view).not.toBeNull();
+    const { points, now, open, shifts } = view!;
+
+    // "Now" is the last row of the series, not a card computed beside it.
+    expect(points[points.length - 1]).toBe(now);
+    expect(points[0]).toBe(open);
+
+    expect(now.spot).toBe(levels.spot);
+    expect(now.callWall).toBe(levels.callWall);
+    expect(now.putWall).toBe(levels.putWall);
+    expect(now.flip).toBe(levels.flip);
+    expect(now.king).toBe(levels.king);
+    // Net GEX is the whole chain's — the aggregate the cockpit reads, not the
+    // expiry-filtered window a panel happens to be drawing.
+    expect(now.netGex).toBeCloseTo(
+      snap.chain.reduce((a, n) => a + n.netGex, 0),
+      6
+    );
+
+    // "How structure moved" is the two ends of that same series. A third
+    // reading here is how the panel and the chart start quoting different opens.
+    const byLabel = Object.fromEntries(shifts.map(s => [s.label, s]));
+    expect(byLabel['Call Wall']).toMatchObject({ from: open.callWall, to: levels.callWall });
+    expect(byLabel['Put Wall']).toMatchObject({ from: open.putWall, to: levels.putWall });
+    expect(byLabel['Gamma Flip']).toMatchObject({ from: open.flip, to: levels.flip });
+    expect(byLabel['King Strike']).toMatchObject({ from: open.king, to: levels.king });
+
+    expect(view!.widthNow).toBe(now.callWall - now.putWall);
+    expect(view!.widthOpen).toBe(open.callWall - open.putWall);
+  });
+
+  /*
+    The tripwire for the walk. Walls and the king are strikes by definition, so
+    every one the replay draws has to be a strike some recorded snapshot carries.
+    A mean-reverting wobble around today's levels lands between the rungs and
+    fails on the first ticker.
+  */
+  it.each(snapshots)('$ticker every row is a book the session recorded', ({ ticker, snap }) => {
+    const { points } = buildGexHistory(snap)!;
+    const recorded = new Set<number>();
+    for (const s of Simulator.getGexHistory(ticker)) for (const l of s.levels) recorded.add(l.strike);
+
+    for (const p of points) {
+      expect(recorded.has(p.callWall)).toBe(true);
+      expect(recorded.has(p.putWall)).toBe(true);
+      expect(recorded.has(p.king)).toBe(true);
+      // The defended band is a band: the call side sits above the put side at
+      // every recorded moment, so `widthNow` is never a negative "width".
+      expect(p.callWall).toBeGreaterThan(p.putWall);
+    }
+    expect(points.map(p => p.t)).toEqual(points.map((_, i) => i));
+  });
+
+  /*
+    "N sign flips today" and "N flip crosses" are the two figures on this page a
+    reader takes as measurements of the session. They must be recountable from
+    the series the chart draws — the page recounts exactly these comparisons to
+    place its event markers, so a builder that counted anything else would badge
+    a number with no marker under it.
+  */
+  it.each(snapshots)('$ticker the session counters are recountable from the series', ({ snap }) => {
+    const view = buildGexHistory(snap)!;
+    const { points } = view;
+    const flips = points.slice(1).filter((p, i) => Math.sign(p.netGex) !== Math.sign(points[i].netGex)).length;
+    const crosses = points.slice(1).filter((p, i) => (points[i].spot >= points[i].flip) !== (p.spot >= p.flip)).length;
+
+    expect(view.netGexFlips).toBe(flips);
+    expect(view.flipCrosses).toBe(crosses);
+  });
+
+  it.each(snapshots)('$ticker the replay is a pure read of the recorded store', ({ snap }) => {
+    expect(buildGexHistory(snap)).toEqual(buildGexHistory(snap));
+  });
+
+  /*
+    Same tripwire the positioning map carries, for the same reason: this module
+    is a reader of the snapshot store. The moment it exports a level of its own
+    there are two answers to "where is the king" again.
+  */
+  it('the history module builds a view and derives no level of its own', () => {
+    expect(Object.keys(gexHistoryModule).sort()).toEqual(['buildGexHistory']);
   });
 });
 

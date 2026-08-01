@@ -17,6 +17,7 @@
 */
 
 import { dayKey, hRange } from '../core/rng';
+import { buildLevels, pinStrike } from './gex';
 import type { MarketSnapshot } from '../types/market';
 
 export type GreekKey = 'gamma' | 'delta' | 'vanna' | 'charm' | 'vomma' | 'speed' | 'color' | 'ultima';
@@ -81,7 +82,7 @@ export interface GreeksRegimeView {
 }
 
 export function buildGreeksRegime(snapshot: MarketSnapshot): GreeksRegimeView {
-  const { ticker, spot, chain, plan, indicators } = snapshot;
+  const { ticker, spot, chain, indicators } = snapshot;
   const day = dayKey();
   const seed = (t: string) => hRange(`${ticker}-${day}-grk-${t}`, -1, 1);
 
@@ -133,10 +134,17 @@ export function buildGreeksRegime(snapshot: MarketSnapshot): GreeksRegimeView {
 
   // ---- dealer regime probability ----
   const netGex = netByGreek.gamma;
-  const gexMag = rows.reduce((a, r) => a + Math.abs(r.gamma), 0) || 1;
   const longGamma = netGex > 0;
-  const belowFlip = spot < plan.flipZone;
-  const nearPin = Math.abs((spot - plan.resistanceWall) / spot) < 0.01 || rows.some(r => Math.abs(r.distPct) < 0.3 && Math.abs(r.gamma) > gexMag * 0.14);
+  // Flip, wall and pin all come off the levels rail. The regime is a claim about
+  // where price sits relative to the structure, so it has to be the same
+  // structure Pinpoint's other panels draw: this used to test the call wall and
+  // then call the result a pin, and an at-the-money gamma test rolled here is a
+  // third answer to a question gex.ts already owns. `half` is 10 because the
+  // matrix window is the 20 strikes nearest spot — 10 either side.
+  const levels = buildLevels(snapshot);
+  const pin = pinStrike(snapshot, 10);
+  const belowFlip = spot < levels.flip;
+  const nearPin = Math.abs((spot - pin) / spot) < 0.01 || Math.abs((spot - levels.callWall) / spot) < 0.01;
   const rsiExtreme = indicators.rsi > 68 || indicators.rsi < 32;
   const trendUp = indicators.ema9 >= indicators.ema21;
   void trendUp;
@@ -149,11 +157,15 @@ export function buildGreeksRegime(snapshot: MarketSnapshot): GreeksRegimeView {
     'LIQUIDATION CASCADE': (belowFlip && !longGamma ? 1.6 : 0.3) + (rsiExtreme && belowFlip ? 0.9 : 0) + hRange(`${ticker}-${day}-lc`, 0, 0.5),
   };
   const total = Object.values(raw).reduce((a, x) => a + x, 0);
+  // Each note says what the book is doing and what that implies for the tape,
+  // and stops there. These render on Pinpoint > Greeks beside the probability,
+  // where a closing clause like "sell premium" reads as the desk's instruction
+  // rather than as a description of a long-gamma regime.
   const notes: Record<DealerRegime, string> = {
-    'PINNED / CHOPPY': 'Dealers are long gamma near a magnet — hedging dampens moves and price coils around the wall. Sell premium, fade the edges.',
-    'CONTROLLED TREND': 'Long gamma but away from the pin — dealers cushion pullbacks so trends grind rather than snap. Trade with the drift, buy dips.',
-    'UNSTABLE BREAKOUT': 'Short-gamma zone — dealer hedging amplifies moves. Breaks tend to run; expect expansion, respect momentum.',
-    'LIQUIDATION CASCADE': 'Short gamma into weakness — hedging feeds selling. Tail risk is live; size down and watch the fracture line.',
+    'PINNED / CHOPPY': 'Dealers are long gamma near a magnet — hedging dampens moves and price coils around the level. Realized range stays inside the implied one, and pushes off the edges keep getting hedged back.',
+    'CONTROLLED TREND': 'Long gamma but away from the pin — dealers cushion pullbacks, so pullbacks stay shallow and the drift grinds on rather than snapping.',
+    'UNSTABLE BREAKOUT': 'Short-gamma zone — dealer hedging amplifies moves. Breaks tend to run, and range expansion is the norm here rather than the exception.',
+    'LIQUIDATION CASCADE': 'Short gamma into weakness — hedging feeds selling. Tail risk is live, and the fracture line is where the book stops absorbing it.',
   };
   const regimes: RegimeProb[] = (Object.keys(raw) as DealerRegime[])
     .map(r => ({ regime: r, prob: Math.round((raw[r] / total) * 100), note: notes[r] }))

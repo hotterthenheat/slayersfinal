@@ -74,7 +74,7 @@ const Fig = ({ label, value, valueClass = 'text-textPrimary' }: { label: string;
 
 /**
  * The model read, on the row instead of in a hover. Every figure here was
- * already on the item and only reachable by pointing at it, which left the wire
+ * already on the item and only reachable by pointing at it, which left the feed
  * reading as a list of titles. Direction takes bull/bear tone; magnitude
  * figures (impact, confidence, the prior base rate) stay neutral — they size a
  * move, they do not point one way.
@@ -97,7 +97,7 @@ const RowStats = ({ n }: { n: NewsItem }) => {
   );
 };
 
-/** One deduped wire story: a lead headline plus any near-identical prints. */
+/** One deduped feed story: a lead headline plus any near-identical prints. */
 interface WireUnit {
   key: string;
   subject: string;
@@ -236,10 +236,18 @@ const News = () => {
 
   return (
     <>
+      {/*
+        This page called the feed "the wire" in three places — the header
+        subtitle, the panel heading and the row-count sub — while the feed's own
+        remediation is that there is no wire behind this terminal, which is why
+        every row is tagged MODELED instead of datelined to a newswire. A reader
+        who takes the heading at face value reads generated rows as reported.
+        The page now calls it what news.ts actually builds: a catalyst feed.
+      */}
       <PageHeader
         breadcrumb={['Terminal', 'News']}
         title="News"
-        subtitle="The wire on the left, what the model thinks it does to price on the right"
+        subtitle="The catalyst feed on the left, what the model thinks it does to price on the right"
         actions={<SegmentedControl ariaLabel="Category filter" options={CAT_OPTIONS} value={filter} onChange={setFilter} />}
       />
 
@@ -318,17 +326,17 @@ const News = () => {
       </Panel>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 items-start">
-        {/* The wire */}
+        {/* The catalyst feed */}
         <Panel
           title={
             <span className="inline-flex items-center gap-1.5">
-              <Newspaper className="w-3.5 h-3.5" /> The wire
+              <Newspaper className="w-3.5 h-3.5" /> Catalyst feed
             </span>
           }
-          subtitle={grouping === 'cluster' ? `${units.length} stories · ${rows.length} on the wire` : `${rows.length} headlines`}
+          subtitle={grouping === 'cluster' ? `${units.length} stories · ${rows.length} headlines` : `${rows.length} headlines`}
           flush
           className="lg:col-span-3"
-          actions={<SegmentedControl ariaLabel="Wire grouping" options={GROUP_OPTIONS} value={grouping} onChange={setGrouping} />}
+          actions={<SegmentedControl ariaLabel="Feed grouping" options={GROUP_OPTIONS} value={grouping} onChange={setGrouping} />}
         >
           {hasFilters && (
             <div className="flex items-center gap-2 px-4 py-2 border-b border-borderSubtle bg-white/[0.02] flex-wrap">
@@ -541,19 +549,33 @@ const News = () => {
                 <div>
                   <div className="font-mono text-label uppercase tracking-widest text-textMuted">Base rate behind it</div>
                   <div className="mt-1.5 grid grid-cols-3 gap-2">
-                    <Stat label="Priors" value={`${selected.prediction.baseN}`} sub={`${selected.category.toLowerCase()} prints`} align="right" />
-                    <Stat label="Hit" value={`${selected.prediction.baseHitPct}%`} sub="resolved the same way" align="right" />
+                    <Stat label="Priors" value={`${selected.prediction.baseN}`} sub={`simulated ${selected.category.toLowerCase()} prints`} align="right" />
+                    {/*
+                      The sub has to name the quantity, not gesture at it.
+                      "Resolved the same way" reads as "the same way as THIS
+                      headline", which is the exact relabel the analog sentence
+                      below was already fixed for: hitPct counts priors that
+                      resolved in their OWN headline's direction and carries no
+                      direction of its own.
+                    */}
+                    <Stat label="Hit" value={`${selected.prediction.baseHitPct}%`} sub="matched own lean" align="right" />
                     <Stat label="Median" value={`${selected.prediction.baseMedianPct}%`} sub="typical move" align="right" />
                   </div>
-                  {/* Sizes the model's own call against what the catalyst type usually does. */}
+                  {/*
+                    Sizes the model's own call against the median of the same
+                    simulated priors the Stat above quotes. It names them as
+                    simulated on its own, because a reader who stops before the
+                    disclosure sentence below would otherwise take "what the type
+                    delivers" for observed market history.
+                  */}
                   <p className="mt-2 font-mono text-label text-textMuted">
                     This call:{' '}
                     <span className={`tnum font-semibold ${dirText(selected.prediction.expMove1dPct)}`}>
                       {Math.abs(selected.prediction.expMove1dPct).toFixed(1)}%
                     </span>{' '}
                     against a {selected.prediction.baseMedianPct}% median,{' '}
-                    {Math.abs(selected.prediction.expMove1dPct) >= selected.prediction.baseMedianPct ? 'bigger' : 'smaller'} than the type
-                    usually delivers.
+                    {Math.abs(selected.prediction.expMove1dPct) >= selected.prediction.baseMedianPct ? 'bigger' : 'smaller'} than this
+                    catalyst type&rsquo;s simulated priors typically produce.
                   </p>
                   <p className="mt-1.5 text-caption text-textSecondary leading-relaxed">{selected.prediction.analog}</p>
                 </div>
@@ -573,9 +595,10 @@ const News = () => {
       {/*
         The read-out used to repeat sentiment, magnitude, P(up) and the 5-day
         move — every one of which now sits on the row and stays there. What it
-        carries instead is the one thing the row does not: what to do with the
-        headline, plus the two sizing figures the collapsed cluster children
-        have no room for.
+        carries instead is the one thing the row does not: the model's read of
+        the headline, plus the two sizing figures the collapsed cluster children
+        have no room for. The read is authored observationally in news.ts, so
+        this surface renders it as written rather than editing it on the way out.
       */}
       {hover && (
         <HoverReadout x={hover.x} y={hover.y}>

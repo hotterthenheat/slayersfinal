@@ -36,7 +36,7 @@ export interface NewsPrediction {
   baseHitPct: number;
   /** Median absolute move those priors produced, % */
   baseMedianPct: number;
-  /** What to do with it */
+  /** Observational read of what the model's own numbers imply — never an order */
   playbook: string;
 }
 
@@ -395,18 +395,30 @@ function predict(category: NewsCategory, sentiment: number, magnitude: number, b
   const kind = category === 'M&A' ? 'M&A' : category.toLowerCase();
   const analog = `Measured over ${base.n} simulated ${kind} catalysts from this model's own generator — no market history stands behind it: median ${base.medianPct}% move, ${base.hitPct}% resolved in their own headline's direction.`;
 
+  // Written as a READ of the model's own numbers, never as an order. Four of
+  // these five branches used to open on a trade verb — "Buy the first pullback",
+  // "Sell into the pop", "Fade bounces", "Wait for stabilization" — and the fifth
+  // told the reader to stack the item with flow "before acting". This terminal
+  // observes: PLAY renders QUALIFIED, FADE renders RICH, and nothing here is
+  // allowed to hand out a ticket. It is authored observationally HERE because
+  // three surfaces already render the field — the News outcome panel, the News
+  // row hover, and the stock drawer — so laundering the copy at one of them
+  // would only fix the surface somebody happened to look at.
+  //
+  // Each branch now points at the quantity that produced it: the residual the
+  // model already assumes, the 5-day expected move, or the expected move itself.
   let playbook: string;
   const abs1d = Math.abs(expMove1dPct);
   if (confidencePct < 55 || abs1d < 0.6) {
-    playbook = 'Low-edge headline, no trade on its own. Stack it with flow and positioning before acting.';
+    playbook = 'Low-edge headline: the modeled move is small against the residual the model already assumes, so the item asserts little on its own. Flow and positioning are what would give it weight.';
   } else if (sentiment > 0 && magnitude > 0.6) {
-    playbook = 'Strength tends to hold. Buy the first pullback rather than the open print; invalid if day-one gains fully fade.';
+    playbook = 'A catalyst this loud carries past the print — the 5-day expected move stays positive. A pullback inside that window leaves the drift intact; a day-one gain that fully retraces is what voids the read.';
   } else if (sentiment > 0) {
-    playbook = 'Modest positive drift expected. Sell into the pop if it overshoots the expected move.';
+    playbook = 'The model reads a modest positive drift rather than a trend. Anything past the expected move is overshoot on this read, not more signal.';
   } else if (magnitude > 0.6) {
-    playbook = 'Downside repricing usually runs multiple sessions. Fade bounces while the 5-day expected move stays negative.';
+    playbook = 'Repricing this loud runs past the first session — the 5-day expected move stays negative. Bounces inside that window read as noise against it.';
   } else {
-    playbook = 'Knee-jerk dip likely absorbed. Wait for stabilization; reassess if a second headline lands.';
+    playbook = 'A dip this shallow is largely absorbed on the model read. It stays unsettled until price steadies or a second headline reprices it.';
   }
 
   return {
@@ -521,12 +533,16 @@ export function marketMood(): MarketMood {
     .map(([category, count]) => ({ category, count }))
     .sort((a, b) => b.count - a.count || a.category.localeCompare(b.category));
 
+  // Says what the magnitude-weighted mix IS. The risk-on line used to add "dips
+  // are getting bought", which is a claim about how the tape traded — nothing in
+  // this simulator watches a dip or who lifted it, and the sentence read as an
+  // observation of a market that was never observed.
   const note =
     label === 'RISK-ON'
-      ? 'Positive catalysts outweigh. Dips are getting bought while the tape digests good news.'
+      ? 'Positive catalysts outweigh the negative ones on a magnitude-weighted basis. The tape reads risk-on until the mix turns.'
       : label === 'RISK-OFF'
-        ? 'Negative catalysts dominate. Rallies are suspect until the headline pressure clears.'
-        : 'Cross-currents in the tape: single-name stories matter more than index direction today.';
+        ? 'Negative catalysts dominate the magnitude-weighted mix. Rallies read as suspect while the headline pressure holds.'
+        : 'Cross-currents in the tape: single-name stories carry more of the mix than index direction today.';
   return {
     score,
     label,
