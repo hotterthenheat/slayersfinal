@@ -8,6 +8,14 @@
 */
 
 import Simulator from '../core/simulator';
+import {
+  SCAN_UNIVERSE_SIZE,
+  buildScanUniverse,
+  scanEpoch,
+  scanNameFor,
+  scanSparkline,
+  type ScanName,
+} from '../core/scanUniverse';
 import type { MarketSnapshot } from '../types/market';
 import type {
   ChainAction,
@@ -59,14 +67,42 @@ interface ScannerProfile {
   scoreFloor: number; // min score to surface a setup
 }
 
+/*
+  Score floors, calibrated against the WIDE field (see core/scanUniverse.ts).
+  With four names and four strikes a floor was a formality — everything the
+  generator produced was near-the-money and trend-aligned, so nothing was ever
+  rejected and the floor's only job was to not fire. Over ~9,000 candidates it
+  is the actual gate, so each one now has to mean something:
+
+  - The five selective scanners keep their bars. A high floor across a wide
+    field is exactly what "the best setups in the market" asks for — the field
+    got two orders of magnitude bigger, so the bar should not come down.
+  - 'all' drops 65 → 8, the score clamp's own minimum, i.e. no bar at all. Its
+    blurb promises "every setup across all scanners" and now it means it: its
+    count IS the field. Nothing about the rows changes — the screen shows the
+    top of the ranking either way — but the number beside the tab stops being
+    an arbitrary subset of a field the user was never shown.
+
+  A note on what the floors do NOT decide. The EXIT verdict needs a score under
+  72, and no contract scoring under 72 is ever going to be in the top 240 of
+  9,000. That is not a floor problem and lowering one will not fix it: a scanner
+  ranks opportunities, so its feed is the head of the distribution by
+  construction. EXIT reaches a screen through Tracker, which rebuilds a setup
+  the user already carries — which is the only place a "fading" read is
+  actionable anyway.
+*/
 const PROFILES: Record<ScannerKey, ScannerProfile> = {
   'top-setups': { expiry: '0DTE', swingMul: 0.38, scalpMul: 0.18, moveBias: 1.0, scoreFloor: 84 },
   'quick-scalp': { expiry: '0DTE', swingMul: 0.22, scalpMul: 0.1, moveBias: 0.7, scoreFloor: 82 },
   discounted: { expiry: '1DTE', swingMul: 0.6, scalpMul: 0.28, moveBias: 1.35, scoreFloor: 78 },
   rebounds: { expiry: '1DTE', swingMul: 0.45, scalpMul: 0.22, moveBias: 1.15, scoreFloor: 76 },
   'whale-sweeps': { expiry: '0DTE', swingMul: 0.42, scalpMul: 0.2, moveBias: 1.1, scoreFloor: 83 },
-  all: { expiry: '0DTE', swingMul: 0.38, scalpMul: 0.18, moveBias: 1.0, scoreFloor: 65 },
+  all: { expiry: '0DTE', swingMul: 0.38, scalpMul: 0.18, moveBias: 1.0, scoreFloor: 8 },
 };
+
+export function scannerFloor(scanner: ScannerKey): number {
+  return PROFILES[scanner].scoreFloor;
+}
 
 // Thesis prose is DIRECTIONAL — a put setup must never carry a buy-wall
 // "protective floor under our entry" story. Each scanner supplies a bull and
@@ -146,6 +182,58 @@ function actionFromHealth(health: number): ChainAction {
   return 'SELL';
 }
 
+// ---- opportunity score ----------------------------------------------------
+/*
+  ONE definition of the score, shared by the cheap prescreen and the full
+  builder. The scan ranks ~9,000 candidates per sweep but materialises only the
+  few hundred it shows, so the score has to be computable without paying for
+  greeks, prose and a take-profit ladder. Keeping the arithmetic here — rather
+  than copied into a fast path — is what makes the two provably agree, and
+  scanUniverse.test.ts asserts it on a grid.
+*/
+
+/** How hard a contract facing the tape is marked down. */
+const COUNTER_TREND_MULT = 0.72;
+/** Half-width of the per-contract jitter, in score points. */
+const JITTER_HALF = 4;
+/** Ceiling a counter-trend contract can reach — an exact bound, used to prune. */
+export const COUNTER_TREND_CEILING = 96 * COUNTER_TREND_MULT + JITTER_HALF;
+
+/**
+ * Near-the-money and aligned with the ticker's lean scores highest; far-OTM or
+ * opposed contracts score low, so the verdict spans ENTER / WATCH / EXIT.
+ * `jitter01` is the candidate's third RNG draw.
+ */
+function scoreOf(spot: number, strike: number, aligned: boolean, jitter01: number): number {
+  const proximity = 1 - Math.min(1, Math.abs(strike - spot) / (spot * 0.03));
+  return Math.round(
+    clamp(
+      96 * (0.4 + 0.6 * proximity) * (aligned ? 1 : COUNTER_TREND_MULT) + (jitter01 - 0.5) * (JITTER_HALF * 2),
+      8,
+      99
+    )
+  );
+}
+
+/**
+ * The score a full makeSetup() would produce, without building the setup.
+ * Burns the same first three draws off the same seeded stream, so the number is
+ * identical rather than merely close.
+ */
+export function prescreenScore(
+  ticker: string,
+  spot: number,
+  strike: number,
+  right: OptionRight,
+  scanner: ScannerKey,
+  aligned: boolean
+): number {
+  const rng = mulberry(hash(`${ticker}-${strike}-${right}-${scanner}`));
+  rng(); // live mid
+  rng(); // health
+  return scoreOf(spot, strike, aligned, rng());
+}
+
 // ---- setup builder --------------------------------------------------------
 function buildTakeProfits(mid: number, profile: ScannerProfile, rng: () => number, verdict: Verdict): TakeProfit[] {
   const ladders = [0.3, 0.8, 1.5, 2.5].map(p => p * (0.8 + profile.moveBias * 0.3));
@@ -168,13 +256,21 @@ function buildTakeProfits(mid: number, profile: ScannerProfile, rng: () => numbe
   });
 }
 
+/**
+ * `leanBullish` lets the scan hand in a lean it already knows. Without it the
+ * builder reads the ticker's candle buffer, and reading a candle buffer for a
+ * name the simulator has never seen registers it — 78ms of session seeding, and
+ * a permanent seat in the 1.5s tick loop. Fine for the handful of contracts a
+ * user opens; ruinous for a five-hundred-name sweep.
+ */
 export function makeSetup(
   ticker: string,
   spot: number,
   strike: number,
   right: OptionRight,
   scanner: ScannerKey,
-  iv: number
+  iv: number,
+  leanBullish?: boolean
 ): Setup {
   const profile = PROFILES[scanner];
   const rng = mulberry(hash(`${ticker}-${strike}-${right}-${scanner}`));
@@ -195,14 +291,9 @@ export function makeSetup(
   const health = clamp(healthFor(spot, strike, right) + Math.round((rng() - 0.5) * 12), 5, 99);
   const momentum = momentumFromHealth(health);
 
-  // Opportunity score: near-the-money + aligned with the ticker's lean scores highest;
-  // far-OTM or opposed contracts score low, so verdict spans ENTER / WATCH / EXIT.
-  const bullish = tickerLean(ticker, scanner);
+  const bullish = leanBullish ?? tickerLean(ticker, scanner);
   const aligned = bullish ? right === 'C' : right === 'P';
-  const proximity = 1 - Math.min(1, Math.abs(strike - spot) / (spot * 0.03));
-  const score = Math.round(
-    clamp(96 * (0.4 + 0.6 * proximity) * (aligned ? 1 : 0.55) + (rng() - 0.5) * 8, 8, 99)
-  );
+  const score = scoreOf(spot, strike, aligned, rng());
   // ±1σ expected move of the UNDERLYING over the contract's life — real math
   // (iv·√t), not a decorative random percentage
   const expectedMovePct = Number((iv * Math.sqrt(Math.max(0.5, dte) / 252) * 100).toFixed(1));
@@ -279,17 +370,6 @@ export function makeSetup(
 }
 
 // ---- feed / groups --------------------------------------------------------
-function buildSparkline(ticker: string, spot: number): number[] {
-  const rng = mulberry(hash(`${ticker}-spark`));
-  const out: number[] = [];
-  let p = spot * 0.994;
-  for (let i = 0; i < 24; i++) {
-    p += (rng() - 0.47) * spot * 0.002;
-    out.push(Number(p.toFixed(2)));
-  }
-  out.push(spot);
-  return out;
-}
 
 /** Directional lean per ticker+scanner, read from the ACTUAL tape — hour
     momentum plus day direction — so "TREND ALIGNED" means what it says.
@@ -305,25 +385,187 @@ function tickerLean(ticker: string, scanner: ScannerKey): boolean {
   return scanner === 'rebounds' ? !up : up;
 }
 
-function buildGroup(ticker: string, spot: number, iv: number, step: number, scanner: ScannerKey): SetupGroup | null {
-  const bullish = tickerLean(ticker, scanner);
-  const candidates: Setup[] = [];
+/** Same read for a scan-universe name, off its own session path — no candle
+    buffer, so no simulator registration. Rebounds still fade the trend. */
+function scanLean(name: ScanName, scanner: ScannerKey): boolean {
+  const up = name.live ? tickerLean(name.ticker, 'top-setups') : name.trendUp;
+  return scanner === 'rebounds' ? !up : up;
+}
 
-  // Sample a handful of near-the-money strikes on the favored side
-  for (let i = 0; i <= 3; i++) {
-    const right: OptionRight = bullish ? 'C' : 'P';
-    const strike = Math.round((spot + (bullish ? i : -i) * step) / step) * step;
-    const setup = makeSetup(ticker, spot, strike, right, scanner, iv);
-    if (setup.score >= PROFILES[scanner].scoreFloor) candidates.push(setup);
+/** Bars in one session — the span both sparkline sources cover, so a live name
+    and a scanned one are showing the same window of time. */
+const SESSION_BARS = 390;
+
+/** A live name's group traces its ACTUAL bars, so the feed's sparkline and the
+    chart the user opens next are the same session. Only a handful of names are
+    live, so reading the buffer costs nothing at sweep scale. */
+function liveSparkline(ticker: string, spot: number, points = 24): number[] {
+  const candles = Simulator.getCandles(ticker) ?? [];
+  if (candles.length < SESSION_BARS) return [];
+  const stride = Math.floor(SESSION_BARS / points);
+  const out: number[] = new Array(points + 1);
+  for (let i = 0; i < points; i++) out[i] = candles[candles.length - 1 - (points - i) * stride].close;
+  out[points] = spot;
+  return out;
+}
+
+/*
+  ---- the sweep ------------------------------------------------------------
+  Strikes either side of spot on BOTH rights, so a bearish tape can still
+  surface a call and the ranking is a real choice rather than a formality.
+  Nine strikes x two rights x the scan universe is the field; what the screen
+  shows is the top of it.
+*/
+const STRIKE_OFFSETS = [-4, -3, -2, -1, 0, 1, 2, 3, 4];
+const RIGHTS: OptionRight[] = ['C', 'P'];
+
+/** Candidates per name per sweep. */
+export const CANDIDATES_PER_NAME = STRIKE_OFFSETS.length * RIGHTS.length;
+
+/*
+  Display caps. The scan ranks thousands; these decide how much of that ranking
+  reaches the DOM. The table wants depth — hundreds of rows to sort — while the
+  card view renders a header, a sparkline and N cards per group, so the group
+  count is the expensive axis and the row count is not.
+*/
+const DISPLAY_CAP = 240;
+const GROUP_CAP = 40;
+const PER_TICKER_CAP = 8;
+
+interface Candidate {
+  name: ScanName;
+  strike: number;
+  right: OptionRight;
+  score: number;
+  /** The scanner's read on the name — carried so stage two need not re-derive it */
+  leanBullish: boolean;
+}
+
+interface Feed {
+  groups: SetupGroup[];
+  /** Candidates that cleared the scanner's floor across the whole field */
+  totalFound: number;
+  /** Setups actually materialised for the screen */
+  shown: number;
+}
+
+/**
+ * Rank the field, then build only what shows.
+ *
+ * Stage one prices nothing: it burns three RNG draws per candidate and keeps
+ * the score. Stage two builds full Setups — greeks, prose, take-profit ladder —
+ * for the few hundred that survive a single GLOBAL sort. The old code did the
+ * opposite (build everything, then cap two per ticker before any cross-ticker
+ * comparison), which is why the market's third-best setup lost its seat to a
+ * weaker one on a different name.
+ */
+function buildFeed(scanner: ScannerKey, activeTicker: string, epoch: number, size: number): Feed {
+  const floor = PROFILES[scanner].scoreFloor;
+  const universe = buildScanUniverse(epoch, size);
+  // Whatever the user is looking at is always in the field, even when it sits
+  // outside the ranked pool.
+  const names = universe.some(n => n.ticker === activeTicker)
+    ? universe
+    : [scanNameFor(activeTicker, epoch), ...universe];
+
+  // A contract facing the tape cannot beat this, ever — so when the floor sits
+  // above it, the whole counter-trend half of the field is skipped rather than
+  // scored and discarded. Exact bound, not a heuristic.
+  const skipCounterTrend = COUNTER_TREND_CEILING < floor;
+
+  const survivors: Candidate[] = [];
+  for (const name of names) {
+    const bullish = scanLean(name, scanner);
+    for (const right of RIGHTS) {
+      const aligned = bullish ? right === 'C' : right === 'P';
+      if (!aligned && skipCounterTrend) continue;
+      for (const k of STRIKE_OFFSETS) {
+        const strike = Math.round((name.spot + k * name.step) / name.step) * name.step;
+        const score = prescreenScore(name.ticker, name.spot, strike, right, scanner, aligned);
+        if (score >= floor) survivors.push({ name, strike, right, score, leanBullish: bullish });
+      }
+    }
   }
 
-  if (candidates.length === 0) return null;
-  candidates.sort((a, b) => b.score - a.score);
-  const setups = candidates.slice(0, 2);
-  const sparkline = buildSparkline(ticker, spot);
-  const changePct = ((sparkline[sparkline.length - 1] - sparkline[0]) / sparkline[0]) * 100;
+  // One global sort — the whole point. Ties break on ticker then strike so the
+  // order is a function of the field, not of iteration luck.
+  survivors.sort(
+    (a, b) =>
+      b.score - a.score ||
+      (a.name.ticker < b.name.ticker ? -1 : a.name.ticker > b.name.ticker ? 1 : 0) ||
+      a.strike - b.strike ||
+      (a.right < b.right ? -1 : a.right > b.right ? 1 : 0)
+  );
 
-  return { ticker, spot, sparkline, changePct: Number(changePct.toFixed(2)), found: setups.length, setups };
+  // Admit down the ranking. Per-ticker and group caps stop one name owning the
+  // board and keep the card view a list rather than a document.
+  const admitted = new Map<string, Candidate[]>();
+  let shown = 0;
+  for (const c of survivors) {
+    if (shown >= DISPLAY_CAP) break;
+    const bucket = admitted.get(c.name.ticker);
+    if (!bucket) {
+      if (admitted.size >= GROUP_CAP) continue;
+      admitted.set(c.name.ticker, [c]);
+    } else {
+      if (bucket.length >= PER_TICKER_CAP) continue;
+      bucket.push(c);
+    }
+    shown++;
+  }
+
+  // Setups are built on first read, not on admission. Five of the six builds a
+  // sweep runs exist only to put a number on a scanner tab — they count groups
+  // and never open one, so materialising 240 contracts for each of them would
+  // be 5/6ths of the work thrown away. Rank is already known from stage one, so
+  // the sort below costs nothing either.
+  const groups: SetupGroup[] = [];
+  for (const [ticker, bucket] of admitted) {
+    const { name } = bucket[0];
+    let built: Setup[] | null = null;
+    const live = name.live ? liveSparkline(ticker, name.spot) : [];
+    const sparkline = live.length ? live : scanSparkline(ticker, name.spot, epoch);
+    // The feed tints the sparkline by changePct, so the number has to be the
+    // line's own slope — otherwise a rising line can print red.
+    const changePct = ((sparkline[sparkline.length - 1] - sparkline[0]) / sparkline[0]) * 100;
+    groups.push({
+      ticker,
+      spot: name.spot,
+      sparkline,
+      changePct: Number(changePct.toFixed(2)),
+      found: bucket.length,
+      get setups(): Setup[] {
+        return (built ??= bucket.map(c =>
+          makeSetup(ticker, name.spot, c.strike, c.right, scanner, name.iv, c.leanBullish)
+        ));
+      },
+    });
+  }
+  const best = new Map(groups.map(g => [g.ticker, admitted.get(g.ticker)![0].score]));
+  groups.sort((a, b) => best.get(b.ticker)! - best.get(a.ticker)!);
+
+  return { groups, totalFound: survivors.length, shown };
+}
+
+// One sweep drives six scanner builds (the active pane plus five tab counts),
+// and Compass re-enters every tick for the contract chain. Keyed on the epoch,
+// so the repeats are free and the field is identical across all six.
+const feedCache = new Map<string, Feed>();
+const FEED_CACHE_MAX = 12;
+
+function cachedFeed(scanner: ScannerKey, activeTicker: string, epoch: number, size: number): Feed {
+  const key = `${scanner}|${activeTicker}|${epoch}|${size}`;
+  const hit = feedCache.get(key);
+  if (hit) return hit;
+  const built = buildFeed(scanner, activeTicker, epoch, size);
+  if (feedCache.size >= FEED_CACHE_MAX) feedCache.delete(feedCache.keys().next().value as string);
+  feedCache.set(key, built);
+  return built;
+}
+
+/** Drops the memoised sweeps. Tests use it to measure a cold build. */
+export function resetSkyVisionCache(): void {
+  feedCache.clear();
 }
 
 // ---- contract chain -------------------------------------------------------
@@ -364,14 +606,14 @@ function buildChain(snapshot: MarketSnapshot, iv: number): ContractChain {
 }
 
 // ---- impact leaderboard ---------------------------------------------------
-function buildImpact(snapshot: MarketSnapshot): ImpactRow[] {
+function buildImpact(snapshot: MarketSnapshot, expiry: string): ImpactRow[] {
   const { ticker, spot, chain } = snapshot;
   const totalGamma = chain.reduce((a, n) => a + Math.abs(n.netGex), 0) || 1;
   const rows = chain.flatMap(node => {
     // Delta notional in $B: shares of exposure × spot at ~0.5 avg delta
     const mk = (right: OptionRight, oi: number, gammaScale: number): Omit<ImpactRow, 'rank'> => ({
       contract: `${ticker} ${node.strike % 1 === 0 ? node.strike.toFixed(0) : node.strike.toFixed(2)}${right}`,
-      expiry: '0DTE',
+      expiry,
       openInterest: oi,
       volume: Math.round(oi * (0.3 + (hash(`${node.strike}${right}`) % 50) / 100)),
       deltaNotional: Number(((oi * 100 * spot * 0.5) / 1e9).toFixed(2)),
@@ -386,28 +628,44 @@ function buildImpact(snapshot: MarketSnapshot): ImpactRow[] {
 }
 
 // ---- top-level assembly ---------------------------------------------------
-export function buildSkyVision(snapshot: MarketSnapshot, scanner: ScannerKey): SkyVisionData {
-  // Curated watchlist plus whatever ticker is currently active
-  const feedTickers = Array.from(new Set([snapshot.ticker, ...Simulator.WATCHLIST]));
 
-  const groups: SetupGroup[] = [];
-  for (const t of feedTickers) {
-    Simulator.ensureTicker(t);
-    const cfg = Simulator.TICKERS[t];
-    const group = buildGroup(t, cfg.currentPrice, cfg.iv, cfg.step, scanner);
-    if (group) groups.push(group);
-  }
-  groups.sort((a, b) => (b.setups[0]?.score ?? 0) - (a.setups[0]?.score ?? 0));
+/** Pins the sweep to a fixed epoch. Tests use it; the app leaves it alone. */
+export interface SkyVisionOptions {
+  epoch?: number;
+  universeSize?: number;
+}
 
-  const totalFound = groups.reduce((a, g) => a + g.found, 0);
-  const activeIv = Simulator.TICKERS[snapshot.ticker].iv;
+/**
+ * The feed is behind a getter on purpose. Compass rebuilds this object every
+ * 1.5s purely to read `.chain` — the contract chain is meant to breathe with
+ * price — and paying for a five-hundred-name sweep to reach a twelve-row
+ * ladder would put the scan on the render path. Touch `.groups` and you get
+ * the sweep; touch `.chain` and you get the chain.
+ */
+export function buildSkyVision(
+  snapshot: MarketSnapshot,
+  scanner: ScannerKey,
+  options: SkyVisionOptions = {}
+): SkyVisionData {
+  const epoch = options.epoch ?? scanEpoch();
+  const size = options.universeSize ?? SCAN_UNIVERSE_SIZE;
+  const activeIv = Simulator.TICKERS[snapshot.ticker]?.iv ?? 0.2;
+  const feed = () => cachedFeed(scanner, snapshot.ticker, epoch, size);
 
   return {
     scanner,
-    groups,
-    totalFound,
-    shown: totalFound,
+    get groups() {
+      return feed().groups;
+    },
+    /** Everything the scanner's floor let through, across the whole field. */
+    get totalFound() {
+      return feed().totalFound;
+    },
+    /** What the caps let onto the screen. */
+    get shown() {
+      return feed().shown;
+    },
     chain: buildChain(snapshot, activeIv),
-    impact: buildImpact(snapshot),
+    impact: buildImpact(snapshot, PROFILES[scanner].expiry),
   };
 }

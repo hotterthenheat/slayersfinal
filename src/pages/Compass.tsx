@@ -1,7 +1,7 @@
-﻿import { useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Filter, AlertTriangle } from 'lucide-react';
+import { Filter } from 'lucide-react';
 import { useMarketData } from '../context/MarketDataContext';
 import type { MarketSnapshot } from '../types/market';
 import Simulator from '../core/simulator';
@@ -9,31 +9,22 @@ import { buildSkyVision, makeSetup } from '../data/skyvision';
 import { SCANNERS, type ScannerKey, type Setup } from '../types/skyvision';
 import PageHeader from '../components/ui/PageHeader';
 import Panel from '../components/ui/Panel';
-import SignalBadge from '../components/ui/SignalBadge';
-import DataTable, { type Column } from '../components/ui/DataTable';
-import SetupsFeed from '../components/skyvision/SetupsFeed';
 import ContractChain, { type ChainSelection } from '../components/skyvision/ContractChain';
 import SignalMonitor from '../components/skyvision/SignalMonitor';
-import SamplePreview from '../components/skyvision/SamplePreview';
 import ImpactLeaderboard from '../components/skyvision/ImpactLeaderboard';
 import ContractWeigher from '../components/compass/ContractWeigher';
 import LottoBoard from '../components/compass/LottoBoard';
+import SetupScanBoard, { type ScanLayout } from '../components/compass/SetupScanBoard';
+import SetupCompare from '../components/compass/SetupCompare';
+import { expiryRangeLabel } from '../components/compass/setupHorizon';
 import type { Horizon } from '../core/contractScore';
 import SegmentedControl from '../components/ui/SegmentedControl';
-import { StateBadge } from '../components/skyvision/StateBadge';
-import { setupState, STATE_META } from '../components/skyvision/setupState';
 import { SkeletonRows } from '../components/ui/Skeleton';
 import { DUR, EASE, PILL } from '../lib/motion';
 
 type CompassMode = 'setups' | 'weigher' | 'lotto';
-type SetupsView = 'list' | 'table';
 
-const SETUPS_VIEW_OPTIONS = [
-  { value: 'list', label: 'List' },
-  { value: 'table', label: 'Table' },
-] as const;
-
-const SETUPS_SUBTITLE = 'Setups ranked by trend + dealer-flow conviction — a read, never an order';
+const SETUPS_SUBTITLE = 'Setups ranked by trend + dealer-flow conviction. A read, never an order.';
 
 const MODE_OPTIONS = [
   { value: 'setups', label: 'Setups' },
@@ -50,14 +41,43 @@ interface MonitorTarget {
 /** The scanner sweeps on its own cadence — the feed must not vibrate with every price tick. */
 const SCAN_INTERVAL_MS = 10_000;
 
+const SCANNER_KEYS = new Set<string>(SCANNERS.map(s => s.key));
+
+/**
+ * `?view=` is this whole surface in one param.
+ *
+ * /compass is a single route and the pane used to live in component state, so
+ * nothing here could be bookmarked, shared or reached with the back button. One
+ * param covers all of it: the three panes, and the six scanner presets, since a
+ * preset IS a view of the setups pane rather than a setting inside it.
+ *
+ * Backward compatible on purpose. No param means exactly what it meant before
+ * (Setups / Top Setups), an unreadable value falls back the same way, and the
+ * URL is only written once the user actually moves — so an existing /compass
+ * bookmark is left alone until it is used.
+ */
+interface ViewRead {
+  mode: CompassMode;
+  scanner?: ScannerKey;
+}
+
+function readView(raw: string | null): ViewRead | null {
+  if (!raw) return null;
+  if (raw === 'setups' || raw === 'weigher' || raw === 'lotto') return { mode: raw };
+  if (SCANNER_KEYS.has(raw)) return { mode: 'setups', scanner: raw as ScannerKey };
+  return null;
+}
+
 const Compass = () => {
   const { marketData, changeTicker } = useMarketData();
   const location = useLocation();
-  const [scanner, setScanner] = useState<ScannerKey>('top-setups');
-  const [mode, setMode] = useState<CompassMode>('setups');
+  const [params, setParams] = useSearchParams();
+  const landedOn = readView(params.get('view'));
+  const [scanner, setScanner] = useState<ScannerKey>(landedOn?.scanner ?? 'top-setups');
+  const [mode, setMode] = useState<CompassMode>(landedOn?.mode ?? 'setups');
   const [weigherHorizon, setWeigherHorizon] = useState<Horizon | undefined>(undefined);
 
-  // Phase 1 (browse): selectedSetup drives the SamplePreview card
+  // Phase 1 (browse): selectedSetup drives the compare card
   // Phase 2 (review): monitorTarget drives the SignalMonitor + ContractChain
   const [selectedSetup, setSelectedSetup] = useState<Setup | null>(null);
   const [monitorTarget, setMonitorTarget] = useState<MonitorTarget | null>(null);
@@ -67,13 +87,29 @@ const Compass = () => {
   const [tickerFilter, setTickerFilter] = useState<string | null>(null);
   const [showTickerDropdown, setShowTickerDropdown] = useState(false);
 
-  // Feed presentation: card list vs sortable table
-  const [setupsView, setSetupsView] = useState<SetupsView>('list');
+  // Scan presentation: card grid vs sortable table. Two densities of one list.
+  const [scanLayout, setScanLayout] = useState<ScanLayout>('cards');
 
   const inReviewMode = monitorTarget !== null;
 
+  const writeView = (value: string) => {
+    const next = new URLSearchParams(params);
+    next.set('view', value);
+    setParams(next, { replace: true });
+  };
+
+  // The URL is the source of truth once it carries a view, so the back button
+  // and a pasted link both land where they say they will.
+  useEffect(() => {
+    const view = readView(params.get('view'));
+    if (!view) return;
+    setMode(view.mode);
+    if (view.scanner) setScanner(view.scanner);
+  }, [params]);
+
   // Deep links: from Tracker (land in review mode on the tracked setup) or
-  // from Earnings/Stocks/News ("weigh this name's contracts").
+  // from Earnings/Stocks/News ("weigh this name's contracts"). Router state
+  // still wins over the param — /lotto redirects through it.
   useEffect(() => {
     const state = location.state as {
       monitor?: { ticker: string; strike: number; right: 'C' | 'P'; scanner: ScannerKey };
@@ -86,21 +122,25 @@ const Compass = () => {
       changeTicker(incoming.ticker);
       setMonitorTarget({ ticker: incoming.ticker, strike: incoming.strike, right: incoming.right });
       window.history.replaceState({}, ''); // consume so refresh doesn't re-enter
+      writeView(incoming.scanner);
     } else if (state?.weigh) {
       changeTicker(state.weigh.ticker);
       setMode('weigher');
       if (state.weigh.horizon) setWeigherHorizon(state.weigh.horizon);
       window.history.replaceState({}, '');
+      writeView('weigher');
     } else if (state?.compassMode) {
-      // Landed from the /lotto redirect (or a palette deep-link)
+      // Landed from the /lotto redirect (or a palette deep-link). Publishing the
+      // mode to the URL is what makes that landing bookmarkable in turn.
       setMode(state.compassMode);
       window.history.replaceState({}, '');
+      writeView(state.compassMode);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ---- two-tier cadence -----------------------------------------------------
-  // Live tier (every tick): prices, monitor, preview, contract chain.
+  // Live tier (every tick): prices, monitor, compare card, contract chain.
   // Scan tier (every SCAN_INTERVAL_MS): setups feed, counts, impact leaderboard.
   // The scanner "sweeps" on its own clock so the feed doesn't churn with noise.
   const [scanSnapshot, setScanSnapshot] = useState<MarketSnapshot | null>(null);
@@ -143,7 +183,7 @@ const Compass = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [monitorTarget, scanner, marketData]);
 
-  // Also rebuild the selected preview setup live so metrics stay current
+  // Also rebuild the selected setup live so the compare card stays current
   const liveSelectedSetup = useMemo(() => {
     if (!selectedSetup) return null;
     Simulator.ensureTicker(selectedSetup.ticker);
@@ -161,24 +201,40 @@ const Compass = () => {
     return tickerFilter ? data.groups.filter(g => g.ticker === tickerFilter) : data.groups;
   }, [data, tickerFilter]);
 
-  // Flat, one-row-per-setup projection for the sortable table view
-  const flatSetups = useMemo(() => filteredGroups.flatMap(g => g.setups), [filteredGroups]);
+  /* One flat, globally ranked list feeds both densities. The engine groups by
+     ticker, which meant the #3 setup on the strongest name rendered below the
+     #1 of a weaker one; "the best setups in the market" has to mean the best
+     regardless of whose ticker they belong to. */
+  const rankedSetups = useMemo(
+    () => filteredGroups.flatMap(g => g.setups).sort((a, b) => b.score - a.score),
+    [filteredGroups]
+  );
 
-  // Compute counts per scanner tab (scan tier — stable between sweeps)
-  const scannerCounts = useMemo(() => {
-    if (!scanSnapshot) return {} as Record<ScannerKey, number>;
-    const counts: Record<string, number> = {};
-    let allCount = 0;
+  /* Per-tab count AND the expiry the preset actually selects.
+     "Quick Scalp for what — 0DTE, 1DTE?" is a fair question and the tab strip
+     had no answer, because the horizon lived in the engine profile and no type
+     carried it out. Rather than keep a second copy of that table here, each
+     preset is asked directly: one throwaway build reports the expiry it stamps.
+     A screen that reads the engine cannot drift from it.
+
+     The counts read `shown` — what the pane will actually render. The All tab
+     used to print the sum of the other five and then render its own, smaller,
+     result set. Neither number touches `groups`, so five of the six sweeps stay
+     unmaterialised the way the engine intends. */
+  const scannerMeta = useMemo(() => {
+    const meta = {} as Record<ScannerKey, { count: number; expiry: string }>;
+    if (!scanSnapshot) return meta;
+    Simulator.ensureTicker(scanSnapshot.ticker);
+    const cfg = Simulator.TICKERS[scanSnapshot.ticker];
     for (const s of SCANNERS) {
-      if (s.key === 'all') continue;
-      const built = buildSkyVision(scanSnapshot, s.key);
-      const count = built.groups.reduce((acc, g) => acc + g.found, 0);
-      counts[s.key] = count;
-      allCount += count;
+      const built = s.key === scanner && data ? data : buildSkyVision(scanSnapshot, s.key);
+      meta[s.key] = {
+        count: built.shown,
+        expiry: makeSetup(scanSnapshot.ticker, cfg.currentPrice, Math.round(cfg.currentPrice), 'C', s.key, cfg.iv).expiry,
+      };
     }
-    counts['all'] = allCount;
-    return counts as Record<ScannerKey, number>;
-  }, [scanSnapshot]);
+    return meta;
+  }, [scanSnapshot, scanner, data]);
 
   // Collect unique tickers across the feed for the filter dropdown
   const feedTickers = useMemo(() => {
@@ -186,9 +242,14 @@ const Compass = () => {
     return data.groups.map(g => g.ticker);
   }, [data]);
 
-  const filteredShown = filteredGroups.reduce((a, g) => a + g.found, 0);
-
   const activeScanner = SCANNERS.find(s => s.key === scanner)!;
+  /* The open pane labels itself from the contracts on screen — free, since they
+     are already built — and falls back to the preset's own stamp. If a preset
+     ever spans two expiries, the pane the user is looking at says so. */
+  const activeExpiry = useMemo(
+    () => expiryRangeLabel(rankedSetups.map(s => s.expiry)) || scannerMeta[scanner]?.expiry || '',
+    [rankedSetups, scannerMeta, scanner]
+  );
 
   const handleScanner = (next: ScannerKey) => {
     setScanner(next);
@@ -196,96 +257,33 @@ const Compass = () => {
     setSelectedSetup(null);
     setChainSel(null);
     setTickerFilter(null);
+    writeView(next);
   };
 
-  // Sortable table columns — every value read straight off the setup the
-  // engine already built (state is a relabel of verdict + take-profit ladder).
-  const setupColumns: Column<Setup>[] = useMemo(
-    () => [
-      {
-        key: 'contract',
-        header: 'Contract',
-        sortValue: s => s.contract,
-        render: s => (
-          <span className="inline-flex items-center gap-2">
-            <span className={`inline-block w-1.5 h-1.5 rounded-full ${s.right === 'C' ? 'bg-bull' : 'bg-bear'}`} />
-            <span className="text-textPrimary font-semibold">{s.contract}</span>
-          </span>
-        ),
-      },
-      {
-        key: 'state',
-        header: 'State',
-        sortValue: s => STATE_META[setupState(s)].rank,
-        render: s => <StateBadge state={setupState(s)} />,
-      },
-      {
-        key: 'score',
-        header: 'Score',
-        align: 'right',
-        sortValue: s => s.score,
-        render: s => <span className="text-textPrimary font-semibold">{s.score}</span>,
-      },
-      {
-        key: 'move',
-        header: '1σ Move',
-        align: 'right',
-        sortValue: s => s.expectedMovePct,
-        render: s => <span className="text-textPrimary">±{s.expectedMovePct}%</span>,
-      },
-      {
-        key: 'health',
-        header: 'Health',
-        align: 'right',
-        sortValue: s => s.health,
-        render: s => (
-          <span className="text-textSecondary">
-            {s.health}<span className="text-textMuted">/100</span>
-          </span>
-        ),
-      },
-      {
-        key: 'conf',
-        header: 'Conf',
-        align: 'right',
-        sortValue: s => s.confidence,
-        render: s => <span className="text-textSecondary">{s.confidence}%</span>,
-      },
-      {
-        key: 'evidence',
-        header: 'Evidence',
-        sortValue: s => s.whyChips.length,
-        render: s => (
-          <span className="inline-flex flex-wrap items-center gap-1">
-            {s.whyChips.slice(0, 2).map(c => (
-              <SignalBadge key={c} tone="bull">
-                {c}
-              </SignalBadge>
-            ))}
-            {s.whyChips.length > 2 && <span className="text-textMuted text-label">+{s.whyChips.length - 2}</span>}
-          </span>
-        ),
-      },
-      {
-        key: 'contradiction',
-        header: 'Contradiction',
-        sortValue: s => s.invalidationPrice,
-        render: s => (
-          <span className="inline-flex items-center gap-1.5 text-warn" title={s.invalidationReason}>
-            <AlertTriangle className="w-3 h-3 shrink-0" />
-            {s.right === 'C' ? 'below' : 'above'} ${s.invalidationPrice.toFixed(2)}
-          </span>
-        ),
-      },
-    ],
-    []
+  const handleMode = (next: CompassMode) => {
+    setMode(next);
+    // Setups publishes its preset, so a shared link opens the pane the sender saw.
+    writeView(next === 'setups' ? scanner : next);
+  };
+
+  /* Phase 1 → Phase 2: enter full review.
+     Stable identities so the memoised scan board sits out the 1.5s price tick.
+     The board can be holding 240 rows; reconciling them to redraw a price that
+     is not in any of them is work nobody asked for. */
+  const handleReviewSetup = useCallback(
+    (setup: Setup) => {
+      /* Follow the contract's underlying. The chain beside the monitor is built
+         from the ACTIVE ticker's snapshot, so studying a setup on a name the
+         desk was not pointed at used to put SPY's ladder next to it. Harmless
+         when the scan was four names; a straight lie now the field is five
+         hundred. The Tracker deep-link has always switched the ticker on the
+         way in — this is the in-page path doing the same thing. */
+      changeTicker(setup.ticker);
+      setMonitorTarget({ ticker: setup.ticker, strike: setup.strike, right: setup.right });
+      setChainSel(null);
+    },
+    [changeTicker]
   );
-
-  // Phase 1 → Phase 2: enter full review
-  const handleReviewSetup = (setup: Setup) => {
-    setMonitorTarget({ ticker: setup.ticker, strike: setup.strike, right: setup.right });
-    setChainSel(null);
-  };
 
   // Phase 2 → Phase 1: exit review, go back to browse
   const handleBackToBrowse = () => {
@@ -298,17 +296,17 @@ const Compass = () => {
     setMonitorTarget({ ticker: sel.ticker, strike: sel.strike, right: sel.right });
   };
 
-  // When user clicks a setup in the feed, show it in SamplePreview
-  const handleSelectSetup = (setup: Setup) => {
+  // When user clicks a setup in the scan, show it in the compare card
+  const handleSelectSetup = useCallback((setup: Setup) => {
     setSelectedSetup(setup);
-  };
+  }, []);
 
   const modeSwitch = (
     <SegmentedControl
       ariaLabel="Compass mode"
       options={MODE_OPTIONS}
       value={mode}
-      onChange={v => setMode(v as CompassMode)}
+      onChange={v => handleMode(v as CompassMode)}
     />
   );
 
@@ -321,12 +319,12 @@ const Compass = () => {
     weigher: {
       crumb: 'Weigher',
       title: 'Contract Weigher',
-      subtitle: 'Search any contract you have — weighed on the same scale as the top setups, with a better-R/R suggestion',
+      subtitle: 'Search any contract you have. Weighed on the same scale as the top setups, with a better-R/R suggestion.',
     },
     lotto: {
       crumb: 'Lotto',
       title: 'Lotto · 0DTE Desk',
-      subtitle: 'Same-day speculation — 0DTE contracts and the closing-auction (MOC) engine. High variance by design.',
+      subtitle: 'Same-day speculation. 0DTE contracts and the closing-auction (MOC) engine. High variance by design.',
     },
   }[mode];
 
@@ -358,7 +356,7 @@ const Compass = () => {
           ? `Monitoring ${monitorTarget.ticker} ${monitorTarget.strike}${monitorTarget.right}`
           : 'Signal Monitor'
       }
-      subtitle="Watching one setup as it moves — the card that graded it now tracks whether the structure under it holds"
+      subtitle="Watching one setup as it moves. The card that graded it now tracks whether the structure under it holds."
       actions={modeSwitch}
     />
   );
@@ -379,8 +377,8 @@ const Compass = () => {
     );
   }
 
-  // Auto-select the first setup if nothing is selected yet
-  const effectiveSelected = liveSelectedSetup ?? (filteredGroups[0]?.setups[0] ?? null);
+  // Auto-select the strongest setup so the compare card always has a subject
+  const effectiveSelected = liveSelectedSetup ?? rankedSetups[0] ?? null;
 
   return (
     <>
@@ -393,15 +391,18 @@ const Compass = () => {
       ) : (
         <>
 
-      {/* Scanner tabs with counts */}
+      {/* Scanner tabs — each one states the expiry it selects, because "Quick
+          Scalp" is a style and a trader needs the horizon. */}
       <div className="flex items-center gap-1 flex-wrap">
         {SCANNERS.map(s => {
           const isActive = scanner === s.key;
-          const count = scannerCounts[s.key] ?? 0;
+          const meta = scannerMeta[s.key];
           return (
             <button
               key={s.key}
               onClick={() => handleScanner(s.key)}
+              aria-pressed={isActive}
+              title={s.blurb}
               className={`relative inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md font-mono text-label uppercase tracking-wider transition-colors ${
                 isActive
                   ? 'text-ink font-semibold'
@@ -417,81 +418,86 @@ const Compass = () => {
               )}
               <span className="relative z-10">{s.label}</span>
               <span className={`relative z-10 font-mono text-micro tnum ${isActive ? 'text-ink/70' : 'text-textMuted'}`}>
-                {count}
+                {meta?.expiry ? `${meta.expiry} · ` : ''}
+                {meta?.count ?? 0}
               </span>
             </button>
           );
         })}
       </div>
 
-      {/* Controls (browse mode only) — one row: what this scan is, how much it
-          found, and the two controls that act on it.
-          This used to be two stacked rows, which put a third full-width control
-          strip under the mode switch and the scanner tabs. Three same-weight
-          strips in the top 260px read as three levels of tabs; the view toggle
-          belongs beside the count it re-renders, not on a rail of its own. */}
+      {/* Controls (browse mode only) — what this scan is, how much it found, and
+          the one filter that acts on it. The Cards/Table switch used to sit out
+          here too, three columns away from the panel it re-renders; it now lives
+          in that panel's own header. */}
       {!inReviewMode && (
         <div className="flex items-center gap-x-3 gap-y-2 flex-wrap">
-          <span className="font-mono text-label text-textMuted uppercase tracking-wider">{activeScanner.blurb}</span>
-            <span className="ml-auto font-mono text-label text-textMuted uppercase tracking-widest tnum">
-              Showing {filteredShown} of {data.totalFound} setups · scan {lastScanAt} · 10s
-            </span>
-            <span className="inline-flex items-center gap-2">
-              <SegmentedControl
-                ariaLabel="Setups view"
-                options={SETUPS_VIEW_OPTIONS}
-                value={setupsView}
-                onChange={v => setSetupsView(v as SetupsView)}
-              />
-              <div className="relative">
+          <span className="font-mono text-label text-textMuted uppercase tracking-wider">
+            {activeExpiry ? `${activeExpiry} · ` : ''}
+            {activeScanner.blurb}
+          </span>
+          <span className="ml-auto font-mono text-label text-textMuted uppercase tracking-widest tnum">
+            Showing {rankedSetups.length} of {data.totalFound} setups · scan {lastScanAt} · 10s
+          </span>
+          <div className="relative">
+            <button
+              onClick={() => setShowTickerDropdown(prev => !prev)}
+              aria-label="Filter setups by ticker"
+              aria-expanded={showTickerDropdown}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border font-mono text-label uppercase tracking-wider transition-colors ${
+                tickerFilter
+                  ? 'border-select/40 bg-select/[0.06] text-select'
+                  : 'border-borderSubtle bg-white/[0.02] text-textMuted hover:text-textSecondary'
+              }`}
+            >
+              <Filter className="w-3 h-3" />
+              {tickerFilter ?? 'All Tickers'}
+            </button>
+            {showTickerDropdown && (
+              /* Scrolls: the scan spans up to forty names now, so this list is
+                 no longer four items long. */
+              <div className="absolute right-0 top-full mt-1 z-20 min-w-[140px] max-h-72 overflow-y-auto border border-borderSubtle bg-panel rounded-md shadow-overlay animate-slide-in">
                 <button
-                  onClick={() => setShowTickerDropdown(prev => !prev)}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border font-mono text-label uppercase tracking-wider transition-colors ${
-                    tickerFilter
-                      ? 'border-select/40 bg-select/[0.06] text-select'
-                      : 'border-borderSubtle bg-white/[0.02] text-textMuted hover:text-textSecondary'
+                  onClick={() => { setTickerFilter(null); setShowTickerDropdown(false); }}
+                  className={`w-full text-left px-3 py-2 font-mono text-label transition-colors ${
+                    !tickerFilter ? 'text-select bg-select/[0.06]' : 'text-textSecondary hover:bg-rowHover'
                   }`}
                 >
-                  <Filter className="w-3 h-3" />
-                  {tickerFilter ?? 'All Tickers'}
+                  All Tickers
                 </button>
-                {showTickerDropdown && (
-                  <div className="absolute right-0 top-full mt-1 z-20 min-w-[140px] border border-borderSubtle bg-panel rounded-md shadow-overlay overflow-hidden animate-slide-in">
-                    <button
-                      onClick={() => { setTickerFilter(null); setShowTickerDropdown(false); }}
-                      className={`w-full text-left px-3 py-2 font-mono text-label transition-colors ${
-                        !tickerFilter ? 'text-select bg-select/[0.06]' : 'text-textSecondary hover:bg-rowHover'
-                      }`}
-                    >
-                      All Tickers
-                    </button>
-                    {feedTickers.map(t => (
-                      <button
-                        key={t}
-                        onClick={() => { setTickerFilter(t); setShowTickerDropdown(false); }}
-                        className={`w-full text-left px-3 py-2 font-mono text-label transition-colors ${
-                          tickerFilter === t ? 'text-select bg-select/[0.06]' : 'text-textSecondary hover:bg-rowHover'
-                        }`}
-                      >
-                        {t}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                {feedTickers.map(t => (
+                  <button
+                    key={t}
+                    onClick={() => { setTickerFilter(t); setShowTickerDropdown(false); }}
+                    className={`w-full text-left px-3 py-2 font-mono text-label transition-colors ${
+                      tickerFilter === t ? 'text-select bg-select/[0.06]' : 'text-textSecondary hover:bg-rowHover'
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
               </div>
-            </span>
+            )}
+          </div>
         </div>
       )}
 
       {/* Scanner blurb (review mode) */}
       {inReviewMode && (
         <div className="flex items-center gap-3 flex-wrap">
-          <span className="font-mono text-label text-textMuted uppercase tracking-wider">{activeScanner.blurb}</span>
+          <span className="font-mono text-label text-textMuted uppercase tracking-wider">
+            {activeExpiry ? `${activeExpiry} · ` : ''}
+            {activeScanner.blurb}
+          </span>
         </div>
       )}
 
-      {/* Feed / monitor + preview / chain */}
-      <div className={`grid grid-cols-1 xl:grid-cols-12 gap-4 ${inReviewMode ? 'items-stretch' : 'items-start'}`}>
+      {/* Scan / monitor + compare / chain.
+          items-start in both modes: review mode used to stretch the row and then
+          hand the right column an only-absolute child, which collapsed the
+          chain to a zero-height box at xl and left a dead panel beside the
+          monitor. */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
         {/* LEFT COLUMN */}
         <div className="xl:col-span-7 min-w-0">
           <AnimatePresence mode="wait" initial={false}>
@@ -505,32 +511,18 @@ const Compass = () => {
               {inReviewMode && monitoredSetup ? (
                 <SignalMonitor setup={monitoredSetup} onBack={handleBackToBrowse} />
               ) : (
-                <div className="flex flex-col gap-4">
-                  {setupsView === 'table' ? (
-                    <Panel flush title="Setups" subtitle={`${filteredShown} shown`}>
-                      <DataTable
-                        columns={setupColumns}
-                        rows={flatSetups}
-                        rowKey={s => s.id}
-                        onRowClick={handleSelectSetup}
-                        selectedKey={effectiveSelected?.id ?? null}
-                        initialSort={{ key: 'state', dir: 'desc' }}
-                        maxHeight="640px"
-                        emptyText="No setups meet this scanner's threshold right now"
-                      />
-                    </Panel>
-                  ) : (
-                    <SetupsFeed
-                      groups={filteredGroups}
-                      selectedSetupId={effectiveSelected?.id ?? null}
-                      onSelectSetup={handleSelectSetup}
-                      onOpenAnalysis={setup => handleReviewSetup(setup)}
-                    />
-                  )}
-                  {/* Lives in the feed column so short (filtered) feeds never
-                      leave a void against the taller preview card */}
-                  <ImpactLeaderboard rows={data.impact} />
-                </div>
+                <SetupScanBoard
+                  setups={rankedSetups}
+                  totalFound={data.totalFound}
+                  scannerLabel={activeScanner.label}
+                  expiryLabel={activeExpiry}
+                  layout={scanLayout}
+                  onLayoutChange={setScanLayout}
+                  selectedId={effectiveSelected?.id ?? null}
+                  onSelect={handleSelectSetup}
+                  onStudy={handleReviewSetup}
+                  resetKey={`${scanner}|${tickerFilter ?? 'all'}`}
+                />
               )}
             </motion.div>
           </AnimatePresence>
@@ -540,29 +532,27 @@ const Compass = () => {
         <div className="xl:col-span-5 min-w-0 flex flex-col xl:sticky xl:top-4 xl:self-start">
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
-              key={inReviewMode ? 'chain' : 'preview'}
+              key={inReviewMode ? 'chain' : 'compare'}
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -4 }}
               transition={{ duration: DUR.base, ease: EASE }}
-              className="flex-1 flex flex-col xl:relative"
+              className="flex-1 flex flex-col"
             >
               {inReviewMode && liveChain ? (
-                // Absolute inset on xl so the chain adopts the left column's height
-                // (scrolling internally) instead of stretching the row taller.
-                <div className="xl:absolute xl:inset-0 flex flex-col min-h-0">
-                  <ContractChain data={liveChain} selected={chainSel} onSelect={handleChainSelect} />
-                </div>
+                <ContractChain data={liveChain} selected={chainSel} onSelect={handleChainSelect} />
               ) : effectiveSelected ? (
-                <SamplePreview
+                <SetupCompare
                   setup={effectiveSelected}
+                  peers={rankedSetups}
                   scanner={scanner}
-                  onReviewSetup={() => handleReviewSetup(effectiveSelected)}
+                  onSelectPeer={handleSelectSetup}
+                  onStudy={() => handleReviewSetup(effectiveSelected)}
                 />
               ) : (
                 <Panel className="h-64" bodyClassName="flex items-center justify-center">
                   <span className="font-mono text-label text-textMuted uppercase tracking-widest">
-                    Select a setup to preview
+                    Select a setup to compare
                   </span>
                 </Panel>
               )}
@@ -571,8 +561,11 @@ const Compass = () => {
         </div>
       </div>
 
-      {/* Largest impact leaderboard — full width in review mode only */}
-      {inReviewMode && <ImpactLeaderboard rows={data.impact} />}
+      {/* Largest impact contracts — one home, full width, under both modes.
+          It used to be tucked into the feed column as ballast against a short
+          scan, which is how a leaderboard ends up reading as padding under the
+          setups rather than as the desk-level context it is. */}
+      <ImpactLeaderboard rows={data.impact} />
         </>
       )}
     </>
