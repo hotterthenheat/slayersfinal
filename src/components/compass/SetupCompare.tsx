@@ -141,10 +141,17 @@ const SetupCompare = ({ setup, peers, scanner, onSelectPeer, onStudy }: SetupCom
           </span>
         </div>
 
-        {/* What it costs and what it pays. */}
+        {/* What it costs and what it pays.
+
+            There is no "Live mid" here any more. `Setup.liveMid` is
+            `mid * (0.9 + rng() * 0.2)` — one seeded draw, fixed per contract, so
+            it never moves and was never a second quote; printing it beside the
+            real mid put a made-up price where a trader reads the market. The
+            bid/ask that replaces it is the book this panel's own spread figure
+            is computed from, so the three numbers now reconcile. */}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           <Stat label="Mid" value={`$${setup.mid.toFixed(2)}`} />
-          <Stat label="Live mid" value={`$${setup.liveMid.toFixed(2)}`} />
+          <Stat label="Bid / Ask" value={`$${setup.bid.toFixed(2)} / $${setup.ask.toFixed(2)}`} />
           <Stat label="Spread" value={`${spreadPct.toFixed(1)}%`} sub={`${setup.liquidityLabel} book`} />
           <Stat label="Cost / contract" value={`$${(setup.mid * CONTRACT_MULTIPLIER).toFixed(0)}`} />
           <Stat label="1σ move" value={`±${setup.expectedMovePct}%`} />

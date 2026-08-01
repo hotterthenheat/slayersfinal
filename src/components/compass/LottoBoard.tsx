@@ -13,7 +13,6 @@ import type { MocRead } from '../../types/fracture';
 import type { MarketSnapshot } from '../../types/market';
 import { DUR, EASE, PILL } from '../../lib/motion';
 import Panel from '../ui/Panel';
-import HoverReadout from '../ui/HoverReadout';
 import EmptyState from '../ui/EmptyState';
 import StatCard from '../ui/StatCard';
 import MetricGrid from '../ui/MetricGrid';
@@ -243,72 +242,43 @@ const ScoreGauge = ({ score }: { score: number }) => {
   );
 };
 
-/* ---- imbalance-growth timeline: the 3:50 → 3:58 publications ---- */
-const GrowthTimeline = ({ moc }: { moc: MocRead }) => {
-  const pubs = ['3:50', '3:52', '3:54', '3:56', '3:58'];
-  const growing = moc.growthZ >= 0;
-  const finalZ = moc.normalizedZ;
-  const maxAbs = Math.max(0.3, Math.abs(finalZ) * 1.15);
-  const series = pubs.map((t, i) => {
-    const frac = (i + 1) / pubs.length;
-    const shape = growing ? Math.pow(frac, 1.5) : 1.15 - 0.35 * frac;
-    return { t, z: finalZ * shape };
-  });
-  const side = finalZ >= 0 ? 'bull' : 'bear';
-  const [hover, setHover] = useState<{ t: string; z: number; dz: number | null; x: number; y: number } | null>(null);
+/* ---- imbalance growth: the one signed growth term the model publishes ---- */
+/**
+ * This used to be a five-bar timeline stamped 3:50 / 3:52 / 3:54 / 3:56 / 3:58,
+ * with each bar synthesised as `normalizedZ * shape` off a power curve. buildMoc
+ * publishes a single `growthZ` for the whole window and no per-print history at
+ * all, so those timestamps and that curve were invented to look like auction
+ * evidence under a panel titled exactly that. One term exists; one term is shown.
+ */
+const GrowthRead = ({ moc }: { moc: MocRead }) => {
+  // The imbalance is BUILDING only when growth runs the same way as the
+  // imbalance itself. A positive growth term against a SELL imbalance is that
+  // imbalance shrinking, which the old `growthZ >= 0` test called building and
+  // then coloured with the imbalance's own side. buildMoc's own CONTINUATION
+  // test uses this product, so the board and the engine now agree on the word.
+  const building = moc.growthZ * moc.normalizedZ > 0;
+  const side: Tone = moc.normalizedZ >= 0 ? 'bull' : 'bear';
+  // growthZ is a gaussian scaled to 0.9, so ±2σ is the practical rail. The bar
+  // pins there rather than rescaling its own axis under the reader.
+  const fill = Math.min(100, (Math.abs(moc.growthZ) / 2) * 100);
+  const barClass = building ? (side === 'bull' ? 'bg-bull/70' : 'bg-bear/70') : 'bg-white/25';
+  const numClass = building ? (side === 'bull' ? 'text-bull' : 'text-bear') : 'text-textSecondary';
   return (
     <div>
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between gap-2 mb-2">
         <span className="font-mono text-micro uppercase tracking-widest text-textMuted">Imbalance growth</span>
-        <SignalBadge tone={growing ? (side as Tone) : 'neutral'}>{growing ? 'building into cross' : 'fading pre-cross'}</SignalBadge>
+        <SignalBadge tone={building ? side : 'neutral'}>{building ? 'building into the cross' : 'fading pre-cross'}</SignalBadge>
       </div>
-      <div className="flex items-end gap-1.5 h-16">
-        {series.map((pt, i) => {
-          const h = Math.max(6, (Math.abs(pt.z) / maxAbs) * 100);
-          const dz = i === 0 ? null : pt.z - series[i - 1].z;
-          return (
-            <div
-              key={pt.t}
-              onMouseEnter={e => setHover({ t: pt.t, z: pt.z, dz, x: e.clientX, y: e.clientY })}
-              onMouseMove={e => setHover({ t: pt.t, z: pt.z, dz, x: e.clientX, y: e.clientY })}
-              onMouseLeave={() => setHover(prev => (prev && prev.t === pt.t ? null : prev))}
-              className="flex-1 h-full flex flex-col justify-end cursor-crosshair rounded-sm hover:bg-rowHover"
-            >
-              <span className={`w-full rounded-sm ${pt.z >= 0 ? 'bg-bull/70' : 'bg-bear/70'}`} style={{ height: `${h}%` }} />
-            </div>
-          );
-        })}
+      <div className="flex items-baseline gap-2">
+        <span className={`font-mono text-data font-bold tnum ${numClass}`}>{signed(moc.growthZ, 2)}σ</span>
+        <span className="font-mono text-micro text-textMuted">over the window&apos;s last updates</span>
       </div>
-      <div className="flex gap-1.5 mt-1">
-        {series.map(pt => (
-          <span key={pt.t} className="flex-1 text-center font-mono text-micro text-textMuted">
-            {pt.t}
-          </span>
-        ))}
+      <div className="mt-2 relative h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+        <span className={`absolute inset-y-0 left-0 rounded-full ${barClass}`} style={{ width: `${fill.toFixed(1)}%` }} aria-hidden />
       </div>
-      {hover && (
-        <HoverReadout x={hover.x} y={hover.y}>
-          <div className="flex items-baseline gap-2">
-            <span className="font-mono text-caption font-bold text-textPrimary tnum">{hover.t}</span>
-            <span className="font-mono text-micro uppercase tracking-wider text-textMuted">publication</span>
-          </div>
-          <div className={`mt-0.5 font-mono text-data font-bold tnum ${hover.z >= 0 ? 'text-bull' : 'text-bear'}`}>
-            {hover.z >= 0 ? '+' : ''}
-            {hover.z.toFixed(2)}σ
-          </div>
-          <div className="mt-0.5 font-mono text-micro">
-            {hover.dz === null ? (
-              <span className="text-textSecondary">first print of the window</span>
-            ) : (
-              // building/fading is magnitude vs prior; hover.z − hover.dz is the prior print's σ
-              <span className={`tnum ${hover.dz >= 0 ? 'text-bull' : 'text-bear'}`}>
-                {Math.abs(hover.z) >= Math.abs(hover.z - hover.dz) ? 'building' : 'fading'} {hover.dz >= 0 ? '+' : ''}
-                {hover.dz.toFixed(2)}σ vs prior
-              </span>
-            )}
-          </div>
-        </HoverReadout>
-      )}
+      <p className="mt-2 font-mono text-micro text-textMuted leading-relaxed">
+        Magnitude against a ±2σ rail. The model carries one growth term for the window, not a print-by-print history.
+      </p>
     </div>
   );
 };
@@ -370,6 +340,13 @@ const LottoRow = ({
   const graded = c.composite + adjust;
   const reach = auctionReach(c, moc);
   const onPin = c.strike === pin;
+  // Today's countdown only settles a same-session ticket, and only while the
+  // session is running. A 1DTE board (DISLOCATION REVERSAL) and a board read
+  // after the close both expire at the NEXT bell, so neither the theta line nor
+  // the breakeven sentence may point at today's. They used to disagree: the
+  // theta line already fell back to "next session", while the sentence beside it
+  // said "by the bell" on every row unconditionally.
+  const bellHours = c.dte === 0 ? hoursToBell : null;
 
   return (
     <motion.div
@@ -404,7 +381,8 @@ const LottoRow = ({
           )}
         </div>
         <div className="mt-1 font-mono text-label text-textMuted leading-relaxed">
-          Needs {Math.abs(c.breakevenMovePct).toFixed(2)}% by the bell. The auction is displacing{' '}
+          Needs {Math.abs(c.breakevenMovePct).toFixed(2)}% {bellHours === null ? 'by the next bell' : 'by the bell'}. The auction
+          is displacing{' '}
           {Math.abs(moc.displacementZ).toFixed(2)}σ, worth {reach.movePct.toFixed(2)}% on this strike.
           {onPin ? ` Dealers are heaviest on ${c.strike}, so it has to break its own pin.` : ''}
         </div>
@@ -417,7 +395,7 @@ const LottoRow = ({
         <span className="font-mono text-micro uppercase tracking-wider text-textMuted">{preserveGreek('θ/day')}</span>
         <span className="font-mono text-caption text-warn tnum">−{c.thetaPerDayPct.toFixed(0)}%</span>
         <span className="font-mono text-micro text-textMuted tnum">
-          {hoursToBell === null ? 'next session' : `${hoursToBell.toFixed(1)}h to bell`}
+          {bellHours === null ? 'next session' : `${bellHours.toFixed(1)}h to bell`}
         </span>
       </div>
       <div className="flex flex-col items-end shrink-0 w-14">
@@ -462,17 +440,18 @@ const LottoRow = ({
  * of the MOC read: the auction names a side, the board only lists that side, and
  * the other side lives in a labelled collapse instead of interleaved.
  */
-type LottoBoardProps =
-  // Compass is being rewired to hand both panes its 10s scan-tier snapshot in
-  // the same pass. Accepting either name means neither commit can land first and
-  // break the build; collapse to `scanSnapshot` once that wiring is in.
-  { scanSnapshot: MarketSnapshot; snapshot?: never } | { snapshot: MarketSnapshot; scanSnapshot?: never };
+interface LottoBoardProps {
+  snapshot: MarketSnapshot;
+}
 
-const LottoBoard = (props: LottoBoardProps) => {
-  const scanSnapshot = props.scanSnapshot ?? props.snapshot;
-  const activeTicker = scanSnapshot.ticker;
+const LottoBoard = ({ snapshot }: LottoBoardProps) => {
+  const activeTicker = snapshot.ticker;
 
-  const [acked, setAcked] = useState(false);
+  // The gate stores WHICH product was accepted, not merely that something was.
+  // It used to be a bare boolean under a paragraph hard-coded to "same-session",
+  // so a DISLOCATION REVERSAL board — next session, held through the overnight
+  // gap — unlocked on an acknowledgement of a risk it does not carry.
+  const [ackedDte, setAckedDte] = useState<0 | 1 | null>(null);
   const [picked, setPicked] = useState<string | null>(null);
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [warmed, setWarmed] = useState(0);
@@ -509,14 +488,16 @@ const LottoBoard = (props: LottoBoardProps) => {
 
   // Only names the simulator already holds are read: buildSnapshot would seed a
   // missing one as a side effect, which is the stall the warm-up exists to avoid.
+  // `snapshot` is a dependency rather than an input: the ladder reads every name
+  // from the simulator, and the prop is what tells it a new sweep has landed.
   const reads = useMemo(() => {
     void warmed;
-    void scanSnapshot;
+    void snapshot;
     return ladderNames
       .filter(n => Simulator.TICKERS[n])
       .map(n => readAuction(Simulator.buildSnapshot(n)))
       .sort((a, b) => Number(b.actionable) - Number(a.actionable) || b.strength - a.strength);
-  }, [ladderNames, warmed, scanSnapshot]);
+  }, [ladderNames, warmed, snapshot]);
 
   const pendingCount = ladderNames.length - reads.length;
 
@@ -531,12 +512,15 @@ const LottoBoard = (props: LottoBoardProps) => {
 
   const selectedTicker = picked ?? autoTicker;
   const selectedSnap = useMemo(() => {
-    void scanSnapshot;
+    void snapshot;
     return Simulator.buildSnapshot(selectedTicker);
-  }, [selectedTicker, scanSnapshot]);
+  }, [selectedTicker, snapshot]);
 
   const read = useMemo(() => readAuction(selectedSnap), [selectedSnap]);
   const moc = read.moc;
+  // Switching from a same-session name to a next-session one re-arms the gate:
+  // the paragraph the user accepted no longer describes the board behind it.
+  const acked = ackedDte === read.boardDte;
   const pin = useMemo(() => pinStrike(selectedSnap, 6), [selectedSnap]);
 
   const board = useMemo(
@@ -682,12 +666,14 @@ const LottoBoard = (props: LottoBoardProps) => {
         {!acked ? (
           <div className="px-4 py-8 flex flex-col items-center text-center gap-3">
             <ShieldAlert className="w-6 h-6 text-warn" aria-hidden />
-            <p className="text-caption text-textSecondary leading-relaxed max-w-[36ch]">
-              These are same-session lotto tickets. Most expire worthless. Only view the board if you accept that a full loss of
-              the premium is the expected outcome.
+            <p className="text-caption text-textSecondary leading-relaxed max-w-[38ch]">
+              {read.boardDte === 0
+                ? 'These are same-session lotto tickets, held into today’s bell.'
+                : 'These are next-session lotto tickets. This read argues for the reversion after the cross, so the ticket is carried through the close and the overnight gap.'}{' '}
+              Most expire worthless. Only view the board if you accept that a full loss of the premium is the expected outcome.
             </p>
             <button
-              onClick={() => setAcked(true)}
+              onClick={() => setAckedDte(read.boardDte)}
               className="mt-1 inline-flex items-center gap-2 px-3.5 py-2 rounded-md border border-warn/40 bg-warn/10 hover:bg-warn/15 font-mono text-label font-semibold uppercase tracking-wider text-warn transition-colors"
             >
               I accept a total loss, show the board
@@ -783,7 +769,7 @@ const LottoBoard = (props: LottoBoardProps) => {
           </div>
 
           <div className="border-t border-borderSubtle pt-3">
-            <GrowthTimeline moc={moc} />
+            <GrowthRead moc={moc} />
           </div>
 
           <p className="text-caption text-textSecondary leading-relaxed">{moc.note}</p>

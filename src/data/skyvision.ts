@@ -29,7 +29,6 @@ import type {
   SetupGroup,
   SkyVisionData,
   TakeProfit,
-  TakeProfitStatus,
   Verdict,
 } from '../types/skyvision';
 
@@ -87,9 +86,12 @@ interface ScannerProfile {
   72, and no contract scoring under 72 is ever going to be in the top 240 of
   9,000. That is not a floor problem and lowering one will not fix it: a scanner
   ranks opportunities, so its feed is the head of the distribution by
-  construction. EXIT reaches a screen through Tracker, which rebuilds a setup
-  the user already carries — which is the only place a "fading" read is
-  actionable anyway.
+  construction. Treat it as an invariant rather than a shortfall — scanRanking
+  .test.ts asserts BOTH halves of it, that no sweep ever emits an EXIT and that
+  makeSetup reaches EXIT on a contract that is merely evaluated rather than
+  ranked. Those are the surfaces a fading read belongs on: Tracker rebuilds a
+  setup the user already carries, and the Weigher grades whatever strike the
+  user points at.
 */
 const PROFILES: Record<ScannerKey, ScannerProfile> = {
   'top-setups': { expiry: '0DTE', swingMul: 0.38, scalpMul: 0.18, moveBias: 1.0, scoreFloor: 84 },
@@ -190,37 +192,61 @@ function actionFromHealth(health: number): ChainAction {
   greeks, prose and a take-profit ladder. Keeping the arithmetic here — rather
   than copied into a fast path — is what makes the two provably agree, and
   scanUniverse.test.ts asserts it on a grid.
+
+  It comes in two forms and the difference matters: `rankOf` is the continuous
+  quantity everything ORDERS by, `displayScore` is the 8-99 integer a screen
+  prints. Rounding is the last step and never an input to a comparison.
 */
 
 /** How hard a contract facing the tape is marked down. */
 const COUNTER_TREND_MULT = 0.72;
-/** Half-width of the per-contract jitter, in score points. */
-const JITTER_HALF = 4;
-/** Ceiling a counter-trend contract can reach — an exact bound, used to prune. */
-export const COUNTER_TREND_CEILING = 96 * COUNTER_TREND_MULT + JITTER_HALF;
+/** Window the score reads moneyness over: outside 3% of spot, proximity is 0. */
+const PROXIMITY_WINDOW = 0.03;
+/*
+  Half-width of the per-contract jitter, in score points. It is a tiebreaker
+  between names, NOT a ranking signal, and the size is what makes that true: one
+  rung of the strike ladder is worth 96*0.6*(RUNG_PCT/PROXIMITY_WINDOW) = 9.6
+  points, so a jitter spanning 3 can never lift a strike above the one nearer
+  the money. At the ±4 it used to carry it could, and did.
+*/
+const JITTER_HALF = 1.5;
+/**
+ * Ceiling a counter-trend contract's SCORE can reach — an exact bound on the
+ * rounded number the floors compare against, used to prune.
+ */
+export const COUNTER_TREND_CEILING = displayScore(96 * COUNTER_TREND_MULT + JITTER_HALF);
 
 /**
- * Near-the-money and aligned with the ticker's lean scores highest; far-OTM or
- * opposed contracts score low, so the verdict spans ENTER / WATCH / EXIT.
- * `jitter01` is the candidate's third RNG draw.
+ * The ranking quantity: near-the-money and aligned with the ticker's lean ranks
+ * highest, far-OTM or opposed ranks low. Continuous on purpose — see
+ * displayScore. `jitter01` is the candidate's third RNG draw.
  */
-function scoreOf(spot: number, strike: number, aligned: boolean, jitter01: number): number {
-  const proximity = 1 - Math.min(1, Math.abs(strike - spot) / (spot * 0.03));
-  return Math.round(
-    clamp(
-      96 * (0.4 + 0.6 * proximity) * (aligned ? 1 : COUNTER_TREND_MULT) + (jitter01 - 0.5) * (JITTER_HALF * 2),
-      8,
-      99
-    )
-  );
+function rankOf(spot: number, strike: number, aligned: boolean, jitter01: number): number {
+  const proximity = 1 - Math.min(1, Math.abs(strike - spot) / (spot * PROXIMITY_WINDOW));
+  return 96 * (0.4 + 0.6 * proximity) * (aligned ? 1 : COUNTER_TREND_MULT) + (jitter01 - 0.5) * (JITTER_HALF * 2);
 }
 
 /**
- * The score a full makeSetup() would produce, without building the setup.
- * Burns the same first three draws off the same seeded stream, so the number is
+ * The 8-99 integer a screen shows, and the number the floors are read against.
+ * It is far too coarse to ORDER by: above a floor of 84 there are sixteen of
+ * these to share between thousands of candidates, so sorting on it sorts a
+ * sixteen-way tie and hands the board to whatever breaks that tie. One
+ * definition, called once at the end of each path.
+ */
+function displayScore(rank: number): number {
+  return Math.round(clamp(rank, 8, 99));
+}
+
+function scoreOf(spot: number, strike: number, aligned: boolean, jitter01: number): number {
+  return displayScore(rankOf(spot, strike, aligned, jitter01));
+}
+
+/**
+ * The rank a full makeSetup() would produce, without building the setup. Burns
+ * the same first three draws off the same seeded stream, so the number is
  * identical rather than merely close.
  */
-export function prescreenScore(
+export function prescreenRank(
   ticker: string,
   spot: number,
   strike: number,
@@ -231,29 +257,45 @@ export function prescreenScore(
   const rng = mulberry(hash(`${ticker}-${strike}-${right}-${scanner}`));
   rng(); // live mid
   rng(); // health
-  return scoreOf(spot, strike, aligned, rng());
+  return rankOf(spot, strike, aligned, rng());
+}
+
+/** The same prescreen, rounded to the score a setup would carry. */
+export function prescreenScore(
+  ticker: string,
+  spot: number,
+  strike: number,
+  right: OptionRight,
+  scanner: ScannerKey,
+  aligned: boolean
+): number {
+  return displayScore(prescreenRank(ticker, spot, strike, right, scanner, aligned));
 }
 
 // ---- setup builder --------------------------------------------------------
-function buildTakeProfits(mid: number, profile: ScannerProfile, rng: () => number, verdict: Verdict): TakeProfit[] {
+/*
+  The ladder a scanned setup carries is a PLAN, and every rung on it is PENDING.
+
+  Nobody entered anything. The scan quotes `mid` off the current spot, so the
+  contract is being met at its reference price this instant — there is no fill,
+  no position and no elapsed path, and therefore nothing that can have been
+  reached. What used to stand here was `progress = rng()`, a hidden draw that
+  printed "TP1 · HIT" in green on a third of the board and could not be checked
+  against anything on the screen.
+
+  A rung IS reachable, on the surface that can evidence it: SignalMonitor throws
+  this status away and takes contractTrack's, which reprices the contract on the
+  underlying's real bars and asks whether the path ever touched the rung. That
+  is the only derivation entitled to say HIT, and it stays the only one.
+*/
+function buildTakeProfits(mid: number, profile: ScannerProfile): TakeProfit[] {
   const ladders = [0.3, 0.8, 1.5, 2.5].map(p => p * (0.8 + profile.moveBias * 0.3));
-  const progress = rng();
-  // Progress only exists on active recommendations — a WATCH/EXIT setup was
-  // never entered, so nothing can be HIT or IN PROGRESS.
-  const active = verdict === 'ENTER';
-  return ladders.map((pct, i): TakeProfit => {
-    let status: TakeProfitStatus = 'PENDING';
-    if (active) {
-      if (progress > 0.66 && i === 0) status = 'HIT';
-      else if (i === 0 || (i === 1 && progress > 0.4)) status = 'IN PROGRESS';
-    }
-    return {
-      level: i + 1,
-      status,
-      expectedPct: Math.round(pct * 100),
-      target: Number((mid * (1 + pct)).toFixed(2)),
-    };
-  });
+  return ladders.map((pct, i): TakeProfit => ({
+    level: i + 1,
+    status: 'PENDING',
+    expectedPct: Math.round(pct * 100),
+    target: Number((mid * (1 + pct)).toFixed(2)),
+  }));
 }
 
 /**
@@ -361,7 +403,7 @@ export function makeSetup(
     confidence: Math.round(clamp((score - 55) * 2.1, 5, 98)),
     health,
     momentum,
-    takeProfits: buildTakeProfits(mid, profile, rng, verdict),
+    takeProfits: buildTakeProfits(mid, profile),
     liquidityLabel,
     liquiditySpread,
     invalidationPrice,
@@ -416,26 +458,78 @@ function liveSparkline(ticker: string, spot: number, points = 24): number[] {
   Nine strikes x two rights x the scan universe is the field; what the screen
   shows is the top of it.
 */
-const STRIKE_OFFSETS = [-4, -3, -2, -1, 0, 1, 2, 3, 4];
+const STRIKE_RUNGS = [-4, -3, -2, -1, 0, 1, 2, 3, 4];
 const RIGHTS: OptionRight[] = ['C', 'P'];
 
+/**
+ * One rung of the ladder, as a fraction of spot. It has to be a PERCENTAGE
+ * because the score reads moneyness as one: proximity is measured over
+ * spot*0.03, so a ladder counted in strike steps is a different ladder on every
+ * name. The field spans $7.80 to $3,862 (data/universe.ts) on a $1 grid above
+ * $100 and $0.50 below, and with the old ±4 steps that meant a $600 name's nine
+ * strikes all landed inside 0.7% of spot — every one of them at the money by
+ * the score's reckoning, every one of them 96+, the whole board back at 99 —
+ * while a $40 name's second strike was already outside the window. The ladder,
+ * not the market, was deciding which names could compete.
+ */
+const RUNG_PCT = 0.005;
+
+/**
+ * The strike grid a name is swept on: nine rungs of ~0.5% of spot each, snapped
+ * to the name's own step and never finer than it, so two rungs cannot collide
+ * on one strike. Where the grid is coarser than the rung the ladder is grid
+ * limited, and that is the market and not the model: 3% of a $7.80 name is 23
+ * cents, less than half a strike step, so it genuinely has one strike inside
+ * the window and its at-the-money contract genuinely sits further from the
+ * money than a $600 name's. The score marks it down for the grid it trades on,
+ * which is a real handicap and not an arithmetic one.
+ */
+export function strikeLadder(spot: number, step: number): number[] {
+  const rung = Math.max(1, Math.round((spot * RUNG_PCT) / step));
+  const atm = Math.round(spot / step);
+  return STRIKE_RUNGS.map(k => (atm + k * rung) * step);
+}
+
 /** Candidates per name per sweep. */
-export const CANDIDATES_PER_NAME = STRIKE_OFFSETS.length * RIGHTS.length;
+export const CANDIDATES_PER_NAME = STRIKE_RUNGS.length * RIGHTS.length;
 
 /*
-  Display caps. The scan ranks thousands; these decide how much of that ranking
-  reaches the DOM. The table wants depth — hundreds of rows to sort — while the
-  card view renders a header, a sparkline and N cards per group, so the group
-  count is the expensive axis and the row count is not.
+  How much of the ranking reaches the DOM. ONE cap, on rows, because the board
+  is the global top-N and nothing else: there is no per-ticker quota and no
+  group quota, so a contract is on the screen if and only if nothing outside
+  beats it.
+
+  There used to be both (8 per ticker, 40 tickers). They recreated the exact
+  defect the note on buildFeed says was fixed — the honest top-240 spreads over
+  most of the field, so a quota of forty names admitted one name's fourth-best
+  contract while discarding better ones on the hundred-odd names it had no room
+  for. Measured on the shipped field: top-setups filled 103 of its 240-row cap,
+  and 312 contracts that outranked rows ON the board were never admitted.
+
+  Nothing replaces them, because nothing needs to. A name cannot own the board:
+  it has CANDIDATES_PER_NAME contracts in the entire field, so its ceiling is 18
+  of 240 rows and the arithmetic caps it, not a policy. Groups cost one
+  closed-form sparkline each and the card view is a flat ranked list, so the
+  group count was never the expensive axis it was described as.
+
+  How much depth a name gets is then arithmetic too, and worth knowing because
+  it is a consequence rather than a choice. A name's best contract is its
+  at-the-money one and its second is a full rung — 9.6 score points — behind, so
+  depth per name only exists while the field is narrower than the cap. Today it
+  is: 194 names for 240 rows, which lands at one to three contracts a name. Take
+  the field past the cap and the head of the ranking becomes one at-the-money
+  contract per name, which is what ranking on moneyness means rather than a
+  regression. Per-name depth is the contract chain's job, not the board's.
 */
 const DISPLAY_CAP = 240;
-const GROUP_CAP = 40;
-const PER_TICKER_CAP = 8;
 
 interface Candidate {
   name: ScanName;
   strike: number;
   right: OptionRight;
+  /** Ranking value — continuous, the number the sweep sorts on */
+  rank: number;
+  /** The 8-99 integer the setup will carry, and what the floor is read against */
   score: number;
   /** The scanner's read on the name — carried so stage two need not re-derive it */
   leanBullish: boolean;
@@ -453,11 +547,11 @@ interface Feed {
  * Rank the field, then build only what shows.
  *
  * Stage one prices nothing: it burns three RNG draws per candidate and keeps
- * the score. Stage two builds full Setups — greeks, prose, take-profit ladder —
- * for the few hundred that survive a single GLOBAL sort. The old code did the
- * opposite (build everything, then cap two per ticker before any cross-ticker
- * comparison), which is why the market's third-best setup lost its seat to a
- * weaker one on a different name.
+ * the rank. Stage two builds full Setups — greeks, prose, take-profit ladder —
+ * for the few hundred that survive a single GLOBAL sort, with no quota of any
+ * kind between the sort and the screen. The board IS the top of the ranking:
+ * every contract on it beats every contract off it, and scanRanking.test.ts
+ * re-derives the field independently to hold that line.
  */
 function buildFeed(scanner: ScannerKey, activeTicker: string, epoch: number, size: number): Feed {
   const floor = PROFILES[scanner].scoreFloor;
@@ -476,42 +570,51 @@ function buildFeed(scanner: ScannerKey, activeTicker: string, epoch: number, siz
   const survivors: Candidate[] = [];
   for (const name of names) {
     const bullish = scanLean(name, scanner);
+    const ladder = strikeLadder(name.spot, name.step);
     for (const right of RIGHTS) {
       const aligned = bullish ? right === 'C' : right === 'P';
       if (!aligned && skipCounterTrend) continue;
-      for (const k of STRIKE_OFFSETS) {
-        const strike = Math.round((name.spot + k * name.step) / name.step) * name.step;
-        const score = prescreenScore(name.ticker, name.spot, strike, right, scanner, aligned);
-        if (score >= floor) survivors.push({ name, strike, right, score, leanBullish: bullish });
+      for (const strike of ladder) {
+        const rank = prescreenRank(name.ticker, name.spot, strike, right, scanner, aligned);
+        // The floor is a bar on the number the user will see, so it is read
+        // against the rounded score; the ordering is not.
+        const score = displayScore(rank);
+        if (score >= floor) survivors.push({ name, strike, right, rank, score, leanBullish: bullish });
       }
     }
   }
 
-  // One global sort — the whole point. Ties break on ticker then strike so the
-  // order is a function of the field, not of iteration luck.
+  /*
+    One global sort — the whole point. It runs on `rank`, not `score`: the score
+    is an integer between the floor and 99, so it holds at most sixteen values
+    for the hundreds or thousands of candidates that clear a floor, and sorting
+    on it is sorting a sixteen-way tie. Whatever breaks that tie is what really
+    ranks the board, and the old tiebreak was the ticker name — measured, 96% of
+    adjacent rows came back in ascending alphabetical order.
+
+    The ticker is now out of the comparator entirely. Below rank it falls to
+    moneyness, then to the strike and the right, none of which is spelling; two
+    candidates that tie on all four keep the field's own order, which is seeded
+    (see core/scanUniverse.ts) rather than alphabetical.
+  */
   survivors.sort(
     (a, b) =>
-      b.score - a.score ||
-      (a.name.ticker < b.name.ticker ? -1 : a.name.ticker > b.name.ticker ? 1 : 0) ||
+      b.rank - a.rank ||
+      Math.abs(a.strike - a.name.spot) / a.name.spot - Math.abs(b.strike - b.name.spot) / b.name.spot ||
       a.strike - b.strike ||
       (a.right < b.right ? -1 : a.right > b.right ? 1 : 0)
   );
 
-  // Admit down the ranking. Per-ticker and group caps stop one name owning the
-  // board and keep the card view a list rather than a document.
+  // Admit straight down the ranking, and stop at the row cap. A ticker enters
+  // `admitted` the first time one of its contracts is admitted, so the Map's
+  // insertion order IS the ranking — strongest name first, no second sort.
+  const shown = Math.min(DISPLAY_CAP, survivors.length);
   const admitted = new Map<string, Candidate[]>();
-  let shown = 0;
-  for (const c of survivors) {
-    if (shown >= DISPLAY_CAP) break;
+  for (let i = 0; i < shown; i++) {
+    const c = survivors[i];
     const bucket = admitted.get(c.name.ticker);
-    if (!bucket) {
-      if (admitted.size >= GROUP_CAP) continue;
-      admitted.set(c.name.ticker, [c]);
-    } else {
-      if (bucket.length >= PER_TICKER_CAP) continue;
-      bucket.push(c);
-    }
-    shown++;
+    if (bucket) bucket.push(c);
+    else admitted.set(c.name.ticker, [c]);
   }
 
   // Setups are built on first read, not on admission. Five of the six builds a
@@ -541,9 +644,6 @@ function buildFeed(scanner: ScannerKey, activeTicker: string, epoch: number, siz
       },
     });
   }
-  const best = new Map(groups.map(g => [g.ticker, admitted.get(g.ticker)![0].score]));
-  groups.sort((a, b) => best.get(b.ticker)! - best.get(a.ticker)!);
-
   return { groups, totalFound: survivors.length, shown };
 }
 

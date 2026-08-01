@@ -4,9 +4,9 @@ import {
   SCAN_UNIVERSE_SIZE,
   buildScanUniverse,
   resetScanUniverse,
+  scanCoverage,
   scanEpoch,
   scanNameFor,
-  scanPoolSize,
   scanSparkline,
 } from './scanUniverse';
 import {
@@ -22,19 +22,43 @@ import { UNIVERSE, lookup } from '../data/universe';
 import { SCANNERS, type ScannerKey } from '../types/skyvision';
 
 /*
-  The scanner used to rank four tickers x four strikes on one side of the tape —
-  sixteen contracts, capped at two per name before anything was compared across
-  names, so "top setups" meant "the best two on each of four symbols". These
-  guard the widening: the field has to be big, it has to be REPRODUCIBLE (the
-  whole terminal is a seeded simulator), and widening it must not drag hundreds
-  of names into the simulator's 1.5s tick loop, which is what makes the wide
-  field affordable in the first place.
+  Two things have gone wrong with this field, and these guard both.
+
+  It started as four tickers x four strikes on one side of the tape — sixteen
+  contracts, capped at two per name before anything was compared across names,
+  so "top setups" meant "the best two on each of four symbols".
+
+  Widening it then overshot in the other direction: it topped up to 520 out of
+  the bundled NASDAQ listing, which carries {symbol, name} and nothing else. No
+  market cap, no listing status, no options flag — so the only screen available
+  was symbol shape plus a blacklist of name substrings, and 326 of the 520 came
+  back as names no other desk in the terminal could open. Delisted shells,
+  a SPAC, corporate notes quoted as equity, micro-cap thrifts, each priced off a
+  hash of its own symbol string.
+
+  So: the field must be REPRODUCIBLE (the whole terminal is a seeded simulator),
+  must stay off the simulator's 1.5s tick loop (what makes it affordable), and
+  every name in it must be one the rest of the terminal can answer a click on.
 */
 
 const EPOCH = 1_800_000_000;
 const snap = Simulator.buildSnapshot('SPY');
 
-describe('scan universe: size', () => {
+/** Symbols the old listing filter waved through, by category of wrongness. */
+const LISTING_JUNK = [
+  'AABA', // dissolved 2019
+  'SGYP', // bankrupt, delisted 2019
+  'SPEX', // delisted shell
+  'DTEA', // delisted
+  'KBLM', // SPAC, never a common-stock options book
+  'JSM', //  Navient baby bond, quoted like equity
+  'CTY', //  Qwest baby bond
+  'ENO', //  Entergy New Orleans baby bond
+  'OFED', // micro-cap thrift
+  'MGYR', // micro-cap thrift
+];
+
+describe('scan universe: composition', () => {
   it('the curated universe carries enough names to rank', () => {
     expect(UNIVERSE.length).toBeGreaterThanOrEqual(150);
   });
@@ -45,27 +69,55 @@ describe('scan universe: size', () => {
     expect(UNIVERSE.every(u => u.px > 0 && u.beta > 0)).toBe(true);
   });
 
-  it('the scannable pool reaches far past the curated tier', () => {
-    // The bundled NASDAQ listing minus funds, warrants and non-equity lines.
-    expect(scanPoolSize()).toBeGreaterThan(4000);
-    expect(scanPoolSize()).toBeGreaterThan(UNIVERSE.length * 20);
+  it('the field is exactly the names the terminal has a reference for', () => {
+    // Coverage IS the cap. There is no separate size constant to drift away
+    // from the set it is supposed to describe.
+    const backed = new Set([...Simulator.WATCHLIST, ...UNIVERSE.map(u => u.ticker)]);
+    expect(SCAN_UNIVERSE_SIZE).toBe(backed.size);
+    expect(buildScanUniverse(EPOCH).length).toBe(SCAN_UNIVERSE_SIZE);
   });
 
-  it('the shipped universe is hundreds of names, not a watchlist', () => {
-    const names = buildScanUniverse(EPOCH);
-    expect(names.length).toBe(SCAN_UNIVERSE_SIZE);
-    expect(names.length).toBeGreaterThan(Simulator.WATCHLIST.length * 100);
+  it('every ranked name is one another desk can open', () => {
+    for (const n of buildScanUniverse(EPOCH)) {
+      expect(n.coverage).not.toBe('listing');
+      // Modeled means the simulator holds it; covered means universe.ts does.
+      // Either way the price on the board traces a reference somebody set.
+      if (n.coverage === 'covered') expect(lookup(n.ticker)!.px).toBe(n.base);
+      else expect(Simulator.TICKERS[n.ticker].basePrice).toBe(n.base);
+    }
   });
 
-  it('the live watchlist and the curated universe are always in the field', () => {
+  it('the names the simulator models are always in, and flagged modeled', () => {
+    const byTicker = new Map(buildScanUniverse(EPOCH).map(n => [n.ticker, n]));
+    for (const t of Simulator.WATCHLIST) {
+      expect(byTicker.get(t)?.coverage).toBe('modeled');
+      expect(byTicker.get(t)?.live).toBe(true);
+    }
+    for (const u of UNIVERSE) expect(byTicker.has(u.ticker)).toBe(true);
+  });
+
+  it('the listing tail the old filter waved through is out of the field', () => {
     const names = new Set(buildScanUniverse(EPOCH).map(n => n.ticker));
-    for (const t of Simulator.WATCHLIST) expect(names.has(t)).toBe(true);
-    for (const u of UNIVERSE) expect(names.has(u.ticker)).toBe(true);
+    for (const junk of LISTING_JUNK) expect(names.has(junk)).toBe(false);
   });
 
-  it('a sweep generates thousands of candidate contracts', () => {
+  it('a name outside both tiers is still scannable, and says so', () => {
+    // Search reaches the whole listing and Compass injects the active ticker
+    // into the sweep, so this path stays open — it just cannot hide.
+    resetScanUniverse();
+    for (const junk of LISTING_JUNK) {
+      expect(scanCoverage(junk)).toBe('listing');
+      const n = scanNameFor(junk, EPOCH);
+      expect(n.coverage).toBe('listing');
+      expect(n.live).toBe(false);
+      expect(lookup(junk)).toBeUndefined();
+      expect(Number.isFinite(n.spot)).toBe(true);
+    }
+  });
+
+  it('a sweep still generates thousands of candidate contracts', () => {
     expect(CANDIDATES_PER_NAME).toBeGreaterThanOrEqual(18);
-    expect(SCAN_UNIVERSE_SIZE * CANDIDATES_PER_NAME).toBeGreaterThan(9000);
+    expect(SCAN_UNIVERSE_SIZE * CANDIDATES_PER_NAME).toBeGreaterThan(3000);
   });
 });
 
@@ -78,13 +130,23 @@ describe('scan universe: determinism', () => {
   });
 
   it('name order is a fixed sample, not iteration luck', () => {
-    const a = buildScanUniverse(EPOCH, 900).map(n => n.ticker);
+    const a = buildScanUniverse(EPOCH).map(n => n.ticker);
     resetScanUniverse();
-    const b = buildScanUniverse(EPOCH, 900).map(n => n.ticker);
+    const b = buildScanUniverse(EPOCH).map(n => n.ticker);
     expect(b).toEqual(a);
-    // A smaller universe is a prefix of a larger one — growing the cap adds
-    // names, it never reshuffles the ones already in.
-    expect(buildScanUniverse(EPOCH, 300).map(n => n.ticker)).toEqual(a.slice(0, 300));
+    // A smaller field is a prefix of the full one — truncating drops names, it
+    // never reshuffles the ones that stay.
+    expect(buildScanUniverse(EPOCH, 60).map(n => n.ticker)).toEqual(a.slice(0, 60));
+  });
+
+  it('field order is not the order sectors happen to be typed in universe.ts', () => {
+    // Ties in the global sort fall through to field order, so a sector-grouped
+    // field would resolve them toward whichever sector was listed first.
+    const order = buildScanUniverse(EPOCH).map(n => n.ticker);
+    const curated = order.filter(t => !Simulator.WATCHLIST.includes(t));
+    const sectors = curated.map(t => lookup(t)!.sector);
+    const firstTen = new Set(sectors.slice(0, 10));
+    expect(firstTen.size).toBeGreaterThan(3);
   });
 
   it('prices move with the epoch and land back on the same number', () => {
@@ -131,15 +193,23 @@ describe('scan universe: price coherence with the live desks', () => {
     expect(scanNameFor('LLY', EPOCH).base).toBe(lookup('LLY')!.px);
   });
 
+  it('the full sweep and a single lookup agree, name for name', () => {
+    // They are one derivation now; this holds them there.
+    resetScanUniverse();
+    for (const n of buildScanUniverse(EPOCH)) expect(scanNameFor(n.ticker, EPOCH)).toEqual(n);
+  });
+
   it('promoting a scanned name onto a live desk keeps its reference and its grid', () => {
     resetScanUniverse();
-    // A long-tail name the curated universe does not carry.
-    const tail = buildScanUniverse(EPOCH).find(n => !n.live && !lookup(n.ticker))!;
-    const before = scanNameFor(tail.ticker, EPOCH);
-    Simulator.buildSnapshot(tail.ticker); // registers it, exactly as a search would
-    expect(Simulator.TICKERS[tail.ticker].basePrice).toBe(before.base);
-    expect(Simulator.TICKERS[tail.ticker].iv).toBe(before.iv);
-    expect(Simulator.TICKERS[tail.ticker].step).toBe(before.step);
+    const covered = buildScanUniverse(EPOCH).find(n => n.coverage === 'covered')!;
+    const before = scanNameFor(covered.ticker, EPOCH);
+    Simulator.buildSnapshot(covered.ticker); // registers it, exactly as a search would
+    expect(Simulator.TICKERS[covered.ticker].basePrice).toBe(before.base);
+    expect(Simulator.TICKERS[covered.ticker].iv).toBe(before.iv);
+    expect(Simulator.TICKERS[covered.ticker].step).toBe(before.step);
+    // ...and the scan now defers to the simulator for its price.
+    resetScanUniverse();
+    expect(scanNameFor(covered.ticker, EPOCH).coverage).toBe('modeled');
   });
 });
 
@@ -152,9 +222,8 @@ describe('scan cost: the wide field stays off the tick loop', () => {
       const d = buildSkyVision(snap, s.key, { epoch: EPOCH });
       d.groups.forEach(g => g.setups.length);
     }
-    // Registering a name costs ~78ms of session seeding AND a permanent seat in
-    // the 1.5s tick loop. Hundreds of them would be unusable, which is the
-    // whole reason the scan prices its own field.
+    // Registering a name costs ~70ms of session seeding AND a permanent seat in
+    // the 1.5s tick loop, which is why the scan prices its own field.
     expect(Object.keys(Simulator.TICKERS).length).toBe(before);
   });
 
@@ -200,16 +269,22 @@ describe('scan ranking', () => {
     // ticker's third-best could be dropped for another name's weaker second.
     const weakestShown = Math.min(...shown.map(s => s.score));
     expect(weakestShown).toBeGreaterThanOrEqual(scannerFloor('top-setups'));
-    expect(d.totalFound).toBeGreaterThan(shown.length * 5);
+    // The board is genuinely a selection: more contracts clear the floor than
+    // fit on it. The margin is smaller than it was, because the field it is
+    // measured against no longer includes names that cannot be opened.
+    expect(d.totalFound).toBeGreaterThan(shown.length);
   });
 
-  it('every scanner fills a table with hundreds of rows', () => {
+  it('every scanner fills a table, spread over most of the field', () => {
     for (const s of SCANNERS) {
       resetSkyVisionCache();
       const d = buildSkyVision(snap, s.key, { epoch: EPOCH });
       const rows = d.groups.flatMap(g => g.setups);
       expect(rows.length).toBeGreaterThan(150);
-      expect(d.groups.length).toBeGreaterThan(20);
+      // Narrowing the field to real names did not narrow the board: it still
+      // fills, and it still spreads across most of the universe rather than
+      // stacking contracts on a handful of names.
+      expect(d.groups.length).toBeGreaterThan(SCAN_UNIVERSE_SIZE * 0.5);
       expect(d.shown).toBe(rows.length);
       // The card header's "N found" has to be the number of cards under it.
       for (const g of d.groups) expect(g.found).toBe(g.setups.length);
@@ -231,9 +306,10 @@ describe('scan ranking', () => {
   it('the field is far larger than what reaches the screen', () => {
     resetSkyVisionCache();
     const all = buildSkyVision(snap, 'all', { epoch: EPOCH });
-    // 'All' carries no floor, so its count IS the field.
+    // 'All' carries no floor, so its count IS the field — and the field is the
+    // universe, not a padded denominator.
     expect(all.totalFound).toBe(buildScanUniverse(EPOCH).length * CANDIDATES_PER_NAME);
-    expect(all.totalFound).toBeGreaterThan(all.shown * 20);
+    expect(all.totalFound).toBeGreaterThan(all.shown * 10);
   });
 
   it('both sides of the tape are scanned, and counter-trend is marked down', () => {
@@ -253,7 +329,7 @@ describe('scan ranking', () => {
     }
   });
 
-  it('a strict floor keeps its bar over the wide field', () => {
+  it('a strict floor keeps its bar over the field', () => {
     resetSkyVisionCache();
     const strict = buildSkyVision(snap, 'top-setups', { epoch: EPOCH });
     const loose = buildSkyVision(snap, 'all', { epoch: EPOCH });

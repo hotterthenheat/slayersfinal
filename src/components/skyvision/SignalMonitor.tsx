@@ -68,10 +68,13 @@ const SignalMonitor = ({ setup, onBack }: SignalMonitorProps) => {
           </button>
           <VerdictBadge verdict={setup.verdict} dot />
           <span className="font-mono text-body font-bold text-textPrimary leading-5">{setup.contract}</span>
+          {/* setup.mid, not setup.liveMid. liveMid is mid * (0.9 + rng() * 0.2):
+              one seeded draw, fixed per contract, so it never even moves. It was
+              a jitter wearing a price label, printed beside the real mid. */}
           <div className="ml-auto text-right border border-borderSubtle bg-inset rounded-md px-3 py-1.5">
-            <div className="font-mono text-micro uppercase tracking-widest text-textMuted">Live Mid</div>
+            <div className="font-mono text-micro uppercase tracking-widest text-textMuted">Mid</div>
             <div className="font-mono text-body font-semibold text-textPrimary tnum leading-5">
-              <AnimatedNumber value={setup.liveMid} format={v => `$${v.toFixed(2)}`} />
+              <AnimatedNumber value={setup.mid} format={v => `$${v.toFixed(2)}`} />
             </div>
           </div>
         </div>
@@ -98,13 +101,13 @@ const SignalMonitor = ({ setup, onBack }: SignalMonitorProps) => {
           </div>
         </Panel>
 
-        <Panel title="Live Read" className="w-full">
+        <Panel title="Read" className="w-full">
           <div className="flex flex-col gap-4 h-full">
             {/* Confidence meter */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <span className="font-mono text-micro uppercase tracking-widest text-textMuted flex items-center gap-1.5">
-                  Confidence <SignalBadge tone="select" dot pulse>Live</SignalBadge>
+                  Confidence
                 </span>
                 <span className="font-mono text-caption font-semibold text-textPrimary tnum leading-4">
                   <AnimatedNumber value={setup.confidence} format={v => `${Math.round(v)}%`} />
@@ -125,7 +128,7 @@ const SignalMonitor = ({ setup, onBack }: SignalMonitorProps) => {
 
             <div className="mt-auto flex items-center justify-between border-t border-borderSubtle pt-3">
               <span className="font-mono text-micro uppercase tracking-widest text-textMuted flex items-center gap-1.5">
-                Expected Move <SignalBadge tone="select" dot pulse>Live</SignalBadge>
+                Expected Move
               </span>
               <span className="font-mono text-body font-semibold text-select tnum leading-5">
                 <AnimatedNumber value={setup.expectedMovePct} format={v => `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`} />
