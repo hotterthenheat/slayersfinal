@@ -23,9 +23,19 @@ const hoursAgo = (h: number) => new Date(Date.now() - h * 3600_000).toISOString(
 /**
  * Four worked theses that ship with the terminal, shown as templates on the
  * Ideas board and quoted on the landing page (Landing.tsx renders the first
- * three). Their `author` and `votes` are demo fields the landing section leans
- * on; the terminal deliberately renders neither, because a handle and a tally
- * with no account system behind them are decoration, not data.
+ * three).
+ *
+ * These are the app's own writing. They used to carry invented handles and
+ * two-digit vote counts, which on a public landing page is a claim about other
+ * people: a stranger reads three named traders and 53 votes as adoption. The
+ * Community desk is local-only with no accounts and no server, permanently, so
+ * nobody has ever written or backed one of these.
+ *
+ * `author` and `votes` stay on the shape because CommunityIdea is the future API
+ * contract, and they now say the true thing: the author is the example itself,
+ * and the tally is zero because no vote has ever been cast. The terminal renders
+ * neither (Ideas.tsx heads them "Worked examples"); the landing page still shows
+ * the author slot, which is why it reads as a label rather than a name.
  *
  * The prices track the simulator's own reference book (SPY 500, QQQ 440, NVDA
  * 138.6 from data/universe.ts) so an example never contradicts the levels the
@@ -34,38 +44,38 @@ const hoursAgo = (h: number) => new Date(Date.now() - h * 3600_000).toISOString(
 export const SEED_IDEAS: CommunityIdea[] = [
   {
     id: 'seed-i1',
-    author: 'gammahunter',
+    author: 'Worked example',
     ticker: 'SPY',
     direction: 'BULLISH',
-    thesis: 'Holding above the flip with the 500 put wall directly below. Dips into 500 should get bought by dealers, so I am looking for a grind toward the 505 call wall.',
-    votes: 24,
+    thesis: 'Holding above the flip with the 500 put wall directly below. Dips into 500 should get bought by dealers, so the path of least resistance is a grind toward the 505 call wall.',
+    votes: 0,
     createdAt: hoursAgo(3),
   },
   {
     id: 'seed-i2',
-    author: 'thetadecay',
+    author: 'Worked example',
     ticker: 'NVDA',
     direction: 'BEARISH',
-    thesis: 'Rejected the call wall twice this week and 0DTE flow flipped to put buying after lunch. Fading rips while it stays below 138.',
-    votes: 18,
+    thesis: 'Rejected the call wall twice this week and 0DTE flow flipped to put buying after lunch. Rips are the supply while it stays below 138.',
+    votes: 0,
     createdAt: hoursAgo(6),
   },
   {
     id: 'seed-i3',
-    author: 'pinrisk',
+    author: 'Worked example',
     ticker: 'QQQ',
     direction: 'BULLISH',
-    thesis: 'Pin sitting right at 440 into Friday, so I expect price to get dragged back to it on any morning flush. Long the dip, exit at the pin.',
-    votes: 11,
+    thesis: 'Pin sitting right at 440 into Friday, so a morning flush has a magnet under it. The pin is where the drag ends, not where it accelerates.',
+    votes: 0,
     createdAt: hoursAgo(9),
   },
   {
     id: 'seed-i4',
-    author: 'wallwatcher',
+    author: 'Worked example',
     ticker: 'TSLA',
     direction: 'BEARISH',
-    thesis: 'Dark pool prints stacking below spot and the biggest strike by volume is a put. Not fighting that combination.',
-    votes: 7,
+    thesis: 'Dark pool prints stacking below spot and the biggest strike by volume is a put. That combination is a supply shelf, not a base.',
+    votes: 0,
     createdAt: hoursAgo(26),
   },
 ];

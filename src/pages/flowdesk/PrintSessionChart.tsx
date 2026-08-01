@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { buildContractFlow } from '../../data/contractflow';
 import { fmtUsd } from '../../data/gex';
-import { BEAR, BULL, FOCUS, SPOT } from '../../components/gex/palette';
+import { BEAR, BULL, FOCUS, MUTED_INK, SPOT } from '../../components/gex/palette';
 import ChartLegend from '../../components/ui/ChartLegend';
 import HoverReadout from '../../components/ui/HoverReadout';
 import { svgHoverIndex } from '../../components/ui/svgHover';
@@ -30,8 +30,9 @@ import type { FlowPrint } from '../../types/flowdesk';
   accessibility tree; only the rules and the average path are SVG.
 */
 
-const MID_INK = '#8b8f96';
-const inkOf = (side: string) => (side === 'ASK' ? BULL : side === 'BID' ? BEAR : MID_INK);
+/** A mid-market fill has no direction, so it takes the palette's muted ink —
+    the exported one, which exists so charts stop forking their own grey. */
+const inkOf = (side: string) => (side === 'ASK' ? BULL : side === 'BID' ? BEAR : MUTED_INK);
 const verbOf = (side: string) =>
   side === 'ASK' ? 'lifted the offer' : side === 'BID' ? 'hit the bid' : 'crossed at the mid';
 
@@ -109,7 +110,7 @@ const PrintSessionChart = ({ print }: { print: FlowPrint }) => {
       <ChartLegend
         items={[
           { label: `Lifted offer ${cf.count.ask}`, color: BULL, kind: 'dot' },
-          { label: `Mid ${cf.count.mid}`, color: MID_INK, kind: 'dot' },
+          { label: `Mid ${cf.count.mid}`, color: MUTED_INK, kind: 'dot' },
           { label: `Hit bid ${cf.count.bid}`, color: BEAR, kind: 'dot' },
           { label: `Session average $${avgNow.toFixed(2)}`, color: SPOT, kind: 'line' },
           { label: 'This print', color: FOCUS, kind: 'dashed' },
@@ -183,7 +184,17 @@ const PrintSessionChart = ({ print }: { print: FlowPrint }) => {
               <span
                 key={i}
                 aria-hidden="true"
-                className="pointer-events-none absolute rounded-full"
+                // Selection silver, as rings rather than an inline shadow: the
+                // clicked print needs a knockout gap so its ring reads over the
+                // marks it overlaps, and `ring-offset-panel` sources that gap
+                // from the surface token instead of a fourth hand-mixed black.
+                className={`pointer-events-none absolute rounded-full ${
+                  last
+                    ? 'ring-2 ring-select ring-offset-2 ring-offset-panel'
+                    : cursor?.i === i
+                      ? 'ring-[1.5px] ring-select'
+                      : ''
+                }`}
                 style={{
                   left: `${xPct(i, n)}%`,
                   top: `${yPct(p.price)}%`,
@@ -193,11 +204,6 @@ const PrintSessionChart = ({ print }: { print: FlowPrint }) => {
                   marginTop: -d / 2,
                   background: inkOf(p.side),
                   opacity: last ? 1 : 0.75,
-                  boxShadow: last
-                    ? `0 0 0 2px #0b0b0c, 0 0 0 4px ${FOCUS}`
-                    : cursor?.i === i
-                      ? `0 0 0 1.5px ${FOCUS}`
-                      : undefined,
                 }}
               />
             );

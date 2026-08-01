@@ -4,6 +4,14 @@
   Compare-plans matrix + FAQ accordion. Feature rows
   are OUR pages and engines — information catered to
   Slayer, presentation in house grammar.
+
+  A feature row may not describe a feed the build does
+  not carry. The FAQ below states plainly that live
+  market data lands with launch, so "streaming",
+  "live" and "real-time" in the matrix above it were
+  the page arguing with itself, and the matrix is what
+  a buyer reads first. Describe what the engines do;
+  let the FAQ own the provenance.
 ==================================================
 */
 
@@ -45,22 +53,22 @@ const ROWS: FeatureRow[] = [
   },
   {
     label: 'Trace',
-    detail: 'Streaming options tape, sweeps, blocks & dark-pool prints',
+    detail: 'Options tape tagged sweep or block, plus dark-pool prints',
     tiers: [true, true, true],
   },
   {
     label: 'Tracker & Workspace',
-    detail: 'Bookmarked setups with live monitoring, saved desk layouts',
+    detail: 'Bookmarked setups re-read as the session moves, saved desk layouts',
     tiers: [true, true, true],
   },
   {
     label: 'Discord chat & alerts',
-    detail: 'Real-time community and setup alerts to your phone',
+    detail: 'Community access and setup alerts to your phone',
     tiers: [true, true, true],
   },
   {
     label: 'Compass',
-    detail: 'Graded setups with a live QUALIFIED / WATCH / FADED read, in plain English',
+    detail: 'Graded setups with a QUALIFIED / WATCH / FADED read, in plain English',
     tiers: [false, true, true],
   },
   {
@@ -75,7 +83,7 @@ const ROWS: FeatureRow[] = [
   },
   {
     label: 'Contract health scores',
-    detail: 'Live health & momentum across the whole chain',
+    detail: 'Health & momentum scored across the whole chain',
     tiers: [false, true, true],
   },
   {
@@ -168,7 +176,7 @@ export const ComparePlans = () => (
 const FAQS = [
   {
     q: 'Do you offer alerts and signals?',
-    a: "Yes, that's Compass. Every setup is graded 0–100 and carries a live read: QUALIFIED, WATCH or FADED, with the reasoning in plain English. Discord alerts fire the moment a setup is detected. The terminal reads the tape; you decide and you place it.",
+    a: "Yes, that's Compass. Every setup is graded and carries a read: QUALIFIED, WATCH or FADED, with the reasoning in plain English. Discord alerts fire when a setup is detected. The terminal reads the tape; you decide and you place it.",
   },
   {
     q: 'Is the data live?',

@@ -22,14 +22,14 @@ export const GEX_SUBPAGES: GexSubpage[] = [
     path: '/pinpoint/gamma',
     label: 'Gamma',
     subtitle:
-      'Net dealer gamma across every strike × expiry — walls, flip, king strike and the pin-vs-trend regime, this ticker or the whole complex',
+      'Net dealer gamma across every strike × expiry: walls, flip, king strike and the pin-vs-trend regime, this ticker or the whole complex',
     icon: CandlestickChart,
   },
   {
     path: '/pinpoint/levels',
     label: 'Levels',
     subtitle:
-      'Dealer positioning map — GEX · DEX · VEX by strike — and every strike scored 0–100 into the price levels that matter today',
+      'Dealer positioning map (GEX · DEX · VEX by strike) and every strike scored 0–100 into the price levels that matter today',
     icon: Target,
   },
   {
@@ -42,13 +42,13 @@ export const GEX_SUBPAGES: GexSubpage[] = [
   {
     path: '/pinpoint/stress',
     label: 'Stress',
-    subtitle: 'Where forced hedging outruns liquidity — the HEX failure boundary and the fracture line where the tape can break',
+    subtitle: 'Where forced hedging outruns liquidity: the HEX failure boundary and the fracture line where the tape can break',
     icon: Gauge,
   },
   {
     path: '/pinpoint/history',
     label: 'History',
-    subtitle: 'Session timeline — how the walls, flip and net GEX moved',
+    subtitle: 'Session timeline: how the walls, flip and net GEX moved',
     icon: History,
   },
 ];

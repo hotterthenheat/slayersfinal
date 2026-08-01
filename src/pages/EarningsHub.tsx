@@ -87,9 +87,18 @@ const reportConfirmed = (e: EarningsEvent): boolean => e.daysOut <= CONFIRM_WIND
 
 // ---- Trade-read framing, all off existing EarningsEvent fields ----------------
 
-/** Edge = the straddle mispricing, straight off the existing richness field. */
+/**
+ * Edge = the straddle mispricing, straight off the existing richness field.
+ *
+ * Cheap vol is silver, not green. Green on this page is the direction sleeves
+ * (revisions, flow, setup, conviction) and nothing else; a straddle priced under
+ * what the name realizes is a statement about the premium, not about which way
+ * the print goes, and a cheap straddle is bought by bears as often as bulls. The
+ * three tones here are the process vocabulary: select qualifies, warn cautions,
+ * neutral is the absence of either.
+ */
 const edgeRead = (e: EarningsEvent): { label: string; tone: Tone } => {
-  if (e.richness <= 0.85) return { label: 'Vol cheap', tone: 'bull' };
+  if (e.richness <= 0.85) return { label: 'Vol cheap', tone: 'select' };
   if (e.richness >= 1.3) return { label: 'Vol rich', tone: 'warn' };
   return { label: 'Vol fair', tone: 'neutral' };
 };
@@ -474,13 +483,21 @@ const EarningsHub = () => {
                 }}
                 aria-pressed={compareSet.has(e.ticker)}
                 aria-label={compareSet.has(e.ticker) ? 'Remove from compare' : 'Add to compare'}
-                className={`inline-flex items-center justify-center w-5 h-5 rounded border transition-colors ${
-                  compareSet.has(e.ticker)
-                    ? 'border-select/40 bg-select/15 text-select'
-                    : 'border-borderMuted text-textMuted hover:text-textSecondary'
-                }`}
+                // The drawn box stays 20px so the 44px column keeps its width;
+                // the padding rides on the button outside the border and the
+                // negative margin takes it back off the layout, so the tappable
+                // area is 28 and nothing moves.
+                className="-m-1 p-1 inline-flex items-center justify-center"
               >
-                {compareSet.has(e.ticker) ? '✓' : ''}
+                <span
+                  className={`inline-flex items-center justify-center w-5 h-5 rounded border transition-colors ${
+                    compareSet.has(e.ticker)
+                      ? 'border-select/40 bg-select/15 text-select'
+                      : 'border-borderMuted text-textMuted hover:text-textSecondary'
+                  }`}
+                >
+                  {compareSet.has(e.ticker) ? '✓' : ''}
+                </span>
               </button>
             ),
           } as Column<EarningsEvent>,
@@ -523,8 +540,11 @@ const EarningsHub = () => {
       header: 'Rich',
       align: 'right',
       sortValue: e => e.richness,
+      // Same cut points and the same vocabulary as `edgeRead` above: rich warns,
+      // cheap takes the accent, fair stays quiet. Never green — the column reads
+      // the premium, not the direction.
       render: e => (
-        <span className={`font-mono text-caption font-semibold tnum ${e.richness >= 1.3 ? 'text-warn' : e.richness <= 0.85 ? 'text-bull' : 'text-textSecondary'} leading-4`}>
+        <span className={`font-mono text-caption font-semibold tnum ${e.richness >= 1.3 ? 'text-warn' : e.richness <= 0.85 ? 'text-select' : 'text-textSecondary'} leading-4`}>
           {e.richness.toFixed(2)}×
         </span>
       ),
@@ -598,7 +618,7 @@ const EarningsHub = () => {
           label="Cheapest straddle"
           value={cheapest ? `${cheapest.ticker} ${cheapest.richness.toFixed(2)}×` : '--'}
           sub={cheapest ? `market under-pricing an ${cheapest.histAvgMovePct.toFixed(1)}% mover` : ''}
-          tone="bull"
+          tone="select"
         />
       </MetricGrid>
 
@@ -853,12 +873,25 @@ const EarningsHub = () => {
             </div>
 
             {/*
-              Two paragraphs of prose used to sit here side by side and read as
-              one wall. `strategy` is the instruction and stays; `rationale` is
-              the argument for it, which nobody needs on every click, so it now
-              costs one tap.
+              This line used to render `EarningsEvent.strategy`, which is written
+              as an order — "fade the move", "own the vol", "buy the call
+              vertical". The desk observes and never instructs, and every other
+              call on this page already obeys that: PLAY renders QUALIFIED, FADE
+              renders RICH, the plays panel quotes odds rather than a ticket.
+
+              It was also the last second derivation left here. `strategy` comes
+              from the verdict engine's own prose, which cuts richness at
+              0.85/1.3, while the structure named beside it comes from the
+              dossier at 0.9/1.18 — the exact disagreement `structureOf` was
+              rewritten to end. Reading the dossier's statement of what is
+              mispriced fixes the voice and the split derivation in one move.
             */}
-            <p className="text-caption text-textPrimary leading-relaxed">{selected.strategy}</p>
+            {selectedView && (
+              <p className="text-caption text-textPrimary leading-relaxed">{selectedView.mispricing.headline}</p>
+            )}
+            {/* `rationale` is the verdict engine's argument for the badge above,
+                which is the one thing the dossier does not restate. Nobody needs
+                it on every click, so it costs one tap. */}
             <div>
               <button
                 onClick={() => setShowWhy(w => !w)}

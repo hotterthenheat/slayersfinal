@@ -5,10 +5,10 @@ import { ArrowUp, Bookmark, Check, Pause, Play, Plus, Save, Search, SlidersHoriz
 import { DUR, EASE, PILL } from '../../lib/motion';
 import { useMarketData } from '../../context/MarketDataContext';
 import { enrichPrint, sentimentOf, summarizeTape } from '../../data/flowtape';
+import { seedSessionTape } from '../../data/tapeSeed';
 import { fmtUsd } from '../../data/gex';
 import Panel from '../../components/ui/Panel';
 import EmptyState from '../../components/ui/EmptyState';
-import Skeleton from '../../components/ui/Skeleton';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import StatCard from '../../components/ui/StatCard';
 import MetricGrid from '../../components/ui/MetricGrid';
@@ -71,6 +71,24 @@ const rowAccent = (premium: number): string =>
     : premium >= 250_000
       ? 'rail-warn'
       : '';
+
+/**
+ * The tape the reader arrives to.
+ *
+ * `marketData.tape` is one tick's worth of orders, not the session — so mounting
+ * on it alone opened the desk on ~4 prints and spent 39s assembling to 100 in
+ * front of the reader. data/tapeSeed replays the session window behind mount off
+ * the same seeded candle path the chart draws, exactly as the simulator seeds a
+ * month of bars rather than opening the chart on a single dot.
+ *
+ * Ids descend with age so the newest backfilled print holds the highest id and
+ * the first live print continues the sequence — the pause-pending count and the
+ * unread pill both read ids as recency.
+ */
+function openingTape(): FlowPrint[] {
+  const seed = seedSessionTape(MAX_ROWS);
+  return seed.map((o, i) => enrichPrint(o, seed.length - i));
+}
 
 /** The terminal's read of the tape — same voice as market notes. */
 function tapeRead(rows: FlowPrint[], summary: TapeSummary): string {
@@ -541,13 +559,16 @@ const SavedViews = ({
 const LiveTape = () => {
   const { marketData } = useMarketData();
   const toast = useToast();
-  const [rows, setRows] = useState<FlowPrint[]>([]);
+  const [rows, setRows] = useState<FlowPrint[]>(openingTape);
   const [paused, setPaused] = useState(false);
   // Snapshot captured at pause — data keeps collecting into `rows`, but the tape
   // renders this frozen slice until the user resumes.
   const [frozen, setFrozen] = useState<FlowPrint[] | null>(null);
   const [marked, setMarked] = useState<Set<number>>(new Set());
-  const [read, setRead] = useState('Awaiting prints…');
+  // Read the opening tape on the first render, not one paint later: the effect
+  // below runs after commit, and "Awaiting prints…" over a full tape is a lie
+  // for a frame.
+  const [read, setRead] = useState(() => tapeRead(rows, summarizeTape(rows)));
   const [flowFilter, setFlowFilter] = useState<FlowFilter>('ALL');
   const [sentFilter, setSentFilter] = useState<SentFilter>('ALL');
   const [minPremKey, setMinPremKey] = useState<PremKey>('0');
@@ -579,7 +600,10 @@ const LiveTape = () => {
     return [];
   });
 
-  const idRef = useRef(0);
+  /** Ids ascend with recency; the opening tape already claims 1…n. */
+  const idRef = useRef(rows.length);
+  /** Highest id the backfill owns, so a row can be told apart from a live print. */
+  const seedMaxId = useRef(rows.length).current;
   const lastReadRef = useRef(0);
   const rowsRef = useRef<FlowPrint[]>([]);
   rowsRef.current = rows;
@@ -638,6 +662,10 @@ const LiveTape = () => {
     );
   }, [base, flowFilter, sentFilter, minPremKey, search]);
 
+  /** Whether any of the opening backfill is still on the tape. The seeded block
+      only ever leaves from the tail, so the oldest row answers it — no scan. */
+  const showsBackfill = base.length > 0 && base[base.length - 1].id <= seedMaxId;
+
   // Prints collected since the pause snapshot — still real, just not yet rendered
   const pending =
     paused && frozen ? (frozen.length === 0 ? rows.length : rows.filter(r => r.id > frozen[0].id).length) : 0;
@@ -647,11 +675,10 @@ const LiveTape = () => {
 
   useEffect(() => {
     const now = Date.now();
-    // The empty first render must not arm the throttle. It used to: the mount
-    // pass stamped `lastReadRef`, then the opening batch of prints arrived all at
-    // once — so `rows.length > 3` was already true and the throttle swallowed the
-    // first real read. "Awaiting prints…" then sat under a "7 of 7 prints" count
-    // for a full 8s on every load. Only a read taken over real rows arms it.
+    // Only a read taken over real rows arms the throttle. That is normally the
+    // mount pass now the opening tape is seeded — but a seed that came back
+    // empty must not arm it on nothing and then swallow the first live read for
+    // a full 8s, which is what an empty first render used to do.
     const armed = lastReadRef.current !== 0;
     if (armed && rows.length > 3 && now - lastReadRef.current < READ_INTERVAL_MS) return;
     if (rows.length > 0) lastReadRef.current = now;
@@ -717,21 +744,6 @@ const LiveTape = () => {
       over them — the header is two rows of variable content, never a fixed 47px. */
   const [headH, setHeadH] = useState(0);
 
-  /** Rows this box holds — the honest denominator for "is the tape full yet". */
-  const boxRows = Math.max(1, Math.ceil(viewportH / rowH));
-  /** The tape only ever holds the prints of the ticks you were present for: it
-      opens on whatever the first 1.5s tick emitted (3 on a cold load, measured)
-      and needs ~4 ticks to cover one screen and ~25 to reach 100. So the first
-      paint is a near-empty 640px box that then fills in under the reader. Until
-      the box has been full once, the part that has no prints yet renders as
-      placeholders with the count beside them, rather than as blank tape.
-      Latched: after the first full screen an empty box is a filter result, not a
-      cold start, and must keep saying so. */
-  const [warmed, setWarmed] = useState(false);
-  useEffect(() => {
-    if (!warmed && (rows.length >= boxRows || paused)) setWarmed(true);
-  }, [warmed, rows.length, boxRows, paused]);
-
   // One read of the scroll box serves both axes: the vertical size drives the
   // virtualization window, the horizontal drives the clipped-column count.
   const measureBox = useCallback(() => {
@@ -766,15 +778,14 @@ const LiveTape = () => {
   // Self-correct the row height from the first mounted row so the padding math
   // matches real layout regardless of borders, fonts, or content. Only re-measures
   // when the first row appears or the column set changes — not on every scroll/tick,
-  // which would force a layout read each render.
+  // which would force a layout read each render. The opening tape is seeded, so
+  // the mount pass already has a real row to measure; the emptiness dep only
+  // matters when a filter empties the tape and is then cleared.
   useEffect(() => {
     const h = firstRowRef.current?.getBoundingClientRect().height;
     if (h && h > 0 && Math.abs(h - rowH) > 0.5) setRowH(h);
-    // `warmed` is a dep because it is the flip that first mounts a real row —
-    // `view.length > 0` is already true behind the placeholders, so on its own
-    // it never fires and the row height stays at the estimate for the session.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [colCount, warmed, view.length > 0]);
+  }, [colCount, view.length > 0]);
 
   useEffect(
     () => () => {
@@ -955,7 +966,11 @@ const LiveTape = () => {
       <Panel
         title="Options Tape"
         subtitle={
-          paused ? 'rendering paused · tape still collecting' : warmed ? 'newest prints first' : 'first screen filling'
+          paused
+            ? 'rendering paused · tape still collecting'
+            : showsBackfill
+              ? 'newest first · earlier session prints below'
+              : 'newest prints first'
         }
         flush
       >
@@ -1034,7 +1049,7 @@ const LiveTape = () => {
                 </tr>
               </thead>
               <tbody>
-                {total === 0 && (warmed || base.length > 0) && (
+                {total === 0 && (
                   <tr>
                     <td colSpan={colCount}>
                       <EmptyState size="lg" title={base.length === 0 ? 'Awaiting first prints…' : 'No prints match the filters'} />
@@ -1091,22 +1106,6 @@ const LiveTape = () => {
                 {padBottom > 0 && (
                   <tr aria-hidden style={{ height: padBottom }}>
                     <td colSpan={colCount} className="p-0 border-0" />
-                  </tr>
-                )}
-                {!warmed && (
-                  <tr>
-                    <td colSpan={colCount} className="px-2 py-2 border-0">
-                      <span className="block pb-1.5 font-mono text-label uppercase tracking-widest text-textMuted tnum">
-                        First screen filling · {base.length} of {boxRows} prints
-                      </span>
-                      {/* Placeholders, not invented rows: the tape below this
-                          line has not printed yet and the box says so. */}
-                      {Array.from({ length: Math.max(0, boxRows - total) }).map((_, i) => (
-                        <span key={i} className="block py-[3px]" style={{ height: rowH }}>
-                          <Skeleton className="h-full w-full rounded-sm" />
-                        </span>
-                      ))}
-                    </td>
                   </tr>
                 )}
               </tbody>

@@ -6,7 +6,7 @@ import { buildExposureProfile } from './exposure';
 import { buildGexView, buildLevels, pinStrike } from './gex';
 import { buildRankedTargets } from './rankedtargets';
 import { buildVannaCharm, levelsOfProfile } from './vannacharm';
-import type { KeyLevelKind, KeyLevelRow, ShiftMode, TargetTag } from '../types/gex';
+import type { IvShift, KeyLevelKind, KeyLevelRow, ShiftMode, TargetTag } from '../types/gex';
 
 /*
   Regression guard for the split-level bug: the key-levels rail and the dealer
@@ -142,7 +142,7 @@ describe('cross-engine agreement: cockpit ↔ exposure map', () => {
 
     · vannacharm.ts   scanned a windowed copy for walls / flip / king
     · rankedtargets.ts scanned the chain again for walls / king / pin
-    · positioningMap.ts took an argmax over the windowed, decayed, jittered bars
+    · positioningMapModel.ts took an argmax over the windowed, decayed, jittered bars
 
   None of them was wrong in a way that shows up as an obviously broken screen —
   the walls agreed most days. The flip did not: it disagreed with the rail on 5
@@ -153,6 +153,21 @@ describe('cross-engine agreement: cockpit ↔ exposure map', () => {
 */
 describe('single derivation: the panels that used to roll their own', () => {
   const MODES: ShiftMode[] = ['CHARM', 'VANNA'];
+
+  /*
+    Every scenario the panel can actually be put in. Charm ignores the IV shift,
+    so it appears once; vanna is swept across the whole `IvShift` union because
+    the size of the shock is what decides whether a level moves at all — and the
+    sentences that quote a level MOVING are only reachable when one does. At a
+    single shift those branches go unread on most names.
+  */
+  const SCENARIOS: [ShiftMode, IvShift][] = [
+    ['CHARM', -1],
+    ['VANNA', -2],
+    ['VANNA', -1],
+    ['VANNA', 1],
+    ['VANNA', 2],
+  ];
 
   it.each(snapshots)('$ticker vanna & charm calls the book’s levels "now"', ({ snap }) => {
     const levels = buildLevels(snap);
@@ -205,6 +220,84 @@ describe('single derivation: the panels that used to roll their own', () => {
   });
 
   /*
+    The right-hand side of every arrow is read off a book that does not exist, so
+    no engine can be asked to confirm it. What can be checked is that it is still
+    a price this book could produce: walls and the king are strikes, and the flip
+    is the midpoint of the two strikes the profile crosses zero across, or spot
+    when it never crosses. A projected level anywhere else came from arithmetic
+    on a level rather than from the profile.
+  */
+  it.each(snapshots)('$ticker the scenario quotes prices the book has', ({ snap }) => {
+    const asc = [...snap.chain].sort((a, b) => a.strike - b.strike);
+    const strikes = new Set(asc.map(n => n.strike));
+    const midpoints = new Set(asc.slice(1).map((n, i) => (asc[i].strike + n.strike) / 2));
+
+    for (const [mode, ivShift] of SCENARIOS) {
+      const view = buildVannaCharm(snap, mode, ivShift, HALF);
+      const shift = Object.fromEntries(view.shifts.map(s => [s.kind, s]));
+
+      for (const kind of ['call-wall', 'put-wall', 'king'] as const) {
+        expect(strikes.has(shift[kind].projected)).toBe(true);
+      }
+      expect(midpoints.has(shift.flip.projected) || shift.flip.projected === snap.spot).toBe(true);
+
+      // The chart's own flip fields are the flip row, not a third derivation.
+      expect(view.flipCurrent).toBe(shift.flip.current);
+      expect(view.flipProjected).toBe(shift.flip.projected);
+    }
+  });
+
+  /*
+    The narrative is prose, so a number in it is the easiest place in the app for
+    a figure to appear that nothing computed — and the hardest to notice, because
+    a sentence reads as true. Every price it quotes must therefore be one the
+    panel is already showing.
+
+    A price is any figure at or above the book's lowest strike; below that the
+    sentences quote a bleed percentage, an hour count and the IV shift, none of
+    which are prices. The cheapest name here opens its chain at 126.
+  */
+  it.each(snapshots)('$ticker the migration narrative quotes no price the panel does not carry', ({ snap }) => {
+    const asc = [...snap.chain].sort((a, b) => a.strike - b.strike);
+    const floor = asc[0].strike;
+    const quotable = new Set([
+      ...asc.map(n => n.strike),
+      ...asc.slice(1).map((n, i) => (asc[i].strike + n.strike) / 2),
+      snap.spot,
+    ]);
+
+    for (const [mode, ivShift] of SCENARIOS) {
+      const view = buildVannaCharm(snap, mode, ivShift, HALF);
+      const prose = view.insights.join(' | ');
+
+      const prices = [...prose.matchAll(/\d+(?:\.\d+)?/g)].map(m => Number(m[0])).filter(n => n >= floor);
+      // Vacuous otherwise: both modes always name at least the flip.
+      expect(prices.length).toBeGreaterThan(0);
+      for (const price of prices) expect(quotable.has(price)).toBe(true);
+
+      // Every "now → scenario" the prose draws is a row of the shift table, so
+      // the sentence and the table can never quote the level differently.
+      const arrows = [...prose.matchAll(/(-?[\d.]+)\s*→\s*(-?[\d.]+)/g)].map(m => `${Number(m[1])}→${Number(m[2])}`);
+      const rows = view.shifts.map(s => `${s.current}→${s.projected}`);
+      for (const arrow of arrows) expect(rows).toContain(arrow);
+    }
+  });
+
+  /*
+    Pin is the one level that is honestly a function of the window (gex.ts
+    `pinStrike`), so a wider panel naming a different strike is correct — but it
+    must be THAT panel's window, and it must be marked once. Reading the rail's
+    10-wide pin onto a 15-wide panel would put the badge on a strike the panel's
+    own heaviest-OI scan disagrees with.
+  */
+  it.each(snapshots)('$ticker the pin marker follows the panel’s own window', ({ snap }) => {
+    for (const mode of MODES) {
+      const wide = buildVannaCharm(snap, mode, -1, 15);
+      expect(wide.rows.filter(r => r.pin).map(r => r.strike)).toEqual([pinStrike(snap, 15)]);
+    }
+  });
+
+  /*
     Wall Drift puts the measured session and the scenario on ONE price axis, the
     scenario's "now" dot inches from the measured series' right edge. Those are
     the same moment, so they are the same prices — the sampling stride used to
@@ -236,12 +329,52 @@ describe('single derivation: the panels that used to roll their own', () => {
     expect(targets.filter(t => t.hedgingClass === 'MAGNET').map(t => t.strike)).toEqual([pin]);
   });
 
+  /*
+    The badges above name book-wide levels, so the table they sit in has to be
+    book-wide too. Window this table and the king can simply be absent from it,
+    which reads as "no king today" rather than "the king is off-screen" — and the
+    rail two panels over would still be naming it.
+  */
+  it.each(snapshots)('$ticker ranked targets rank the whole book their badges come from', ({ snap }) => {
+    const { targets } = buildRankedTargets(snap);
+    const asc = (xs: number[]) => [...xs].sort((a, b) => a - b);
+
+    expect(asc(targets.map(t => t.strike))).toEqual(asc(snap.chain.map(n => n.strike)));
+    expect(targets.map(t => t.rank)).toEqual(targets.map((_, i) => i + 1));
+  });
+
   it.each(snapshots)('$ticker the positioning map is handed the book’s king', ({ snap }) => {
     expect(buildExposureProfile(snap, '0DTE', HALF).levels.king).toBe(buildLevels(snap).king);
   });
 
   /*
-    A tripwire, not a style rule. positioningMap.ts only ever receives the
+    The map draws no flip line. It changes the fill colour at a band boundary and
+    claims that boundary IS the flip — which holds only because both are the
+    midpoint of the same two strikes. Nothing tested it, so a change to how bands
+    are edged would have moved the regime boundary a half-strike with no line on
+    screen to look wrong.
+
+    The flip is asserted to be inside the rendered window first: the simulator
+    pivots it within about 1% of spot, so a flip outside ±10 strikes is itself
+    the regression, and without this the boundary check could pass vacuously.
+  */
+  it.each(snapshots)('$ticker the map’s colour boundary is the engine’s flip', ({ snap }) => {
+    const { flip } = buildLevels(snap);
+    const { strikes } = buildExposureProfile(snap, '0DTE', HALF);
+    const scale = positioningMap.priceScale(strikes, 1);
+
+    expect(flip).toBeGreaterThan(scale.lo);
+    expect(flip).toBeLessThan(scale.hi);
+
+    const y = scale.yOf(flip);
+    // The last band is squared off at the plot floor, so 1 is an edge too.
+    const edges = [...positioningMap.bands(strikes, 1).map(b => b.top), 1];
+    const nearest = edges.reduce((best, e) => (Math.abs(e - y) < Math.abs(best - y) ? e : best), edges[0]);
+    expect(nearest).toBeCloseTo(y, 9);
+  });
+
+  /*
+    A tripwire, not a style rule. positioningMapModel.ts only ever receives the
     windowed, expiry-decayed, jittered bars, so any level it exports is a fact
     about the drawing rather than about the book — and one named `kingStrike`
     shipped, and moved when the panel was resized. The module is a geometry

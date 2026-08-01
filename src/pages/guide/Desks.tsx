@@ -13,6 +13,16 @@ import {
 } from 'lucide-react';
 import { Card, Points } from './parts';
 
+/*
+  Every claim on this page is a claim about code that ships, so it goes stale
+  the moment a desk moves. Two rules keep it honest: name only panels and
+  controls that exist in the registries and subnavs (pulseRegistry, gex/subnav,
+  flowdesk/subnav, proveit/ProveIt), and describe what an engine derives rather
+  than what a number looks like it means. Worked reads stay mechanical for the
+  same reason — a printed level here would be a second derivation of gex.ts,
+  and it would be wrong by the next tick.
+*/
+
 interface DeskDoc {
   icon: LucideIcon;
   name: string;
@@ -31,22 +41,27 @@ const DESKS: DeskDoc[] = [
     to: '/pulse',
     tagline: 'Your customizable workspace — the cockpit you build once and work from.',
     shows: [
-      'A grid of panels you arrange yourself: chart, GEX heatmap, dealer positioning, key levels, order flow, dark pool, the liquidity map and more.',
+      'A grid of panels you arrange yourself: chart, GEX heatmap, dealer positioning, exposure matrix, order flow, the options tape, dark pool, the liquidity map and more.',
       'Each panel is a compact version of a full desk, all following the active ticker (or its own ticker, if you pin one).',
+      <>A separate <span className="text-textPrimary">Data connections</span> tray holds modules that stay dark until a
+      feed is wired up — DOM ladder, footprint, true time &amp; sales. They name the feed they need instead of drawing
+      filler.</>,
     ],
     read: [
-      'It is a dashboard: the chart for price, the heatmap and positioning for where dealers sit, order flow for what is printing now.',
+      'It is a dashboard: the chart for price, the heatmap and positioning for where dealers sit, Order Flow for cumulative delta, the Options Flow tape for the prints themselves.',
       'Below 1024px the drag-grid collapses into a clean vertical stack so it stays readable on a phone.',
     ],
     controls: [
-      <><span className="text-textPrimary">Customize</span> — drag to move, drag an edge to resize; your layout is saved in your browser.</>,
-      <><span className="text-textPrimary">Desk profiles</span> — one tap loads a ready workspace: Scalper, Swing, Macro or Earnings.</>,
+      <><span className="text-textPrimary">Customize</span> — drag, resize and add panels are off until you enter it;
+      outside Customize the desk is chromeless. Your layout is saved in your browser.</>,
+      <>The <span className="text-textPrimary">Views</span> menu carries fourteen ready workspaces, Scalper, Swing,
+      Macro and Earnings among them. Presets stay restorable however you edit them.</>,
       <>Each panel has its own ticker field, so you can watch SPY and NVDA side by side.</>,
     ],
     example: (
-      <>Load the <span className="text-textPrimary">Scalper</span> profile to get chart + order flow + key levels + the
-      liquidity map together. Watch cumulative delta against price — when delta pushes up but price stalls at a call
-      wall, that is absorption.</>
+      <>Load the <span className="text-textPrimary">Scalper</span> view for chart + order flow + the liquidity map.
+      Watch cumulative delta against price — when delta pushes up but price stalls at a call wall, that is
+      absorption.</>
     ),
   },
   {
@@ -55,20 +70,29 @@ const DESKS: DeskDoc[] = [
     to: '/compass',
     tagline: 'Finds the setup — scores contracts across weeklies, swings and LEAPS.',
     shows: [
-      'A ranked list of trade setups, each with a composite score and a plain-English read of why it ranked.',
-      'A contract search / weigher: type any contract to score it against the current tape, plus a Lotto board for short-dated, high-risk names.',
+      'A ranked board of contracts, each with a score from 8 to 99 and the scanner\'s thesis written out for that ticker and strike.',
+      <>The <span className="text-textPrimary">Weigher</span>: search any contract you already hold and have it graded
+      on the same scale as the board, with a better-risk/reward alternative. And <span className="text-textPrimary">Lotto</span>,
+      a 0DTE desk with the closing-auction (MOC) engine, high variance by design.</>,
     ],
     read: [
-      'A higher composite means more of the inputs line up (flow, positioning, momentum, richness) — it is a ranking, not a prediction.',
-      'Read the one-line rationale under each setup before the number; it tells you which factor is doing the work.',
+      <>The score has two inputs and no more: how close the strike sits to spot, and whether the contract's direction
+      agrees with the ticker's lean. Counter-trend contracts are marked down and cannot reach the top of the board.
+      It ranks candidates — it does not forecast one.</>,
+      <>Score sets the verdict: <span className="text-textPrimary">QUALIFIED</span> at 88 and above,
+      {' '}<span className="text-textPrimary">WATCH</span> from 72, <span className="text-textPrimary">FADED</span> below
+      that. Health sits in its own column on the board, and momentum in the contract chain; neither is an input to the
+      score, so read them as a second opinion rather than a confirmation.</>,
+      'The paragraph under a setup is the scanner\'s premise applied to that name, not a breakdown of why this contract outranked the next one.',
     ],
     controls: [
-      'Switch the scanner between Top Setups and the Lotto board.',
-      'Search a specific contract to weigh it on demand.',
+      'Three modes: Setups, Weigher and Lotto.',
+      'Inside Setups, six scanners: Top Setups, Quick Scalp, Discounted, Rebounds, Whale Sweeps and All — each with its own score floor, so a thinner board means the bar held.',
     ],
     example: (
-      <>If a call setup scores high on "ask-side flow + supportive positioning," cross-check Pinpoint: is spot above the
-      gamma flip with a call wall overhead as the target?</>
+      <>A near-the-money call on a bullish name will outrank a far-OTM one on the same name, because proximity is most
+      of the score. That is a starting shortlist, not a reason — cross-check Pinpoint before you act on it: is spot
+      above the gamma flip, with a call wall overhead as the target?</>
     ),
   },
   {
@@ -77,20 +101,27 @@ const DESKS: DeskDoc[] = [
     to: '/trace',
     tagline: 'Reads the flow — the options tape and where size is printing.',
     shows: [
-      'Tape: streaming prints with sweep / block tags. Dark Pool: off-exchange crosses. Scanner: filter the tape. Reconstruction: child prints clustered into the parent order behind them. Tracker: your saved flow.',
+      <>Four subtabs. <span className="text-textPrimary">Tape</span>: options prints tagged sweep or block, newest
+      first. <span className="text-textPrimary">Dark Pool</span>: off-exchange blocks mapped to shelves.
+      {' '}<span className="text-textPrimary">Scanner</span>: per-contract aggregation — volume, ΔOI and bull/bear
+      scoring. <span className="text-textPrimary">Reconstruction</span>: child prints clustered into the parent order
+      they may belong to.</>,
     ],
     read: [
       <><span className="text-textPrimary">Sweep</span> = urgency — the order took multiple exchanges at once. <span className="text-textPrimary">Block</span> = negotiated size crossed in one clip.</>,
-      <>Aggressor colour follows the app convention: an <span className="text-bull">ask-lift reads green</span> (buy aggression), a bid is muted supply.</>,
-      'Cumulative delta is the running buy-minus-sell — a rising line into a level is pressure building against it.',
+      <>Aggressor colour follows the app convention: a print that lifted the ask <span className="text-bull">reads green</span>,
+      one that hit the bid <span className="text-bear">reads red</span>. Mid prints stay muted, because a mid fill names
+      no aggressor.</>,
+      'The session strip above the tape is the aggregate read: total premium, the call/put split and bull vs bear premium as a share of the session.',
     ],
     controls: [
       'Filter by type (all / sweeps / blocks), by direction (bull / bear), and by premium (≥$100K / ≥$500K / ≥$1M).',
-      'Choose columns and save filter views for the setups you watch most.',
+      'Choose columns and save filter views for the setups you watch most. Pause freezes the rendered rows while the tape keeps collecting behind it.',
     ],
     example: (
-      <>Repeated ask-side sweeps into a single strike, clustered in a few minutes, is what Reconstruction groups into one
-      inferred parent order — a desk working size, not noise.</>
+      <>Repeated ask-side sweeps into one strike over a few minutes is what Reconstruction groups into a single inferred
+      parent. Inferred is the operative word: no ticket IDs confirm the grouping, so the panel prints its competing
+      explanations — several desks lifting the same strike independently would leave the same footprint.</>
     ),
   },
   {
@@ -99,20 +130,29 @@ const DESKS: DeskDoc[] = [
     to: '/pinpoint',
     tagline: 'Dealer positioning — where market-makers are hedged and what that pins.',
     shows: [
-      'The GEX heatmap and exposure profile, the full greek matrix, Greeks & Regime, Vanna / Charm migration, the Vol Lab, Hedge Impact, Fracture stress and State Density.',
+      <>Five desks. <span className="text-textPrimary">Gamma</span>: the strike × expiry heatmap, this ticker or the
+      whole complex. <span className="text-textPrimary">Levels</span>: the dealer positioning map and every strike
+      scored. <span className="text-textPrimary">Greeks</span>: the eight-greek exposure matrix and regime, plus vanna
+      and charm migration. <span className="text-textPrimary">Stress</span>: hedge impact and the fracture line.
+      {' '}<span className="text-textPrimary">History</span>: how the walls, flip and net GEX moved this session.</>,
+      <>The volatility surface and the density it implies are <span className="text-textPrimary">not</span> here. They
+      moved to Prove It — they are what a calibrated model says about the chain, not a picture of where dealers are
+      hedged. Old Pinpoint volatility links redirect there.</>,
     ],
     read: [
       <>Net GEX per strike: <span className="text-bull">green supports</span> (long gamma — dealers dampen moves), <span className="text-bear">red amplifies</span> (short gamma — dealers accelerate them).</>,
       <><span className="text-textPrimary">Call wall</span> often caps as resistance; <span className="text-textPrimary">put wall</span> often holds as support; the <span className="text-flip">gamma flip</span> is the level where the regime changes sign; the <span className="text-king">king strike</span> is the strongest single pin.</>,
-      'Hover any heatmap cell or column header for the exact read — the numbers are always printed, colour is a second signal.',
+      'Hover any heatmap cell for the exact read — the numbers are always printed, colour is a second signal.',
+      'Every desk here reads the same derivation of spot, walls, flip, pin and king, so two panels on one screen can never print two different numbers for one level.',
     ],
     controls: [
-      'The Pinpoint sub-tabs switch between positioning, dynamics (vanna/charm, history) and volatility (vol lab, state density).',
-      'On the matrix, toggle By strike vs By |exposure|, and reveal advanced greeks.',
+      'Five desk tabs across the top; four of them carry a View toggle for their second read (this ticker vs complex, exposure vs ranked, matrix vs migration, hedge vs fracture).',
+      'On the greek matrix, toggle By strike vs By |exposure|, and reveal the advanced greeks beyond the core three.',
     ],
     example: (
       <>Spot sitting below the gamma flip with red −GEX stacked beneath it means dealers accelerate down-moves — a break
-      lower can go faster than it "should." Walls at 495 / 500 bracket the likely range.</>
+      lower can go faster than it "should." Read your own bracket off the Levels desk: the put wall under spot and the
+      call wall above it are the range the book is currently defending.</>
     ),
   },
   {
@@ -121,15 +161,23 @@ const DESKS: DeskDoc[] = [
     to: '/prove-it',
     tagline: 'The receipts — quant modeling and how each engine has tracked.',
     shows: [
-      'A Monte Carlo path fan with its percentile cone and a terminal-price histogram, the dealer surface (2D / 3D), the model scoreboard, a calibration plot and an edge-decay chart.',
+      <><span className="text-textPrimary">Models</span>: a Monte Carlo path fan with its percentile cone and a
+      terminal-price histogram, the dealer surface, the model scoreboard, and the market-state replay — today's closest
+      historical analogs, a probability-calibration plot and an edge-decay curve.</>,
+      <><span className="text-textPrimary">Volatility lab</span>: the IV surface, term structure, skew and the
+      volatility-state odds. <span className="text-textPrimary">Risk-neutral density</span>: the terminal-price odds the
+      chain implies, against realized. Both arrived from Pinpoint — model output belongs on the desk that scores
+      models.</>,
     ],
     read: [
       'The cone is the percentile band across sampled paths; the near-white line is the median. Hover the fan for the median and the 50% / 90% bands at any horizon.',
       'On the calibration plot, points sitting on the diagonal mean predicted probability matched realized frequency — off the diagonal means over- or under-confident.',
+      'Open Assumptions under the Monte Carlo: it names the model, the IV, the drift proxy and the path count. Every stat above it recomputes from that same seeded run.',
     ],
     controls: [
-      'Pick the forecast window (10d / 30d / 60d).',
-      'Flip the dealer surface between 2D heatmap and the 3D render.',
+      'Three views: Models, Volatility lab and Risk-neutral density.',
+      'The forecast window (10d / 30d / 60d) sets the Monte Carlo horizon, so it only appears on Models.',
+      'Flip the dealer surface between the 2D heatmap and the 3D render.',
     ],
     example: (
       <>A wide 90% band with a median near spot says the market is pricing a big move but no strong direction — an
@@ -141,7 +189,7 @@ const DESKS: DeskDoc[] = [
 const RESEARCH: { icon: LucideIcon; name: string; to: string; blurb: string }[] = [
   { icon: BarChart3, name: 'Stocks', to: '/stocks', blurb: 'Equity picks and sector rotation — which groups are leading or lagging.' },
   { icon: Newspaper, name: 'News', to: '/news', blurb: 'Headlines paired with a read on the likely reaction.' },
-  { icon: CalendarClock, name: 'Earnings', to: '/earnings', blurb: 'Calendar with play / fade / skip reads and implied moves.' },
+  { icon: CalendarClock, name: 'Earnings', to: '/earnings', blurb: 'The slate ahead, each print read QUALIFIED / RICH / NO EDGE against its implied move.' },
   { icon: BookMarked, name: 'Tracker', to: '/tracker', blurb: 'Your tracked setups and trade journal, saved in your browser.' },
 ];
 

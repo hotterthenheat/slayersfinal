@@ -272,48 +272,48 @@ export function buildEarningsIntel(e: EarningsEvent): EarningsIntelView {
     ? {
         side: 'LONG',
         name: skewLean === 'CALL' ? 'Long call-weighted strangle' : skewLean === 'PUT' ? 'Long put-weighted strangle' : 'Long straddle',
-        legs: `Buy the ${dte}-DTE ATM call + put across the print`,
+        legs: `The ${dte}-DTE ATM call + put, held across the print`,
         cost: `≈ ${impliedMovePct.toFixed(1)}% debit`,
         breakeven: `$${lo(jump)} / $${hi(jump)}`,
         maxLabel: 'Risk capped at the debit · convex on a big move',
         edgeLabel: `+${(histAvgMovePct - impliedMovePct).toFixed(1)} pts vol cheap`,
         ev: evStraddle,
-        fit: `The straddle charges ${impliedMovePct.toFixed(1)}% for a name that averages ${histAvgMovePct.toFixed(1)}% — own the gross move before the crowd re-rates it.`,
+        fit: `The straddle charges ${impliedMovePct.toFixed(1)}% for a name that averages ${histAvgMovePct.toFixed(1)}%, so the gross move is on offer below what it has historically cost.`,
       }
     : wingDir < 0
       ? {
           side: 'LONG',
           name: 'Put debit spread',
-          legs: `Buy the ~${(sigma * 0.7).toFixed(1)}% put, sell the ~${(sigma * 1.55).toFixed(1)}% put`,
+          legs: `The ~${(sigma * 0.7).toFixed(1)}% put against the ~${(sigma * 1.55).toFixed(1)}% put`,
           cost: `≈ ${(impliedMovePct * 0.42).toFixed(1)}% debit`,
           breakeven: `below $${lo(jump * 0.55)}`,
           maxLabel: 'Defined debit · full width if the gap-down prints',
           edgeLabel: `down-gap +${(downEdge * 100).toFixed(0)} pts underpriced`,
           ev: evWing,
-          fit: 'Long the cheap down-tail as a spread — captures the underpriced gap-down without paying for the rich body.',
+          fit: 'The down-tail is the cheap leg: a spread carries it without paying for the body the straddle already marks rich.',
         }
       : {
           side: 'LONG',
           name: 'Call debit spread',
-          legs: `Buy the ~${(sigma * 0.7).toFixed(1)}% call, sell the ~${(sigma * 1.55).toFixed(1)}% call`,
+          legs: `The ~${(sigma * 0.7).toFixed(1)}% call against the ~${(sigma * 1.55).toFixed(1)}% call`,
           cost: `≈ ${(impliedMovePct * 0.42).toFixed(1)}% debit`,
           breakeven: `above $${hi(jump * 0.55)}`,
           maxLabel: 'Defined debit · full width if the gap-up prints',
           edgeLabel: `up-gap +${(upEdge * 100).toFixed(0)} pts underpriced`,
           ev: evWing,
-          fit: 'Long the cheap up-tail as a spread — captures the underpriced pop without paying for the rich body.',
+          fit: 'The up-tail is the cheap leg: a spread carries it without paying for the body the straddle already marks rich.',
         };
 
   const shortVol: Expression = {
     side: 'SHORT',
     name: skewLean === 'PUT' ? 'Put-shifted iron condor' : 'Iron condor',
-    legs: `Sell the ±${impliedMovePct.toFixed(1)}% strangle, buy ±${(impliedMovePct * 1.6).toFixed(1)}% wings`,
+    legs: `The short ±${impliedMovePct.toFixed(1)}% strangle against ±${(impliedMovePct * 1.6).toFixed(1)}% wings`,
     cost: `≈ ${(impliedMovePct * 0.5).toFixed(1)}% credit`,
     breakeven: `$${lo(jump)} / $${hi(jump)}`,
     maxLabel: 'Profit capped at the credit · risk defined at the wings',
     edgeLabel: `+${(impliedMovePct - histAvgMovePct).toFixed(1)} pts vol rich`,
     ev: evShort,
-    fit: `Fade a straddle pricing ${richness.toFixed(2)}× realized — collect the crush from outside the expected move with the tails defined.`,
+    fit: `The straddle prices ${richness.toFixed(2)}× realized, so the crush accrues to the seller from outside the expected move, with the tails defined.`,
   };
 
   // ---- which component is mispriced → the recommendation ------------------
@@ -343,38 +343,42 @@ export function buildEarningsIntel(e: EarningsEvent): EarningsIntelView {
   const im = impliedMovePct.toFixed(1);
   const hm = histAvgMovePct.toFixed(1);
   const rx = richness.toFixed(2);
+  // `verdict` names the structure that isolates the mispriced component. It is
+  // written as a description of that structure, never as an order to place it:
+  // the desk states what the distribution says and leaves the trade to the
+  // reader, the same rule the PLAY/FADE/SKIP labels follow on the board.
   const mispricingByComponent: Record<MispricedComponent, MispricingRead> = {
     STRADDLE_CHEAP: {
       component,
-      headline: `The straddle underprices the event — ${im}% implied against a ${hm}% average mover (${rx}×).`,
-      verdict: 'Own the event outright: long straddle / strangle, sized for the post-print crush.',
+      headline: `The straddle underprices the event: ${im}% implied against a ${hm}% average mover (${rx}×).`,
+      verdict: 'The mispricing is in the body, and a long straddle or strangle is the structure that isolates it, sized against the post-print crush.',
     },
     STRADDLE_RICH: {
       component,
-      headline: `The straddle is uniformly rich — ${im}% implied vs ${hm}% realized (${rx}×) and neither tail is underpriced.`,
-      verdict: 'Sell the event: iron condor outside the expected move, tails defined against the surprise.',
+      headline: `The straddle is uniformly rich: ${im}% implied against ${hm}% realized (${rx}×), and neither tail is underpriced.`,
+      verdict: 'The whole edge sits on the premium seller’s side. An iron condor outside the expected move is the version of that with the tails defined against a surprise.',
     },
     DOWNSIDE_SKEW: {
       component,
-      headline: `Straddle is ${richness >= 1.18 ? 'rich' : 'fair'} (${rx}×) but the down-gap is underpriced — the model carries +${(downEdge * 100).toFixed(0)} pts more down-tail than the skew charges.`,
-      verdict: 'Put debit spread, not a short straddle — stay long the cheap downside, don’t sell it with the body.',
+      headline: `Straddle is ${richness >= 1.18 ? 'rich' : 'fair'} (${rx}×) but the down-gap is underpriced: the model carries +${(downEdge * 100).toFixed(0)} pts more down-tail than the skew charges.`,
+      verdict: 'A put debit spread, not a short straddle: the cheap leg is the downside, and a short body sells it away with everything else.',
     },
     UPSIDE_SKEW: {
       component,
-      headline: `Straddle is ${richness >= 1.18 ? 'rich' : 'fair'} (${rx}×) but the up-gap is underpriced — the model carries +${(upEdge * 100).toFixed(0)} pts more up-tail than calls price.`,
-      verdict: 'Call debit spread, not a short straddle — stay long the cheap upside, don’t sell it with the body.',
+      headline: `Straddle is ${richness >= 1.18 ? 'rich' : 'fair'} (${rx}×) but the up-gap is underpriced: the model carries +${(upEdge * 100).toFixed(0)} pts more up-tail than calls price.`,
+      verdict: 'A call debit spread, not a short straddle: the cheap leg is the upside, and a short body sells it away with everything else.',
     },
     FAIR: {
       component,
-      headline: `Premium is fair (${rx}×) and both tails price in line with the model — no single component stands out.`,
-      verdict: 'No edge into the print. Trade the day-two continuation once the gap is on the tape.',
+      headline: `Premium is fair (${rx}×) and both tails price in line with the model: no single component stands out.`,
+      verdict: 'Nothing is mispriced into the print. What is left is the day-two continuation, once the gap is on the tape.',
     },
   };
   const mispricing = mispricingByComponent[component];
 
   const headline =
     recommended === 'SKIP'
-      ? `${e.ticker} prices its ${im}% print in line with history and the model — nothing to harvest into the report.`
+      ? `${e.ticker} prices its ${im}% print in line with history and the model: nothing to harvest into the report.`
       : `${e.ticker}: ${mispricing.verdict} Net EV ${netEv >= 0 ? '+' : ''}${netEv.toFixed(2)}% after spreads and the ${ivCrushPct.toFixed(0)}% IV crush.`;
 
   return {
