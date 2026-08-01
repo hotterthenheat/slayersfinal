@@ -36,6 +36,8 @@ import { buildSkyVision, makeSetup } from '../../data/skyvision';
 import { VERDICT_LABEL, VERDICT_TONE } from '../skyvision/verdict';
 import { setupState } from '../skyvision/setupState';
 import { StateBadge } from '../skyvision/StateBadge';
+import ContractTrack from './ContractTrack';
+import { buildTrack, weighedToPlan } from './contractTrack';
 import type { Verdict } from '../../types/skyvision';
 import type { MarketSnapshot } from '../../types/market';
 import { DUR, EASE, PILL } from '../../lib/motion';
@@ -545,6 +547,35 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
       return [];
     }
   }, [snapshot, committed, fallbackExpiry]);
+
+  /* ---- the contract's own premium, derived --------------------------------
+     The grade answers "is this worth buying". This answers the question the
+     ledger cannot: what the contract has been doing, and what holding it costs
+     if the underlying does nothing at all. Both halves are the SAME
+     Black-Scholes that produced the mid above (weighedToPlan pins the model), so
+     the line lands on the printed number rather than near it.
+
+     The weigher genuinely has no take-profit ladder and no invalidation level,
+     and none is synthesised: an empty ladder is a first-class state on the plan.
+     Breakeven and the strike are what lane B marks instead, which is the
+     pre-trade question this pane is actually asking.
+
+     Built here rather than inside the chart so it moves on the pane's 10s beat.
+     ContractTrack otherwise reads the candle buffer itself, which would put the
+     chart back on the 1.5s tick the rest of this pane deliberately sits out. The
+     cost of that choice is a seam of at most one beat's drift between the mid the
+     card printed and the close the forward curve runs from; buildTrack pins the
+     series to the printed mid at NOW either way, so the number and the line
+     cannot disagree. */
+  const trackPlan = useMemo(() => (weighed && isPriceable(weighed) ? weighedToPlan(weighed) : null), [weighed]);
+  const trackBars = trackPlan ? Simulator.getCandles(trackPlan.ticker) ?? [] : [];
+  const track = useMemo(
+    () => (trackPlan && trackBars.length ? buildTrack(trackPlan, trackBars) : null),
+    // The buffer is mutated in place, so its identity never changes; the plan is
+    // what moves, and it moves on the beat.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [trackPlan, trackBars.length]
+  );
 
   // ---- Compass evidence, only where the horizons genuinely match -------------
   const evidence = useMemo(() => {
@@ -1243,6 +1274,10 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
     );
   };
 
+  // The chart follows the grade. Where the panel above is an empty state — a date
+  // that has passed, a symbol with no listing — there is no contract to draw.
+  const showTrack = trackPlan != null && track != null && !parsed.expired && parsed.ticker.state !== 'unknown';
+
   return (
     <div className="mx-auto w-full max-w-[1180px] flex flex-col gap-4">
       <div className="flex flex-col gap-3">
@@ -1306,6 +1341,8 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
           />
         </Panel>
       </div>
+
+      {showTrack && <ContractTrack key={trackPlan.key} plan={trackPlan} bars={trackBars} track={track} className="animate-soft-in" />}
 
       {weighed && priceable && (
         <Panel

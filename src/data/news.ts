@@ -25,6 +25,12 @@ export interface NewsPrediction {
   confidencePct: number;
   /** The historical base rate behind the number */
   analog: string;
+  /** Prior events the base rate is drawn from */
+  baseN: number;
+  /** Share of those priors that closed the headline's way, % */
+  baseHitPct: number;
+  /** Median absolute move those priors produced, % */
+  baseMedianPct: number;
   /** What to do with it */
   playbook: string;
 }
@@ -138,10 +144,10 @@ const TICKER_TEMPLATES: Template[] = [
 ];
 
 const MACRO_TEMPLATES: Array<{ sentiment: number; magnitude: number; text: string }> = [
-  { sentiment: 0.5, magnitude: 0.7, text: 'CPI cools to 2.4% y/y vs 2.6% est — rate-cut odds firm up' },
+  { sentiment: 0.5, magnitude: 0.7, text: 'CPI cools to 2.4% y/y vs 2.6% est; rate-cut odds firm up' },
   { sentiment: -0.45, magnitude: 0.65, text: '10-yr yield pushes through 4.6% as supply concerns build' },
   { sentiment: 0.35, magnitude: 0.5, text: 'Jobless claims steady; soft-landing narrative intact' },
-  { sentiment: -0.55, magnitude: 0.7, text: 'ISM services surprise contraction — growth scare risk returns' },
+  { sentiment: -0.55, magnitude: 0.7, text: 'ISM services surprise contraction; growth scare risk returns' },
   { sentiment: 0.2, magnitude: 0.45, text: "Fed's Waller: policy 'well positioned', open to cuts if inflation cooperates" },
   { sentiment: -0.3, magnitude: 0.5, text: 'Crude jumps 3% on supply disruption; transports lag' },
 ];
@@ -163,14 +169,14 @@ const CATEGORY_KICK: Record<NewsCategory, number> = {
   Macro: 1.0,
 };
 
-const CATEGORY_BASE: Record<NewsCategory, { median: string; hit: number; n: number }> = {
-  Earnings: { median: '3.1%', hit: 71, n: 96 },
-  Guidance: { median: '2.6%', hit: 68, n: 74 },
-  'M&A': { median: '2.2%', hit: 66, n: 38 },
-  Regulatory: { median: '1.6%', hit: 62, n: 45 },
-  Analyst: { median: '1.1%', hit: 60, n: 132 },
-  Product: { median: '0.9%', hit: 57, n: 88 },
-  Macro: { median: '0.8%', hit: 58, n: 210 },
+const CATEGORY_BASE: Record<NewsCategory, { medianPct: number; hit: number; n: number }> = {
+  Earnings: { medianPct: 3.1, hit: 71, n: 96 },
+  Guidance: { medianPct: 2.6, hit: 68, n: 74 },
+  'M&A': { medianPct: 2.2, hit: 66, n: 38 },
+  Regulatory: { medianPct: 1.6, hit: 62, n: 45 },
+  Analyst: { medianPct: 1.1, hit: 60, n: 132 },
+  Product: { medianPct: 0.9, hit: 57, n: 88 },
+  Macro: { medianPct: 0.8, hit: 58, n: 210 },
 };
 
 function predict(category: NewsCategory, sentiment: number, magnitude: number, beta: number, seed: string): NewsPrediction {
@@ -182,20 +188,20 @@ function predict(category: NewsCategory, sentiment: number, magnitude: number, b
   const confidencePct = Math.round(42 + magnitude * 40 + h01(`${seed}-cf`) * 12);
   const base = CATEGORY_BASE[category];
   const dir = sentiment >= 0 ? 'higher' : 'lower';
-  const analog = `${base.n} similar ${category.toLowerCase()} headlines on large caps: median ${base.median} move, ${base.hit}% closed ${dir} next session.`;
+  const analog = `${base.n} similar ${category.toLowerCase()} headlines on large caps: median ${base.medianPct}% move, ${base.hit}% closed ${dir} next session.`;
 
   let playbook: string;
   const abs1d = Math.abs(expMove1dPct);
   if (confidencePct < 55 || abs1d < 0.6) {
-    playbook = 'Low-edge headline — no trade on its own. Stack it with flow and positioning before acting.';
+    playbook = 'Low-edge headline, no trade on its own. Stack it with flow and positioning before acting.';
   } else if (sentiment > 0 && magnitude > 0.6) {
-    playbook = 'Strength tends to hold — buy the first pullback rather than the open print; invalid if day-one gains fully fade.';
+    playbook = 'Strength tends to hold. Buy the first pullback rather than the open print; invalid if day-one gains fully fade.';
   } else if (sentiment > 0) {
-    playbook = 'Modest positive drift expected — sell into the pop if it overshoots the expected move.';
+    playbook = 'Modest positive drift expected. Sell into the pop if it overshoots the expected move.';
   } else if (magnitude > 0.6) {
-    playbook = 'Downside repricing usually runs multiple sessions — fade bounces while the 5-day expected move stays negative.';
+    playbook = 'Downside repricing usually runs multiple sessions. Fade bounces while the 5-day expected move stays negative.';
   } else {
-    playbook = 'Knee-jerk dip likely absorbed — wait for stabilization; reassess if a second headline lands.';
+    playbook = 'Knee-jerk dip likely absorbed. Wait for stabilization; reassess if a second headline lands.';
   }
 
   return {
@@ -204,6 +210,9 @@ function predict(category: NewsCategory, sentiment: number, magnitude: number, b
     expMove5dPct,
     confidencePct,
     analog,
+    baseN: base.n,
+    baseHitPct: base.hit,
+    baseMedianPct: base.medianPct,
     playbook,
   };
 }
@@ -280,17 +289,57 @@ export function tickerSentiment(ticker: string): number {
   return mine.reduce((a, n) => a + n.sentiment * Math.abs(n.magnitude), 0) / w;
 }
 
+/**
+ * The one cut that turns a −1…+1 sentiment into a direction word. Exported so
+ * the tape-mood mix and the per-headline tone read off the same threshold —
+ * they were two separate literals and could disagree on the same headline.
+ */
+export const SENTIMENT_CUT = 0.12;
+export type NewsLean = 'bullish' | 'bearish' | 'flat';
+export const newsLean = (s: number): NewsLean => (s > SENTIMENT_CUT ? 'bullish' : s < -SENTIMENT_CUT ? 'bearish' : 'flat');
+
+export interface MarketMood {
+  score: number;
+  label: string;
+  note: string;
+  /** Headline counts behind the score — what the reader can actually check */
+  mix: Record<NewsLean, number>;
+  /** Headlines carried by each catalyst type, biggest first */
+  byCategory: Array<{ category: NewsCategory; count: number }>;
+  nameCount: number;
+  macroCount: number;
+}
+
 /** Overall tape mood from the feed — the gauge at the top of the News page. */
-export function marketMood(): { score: number; label: string; note: string } {
+export function marketMood(): MarketMood {
   const feed = buildNewsFeed();
   const w = feed.reduce((a, n) => a + n.magnitude, 0) || 1;
   const score = feed.reduce((a, n) => a + n.sentiment * n.magnitude, 0) / w;
   const label = score > 0.15 ? 'RISK-ON' : score < -0.15 ? 'RISK-OFF' : 'MIXED';
+
+  const mix: Record<NewsLean, number> = { bullish: 0, bearish: 0, flat: 0 };
+  const cats = new Map<NewsCategory, number>();
+  for (const n of feed) {
+    mix[newsLean(n.sentiment)] += 1;
+    cats.set(n.category, (cats.get(n.category) ?? 0) + 1);
+  }
+  const byCategory = [...cats.entries()]
+    .map(([category, count]) => ({ category, count }))
+    .sort((a, b) => b.count - a.count || a.category.localeCompare(b.category));
+
   const note =
     label === 'RISK-ON'
-      ? 'Positive catalysts outweigh — dips are getting bought while the tape digests good news.'
+      ? 'Positive catalysts outweigh. Dips are getting bought while the tape digests good news.'
       : label === 'RISK-OFF'
-        ? 'Negative catalysts dominate — rallies are suspect until the headline pressure clears.'
-        : 'Cross-currents in the tape — single-name stories matter more than index direction today.';
-  return { score, label, note };
+        ? 'Negative catalysts dominate. Rallies are suspect until the headline pressure clears.'
+        : 'Cross-currents in the tape: single-name stories matter more than index direction today.';
+  return {
+    score,
+    label,
+    note,
+    mix,
+    byCategory,
+    nameCount: feed.filter(n => n.ticker).length,
+    macroCount: feed.filter(n => !n.ticker).length,
+  };
 }

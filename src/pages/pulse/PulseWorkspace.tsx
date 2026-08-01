@@ -21,6 +21,7 @@ import {
   Columns,
   Rows,
   Grid2x2,
+  StretchHorizontal,
   Lock,
   Pencil,
   Search,
@@ -48,6 +49,7 @@ import {
   WORKSPACE_VERSION,
   clonePreset,
   type PulseLayout,
+  type PulsePanel,
   type PulseWorkspaceState,
 } from './presets';
 
@@ -57,9 +59,19 @@ const GRID_COLS = 12;
 
 const SCAN_INTERVAL_MS = 10_000;
 
-/** One shared data context per ticker, built once per scan. */
+/**
+ * One shared data context per ticker, built once per scan.
+ *
+ * The strike window is the WIDEST the chain supports: the simulated book carries
+ * spot ±15 (31 strikes) and the desk was drawing the inner ±10, so ten strikes
+ * of real exposure were clipped off every GEX panel at once and a wall sitting
+ * just outside the window simply was not on screen. Measured cost of the extra
+ * rows on the 1s heat pulse is +3.6ms per repaint (6.4 → 10.1ms), inside the
+ * 16.7ms frame budget. Going deeper than the chain needs the chain itself to get
+ * deeper: see simulator.ts `strikeRange`.
+ */
 function buildCtx(snapshot: MarketSnapshot, revision: number, focusPrice: number | null = null): WorkspaceCtx {
-  const gex = buildGexView(snapshot, 'GEX', 10);
+  const gex = buildGexView(snapshot, 'GEX', 20);
   const iv = Simulator.TICKERS[snapshot.ticker]?.iv ?? 0.2;
   return {
     ticker: snapshot.ticker,
@@ -68,7 +80,7 @@ function buildCtx(snapshot: MarketSnapshot, revision: number, focusPrice: number
     iv,
     gex,
     matrix: gex.matrix,
-    exposure: buildExposureProfile(snapshot, '0DTE', 10),
+    exposure: buildExposureProfile(snapshot, '0DTE', 15),
     cmd: buildCommandView(snapshot),
     vanna: buildVannaCharm(snapshot, 'CHARM', -1),
     vol: buildVolLab(snapshot.ticker, snapshot.spot, iv),
@@ -77,11 +89,36 @@ function buildCtx(snapshot: MarketSnapshot, revision: number, focusPrice: number
   };
 }
 
+// ---- layout constraints --------------------------------------------------
+/**
+ * The registry is the one authority on how small a widget may get. Layout items
+ * carry their own minW/minH — hand-typed in the presets, frozen at write time in
+ * a saved layout — and nothing reconciled the two, so "GEX + Order Flow" shipped
+ * the Exposure Matrix at w=4 under a declared minimum of 6, and any layout saved
+ * before a widget's floor moved kept the old one forever. Read the floor off the
+ * registry on every load and clamp anything already under it.
+ */
+function hydrateLayout(l: PulseLayout): PulseLayout {
+  return {
+    ...l,
+    layout: l.layout.map(g => {
+      const panel = l.panels.find(p => p.id === g.i);
+      const def = panel ? pulsePanelByKey(panel.key) : undefined;
+      if (!def) return g;
+      // A minimized panel is deliberately parked at h=1; leave it collapsed.
+      const minH = panel?.minimized ? 1 : def.minH;
+      return { ...g, minW: def.minW, minH, w: Math.max(def.minW, g.w), h: Math.max(minH, g.h) };
+    }),
+  };
+}
+
+const hydratedPreset = (p: PulseLayout): PulseLayout => hydrateLayout(clonePreset(p));
+
 // ---- persistence ---------------------------------------------------------
 function freshState(): PulseWorkspaceState {
   return {
     version: WORKSPACE_VERSION,
-    layouts: PULSE_PRESETS.map(clonePreset),
+    layouts: PULSE_PRESETS.map(hydratedPreset),
     activeId: PULSE_PRESETS[0].id,
   };
 }
@@ -94,15 +131,16 @@ function loadState(): PulseWorkspaceState {
     if (parsed.version !== WORKSPACE_VERSION || !Array.isArray(parsed.layouts) || parsed.layouts.length === 0) {
       return freshState();
     }
-    // Drop panels whose keys no longer exist in the registry
+    // Drop panels whose keys no longer exist in the registry, then re-read every
+    // size floor from the registry (see hydrateLayout).
     parsed.layouts = parsed.layouts.map(l => {
       const panels = l.panels.filter(p => pulsePanelByKey(p.key));
-      return { ...l, panels, layout: l.layout.filter(g => panels.some(p => p.id === g.i)) };
+      return hydrateLayout({ ...l, panels, layout: l.layout.filter(g => panels.some(p => p.id === g.i)) });
     });
     // Fold in any preset the saved state predates (by id), so returning users
     // gain newly-shipped desk profiles without losing their custom layouts.
     const have = new Set(parsed.layouts.map(l => l.id));
-    const missing = PULSE_PRESETS.filter(p => !have.has(p.id)).map(clonePreset);
+    const missing = PULSE_PRESETS.filter(p => !have.has(p.id)).map(hydratedPreset);
     if (missing.length) parsed.layouts = [...parsed.layouts, ...missing];
     if (!parsed.layouts.some(l => l.id === parsed.activeId)) parsed.activeId = parsed.layouts[0].id;
     return parsed;
@@ -111,13 +149,148 @@ function loadState(): PulseWorkspaceState {
   }
 }
 
-/** Re-flow the active layout's panels into a quick arrangement. */
-function arrange(mode: 'one' | 'cols' | 'rows' | 'quad', ids: string[]): Layout[] {
-  if (mode === 'one') return ids.map((i, k) => ({ i, x: 0, y: k * 6, w: 12, h: 6, minW: 3, minH: 3 }));
-  if (mode === 'cols') return ids.map((i, k) => ({ i, x: (k % 2) * 6, y: Math.floor(k / 2) * 6, w: 6, h: 6, minW: 3, minH: 3 }));
-  if (mode === 'rows') return ids.map((i, k) => ({ i, x: 0, y: k * 4, w: 12, h: 4, minW: 3, minH: 3 }));
-  // quad — 2×2 then stack extras
-  return ids.map((i, k) => ({ i, x: (k % 2) * 6, y: Math.floor(k / 2) * 5, w: 6, h: 5, minW: 3, minH: 3 }));
+const floorOf = (key: string): { minW: number; minH: number } => {
+  const def = pulsePanelByKey(key);
+  return { minW: def?.minW ?? 3, minH: def?.minH ?? 3 };
+};
+
+/**
+ * Re-flow the active layout's panels into a quick arrangement.
+ *
+ * Every mode used to emit a flat minW/minH of 3 for every panel. RGL reads the
+ * resize floor off the layout item, so one press of Columns silently licensed a
+ * later mouse-drag to shrink the Liquidity Map to a third of the size its own
+ * heatmap needs. Sizes now come from the widget's own registered floor.
+ */
+function arrange(mode: 'one' | 'cols' | 'rows' | 'quad', panels: PulsePanel[]): Layout[] {
+  // per-row width, nominal height, panels per row
+  const SHAPE = {
+    one: { w: 12, h: 6, per: 1 },
+    cols: { w: 6, h: 6, per: 2 },
+    rows: { w: 12, h: 4, per: 1 },
+    quad: { w: 6, h: 5, per: 2 },
+  }[mode];
+
+  const out: Layout[] = [];
+  let y = 0;
+  for (let k = 0; k < panels.length; k += SHAPE.per) {
+    const band = panels.slice(k, k + SHAPE.per);
+    const boxes = band.map((p, j) => {
+      const { minW, minH } = floorOf(p.key);
+      return { i: p.id, x: j * SHAPE.w, y, w: Math.max(minW, SHAPE.w), h: Math.max(minH, SHAPE.h), minW, minH };
+    });
+    // The nominal height is a suggestion; a widget whose floor is taller sets the
+    // band, so the row advances past its real bottom instead of overlapping the
+    // next one and leaving RGL to shove it out.
+    const bandH = Math.max(...boxes.map(b => b.h));
+    boxes.forEach(b => out.push({ ...b, h: bandH }));
+    y += bandH;
+  }
+  return out;
+}
+
+/**
+ * Pack the desk into full rows.
+ *
+ * The other four modes impose a shape; this one keeps the shape the user built
+ * and only closes the gaps. It walks the panels in reading order, keeps adding
+ * to the current row while the next panel's floor still fits, then stretches or
+ * trims that row's widths until they sum to exactly 12. This is what repairs an
+ * already-saved desk where two panels the user wanted side by side are stacked
+ * because their old default widths summed past the grid — nothing migrates on
+ * load, they press Fit.
+ */
+function fitRows(layout: Layout[], panels: PulsePanel[]): Layout[] {
+  const panelOf = (i: string) => panels.find(p => p.id === i);
+  const keyOf = (i: string) => panelOf(i)?.key ?? '';
+  const order = [...layout].sort((a, b) => a.y - b.y || a.x - b.x);
+
+  const rows: Layout[][] = [];
+  let row: Layout[] = [];
+  let floorUsed = 0;
+  const flush = () => {
+    if (row.length) rows.push(row);
+    row = [];
+    floorUsed = 0;
+  };
+  for (const g of order) {
+    // A collapsed panel is a 1-row title bar. Pairing it with a full-height
+    // neighbour would stretch it back open with its body still hidden, so it
+    // takes a band of its own.
+    if (panelOf(g.i)?.minimized) {
+      flush();
+      rows.push([g]);
+      continue;
+    }
+    const { minW } = floorOf(keyOf(g.i));
+    if (row.length && floorUsed + minW > GRID_COLS) flush();
+    row.push(g);
+    floorUsed += minW;
+  }
+  flush();
+
+  const out: Layout[] = [];
+  let y = 0;
+  for (const r of rows) {
+    if (r.length === 1 && panelOf(r[0].i)?.minimized) {
+      out.push({ ...r[0], x: 0, y, w: GRID_COLS, h: 1, minW: floorOf(keyOf(r[0].i)).minW, minH: 1 });
+      y += 1;
+      continue;
+    }
+    const floors = r.map(g => floorOf(keyOf(g.i)));
+    const widths = r.map((g, k) => Math.max(floors[k].minW, Math.min(g.w, GRID_COLS)));
+    let sum = widths.reduce((a, b) => a + b, 0);
+    // Take columns from the widest panel that still has slack, give them to the
+    // narrowest. Guarded rather than while(true): a row whose floors already sum
+    // to 12 has nothing left to take and must exit, not spin.
+    for (let guard = 0; sum > GRID_COLS && guard < 64; guard++) {
+      let pick = -1;
+      widths.forEach((w, k) => {
+        if (w > floors[k].minW && (pick < 0 || w > widths[pick])) pick = k;
+      });
+      if (pick < 0) break;
+      widths[pick] -= 1;
+      sum -= 1;
+    }
+    for (let guard = 0; sum < GRID_COLS && guard < 64; guard++) {
+      let pick = 0;
+      widths.forEach((w, k) => {
+        if (w < widths[pick]) pick = k;
+      });
+      widths[pick] += 1;
+      sum += 1;
+    }
+    // One height per row so the row reads as a band rather than a ragged edge.
+    const h = Math.max(...r.map((g, k) => Math.max(floors[k].minH, g.h)));
+    let x = 0;
+    r.forEach((g, k) => {
+      out.push({ ...g, x, y, w: widths[k], h, minW: floors[k].minW, minH: floors[k].minH });
+      x += widths[k];
+    });
+    y += h;
+  }
+  return out;
+}
+
+/**
+ * Where a newly added panel lands. It used to be `{ x: 0, y: Infinity }` — the
+ * left edge of a brand-new bottom row — so adding a second panel stacked it
+ * under the first even with half the grid free beside it, which is exactly what
+ * "the boxes don't fit each other" describes. Take the first row with room for
+ * the incoming widget's own minimum, and only fall back to a new bottom row when
+ * no row has any.
+ */
+function placeNew(layout: Layout[], def: { w: number; minW: number }): { x: number; y: number; w: number } {
+  const bands = [...new Set(layout.map(g => g.y))].sort((a, b) => a - b);
+  for (const y of bands) {
+    // Everything whose vertical span COVERS this band, not just what starts on
+    // it: Flow Command's full-height GEX column occupies three bands, and
+    // counting only the panels that begin at each y would offer its space away.
+    const rightEdge = layout.reduce((m, g) => (g.y <= y && y < g.y + g.h ? Math.max(m, g.x + g.w) : m), 0);
+    const free = GRID_COLS - rightEdge;
+    if (free >= def.minW) return { x: rightEdge, y, w: Math.min(def.w, free) };
+  }
+  return { x: 0, y: Infinity, w: def.w };
 }
 
 /** Per-panel ticker editor — click to type a symbol, Enter to switch. */
@@ -284,6 +457,22 @@ const PanelChrome = ({
     (and the per-second buildDarkPoolView / runMonteCarlo that rode on it). */
 const PULSE_KEYS = new Set(['gex-heatmap']);
 
+/**
+ * How many panels may take the 1s heat pulse at once.
+ *
+ * Measured rather than guessed. One 30-strike matrix repaints in ~10ms, two in
+ * ~19ms, three in ~30ms, four in ~34ms (headless Chromium at 1536x900, React 18
+ * production, real heatCellStyle), against a 16.7ms budget at 60fps. So a desk
+ * carrying more than one heatmap cannot pulse them together without dropping a
+ * frame every second. Over the budget they ALL fall back to the 10s scan
+ * cadence: the per-second movement is an interpolation between scans, and a wall
+ * of books is read by comparing them, which a staggered or partial animation
+ * actively gets in the way of. Raising this needs the cell repaint to get
+ * cheaper, not the budget to get more generous — see GexMatrix's per-cell CSS
+ * transition, which is most of the cost.
+ */
+const PULSE_BUDGET = 1;
+
 /** Memoized panel body — bails out unless its render fn or ctx identity changes,
     so stable-ctx panels don't re-render on the 1s pulse tick. */
 const MemoPanelBody = memo(({ render, ctx }: { render: (c: WorkspaceCtx) => ReactNode; ctx: WorkspaceCtx }) => (
@@ -395,11 +584,21 @@ const PulseWorkspace = () => {
     }
   }, [marketData]);
 
+  // Maximizing hides every other panel, so the budget is spent on what is
+  // actually on screen rather than on what the layout holds.
+  const pulsePanelCount = maximizedId
+    ? active.panels.filter(p => p.id === maximizedId && PULSE_KEYS.has(p.key)).length
+    : active.panels.filter(p => PULSE_KEYS.has(p.key)).length;
+  const pulseOn = pulsePanelCount > 0 && pulsePanelCount <= PULSE_BUDGET;
+
   const [pulseTick, setPulseTick] = useState(0);
   useEffect(() => {
+    // No pulsing panel on screen means no reason to re-render the desk every
+    // second just to throw the result away in MemoPanelBody.
+    if (!pulseOn) return;
     const id = setInterval(() => setPulseTick(t => t + 1), 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [pulseOn]);
 
   const usedTickers = useMemo(() => {
     const set = new Set<string>([activeTicker]);
@@ -429,11 +628,14 @@ const PulseWorkspace = () => {
     const def = pulsePanelByKey(key);
     if (!def) return;
     const id = `${key}-${++counterRef.current}`;
-    mutate(l => ({
-      ...l,
-      panels: [...l.panels, { id, key }],
-      layout: [...l.layout, { i: id, x: 0, y: Infinity, w: def.w, h: def.h, minW: def.minW, minH: def.minH }],
-    }));
+    mutate(l => {
+      const spot = placeNew(l.layout, def);
+      return {
+        ...l,
+        panels: [...l.panels, { id, key }],
+        layout: [...l.layout, { i: id, ...spot, h: def.h, minW: def.minW, minH: def.minH }],
+      };
+    });
     setAddOpen(false);
   };
 
@@ -517,7 +719,9 @@ const PulseWorkspace = () => {
   };
 
   const doArrange = (mode: 'one' | 'cols' | 'rows' | 'quad') =>
-    mutate(l => ({ ...l, layout: arrange(mode, l.panels.map(p => p.id)) }));
+    mutate(l => ({ ...l, layout: arrange(mode, l.panels) }));
+
+  const doFit = () => mutate(l => ({ ...l, layout: fitRows(l.layout, l.panels) }));
 
   // ---- workspace-level ops ------------------------------------------------
   const switchLayout = (id: string) => {
@@ -570,7 +774,7 @@ const PulseWorkspace = () => {
       setConfirmOp('reset');
       return;
     }
-    mutate(() => clonePreset(preset));
+    mutate(() => hydratedPreset(preset));
     setConfirmOp(null);
     toast.success(`Reset "${preset.name}" to its preset arrangement`);
   };
@@ -611,7 +815,7 @@ const PulseWorkspace = () => {
       );
     // Only pulse-consuming panels take the fresh per-second matrix; the rest get
     // the stable scan ctx so their memoized body skips the 1s churn.
-    const ctx = PULSE_KEYS.has(key) ? { ...base, matrix: pulseMatrix(base.gex.matrix, pulseTick) } : base;
+    const ctx = pulseOn && PULSE_KEYS.has(key) ? { ...base, matrix: pulseMatrix(base.gex.matrix, pulseTick) } : base;
     // Isolate each body so one throwing panel can't take down the whole grid.
     return (
       <PanelErrorBoundary resetKey={`${key}:${ticker}`} label={def.title}>
@@ -643,7 +847,7 @@ const PulseWorkspace = () => {
       {/* The desk is deliberately chromeless — no page title bar — so the H1
           every other route renders is here for the document outline and for
           assistive tech, not for the eye. */}
-      <h1 className="sr-only">Pulse — {active.name} workspace</h1>
+      <h1 className="sr-only">Pulse workspace: {active.name}</h1>
       {/* Workspace bar */}
       <div className="flex items-center gap-2 flex-wrap">
         {/* View switcher — the hero control (present in both modes) */}
@@ -716,10 +920,13 @@ const PulseWorkspace = () => {
         {editLayout && (
           <>
             <div className="inline-flex items-center rounded-md border border-borderSubtle overflow-hidden">
-              <button onClick={() => doArrange('one')} title="One panel" className="px-2 py-1.5 text-textMuted hover:text-textPrimary hover:bg-rowHover"><Square className="w-3.5 h-3.5" /></button>
-              <button onClick={() => doArrange('cols')} title="Columns" className="px-2 py-1.5 text-textMuted hover:text-textPrimary hover:bg-rowHover border-l border-borderSubtle"><Columns className="w-3.5 h-3.5" /></button>
-              <button onClick={() => doArrange('rows')} title="Rows" className="px-2 py-1.5 text-textMuted hover:text-textPrimary hover:bg-rowHover border-l border-borderSubtle"><Rows className="w-3.5 h-3.5" /></button>
-              <button onClick={() => doArrange('quad')} title="Grid" className="px-2 py-1.5 text-textMuted hover:text-textPrimary hover:bg-rowHover border-l border-borderSubtle"><Grid2x2 className="w-3.5 h-3.5" /></button>
+              <button onClick={() => doArrange('one')} title="One panel per row" aria-label="Arrange one panel per row" className="px-2 py-1.5 text-textMuted hover:text-textPrimary hover:bg-rowHover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60"><Square className="w-3.5 h-3.5" /></button>
+              <button onClick={() => doArrange('cols')} title="Two columns" aria-label="Arrange in two columns" className="px-2 py-1.5 text-textMuted hover:text-textPrimary hover:bg-rowHover border-l border-borderSubtle focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60"><Columns className="w-3.5 h-3.5" /></button>
+              <button onClick={() => doArrange('rows')} title="Short rows" aria-label="Arrange in short rows" className="px-2 py-1.5 text-textMuted hover:text-textPrimary hover:bg-rowHover border-l border-borderSubtle focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60"><Rows className="w-3.5 h-3.5" /></button>
+              <button onClick={() => doArrange('quad')} title="Two by two" aria-label="Arrange two by two" className="px-2 py-1.5 text-textMuted hover:text-textPrimary hover:bg-rowHover border-l border-borderSubtle focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60"><Grid2x2 className="w-3.5 h-3.5" /></button>
+              {/* Keeps the desk you built and only closes the gaps, so a pair
+                  that saved stacked ends up side by side. */}
+              <button onClick={doFit} title="Fit panels to full rows" aria-label="Fit panels to full rows" className="px-2 py-1.5 text-textMuted hover:text-textPrimary hover:bg-rowHover border-l border-borderSubtle focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60"><StretchHorizontal className="w-3.5 h-3.5" /></button>
             </div>
 
             <div className="relative">
@@ -753,7 +960,15 @@ const PulseWorkspace = () => {
                     onClick={() => addPanel(def.key)}
                     className="w-full text-left px-3 py-2 hover:bg-rowHover transition-colors border-b border-borderSubtle/40 last:border-0"
                   >
-                    <span className="block font-mono text-label font-semibold text-textPrimary">{def.title}</span>
+                    <span className="flex items-baseline gap-2">
+                      <span className="font-mono text-label font-semibold text-textPrimary">{def.title}</span>
+                      {/* The grid is 12 wide, so the size a panel arrives at
+                          decides whether it can share a row. Say it before the
+                          click instead of after. */}
+                      <span className="ml-auto shrink-0 font-mono text-micro text-textMuted tnum" title={`${def.w} of ${GRID_COLS} columns wide, ${def.h} rows tall`}>
+                        {def.w}×{def.h}
+                      </span>
+                    </span>
                     <span className="block text-micro text-textSecondary">{def.description}</span>
                   </button>
                 ))}

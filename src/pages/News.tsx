@@ -8,7 +8,9 @@ import MetricGrid from '../components/ui/MetricGrid';
 import SignalBadge from '../components/ui/SignalBadge';
 import SegmentedControl from '../components/ui/SegmentedControl';
 import HoverReadout from '../components/ui/HoverReadout';
-import { buildNewsFeed, marketMood, type NewsCategory, type NewsItem } from '../data/news';
+import Stat from '../components/ui/Stat';
+import { buildNewsFeed, marketMood, newsLean, type NewsCategory, type NewsItem } from '../data/news';
+import { lookup } from '../data/universe';
 import NewsIntel from '../components/news/NewsIntel';
 import type { Tone } from '../components/ui/tones';
 
@@ -34,9 +36,16 @@ const RIGHT_OPTIONS = [
   { value: 'intel', label: 'Deep read' },
 ] as const;
 
-const sentimentTone = (s: number): Tone => (s > 0.12 ? 'bull' : s < -0.12 ? 'bear' : 'neutral');
-const sentimentLabel = (s: number): string => (s > 0.12 ? 'bullish' : s < -0.12 ? 'bearish' : 'neutral');
-const sentimentText = (s: number): string => (s > 0.12 ? 'text-bull' : s < -0.12 ? 'text-bear' : 'text-textSecondary');
+// One threshold for the whole surface — `newsLean` is the engine's cut, so a
+// headline counted "bullish" in the tape mix is tinted bullish in the row.
+const sentimentTone = (s: number): Tone => {
+  const l = newsLean(s);
+  return l === 'bullish' ? 'bull' : l === 'bearish' ? 'bear' : 'neutral';
+};
+const sentimentText = (s: number): string => {
+  const l = newsLean(s);
+  return l === 'bullish' ? 'text-bull' : l === 'bearish' ? 'text-bear' : 'text-textSecondary';
+};
 
 const catTone: Record<NewsCategory, Tone> = {
   Earnings: 'magenta',
@@ -50,6 +59,43 @@ const catTone: Record<NewsCategory, Tone> = {
 
 const signedPct = (v: number): string => `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`;
 const subjectOf = (n: NewsItem): string => n.ticker ?? 'MACRO';
+const dirText = (v: number): string => (v >= 0 ? 'text-bull' : 'text-bear');
+
+/** Relative age off the feed's own `minutesAgo` — "how stale" at a glance. */
+const ageLabel = (minutes: number): string => (minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`);
+
+/** One labelled figure in a dense stat rail. */
+const Fig = ({ label, value, valueClass = 'text-textPrimary' }: { label: string; value: string; valueClass?: string }) => (
+  <span className="inline-flex items-baseline gap-1 whitespace-nowrap">
+    <span className="uppercase tracking-wider text-textMuted">{label}</span>
+    <span className={`tnum font-semibold ${valueClass}`}>{value}</span>
+  </span>
+);
+
+/**
+ * The model read, on the row instead of in a hover. Every figure here was
+ * already on the item and only reachable by pointing at it, which left the wire
+ * reading as a list of titles. Direction takes bull/bear tone; magnitude
+ * figures (impact, confidence, the prior base rate) stay neutral — they size a
+ * move, they do not point one way.
+ */
+const RowStats = ({ n }: { n: NewsItem }) => {
+  const p = n.prediction;
+  return (
+    <div className="mt-2 flex items-center gap-x-3.5 gap-y-1 flex-wrap font-mono text-micro text-textSecondary">
+      <Fig label="P up" value={`${p.probUpPct}%`} valueClass={sentimentText(n.sentiment)} />
+      <Fig label="1d" value={signedPct(p.expMove1dPct)} valueClass={dirText(p.expMove1dPct)} />
+      <Fig label="5d" value={signedPct(p.expMove5dPct)} valueClass={dirText(p.expMove5dPct)} />
+      <span className="w-px h-2.5 bg-borderSubtle" aria-hidden />
+      <Fig label="impact" value={`${Math.round(n.magnitude * 100)}`} />
+      <Fig label="conf" value={`${p.confidencePct}`} />
+      <span className="w-px h-2.5 bg-borderSubtle" aria-hidden />
+      <Fig label="priors" value={`${p.baseN}`} />
+      <Fig label="hit" value={`${p.baseHitPct}%`} />
+      <Fig label="median" value={`${p.baseMedianPct}%`} />
+    </div>
+  );
+};
 
 /** One deduped wire story: a lead headline plus any near-identical prints. */
 interface WireUnit {
@@ -170,6 +216,7 @@ const News = () => {
   const selected: NewsItem = rows.find(n => n.id === selectedId) ?? units[0]?.lead ?? feed[0];
 
   const moodTone: Tone = mood.label === 'RISK-ON' ? 'bull' : mood.label === 'RISK-OFF' ? 'bear' : 'neutral';
+  const moodTotal = Math.max(feed.length, 1);
   // One card per ticker — keep each ticker's biggest-move headline, then take
   // the top three. Sorting the raw feed let one ticker (e.g. NVDA) fill two
   // cards and labelled all three "Top catalyst"; this dedupes and ranks them.
@@ -192,11 +239,16 @@ const News = () => {
       <PageHeader
         breadcrumb={['Terminal', 'News']}
         title="News"
-        subtitle="The wire on the left — what the model thinks it does to price on the right"
+        subtitle="The wire on the left, what the model thinks it does to price on the right"
         actions={<SegmentedControl ariaLabel="Category filter" options={CAT_OPTIONS} value={filter} onChange={setFilter} />}
       />
 
       <MetricGrid min="170px">
+        {/*
+          The sub was a bare signed integer with no unit and no scale ("−14
+          headline-weighted lean"), which is not something a reader can size.
+          The counts behind the score are checkable against the wire below.
+        */}
         <StatCard
           label="Tape mood"
           value={
@@ -205,10 +257,10 @@ const News = () => {
               {mood.label}
             </span>
           }
-          sub={`${(mood.score * 100).toFixed(0)} headline-weighted lean`}
+          sub={`${mood.mix.bullish} bullish · ${mood.mix.bearish} bearish${mood.mix.flat > 0 ? ` · ${mood.mix.flat} flat` : ''}`}
           tone={moodTone}
         />
-        <StatCard label="Headlines tracked" value={feed.length} sub="this session, model-scored" />
+        <StatCard label="Headlines tracked" value={feed.length} sub={`${mood.nameCount} single-name · ${mood.macroCount} macro`} />
         {movers.map((m, i) => (
           <StatCard
             key={m.id}
@@ -220,13 +272,49 @@ const News = () => {
         ))}
       </MetricGrid>
 
-      <Panel tone={moodTone} bodyClassName="py-3">
-        <p className="text-caption text-textSecondary leading-relaxed">
-          <span className={`font-mono font-semibold uppercase tracking-wider mr-2 ${moodTone === 'bull' ? 'text-bull' : moodTone === 'bear' ? 'text-bear' : 'text-textPrimary'}`}>
-            The read
+      {/*
+        This block used to be a full-width prose banner headed "The read" whose
+        only datum was a lean adjective. It now leads with the split the score
+        is computed from and the catalyst mix, and the sentence follows as a
+        caption instead of a headline. The heading also stopped colliding with
+        the deep read's own "The read" two columns over.
+      */}
+      <Panel
+        title={
+          <span className="inline-flex items-center gap-1.5">
+            <Gauge className="w-3.5 h-3.5" /> Tape composition
           </span>
-          {mood.note}
-        </p>
+        }
+        subtitle={`${feed.length} headlines scored this session`}
+        tone={moodTone}
+        bodyClassName="py-3"
+      >
+        <div className="flex flex-col gap-3">
+          <div>
+            <div className="flex items-center justify-between font-mono text-label uppercase tracking-wider">
+              <span className="text-bear tnum">{mood.mix.bearish} bearish</span>
+              {mood.mix.flat > 0 && <span className="text-textMuted tnum">{mood.mix.flat} flat</span>}
+              <span className="text-bull tnum">{mood.mix.bullish} bullish</span>
+            </div>
+            <div className="mt-1.5 flex h-1.5 rounded-full overflow-hidden bg-white/[0.06]">
+              <span className="h-full bg-bear/80" style={{ width: `${(mood.mix.bearish / moodTotal) * 100}%` }} />
+              <span className="h-full bg-white/20" style={{ width: `${(mood.mix.flat / moodTotal) * 100}%` }} />
+              <span className="h-full bg-bull/80" style={{ width: `${(mood.mix.bullish / moodTotal) * 100}%` }} />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-x-3 gap-y-1.5 flex-wrap">
+            <span className="font-mono text-label uppercase tracking-widest text-textMuted">Catalysts</span>
+            {mood.byCategory.map(c => (
+              <span key={c.category} className="inline-flex items-center gap-1.5">
+                <SignalBadge tone={catTone[c.category]}>{c.category}</SignalBadge>
+                <span className="font-mono text-label font-semibold text-textPrimary tnum">{c.count}</span>
+              </span>
+            ))}
+          </div>
+
+          <p className="text-caption text-textSecondary leading-relaxed border-t border-borderSubtle pt-2.5">{mood.note}</p>
+        </div>
       </Panel>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 items-start">
@@ -303,15 +391,21 @@ const News = () => {
                     >
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-mono text-label text-textMuted tnum">{lead.time}</span>
+                        <span className="font-mono text-label text-textMuted tnum">{ageLabel(lead.minutesAgo)} ago</span>
                         <span className="font-mono text-label text-textMuted">{lead.source}</span>
                         {lead.ticker ? (
-                          <span className="font-mono text-label font-bold text-textPrimary">{lead.ticker}</span>
+                          <>
+                            <span className="font-mono text-label font-bold text-textPrimary">{lead.ticker}</span>
+                            <span className="font-mono text-label text-textMuted">{lookup(lead.ticker)?.sector}</span>
+                          </>
                         ) : (
                           <span className="font-mono text-label uppercase tracking-wider text-textMuted">Macro</span>
                         )}
                         <SignalBadge tone={catTone[lead.category]}>{lead.category}</SignalBadge>
                       </div>
                       <p className="mt-1.5 text-data text-textPrimary leading-snug">{lead.headline}</p>
+
+                      <RowStats n={lead} />
 
                       {isCluster && (
                         <div className="mt-2 flex items-center gap-3 flex-wrap">
@@ -412,6 +506,13 @@ const News = () => {
             className="lg:col-span-2 lg:sticky lg:top-4"
             actions={<SegmentedControl ariaLabel="Selected view" options={RIGHT_OPTIONS} value={rightTab} onChange={setRightTab} />}
           >
+            <div className="flex items-center gap-2 flex-wrap font-mono text-label text-textMuted mb-1.5">
+              <span className="tnum">{selected.time}</span>
+              <span className="tnum">{ageLabel(selected.minutesAgo)} ago</span>
+              <span>{selected.source}</span>
+              {selected.ticker && <span>{lookup(selected.ticker)?.sector}</span>}
+              <SignalBadge tone={catTone[selected.category]}>{selected.category}</SignalBadge>
+            </div>
             <p className="text-data text-textPrimary leading-snug mb-4">{selected.headline}</p>
 
             {rightTab === 'outcome' ? (
@@ -420,27 +521,40 @@ const News = () => {
 
                 <OddsBar probUp={selected.prediction.probUpPct} />
 
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="border border-borderSubtle bg-inset rounded-md px-2.5 py-2">
-                    <div className="font-mono text-label uppercase tracking-wider text-textMuted">1-day exp</div>
-                    <div className={`mt-1 font-mono text-body font-semibold tnum ${selected.prediction.expMove1dPct >= 0 ? 'text-bull' : 'text-bear'} leading-5`}>
-                      {signedPct(selected.prediction.expMove1dPct)}
-                    </div>
-                  </div>
-                  <div className="border border-borderSubtle bg-inset rounded-md px-2.5 py-2">
-                    <div className="font-mono text-label uppercase tracking-wider text-textMuted">5-day exp</div>
-                    <div className={`mt-1 font-mono text-body font-semibold tnum ${selected.prediction.expMove5dPct >= 0 ? 'text-bull' : 'text-bear'} leading-5`}>
-                      {signedPct(selected.prediction.expMove5dPct)}
-                    </div>
-                  </div>
-                  <div className="border border-borderSubtle bg-inset rounded-md px-2.5 py-2">
-                    <div className="font-mono text-label uppercase tracking-wider text-textMuted">Confidence</div>
-                    <div className="mt-1 font-mono text-body font-semibold text-textPrimary tnum leading-5">{selected.prediction.confidencePct}%</div>
-                  </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <Stat
+                    label="1-day exp"
+                    value={signedPct(selected.prediction.expMove1dPct)}
+                    tone={selected.prediction.expMove1dPct >= 0 ? 'bull' : 'bear'}
+                    sub="next session"
+                  />
+                  <Stat
+                    label="5-day exp"
+                    value={signedPct(selected.prediction.expMove5dPct)}
+                    tone={selected.prediction.expMove5dPct >= 0 ? 'bull' : 'bear'}
+                    sub="five sessions"
+                  />
+                  <Stat label="Confidence" value={`${selected.prediction.confidencePct}%`} sub="model, in the read" />
+                  <Stat label="Impact" value={`${Math.round(selected.magnitude * 100)}`} sub="how market-moving" />
                 </div>
 
                 <div>
-                  <div className="font-mono text-label uppercase tracking-widest text-textMuted">Historical analog</div>
+                  <div className="font-mono text-label uppercase tracking-widest text-textMuted">Base rate behind it</div>
+                  <div className="mt-1.5 grid grid-cols-3 gap-2">
+                    <Stat label="Priors" value={`${selected.prediction.baseN}`} sub={`${selected.category.toLowerCase()} prints`} align="right" />
+                    <Stat label="Hit" value={`${selected.prediction.baseHitPct}%`} sub="resolved the same way" align="right" />
+                    <Stat label="Median" value={`${selected.prediction.baseMedianPct}%`} sub="typical move" align="right" />
+                  </div>
+                  {/* Sizes the model's own call against what the catalyst type usually does. */}
+                  <p className="mt-2 font-mono text-label text-textMuted">
+                    This call:{' '}
+                    <span className={`tnum font-semibold ${dirText(selected.prediction.expMove1dPct)}`}>
+                      {Math.abs(selected.prediction.expMove1dPct).toFixed(1)}%
+                    </span>{' '}
+                    against a {selected.prediction.baseMedianPct}% median,{' '}
+                    {Math.abs(selected.prediction.expMove1dPct) >= selected.prediction.baseMedianPct ? 'bigger' : 'smaller'} than the type
+                    usually delivers.
+                  </p>
                   <p className="mt-1.5 text-caption text-textSecondary leading-relaxed">{selected.prediction.analog}</p>
                 </div>
 
@@ -456,28 +570,25 @@ const News = () => {
         )}
       </div>
 
+      {/*
+        The read-out used to repeat sentiment, magnitude, P(up) and the 5-day
+        move — every one of which now sits on the row and stays there. What it
+        carries instead is the one thing the row does not: what to do with the
+        headline, plus the two sizing figures the collapsed cluster children
+        have no room for.
+      */}
       {hover && (
         <HoverReadout x={hover.x} y={hover.y}>
-          <div className="flex items-baseline gap-2">
-            <span className="font-mono text-caption font-bold text-textPrimary">{hover.n.category}</span>
-            <span className={`font-mono text-micro font-bold uppercase tracking-wider ${sentimentText(hover.n.sentiment)}`}>
-              {sentimentLabel(hover.n.sentiment)}
-            </span>
-          </div>
-          <div className="mt-0.5 flex items-baseline gap-3 font-mono text-micro uppercase tracking-wider text-textMuted">
+          <div className="flex items-baseline gap-3 font-mono text-micro uppercase tracking-wider text-textMuted">
+            <span className="text-caption font-bold normal-case tracking-normal text-textPrimary">{hover.n.category}</span>
             <span>
-              Mag <span className="text-textPrimary tnum">{Math.round(hover.n.magnitude * 100)}%</span>
+              Impact <span className="text-textPrimary tnum">{Math.round(hover.n.magnitude * 100)}</span>
             </span>
             <span>
-              P(up) <span className="text-textPrimary tnum">{hover.n.prediction.probUpPct}%</span>
+              Conf <span className="text-textPrimary tnum">{hover.n.prediction.confidencePct}</span>
             </span>
           </div>
-          <div className="mt-0.5 font-mono text-micro text-textSecondary">
-            ±5d expected move{' '}
-            <span className={`tnum ${hover.n.prediction.expMove5dPct >= 0 ? 'text-bull' : 'text-bear'}`}>
-              {signedPct(hover.n.prediction.expMove5dPct)}
-            </span>
-          </div>
+          <p className="mt-1 text-label text-textSecondary leading-snug">{hover.n.prediction.playbook}</p>
         </HoverReadout>
       )}
     </>

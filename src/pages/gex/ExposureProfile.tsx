@@ -43,7 +43,7 @@ const ExposureProfile = () => {
   const [expiry, setExpiry] = useState<ExposureExpiry>('0DTE');
   const [windowHalf, setWindowHalf] = useState<'10' | '15'>('10');
 
-  // Strike sync across matrix + map: hover mirrors, click pins (cyan)
+  // Strike sync across matrix + map: hover mirrors, click pins (silver)
   const [hoverStrike, setHoverStrike] = useState<number | null>(null);
   const [selectedStrike, setSelectedStrike] = useState<number | null>(null);
   const toggleStrike = (s: number) => setSelectedStrike(prev => (prev === s ? null : s));
@@ -82,14 +82,13 @@ const ExposureProfile = () => {
     );
   }
 
-  const { levels } = data;
   const selectedRow = selectedStrike != null ? data.strikes.find(s => s.strike === selectedStrike) : undefined;
-  const wallDist = (wall: number) => {
-    const pct = ((wall - levels.spot) / levels.spot) * 100;
-    return `${Math.abs(pct).toFixed(2)}% ${pct >= 0 ? 'above' : 'below'}`;
-  };
   const biasTok: Tone = data.bias === 'BULLISH' ? 'bull' : data.bias === 'BEARISH' ? 'bear' : 'neutral';
-  const strikeFmt = (v: number) => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
+  // The three nets are sums over the RENDERED window at the SELECTED expiry, and
+  // the bias is the whole chain (exposure.ts:86-92 vs :105-108). Two different
+  // Net GEX figures print on this desk — the rail's and the insight panel's — so
+  // each card states which one it is rather than leaving the reader to guess.
+  const scope = `${expiry} · ±${windowHalf} strikes`;
 
   return (
     <>
@@ -117,9 +116,25 @@ const ExposureProfile = () => {
         <span className="text-textSecondary font-semibold uppercase tracking-wider">Sign</span> positive net = dealer long
         gamma <span className="text-textSecondary">(dips absorbed)</span> · negative = dealer short gamma{' '}
         <span className="text-textSecondary">(moves amplified)</span>.{' '}
-        <span className="text-textSecondary font-semibold uppercase tracking-wider">Units</span> signed $ — GEX per 1%
+        <span className="text-textSecondary font-semibold uppercase tracking-wider">Units</span> signed $ · GEX per 1%
         move, DEX delta notional, VEX per 1% vol.
       </p>
+
+      {/* Stat rail — on top, the same grammar every other Pinpoint desk uses.
+          Spot, both walls and the pin used to sit here too; all four are labelled
+          on the positioning map directly below, and the distance-to-spot they
+          carried now lives in the matrix read-out where a strike is being read. */}
+      <MetricGrid min="170px">
+        <StatCard
+          label="Net GEX"
+          value={<AnimatedNumber value={data.netGex} format={fmtUsd} />}
+          tone={data.netGex >= 0 ? 'bull' : 'bear'}
+          sub={scope}
+        />
+        <StatCard label="Net DEX" value={<AnimatedNumber value={data.netDex} format={fmtUsd} />} sub={scope} />
+        <StatCard label="Net VEX" value={<AnimatedNumber value={data.netVex} format={fmtUsd} />} sub={scope} />
+        <StatCard label="Dealer Bias" value={data.bias} tone={biasTok} sub="full chain, all expiries" />
+      </MetricGrid>
 
       {/* Selected-strike detail bar */}
       <AnimatePresence initial={false}>
@@ -199,30 +214,8 @@ const ExposureProfile = () => {
         </Panel>
       </div>
 
-      {/* Stat rail + insight */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-stretch">
-        <div className="xl:col-span-8">
-          <MetricGrid min="170px">
-            <StatCard label="Net GEX" value={<AnimatedNumber value={data.netGex} format={fmtUsd} />} tone={data.netGex >= 0 ? 'bull' : 'bear'} sub={data.netGex >= 0 ? 'Net supportive' : 'Net negative'} />
-            <StatCard label="Net DEX" value={<AnimatedNumber value={data.netDex} format={fmtUsd} />} sub="Delta exposure" />
-            <StatCard label="Net VEX" value={<AnimatedNumber value={data.netVex} format={fmtUsd} />} sub="Vanna exposure · per 1% vol" />
-            <StatCard label="Spot" value={<AnimatedNumber value={levels.spot} format={v => `$${v.toFixed(2)}`} />} sub="Underlying" />
-            <div className="h-full" onMouseEnter={() => setHoverStrike(levels.putWall)} onMouseLeave={() => setHoverStrike(null)}>
-              <StatCard className="h-full" label="Put Wall" value={<AnimatedNumber value={levels.putWall} format={strikeFmt} />} tone="bear" sub={wallDist(levels.putWall)} />
-            </div>
-            <div className="h-full" onMouseEnter={() => setHoverStrike(levels.pin)} onMouseLeave={() => setHoverStrike(null)}>
-              <StatCard className="h-full" label="Pin Level" value={<AnimatedNumber value={levels.pin} format={strikeFmt} />} sub="Max OI magnet" />
-            </div>
-            <div className="h-full" onMouseEnter={() => setHoverStrike(levels.callWall)} onMouseLeave={() => setHoverStrike(null)}>
-              <StatCard className="h-full" label="Call Wall" value={<AnimatedNumber value={levels.callWall} format={strikeFmt} />} tone="bull" sub={wallDist(levels.callWall)} />
-            </div>
-            <StatCard label="Dealer Bias" value={data.bias} tone={biasTok} sub={data.biasNote} />
-          </MetricGrid>
-        </div>
-        <div className="xl:col-span-4 min-w-0">
-          <ExposureInsight bias={data.bias} biasNote={data.biasNote} insights={data.insights} />
-        </div>
-      </div>
+      {/* Positioning narrative — the read the instruments above earned */}
+      <ExposureInsight bias={data.bias} biasNote={data.biasNote} insights={data.insights} />
 
       {/* Exposure ledger — filterable single-leg drill-down + CSV export */}
       <ExposureLedger

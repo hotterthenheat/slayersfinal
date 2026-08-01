@@ -5,7 +5,26 @@ import { interactiveRowProps, ROW_INTERACTIVE } from '../ui/interactiveRow';
 import { StateBadge } from '../skyvision/StateBadge';
 import { setupState } from '../skyvision/setupState';
 import { expiryRead } from './setupHorizon';
+import { COVERAGE_META, scanCoverage, type ScanCoverage } from '../../core/scanUniverse';
+import type { Tone } from '../ui/tones';
 import type { Setup } from '../../types/skyvision';
+
+/**
+ * Tone for a coverage tier. The rule and the copy live in core/scanUniverse
+ * (COVERAGE_META); the tone belongs here, because src/core never imports
+ * src/components. Same split as STATE_META and StateBadge.
+ *
+ * Silver, grey, amber — the chrome ladder. Depth of coverage is a fact about
+ * what the terminal can SHOW, never about which way the market went, so it may
+ * not borrow bull/bear green and red. And the deepest tier is MODELED rather
+ * than anything resembling "live": the field is a simulator and nothing on this
+ * card is allowed to suggest otherwise.
+ */
+const COVERAGE_TONE: Record<ScanCoverage, Tone> = {
+  modeled: 'select',
+  covered: 'neutral',
+  listing: 'warn',
+};
 
 interface SetupScanCardProps {
   setup: Setup;
@@ -31,12 +50,19 @@ const SetupScanCard = ({ setup, rank, selected, onSelect, onStudy }: SetupScanCa
   // contract pill only; nothing else on the card borrows it.
   const pillTone = isCall ? 'border-bull/50 bg-bull/20' : 'border-bear/50 bg-bear/20';
   const exp = expiryRead(setup.expiry);
+  // How deep the terminal actually goes on this NAME, as opposed to how the
+  // contract graded. The field mixes names the simulator models with names it
+  // only prices, and clicking a shallow one leaves every other desk with nothing
+  // to say; the card is where that is worth knowing, before the click.
+  const coverage = scanCoverage(setup.ticker);
 
   return (
     <div
       {...interactiveRowProps(onSelect, selected)}
       onClick={onSelect}
-      aria-label={`Preview ${setup.contract}, rank ${rank}`}
+      /* role="button" makes the card a leaf, so the badges inside it are not
+         read out on their own. Whatever the card claims has to be in the name. */
+      aria-label={`Preview ${setup.contract}, rank ${rank}, ${COVERAGE_META[coverage].label.toLowerCase()} coverage`}
       /* Selection is one signal, not three. This used to carry a 2px near-white
          inset rail on top of the border and the wash, and it fired on mount, so
          a card nobody had clicked wore the brightest marker on the screen. */
@@ -57,6 +83,9 @@ const SetupScanCard = ({ setup, rank, selected, onSelect, onStudy }: SetupScanCa
           className="inline-flex items-center rounded border border-borderSubtle bg-inset px-1.5 py-0.5 font-mono text-micro uppercase tracking-wider text-textSecondary tnum"
         >
           {exp.chip}
+        </span>
+        <span title={COVERAGE_META[coverage].note}>
+          <SignalBadge tone={COVERAGE_TONE[coverage]}>{COVERAGE_META[coverage].label}</SignalBadge>
         </span>
         {rank === 1 && <SignalBadge tone="magenta">Top pick</SignalBadge>}
         <span className="ml-auto">

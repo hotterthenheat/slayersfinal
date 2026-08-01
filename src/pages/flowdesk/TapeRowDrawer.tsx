@@ -1,13 +1,9 @@
-import { lazy, Suspense } from 'react';
-import { SkeletonRows } from '../../components/ui/Skeleton';
 import { Bookmark } from 'lucide-react';
 import SignalBadge from '../../components/ui/SignalBadge';
 import DrilldownDrawer, { Field, Section } from '../../components/flowdesk/DrilldownDrawer';
 import CrossDeskLinks from '../../components/flowdesk/CrossDeskLinks';
-
-// recharts is heavy — keep it out of the initial bundle; the drilldown only
-// mounts when a print is opened.
-const ContractFlowChart = lazy(() => import('./ContractFlowChart'));
+import PrintSessionChart from './PrintSessionChart';
+import { aggressorOf, competingRead, moneyness, printImplication, printRead, sizeVsOi } from './printRead';
 import { sentimentOf } from '../../data/flowtape';
 import { fmtUsd } from '../../data/gex';
 import type { FlowPrint, PrintSentiment } from '../../types/flowdesk';
@@ -26,13 +22,36 @@ interface TapeRowDrawerProps {
   onToggleMark: (id: number) => void;
 }
 
-/** Right-hand detail drawer for a single options print — the full anatomy of one
-    fill drawn entirely from values the tape already computes. */
+/**
+ * Right-hand detail for a single options print.
+ *
+ * The reader has just watched one line fly past the tape and wants four things:
+ * whether it matters, who traded it, how hard they pressed, and what it implies.
+ * So the drawer leads with the one number that answers the first — the premium,
+ * with the arithmetic that makes it — then answers the rest in a sentence, then
+ * puts the fill inside the only series a point event honestly belongs to.
+ *
+ * It used to open on five unrelated number layouts carrying twenty values, seven
+ * of them printed twice, above two charts. Everything the sentence, the spread
+ * rail or the chart already says has been taken out rather than restated: the
+ * contract's aggressor split is the chart's to report, the strategy and the
+ * sentiment are the header's, and volume, open interest and spot ride under the
+ * ratios that use them.
+ */
 const TapeRowDrawer = ({ print, onClose, isMarked, onToggleMark }: TapeRowDrawerProps) => {
   const sent = print ? sentimentOf(print) : 'NEUTRAL';
-  const sideLabel = print ? (print.side === 'ASK' ? 'BUY' : print.side === 'BID' ? 'SELL' : 'MID') : '';
-  const sideTone =
-    print?.side === 'ASK' ? 'text-bull' : print?.side === 'BID' ? 'text-bear' : 'text-textMuted';
+  const agg = print ? aggressorOf(print) : null;
+  const money = print ? moneyness(print) : null;
+
+  // The rail is drawn from the three numbers printed at its ends, so the picture
+  // can never disagree with its own labels. enrichPrint can quote a fill outside
+  // the spread it also quotes; when it does, the caption says so instead of
+  // parking the marker somewhere it never traded.
+  const lo = print ? Math.min(print.bid, print.ask) : 0;
+  const hi = print ? Math.max(print.bid, print.ask) : 0;
+  const raw = print ? (print.fill - lo) / (hi - lo || 1) : 0;
+  const outside = raw < 0 || raw > 1;
+  const pos = Math.max(0, Math.min(1, raw));
 
   return (
     <DrilldownDrawer
@@ -54,9 +73,7 @@ const TapeRowDrawer = ({ print, onClose, isMarked, onToggleMark }: TapeRowDrawer
                 {print.right}
               </span>
               {print.legs > 1 && <span className="font-mono text-label text-select">×{print.legs}</span>}
-              <SignalBadge tone={sent === 'BULLISH' ? 'bull' : sent === 'BEARISH' ? 'bear' : 'neutral'}>
-                {sent}
-              </SignalBadge>
+              <SignalBadge tone={SENT_TONE[sent]}>{sent}</SignalBadge>
             </div>
             <div className="mt-1 flex items-center gap-2 font-mono text-label text-textSecondary tnum">
               <span>{print.time}</span>
@@ -69,115 +86,110 @@ const TapeRowDrawer = ({ print, onClose, isMarked, onToggleMark }: TapeRowDrawer
         )
       }
     >
-      {print && (
+      {print && agg && money && (
         <>
-          {/* Headline premium */}
-          <div className="inst-surface rounded-md px-4 py-3 flex items-end justify-between gap-3">
-            <div className="flex flex-col gap-0.5 min-w-0">
-              <span className="font-mono text-label uppercase tracking-widest text-textMuted">Print Premium</span>
-              <span
-                className={`font-mono text-xl font-bold tnum ${
-                  print.premium >= 1_000_000 ? 'text-king' : 'text-textPrimary'
-                }`}
-              >
-                {fmtUsd(print.premium)}
-              </span>
-            </div>
-            <div className="flex flex-col items-end gap-0.5 shrink-0">
-              <span className="font-mono text-label uppercase tracking-widest text-textMuted">Aggressor</span>
-              <span className={`font-mono text-base font-bold ${sideTone}`}>{sideLabel}</span>
-            </div>
-          </div>
-
-          {/* Contract drilldown — this contract's flow + underlying net premium */}
-          <Suspense
-            fallback={
-              <SkeletonRows rows={6} className="h-[380px] rounded-md inst-surface p-3" />
-            }
-          >
-            <ContractFlowChart contract={print} />
-          </Suspense>
-
-          {/* Contract */}
-          <Section title="Contract">
-            <Field label="Expiry" value={print.expiry} sub={`${print.dte}d to expiry`} />
-            <Field
-              label="OTM"
-              value={`${print.otmPct >= 0 ? '+' : ''}${print.otmPct.toFixed(1)}%`}
-              tone={print.otmPct >= 0 ? 'text-bull' : 'text-bear'}
-            />
-            <Field label="Spot" value={`$${print.spot.toFixed(2)}`} />
-          </Section>
-
-          {/* Execution */}
-          <Section title="Execution">
-            <Field label="Fill" value={`$${print.fill.toFixed(2)}`} />
-            <Field label="Bid / Ask" value={`${print.bid.toFixed(2)} / ${print.ask.toFixed(2)}`} />
-            <Field label="Size" value={print.size.toLocaleString()} />
-          </Section>
-
-          {/* Spread fill position */}
-          <div className="flex flex-col gap-1.5">
-            <span className="font-mono text-label uppercase tracking-widest text-textSecondary">Fill in spread</span>
-            <div className="inst-surface rounded-md px-3 py-3 flex items-center gap-3">
-              <span className="font-mono text-label tnum text-textMuted">{print.bid.toFixed(2)}</span>
-              <span className="relative flex-1 h-[4px] rounded-full bg-white/[0.07]">
+          {/* The lead: what it cost, who pressed, and how far into the spread they
+              reached. One object, because those three are one read. */}
+          <div className="inst-surface rounded-md px-4 py-3 flex flex-col gap-3">
+            <div className="flex items-end justify-between gap-3">
+              <div className="flex flex-col gap-0.5 min-w-0">
+                <span className="font-mono text-label uppercase tracking-widest text-textMuted">Print premium</span>
                 <span
-                  className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-[9px] h-[9px] rounded-full ${
-                    print.side === 'ASK' ? 'bg-bull' : print.side === 'BID' ? 'bg-bear' : 'bg-white/60'
+                  className={`font-mono text-xl font-bold tnum ${
+                    print.premium >= 1_000_000 ? 'text-king' : 'text-textPrimary'
                   }`}
-                  style={{ left: `${print.fillPos * 100}%` }}
-                />
+                >
+                  {fmtUsd(print.premium)}
+                </span>
+                <span className="font-mono text-label text-textSecondary tnum">
+                  {print.size.toLocaleString()} × ${print.fill.toFixed(2)} × 100
+                </span>
+              </div>
+              <div className="flex flex-col items-end gap-0.5 shrink-0">
+                <span className="font-mono text-label uppercase tracking-widest text-textMuted">Aggressor</span>
+                <span className={`font-mono text-base font-bold ${agg.tone}`}>{agg.label}</span>
+                <span className="font-mono text-label text-textSecondary tnum">
+                  {Math.abs(print.flowScore) < 15
+                    ? 'no pressure either way'
+                    : `${Math.abs(print.flowScore)} of 100 pressure`}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5 border-t border-borderSubtle pt-3">
+              <div className="flex items-center gap-3">
+                <span className="font-mono text-label tnum text-textMuted">{lo.toFixed(2)}</span>
+                <span className="relative flex-1 h-[4px] rounded-full bg-white/[0.07]">
+                  <span
+                    className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-[9px] h-[9px] rounded-full ${
+                      print.side === 'ASK' ? 'bg-bull' : print.side === 'BID' ? 'bg-bear' : 'bg-white/60'
+                    } ${outside ? 'ring-1 ring-warn' : ''}`}
+                    style={{ left: `${pos * 100}%` }}
+                  />
+                </span>
+                <span className="font-mono text-label tnum text-textMuted">{hi.toFixed(2)}</span>
+              </div>
+              <span className="text-micro leading-relaxed text-textMuted">
+                {outside
+                  ? `Printed at $${print.fill.toFixed(2)}, ${raw < 0 ? 'below the quoted bid' : 'above the quoted ask'} of $${(raw < 0 ? lo : hi).toFixed(2)}.`
+                  : `Printed at $${print.fill.toFixed(2)}, ${Math.round(pos * 100)}% of the way from the bid to the ask.`}
               </span>
-              <span className="font-mono text-label tnum text-textMuted">{print.ask.toFixed(2)}</span>
             </div>
           </div>
 
-          {/* Conviction */}
-          <Section title="Conviction">
-            <Field
-              label="Flow Score"
-              value={`${print.flowScore > 0 ? '+' : ''}${print.flowScore}`}
-              tone={print.flowScore > 15 ? 'text-bull' : print.flowScore < -15 ? 'text-bear' : 'text-textMuted'}
-            />
-            <Field
-              label="Day Ratio"
-              value={print.ratioLabel}
-              tone={
-                print.ratioLabel === 'MID'
-                  ? 'text-textMuted'
-                  : print.ratioBidPct >= 50
-                    ? 'text-bear'
-                    : 'text-bull'
-              }
-            />
-            <Field label="Sentiment" value={sent} tone={`text-${SENT_TONE[sent] === 'neutral' ? 'textMuted' : SENT_TONE[sent]}`} />
-          </Section>
+          {/* The read, and the story that fits the same fill just as well. */}
+          <div className="inst-surface rounded-md px-4 py-3 flex flex-col gap-2">
+            <span className="font-mono text-label uppercase tracking-widest text-textSecondary">What it reads as</span>
+            <p className="text-caption leading-relaxed text-textSecondary">{printRead(print)}</p>
+            <p className="text-caption leading-relaxed text-textMuted">{printImplication(print)}</p>
+            <div className="flex items-start gap-2 border-t border-borderSubtle pt-2.5">
+              <span className="font-mono text-label uppercase tracking-wider text-textMuted whitespace-nowrap mt-px">
+                Competing read
+              </span>
+              <p className="text-label leading-relaxed text-textMuted">{competingRead(print)}</p>
+            </div>
+          </div>
 
-          {/* Activity */}
-          <Section title="Activity">
-            <Field label="Volume" value={print.volume.toLocaleString()} />
-            <Field label="Open Int." value={print.oi.toLocaleString()} />
+          <PrintSessionChart print={print} />
+
+          <Section title="Contract">
             <Field
-              label="ΔOI"
-              value={
-                print.deltaOI === 0
-                  ? '—'
-                  : `${print.deltaOI > 0 ? '↑' : '↓'}${Math.abs(print.deltaOI).toLocaleString()}`
-              }
-              tone={print.deltaOI === 0 ? 'text-textMuted' : print.deltaOI > 0 ? 'text-bull' : 'text-bear'}
+              label="Expiry"
+              value={print.expiry}
+              sub={print.dte === 0 ? 'expires today' : `${print.dte}d left`}
+            />
+            <Field
+              label="Moneyness"
+              value={money.short}
+              sub={`spot $${print.spot.toFixed(2)}`}
+            />
+            <Field
+              label="Print vs OI"
+              value={`${sizeVsOi(print).toFixed(1)}%`}
+              sub={`${print.size.toLocaleString()} of ${print.oi.toLocaleString()} open`}
+              tone={sizeVsOi(print) >= 25 ? 'text-warn' : 'text-textPrimary'}
             />
             <Field
               label="Vol / OI"
               value={`${print.volOverOI.toFixed(2)}x`}
+              sub={`${print.volume.toLocaleString()} traded today`}
               tone={print.volOverOI >= 5 ? 'text-warn' : 'text-textPrimary'}
             />
-            <Field label="IV" value={`${print.iv.toFixed(1)}%`} />
-            <Field label="Strategy" value={print.strat === '—' ? 'Single leg' : print.strat} />
+            <Field
+              label="ΔOI"
+              value={
+                print.deltaOI === 0
+                  ? 'Unchanged'
+                  : `${print.deltaOI > 0 ? '↑' : '↓'}${Math.abs(print.deltaOI).toLocaleString()}`
+              }
+              sub="vs the prior session"
+              tone={print.deltaOI === 0 ? 'text-textMuted' : print.deltaOI > 0 ? 'text-bull' : 'text-bear'}
+            />
+            <Field label="IV" value={`${print.iv.toFixed(1)}%`} sub="annualized" />
           </Section>
 
-          {/* Mark action */}
           <button
+            type="button"
             onClick={() => onToggleMark(print.id)}
             aria-pressed={isMarked}
             className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded border font-mono text-caption uppercase tracking-wider transition-colors ${

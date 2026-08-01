@@ -5,7 +5,7 @@ import { Filter, History } from 'lucide-react';
 import { useMarketData } from '../context/MarketDataContext';
 import type { MarketSnapshot } from '../types/market';
 import Simulator from '../core/simulator';
-import { buildSkyVision, makeSetup, scannerFloor } from '../data/skyvision';
+import { buildSkyVision, makeSetup, scannerExpiry, scannerFloor } from '../data/skyvision';
 import { SCANNERS, type OptionRight, type ScannerKey, type Setup } from '../types/skyvision';
 import PageHeader from '../components/ui/PageHeader';
 import Panel from '../components/ui/Panel';
@@ -16,7 +16,7 @@ import ContractWeigher from '../components/compass/ContractWeigher';
 import LottoBoard from '../components/compass/LottoBoard';
 import SetupScanBoard, { type ScanLayout } from '../components/compass/SetupScanBoard';
 import SetupCompare from '../components/compass/SetupCompare';
-import { expiryRangeLabel } from '../components/compass/setupHorizon';
+import { expiryRangeLabel, expiryRead } from '../components/compass/setupHorizon';
 import type { Horizon } from '../core/contractScore';
 import SegmentedControl from '../components/ui/SegmentedControl';
 import { SkeletonRows } from '../components/ui/Skeleton';
@@ -328,35 +328,32 @@ const Compass = () => {
      Measured on the shipped field, the raw grouped order inverts 18.5% of pairs
      against the sweep's own ranking.
 
-     The key is `score` and that is a compromise, not a choice. `score` is a
-     display rounding of the continuous rank the sweep sorts on (rankOf and
-     displayScore, data/skyvision.ts) — ten values doing the work of 240 rows,
-     so everything inside a bucket is a tie this comparator cannot break. What
-     saves it is that the tie is not broken arbitrarily: Array#sort is stable,
-     and the engine emits groups in ranking order with each group's contracts in
-     ranking order, so a stable sort over that list is a merge of runs that are
-     already ranked. The stability is load-bearing here rather than incidental.
-
-     Two explicit tiebreaks were tried and both measure worse against the rank
-     recovered from prescreenRank: the engine's own next key, moneyness, takes
-     pairwise inversions from 2.1% to 4.4%, and distance of |delta| from the
-     money takes them to 3.9%. That is not a flaw in either idea. The jitter
-     separating two candidates inside one score bucket is ±1.5 points, wider
-     than the bucket itself, so inside a bucket moneyness has stopped predicting
-     rank. Nothing short of the rank improves on the merge, which is why the
-     fix is for `Setup` to carry the rank and for this line to read
-     b.rank - a.rank. */
+     The key is `rank`, the continuous quantity the sweep itself sorts on, and
+     that is the only key that works. It used to be `score`, which is a display
+     rounding of that same rank (rankOf and displayScore, data/skyvision.ts) —
+     sixteen values above a floor of 84, ten of them actually occupied, doing the
+     work of 240 rows. Everything inside a bucket was a tie the comparator could
+     not break, so the order fell to whatever arrived first: measured, 230 of the
+     239 adjacent pairs on a full board share a score.
+     Two explicit tiebreaks were tried in its place and both measured
+     WORSE against the rank recovered from prescreenRank: moneyness took pairwise
+     inversions from 2.1% to 4.4%, distance of |delta| from the money to 3.9%.
+     The jitter separating two candidates inside one score bucket is ±1.5 points,
+     wider than the bucket itself, so inside a bucket nothing short of the rank
+     predicts the rank. Sorting on it is a total order that does not depend on
+     arrival at all, which setupRank.test.ts pins by shuffling the input. */
   const rankedSetups = useMemo(
-    () => filteredGroups.flatMap(g => g.setups).sort((a, b) => b.score - a.score),
+    () => filteredGroups.flatMap(g => g.setups).sort((a, b) => b.rank - a.rank),
     [filteredGroups]
   );
 
   /* Per-tab count AND the expiry the preset actually selects.
      "Quick Scalp for what — 0DTE, 1DTE?" is a fair question and the tab strip
      had no answer, because the horizon lived in the engine profile and no type
-     carried it out. Rather than keep a second copy of that table here, each
-     preset is asked directly: one throwaway build reports the expiry it stamps.
-     A screen that reads the engine cannot drift from it.
+     carried it out. Four of the six presets are same-day and two are next-day,
+     so a user who assumes the strip is uniform is wrong about a third of it.
+     The engine answers directly through scannerExpiry, rather than a second copy
+     of that table living here where it could drift.
 
      The count is `totalFound` — what the preset's score bar actually admits
      across the whole field. It used to be `shown`, which is a row cap: against
@@ -368,15 +365,9 @@ const Compass = () => {
   const scannerMeta = useMemo(() => {
     const meta = {} as Record<ScannerKey, { found: number; shown: number; expiry: string }>;
     if (!scanSnapshot) return meta;
-    Simulator.ensureTicker(scanSnapshot.ticker);
-    const cfg = Simulator.TICKERS[scanSnapshot.ticker];
     for (const s of SCANNERS) {
       const built = s.key === scanner && data ? data : buildSkyVision(scanSnapshot, s.key);
-      meta[s.key] = {
-        found: built.totalFound,
-        shown: built.shown,
-        expiry: makeSetup(scanSnapshot.ticker, cfg.currentPrice, Math.round(cfg.currentPrice), 'C', s.key, cfg.iv).expiry,
-      };
+      meta[s.key] = { found: built.totalFound, shown: built.shown, expiry: scannerExpiry(s.key) };
     }
     return meta;
   }, [scanSnapshot, scanner, data]);
@@ -560,7 +551,7 @@ const Compass = () => {
               aria-pressed={isActive}
               title={
                 meta
-                  ? `${s.blurb}. ${meta.found.toLocaleString()} contracts scored ${floor}+ on the last sweep; the board shows the top ${meta.shown}.`
+                  ? `${expiryRead(meta.expiry).sentence}. ${s.blurb}. ${meta.found.toLocaleString()} contracts scored ${floor}+ on the last sweep; the board shows the top ${meta.shown}.`
                   : s.blurb
               }
               className={`relative inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md font-mono text-label uppercase tracking-wider transition-colors ${

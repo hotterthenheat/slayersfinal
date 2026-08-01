@@ -5,15 +5,15 @@ import { ArrowUp, Bookmark, Check, Pause, Play, Plus, Save, Search, SlidersHoriz
 import { DUR, EASE, PILL } from '../../lib/motion';
 import { useMarketData } from '../../context/MarketDataContext';
 import { enrichPrint, sentimentOf, summarizeTape } from '../../data/flowtape';
-import { buildGexView, fmtUsd } from '../../data/gex';
+import { fmtUsd } from '../../data/gex';
 import Panel from '../../components/ui/Panel';
 import EmptyState from '../../components/ui/EmptyState';
+import Skeleton from '../../components/ui/Skeleton';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import StatCard from '../../components/ui/StatCard';
 import MetricGrid from '../../components/ui/MetricGrid';
 import type { Tone } from '../../components/ui/tones';
 import { useToast } from '../../components/ui/Toast';
-import TickerTag from '../../components/ui/TickerTag';
 import Term from '../../components/ui/Term';
 import type { TermKey } from '../../data/terms';
 import TapeRowDrawer from './TapeRowDrawer';
@@ -77,7 +77,7 @@ function tapeRead(rows: FlowPrint[], summary: TapeSummary): string {
   if (rows.length === 0) return 'Awaiting prints…';
   const zdte = rows.filter(r => r.dte === 0).length;
   const parts = [
-    `${summary.bullish ? 'Bullish' : 'Bearish'} tape — ${
+    `${summary.bullish ? 'Bullish' : 'Bearish'} tape: ${
       summary.bullish ? 'aggressive call buying leads' : 'put premium leads'
     } by ${fmtUsd(Math.abs(summary.netPremium))}`,
   ];
@@ -537,7 +537,7 @@ const SavedViews = ({
   );
 };
 
-/** Streaming rich options prints in the house grammar — session strip, filters, multi-ticker. */
+/** Rich options prints in the house grammar — session strip, filters, multi-ticker. */
 const LiveTape = () => {
   const { marketData } = useMarketData();
   const toast = useToast();
@@ -645,38 +645,6 @@ const LiveTape = () => {
   const visibleDataCols = useMemo(() => ALL_COLS.filter(c => visibleCols.has(c.id)), [visibleCols]);
   const colCount = 1 + visibleDataCols.length;
 
-  const topTickers = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const r of rows) m.set(r.ticker, (m.get(r.ticker) ?? 0) + r.premium);
-    return [...m.entries()]
-      .map(([ticker, premium]) => ({ ticker, premium }))
-      .sort((a, b) => b.premium - a.premium)
-      .slice(0, 6);
-  }, [rows]);
-  const topMax = topTickers[0]?.premium ?? 1;
-
-  // Dark-pool crosses for the rail — deterministic per ticker, so keyed on the
-  // active symbol rather than every tick
-  const activeTicker = marketData?.ticker;
-  const darkPrints = useMemo(() => {
-    if (!marketData) return [];
-    return buildGexView(marketData, 'GEX', 10)
-      .board.flatMap(t =>
-        t.prints.map((p, i) => ({
-          key: `${t.ticker}-${i}`,
-          ticker: t.ticker,
-          size: p.size,
-          price: p.price,
-          notional: p.notional,
-          time: p.time,
-          date: p.date,
-        }))
-      )
-      .sort((a, b) => b.notional - a.notional)
-      .slice(0, 8);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTicker]);
-
   useEffect(() => {
     const now = Date.now();
     // The empty first render must not arm the throttle. It used to: the mount
@@ -749,6 +717,21 @@ const LiveTape = () => {
       over them — the header is two rows of variable content, never a fixed 47px. */
   const [headH, setHeadH] = useState(0);
 
+  /** Rows this box holds — the honest denominator for "is the tape full yet". */
+  const boxRows = Math.max(1, Math.ceil(viewportH / rowH));
+  /** The tape only ever holds the prints of the ticks you were present for: it
+      opens on whatever the first 1.5s tick emitted (3 on a cold load, measured)
+      and needs ~4 ticks to cover one screen and ~25 to reach 100. So the first
+      paint is a near-empty 640px box that then fills in under the reader. Until
+      the box has been full once, the part that has no prints yet renders as
+      placeholders with the count beside them, rather than as blank tape.
+      Latched: after the first full screen an empty box is a filter result, not a
+      cold start, and must keep saying so. */
+  const [warmed, setWarmed] = useState(false);
+  useEffect(() => {
+    if (!warmed && (rows.length >= boxRows || paused)) setWarmed(true);
+  }, [warmed, rows.length, boxRows, paused]);
+
   // One read of the scroll box serves both axes: the vertical size drives the
   // virtualization window, the horizontal drives the clipped-column count.
   const measureBox = useCallback(() => {
@@ -787,8 +770,11 @@ const LiveTape = () => {
   useEffect(() => {
     const h = firstRowRef.current?.getBoundingClientRect().height;
     if (h && h > 0 && Math.abs(h - rowH) > 0.5) setRowH(h);
+    // `warmed` is a dep because it is the flip that first mounts a real row —
+    // `view.length > 0` is already true behind the placeholders, so on its own
+    // it never fires and the row height stays at the estimate for the session.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [colCount, view.length > 0]);
+  }, [colCount, warmed, view.length > 0]);
 
   useEffect(
     () => () => {
@@ -896,7 +882,7 @@ const LiveTape = () => {
         {paused && (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-warn/40 bg-warn/[0.06] font-mono text-label font-semibold uppercase tracking-wider text-warn">
             <span className="w-1.5 h-1.5 rounded-full bg-warn custom-pulse" />
-            Paused · {pending} new print{pending === 1 ? '' : 's'} buffered — resume to catch up
+            Paused · {pending} new print{pending === 1 ? '' : 's'} buffered · resume to catch up
           </span>
         )}
 
@@ -938,7 +924,7 @@ const LiveTape = () => {
             hint is a horizontal scrollbar at the foot of a 640px tape. */}
         {clipped > 0 && (
           <span className="font-mono text-label text-warn uppercase tracking-wider tnum">
-            {clipped} {clipped === 1 ? 'column' : 'columns'} off-screen — scroll or hide some
+            {clipped} {clipped === 1 ? 'column' : 'columns'} off-screen · scroll or hide some
           </span>
         )}
 
@@ -956,52 +942,60 @@ const LiveTape = () => {
         <p className="text-label text-textSecondary leading-snug tnum self-center line-clamp-2">{read}</p>
       </div>
 
-      {/* Tape + concentration */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-stretch">
-        {/* The tape takes the whole row until the rail can sit beside it WITHOUT
-            amputating columns. At xl it had 9 of 12 — 918px for a 1305px table —
-            so seven columns sat off-screen behind a scrollbar 640px down the page.
-            1840px is where 9/12 of the content width finally clears 1305, so the
-            handoff is monotonic: it used to go through `2xl` (1536), where 1600px
-            hid four columns while 1440px hid none. */}
-        <Panel title="Options Tape" subtitle={paused ? 'rendering paused — tape still collecting' : 'streaming prints — newest first'} flush className="xl:col-span-12 min-[1840px]:col-span-9 min-w-0">
-          {/* FIXED height (not max-h) — the tape never grows or shrinks as prints
-              arrive; it always scrolls inside a stable 640px viewport. */}
-          <div className="relative">
-            {clipped > 0 && (
-              <span
-                aria-hidden
-                className="pointer-events-none absolute top-0 bottom-3 right-0 w-12 z-20 bg-gradient-to-l from-panel to-transparent"
-              />
-            )}
-            {/* Sits below the sticky header rather than over them — the column
-                names are what you are reading the tape against. */}
-            <AnimatePresence initial={false}>
-              {unread > 0 && (
-                <motion.div
-                  className="pointer-events-none absolute inset-x-0 z-30 flex justify-center"
-                  style={{ top: headH + 8 }}
-                  initial={{ opacity: 0, y: -8, scale: 0.96 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.96, transition: { duration: DUR.fast, ease: EASE } }}
-                  transition={PILL}
+      {/* The tape owns the row. It used to share it with a side rail behind a
+          min-[1840px] split, and the split ran backwards: measured at 1839 the
+          tape was 1765px wide with every column visible, and crossing to 1840
+          cut it to 1319px and pushed a column off-screen — the handoff bought
+          the rail 444px by amputating the table it sat next to. The rail is gone
+          (Dark Pool has its own subtab, and six premium bars never earned a
+          column), so the split and the width it cost go with it. The
+          clipped-column counter still earns its keep: the table's intrinsic
+          width settles near 1330px once prints have widened the cells, so a
+          1280px viewport (1220px of content) still hides two columns. */}
+      <Panel
+        title="Options Tape"
+        subtitle={
+          paused ? 'rendering paused · tape still collecting' : warmed ? 'newest prints first' : 'first screen filling'
+        }
+        flush
+      >
+        {/* FIXED height (not max-h) — the tape never grows or shrinks as prints
+            arrive; it always scrolls inside a stable 640px viewport. */}
+        <div className="relative">
+          {clipped > 0 && (
+            <span
+              aria-hidden
+              className="pointer-events-none absolute top-0 bottom-3 right-0 w-12 z-20 bg-gradient-to-l from-panel to-transparent"
+            />
+          )}
+          {/* Sits below the sticky header rather than over them — the column
+              names are what you are reading the tape against. */}
+          <AnimatePresence initial={false}>
+            {unread > 0 && (
+              <motion.div
+                className="pointer-events-none absolute inset-x-0 z-30 flex justify-center"
+                style={{ top: headH + 8 }}
+                initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.96, transition: { duration: DUR.fast, ease: EASE } }}
+                transition={PILL}
+              >
+                <button
+                  onClick={jumpToNewest}
+                  // Holo, not another panel surface: this floats over live rows
+                  // and has to read as an object above the tape rather than a
+                  // smudge on it — and it is the one silver thing in a field of
+                  // red and green, so it can't be mistaken for a print.
+                  className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full holo-bg pl-2 pr-2.5 py-1 font-mono text-micro font-semibold uppercase tracking-wide text-ink shadow-[0_2px_12px_rgba(0,0,0,0.65)] ring-1 ring-black/40 transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-select active:scale-[0.98]"
                 >
-                  <button
-                    onClick={jumpToNewest}
-                    // Holo, not another panel surface: this floats over live rows
-                    // and has to read as an object above the tape rather than a
-                    // smudge on it — and it is the one silver thing in a field of
-                    // red and green, so it can't be mistaken for a print.
-                    className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full holo-bg pl-2 pr-2.5 py-1 font-mono text-micro font-semibold uppercase tracking-wide text-ink shadow-[0_2px_12px_rgba(0,0,0,0.65)] ring-1 ring-black/40 transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-select active:scale-[0.98]"
-                  >
-                    <ArrowUp className="w-3 h-3" />
-                    <span className="tabular-nums">
-                      {unread > 99 ? '99+' : unread} new {unread === 1 ? 'print' : 'prints'}
-                    </span>
-                  </button>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                  <ArrowUp className="w-3 h-3" />
+                  <span className="tabular-nums">
+                    {unread > 99 ? '99+' : unread} new {unread === 1 ? 'print' : 'prints'}
+                  </span>
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
           <div ref={scrollRef} onScroll={onScroll} className="overflow-auto h-[640px]">
             <table ref={tableRef} className="w-full border-collapse min-w-[640px]">
               <thead className="sticky top-0 z-10">
@@ -1040,7 +1034,7 @@ const LiveTape = () => {
                 </tr>
               </thead>
               <tbody>
-                {total === 0 && (
+                {total === 0 && (warmed || base.length > 0) && (
                   <tr>
                     <td colSpan={colCount}>
                       <EmptyState size="lg" title={base.length === 0 ? 'Awaiting first prints…' : 'No prints match the filters'} />
@@ -1099,98 +1093,27 @@ const LiveTape = () => {
                     <td colSpan={colCount} className="p-0 border-0" />
                   </tr>
                 )}
+                {!warmed && (
+                  <tr>
+                    <td colSpan={colCount} className="px-2 py-2 border-0">
+                      <span className="block pb-1.5 font-mono text-label uppercase tracking-widest text-textMuted tnum">
+                        First screen filling · {base.length} of {boxRows} prints
+                      </span>
+                      {/* Placeholders, not invented rows: the tape below this
+                          line has not printed yet and the box says so. */}
+                      {Array.from({ length: Math.max(0, boxRows - total) }).map((_, i) => (
+                        <span key={i} className="block py-[3px]" style={{ height: rowH }}>
+                          <Skeleton className="h-full w-full rounded-sm" />
+                        </span>
+                      ))}
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
-          </div>
-        </Panel>
-
-        {/* Right rail: concentration summary on top, dark-pool feed below.
-            Stacks under the tape until 1840px — see the Panel above. */}
-        <div className="xl:col-span-12 min-[1840px]:col-span-3 min-w-0 flex flex-col gap-4 h-full min-h-0">
-          <Panel title="Top Tickers" subtitle="session premium concentration" className="w-full">
-            <div className="flex flex-col gap-2.5">
-              {topTickers.length === 0 && (
-                <span className="font-mono text-label text-textMuted uppercase tracking-widest py-6 text-center">
-                  Awaiting tape…
-                </span>
-              )}
-              {topTickers.map((t, i) => (
-                <div key={t.ticker} className="flex items-center gap-2">
-                  <TickerTag
-                    symbol={t.ticker}
-                    className={`w-12 shrink-0 text-left font-mono text-label font-semibold ${i === 0 ? 'text-king' : 'text-textPrimary'}`}
-                  />
-                  <span className="relative flex-1 h-[5px] rounded-full bg-white/[0.05]">
-                    <span
-                      className={`absolute inset-y-0 left-0 rounded-full ${i === 0 ? 'bg-king/70' : 'bg-white/25'}`}
-                      style={{ width: `${(t.premium / topMax) * 100}%` }}
-                    />
-                  </span>
-                  <span className="w-14 shrink-0 text-right font-mono text-label tnum text-textSecondary">
-                    {fmtUsd(t.premium)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </Panel>
-
-          <Panel title="Dark Pool" subtitle="off-exchange crosses · by notional" flush className="w-full flex-1 min-h-0">
-            <div className="overflow-y-auto h-full">
-              {darkPrints.length === 0 ? (
-                <span className="block font-mono text-label text-textMuted uppercase tracking-widest py-6 text-center">
-                  Awaiting prints…
-                </span>
-              ) : (
-                <table className="w-full border-collapse">
-                  <thead className="sticky top-0 z-10">
-                    <tr className="bg-panelRaised">
-                      {['Ticker', 'Size', 'Price', 'Notional', 'Time'].map((h, i) => (
-                        <th
-                          key={h}
-                          className={`px-2 py-1.5 font-mono text-label font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle ${
-                            i === 0 ? 'text-left' : 'text-right'
-                          }`}
-                        >
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {darkPrints.map(p => (
-                      <tr
-                        key={p.key}
-                        title={`${p.date} · ${p.time}`}
-                        className="border-b border-borderSubtle/30 last:border-0 hover:bg-rowHover transition-colors"
-                      >
-                        <td className="px-2 py-2 whitespace-nowrap">
-                          <span className="flex items-center gap-1.5">
-                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-darkpool" />
-                            <span className="font-mono text-label font-semibold text-textPrimary">{p.ticker}</span>
-                          </span>
-                        </td>
-                        <td className="px-2 py-2 text-right font-mono text-label tnum text-textSecondary">
-                          {p.size.toLocaleString()}
-                        </td>
-                        <td className="px-2 py-2 text-right font-mono text-label tnum text-textSecondary">
-                          ${p.price.toFixed(2)}
-                        </td>
-                        <td className="px-2 py-2 text-right font-mono text-label font-bold tnum text-textPrimary">
-                          {fmtUsd(p.size * p.price)}
-                        </td>
-                        <td className="px-2 py-2 text-right font-mono text-label tnum text-textSecondary whitespace-nowrap">
-                          {p.time.slice(0, 5)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </Panel>
         </div>
-      </div>
+      </Panel>
 
       <TapeRowDrawer
         print={selected}

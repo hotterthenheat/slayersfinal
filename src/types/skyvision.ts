@@ -16,7 +16,7 @@ export interface ScannerDef {
 }
 
 export const SCANNERS: ScannerDef[] = [
-  { key: 'top-setups', label: 'Top Setups', blurb: 'Strongest ranked — trend + dealer-flow conviction' },
+  { key: 'top-setups', label: 'Top Setups', blurb: 'Strongest ranked on trend and dealer-flow conviction' },
   { key: 'quick-scalp', label: 'Quick Scalp', blurb: 'High-gamma, short-hold intraday pops' },
   { key: 'discounted', label: 'Discounted', blurb: 'Cheap premium vs projected move' },
   { key: 'rebounds', label: 'Rebounds', blurb: 'Oversold reversals with structure support' },
@@ -63,6 +63,14 @@ export interface Setup {
   right: OptionRight;
   strike: number;
   expiry: string;
+  /**
+   * The engine's continuous ranking quantity (data/skyvision.ts rankOf). This is
+   * what a board ORDERS by. `score` is its display rounding, and above a floor of
+   * 84 that rounding holds sixteen values for thousands of candidates, so sorting
+   * on it sorts a sixteen-way tie and hands the board to whatever breaks it.
+   */
+  rank: number;
+  /** The 8-99 integer a screen prints. Never an input to a comparison. */
   score: number;
   verdict: Verdict;
   topRated: boolean;

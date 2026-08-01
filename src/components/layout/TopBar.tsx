@@ -1,11 +1,11 @@
 /*
 ==================================================
   SLAYER TERMINAL - TOP BAR (nav + utilities)
-  Navigation is workflow-first: Discover · Analyze ·
-  Manage · Review, each a hover-dropdown of the branded
-  desks inside it. A sliding holo underline marks the
-  active workflow. Below lg the whole nav collapses into
-  a slide-down drawer grouped the same way. Home exits
+  Four groups from nav.ts — Scan · Read · Yours ·
+  Models — each a hover-dropdown of the branded desks
+  inside it. A sliding holo underline marks the active
+  group. Below lg the whole nav collapses into a
+  slide-down drawer grouped the same way. Home exits
   via the wordmark.
 ==================================================
 */
@@ -92,8 +92,8 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
         <Wordmark onClick={goHome} />
       </div>
 
-      {/* Center nav — one dropdown per workflow (Discover · Analyze · Manage ·
-          Review). Allowed to shrink rather than overflow the side zones. */}
+      {/* Center nav — one dropdown per group. Allowed to shrink rather than
+          overflow the side zones. */}
       <nav className="hidden lg:flex items-center self-stretch min-w-0 mx-auto">
         {NAV_GROUPS.map(group => {
           const items = itemsByGroup(group);
@@ -208,8 +208,8 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
   );
 };
 
-/** Live spot + day change. Isolated so the price tick re-renders only this
-    span, not the whole workflow nav / dropdown tree above it. */
+/** Spot + day change. Isolated so the price tick re-renders only this span, not
+    the whole group nav / dropdown tree above it. */
 const LivePrice = () => {
   const { marketData } = useMarketData();
   if (!marketData) return null;
@@ -227,7 +227,7 @@ const LivePrice = () => {
   );
 };
 
-/** Shared hover dropdown — lists the desks inside a workflow with a one-line
+/** Shared hover dropdown — lists the desks inside a group with a one-line
     description each. `section` marks the active desk (matches on the first path
     segment so a desk's subpages still highlight it). */
 const DropMenu = ({
@@ -287,7 +287,7 @@ const DropMenu = ({
   </motion.div>
 );
 
-/** Full workflow-grouped nav list for the mobile drawer. */
+/** Full grouped nav list for the mobile drawer. */
 const MobileNav = ({ section, onPick }: { section: string; onPick: () => void }) => (
   <div className="p-3 flex flex-col gap-4">
     {NAV_GROUPS.map((group: NavGroup) => {

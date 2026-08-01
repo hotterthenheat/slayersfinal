@@ -106,6 +106,19 @@ export function scannerFloor(scanner: ScannerKey): number {
   return PROFILES[scanner].scoreFloor;
 }
 
+/**
+ * The expiry a preset actually stamps on every setup it emits.
+ *
+ * Four of the six are same-day and two are next-day, and the tab strip is where
+ * that choice is made, so the strip has to be able to say so. It reads the
+ * profile rather than a second table in types/skyvision.ts: a horizon copied into
+ * the type can drift from the one the engine selects, and a label that lies about
+ * DTE is worse than no label. scannerHorizon.test.ts pins it against makeSetup.
+ */
+export function scannerExpiry(scanner: ScannerKey): string {
+  return PROFILES[scanner].expiry;
+}
+
 // Thesis prose is DIRECTIONAL — a put setup must never carry a buy-wall
 // "protective floor under our entry" story. Each scanner supplies a bull and
 // a bear variant; the setup's right picks which one renders.
@@ -120,7 +133,7 @@ const WHY_LIBRARY: Record<ScannerKey, { chips: string[]; text: (t: string, k: nu
   'quick-scalp': {
     chips: ['HIGH GAMMA', 'FAST DECAY', 'TIGHT STOP'],
     text: (t) =>
-      `Concentrated gamma at this strike makes ${t} whippy — dealer re-hedging amplifies small moves. Scalp the pop and take profit fast before theta bleeds the premium.`,
+      `Concentrated gamma at this strike makes ${t} whippy, and dealer re-hedging amplifies small moves. Scalp the pop and take profit fast before theta bleeds the premium.`,
   },
   discounted: {
     chips: ['CHEAP PREMIUM', 'ASYMMETRIC', 'VALUE'],
@@ -138,8 +151,8 @@ const WHY_LIBRARY: Record<ScannerKey, { chips: string[]; text: (t: string, k: nu
     chips: ['BLOCK PRINTS', 'SMART MONEY', 'ACCUMULATION'],
     text: (t, k, bullish) =>
       bullish
-        ? `Repeated large sweep orders are accumulating ${t} upside exposure near ${k}. Following the institutional footprint — size and persistence of prints suggest informed positioning.`
-        : `Repeated large sweep orders are stacking ${t} downside protection near ${k}. Following the institutional footprint — size and persistence of prints suggest informed hedging or an outright short lean.`,
+        ? `Repeated large sweep orders are accumulating ${t} upside exposure near ${k}. Following the institutional footprint: size and persistence of prints suggest informed positioning.`
+        : `Repeated large sweep orders are stacking ${t} downside protection near ${k}. Following the institutional footprint: size and persistence of prints suggest informed hedging or an outright short lean.`,
   },
   all: {
     chips: ['MULTI-SIGNAL', 'COMPOSITE', 'BROAD SCAN'],
@@ -237,10 +250,6 @@ function displayScore(rank: number): number {
   return Math.round(clamp(rank, 8, 99));
 }
 
-function scoreOf(spot: number, strike: number, aligned: boolean, jitter01: number): number {
-  return displayScore(rankOf(spot, strike, aligned, jitter01));
-}
-
 /**
  * The rank a full makeSetup() would produce, without building the setup. Burns
  * the same first three draws off the same seeded stream, so the number is
@@ -335,7 +344,11 @@ export function makeSetup(
 
   const bullish = leanBullish ?? tickerLean(ticker, scanner);
   const aligned = bullish ? right === 'C' : right === 'P';
-  const score = scoreOf(spot, strike, aligned, rng());
+  // The setup carries BOTH: the continuous quantity a board orders by and the
+  // integer it prints. Rounding stays the last step, so nothing downstream has to
+  // re-derive a rank the sweep already computed.
+  const rank = rankOf(spot, strike, aligned, rng());
+  const score = displayScore(rank);
   // ±1σ expected move of the UNDERLYING over the contract's life — real math
   // (iv·√t), not a decorative random percentage
   const expectedMovePct = Number((iv * Math.sqrt(Math.max(0.5, dte) / 252) * 100).toFixed(1));
@@ -347,12 +360,14 @@ export function makeSetup(
   const why = WHY_LIBRARY[scanner];
   // Observational headlines only — the engine describes what the signal shows,
   // it never instructs the user to place an order ("enter now" is off-limits).
+  // Colon, not an em dash, and it matches the landing page's own rendering of
+  // this same headline (pages/landing/LiveSections.tsx) to the character.
   const headline =
     verdict === 'ENTER'
-      ? `STRONG ${right === 'C' ? 'CALL' : 'PUT'} — CONDITIONS ALIGNED`
+      ? `STRONG ${right === 'C' ? 'CALL' : 'PUT'}: CONDITIONS ALIGNED`
       : verdict === 'WATCH'
-        ? 'BUILDING — UNCONFIRMED'
-        : 'FADING — LOW CONVICTION';
+        ? 'BUILDING: UNCONFIRMED'
+        : 'FADING: LOW CONVICTION';
 
   // Liquidity: derive from bid/ask spread
   const spreadPct = mid > 0 ? ((ask - bid) / mid) * 100 : 0;
@@ -379,6 +394,7 @@ export function makeSetup(
     right,
     strike,
     expiry: profile.expiry,
+    rank,
     score,
     verdict,
     topRated: score >= 93,

@@ -8,6 +8,8 @@ import { weighContract, type WeighedContract, type ContractVerdict } from '../..
 import { pinStrike } from '../../data/gex';
 import { UNIVERSE } from '../../data/universe';
 import { VERDICT_LABEL, VERDICT_TONE } from '../skyvision/verdict';
+import ContractTrack from './ContractTrack';
+import { weighedToPlan } from './contractTrack';
 import type { Verdict } from '../../types/skyvision';
 import type { MocRead } from '../../types/fracture';
 import type { MarketSnapshot } from '../../types/market';
@@ -326,6 +328,8 @@ const LottoRow = ({
   pin,
   hoursToBell,
   best,
+  selected,
+  onSelect,
   counter = false,
 }: {
   c: WeighedContract;
@@ -334,6 +338,8 @@ const LottoRow = ({
   pin: number;
   hoursToBell: number | null;
   best: boolean;
+  selected: boolean;
+  onSelect: () => void;
   counter?: boolean;
 }) => {
   const rightColor = c.right === 'C' ? 'text-bull' : 'text-bear';
@@ -349,10 +355,21 @@ const LottoRow = ({
   const bellHours = c.dte === 0 ? hoursToBell : null;
 
   return (
-    <motion.div
+    /* A row is the handle on the contract track below the board, so it is a real
+       control rather than a div with a cursor. No selection rail: the wash is the
+       marker the rest of this desk uses on a picked card. */
+    <motion.button
+      type="button"
       layout="position"
       transition={{ duration: DUR.reflow, ease: EASE }}
-      className={`px-3.5 py-2.5 flex items-center gap-3 ${best ? 'bg-white/[0.02]' : ''}`}
+      onClick={onSelect}
+      aria-pressed={selected}
+      aria-label={`${c.ticker} ${c.strike}${c.right === 'C' ? ' call' : ' put'}, ${
+        c.dte === 0 ? 'same session' : `${c.dte} day`
+      }, mid $${c.mid.toFixed(2)}, grades ${graded}. Chart this ticket.`}
+      className={`w-full text-left px-3.5 py-2.5 flex items-center gap-3 transition-colors ${ROW_INTERACTIVE} ${
+        selected ? 'bg-select/[0.06]' : best ? 'bg-white/[0.02] hover:bg-rowHover' : 'hover:bg-rowHover'
+      }`}
     >
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 flex-wrap">
@@ -426,7 +443,7 @@ const LottoRow = ({
           {VERDICT_LABEL[GRADE_VERDICT[c.verdict]]}
         </SignalBadge>
       </div>
-    </motion.div>
+    </motion.button>
   );
 };
 
@@ -453,6 +470,8 @@ const LottoBoard = ({ snapshot }: LottoBoardProps) => {
   // gap — unlocked on an acknowledgement of a risk it does not carry.
   const [ackedDte, setAckedDte] = useState<0 | 1 | null>(null);
   const [picked, setPicked] = useState<string | null>(null);
+  /** WeighedContract id of the ticket the track below the board is drawing. */
+  const [pickedTicket, setPickedTicket] = useState<string | null>(null);
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [warmed, setWarmed] = useState(0);
 
@@ -540,6 +559,13 @@ const LottoBoard = ({ snapshot }: LottoBoardProps) => {
       .sort((a, b) => b.c.composite + b.adjust - (a.c.composite + a.adjust));
   const ranked = rank(board);
   const rankedCounter = rank(counter);
+
+  /* The ticket the track draws. Resolved rather than reset: switching name, side
+     or session rebuilds the ladder, and a stale id simply stops matching, so the
+     board falls back to its own top ticket without an effect chasing it. */
+  const trackedTicket =
+    [...ranked, ...rankedCounter].find(r => r.c.id === pickedTicket)?.c ?? ranked[0]?.c ?? null;
+  const trackPlan = trackedTicket ? weighedToPlan(trackedTicket) : null;
 
   const mocTone = mocToneOf(moc);
   const qualifies = board.filter(c => c.verdict === 'BUY').length;
@@ -701,12 +727,28 @@ const LottoBoard = ({ snapshot }: LottoBoardProps) => {
                   pin={pin}
                   hoursToBell={hoursToBell}
                   best={i === 0}
+                  selected={c.id === trackedTicket?.id}
+                  onSelect={() => setPickedTicket(c.id)}
                 />
               ))}
             </AnimatePresence>
           </div>
         )}
       </Panel>
+
+      {/* What the ticket has been doing, and what an hour of standing still costs
+          it. On a same-session lotto that second half IS the trade: the forward
+          curve holds spot at the last close and lets only time run, which is the
+          honest picture of a contract whose theta is measured per hour.
+
+          Priced by the same Black-Scholes that graded the row (weighedToPlan
+          pins the model), so the line ends on the mid printed beside it. No
+          take-profit ladder is drawn, because this desk has none to draw: the
+          empty ladder is a first-class state on the plan, and the strike and the
+          breakeven are what lane B marks instead. */}
+      {acked && trackPlan && (
+        <ContractTrack key={trackPlan.key} plan={trackPlan} className="animate-soft-in" />
+      )}
 
       {/* The other side, never interleaved. A call and a put on one underlying
           can no longer sit five rows apart in a single ranking. */}
@@ -722,7 +764,18 @@ const LottoBoard = ({ snapshot }: LottoBoardProps) => {
             </p>
             <div className="flex flex-col divide-y divide-borderSubtle">
               {rankedCounter.map(({ c, adjust }) => (
-                <LottoRow key={c.id} c={c} moc={moc} adjust={adjust} pin={pin} hoursToBell={hoursToBell} best={false} counter />
+                <LottoRow
+                  key={c.id}
+                  c={c}
+                  moc={moc}
+                  adjust={adjust}
+                  pin={pin}
+                  hoursToBell={hoursToBell}
+                  best={false}
+                  selected={c.id === trackedTicket?.id}
+                  onSelect={() => setPickedTicket(c.id)}
+                  counter
+                />
               ))}
             </div>
           </div>
