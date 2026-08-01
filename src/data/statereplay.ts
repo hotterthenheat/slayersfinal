@@ -1,23 +1,42 @@
 /*
 ==================================================
   SLAYER TERMINAL - MARKET-STATE REPLAY (statereplay.ts)
-  Prove It's analog engine: "what happened in past
-  sessions that actually resembled today?"
+  Prove It's analog engine: "if the board looked like
+  this, how does the model say it resolves?"
 
   It reads today's market state as an 8-factor vector
   (dealer positioning, vol regime, liquidity, breadth,
-  rates, news, options flow, time-of-day), synthesizes
-  a pool of prior sessions, scores each on similarity,
-  and replays the outcome distribution of the closest
-  analogs against THIS setup's target and stop:
+  rates, news, options flow, time-of-day), SYNTHESIZES
+  a pool of sessions around it, scores each on
+  similarity, and replays the outcome distribution of
+  the closest analogs against THIS setup's target and
+  stop:
 
     reached target first  /  stopped first  /  neither
 
-  On top it grades itself — a predicted-vs-realized
-  calibration curve, an edge-decay profile as the
-  trade is held longer, MFE/MAE excursion stats, and
-  an in-sample vs out-of-sample split so the read has
-  to prove it holds on data it wasn't fit to.
+  What the numbers are, stated once so no label has to
+  carry it. The arithmetic below is real — 176 sessions
+  are synthesized and every rate is counted off that
+  population. The sessions are not. Nothing here
+  observed a market, so every figure this module
+  renders is the size of a modeled assumption, not a
+  measurement, and the copy says so on every line:
+
+    • the outcome tilt IS the assumption. Each analog's
+      target probability starts at the zero-drift coin
+      and is nudged by how similar the session is, so
+      "similar states resolve toward target more often"
+      is an input, not a finding. `edgePts` measures how
+      big that assumption is at this geometry.
+    • calibration is a consistency check, not evidence.
+      Each outcome is drawn FROM its own predicted
+      probability, so predicted and realized track by
+      construction; the curve catches a broken sampler,
+      it cannot corroborate the model.
+    • the recency split is a split, not a holdout.
+      Nothing was fitted, and `daysAgo` is drawn
+      independently of the outcome, so it reports
+      whether the sampler is stationary.
 
   Dealer/vol/flow come off the live chain and tape;
   breadth, rates, news and time-of-day are modeled
@@ -57,6 +76,7 @@ export interface StateFactor {
 
 export interface SimSession {
   id: string;
+  /** Sessions back this synthetic analog is dated to — a label on a generated row */
   daysAgo: number;
   /** similarity to today, 0..1 */
   sim: number;
@@ -93,12 +113,19 @@ export interface EdgeDecayPoint {
   marginalEdgePts: number;
 }
 
+/**
+ * A recency split of the sampled analogs, kept under its original name because
+ * that is what the panel calls it. Nothing is fitted here and `daysAgo` is drawn
+ * independently of the outcome, so this is not a holdout: it reports whether the
+ * sampler drifts across the pool, and a gap near zero is what a working sampler
+ * looks like, not corroboration.
+ */
 export interface OutOfSample {
   inSampleTargetPct: number;
   inSampleN: number;
   outSampleTargetPct: number;
   outSampleN: number;
-  /** in-sample minus out-of-sample target-first rate, ppts (decay if positive) */
+  /** older-half minus recent-half target-first rate, ppts */
   degradationPts: number;
 }
 
@@ -107,9 +134,9 @@ export interface StateReplayView {
   spot: number;
   direction: 'BULLISH' | 'BEARISH';
   factors: StateFactor[];
-  /** sessions scanned before the similarity cut */
+  /** sessions synthesized before the similarity cut */
   pool: number;
-  /** comparable analogs kept above the similarity cut */
+  /** closest analogs kept — a nearest-neighbour cut, not a similarity threshold */
   n: number;
   avgSimPct: number;
   simLowPct: number;
@@ -124,9 +151,18 @@ export interface StateReplayView {
   targetPct: number;
   stopPct: number;
   neitherPct: number;
-  /** target-first rate a no-edge session would post at this R:R */
+  /**
+   * Target-first rate a zero-drift session posts at this R:R — the fair-coin
+   * touch probability scaled by how often the pool resolves at all inside the
+   * horizon, so it is comparable to `targetPct` rather than to a raw coin flip.
+   */
   baselineTargetPct: number;
-  /** targetPct minus baseline, ppts — the setup's excess hit rate */
+  /**
+   * targetPct minus baseline, ppts. The size of the model's similarity tilt at
+   * this geometry — the assumption that closer states resolve toward target more
+   * often is an INPUT to the sampler, so this measures that assumption, it does
+   * not test it.
+   */
   edgePts: number;
   // excursion & expectancy
   expectancyR: number;
@@ -134,7 +170,7 @@ export interface StateReplayView {
   avgMaePct: number;
   edgeRatio: number;
   calibration: CalibrationBin[];
-  /** mean |predicted − realized| across bins, ppts */
+  /** count-weighted mean |predicted − realized| across the bands, ppts */
   calibrationErrorPct: number;
   edgeDecay: EdgeDecayPoint[];
   oos: OutOfSample;
@@ -360,7 +396,9 @@ export function buildStateReplay(snapshot: MarketSnapshot): StateReplayView {
     prevEdge = edge;
   }
 
-  // ---- out-of-sample: hold out the most recent analogs -----------------------------
+  // ---- recency split: the recent analogs against the older ones ---------------------
+  // Named `oos` because the panel is, but nothing was fitted and `daysAgo` is
+  // independent of the outcome, so this is a stationarity check on the sampler.
   const byRecency = [...comp].sort((a, b) => a.daysAgo - b.daysAgo);
   const outN = Math.max(1, Math.round(n * 0.35));
   const outSet = byRecency.slice(0, outN);
@@ -386,18 +424,28 @@ export function buildStateReplay(snapshot: MarketSnapshot): StateReplayView {
     rMultiple: c.rMultiple,
   }));
 
+  /*
+    Every sentence below names the population before it quotes a rate. The
+    arithmetic was already derived — 176 sessions synthesized, every rate counted
+    off that population — but the copy read as market history: "comparable
+    sessions", "real precedent", "its own history", "the held-out sample". No
+    session here happened. Correct numbers under a label that says otherwise is
+    the same fabrication as a made-up number, so the word "simulated" leads and
+    the tilt is described as the assumption it is.
+  */
   const dir = plan.direction;
-  const receipts = `In ${n} comparable sessions this ${dir === 'BULLISH' ? 'long' : 'short'} setup reached target first ${targetPct}%, stopped first ${stopPct}%, neither ${neitherPct}%.`;
+  const lean = dir === 'BULLISH' ? 'bullish' : 'bearish';
+  const receipts = `Across ${n} simulated analogs of today's state, this ${lean} setup reached target first ${targetPct}%, stopped first ${stopPct}%, neither ${neitherPct}%.`;
   const headline =
     edgePts >= 4
-      ? `Today's state has real precedent: the closest ${n} analogs hit target first ${targetPct}% of the time — ${edgePts} points above the ${baselineTargetPct}% a no-edge session posts at this ${rr.toFixed(1)}:1 geometry, and it holds ${oos.degradationPts <= 4 ? 'on the held-out sample too' : 'but softens on the held-out sample'}.`
+      ? `The model leans with this setup: the closest ${n} simulated analogs reach target first ${targetPct}% of the time — ${edgePts} points above the ${baselineTargetPct}% a no-edge session posts at this ${rr.toFixed(1)}:1 geometry. That gap is the size of the similarity tilt the sampler assumes, and it ${oos.degradationPts <= 4 ? 'holds across the pool' : 'thins on the recent half of the pool'}. Simulated, not observed.`
       : edgePts <= -4
-        ? `The analogs argue against it: comparable states reached target first only ${targetPct}%, ${Math.abs(edgePts)} points below the ${baselineTargetPct}% baseline for this ${rr.toFixed(1)}:1 target — the setup is fighting its own history.`
-        : `Comparable states are a coin flip: target first ${targetPct}% against a ${baselineTargetPct}% no-edge baseline at ${rr.toFixed(1)}:1. There is no durable precedent here — trade it small or wait for the state to sharpen.`;
+        ? `The model leans against this setup: comparable simulated states reach target first only ${targetPct}%, ${Math.abs(edgePts)} points below the ${baselineTargetPct}% baseline for this ${rr.toFixed(1)}:1 target — at this geometry the stop sits in the way. Simulated, not observed.`
+        : `The model is neutral here: target first ${targetPct}% against a ${baselineTargetPct}% no-edge baseline at ${rr.toFixed(1)}:1. The similarity tilt is worth nothing at this geometry, and no simulated precedent separates this state from a coin flip.`;
   const note =
     calibrationErrorPct <= 6
-      ? `Predicted and realized target rates track within ${calibrationErrorPct} points across the probability bands, so the model isn't fooling itself — the numbers it quotes are the numbers it delivers on the analogs.`
-      : `Predicted and realized rates diverge by ${calibrationErrorPct} points in places — read the distribution, not the point estimate, and weight the calibration panel before sizing.`;
+      ? `Predicted and realized target rates track within ${calibrationErrorPct} points across the probability bands. Each analog's outcome is drawn from its own predicted probability, so that agreement is what a working sampler looks like — it says the panel above is internally consistent, not that the model has been proven right.`
+      : `Predicted and realized rates diverge by ${calibrationErrorPct} points in places, which is wider than a sampler drawing outcomes from its own probabilities should run — the thin bands are carrying it, and the distribution is the honest read rather than the point estimate.`;
 
   return {
     ticker,

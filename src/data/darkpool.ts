@@ -20,40 +20,83 @@ import type {
   Posture,
 } from '../types/darkpool';
 
-const VENUES = ['UBS ATS', 'MS Pool', 'JPM-X', 'Sigma X', 'CrossFinder', 'IEX-D', 'Level ATS'];
-
 const PRINT_COUNT = 26;
 const LEVEL_COUNT = 6;
+/** Retests are displayed as "N×" with a "5+" top, so the count stops at 5. */
+const RETEST_CAP = 5;
 
-/** Cheap intraday "did price bounce here" count from the price history. */
-function defendedCount(priceHistory: number[], level: number, tolPct: number): number {
-  let count = 0;
+/*
+  Venue ARCHETYPE, never a venue name. Which KIND of pool a block crossed in is
+  the part a reader can use — a wholesaler is retail flow internalised in small
+  clips, a bank ATS carries client and principal flow side by side, an agency
+  venue crosses buy-side to buy-side, and a conditional venue only fires once
+  both sides are large-in-scale. The distinction survives without borrowing
+  anyone's brand: naming the real bank-operated ATSs hung invented crosses on
+  regulated venues those firms actually run, which reads as a citation of a
+  print that never happened rather than as a simulation.
+*/
+const MID_SIZE_VENUES = ['BANK ATS', 'AGENCY ATS', 'MIDPOINT ATS'] as const;
+
+/**
+ * Archetype for one print, keyed off its size — which is what actually sorts the
+ * pools in practice: retail clips get internalised, ordinary institutional size
+ * works a bank or agency book, and only large-in-scale size reaches a
+ * conditional venue.
+ */
+function venueArchetype(seedBase: string, sizePercentile: number): string {
+  if (sizePercentile > 0.88) return h01(`${seedBase}-v`) > 0.35 ? 'CONDITIONAL ATS' : 'BANK ATS';
+  if (sizePercentile < 0.28) return h01(`${seedBase}-v`) > 0.45 ? 'WHOLESALER' : 'MIDPOINT ATS';
+  return hPick(`${seedBase}-v`, MID_SIZE_VENUES);
+}
+
+/**
+ * Intraday retests per shelf, from the price history.
+ *
+ * A reversal is credited to its NEAREST shelf and to that one only — the same
+ * ownership rule the print clustering below uses. Testing each shelf
+ * independently against a fixed band counted one turn six times over, so every
+ * shelf on a chopping session reported the ceiling and "defended 5× today" said
+ * something about the tape rather than about that price.
+ */
+function retestsByShelf(priceHistory: number[], shelves: number[], tolPct: number): number[] {
+  const counts = new Array<number>(shelves.length).fill(0);
   for (let i = 2; i < priceHistory.length; i++) {
     const prev = priceHistory[i - 1];
-    const nearLevel = Math.abs(prev - level) / level < tolPct;
-    if (!nearLevel) continue;
     const wasFalling = priceHistory[i - 2] > prev;
     const turnedUp = priceHistory[i] > prev;
     const wasRising = priceHistory[i - 2] < prev;
     const turnedDown = priceHistory[i] < prev;
-    if ((wasFalling && turnedUp) || (wasRising && turnedDown)) count++;
+    if (!((wasFalling && turnedUp) || (wasRising && turnedDown))) continue;
+    let owner = -1;
+    let bestDist = Infinity;
+    shelves.forEach((s, k) => {
+      const d = Math.abs(prev - s) / s;
+      if (d < bestDist) {
+        bestDist = d;
+        owner = k;
+      }
+    });
+    if (owner >= 0 && bestDist < tolPct) counts[owner]++;
   }
-  return count;
+  return counts;
 }
 
+// What the shelf has been doing, not what to do about it. The share is a share
+// of session block DOLLARS — the quantity sharePct is actually computed from —
+// and calling it volume described a share count nothing here counts.
 function levelUsage(role: LevelRole, price: number, defended: number, sharePct: number): string {
   const p = price.toFixed(2);
   if (role === 'SUPPORT') {
     return defended >= 2
-      ? `Buyer has defended $${p} ${defended}× today — longs lean on it; a close below flips the read to distribution.`
-      : `Fresh accumulation shelf at $${p} (${sharePct.toFixed(0)}% of DP volume) — expect dips into it to slow; invalid below.`;
+      ? `Price has turned up off $${p} ${defended}× today — the bid keeps showing there, and a close below turns the read to distribution.`
+      : `Fresh accumulation shelf at $${p} (${sharePct.toFixed(0)}% of session block dollars) — dips into it are where the resting size sits. Below it the read is void.`;
   }
   if (role === 'RESISTANCE') {
     return defended >= 2
-      ? `Supply has capped price at $${p} ${defended}× — fade pushes into it until a sized print clears above.`
-      : `Distribution ceiling at $${p} — rallies into the shelf meet a seller; breakout needs volume through it.`;
+      ? `Supply has capped price at $${p} ${defended}× today — it stays capped until a sized print clears above.`
+      : `Distribution ceiling at $${p} — rallies into the shelf keep meeting a seller; a break through needs volume behind it.`;
   }
-  return `Two-way shelf at $${p} — institutions rotating, not committing. Trade the break: direction follows whichever side absorbs.`;
+  return `Two-way shelf at $${p} — institutions rotating, not committing. Direction follows whichever side absorbs the other.`;
 }
 
 function classify(
@@ -65,8 +108,11 @@ function classify(
 ): { intent: DarkPoolIntent; conviction: number; read: string } {
   // The read: sized prints below spot in an up-tape = someone building; sized
   // prints above spot into strength = someone leaving into liquidity. Small or
-  // mid prints at VWAP-ish levels are rotation; prints glued to option shelves
-  // are most likely hedge flow, not directional conviction.
+  // mid prints at VWAP-ish levels are rotation; a print that lands exactly on a
+  // shelf where resting size already sits reads as offset flow rather than
+  // directional conviction — atLevel is that liquidity shelf, and the copy says
+  // so, because this module never looks at the option chain and cannot know
+  // whether a dealer strike sits there.
   const sized = sizePercentile > 0.72;
   const below = vsSpotPct < -0.08;
   const above = vsSpotPct > 0.08;
@@ -75,21 +121,21 @@ function classify(
     return {
       intent: 'HEDGE FLOW',
       conviction: Math.round(hRange(`${seedBase}-c1`, 48, 68)),
-      read: 'Printed on an options shelf — likely dealer/desk hedge, not a directional bet. Don’t chase it.',
+      read: 'Crossed straight onto a resting-size shelf — that pattern reads as hedge or offset flow rather than a directional bet.',
     };
   }
   if (sized && below && sessionUp) {
     return {
       intent: 'ACCUMULATION',
       conviction: Math.round(hRange(`${seedBase}-c2`, 70, 92)),
-      read: 'Size bought below market in an up-tape — institution building a position on weakness. Level becomes support.',
+      read: 'Size bought below market in an up-tape — reads as an institution building on weakness. The level acts as support while it holds.',
     };
   }
   if (sized && above && !sessionUp) {
     return {
       intent: 'DISTRIBUTION',
       conviction: Math.round(hRange(`${seedBase}-c3`, 68, 90)),
-      read: 'Size sold into strength while the tape weakens — supply overhead. Rallies into the print price should struggle.',
+      read: 'Size sold into strength while the tape weakens — supply overhead. Rallies into the print price have been struggling.',
     };
   }
   if (sized) {
@@ -98,14 +144,14 @@ function classify(
       intent: acc ? 'ACCUMULATION' : 'DISTRIBUTION',
       conviction: Math.round(hRange(`${seedBase}-c4`, 55, 75)),
       read: acc
-        ? 'Sized print near the lows of its window — leans accumulation; confirm if the level holds on the next test.'
-        : 'Sized print near the highs of its window — leans distribution; confirm if bounces into it stall.',
+        ? 'Sized print near the lows of its window — leans accumulation; the confirmation is the level holding on its next test.'
+        : 'Sized print near the highs of its window — leans distribution; the confirmation is bounces into it stalling.',
     };
   }
   return {
     intent: 'ROTATION',
     conviction: Math.round(hRange(`${seedBase}-c5`, 35, 55)),
-    read: 'Routine off-exchange rotation — no signal by itself; watch whether it clusters at a shelf.',
+    read: 'Routine off-exchange rotation — no signal by itself; the tell is whether it clusters at a shelf.',
   };
 }
 
@@ -122,8 +168,8 @@ export function buildDarkPoolView(snapshot: MarketSnapshot): DarkPoolView {
   // ---- shelf anchors ----------------------------------------------------------
   // Shelf PRICES first (edge-biased inside the session range — where resting
   // institutional interest concentrates); their notionals are derived from the
-  // prints that actually land on them, so a shelf can never be smaller than the
-  // blocks it hosts and the '% of DP' shares agree with the session total.
+  // prints that actually land on them, so a shelf is exactly the blocks it hosts
+  // and its share agrees with the session total.
   const shelfPrices = Array.from({ length: LEVEL_COUNT }, (_, i) => {
     const t = h01(seed(`lvl-${i}`));
     const edgeBiased = t < 0.5 ? Math.pow(t * 2, 1.5) / 2 : 1 - Math.pow((1 - t) * 2, 1.5) / 2;
@@ -157,7 +203,7 @@ export function buildDarkPoolView(snapshot: MarketSnapshot): DarkPoolView {
       price: Number(price.toFixed(2)),
       size,
       notional,
-      venue: hPick(`${pSeed}-v`, VENUES),
+      venue: venueArchetype(pSeed, sizePercentile),
       vsSpotPct,
       atLevel,
       ...cls,
@@ -167,10 +213,14 @@ export function buildDarkPoolView(snapshot: MarketSnapshot): DarkPoolView {
   const totalNotional = prints.reduce((a, p) => a + p.notional, 0);
 
   // ---- liquidity shelves from the prints ---------------------------------------
-  // Each print belongs to its NEAREST shelf only, and the "% of DP" share counts
-  // only today's prints against the same session total the page reports — so the
-  // six shares can never sum past 100%. The small resting-interest base pads the
-  // shelf's displayed notional (an empty shelf isn't $0) but never the share.
+  // Each print belongs to its NEAREST shelf only, and dollars, print count and
+  // share all read that same cluster against the same session total the page
+  // reports — so the six shares can never sum past 100%, and the row's own
+  // arithmetic checks out: share × session total is the dollars beside it.
+  // A resting-interest base used to pad the displayed notional and a random
+  // 1–4 used to pad the print count, which broke exactly that: the row showed
+  // more dollars than its share bought and more prints than the session held.
+  // A shelf nothing crossed at today is a real state and now reads as $0.
   const clusterOf = new Map<number, DarkPoolPrint[]>();
   for (const p of prints) {
     let best = -1;
@@ -188,18 +238,18 @@ export function buildDarkPoolView(snapshot: MarketSnapshot): DarkPoolView {
       else clusterOf.set(best, [p]);
     }
   }
+  const retests = retestsByShelf(priceHistory, shelfPrices, 0.0012);
   const levels: DarkPoolLevel[] = shelfPrices.map((price, i) => {
     const cluster = clusterOf.get(i) ?? [];
-    const clusterNotional = cluster.reduce((a, p) => a + p.notional, 0);
-    const notional = clusterNotional + hRange(seed(`lvln-${i}`), 6e6, 24e6);
+    const notional = cluster.reduce((a, p) => a + p.notional, 0);
     const distPct = ((price - spot) / spot) * 100;
-    const defended = Math.min(defendedCount(priceHistory, price, 0.0012) + (h01(seed(`lvld-${i}`)) > 0.6 ? 1 : 0), 5);
+    const defended = Math.min(retests[i], RETEST_CAP);
     const role: LevelRole = Math.abs(distPct) < 0.12 ? 'PIVOT' : distPct < 0 ? 'SUPPORT' : 'RESISTANCE';
-    const sharePct = (clusterNotional / (totalNotional || 1)) * 100;
+    const sharePct = (notional / (totalNotional || 1)) * 100;
     return {
       price: Number(price.toFixed(2)),
       notional,
-      prints: cluster.length + Math.round(hRange(seed(`lvlp-${i}`), 1, 4)),
+      prints: cluster.length,
       sharePct,
       role,
       defended,
@@ -220,25 +270,32 @@ export function buildDarkPoolView(snapshot: MarketSnapshot): DarkPoolView {
   const posture: Posture = netPosturePct > 18 ? 'ACCUMULATING' : netPosturePct < -18 ? 'DISTRIBUTING' : 'BALANCED';
   // Anchor the note on the strongest shelf on the MATCHING side of spot, so an
   // accumulation read never cites a resistance shelf overhead (and vice versa).
-  const byNotional = [...levels].sort((a, b) => b.notional - a.notional);
+  // Rank only shelves that actually hosted a block: the note says size is being
+  // absorbed at that price, which a shelf nothing crossed at cannot support.
+  const ranked = [...levels].sort((a, b) => b.notional - a.notional);
+  const hosted = ranked.filter(l => l.prints > 0);
+  const pool = hosted.length ? hosted : ranked;
   const strongest =
     (posture === 'ACCUMULATING'
-      ? byNotional.find(l => l.price < spot)
+      ? pool.find(l => l.price < spot)
       : posture === 'DISTRIBUTING'
-        ? byNotional.find(l => l.price > spot)
-        : byNotional[0]) ?? byNotional[0];
+        ? pool.find(l => l.price > spot)
+        : pool[0]) ?? pool[0];
   const postureNote =
     posture === 'ACCUMULATING'
       ? `Sized prints skew to the buy side — dips into the $${strongest.price.toFixed(2)} shelf are being absorbed.`
       : posture === 'DISTRIBUTING'
         ? `Sized prints skew to the sell side — strength into $${strongest.price.toFixed(2)} keeps meeting supply.`
-        : 'Buy and sell blocks roughly offset — institutions rotating, not committing. Let a shelf break decide direction.';
+        : 'Buy and sell blocks roughly offset — institutions rotating, not committing. Direction waits on a shelf break.';
 
   const largest = prints.reduce<DarkPoolPrint | null>((a, p) => (a === null || p.notional > a.notional ? p : a), null);
 
   return {
     ticker,
     spot,
+    // A modelled session share, not a measured one: nothing in the snapshot
+    // carries consolidated volume, so this is the assumption the page is built
+    // on rather than a count of anything. Swapping in a real feed replaces it.
     dpSharePct: hRange(seed('share'), 34, 52),
     netPosturePct,
     posture,

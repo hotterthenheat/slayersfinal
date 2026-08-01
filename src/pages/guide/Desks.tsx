@@ -15,12 +15,20 @@ import { Card, Points } from './parts';
 
 /*
   Every claim on this page is a claim about code that ships, so it goes stale
-  the moment a desk moves. Two rules keep it honest: name only panels and
+  the moment a desk moves. Three rules keep it honest: name only panels and
   controls that exist in the registries and subnavs (pulseRegistry, gex/subnav,
-  flowdesk/subnav, proveit/ProveIt), and describe what an engine derives rather
-  than what a number looks like it means. Worked reads stay mechanical for the
-  same reason — a printed level here would be a second derivation of gex.ts,
-  and it would be wrong by the next tick.
+  flowdesk/subnav, proveit/ProveIt); describe what an engine derives rather than
+  what a number looks like it means; and name the population before quoting a
+  rate, because a simulated analog is not a historical one and the difference is
+  the whole of the claim. Worked reads stay mechanical for the same reason — a
+  printed level here would be a second derivation of gex.ts, and it would be
+  wrong by the next tick.
+
+  Two rounds of spot-fixes left this page contradicting itself, so the standing
+  instruction is to re-read the code path, not the previous paragraph: the
+  board's score comes from data/skyvision.ts rankOf, the Weigher's from
+  core/contractScore.ts, and they are different scales that happen to share one
+  spoken lexicon.
 */
 
 interface DeskDoc {
@@ -68,18 +76,23 @@ const DESKS: DeskDoc[] = [
     icon: Compass,
     name: 'Compass',
     to: '/compass',
-    tagline: 'Finds the setup — scores contracts across weeklies, swings and LEAPS.',
+    tagline: 'Finds the setup — a ranked same-day board, plus a weigher for any contract you name.',
     shows: [
-      'A ranked board of contracts, each with a score from 8 to 99 and the scanner\'s thesis written out for that ticker and strike.',
-      <>The <span className="text-textPrimary">Weigher</span>: search any contract you already hold and have it graded
-      on the same scale as the board, with a better-risk/reward alternative. And <span className="text-textPrimary">Lotto</span>,
-      a 0DTE desk with the closing-auction (MOC) engine, high variance by design.</>,
+      'A ranked board of contracts, each with a score from 8 to 99 and the scanner\'s thesis written out for that ticker and strike. Every preset stamps its own expiry, and all six are 0DTE or 1DTE — the board is a same-day and next-day instrument.',
+      <>The <span className="text-textPrimary">Weigher</span>: search any contract you already hold, at any expiry from
+      same-day to LEAPS, and have it graded on its own six-factor composite — the math, theta burden, vol pricing, flow
+      and dark pool, news lean, liquidity — with a better-risk/reward alternative beside it. It speaks the board's
+      lexicon but not the board's number: the weights change with the sleeve, so the two scales are not
+      interchangeable. And <span className="text-textPrimary">Lotto</span>, a 0DTE desk with the closing-auction (MOC)
+      engine, high variance by design.</>,
     ],
     read: [
-      <>The score has two inputs and no more: how close the strike sits to spot, and whether the contract's direction
-      agrees with the ticker's lean. Counter-trend contracts are marked down and cannot reach the top of the board.
-      It ranks candidates — it does not forecast one.</>,
-      <>Score sets the verdict: <span className="text-textPrimary">QUALIFIED</span> at 88 and above,
+      <>The board's score has three inputs: how close the strike sits to spot, whether the contract's direction agrees
+      with the ticker's lean, and a ±1.5-point jitter that breaks ties between names. The jitter is narrower than one
+      rung of the strike ladder is worth, so it can separate two contracts but never reorder them. Counter-trend
+      contracts are marked down and cannot reach the top of the board. It ranks candidates — it does not forecast
+      one.</>,
+      <>Score sets the board's verdict: <span className="text-textPrimary">QUALIFIED</span> at 88 and above,
       {' '}<span className="text-textPrimary">WATCH</span> from 72, <span className="text-textPrimary">FADED</span> below
       that. Health sits in its own column on the board, and momentum in the contract chain; neither is an input to the
       score, so read them as a second opinion rather than a confirmation.</>,
@@ -87,12 +100,15 @@ const DESKS: DeskDoc[] = [
     ],
     controls: [
       'Three modes: Setups, Weigher and Lotto.',
-      'Inside Setups, six scanners: Top Setups, Quick Scalp, Discounted, Rebounds, Whale Sweeps and All — each with its own score floor, so a thinner board means the bar held.',
+      <>Inside Setups, six scanners: Top Setups, Quick Scalp, Discounted, Rebounds, Whale Sweeps and All — each with its
+      own score floor. The count beside a tab is what that floor admitted across the whole field, not what fits on
+      screen: the board itself is capped at the top 240 rows. All's floor is the bottom of the scale, so its count
+      is the field.</>,
     ],
     example: (
       <>A near-the-money call on a bullish name will outrank a far-OTM one on the same name, because proximity is most
-      of the score. That is a starting shortlist, not a reason — cross-check Pinpoint before you act on it: is spot
-      above the gamma flip, with a call wall overhead as the target?</>
+      of the score. That is a starting shortlist, not a reason — the cross-check lives on Pinpoint: is spot above the
+      gamma flip, with a call wall overhead?</>
     ),
   },
   {
@@ -112,7 +128,7 @@ const DESKS: DeskDoc[] = [
       <>Aggressor colour follows the app convention: a print that lifted the ask <span className="text-bull">reads green</span>,
       one that hit the bid <span className="text-bear">reads red</span>. Mid prints stay muted, because a mid fill names
       no aggressor.</>,
-      'The session strip above the tape is the aggregate read: total premium, the call/put split and bull vs bear premium as a share of the session.',
+      'The session strip above the tape is the aggregate read: total premium, the call/put split, bull vs bear premium as a share of the session, the sweep and block counts, and the largest single print.',
     ],
     controls: [
       'Filter by type (all / sweeps / blocks), by direction (bull / bear), and by premium (≥$100K / ≥$500K / ≥$1M).',
@@ -143,7 +159,7 @@ const DESKS: DeskDoc[] = [
       <>Net GEX per strike: <span className="text-bull">green supports</span> (long gamma — dealers dampen moves), <span className="text-bear">red amplifies</span> (short gamma — dealers accelerate them).</>,
       <><span className="text-textPrimary">Call wall</span> often caps as resistance; <span className="text-textPrimary">put wall</span> often holds as support; the <span className="text-flip">gamma flip</span> is the level where the regime changes sign; the <span className="text-king">king strike</span> is the strongest single pin.</>,
       'Hover any heatmap cell for the exact read — the numbers are always printed, colour is a second signal.',
-      'Every desk here reads the same derivation of spot, walls, flip, pin and king, so two panels on one screen can never print two different numbers for one level.',
+      'Spot, the walls, the flip and the king come from one derivation the whole terminal shares, so two panels on one screen cannot print two different numbers for them. The pin is the stated exception: it is the heaviest open-interest strike inside the window a panel is showing, so it moves with the strike range by design rather than by disagreement.',
     ],
     controls: [
       'Five desk tabs across the top; four of them carry a View toggle for their second read (this ticker vs complex, exposure vs ranked, matrix vs migration, hedge vs fracture).',
@@ -151,19 +167,19 @@ const DESKS: DeskDoc[] = [
     ],
     example: (
       <>Spot sitting below the gamma flip with red −GEX stacked beneath it means dealers accelerate down-moves — a break
-      lower can go faster than it "should." Read your own bracket off the Levels desk: the put wall under spot and the
-      call wall above it are the range the book is currently defending.</>
+      lower can go faster than it "should." The Levels desk names the range the book is currently defending: the put
+      wall under spot, the call wall above it.</>
     ),
   },
   {
     icon: Sigma,
     name: 'Prove It',
     to: '/prove-it',
-    tagline: 'The receipts — quant modeling and how each engine has tracked.',
+    tagline: 'The receipts — quant modeling, and how the engines this desk can grade have tracked.',
     shows: [
       <><span className="text-textPrimary">Models</span>: a Monte Carlo path fan with its percentile cone and a
-      terminal-price histogram, the dealer surface, the model scoreboard, and the market-state replay — today's closest
-      historical analogs, a probability-calibration plot and an edge-decay curve.</>,
+      terminal-price histogram, the dealer surface, the model scoreboard, and the market-state replay — the closest
+      simulated analogs of today's state, a probability-calibration plot and an edge-decay curve.</>,
       <><span className="text-textPrimary">Volatility lab</span>: the IV surface, term structure, skew and the
       volatility-state odds. <span className="text-textPrimary">Risk-neutral density</span>: the terminal-price odds the
       chain implies, against realized. Both arrived from Pinpoint — model output belongs on the desk that scores
@@ -171,8 +187,8 @@ const DESKS: DeskDoc[] = [
     ],
     read: [
       'The cone is the percentile band across sampled paths; the near-white line is the median. Hover the fan for the median and the 50% / 90% bands at any horizon.',
-      'On the calibration plot, points sitting on the diagonal mean predicted probability matched realized frequency — off the diagonal means over- or under-confident.',
-      'Open Assumptions under the Monte Carlo: it names the model, the IV, the drift proxy and the path count. Every stat above it recomputes from that same seeded run.',
+      'On the calibration plot, points sit near the diagonal when a band\'s predicted probability matched the rate that band resolved at. Each analog\'s outcome is drawn from its own predicted probability, so agreement there is what a working sampler looks like, not evidence the model was right: the plot catches a broken sampler, it cannot corroborate one.',
+      'Open Assumptions under the Monte Carlo: it names the model, the IV, the drift proxy, the horizon and the path count. Every stat above it recomputes from that same seeded run.',
     ],
     controls: [
       'Three views: Models, Volatility lab and Risk-neutral density.',

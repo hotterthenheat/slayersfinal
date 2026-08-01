@@ -33,13 +33,15 @@ const hoursAgo = (h: number) => new Date(Date.now() - h * 3600_000).toISOString(
  *
  * `author` and `votes` stay on the shape because CommunityIdea is the future API
  * contract, and they now say the true thing: the author is the example itself,
- * and the tally is zero because no vote has ever been cast. The terminal renders
- * neither (Ideas.tsx heads them "Worked examples"); the landing page still shows
- * the author slot, which is why it reads as a label rather than a name.
+ * and the tally is zero because no vote has ever been cast. The desk renders
+ * neither (Ideas.tsx heads them "Worked examples"), but the landing page renders
+ * BOTH — a vote box on every row, and the author from `md` up — which is exactly
+ * why both have to be true in the data: the box reads 0 because nothing has been
+ * voted on, and the byline reads as a label rather than a name.
  *
- * The prices track the simulator's own reference book (SPY 500, QQQ 440, NVDA
- * 138.6 from data/universe.ts) so an example never contradicts the levels the
- * desk is showing next to it.
+ * The prices track the simulator's own reference book — SPY 500 and QQQ 440 are
+ * core/simulator.ts's own ETF refs, NVDA 138.6 reaches it from data/universe.ts
+ * — so an example never contradicts the levels the desk is showing next to it.
  */
 export const SEED_IDEAS: CommunityIdea[] = [
   {

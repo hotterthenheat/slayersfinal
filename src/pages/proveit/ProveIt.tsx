@@ -51,7 +51,22 @@ const ModelsView = ({ window_ }: { window_: Window }) => {
     [marketData?.ticker, marketData?.spot && Math.round(marketData.spot * 4), iv, window_]
   );
   const scoreboard = useMemo(() => modelScoreboard(), []);
-  const composite = Math.round(scoreboard.reduce((a, m) => a + m.hitRatePct, 0) / scoreboard.length);
+  /*
+    An UNWEIGHTED mean of the rows' hit rates, and the sub-line says so.
+
+    It used to read "engines' blended hit rate", which names a quantity nothing
+    here computes: blending would pool the calls and divide once, and the two
+    engines score different populations — headline priors against the next
+    session, sweep prints against the next 30 bars — at very different sample
+    sizes. Pooling would let the larger population speak for the smaller engine,
+    and the mean of two rates is not that pooled number anyway.
+
+    `grade` returns null for a population too thin to score, so an empty board is
+    reachable; it prints a dash rather than NaN%.
+  */
+  const composite = scoreboard.length
+    ? Math.round(scoreboard.reduce((a, m) => a + m.hitRatePct, 0) / scoreboard.length)
+    : null;
 
   if (!marketData || !mc) {
     return (
@@ -108,7 +123,16 @@ const ModelsView = ({ window_ }: { window_: Window }) => {
           sub={`IV ${(iv * 100).toFixed(0)}% annualized`}
           tone={regime === 'HIGH VOL' ? 'warn' : 'neutral'}
         />
-        <StatCard label="Model composite" value={`${composite}%`} sub="engines' blended hit rate" tone={composite >= 60 ? 'bull' : 'neutral'} />
+        {/* Hit rate is model QUALITY, not market direction, so a strong composite
+            takes the holo select accent and never bull green — the same
+            correction the earnings board made for cheap vol. Green on this grid
+            is reserved for the two directional cards above it. */}
+        <StatCard
+          label="Model composite"
+          value={composite === null ? '—' : `${composite}%`}
+          sub={`unweighted mean of ${scoreboard.length} engine hit rate${scoreboard.length === 1 ? '' : 's'}`}
+          tone={composite !== null && composite >= 60 ? 'select' : 'neutral'}
+        />
       </MetricGrid>
 
       {/* Start-aligned on purpose: the Dealer surface beside this is `xl:sticky`
@@ -181,7 +205,7 @@ const ModelsView = ({ window_ }: { window_: Window }) => {
             <Trophy className="w-3.5 h-3.5" /> Model scoreboard
           </span>
         }
-        subtitle="every engine tracked against what actually happened"
+        subtitle="each engine's calls scored against the outcomes the same seeded series produced"
         flush
       >
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-px bg-borderSubtle">
@@ -189,12 +213,15 @@ const ModelsView = ({ window_ }: { window_: Window }) => {
             <div key={m.model} className="bg-panel px-3.5 py-3 flex flex-col gap-2">
               <div className="font-mono text-label font-semibold text-textPrimary">{m.model}</div>
               <div className="flex items-baseline gap-2">
-                <span className={`font-mono text-2xl font-bold tnum ${m.hitRatePct >= 65 ? 'text-bull' : 'text-textPrimary'}`}>
+                {/* Select, not bull: an engine hitting 65% is a statement about the
+                    engine, and a green number beside a call it got right would
+                    read as the tape going up. */}
+                <span className={`font-mono text-2xl font-bold tnum ${m.hitRatePct >= 65 ? 'text-select' : 'text-textPrimary'}`}>
                   {m.hitRatePct}%
                 </span>
                 <span className="font-mono text-micro text-textMuted tnum">n={m.sample}</span>
               </div>
-              <Sparkline data={m.trend} up={m.trend[m.trend.length - 1] >= m.trend[0]} width={120} height={22} />
+              <Sparkline data={m.trend} up={m.trend[m.trend.length - 1] >= m.trend[0]} width={120} height={22} label="hit rate" />
               <div className="font-mono text-micro text-textSecondary tnum">
                 edge {m.edgeBps >= 0 ? '+' : ''}
                 {m.edgeBps} bps/signal
@@ -210,10 +237,11 @@ const ModelsView = ({ window_ }: { window_: Window }) => {
       <Panel bodyClassName="py-3">
         <p className="text-caption text-textSecondary leading-relaxed">
           <span className="font-mono font-semibold uppercase tracking-wider mr-2 text-textSecondary">How to read this</span>
-          The cone is not a prediction. It is the honest distribution of outcomes given current volatility. Trade ideas
-          from Compass and Trace should live inside the cone's fat part; anything that needs a path outside the 90% band
-          is a lottery ticket, whatever the chart pattern says. The scoreboard exists so the terminal has to prove it:
-          when an engine's hit rate decays, weights come down with it.
+          The cone is not a prediction. It is the distribution of outcomes the stated assumptions imply. Ideas off
+          Compass and Trace sit inside the cone's fat part; anything that needs a path outside the 90% band is a tail,
+          whatever the chart pattern says. The scoreboard is where an engine has to show its work: every row names the
+          population it was scored on, and an engine whose population is too thin to say anything is dropped from the
+          board rather than rounded up.
         </p>
       </Panel>
     </>
@@ -239,7 +267,7 @@ const ProveIt = () => {
       <PageHeader
         breadcrumb={['Terminal', 'Prove It', active.label]}
         title="Prove It"
-        subtitle="Quantitative modeling & predictive analytics: the receipts behind every call"
+        subtitle="Quantitative modeling & predictive analytics: the receipts behind the calls this desk can grade"
         actions={
           // The window sets the Monte Carlo horizon and nothing else, so it is
           // not offered on the two reads it cannot move.

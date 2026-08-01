@@ -21,6 +21,7 @@
 */
 
 import { dayKey, hGauss, h01, hRange } from './rng';
+import { buildLevels } from '../data/gex';
 import type { MarketSnapshot } from '../types/market';
 import type {
   AbsorptionRegime,
@@ -259,18 +260,23 @@ function buildMoc(snapshot: MarketSnapshot, G: number, seed: (t: string) => numb
   let classification: MocClassification;
   let note: string;
   const sideWord = side === 'BUY' ? 'buy' : 'sell';
+  // The note describes the auction and what the mechanics imply, and stops
+  // there. It renders raw on three surfaces — the Lotto board's header and its
+  // empty state, and a Pulse panel — so an instruction written here becomes an
+  // instruction on all three, and LottoBoard's own read (which already speaks
+  // observationally) would be reasoning off a sentence that overrides it.
   if (Math.abs(score) >= 45 && absorptionPct < 55 && growthZ * normalizedZ > 0) {
     classification = 'CONTINUATION';
-    note = `Persistent ${sideWord} imbalance the paired book isn't absorbing, indicative price displaced ${displacementZ.toFixed(1)}σ and still moving — trade the imbalance into the close, defined-risk.`;
+    note = `Persistent ${sideWord} imbalance the paired book isn't absorbing, indicative price displaced ${displacementZ.toFixed(1)}σ and still moving — nothing in the auction is leaning against it, so the displacement carries into the cross rather than unwinding before it.`;
   } else if (Math.abs(normalizedZ) > 0.5 && absorptionPct >= 62) {
     classification = 'ABSORPTION FADE';
-    note = `Large ${sideWord} imbalance but ${absorptionPct}% is being paired off and displacement is fading — liquidity providers are absorbing it. Fade the initial reaction once the imbalance demonstrably weakens.`;
+    note = `Large ${sideWord} imbalance but ${absorptionPct}% is being paired off and displacement is fading — liquidity providers are absorbing it, so the initial reaction is being met rather than followed. The give-back begins where the imbalance measurably weakens.`;
   } else if (isRebalance && reversalRisk > 60) {
     classification = 'DISLOCATION REVERSAL';
-    note = `Abnormal ${sideWord}-side auction pressure that looks mechanical (rebalance/flow, not information). Don't fade before the cross — take the mean-reversion after, toward the pre-auction fair-price region.`;
+    note = `Abnormal ${sideWord}-side auction pressure that looks mechanical (rebalance/flow, not information). Pressure with no information behind it leaves nothing to hold the level once the print is done, so the displacement decays after the cross — not before it — toward the pre-auction fair-price region.`;
   } else {
     classification = 'NO TRADE';
-    note = 'Imbalance and indicative displacement disagree, or the imbalance is being absorbed — no clean closing-auction edge. Wait for the 3:53–3:57 window to confirm.';
+    note = 'Imbalance and indicative displacement disagree, or the imbalance is being absorbed — no clean closing-auction edge. The 3:53–3:57 window is where the imbalance either confirms or decays.';
   }
 
   return {
@@ -302,13 +308,18 @@ export function buildMocRead(snapshot: MarketSnapshot): MocRead {
 }
 
 export function buildFractureView(snapshot: MarketSnapshot): FractureView {
-  const { ticker, spot, chain, plan } = snapshot;
+  const { ticker, spot, chain } = snapshot;
   const day = dayKey();
   const seed = (t: string) => h01(`${ticker}-${day}-frac-${t}`);
 
   const G = chain.reduce((a, n) => a + Math.abs(n.netGex), 0) || spot * 1e6;
   const netGexTotal = chain.reduce((a, n) => a + n.netGex, 0);
-  const amp = netGexTotal < 0 || spot < plan.flipZone; // short-gamma / below flip = amplifying
+  // The flip comes off the levels rail, not off `plan` directly. Every number on
+  // this page is scaled by whether spot sits below it, so a fracture line drawn
+  // against one flip while the GEX rail draws its own is two desks disagreeing
+  // about where the regime turns.
+  const { flip } = buildLevels(snapshot);
+  const amp = netGexTotal < 0 || spot < flip; // short-gamma / below flip = amplifying
   const rv = realizedVol(snapshot.priceHistory, spot);
   // Branching (self-excitation) blends the price-path autocorrelation with the
   // regime signals that actually make a tape endogenous — short-gamma dealers,
@@ -394,7 +405,7 @@ export function buildFractureView(snapshot: MarketSnapshot): FractureView {
       critLabel === 'STABLE'
         ? 'Activity is mostly exogenous — trades are responding to news, not to each other. A shock would dissipate.'
         : critLabel === 'REACTIVE'
-          ? 'Feedback is building — moves are starting to beget moves. Watch for it to tip toward self-sustaining.'
+          ? 'Feedback is building — moves are starting to beget moves. The tape is not self-sustaining yet, but it is no longer far from it.'
           : critLabel === 'CRITICAL'
             ? 'Near the critical threshold — the market is reacting largely to itself. One aggressive program could self-sustain.'
             : 'Above the practical threshold — trades are generating trades. A small catalyst can trigger a cascade.',
