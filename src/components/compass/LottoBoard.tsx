@@ -9,7 +9,7 @@ import { pinStrike } from '../../data/gex';
 import { UNIVERSE } from '../../data/universe';
 import { VERDICT_LABEL, VERDICT_TONE } from '../skyvision/verdict';
 import ContractTrack from './ContractTrack';
-import { weighedToPlan } from './contractTrack';
+import { weighedToPlan } from './contractTrackModel';
 import type { Verdict } from '../../types/skyvision';
 import type { MocRead } from '../../types/fracture';
 import type { MarketSnapshot } from '../../types/market';

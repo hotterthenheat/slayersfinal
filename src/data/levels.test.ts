@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import Simulator from '../core/simulator';
-import * as positioningMap from '../components/gex/positioningMap';
+import * as positioningMap from '../components/gex/positioningMapModel';
 import { buildCommandView } from './command';
 import { buildExposureProfile } from './exposure';
 import { buildGexView, buildLevels, pinStrike } from './gex';

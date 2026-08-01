@@ -37,7 +37,7 @@ import { VERDICT_LABEL, VERDICT_TONE } from '../skyvision/verdict';
 import { setupState } from '../skyvision/setupState';
 import { StateBadge } from '../skyvision/StateBadge';
 import ContractTrack from './ContractTrack';
-import { buildTrack, weighedToPlan } from './contractTrack';
+import { buildTrack, weighedToPlan } from './contractTrackModel';
 import type { Verdict } from '../../types/skyvision';
 import type { MarketSnapshot } from '../../types/market';
 import { DUR, EASE, PILL } from '../../lib/motion';

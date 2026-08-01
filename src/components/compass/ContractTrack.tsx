@@ -21,7 +21,7 @@ import {
   trackSummary,
   type ContractPlan,
   type TrackData,
-} from './contractTrack';
+} from './contractTrackModel';
 import type { Candle } from '../../types/market';
 
 /*
