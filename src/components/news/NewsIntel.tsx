@@ -145,7 +145,7 @@ const NoBreakdown = ({ view, selectedItem, onSelect }: { view: NewsIntelView; se
   <div className="flex flex-col gap-3">
     <p className="text-caption text-textSecondary leading-relaxed">
       No positioning breakdown for{' '}
-      {selectedItem?.ticker ? <span className="font-mono text-textPrimary">{selectedItem.ticker}</span> : 'this macro print'} yet — the deep
+      {selectedItem?.ticker ? <span className="font-mono text-textPrimary">{selectedItem.ticker}</span> : 'this macro print'} yet. The deep
       read needs the current options chain, which the terminal keeps for the active name{' '}
       <span className="font-mono text-textPrimary">{view.ticker}</span> and the macro tape. Open a covered catalyst:
     </p>
@@ -164,7 +164,7 @@ const NoBreakdown = ({ view, selectedItem, onSelect }: { view: NewsIntelView; se
         ))}
       </div>
     ) : (
-      <span className="font-mono text-label text-textMuted">No catalyst on {view.ticker} today — positioning reads {view.positioningLabel}.</span>
+      <span className="font-mono text-label text-textMuted">No catalyst on {view.ticker} today; positioning reads {view.positioningLabel}.</span>
     )}
   </div>
 );
@@ -194,7 +194,6 @@ const NewsIntel = ({ selectedItem, onSelect }: NewsIntelProps) => {
     );
   }
 
-  const readTone: Tone = view.narrativeLean > 0.1 ? 'bull' : view.narrativeLean < -0.1 ? 'bear' : 'neutral';
   const matched = selectedItem ? view.headlines.find(h => h.id === selectedItem.id) ?? null : null;
 
   return (
@@ -221,11 +220,29 @@ const NewsIntel = ({ selectedItem, onSelect }: NewsIntelProps) => {
         <Stat label="Event vol" value={`±${view.eventVolPct.toFixed(1)}%`} tone="select" sub="implied event move" />
       </div>
 
-      <div className={`border-l-2 pl-3 ${readTone === 'bull' ? 'border-bull/40' : readTone === 'bear' ? 'border-bear/40' : 'border-borderMuted'}`}>
-        <span className={`font-mono text-label font-semibold uppercase tracking-widest ${readTone === 'bull' ? 'text-bull' : readTone === 'bear' ? 'text-bear' : 'text-textSecondary'}`}>
-          The read
-        </span>
-        <p className="mt-1 text-caption text-textSecondary leading-relaxed">{view.headline}</p>
+      {/*
+        This was a prose summary headed "The read" that opened with a lean
+        adjective ("the wire leans bullish") and then restated the four Stats
+        directly above it. The adjective is a judgement, not an observation, and
+        the restatement is why it read as filler. What is left is the part the
+        Stats do not carry: which catalyst type is loudest, the informational /
+        mechanical split, where the book sits, and what that combination means
+        for timing.
+      */}
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-x-3 gap-y-1 flex-wrap font-mono text-label">
+          <span className="uppercase tracking-widest text-textMuted">Loudest catalyst</span>
+          {view.dominantCategory ? (
+            <SignalBadge tone={catTone[view.dominantCategory]}>{view.dominantCategory}</SignalBadge>
+          ) : (
+            <span className="text-textMuted">none on the read</span>
+          )}
+          <span className="text-textSecondary">{view.natureSplit}</span>
+          <span className="ml-auto text-textSecondary">
+            book <span className="text-textPrimary">{view.positioningLabel}</span>
+          </span>
+        </div>
+        <p className="text-caption text-textSecondary leading-relaxed">{view.note}</p>
       </div>
 
       <div className="border-t border-borderSubtle pt-3.5">

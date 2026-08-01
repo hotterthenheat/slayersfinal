@@ -44,10 +44,12 @@ export function priceScale(strikes: StrikeExposure[], plotH = 1): PriceScale {
 
 /**
  * One band per strike, centered on it, spanning to the midpoint of each
- * neighbour. That midpoint is exactly how exposure.ts:116 defines `levels.flip`,
- * so the boundary where the fill changes colour IS the engine's flip — no
- * synthetic vertex, no interpolant, no second opinion about where the regime
- * turns.
+ * neighbour. That midpoint is exactly how the flip is defined upstream — the
+ * plan places it halfway between the two strikes the smoothed net-GEX profile
+ * crosses zero across (simulator.ts `generateTradePlan`, surfaced by gex.ts
+ * `buildLevels`) — so the boundary where the fill changes colour IS the engine's
+ * flip: no synthetic vertex, no interpolant, no second opinion about where the
+ * regime turns.
  *
  * Edges come from the neighbours rather than a single `step`, so an uneven
  * strike chain still tiles exactly instead of opening seams; on the even chains
@@ -82,24 +84,20 @@ export function netMaxOf(strikes: StrikeExposure[]): number {
   return m;
 }
 
-/**
- * argmax |gex.net|, lowest index on a tie. `king` is on KeyLevels (gex.ts:21)
- * but not on ExposureLevels, so it is derived against the type's own definition
- * rather than added to a shared type three other panels depend on.
- */
-export function kingStrike(strikes: StrikeExposure[]): number {
-  if (strikes.length === 0) return Number.NaN;
-  let best = strikes[0];
-  let bestMag = Math.abs(best.gex.net);
-  for (const s of strikes) {
-    const mag = Math.abs(s.gex.net);
-    if (mag > bestMag) {
-      bestMag = mag;
-      best = s;
-    }
-  }
-  return best.strike;
-}
+/*
+  There is deliberately no king derivation here.
+
+  This module only ever sees `StrikeExposure[]` — a WINDOWED, expiry-decayed,
+  per-strike-jittered view of the book — so an argmax over it answers "the
+  biggest bar currently drawn", which is a different question from "the book's
+  king" and moves when the panel is resized. The two disagreed on 8 of 32
+  ticker × expiry combinations, and the map crowned one strike while the levels
+  rail above it named another.
+
+  `ExposureLevels.king` carries the book's answer from gex.ts `buildLevels`, and
+  PositioningMap.tsx reads it. If the king falls outside the rendered window, no
+  row is crowned — the honest outcome, and the one the type makes easy.
+*/
 
 /**
  * Net gamma accumulated between the anchor and each strike, the anchor's own

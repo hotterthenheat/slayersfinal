@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Boxes, ChevronRight, FlaskConical, Trophy } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import Simulator from '../../core/simulator';
@@ -12,6 +13,8 @@ import Sparkline from '../../components/skyvision/Sparkline';
 import MonteCarloPanel from './MonteCarloPanel';
 import Surface3D from './Surface3D';
 import MarketStateReplay from '../../components/proveit/MarketStateReplay';
+import VolLab from '../gex/VolLab';
+import StatePriceDensity from '../../components/gex/StatePriceDensity';
 
 type Window = '10' | '30' | '60';
 
@@ -21,9 +24,23 @@ const WINDOW_OPTIONS = [
   { value: '60', label: '60d' },
 ] as const;
 
-const ProveIt = () => {
+/** The three reads. Volatility and density arrived from Pinpoint: a calibrated
+    surface and the price density it implies are model output measured against
+    the tape, which is this desk's remit, not a picture of dealer hedging. */
+const VIEW_OPTIONS = [
+  { value: 'models', label: 'Models' },
+  { value: 'volatility', label: 'Volatility lab' },
+  { value: 'density', label: 'Risk-neutral density' },
+] as const;
+type ViewKey = (typeof VIEW_OPTIONS)[number]['value'];
+
+/**
+ * Monte Carlo, the dealer surface and the scoreboard. Split out so the two
+ * volatility reads mount without a snapshot they never use, and so the tab bar
+ * stays on screen while this one waits for its run.
+ */
+const ModelsView = ({ window_ }: { window_: Window }) => {
   const { activeTicker, marketData } = useMarketData();
-  const [window_, setWindow] = useState<Window>('30');
   const [assumptionsOpen, setAssumptionsOpen] = useState(false);
 
   const iv = Simulator.TICKERS[activeTicker]?.iv ?? 0.25;
@@ -38,16 +55,9 @@ const ProveIt = () => {
 
   if (!marketData || !mc) {
     return (
-      <>
-        <PageHeader
-          breadcrumb={['Terminal', 'Prove It']}
-          title="Prove It"
-          subtitle="Quantitative modeling & predictive analytics — the receipts behind every call"
-        />
-        <Panel className="h-64" bodyClassName="flex items-center justify-center">
-          <span className="font-mono text-label text-textMuted uppercase tracking-widest">Spinning up the models…</span>
-        </Panel>
-      </>
+      <Panel className="h-64" bodyClassName="flex items-center justify-center">
+        <span className="font-mono text-label text-textMuted uppercase tracking-widest">Spinning up the models…</span>
+      </Panel>
     );
   }
 
@@ -68,22 +78,6 @@ const ProveIt = () => {
 
   return (
     <>
-      <PageHeader
-        breadcrumb={['Terminal', 'Prove It']}
-        title="Prove It"
-        subtitle="Quantitative modeling & predictive analytics — the receipts behind every call"
-        actions={
-          <span className="inline-flex items-center gap-2">
-            <SegmentedControl
-              ariaLabel="Forecast window"
-              options={WINDOW_OPTIONS}
-              value={window_}
-              onChange={v => setWindow(v as Window)}
-            />
-          </span>
-        }
-      />
-
       <MetricGrid min="170px">
         <StatCard
           label={`P(up in ${mc.days} sessions)`}
@@ -222,6 +216,51 @@ const ProveIt = () => {
           when an engine's hit rate decays, weights come down with it.
         </p>
       </Panel>
+    </>
+  );
+};
+
+const ProveIt = () => {
+  const [params, setParams] = useSearchParams();
+  const [window_, setWindow] = useState<Window>('30');
+
+  // An unknown `?view=` falls back to the first read rather than an empty page.
+  const active = VIEW_OPTIONS.find(v => v.value === params.get('view')) ?? VIEW_OPTIONS[0];
+  const view = active.value;
+
+  const selectView = (next: ViewKey) => {
+    const p = new URLSearchParams(params);
+    p.set('view', next);
+    setParams(p, { replace: true });
+  };
+
+  return (
+    <>
+      <PageHeader
+        breadcrumb={['Terminal', 'Prove It', active.label]}
+        title="Prove It"
+        subtitle="Quantitative modeling & predictive analytics — the receipts behind every call"
+        actions={
+          // The window sets the Monte Carlo horizon and nothing else, so it is
+          // not offered on the two reads it cannot move.
+          view === 'models' && (
+            <SegmentedControl
+              ariaLabel="Forecast window"
+              options={WINDOW_OPTIONS}
+              value={window_}
+              onChange={v => setWindow(v as Window)}
+            />
+          )
+        }
+      />
+
+      <div className="flex max-w-full">
+        <SegmentedControl ariaLabel="Prove It view" options={VIEW_OPTIONS} value={view} onChange={selectView} />
+      </div>
+
+      {view === 'models' && <ModelsView window_={window_} />}
+      {view === 'volatility' && <VolLab />}
+      {view === 'density' && <StatePriceDensity />}
     </>
   );
 };

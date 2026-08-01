@@ -9,8 +9,20 @@
 ==================================================
 */
 
+import { buildLevels, pinStrike } from './gex';
 import type { MarketSnapshot } from '../types/market';
 import type { HedgingClass, RankedTarget, RankedTargetsView, TargetTag } from '../types/gex';
+
+/**
+ * Window the cockpit's key-levels rail and the positioning map both use.
+ *
+ * The pin is the one structural level that legitimately depends on how many
+ * strikes are in view (gex.ts `pinStrike`), so this table names the strike the
+ * rail names rather than the book-wide heaviest-OI strike it used to scan for
+ * itself. Those were $10 apart on AAPL — a PIN badge here contradicting a PIN
+ * price two screens over is worse than no badge.
+ */
+const PIN_HALF = 10;
 
 // ---- deterministic RNG ------------------------------------------------------
 function hash(seed: string): number {
@@ -36,39 +48,26 @@ export function buildRankedTargets(snapshot: MarketSnapshot): RankedTargetsView 
     return Math.round((n.callOI + n.putOI) * (0.2 + j * 0.7));
   });
 
-  // Structural landmarks for tagging
-  let callWall = spot;
-  let putWall = spot;
-  let king = spot;
-  let pin = spot;
-  let maxAbove = 0;
-  let maxBelow = 0;
+  // Structural landmarks for tagging. Read from the single derivation, not
+  // re-scanned here: this table's WALL / KING / PIN badges name the same strikes
+  // the levels rail, the strike chart and the positioning map name, so a reader
+  // moving between them is never told the king is in two places at once.
+  const { callWall, putWall, king } = buildLevels(snapshot);
+  const pin = pinStrike(snapshot, PIN_HALF);
+
+  // Scales, not levels — these normalize the score's terms and set the "strong
+  // gamma" cut. Book-wide because the table ranks the whole chain.
   let maxAll = 0;
   let maxOI = 0;
   for (const n of nodes) {
-    const mag = Math.abs(n.netGex);
-    if (n.strike > spot && mag > maxAbove) {
-      maxAbove = mag;
-      callWall = n.strike;
-    }
-    if (n.strike < spot && mag > maxBelow) {
-      maxBelow = mag;
-      putWall = n.strike;
-    }
-    if (mag > maxAll) {
-      maxAll = mag;
-      king = n.strike;
-    }
-    if (n.callOI + n.putOI > maxOI) {
-      maxOI = n.callOI + n.putOI;
-      pin = n.strike;
-    }
+    maxAll = Math.max(maxAll, Math.abs(n.netGex));
+    maxOI = Math.max(maxOI, n.callOI + n.putOI);
   }
 
   const maxVolume = Math.max(...volumes, 1);
   const maxTotalOI = maxOI || 1;
+  const maxAbsGex = Math.max(1, maxAll);
 
-  let maxAbsGex = 1;
   const targets: RankedTarget[] = nodes.map((n, i) => {
     const volume = volumes[i];
 
@@ -108,8 +107,6 @@ export function buildRankedTargets(snapshot: MarketSnapshot): RankedTargetsView 
             ? 'DOWNSIDE CUSHION'
             : 'UPSIDE RESISTANCE'
           : 'NEUTRAL';
-
-    maxAbsGex = Math.max(maxAbsGex, Math.abs(n.netGex));
 
     return {
       rank: 0, // assigned after sort

@@ -1,9 +1,11 @@
 /*
 ==================================================
   SLAYER TERMINAL - COMMUNITY STORE (community.ts)
-  Seeded content + localStorage persistence. Runs
-  locally until accounts land; the shapes here are
-  the future API contract.
+  Two kinds of content, kept apart on purpose:
+  EXAMPLE_IDEAS and ROADMAP ship with the app, and
+  CommunityState holds only what this browser wrote.
+  Nothing here reaches a server; the shapes are the
+  future API contract.
 ==================================================
 */
 
@@ -17,7 +19,18 @@ const STORAGE_KEY = 'slayer_community_v1';
 
 const hoursAgo = (h: number) => new Date(Date.now() - h * 3600_000).toISOString();
 
-// ---- seeds ------------------------------------------------------------------
+// ---- shipped examples -------------------------------------------------------
+/**
+ * Four worked theses that ship with the terminal, shown as templates on the
+ * Ideas board and quoted on the landing page (Landing.tsx renders the first
+ * three). Their `author` and `votes` are demo fields the landing section leans
+ * on; the terminal deliberately renders neither, because a handle and a tally
+ * with no account system behind them are decoration, not data.
+ *
+ * The prices track the simulator's own reference book (SPY 500, QQQ 440, NVDA
+ * 138.6 from data/universe.ts) so an example never contradicts the levels the
+ * desk is showing next to it.
+ */
 export const SEED_IDEAS: CommunityIdea[] = [
   {
     id: 'seed-i1',
@@ -33,7 +46,7 @@ export const SEED_IDEAS: CommunityIdea[] = [
     author: 'thetadecay',
     ticker: 'NVDA',
     direction: 'BEARISH',
-    thesis: 'Rejected the call wall twice this week and 0DTE flow flipped to put buying after lunch. Fading rips while it stays below 122.',
+    thesis: 'Rejected the call wall twice this week and 0DTE flow flipped to put buying after lunch. Fading rips while it stays below 138.',
     votes: 18,
     createdAt: hoursAgo(6),
   },
@@ -57,30 +70,19 @@ export const SEED_IDEAS: CommunityIdea[] = [
   },
 ];
 
-export const SEED_REQUESTS: FeatureRequest[] = [
-  {
-    id: 'seed-r1',
-    author: 'scalpking',
-    title: 'Price alerts when a wall breaks',
-    detail: 'Push/browser alert the moment spot trades through the call or put wall with force: the exact moment the map says momentum.',
-    kind: 'FEATURE',
-    status: 'PLANNED',
-    votes: 42,
-    createdAt: hoursAgo(72),
-  },
-  {
-    id: 'seed-r2',
-    author: 'mobileandy',
-    title: 'Mobile companion app',
-    detail: 'Read-only levels + alerts on the phone. I do not need the full terminal, just the walls, flip and my tracked setups.',
-    kind: 'PRODUCT',
-    status: 'UNDER REVIEW',
-    votes: 35,
-    createdAt: hoursAgo(120),
-  },
+/** Alias that says what these are on the desk. Same array; SEED_IDEAS keeps the
+    name the landing page imports. */
+export const EXAMPLE_IDEAS = SEED_IDEAS;
+
+/**
+ * The published roadmap. This is app-shipped content with real statuses, not
+ * seeded user posts: `author` and `votes` survive for the API contract but the
+ * board renders neither, since neither can be true without a backend.
+ */
+export const ROADMAP: FeatureRequest[] = [
   {
     id: 'seed-r3',
-    author: 'deskbuilder',
+    author: 'slayer',
     title: 'Named workspaces',
     detail: 'Save more than one layout: one desk for the open, one for lunch chop, one for the close.',
     kind: 'IMPROVEMENT',
@@ -89,20 +91,40 @@ export const SEED_REQUESTS: FeatureRequest[] = [
     createdAt: hoursAgo(48),
   },
   {
+    id: 'seed-r1',
+    author: 'slayer',
+    title: 'Price alerts when a wall breaks',
+    detail: 'Alert the moment spot trades through the call or put wall with force: the exact moment the map says momentum.',
+    kind: 'FEATURE',
+    status: 'PLANNED',
+    votes: 42,
+    createdAt: hoursAgo(72),
+  },
+  {
     id: 'seed-r4',
-    author: 'sectorsam',
+    author: 'slayer',
     title: 'Dark pool sector filters',
-    detail: 'Filter the dark pool feed by sector so I can watch just tech or just financials.',
+    detail: 'Filter the dark pool board by sector so you can watch just tech or just financials.',
     kind: 'FEATURE',
     status: 'PLANNED',
     votes: 19,
     createdAt: hoursAgo(90),
   },
   {
+    id: 'seed-r2',
+    author: 'slayer',
+    title: 'Mobile companion app',
+    detail: 'Read-only levels and alerts on the phone: the walls, the flip and your tracked setups, nothing else.',
+    kind: 'PRODUCT',
+    status: 'UNDER REVIEW',
+    votes: 35,
+    createdAt: hoursAgo(120),
+  },
+  {
     id: 'seed-r5',
-    author: 'spreadtrader',
+    author: 'slayer',
     title: 'Multi-leg strategy builder',
-    detail: 'Build spreads against the exposure map. Show me how my structure sits against the walls.',
+    detail: 'Build spreads against the exposure map and see how the structure sits against the walls.',
     kind: 'PRODUCT',
     status: 'UNDER REVIEW',
     votes: 16,
@@ -110,9 +132,9 @@ export const SEED_REQUESTS: FeatureRequest[] = [
   },
   {
     id: 'seed-r6',
-    author: 'deskbuilder',
+    author: 'slayer',
     title: 'Custom workspace layouts',
-    detail: 'Let me arrange my own panels instead of fixed pages.',
+    detail: 'Arrange your own panels instead of fixed pages. Shipped as the Pulse workspace.',
     kind: 'FEATURE',
     status: 'SHIPPED',
     votes: 51,
@@ -120,54 +142,55 @@ export const SEED_REQUESTS: FeatureRequest[] = [
   },
 ];
 
-/** Real changes that came from user input — the feedback loop, closed. */
-export const SHIPPED_FROM_FEEDBACK: { title: string; note: string }[] = [
-  { title: 'Custom workspace layouts', note: 'Build your own desk from any panels, under Tools.' },
-  { title: 'Readability pass', note: 'Brighter text, bigger numbers: labels whisper, data does not.' },
-  { title: 'Plain-English copy', note: 'Buzzwords removed across the terminal.' },
-  { title: 'Live tape filters', note: 'Flow type, sentiment and minimum premium filters on the tape.' },
-];
+/** Kept for the store's migration step: anything carrying one of these ids was
+    written back into localStorage by an older build that copied the shipped
+    content into the user's own array. */
+const SHIPPED_ID_PREFIX = 'seed-';
 
-// The rest of the loop — what asks have moved into the build, and what is still
-// being weighed. Illustrative for the preview; the real board fills the same shape.
-export const IN_PROGRESS_FROM_FEEDBACK: { title: string; note: string }[] = [
-  { title: 'Alert delivery', note: 'Push + email the moment a tracked setup triggers or invalidates.' },
-  { title: 'Saved scanner presets', note: 'Name a filter stack on the tape and recall it in one click.' },
-  { title: 'Per-desk density toggle', note: 'Comfortable vs compact rows, remembered per desk.' },
-];
-
-export const CONSIDERING_FROM_FEEDBACK: { title: string; note: string }[] = [
-  { title: 'Multi-ticker Pinpoint', note: 'Tile several names’ dealer positioning at once.' },
-  { title: 'Session replay', note: 'Scrub a past session and watch the levels move.' },
-];
+export const isShippedId = (id: string): boolean => id.startsWith(SHIPPED_ID_PREFIX);
 
 // ---- persistence ---------------------------------------------------------------
+/** Only what this browser wrote. The shipped examples and roadmap above are
+    rendered from the constants, never copied in here. */
 export interface CommunityState {
   ideas: CommunityIdea[];
   requests: FeatureRequest[];
   feedback: FeedbackEntry[];
-  /** ids the local user has voted for (ideas + requests) */
+  /** Roadmap ids this browser has backed. */
   voted: string[];
 }
+
+export const EMPTY_COMMUNITY: CommunityState = { ideas: [], requests: [], feedback: [], voted: [] };
+
+const mine = <T extends { id: string }>(list: unknown): T[] =>
+  Array.isArray(list) ? (list as T[]).filter(x => x && typeof x.id === 'string' && !isShippedId(x.id)) : [];
 
 export function loadCommunity(): CommunityState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { ideas: SEED_IDEAS, requests: SEED_REQUESTS, feedback: [], voted: [] };
-    const parsed = JSON.parse(raw) as CommunityState;
+    if (!raw) return EMPTY_COMMUNITY;
+    const parsed = JSON.parse(raw) as Partial<CommunityState>;
     return {
-      ideas: Array.isArray(parsed.ideas) && parsed.ideas.length ? parsed.ideas : SEED_IDEAS,
-      requests: Array.isArray(parsed.requests) && parsed.requests.length ? parsed.requests : SEED_REQUESTS,
+      // Older builds seeded state.ideas/requests with the shipped content and
+      // wrote the whole array back on the first vote. Dropping those ids on read
+      // is the migration: the shipped rows come from the constants now, so an
+      // empty board can finally stay empty.
+      ideas: mine<CommunityIdea>(parsed.ideas),
+      requests: mine<FeatureRequest>(parsed.requests),
       feedback: Array.isArray(parsed.feedback) ? parsed.feedback : [],
-      voted: Array.isArray(parsed.voted) ? parsed.voted : [],
+      voted: Array.isArray(parsed.voted) ? parsed.voted.filter(v => typeof v === 'string') : [],
     };
   } catch {
-    return { ideas: SEED_IDEAS, requests: SEED_REQUESTS, feedback: [], voted: [] };
+    return EMPTY_COMMUNITY;
   }
 }
 
 export function saveCommunity(state: CommunityState): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    /* private mode / quota: the desk keeps working, it just will not persist */
+  }
 }
 
 /** "3h ago" style relative time. */
@@ -177,4 +200,43 @@ export function timeAgo(iso: string): string {
   const hours = Math.round(mins / 60);
   if (hours < 24) return `${hours}h ago`;
   return `${Math.round(hours / 24)}d ago`;
+}
+
+/**
+ * Everything this browser holds, as Markdown. The desk cannot send anything, so
+ * the honest substitute for a submit button is a record you can paste into a
+ * mail or a message yourself.
+ */
+export function communityMarkdown(state: CommunityState, unpack: (raw: string) => string): string {
+  const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
+  const out: string[] = [`# Slayer Terminal desk record`, `Exported ${stamp} (local time)`, ''];
+
+  out.push(`## Theses (${state.ideas.length})`);
+  if (!state.ideas.length) out.push('_none_');
+  for (const i of state.ideas) {
+    out.push(`- **${i.ticker}** ${i.direction} - ${unpack(i.thesis)}`);
+  }
+  out.push('');
+
+  out.push(`## Requests (${state.requests.length})`);
+  if (!state.requests.length) out.push('_none_');
+  for (const r of state.requests) {
+    out.push(`- **${r.title}** (${r.kind})${r.detail ? ` - ${r.detail}` : ''}`);
+  }
+  out.push('');
+
+  out.push(`## Notes (${state.feedback.length})`);
+  if (!state.feedback.length) out.push('_none_');
+  for (const f of state.feedback) {
+    out.push(`- **${f.category}** - ${unpack(f.message)}`);
+  }
+  out.push('');
+
+  const backed = ROADMAP.filter(r => state.voted.includes(r.id));
+  out.push(`## Roadmap items backed (${backed.length})`);
+  if (!backed.length) out.push('_none_');
+  for (const r of backed) out.push(`- ${r.title} (${r.status})`);
+  out.push('');
+
+  return out.join('\n');
 }

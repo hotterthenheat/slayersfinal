@@ -1,11 +1,15 @@
-import { Target, Grid3x3, FlaskConical, Gauge, History, CandlestickChart, type LucideIcon } from 'lucide-react';
+import { Target, Grid3x3, Gauge, History, CandlestickChart, type LucideIcon } from 'lucide-react';
 
 /** Pinpoint subpage registry — drives the sub-tab bar and command palette.
-    Six desks, each a single dealer-positioning question. Desks that carry two
+    Five desks, each a single dealer-positioning question. Desks that carry two
     complementary reads (Gamma this-ticker vs the complex, Levels exposure vs
-    ranked, Greeks matrix vs migration, Volatility surface vs density, Stress
-    hedge vs fracture) expose the second as an in-desk sub-toggle (?view=) rather
-    than its own tab, so the bar reads as a short map instead of a wall of eleven. */
+    ranked, Greeks matrix vs migration, Stress hedge vs fracture) expose the
+    second as an in-desk sub-toggle (?view=) rather than its own tab, so the bar
+    reads as a short map instead of a wall of nine.
+
+    The vol surface and the density it implies are not on this bar: they are what
+    a calibrated model says about the chain, not where dealers are hedged, so
+    they belong to Prove It. /pinpoint/volatility redirects there. */
 export interface GexSubpage {
   path: string;
   label: string;
@@ -34,12 +38,6 @@ export const GEX_SUBPAGES: GexSubpage[] = [
     subtitle:
       'Full 8-greek exposure matrix and dealer regime, plus where exposure migrates as volatility and time shift (charm & vanna)',
     icon: Grid3x3,
-  },
-  {
-    path: '/pinpoint/volatility',
-    label: 'Volatility',
-    subtitle: 'IV surface, term structure and skew, and the risk-neutral price density the options imply',
-    icon: FlaskConical,
   },
   {
     path: '/pinpoint/stress',

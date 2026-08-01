@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
-import { CalendarClock, Crosshair, Star, Bell, GitCompare, X, SlidersHorizontal } from 'lucide-react';
+import { CalendarClock, Crosshair, Star, Bell, GitCompare, X, SlidersHorizontal, Ticket, ChevronDown, ChevronRight, ArrowDown } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import TickerJump from '../components/ui/TickerJump';
 import Panel from '../components/ui/Panel';
@@ -7,8 +7,17 @@ import StatCard from '../components/ui/StatCard';
 import MetricGrid from '../components/ui/MetricGrid';
 import SignalBadge from '../components/ui/SignalBadge';
 import SegmentedControl from '../components/ui/SegmentedControl';
+import Stat from '../components/ui/Stat';
 import DataTable, { type Column } from '../components/ui/DataTable';
-import { buildEarningsCalendar, type EarningsEvent, type EarningsVerdict } from '../data/earnings';
+import {
+  buildEarningsCalendar,
+  buildEarningsPlays,
+  directionVote,
+  type EarningsEvent,
+  type EarningsPlay,
+  type EarningsVerdict,
+} from '../data/earnings';
+import { buildEarningsIntel, type EarningsIntelView } from '../data/earningsintel';
 import EarningsIntel from '../components/earnings/EarningsIntel';
 import { toneText, type Tone } from '../components/ui/tones';
 
@@ -37,6 +46,8 @@ const inWindow = (e: EarningsEvent, w: WindowFilter): boolean => {
 };
 
 const WATCHLIST_KEY = 'slayer.earnings.watchlist';
+/** Anchor for the "full dossier" jump out of the selected-row read. */
+const DOSSIER_ID = 'earnings-dossier';
 
 // A verdict is a process state, so it takes the chrome tones — see the rule in
 // skyvision/setupState.ts. QUALIFIED = silver (a structure qualifies), RICH =
@@ -89,21 +100,6 @@ const edgePtsLabel = (e: EarningsEvent): string => {
   return `${d >= 0 ? '+' : '−'}${Math.abs(d).toFixed(1)}pt`;
 };
 
-/**
- * Conviction = how many directional sleeves already lean the same way. Reuses the
- * exact categorizations the board already renders (revisions >0.15, flow >0.2,
- * setup ≥62). A tally of existing signals, not a new score.
- */
-const dirVote = (e: EarningsEvent): { rev: number; flow: number; setup: number; net: number; aligned: number } => {
-  const rev = e.revisionTrend > 0.15 ? 1 : e.revisionTrend < -0.15 ? -1 : 0;
-  const flow = e.flowLean > 0.2 ? 1 : e.flowLean < -0.2 ? -1 : 0;
-  const setup = e.technicalScore >= 62 ? 1 : e.technicalScore <= 40 ? -1 : 0;
-  const votes = [rev, flow, setup];
-  const up = votes.filter(v => v > 0).length;
-  const down = votes.filter(v => v < 0).length;
-  return { rev, flow, setup, net: rev + flow + setup, aligned: Math.max(up, down) };
-};
-
 interface Conviction {
   label: string;
   tone: Tone;
@@ -111,7 +107,7 @@ interface Conviction {
   aligned: number;
 }
 const convictionRead = (e: EarningsEvent): Conviction => {
-  const { net, aligned } = dirVote(e);
+  const { net, aligned } = directionVote(e);
   const dir = net > 0 ? 'UP' : net < 0 ? 'DOWN' : 'MIXED';
   const dirTone: Tone = net > 0 ? 'bull' : net < 0 ? 'bear' : 'warn';
   if (aligned >= 3) return { label: 'High', tone: dirTone, dir, aligned };
@@ -119,15 +115,24 @@ const convictionRead = (e: EarningsEvent): Conviction => {
   return { label: 'Split', tone: 'warn', dir: 'MIXED', aligned };
 };
 
-/** The risk-defined structure the verdict + richness imply — mirrors the engine. */
-const structureRead = (e: EarningsEvent): { label: string; risk: string; tone: Tone } => {
-  const { net } = dirVote(e);
-  if (e.richness <= 0.85) return { label: 'Long straddle', risk: 'risk = debit paid', tone: 'bull' };
-  if (e.richness >= 1.3) {
-    if (e.verdict === 'PLAY') return { label: net >= 0 ? 'Call vertical' : 'Put vertical', risk: 'risk = defined debit', tone: 'bull' };
-    return { label: 'Iron condor', risk: 'risk = wings defined', tone: 'magenta' };
-  }
-  if (e.verdict === 'PLAY') return { label: net >= 0 ? 'Call spread' : 'Put spread', risk: 'risk = defined debit', tone: 'bull' };
+/**
+ * The structure, read off the dossier instead of recomputed.
+ *
+ * This used to be a second derivation: the board re-scored richness and the
+ * direction tally and named its own structure, while the dossier's
+ * `buildEarningsIntel` named one from the skew and the state distribution. They
+ * cut richness at different thresholds (0.85/1.3 vs 0.9/1.18) and picked a side
+ * from different inputs, so the same print could read "Call spread" in the table
+ * and "Put debit spread" in the dossier below it. Now there is one call and the
+ * board is a projection of it.
+ *
+ * The tone stays chrome: a qualifying long structure is silver, the premium sale
+ * keeps magenta, no structure is grey. Buying vol is not a bullish statement.
+ */
+const structureOf = (view: EarningsIntelView | undefined): { label: string; risk: string; tone: Tone } => {
+  if (!view) return { label: 'no read', risk: '', tone: 'neutral' };
+  if (view.recommended === 'LONG') return { label: view.longVol.name, risk: 'risk = debit paid', tone: 'select' };
+  if (view.recommended === 'SHORT') return { label: view.shortVol.name, risk: 'risk = wings defined', tone: 'magenta' };
   return { label: 'Day-2 continuation', risk: 'no pre-print risk', tone: 'neutral' };
 };
 
@@ -161,8 +166,8 @@ const ReportTimeTag = ({ e }: { e: EarningsEvent }) => {
     <span
       title={
         confirmed
-          ? 'Report date & slot inferred confirmed — inside the near-term window'
-          : 'Report date estimated — further-out prints stay analyst-estimated until the company confirms'
+          ? 'Report date and slot inferred confirmed: inside the near-term window'
+          : 'Report date estimated: further-out prints stay analyst-estimated until the company confirms'
       }
       className={`inline-flex items-center gap-1 font-mono text-label uppercase tracking-wider ${
         confirmed ? 'text-textSecondary' : 'text-warn'
@@ -193,11 +198,11 @@ const WatchStar = ({ on, onClick }: { on: boolean; onClick: () => void }) => (
 
 /** Three signal chips (revisions / flow / setup) that back the conviction read. */
 const VoteChips = ({ e }: { e: EarningsEvent }) => {
-  const { rev, flow, setup } = dirVote(e);
+  const { rev, flow, setup } = directionVote(e);
   const chip = (label: string, v: number) => (
     <span className={`font-mono text-label ${v > 0 ? 'text-bull' : v < 0 ? 'text-bear' : 'text-textMuted'}`}>
       {label}
-      {v > 0 ? '▲' : v < 0 ? '▼' : '—'}
+      {v > 0 ? '▲' : v < 0 ? '▼' : '·'}
     </span>
   );
   return (
@@ -222,12 +227,14 @@ const pad = (n: number) => String(n).padStart(2, '0');
 /** Live countdown to the next tracked print, with a bell to arm/disarm the alert. */
 const AlertCountdown = ({
   event,
+  view,
   armed,
   watched,
   onArm,
   onOpen,
 }: {
   event: EarningsEvent;
+  view: EarningsIntelView | undefined;
   armed: boolean;
   watched: boolean;
   onArm: () => void;
@@ -245,7 +252,7 @@ const AlertCountdown = ({
   const hh = Math.floor((totalSec % 86400) / 3600);
   const mm = Math.floor((totalSec % 3600) / 60);
   const ss = totalSec % 60;
-  const st = structureRead(event);
+  const st = structureOf(view);
 
   return (
     <div className="inst-surface rounded-md flex items-center gap-3 px-4 py-2.5 flex-wrap">
@@ -298,10 +305,10 @@ const AlertCountdown = ({
 };
 
 /** The three-part read that replaces a bare QUALIFIED / RICH badge. */
-const TradeRead = ({ e }: { e: EarningsEvent }) => {
+const TradeRead = ({ e, view }: { e: EarningsEvent; view: EarningsIntelView | undefined }) => {
   const edge = edgeRead(e);
   const conv = convictionRead(e);
-  const st = structureRead(e);
+  const st = structureOf(view);
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center gap-1.5">
@@ -320,6 +327,44 @@ const TradeRead = ({ e }: { e: EarningsEvent }) => {
   );
 };
 
+/**
+ * One earnings-lotto candidate: a contract you could type into a ticket, and
+ * the odds the model and the tape each put on it landing there.
+ *
+ * The edge takes the silver accent, not green. It is a statement about who is
+ * underpaying for an outcome, not about the market going up, and the semantic
+ * green on this page belongs to direction.
+ */
+const PlayCard = ({ p, ticker, expiryLabel }: { p: EarningsPlay; ticker: string; expiryLabel: string }) => (
+  <div className="inst-surface rounded-md px-3 py-2.5 flex flex-col gap-2">
+    <div className="flex items-center gap-2 flex-wrap">
+      <span className="font-mono text-body font-bold text-textPrimary leading-5">
+        {ticker} {expiryLabel} {p.strike}
+        {p.right}
+      </span>
+      <SignalBadge tone={p.kind === 'TAIL' ? 'magenta' : 'select'}>{p.kind === 'TAIL' ? 'Lotto strike' : 'Body strike'}</SignalBadge>
+    </div>
+    <div className="font-mono text-label text-textMuted">
+      <span className="tnum text-textSecondary">
+        {p.awayPct >= 0 ? '+' : '−'}
+        {Math.abs(p.awayPct).toFixed(1)}%
+      </span>{' '}
+      away · {p.sigmas}× the implied move · {p.role}
+    </div>
+    <div className="grid grid-cols-3 gap-2">
+      <Stat label="Model" value={`${p.modelProbPct.toFixed(0)}%`} sub={`lands ${p.stateLabel.toLowerCase()} or past`} align="right" />
+      <Stat label="Priced" value={`${p.pricedProbPct.toFixed(0)}%`} sub="what the skew charges" align="right" />
+      <Stat
+        label="Edge"
+        value={`${p.edgePts >= 0 ? '+' : '−'}${Math.abs(p.edgePts).toFixed(0)}pt`}
+        tone={p.edgePts >= 0 ? 'select' : 'neutral'}
+        sub="model less priced"
+        align="right"
+      />
+    </div>
+  </div>
+);
+
 const EarningsHub = () => {
   const events = useMemo(() => buildEarningsCalendar(), []);
   const [filter, setFilter] = useState<VerdictFilter>('ALL');
@@ -328,6 +373,7 @@ const EarningsHub = () => {
   const [compareMode, setCompareMode] = useState(false);
   const [compareSet, setCompareSet] = useState<Set<string>>(new Set());
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
+  const [showWhy, setShowWhy] = useState(false);
 
   const [watchlist, setWatchlist] = useState<Set<string>>(() => {
     try {
@@ -372,6 +418,20 @@ const EarningsHub = () => {
   );
   const selected = events.find(e => e.ticker === selectedTicker) ?? null;
   const compared = events.filter(e => compareSet.has(e.ticker));
+
+  // One dossier per print, built once for the whole slate. Every structure the
+  // page names now reads off this map, so the table, the compare tray and the
+  // dossier at the bottom cannot disagree about the same ticker.
+  const intelByTicker = useMemo(() => {
+    const m = new Map<string, EarningsIntelView>();
+    for (const e of events) m.set(e.ticker, buildEarningsIntel(e));
+    return m;
+  }, [events]);
+  const selectedView = selected ? intelByTicker.get(selected.ticker) : undefined;
+  const playsView = useMemo(
+    () => (selected && selectedView ? buildEarningsPlays(selected, selectedView) : null),
+    [selected, selectedView]
+  );
 
   const plays = events.filter(e => e.verdict === 'PLAY');
   const fades = events.filter(e => e.verdict === 'FADE');
@@ -483,7 +543,7 @@ const EarningsHub = () => {
       sortValue: e => e.revisionTrend,
       render: e => (
         <span className={`font-mono text-caption tnum ${e.revisionTrend > 0.15 ? 'text-bull' : e.revisionTrend < -0.15 ? 'text-bear' : 'text-textMuted'} leading-4`}>
-          {e.revisionTrend > 0.15 ? '▲ rising' : e.revisionTrend < -0.15 ? '▼ falling' : '— flat'}
+          {e.revisionTrend > 0.15 ? '▲ rising' : e.revisionTrend < -0.15 ? '▼ falling' : '· flat'}
         </span>
       ),
     },
@@ -511,7 +571,7 @@ const EarningsHub = () => {
       header: 'Trade read',
       width: '210px',
       sortValue: e => e.verdict,
-      render: e => <TradeRead e={e} />,
+      render: e => <TradeRead e={e} view={intelByTicker.get(e.ticker)} />,
     },
   ];
 
@@ -520,7 +580,7 @@ const EarningsHub = () => {
       <PageHeader
         breadcrumb={['Terminal', 'Earnings']}
         title="Earnings Hub"
-        subtitle="Every upcoming print priced: implied vs what it actually moves — edge, conviction and the risk-defined structure for each"
+        subtitle="Every upcoming print priced: implied vs what it actually moves, then edge, conviction and the risk-defined structure for each"
         actions={<SegmentedControl ariaLabel="Verdict filter" options={FILTER_OPTIONS} value={filter} onChange={setFilter} />}
       />
 
@@ -546,6 +606,7 @@ const EarningsHub = () => {
       {alertEvent && (
         <AlertCountdown
           event={alertEvent}
+          view={intelByTicker.get(alertEvent.ticker)}
           watched={!!nextWatched}
           armed={watchlist.has(alertEvent.ticker)}
           onArm={() => toggleWatch(alertEvent.ticker)}
@@ -569,7 +630,7 @@ const EarningsHub = () => {
               <div className="flex items-center justify-between">
                 <span className="font-mono text-label font-semibold uppercase tracking-widest text-textMuted">{label}</span>
                 {!reportConfirmed(list[0]) && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-warn" title="Estimated date — not yet confirmed" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-warn" title="Estimated date, not yet confirmed" />
                 )}
               </div>
               <div className="mt-2 flex flex-col gap-1.5">
@@ -577,7 +638,7 @@ const EarningsHub = () => {
                   <button
                     key={e.ticker}
                     onClick={() => setSelectedTicker(prev => (prev === e.ticker ? null : e.ticker))}
-                    className={`flex items-center gap-2 rounded px-1.5 py-1 text-left transition-colors ${
+                    className={`-my-0.5 flex items-center gap-2 rounded px-1.5 py-1.5 text-left transition-colors ${
                       selectedTicker === e.ticker ? 'bg-select/[0.08]' : 'hover:bg-rowHover'
                     }`}
                   >
@@ -608,7 +669,7 @@ const EarningsHub = () => {
           actions={
             <button
               onClick={() => setCompareSet(new Set())}
-              className="inline-flex items-center gap-1 px-2 py-1 rounded border border-borderSubtle bg-white/[0.02] font-mono text-label uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:border-borderMuted transition-colors"
+              className="-my-0.5 inline-flex items-center gap-1 px-2 py-1.5 rounded border border-borderSubtle bg-white/[0.02] font-mono text-label uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:border-borderMuted transition-colors"
             >
               <X className="w-3 h-3" /> Clear
             </button>
@@ -619,7 +680,7 @@ const EarningsHub = () => {
             {compared.map(e => {
               const edge = edgeRead(e);
               const conv = convictionRead(e);
-              const st = structureRead(e);
+              const st = structureOf(intelByTicker.get(e.ticker));
               return (
                 <div key={e.ticker} className="bg-panel px-3.5 py-3 flex flex-col gap-2.5 min-w-[220px]">
                   <div className="flex items-start justify-between gap-2">
@@ -632,7 +693,7 @@ const EarningsHub = () => {
                     <button
                       onClick={() => toggleCompare(e.ticker)}
                       aria-label={`Remove ${e.ticker} from compare`}
-                      className="shrink-0 text-textMuted hover:text-textSecondary transition-colors"
+                      className="shrink-0 -m-1.5 p-1.5 text-textMuted hover:text-textSecondary transition-colors"
                     >
                       <X className="w-3.5 h-3.5" />
                     </button>
@@ -693,7 +754,7 @@ const EarningsHub = () => {
             <button
               onClick={() => setWatchOnly(w => !w)}
               aria-pressed={watchOnly}
-              className={`inline-flex items-center gap-1 px-2 py-1 rounded border font-mono text-label uppercase tracking-wider transition-colors ${
+              className={`-my-0.5 inline-flex items-center gap-1 px-2 py-1.5 rounded border font-mono text-label uppercase tracking-wider transition-colors ${
                 watchOnly
                   ? 'border-select/40 bg-select/10 text-select'
                   : 'border-borderSubtle bg-white/[0.02] text-textSecondary hover:text-textPrimary hover:border-borderMuted'
@@ -704,7 +765,7 @@ const EarningsHub = () => {
             <button
               onClick={() => setCompareMode(m => !m)}
               aria-pressed={compareMode}
-              className={`inline-flex items-center gap-1 px-2 py-1 rounded border font-mono text-label uppercase tracking-wider transition-colors ${
+              className={`-my-0.5 inline-flex items-center gap-1 px-2 py-1.5 rounded border font-mono text-label uppercase tracking-wider transition-colors ${
                 compareMode
                   ? 'border-select/40 bg-select/10 text-select'
                   : 'border-borderSubtle bg-white/[0.02] text-textSecondary hover:text-textPrimary hover:border-borderMuted'
@@ -741,7 +802,21 @@ const EarningsHub = () => {
                 implied {selected.impliedMovePct.toFixed(1)}% · realized {selected.histAvgMovePct.toFixed(1)}% ·{' '}
                 {selected.richness.toFixed(2)}×
               </span>
-              <TickerJump ticker={selected.ticker} horizon="WEEKLIES" className="ml-auto" />
+              <span className="ml-auto flex items-center gap-2">
+                {/*
+                  The full dossier renders below the table, which is a long way
+                  from the row that produced it. Clicking a name and then having
+                  to hunt for its detail is half of why the detail felt like a
+                  wall — the payload is now reachable from the click.
+                */}
+                <button
+                  onClick={() => document.getElementById(DOSSIER_ID)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                  className="-my-0.5 inline-flex items-center gap-1 px-2 py-1.5 rounded border border-borderSubtle bg-white/[0.02] font-mono text-label uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:border-borderMuted transition-colors"
+                >
+                  <ArrowDown className="w-3 h-3" /> Full dossier
+                </button>
+                <TickerJump ticker={selected.ticker} horizon="WEEKLIES" />
+              </span>
             </div>
 
             {/* Edge · conviction · structure — the read that replaces a bare call */}
@@ -749,7 +824,7 @@ const EarningsHub = () => {
               {(() => {
                 const edge = edgeRead(selected);
                 const conv = convictionRead(selected);
-                const st = structureRead(selected);
+                const st = structureOf(selectedView);
                 return (
                   <>
                     <div className="inst-surface rounded-md px-3 py-2">
@@ -777,8 +852,24 @@ const EarningsHub = () => {
               })()}
             </div>
 
+            {/*
+              Two paragraphs of prose used to sit here side by side and read as
+              one wall. `strategy` is the instruction and stays; `rationale` is
+              the argument for it, which nobody needs on every click, so it now
+              costs one tap.
+            */}
             <p className="text-caption text-textPrimary leading-relaxed">{selected.strategy}</p>
-            <p className="text-caption text-textSecondary leading-relaxed">{selected.rationale}</p>
+            <div>
+              <button
+                onClick={() => setShowWhy(w => !w)}
+                aria-expanded={showWhy}
+                className="-my-1 py-1 inline-flex items-center gap-1 font-mono text-label uppercase tracking-wider text-textMuted hover:text-textPrimary transition-colors"
+              >
+                {showWhy ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                Why this read
+              </button>
+              {showWhy && <p className="mt-1.5 text-caption text-textSecondary leading-relaxed">{selected.rationale}</p>}
+            </div>
           </div>
         )}
         <DataTable
@@ -797,7 +888,64 @@ const EarningsHub = () => {
         />
       </Panel>
 
-      <EarningsIntel event={selected} />
+      {/*
+        Earnings plays: the dossier names a structure, this names the contract.
+        Strikes come off the dossier's own reaction nodes (±0.7σ / ±1.55σ of the
+        implied move) rounded to the listed grid, and the odds beside each one
+        are that distribution's model and priced legs, so nothing here is a
+        second opinion about the same print.
+
+        There is deliberately no premium. The contract weigher prices off a
+        baseline vol surface with no earnings jump in it, so a debit taken from
+        it would read cheap for exactly the contracts that are not.
+      */}
+      {selected && playsView && (
+        <Panel
+          title={
+            <span className="inline-flex items-center gap-1.5">
+              <Ticket className="w-3.5 h-3.5" /> Earnings plays
+            </span>
+          }
+          subtitle={`${playsView.ticker} · expires ${playsView.expiryLabel} · ${playsView.dte}d`}
+          tone={playsView.plays.length > 0 ? 'select' : 'neutral'}
+        >
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <SignalBadge tone={playsView.plays.length > 0 ? 'select' : 'neutral'} dot>
+                {playsView.condition}
+              </SignalBadge>
+              <span className="font-mono text-label text-textMuted">
+                Structure <span className="text-textPrimary">{playsView.structure}</span>
+              </span>
+              <span className="ml-auto font-mono text-label text-textMuted tnum">implied ±{playsView.impliedMovePct.toFixed(1)}%</span>
+            </div>
+
+            {playsView.plays.length > 0 && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+                {playsView.plays.map(p => (
+                  <PlayCard key={p.id} p={p} ticker={playsView.ticker} expiryLabel={playsView.expiryLabel} />
+                ))}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <Stat label="ATM IV now" value={`${playsView.frontIv.toFixed(0)}%`} sub="front expiry, carries the print" />
+              <Stat label="Morning after" value={`${playsView.baseIv.toFixed(0)}%`} sub="post-crush baseline" />
+              <Stat label="Crush" value={`${playsView.ivCrushPct.toFixed(0)}%`} tone="warn" sub="of the front IV, on the print" />
+            </div>
+
+            <p className="text-caption text-textSecondary leading-relaxed">{playsView.read}</p>
+            <p className="font-mono text-label text-textMuted leading-relaxed">
+              No premium quoted: the event vol that makes these contracts expensive is not in the terminal's baseline surface, so any debit
+              shown here would be too low. The odds are what the model and the skew disagree about.
+            </p>
+          </div>
+        </Panel>
+      )}
+
+      <div id={DOSSIER_ID}>
+        <EarningsIntel event={selected} />
+      </div>
     </>
   );
 };

@@ -12,25 +12,25 @@ export const FLOWDESK_SUBPAGES: FlowDeskSubpage[] = [
   {
     path: '/trace/live-tape',
     label: 'Tape',
-    subtitle: 'Streaming options prints, dark-pool crosses & session flow',
+    subtitle: 'Options prints tagged sweep or block, with session premium and conviction',
     icon: Radio,
   },
   {
     path: '/trace/dark-pool',
     label: 'Dark Pool',
-    subtitle: 'Off-exchange blocks mapped to shelves — who is building, who is leaving',
+    subtitle: 'Off-exchange blocks mapped to shelves: who is building, who is leaving',
     icon: Layers,
   },
   {
     path: '/trace/scanner',
     label: 'Scanner',
-    subtitle: 'Per-contract flow aggregation — volume, ΔOI & bull/bear scoring',
+    subtitle: 'Per-contract flow aggregation: volume, ΔOI and bull/bear scoring',
     icon: ScanLine,
   },
   {
     path: '/trace/reconstruction',
     label: 'Reconstruction',
-    subtitle: 'Prints clustered into probable parent metaorders — size, completion & urgency',
+    subtitle: 'Prints clustered into probable parent metaorders: size, completion and urgency',
     icon: Network,
   },
 ];

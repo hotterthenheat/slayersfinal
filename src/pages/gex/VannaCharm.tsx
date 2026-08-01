@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildVannaCharm } from '../../data/vannacharm';
+import { buildGreeksRegime } from '../../data/greeksmatrix';
 import { fmtUsd } from '../../data/gex';
 import Panel from '../../components/ui/Panel';
 import SegmentedControl from '../../components/ui/SegmentedControl';
@@ -63,6 +64,8 @@ interface Contrib {
   projected: number;
   delta: number;
   absShift: number;
+  /** The greek doing the work at this strike, from the greeks engine. */
+  driver?: number;
 }
 
 interface Cuml {
@@ -78,13 +81,28 @@ interface Cuml {
   dDn: number;
 }
 
-/** Ranked largest contributors — biggest |Δ net GEX| under the scenario. */
-const ContributorList = ({ rows, max }: { rows: Contrib[]; max: number }) => (
+/**
+ * Ranked largest contributors — biggest |Δ net GEX| under the scenario.
+ *
+ * Two quantities, deliberately adjacent: the greek is a RATE (how fast dealer
+ * delta drifts at that strike per unit of time or vol) and Δ is what that rate
+ * ACCUMULATES to by the close. The desk is named for the rates and did not show
+ * one of them; a mover with no driver beside it is a number to take on faith.
+ */
+const ContributorList = ({ rows, max, greek }: { rows: Contrib[]; max: number; greek: 'Charm' | 'Vanna' }) => (
   <div className="flex flex-col">
     <div className="flex items-center gap-3 px-2 py-1.5 border-b border-borderSubtle font-mono text-label font-semibold uppercase tracking-widest text-textMuted select-none">
       <span className="w-16 shrink-0">Strike</span>
+      <span
+        className="w-[4.5rem] shrink-0 text-right"
+        title={`${greek}: ${
+          greek === 'Charm' ? 'delta drift as time passes' : 'delta drift as IV moves'
+        }, net dealer $ from the greeks engine`}
+      >
+        {greek}
+      </span>
       <span className="flex-1 min-w-0">Shift |Δ|</span>
-      <span className="w-44 shrink-0 text-right">Now → Proj</span>
+      <span className="w-40 shrink-0 text-right">Now → Proj</span>
       <span className="w-24 shrink-0 text-right">Δ</span>
     </div>
     {rows.map(r => {
@@ -99,13 +117,16 @@ const ContributorList = ({ rows, max }: { rows: Contrib[]; max: number }) => (
             {fmtStrike(r.strike)}
             {r.pin && <span className="ml-1 font-mono text-micro font-bold uppercase text-textPrimary">pin</span>}
           </span>
+          <span className="w-[4.5rem] shrink-0 text-right font-mono text-label tnum text-textSecondary">
+            {r.driver === undefined ? <span className="text-textMuted">·</span> : signedUsd(r.driver)}
+          </span>
           <span className="relative flex-1 min-w-0 h-[6px] rounded-sm bg-white/[0.04] overflow-hidden">
             <span
               className={`absolute inset-y-0 left-0 rounded-sm ${up ? 'bg-bull/80' : 'bg-bear/80'}`}
               style={{ width: `${w}%` }}
             />
           </span>
-          <span className="w-44 shrink-0 text-right font-mono text-label tnum text-textSecondary">
+          <span className="w-40 shrink-0 text-right font-mono text-label tnum text-textSecondary">
             {fmtUsd(r.current)} <span className="text-textMuted">→</span> {fmtUsd(r.projected)}
           </span>
           <span className={`w-24 shrink-0 text-right font-mono text-caption font-bold tnum ${up ? 'text-bull' : 'text-bear'}`}>
@@ -114,6 +135,11 @@ const ContributorList = ({ rows, max }: { rows: Contrib[]; max: number }) => (
         </div>
       );
     })}
+    <p className="px-2 py-2 border-t border-borderSubtle font-mono text-label text-textMuted leading-relaxed">
+      {greek} is the rate the greeks engine reads at that strike. Δ is the net GEX that migrates{' '}
+      {greek === 'Charm' ? 'by the close' : 'under this vol move'}. Rate and result are separate readings, so
+      the ranking here is by Δ, not by the greek.
+    </p>
   </div>
 );
 
@@ -195,6 +221,11 @@ const VannaCharm = () => {
     [scanSnapshot, mode, ivKey]
   );
 
+  // The per-strike vanna/charm the movers list names as the driver. Read from
+  // the greeks engine rather than rescaled here, so the number a strike shows on
+  // this sub-view is the number it shows on the matrix next door.
+  const greeks = useMemo(() => (scanSnapshot ? buildGreeksRegime(scanSnapshot) : null), [scanSnapshot]);
+
   if (!data) {
     return (
       <Panel className="h-64" bodyClassName="overflow-hidden">
@@ -217,9 +248,17 @@ const VannaCharm = () => {
   // Map reads the same scale (data.maxAbs) so magnitudes stay comparable across filters.
   const mapData: VannaCharmView = { ...data, rows: focusRows.length ? focusRows : data.rows };
 
-  // Largest contributors by |Δ net GEX|.
+  // Largest contributors by |Δ net GEX|, each labelled with the greek driving it.
+  const driverAt = new Map<number, number>(
+    (greeks?.rows ?? []).map(r => [r.strike, mode === 'CHARM' ? r.charm : r.vanna])
+  );
   const contributors: Contrib[] = focusRows
-    .map(r => ({ ...r, delta: r.projected - r.current, absShift: Math.abs(r.projected - r.current) }))
+    .map(r => ({
+      ...r,
+      delta: r.projected - r.current,
+      absShift: Math.abs(r.projected - r.current),
+      driver: driverAt.get(r.strike),
+    }))
     .sort((a, b) => b.absShift - a.absShift)
     .slice(0, 6);
   const maxContrib = contributors.reduce((m, c) => Math.max(m, c.absShift), 1);
@@ -285,7 +324,7 @@ const VannaCharm = () => {
         <Panel
           title="Exposure Migration Map"
           subtitle={`${
-            mode === 'CHARM' ? 'net gex — now vs close (charm decay)' : `net gex — now vs iv ${ivNum > 0 ? '+' : ''}${ivKey} (vanna)`
+            mode === 'CHARM' ? 'net gex · now vs close (charm decay)' : `net gex · now vs iv ${ivNum > 0 ? '+' : ''}${ivKey} (vanna)`
           }${focus === 'ALL' ? '' : ` · ${FOCUS_LABEL[focus]}`}`}
           flush
           className="xl:col-span-7 min-w-0"
@@ -324,20 +363,20 @@ const VannaCharm = () => {
             No strikes in focus
           </div>
         ) : view === 'STRIKE' ? (
-          <ContributorList rows={contributors} max={maxContrib} />
+          <ContributorList rows={contributors} max={maxContrib} greek={mode === 'CHARM' ? 'Charm' : 'Vanna'} />
         ) : (
           <CumulativePanel c={cuml} />
         )}
       </Panel>
 
-      {/* Wall drift timeline */}
+      {/* Wall drift — the same scenario, asked of the levels instead of the exposure */}
       <Panel
         title="Wall Drift"
-        subtitle="session timeline — walls, flip & spot"
+        subtitle="the bracket dealers defend, and where the scenario lands it"
         className="w-full"
-        bodyClassName="h-[240px]"
+        bodyClassName="h-[320px]"
       >
-        <WallDrift drift={data.drift} />
+        <WallDrift drift={data.drift} scenario={data} />
       </Panel>
     </>
   );

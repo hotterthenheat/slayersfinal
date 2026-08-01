@@ -47,8 +47,16 @@ const L = (i: string, x: number, y: number, w: number, h: number, minW = 3, minH
 
 /**
  * Starter layouts. "Slayer Classic" reproduces the old fixed Pulse (chart +
- * exposure heatmap + dealer positioning + key levels + order flow + dark pool)
- * so nothing regresses. Users can edit these; the originals stay restorable.
+ * exposure heatmap + dealer positioning + order flow + dark pool) so nothing
+ * regresses. Users can edit these; the originals stay restorable.
+ *
+ * Panels meant to share a band must sum to 12 across it. Less leaves a gutter
+ * the grid cannot fill; more gets wrapped by react-grid-layout, which is how a
+ * preset ends up stacking two panels it meant to pair. (Column compositions like
+ * Flow Command are the exception — a tall panel spans several bands, so those
+ * bands read short on their own.) The minW/minH arguments here are advisory:
+ * PulseWorkspace re-reads them from the widget registry on load, so no preset
+ * can ship a panel under the floor its own content needs.
  */
 export const PULSE_PRESETS: PulseLayout[] = [
   {
@@ -132,9 +140,38 @@ export const PULSE_PRESETS: PulseLayout[] = [
       { id: 'g-flow', key: 'order-flow' },
     ],
     layout: [
-      L('g-chart', 0, 0, 8, 6, 4, 4),
-      L('g-exp', 8, 0, 4, 6, 3, 4),
+      // 6 + 6, not 8 + 4: the Exposure Matrix is a ten-column table and was
+      // shipped here at w=4, under its own registry minimum, so the pairing this
+      // preset exists to show read as a scroll box next to a chart.
+      L('g-chart', 0, 0, 6, 6, 4, 4),
+      L('g-exp', 6, 0, 6, 6, 6, 4),
       L('g-flow', 0, 6, 12, 4, 4, 4),
+    ],
+  },
+  {
+    // Heat only. No candles, no tape, no levels rail: four books' worth of
+    // strike × expiry gamma next to each other, which is the read you want when
+    // the question is "where is the whole market pinned", not "what is SPY
+    // doing". One panel per symbol the simulator actually carries.
+    //
+    // 2 x 2 at w=6 rather than 4 across at w=3: the matrix is a six-column table
+    // with a colour rail behind a 460px floor, and a w=3 panel is 355px on a
+    // 1536 desk, so a four-across wall would be four horizontally scrolling
+    // boxes. w=6 is 723px and every column is readable without scrolling.
+    id: 'gex-wall',
+    name: 'GEX Wall',
+    preset: true,
+    panels: [
+      { id: 'gw-spy', key: 'gex-heatmap', ticker: 'SPY' },
+      { id: 'gw-qqq', key: 'gex-heatmap', ticker: 'QQQ' },
+      { id: 'gw-aapl', key: 'gex-heatmap', ticker: 'AAPL' },
+      { id: 'gw-nvda', key: 'gex-heatmap', ticker: 'NVDA' },
+    ],
+    layout: [
+      L('gw-spy', 0, 0, 6, 7, 4, 4),
+      L('gw-qqq', 6, 0, 6, 7, 4, 4),
+      L('gw-aapl', 0, 7, 6, 7, 4, 4),
+      L('gw-nvda', 6, 7, 6, 7, 4, 4),
     ],
   },
   {
@@ -257,10 +294,12 @@ export const PULSE_PRESETS: PulseLayout[] = [
       { id: 'ea-chart', key: 'live-chart' },
     ],
     layout: [
-      L('ea-cal', 0, 0, 7, 6, 4, 4),
+      // Right column is 3 + 4 tall (Top Setups is a six-column board and will
+      // not read at h=3), so the calendar beside it matches at 7.
+      L('ea-cal', 0, 0, 7, 7, 4, 4),
       L('ea-vol', 7, 0, 5, 3, 3, 3),
-      L('ea-setups', 7, 3, 5, 3, 3, 3),
-      L('ea-chart', 0, 6, 12, 5, 4, 4),
+      L('ea-setups', 7, 3, 5, 4, 4, 4),
+      L('ea-chart', 0, 7, 12, 5, 4, 4),
     ],
   },
   {

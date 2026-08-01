@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { SkeletonRows } from './components/ui/Skeleton';
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { MotionConfig } from 'framer-motion';
 import { MarketDataProvider } from './context/MarketDataContext';
 import { TrackerProvider } from './context/TrackerContext';
@@ -18,7 +18,7 @@ import GuideFaq from './pages/guide/Faq';
 import GuideShortcuts from './pages/guide/Shortcuts';
 import GexLayout from './pages/gex/GexLayout';
 import PulseWorkspace from './pages/pulse/PulseWorkspace';
-import { GammaDesk, LevelsDesk, GreeksDesk, VolatilityDesk, StressDesk } from './pages/gex/desks';
+import { GammaDesk, LevelsDesk, GreeksDesk, StressDesk } from './pages/gex/desks';
 import GexHistory from './pages/gex/GexHistory';
 import FlowDeskLayout from './pages/flowdesk/FlowDeskLayout';
 import LiveTape from './pages/flowdesk/LiveTape';
@@ -52,6 +52,15 @@ const RouteFallback = () => (
     <SkeletonRows rows={8} />
   </div>
 );
+
+/** The Volatility desk left Pinpoint for Prove It: a calibrated IV surface and
+    the density it implies are what a model says, not where dealers are hedged.
+    Its density half carried its own `?view=` name, so that link is carried over
+    rather than dropping every old bookmark on the surface. */
+const VolatilityMoved = () => {
+  const [params] = useSearchParams();
+  return <Navigate to={`/prove-it?view=${params.get('view') === 'density' ? 'density' : 'volatility'}`} replace />;
+};
 
 /** The terminal index's Resume row is the only reader of this. It records where
     the user was, never what the market did; `writeLastDesk` ignores everything
@@ -117,12 +126,11 @@ const App = () => {
               <Route index element={<Navigate to="/pinpoint/gamma" replace />} />
               <Route path="command" element={<Navigate to="/pulse" replace />} />
               <Route path="flow-map" element={<Navigate to="/pulse" replace />} />
-              {/* Six consolidated desks; the second read on each lives as an
+              {/* Five consolidated desks; the second read on each lives as an
                   in-desk ?view= sub-toggle rather than its own tab. */}
               <Route path="gamma" element={<GammaDesk />} />
               <Route path="levels" element={<LevelsDesk />} />
               <Route path="greeks" element={<GreeksDesk />} />
-              <Route path="volatility" element={<VolatilityDesk />} />
               <Route path="stress" element={<StressDesk />} />
               <Route path="history" element={<GexHistory />} />
               {/* Retired sub-desks → consolidated desk + the matching sub-view */}
@@ -132,8 +140,11 @@ const App = () => {
               <Route path="ranked-targets" element={<Navigate to="/pinpoint/levels?view=ranked" replace />} />
               <Route path="greeks-regime" element={<Navigate to="/pinpoint/greeks" replace />} />
               <Route path="vanna-charm" element={<Navigate to="/pinpoint/greeks?view=migration" replace />} />
-              <Route path="vol-lab" element={<Navigate to="/pinpoint/volatility" replace />} />
-              <Route path="state-density" element={<Navigate to="/pinpoint/volatility?view=density" replace />} />
+              {/* Volatility moved out of the section entirely — these land on
+                  Prove It directly, never on a redirect that redirects again. */}
+              <Route path="volatility" element={<VolatilityMoved />} />
+              <Route path="vol-lab" element={<Navigate to="/prove-it?view=volatility" replace />} />
+              <Route path="state-density" element={<Navigate to="/prove-it?view=density" replace />} />
               <Route path="hedge-impact" element={<Navigate to="/pinpoint/stress" replace />} />
               <Route path="fracture" element={<Navigate to="/pinpoint/stress?view=fracture" replace />} />
             </Route>

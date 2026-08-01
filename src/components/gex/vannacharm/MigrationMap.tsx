@@ -1,8 +1,10 @@
-import { Fragment, useMemo, useRef, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import Simulator from '../../../core/simulator';
 import { fmtUsd } from '../../../data/gex';
 import { heatRgb } from '../heatmap';
+import ChartLegend from '../../ui/ChartLegend';
+import HoverReadout from '../../ui/HoverReadout';
 import SignalBadge from '../../ui/SignalBadge';
 import TrendLine from '../TrendLine';
 import type { ShiftBarRow, VannaCharmView } from '../../../types/gex';
@@ -31,16 +33,15 @@ const Bar = ({ value, max, top, ghost }: { value: number; max: number; top: bool
   );
 };
 
-/** Hover readout: now → projected for the strike, with real history behind it. */
-const ShiftHoverCard = ({
-  row,
-  data,
-  y,
-}: {
-  row: ShiftBarRow;
-  data: VannaCharmView;
-  y: number;
-}) => {
+/**
+ * Now → projected for the strike, with real history behind it.
+ *
+ * Body only — the shell is the house HoverReadout, which portals to <body>,
+ * clamps to the viewport and flips sides. This card used to position itself
+ * against the row list, so inside the panel's scroll region it clipped at the
+ * top and bottom of the very list it was describing.
+ */
+const ShiftHoverBody = ({ row, data }: { row: ShiftBarRow; data: VannaCharmView }) => {
   const series = useMemo(() => {
     const snaps = Simulator.getGexHistory(data.ticker) ?? [];
     const out: number[] = [];
@@ -58,12 +59,7 @@ const ShiftHoverCard = ({
   const scenario = data.mode === 'CHARM' ? 'CHARM → CLOSE' : `VANNA ${data.ivShift > 0 ? '+' : ''}${data.ivShift} IV`;
 
   return (
-    <div
-      className={`absolute z-20 w-60 pointer-events-none border border-borderSubtle bg-panelRaised/95 rounded-md shadow-overlay p-3 animate-soft-in ${
-        row.current >= 0 ? 'left-16' : 'right-4'
-      }`}
-      style={{ top: Math.max(4, y - 90) }}
-    >
+    <div className="w-56">
       <div className="flex items-center justify-between gap-2">
         <span className="font-mono text-label font-bold text-textPrimary tnum">
           Strike {strikeLabel}
@@ -131,9 +127,7 @@ const FlipMark = ({ price, projected }: { price: number; projected?: boolean }) 
 const MigrationMap = ({ data }: MigrationMapProps) => {
   const { ticker, rows, maxAbs, flipCurrent, flipProjected } = data;
 
-  const bodyRef = useRef<HTMLDivElement | null>(null);
-  const [hoverRow, setHoverRow] = useState<ShiftBarRow | null>(null);
-  const [hoverY, setHoverY] = useState(0);
+  const [hover, setHover] = useState<{ row: ShiftBarRow; x: number; y: number } | null>(null);
 
   const slotAfter = (level: number) => {
     let idx = rows.findIndex((row, i) => row.strike >= level && (rows[i + 1]?.strike ?? -Infinity) < level);
@@ -146,40 +140,34 @@ const MigrationMap = ({ data }: MigrationMapProps) => {
   return (
     <div className="flex flex-col h-full min-h-0 relative">
       {/* Legend */}
-      <div className="flex items-center gap-3 px-2 py-1.5 border-b border-borderSubtle flex-wrap select-none">
-        {[
-          { label: 'Current', cls: 'bg-white/80' },
-          { label: 'Projected', cls: 'bg-white/30' },
-        ].map(item => (
-          <span key={item.label} className="flex items-center gap-1.5 font-mono text-micro uppercase tracking-wider text-textSecondary">
-            <span className={`inline-block w-2.5 h-[5px] rounded-sm ${item.cls}`} />
-            {item.label}
-          </span>
-        ))}
-        <span className="ml-auto font-mono text-micro uppercase tracking-wider text-textMuted">{ticker} · net GEX</span>
+      <div className="flex items-center gap-3 px-2 py-1.5 border-b border-borderSubtle flex-wrap">
+        <ChartLegend
+          items={[
+            { label: 'Current', swatchClass: 'bg-white/80' },
+            { label: 'Projected', swatchClass: 'bg-white/30' },
+          ]}
+        />
+        <span className="ml-auto font-mono text-micro uppercase tracking-wider text-textMuted select-none">
+          {ticker} · net GEX
+        </span>
       </div>
 
       {/* Rows */}
       <div
-        ref={bodyRef}
         tabIndex={0}
         role="region"
-        aria-label="Exposure migration — scrollable"
+        aria-label="Exposure migration, scrollable"
         className="flex-grow overflow-y-auto min-h-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60"
-        onMouseMove={e => {
-          const rect = bodyRef.current?.getBoundingClientRect();
-          if (rect) setHoverY(e.clientY - rect.top + (bodyRef.current?.offsetTop ?? 0));
-        }}
-        onMouseLeave={() => setHoverRow(null)}
+        onMouseLeave={() => setHover(null)}
       >
         {flipAfter === -0.5 && <FlipMark price={flipCurrent} />}
         {flipProjAfter === -0.5 && <FlipMark price={flipProjected} projected />}
         {rows.map((row, i) => (
           <Fragment key={row.strike}>
             <div
-              onMouseEnter={() => setHoverRow(row)}
+              onMouseMove={e => setHover({ row, x: e.clientX, y: e.clientY })}
               className={`flex items-center border-b border-borderSubtle/20 ${row.pin ? 'bg-white/[0.03]' : ''} ${
-                hoverRow?.strike === row.strike ? 'bg-white/[0.04]' : ''
+                hover?.row.strike === row.strike ? 'bg-white/[0.04]' : ''
               }`}
             >
               <span className="w-14 shrink-0 px-2 py-1 bg-inset border-r border-borderSubtle/40 font-mono text-micro font-semibold tnum text-textSecondary">
@@ -200,8 +188,11 @@ const MigrationMap = ({ data }: MigrationMapProps) => {
         ))}
       </div>
 
-      {/* Hover readout — opposite side of the bar, clear of the cursor */}
-      {hoverRow && <ShiftHoverCard row={hoverRow} data={data} y={hoverY} />}
+      {hover && (
+        <HoverReadout x={hover.x} y={hover.y}>
+          <ShiftHoverBody row={hover.row} data={data} />
+        </HoverReadout>
+      )}
 
       <div className="px-2.5 py-1.5 border-t border-borderSubtle font-mono text-micro text-textMuted leading-relaxed select-none">
         Bright = positioning now · Dim = after {data.mode === 'CHARM' ? 'charm decay into the close' : `an IV ${data.ivShift > 0 ? '+' : ''}${data.ivShift} vol move`}

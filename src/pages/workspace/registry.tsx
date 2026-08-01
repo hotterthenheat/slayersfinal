@@ -24,6 +24,10 @@ import PressureMatrix from '../../components/gex/PressureMatrix';
 import MarketNotes from '../../components/gex/MarketNotes';
 import SwingMapChart from '../../components/swing/SwingMapChart';
 import SignalBadge from '../../components/ui/SignalBadge';
+import EmptyState from '../../components/ui/EmptyState';
+import TickerTag from '../../components/ui/TickerTag';
+import AnimatedNumber from '../../components/ui/AnimatedNumber';
+import Sparkline from '../../components/skyvision/Sparkline';
 import type { Tone } from '../../components/ui/tones';
 import { makeAutoNote } from '../../data/command';
 import { buildDarkPoolView } from '../../data/darkpool';
@@ -62,6 +66,13 @@ export interface WorkspaceCtx {
   focusPrice?: number | null;
 }
 
+/**
+ * `w`/`h` are the size a panel is BORN at, `minW`/`minH` the size below which its
+ * content stops being readable. Both are load-bearing on a 12-column grid: two
+ * widgets can only be added side by side when their default widths sum to 12 or
+ * less, and Pulse's row-fitting insert refuses a row that cannot clear the
+ * incoming widget's `minW`. Keep the common pairs summing to 12.
+ */
 export interface WidgetDef {
   key: string;
   title: string;
@@ -80,7 +91,9 @@ export const WIDGETS: WidgetDef[] = [
     key: 'live-chart',
     title: 'Chart',
     description: 'Candles with walls, flip, king & GEX nodes',
-    w: 8,
+    // Half the grid, not two thirds: the chart is the panel most often paired
+    // with a matrix, and at w=8 nothing wide enough to sit beside it fit.
+    w: 6,
     h: 5,
     minW: 4,
     minH: 4,
@@ -101,7 +114,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     key: 'gradient-chart',
     title: 'Gradient Chart',
-    description: 'Dealer gamma / charm field across the session — the tape drawn over it',
+    description: 'Dealer gamma / charm field across the session, with the tape drawn over it',
     w: 8,
     h: 6,
     minW: 4,
@@ -137,7 +150,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     key: 'flow-tape',
     title: 'Options Flow',
-    description: 'Session print stream — premium, aggressor, sweeps & SigScore; click to isolate a contract',
+    description: 'Session print stream: premium, aggressor, sweeps & SigScore; click to isolate a contract',
     w: 8,
     h: 6,
     minW: 4,
@@ -147,7 +160,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     key: 'flow-alerts',
     title: 'Flow Alerts',
-    description: 'Typed alerts from the print stream — repeaters, grenades & sizable sweeps',
+    description: 'Typed alerts from the print stream: repeaters, grenades & sizable sweeps',
     w: 4,
     h: 6,
     minW: 3,
@@ -167,7 +180,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     key: 'liquidity-map',
     title: 'Liquidity Map',
-    description: 'Order-book heatmap over time — resting shelves, pulls & absorption behind price',
+    description: 'Order-book heatmap over time: resting shelves, pulls & absorption behind price',
     w: 8,
     h: 9,
     minW: 4,
@@ -192,7 +205,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     key: 'swing-map',
     title: 'Swing Map',
-    description: 'Daily swing targets — support/resistance zones, trend & measured move',
+    description: 'Daily swing targets: support/resistance zones, trend & measured move',
     w: 6,
     h: 6,
     minW: 4,
@@ -217,9 +230,13 @@ export const WIDGETS: WidgetDef[] = [
     key: 'exposure-matrix',
     title: 'Exposure Matrix',
     description: 'GEX · DEX · VEX by strike, put/call/net',
-    w: 7,
+    // Ten columns behind a 560px table floor. At w=5 that floor is only cleared
+    // above a ~1500px viewport, so the panel showed its own horizontal scrollbar
+    // at its own declared minimum; 6 clears it from 1280 up, and 6 + the chart's
+    // 6 is exactly the grid, which is the pairing this widget is asked for.
+    w: 6,
     h: 5,
-    minW: 5,
+    minW: 6,
     minH: 4,
     render: ctx => <ExposureMatrix data={ctx.exposure} />,
   },
@@ -280,7 +297,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     key: 'wall-drift',
     title: 'Wall Drift',
-    description: 'Session timeline — walls, flip & spot',
+    description: 'Session timeline: walls, flip & spot',
     w: 6,
     h: 3,
     minW: 4,
@@ -308,37 +325,71 @@ export const WIDGETS: WidgetDef[] = [
   {
     key: 'top-setups',
     title: 'Top Setups',
-    description: 'Compass — strongest setup per ticker',
-    w: 4,
-    h: 4,
-    minW: 3,
-    minH: 3,
-    render: ctx => (
-      <div className="h-full min-h-0 overflow-y-auto">
-        {ctx.setups.groups
-          .map(g => g.setups[0])
-          .filter(Boolean)
-          .slice(0, 6)
-          .map(s => (
-            <div key={s.id} className="flex items-center gap-2 px-2.5 py-2 border-b border-borderSubtle/30 last:border-0">
-              <span
-                className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-micro font-semibold ${
-                  s.right === 'C' ? 'border-bull/30 bg-bull/10 text-bull' : 'border-bear/30 bg-bear/10 text-bear'
-                }`}
-              >
-                {s.contract}
-              </span>
-              <span className="ml-auto font-mono text-micro text-textSecondary tnum">
-                score <span className="text-textPrimary font-semibold">{s.score}</span>
-              </span>
-              <span className={`font-mono text-micro font-semibold tnum ${s.expectedMovePct >= 0 ? 'text-bull' : 'text-bear'}`}>
-                {s.expectedMovePct >= 0 ? '+' : ''}
-                {s.expectedMovePct}%
-              </span>
-            </div>
-          ))}
-      </div>
-    ),
+    description: 'Strongest setup per ticker across the scanned universe',
+    // The desk's only genuinely multi-ticker panel, so it gets a board's width
+    // rather than a sidebar's: six named columns need the room.
+    w: 6,
+    h: 5,
+    minW: 4,
+    minH: 4,
+    render: ctx => {
+      // flatMap, not map+filter: a group can be empty, and this keeps `s`
+      // non-nullable without a cast.
+      const rows = ctx.setups.groups.flatMap(g => (g.setups[0] ? [{ g, s: g.setups[0] }] : [])).slice(0, 8);
+      return (
+        <div className="h-full min-h-0 flex flex-col">
+          {/* The chart panels on this desk name every series they draw. A
+              multi-ticker board owes the same: without a header the numbers are
+              three anonymous columns and the symbol lives inside a contract
+              string. Widths are shared with the rows below so they line up. */}
+          <div className="shrink-0 flex items-center gap-2 px-2.5 py-1.5 border-b border-borderSubtle bg-white/[0.015] font-mono text-micro uppercase tracking-widest text-textMuted">
+            <span className="w-12">Ticker</span>
+            <span className="w-14 text-right">Chg</span>
+            <span className="w-16 text-center">Session</span>
+            <span className="flex-1 min-w-0">Setup</span>
+            <span className="w-8 text-right">Score</span>
+            <span className="w-14 text-right">Exp move</span>
+          </div>
+          <div className="flex-grow min-h-0 overflow-y-auto">
+            {rows.length === 0 && <EmptyState title="No setups in range" size="sm" />}
+            {rows.map(({ g, s }) => (
+              <div key={s.id} className="flex items-center gap-2 px-2.5 py-1.5 border-b border-borderSubtle/30 last:border-0">
+                <TickerTag symbol={g.ticker} className="w-12 font-mono text-label font-bold text-textPrimary" />
+                <span className={`w-14 text-right font-mono text-micro tnum ${g.changePct >= 0 ? 'text-bull' : 'text-bear'}`}>
+                  {g.changePct >= 0 ? '+' : ''}
+                  {g.changePct.toFixed(2)}%
+                </span>
+                {/* The group already carries the ticker's own session bars, so
+                    the dead middle of the row becomes the context the symbol was
+                    missing. Hover read-out comes with the primitive. */}
+                <span className="w-16 flex justify-center">
+                  <Sparkline data={g.sparkline} up={g.changePct >= 0} width={64} height={20} label={`${g.ticker} session`} />
+                </span>
+                <span className="flex-1 min-w-0 flex items-center gap-1.5 overflow-hidden">
+                  <span
+                    title={s.contract}
+                    className={`shrink-0 inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-micro font-semibold ${
+                      s.right === 'C' ? 'border-bull/30 bg-bull/10 text-bull' : 'border-bear/30 bg-bear/10 text-bear'
+                    }`}
+                  >
+                    {s.strike % 1 === 0 ? s.strike.toFixed(0) : s.strike.toFixed(2)}
+                    {s.right}
+                  </span>
+                  <span className="font-mono text-micro uppercase tracking-wider text-textMuted truncate">{s.expiry}</span>
+                </span>
+                <span className="w-8 text-right font-mono text-label font-semibold text-textPrimary tnum">
+                  <AnimatedNumber value={s.score} format={v => v.toFixed(0)} />
+                </span>
+                <span className={`w-14 text-right font-mono text-micro font-semibold tnum ${s.expectedMovePct >= 0 ? 'text-bull' : 'text-bear'}`}>
+                  {s.expectedMovePct >= 0 ? '+' : ''}
+                  {s.expectedMovePct}%
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    },
   },
   {
     key: 'dark-pool',
@@ -440,7 +491,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     key: 'earnings-calendar',
     title: 'Earnings Slate',
-    description: 'Upcoming prints — implied move & verdict',
+    description: 'Upcoming prints: implied move & verdict',
     w: 4,
     h: 4,
     minW: 3,
