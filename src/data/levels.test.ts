@@ -1,9 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import Simulator from '../core/simulator';
+import * as positioningMap from '../components/gex/positioningMap';
 import { buildCommandView } from './command';
 import { buildExposureProfile } from './exposure';
 import { buildGexView, buildLevels, pinStrike } from './gex';
-import type { KeyLevelKind, KeyLevelRow } from '../types/gex';
+import { buildRankedTargets } from './rankedtargets';
+import { buildVannaCharm, levelsOfProfile } from './vannacharm';
+import type { KeyLevelKind, KeyLevelRow, ShiftMode, TargetTag } from '../types/gex';
 
 /*
   Regression guard for the split-level bug: the key-levels rail and the dealer
@@ -130,6 +133,130 @@ describe('cross-engine agreement: cockpit ↔ exposure map', () => {
 
     if (exposure.bias === 'BULLISH') expect(chainNet).toBeGreaterThan(0);
     if (exposure.bias === 'BEARISH') expect(chainNet).toBeLessThan(0);
+  });
+});
+
+/*
+  The three modules that sat outside the net above, and each of which had rolled
+  its own answer to a question gex.ts already answers:
+
+    · vannacharm.ts   scanned a windowed copy for walls / flip / king
+    · rankedtargets.ts scanned the chain again for walls / king / pin
+    · positioningMap.ts took an argmax over the windowed, decayed, jittered bars
+
+  None of them was wrong in a way that shows up as an obviously broken screen —
+  the walls agreed most days. The flip did not: it disagreed with the rail on 5
+  of these 16 names, the ranked-targets pin sat $10 from the rail's pin on AAPL,
+  and the map's crown moved to a different strike on 8 of 32 ticker × expiry
+  combinations. Agreement by coincidence is exactly what this file exists to
+  stop being mistaken for agreement by construction.
+*/
+describe('single derivation: the panels that used to roll their own', () => {
+  const MODES: ShiftMode[] = ['CHARM', 'VANNA'];
+
+  it.each(snapshots)('$ticker vanna & charm calls the book’s levels "now"', ({ snap }) => {
+    const levels = buildLevels(snap);
+    for (const mode of MODES) {
+      const view = buildVannaCharm(snap, mode, -1, HALF);
+      const shift = Object.fromEntries(view.shifts.map(s => [s.kind, s]));
+
+      // Left side of every "now → scenario" arrow. If it is not the rail's
+      // number, the arrow is measuring the derivation, not the scenario.
+      expect(shift['call-wall'].current).toBe(levels.callWall);
+      expect(shift['put-wall'].current).toBe(levels.putWall);
+      expect(shift.flip.current).toBe(levels.flip);
+      expect(shift.king.current).toBe(levels.king);
+      expect(view.flipCurrent).toBe(levels.flip);
+
+      // Exactly one bar carries the pin marker, and it is the rail's pin.
+      expect(view.rows.filter(r => r.pin).map(r => r.strike)).toEqual([pinStrike(snap, HALF)]);
+    }
+  });
+
+  /*
+    A projection is a property of the book, like the levels it moves. Charm's
+    per-strike normalizer used to be the rendered window's own heaviest charm,
+    so the same strike migrated to a different dollar figure depending on how
+    many strikes the host panel asked for — and the levels read off it inherited
+    that. Widening the window may show more bars; it may not change one.
+  */
+  it.each(snapshots)('$ticker migration is the book’s, not the window’s', ({ snap }) => {
+    for (const mode of MODES) {
+      const narrow = buildVannaCharm(snap, mode, -1, 10);
+      const wide = buildVannaCharm(snap, mode, -1, 15);
+      expect(wide.shifts).toEqual(narrow.shifts);
+
+      const wideAt = new Map(wide.rows.map(r => [r.strike, r.projected]));
+      for (const row of narrow.rows) expect(wideAt.get(row.strike)).toBe(row.projected);
+    }
+  });
+
+  /*
+    The scenario and the recorded session are the two profiles no engine can be
+    asked about — one is hypothetical, one is already gone — so vannacharm.ts
+    carries the plan's RULES to apply to them. This is the seam where a second
+    derivation could creep back in, so it is pinned directly: fed today's book,
+    that function must return exactly what buildLevels returns.
+  */
+  it.each(snapshots)('$ticker the scenario rules reproduce buildLevels on today’s book', ({ snap }) => {
+    const { callWall, putWall, flip, king } = buildLevels(snap);
+    const today = snap.chain.map(n => ({ strike: n.strike, value: n.netGex }));
+    expect(levelsOfProfile(today, snap.spot)).toEqual({ callWall, putWall, flip, king });
+  });
+
+  /*
+    Wall Drift puts the measured session and the scenario on ONE price axis, the
+    scenario's "now" dot inches from the measured series' right edge. Those are
+    the same moment, so they are the same prices — the sampling stride used to
+    stop two bars short and quietly print two.
+  */
+  it.each(snapshots)('$ticker wall drift ends on the levels the rail prints', ({ snap }) => {
+    const levels = buildLevels(snap);
+    const { drift } = buildVannaCharm(snap, 'CHARM', -1, HALF);
+    expect(drift.length).toBeGreaterThan(1);
+
+    const last = drift[drift.length - 1];
+    expect(last.spot).toBe(snap.spot);
+    expect(last.callWall).toBe(levels.callWall);
+    expect(last.putWall).toBe(levels.putWall);
+    expect(last.flip).toBe(levels.flip);
+  });
+
+  it.each(snapshots)('$ticker ranked targets badges the shared levels and nothing else', ({ snap }) => {
+    const levels = buildLevels(snap);
+    const pin = pinStrike(snap, HALF);
+    const { targets } = buildRankedTargets(snap);
+    const asc = (xs: number[]) => [...xs].sort((a, b) => a - b);
+    const badged = (tag: TargetTag) => asc(targets.filter(t => t.tags.includes(tag)).map(t => t.strike));
+
+    expect(badged('KING')).toEqual([levels.king]);
+    expect(badged('PIN')).toEqual([pin]);
+    expect(badged('WALL')).toEqual(asc([levels.callWall, levels.putWall]));
+    // MAGNET is the pin's class by definition, so it names the pin and no one else.
+    expect(targets.filter(t => t.hedgingClass === 'MAGNET').map(t => t.strike)).toEqual([pin]);
+  });
+
+  it.each(snapshots)('$ticker the positioning map is handed the book’s king', ({ snap }) => {
+    expect(buildExposureProfile(snap, '0DTE', HALF).levels.king).toBe(buildLevels(snap).king);
+  });
+
+  /*
+    A tripwire, not a style rule. positioningMap.ts only ever receives the
+    windowed, expiry-decayed, jittered bars, so any level it exports is a fact
+    about the drawing rather than about the book — and one named `kingStrike`
+    shipped, and moved when the panel was resized. The module is a geometry
+    helper; levels reach it on ExposureLevels or not at all.
+  */
+  it('the positioning map exports geometry and scales, not levels', () => {
+    expect(Object.keys(positioningMap).sort()).toEqual([
+      'bands',
+      'cumHalfOf',
+      'cumulative',
+      'ghostRuns',
+      'netMaxOf',
+      'priceScale',
+      'tierFor',
+    ]);
   });
 });
 

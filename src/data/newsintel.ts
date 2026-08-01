@@ -7,8 +7,9 @@
   reads:
     · News half-life — how long this catalyst TYPE
       keeps moving price before the effect decays
-    · Catalyst-similarity — the closest past analog
-      events and how they actually resolved
+    · Catalyst-similarity — the nearest catalysts in
+      the model's own prior population and how those
+      resolved
     · Narrative-vs-positioning — does the options book
       agree with the headline lean, or fade it?
     · Informational vs mechanical — is the move fresh
@@ -19,33 +20,36 @@
       has already discounted
     · Invalidation — what would void the read
 
-  The headline feed and the model's direction/expected
-  move come from news.ts (buildNewsFeed); positioning
-  is read off the live chain. Half-lives, analog base
-  rates and event vols are modeled per catalyst type
-  and swap for a real event-study feed behind the same
-  contract. Deterministic per ticker + day.
+  The headline feed, the model's direction/expected
+  move and the prior population the analogs are drawn
+  from all come from news.ts; positioning is read off
+  the live chain. Half-lives and nature weights are
+  STATED per catalyst type — assumptions, not
+  measurements — and swap for a real event-study feed
+  behind the same contract. Deterministic per ticker
+  + day.
 ==================================================
 */
 
-import { dayKey, h01, hRange, hGauss, hPick } from '../core/rng';
+import { dayKey, h01, hRange, hGauss } from '../core/rng';
 import type { MarketSnapshot } from '../types/market';
-import { buildNewsFeed, type NewsCategory, type NewsItem } from './news';
+import { buildNewsFeed, catalystPriors, type CatalystPrior, type NewsCategory, type NewsItem } from './news';
+import { lookup } from './universe';
 
 export type HeadlineScope = 'NAME' | 'MACRO';
 export type CatalystNature = 'INFORMATIONAL' | 'MECHANICAL';
 export type PositioningAgreement = 'CONFIRMS' | 'DIVERGES' | 'NEUTRAL';
 
 export interface CatalystAnalog {
-  /** Relative period tag of the analog event */
+  /** Where the analog sits in the model's own history, e.g. "-84 sess" */
   when: string;
-  /** Short descriptor of how the analog played out */
+  /** Derived descriptor: the analog's setup and how its move sized up */
   descriptor: string;
   /** How close the analog is to today's setup, 0–100 */
   similarityPct: number;
   /** Signed next-session move the analog produced, % */
   outcome1dPct: number;
-  /** Whether the day-one move held (vs round-tripped) */
+  /** Whether the analog closed the way its own headline leaned */
   followThrough: boolean;
 }
 
@@ -113,7 +117,16 @@ export interface NewsIntelView {
   eventVolPct: number;
   /** e.g. "2 informational · 1 mechanical" */
   natureSplit: string;
-  headline: string;
+  /*
+    There is deliberately no summary `headline` here. This view used to build one
+    — "The wire leans bullish and options are positioned call-heavy, so the book
+    confirms it. Roughly 62% looks priced in…" — which the screen dropped because
+    it opened on a judgement and then restated the four Stats beside it. Dropping
+    the consumer left the producer, and an unrendered sentence is a sentence that
+    comes back the next time someone needs a subtitle. The fields it wrapped
+    (narrativeLean, positioningLabel, netAgreement, aggPricedInPct,
+    medianHalfLifeLabel) are all still here to be read individually.
+  */
   note: string;
 }
 
@@ -143,46 +156,62 @@ const NATURE_BASE: Record<NewsCategory, number> = {
   Analyst: 0.3,
 };
 
-/** Short analog outcome fragments per catalyst type. */
-const ANALOG_FRAGMENTS: Record<NewsCategory, string[]> = {
-  Earnings: ['beat + raise, gap held', 'in-line print, faded the open', 'beat but soft guide, round-tripped', 'miss, knife-catch bounce'],
-  Guidance: ['raise, multi-day drift', 'cut, slow bleed lower', 'reaffirm, muted reaction', 'raise then fully retraced'],
-  Analyst: ['upgrade, one-day pop', 'PT raise, no follow-through', 'downgrade, quick fade', 'double-upgrade, trend held'],
-  Macro: ['CPI cool, broad risk-on day', 'yields spike, market-wide fade', 'soft-landing bid returned', 'growth scare, positioning unwind'],
-  'M&A': ['deal talks, spike + held', 'rumor denied, full retrace', 'accretive deal, slow drift up', 'regulatory snag, gap down'],
-  Product: ['launch pop, faded by close', 'strong reviews, slow build', 'delay flagged, quick dip', 'refresh, muted tape'],
-  Regulatory: ['probe opened, gap down', 'fine settled, relief pop', 'ruling favorable, short squeeze', 'overhang, slow bleed'],
-};
-
-/** Relative period tags for analog events. */
-const PERIODS = ["Q4 '23", "Feb '24", "May '24", "Q2 '24", "Aug '24", "Q3 '24", "Nov '24", "Q4 '24", "Jan '25", "Feb '25", "Q1 '25", "May '25"];
-
 const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
 
 function halfLifeLabel(hours: number): string {
   return hours >= SESSION_HOURS ? `${(hours / SESSION_HOURS).toFixed(1)} sess` : `${hours.toFixed(1)}h`;
 }
 
-/** Closest past analog events + how they resolved. Deterministic per headline. */
-function buildAnalogs(seed: string, category: NewsCategory, sentiment: number, magnitude: number, evMag: number): CatalystAnalog[] {
-  const frags = ANALOG_FRAGMENTS[category];
-  const dir = sentiment >= 0 ? 1 : -1;
-  const out: CatalystAnalog[] = [];
-  for (let i = 0; i < 3; i++) {
-    const s = `${seed}-an${i}`;
-    // Most analogs follow the headline sign; strong sentiment pulls more into line.
-    const followsSign = h01(`${s}-od`) < 0.72 + Math.abs(sentiment) * 0.16;
-    const outDir = followsSign ? dir : -dir;
-    const outcome1dPct = outDir * hRange(`${s}-mag`, 0.5, 1.05) * (evMag + 0.7 + magnitude * 0.6);
-    out.push({
-      when: hPick(`${s}-per`, PERIODS),
-      descriptor: hPick(`${s}-desc`, frags),
-      similarityPct: Math.round(clamp(hRange(`${s}-sim`, 66, 93) - i * 7, 38, 96)),
-      outcome1dPct,
-      followThrough: h01(`${s}-ft`) < 0.5 + Math.abs(sentiment) * 0.22 + magnitude * 0.1,
-    });
-  }
-  return out.sort((a, b) => b.similarityPct - a.similarityPct);
+/*
+  ---- analogs ----------------------------------------------------------------
+  These used to be invented: a random pick from a list of canned outcome phrases,
+  stamped with a real calendar period ("Feb '24", "Q4 '24") and given a random
+  similarity score and a random outcome. Dated to a month that actually happened,
+  it read as an event study — a claim that a specific past print resolved a
+  specific way. Nothing had looked anything up.
+
+  They are now an actual nearest-neighbour lookup into the prior population
+  news.ts generates and measures its base rates over: same catalyst type, closest
+  in setup, reported at its own offset in that history with the outcome the model
+  gave it. Every field below is read or derived from the matched prior.
+*/
+
+/** Axis spans used to normalise the setup distance, so no one axis dominates. */
+const SENTIMENT_SPAN = 2;
+const MAGNITUDE_SPAN = 1;
+const BETA_SPAN = 1.3;
+
+function setupSimilarity(p: CatalystPrior, sentiment: number, magnitude: number, beta: number): number {
+  const ds = (p.sentiment - sentiment) / SENTIMENT_SPAN;
+  const dm = (p.magnitude - magnitude) / MAGNITUDE_SPAN;
+  const db = (p.beta - beta) / BETA_SPAN;
+  return clamp(100 - Math.sqrt((ds * ds + dm * dm + db * db) / 3) * 100, 0, 100);
+}
+
+/** The analog's own setup, plus how its outcome sized up against the call on it. */
+function describePrior(p: CatalystPrior): string {
+  const size = p.magnitude >= 0.62 ? 'loud' : p.magnitude >= 0.36 ? 'mid-size' : 'quiet';
+  const lean = p.sentiment >= 0 ? 'bullish' : 'bearish';
+  const call = Math.abs(p.expMove1dPct);
+  // Below the floor the ratio is noise dividing by noise, so it goes unstated.
+  if (call < 0.1) return `${size} ${lean} print, no meaningful call on it`;
+  return `${size} ${lean} print, ${(Math.abs(p.realized1dPct) / call).toFixed(1)}× the modeled move`;
+}
+
+/** The closest catalysts in the model's own history, best match first. */
+function buildAnalogs(category: NewsCategory, sentiment: number, magnitude: number, beta: number): CatalystAnalog[] {
+  return catalystPriors()
+    .filter(p => p.category === category)
+    .map(p => ({ p, similarityPct: setupSimilarity(p, sentiment, magnitude, beta) }))
+    .sort((a, b) => b.similarityPct - a.similarityPct)
+    .slice(0, 3)
+    .map(({ p, similarityPct }) => ({
+      when: `-${p.sessionsBack} sess`,
+      descriptor: describePrior(p),
+      similarityPct: Math.round(similarityPct),
+      outcome1dPct: p.realized1dPct,
+      followThrough: p.realized1dPct * p.sentiment > 0,
+    }));
 }
 
 /** Per-headline intelligence for one wire item. */
@@ -263,7 +292,7 @@ function analyzeItem(item: NewsItem, scope: HeadlineScope, snapshot: MarketSnaps
     agreement,
     divergenceScore,
     agreementNote,
-    analogs: buildAnalogs(seed, category, sentiment, magnitude, evMag),
+    analogs: buildAnalogs(category, sentiment, magnitude, lookup(item.ticker ?? '')?.beta ?? 1),
     invalidation,
     expMove1dPct: prediction.expMove1dPct,
     probUpPct: prediction.probUpPct,
@@ -334,16 +363,7 @@ export function buildNewsIntel(snapshot: MarketSnapshot): NewsIntelView {
   const mechN = headlines.length - infoN;
   const natureSplit = `${infoN} informational · ${mechN} mechanical`;
 
-  // --- Summary read ---
-  const narrWord = narrativeLean > 0.1 ? 'bullish' : narrativeLean < -0.1 ? 'bearish' : 'mixed';
-  const posWord = positioningLean > 0.1 ? 'call-heavy' : positioningLean < -0.1 ? 'put-heavy' : 'balanced';
-  const agreeWord = netAgreement === 'CONFIRMS' ? 'the book confirms it' : netAgreement === 'DIVERGES' ? 'the book fades it' : 'the book is neutral';
-  const domWord = dominantCategory ? dominantCategory.toLowerCase() : 'macro';
-
-  const headline = hasNameHeadlines
-    ? `${nameCount} live ${domWord} catalyst${nameCount > 1 ? 's' : ''} on ${ticker}. The wire leans ${narrWord} and options are positioned ${posWord}, so ${agreeWord}. Roughly ${aggPricedInPct}% looks priced in, with a ${halfLifeLabel(medianHalfLifeHours)} half-life on the read.`
-    : `No single-name catalyst on ${ticker} today — positioning reads ${posWord}. The macro wire is the only live driver; the per-headline intel populates the moment a name-specific print lands.`;
-
+  // --- Timing read: what the priced-in / agreement combination means to do ---
   const note = hasNameHeadlines
     ? aggPricedInPct >= 65
       ? 'Most of the expected move is already discounted — chasing the headline is late. Wait for a positioning-driven overshoot to fade, or a fresh print to reset the clock.'
@@ -370,7 +390,6 @@ export function buildNewsIntel(snapshot: MarketSnapshot): NewsIntelView {
     agreementScore,
     eventVolPct,
     natureSplit,
-    headline,
     note,
   };
 }
