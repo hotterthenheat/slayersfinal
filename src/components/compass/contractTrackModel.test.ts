@@ -12,7 +12,7 @@ import {
   setupToPlan,
   spotForPremium,
   weighedToPlan,
-} from './contractTrack';
+} from './contractTrackModel';
 import type { OptionRight, ScannerKey } from '../../types/skyvision';
 
 /*

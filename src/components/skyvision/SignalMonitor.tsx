@@ -9,7 +9,7 @@ import VerdictBadge from './VerdictBadge';
 import { VERDICT_TONE } from './verdict';
 import GreeksRow from './GreeksRow';
 import ContractTrack from '../compass/ContractTrack';
-import { buildTrack, setupToPlan, tpStatusTone, type TrackRung } from '../compass/contractTrack';
+import { buildTrack, setupToPlan, tpStatusTone, type TrackRung } from '../compass/contractTrackModel';
 import type { Setup, TakeProfit } from '../../types/skyvision';
 
 interface SignalMonitorProps {

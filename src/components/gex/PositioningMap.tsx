@@ -23,7 +23,7 @@ import {
   priceScale,
   tierFor,
   type Tier,
-} from './positioningMap';
+} from './positioningMapModel';
 
 interface PositioningMapProps {
   data: ExposureProfileData;
