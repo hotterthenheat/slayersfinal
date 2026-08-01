@@ -381,11 +381,19 @@ function predict(category: NewsCategory, sentiment: number, magnitude: number, b
   const probUpPct = Math.round(50 + 40 * Math.tanh(sentiment * magnitude * 2.1));
   const confidencePct = Math.round(42 + magnitude * 40 + h01(`${seed}-cf`) * 12);
   const base = categoryBaseRates()[category];
-  const dir = sentiment >= 0 ? 'higher' : 'lower';
   // Says what the number is before it says what it is worth: these are the
   // model's own simulated priors, and the sentence must not be readable as
   // measured market history.
-  const analog = `Measured over ${base.n} simulated ${category.toLowerCase()} catalysts from this model's own generator — no market history stands behind it: median ${base.medianPct}% move, ${base.hitPct}% closed ${dir} next session.`;
+  //
+  // The hit rate counts priors that resolved in their OWN headline's direction,
+  // which is a directionless quantity — it cannot be restated as "closed
+  // higher" or "closed lower". A direction word taken from the selected item
+  // used to do exactly that, printing the same 66% as "closed higher" on a
+  // bullish earnings print and "closed lower" on a bearish one when only 49% of
+  // those priors closed up either way. The figure traced to the engine; the
+  // label described something the engine never measured.
+  const kind = category === 'M&A' ? 'M&A' : category.toLowerCase();
+  const analog = `Measured over ${base.n} simulated ${kind} catalysts from this model's own generator — no market history stands behind it: median ${base.medianPct}% move, ${base.hitPct}% resolved in their own headline's direction.`;
 
   let playbook: string;
   const abs1d = Math.abs(expMove1dPct);

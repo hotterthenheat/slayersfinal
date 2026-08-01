@@ -7,8 +7,6 @@ import ExposureProfile from './ExposureProfile';
 import RankedTargets from './RankedTargets';
 import GreeksRegime from './GreeksRegime';
 import VannaCharm from './VannaCharm';
-import VolLab from './VolLab';
-import StatePriceDensity from '../../components/gex/StatePriceDensity';
 import HedgeImpact from './HedgeImpact';
 import Fracture from '../fracture/Fracture';
 
@@ -22,7 +20,8 @@ interface SubView {
  * A consolidated Pinpoint desk. Two complementary reads share one desk via a
  * segmented sub-toggle synced to the `?view=` query param, so old deep links and
  * the redirects from the retired sub-routes land on the exact pane a trader
- * expected — while the Pinpoint tab bar stays six desks, not eleven.
+ * expected — while the Pinpoint tab bar stays five desks rather than growing a
+ * tab per read.
  */
 const SubtabDesk = ({ views, ariaLabel }: { views: SubView[]; ariaLabel: string }) => {
   const [params, setParams] = useSearchParams();
@@ -82,15 +81,10 @@ export const GreeksDesk = () => (
   />
 );
 
-export const VolatilityDesk = () => (
-  <SubtabDesk
-    ariaLabel="Volatility view"
-    views={[
-      { key: 'surface', label: 'IV surface', node: <VolLab /> },
-      { key: 'density', label: 'Risk-neutral density', node: <StatePriceDensity /> },
-    ]}
-  />
-);
+/* No Volatility desk here. The IV surface and the density it implies moved to
+   Prove It — they are model output, not a picture of dealer hedging — and
+   /pinpoint/volatility redirects there. Keeping a second copy mounted under
+   Pinpoint would fork the surface into two homes. */
 
 export const StressDesk = () => (
   <SubtabDesk

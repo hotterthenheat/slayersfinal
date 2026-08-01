@@ -302,26 +302,31 @@ function buildBoard(): BoardTicker[] {
 
 // ---- matrix pulse ----------------------------------------------------------------
 /**
- * Per-second modulation of the matrix cells — a looping (self-recycling)
- * wave per cell so the heatmap breathes between scans. Sign is
- * preserved and maxAbs is untouched, so colors morph without the scale or
- * the strike window moving.
+ * Retired. Returns the matrix untouched, and exists only so the call sites that
+ * still wrap it keep compiling; they should drop the wrapper.
+ *
+ * This used to multiply every cell by a two-term sine once a second so the
+ * heatmap "breathed" between scans. A liveness cue is a fair design choice — but
+ * this one moved the DATA, not the presentation. GexMatrix prints
+ * `fmtUsd(cell.value)` inside every cell and the hover read-out repeats it,
+ * signed and labelled ("dealer support · long γ"). So the dollar figure a reader
+ * takes off the grid swung across 31% of its own magnitude while the book had
+ * not moved, and the 1/1.19 normalisation meant a cell peaked at 99.6% of its
+ * true value and spent the rest of the cycle understating it — down to 68% — so
+ * the ±maxAbs the colour rail advertises was a number no cell could reach.
+ * Nothing in the dealer book produces that wobble; it was there to look alive.
+ *
+ * A cue that no read-out reports would be legitimate — a per-cell `pulse` weight
+ * carried alongside `value` and spent on opacity or glow in GexMatrix. That
+ * needs a field on MatrixCell and a change in the component, so it is not
+ * smuggled back in here on the value.
  */
-const PULSE_PERIOD_S = 24;
-
-export function pulseMatrix(matrix: GexMatrixData, tick: number): GexMatrixData {
-  const phase01 = (tick % PULSE_PERIOD_S) / PULSE_PERIOD_S;
-  const cells = matrix.cells.map((row, r) =>
-    row.map((cell, c) => {
-      const p = h01(`${matrix.strikes[r]}-${c}-pulse`);
-      const slow = Math.sin(2 * Math.PI * (phase01 + p));
-      const fast = Math.sin(2 * Math.PI * (phase01 * 3 + p * 7));
-      // Normalized by the wave's own peak (1.19) so a pulsed cell can never
-      // exceed the ±maxAbs the color rail prints — the scale stays honest.
-      return { ...cell, value: (cell.value * (1 + 0.14 * slow + 0.05 * fast)) / 1.19 };
-    })
-  );
-  return { ...matrix, cells };
+export function pulseMatrix(
+  matrix: GexMatrixData,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the tick that used to drive the wobble; kept so existing call sites still type-check
+  tick?: number
+): GexMatrixData {
+  return matrix;
 }
 
 // ---- top-level assembly --------------------------------------------------------

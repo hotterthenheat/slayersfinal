@@ -70,7 +70,7 @@ const ModelsView = ({ window_ }: { window_: Window }) => {
     {
       label: 'Drift source',
       value: trendUp ? 'EMA9 ≥ EMA21' : 'EMA9 < EMA21',
-      note: 'trend-following — EMAs stand in for the return forecast',
+      note: 'trend-following: EMAs stand in for the return forecast',
     },
     { label: 'Horizon', value: `${mc.days} sessions`, note: 'trading days ahead' },
     { label: 'Paths', value: `${mc.runs.toLocaleString()} runs`, note: 'independent random sample paths' },
@@ -152,7 +152,7 @@ const ModelsView = ({ window_ }: { window_: Window }) => {
                   ))}
                 </dl>
                 <p className="mt-3 text-label text-textSecondary leading-relaxed">
-                  These inputs set the cone's width — they do not make it a forecast. Change the window or ticker and
+                  These inputs set the cone's width; they do not make it a forecast. Change the window or ticker and
                   every stat above recomputes from the same seeded run.
                 </p>
               </div>
@@ -166,7 +166,7 @@ const ModelsView = ({ window_ }: { window_: Window }) => {
               <Boxes className="w-3.5 h-3.5" /> Dealer surface
             </span>
           }
-          subtitle="net exposure — strikes × expiries × GEX"
+          subtitle="net exposure · strikes × expiries × GEX"
           className="xl:col-span-5 xl:sticky xl:top-4 xl:self-start"
           bodyClassName="p-0"
         >
@@ -210,9 +210,9 @@ const ModelsView = ({ window_ }: { window_: Window }) => {
       <Panel bodyClassName="py-3">
         <p className="text-caption text-textSecondary leading-relaxed">
           <span className="font-mono font-semibold uppercase tracking-wider mr-2 text-textSecondary">How to read this</span>
-          The cone is not a prediction — it is the honest distribution of outcomes given current volatility. Trade ideas
+          The cone is not a prediction. It is the honest distribution of outcomes given current volatility. Trade ideas
           from Compass and Trace should live inside the cone's fat part; anything that needs a path outside the 90% band
-          is a lottery ticket, whatever the chart pattern says. The scoreboard exists so the terminal has to prove it —
+          is a lottery ticket, whatever the chart pattern says. The scoreboard exists so the terminal has to prove it:
           when an engine's hit rate decays, weights come down with it.
         </p>
       </Panel>
@@ -239,7 +239,7 @@ const ProveIt = () => {
       <PageHeader
         breadcrumb={['Terminal', 'Prove It', active.label]}
         title="Prove It"
-        subtitle="Quantitative modeling & predictive analytics — the receipts behind every call"
+        subtitle="Quantitative modeling & predictive analytics: the receipts behind every call"
         actions={
           // The window sets the Monte Carlo horizon and nothing else, so it is
           // not offered on the two reads it cannot move.
