@@ -239,7 +239,14 @@ const DarkPool = () => {
       (execFilter === 'ALL' || p.execution === execFilter) &&
       (intentFilter === 'ALL' || p.intent === intentFilter) &&
       p.notional >= Number(minNotional) &&
-      (!q || p.execution.includes(q) || p.intent.includes(q) || p.venue.includes(q) || String(p.price).includes(q)),
+      (!q ||
+        p.execution.includes(q) ||
+        p.intent.includes(q) ||
+        p.venue.includes(q) ||
+        // The field offers "read", so it has to search the reasoning too —
+        // typing a phrase visible in an expanded row was removing that row.
+        p.read.toUpperCase().includes(q) ||
+        String(p.price).includes(q)),
   );
 
   // Resolved from the rows ON SCREEN. Reading it off the full session left the
@@ -275,11 +282,13 @@ const DarkPool = () => {
     ? `${leadExec[0]} carries the session at ${fmtUsd(leadExec[1].usd)} across ${leadExec[1].n} ${leadExec[1].n === 1 ? 'print' : 'prints'} · ${midShare.toFixed(0)}% of block dollars crossed at the midpoint · ${sweepUsd > 0 ? `${fmtUsd(sweepUsd)} came in as sweeps that finished off-exchange` : 'no sweeps finished off-exchange'}.`
     : 'Nothing crossed off-exchange this session.';
 
-  // Scales for the inline meters — computed off the rows on screen so a bar is
-  // read against what the filter left, not against a session the user filtered
-  // away.
-  const maxSize = Math.max(...view.prints.map(p => p.size), 1);
-  const maxVs = Math.max(...view.prints.map(p => Math.abs(p.vsSpotPct)), 0.01);
+  // Scales for the inline meters, off the rows ON SCREEN. The comment here said
+  // exactly that while the code read the whole session, so filtering out the
+  // day's outliers left every remaining bar normalised against something
+  // hidden — a column of identical stubs, which is the one thing a meter must
+  // not be.
+  const maxSize = Math.max(...rows.map(p => p.size), 1);
+  const maxVs = Math.max(...rows.map(p => Math.abs(p.vsSpotPct)), 0.01);
 
   const columns: Column<DarkPoolPrint>[] = [
     {

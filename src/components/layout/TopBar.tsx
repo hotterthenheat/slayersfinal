@@ -79,6 +79,11 @@ const TICKER_SCOPED = [
   // and the default tab is the wire. A rendered-text diff only ever sees the
   // tab that happens to be open.
   '/news',
+  // Tracker for the same reason again: EdgeLedger seeds every modelled trade
+  // from the active snapshot, so the global [ / ] shortcuts were silently
+  // rebuilding the ledger with nothing on screen naming the symbol or able to
+  // put it back.
+  '/tracker',
 ];
 const tickerScoped = (path: string) =>
   TICKER_SCOPED.some(r => path === r || path.startsWith(`${r}/`));
