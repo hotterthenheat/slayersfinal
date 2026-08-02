@@ -249,8 +249,16 @@ export interface LottoRow {
   ask: number;
   breakevenMove: number;
   requiredMove: number;
+  /** Probability of touching the strike before the close. */
   pFirstPassage: number;
-  pTargetBeforeExpiry: number;
+  /**
+   * Probability of being through the strike at the close.
+   *
+   * The close, not expiration. Both were named at once in the copy while the
+   * model had no expiry to work with, and for a multi-day contract they are
+   * different events.
+   */
+  pTargetBeforeClose: number;
   thetaBurnPerHour: number;
   spreadCost: number;
   terminalLiquidity: number;

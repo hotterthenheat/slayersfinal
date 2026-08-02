@@ -73,7 +73,11 @@ const LottoScene: React.FC = () => {
 
           <div className="mt-2 flex-1 min-h-0 flex flex-col">
             <HeadRow
-              cols={compact ? ['STRIKE', 'P(TGT)', 'VERDICT'] : ['STRIKE', 'ASK', 'REQUIRED', 'BREAKEVEN', 'P(TOUCH)', 'P(TGT)', 'VERDICT']}
+              cols={
+                compact
+                  ? ['STRIKE', 'P(CLOSE)', 'VERDICT']
+                  : ['STRIKE', 'ASK', 'REQUIRED', 'BREAKEVEN', 'P(TOUCH)', 'P(CLOSE)', 'VERDICT']
+              }
               grid={compact ? GRID_SM : GRID}
             />
             <div className="mt-1 flex-1 min-h-0 flex flex-col justify-evenly">
@@ -93,8 +97,8 @@ const LottoScene: React.FC = () => {
                       {!compact && <span>+{l.requiredMove.toFixed(2)}%</span>}
                       {!compact && <span>+{l.breakevenMove.toFixed(2)}%</span>}
                       {!compact && <span>{prob(l.pFirstPassage)}</span>}
-                      <span className={l.pTargetBeforeExpiry > 0.2 ? 'text-bull' : 'text-warn'}>
-                        {prob(l.pTargetBeforeExpiry)}
+                      <span className={l.pTargetBeforeClose > 0.2 ? 'text-bull' : 'text-warn'}>
+                        {prob(l.pTargetBeforeClose)}
                       </span>
                       <Verdict>{l.verdict}</Verdict>
                     </div>
@@ -136,8 +140,9 @@ const LottoScene: React.FC = () => {
               </div>
               <p className="mt-1 font-mono text-micro text-textSecondary leading-relaxed">
                 A cheap contract is not cheap when the required path is a tail. It needs{' '}
-                {furthest.requiredMove.toFixed(2)}% inside the session and touches at {prob(furthest.pTargetBeforeExpiry)}{' '}
-                — under the {prob(LOTTO_P_GATE)} the desk requires before a far strike is worth pricing.
+                {furthest.requiredMove.toFixed(2)}% inside the session and finishes through the strike at{' '}
+                {prob(furthest.pTargetBeforeClose)}{' '}
+                by the close — under the {prob(LOTTO_P_GATE)} the desk requires before a far strike is worth pricing.
               </p>
             </div>
           </Beat>
@@ -150,8 +155,8 @@ const LottoScene: React.FC = () => {
           modelled path and {gated === 1 ? 'one is' : `${gated} are`} not.
         </SceneStatement>
         <Caveat>
-          Modelled first-passage probabilities over the remaining session · horizon is expiration, event is touching the
-          strike · maximum loss on any of these is the full premium
+          Modelled probabilities over the remaining session · horizon is the close, events are touching the strike and
+          finishing through it · maximum loss on any of these is the full premium
         </Caveat>
       </div>
     </div>

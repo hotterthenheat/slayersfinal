@@ -44,6 +44,10 @@ const PinpointScene: React.FC = () => {
   const strikeMin = strikesDesc[rows - 1];
   const strikeMax = strikesDesc[0];
   const belowFlip = thread.spot < g.flip;
+  // The field's own totals, not a second opinion about it.
+  const netGex = g.cells.reduce((a, c) => a + c.netGex, 0);
+  const kingAbs = g.cells.filter(c => c.strike === g.king).reduce((a, c) => a + Math.abs(c.netGex), 0);
+  const kingShare = kingAbs / Math.max(1, g.cells.reduce((a, c) => a + Math.abs(c.netGex), 0));
 
   /** Geometry for a given measured height — one place, so nothing drifts. */
   const geom = (H: number) => {
@@ -194,8 +198,13 @@ const PinpointScene: React.FC = () => {
               <div className="font-mono text-micro uppercase tracking-widest text-textMuted mb-1">Regime at spot</div>
               <KeyValue k="Dealer state" v={thread.dealerState} tone={belowFlip ? 'warn' : 'info'} />
               <KeyValue k="Hedging" v={belowFlip ? 'AMPLIFIES THE MOVE' : 'ABSORBS THE MOVE'} tone={belowFlip ? 'warn' : 'info'} />
-              <KeyValue k="Net GEX" v={usd(-412e6)} tone="warn" />
-              <KeyValue k="Concentration" v={`${px(g.king)} · ${prob(0.31)} of book`} />
+              {/* Summed from the very cells above it. This was a second
+                  hard-coded −$412M — the one the story layer had already dropped —
+                  sitting in the panel headed "regime at spot" beside a field that
+                  disagreed with it. A number quoted next to the thing it is
+                  supposedly a total of has to be that total. */}
+              <KeyValue k="Net GEX" v={usd(netGex)} tone={netGex < 0 ? 'warn' : 'info'} />
+              <KeyValue k="Concentration" v={`${px(g.king)} · ${prob(kingShare)} of book`} />
             </div>
           </Beat>
 

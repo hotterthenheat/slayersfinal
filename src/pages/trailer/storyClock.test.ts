@@ -146,6 +146,30 @@ describe('one session', () => {
     expect(isTradingDay(new Date(story.sessionStart))).toBe(true);
   });
 
+  it("uses New York's calendar day, not the viewer's", () => {
+    // Built on the browser's local date it was a local day wearing an ET label:
+    // Monday breakfast in Asia is still Sunday in New York, so the film picked
+    // the wrong session and every DTE hung off it.
+    const ny = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/New_York',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+    const session = new Date(story.sessionStart);
+    // The session is NY's day, or the most recent session at or before it.
+    const iso = `${session.getFullYear()}-${String(session.getMonth() + 1).padStart(2, '0')}-${String(
+      session.getDate(),
+    ).padStart(2, '0')}`;
+    expect(iso <= ny).toBe(true);
+    // And never more than a long weekend behind it.
+    const gap = (new Date(`${ny}T00:00:00`).getTime() - new Date(`${iso}T00:00:00`).getTime()) / 86400000;
+    expect(gap).toBeLessThanOrEqual(4);
+    // The wall clock the HUD prints is the session's, unshifted.
+    expect(session.getHours()).toBe(10);
+    expect(session.getMinutes()).toBe(42);
+  });
+
   it('agrees with the calendar about every maturity it names', () => {
     const session = new Date(story.sessionStart);
     const seen = new Map<string, number>();
@@ -311,7 +335,7 @@ describe('contract weigher', () => {
 
   it('gates the lottery strikes on the stated probability, not on an opinion', () => {
     for (const l of story.lotto) {
-      expect(l.verdict).toBe(l.pTargetBeforeExpiry >= LOTTO_P_GATE ? 'CONSIDERED' : 'NO TRADE');
+      expect(l.verdict).toBe(l.pTargetBeforeClose >= LOTTO_P_GATE ? 'CONSIDERED' : 'NO TRADE');
     }
     // The honesty rule the copy relies on: NO TRADE is on the board.
     expect(story.lotto.some(l => l.verdict === 'NO TRADE')).toBe(true);

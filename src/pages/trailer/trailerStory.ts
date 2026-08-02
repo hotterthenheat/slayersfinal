@@ -78,6 +78,8 @@ const SEED = 'slayer-trailer-v1';
  */
 const STORY_SPOT = 138.6;
 const STORY_REGIME_DAY = 20667;
+/** The symbol's configured IV — the chain builder's, so a re-mark matches it. */
+const STORY_IV = 0.35;
 
 /**
  * The story's structural level sits at least this far below the open.
@@ -95,20 +97,37 @@ const round = (v: number, dp = 2) => Number(v.toFixed(dp));
 const clampUnit = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
 /**
- * The session clock.
+ * The session clock, on New York's calendar.
  *
  * Pinned to 10:42 on the story's own day rather than `Date.now()`, so the
  * timestamp that travels the State Thread is a market time the viewer can read
  * against the narrative — and so two viewers watching at different hours see the
  * same film. The date advances with the calendar; only the time of day is fixed.
+ *
+ * The day is resolved in `America/New_York`, not the browser's zone. Built
+ * locally it was a local date wearing an ET label: at Monday breakfast in Asia it
+ * is still Sunday in New York, so the film picked Monday as its session instead
+ * of rolling back to Friday — and every expiry, DTE and earnings date hung off
+ * the wrong one. Same trap the HUD had, one layer down.
  */
+function nyToday(): { y: number; m: number; d: number } {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const get = (t: string) => Number(parts.find(p => p.type === t)!.value);
+  return { y: get('year'), m: get('month'), d: get('day') };
+}
+
 function sessionDate(): Date {
-  const now = new Date();
-  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 10, 42, 0, 0);
+  const { y, m, d } = nyToday();
+  const out = new Date(y, m - 1, d, 10, 42, 0, 0);
   // A session, not a calendar day. Watched on a Saturday the film was stamped
   // 10:42 on a day the market never opened, and every DTE hung off it.
-  for (let i = 0; i < 7 && !isTradingDay(d); i++) d.setDate(d.getDate() - 1);
-  return d;
+  for (let i = 0; i < 7 && !isTradingDay(out); i++) out.setDate(out.getDate() - 1);
+  return out;
 }
 
 /**
@@ -394,6 +413,35 @@ function buildDarkPool(level: number, path: PricePoint[]): DarkPoolRead {
   };
 }
 
+// ---- re-marking the book ----------------------------------------------------
+/**
+ * The session's open interest, marked at a later spot.
+ *
+ * Net GEX is `OI x 100 x gamma(spot) x spot^2 x 0.01 x dealer-direction`, so it
+ * moves with spot even though the book behind it does not. The field was built
+ * once at the session's reference price and then shown under a spot marker from
+ * an hour later — an exposure surface for one market state with another state's
+ * price drawn across it.
+ *
+ * Re-deriving the whole chain at the later spot is NOT the fix, and this is the
+ * trap worth writing down: `generateOptionsChain` re-centres open interest on
+ * whatever spot it is given, so a chain rebuilt at the tested shelf slides the
+ * entire book down with price. Net GEX flips from −27M to +43M and the flip
+ * follows spot, which would make it impossible for price to ever cross the
+ * flip — the one thing this film is about.
+ *
+ * So: keep the session's OI, recompute gamma at the new spot, and reapply the
+ * simulator's own dealer-direction weights. Fixed book, live mark.
+ */
+function remarkGex(chain: StrikeNode[], spot: number, ivAnnual: number): { strike: number; netGex: number }[] {
+  const t = 0.003; // 0DTE, matching the chain builder
+  return chain.map(n => {
+    const g = Simulator.getGreeks(spot, n.strike, t, ivAnnual).gamma;
+    const scale = 100 * g * spot * spot * 0.01;
+    return { strike: n.strike, netGex: n.callOI * scale * 0.5 + n.putOI * scale * -0.6 };
+  });
+}
+
 // ---- dealer field -----------------------------------------------------------
 function buildGammaField(
   chain: { strike: number; netGex: number }[],
@@ -401,6 +449,10 @@ function buildGammaField(
   spot: number,
   dates: StoryDates,
 ): GammaField {
+  // `spot` is the price the scene is standing at; `chain` is the session's book
+  // already re-marked to it. The LEVELS stay the session's — walls and the flip
+  // are where the open interest is, and open interest does not move because
+  // price did. That is what makes "price crossed the flip" a thing that happens.
   const sorted = [...chain].sort((a, b) => a.strike - b.strike);
   const centre = sorted.reduce((best, n) => (Math.abs(n.strike - spot) < Math.abs(best.strike - spot) ? n : best), sorted[0]);
   const ci = sorted.indexOf(centre);
@@ -735,11 +787,17 @@ function buildContracts(
 
 // ---- lotto ------------------------------------------------------------------
 /**
- * Far-dated cheap strikes, gated on the probability the desk requires.
+ * Far strikes, gated on the probability the desk requires.
  *
- * The gate is a number, not a mood — and it is stated on screen. A verdict
- * written into the table beside a probability it has no relationship to is the
- * same failure as the Weigher's, one row further out on the board.
+ * ONE horizon: the rest of the session. The caveat used to name two in a single
+ * sentence — "over the remaining session" and "horizon is expiration" — while the
+ * verdict came from a field called `pTargetBeforeExpiry` that `buildLotto` had no
+ * expiry to compute. For a multi-day contract those are materially different
+ * events, and the scene's own chart ("what the session can still deliver, N min
+ * to cutoff") only ever meant one of them.
+ *
+ * The gate is a number, not a mood, and it is stated on screen beside the
+ * probability it gates.
  */
 export const LOTTO_P_GATE = 0.06;
 
@@ -752,7 +810,7 @@ function buildLotto(spot: number, step: number): LottoRow[] {
   return defs.map((d, i) => {
     const required = (d.k - spot) / spot;
     const ask = round(Math.max(0.04, 1.9 * Math.exp(-required * 74)), 2);
-    const pTargetBeforeExpiry = round(Math.max(0.003, 0.38 * Math.exp(-required * 104)), 3);
+    const pTargetBeforeClose = round(Math.max(0.003, 0.38 * Math.exp(-required * 104)), 3);
     return {
       id: `L${i}`,
       strike: round(d.k),
@@ -760,13 +818,13 @@ function buildLotto(spot: number, step: number): LottoRow[] {
       breakevenMove: round((required + ask / spot) * 100, 2),
       requiredMove: round(required * 100, 2),
       pFirstPassage: round(Math.max(0.005, 0.46 * Math.exp(-required * 96)), 3),
-      pTargetBeforeExpiry,
+      pTargetBeforeClose,
       thetaBurnPerHour: round(ask * (0.11 + i * 0.05), 3),
       spreadCost: round(0.03 + i * 0.05, 3),
       terminalLiquidity: round(Math.max(0.05, 0.82 - i * 0.31), 2),
       pinRisk: round(0.18 + i * 0.09, 2),
       maxLoss: 1,
-      verdict: pTargetBeforeExpiry >= LOTTO_P_GATE ? ('CONSIDERED' as const) : ('NO TRADE' as const),
+      verdict: pTargetBeforeClose >= LOTTO_P_GATE ? ('CONSIDERED' as const) : ('NO TRADE' as const),
       why: d.why,
     };
   });
@@ -929,6 +987,13 @@ function buildTracker(
   // freeze" chart opened ahead of the packet it was scoring, and every
   // counterfactual was marked from a path that began after the moment it claimed
   // to begin at.
+  //
+  // The window is the rest of the session, and the marks decay by exactly that.
+  // They used to remove a full calendar day while the HUD advanced 96 seconds and
+  // never left the session — which overstated theta on every row, worst on the
+  // short-dated one, and changed which alternative is reported as having beaten
+  // the contract that was taken.
+  const outcomeDays = ((1 - storyUAtSceneStart('tracker')) * STORY_SECONDS) / 86400;
   const targetProgress = 0.82;
   const finalPx = freezeSpot + (target - freezeSpot) * targetProgress;
   const path: PricePoint[] = [];
@@ -944,7 +1009,7 @@ function buildTracker(
   // paid on the way.
   const markAt = (c: ContractRow) => {
     // Calendar days over a calendar year — see `buildContracts`.
-    const t = Math.max(0.5, c.dte - 1) / 365;
+    const t = Math.max(0.05, c.dte - outcomeDays) / 365;
     return round((bsPriceAtT(finalPx, c.strike, c.iv, t, 'C') - c.mid) / c.mid - c.executionCost, 3);
   };
   const taken = markAt(contract);
@@ -1003,7 +1068,8 @@ export function buildTrailerStory(): TrailerStory {
   // offering two different answers to "where is support".
   const level = storyLevel(snapshot.chain, spot0);
   const levels = { callWall: round(raw.callWall), putWall: level, flip: round(raw.flip), king: round(raw.king) };
-  const netGex = snapshot.chain.reduce((a, n) => a + n.netGex, 0);
+  // Net GEX is a live mark too: the Levels scene reads it beside its own spot.
+  const netGex = (spot: number) => remarkGex(snapshot.chain, spot, STORY_IV).reduce((a, n) => a + n.netGex, 0);
   const step = Math.max(0.5, round((levels.callWall - levels.putWall) / 12, 1));
 
   const path = buildPath(spot0, level, levels.flip);
@@ -1027,6 +1093,7 @@ export function buildTrailerStory(): TrailerStory {
   // centred its distributions on one, while the live spot marker drawn over them
   // came from the story clock — the same disagreement, two scenes further on.
   const spotAtScene = (id: string) => round(pxAt(path, storyUAtSceneStart(id) * STORY_SECONDS));
+  const gammaSpot = spotAtScene('gamma');
   const dates = buildDates();
   const prints = buildPrints(level, step, dates);
   const setups = buildSetups(TICKER, level, step, dates);
@@ -1048,12 +1115,12 @@ export function buildTrailerStory(): TrailerStory {
     path,
     levels,
     prints,
-    scanner: buildScanner(prints, TICKER, spot0, dates),
+    scanner: buildScanner(prints, TICKER, spotAtScene('scanner'), dates),
     metaorder: buildMetaorder(prints),
     darkPool: buildDarkPool(level, path),
-    gamma: buildGammaField(snapshot.chain, levels, spot0, dates),
+    gamma: buildGammaField(remarkGex(snapshot.chain, gammaSpot, STORY_IV), levels, gammaSpot, dates),
     rankedLevels: buildRankedLevels(levels),
-    greeks: buildGreeks(netGex),
+    greeks: buildGreeks(netGex(spotAtScene('levels'))),
     stress: STRESS,
     setups,
     contracts,

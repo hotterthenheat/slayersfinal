@@ -158,6 +158,7 @@ export function useTrailerTimeline(autoStart: boolean): TrailerTimeline {
   const rafRef = useRef<number | null>(null);
   const lastRef = useRef<number | null>(null);
   const timeRef = useRef(0);
+  const playingRef = useRef(false);
 
   // One loop. It only exists while playing, so a paused trailer costs nothing.
   useEffect(() => {
@@ -234,10 +235,21 @@ export function useTrailerTimeline(autoStart: boolean): TrailerTimeline {
     setPlaying(false);
     setExplored(true);
   }, [seek]);
+  /**
+   * Seek to a scene.
+   *
+   * While playing, land on its first frame and let it play. While PAUSED, land
+   * on a settled frame instead: at progress 0 most `Beat`s are at zero opacity
+   * and several scenes have not mounted a row yet, so stepping through a paused
+   * film — which is what a viewer does to read it — arrived at a blank stage and
+   * stayed there. 0.82 is past every scene's staging and before its closing
+   * beat, so the destination is the composed frame.
+   */
   const goToScene = useCallback(
     (index: number) => {
       const i = Math.max(0, Math.min(SCENES.length - 1, index));
-      seek(SCENES[i].enterAtMs);
+      const s = SCENES[i];
+      seek(playingRef.current ? s.enterAtMs : s.enterAtMs + (s.exitAtMs - s.enterAtMs) * 0.82);
       setExplored(true);
     },
     [seek],
@@ -249,6 +261,12 @@ export function useTrailerTimeline(autoStart: boolean): TrailerTimeline {
     },
     [goToScene],
   );
+
+  // `goToScene` reads `playing` without re-creating itself on every play/pause,
+  // so the controls keep a stable identity across the film.
+  useEffect(() => {
+    playingRef.current = playing;
+  }, [playing]);
 
   const sceneIndex = sceneIndexAt(timeMs);
   const scene = SCENES[sceneIndex];
