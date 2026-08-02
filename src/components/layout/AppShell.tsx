@@ -28,12 +28,21 @@ const isTypingTarget = (el: EventTarget | null): boolean => {
  * read as the end of a page at all — it reads as a status bar, and the site
  * looks like it stops mid-air.
  *
- * Pulse is the one genuine exception. It is a workspace whose panels are
- * dragged and resized against the bottom edge of the viewport, so growing a
- * 500px scroll region underneath them would put the drag surface in a page
- * that scrolls out from under the cursor.
+ * The DESKS are the exception, and Pulse is the sharpest case of it: its panels
+ * are dragged against the bottom edge of the viewport, so growing a 500px
+ * scroll region underneath them would put the drag surface in a page that
+ * scrolls out from under the cursor.
+ *
+ * The others earn it for a plainer reason. A desk is a working surface that
+ * fills the screen with rows, and parking a five-column sitemap under a
+ * 240-row tape is furniture in the middle of the work. They still get a real
+ * footer — wordmark, copyright, the not-advice line and the legal links — just
+ * as one bar rather than a directory. Documents (the terminal index, the guide,
+ * the legal pages, community) get the full one, because on a document the
+ * footer IS the next thing you want.
  */
-const deskRoute = (path: string) => path === '/pulse' || path.startsWith('/pulse/');
+const DESK_ROUTES = ['/pulse', '/trace', '/pinpoint', '/compass', '/prove-it'];
+const deskRoute = (path: string) => DESK_ROUTES.some(r => path === r || path.startsWith(`${r}/`));
 
 const AppShell = () => {
   const [paletteOpen, setPaletteOpen] = useState(false);

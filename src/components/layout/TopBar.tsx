@@ -215,20 +215,23 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
             <LivePrice />
           </div>
         )}
-        {/* The market clock, in Eastern time, with the session it is in. Both
-            parts earn their place on every route: the phase is why a desk is
-            quiet at 03:00, and it is the same answer wherever the reader is. */}
+        {/* Eastern time, and only that.
+            
+            It carried the session phase too — Open / Closed / Weekend — which
+            read as a fact about the market and contradicted the desk directly
+            underneath it: "WEEKEND" above a page saying "of today's volume" and
+            "carries the session at $2.3B across 58 prints". Every desk here
+            renders a full session, so a badge driven by the wall clock
+            disagrees with the screen every night and all weekend. The time
+            itself does not make that claim, and is the part a terminal wants.
+            The phase survives as the hover, where it explains the clock instead
+            of arguing with the page. */}
         <span
-          className="hidden xl:flex items-center gap-2 font-mono text-caption text-textSecondary tnum select-none leading-4"
+          className="hidden xl:flex items-center gap-1.5 font-mono text-caption text-textSecondary tnum select-none leading-4"
           title={`New York time — market ${clock.label.toLowerCase()}`}
         >
           <span>{clock.time}</span>
           <span className="text-micro uppercase tracking-wider text-textMuted">ET</span>
-          <span
-            className={`text-micro uppercase tracking-wider ${clock.phase === 'open' ? 'text-textSecondary' : 'text-textMuted'}`}
-          >
-            {clock.label}
-          </span>
         </span>
       </div>
 
