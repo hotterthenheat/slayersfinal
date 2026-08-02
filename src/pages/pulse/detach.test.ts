@@ -432,6 +432,23 @@ describe('tile — shrink one panel, the others take the space', () => {
     expect(settled.find(g => g.i === 'solo')!.w).not.toBe(5);
   });
 
+  it('repairs a row of one-unit panels saved by the previous shipped build', () => {
+    // That build allowed a one-unit floor, so a saved row of (x=0,w=1) and
+    // (x=1,w=11) is real user data. Clamping the first to two widens it
+    // straight into the second — a clamp is not a repair on its own.
+    const clamped = [
+      { i: 'a', x: 0, y: 0, w: 2, h: 2 }, // was w:1, widened by the floor
+      { i: 'b', x: 1, y: 0, w: 11, h: 2 },
+    ];
+    const out = tile(clamped);
+    expect(overlapCount(out)).toBe(0);
+    expect(deadSpace(out)).toBe(0);
+    for (const g of out) {
+      expect(g.w).toBeGreaterThanOrEqual(MIN_UNITS.w);
+      expect(g.x + g.w).toBeLessThanOrEqual(GRID.cols);
+    }
+  });
+
   it('handles an empty desk', () => {
     expect(tile([])).toEqual([]);
   });

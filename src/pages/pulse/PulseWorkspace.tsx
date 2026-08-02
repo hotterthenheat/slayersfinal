@@ -122,24 +122,21 @@ function buildCtx(snapshot: MarketSnapshot, revision: number, focusPrice: number
  * registry on every load and clamp anything already under it.
  */
 function hydrateLayout(l: PulseLayout): PulseLayout {
-  return {
-    ...l,
-    layout: l.layout.map(g => ({
-      ...g,
-      // Nothing is clamped. This used to read every widget's registered floor
-      // and raise `w` and `h` to it on EVERY load, which is why a panel could
-      // be dragged narrower and then silently sprang back the next time the
-      // desk opened, and why a row of panels could never be made to sum to 12:
-      // there was always a strip of canvas on the right that no combination of
-      // sizes could reach. The registry still says how big a panel is born;
-      // what it grows or shrinks to afterwards is the user's business.
-      minW: MIN_UNITS.w,
-      minH: MIN_UNITS.h,
-      w: Math.min(GRID_COLS, Math.max(MIN_UNITS.w, g.w)),
-      h: Math.max(MIN_UNITS.h, g.h),
-    })),
-  };
+  let clamped = false;
+  const layout = l.layout.map(g => {
+    const w = Math.min(GRID_COLS, Math.max(MIN_UNITS.w, g.w));
+    const h = Math.max(MIN_UNITS.h, g.h);
+    if (w !== g.w || h !== g.h) clamped = true;
+    return { ...g, minW: MIN_UNITS.w, minH: MIN_UNITS.h, w, h };
+  });
+  // Clamping a width without moving its neighbours produces OVERLAP, not a
+  // repair. The shipped build before this one allowed one-unit panels, so a
+  // saved row of (x=0,w=1) and (x=1,w=11) widens the first panel straight into
+  // the second. Re-tile when — and only when — something actually had to be
+  // clamped, so a desk already inside the floor (every preset) is untouched.
+  return { ...l, layout: clamped ? tile(layout, { noGrow: l.panels.filter(p => p.minimized).map(p => p.id) }) : layout };
 }
+
 
 const hydratedPreset = (p: PulseLayout): PulseLayout => hydrateLayout(clonePreset(p));
 
@@ -460,15 +457,46 @@ const PanelChrome = ({
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  // Thresholds are the measured cost of each group: ~26px a button, plus the
-  // grip and a readable stub of title.
-  const showQuote = room >= 420;
-  const showSecondary = room >= 300; // duplicate + minimize
-  const showPlacement = room >= 210; // detach + pop out
   // A detached panel has its own drag strip and a popped-out one has the OS
   // window's title bar, so neither takes the grid's drag handle.
   const draggable = !maximizedView && placement === 'docked' && h.editLayout;
   const title = def?.title ?? panelKey;
+
+  /**
+   * Spend the measured width on controls in priority order.
+   *
+   * Fixed thresholds were wrong because the header renders a DIFFERENT set
+   * depending on mode: locked shows three controls, Customize shows eight. A
+   * single `room >= 210` therefore hid Detach and Pop out on a narrow LOCKED
+   * panel — where the user cannot widen it, cannot reach them by maximizing,
+   * and has no overflow menu. That is a dead end, and it was mine.
+   *
+   * Budgeting fixes it without raising the floor: locked panels have the room
+   * for placement because they are not paying for a grip, duplicate, minimize
+   * and close. In Customize the same panel does drop them, which is fine —
+   * there the user can simply make the panel wider.
+   */
+  const BTN = 26;
+  const closable = draggable || placement === 'detached';
+  let budget =
+    room -
+    (draggable ? 22 : 0) - // keyboard grip
+    24 - // a stub of title; it truncates, and placement matters more than letters
+    ((placement !== 'popped' && !maximizedView ? 1 : 0) + (closable ? 1 : 0) + (placement === 'popped' ? 1 : 0)) * BTN;
+  const afford = (cost: number) => {
+    if (budget < cost) return false;
+    budget -= cost;
+    return true;
+  };
+  // Priority order: getting the panel somewhere else beats editing the desk,
+  // which beats the ticker, which beats the quote.
+  // Short-circuit so a group that will not RENDER does not SPEND. Costing
+  // duplicate+minimize on a locked desk, where they never appear, silently
+  // priced Detach and Pop out out of the header.
+  const showPlacement = !maximizedView && placement !== 'popped' && afford(2 * BTN);
+  const showSecondary = draggable && afford(2 * BTN);
+  const showTicker = afford(34);
+  const showQuote = afford(96);
   const up = (changePct ?? 0) >= 0;
   return (
     <div ref={headRef} className={`${draggable ? 'widget-drag cursor-grab active:cursor-grabbing' : ''} flex items-center gap-2 px-3.5 h-10 border-b border-borderSubtle bg-white/[0.015] shrink-0 select-none overflow-hidden`}>
@@ -512,7 +540,7 @@ const PanelChrome = ({
       <h2 className="font-mono text-label font-semibold uppercase tracking-widest text-textPrimary truncate">
         {def?.title ?? panelKey}
       </h2>
-      {showPlacement && <PanelTicker value={ticker} onChange={t => h.onTicker(panelId, t)} />}
+      {showTicker && <PanelTicker value={ticker} onChange={t => h.onTicker(panelId, t)} />}
       {showQuote && price != null && Number.isFinite(price) && (
         <span className="hidden md:flex items-baseline gap-1.5 font-mono tnum whitespace-nowrap" onMouseDown={e => e.stopPropagation()}>
           <span className="text-caption text-textPrimary">${price.toFixed(2)}</span>
@@ -1652,6 +1680,14 @@ const PulseWorkspace = () => {
               // immediately overwritten. Measured — the neighbour never moved.
               onResizeStart={(_l, item) => (touched.current = item.i)}
               onDragStart={(_l, item) => (touched.current = item.i)}
+              // A press-and-release that moves nothing gives RGL no layout to
+              // report, so `onLayoutChange` never runs and never clears the ref.
+              // The next unrelated change — adding a panel, minimizing one —
+              // would then be treated as that stale gesture and tile while
+              // holding the wrong panel. RGL calls stop BEFORE onLayoutChange,
+              // so the clear is queued behind it rather than done inline.
+              onResizeStop={() => queueMicrotask(() => (touched.current = null))}
+              onDragStop={() => queueMicrotask(() => (touched.current = null))}
             >
               {dockedPanels.map(p => {
                 const ticker = p.ticker ?? activeTicker;
