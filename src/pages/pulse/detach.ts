@@ -350,6 +350,78 @@ export function place(docked: Layout[], at: Layout, opts: TileOptions = {}): Lay
 }
 
 /**
+ * A panel coming HOME, as distinct from one arriving new.
+ *
+ * An arrival should pack in — that is what keeps the desk gapless. A return
+ * should change nothing it does not have to. `place` tiled unconditionally, so
+ * on a desk carrying a deliberate gap (nothing clamps those on load, by design)
+ * detaching a panel and docking it straight back moved it from `x=6,w=6` to
+ * `x=4,w=8`. Measured. The panel was only ever visiting.
+ */
+export function restore(docked: Layout[], at: Layout, opts: TileOptions = {}): Layout[] {
+  const cols = opts.cols ?? GRID.cols;
+  const rest = docked.filter(g => g.i !== at.i);
+  const free = at.x >= 0 && at.x + at.w <= cols && !rest.some(g => collides(g, at));
+  return free ? [...rest, { ...at }] : tile([...rest, { ...at, x: 0, y: floorOf(rest) }], opts);
+}
+
+/** Exchange two panels' boxes, keeping each panel's identity. Always valid:
+    the two rectangles are disjoint, so permuting them cannot overlap. */
+export function swapCells(layout: Layout[], a: string, b: string): Layout[] {
+  const A = layout.find(g => g.i === a);
+  const B = layout.find(g => g.i === b);
+  if (!A || !B) return layout;
+  return layout.map(g => (g.i === a ? { ...B, i: a } : g.i === b ? { ...A, i: b } : { ...g }));
+}
+
+/**
+ * Move a panel one cell with the keyboard, on a desk that has no spare cells.
+ *
+ * This is the arithmetic the mouse never has to do. Once the desk is gapless,
+ * a one-cell move ALWAYS lands on a neighbour, and handing that overlap to
+ * `tile` does not nudge anything — `tile` packs, it does not resolve
+ * collisions. Measured on a plain 6+6: ArrowLeft on the right panel was a
+ * no-op three presses running, and ArrowRight on the left panel swapped the two
+ * panels via the band-reflow fallback. So the keyboard advertised a
+ * rearrangeable desk and delivered nothing, or delivered something nobody
+ * asked for.
+ *
+ * Where there is genuinely free space, slide one cell. Where the next cell is
+ * occupied — the normal case — exchange places with whoever is standing there,
+ * which is what "move it left" means on a tiled desk and is the one answer that
+ * is always available. The caller announces which of the two happened, because
+ * a swap changes the panel's size and silence about that is its own defect.
+ */
+export function stepMove(
+  layout: Layout[],
+  id: string,
+  dx: number,
+  dy: number,
+  opts: TileOptions = {},
+): { layout: Layout[]; swappedWith?: string } {
+  const cols = opts.cols ?? GRID.cols;
+  const g = layout.find(x => x.i === id);
+  if (!g || (!dx && !dy)) return { layout };
+  // The single cell just past the edge being pushed against.
+  const probe: Layout = {
+    i: '',
+    x: dx < 0 ? g.x - 1 : dx > 0 ? g.x + g.w : g.x,
+    y: dy < 0 ? g.y - 1 : dy > 0 ? g.y + g.h : g.y,
+    w: 1,
+    h: 1,
+  };
+  if (probe.x < 0 || probe.x >= cols || probe.y < 0) return { layout };
+  const hit = layout.find(o => o.i !== id && collides(o, probe));
+  if (hit) return { layout: swapCells(layout, id, hit.i), swappedWith: hit.i };
+  const moved = layout.map(o =>
+    o.i === id
+      ? { ...o, x: Math.max(0, Math.min(cols - o.w, o.x + dx)), y: Math.max(0, o.y + dy) }
+      : { ...o },
+  );
+  return { layout: tile(moved, { ...opts, hold: [id] }) };
+}
+
+/**
  * Change one panel's height and keep the desk whole.
  *
  * Minimizing is the easy half — the panel shrinks and `tile` closes the band it

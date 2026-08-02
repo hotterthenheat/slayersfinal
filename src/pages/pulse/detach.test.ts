@@ -13,6 +13,9 @@ import {
   place,
   popoutFeatures,
   resizeHeight,
+  restore,
+  stepMove,
+  swapCells,
   screenIndexOf,
   tile,
 } from './detach';
@@ -769,5 +772,137 @@ describe('resizeHeight', () => {
   it('leaves a layout alone when the id is not on it', () => {
     const desk = [cell('a', 0, 0, 12, 6)];
     expect(resizeHeight(desk, 'ghost', 12)).toEqual(desk);
+  });
+});
+
+/**
+ * Keyboard movement, and the difference between a panel arriving and a panel
+ * coming home. Both went in after a browser reproduction: on a plain 6+6 desk
+ * ArrowLeft on the right panel was a no-op three presses running and ArrowRight
+ * on the left panel swapped both panels, while a detach/dock round trip on a
+ * desk with a deliberate gap moved the returning panel from x=6,w=6 to x=4,w=8.
+ */
+describe('restore', () => {
+  const cell = (i: string, x: number, y: number, w: number, h: number) =>
+    ({ i, x, y, w, h, minW: MIN_UNITS.w, minH: MIN_UNITS.h });
+
+  it('gives a gapped desk back exactly as it was', () => {
+    const staying = [cell('a', 0, 0, 4, 12)];
+    const back = cell('b', 6, 0, 6, 12);
+    const out = restore(staying, back);
+    expect(out.find(g => g.i === 'a')).toMatchObject({ x: 0, w: 4 });
+    expect(out.find(g => g.i === 'b')).toMatchObject({ x: 6, w: 6 });
+    // The hole the user left is still theirs. `place` would have packed it out.
+    expect(deadSpace(out)).toBeGreaterThan(0);
+  });
+
+  it('still relocates when the cell was taken while the panel was away', () => {
+    const out = restore([cell('a', 0, 0, 12, 12)], cell('b', 6, 0, 6, 12));
+    expect(overlapCount(out)).toBe(0);
+    expect(out.find(g => g.i === 'b')!.y).toBeGreaterThan(0);
+  });
+
+  it('refuses a cell that runs off the grid', () => {
+    const out = restore([cell('a', 0, 0, 4, 6)], cell('b', 8, 0, 8, 6));
+    expect(out.every(g => g.x + g.w <= GRID.cols)).toBe(true);
+    expect(overlapCount(out)).toBe(0);
+  });
+
+  it('never duplicates a panel already on the desk', () => {
+    const out = restore([cell('a', 0, 0, 6, 6), cell('b', 6, 0, 6, 6)], cell('b', 6, 0, 6, 6));
+    expect(out.filter(g => g.i === 'b')).toHaveLength(1);
+  });
+});
+
+describe('swapCells', () => {
+  const cell = (i: string, x: number, y: number, w: number, h: number) =>
+    ({ i, x, y, w, h, minW: MIN_UNITS.w, minH: MIN_UNITS.h });
+
+  it('exchanges two boxes without overlapping, whatever their sizes', () => {
+    const desk = [cell('a', 0, 0, 4, 12), cell('b', 4, 0, 8, 6), cell('c', 4, 6, 8, 6)];
+    const out = swapCells(desk, 'a', 'c');
+    expect(overlapCount(out)).toBe(0);
+    expect(deadSpace(out)).toBeCloseTo(deadSpace(desk), 9);
+    expect(out.find(g => g.i === 'a')).toMatchObject({ x: 4, y: 6, w: 8, h: 6 });
+    expect(out.find(g => g.i === 'c')).toMatchObject({ x: 0, y: 0, w: 4, h: 12 });
+  });
+
+  it('leaves the layout alone when an id is missing', () => {
+    const desk = [cell('a', 0, 0, 12, 6)];
+    expect(swapCells(desk, 'a', 'ghost')).toEqual(desk);
+  });
+});
+
+describe('stepMove', () => {
+  const cell = (i: string, x: number, y: number, w: number, h: number) =>
+    ({ i, x, y, w, h, minW: MIN_UNITS.w, minH: MIN_UNITS.h });
+  const row = () => [cell('a', 0, 0, 6, 12), cell('b', 6, 0, 6, 12)];
+
+  it('moves left into an occupied cell by exchanging places', () => {
+    const { layout, swappedWith } = stepMove(row(), 'b', -1, 0);
+    expect(swappedWith).toBe('a');
+    expect(layout.find(g => g.i === 'b')).toMatchObject({ x: 0, w: 6 });
+    expect(layout.find(g => g.i === 'a')).toMatchObject({ x: 6, w: 6 });
+    expect(overlapCount(layout)).toBe(0);
+    expect(deadSpace(layout)).toBeCloseTo(0, 9);
+  });
+
+  it('is its own inverse on a two-panel row', () => {
+    const start = row();
+    const once = stepMove(start, 'b', -1, 0).layout;
+    const back = stepMove(once, 'b', 1, 0).layout;
+    const key = (l: { i: string; x: number; y: number; w: number; h: number }[]) =>
+      l.map(g => `${g.i}:${g.x},${g.y},${g.w},${g.h}`).sort().join('|');
+    expect(key(back)).toBe(key(start));
+  });
+
+  it('does nothing at the west edge rather than pretending', () => {
+    const start = row();
+    const { layout, swappedWith } = stepMove(start, 'a', -1, 0);
+    expect(swappedWith).toBeUndefined();
+    expect(layout).toEqual(start);
+  });
+
+  it('swaps vertically too', () => {
+    const stack = [cell('a', 0, 0, 12, 6), cell('b', 0, 6, 12, 6)];
+    const { layout, swappedWith } = stepMove(stack, 'b', 0, -1);
+    expect(swappedWith).toBe('a');
+    expect(layout.find(g => g.i === 'b')!.y).toBe(0);
+    expect(overlapCount(layout)).toBe(0);
+  });
+
+  it('slides into genuinely free space instead of swapping', () => {
+    // A lone panel with the rest of the grid empty beside it.
+    const { layout, swappedWith } = stepMove([cell('a', 0, 0, 4, 6)], 'a', 1, 0);
+    expect(swappedWith).toBeUndefined();
+    expect(overlapCount(layout)).toBe(0);
+  });
+
+  it('never overlaps or overflows, from every panel in every direction', () => {
+    const desks = [
+      row(),
+      [cell('a', 0, 0, 4, 12), cell('b', 4, 0, 4, 12), cell('c', 8, 0, 4, 12)],
+      [cell('a', 0, 0, 6, 6), cell('b', 6, 0, 6, 6), cell('c', 0, 6, 12, 6)],
+      [cell('a', 0, 0, 3, 8), cell('b', 3, 0, 9, 4), cell('c', 3, 4, 9, 4), cell('d', 0, 8, 12, 4)],
+    ];
+    for (const desk of desks) {
+      const before = deadSpace(desk);
+      for (const g of desk) {
+        for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+          const { layout } = stepMove(desk.map(c => ({ ...c })), g.i, dx, dy);
+          expect(overlapCount(layout)).toBe(0);
+          expect(layout.every(c => c.x >= 0 && c.x + c.w <= GRID.cols)).toBe(true);
+          expect(layout).toHaveLength(desk.length);
+          // A move must never introduce dead space that was not already there.
+          expect(deadSpace(layout)).toBeLessThanOrEqual(before + 1e-9);
+        }
+      }
+    }
+  });
+
+  it('leaves the desk alone for an unknown id or a zero step', () => {
+    const start = row();
+    expect(stepMove(start, 'ghost', -1, 0).layout).toEqual(start);
+    expect(stepMove(start, 'a', 0, 0).layout).toEqual(start);
   });
 });

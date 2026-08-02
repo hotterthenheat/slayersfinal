@@ -71,6 +71,8 @@ import {
   migrateWorkspace,
   place,
   resizeHeight,
+  restore,
+  stepMove,
   screenIndexOf,
   tile,
 } from './detach';
@@ -1048,7 +1050,7 @@ const PulseWorkspace = () => {
       // full-width rows — gapless, non-overlapping, and not the desk the user
       // had. That is a change nothing asked for.
       const settled = returning
-        ? place(staying, returning, { noGrow: noGrowIds(panels) })
+        ? restore(staying, returning, { noGrow: noGrowIds(panels) })
         : tile(staying, { noGrow: noGrowIds(panels) });
       return { ...l, panels, layout: mergeLayout(settled, l.layout, away) };
     });
@@ -1126,6 +1128,11 @@ const PulseWorkspace = () => {
       next.delete(id);
       return next;
     });
+    // Only a panel that is popped out ON THIS DESK can be coming home. Saved
+    // and duplicated layouts reuse panel ids, so a callback arriving after a
+    // desk switch could otherwise reconcile a layout that merely shares the id
+    // with the window's real owner.
+    if (!active.panels.some(p => p.id === id && p.popout)) return;
     returnToGrid(id);
   };
 
@@ -1144,36 +1151,51 @@ const PulseWorkspace = () => {
     // The keyboard path gets exactly the freedom the mouse has. It used to read
     // the registry floor, so Shift+Arrow stopped shrinking a panel at a size the
     // mouse is now allowed past — two different limits for the same gesture.
-    const away = active.panels.filter(p => p.detached || p.popout).map(p => p.id);
+    const away = awayIds(active);
     const awaySet = new Set(away);
-    const moved = active.layout
-      .filter(g => !awaySet.has(g.i))
-      .map(g => {
-        if (g.i !== id) return g;
-        const w = Math.max(MIN_UNITS.w, Math.min(GRID_COLS, g.w + dw));
-        const h = Math.max(MIN_UNITS.h, g.h + dh);
-        return {
-          ...g,
-          w,
-          h,
-          x: Math.max(0, Math.min(GRID_COLS - w, g.x + dx)),
-          y: Math.max(0, g.y + dy),
-        };
-      });
+    const docked = active.layout.filter(g => !awaySet.has(g.i));
+    const opts = { noGrow: noGrowIds(active.panels) };
 
-    // Tile the keyboard path too. It wrote straight to the layout and never went
-    // near `tile`, so Shift+Arrow left exactly the dead bands a mouse drag now
-    // removes automatically.
-    const settled = tile(moved, { hold: [id], noGrow: active.panels.filter(p => p.minimized).map(p => p.id) });
+    // Move and resize are different problems and used to share one path.
+    //
+    // A RESIZE has an anchor: `hold` keeps the edge the user pulled where they
+    // put it and the neighbours absorb the rest, exactly as a mouse drag does.
+    // A MOVE on a gapless desk has no free cell to move into, so the same code
+    // handed `tile` an overlap — which it packs rather than resolves. The
+    // measured result on a plain 6+6 was a no-op in one direction and a
+    // two-panel swap in the other. `stepMove` does the collision arithmetic.
+    let settled: Layout[];
+    let swapped: string | undefined;
+    if (dw || dh) {
+      settled = tile(
+        docked.map(g => {
+          if (g.i !== id) return g;
+          const w = Math.max(MIN_UNITS.w, Math.min(GRID_COLS, g.w + dw));
+          const h = Math.max(MIN_UNITS.h, g.h + dh);
+          return { ...g, w, h, x: Math.min(g.x, GRID_COLS - w) };
+        }),
+        { ...opts, hold: [id] },
+      );
+    } else {
+      const step = stepMove(docked, id, dx, dy, opts);
+      settled = step.layout;
+      swapped = step.swappedWith;
+    }
     mutate(l => ({ ...l, layout: mergeLayout(settled, l.layout, away) }));
 
     // Announce the SETTLED geometry, not the requested one. Reading it off the
     // pre-tile box told a screen-reader user "4 by 12" while tiling immediately
     // grew that panel back to 12 columns, because a panel alone in its row has
     // no neighbour to give the space to. A number that never reaches the screen
-    // is worse than silence.
+    // is worse than silence — and a swap resizes the panel, so saying only
+    // where it went would be the same defect one step along.
     const g = settled.find(x => x.i === id);
     if (!g) return '';
+    if (swapped) {
+      const other = active.panels.find(p => p.id === swapped);
+      const name = (other && pulsePanelByKey(other.key)?.title) ?? 'panel';
+      return `swapped with ${name}, now column ${g.x + 1}, row ${g.y + 1}, ${g.w} by ${g.h}`;
+    }
     return dw || dh ? `${g.w} by ${g.h}` : `column ${g.x + 1}, row ${g.y + 1}`;
   };
 
@@ -1323,6 +1345,17 @@ const PulseWorkspace = () => {
       popWins.forEach(w => {
         if (!w.closed) w.close();
       });
+      // And forget them. Closing without clearing left dead windows in the map,
+      // so switching BACK to this desk remounted PopoutPanel against one — and
+      // its "already closed" guard fires on mount, which docked the panel.
+      // Measured: pop a panel out, switch desks, switch back, and the panel had
+      // quietly left the second monitor and rearranged the desk to fit,
+      // 6 columns at row 0 becoming 12 columns at row 12.
+      //
+      // The `popout` box stays on the panel, so the Windows menu still offers
+      // to reopen it — the same route a page reload already takes, since a
+      // browser will not open a window without a click.
+      setPopWins(m => (m.size ? new Map() : m));
     };
     // Intentionally keyed on the layout id alone: this is a teardown for
     // "the active desk changed", not for "the window map changed".

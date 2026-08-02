@@ -5,7 +5,7 @@ to be checked, not to be believed: every "done" below names the file or the
 measurement behind it, and everything unverified says so.
 
 Last updated after the layout-mutation sweep. Gate: `tsc --noEmit`, `eslint .`,
-**761 tests** (up from 31 at the start of this work), `vite build` — all green,
+**774 tests** (up from 31 at the start of this work), `vite build` — all green,
 and green on **121 consecutive dates**, which is a claim this document could not
 previously make.
 
@@ -140,6 +140,28 @@ every width while locked, and it opens the ticker editor. Reserving the ticker's
 34px instead would have pushed out Detach or Pop out at 151px — reintroducing
 the dead end fixed two rounds earlier, and that one has no alternative route,
 because maximizing hides the placement controls.
+
+Two rounds later the same shape again, one layer out. Keyboard movement was
+**broken by the gapless invariant itself**: once the desk has no spare cells, a
+one-cell arrow move always lands on a neighbour, and `tile` packs rather than
+resolves collisions. Measured on a plain 6+6 — ArrowLeft on the right panel was
+a no-op three presses running, and ArrowRight on the left panel swapped both
+panels through the band-reflow fallback. `stepMove` now does the collision
+arithmetic: slide where there is genuinely free space, exchange places where
+there is not, and say which of the two happened, because a swap resizes the
+panel and announcing only the position would be the same defect one step along.
+
+`place` also tiled unconditionally, so a desk carrying a deliberate gap had its
+returning panel moved from `x=6,w=6` to `x=4,w=8` by a detach/dock round trip.
+Arrivals pack in; returns now go through `restore`, which changes nothing it
+does not have to.
+
+And popping a panel out, switching desks and switching back **silently docked
+it** — `popWins` kept the closed window, so remounting `PopoutPanel` hit its
+"already closed" guard and returned the panel. 6 columns at row 0 became 12
+columns at row 12. The reported mechanism for this one was wrong (the pagehide
+listener is unregistered before the programmatic close, so it never fires) but
+the conclusion was right.
 
 **One thing the sweep found that no review had:** popping a panel out to another
 monitor left its cell reserved on the desk it came from — **50.4% of the screen

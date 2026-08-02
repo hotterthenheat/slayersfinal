@@ -10,7 +10,7 @@
 ==================================================
 */
 
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useLaunch } from './LaunchTransition';
 
 const LEGAL_LINKS = [
@@ -59,10 +59,27 @@ const FOOTER_COLS = [
   { title: 'Legal', links: LEGAL_LINKS },
 ];
 
-/** Anchor / route / mailto — one link component so columns stay declarative.
-    Links into the terminal play the launch gate instead of jumping. */
+/**
+ * Anchor / route / mailto — one link component so columns stay declarative.
+ * Links into the terminal play the launch gate instead of jumping.
+ *
+ * A BARE hash is the interesting case. `#pricing` and `#faq` are sections of
+ * the landing page, and this footer used to appear only there, so a raw anchor
+ * was right. Now that every route carries it, `#pricing` clicked from
+ * `/compass` resolves to `/compass#pricing` — a section that does not exist,
+ * and measurably nothing happens. Off the landing page the hash has to carry
+ * its route with it.
+ */
 const SmartLink = ({ to, className, children }: { to: string; className: string; children: React.ReactNode }) => {
   const { launch } = useLaunch();
+  const { pathname } = useLocation();
+  if (to.startsWith('#') && pathname !== '/') {
+    return (
+      <Link to={{ pathname: '/', hash: to }} className={className}>
+        {children}
+      </Link>
+    );
+  }
   if (to === '/terminal') {
     return (
       <a
