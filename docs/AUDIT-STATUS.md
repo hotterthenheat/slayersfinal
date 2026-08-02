@@ -4,8 +4,8 @@ Status of the 59-item audit written while clicking through the product. Written
 to be checked, not to be believed: every "done" below names the file or the
 measurement behind it, and everything unverified says so.
 
-Last updated at commit `25ce0eb`. Gate there: `tsc --noEmit`, `eslint .`,
-**690 tests** (up from 31 at the start of this work), `vite build` — all green,
+Last updated after the layout-mutation sweep. Gate: `tsc --noEmit`, `eslint .`,
+**761 tests** (up from 31 at the start of this work), `vite build` — all green,
 and green on **121 consecutive dates**, which is a claim this document could not
 previously make.
 
@@ -100,6 +100,47 @@ freezing the clock, which would have made the suite reproducible *and blind*.
 
 ---
 
+## The layout-mutation sweep
+
+Four review rounds in a row landed a finding in a path *adjacent* to the one
+just fixed, never the one under review. So the last round stopped waiting for
+the reviewer and swept the class directly: **every path that mutates the Pulse
+layout without going through `tile`**. A browser drove each one and read the
+saved cells back out of `localStorage` after the click.
+
+Six of seven were leaving the desk broken, and none of them was red anywhere.
+
+| Path | Measured |
+|---|---|
+| Add panel | **14.7% empty.** The new panel took the width its widget asked for and nothing grew to meet it. Its height was the widget's too, so a panel landing beside a short neighbour reached straight through whatever stood underneath |
+| Duplicate | **8.0% empty** — the copy was appended at `y: Infinity` with the source's width |
+| Minimize | **9.8% empty.** The ten rows the panel gave up just stood there |
+| Re-open | Grew the panel back *through* its downstairs neighbour. An overlapping layout sends `tile` to the band reflow, which rebuilds the arrangement the user made |
+| Close | **10.3% empty**, a panel-shaped hole |
+| Fit / Arrange with a panel on a second monitor | **16.7% empty.** Both laid out a band for a panel that is not on this screen |
+| Detach → dock, nothing in between | Not empty, not overlapping, and **not the desk the user had**: a 6+6 row came home as two stacked full-width rows. Found by the reviewer, not by me — my own probe asserted "gapless and non-overlapping", which this satisfies. The assertion was weaker than the contract |
+
+Every arrival now goes through one function, `place`, which honours the
+requested cell when it is genuinely free and otherwise drops the panel below the
+desk for the up-pack to lift in. Height changes go through `resizeHeight`, which
+pushes the desk down *before* growing a panel so `tile` is never handed an
+overlap. 10 new tests in `detach.test.ts`; all seven paths re-measured at 0.0%.
+
+**One thing the sweep found that no review had:** popping a panel out to another
+monitor left its cell reserved on the desk it came from — **50.4% of the screen
+showing nothing** with one of two panels out. Detaching and popping out look
+like the same move and are not. A detached panel floats over the desk in the
+cell it left, so reserving it costs nothing and is what makes docking straight
+back a no-op; a popped-out panel is on another monitor and that cell is just a
+hole. Detach reserves, pop-out packs.
+
+Also closed here: the control that re-opens a collapsed panel was labelled
+**"Minimize"**, the same as the one that collapsed it. Same defect class as the
+keyboard announcement — a label describing something other than what the code
+does.
+
+---
+
 ## Verified stale — reported open, found already fixed
 
 Kept because the previous revision of this file asserted all four as
@@ -135,6 +176,9 @@ nearly "fixed" into a regression.
 - **`simulator.ts` must never import `scanUniverse.ts`.** It reads the other way. The cycle surfaces as `undefined` at module init, not as a type error. I created it once.
 - **Routing failures here are silent.** The catch-all sends unmatched URLs to a real page and a wrong `?view=` falls back to the first pane, so a broken link renders as a working one. Follow redirects; do not read the route table.
 - **Renaming a storage key silently wipes saved layouts and views**, and nothing catches it. The Pulse key is frozen at `slayer_pulse_workspace_v1` on purpose and the schema version rides *inside* the payload. Bump `WORKSPACE_VERSION` and add a step to `migrateWorkspace` in `pulse/detach.ts`; never bump it alone, because `loadState` hands back a fresh workspace on any mismatch and that is a silent delete of every desk the user built.
+- **Every arrival on the Pulse desk goes through `place`, and every height change through `resizeHeight`.** Both live in `pulse/detach.ts`. Writing a cell straight into `layout` is what broke add, duplicate, close, minimize and re-open, each independently, each silently. If you add a sixth way for a panel to appear, route it through `place` — do not append to the array.
+- **Detaching and popping out are not the same move.** A detached panel floats over the desk in the cell it left, so that cell stays reserved and docking straight back is a no-op. A popped-out panel is on another monitor and its cell is a hole, so the desk packs and coming home relocates. Measured: 50.4% of the desk empty when the reserved-cell rule was applied to both.
+- **"Gapless and non-overlapping" is weaker than "unchanged".** A probe asserting only the first passed a detach/dock round trip that turned a 6+6 row into two stacked full-width rows. If the contract is that an operation is a no-op, assert the geometry, not its properties.
 - **Pulse panel sizes have no floor, deliberately.** The registry's `minW`/`minH` are the size a widget is *born* at and what the one-press arrange modes aim for — they are not a resize limit. Enforcing them meant a row could never be made to sum to 12, so there was always a strip of canvas nothing could reach. If you reintroduce a clamp in `hydrateLayout`, you reintroduce that.
 - **Pulse row units are half what the comments assume.** `rowHeight` is 26 and presets are still authored in the old coarse unit; the `L()` helper doubles `y` and `h` on the way out. 12 fine rows and 6 coarse rows are the same 444px — that only works because the row height is 26 and not 32.
 - **Case-only filename collisions are invisible to CI.** The container and CI both run Linux. Two of these reached the user's macOS dev server instead of a test. Check before merging directories.

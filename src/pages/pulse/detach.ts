@@ -194,6 +194,13 @@ export function mergeLayout(reported: Layout[], saved: Layout[], awayIds: readon
 const spansRow = (a: Layout, b: Layout) => a.y < b.y + b.h && b.y < a.y + a.h;
 const spansCol = (a: Layout, b: Layout) => a.x < b.x + b.w && b.x < a.x + a.w;
 
+/** Two cells sharing at least one grid square. */
+export const collides = (a: Layout, b: Layout) => spansRow(a, b) && spansCol(a, b);
+
+/** The first row below every panel — where a new or returning panel can always
+    stand without landing on anything. */
+export const floorOf = (layout: readonly Layout[]) => layout.reduce((m, g) => Math.max(m, g.y + g.h), 0);
+
 /** Grow every panel right, then down, into space nothing else claims. `may`
     decides which panels take part in this pass. */
 function grow(out: Layout[], may: (g: Layout) => boolean, cols: number): void {
@@ -317,6 +324,51 @@ export function tile(layout: Layout[], opts: TileOptions | readonly string[] = {
     return reflowBands(out, cols, noGrow);
   }
   return out;
+}
+
+/**
+ * Land a panel on the desk and close whatever gaps that leaves.
+ *
+ * Every arrival takes this path — a brand-new panel, a duplicate, an undone
+ * close, a panel coming home from another monitor — because each of them was
+ * getting its own idea of where a panel goes and each idea was wrong somewhere.
+ * Adding a panel left a 14.7% hole, duplicating left 8%, and docking moved a
+ * side-by-side pair into two stacked rows it had no reason to touch.
+ *
+ * `at` is a REQUEST, not an instruction. Honour it exactly when the cell is
+ * genuinely free, which is what makes a detach/dock round trip with nothing in
+ * between a no-op. Otherwise drop the panel below the desk and let the up-pack
+ * lift it into the space that actually exists — landing it on an occupied cell
+ * instead trips the band reflow, which is correct but brutal: a chart came back
+ * 244px wide, shredded into a six-panel row.
+ */
+export function place(docked: Layout[], at: Layout, opts: TileOptions = {}): Layout[] {
+  const cols = opts.cols ?? GRID.cols;
+  const fits = at.x >= 0 && at.x + at.w <= cols && !docked.some(g => g.i !== at.i && collides(g, at));
+  const landed = fits ? at : { ...at, x: 0, y: floorOf(docked) };
+  return tile([...docked.filter(g => g.i !== at.i), landed], opts);
+}
+
+/**
+ * Change one panel's height and keep the desk whole.
+ *
+ * Minimizing is the easy half — the panel shrinks and `tile` closes the band it
+ * vacated. Restoring is the half that was broken: writing the taller box back
+ * grows it straight through its downstairs neighbour, and an overlapping layout
+ * sends `tile` to the band reflow, which rebuilds the desk the user arranged.
+ * Push everything below the panel's old bottom down by the growth first, so the
+ * layout handed to `tile` never overlaps and the up-pack pulls the desk snug
+ * again.
+ */
+export function resizeHeight(layout: Layout[], id: string, h: number, opts: TileOptions = {}): Layout[] {
+  const target = layout.find(g => g.i === id);
+  if (!target) return layout;
+  const delta = h - target.h;
+  const oldBottom = target.y + target.h;
+  const next = layout.map(g =>
+    g.i === id ? { ...g, h } : delta > 0 && g.y >= oldBottom ? { ...g, y: g.y + delta } : { ...g },
+  );
+  return tile(next, opts);
 }
 
 /** Any two boxes sharing a cell. Cheap at desk sizes (tens of panels). */

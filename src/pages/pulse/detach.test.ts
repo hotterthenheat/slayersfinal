@@ -10,7 +10,9 @@ import {
   deadSpace,
   mergeLayout,
   migrateWorkspace,
+  place,
   popoutFeatures,
+  resizeHeight,
   screenIndexOf,
   tile,
 } from './detach';
@@ -654,5 +656,118 @@ describe('migrateWorkspace', () => {
     expect(out.layouts[0].panels[0].detached).toEqual({ x: 40, y: 60, w: 700, h: 500 });
     // The negative left survives serialisation — that is the second monitor.
     expect(out.layouts[0].panels[1].popout!.left).toBe(-1920);
+  });
+});
+
+/**
+ * Every way a panel arrives on the desk, and every way one changes height.
+ *
+ * These went in after a browser sweep of the paths that mutate the layout
+ * WITHOUT going through `tile`. All five were leaving the desk gapped: adding a
+ * panel 14.7% empty, duplicating 8%, minimizing 9.8%, closing 10.3%, and one
+ * press of Fit with a panel on a second monitor 16.7%. The numbers are measured,
+ * not estimated — the probe read them out of localStorage after each click.
+ */
+describe('place', () => {
+  const cell = (i: string, x: number, y: number, w: number, h: number) =>
+    ({ i, x, y, w, h, minW: MIN_UNITS.w, minH: MIN_UNITS.h });
+
+  it('honours a free cell exactly, so a detach/dock round trip is a no-op', () => {
+    // The desk the review named: 6 + 6, detach the right one, dock it straight
+    // back. It used to come home as two stacked full-width rows.
+    const staying = [cell('a', 0, 0, 6, 12)];
+    const back = cell('b', 6, 0, 6, 12);
+    expect(place(staying, back)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ i: 'a', x: 0, y: 0, w: 6, h: 12 }),
+      expect.objectContaining({ i: 'b', x: 6, y: 0, w: 6, h: 12 }),
+    ]));
+  });
+
+  it('relocates when a neighbour has taken the saved cell', () => {
+    // Same desk, but the panel that stayed grew into the space while it was
+    // away. Dropping the returning panel on top would overlap.
+    const staying = [cell('a', 0, 0, 12, 12)];
+    const out = place(staying, cell('b', 6, 0, 6, 12));
+    expect(overlapCount(out)).toBe(0);
+    expect(deadSpace(out)).toBeCloseTo(0, 9);
+    expect(out.find(g => g.i === 'b')!.y).toBeGreaterThan(0);
+  });
+
+  it('leaves no dead space when a panel arrives beside a short one', () => {
+    const out = place([cell('a', 0, 0, 6, 4)], cell('new', 6, 0, 4, 4));
+    expect(overlapCount(out)).toBe(0);
+    expect(deadSpace(out)).toBeCloseTo(0, 9);
+  });
+
+  it('refuses a cell that runs off the right edge', () => {
+    const out = place([cell('a', 0, 0, 6, 6)], cell('b', 8, 0, 8, 6));
+    expect(out.every(g => g.x + g.w <= GRID.cols)).toBe(true);
+    expect(overlapCount(out)).toBe(0);
+  });
+
+  it('is gapless for every arrival position on a three-panel desk', () => {
+    const desk = [cell('a', 0, 0, 6, 6), cell('b', 6, 0, 6, 6), cell('c', 0, 6, 12, 6)];
+    for (let x = 0; x <= 8; x++) {
+      for (let y = 0; y <= 12; y += 2) {
+        const out = place(desk, cell('new', x, y, 4, 4));
+        expect(overlapCount(out)).toBe(0);
+        expect(out.every(g => g.x + g.w <= GRID.cols)).toBe(true);
+        expect(deadSpace(out)).toBeCloseTo(0, 9);
+        expect(out).toHaveLength(4);
+      }
+    }
+  });
+
+  it('re-places rather than duplicates a panel already on the desk', () => {
+    const desk = [cell('a', 0, 0, 6, 6), cell('b', 6, 0, 6, 6)];
+    const out = place(desk, cell('b', 0, 6, 12, 6));
+    expect(out.filter(g => g.i === 'b')).toHaveLength(1);
+    expect(overlapCount(out)).toBe(0);
+  });
+});
+
+describe('resizeHeight', () => {
+  const cell = (i: string, x: number, y: number, w: number, h: number) =>
+    ({ i, x, y, w, h, minW: MIN_UNITS.w, minH: MIN_UNITS.h });
+
+  it('closes the band a collapsing panel gives up', () => {
+    const desk = [cell('a', 0, 0, 12, 12), cell('b', 0, 12, 12, 12)];
+    const out = resizeHeight(desk, 'a', 2, { noGrow: ['a'] });
+    expect(out.find(g => g.i === 'a')!.h).toBe(2);
+    expect(overlapCount(out)).toBe(0);
+    expect(deadSpace(out)).toBeCloseTo(0, 9);
+  });
+
+  it('re-opens through nothing — the desk below moves down, it is not overrun', () => {
+    // The bug: writing h back grew the panel straight through its neighbour,
+    // and an overlapping layout sends `tile` to the band reflow, which rebuilds
+    // the arrangement the user made.
+    const collapsed = [cell('a', 0, 0, 12, 2), cell('b', 0, 2, 6, 12), cell('c', 6, 2, 6, 12)];
+    const out = resizeHeight(collapsed, 'a', 12);
+    expect(overlapCount(out)).toBe(0);
+    expect(deadSpace(out)).toBeCloseTo(0, 9);
+    expect(out.find(g => g.i === 'a')!.h).toBe(12);
+    // b and c are still side by side underneath, not reflowed into bands.
+    const b = out.find(g => g.i === 'b')!;
+    const c = out.find(g => g.i === 'c')!;
+    expect(b.y).toBe(c.y);
+    expect(b.y).toBe(12);
+  });
+
+  it('survives a collapse/re-open round trip at every height', () => {
+    for (let h = MIN_UNITS.h; h <= 16; h++) {
+      const desk = [cell('a', 0, 0, 6, h), cell('b', 6, 0, 6, h), cell('c', 0, h, 12, 6)];
+      const min = resizeHeight(desk, 'a', 2, { noGrow: ['a'] });
+      expect(overlapCount(min)).toBe(0);
+      expect(deadSpace(min)).toBeCloseTo(0, 9);
+      const back = resizeHeight(min, 'a', h);
+      expect(overlapCount(back)).toBe(0);
+      expect(deadSpace(back)).toBeCloseTo(0, 9);
+    }
+  });
+
+  it('leaves a layout alone when the id is not on it', () => {
+    const desk = [cell('a', 0, 0, 12, 6)];
+    expect(resizeHeight(desk, 'ghost', 12)).toEqual(desk);
   });
 });
