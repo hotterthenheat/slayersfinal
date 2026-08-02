@@ -144,11 +144,26 @@ const noGrowIds = (panels: readonly PulsePanel[]) => panels.filter(p => p.minimi
  * registry on every load and clamp anything already under it.
  */
 function hydrateLayout(l: PulseLayout): PulseLayout {
+  const awaySet = new Set(awayIds(l));
+  /**
+   * Whether this desk needs re-flowing at all, which is two questions.
+   *
+   * A DOCKED cell being clamped is a repair — its neighbours have to move or
+   * the clamp overlaps them. An AWAY cell being clamped is not: a legacy
+   * one-unit cell belonging to a panel on another monitor was tripping the
+   * repair for panels that needed none, and a docked (x=0,w=4) beside it grew
+   * to all twelve columns and got saved that way.
+   *
+   * But the desk still packs when a POPPED-OUT panel is holding the gap,
+   * because popping out releases the cell — the same asymmetry the return path
+   * uses. A detached panel is floating over its own cell and keeps it.
+   */
+  const released = l.panels.some(p => p.popout && !p.detached);
   let clamped = false;
   const layout = l.layout.map(g => {
     const w = Math.min(GRID_COLS, Math.max(MIN_UNITS.w, g.w));
     const h = Math.max(MIN_UNITS.h, g.h);
-    if (w !== g.w || h !== g.h) clamped = true;
+    if ((w !== g.w || h !== g.h) && !awaySet.has(g.i)) clamped = true;
     return { ...g, minW: MIN_UNITS.w, minH: MIN_UNITS.h, w, h };
   });
   // Clamping a width without moving its neighbours produces OVERLAP, not a
@@ -156,12 +171,12 @@ function hydrateLayout(l: PulseLayout): PulseLayout {
   // saved row of (x=0,w=1) and (x=1,w=11) widens the first panel straight into
   // the second. Re-tile when — and only when — something actually had to be
   // clamped, so a desk already inside the floor (every preset) is untouched.
-  if (!clamped) return { ...l, layout };
+  if (!clamped && !released) return { ...l, layout };
   // Repair only what the grid will render. This used to re-tile the whole
   // array, so loading a desk with a legacy one-unit panel POPPED OUT laid the
   // docked panels out around a cell belonging to a window on another screen:
   // measured at 50.0% dead, with the one visible chart at half the desk width.
-  const away = awayIds(l);
+  const away = [...awaySet];
   return {
     ...l,
     layout: mergeLayout(

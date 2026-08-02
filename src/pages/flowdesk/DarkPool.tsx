@@ -64,6 +64,56 @@ const SIZE_OPTIONS = [
   { value: '50000000', label: '≥$50M' },
 ] as const;
 
+
+/**
+ * Inline meters.
+ *
+ * The lit tape carries a spread bar, a flow bar and a ratio bar on every row,
+ * and that is most of why it reads as a tape rather than a spreadsheet — the
+ * eye finds the outlier without reading a single number. This page had twelve
+ * columns of plain text and looked half empty at the same information density.
+ */
+const SizeBar = ({ pct }: { pct: number }) => (
+  <span className="inline-flex items-center gap-1.5 w-full justify-end">
+    <span className="relative h-1 w-14 rounded-full bg-inset overflow-hidden shrink-0" aria-hidden="true">
+      <span
+        className="absolute inset-y-0 left-0 rounded-full bg-textMuted/70"
+        style={{ width: `${Math.max(2, Math.min(100, pct))}%` }}
+      />
+    </span>
+  </span>
+);
+
+/** Where the print sits against spot. Centre is spot; the fill runs out to
+    whichever side it printed on, so a column of these reads as a distribution. */
+const VsSpotBar = ({ pct, max }: { pct: number; max: number }) => {
+  const half = Math.max(2, Math.min(50, (Math.abs(pct) / (max || 1)) * 50));
+  const up = pct >= 0;
+  return (
+    <span className="relative inline-block h-1 w-16 rounded-full bg-inset align-middle" aria-hidden="true">
+      <span className="absolute inset-y-0 left-1/2 w-px bg-borderMuted" />
+      <span
+        className={`absolute inset-y-0 ${up ? 'left-1/2' : 'right-1/2'} rounded-full ${up ? 'bg-bull/70' : 'bg-bear/70'}`}
+        style={{ width: `${half}%` }}
+      />
+    </span>
+  );
+};
+
+/** Conviction as a bar rather than a bare percentage — the point of the column
+    is comparing rows, and a number does that worse than a length. */
+const ConvBar = ({ pct }: { pct: number }) => (
+  <span className="inline-flex items-center gap-1.5 justify-end w-full">
+    <span className={`font-mono text-caption tnum leading-4 ${pct < 55 ? 'text-warn' : 'text-textSecondary'}`}>{pct}</span>
+    <span className="relative h-1 w-10 rounded-full bg-inset overflow-hidden shrink-0" aria-hidden="true">
+      <span
+        className={`absolute inset-y-0 left-0 rounded-full ${pct < 55 ? 'bg-warn/70' : 'bg-textMuted/70'}`}
+        style={{ width: `${Math.max(2, Math.min(100, pct))}%` }}
+      />
+    </span>
+  </span>
+);
+
 const roleTone: Record<DarkPoolLevel['role'], Tone> = {
   SUPPORT: 'bull',
   RESISTANCE: 'bear',
@@ -167,16 +217,6 @@ const DarkPool = () => {
 
   const maxNotional = Math.max(...view.levels.map(l => l.notional));
   const selected = view.levels.find(l => l.price === selectedPrice) ?? [...view.levels].sort((a, b) => b.notional - a.notional)[0];
-  const activePrint = view.prints.find(p => p.id === selectedPrint) ?? null;
-  // Which tracked shelf did the selected print land on? Nearest by price — used to
-  // surface that shelf's retest count as evidence behind the inferred read.
-  const activePrintShelf =
-    activePrint && activePrint.atLevel && view.levels.length
-      ? view.levels.reduce((best, l) =>
-          Math.abs(l.price - activePrint.price) < Math.abs(best.price - activePrint.price) ? l : best
-        )
-      : null;
-
   const postureTone: Tone = view.posture === 'ACCUMULATING' ? 'bull' : view.posture === 'DISTRIBUTING' ? 'bear' : 'neutral';
   const PostureIcon = view.posture === 'ACCUMULATING' ? ArrowDownToLine : view.posture === 'DISTRIBUTING' ? ArrowUpFromLine : Scale;
 
@@ -202,6 +242,21 @@ const DarkPool = () => {
       (!q || p.execution.includes(q) || p.intent.includes(q) || p.venue.includes(q) || String(p.price).includes(q)),
   );
 
+  // Resolved from the rows ON SCREEN. Reading it off the full session left the
+  // expanded detail open for a print the active filters had just removed, with
+  // no row left to click to close it.
+  const activePrint = rows.find(p => p.id === selectedPrint) ?? null;
+
+  // Which tracked shelf did the selected print land on? Nearest by price — used to
+  // surface that shelf's retest count as evidence behind the inferred read.
+  const activePrintShelf =
+    activePrint && activePrint.atLevel && view.levels.length
+      ? view.levels.reduce((best, l) =>
+          Math.abs(l.price - activePrint.price) < Math.abs(best.price - activePrint.price) ? l : best
+        )
+      : null;
+
+
   // Counted off the classifier's own output, like the intent tally below it, so
   // the summary line is checkable against the rows rather than asserted over
   // them. Dollars rather than prints: one LIS cross and forty algo slices are
@@ -218,45 +273,26 @@ const DarkPool = () => {
   const sweepUsd = byExec['SWEEP TO DARK']?.usd ?? 0;
   const blockRead = leadExec
     ? `${leadExec[0]} carries the session at ${fmtUsd(leadExec[1].usd)} across ${leadExec[1].n} ${leadExec[1].n === 1 ? 'print' : 'prints'} · ${midShare.toFixed(0)}% of block dollars crossed at the midpoint · ${sweepUsd > 0 ? `${fmtUsd(sweepUsd)} came in as sweeps that finished off-exchange` : 'no sweeps finished off-exchange'}.`
-    : 'No sized prints classified this session.';
+    : 'Nothing crossed off-exchange this session.';
+
+  // Scales for the inline meters — computed off the rows on screen so a bar is
+  // read against what the filter left, not against a session the user filtered
+  // away.
+  const maxSize = Math.max(...view.prints.map(p => p.size), 1);
+  const maxVs = Math.max(...view.prints.map(p => Math.abs(p.vsSpotPct)), 0.01);
 
   const columns: Column<DarkPoolPrint>[] = [
-    { key: 'time', header: 'Time', width: '64px', render: p => <span className="font-mono text-caption text-textSecondary tnum leading-4">{p.time}</span> },
     {
-      key: 'price',
-      header: 'Price',
-      align: 'right',
-      sortValue: p => p.price,
-      render: p => <span className="font-mono text-caption text-textPrimary tnum leading-4">${p.price.toFixed(2)}</span>,
-    },
-    {
-      key: 'vs',
-      header: 'vs Spot',
-      align: 'right',
-      sortValue: p => p.vsSpotPct,
-      render: p => (
-        <span className={`font-mono text-caption tnum ${p.vsSpotPct >= 0 ? 'text-bull' : 'text-bear'} leading-4`}>
-          {p.vsSpotPct >= 0 ? '+' : ''}
-          {p.vsSpotPct.toFixed(2)}%
-        </span>
-      ),
-    },
-    {
-      key: 'size',
-      header: 'Size',
-      align: 'right',
-      sortValue: p => p.size,
-      render: p => <span className="font-mono text-caption text-textSecondary tnum leading-4">{p.size.toLocaleString()}</span>,
-    },
-    {
-      key: 'notional',
-      header: 'Notional',
-      align: 'right',
-      sortValue: p => p.notional,
-      render: p => <span className="font-mono text-caption font-semibold text-textPrimary tnum leading-4">{fmtUsd(p.notional)}</span>,
+      key: 'time',
+      group: 'Print',
+      header: 'Time',
+      width: '62px',
+      sortValue: p => p.time,
+      render: p => <span className="font-mono text-caption text-textSecondary tnum leading-4">{p.time}</span>,
     },
     {
       key: 'exec',
+      group: 'Print',
       header: 'Kind',
       sortValue: p => p.execution,
       render: p => (
@@ -271,9 +307,88 @@ const DarkPool = () => {
       ),
     },
     {
+      key: 'venue',
+      group: 'Print',
+      header: 'Venue',
+      help: 'ATS',
+      width: '128px',
+      sortValue: p => p.venue,
+      render: p => <span className="font-mono text-caption text-textMuted leading-4">{p.venue}</span>,
+    },
+    {
+      key: 'price',
+      group: 'Execution',
+      header: 'Price',
+      align: 'right',
+      width: '82px',
+      sortValue: p => p.price,
+      render: p => <span className="font-mono text-caption text-textPrimary tnum leading-4">${p.price.toFixed(2)}</span>,
+    },
+    {
+      key: 'vs',
+      group: 'Execution',
+      header: 'vs Spot',
+      align: 'right',
+      sortValue: p => p.vsSpotPct,
+      render: p => (
+        <span className="inline-flex items-center gap-2 justify-end w-full">
+          <span className={`font-mono text-caption tnum ${p.vsSpotPct >= 0 ? 'text-bull' : 'text-bear'} leading-4`}>
+            {p.vsSpotPct >= 0 ? '+' : ''}
+            {p.vsSpotPct.toFixed(2)}%
+          </span>
+          <VsSpotBar pct={p.vsSpotPct} max={maxVs} />
+        </span>
+      ),
+    },
+    {
+      key: 'size',
+      group: 'Execution',
+      header: 'Size',
+      align: 'right',
+      sortValue: p => p.size,
+      render: p => (
+        <span className="inline-flex items-center gap-2 justify-end w-full">
+          <span className="font-mono text-caption text-textSecondary tnum leading-4">{p.size.toLocaleString()}</span>
+          <SizeBar pct={(p.size / maxSize) * 100} />
+        </span>
+      ),
+    },
+    {
+      key: 'notional',
+      group: 'Execution',
+      header: 'Notional',
+      align: 'right',
+      width: '104px',
+      sortValue: p => p.notional,
+      render: p => (
+        <span className="font-mono text-caption font-semibold text-textPrimary tnum leading-4">{fmtUsd(p.notional)}</span>
+      ),
+    },
+    {
+      key: 'share',
+      group: 'Execution',
+      header: 'Session',
+      align: 'right',
+      width: '70px',
+      sortValue: p => p.notional,
+      render: p => {
+        const pct = view.totalNotional ? (p.notional / view.totalNotional) * 100 : 0;
+        return (
+          <span
+            className={`font-mono text-caption tnum leading-4 ${pct >= 2 ? 'text-textSecondary' : 'text-textMuted'}`}
+            title="Share of session off-exchange dollars"
+          >
+            {pct < 0.01 ? '<0.01%' : `${pct.toFixed(2)}%`}
+          </span>
+        );
+      },
+    },
+    {
       key: 'clips',
+      group: 'Execution',
       header: 'Clips',
       align: 'right',
+      width: '62px',
       sortValue: p => p.clips,
       render: p => (
         <span
@@ -286,8 +401,10 @@ const DarkPool = () => {
     },
     {
       key: 'lag',
-      header: 'Report lag',
+      group: 'Execution',
+      header: 'Lag',
       align: 'right',
+      width: '58px',
       sortValue: p => p.reportLagSec,
       render: p => (
         <span
@@ -299,14 +416,9 @@ const DarkPool = () => {
       ),
     },
     {
-      key: 'venue',
-      header: 'Venue',
-      help: 'ATS',
-      render: p => <span className="font-mono text-caption text-textMuted leading-4">{p.venue}</span>,
-    },
-    {
       key: 'intent',
-      header: 'Inferred read',
+      group: 'Read',
+      header: 'Inferred',
       sortValue: p => p.intent,
       render: p => (
         <span className="inline-flex items-center gap-2">
@@ -320,15 +432,34 @@ const DarkPool = () => {
       ),
     },
     {
+      key: 'shelf',
+      group: 'Read',
+      header: 'Shelf',
+      align: 'right',
+      width: '86px',
+      sortValue: p => (p.atLevel ? 1 : 0),
+      render: p => {
+        if (!p.atLevel || !view.levels.length) {
+          return <span className="font-mono text-caption text-textMuted leading-4">—</span>;
+        }
+        const near = view.levels.reduce((best, l) =>
+          Math.abs(l.price - p.price) < Math.abs(best.price - p.price) ? l : best,
+        );
+        return (
+          <span className="font-mono text-caption text-flip tnum leading-4" title={`${near.role} shelf`}>
+            ${near.price.toFixed(2)}
+          </span>
+        );
+      },
+    },
+    {
       key: 'conv',
+      group: 'Read',
       header: 'Conf',
       align: 'right',
+      width: '92px',
       sortValue: p => p.conviction,
-      render: p => (
-        <span className={`font-mono text-caption tnum ${p.conviction < 55 ? 'text-warn' : 'text-textSecondary'} leading-4`}>
-          {p.conviction}%
-        </span>
-      ),
+      render: p => <ConvBar pct={p.conviction} />,
     },
   ];
 
@@ -348,7 +479,7 @@ const DarkPool = () => {
           value={`${view.dpSharePct.toFixed(1)}%`}
           sub="of today's volume printed away from the lit book"
         />
-        <StatCard label="Block notional" value={fmtUsd(view.totalNotional)} sub={`${view.prints.length} sized prints classified`} />
+        <StatCard label="Block notional" value={fmtUsd(view.totalNotional)} sub={`${view.prints.length} prints · ${view.prints.filter(p => p.notional >= 1_000_000).length} over $1M`} />
         <StatCard
           label="Largest block"
           value={view.largest ? fmtUsd(view.largest.notional) : '--'}
@@ -421,13 +552,6 @@ const DarkPool = () => {
           <span className="font-mono text-label uppercase tracking-wider text-textMuted">Block read</span>
           <span className="text-caption text-textSecondary leading-relaxed">{blockRead}</span>
         </p>
-        <p className="px-4 py-3 border-b border-borderSubtle text-caption leading-relaxed text-textMuted">
-          One row is one block that crossed off-exchange. <span className="text-textSecondary">Kind</span> is how it was
-          executed — a single negotiated cross and a hundred algo child fills can be the same dollars and mean nothing
-          alike. <span className="text-textSecondary">vs Spot</span> is where it printed against the current price,
-          which is the tell for why: size under the market reads as building, size over it reads as leaving. Open a row
-          for the reasoning and the story that fits it just as well.
-        </p>
         {activePrint && (
           <div className="px-4 py-3 border-b border-borderSubtle bg-inset flex flex-col gap-2.5 animate-soft-in">
             <div className="flex flex-wrap items-center gap-2">
@@ -465,7 +589,7 @@ const DarkPool = () => {
           onRowClick={p => setSelectedPrint(prev => (prev === p.id ? null : p.id))}
           selectedKey={activePrint ? String(activePrint.id) : null}
           initialSort={{ key: 'notional', dir: 'desc' }}
-          maxHeight="max(420px, 48vh)"
+          maxHeight="max(560px, 62vh)"
         />
         )}
         {/* What each kind means, once, under the tape that uses them. */}
@@ -514,7 +638,7 @@ const DarkPool = () => {
 
           <div className="flex flex-col gap-1 border-t border-borderSubtle pt-3">
             <span className="font-mono text-label text-textMuted tnum">
-              Of {view.prints.length} sized prints:{' '}
+              Across {view.prints.length} prints:{' '}
               <span className="text-bull">{tally.ACCUMULATION} accumulation</span>,{' '}
               <span className="text-bear">{tally.DISTRIBUTION} distribution</span>,{' '}
               <span className="text-warn">{tally['HEDGE FLOW']} hedge</span>,{' '}

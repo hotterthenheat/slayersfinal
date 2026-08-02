@@ -21,7 +21,17 @@ import type {
   Posture,
 } from '../types/darkpool';
 
-const PRINT_COUNT = 26;
+/**
+ * A session's worth of off-exchange prints.
+ *
+ * This was 26, which is roughly the number of BLOCKS a name prints in a day —
+ * and it made the tape look like a summary rather than a tape. Real
+ * off-exchange flow is mostly small: hundreds of odd lots and round lots from
+ * internalisers and schedule algos, with a handful of negotiated crosses
+ * carrying most of the dollars. The size curve below produces that shape, so
+ * the row count went up without the notional running away with it.
+ */
+const PRINT_COUNT = 240;
 const LEVEL_COUNT = 6;
 /** Retests are displayed as "N×" with a "5+" top, so the count stops at 5. */
 const RETEST_CAP = 5;
@@ -270,10 +280,12 @@ export function buildDarkPoolView(snapshot: MarketSnapshot): DarkPoolView {
     const price = nearShelf
       ? shelfPrice * (1 + hRange(`${pSeed}-jit`, -0.0008, 0.0008))
       : lo + h01(`${pSeed}-px`) * range;
-    // Block sizes skew small with a rare institutional tail (5K–255K shares) —
-    // scaled so a single cross stays a plausible fraction of the day's DP flow.
+    // Heavily right-skewed, the way off-exchange size actually distributes: the
+    // median print is a few hundred shares and the top of the book is six
+    // figures. The exponent does the work — a linear draw here would put the
+    // average print at 125K shares and every row would read as a block.
     const sizePercentile = Math.pow(h01(`${pSeed}-sz`), 0.6);
-    const size = Math.round(5000 + Math.pow(sizePercentile, 2.5) * 250000);
+    const size = Math.round(100 + Math.pow(sizePercentile, 6) * 260000);
     const notional = size * price;
     const vsSpotPct = ((price - spot) / spot) * 100;
     const atLevel = nearShelf && Math.abs(price - shelfPrice) / shelfPrice < 0.001;

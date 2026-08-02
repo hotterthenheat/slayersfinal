@@ -8,6 +8,15 @@ import type { TermKey } from '../../data/terms';
 export interface Column<T> {
   key: string;
   header: string;
+  /**
+   * Optional band this column sits under, rendered as a spanning header row
+   * above the column names. A dense table with a dozen columns reads as a wall
+   * of abbreviations without it — the band is what tells you that `Clips` and
+   * `Report lag` are both describing the execution and not the instrument.
+   * Adjacent columns sharing a name form one band; leave it off entirely and
+   * the extra row is not rendered at all.
+   */
+  group?: string;
   /** Dictionary key — wraps the header in a <Term> jargon explainer */
   help?: TermKey;
   align?: 'left' | 'right';
@@ -62,10 +71,40 @@ const DataTable = <T,>({
     );
   };
 
+  // Runs of adjacent columns that share a group name. A column with no group
+  // still occupies a cell in the band row, or the colSpans stop lining up.
+  const bands = useMemo(() => {
+    if (!columns.some(c => c.group)) return [];
+    const out: { name: string; span: number }[] = [];
+    for (const col of columns) {
+      const name = col.group ?? '';
+      const last = out[out.length - 1];
+      if (last && last.name === name) last.span += 1;
+      else out.push({ name, span: 1 });
+    }
+    return out;
+  }, [columns]);
+
   return (
     <div className="overflow-auto" style={maxHeight ? { maxHeight } : undefined}>
       <table className="w-full border-collapse">
         <thead className="sticky top-0 z-10">
+          {bands.length > 0 && (
+            <tr className="bg-panelRaised border-b border-borderSubtle/60">
+              {bands.map((b, i) => (
+                <th
+                  key={`${b.name}-${i}`}
+                  colSpan={b.span}
+                  scope="colgroup"
+                  className={`px-3 pt-2 pb-1 font-mono text-micro font-semibold uppercase tracking-widest text-textMuted whitespace-nowrap text-left ${
+                    i > 0 ? 'border-l border-borderSubtle/60' : ''
+                  }`}
+                >
+                  {b.name}
+                </th>
+              ))}
+            </tr>
+          )}
           <tr className="bg-panelRaised border-b border-borderSubtle">
             {columns.map(col => (
               <th
