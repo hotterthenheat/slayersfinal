@@ -12,6 +12,8 @@ import { useTrailer, at, clamp01, ease } from '../useTrailerState';
 import { ArrivalList, Beat, Caveat, HeadRow, SceneHead, SceneStatement, Verdict } from '../parts';
 import { prob, usd } from '../format';
 import type { OptionPrint } from '../trailerTypes';
+import { STORY_SECONDS } from '../trailerStory';
+import { storyUAtSceneStart } from '../useTrailerTimeline';
 
 const GRID = '48px 1fr 62px 54px 56px 62px 60px';
 const GRID_SM = '44px 1fr 56px 58px';
@@ -58,12 +60,19 @@ const Row: React.FC<{ print: OptionPrint; compact: boolean }> = ({ print, compac
 };
 
 const TraceTapeScene: React.FC = () => {
-  const { story, progress: p, reduced, compact } = useTrailer();
+  const { story, progress: p, storyU, reduced, compact } = useTrailer();
 
-  // Arrival thresholds from the story's own print times, mapped into the scene.
-  const span = story.prints[story.prints.length - 1].at || 1;
-  const arrivals = story.prints.map(pr => 0.08 + (pr.at / span) * 0.62);
-  const shown = story.prints.filter((_, i) => p >= arrivals[i]);
+  /*
+    Rows arrive at the second the T column says they arrived.
+
+    The thresholds were the print times rescaled into a cinematic 0.08–0.70
+    window, so a row stamped `0.0s` appeared 11 story seconds in and one stamped
+    `55.2s` appeared at 101. The scene has 144 story seconds and the sequence
+    spans 55, so it fits with room to spare — there was never a reason to stretch
+    it, and stretching it made the tape disagree with its own timestamps.
+  */
+  const elapsed = (storyU - storyUAtSceneStart('trace')) * STORY_SECONDS;
+  const shown = story.prints.filter(pr => pr.at <= elapsed);
   const childCount = shown.filter(s => s.child).length;
   const evidence = ease(at(p, 0.1, 0.86)) * clamp01(childCount / 4);
 
@@ -82,7 +91,15 @@ const TraceTapeScene: React.FC = () => {
             cols={compact ? ['T', 'CONTRACT', 'SIZE', 'PREM'] : ['T', 'CONTRACT', 'SIZE', 'FILL', 'PREM', 'OI', 'QUOTE']}
             grid={compact ? GRID_SM : GRID}
           />
-          <ArrivalList p={p} arrivals={arrivals} reduced={reduced} className="mt-1 min-h-0">
+          {/* Story seconds in, story seconds out: a row lands when the session
+              clock reaches the timestamp printed in its own T column. */}
+          <ArrivalList
+            p={elapsed}
+            arrivals={story.prints.map(pr => pr.at)}
+            settle={2}
+            reduced={reduced}
+            className="mt-1 min-h-0"
+          >
             {story.prints.map(pr => (
               <Row key={pr.id} print={pr} compact={compact} />
             ))}

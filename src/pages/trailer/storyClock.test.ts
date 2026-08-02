@@ -205,6 +205,42 @@ describe('one session', () => {
     expect(ats[ats.length - 1]).toBeGreaterThan(window * 0.5);
   });
 
+  it('fits the tape sequence inside the window the scene plays it in', () => {
+    // The rows print their own timestamps in a T column, so they have to be
+    // reachable by the session clock while that scene is on screen. They used to
+    // be rescaled into a cinematic window instead, which put a print stamped 0.0s
+    // eleven story seconds in.
+    const window = (storyUAtSceneEnd('trace') - storyUAtSceneStart('trace')) * STORY_SECONDS;
+    for (const p of story.prints) {
+      expect(p.at).toBeGreaterThanOrEqual(0);
+      expect(p.at).toBeLessThanOrEqual(window);
+    }
+  });
+
+  it('names the Prove It horizon in sessions, counted in sessions', () => {
+    const session = new Date(story.sessionStart);
+    // The NEAR maturity, which is the one the band is quoted against — the
+    // contracts table also carries the short-dated rival, and picking that by
+    // mistake is how this assertion first failed.
+    const near = expiryFor(Math.max(...story.contracts.map(c => c.dte)), session);
+    expect(story.proveIt.horizonLabel).toContain(`${near.sessions} sessions`);
+    // The trap: `dte` is calendar days and is normally the larger number.
+    expect(near.sessions).toBeLessThanOrEqual(near.dte);
+  });
+
+  it('models the outcome over exactly the window the Tracker scene covers', () => {
+    // Modelled over the rest of the session while the scene covers less of it,
+    // the chart reached prices the clock had not and the counterfactuals scored
+    // before the moment they were measured at.
+    const window = (storyUAtSceneEnd('tracker') - storyUAtSceneStart('tracker')) * STORY_SECONDS;
+    const rest = (1 - storyUAtSceneStart('tracker')) * STORY_SECONDS;
+    expect(window).toBeLessThan(rest);
+    // Decay is the window, so a same-strike pair one expiry apart still differs
+    // by time value rather than by a day of theta neither of them paid.
+    const short = story.contracts.reduce((a, c) => (c.dte < a.dte ? c : a));
+    expect(Math.abs(short.theta)).toBeGreaterThan(0);
+  });
+
   it('opens the tracked outcome at the price on the tape when the packet froze', () => {
     const freeze = spotAt(story, storyUAtSceneStart('tracker') * STORY_SECONDS);
     expect(story.outcome.path[0].px).toBeCloseTo(Number(freeze.toFixed(2)), 2);

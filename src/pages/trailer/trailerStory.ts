@@ -146,21 +146,28 @@ function sessionDate(): Date {
  */
 interface StoryDates {
   session: Date;
-  /** The weekly the story trades. */
-  near: { label: string; dte: number };
+  /**
+   * The weekly the story trades.
+   *
+   * `dte` is CALENDAR days (what `expiryFor` reports and what the pricer wants);
+   * `sessions` is trading days. Prove It's band is close-to-close, so it names
+   * sessions — it used to print the calendar number under the word "sessions",
+   * claiming 11 where the expiry has 7.
+   */
+  near: { label: string; dte: number; sessions: number };
   /** The short-dated rival the Weigher rejects. */
-  short: { label: string; dte: number };
+  short: { label: string; dte: number; sessions: number };
   /** The swing horizon Compass prices the event against. */
-  far: { label: string; dte: number };
+  far: { label: string; dte: number; sessions: number };
   /** Earnings — a date, not an expiry, but it still has to land on a session. */
-  earnings: { label: string; dte: number };
+  earnings: { label: string; dte: number; sessions: number };
 }
 
 function buildDates(): StoryDates {
   const session = sessionDate();
   const at = (dte: number) => {
     const e = expiryFor(dte, session);
-    return { label: fmtMonthDay(e.date).toUpperCase(), dte: e.dte };
+    return { label: fmtMonthDay(e.date).toUpperCase(), dte: e.dte, sessions: e.sessions };
   };
   return { session, near: at(11), short: at(4), far: at(18), earnings: at(25) };
 }
@@ -857,7 +864,7 @@ function buildProveIt(spot: number, dates: StoryDates): ProveItRead {
     expectedLow: round(spot * 0.982),
     expectedHigh: round(spot * 1.026),
     tailProb: 0.041,
-    horizonLabel: `Close-to-close, ${dates.near.dte} sessions, ±1σ band`,
+    horizonLabel: `Close-to-close, ${dates.near.sessions} sessions, ±1σ band`,
     models: [
       { name: 'gex-drift v4', role: 'CHAMPION', crps: 0.0184, calibrationErr: 0.021, economicValue: 0.061, walkForward: 0.58, promoted: true, gate: 'IN PRODUCTION' },
       { name: 'flow-attn v1', role: 'CHALLENGER', crps: 0.0179, calibrationErr: 0.048, economicValue: 0.012, walkForward: 0.51, promoted: false, gate: 'FAILED · calibration error above 0.03 gate' },
@@ -988,12 +995,17 @@ function buildTracker(
   // counterfactual was marked from a path that began after the moment it claimed
   // to begin at.
   //
-  // The window is the rest of the session, and the marks decay by exactly that.
-  // They used to remove a full calendar day while the HUD advanced 96 seconds and
-  // never left the session — which overstated theta on every row, worst on the
-  // short-dated one, and changed which alternative is reported as having beaten
-  // the contract that was taken.
-  const outcomeDays = ((1 - storyUAtSceneStart('tracker')) * STORY_SECONDS) / 86400;
+  // The window is the Tracker scene's own, and the marks decay by exactly that.
+  //
+  // Two corrections live here. The marks used to remove a full calendar day while
+  // the HUD advanced 96 seconds and never left the session, which overstated theta
+  // everywhere and worst on the short-dated row. Then the window was the rest of
+  // the session (168s) while the scene only covers 96 — so the chart could reach a
+  // price the clock had not, and the counterfactual scores landed before the
+  // moment they were measured at. The modelled interval and the scene are the same
+  // interval now, and the scene reveals against it.
+  const outcomeDays =
+    ((storyUAtSceneEnd('tracker') - storyUAtSceneStart('tracker')) * STORY_SECONDS) / 86400;
   const targetProgress = 0.82;
   const finalPx = freezeSpot + (target - freezeSpot) * targetProgress;
   const path: PricePoint[] = [];
@@ -1048,6 +1060,16 @@ function buildTracker(
 
 // ---- assembly ---------------------------------------------------------------
 let cached: TrailerStory | null = null;
+/**
+ * The session day the cached story belongs to.
+ *
+ * The memo holds `sessionStart`, every expiry label, every DTE and the earnings
+ * date — all resolved from New York's calendar at first build. A tab left open
+ * across an ET midnight or a weekend and returned to would replay the previous
+ * day's session and maturities as if they were today's. Keyed by the day, the
+ * memo still returns the same object for every replay within it.
+ */
+let cachedDay = '';
 
 /**
  * Build (and memoize) the story.
@@ -1057,7 +1079,10 @@ let cached: TrailerStory | null = null;
  * mount would drift the chain out from under a viewer who hit Replay.
  */
 export function buildTrailerStory(): TrailerStory {
-  if (cached) return cached;
+  const { y, m, d } = nyToday();
+  const day = `${y}-${m}-${d}`;
+  if (cached && cachedDay === day) return cached;
+  cachedDay = day;
 
   const snapshot = Simulator.buildSnapshotAt(TICKER, STORY_SPOT, STORY_REGIME_DAY);
   const raw = buildLevels(snapshot);
@@ -1140,6 +1165,7 @@ export function buildTrailerStory(): TrailerStory {
 /** Test/HMR escape hatch — drops the memo so the next build re-derives. */
 export function resetTrailerStory(): void {
   cached = null;
+  cachedDay = '';
 }
 
 /** Spot at a point in the story window, from the one shaped path. */

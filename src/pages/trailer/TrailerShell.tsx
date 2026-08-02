@@ -89,24 +89,54 @@ const TrailerShell: React.FC<{ autoStart: boolean }> = ({ autoStart }) => {
     [story, sceneIndex, sceneProgress],
   );
 
-  // Chrome hides while the film runs and comes back on any input.
+  /*
+    Chrome hides while the film runs and comes back on any input — but never
+    while it holds focus.
+
+    The idle timer used to fade the transport out on a schedule regardless, so a
+    keyboard user who tabbed to Next and paused to read lost the focus ring, and
+    then their focused control sat inside a container with `pointer-events-none`:
+    invisible, still focused, still activatable. `focusin` on the chrome pins it
+    open; `focusout` hands it back to the timer.
+  */
   useEffect(() => {
+    const chrome = () => document.getElementById('trailer-chrome');
+    const holdsFocus = () => {
+      const el = document.activeElement;
+      return !!el && el !== document.body && !!chrome()?.contains(el);
+    };
     const wake = () => {
       setChromeVisible(true);
       if (idleRef.current) window.clearTimeout(idleRef.current);
+      if (holdsFocus()) return;
       idleRef.current = window.setTimeout(() => setChromeVisible(false), 2600);
     };
     wake();
     window.addEventListener('pointermove', wake);
     window.addEventListener('keydown', wake);
     window.addEventListener('touchstart', wake);
+    window.addEventListener('focusin', wake);
+    window.addEventListener('focusout', wake);
     return () => {
       window.removeEventListener('pointermove', wake);
       window.removeEventListener('keydown', wake);
       window.removeEventListener('touchstart', wake);
+      window.removeEventListener('focusin', wake);
+      window.removeEventListener('focusout', wake);
       if (idleRef.current) window.clearTimeout(idleRef.current);
     };
   }, []);
+
+  /*
+    A new scene starts at the top of the stage.
+
+    On compact the stage is the scrolling element and it outlives the scene
+    inside it, so scrolling down a tall scene and pressing Next opened the next
+    one halfway down — past its heading and its first evidence.
+  */
+  useEffect(() => {
+    document.getElementById('trailer-stage')?.scrollTo({ top: 0 });
+  }, [sceneIndex]);
 
   // Keyboard transport. Ignored while focus is on anything that owns the key
   // itself — a field, or a control that activates on Space or Enter.
@@ -195,7 +225,7 @@ const TrailerShell: React.FC<{ autoStart: boolean }> = ({ autoStart }) => {
           {`Scene ${sceneIndex + 1} of ${SCENES.length}. ${scene.product}. ${scene.description}`}
         </p>
 
-        <div className="shrink-0">
+        <div id="trailer-chrome" className="shrink-0">
           <StateThread />
           <TrailerControls visible={chromeVisible || !playing} muted={muted} onToggleMute={() => setMuted(m => !m)} />
         </div>

@@ -16,16 +16,28 @@ import React from 'react';
 import { useTrailer, at, clamp01, ease } from '../useTrailerState';
 import { Beat, Caveat, FillBox, PriceField, SceneHead, SceneStatement, Verdict } from '../parts';
 import { clock, prob, px } from '../format';
+import { storyUAtSceneEnd, storyUAtSceneStart } from '../useTrailerTimeline';
 
 const TrackerScene: React.FC = () => {
-  const { story, progress: p, reduced, compact } = useTrailer();
+  const { story, progress: p, storyU, reduced, compact } = useTrailer();
   const k = story.packet;
   const o = story.outcome;
   const beat = o.counterfactuals.filter(c => c.better).length;
 
   const freeze = ease(at(p, 0.04, 0.24));
-  const advance = ease(at(p, 0.24, 0.62));
-  const counter = ease(at(p, 0.5, 0.82));
+  /*
+    The forward path is drawn to where the session clock has actually got, and the
+    scores land after it.
+
+    Staged on scene progress the whole path was on screen by 0.62 — the viewer saw
+    the closing price, and then the counterfactuals scored against it, before the
+    HUD reached the moment either was measured at. `buildTracker` models the
+    outcome across exactly this scene's story window, so revealing to `storyU` is
+    the same interval, drawn honestly.
+  */
+  const u0 = storyUAtSceneStart('tracker');
+  const advance = clamp01((storyU - u0) / Math.max(1e-6, storyUAtSceneEnd('tracker') - u0));
+  const counter = ease(at(advance, 0.55, 1));
 
   return (
     <div className="h-full flex flex-col gap-3 min-h-0">

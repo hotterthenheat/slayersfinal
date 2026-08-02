@@ -367,17 +367,20 @@ export const PriceField: React.FC<{
  * rather than all at once or on a metronome.
  */
 export const ArrivalList: React.FC<{
+  /** Elapsed, in the SAME unit as `arrivals` — scene progress or story seconds. */
   p: number;
   arrivals: number[];
+  /** How long a row takes to settle, in that unit. */
+  settle?: number;
   reduced?: boolean;
   className?: string;
   children: React.ReactNode[];
-}> = ({ p, arrivals, reduced, className = '', children }) => (
+}> = ({ p, arrivals, settle = 0.05, reduced, className = '', children }) => (
   <div className={className}>
     {React.Children.map(children, (child, i) => {
       const from = arrivals[i] ?? 0;
       if (p < from) return null;
-      const e = ease(at(p, from, from + 0.05));
+      const e = ease(at(p, from, from + settle));
       return (
         <div style={{ opacity: e, transform: reduced ? undefined : `translate3d(${(1 - e) * -10}px, 0, 0)` }}>{child}</div>
       );

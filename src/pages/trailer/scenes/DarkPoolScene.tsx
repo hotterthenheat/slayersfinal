@@ -50,6 +50,10 @@ const DarkPoolScene: React.FC = () => {
     }
   }
   const distancePct = ((thread.spot - dp.shelf) / dp.shelf) * 100;
+  // The shelf is worth what has printed into it so far. `shelfNotional` is the
+  // sum of all nine, one of which lands after this scene ends — so the headline
+  // counted size the clock had not reached while correctly hiding its row.
+  const notionalSoFar = shown.reduce((a, pr) => a + pr.notional, 0);
 
   return (
     <div className="h-full flex flex-col gap-3 min-h-0">
@@ -70,13 +74,13 @@ const DarkPoolScene: React.FC = () => {
               pulse={p * 3}
               height={h}
               ariaLabel={`Off-exchange prints forming a shelf at ${px(dp.shelf)} beneath the simulated price path`}
-              levels={[{ price: dp.shelf, label: `SHELF ${px(dp.shelf)} · ${usd(dp.shelfNotional)}`, kind: 'shelf' }]}
+              levels={[{ price: dp.shelf, label: `SHELF ${px(dp.shelf)} · ${usd(notionalSoFar)}`, kind: 'shelf' }]}
             />
             )}
           </FillBox>
           <Beat p={p} from={0.34} reduced={reduced} className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
             <Cell label="Shelf" value={px(dp.shelf)} tone="info" />
-            <Cell label="Notional" value={usd(dp.shelfNotional)} />
+            <Cell label="Notional" value={usd(notionalSoFar)} />
             <Cell label="Touches held" value={`${held}/${touches}`} tone={held === touches ? 'bull' : 'warn'} />
             <Cell label="Distance" value={`${distancePct >= 0 ? '+' : ''}${distancePct.toFixed(2)}%`} tone={distancePct >= 0 ? 'bull' : 'bear'} />
           </Beat>
@@ -89,11 +93,14 @@ const DarkPoolScene: React.FC = () => {
                 Readings that fit
               </div>
               <div className="space-y-1.5">
+                {/* Four readings of one print, so they are a distribution and have
+                    to sum to 100 at every frame — including the one a paused film
+                    is left on. Only the bar grows. */}
                 {dp.readings.map((r, i) => (
-                  <div key={r.label}>
+                  <div key={r.label} style={{ opacity: readT }}>
                     <div className="flex items-baseline justify-between gap-2 font-mono text-micro">
                       <span className={i === 0 ? 'text-textPrimary' : 'text-textSecondary'}>{r.label}</span>
-                      <span className="tnum text-textPrimary">{Math.round(r.weight * readT * 100)}%</span>
+                      <span className="tnum text-textPrimary">{Math.round(r.weight * 100)}%</span>
                     </div>
                     <div className="h-[3px] rounded-full bg-white/[0.06] overflow-hidden mt-0.5">
                       <div

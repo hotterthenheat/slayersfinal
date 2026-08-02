@@ -35,7 +35,7 @@ const PathMass: React.FC<{ rows: { requiredMove: number; verdict: string }[]; gr
     bars.push(`${((i / (N - 1)) * W).toFixed(1)},${(H - d * (H - 14) * grow).toFixed(1)}`);
   }
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full" style={{ height: H }} role="img" aria-label="Distribution of intraday moves against the move each contract requires before expiration">
+    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full" style={{ height: H }} role="img" aria-label="Distribution of intraday moves against the move each contract requires before the close">
       <polyline points={`0,${H} ${bars.join(' ')} ${W},${H}`} fill="rgba(228,232,244,0.10)" stroke="#E4E8F4" strokeWidth={1} strokeOpacity={0.5} vectorEffect="non-scaling-stroke" />
       {rows.map(r => {
         const x = (r.requiredMove / maxMove) * W;
