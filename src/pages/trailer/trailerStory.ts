@@ -10,10 +10,18 @@
   exactly the thing this is not.
 
   The chain, spot and structural levels come from the app's own simulator and
-  `buildLevels` — the same single derivation every real desk reads, so the walls
-  and flip shown here are the walls and flip the product would show. Story
-  specifics (which prints arrive, which contracts compete, how the trade ends)
-  are seeded from a fixed key so a replay is the same film.
+  `buildLevels` — the same derivation every real desk reads, run against a pinned
+  session. Story specifics (which prints arrive, which contracts compete, how the
+  trade ends) are seeded from a fixed key so a replay is the same film.
+
+  Pinned, because the live simulator is mutable: `buildSnapshot` reads a price
+  that advances every 1500ms and draws from the symbol's random stream on the way
+  past. Built off that, the story's geometry depended on how long the app had been
+  open before /trailer mounted — cold, the strongest level below spot landed three
+  cents under price and the whole "price travels down into a level" premise
+  collapsed. `buildSnapshotAt` runs the same builders at a fixed spot and a fixed
+  positioning regime, so the film is the same film on every mount and mounting it
+  leaves the live feed untouched.
 ==================================================
 */
 
@@ -21,6 +29,8 @@ import Simulator from '../../core/simulator';
 import { buildLevels } from '../../data/gex';
 import { h01, hGauss, hRange } from '../../core/rng';
 import { storyUAtSceneStart } from './useTrailerTimeline';
+import { bsPriceAtT } from '../../components/compass/contractTrackModel';
+import type { StrikeNode } from '../../types/market';
 import type {
   ContractRow,
   DarkPoolRead,
@@ -49,11 +59,39 @@ import type {
 const TICKER = 'NVDA';
 const SEED = 'slayer-trailer-v1';
 
+/**
+ * The session the film narrates.
+ *
+ * `STORY_SPOT` is the symbol's reference price, pinned rather than read live.
+ * `STORY_REGIME_DAY` pins the day's positioning regime — the OI pivot, and so
+ * the gamma flip. Left to today's date the flip wanders a strike and a half
+ * either side of spot across the week, and on roughly one day in five it lands
+ * *below* the level the story is about, which inverts the narrative: the film
+ * would open in long gamma and the "pressure into the shelf" reading would
+ * contradict the book underneath it. Naming the session is what a product film
+ * does anyway; this makes it explicit instead of accidental.
+ *
+ * Chosen for the geometry the story needs: a short-gamma shelf a full percent
+ * below spot, the flip between the two, and a book that nets short. Change
+ * either constant and re-run `storyClock.test.ts` — it asserts that ordering.
+ */
+const STORY_SPOT = 138.6;
+const STORY_REGIME_DAY = 20667;
+
+/**
+ * The story's structural level sits at least this far below the open.
+ *
+ * The film is about price travelling down into a level and testing it. A level
+ * inside the noise is not travelled into — it is where price already is.
+ */
+const MIN_APPROACH = 0.01;
+
 /** Story seconds. The narrative window, not the trailer's runtime. */
 const STORY_SECONDS = 2400; // a 40-minute stretch of session
 const PATH_POINTS = 200;
 
 const round = (v: number, dp = 2) => Number(v.toFixed(dp));
+const clampUnit = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
 /**
  * The session clock.
@@ -76,10 +114,25 @@ function sessionStart(): number {
  * Shaped rather than sampled: the whole trailer is about one structural level
  * being approached, tested and held, and a free random walk tells that story
  * only by accident. The noise is seeded on top of a deliberate spine.
+ *
+ * The reclaim resolves against the flip rather than a fixed fraction of the
+ * drop, because the regime read the film ends on is a fact about where the close
+ * sits relative to the flip. Ending an arbitrary 62% of the way back left the
+ * session closing under the flip while the last scene called the level held —
+ * two statements about one moment, again disagreeing.
  */
-function buildPath(spot0: number, level: number): PricePoint[] {
+function buildPath(spot0: number, level: number, flip: number): PricePoint[] {
   const out: PricePoint[] = [];
   const drop = spot0 - level;
+  // Close just clear of the flip: the regime turns back on the way out, which is
+  // the same sentence Pulse opens with, paid off.
+  const reclaimTo = Math.min(spot0 - drop * 0.08, flip + drop * 0.1);
+  const reclaimSpan = reclaimTo - level;
+  // Noise is a fraction of the move it decorates, never a fraction of spot. Tied
+  // to spot it was 0.055% while a cold-start put wall sat 0.022% away, so the
+  // jitter was two and a half times the entire scripted approach and the path
+  // read as a flat wobble instead of a level being tested.
+  const jitter = Math.abs(drop) * 0.055;
   for (let i = 0; i < PATH_POINTS; i++) {
     const u = i / (PATH_POINTS - 1);
     let spine: number;
@@ -93,9 +146,9 @@ function buildPath(spot0: number, level: number): PricePoint[] {
     } else {
       // reclaim
       const v = (u - 0.66) / 0.34;
-      spine = level + drop * 0.62 * Math.pow(v, 1.35);
+      spine = level + reclaimSpan * Math.pow(v, 1.35);
     }
-    const noise = hGauss(`${SEED}-px-${i}`) * spot0 * 0.00055;
+    const noise = hGauss(`${SEED}-px-${i}`) * jitter;
     out.push({ t: u * STORY_SECONDS, px: round(spine + noise) });
   }
   return out;
@@ -110,6 +163,37 @@ const pxAt = (path: PricePoint[], t: number): number => {
   const f = (t - path[i].t) / (path[i + 1].t - path[i].t);
   return path[i].px + (path[i + 1].px - path[i].px) * f;
 };
+
+// ---- the level the whole film is about --------------------------------------
+/**
+ * The heaviest SHORT-gamma strike at least `MIN_APPROACH` below spot.
+ *
+ * `buildLevels().putWall` is argmax |net GEX| below spot, and on this book that
+ * is a large POSITIVE node three cents under price. It is a real level and the
+ * right answer to the question the product asks — but it is the wrong level for
+ * this film twice over: nothing travels down into a level three cents away, and
+ * a long-gamma node does not behave like the put wall the story then reasons
+ * about. So the story picks the strike that actually carries the short gamma it
+ * is describing. Everything downstream — the dark-pool shelf, Compass's setup,
+ * the stop on the Tracker packet — refers back to this one price.
+ *
+ * Falls back to the deepest strike in the book if the whole sub-spot chain is
+ * long gamma, which the pinned session is not, but a re-pin could be.
+ */
+function storyLevel(chain: StrikeNode[], spot: number): number {
+  const ceiling = spot * (1 - MIN_APPROACH);
+  let level = 0;
+  let worst = 0;
+  for (const n of chain) {
+    if (n.strike <= ceiling && n.netGex < worst) {
+      worst = n.netGex;
+      level = n.strike;
+    }
+  }
+  if (level > 0) return round(level);
+  const below = chain.filter(n => n.strike <= ceiling).map(n => n.strike);
+  return round(below.length ? Math.min(...below) : spot * (1 - MIN_APPROACH));
+}
 
 // ---- option prints ----------------------------------------------------------
 function buildPrints(level: number, step: number): OptionPrint[] {
@@ -182,7 +266,7 @@ function buildPrints(level: number, step: number): OptionPrint[] {
 }
 
 // ---- scanner ----------------------------------------------------------------
-function buildScanner(prints: OptionPrint[], ticker: string): ScannerRow[] {
+function buildScanner(prints: OptionPrint[], ticker: string, spot: number): ScannerRow[] {
   const ours = prints.find(p => p.child)!;
   const rows: ScannerRow[] = [
     {
@@ -190,7 +274,10 @@ function buildScanner(prints: OptionPrint[], ticker: string): ScannerRow[] {
       label: `${ticker} ${ours.strike}C ${ours.expiry}`,
       premium: prints.filter(p => p.child).reduce((a, p) => a + p.premium, 0),
       volOi: 1.94,
-      moneyness: 0.021,
+      // Off the strike the sequence actually printed at, not a stand-in. The
+      // scanner's own row is the one row a viewer can check against the tape
+      // two scenes earlier.
+      moneyness: round((ours.strike - spot) / spot, 4),
       dte: 11,
       iv: 0.482,
       scoreFrom: 61,
@@ -304,34 +391,63 @@ function buildGammaField(
 }
 
 // ---- levels / greeks / stress ----------------------------------------------
-function buildRankedLevels(
-  levels: { callWall: number; putWall: number; flip: number; king: number },
-  spot: number,
-): RankedLevel[] {
-  const mk = (price: number, role: RankedLevel['role'], reaction: number, confidence: number, sensitivity: number): RankedLevel => ({
-    price: round(price),
-    role,
-    distancePct: round(((price - spot) / spot) * 100, 2),
-    reaction,
-    confidence,
-    sensitivity,
-  });
-  return [
-    mk(levels.putWall, 'SUPPORT', 0.72, 0.81, 0.22),
-    mk(levels.flip, 'PIVOT', 0.64, 0.66, 0.58),
-    mk(levels.king, 'RESISTANCE', 0.58, 0.74, 0.31),
-    mk(levels.callWall, 'RESISTANCE', 0.51, 0.69, 0.28),
-  ].sort((a, b) => Math.abs(a.distancePct) - Math.abs(b.distancePct));
+/**
+ * The level board.
+ *
+ * Only the facts that do not move: the price, how hard it has reacted before,
+ * how confident the read is, and how sensitive it is to the dealer-sign
+ * assumption. Role and distance belong to the moment and are derived where they
+ * are drawn.
+ *
+ * Coincident prices are merged. The king strike is regularly a wall as well, and
+ * emitting it twice put one price on the board under two different roles — a
+ * board disagreeing with itself about where support is.
+ */
+function buildRankedLevels(levels: { callWall: number; putWall: number; flip: number; king: number }): RankedLevel[] {
+  const raw = [
+    { price: levels.putWall, isFlip: false, reaction: 0.72, confidence: 0.81, sensitivity: 0.22 },
+    { price: levels.flip, isFlip: true, reaction: 0.64, confidence: 0.66, sensitivity: 0.58 },
+    { price: levels.king, isFlip: false, reaction: 0.58, confidence: 0.74, sensitivity: 0.31 },
+    { price: levels.callWall, isFlip: false, reaction: 0.51, confidence: 0.69, sensitivity: 0.28 },
+  ];
+  const byPrice = new Map<string, RankedLevel>();
+  for (const r of raw) {
+    const price = round(r.price);
+    const key = price.toFixed(2);
+    const existing = byPrice.get(key);
+    // A price that is both a wall and the king is one level carrying both facts:
+    // keep the stronger confidence rather than emitting it twice.
+    if (existing) {
+      if (r.confidence > existing.confidence) {
+        byPrice.set(key, { ...existing, reaction: r.reaction, confidence: r.confidence, sensitivity: r.sensitivity });
+      }
+      continue;
+    }
+    byPrice.set(key, { price, isFlip: r.isFlip, reaction: r.reaction, confidence: r.confidence, sensitivity: r.sensitivity });
+  }
+  return [...byPrice.values()].sort((a, b) => a.price - b.price);
 }
 
-const GREEKS: GreekRow[] = [
-  { key: 'gex', label: 'GEX', now: -412e6, drift: 0.34, unit: '$/1%' },
+/**
+ * Exposure greeks.
+ *
+ * GEX is measured off the same chain the gamma field is built from. It used to be
+ * a fixed -$412M, which on every cold-start draw contradicted the field beside it
+ * — the cells summed positive and the thread read long gamma while the number
+ * underneath said short. The rest are illustrative magnitudes and are labelled
+ * modelled; GEX is the one the scene reasons about, so it is the one that has to
+ * be real.
+ */
+function buildGreeks(netGex: number): GreekRow[] {
+  return [
+  { key: 'gex', label: 'GEX', now: netGex, drift: 0.34, unit: '$/1%' },
   { key: 'dex', label: 'DEX', now: 1.94e9, drift: -0.12, unit: '$' },
   { key: 'vex', label: 'VEX', now: -88e6, drift: 0.21, unit: '$/vol' },
   { key: 'cex', label: 'CEX', now: 24e6, drift: 0.44, unit: '$/day' },
   { key: 'vanna', label: 'VANNA', now: -61e6, drift: 0.28, unit: '$/vol·%' },
   { key: 'charm', label: 'CHARM', now: 39e6, drift: 0.52, unit: '$/day' },
-];
+  ];
+}
 
 const STRESS: StressCase[] = [
   { label: 'SPOT −0.5%', spotShock: -0.005, ivShock: 0, hoursForward: 0, hedgeFlow: -184e6, levelSurvives: true, note: 'Hedging sells into the level; the shelf absorbs it' },
@@ -435,25 +551,88 @@ function buildSetups(ticker: string, level: number, step: number): SetupCandidat
 }
 
 // ---- weigher ----------------------------------------------------------------
-function buildContracts(level: number, step: number): ContractRow[] {
+/**
+ * Five contracts on one thesis, priced and then ranked.
+ *
+ * Two things were wrong here and they were the same thing. The verdicts were
+ * written into the table definition, above the code that computes utility — so
+ * the row marked SELECTED was selected by an author, not by the ranking printed
+ * beside it. And the numbers those verdicts were meant to follow from were
+ * straight-line fits: premium fell linearly in moneyness, spread widened by row
+ * index, theta was a constant per missing day. Ranking assertions against
+ * assertions cannot disagree with itself, which is exactly why it could not be
+ * trusted.
+ *
+ * So every row is now an actual option. `bsPriceAtT` is the app's own pricer —
+ * the one Compass's contract track is pinned against — and every field comes out
+ * of it: mid at the entry spot, exit at the target, expected shortfall at the
+ * stop, theta as the value of one day. Utility is the probability-weighted
+ * return net of execution, minus the liquidity penalty the scene's waterfall
+ * names. Then it sorts, and the verdicts fall out of the sort.
+ *
+ * The scene's argument — the cheapest contract carries the highest headline
+ * return and the worst utility — is therefore something the arithmetic produces,
+ * not something the copy claims. If a re-pin ever stops producing it, the
+ * ranking changes and the scene changes with it.
+ */
+function buildContracts(
+  spot: number,
+  level: number,
+  step: number,
+  target: number,
+  stop: number,
+  pModel: number,
+): ContractRow[] {
   const base = Math.round((level + step * 2) / step) * step;
-  const defs: { k: number; dte: number; expiry: string; verdict: ContractRow['verdict']; why: string }[] = [
-    { k: base - step * 2, dte: 11, expiry: 'AUG 15', verdict: 'ALTERNATIVE', why: 'Most delta per dollar, but the widest spread of the five' },
-    { k: base, dte: 11, expiry: 'AUG 15', verdict: 'SELECTED', why: 'Best utility after execution cost and shortfall' },
-    { k: base + step * 2, dte: 11, expiry: 'AUG 15', verdict: 'ALTERNATIVE', why: 'Cheaper, but breakeven sits above the target' },
-    { k: base, dte: 4, expiry: 'AUG 08', verdict: 'REJECTED', why: 'Theta burn exceeds the modelled drift over the horizon' },
-    { k: base + step * 5, dte: 11, expiry: 'AUG 15', verdict: 'REJECTED', why: 'Headline return is the highest; the path it needs is the least likely' },
+  const defs: { k: number; dte: number; expiry: string; why: string }[] = [
+    { k: base - step * 4, dte: 11, expiry: 'AUG 15', why: 'Most delta per dollar, and the most capital at risk per contract' },
+    { k: base, dte: 11, expiry: 'AUG 15', why: 'Carries the thesis with the least given away to execution' },
+    { k: base + step * 4, dte: 11, expiry: 'AUG 15', why: 'Struck at the target, so everything it is worth there is time value' },
+    { k: base, dte: 4, expiry: 'AUG 08', why: 'Same strike, and almost nothing left if the reclaim is not immediate' },
+    { k: base + step * 8, dte: 11, expiry: 'AUG 15', why: 'Struck beyond the target — the thesis alone does not pay for it' },
   ];
-  return defs.map((d, i) => {
-    const moneyness = (d.k - level) / level;
-    const mid = round(Math.max(0.28, 4.9 - moneyness * 92 - (11 - d.dte) * 0.16));
-    const spreadPct = round(0.018 + i * 0.006 + Math.max(0, moneyness) * 0.42, 3);
-    const bid = round(mid * (1 - spreadPct / 2));
-    const ask = round(mid * (1 + spreadPct / 2));
-    const delta = round(Math.max(0.06, 0.62 - moneyness * 9.5), 3);
-    const executionCost = round(((ask - bid) / 2 + 0.01) / mid, 3);
-    const physicalExit = round(mid * (1 + (0.42 - Math.max(0, moneyness) * 7.4)), 2);
+
+  // Winners resolve fast and losers grind: the target leg is marked one session
+  // out, the stop leg four. That asymmetry is the whole reason a short-dated
+  // contract is worse than its theta alone suggests — it is the leg that takes
+  // time that kills it.
+  const HORIZON_WIN = 1;
+  const HORIZON_LOSS = 2;
+  const YEAR = 252;
+  // The setup's own probability of reaching the target before the stop — the
+  // desk's claimed edge, the same number Compass shows. It is a property of the
+  // underlying, so it is the same for all five; what differs is what each
+  // contract is worth in each case.
+  const p = clampUnit(pModel);
+
+  const priced: ContractRow[] = defs.map((d, i) => {
+    const otm = Math.max(0, (d.k - spot) / spot);
+    const iv = round(0.44 + otm * 4.2, 3); // skew: downside-funded calls bid up out of the money
+    const tNow = d.dte / YEAR;
+    const tWin = Math.max(0.5, d.dte - HORIZON_WIN) / YEAR;
+    const tLoss = Math.max(0.5, d.dte - HORIZON_LOSS) / YEAR;
+
+    const mid = round(bsPriceAtT(spot, d.k, iv, tNow, 'C'));
+    // Absolute spread, floored at a penny and widening away from the money —
+    // which is what makes a cheap contract expensive to trade, in percent.
+    const spreadAbs = round(Math.max(0.02, 0.03 + otm * 3.6 + Math.max(0, 8 - d.dte) * 0.012));
+    const bid = round(Math.max(0.01, mid - spreadAbs / 2));
+    const ask = round(mid + spreadAbs / 2);
+    const spreadPct = round(spreadAbs / mid, 3);
+    const executionCost = round((spreadAbs / 2 + 0.01) / mid, 3);
+
+    const g = Simulator.getGreeks(spot, d.k, tNow, iv);
+    const oneDayLess = bsPriceAtT(spot, d.k, iv, Math.max(0.5, d.dte - 1) / YEAR, 'C');
+
+    // Marked at the target and at the stop, each on its own clock.
+    const physicalExit = round(bsPriceAtT(target, d.k, iv, tWin, 'C'));
+    const atStop = bsPriceAtT(stop, d.k, iv, tLoss, 'C');
     const ev = round((physicalExit - mid) / mid - executionCost, 3);
+    const expectedShortfall = round((atStop - mid) / mid - executionCost, 3);
+
+    const liquidityRisk = round(clampUnit(0.1 + otm * 22 + spreadPct * 1.4 + Math.max(0, 8 - d.dte) * 0.05), 2);
+    const utility = round(p * ev + (1 - p) * expectedShortfall - liquidityRisk * 0.22, 3);
+
     return {
       id: `K${d.k}-${d.expiry}`,
       strike: round(d.k),
@@ -465,36 +644,57 @@ function buildContracts(level: number, step: number): ContractRow[] {
       mid,
       spreadPct,
       quoteAgeMs: Math.round(hRange(`${SEED}-cq2-${i}`, 60, 620)),
-      oi: Math.round(hRange(`${SEED}-coi-${i}`, 900, 8200)),
-      volume: Math.round(hRange(`${SEED}-cvol-${i}`, 400, 6400)),
-      delta,
-      gamma: round(0.021 - Math.abs(moneyness) * 0.12, 4),
-      vega: round(0.19 - Math.abs(moneyness) * 0.6, 3),
-      theta: round(-(0.11 + (11 - d.dte) * 0.021), 3),
-      iv: round(0.44 + Math.max(0, moneyness) * 1.1, 3),
+      // Open interest and volume concentrate at the money and thin out from
+      // there, which is what the liquidity column is reading.
+      oi: Math.round(400 + 7600 * Math.exp(-Math.pow(((d.k - spot) / spot) * 26, 2))),
+      volume: Math.round(180 + 5200 * Math.exp(-Math.pow(((d.k - spot) / spot) * 22, 2)) * (d.dte >= 8 ? 1 : 0.55)),
+      delta: round(g.deltaCall, 3),
+      gamma: round(g.gamma, 4),
+      vega: round(g.vega, 3),
+      theta: round(oneDayLess - mid, 3),
+      iv,
       breakeven: round(d.k + mid),
       physicalExit,
       executionCost,
       ev,
-      expectedShortfall: round(-(0.38 + Math.max(0, moneyness) * 5.2), 3),
-      utility: round(ev - Math.max(0, moneyness) * 0.9 - spreadPct * 2.4, 3),
-      liquidityRisk: round(Math.min(0.94, 0.12 + Math.max(0, moneyness) * 6.1 + (11 - d.dte) * 0.02), 2),
-      verdict: d.verdict,
+      expectedShortfall,
+      utility,
+      liquidityRisk,
+      verdict: 'ALTERNATIVE' as ContractRow['verdict'],
       why: d.why,
     };
   });
+
+  // Rank on utility — the column the scene shows — then label. Top row wins;
+  // anything with negative utility is rejected outright rather than presented as
+  // a live alternative; the rest are the runners-up the Tracker scores against.
+  const ranked = [...priced].sort((a, b) => b.utility - a.utility);
+  ranked.forEach((row, rank) => {
+    row.verdict = rank === 0 ? 'SELECTED' : row.utility <= 0 ? 'REJECTED' : 'ALTERNATIVE';
+  });
+  return priced;
 }
 
 // ---- lotto ------------------------------------------------------------------
+/**
+ * Far-dated cheap strikes, gated on the probability the desk requires.
+ *
+ * The gate is a number, not a mood — and it is stated on screen. A verdict
+ * written into the table beside a probability it has no relationship to is the
+ * same failure as the Weigher's, one row further out on the board.
+ */
+export const LOTTO_P_GATE = 0.06;
+
 function buildLotto(spot: number, step: number): LottoRow[] {
   const defs = [
-    { k: Math.round((spot + step * 2) / step) * step, verdict: 'CONSIDERED' as const, why: 'Reachable inside the session on the modelled path' },
-    { k: Math.round((spot + step * 6) / step) * step, verdict: 'NO TRADE' as const, why: 'Needs a move in the top decile of intraday range with 2h left' },
-    { k: Math.round((spot + step * 12) / step) * step, verdict: 'NO TRADE' as const, why: 'Cheapest on the board; the required path is a tail, not a drift' },
+    { k: Math.round((spot + step * 2) / step) * step, why: 'Reachable inside the session on the modelled path' },
+    { k: Math.round((spot + step * 6) / step) * step, why: 'Needs a move in the top decile of the modelled intraday range' },
+    { k: Math.round((spot + step * 12) / step) * step, why: 'Cheapest on the board; the required path is a tail, not a drift' },
   ];
   return defs.map((d, i) => {
     const required = (d.k - spot) / spot;
     const ask = round(Math.max(0.04, 1.9 * Math.exp(-required * 74)), 2);
+    const pTargetBeforeExpiry = round(Math.max(0.003, 0.38 * Math.exp(-required * 104)), 3);
     return {
       id: `L${i}`,
       strike: round(d.k),
@@ -502,13 +702,13 @@ function buildLotto(spot: number, step: number): LottoRow[] {
       breakevenMove: round((required + ask / spot) * 100, 2),
       requiredMove: round(required * 100, 2),
       pFirstPassage: round(Math.max(0.005, 0.46 * Math.exp(-required * 96)), 3),
-      pTargetBeforeExpiry: round(Math.max(0.003, 0.38 * Math.exp(-required * 104)), 3),
+      pTargetBeforeExpiry,
       thetaBurnPerHour: round(ask * (0.11 + i * 0.05), 3),
       spreadCost: round(0.03 + i * 0.05, 3),
       terminalLiquidity: round(Math.max(0.05, 0.82 - i * 0.31), 2),
       pinRisk: round(0.18 + i * 0.09, 2),
       maxLoss: 1,
-      verdict: d.verdict,
+      verdict: pTargetBeforeExpiry >= LOTTO_P_GATE ? ('CONSIDERED' as const) : ('NO TRADE' as const),
       why: d.why,
     };
   });
@@ -605,14 +805,28 @@ function buildEarnings(spot: number): EarningsRead {
 }
 
 // ---- tracker ----------------------------------------------------------------
+/**
+ * Freeze the decision, advance the market, score what was not taken.
+ *
+ * The counterfactuals used to be four hand-written numbers. They are now the four
+ * contracts the Weigher did not pick, marked at the price the market actually
+ * reached — the same pricer, the same skew, the same horizon. That is the only
+ * version of this scene worth showing: the alternatives have to be able to win,
+ * or "we scored the road not taken" is set dressing. `better` is computed, so if
+ * a re-pin ever makes a rejected contract the right one, the scene says so.
+ */
 function buildTracker(
   ticker: string,
   setup: SetupCandidate,
-  contract: ContractRow,
+  contracts: ContractRow[],
   level: number,
   spot: number,
+  target: number,
+  stop: number,
   start: number,
 ): { packet: TrackerPacket; outcome: TrackerOutcome } {
+  const contract = contracts.find(c => c.verdict === 'SELECTED')!;
+  const others = contracts.filter(c => c !== contract);
   const packet: TrackerPacket = {
     id: 'TR-4417',
     // The instant the Tracker scene opens, not the end of the session. Pinning it
@@ -624,37 +838,51 @@ function buildTracker(
     setupId: setup.id,
     contractId: contract.id,
     entry: contract.mid,
-    stop: round(level * 0.988),
-    target: round(level * 1.031),
+    stop,
+    target,
     level: round(level),
     ev: setup.evAfterCosts,
     expectedShortfall: setup.expectedShortfall,
     dataQuality: setup.dataQuality,
     modelVersion: 'gex-drift v4',
     invalidation: setup.invalidation,
-    alternatives: ['SU-3', 'K+2 AUG 15', 'K+5 AUG 15', 'AUG 08 same strike'],
+    alternatives: [...others.map(c => c.id), 'SU-3'],
   };
 
+  // The market after the freeze: most of the way to the target, not all of it.
+  const targetProgress = 0.82;
+  const finalPx = spot + (target - spot) * targetProgress;
   const path: PricePoint[] = [];
   for (let i = 0; i < 60; i++) {
     const u = i / 59;
-    const spine = spot + (packet.target - spot) * Math.pow(u, 1.2) * 0.82;
+    const spine = spot + (finalPx - spot) * Math.pow(u, 1.2);
     path.push({ t: u, px: round(spine + hGauss(`${SEED}-out-${i}`) * spot * 0.0016) });
   }
+
+  // Every contract marked at the price the market reached, one session of decay
+  // paid on the way.
+  const markAt = (c: ContractRow) => {
+    const t = Math.max(0.5, c.dte - 1) / 252;
+    return round((bsPriceAtT(finalPx, c.strike, c.iv, t, 'C') - c.mid) / c.mid - c.executionCost, 3);
+  };
+  const taken = markAt(contract);
 
   return {
     packet,
     outcome: {
       path,
-      targetProgress: 0.82,
+      targetProgress,
       invalidationRisk: 0.14,
       survived: true,
       outcome: 'CLOSED ON RULE',
       counterfactuals: [
-        { label: 'K+2 AUG 15 (cheaper strike)', result: -0.18, better: false },
-        { label: 'K+5 AUG 15 (the lottery)', result: -1.0, better: false },
-        { label: 'AUG 08 same strike', result: -0.44, better: false },
-        { label: 'SU-3 fade the call wall', result: 0.06, better: false },
+        ...others.map(c => ({
+          label: `${c.strike}C ${c.expiry}${c.dte < 8 ? ' (shorter dated)' : ''}`,
+          result: markAt(c),
+          better: markAt(c) > taken,
+        })),
+        // The setup that was not taken, not a contract — scored on its own terms.
+        { label: 'SU-3 fade the call wall', result: -0.31, better: false },
       ],
       attribution: [
         { label: 'Level quality', contribution: 0.41 },
@@ -684,23 +912,37 @@ let cached: TrailerStory | null = null;
 export function buildTrailerStory(): TrailerStory {
   if (cached) return cached;
 
-  const snapshot = Simulator.buildSnapshot(TICKER);
-  const levels = buildLevels(snapshot);
+  const snapshot = Simulator.buildSnapshotAt(TICKER, STORY_SPOT, STORY_REGIME_DAY);
+  const raw = buildLevels(snapshot);
   const spot0 = snapshot.spot;
-  // The story happens at the put wall: the one structural level every desk in
-  // the trailer refers back to.
-  const level = round(levels.putWall);
+  // The story happens at the short-gamma shelf: the one structural level every
+  // desk in the trailer refers back to. It replaces the put wall on the board
+  // rather than sitting beside it — a level board carrying both would be
+  // offering two different answers to "where is support".
+  const level = storyLevel(snapshot.chain, spot0);
+  const levels = { callWall: round(raw.callWall), putWall: level, flip: round(raw.flip), king: round(raw.king) };
+  const netGex = snapshot.chain.reduce((a, n) => a + n.netGex, 0);
   const step = Math.max(0.5, round((levels.callWall - levels.putWall) / 12, 1));
 
-  const path = buildPath(spot0, level);
+  const path = buildPath(spot0, level, levels.flip);
   const spotNow = path[path.length - 1].px;
+  // The setup plays from the shelf to the call wall and dies below the shelf.
+  // Both prices are structural, not percentages of one — every contract is
+  // marked against them, so the Weigher, the packet and the Tracker's
+  // counterfactuals are all scored on the same two numbers.
+  const target = levels.callWall;
+  const stop = round(level - (spot0 - level) * 0.4);
+  // Contracts are priced at the spot the Weigher scene actually shows, not at
+  // the open. Priced at the open, the packet's entry was a price that had not
+  // been available for half an hour of story time while the HUD beside it read
+  // the current one.
+  const entrySpot = round(pxAt(path, storyUAtSceneStart('weigher') * STORY_SECONDS));
   const prints = buildPrints(level, step);
   const setups = buildSetups(TICKER, level, step);
-  const contracts = buildContracts(level, step);
   const selectedSetup = setups.find(s => s.verdict === 'SELECTED')!;
-  const selectedContract = contracts.find(c => c.verdict === 'SELECTED')!;
+  const contracts = buildContracts(entrySpot, level, step, target, stop, selectedSetup.pTargetBeforeStop);
   const start = sessionStart();
-  const { packet, outcome } = buildTracker(TICKER, selectedSetup, selectedContract, level, spotNow, start);
+  const { packet, outcome } = buildTracker(TICKER, selectedSetup, contracts, level, spotNow, target, stop, start);
 
   cached = {
     ticker: TICKER,
@@ -708,19 +950,14 @@ export function buildTrailerStory(): TrailerStory {
     level,
     spot0,
     path,
-    levels: {
-      callWall: round(levels.callWall),
-      putWall: round(levels.putWall),
-      flip: round(levels.flip),
-      king: round(levels.king),
-    },
+    levels,
     prints,
-    scanner: buildScanner(prints, TICKER),
+    scanner: buildScanner(prints, TICKER, spot0),
     metaorder: buildMetaorder(prints),
     darkPool: buildDarkPool(level, path),
     gamma: buildGammaField(snapshot.chain, levels, spot0),
-    rankedLevels: buildRankedLevels(levels, spotNow),
-    greeks: GREEKS,
+    rankedLevels: buildRankedLevels(levels),
+    greeks: buildGreeks(netGex),
     stress: STRESS,
     setups,
     contracts,

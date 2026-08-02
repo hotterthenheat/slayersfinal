@@ -22,26 +22,29 @@ import { at, clamp01, ease } from './useTrailerState';
  * the paths and distorted every axis label with them, so the height is measured
  * and passed down as a number.
  */
-export const FillBox: React.FC<{ className?: string; min?: number; children: (h: number) => React.ReactNode }> = ({
-  className = '',
-  min = 90,
-  children,
-}) => {
+export const FillBox: React.FC<{
+  className?: string;
+  min?: number;
+  /** Measured content box. Width matters as much as height: an SVG that assumes
+      a 1000-unit width and then stretches to fit distorts its own labels. */
+  children: (h: number, w: number) => React.ReactNode;
+}> = ({ className = '', min = 90, children }) => {
   const ref = useRef<HTMLDivElement>(null);
-  const [h, setH] = useState(0);
+  const [box, setBox] = useState({ h: 0, w: 0 });
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     const ro = new ResizeObserver(entries => {
-      const next = Math.round(entries[0].contentRect.height);
-      setH(prev => (Math.abs(prev - next) > 1 ? next : prev));
+      const r = entries[0].contentRect;
+      const next = { h: Math.round(r.height), w: Math.round(r.width) };
+      setBox(prev => (Math.abs(prev.h - next.h) > 1 || Math.abs(prev.w - next.w) > 1 ? next : prev));
     });
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
   return (
     <div ref={ref} className={`min-h-0 ${className}`}>
-      {h > 0 ? children(Math.max(min, h)) : null}
+      {box.h > 0 && box.w > 0 ? children(Math.max(min, box.h), box.w) : null}
     </div>
   );
 };
@@ -176,6 +179,8 @@ const VERDICT_TONE: Record<string, Tone> = {
   SELECTED: 'select',
   ALTERNATIVE: 'neutral',
   REJECTED: 'bear',
+  HOLDS: 'select',
+  BREAKS: 'bear',
   'NO TRADE': 'warn',
   CONSIDERED: 'info',
   FAVOURED: 'select',
@@ -246,10 +251,31 @@ export const PriceField: React.FC<{
    */
   follow?: boolean;
   pulse?: number;
+  /**
+   * The slot's measured width, from `FillBox`.
+   *
+   * Without it the field drew into a fixed 1000-unit box and stretched to fit
+   * with `preserveAspectRatio="none"`, which scales `<text>` along with the
+   * paths: in a 260px sidebar the level labels came out squashed to about a
+   * quarter width, in a full-bleed frame stretched wide. Drawing in real pixels
+   * costs nothing and keeps type at type size wherever the chart lands.
+   */
+  width?: number;
   className?: string;
   ariaLabel: string;
-}> = ({ points, reveal, levels = [], height = 180, markLive = true, follow = false, pulse = 0, className = '', ariaLabel }) => {
-  const W = 1000;
+}> = ({
+  points,
+  reveal,
+  levels = [],
+  height = 180,
+  markLive = true,
+  follow = false,
+  pulse = 0,
+  width,
+  className = '',
+  ariaLabel,
+}) => {
+  const W = Math.max(120, width ?? 1000);
   const H = height;
   const shown = Math.max(2, Math.round(points.length * clamp01(reveal)));
   const slice = points.slice(0, shown);
@@ -272,19 +298,27 @@ export const PriceField: React.FC<{
   return (
     <svg
       viewBox={`0 0 ${W} ${H}`}
+      // Safe now that the viewBox is the element's own pixel box: the scale is
+      // 1:1 in both axes, so "none" letterboxes nothing and distorts nothing.
       preserveAspectRatio="none"
       className={`w-full ${className}`}
       style={{ height }}
       role="img"
       aria-label={ariaLabel}
     >
-      {levels.map(l => (
+      {levels.map(l => {
+        const ly = y(l.price);
+        // Above the line by default, below it when the line is near the top —
+        // the Tracker's target sits at the very top of its own scale, and its
+        // label was being sliced in half by the frame.
+        const labelY = ly < 16 ? ly + 13 : ly - 5;
+        return (
         <g key={l.label}>
           <line
             x1={0}
             x2={W}
-            y1={y(l.price)}
-            y2={y(l.price)}
+            y1={ly}
+            y2={ly}
             stroke={LEVEL_STROKE[l.kind]}
             strokeWidth={l.kind === 'shelf' ? 1.6 : 1}
             strokeDasharray={l.kind === 'flip' ? '6 5' : l.kind === 'shelf' ? undefined : '3 6'}
@@ -292,7 +326,7 @@ export const PriceField: React.FC<{
           />
           <text
             x={8}
-            y={y(l.price) - 5}
+            y={labelY}
             fill={LEVEL_STROKE[l.kind]}
             fontSize={11}
             fontFamily="ui-monospace, monospace"
@@ -301,7 +335,8 @@ export const PriceField: React.FC<{
             {l.label}
           </text>
         </g>
-      ))}
+        );
+      })}
       <path d={d} fill="none" stroke="#E4E8F4" strokeWidth={1.6} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
       {markLive && (
         <>

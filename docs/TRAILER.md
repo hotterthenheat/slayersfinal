@@ -99,16 +99,51 @@ its scene opens.
 
 ### Where the data comes from
 
-`Simulator.buildSnapshot('NVDA')` and `buildLevels()` — the same single
-derivation every real desk reads, so the walls and flip shown here are the walls
-and flip the product shows. Story specifics (which prints arrive, which contracts
-compete, how the trade ends) are seeded from a fixed key via `src/core/rng`, so a
-replay is the same film.
+`Simulator.buildSnapshotAt('NVDA', spot, regimeDay)` and `buildLevels()` — the
+same chain, plan and level builders every real desk reads, run against a **pinned
+session**. Story specifics (which prints arrive, which contracts compete, how the
+trade ends) are seeded from a fixed key via `src/core/rng`, so a replay is the
+same film.
+
+**Why pinned.** The live simulator is mutable: `buildSnapshot` reads a price that
+advances every 1500ms and draws from the symbol's random stream on the way past.
+Built off that, the story's geometry depended on how long the app had been open
+before `/trailer` mounted. Cold, the strongest level below spot landed three cents
+under price, and the premise — price travelling down into a level — had nowhere
+to happen. `buildSnapshotAt` is a read-only sibling: same builders, fixed spot,
+fixed positioning regime, no RNG draw, no mutation. Mounting the trailer now
+leaves the live feed exactly where it was.
+
+Two constants at the top of `trailerStory.ts` name the session: `STORY_SPOT` and
+`STORY_REGIME_DAY`. The regime day sets the OI pivot and therefore the gamma flip;
+left to the calendar it wanders a strike and a half either side of spot across a
+week, and on roughly one day in five it lands *below* the level the story is
+about, which inverts the whole narrative.
+
+**The level is chosen, not assumed.** `buildLevels().putWall` is argmax |net GEX|
+below spot, which on this book is a large *positive* node just under price — a
+correct answer to the product's question and the wrong level for this film.
+`storyLevel()` picks the heaviest short-gamma strike at least 1% below spot
+instead, and that price replaces the put wall on the trailer's board rather than
+sitting beside it. A board carrying both would be offering two answers to "where
+is support".
+
+**Contracts are priced, not fitted.** The Weigher runs on `bsPriceAtT` — the app's
+own Black-Scholes, the one Compass's contract track is pinned against. Mid at the
+entry spot, exit at the target, expected shortfall at the stop, theta as the value
+of one day. Utility is the probability-weighted return net of execution minus the
+liquidity penalty, and the SELECTED / ALTERNATIVE / REJECTED labels are assigned
+*after* sorting on it. The scene's argument — the best headline return is not the
+best decision — is therefore an output. `storyClock.test.ts` fails if it stops
+being true.
 
 **Swapping in live data later:** replace the body of `buildTrailerStory()`. The
 scenes depend only on the `TrailerStory` shape in `trailerTypes.ts`, not on the
-simulator. The one thing to preserve is that `path`, `levels` and `level` stay
-mutually consistent — the whole narrative is one level being tested.
+simulator. The things to preserve are that `path`, `levels` and `level` stay
+mutually consistent — the whole narrative is one level being tested — and that
+nothing which depends on *where price is now* gets frozen into the story. Role,
+distance, touches held and the print list are all derived at draw time from the
+story clock, because every one of them was wrong when it was not.
 
 ## Performance decisions
 
@@ -150,7 +185,12 @@ Enforced in the copy of every scene:
 - Every probability names its horizon and its event.
 - **NO TRADE appears twice** — Lotto's cheapest contract and one Stocks name —
   and Compass rejects two of four setups, one of which has the best flow score
-  on the board.
+  on the board. Lotto's verdicts come from a stated probability gate, printed
+  next to them, not from an author's opinion of which strike looks silly.
+- **The desk's own choice is allowed to lose.** The Tracker re-prices every
+  rejected contract on the path the market actually took, and on this path one of
+  them pays more than the one that was taken. The scene says so, in a count it
+  reads off the results rather than a sentence written under them.
 - No profitability promise, no user counts, no testimonials, no live-feed claim.
 
 ## Known limitations
@@ -164,5 +204,9 @@ Enforced in the copy of every scene:
 - Scene lengths are tuned for desktop reading speed. On a phone the composition
   scrolls, and a slow reader will want to pause — the transport is always
   reachable.
-- The story is a single scripted event. A second story would mean a second
-  `buildTrailerStory` and a story picker; the scene components would not change.
+- The story is a single scripted event on a **named session** — a fixed spot and
+  a fixed positioning regime, not today's book. That is deliberate (above), and it
+  means the numbers in the film will not match the numbers on the desk you land on
+  when you press "Open NVDA desk". The desk is live; the film is a recording.
+- A second story would mean a second `buildTrailerStory` and a story picker; the
+  scene components would not change.

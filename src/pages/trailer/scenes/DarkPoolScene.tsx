@@ -11,6 +11,7 @@ import React from 'react';
 import { useTrailer, at, clamp01, ease } from '../useTrailerState';
 import { Beat, Caveat, Cell, FillBox, PriceField, SceneHead, SceneStatement } from '../parts';
 import { px, usd } from '../format';
+import { STORY_SECONDS } from '../trailerStory';
 
 const DarkPoolScene: React.FC = () => {
   const { story, thread, progress: p, storyU, reduced } = useTrailer();
@@ -20,7 +21,35 @@ const DarkPoolScene: React.FC = () => {
   const reveal = storyU;
   const readT = ease(at(p, 0.5, 0.76));
 
-  const shown = dp.prints.filter((_, i) => p > 0.12 + (i / dp.prints.length) * 0.42);
+  // Prints arrive when the session reaches them, not when the scene does. Staged
+  // on scene progress they marched in evenly over the scene regardless of their
+  // own timestamps — so a print stamped early in the session could arrive after
+  // one stamped late, on a chart whose live edge was already past both.
+  const revealedTo = storyU * STORY_SECONDS;
+  const shown = dp.prints.filter(pr => pr.at <= revealedTo);
+
+  /*
+    Touches and distance against the session so far, not against its close.
+
+    Both were stored at build time from the closing spot, so mid-film the panel
+    read "+1.07%" while the price above it sat under the shelf, and claimed three
+    holds before the third probe had happened. Counted off the one revealed path:
+    a crossing down is a touch, a recovery back through is a hold.
+  */
+  let touches = 0;
+  let held = 0;
+  let below = false;
+  for (const pt of story.path) {
+    if (pt.t > revealedTo) break;
+    if (!below && pt.px < dp.shelf) {
+      below = true;
+      touches++;
+    } else if (below && pt.px > dp.shelf) {
+      below = false;
+      held++;
+    }
+  }
+  const distancePct = ((thread.spot - dp.shelf) / dp.shelf) * 100;
 
   return (
     <div className="h-full flex flex-col gap-3 min-h-0">
@@ -32,9 +61,10 @@ const DarkPoolScene: React.FC = () => {
             {thread.ticker} · off-exchange prints against the lit path
           </div>
           <FillBox className="relative flex-1" min={120}>
-            {h => (
+            {(h, w) => (
             <PriceField
               points={story.path}
+              width={w}
               reveal={reveal}
               follow
               pulse={p * 3}
@@ -47,8 +77,8 @@ const DarkPoolScene: React.FC = () => {
           <Beat p={p} from={0.34} reduced={reduced} className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
             <Cell label="Shelf" value={px(dp.shelf)} tone="info" />
             <Cell label="Notional" value={usd(dp.shelfNotional)} />
-            <Cell label="Touches held" value={`${dp.survivedTouches}/${dp.touches}`} tone="bull" />
-            <Cell label="Distance" value={`${dp.distancePct >= 0 ? '+' : ''}${dp.distancePct}%`} />
+            <Cell label="Touches held" value={`${held}/${touches}`} tone={held === touches ? 'bull' : 'warn'} />
+            <Cell label="Distance" value={`${distancePct >= 0 ? '+' : ''}${distancePct.toFixed(2)}%`} tone={distancePct >= 0 ? 'bull' : 'bear'} />
           </Beat>
         </div>
 
@@ -96,8 +126,9 @@ const DarkPoolScene: React.FC = () => {
 
       <div className="space-y-1">
         <SceneStatement p={p} from={0.66} reduced={reduced}>
-          Three touches, three holds — the shelf is absorbing on the weight of evidence, and that is still a reading, not
-          a direction.
+          {touches === 0
+            ? `Price has not reached ${px(dp.shelf)} yet — the shelf is a claim about where size sits, not a prediction.`
+            : `${touches} ${touches === 1 ? 'touch' : 'touches'}, ${held} ${held === 1 ? 'hold' : 'holds'} — the shelf is absorbing on the weight of evidence, and that is still a reading, not a direction.`}
         </SceneStatement>
         <Caveat>
           Modelled off-exchange prints · a print records size, never intent · absorption is the best-supported of four

@@ -12,6 +12,7 @@ import { Link } from 'react-router-dom';
 import { ArrowUpRight, ChevronLeft, ChevronRight, Pause, Play, RotateCcw, SkipForward, Volume2, VolumeX, X } from 'lucide-react';
 import { SCENES, TRAILER_DURATION_MS } from './useTrailerTimeline';
 import { useTrailer } from './useTrailerState';
+import { useTicker } from '../../context/MarketDataContext';
 
 const Btn: React.FC<{
   onClick: () => void;
@@ -70,7 +71,8 @@ const TrailerControls: React.FC<{
   muted: boolean;
   onToggleMute: () => void;
 }> = ({ visible, muted, onToggleMute }) => {
-  const { timeline } = useTrailer();
+  const { timeline, story } = useTrailer();
+  const { changeTicker } = useTicker();
   const { playing, scene, sceneIndex, toggle, replay, skipToEnd, step, timeMs } = timeline;
 
   const remaining = Math.max(0, TRAILER_DURATION_MS - timeMs);
@@ -115,9 +117,20 @@ const TrailerControls: React.FC<{
           {scene.route && (
             <Link
               to={scene.route}
+              state={{ focusTicker: story.ticker }}
+              /*
+                Carry the symbol across. Every desk reads the global active
+                ticker, which the app opens on SPY — so "Open desk" from a film
+                about NVDA used to land on a desk showing something else, and the
+                one promise the button makes (this is the real thing you were
+                just watching) was the one it broke. `changeTicker` is the same
+                call the top-bar switcher makes; the `focusTicker` state is the
+                documented Pulse deep-link contract, which also marks the chart.
+              */
+              onClick={() => changeTicker(story.ticker)}
               className="inline-flex items-center gap-1.5 min-h-[44px] px-3 rounded-md border border-select/30 bg-select/10 font-mono text-label font-semibold uppercase tracking-wider text-select hover:bg-select/15 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-select/60 transition-colors"
             >
-              Open desk <ArrowUpRight className="w-3.5 h-3.5" />
+              Open {story.ticker} desk <ArrowUpRight className="w-3.5 h-3.5" />
             </Link>
           )}
           <Link

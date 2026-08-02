@@ -63,9 +63,10 @@ const ConvergenceScene: React.FC = () => {
             <span className="font-mono text-caption tnum text-textPrimary">{px(thread.spot)}</span>
           </div>
           <FillBox className="flex-1" min={110}>
-            {h => (
+            {(h, w) => (
             <PriceField
               points={story.path}
+              width={w}
               reveal={reveal}
               pulse={p * 3}
               height={h}

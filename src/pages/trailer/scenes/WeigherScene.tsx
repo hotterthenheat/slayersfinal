@@ -2,10 +2,15 @@
   Scene 9 — Compass, contract weigher.
 
   One thesis expands into five ways to express it. The waterfall is the point:
-  gross expected value, then execution cost, then the moneyness penalty, arriving
-  at a utility that can be compared. The contract with the highest headline
-  return is last on utility, which is the whole argument for weighing rather than
-  ranking.
+  gross expected value, then execution cost, then the liquidity penalty, arriving
+  at a utility that can be compared — and the contract with the highest headline
+  return is not the one utility picks, which is the whole argument for weighing
+  rather than ranking.
+
+  The closing line names that contract rather than asserting the shape, because
+  the shape is now an output. `trailerStory` prices every row with the app's own
+  Black-Scholes and sorts on utility; if a re-pin ever made the best headline and
+  the best utility the same contract, this sentence has to change with it.
 */
 
 import React from 'react';
@@ -21,6 +26,7 @@ const WeigherScene: React.FC = () => {
   const rows = story.contracts;
   const selected = rows.find(r => r.verdict === 'SELECTED')!;
   const maxUtil = Math.max(...rows.map(r => Math.abs(r.utility)), 0.001);
+  const topEv = rows.reduce((best, r) => (r.ev > best.ev ? r : best), rows[0]);
 
   return (
     <div className="h-full flex flex-col gap-3 min-h-0">
@@ -111,8 +117,18 @@ const WeigherScene: React.FC = () => {
 
       <div className="space-y-1">
         <SceneStatement p={p} from={0.7} reduced={reduced}>
-          The Weigher prices the difference — the cheapest contract on the board has the highest headline return and the
-          worst utility once execution is paid for.
+          {topEv.id === selected.id ? (
+            <>
+              The Weigher prices the difference — on this board the best headline return survives execution cost, and the
+              same contract wins on both.
+            </>
+          ) : (
+            <>
+              The Weigher prices the difference — the {topEv.strike}
+              {topEv.right} {topEv.expiry} returns {(topEv.ev * 100).toFixed(0)}% if the target is reached and{' '}
+              {(topEv.expectedShortfall * 100).toFixed(0)}% if it is not, and that is why it is not the one taken.
+            </>
+          )}
         </SceneStatement>
         <Caveat>
           Modelled chain and quotes · expected value is net of the modelled spread and slippage · not a recommendation

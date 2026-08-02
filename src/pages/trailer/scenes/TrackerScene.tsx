@@ -2,25 +2,26 @@
   Scene 16 — Tracker.
 
   The payoff of the whole film. The decision that Compass selected and the
-  Weigher priced is frozen into a packet — including the alternatives it beat —
-  and then the market is allowed to move.
+  Weigher priced is frozen into a packet — carrying the alternatives it passed
+  over — and then the market is allowed to move.
 
   What comes back is not a win column. It is the counterfactual: every rejected
-  alternative scored on the same path, so "was the selected contract actually
-  better" has an answer instead of a story. The learning line is deliberately
-  modest — one outcome updates a weight inside its prior, it does not crown a
-  model.
+  alternative re-priced on the same path, so "was the selected contract actually
+  better" has an answer instead of a story — and on this path the answer is
+  partly no, which is the point. The learning line is deliberately modest: one
+  outcome updates a weight inside its prior, it does not crown a model.
 */
 
 import React from 'react';
 import { useTrailer, at, clamp01, ease } from '../useTrailerState';
-import { Beat, Caveat, PriceField, SceneHead, SceneStatement, Verdict } from '../parts';
+import { Beat, Caveat, FillBox, PriceField, SceneHead, SceneStatement, Verdict } from '../parts';
 import { clock, prob, px } from '../format';
 
 const TrackerScene: React.FC = () => {
   const { story, progress: p, reduced, compact } = useTrailer();
   const k = story.packet;
   const o = story.outcome;
+  const beat = o.counterfactuals.filter(c => c.better).length;
 
   const freeze = ease(at(p, 0.04, 0.24));
   const advance = ease(at(p, 0.24, 0.62));
@@ -76,19 +77,24 @@ const TrackerScene: React.FC = () => {
                 <span className="ml-2 text-textPrimary">{o.outcome}</span>
               </span>
             </div>
-            <PriceField
-              points={o.path}
-              reveal={advance}
-              markLive
-              pulse={p * 3}
-              height={compact ? 92 : 118}
-              ariaLabel="Modelled path after the decision was frozen, against the stop and target"
-              levels={[
-                { price: k.target, label: `TARGET ${px(k.target)}`, kind: 'resistance' },
-                { price: k.level, label: `LEVEL ${px(k.level)}`, kind: 'shelf' },
-                { price: k.stop, label: `STOP ${px(k.stop)}`, kind: 'support' },
-              ]}
-            />
+            <FillBox className={compact ? 'h-[92px]' : 'h-[118px]'} min={compact ? 92 : 118}>
+              {(h, w) => (
+                <PriceField
+                  points={o.path}
+                  width={w}
+                  reveal={advance}
+                  markLive
+                  pulse={p * 3}
+                  height={h}
+                  ariaLabel="Modelled path after the decision was frozen, against the stop and target"
+                  levels={[
+                    { price: k.target, label: `TARGET ${px(k.target)}`, kind: 'resistance' },
+                    { price: k.level, label: `LEVEL ${px(k.level)}`, kind: 'shelf' },
+                    { price: k.stop, label: `STOP ${px(k.stop)}`, kind: 'support' },
+                  ]}
+                />
+              )}
+            </FillBox>
             <div className="mt-1.5 grid grid-cols-3 gap-2 font-mono text-micro">
               <div>
                 <div className="text-textMuted uppercase tracking-wider">Target progress</div>
@@ -123,8 +129,18 @@ const TrackerScene: React.FC = () => {
                     </div>
                   );
                 })}
+                {/*
+                  Read off the scored alternatives rather than asserted. The line
+                  used to say the selected contract beat all four, which stopped
+                  being true the moment the counterfactuals were priced instead of
+                  written down — and a desk that only reports the outcomes
+                  flattering its own choice is the thing this scene exists to
+                  argue against.
+                */}
                 <div className="mt-1 pt-1 border-t border-borderSubtle font-mono text-micro text-textMuted">
-                  The selected contract beat all four on this path.
+                  {beat === 0
+                    ? 'No alternative beat the selected contract on this path.'
+                    : `${beat} of ${o.counterfactuals.length} would have paid more on this path — with the risk each carried before the outcome was known.`}
                 </div>
               </div>
             </Beat>

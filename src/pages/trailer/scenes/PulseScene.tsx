@@ -45,9 +45,10 @@ const PulseScene: React.FC = () => {
             </span>
           </div>
           <FillBox className="flex-1" min={130}>
-            {h => (
+            {(h, w) => (
             <PriceField
               points={story.path}
+              width={w}
               reveal={reveal}
               follow
               pulse={p * 3}

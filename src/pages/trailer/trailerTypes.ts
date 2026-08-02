@@ -155,8 +155,15 @@ export interface GammaField {
 
 export interface RankedLevel {
   price: number;
-  role: 'SUPPORT' | 'RESISTANCE' | 'PIVOT';
-  distancePct: number;
+  /**
+   * The gamma flip, which is a pivot wherever price happens to be.
+   *
+   * Role and distance are NOT stored: both are facts about where price is now,
+   * and a board that froze them at the session close labelled a level SUPPORT
+   * while the HUD beside it showed price underneath it. `roleOf` in
+   * `LevelsStressScene` derives them from the live spot.
+   */
+  isFlip: boolean;
   reaction: number;
   confidence: number;
   sensitivity: number;

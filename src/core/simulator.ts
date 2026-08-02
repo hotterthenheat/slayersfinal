@@ -339,7 +339,7 @@ const Simulator = (() => {
   }
 
   // Generate Strike-by-Strike Chain
-  function generateOptionsChain(tickerKey: TickerSymbol, spotOverride?: number): StrikeNode[] {
+  function generateOptionsChain(tickerKey: TickerSymbol, spotOverride?: number, regimeDayOverride?: number): StrikeNode[] {
     const config = TICKERS[tickerKey];
     const spot = spotOverride ?? config.currentPrice;
     const step = config.step;
@@ -354,7 +354,11 @@ const Simulator = (() => {
     // gamma flip — so the flip is a real structural level that sits away from
     // spot and moves day to day, not an artifact glued half a step above price.
     // Mostly a touch below spot (positive-gamma days), sometimes above.
-    const regime01 = (symbolHash(`${tickerKey}:regime:${Math.floor(Date.now() / 86400000)}`) % 1000) / 1000;
+    //
+    // The day is overridable so a caller that must be reproducible can name the
+    // session it is showing. Live desks pass nothing and get today's regime.
+    const regimeDay = regimeDayOverride ?? Math.floor(Date.now() / 86400000);
+    const regime01 = (symbolHash(`${tickerKey}:regime:${regimeDay}`) % 1000) / 1000;
     const pivot = spot * (1 + (regime01 * 0.014 - 0.011)); // −1.1% … +0.3% of spot
 
     for (let i = -strikeRange; i <= strikeRange; i++) {
@@ -637,6 +641,37 @@ const Simulator = (() => {
         indicators,
         plan,
         tape,
+      };
+    },
+    /**
+     * A snapshot pinned to a caller-supplied spot, with no tape and no RNG draw.
+     *
+     * `buildSnapshot` reads the live `currentPrice` and pulls from the symbol's
+     * random stream to mint a tape slice, so two calls a tick apart return
+     * different books — right for a live desk, fatal for anything that has to be
+     * reproducible. The chain and plan builders are already pure functions of
+     * (symbol, spot, positioning regime); this exposes them at a fixed spot,
+     * draws nothing, and mutates nothing, so the same arguments always yield the
+     * same book and calling it leaves the live feed exactly where it was.
+     *
+     * `regimeDay` pins the daily positioning regime (the OI pivot, and therefore
+     * the gamma flip). Omit it for today's regime; pass one to name the session
+     * being shown.
+     */
+    buildSnapshotAt: (sym: string, spot: number, regimeDay?: number): MarketSnapshot => {
+      const key = ensureTicker(sym);
+      const cfg = TICKERS[key];
+      const chain = generateOptionsChain(key, spot, regimeDay);
+      const indicators = getIndicators(priceHistory[key]);
+      return {
+        ticker: key,
+        spot,
+        changePercent: ((spot - cfg.basePrice) / cfg.basePrice) * 100,
+        priceHistory: priceHistory[key],
+        chain,
+        indicators,
+        plan: generateTradePlan(key, spot, chain, indicators),
+        tape: [],
       };
     },
     tick,

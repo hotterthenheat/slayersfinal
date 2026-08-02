@@ -12,6 +12,7 @@ import React from 'react';
 import { useTrailer, at, ease } from '../useTrailerState';
 import { Beat, Caveat, HeadRow, SceneHead, SceneStatement, Verdict } from '../parts';
 import { prob } from '../format';
+import { LOTTO_P_GATE } from '../trailerStory';
 
 const GRID = '76px 62px 74px 74px 78px 74px 96px';
 const GRID_SM = '70px 74px 96px';
@@ -55,6 +56,9 @@ const PathMass: React.FC<{ rows: { requiredMove: number; verdict: string }[]; gr
 const LottoScene: React.FC = () => {
   const { story, progress: p, reduced, compact } = useTrailer();
   const grow = ease(at(p, 0.12, 0.5));
+  const furthest = story.lotto[story.lotto.length - 1];
+  const gated = story.lotto.filter(l => l.verdict === 'NO TRADE').length;
+  const reachable = story.lotto.length - gated;
 
   return (
     <div className="h-full flex flex-col gap-3 min-h-0">
@@ -124,12 +128,16 @@ const LottoScene: React.FC = () => {
           <Beat p={p} from={0.58} reduced={reduced}>
             <div className="rounded-md border border-warn/30 bg-warn/[0.06] p-2.5">
               <div className="flex items-center gap-2">
-                <Verdict>NO TRADE</Verdict>
-                <span className="font-mono text-label tnum text-textPrimary">{story.lotto[2].strike}C</span>
+                {/* The verdict comes from the gate in `trailerStory`, not from
+                    this component — the gate is the claim, and a hard-coded word
+                    beside a computed probability is how the two drift apart. */}
+                <Verdict>{furthest.verdict}</Verdict>
+                <span className="font-mono text-label tnum text-textPrimary">{furthest.strike}C</span>
               </div>
               <p className="mt-1 font-mono text-micro text-textSecondary leading-relaxed">
-                A cheap contract is not cheap when the required path is a tail. The probability-adjusted outcome on the
-                nearer strike is materially better at a lower headline return.
+                A cheap contract is not cheap when the required path is a tail. It needs{' '}
+                {furthest.requiredMove.toFixed(2)}% inside the session and touches at {prob(furthest.pTargetBeforeExpiry)}{' '}
+                — under the {prob(LOTTO_P_GATE)} the desk requires before a far strike is worth pricing.
               </p>
             </div>
           </Beat>
@@ -138,7 +146,8 @@ const LottoScene: React.FC = () => {
 
       <div className="space-y-1">
         <SceneStatement p={p} from={0.7} reduced={reduced}>
-          Same session, same clock — one strike is reachable on the modelled path and two are not.
+          Same session, same clock — {reachable === 1 ? 'one strike is' : `${reachable} strikes are`} reachable on the
+          modelled path and {gated === 1 ? 'one is' : `${gated} are`} not.
         </SceneStatement>
         <Caveat>
           Modelled first-passage probabilities over the remaining session · horizon is expiration, event is touching the

@@ -14,7 +14,24 @@ import { Bar, Caveat, SceneHead, SceneStatement, SignedBar, Verdict } from '../p
 import { prob, px, usd } from '../format';
 
 const LevelsStressScene: React.FC = () => {
-  const { story, progress: p, reduced, compact } = useTrailer();
+  const { story, thread, progress: p, reduced, compact } = useTrailer();
+
+  /*
+    Role and distance against the live spot, nearest first.
+
+    Both were baked into the story at the session close, so a level the price had
+    since dropped under still read SUPPORT with a negative distance while the HUD
+    two rows down showed price below it. They are facts about now, so they are
+    computed now — the level's reaction, confidence and sensitivity are properties
+    of the book and stay where they were built.
+  */
+  const board = story.rankedLevels
+    .map(l => ({
+      ...l,
+      role: l.isFlip ? 'PIVOT' : l.price < thread.spot ? 'SUPPORT' : 'RESISTANCE',
+      distancePct: ((l.price - thread.spot) / thread.spot) * 100,
+    }))
+    .sort((a, b) => Math.abs(a.distancePct) - Math.abs(b.distancePct));
 
   const levelsT = ease(at(p, 0.06, 0.34));
   const greeksT = ease(at(p, 0.26, 0.56));
@@ -35,7 +52,7 @@ const LevelsStressScene: React.FC = () => {
         <div className="inst-surface rounded-md p-2.5 flex flex-col min-h-0">
           <div className="font-mono text-micro uppercase tracking-widest text-textMuted mb-1.5">Ranked levels</div>
           <div className="flex-1 min-h-0 flex flex-col justify-evenly gap-1.5">
-            {story.rankedLevels.map((l, i) => {
+            {board.map((l, i) => {
               const e = clamp01((levelsT - i * 0.12) / 0.6);
               if (e <= 0) return null;
               return (
@@ -51,7 +68,7 @@ const LevelsStressScene: React.FC = () => {
                     </span>
                     <span className="text-textMuted ml-auto">
                       {l.distancePct >= 0 ? '+' : ''}
-                      {l.distancePct}%
+                      {l.distancePct.toFixed(2)}%
                     </span>
                   </div>
                   <div className="mt-0.5 grid grid-cols-[1fr_1fr] gap-1.5">
@@ -117,7 +134,11 @@ const LevelsStressScene: React.FC = () => {
                 >
                   <div className="flex items-baseline justify-between gap-2">
                     <span className="font-mono text-micro uppercase tracking-wider text-textPrimary">{s.label}</span>
-                    {seen && <Verdict>{s.levelSurvives ? 'SELECTED' : 'REJECTED'}</Verdict>}
+                    {/* The level's own words. SELECTED/REJECTED belong to a
+                        decision; a shock case is a state the level either
+                        survives or does not, and borrowing the decision lexicon
+                        for it read as though the desk had chosen the shock. */}
+                    {seen && <Verdict>{s.levelSurvives ? 'HOLDS' : 'BREAKS'}</Verdict>}
                   </div>
                   {seen && (
                     <>

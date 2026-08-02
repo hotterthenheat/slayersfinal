@@ -108,12 +108,19 @@ const TrailerShell: React.FC<{ autoStart: boolean }> = ({ autoStart }) => {
     };
   }, []);
 
-  // Keyboard transport. Ignored while focus is in a field so the controls never
-  // eat a keystroke meant for something else.
+  // Keyboard transport. Ignored while focus is on anything that owns the key
+  // itself — a field, or a control that activates on Space or Enter.
+  //
+  // Excluding only fields was not enough: a keyboard user tabs to Next scene,
+  // presses Space to press it, and the global handler ran too, so one keystroke
+  // both advanced the scene and toggled playback. Buttons, links and anything
+  // wearing role="button" are all Space- or Enter-activated, so they are all the
+  // browser's keystroke, not ours.
   useEffect(() => {
+    const SELF_HANDLING = 'input, textarea, select, button, a[href], [role="button"], [role="slider"], [contenteditable="true"]';
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
-      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
+      if (el?.closest?.(SELF_HANDLING)) return;
       if (e.key === ' ' || e.key === 'k') {
         e.preventDefault();
         toggle();

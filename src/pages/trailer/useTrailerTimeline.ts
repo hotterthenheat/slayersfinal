@@ -164,7 +164,15 @@ export function useTrailerTimeline(autoStart: boolean): TrailerTimeline {
       lastRef.current = now;
       // A tab that was hidden hands back a huge delta on the first frame back;
       // clamping keeps the film from jumping a whole scene on return.
-      const dt = prev == null ? 0 : Math.min(now - prev, 64);
+      //
+      // The ceiling is a backstop for that case, not a frame budget. At 64ms it
+      // was under four frames, so any machine dropping below ~16fps — a mid-range
+      // phone, a laptop with the trailer in a background window — quietly ran the
+      // film in slow motion, and the 84-second timeline took two minutes without
+      // anything looking wrong. 500ms still catches the tab-restore jump (which
+      // arrives in seconds) while letting a genuinely slow renderer stay on the
+      // clock and drop frames instead.
+      const dt = prev == null ? 0 : Math.min(now - prev, 500);
       const next = timeRef.current + dt;
       if (next >= TRAILER_DURATION_MS) {
         timeRef.current = TRAILER_DURATION_MS;
