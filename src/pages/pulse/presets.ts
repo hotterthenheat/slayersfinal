@@ -6,7 +6,7 @@ import type { Layout } from 'react-grid-layout';
  * A panel carries an optional per-panel `ticker`; when unset it follows the
  * workspace's global ticker.
  */
-export const WORKSPACE_VERSION = 2;
+export const WORKSPACE_VERSION = 3;
 /**
  * The storage key is frozen at `_v1` on purpose, and the schema version rides
  * INSIDE the payload. Renaming this key does not migrate a saved desk, it
@@ -74,15 +74,29 @@ export interface PulseWorkspaceState {
   activeId: string;
 }
 
-/** Helper to keep preset authoring terse. */
-const L = (i: string, x: number, y: number, w: number, h: number, minW = 3, minH = 3): Layout => ({
+/**
+ * Helper to keep preset authoring terse.
+ *
+ * Presets are still written in the ORIGINAL coarse row unit — `h: 6` reads as
+ * six chart-height rows, the way every comment below assumes — and this doubles
+ * `y` and `h` on the way out, because the grid's row is half as tall as it was.
+ * Authoring in the fine unit would have meant rewriting fifteen hand-tuned
+ * tables and re-deriving every "these must sum to 12" note in the process.
+ *
+ * The trailing minW/minH arguments are gone. They were a resize FLOOR, and a
+ * floor is exactly why a row could not be shrunk to fit its neighbours: the
+ * user dragged and the panel refused, leaving a strip of canvas nothing could
+ * reach. Size is the user's now. What a widget wants to be born at still comes
+ * from the registry.
+ */
+const L = (i: string, x: number, y: number, w: number, h: number): Layout => ({
   i,
   x,
-  y,
+  y: y * 2,
   w,
-  h,
-  minW,
-  minH,
+  h: h * 2,
+  minW: 1,
+  minH: 1,
 });
 
 /**
@@ -90,13 +104,17 @@ const L = (i: string, x: number, y: number, w: number, h: number, minW = 3, minH
  * exposure heatmap + dealer positioning + order flow + dark pool) so nothing
  * regresses. Users can edit these; the originals stay restorable.
  *
- * Panels meant to share a band must sum to 12 across it. Less leaves a gutter
- * the grid cannot fill; more gets wrapped by react-grid-layout, which is how a
- * preset ends up stacking two panels it meant to pair. (Column compositions like
- * Flow Command are the exception — a tall panel spans several bands, so those
- * bands read short on their own.) The minW/minH arguments here are advisory:
- * PulseWorkspace re-reads them from the widget registry on load, so no preset
- * can ship a panel under the floor its own content needs.
+ * Panels meant to share a band must sum to 12 across it. Less leaves a gutter,
+ * more gets wrapped by react-grid-layout, which is how a preset ends up
+ * stacking two panels it meant to pair. (Column compositions like Flow Command
+ * are the exception — a tall panel spans several bands, so those bands read
+ * short on their own.)
+ *
+ * A gutter is only a preset's problem now. The desk no longer enforces a size
+ * floor, so a user can drag any of these to any width and close the gap
+ * themselves, or press Fill and have every panel stretch into whatever space is
+ * left. Presets should still sum to 12 — landing on a tidy desk is the point of
+ * shipping them — but a preset that does not is no longer unfixable.
  */
 export const PULSE_PRESETS: PulseLayout[] = [
   {
@@ -116,16 +134,16 @@ export const PULSE_PRESETS: PulseLayout[] = [
       { id: 'c-liq', key: 'liquidity-map' },
     ],
     layout: [
-      L('c-chart', 0, 0, 8, 6, 4, 4),
-      L('c-heat', 8, 0, 4, 6, 3, 4),
-      L('c-pos', 0, 6, 8, 5, 3, 4),
-      L('c-flow', 8, 6, 4, 5, 3, 4),
-      L('c-grad', 0, 11, 8, 6, 4, 4),
-      L('c-prem', 8, 11, 4, 6, 3, 3),
-      L('c-tape', 0, 17, 8, 6, 4, 4),
-      L('c-alerts', 8, 17, 4, 6, 3, 3),
-      L('c-dp', 0, 23, 12, 4, 4, 3),
-      L('c-liq', 0, 27, 12, 8, 4, 5),
+      L('c-chart', 0, 0, 8, 6),
+      L('c-heat', 8, 0, 4, 6),
+      L('c-pos', 0, 6, 8, 5),
+      L('c-flow', 8, 6, 4, 5),
+      L('c-grad', 0, 11, 8, 6),
+      L('c-prem', 8, 11, 4, 6),
+      L('c-tape', 0, 17, 8, 6),
+      L('c-alerts', 8, 17, 4, 6),
+      L('c-dp', 0, 23, 12, 4),
+      L('c-liq', 0, 27, 12, 8),
     ],
   },
   {
@@ -144,13 +162,13 @@ export const PULSE_PRESETS: PulseLayout[] = [
     ],
     layout: [
       // left column — flow / dark-pool feed
-      L('cmd-dp', 0, 0, 3, 6, 3, 4),
-      L('cmd-flow', 0, 6, 3, 5, 3, 4),
+      L('cmd-dp', 0, 0, 3, 6),
+      L('cmd-flow', 0, 6, 3, 5),
       // center column — liquidity chart (flagship, tall) over the live chart
-      L('cmd-liq', 3, 0, 5, 9, 4, 5),
-      L('cmd-chart', 3, 9, 5, 4, 4, 4),
+      L('cmd-liq', 3, 0, 5, 9),
+      L('cmd-chart', 3, 9, 5, 4),
       // right column — GEX heatmap grid, full height (matches the center stack)
-      L('cmd-gex', 8, 0, 4, 13, 3, 4),
+      L('cmd-gex', 8, 0, 4, 13),
     ],
   },
   {
@@ -165,9 +183,9 @@ export const PULSE_PRESETS: PulseLayout[] = [
       { id: 'sw-setups', key: 'top-setups' },
     ],
     layout: [
-      L('sw-spy', 0, 0, 6, 7, 4, 4),
-      L('sw-qqq', 6, 0, 6, 7, 4, 4),
-      L('sw-setups', 0, 7, 12, 4, 3, 3),
+      L('sw-spy', 0, 0, 6, 7),
+      L('sw-qqq', 6, 0, 6, 7),
+      L('sw-setups', 0, 7, 12, 4),
     ],
   },
   {
@@ -183,9 +201,9 @@ export const PULSE_PRESETS: PulseLayout[] = [
       // 6 + 6, not 8 + 4: the Exposure Matrix is a ten-column table and was
       // shipped here at w=4, under its own registry minimum, so the pairing this
       // preset exists to show read as a scroll box next to a chart.
-      L('g-chart', 0, 0, 6, 6, 4, 4),
-      L('g-exp', 6, 0, 6, 6, 6, 4),
-      L('g-flow', 0, 6, 12, 4, 4, 4),
+      L('g-chart', 0, 0, 6, 6),
+      L('g-exp', 6, 0, 6, 6),
+      L('g-flow', 0, 6, 12, 4),
     ],
   },
   {
@@ -208,10 +226,10 @@ export const PULSE_PRESETS: PulseLayout[] = [
       { id: 'gw-nvda', key: 'gex-heatmap', ticker: 'NVDA' },
     ],
     layout: [
-      L('gw-spy', 0, 0, 6, 7, 4, 4),
-      L('gw-qqq', 6, 0, 6, 7, 4, 4),
-      L('gw-aapl', 0, 7, 6, 7, 4, 4),
-      L('gw-nvda', 6, 7, 6, 7, 4, 4),
+      L('gw-spy', 0, 0, 6, 7),
+      L('gw-qqq', 6, 0, 6, 7),
+      L('gw-aapl', 0, 7, 6, 7),
+      L('gw-nvda', 6, 7, 6, 7),
     ],
   },
   {
@@ -225,10 +243,10 @@ export const PULSE_PRESETS: PulseLayout[] = [
       { id: 'q-aapl', key: 'live-chart', ticker: 'AAPL' },
     ],
     layout: [
-      L('q-spy', 0, 0, 6, 5, 4, 4),
-      L('q-qqq', 6, 0, 6, 5, 4, 4),
-      L('q-nvda', 0, 5, 6, 5, 4, 4),
-      L('q-aapl', 6, 5, 6, 5, 4, 4),
+      L('q-spy', 0, 0, 6, 5),
+      L('q-qqq', 6, 0, 6, 5),
+      L('q-nvda', 0, 5, 6, 5),
+      L('q-aapl', 6, 5, 6, 5),
     ],
   },
   {
@@ -241,9 +259,9 @@ export const PULSE_PRESETS: PulseLayout[] = [
       { id: 'd-flow', key: 'order-flow' },
     ],
     layout: [
-      L('d-chart', 0, 0, 7, 6, 4, 4),
-      L('d-dp', 7, 0, 5, 6, 3, 4),
-      L('d-flow', 0, 6, 12, 4, 4, 3),
+      L('d-chart', 0, 0, 7, 6),
+      L('d-dp', 7, 0, 5, 6),
+      L('d-flow', 0, 6, 12, 4),
     ],
   },
   {
@@ -255,8 +273,8 @@ export const PULSE_PRESETS: PulseLayout[] = [
       { id: 'a-moc', key: 'moc-read' },
     ],
     layout: [
-      L('a-chart', 0, 0, 7, 8, 4, 4),
-      L('a-moc', 7, 0, 5, 8, 4, 4),
+      L('a-chart', 0, 0, 7, 8),
+      L('a-moc', 7, 0, 5, 8),
     ],
   },
   {
@@ -269,9 +287,9 @@ export const PULSE_PRESETS: PulseLayout[] = [
       { id: 'f-pos', key: 'positioning-map' },
     ],
     layout: [
-      L('f-chart', 0, 0, 7, 6, 4, 4),
-      L('f-frac', 7, 0, 5, 6, 4, 4),
-      L('f-pos', 0, 6, 12, 4, 4, 4),
+      L('f-chart', 0, 0, 7, 6),
+      L('f-frac', 7, 0, 5, 6),
+      L('f-pos', 0, 6, 12, 4),
     ],
   },
   // ── Workflow desks — one tap reshapes the terminal around how you're trading
@@ -286,9 +304,9 @@ export const PULSE_PRESETS: PulseLayout[] = [
       { id: 'sc-liq', key: 'liquidity-map' },
     ],
     layout: [
-      L('sc-chart', 0, 0, 8, 7, 4, 4),
-      L('sc-flow', 8, 0, 4, 7, 3, 4),
-      L('sc-liq', 0, 7, 12, 7, 4, 5),
+      L('sc-chart', 0, 0, 8, 7),
+      L('sc-flow', 8, 0, 4, 7),
+      L('sc-liq', 0, 7, 12, 7),
     ],
   },
   {
@@ -301,9 +319,9 @@ export const PULSE_PRESETS: PulseLayout[] = [
       { id: 'sw-pos', key: 'positioning-map' },
     ],
     layout: [
-      L('sw-chart', 0, 0, 8, 6, 4, 4),
-      L('sw-setups', 8, 0, 4, 6, 3, 4),
-      L('sw-pos', 0, 6, 12, 5, 4, 4),
+      L('sw-chart', 0, 0, 8, 6),
+      L('sw-setups', 8, 0, 4, 6),
+      L('sw-pos', 0, 6, 12, 5),
     ],
   },
   {
@@ -317,10 +335,10 @@ export const PULSE_PRESETS: PulseLayout[] = [
       { id: 'mc-heat', key: 'gex-heatmap' },
     ],
     layout: [
-      L('mc-stocks', 0, 0, 6, 6, 4, 4),
-      L('mc-news', 6, 0, 6, 6, 4, 4),
-      L('mc-chart', 0, 6, 8, 5, 4, 4),
-      L('mc-heat', 8, 6, 4, 5, 3, 4),
+      L('mc-stocks', 0, 0, 6, 6),
+      L('mc-news', 6, 0, 6, 6),
+      L('mc-chart', 0, 6, 8, 5),
+      L('mc-heat', 8, 6, 4, 5),
     ],
   },
   {
@@ -336,10 +354,10 @@ export const PULSE_PRESETS: PulseLayout[] = [
     layout: [
       // Right column is 3 + 4 tall (Top Setups is a six-column board and will
       // not read at h=3), so the calendar beside it matches at 7.
-      L('ea-cal', 0, 0, 7, 7, 4, 4),
-      L('ea-vol', 7, 0, 5, 3, 3, 3),
-      L('ea-setups', 7, 3, 5, 4, 4, 4),
-      L('ea-chart', 0, 7, 12, 5, 4, 4),
+      L('ea-cal', 0, 0, 7, 7),
+      L('ea-vol', 7, 0, 5, 3),
+      L('ea-setups', 7, 3, 5, 4),
+      L('ea-chart', 0, 7, 12, 5),
     ],
   },
   {
@@ -347,7 +365,7 @@ export const PULSE_PRESETS: PulseLayout[] = [
     name: 'Minimal Chart',
     preset: true,
     panels: [{ id: 'm-chart', key: 'live-chart' }],
-    layout: [L('m-chart', 0, 0, 12, 9, 6, 5)],
+    layout: [L('m-chart', 0, 0, 12, 9)],
   },
 ];
 

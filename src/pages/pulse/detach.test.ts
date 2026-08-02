@@ -6,6 +6,8 @@ import {
   boundsOnScreen,
   boxMoved,
   clampBounds,
+  deadSpace,
+  fillGaps,
   mergeLayout,
   migrateWorkspace,
   popoutFeatures,
@@ -199,6 +201,87 @@ describe('boxMoved', () => {
   });
 });
 
+describe('fillGaps — the dead space goes away', () => {
+  it('stretches a short row out to the full 12 columns', () => {
+    // The exact complaint: a row of panels that cannot be made to sum to 12
+    // leaves a strip of canvas on the right that nothing can reach.
+    const filled = fillGaps([{ i: 'a', x: 0, y: 0, w: 5, h: 4 }]);
+    expect(filled[0].w).toBe(12);
+  });
+
+  it('stops a panel at its neighbour rather than overlapping it', () => {
+    const filled = fillGaps([
+      { i: 'a', x: 0, y: 0, w: 3, h: 4 },
+      { i: 'b', x: 8, y: 0, w: 4, h: 4 },
+    ]);
+    expect(filled.find(g => g.i === 'a')!.w).toBe(8); // grows 3 -> 8, meets b
+    expect(filled.find(g => g.i === 'b')!.w).toBe(4); // already at the edge
+  });
+
+  it('grows a panel downward into empty rows below it', () => {
+    const filled = fillGaps([
+      { i: 'tall', x: 0, y: 0, w: 6, h: 10 },
+      { i: 'short', x: 6, y: 0, w: 6, h: 4 },
+    ]);
+    // `short` had six columns of nothing under it for six rows.
+    expect(filled.find(g => g.i === 'short')!.h).toBe(10);
+  });
+
+  it('leaves a desk that is already full completely alone', () => {
+    const full = [
+      { i: 'a', x: 0, y: 0, w: 6, h: 4 },
+      { i: 'b', x: 6, y: 0, w: 6, h: 4 },
+      { i: 'c', x: 0, y: 4, w: 12, h: 4 },
+    ];
+    expect(fillGaps(full)).toEqual(full);
+  });
+
+  it('never overlaps two panels, over every preset we ship', () => {
+    // The property that matters more than any single case: growth may only
+    // consume space that was empty, so no two boxes may ever intersect after.
+    for (const preset of PULSE_PRESETS) {
+      const filled = fillGaps(preset.layout);
+      for (let i = 0; i < filled.length; i++) {
+        for (let j = i + 1; j < filled.length; j++) {
+          const a = filled[i];
+          const b = filled[j];
+          const hit = a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+          expect({ preset: preset.id, a: a.i, b: b.i, hit }).toEqual({ preset: preset.id, a: a.i, b: b.i, hit: false });
+        }
+      }
+      // And nothing may hang off the right edge of the grid.
+      for (const g of filled) expect(g.x + g.w).toBeLessThanOrEqual(GRID.cols);
+    }
+  });
+
+  it('never increases dead space on any preset, and removes it outright on most', () => {
+    let improved = 0;
+    for (const preset of PULSE_PRESETS) {
+      const before = deadSpace(preset.layout);
+      const after = deadSpace(fillGaps(preset.layout));
+      expect(after).toBeLessThanOrEqual(before + 1e-9);
+      if (after < before) improved++;
+    }
+    expect(improved).toBeGreaterThan(0);
+  });
+
+  it('handles an empty desk without dividing by zero', () => {
+    expect(fillGaps([])).toEqual([]);
+    expect(deadSpace([])).toBe(0);
+  });
+});
+
+describe('deadSpace', () => {
+  it('is zero for a perfectly packed desk', () => {
+    expect(deadSpace([{ i: 'a', x: 0, y: 0, w: 12, h: 4 }])).toBe(0);
+  });
+
+  it('reports the fraction of the bounding box that is empty', () => {
+    // One 6-wide panel in a 12-wide, 4-row box: half of it is nothing.
+    expect(deadSpace([{ i: 'a', x: 0, y: 0, w: 6, h: 4 }])).toBeCloseTo(0.5, 6);
+  });
+});
+
 describe('mergeLayout', () => {
   const saved = [
     { i: 'chart', x: 0, y: 0, w: 8, h: 6 },
@@ -253,6 +336,74 @@ describe('migrateWorkspace', () => {
         },
       ],
     }) as PulseWorkspaceState;
+
+  it('upgrades a v2 desk to the finer row unit without moving a single pixel', () => {
+    // The load-bearing claim of the v3 migration. The row unit went 64 -> 26
+    // and every y/h doubled; if those two numbers do not cancel exactly, every
+    // saved desk silently changes shape on next open. 6 rows at 64 is
+    // 6*64+5*12 = 444, and 12 rows at 26 is 12*26+11*12 = 444.
+    const OLD = { rowHeight: 64, margin: 12 };
+    const px = (h: number, rowHeight: number) => h * rowHeight + (h - 1) * OLD.margin;
+    const top = (y: number, rowHeight: number) => (rowHeight + OLD.margin) * y;
+
+    const v2 = {
+      ...v1(),
+      version: 2,
+      layouts: [
+        {
+          id: 'd',
+          name: 'Desk',
+          panels: [{ id: 'p1', key: 'live-chart' }],
+          layout: [{ i: 'p1', x: 0, y: 6, w: 8, h: 6, minW: 4, minH: 4 }],
+        },
+      ],
+    } as PulseWorkspaceState;
+
+    const out = migrateWorkspace(v2)!;
+    const g = out.layouts[0].layout[0];
+    expect(out.version).toBe(3);
+    expect(g.h).toBe(12);
+    expect(g.y).toBe(12);
+    expect(px(g.h, GRID.rowHeight)).toBe(px(6, OLD.rowHeight));
+    expect(top(g.y, GRID.rowHeight)).toBe(top(6, OLD.rowHeight));
+  });
+
+  it('holds the pixel identity for every height a preset actually ships', () => {
+    const OLD_ROW = 64;
+    const M = 12;
+    for (let h = 1; h <= 16; h++) {
+      expect(2 * h * GRID.rowHeight + (2 * h - 1) * M).toBe(h * OLD_ROW + (h - 1) * M);
+    }
+  });
+
+  it('frees the resize floor on every migrated panel', () => {
+    // The actual complaint: panels could only be resized to their "true size".
+    const v2 = {
+      ...v1(),
+      version: 2,
+      layouts: [
+        {
+          id: 'd',
+          name: 'Desk',
+          panels: [{ id: 'p1', key: 'exposure-matrix' }],
+          layout: [{ i: 'p1', x: 0, y: 0, w: 6, h: 6, minW: 6, minH: 4 }],
+        },
+      ],
+    } as PulseWorkspaceState;
+    const g = migrateWorkspace(v2)!.layouts[0].layout[0];
+    expect(g.minW).toBe(1);
+    expect(g.minH).toBe(1);
+  });
+
+  it('carries a v1 desk all the way to the current version in one call', () => {
+    // The migration chain must not stop at v2, or a user who has not opened the
+    // app since the pop-out release loses everything on this release instead.
+    const out = migrateWorkspace(v1())!;
+    expect(out.version).toBe(WORKSPACE_VERSION);
+    expect(out.layouts[0].panels[0].ticker).toBe('SPY');
+    expect(out.layouts[0].layout[0].h).toBe(10); // 5 doubled
+    expect(out.layouts[0].layout[0].minW).toBe(1);
+  });
 
   it('upgrades a v1 desk instead of throwing it away', () => {
     // The whole point. `loadState` discards anything whose version does not

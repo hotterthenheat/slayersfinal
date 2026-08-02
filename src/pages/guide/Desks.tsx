@@ -48,6 +48,11 @@ const DESKS: DeskDoc[] = [
     controls: [
       <><span className="text-textPrimary">Customize</span> — drag, resize and add panels are off until you enter it;
       outside Customize the desk is chromeless. Your layout is saved in your browser.</>,
+      <>Panels resize from any edge or corner, to any size. There is no per-panel minimum: if you want a chart three
+      columns wide, it goes three columns wide. <span className="text-textPrimary">Fill</span> then grows every panel
+      into whatever space is left around it, so a desk you arranged by hand ends with no gaps and nothing moved.{' '}
+      <span className="text-textPrimary">Fit</span> is the other one — it re-flows the panels into tidy full rows, which
+      does move them.</>,
       <>Every panel header carries <span className="text-textPrimary">Detach</span> and{' '}
       <span className="text-textPrimary">Pop out</span>, both available without entering Customize. Detach floats a panel
       free of the grid; pop out gives it its own window you can drag to a second monitor. Either way the panel keeps

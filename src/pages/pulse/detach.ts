@@ -14,8 +14,28 @@ import type { Layout } from 'react-grid-layout';
 import type { PulseWorkspaceState, PulseLayout, PixelBounds, ScreenBox } from './presets';
 import { WORKSPACE_VERSION } from './presets';
 
-/** Grid metrics, mirrored from the <Grid> props in PulseWorkspace. */
-export const GRID = { cols: 12, rowHeight: 64, marginX: 12, marginY: 12 } as const;
+/**
+ * Grid metrics, mirrored from the <Grid> props in PulseWorkspace.
+ *
+ * `rowHeight` was 64 with row units counted whole, which made the vertical step
+ * 76px — a panel could be 444px or 520px tall and nothing in between, so two
+ * neighbours of different content lengths always left a band of dead space
+ * between them. It is 26 now, with every stored `y` and `h` doubled by the v3
+ * migration, which halves the step to 38px and leaves every existing layout
+ * pixel-identical: 6 rows at 64 is 6*64+5*12 = 444, and 12 rows at 26 is
+ * 12*26+11*12 = 444. The one number that makes that work is 26, not 32.
+ */
+export const GRID = { cols: 12, rowHeight: 26, marginX: 12, marginY: 12 } as const;
+
+/**
+ * The only size limit left. The registry still declares a width and height per
+ * widget, but those are the size a panel is BORN at and what the auto-arrange
+ * modes aim for — not a floor the user's own drag is held to. Enforcing them
+ * meant a row could not be made to sum to 12, so there was always a strip of
+ * canvas on the right that nothing could reach. One unit keeps a panel large
+ * enough to grab and no larger.
+ */
+export const MIN_UNITS = { w: 1, h: 1 } as const;
 
 /** Smallest a floating panel may be dragged. Below this the header controls
     start overlapping and the body has nothing left to render into. */
@@ -145,6 +165,68 @@ export function mergeLayout(reported: Layout[], saved: Layout[], awayIds: readon
   return [...reported, ...kept.filter(g => !seen.has(g.i))];
 }
 
+// ---- dead space ----------------------------------------------------------
+
+const spansRow = (a: Layout, b: Layout) => a.y < b.y + b.h && b.y < a.y + a.h;
+const spansCol = (a: Layout, b: Layout) => a.x < b.x + b.w && b.x < a.x + a.w;
+
+/**
+ * Grow every panel into the empty space beside and below it.
+ *
+ * Freeing the resize floor lets a user BUILD a desk with no gaps; this closes
+ * the gaps that are already there, which is the other half. Each panel extends
+ * right until it meets a panel that shares any of its rows, then down until it
+ * meets one that shares any of its columns. Limits are measured against the
+ * ORIGINAL boxes, so growth can only ever consume space that was empty to begin
+ * with and two panels can never be handed the same cell.
+ *
+ * Deliberately not vertical-compaction: react-grid-layout already pulls panels
+ * upward, and pulling up is what CREATES the ragged right edge in the first
+ * place. This stretches instead of shuffling, so the desk the user arranged
+ * keeps its shape and only loses its holes.
+ */
+export function fillGaps(layout: Layout[], cols: number = GRID.cols): Layout[] {
+  const out = layout.map(g => ({ ...g }));
+  if (out.length === 0) return out;
+
+  // Two passes: widening a panel can expose a neighbour whose own downward
+  // growth is now bounded differently. Two is enough to settle every shape
+  // reachable from a 12-column grid; a third never changed a result in testing.
+  for (let pass = 0; pass < 2; pass++) {
+    for (const g of out) {
+      let right = cols;
+      for (const o of out) {
+        if (o === g || !spansRow(g, o)) continue;
+        if (o.x >= g.x + g.w) right = Math.min(right, o.x);
+      }
+      g.w = Math.max(g.w, right - g.x);
+    }
+
+    const floor = Math.max(...out.map(g => g.y + g.h));
+    for (const g of out) {
+      let below = floor;
+      for (const o of out) {
+        if (o === g || !spansCol(g, o)) continue;
+        if (o.y >= g.y + g.h) below = Math.min(below, o.y);
+      }
+      g.h = Math.max(g.h, below - g.y);
+    }
+  }
+  return out;
+}
+
+/**
+ * How much of the desk is empty, 0 to 1. Drives the toolbar's "Fill" affordance
+ * so it can say what it will actually do instead of being a mystery button.
+ */
+export function deadSpace(layout: Layout[], cols: number = GRID.cols): number {
+  if (layout.length === 0) return 0;
+  const rows = Math.max(...layout.map(g => g.y + g.h));
+  if (rows <= 0) return 0;
+  const used = layout.reduce((a, g) => a + g.w * g.h, 0);
+  return Math.max(0, 1 - used / (cols * rows));
+}
+
 // ---- schema migration ----------------------------------------------------
 
 /**
@@ -173,6 +255,22 @@ export function migrateWorkspace(parsed: PulseWorkspaceState): PulseWorkspaceSta
       // No field to backfill: a v1 panel had no out-of-grid state, so every one
       // of them is docked, which is what `detached`/`popout` being absent means.
       layouts: state.layouts.map((l: PulseLayout) => ({ ...l, panels: l.panels.map(p => ({ ...p })) })),
+    };
+  }
+
+  if (state.version === 2) {
+    // Row units are half as tall now, so every vertical number doubles and the
+    // desk stays pixel-identical while gaining a step half the size. The
+    // per-widget size floors go with it: they were the reason a row could not
+    // be made to sum to 12, and they are a starting size now, not a limit.
+    state = {
+      ...state,
+      version: 3,
+      layouts: state.layouts.map(l => ({
+        ...l,
+        panels: l.panels.map(p => ({ ...p, restoreH: p.restoreH == null ? undefined : p.restoreH * 2 })),
+        layout: l.layout.map(g => ({ ...g, y: g.y * 2, h: g.h * 2, minW: MIN_UNITS.w, minH: MIN_UNITS.h })),
+      })),
     };
   }
 

@@ -22,6 +22,7 @@ import {
   Rows,
   Grid2x2,
   StretchHorizontal,
+  Maximize,
   Lock,
   Pencil,
   Search,
@@ -58,7 +59,18 @@ import {
   type PulseWorkspaceState,
   type ScreenBox,
 } from './presets';
-import { boundsFromGrid, boundsOnScreen, clampBounds, mergeLayout, migrateWorkspace, screenIndexOf } from './detach';
+import {
+  GRID,
+  MIN_UNITS,
+  boundsFromGrid,
+  boundsOnScreen,
+  clampBounds,
+  deadSpace,
+  fillGaps,
+  mergeLayout,
+  migrateWorkspace,
+  screenIndexOf,
+} from './detach';
 import { useScreens, type DisplayInfo } from './useScreens';
 import PopoutPanel from './PopoutPanel';
 import { openPanelWindow } from './popoutWindow';
@@ -112,14 +124,20 @@ function buildCtx(snapshot: MarketSnapshot, revision: number, focusPrice: number
 function hydrateLayout(l: PulseLayout): PulseLayout {
   return {
     ...l,
-    layout: l.layout.map(g => {
-      const panel = l.panels.find(p => p.id === g.i);
-      const def = panel ? pulsePanelByKey(panel.key) : undefined;
-      if (!def) return g;
-      // A minimized panel is deliberately parked at h=1; leave it collapsed.
-      const minH = panel?.minimized ? 1 : def.minH;
-      return { ...g, minW: def.minW, minH, w: Math.max(def.minW, g.w), h: Math.max(minH, g.h) };
-    }),
+    layout: l.layout.map(g => ({
+      ...g,
+      // Nothing is clamped. This used to read every widget's registered floor
+      // and raise `w` and `h` to it on EVERY load, which is why a panel could
+      // be dragged narrower and then silently sprang back the next time the
+      // desk opened, and why a row of panels could never be made to sum to 12:
+      // there was always a strip of canvas on the right that no combination of
+      // sizes could reach. The registry still says how big a panel is born;
+      // what it grows or shrinks to afterwards is the user's business.
+      minW: MIN_UNITS.w,
+      minH: MIN_UNITS.h,
+      w: Math.min(GRID_COLS, Math.max(MIN_UNITS.w, g.w)),
+      h: Math.max(MIN_UNITS.h, g.h),
+    })),
   };
 }
 
@@ -163,10 +181,26 @@ function loadState(): PulseWorkspaceState {
   }
 }
 
-const floorOf = (key: string): { minW: number; minH: number } => {
+/**
+ * The size a widget WANTS, in grid units.
+ *
+ * This is no longer a floor. It is what a panel is born at, and what the
+ * one-press arrange modes aim for so pressing Columns still produces something
+ * legible rather than twelve slivers. A manual drag ignores it entirely.
+ *
+ * Heights double on the way out because the row unit is half as tall as it was
+ * when these numbers were tuned; the registry still declares them in the old
+ * coarse unit, same as the presets.
+ */
+const wantOf = (key: string): { w: number; h: number } => {
   const def = pulsePanelByKey(key);
-  return { minW: def?.minW ?? 3, minH: def?.minH ?? 3 };
+  return { w: def?.minW ?? 3, h: (def?.minH ?? 3) * 2 };
 };
+
+/** A collapsed panel is its 40px title bar and nothing else. Two fine rows is
+    64px, which is what one coarse row used to be — so minimizing looks the same
+    as it always did. */
+const MINIMIZED_H = 2;
 
 /**
  * Re-flow the active layout's panels into a quick arrangement.
@@ -178,11 +212,12 @@ const floorOf = (key: string): { minW: number; minH: number } => {
  */
 function arrange(mode: 'one' | 'cols' | 'rows' | 'quad', panels: PulsePanel[]): Layout[] {
   // per-row width, nominal height, panels per row
+  // Heights are in the fine row unit: 6 coarse rows is 12 of these.
   const SHAPE = {
-    one: { w: 12, h: 6, per: 1 },
-    cols: { w: 6, h: 6, per: 2 },
-    rows: { w: 12, h: 4, per: 1 },
-    quad: { w: 6, h: 5, per: 2 },
+    one: { w: 12, h: 12, per: 1 },
+    cols: { w: 6, h: 12, per: 2 },
+    rows: { w: 12, h: 8, per: 1 },
+    quad: { w: 6, h: 10, per: 2 },
   }[mode];
 
   const out: Layout[] = [];
@@ -190,8 +225,11 @@ function arrange(mode: 'one' | 'cols' | 'rows' | 'quad', panels: PulsePanel[]): 
   for (let k = 0; k < panels.length; k += SHAPE.per) {
     const band = panels.slice(k, k + SHAPE.per);
     const boxes = band.map((p, j) => {
-      const { minW, minH } = floorOf(p.key);
-      return { i: p.id, x: j * SHAPE.w, y, w: Math.max(minW, SHAPE.w), h: Math.max(minH, SHAPE.h), minW, minH };
+      // The shape wins on width — the whole point of "Columns" is two equal
+      // columns — but a widget that wants to be taller still gets its height,
+      // so a one-press arrange never produces a panel too short to read.
+      const want = wantOf(p.key);
+      return { i: p.id, x: j * SHAPE.w, y, w: SHAPE.w, h: Math.max(want.h, SHAPE.h), minW: MIN_UNITS.w, minH: MIN_UNITS.h };
     });
     // The nominal height is a suggestion; a widget whose floor is taller sets the
     // band, so the row advances past its real bottom instead of overlapping the
@@ -221,25 +259,29 @@ function fitRows(layout: Layout[], panels: PulsePanel[]): Layout[] {
 
   const rows: Layout[][] = [];
   let row: Layout[] = [];
-  let floorUsed = 0;
+  let wantUsed = 0;
   const flush = () => {
     if (row.length) rows.push(row);
     row = [];
-    floorUsed = 0;
+    wantUsed = 0;
   };
   for (const g of order) {
-    // A collapsed panel is a 1-row title bar. Pairing it with a full-height
-    // neighbour would stretch it back open with its body still hidden, so it
-    // takes a band of its own.
+    // A collapsed panel is a title bar. Pairing it with a full-height neighbour
+    // would stretch it back open with its body still hidden, so it takes a band
+    // of its own.
     if (panelOf(g.i)?.minimized) {
       flush();
       rows.push([g]);
       continue;
     }
-    const { minW } = floorOf(keyOf(g.i));
-    if (row.length && floorUsed + minW > GRID_COLS) flush();
+    // Row breaks still use the widget's PREFERRED width. This is the one place
+    // that judgement belongs: Fit is a one-press tidy, and packing eight panels
+    // into a row because each is technically allowed to be one column wide
+    // would be obeying the letter of "no floors" and missing the point.
+    const want = wantOf(keyOf(g.i)).w;
+    if (row.length && wantUsed + want > GRID_COLS) flush();
     row.push(g);
-    floorUsed += minW;
+    wantUsed += want;
   }
   flush();
 
@@ -247,26 +289,25 @@ function fitRows(layout: Layout[], panels: PulsePanel[]): Layout[] {
   let y = 0;
   for (const r of rows) {
     if (r.length === 1 && panelOf(r[0].i)?.minimized) {
-      out.push({ ...r[0], x: 0, y, w: GRID_COLS, h: 1, minW: floorOf(keyOf(r[0].i)).minW, minH: 1 });
-      y += 1;
+      out.push({ ...r[0], x: 0, y, w: GRID_COLS, h: MINIMIZED_H, minW: MIN_UNITS.w, minH: MIN_UNITS.h });
+      y += MINIMIZED_H;
       continue;
     }
-    const floors = r.map(g => floorOf(keyOf(g.i)));
-    const widths = r.map((g, k) => Math.max(floors[k].minW, Math.min(g.w, GRID_COLS)));
+    // Start from what each panel currently is, then settle the row on exactly
+    // 12. Nothing is held above a floor any more, so the row ALWAYS reaches 12
+    // and the ragged right edge is gone by construction rather than by luck.
+    const widths = r.map(g => Math.max(MIN_UNITS.w, Math.min(g.w, GRID_COLS)));
     let sum = widths.reduce((a, b) => a + b, 0);
-    // Take columns from the widest panel that still has slack, give them to the
-    // narrowest. Guarded rather than while(true): a row whose floors already sum
-    // to 12 has nothing left to take and must exit, not spin.
-    for (let guard = 0; sum > GRID_COLS && guard < 64; guard++) {
+    for (let guard = 0; sum > GRID_COLS && guard < 256; guard++) {
       let pick = -1;
       widths.forEach((w, k) => {
-        if (w > floors[k].minW && (pick < 0 || w > widths[pick])) pick = k;
+        if (w > MIN_UNITS.w && (pick < 0 || w > widths[pick])) pick = k;
       });
       if (pick < 0) break;
       widths[pick] -= 1;
       sum -= 1;
     }
-    for (let guard = 0; sum < GRID_COLS && guard < 64; guard++) {
+    for (let guard = 0; sum < GRID_COLS && guard < 256; guard++) {
       let pick = 0;
       widths.forEach((w, k) => {
         if (w < widths[pick]) pick = k;
@@ -275,10 +316,10 @@ function fitRows(layout: Layout[], panels: PulsePanel[]): Layout[] {
       sum += 1;
     }
     // One height per row so the row reads as a band rather than a ragged edge.
-    const h = Math.max(...r.map((g, k) => Math.max(floors[k].minH, g.h)));
+    const h = Math.max(...r.map(g => g.h), MIN_UNITS.h);
     let x = 0;
     r.forEach((g, k) => {
-      out.push({ ...g, x, y, w: widths[k], h, minW: floors[k].minW, minH: floors[k].minH });
+      out.push({ ...g, x, y, w: widths[k], h, minW: MIN_UNITS.w, minH: MIN_UNITS.h });
       x += widths[k];
     });
     y += h;
@@ -295,6 +336,9 @@ function fitRows(layout: Layout[], panels: PulsePanel[]): Layout[] {
  * no row has any.
  */
 function placeNew(layout: Layout[], def: { w: number; minW: number }): { x: number; y: number; w: number } {
+  // `def.minW` here is the width the widget WANTS, used to decide whether a
+  // row has enough room to be worth landing in. It is not a floor on what the
+  // panel may later be dragged to.
   const bands = [...new Set(layout.map(g => g.y))].sort((a, b) => a - b);
   for (const y of bands) {
     // Everything whose vertical span COVERS this band, not just what starts on
@@ -718,7 +762,8 @@ const PulseWorkspace = () => {
       return {
         ...l,
         panels: [...l.panels, { id, key }],
-        layout: [...l.layout, { i: id, ...spot, h: def.h, minW: def.minW, minH: def.minH }],
+        // Born at the registry's size; free to be dragged anywhere after.
+        layout: [...l.layout, { i: id, ...spot, h: def.h * 2, minW: MIN_UNITS.w, minH: MIN_UNITS.h }],
       };
     });
     setAddOpen(false);
@@ -769,7 +814,9 @@ const PulseWorkspace = () => {
       return {
         ...l,
         panels: l.panels.map(x => (x.id === id ? { ...x, minimized: min, restoreH: min ? geo.h : undefined } : x)),
-        layout: l.layout.map(g => (g.i === id ? { ...g, h: min ? 1 : p.restoreH ?? geo.h, minH: min ? 1 : 3 } : g)),
+        layout: l.layout.map(g =>
+          g.i === id ? { ...g, h: min ? MINIMIZED_H : (p.restoreH ?? geo.h), minH: MIN_UNITS.h } : g,
+        ),
       };
     });
 
@@ -885,10 +932,12 @@ const PulseWorkspace = () => {
    * RGL re-runs its vertical compaction from it.
    */
   const nudgePanel = (id: string, dx: number, dy: number, dw: number, dh: number): string => {
-    const panel = active.panels.find(p => p.id === id);
-    const def = panel ? pulsePanelByKey(panel.key) : undefined;
-    const minW = def?.minW ?? 2;
-    const minH = def?.minH ?? 2;
+    // The keyboard path gets exactly the freedom the mouse has. It used to
+    // read the registry floor, so Shift+Arrow stopped shrinking a panel at a
+    // size the mouse is now allowed past — two different limits for the same
+    // gesture.
+    const minW = MIN_UNITS.w;
+    const minH = MIN_UNITS.h;
     let announced = '';
     mutate(l => ({
       ...l,
@@ -909,6 +958,28 @@ const PulseWorkspace = () => {
     mutate(l => ({ ...l, layout: arrange(mode, l.panels) }));
 
   const doFit = () => mutate(l => ({ ...l, layout: fitRows(l.layout, l.panels) }));
+
+  /**
+   * Stretch every panel into whatever space is left beside and below it.
+   *
+   * Distinct from Fit, which re-flows the desk into tidy full-width rows and
+   * therefore MOVES things. Fill moves nothing: it keeps the arrangement the
+   * user built and only takes the holes out of it, which is the whole point
+   * when the arrangement is deliberate and the gaps are not.
+   */
+  const doFill = () =>
+    mutate(l => {
+      const docked = l.layout.filter(g => l.panels.some(p => p.id === g.i && !p.detached && !p.popout));
+      const before = deadSpace(docked);
+      const filled = fillGaps(docked);
+      const after = deadSpace(filled);
+      toast.info(
+        before <= 0.001
+          ? 'No dead space to reclaim'
+          : `Dead space ${Math.round(before * 100)}% to ${Math.round(after * 100)}%`,
+      );
+      return { ...l, layout: mergeLayout(filled, l.layout, l.panels.filter(p => p.detached || p.popout).map(p => p.id)) };
+    });
 
   // ---- workspace-level ops ------------------------------------------------
   const switchLayout = (id: string) => {
@@ -992,6 +1063,8 @@ const PulseWorkspace = () => {
    * read as the feature being broken. So they are offered as one button.
    */
   const reopenable = active.panels.filter(p => p.popout && !popWins.has(p.id));
+  /** Share of the desk that is empty, so Fill can say what it will reclaim. */
+  const gaps = deadSpace(dockedLayout);
 
   /**
    * Windows belong to the layout that opened them. Switching desk profiles has
@@ -1152,6 +1225,7 @@ const PulseWorkspace = () => {
               {/* Keeps the desk you built and only closes the gaps, so a pair
                   that saved stacked ends up side by side. */}
               <button onClick={doFit} title="Fit panels to full rows" aria-label="Fit panels to full rows" className="px-2 py-1.5 text-textMuted hover:text-textPrimary hover:bg-rowHover border-l border-borderSubtle focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60"><StretchHorizontal className="w-3.5 h-3.5" /></button>
+              <button onClick={doFill} title={gaps > 0.001 ? `Fill dead space (${Math.round(gaps * 100)}% empty)` : 'Fill dead space'} aria-label="Grow every panel to fill the empty space around it" className="px-2 py-1.5 text-textMuted hover:text-textPrimary hover:bg-rowHover border-l border-borderSubtle focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60"><Maximize className="w-3.5 h-3.5" /></button>
             </div>
 
             <div className="relative">
@@ -1427,7 +1501,8 @@ const PulseWorkspace = () => {
             .map(p => {
               const ticker = p.ticker ?? activeTicker;
               const li = active.layout.find(g => g.i === p.id);
-              const h = Math.max(340, (li?.h ?? 6) * 52);
+              // 26px per fine row, matching the desktop grid's own row unit.
+              const h = Math.max(340, (li?.h ?? 12) * 26);
               return (
                 <div
                   key={p.id}
@@ -1458,13 +1533,18 @@ const PulseWorkspace = () => {
             <Grid
               layout={dockedLayout}
               cols={GRID_COLS}
-              rowHeight={64}
-              margin={[12, 12]}
+              rowHeight={GRID.rowHeight}
+              margin={[GRID.marginX, GRID.marginY]}
               containerPadding={[0, 0]}
               compactType="vertical"
               draggableHandle=".widget-drag"
               isDraggable={editLayout}
               isResizable={editLayout}
+              // Every edge and corner, not just the bottom-right nub. Closing a
+              // gap on a panel's LEFT means dragging its left edge; with only
+              // the SE handle you had to move the panel and then resize it,
+              // which is two gestures for one intention.
+              resizeHandles={['s', 'w', 'e', 'n', 'sw', 'nw', 'se', 'ne']}
               onLayoutChange={onLayoutChange}
             >
               {dockedPanels.map(p => {
