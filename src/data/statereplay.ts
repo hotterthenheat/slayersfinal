@@ -183,6 +183,11 @@ export interface StateReplayView {
 const clamp01 = (x: number): number => (x < 0 ? 0 : x > 1 ? 1 : x);
 const clamp = (x: number, lo: number, hi: number): number => (x < lo ? lo : x > hi ? hi : x);
 
+/** Floor on the plan's target/stop distance: a plan whose target sits on entry
+    would send `rr` and `baseHit` to infinity. Exported because the distances the
+    view publishes carry the floor, so anything re-deriving them must apply it. */
+export const MIN_DIST = 1e-4;
+
 const POOL = 176;
 const HORIZON_BARS = 78; // one RTH session in 5-min bars
 const CHECKPOINTS = [6, 12, 18, 26, 39, 52, 65, 78];
@@ -246,8 +251,8 @@ export function buildStateReplay(snapshot: MarketSnapshot): StateReplayView {
 
   // ---- trade geometry the analogs are replayed against -----------------------------
   const entry = plan.entry || spot;
-  const stopDist = Math.max(1e-4, Math.abs(entry - plan.stopLoss) / entry);
-  const tgtDist = Math.max(1e-4, Math.abs(plan.target1 - entry) / entry);
+  const stopDist = Math.max(MIN_DIST, Math.abs(entry - plan.stopLoss) / entry);
+  const tgtDist = Math.max(MIN_DIST, Math.abs(plan.target1 - entry) / entry);
   const rr = tgtDist / stopDist;
   // Zero-drift probability of touching target before stop (the no-edge coin).
   const baseHit = stopDist / (stopDist + tgtDist);

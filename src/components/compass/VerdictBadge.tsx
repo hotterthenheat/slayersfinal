@@ -1,5 +1,5 @@
 import SignalBadge from '../ui/SignalBadge';
-import type { Verdict } from '../../types/skyvision';
+import type { Verdict } from '../../types/compass';
 import { VERDICT_LABEL, VERDICT_TONE } from './verdict';
 
 interface VerdictBadgeProps {

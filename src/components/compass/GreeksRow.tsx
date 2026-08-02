@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import Stat from '../ui/Stat';
 import HoverReadout from '../ui/HoverReadout';
 import Term from '../ui/Term';
-import type { SetupGreeks } from '../../types/skyvision';
+import type { SetupGreeks } from '../../types/compass';
 
 interface GreeksRowProps {
   greeks: SetupGreeks;

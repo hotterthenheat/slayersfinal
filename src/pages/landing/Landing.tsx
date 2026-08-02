@@ -53,7 +53,7 @@ const TIERS = [
       '0DTE levels & dealer dynamics',
       'Trace + Pulse',
       'Tracker · setups & trade history',
-      'Real-time Discord chat & alerts',
+      'Discord chat & alerts',
     ],
     cta: 'Select plan',
     to: '/terminal',
@@ -66,7 +66,7 @@ const TIERS = [
     period: '/mo',
     features: [
       'Everything in Pinpoint',
-      'Tells you which options to trade',
+      'Compass · ranked same-day contract board',
       'Volatility Lab · IV surface & expected move',
       'Contract health scores',
       'Prove It · Monte Carlo, model scoreboard & 3D dealer surface',
@@ -305,23 +305,22 @@ const Landing = () => (
       </span>
       <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">Built in the open.</h2>
       <p className="mt-4 text-body text-textSecondary leading-relaxed max-w-xl">
-        Trade ideas, feature requests and feedback, posted inside the terminal, voted on by the people
-        trading with it. What ships next is decided out loud.
+        A desk for theses, feature requests and feedback, with the roadmap published beside it: what is
+        planned, what is being built, what shipped. Anything you write stays in your browser.
       </p>
       <div className="mt-8 border border-borderSubtle bg-panel rounded-lg overflow-hidden">
         {SEED_IDEAS.slice(0, 3).map(idea => (
-          // Phones stack: the vote box, ticker and direction chip take ~176px of a
-          // 342px row, which left the thesis 137px and truncated roughly 80% of
-          // every quote away. The quote is the whole point of the row, so below
-          // `sm` it gets its own full-width line and clamps to two instead.
+          // Phones stack: the ticker and direction chip still eat a third of a
+          // 342px row, and the quote is the whole point of it, so below `sm` the
+          // quote gets its own full-width line and clamps to three instead.
           <div
             key={idea.id}
             className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 px-5 py-4 border-b border-borderSubtle/50 last:border-0"
           >
+            {/* No vote box. These are the app's own worked examples on a desk with
+                no accounts and no server, so a tally affordance would offer the
+                reader a vote nobody can cast. */}
             <span className="flex items-center gap-3 sm:gap-4 shrink-0">
-              <span className="flex flex-col items-center w-9 shrink-0 border border-borderSubtle rounded-md py-1.5">
-                <span className="font-mono text-caption font-bold text-textPrimary tnum">{idea.votes}</span>
-              </span>
               <span className="font-mono text-caption font-bold text-textPrimary shrink-0">{idea.ticker}</span>
               <span
                 className={`inline-flex items-center rounded px-1.5 py-0.5 font-mono text-micro font-bold uppercase tracking-wider shrink-0 ${

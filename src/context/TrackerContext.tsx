@@ -10,7 +10,7 @@
 
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import type { TrackedSetup } from '../types/tracker';
-import type { Setup, ScannerKey, OptionRight, Verdict } from '../types/skyvision';
+import type { Setup, ScannerKey, OptionRight, Verdict } from '../types/compass';
 
 /** Minimal shape to bookmark a contract weighed outside the setups scan. */
 export interface TrackContractInput {

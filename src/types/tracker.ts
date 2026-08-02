@@ -6,7 +6,7 @@
 ==================================================
 */
 
-import type { OptionRight, ScannerKey, Verdict } from './skyvision';
+import type { OptionRight, ScannerKey, Verdict } from './compass';
 
 /** A setup the user has bookmarked for ongoing tracking. */
 export interface TrackedSetup {

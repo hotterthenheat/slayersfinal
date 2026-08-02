@@ -13,23 +13,9 @@ import {
 } from 'lucide-react';
 import { Card, Points } from './parts';
 
-/*
-  Every claim on this page is a claim about code that ships, so it goes stale
-  the moment a desk moves. Three rules keep it honest: name only panels and
-  controls that exist in the registries and subnavs (pulseRegistry, gex/subnav,
-  flowdesk/subnav, proveit/ProveIt); describe what an engine derives rather than
-  what a number looks like it means; and name the population before quoting a
-  rate, because a simulated analog is not a historical one and the difference is
-  the whole of the claim. Worked reads stay mechanical for the same reason — a
-  printed level here would be a second derivation of gex.ts, and it would be
-  wrong by the next tick.
-
-  Two rounds of spot-fixes left this page contradicting itself, so the standing
-  instruction is to re-read the code path, not the previous paragraph: the
-  board's score comes from data/skyvision.ts rankOf, the Weigher's from
-  core/contractScore.ts, and they are different scales that happen to share one
-  spoken lexicon.
-*/
+// The rule that governs this page now lives in ./parts.tsx, which every guide
+// page imports. It was here, and being here is why Overview.tsx and Faq.tsx
+// kept the stale wording through two waves that corrected this file.
 
 interface DeskDoc {
   icon: LucideIcon;
@@ -62,6 +48,19 @@ const DESKS: DeskDoc[] = [
     controls: [
       <><span className="text-textPrimary">Customize</span> — drag, resize and add panels are off until you enter it;
       outside Customize the desk is chromeless. Your layout is saved in your browser.</>,
+      <>Panels resize from any edge or corner, to any size. There is no per-panel minimum: if you want a chart three
+      columns wide, it goes three columns wide. <span className="text-textPrimary">Fill</span> then grows every panel
+      into whatever space is left around it, so a desk you arranged by hand ends with no gaps and nothing moved.{' '}
+      <span className="text-textPrimary">Fit</span> is the other one — it re-flows the panels into tidy full rows, which
+      does move them.</>,
+      <>Every panel header carries <span className="text-textPrimary">Detach</span> and{' '}
+      <span className="text-textPrimary">Pop out</span>, both available without entering Customize. Detach floats a panel
+      free of the grid; pop out gives it its own window you can drag to a second monitor. Either way the panel keeps
+      running off the same scan, and docking it returns it to the cell it left.</>,
+      <>The <span className="text-textPrimary">Windows</span> menu in the toolbar lists whatever is out of the grid and
+      where, brings it all back in one press, and — in browsers that allow it — picks which display new pop-outs open on.
+      Window positions are saved with the layout; after a reload the menu offers to reopen them, since a browser will not
+      let a page open windows without a click.</>,
       <>The <span className="text-textPrimary">Views</span> menu carries fourteen ready workspaces, Scalper, Swing,
       Macro and Earnings among them. Presets stay restorable however you edit them.</>,
       <>Each panel has its own ticker field, so you can watch SPY and NVDA side by side.</>,

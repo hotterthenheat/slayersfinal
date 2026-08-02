@@ -255,7 +255,7 @@ const MarketStateReplay = ({ snapshot }: MarketStateReplayProps) => {
         <StatCard
           label="Reached target first"
           value={`${view.targetPct}%`}
-          sub={`${view.n} comparable sessions`}
+          sub={`${view.n} simulated analogs`}
           tone={view.edgePts >= 0 ? 'bull' : 'bear'}
           emphasis
         />
@@ -268,9 +268,9 @@ const MarketStateReplay = ({ snapshot }: MarketStateReplayProps) => {
           tone={view.expectancyR >= 0 ? 'bull' : 'bear'}
         />
         <StatCard
-          label="Out-of-sample"
+          label="Recent half"
           value={`${view.oos.outSampleTargetPct}%`}
-          sub={`holdout · Δ${view.oos.degradationPts >= 0 ? '−' : '+'}${Math.abs(view.oos.degradationPts)}pt`}
+          sub={`recency split · Δ${view.oos.degradationPts >= 0 ? '−' : '+'}${Math.abs(view.oos.degradationPts)}pt`}
           tone={Math.abs(view.oos.degradationPts) <= 5 ? 'bull' : 'warn'}
         />
         <StatCard
@@ -296,14 +296,14 @@ const MarketStateReplay = ({ snapshot }: MarketStateReplayProps) => {
       </Panel>
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-stretch">
-        {/* Comparable sessions + outcome distribution */}
+        {/* Simulated analogs + outcome distribution */}
         <Panel
           title={
             <span className="inline-flex items-center gap-1.5">
-              <History className="w-3.5 h-3.5" /> Comparable sessions
+              <History className="w-3.5 h-3.5" /> Simulated analogs
             </span>
           }
-          subtitle={`${view.n} closest analogs of ${view.pool} scanned`}
+          subtitle={`${view.n} closest of ${view.pool} synthesized`}
           className="xl:col-span-7"
           flush
         >
@@ -322,7 +322,7 @@ const MarketStateReplay = ({ snapshot }: MarketStateReplayProps) => {
           <p className="px-3.5 py-2.5 border-t border-borderSubtle font-mono text-micro text-textMuted leading-relaxed">
             Target first vs stop first is scored against this setup's own geometry — {view.targetDistPct.toFixed(1)}% to target,{' '}
             {view.stopDistPct.toFixed(1)}% to stop ({view.rr.toFixed(1)}:1). Excess over the {view.baselineTargetPct}% a no-edge
-            session posts is the edge: {view.edgePts >= 0 ? '+' : ''}
+            session posts is the size of the similarity tilt the sampler assumes: {view.edgePts >= 0 ? '+' : ''}
             {view.edgePts} points.
           </p>
         </Panel>
@@ -359,7 +359,7 @@ const MarketStateReplay = ({ snapshot }: MarketStateReplayProps) => {
               <Activity className="w-3.5 h-3.5" /> Probability calibration
             </span>
           }
-          subtitle="predicted target rate vs what actually happened"
+          subtitle="predicted target rate vs the rate the sampler drew"
           className="xl:col-span-6"
           tone={view.calibrationErrorPct <= 6 ? 'bull' : 'warn'}
         >
@@ -409,37 +409,39 @@ const MarketStateReplay = ({ snapshot }: MarketStateReplayProps) => {
         </Panel>
       </div>
 
-      {/* Out-of-sample split */}
+      {/* Recency split. Nothing was fitted and `daysAgo` is drawn independently of
+          the outcome, so cutting the pool on it reports sampler drift and validates
+          nothing — the labels here must not imply otherwise. */}
       <Panel
         title={
           <span className="inline-flex items-center gap-1.5">
-            <Target className="w-3.5 h-3.5" /> In-sample vs out-of-sample
+            <Target className="w-3.5 h-3.5" /> Recency split
           </span>
         }
-        subtitle="does the target rate hold on analogs the read wasn't fit to"
+        subtitle="does the sampler drift across the pool"
         tone={Math.abs(view.oos.degradationPts) <= 5 ? 'bull' : 'warn'}
       >
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
           <div className="flex flex-col gap-1">
-            <span className="font-mono text-micro uppercase tracking-wider text-textMuted">In-sample</span>
+            <span className="font-mono text-micro uppercase tracking-wider text-textMuted">Older half</span>
             <span className="font-mono text-2xl font-bold tnum text-textPrimary">{view.oos.inSampleTargetPct}%</span>
-            <span className="font-mono text-micro text-textMuted tnum">older {view.oos.inSampleN} analogs · target first</span>
+            <span className="font-mono text-micro text-textMuted tnum">{view.oos.inSampleN} analogs · target first</span>
           </div>
           <div className="flex flex-col gap-1">
-            <span className="font-mono text-micro uppercase tracking-wider text-textMuted">Out-of-sample</span>
+            <span className="font-mono text-micro uppercase tracking-wider text-textMuted">Recent half</span>
             <span className={`font-mono text-2xl font-bold tnum ${Math.abs(view.oos.degradationPts) <= 5 ? 'text-textPrimary' : 'text-warn'}`}>
               {view.oos.outSampleTargetPct}%
             </span>
-            <span className="font-mono text-micro text-textMuted tnum">recent {view.oos.outSampleN} held out · target first</span>
+            <span className="font-mono text-micro text-textMuted tnum">{view.oos.outSampleN} analogs · target first</span>
           </div>
           <div className="flex flex-col gap-1">
-            <span className="font-mono text-micro uppercase tracking-wider text-textMuted">Degradation</span>
+            <span className="font-mono text-micro uppercase tracking-wider text-textMuted">Drift</span>
             <span className={`font-mono text-2xl font-bold tnum ${Math.abs(view.oos.degradationPts) <= 5 ? 'text-bull' : 'text-warn'}`}>
               {view.oos.degradationPts >= 0 ? '−' : '+'}
               {Math.abs(view.oos.degradationPts)}pt
             </span>
             <span className="font-mono text-micro text-textMuted tnum">
-              {Math.abs(view.oos.degradationPts) <= 5 ? 'holds out of sample' : 'softens on the holdout'}
+              {Math.abs(view.oos.degradationPts) <= 5 ? 'flat across the pool' : 'the halves disagree'}
             </span>
           </div>
         </div>
@@ -449,12 +451,12 @@ const MarketStateReplay = ({ snapshot }: MarketStateReplayProps) => {
       <Panel bodyClassName="py-3">
         <p className="text-caption text-textSecondary leading-relaxed">
           <span className="font-mono font-semibold uppercase tracking-wider mr-2 text-textSecondary">How this reads</span>
-          Market-State Replay asks what happened the last time the whole board looked like this. It scores {view.pool} prior sessions
-          against today's eight-factor state, keeps the {view.n} closest, and replays their outcomes against this setup's actual target
-          and stop. Dealer positioning, vol and options flow are read from the current chain and tape; breadth, rates, news and
-          time-of-day round out the macro context. The calibration
-          and out-of-sample panels exist so the read has to prove it holds on data it wasn't fit to, rather than asking you to take the
-          headline number on faith.
+          Market-State Replay synthesizes {view.pool} sessions around today's eight-factor state, keeps the {view.n} closest, and
+          replays them against this setup's target and stop. No session here happened — the pool is generated by the same model that
+          scores it, so every rate above is the size of a modeled assumption rather than a measurement. Dealer positioning, vol and
+          options flow are read from the current chain and tape; breadth, rates, news and time-of-day are modeled macro context.
+          Calibration checks the sampler against itself, since each outcome is drawn from its own predicted probability, and the
+          recency split reports whether that sampler drifts across the pool. Neither can corroborate the model.
         </p>
       </Panel>
     </>

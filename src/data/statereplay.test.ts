@@ -1,6 +1,7 @@
+import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import Simulator from '../core/simulator';
-import { buildStateReplay, type StateReplayView } from './statereplay';
+import { buildStateReplay, MIN_DIST, type StateReplayView } from './statereplay';
 import type { MarketSnapshot } from '../types/market';
 
 /*
@@ -30,6 +31,12 @@ const cases = NAMES.map(ticker => {
 });
 
 const rendered = (v: StateReplayView): string[] => [v.receipts, v.headline, v.note];
+
+/** The panel carries copy of its own that never passes through the view strings,
+    and this suite runs in the node environment with no DOM to render it into, so
+    the guard below reads the component source. Phrase level only — single-word
+    bans would fire on identifiers and Tailwind classes. */
+const PANEL_SRC = readFileSync(new URL('../components/proveit/MarketStateReplay.tsx', import.meta.url), 'utf8');
 
 describe('state replay: the reported rates re-derive from the reported population', () => {
   it.each(cases)('$ticker keeps the comparable set inside the synthesized pool', ({ view }) => {
@@ -69,9 +76,12 @@ describe('state replay: the reported rates re-derive from the reported populatio
   it.each(cases)('$ticker replays the plan geometry rather than deriving its own', ({ snap, view }) => {
     // Target, stop and direction come off the trade plan the simulator built.
     // A local re-derivation here would quietly disagree with the rest of the desk.
+    // MIN_DIST is part of what the view publishes, not an implementation detail:
+    // on a day whose plan lands the target or the stop on entry the engine returns
+    // the floor, so a raw re-derivation would be pinning a number nothing renders.
     const entry = snap.plan.entry || snap.spot;
-    expect(view.targetDistPct).toBeCloseTo((Math.abs(snap.plan.target1 - entry) / entry) * 100, 6);
-    expect(view.stopDistPct).toBeCloseTo((Math.abs(entry - snap.plan.stopLoss) / entry) * 100, 6);
+    expect(view.targetDistPct).toBeCloseTo(Math.max(MIN_DIST, Math.abs(snap.plan.target1 - entry) / entry) * 100, 6);
+    expect(view.stopDistPct).toBeCloseTo(Math.max(MIN_DIST, Math.abs(entry - snap.plan.stopLoss) / entry) * 100, 6);
     expect(view.rr).toBeCloseTo(view.targetDistPct / view.stopDistPct, 6);
     expect(view.direction).toBe(snap.plan.direction);
     expect(view.spot).toBe(snap.spot);
@@ -114,6 +124,27 @@ describe('state replay copy says what the population is', () => {
     // a consistency check on the sampler and cannot prove the model right.
     expect(view.note).not.toMatch(/isn't fooling itself|proves|confirms|validated/i);
     if (view.calibrationErrorPct <= 6) expect(view.note).toMatch(/drawn from its own predicted probability/i);
+  });
+
+  it('the panel around the view strings makes the same claims they do', () => {
+    // The view strings were pinned here from the start; the static JSX between
+    // them was not, and it drifted the other way — "176 prior sessions", "N
+    // comparable sessions", "recent N held out", "vs what actually happened" —
+    // so the screen denied in one paragraph what it asserted in the next.
+    for (const banned of [
+      /\bcomparable sessions\b/i,
+      /\bprior sessions\b/i,
+      /\breal precedent\b/i,
+      /\bits own history\b/i,
+      /\b(actually happened|market history|historical(ly)?)\b/i,
+      /\bbacktest(ed)?\b/i,
+      /\bheld[- ]out\b/i,
+      /\bout[- ]of[- ]sample\b/i,
+      /\bholdout\b/i,
+      /(?<!\bnot )\bobserved\b/i,
+    ]) {
+      expect(PANEL_SRC).not.toMatch(banned);
+    }
   });
 
   it.each(cases)('$ticker instructs no trade and claims no position', ({ view }) => {

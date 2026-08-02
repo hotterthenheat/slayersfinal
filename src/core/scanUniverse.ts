@@ -80,7 +80,7 @@ export type ScanCoverage = 'modeled' | 'covered' | 'listing';
  * can show, and the obvious pill text for the deepest tier is "LIVE" — a claim
  * this desk must never make about a simulator. Writing the copy here means the
  * next screen to surface coverage inherits the honest wording instead of
- * inventing it. Same split as ../components/skyvision/setupState.ts: the meaning
+ * inventing it. Same split as ../components/compass/setupState.ts: the meaning
  * lives with the logic, the tone and the pill live with the component.
  */
 export const COVERAGE_META: Record<ScanCoverage, { label: string; note: string }> = {
@@ -272,7 +272,14 @@ function makeScanName(ticker: string, epoch: number): ScanName {
     spot: live ? live.currentPrice : Number((s.base * (1 + now / 100)).toFixed(2)),
     iv: s.iv,
     step: s.step,
-    changePct: Number(changePct.toFixed(2)),
+    // `+ 0` for the same reason as compass.ts:664 — this is the other half of
+    // the same defect, found by the sweep and left standing because it sits in
+    // a file that round's owner did not hold. Number((-0.002).toFixed(2)) is
+    // NEGATIVE zero, so a name whose move rounds away publishes a signed flat:
+    // `>= 0` is true while the unrounded slope's is not. Rounding a sub-cent
+    // move to flat is fine; carrying the sign of a move that no longer exists
+    // is not, and it is the single derivation every desk reads.
+    changePct: Number(changePct.toFixed(2)) + 0,
     // Same shape as the candle-based lean the live names use: hour momentum
     // plus half the day's direction.
     trendUp: now - walkPct(s, epoch - HOUR_EPOCHS) + 0.5 * (now - walkPct(s, epoch - SESSION_EPOCHS)) >= 0,

@@ -3,16 +3,16 @@ import Simulator from '../core/simulator';
 import { buildScanUniverse, scanEpoch, type ScanName } from '../core/scanUniverse';
 import {
   CANDIDATES_PER_NAME,
-  buildSkyVision,
+  buildCompass,
   makeSetup,
   prescreenRank,
   prescreenScore,
-  resetSkyVisionCache,
+  resetCompassCache,
   scannerFloor,
   strikeLadder,
-} from './skyvision';
-import { setupState, SETUP_STATES, type SetupState } from '../components/skyvision/setupState';
-import { SCANNERS, type OptionRight, type Setup, type Verdict } from '../types/skyvision';
+} from './compass';
+import { setupState, SETUP_STATES, type SetupState } from '../components/compass/setupState';
+import { SCANNERS, type OptionRight, type Setup, type Verdict } from '../types/compass';
 
 /*
   What the Compass board IS, pinned.
@@ -35,8 +35,8 @@ const snap = Simulator.buildSnapshot('SPY');
 const displayScore = (rank: number) => Math.round(Math.min(99, Math.max(8, rank)));
 
 const board = (scanner = 'top-setups' as const, epoch = EPOCH) => {
-  resetSkyVisionCache();
-  const data = buildSkyVision(snap, scanner, { epoch });
+  resetCompassCache();
+  const data = buildCompass(snap, scanner, { epoch });
   const rows = data.groups.flatMap(g => g.setups.map(s => ({ setup: s, spot: g.spot })));
   return { data, rows, setups: rows.map(r => r.setup) };
 };

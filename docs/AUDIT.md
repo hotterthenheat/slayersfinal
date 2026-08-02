@@ -129,7 +129,7 @@ Loading is the weakest area: 3 different idioms, no `<Skeleton>`. Empty states i
 ## 3. Copy (institutional language)
 
 **Core issue — verdict lexicon fragmentation.** Setup engine type is `ENTER\|WATCH\|EXIT`
-(`types/skyvision.ts`), but `VerdictBadge` + Disclaimer canonicalize **QUALIFIED/WATCH/FADED**.
+(`types/compass.ts`), but `VerdictBadge` + Disclaimer canonicalize **QUALIFIED/WATCH/FADED**.
 Several surfaces still print ENTER/EXIT → same state, two words, sometimes same screen.
 Standardize user-facing on QUALIFIED/WATCH/FADED; keep ENTER/EXIT internal only.
 

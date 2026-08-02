@@ -1,12 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import {
+  CALENDAR_THROUGH,
   MARKET_HOLIDAYS,
   isTradingDay,
   nextSession,
   sessionsBetween,
   expiryFor,
   isoDate,
+  today,
 } from './calendar';
+import { expiryLadder } from './contractQuery';
 
 /** Local-midnight date from a y-m-d triple — never `new Date('2026-07-04')`,
     which parses as UTC and shifts a day in negative-offset zones. */
@@ -176,6 +179,43 @@ describe('matrix column horizons resolve to distinct sessions', () => {
       });
       for (let k = 1; k < cols.length; k++) expect(cols[k].getTime()).toBeGreaterThan(cols[k - 1].getTime());
       for (const c of cols) expect(isTradingDay(c)).toBe(true);
+    }
+  });
+});
+
+/**
+ * The only tests in this file that read the clock on purpose.
+ *
+ * Everything above pins a fixed date, because a suite whose inputs move with
+ * the wall clock is a suite that goes red on a Tuesday for no reason — this
+ * project measured 45 red days out of 121 that way. A holiday table is the one
+ * thing here that genuinely expires, though, and nothing else notices when it
+ * does: `contractQuery` drops every ladder rung past the table rather than
+ * counting Thanksgiving as a session, so the expiry picker gets SHORTER, not
+ * wrong. Silent and correct is worse than loud and correct here, because the
+ * fix takes an afternoon and the warning has to arrive years early.
+ */
+describe('the calendar has not run out', () => {
+  const LONGEST_RUNG_DAYS = 365;
+
+  it('still covers the longest contract the picker can offer, with two years of lead time', () => {
+    const horizon = today();
+    horizon.setDate(horizon.getDate() + LONGEST_RUNG_DAYS + 365 * 2);
+    const need = horizon.getFullYear();
+    expect(
+      CALENDAR_THROUGH,
+      `MARKET_HOLIDAYS must reach ${need} to keep pricing the 365d rung. Extend the table.`,
+    ).toBeGreaterThanOrEqual(need);
+  });
+
+  it('drops no rung from today’s expiry ladder', () => {
+    // The symptom the lead-time guard exists to pre-empt, asserted directly:
+    // the year clamp silently `continue`s past any rung the table cannot price.
+    const ladder = expiryLadder();
+    expect(ladder.length).toBeGreaterThanOrEqual(14);
+    for (const e of ladder) {
+      expect(e.date.getFullYear()).toBeLessThanOrEqual(CALENDAR_THROUGH);
+      expect(isTradingDay(e.date)).toBe(true);
     }
   });
 });

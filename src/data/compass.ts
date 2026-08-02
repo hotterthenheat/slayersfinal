@@ -1,6 +1,6 @@
 /*
 ==================================================
-  SLAYER TERMINAL - SKY'S VISION ENGINE (skyvision.ts)
+  SLAYER TERMINAL - COMPASS ENGINE (compass.ts)
   Placeholder advisory model. Deterministic per contract
   so rows stay stable across ticks. Swap this whole file
   for the real quant engine / ThetaData feed later.
@@ -27,10 +27,10 @@ import type {
   ScannerKey,
   Setup,
   SetupGroup,
-  SkyVisionData,
+  CompassData,
   TakeProfit,
   Verdict,
-} from '../types/skyvision';
+} from '../types/compass';
 
 // ---- deterministic RNG ----------------------------------------------------
 function hash(seed: string): number {
@@ -111,7 +111,7 @@ export function scannerFloor(scanner: ScannerKey): number {
  *
  * Four of the six are same-day and two are next-day, and the tab strip is where
  * that choice is made, so the strip has to be able to say so. It reads the
- * profile rather than a second table in types/skyvision.ts: a horizon copied into
+ * profile rather than a second table in types/compass.ts: a horizon copied into
  * the type can drift from the one the engine selects, and a label that lies about
  * DTE is worse than no label. scannerHorizon.test.ts pins it against makeSetup.
  */
@@ -657,7 +657,11 @@ function buildFeed(scanner: ScannerKey, activeTicker: string, epoch: number, siz
       ticker,
       spot: name.spot,
       sparkline,
-      changePct: Number(changePct.toFixed(2)),
+      // `+ 0` is load-bearing: Number((-0.002).toFixed(2)) is NEGATIVE zero, so a
+      // group whose move rounds away publishes a signed flat — `>= 0` yet not
+      // `Object.is` 0. Rounding a sub-cent move to flat is fine; carrying the
+      // sign of a move that no longer exists is not.
+      changePct: Number(changePct.toFixed(2)) + 0,
       found: bucket.length,
       get setups(): Setup[] {
         return (built ??= bucket.map(c =>
@@ -686,7 +690,7 @@ function cachedFeed(scanner: ScannerKey, activeTicker: string, epoch: number, si
 }
 
 /** Drops the memoised sweeps. Tests use it to measure a cold build. */
-export function resetSkyVisionCache(): void {
+export function resetCompassCache(): void {
   feedCache.clear();
 }
 
@@ -752,7 +756,7 @@ function buildImpact(snapshot: MarketSnapshot, expiry: string): ImpactRow[] {
 // ---- top-level assembly ---------------------------------------------------
 
 /** Pins the sweep to a fixed epoch. Tests use it; the app leaves it alone. */
-export interface SkyVisionOptions {
+export interface CompassOptions {
   epoch?: number;
   universeSize?: number;
 }
@@ -764,11 +768,11 @@ export interface SkyVisionOptions {
  * ladder would put the scan on the render path. Touch `.groups` and you get
  * the sweep; touch `.chain` and you get the chain.
  */
-export function buildSkyVision(
+export function buildCompass(
   snapshot: MarketSnapshot,
   scanner: ScannerKey,
-  options: SkyVisionOptions = {}
-): SkyVisionData {
+  options: CompassOptions = {}
+): CompassData {
   const epoch = options.epoch ?? scanEpoch();
   const size = options.universeSize ?? SCAN_UNIVERSE_SIZE;
   const activeIv = Simulator.TICKERS[snapshot.ticker]?.iv ?? 0.2;

@@ -8,7 +8,7 @@
 
   The one rule that makes it honest: reprice with the
   model that MINTED the entry. Setups are quoted by
-  the skyvision estimator, the Weigher/Lotto by
+  the compass estimator, the Weigher/Lotto by
   Black-Scholes, and the two disagree by 16-77% on the
   same contract. Crossing them would put a line on the
   screen that contradicts the number printed beside
@@ -25,7 +25,7 @@
 import { BULL, FOCUS, MUTED_INK } from '../gex/palette';
 import type { Tone } from '../ui/tones';
 import type { Candle } from '../../types/market';
-import type { OptionRight, Setup, TakeProfitStatus } from '../../types/skyvision';
+import type { OptionRight, Setup, TakeProfitStatus } from '../../types/compass';
 import type { WeighedContract } from '../../core/contractScore';
 
 /** Only achievement is green; activity is silver; waiting is quiet. Canonical
@@ -66,7 +66,7 @@ export const SESSION_BARS = 390;
   two-line extraction described in the test's header.
 */
 
-/** estimatePremium's clamp (data/skyvision.ts). */
+/** estimatePremium's clamp (data/compass.ts). */
 export const PREMIUM_FLOOR = 0.05;
 /** blackScholes's clamp (core/contractScore.ts). */
 export const BS_FLOOR = 0.02;
@@ -121,7 +121,7 @@ export function bsPriceAtT(
   return Math.max(price, BS_FLOOR);
 }
 
-/** Trading sessions a skyvision profile expiry stands for. Mirrors `dteOf`. */
+/** Trading sessions a compass profile expiry stands for. Mirrors `dteOf`. */
 export function sessionsForExpiry(expiry: string): number {
   return expiry === '0DTE' ? 0.5 : 1;
 }
@@ -342,7 +342,7 @@ const FWD_PTS = 60;
 /** History window ceiling — a 30d swing would otherwise want 8,078 bars. */
 const MAX_HIST_SESSIONS = 5;
 /** Fraction of the lane each docked rung's caret row reserves at the top. */
-const DOCK_HEADROOM = 0.1;
+export const DOCK_HEADROOM = 0.1;
 
 function finite(v: number, fallback: number): number {
   return Number.isFinite(v) ? v : fallback;

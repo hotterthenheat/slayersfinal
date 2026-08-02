@@ -4,7 +4,7 @@
   Scores every strike 0–100 by structural priority:
   gamma weight, open interest, neighbor dominance and
   spot proximity. The layer between the raw exposure
-  map and Sky's Vision's trade calls. Placeholder —
+  map and Compass's trade calls. Placeholder —
   swaps for the real scoring engine later.
 ==================================================
 */

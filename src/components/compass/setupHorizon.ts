@@ -16,7 +16,7 @@ import { expiryFor, isoDate, today } from '../../core/calendar';
   once, here, and the card, the table and the compare pane all read it.
 
   Value-only module (no component export) so importing it never trips
-  react-refresh, matching ./skyvision/verdict.ts.
+  react-refresh, matching ./compass/verdict.ts.
 */
 
 export interface ExpiryRead {

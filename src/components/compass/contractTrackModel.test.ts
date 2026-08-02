@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import Simulator from '../../core/simulator';
-import { makeSetup } from '../../data/skyvision';
+import { makeSetup } from '../../data/compass';
 import { weighContracts, type Horizon } from '../../core/contractScore';
 import {
   BS_FLOOR,
+  DOCK_HEADROOM,
   PREMIUM_FLOOR,
   bsPriceAtT,
   buildTrack,
@@ -13,7 +14,7 @@ import {
   spotForPremium,
   weighedToPlan,
 } from './contractTrackModel';
-import type { OptionRight, ScannerKey } from '../../types/skyvision';
+import type { OptionRight, ScannerKey } from '../../types/compass';
 
 /*
   The chart's copy of core/priceCoherence.test.ts. The regression class is "the
@@ -21,7 +22,7 @@ import type { OptionRight, ScannerKey } from '../../types/skyvision';
   printed beside it is exactly the failure the derived series exists to avoid.
 
   Tests 4a/4b are the load-bearing ones. `premiumAtT` and `bsPriceAtT` in
-  contractTrack.ts are the UNCAPPED cores of `estimatePremium` (data/skyvision.ts)
+  contractTrack.ts are the UNCAPPED cores of `estimatePremium` (data/compass.ts)
   and `blackScholes` (core/contractScore.ts) — copies, because neither engine
   exports its core today. Feeding the clamped time back in must reproduce the
   engine's own output exactly, so any change to either engine that this file does
@@ -138,7 +139,7 @@ describe('contract track: weigher adapter', () => {
 });
 
 describe('contract track: the uncapped cores reproduce the engines', () => {
-  it('premiumAtT at the clamped time equals the skyvision mid on a grid', () => {
+  it('premiumAtT at the clamped time equals the compass mid on a grid', () => {
     // estimatePremium is not exported, so the engine is probed through its only
     // consumer: makeSetup rounds to 2dp, which is the whole tolerance.
     for (const ticker of ['SPY', 'NVDA']) {
@@ -281,7 +282,20 @@ describe('contract track: rung status comes from the path, not a coin flip', () 
     const track = buildTrack(plan, Simulator.getCandles('SPY'));
     expect(track.yMax).toBeGreaterThanOrEqual(track.pathMax);
     expect(track.pathMax / track.yMax).toBeGreaterThan(0.5);
-    for (const r of track.dockedRungs) expect(r.premium).toBeGreaterThan(track.yMax);
+
+    // Not `premium > yMax`. Docking is decided against frameTop; yMax is then
+    // lifted above frameTop to reserve a caret row per docked rung, so a docked
+    // rung legitimately sits *under* yMax. That assertion held for a year of
+    // seeded ladders and then broke on a calendar roll, because it encoded one
+    // day's spacing as a rule. The contract is the partition plus the
+    // reservation: nothing is drawn twice, and the caret band clears everything
+    // the frame plots.
+    const docked = new Set(track.dockedRungs);
+    const inFrame = track.rungs.filter(r => !docked.has(r));
+    expect(inFrame.length + track.dockedRungs.length).toBe(track.rungs.length);
+    const reserve = 1 + DOCK_HEADROOM * track.dockedRungs.length;
+    for (const r of inFrame) expect(r.premium * reserve).toBeLessThanOrEqual(track.yMax * (1 + 1e-9));
+    for (const d of track.dockedRungs) for (const r of inFrame) expect(d.premium).toBeGreaterThan(r.premium);
   });
 });
 

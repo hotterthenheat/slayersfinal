@@ -4,11 +4,11 @@ import Panel from '../ui/Panel';
 import SegmentedControl from '../ui/SegmentedControl';
 import EmptyState from '../ui/EmptyState';
 import DataTable, { type Column } from '../ui/DataTable';
-import { StateBadge } from '../skyvision/StateBadge';
-import { setupState, STATE_META } from '../skyvision/setupState';
+import { StateBadge } from './StateBadge';
+import { setupState, STATE_META } from './setupState';
 import SetupScanCard from './SetupScanCard';
 import { expiryRead } from './setupHorizon';
-import type { Setup } from '../../types/skyvision';
+import type { Setup } from '../../types/compass';
 
 export type ScanLayout = 'cards' | 'table';
 
