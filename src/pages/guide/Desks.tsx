@@ -60,7 +60,11 @@ const DESKS: DeskDoc[] = [
       <>Every panel header carries <span className="text-textPrimary">Detach</span> and{' '}
       <span className="text-textPrimary">Pop out</span>, both available without entering Customize. Detach floats a panel
       free of the grid; pop out gives it its own window you can drag to a second monitor. Either way the panel keeps
-      running off the same scan, and docking it returns it to the cell it left.</>,
+      running off the same scan.</>,
+      <>The two differ in what happens to the space behind them. A detached panel is still hovering over the desk, so
+      its cell is held for it and docking puts it back exactly where it was. A popped-out panel has left this screen
+      entirely, so the desk closes over it rather than showing a hole where it used to be, and it comes home to
+      wherever there is room.</>,
       <>The <span className="text-textPrimary">Windows</span> menu in the toolbar lists whatever is out of the grid and
       where, brings it all back in one press, and — in browsers that allow it — picks which display new pop-outs open on.
       Window positions are saved with the layout; after a reload the menu offers to reopen them, since a browser will not
