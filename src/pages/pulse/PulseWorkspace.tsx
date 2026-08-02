@@ -117,6 +117,23 @@ function buildCtx(snapshot: MarketSnapshot, revision: number, focusPrice: number
 
 // ---- layout constraints --------------------------------------------------
 /**
+ * The panels the grid is actually showing, and the ones it is not.
+ *
+ * A detached or popped-out panel keeps its saved cell as a hint for coming
+ * home, but it occupies nothing on screen. Every re-flow below works over the
+ * docked set and merges the absent cells back afterwards — passing the whole
+ * array made the desk reserve a band for a panel sitting on another monitor,
+ * measured at 16.7% empty after one press of Fit.
+ */
+const awayIds = (l: PulseLayout) => l.panels.filter(p => p.detached || p.popout).map(p => p.id);
+const dockedCells = (l: PulseLayout, away: readonly string[] = awayIds(l)) => {
+  const set = new Set(away);
+  return l.layout.filter(g => !set.has(g.i));
+};
+/** Minimized panels pack but never grow — see `TileOptions.noGrow`. */
+const noGrowIds = (panels: readonly PulsePanel[]) => panels.filter(p => p.minimized).map(p => p.id);
+
+/**
  * The registry is the one authority on how small a widget may get. Layout items
  * carry their own minW/minH — hand-typed in the presets, frozen at write time in
  * a saved layout — and nothing reconciled the two, so "GEX + Order Flow" shipped
@@ -137,7 +154,20 @@ function hydrateLayout(l: PulseLayout): PulseLayout {
   // saved row of (x=0,w=1) and (x=1,w=11) widens the first panel straight into
   // the second. Re-tile when — and only when — something actually had to be
   // clamped, so a desk already inside the floor (every preset) is untouched.
-  return { ...l, layout: clamped ? tile(layout, { noGrow: l.panels.filter(p => p.minimized).map(p => p.id) }) : layout };
+  if (!clamped) return { ...l, layout };
+  // Repair only what the grid will render. This used to re-tile the whole
+  // array, so loading a desk with a legacy one-unit panel POPPED OUT laid the
+  // docked panels out around a cell belonging to a window on another screen:
+  // measured at 50.0% dead, with the one visible chart at half the desk width.
+  const away = awayIds(l);
+  return {
+    ...l,
+    layout: mergeLayout(
+      tile(dockedCells({ ...l, layout }, away), { noGrow: noGrowIds(l.panels) }),
+      layout,
+      away,
+    ),
+  };
 }
 
 
@@ -364,23 +394,6 @@ function placeNew(layout: Layout[], def: { w: number; h: number; minW: number })
   // sentinel, because `place` has to do real arithmetic with this cell.
   return { ...cell, x: 0, y: floorOf(layout) };
 }
-
-/**
- * The panels the grid is actually showing, and the ones it is not.
- *
- * A detached or popped-out panel keeps its saved cell as a hint for coming
- * home, but it occupies nothing on screen. Every re-flow below works over the
- * docked set and merges the absent cells back afterwards — passing the whole
- * array made the desk reserve a band for a panel sitting on another monitor,
- * measured at 16.7% empty after one press of Fit.
- */
-const awayIds = (l: PulseLayout) => l.panels.filter(p => p.detached || p.popout).map(p => p.id);
-const dockedCells = (l: PulseLayout, away: readonly string[] = awayIds(l)) => {
-  const set = new Set(away);
-  return l.layout.filter(g => !set.has(g.i));
-};
-/** Minimized panels pack but never grow — see `TileOptions.noGrow`. */
-const noGrowIds = (panels: readonly PulsePanel[]) => panels.filter(p => p.minimized).map(p => p.id);
 
 /** Per-panel ticker editor — click to type a symbol, Enter to switch. */
 const PanelTicker = ({ value, onChange }: { value: string; onChange: (t: string) => void }) => {
@@ -894,10 +907,19 @@ const PulseWorkspace = () => {
           if (l.panels.some(p => p.id === id)) return l;
           const panels = [...l.panels, panel];
           const away = awayIds({ ...l, panels });
-          // The old cell is a hint. The desk closed that gap when the panel
-          // went, so `place` only honours it if it is somehow still free.
-          const landed = place(dockedCells({ ...l, panels }, away), geo, { noGrow: noGrowIds(panels) });
-          return { ...l, panels, layout: mergeLayout(landed, l.layout, away) };
+          const docked = dockedCells({ ...l, panels }, away);
+          const noGrow = noGrowIds(panels);
+          // Closing a DETACHED panel and undoing restores it still detached, so
+          // it is not returning to the grid and must not be tiled with the
+          // panels that are — it would be an obstacle they lay out around and
+          // then never render. Its cell rides back through the saved side,
+          // because removing the panel took it out of `l.layout`.
+          //
+          // The old cell is only a hint for a panel that IS coming back: the
+          // desk closed that gap when the panel went, so `place` honours it
+          // just when it is somehow still free.
+          const settled = away.includes(id) ? tile(docked, { noGrow }) : place(docked, geo, { noGrow });
+          return { ...l, panels, layout: mergeLayout(settled, [...l.layout, geo], away) };
         }),
     });
   };

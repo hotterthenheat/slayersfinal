@@ -126,6 +126,21 @@ desk for the up-pack to lift in. Height changes go through `resizeHeight`, which
 pushes the desk down *before* growing a panel so `tile` is never handed an
 overlap. 10 new tests in `detach.test.ts`; all seven paths re-measured at 0.0%.
 
+The round after that found the partition was applied at the runtime reflows and
+**not at its two edges**. Loading a saved desk that had a legacy one-unit panel
+popped out re-tiled the whole array including the absent cell: **50.0% dead,
+with the one visible chart at half the desk width**. Undoing the close of a
+*detached* panel fed its cell into the same tiling input. Both fixed; both
+re-measured at 0.0%.
+
+A third finding in that round was **refuted**. The per-panel ticker is dropped
+from a locked two-column panel near 1024px, and the report said Customize was
+then the only way to reach it. Measured: Maximize is offered on every panel at
+every width while locked, and it opens the ticker editor. Reserving the ticker's
+34px instead would have pushed out Detach or Pop out at 151px — reintroducing
+the dead end fixed two rounds earlier, and that one has no alternative route,
+because maximizing hides the placement controls.
+
 **One thing the sweep found that no review had:** popping a panel out to another
 monitor left its cell reserved on the desk it came from — **50.4% of the screen
 showing nothing** with one of two panels out. Detaching and popping out look
