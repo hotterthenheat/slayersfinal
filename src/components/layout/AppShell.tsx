@@ -20,6 +20,21 @@ const isTypingTarget = (el: EventTarget | null): boolean => {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || node.isContentEditable;
 };
 
+/**
+ * Which routes get the one-line bar instead of the real footer.
+ *
+ * Every route did, and that was the bug: the landing page carried a 503px
+ * sitemap footer and everything else got a 53px legal strip, which does not
+ * read as the end of a page at all — it reads as a status bar, and the site
+ * looks like it stops mid-air.
+ *
+ * Pulse is the one genuine exception. It is a workspace whose panels are
+ * dragged and resized against the bottom edge of the viewport, so growing a
+ * 500px scroll region underneath them would put the drag surface in a page
+ * that scrolls out from under the cursor.
+ */
+const deskRoute = (path: string) => path === '/pulse' || path.startsWith('/pulse/');
+
 const AppShell = () => {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -101,7 +116,7 @@ const AppShell = () => {
                 undo the column gutters so the rule runs edge to edge — the
                 compact bar carries its own padding. */}
             <div className="mt-auto -mx-4 -mb-5 lg:-mx-6 2xl:-mx-8">
-              <SiteFooter variant="compact" />
+              <SiteFooter variant={deskRoute(location.pathname) ? 'compact' : 'full'} bleed />
             </div>
           </motion.div>
         </AnimatePresence>
