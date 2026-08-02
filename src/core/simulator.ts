@@ -415,7 +415,7 @@ const Simulator = (() => {
     return strikes;
   }
 
-  // Generate Sky's Vision Plan
+  // Generate Compass Plan
   function generateTradePlan(tickerKey: TickerSymbol, spot: number, chain: StrikeNode[], indicators: Indicators): TradePlan {
     const config = TICKERS[tickerKey];
 

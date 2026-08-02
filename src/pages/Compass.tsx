@@ -5,13 +5,13 @@ import { Filter, History } from 'lucide-react';
 import { useMarketData } from '../context/MarketDataContext';
 import type { MarketSnapshot } from '../types/market';
 import Simulator from '../core/simulator';
-import { buildSkyVision, makeSetup, scannerExpiry, scannerFloor } from '../data/skyvision';
-import { SCANNERS, type OptionRight, type ScannerKey, type Setup } from '../types/skyvision';
+import { buildCompass, makeSetup, scannerExpiry, scannerFloor } from '../data/compass';
+import { SCANNERS, type OptionRight, type ScannerKey, type Setup } from '../types/compass';
 import PageHeader from '../components/ui/PageHeader';
 import Panel from '../components/ui/Panel';
-import ContractChain, { type ChainSelection } from '../components/skyvision/ContractChain';
-import SignalMonitor from '../components/skyvision/SignalMonitor';
-import ImpactLeaderboard from '../components/skyvision/ImpactLeaderboard';
+import ContractChain, { type ChainSelection } from '../components/compass/ContractChain';
+import SignalMonitor from '../components/compass/SignalMonitor';
+import ImpactLeaderboard from '../components/compass/ImpactLeaderboard';
 import ContractWeigher from '../components/compass/ContractWeigher';
 import LottoBoard from '../components/compass/LottoBoard';
 import SetupScanBoard, { type ScanLayout } from '../components/compass/SetupScanBoard';
@@ -251,11 +251,11 @@ const Compass = () => {
   const scanClock = scanAt ? sweepClock(scanAt) : '';
 
   // Scan tier: feed groups, counts, impact — stable between sweeps
-  const data = useMemo(() => (scanSnapshot ? buildSkyVision(scanSnapshot, scanner) : null), [scanSnapshot, scanner]);
+  const data = useMemo(() => (scanSnapshot ? buildCompass(scanSnapshot, scanner) : null), [scanSnapshot, scanner]);
 
   // Live tier: the contract chain tracks every tick (prices should breathe)
   const liveChain = useMemo(
-    () => (marketData ? buildSkyVision(marketData, scanner).chain : null),
+    () => (marketData ? buildCompass(marketData, scanner).chain : null),
     [marketData, scanner]
   );
 
@@ -330,7 +330,7 @@ const Compass = () => {
 
      The key is `rank`, the continuous quantity the sweep itself sorts on, and
      that is the only key that works. It used to be `score`, which is a display
-     rounding of that same rank (rankOf and displayScore, data/skyvision.ts) —
+     rounding of that same rank (rankOf and displayScore, data/compass.ts) —
      sixteen values above a floor of 84, ten of them actually occupied, doing the
      work of 240 rows. Everything inside a bucket was a tie the comparator could
      not break, so the order fell to whatever arrived first: measured, 230 of the
@@ -366,7 +366,7 @@ const Compass = () => {
     const meta = {} as Record<ScannerKey, { found: number; shown: number; expiry: string }>;
     if (!scanSnapshot) return meta;
     for (const s of SCANNERS) {
-      const built = s.key === scanner && data ? data : buildSkyVision(scanSnapshot, s.key);
+      const built = s.key === scanner && data ? data : buildCompass(scanSnapshot, s.key);
       meta[s.key] = { found: built.totalFound, shown: built.shown, expiry: scannerExpiry(s.key) };
     }
     return meta;
@@ -562,7 +562,7 @@ const Compass = () => {
             >
               {isActive && (
                 <motion.span
-                  layoutId="skyvision-scanner-pill"
+                  layoutId="compass-scanner-pill"
                   className="absolute inset-0 rounded-md holo-bg"
                   transition={PILL}
                 />

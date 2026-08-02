@@ -21,7 +21,7 @@ export type RotationPhase = 'LEADING' | 'IMPROVING' | 'WEAKENING' | 'LAGGING';
 
 /**
  * The one lexicon the stock screens speak, same rule as
- * components/skyvision/verdict.ts: the engine state stays ACCUMULATE/HOLD/AVOID,
+ * components/compass/verdict.ts: the engine state stays ACCUMULATE/HOLD/AVOID,
  * every surface renders STRONG/NEUTRAL/WEAK — the literal reading of a pure
  * threshold on the composite (>=68 / <=46), where "ACCUMULATE" is an instruction
  * the number does not support on its own.
@@ -38,7 +38,7 @@ export const VERDICT_LABEL: Record<StockVerdict, string> = {
 };
 
 // A verdict is a process state, so it takes the chrome tones (the rule in
-// skyvision/setupState.ts). AVOID keeps bear because HOLD already owns neutral
+// compass/setupState.ts). AVOID keeps bear because HOLD already owns neutral
 // and WEAK must stay distinguishable from NEUTRAL.
 export const VERDICT_TONE: Record<StockVerdict, Tone> = {
   ACCUMULATE: 'select',

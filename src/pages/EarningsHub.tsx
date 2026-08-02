@@ -50,7 +50,7 @@ const WATCHLIST_KEY = 'slayer.earnings.watchlist';
 const DOSSIER_ID = 'earnings-dossier';
 
 // A verdict is a process state, so it takes the chrome tones — see the rule in
-// skyvision/setupState.ts. QUALIFIED = silver (a structure qualifies), RICH =
+// compass/setupState.ts. QUALIFIED = silver (a structure qualifies), RICH =
 // amber caution (premium favours the seller), NO EDGE = grey. Magenta stays
 // reserved for the king/standout signal, not a verdict.
 const verdictTone: Record<EarningsVerdict, Tone> = {
@@ -60,7 +60,7 @@ const verdictTone: Record<EarningsVerdict, Tone> = {
 };
 
 /**
- * Observational labels, same rule as `skyvision/verdict.ts` and the Stocks
+ * Observational labels, same rule as `compass/verdict.ts` and the Stocks
  * board: the engine keeps PLAY/FADE/SKIP, the screen states the condition.
  *
  * PLAY deliberately does NOT map to a price word — it fires on three different

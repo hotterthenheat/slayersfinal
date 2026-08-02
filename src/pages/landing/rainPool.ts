@@ -4,7 +4,7 @@
   The scrolling terminal lines behind the hero — the
   same grammar as the real slayerterminal.com rain:
   short machine output, tinted by desk.
-    steel = SkyVision (setup scan / rank / score)
+    steel = Compass (setup scan / rank / score)
     amber = Pinpoint AI (dealer flow / GEX / walls)
     dim   = everything else
   GENERATED_POOL is appended by the line-generation
@@ -17,11 +17,11 @@ export type RainTint = 'steel' | 'amber' | 'bright' | '';
 
 /** Hand-authored base — ported from the live site, then broadened. */
 const BASE_POOL: string[] = [
-  // SkyVision — setup scanner
+  // Compass — setup scanner
   'chain = spx.chain(dte=0)',
-  'setups = skyvision.scan(chain)',
+  'setups = compass.scan(chain)',
   'top = setups.rank().head(5)',
-  'skyvision.scan() -> 4 setups',
+  'compass.scan() -> 4 setups',
   'setup.score   # 91',
   'setup.ev      # +0.44R',
   'score = kelly(edge, win_rate)',
@@ -74,7 +74,7 @@ const BASE_POOL: string[] = [
 export const GENERATED_POOL: string[] = [
   "slayer:~ $",
   "chain = spx.chain(dte=0)",
-  "setups = skyvision.scan(chain)",
+  "setups = compass.scan(chain)",
   "NET GEX  -1.84bn   FLIP  5,938",
   "setup.score   # 91",
   "SPX  5938P  0DTE   91",
@@ -113,7 +113,7 @@ export const GENERATED_POOL: string[] = [
   "charm bleed  -0.12/day into exp",
   "edge: long below flip  ev +0.5R",
   "NDX flip 21,340  gex +0.74bn",
-  "skyvision.tag  # pos gamma zone",
+  "compass.tag  # pos gamma zone",
   "gamma pin -> 5,940",
   "SPY  591P  0DTE   88",
   "wall migrate 6050 -> 6025",
@@ -128,7 +128,7 @@ export const GENERATED_POOL: string[] = [
   "vanna flips + above 5,960",
   "SLAYER/LIVE  15:41:22 ET",
   "reprice: score 84 -> 88",
-  "top = skyvision.rank(chain).head(5)",
+  "top = compass.rank(chain).head(5)",
   "META  598P  0DTE   79",
   "p_touch = 0.67   # holding",
   "scan: 42 chains  12 setups",
@@ -155,7 +155,7 @@ export const GENERATED_POOL: string[] = [
   "vanna  0.083  charm -0.021",
   "gamma flip @ 5,938",
   "reprice: S+10 -> +0.28 delta",
-  "skyvision.score  # 91",
+  "compass.score  # 91",
   "p_touch = 0.67  edge +0.12",
   "dealer gamma  +1.42bn",
   "N(d2) = 0.61  prob_itm",
@@ -176,7 +176,7 @@ export const GENERATED_POOL: string[] = [
   "unusual: TSLA 250P  vol 40x",
   "dealer: short 5,938 puts",
   "CALL WALL 6050  block absorb",
-  "skyvision.scan(tape)",
+  "compass.scan(tape)",
   "setup.ev      # +0.38R",
   "p_touch = 0.71  reprice",
   "0DTE  SWEEP  filled  +27%",
@@ -186,7 +186,7 @@ export const GENERATED_POOL: string[] = [
   "vanna flip near 5,940",
   "regime: pos gamma  dark bid",
   "internals: TICK +840 ADD +1.2k",
-  "edge = skyvision.rank(sweeps)",
+  "edge = compass.rank(sweeps)",
   "AMZN 190P  SWEEP BID  x2k  79",
   "risk = 1.0R  stop 17pts  5938->5921",
   "size = kelly(edge=0.44, odds=1.9)",
@@ -199,7 +199,7 @@ export const GENERATED_POOL: string[] = [
   "theta_drag = -0.18R / hr  0DTE",
   "p_touch = 0.67  stop @ 1R",
   "ev = 0.86*1.9R - 0.14*1.0R",
-  "skyvision.size(setup, risk=1R)",
+  "compass.size(setup, risk=1R)",
   "SLAYER/RISK  09:41:22 ET",
   "SPX  5938P  0DTE  stop 1R  91",
   "regime: neg gamma  size down 30%",
@@ -228,7 +228,7 @@ export const GENERATED_POOL: string[] = [
   "09:41:22 ET  TICK spike +1021",
   "sector heat: XLK +1.4  XLE -0.8",
   "vanna: bid into 5,950",
-  "skyvision.scan(internals)",
+  "compass.scan(internals)",
   "edge: breadth + neg gamma",
   "trin  0.82   bullish tilt",
   "gex.flip   # 5,938",
@@ -237,7 +237,7 @@ export const GENERATED_POOL: string[] = [
   "rv20=9.1  iv30=14.6",
   "vrp = iv30 - rv20  # +5.5",
   "em = px * iv * sqrt(t/252)",
-  "skyvision.scan(surface)",
+  "compass.scan(surface)",
   "setup.edge  # +4.1 vrp",
   "flow = pinpoint.read(surf)",
   "flow.vanna  # bearish skew",
@@ -247,7 +247,7 @@ export const GENERATED_POOL: string[] = [
   "vrp_rank  # 88 pctile",
   "rv_cone: iv rich vs 63d",
   "QQQ  vega -1.2m  short vol",
-  "setups = skyvision.rank(vrp)",
+  "setups = compass.rank(vrp)",
   "p_touch upper band  # 0.41",
   "mc = montecarlo(setup, n=1e4)",
   "flow.vex       # -430mm",
@@ -307,11 +307,11 @@ export const RAIN_POOL: string[] = (() => {
   return out;
 })();
 
-/** Desk tint — steel for SkyVision, amber for Pinpoint/dealer-flow. */
+/** Desk tint — steel for Compass, amber for Pinpoint/dealer-flow. */
 export function tintFor(s: string): RainTint {
   const l = s.toLowerCase();
   if (
-    l.includes('skyvision') || l.includes('setup') || l.includes('scan') ||
+    l.includes('compass') || l.includes('setup') || l.includes('scan') ||
     l.includes('rank') || l.includes('score') || l.includes('kelly') ||
     l.includes('reprice') || l.includes('p_touch') || l.includes('holding') ||
     l.includes('testing') || l.includes('failing') || l.includes('grade') ||

@@ -5,10 +5,10 @@ import Stat from '../ui/Stat';
 import SignalBadge from '../ui/SignalBadge';
 import AnimatedNumber from '../ui/AnimatedNumber';
 import DataTable, { type Column } from '../ui/DataTable';
-import VerdictBadge from '../skyvision/VerdictBadge';
+import VerdictBadge from './VerdictBadge';
 import { useTracker } from '../../context/TrackerContext';
 import { expiryRead, horizonCopy } from './setupHorizon';
-import type { ScannerKey, Setup } from '../../types/skyvision';
+import type { ScannerKey, Setup } from '../../types/compass';
 
 /** Standard equity-option contract multiplier (shares per contract). */
 const CONTRACT_MULTIPLIER = 100;

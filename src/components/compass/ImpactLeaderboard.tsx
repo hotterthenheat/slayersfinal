@@ -4,7 +4,7 @@ import Panel from '../ui/Panel';
 import SegmentedControl from '../ui/SegmentedControl';
 import DataTable, { type Column } from '../ui/DataTable';
 import { fmtUsd } from '../../data/gex';
-import type { ImpactMetric, ImpactRow } from '../../types/skyvision';
+import type { ImpactMetric, ImpactRow } from '../../types/compass';
 
 interface ImpactLeaderboardProps {
   rows: ImpactRow[];

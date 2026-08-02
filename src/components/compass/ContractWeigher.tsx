@@ -32,13 +32,13 @@ import {
 import { parseContractQuery, expiryLadder, slotValue, type QuerySlot } from '../../core/contractQuery';
 import { expiryFor, type Expiry } from '../../core/calendar';
 import Simulator from '../../core/simulator';
-import { buildSkyVision, makeSetup } from '../../data/skyvision';
-import { VERDICT_LABEL, VERDICT_TONE } from '../skyvision/verdict';
-import { setupState } from '../skyvision/setupState';
-import { StateBadge } from '../skyvision/StateBadge';
+import { buildCompass, makeSetup } from '../../data/compass';
+import { VERDICT_LABEL, VERDICT_TONE } from './verdict';
+import { setupState } from './setupState';
+import { StateBadge } from './StateBadge';
 import ContractTrack from './ContractTrack';
 import { buildTrack, weighedToPlan } from './contractTrackModel';
-import type { Verdict } from '../../types/skyvision';
+import type { Verdict } from '../../types/compass';
 import type { MarketSnapshot } from '../../types/market';
 import { DUR, EASE, PILL } from '../../lib/motion';
 import Panel from '../ui/Panel';
@@ -53,7 +53,7 @@ import type { Tone } from '../ui/tones';
 /**
  * One grade lexicon across the terminal. The engine keeps BUY/WATCH/FADE as
  * identifiers; every screen renders QUALIFIED / WATCH / FADED through
- * skyvision/verdict.ts. This replaced a third local map that spoke
+ * compass/verdict.ts. This replaced a third local map that spoke
  * STRONG/WATCH/WEAK, so one idea had three vocabularies.
  */
 const GRADE_VERDICT: Record<ContractVerdict, Verdict> = { BUY: 'ENTER', WATCH: 'WATCH', FADE: 'EXIT' };
@@ -260,7 +260,7 @@ interface LadderProps {
 /**
  * Listed strikes on the resolved expiry and side, spot anchored. This is a new,
  * smaller component rather than a lift of ContractChain: that one takes
- * ContractChainData from buildSkyVision rather than a MarketSnapshot, and it is
+ * ContractChainData from buildCompass rather than a MarketSnapshot, and it is
  * currently rendering at zero height in Compass review mode at xl. Only the
  * SpotRule idiom is reused.
  */
@@ -539,7 +539,7 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
   const feedSeeds = useMemo(() => {
     if (committed) return [];
     try {
-      return buildSkyVision(snapshot, 'top-setups')
+      return buildCompass(snapshot, 'top-setups')
         .groups.flatMap(g => g.setups)
         .slice(0, 3)
         .map(s => canonicalQuery(s.ticker, s.strike, s.right, fallbackExpiry));

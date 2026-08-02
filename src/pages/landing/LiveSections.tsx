@@ -16,7 +16,7 @@ import { useMarketData } from '../../context/MarketDataContext';
 import { buildGexView, fmtUsd, pulseMatrix } from '../../data/gex';
 import { buildExposureProfile } from '../../data/exposure';
 import { buildCommandView } from '../../data/command';
-import { buildSkyVision } from '../../data/skyvision';
+import { buildCompass } from '../../data/compass';
 import { enrichPrint } from '../../data/flowtape';
 import GexMatrix from '../../components/gex/GexMatrix';
 import PositioningMap from '../../components/gex/PositioningMap';
@@ -26,8 +26,8 @@ import TiltBox from './TiltBox';
 import WorkspaceLoop, { type WorkspaceTile } from './WorkspaceLoop';
 import type { MarketSnapshot } from '../../types/market';
 import type { CommandView, ExposureProfileData, GexMatrixData, GexView } from '../../types/gex';
-import type { Setup, SkyVisionData } from '../../types/skyvision';
-import { VERDICT_LABEL } from '../../components/skyvision/verdict';
+import type { Setup, CompassData } from '../../types/compass';
+import { VERDICT_LABEL } from '../../components/compass/verdict';
 import { DUR, EASE } from '../../lib/motion';
 
 const SCAN_INTERVAL_MS = 10_000;
@@ -43,7 +43,7 @@ interface LandingCtx {
   matrix: GexMatrixData;
   exposure: ExposureProfileData;
   cmd: CommandView;
-  setups: SkyVisionData;
+  setups: CompassData;
 }
 
 /** Same two-tier cadence as the terminal: 10s scan structure, 1s heat pulse.
@@ -88,7 +88,7 @@ function useLandingScan(): LandingCtx | null {
       gex,
       exposure: buildExposureProfile(scan, '0DTE', 10),
       cmd: buildCommandView(scan),
-      setups: buildSkyVision(scan, 'top-setups'),
+      setups: buildCompass(scan, 'top-setups'),
     };
   }, [scan]);
 
@@ -187,7 +187,7 @@ const DemoTape = ({ snapshot }: { snapshot: MarketSnapshot }) => {
 };
 
 /** Compass top pick, confidence bar and all — the real grading, live. */
-const DemoSetup = ({ setups }: { setups: SkyVisionData }) => {
+const DemoSetup = ({ setups }: { setups: CompassData }) => {
   const setup = useMemo<Setup | null>(() => {
     const flat = setups.groups.flatMap(g => g.setups);
     return flat.find(s => s.topRated) ?? flat[0] ?? null;

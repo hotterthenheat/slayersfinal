@@ -9,7 +9,7 @@ import Panel from '../../components/ui/Panel';
 import StatCard from '../../components/ui/StatCard';
 import MetricGrid from '../../components/ui/MetricGrid';
 import SegmentedControl from '../../components/ui/SegmentedControl';
-import Sparkline from '../../components/skyvision/Sparkline';
+import Sparkline from '../../components/compass/Sparkline';
 import MonteCarloPanel from './MonteCarloPanel';
 import Surface3D from './Surface3D';
 import MarketStateReplay from '../../components/proveit/MarketStateReplay';

@@ -7,7 +7,7 @@ import MetricGrid from '../components/ui/MetricGrid';
 import SignalBadge from '../components/ui/SignalBadge';
 import SegmentedControl from '../components/ui/SegmentedControl';
 import DataTable, { type Column } from '../components/ui/DataTable';
-import Sparkline from '../components/skyvision/Sparkline';
+import Sparkline from '../components/compass/Sparkline';
 import HoverReadout from '../components/ui/HoverReadout';
 import StockDetailDrawer from './StockDetailDrawer';
 import { FACTOR_GUIDE } from '../data/factorGuide';

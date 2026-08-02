@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import Simulator from '../core/simulator';
-import { buildSkyVision, makeSetup, resetSkyVisionCache, scannerExpiry } from './skyvision';
+import { buildCompass, makeSetup, resetCompassCache, scannerExpiry } from './compass';
 import { dteOfBucket } from '../components/compass/setupHorizon';
-import { SCANNERS } from '../types/skyvision';
+import { SCANNERS } from '../types/compass';
 
 /*
   "Quick scalps for what? 0dte, 1dte, 2dte" — a fair question, and the answer is
@@ -37,8 +37,8 @@ describe('scanner horizons: the tab strip cannot drift from the engine', () => {
     Simulator.ensureTicker('SPY');
     const snap = Simulator.buildSnapshot('SPY');
     for (const s of SCANNERS) {
-      resetSkyVisionCache();
-      const rows = buildSkyVision(snap, s.key, { epoch: EPOCH }).groups.flatMap(g => g.setups);
+      resetCompassCache();
+      const rows = buildCompass(snap, s.key, { epoch: EPOCH }).groups.flatMap(g => g.setups);
       expect(rows.length, `${s.key} put nothing on the board`).toBeGreaterThan(0);
       const stamped = new Set(rows.map(r => r.expiry));
       expect([...stamped], s.key).toEqual([scannerExpiry(s.key)]);

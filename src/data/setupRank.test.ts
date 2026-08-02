@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import Simulator from '../core/simulator';
-import { buildSkyVision, resetSkyVisionCache } from './skyvision';
-import { SCANNERS, type Setup } from '../types/skyvision';
+import { buildCompass, resetCompassCache } from './compass';
+import { SCANNERS, type Setup } from '../types/compass';
 
 /*
   What the Compass board sorts on.
@@ -46,8 +46,8 @@ function shuffle<T>(rows: T[], seed = 0x9e3779b9): T[] {
 function boardOf(scanner: (typeof SCANNERS)[number]['key']): Setup[] {
   Simulator.ensureTicker('SPY');
   const snap = Simulator.buildSnapshot('SPY');
-  resetSkyVisionCache();
-  return buildSkyVision(snap, scanner, { epoch: EPOCH }).groups.flatMap(g => g.setups);
+  resetCompassCache();
+  return buildCompass(snap, scanner, { epoch: EPOCH }).groups.flatMap(g => g.setups);
 }
 
 const ids = (rows: Setup[]) => rows.map(r => r.id);

@@ -18,7 +18,7 @@ passed every gate. That is why the open list below is as long as it is.
 ### Global
 | Item | Where |
 |---|---|
-| Lime green accents → holo silver | It was the verdict system, not a stray class: `ENTER` mapped onto `bull`, so every QUALIFIED / PLAY / STRONG badge rendered green. `skyvision/verdict.ts` |
+| Lime green accents → holo silver | It was the verdict system, not a stray class: `ENTER` mapped onto `bull`, so every QUALIFIED / PLAY / STRONG badge rendered green. `compass/verdict.ts` |
 | "sim" / "live" wording | "sim" was a false alarm: nothing ever rendered "simulated" or "simulator". The two rendered hits abbreviated *similarity*. "live" was the real work, ~55 hand-edited sites |
 | Landing em dashes → zero | Counted by occurrence, not by line. Everything remaining is in comments |
 | Footer on every route | It existed only as furniture inside `Landing.tsx`; now `SiteFooter` with `full` / `compact` |
@@ -65,7 +65,7 @@ complaints. See the open list for what did not land.
 5. **Earnings renders imperative strategy text.** This product observes and never instructs; that row instructs.
 6. **Pricing still claims streaming / live** on a shipped surface, while the FAQ on the same page is honest about it.
 7. **One user-visible em dash added** in the Prove It subtitle.
-8. **`skyvision` → `compass` rename** — 138 occurrences, 38 files, two directories merging (verified collision-free). Includes deleting the `/skys-vision` redirect, since the site is not live.
+8. **`compass` → `compass` rename** — 138 occurrences, 38 files, two directories merging (verified collision-free). Includes deleting the `/skys-vision` redirect, since the site is not live.
 
 ### Unverified
 Two re-verifiers were queued behind the partial fix round and never ran, so the

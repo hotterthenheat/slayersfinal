@@ -104,7 +104,6 @@ const App = () => {
             {/* Workspace folded into Pulse — Pulse is the one customizable desk */}
             <Route path="/workspace" element={<Navigate to="/pulse" replace />} />
             <Route path="/compass" element={<Compass />} />
-            <Route path="/skys-vision" element={<Navigate to="/compass" replace />} />
             <Route path="/stocks" element={<Stocks />} />
             <Route path="/news" element={<News />} />
             <Route path="/earnings" element={<EarningsHub />} />

@@ -27,7 +27,7 @@ import SignalBadge from '../../components/ui/SignalBadge';
 import EmptyState from '../../components/ui/EmptyState';
 import TickerTag from '../../components/ui/TickerTag';
 import AnimatedNumber from '../../components/ui/AnimatedNumber';
-import Sparkline from '../../components/skyvision/Sparkline';
+import Sparkline from '../../components/compass/Sparkline';
 import type { Tone } from '../../components/ui/tones';
 import { makeAutoNote } from '../../data/command';
 import { buildDarkPoolView } from '../../data/darkpool';
@@ -46,7 +46,7 @@ import type {
   VannaCharmView,
   VolLabData,
 } from '../../types/gex';
-import type { SkyVisionData } from '../../types/skyvision';
+import type { CompassData } from '../../types/compass';
 
 export interface WorkspaceCtx {
   ticker: string;
@@ -61,7 +61,7 @@ export interface WorkspaceCtx {
   cmd: CommandView;
   vanna: VannaCharmView;
   vol: VolLabData;
-  setups: SkyVisionData;
+  setups: CompassData;
   /** Deep-link focus: a price level to mark on charts (from "view on chart"). */
   focusPrice?: number | null;
 }

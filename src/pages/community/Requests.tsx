@@ -17,7 +17,7 @@ const KIND_OPTIONS = [
 ] as const;
 
 // Roadmap status is a process, not a direction — chrome tones only, per the rule
-// in components/skyvision/setupState.ts.
+// in components/compass/setupState.ts.
 const STATUS_TONE: Record<RequestStatus, Tone> = {
   'UNDER REVIEW': 'neutral',
   PLANNED: 'info',

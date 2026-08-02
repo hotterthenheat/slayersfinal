@@ -37,7 +37,7 @@ import { buildExposureProfile } from '../../data/exposure';
 import { buildCommandView } from '../../data/command';
 import { buildVannaCharm } from '../../data/vannacharm';
 import { buildVolLab } from '../../data/vollab';
-import { buildSkyVision } from '../../data/skyvision';
+import { buildCompass } from '../../data/compass';
 import type { MarketSnapshot } from '../../types/market';
 import type { WorkspaceCtx } from '../workspace/registry';
 import { PULSE_ADDABLE_PANELS, PULSE_DATA_CONNECTIONS, pulsePanelByKey } from './pulseRegistry';
@@ -84,7 +84,7 @@ function buildCtx(snapshot: MarketSnapshot, revision: number, focusPrice: number
     cmd: buildCommandView(snapshot),
     vanna: buildVannaCharm(snapshot, 'CHARM', -1),
     vol: buildVolLab(snapshot.ticker, snapshot.spot, iv),
-    setups: buildSkyVision(snapshot, 'top-setups'),
+    setups: buildCompass(snapshot, 'top-setups'),
     focusPrice,
   };
 }

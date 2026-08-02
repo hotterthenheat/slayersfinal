@@ -16,14 +16,14 @@ import { useTracker } from '../context/TrackerContext';
 import EdgeLedger from '../components/tracker/EdgeLedger';
 import { useMarketData } from '../context/MarketDataContext';
 import Simulator from '../core/simulator';
-import { makeSetup } from '../data/skyvision';
-import type { ScannerKey, Setup } from '../types/skyvision';
+import { makeSetup } from '../data/compass';
+import type { ScannerKey, Setup } from '../types/compass';
 import type { TrackedSetup } from '../types/tracker';
 import PageHeader from '../components/ui/PageHeader';
 import SegmentedControl from '../components/ui/SegmentedControl';
 import Panel from '../components/ui/Panel';
 import SignalBadge from '../components/ui/SignalBadge';
-import VerdictBadge from '../components/skyvision/VerdictBadge';
+import VerdictBadge from '../components/compass/VerdictBadge';
 import DataTable, { type Column } from '../components/ui/DataTable';
 import StatCard from '../components/ui/StatCard';
 import { useToast } from '../components/ui/Toast';
@@ -89,7 +89,7 @@ const STATUS_PICK_ACTIVE: Record<'auto' | UserStatus, string> = {
   closed: 'bg-white/[0.04] border-borderSubtle text-textMuted',
 };
 
-/** Days-to-expiry per scanner — mirrors the scanner profiles in data/skyvision. */
+/** Days-to-expiry per scanner — mirrors the scanner profiles in data/compass. */
 const DTE_BY_SCANNER: Record<ScannerKey, number> = {
   'top-setups': 0,
   'quick-scalp': 0,

@@ -26,7 +26,7 @@ import { Card, Points } from './parts';
 
   Two rounds of spot-fixes left this page contradicting itself, so the standing
   instruction is to re-read the code path, not the previous paragraph: the
-  board's score comes from data/skyvision.ts rankOf, the Weigher's from
+  board's score comes from data/compass.ts rankOf, the Weigher's from
   core/contractScore.ts, and they are different scales that happen to share one
   spoken lexicon.
 */

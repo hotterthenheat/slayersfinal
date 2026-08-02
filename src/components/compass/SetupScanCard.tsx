@@ -2,12 +2,12 @@ import { AlertTriangle, ArrowUpRight } from 'lucide-react';
 import SignalBadge from '../ui/SignalBadge';
 import { preserveGreek } from '../ui/greek';
 import { interactiveRowProps, ROW_INTERACTIVE } from '../ui/interactiveRow';
-import { StateBadge } from '../skyvision/StateBadge';
-import { setupState } from '../skyvision/setupState';
+import { StateBadge } from './StateBadge';
+import { setupState } from './setupState';
 import { expiryRead } from './setupHorizon';
 import { COVERAGE_META, scanCoverage, type ScanCoverage } from '../../core/scanUniverse';
 import type { Tone } from '../ui/tones';
-import type { Setup } from '../../types/skyvision';
+import type { Setup } from '../../types/compass';
 
 /**
  * Tone for a coverage tier. The rule and the copy live in core/scanUniverse

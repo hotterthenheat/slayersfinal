@@ -1,5 +1,5 @@
 import type { Tone } from '../ui/tones';
-import type { Verdict } from '../../types/skyvision';
+import type { Verdict } from '../../types/compass';
 
 /**
  * One source of truth for how a setup verdict is spoken and toned.

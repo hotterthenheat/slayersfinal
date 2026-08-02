@@ -80,7 +80,7 @@ export type ScanCoverage = 'modeled' | 'covered' | 'listing';
  * can show, and the obvious pill text for the deepest tier is "LIVE" — a claim
  * this desk must never make about a simulator. Writing the copy here means the
  * next screen to surface coverage inherits the honest wording instead of
- * inventing it. Same split as ../components/skyvision/setupState.ts: the meaning
+ * inventing it. Same split as ../components/compass/setupState.ts: the meaning
  * lives with the logic, the tone and the pill live with the component.
  */
 export const COVERAGE_META: Record<ScanCoverage, { label: string; note: string }> = {

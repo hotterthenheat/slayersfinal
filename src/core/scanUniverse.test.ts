@@ -12,14 +12,14 @@ import {
 import {
   CANDIDATES_PER_NAME,
   COUNTER_TREND_CEILING,
-  buildSkyVision,
+  buildCompass,
   makeSetup,
   prescreenScore,
-  resetSkyVisionCache,
+  resetCompassCache,
   scannerFloor,
-} from '../data/skyvision';
+} from '../data/compass';
 import { UNIVERSE, lookup } from '../data/universe';
-import { SCANNERS, type ScannerKey } from '../types/skyvision';
+import { SCANNERS, type ScannerKey } from '../types/compass';
 
 /*
   Two things have gone wrong with this field, and these guard both.
@@ -167,9 +167,9 @@ describe('scan universe: determinism', () => {
 
   it('the whole feed replays bit-for-bit at a fixed epoch', () => {
     const flat = (s: ScannerKey) => {
-      resetSkyVisionCache();
+      resetCompassCache();
       resetScanUniverse();
-      return buildSkyVision(snap, s, { epoch: EPOCH }).groups.flatMap(g =>
+      return buildCompass(snap, s, { epoch: EPOCH }).groups.flatMap(g =>
         g.setups.map(x => `${x.id}@${x.score}/${x.verdict}/${x.mid}`)
       );
     };
@@ -216,10 +216,10 @@ describe('scan universe: price coherence with the live desks', () => {
 describe('scan cost: the wide field stays off the tick loop', () => {
   it('a full sweep registers no new simulator tickers', () => {
     resetScanUniverse();
-    resetSkyVisionCache();
+    resetCompassCache();
     const before = Object.keys(Simulator.TICKERS).length;
     for (const s of SCANNERS) {
-      const d = buildSkyVision(snap, s.key, { epoch: EPOCH });
+      const d = buildCompass(snap, s.key, { epoch: EPOCH });
       d.groups.forEach(g => g.setups.length);
     }
     // Registering a name costs ~70ms of session seeding AND a permanent seat in
@@ -228,12 +228,12 @@ describe('scan cost: the wide field stays off the tick loop', () => {
   });
 
   it('reading only the contract chain does not run the sweep', () => {
-    resetSkyVisionCache();
+    resetCompassCache();
     resetScanUniverse();
     buildScanUniverse(EPOCH);
     const t0 = performance.now();
     let rows = 0;
-    for (let i = 0; i < 50; i++) rows += buildSkyVision(snap, 'top-setups', { epoch: EPOCH }).chain.rows.length;
+    for (let i = 0; i < 50; i++) rows += buildCompass(snap, 'top-setups', { epoch: EPOCH }).chain.rows.length;
     const perCall = (performance.now() - t0) / 50;
     expect(rows).toBeGreaterThan(0);
     // Compass rebuilds this object every 1.5s purely for the chain.
@@ -262,8 +262,8 @@ describe('scan ranking', () => {
   });
 
   it('ranks globally — every shown setup beats every setup left out', () => {
-    resetSkyVisionCache();
-    const d = buildSkyVision(snap, 'top-setups', { epoch: EPOCH });
+    resetCompassCache();
+    const d = buildCompass(snap, 'top-setups', { epoch: EPOCH });
     const shown = d.groups.flatMap(g => g.setups);
     // The old engine capped two per ticker BEFORE comparing tickers, so a
     // ticker's third-best could be dropped for another name's weaker second.
@@ -277,8 +277,8 @@ describe('scan ranking', () => {
 
   it('every scanner fills a table, spread over most of the field', () => {
     for (const s of SCANNERS) {
-      resetSkyVisionCache();
-      const d = buildSkyVision(snap, s.key, { epoch: EPOCH });
+      resetCompassCache();
+      const d = buildCompass(snap, s.key, { epoch: EPOCH });
       const rows = d.groups.flatMap(g => g.setups);
       expect(rows.length).toBeGreaterThan(150);
       // Narrowing the field to real names did not narrow the board: it still
@@ -292,9 +292,9 @@ describe('scan ranking', () => {
   });
 
   it("a group's change is its own sparkline's slope", () => {
-    resetSkyVisionCache();
+    resetCompassCache();
     // The feed tints the line by changePct, so a rising line must never be red.
-    for (const g of buildSkyVision(snap, 'all', { epoch: EPOCH }).groups) {
+    for (const g of buildCompass(snap, 'all', { epoch: EPOCH }).groups) {
       expect(g.sparkline.length).toBeGreaterThan(10);
       expect(g.sparkline[g.sparkline.length - 1]).toBe(g.spot);
       const slope = ((g.sparkline[g.sparkline.length - 1] - g.sparkline[0]) / g.sparkline[0]) * 100;
@@ -304,8 +304,8 @@ describe('scan ranking', () => {
   });
 
   it('the field is far larger than what reaches the screen', () => {
-    resetSkyVisionCache();
-    const all = buildSkyVision(snap, 'all', { epoch: EPOCH });
+    resetCompassCache();
+    const all = buildCompass(snap, 'all', { epoch: EPOCH });
     // 'All' carries no floor, so its count IS the field — and the field is the
     // universe, not a padded denominator.
     expect(all.totalFound).toBe(buildScanUniverse(EPOCH).length * CANDIDATES_PER_NAME);
@@ -313,8 +313,8 @@ describe('scan ranking', () => {
   });
 
   it('both sides of the tape are scanned, and counter-trend is marked down', () => {
-    resetSkyVisionCache();
-    const rows = buildSkyVision(snap, 'all', { epoch: EPOCH }).groups.flatMap(g => g.setups);
+    resetCompassCache();
+    const rows = buildCompass(snap, 'all', { epoch: EPOCH }).groups.flatMap(g => g.setups);
     expect(new Set(rows.map(r => r.right)).size).toBe(2);
     // A contract facing the tape can never outscore this — the bound the sweep
     // prunes on, so it has to hold.
@@ -330,9 +330,9 @@ describe('scan ranking', () => {
   });
 
   it('a strict floor keeps its bar over the field', () => {
-    resetSkyVisionCache();
-    const strict = buildSkyVision(snap, 'top-setups', { epoch: EPOCH });
-    const loose = buildSkyVision(snap, 'all', { epoch: EPOCH });
+    resetCompassCache();
+    const strict = buildCompass(snap, 'top-setups', { epoch: EPOCH });
+    const loose = buildCompass(snap, 'all', { epoch: EPOCH });
     expect(scannerFloor('top-setups')).toBeGreaterThan(scannerFloor('all'));
     expect(strict.totalFound).toBeLessThan(loose.totalFound);
     for (const g of strict.groups) {

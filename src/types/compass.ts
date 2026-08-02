@@ -1,6 +1,6 @@
 /*
 ==================================================
-  SLAYER TERMINAL - SKY'S VISION TYPES (skyvision.ts)
+  SLAYER TERMINAL - COMPASS TYPES (compass.ts)
   Advisory signal engine — ENTER/EXIT guidance only.
   Four scanners, grouped setup feed, contract chain,
   signal monitor & impact leaderboard.
@@ -64,7 +64,7 @@ export interface Setup {
   strike: number;
   expiry: string;
   /**
-   * The engine's continuous ranking quantity (data/skyvision.ts rankOf). This is
+   * The engine's continuous ranking quantity (data/compass.ts rankOf). This is
    * what a board ORDERS by. `score` is its display rounding, and above a floor of
    * 84 that rounding holds sixteen values for thousands of candidates, so sorting
    * on it sorts a sixteen-way tie and hands the board to whatever breaks it.
@@ -137,7 +137,7 @@ export interface ImpactRow {
   gamma: number;
 }
 
-export interface SkyVisionData {
+export interface CompassData {
   scanner: ScannerKey;
   groups: SetupGroup[];
   totalFound: number;

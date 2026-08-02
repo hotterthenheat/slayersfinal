@@ -13,7 +13,7 @@
 */
 
 import type { Tone } from '../ui/tones';
-import type { Setup } from '../../types/skyvision';
+import type { Setup } from '../../types/compass';
 
 /**
  * Lifecycle state for a setup, derived from existing fields:

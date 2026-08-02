@@ -1,6 +1,6 @@
 import Panel from '../ui/Panel';
 import SpotRule from '../ui/SpotRule';
-import type { ChainAction, ChainSide, ContractChain as ContractChainData, Momentum, OptionRight } from '../../types/skyvision';
+import type { ChainAction, ChainSide, ContractChain as ContractChainData, Momentum, OptionRight } from '../../types/compass';
 
 export interface ChainSelection {
   ticker: string;

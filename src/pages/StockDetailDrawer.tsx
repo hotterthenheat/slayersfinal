@@ -7,7 +7,7 @@ import SegmentedControl from '../components/ui/SegmentedControl';
 import EmptyState from '../components/ui/EmptyState';
 import Stat from '../components/ui/Stat';
 import TickerJump from '../components/ui/TickerJump';
-import Sparkline from '../components/skyvision/Sparkline';
+import Sparkline from '../components/compass/Sparkline';
 import Simulator from '../core/simulator';
 import { buildDarkPoolFeed } from '../data/darkpoolfeed';
 import { buildEarningsCalendar, type EarningsEvent } from '../data/earnings';
