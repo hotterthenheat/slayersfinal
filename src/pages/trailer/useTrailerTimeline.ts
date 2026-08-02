@@ -109,6 +109,12 @@ export function storyUAtSceneStart(id: string): number {
   return i < 0 ? 0 : STORY_START[i];
 }
 
+/** Story fraction at the instant a named scene ends. */
+export function storyUAtSceneEnd(id: string): number {
+  const i = SCENE_SPEC.findIndex(s => s.id === id);
+  return i < 0 ? 1 : SCENE_SPEC[i].storyEnd;
+}
+
 /** Guard for the one invariant the keyframes have: the session cannot run backwards. */
 export function storyClockIsMonotonic(): boolean {
   return SCENE_SPEC.every((s, i) => s.storyEnd > STORY_START[i] && s.storyEnd <= 1);

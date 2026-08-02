@@ -53,7 +53,10 @@ const MetaorderScene: React.FC = () => {
             className="w-full"
             style={{ height: H }}
             role="img"
-            aria-label={`Six child prints at strike ${meta.sharedStrike} converging into one probable parent sequence over ${meta.windowSec} seconds`}
+            /* Counted, not asserted. It said six while the reconstruction ran on
+               nine, so a screen-reader user was given a different evidence count
+               from the one the parent-order probability was computed from. */
+            aria-label={`${meta.childIds.length} child prints at strike ${meta.sharedStrike} converging into one probable parent sequence over ${meta.windowSec} seconds`}
           >
             <line x1={30} x2={W - 30} y1={H - 12} y2={H - 12} stroke="#1c1c1c" strokeWidth={1} />
             {/* links between children — drawn before the marks so marks sit on top */}

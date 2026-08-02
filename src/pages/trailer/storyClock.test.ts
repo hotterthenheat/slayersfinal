@@ -9,8 +9,17 @@
 */
 
 import { describe, it, expect } from 'vitest';
-import { SCENES, TRAILER_DURATION_MS, storyClockIsMonotonic, storyUAt, storyUAtSceneStart } from './useTrailerTimeline';
-import { buildTrailerStory, LOTTO_P_GATE, STORY_SECONDS } from './trailerStory';
+import {
+  SCENES,
+  TRAILER_DURATION_MS,
+  storyClockIsMonotonic,
+  storyUAt,
+  storyUAtSceneEnd,
+  storyUAtSceneStart,
+} from './useTrailerTimeline';
+import { buildTrailerStory, LOTTO_P_GATE, STORY_SECONDS, spotAt } from './trailerStory';
+import { expiryFor, fmtMonthDay, isTradingDay } from '../../core/calendar';
+import Simulator from '../../core/simulator';
 
 describe('story clock', () => {
   it('never runs the session backwards', () => {
@@ -121,6 +130,90 @@ describe('story geometry', () => {
 });
 
 /*
+  One session, one calendar, one clock.
+
+  The film advertises a single event, so nothing in it may imply a different day
+  from anything else. Each of these was a real contradiction: expiry labels and
+  DTEs were hard-coded strings hanging off the viewer's own date, the news feed
+  was stamped past the window it plays in, and the Tracker's forward path opened
+  at a price from later than the decision it was scoring.
+*/
+describe('one session', () => {
+  const story = buildTrailerStory();
+
+  it('lands on a trading day', () => {
+    expect(isTradingDay(new Date(story.sessionStart))).toBe(true);
+  });
+
+  it('agrees with the calendar about every maturity it names', () => {
+    const session = new Date(story.sessionStart);
+    const seen = new Map<string, number>();
+    for (const c of story.contracts) seen.set(c.expiry, c.dte);
+    for (const p of story.prints) seen.set(p.expiry, p.dte);
+    expect(seen.size).toBeGreaterThan(1); // more than one maturity is on screen
+    for (const [label, dte] of seen) {
+      // The label must be the date that many days from THIS session, and the
+      // walk must land on a session rather than a weekend.
+      const e = expiryFor(dte, session);
+      expect(fmtMonthDay(e.date).toUpperCase()).toBe(label);
+      expect(e.dte).toBe(dte);
+      expect(isTradingDay(e.date)).toBe(true);
+    }
+  });
+
+  it('puts earnings after the weeklies it is quoted against', () => {
+    const nearest = Math.min(...story.contracts.map(c => c.dte));
+    expect(story.earnings.daysAway).toBeGreaterThan(nearest);
+    const e = expiryFor(story.earnings.daysAway, new Date(story.sessionStart));
+    expect(fmtMonthDay(e.date).toUpperCase()).toBe(story.earnings.date);
+  });
+
+  it('stamps the news cluster inside the window the scene plays it in', () => {
+    const window = (storyUAtSceneEnd('news') - storyUAtSceneStart('news')) * STORY_SECONDS;
+    for (const item of story.news.items) {
+      expect(item.at).toBeGreaterThanOrEqual(0);
+      expect(item.at).toBeLessThanOrEqual(window);
+    }
+    // And they still arrive in order, spread across it rather than bunched.
+    const ats = story.news.items.map(i => i.at);
+    expect([...ats].sort((a, b) => a - b)).toEqual(ats);
+    expect(ats[ats.length - 1]).toBeGreaterThan(window * 0.5);
+  });
+
+  it('opens the tracked outcome at the price on the tape when the packet froze', () => {
+    const freeze = spotAt(story, storyUAtSceneStart('tracker') * STORY_SECONDS);
+    expect(story.outcome.path[0].px).toBeCloseTo(Number(freeze.toFixed(2)), 2);
+    // And it must not open at the session close, which is what it used to do.
+    expect(story.outcome.path[0].px).not.toBe(story.path[story.path.length - 1].px);
+  });
+});
+
+/*
+  The pinned snapshot's contract.
+
+  `buildSnapshotAt` exists so the trailer does not inherit the wall clock. It
+  once handed back the live `priceHistory` array, so its indicators moved between
+  two identical calls and the array inside an already-returned snapshot kept
+  changing underneath its holder.
+*/
+describe('pinned snapshot', () => {
+  it('returns the same book before and after the live feed advances', () => {
+    const before = Simulator.buildSnapshotAt('NVDA', 138.6, 20667);
+    const snapshotOfHistory = [...before.priceHistory];
+    for (let i = 0; i < 3; i++) Simulator.tick(() => {});
+    const after = Simulator.buildSnapshotAt('NVDA', 138.6, 20667);
+
+    expect(after.chain).toEqual(before.chain);
+    expect(after.indicators).toEqual(before.indicators);
+    expect(after.plan).toEqual(before.plan);
+    // The returned history is the caller's, not a window onto the live buffer.
+    expect(before.priceHistory).not.toBe(after.priceHistory);
+    expect(before.priceHistory).toEqual(snapshotOfHistory);
+    expect(before.priceHistory[before.priceHistory.length - 1]).toBe(138.6);
+  });
+});
+
+/*
   The Weigher's ranking.
 
   The verdicts used to be authored above the code that computes utility, so the
@@ -157,11 +250,20 @@ describe('contract weigher', () => {
   });
 
   it('still makes the argument the scene is built on', () => {
-    // The point of the scene is that the best headline return is not the best
-    // decision. If a re-pin ever collapses those onto one row, the scene's
+    // The point of the scene is that the biggest payoff at the target is not the
+    // best decision. If a re-pin ever collapses those onto one row, the scene's
     // closing line has a branch for it — but this should fail loudly first.
-    const topEv = [...story.contracts].sort((a, b) => b.ev - a.ev)[0];
-    expect(topEv.verdict).not.toBe('SELECTED');
+    const top = [...story.contracts].sort((a, b) => b.returnAtTarget - a.returnAtTarget)[0];
+    expect(top.verdict).not.toBe('SELECTED');
+  });
+
+  it('keeps utility an expectation and IF TARGET a branch', () => {
+    // The two must not be the same number: utility weights the target branch
+    // against the loss at the stop, so on any row that can lose it sits below.
+    for (const c of story.contracts) {
+      expect(c.utility).toBeLessThan(c.returnAtTarget);
+      expect(c.expectedShortfall).toBeLessThan(c.returnAtTarget);
+    }
   });
 
   it('gates the lottery strikes on the stated probability, not on an opinion', () => {

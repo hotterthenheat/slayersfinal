@@ -2,10 +2,10 @@
   Scene 9 — Compass, contract weigher.
 
   One thesis expands into five ways to express it. The waterfall is the point:
-  gross expected value, then execution cost, then the liquidity penalty, arriving
-  at a utility that can be compared — and the contract with the highest headline
-  return is not the one utility picks, which is the whole argument for weighing
-  rather than ranking.
+  the return if the target is reached, then execution cost, then the probability
+  of getting there and the loss if it is not, arriving at a utility that can be
+  compared — and the contract with the biggest payoff at the target is not the one
+  utility picks, which is the whole argument for weighing rather than ranking.
 
   The closing line names that contract rather than asserting the shape, because
   the shape is now an output. `trailerStory` prices every row with the app's own
@@ -26,7 +26,7 @@ const WeigherScene: React.FC = () => {
   const rows = story.contracts;
   const selected = rows.find(r => r.verdict === 'SELECTED')!;
   const maxUtil = Math.max(...rows.map(r => Math.abs(r.utility)), 0.001);
-  const topEv = rows.reduce((best, r) => (r.ev > best.ev ? r : best), rows[0]);
+  const topReturn = rows.reduce((best, r) => (r.returnAtTarget > best.returnAtTarget ? r : best), rows[0]);
 
   return (
     <div className="h-full flex flex-col gap-3 min-h-0">
@@ -41,8 +41,8 @@ const WeigherScene: React.FC = () => {
         <HeadRow
           cols={
             compact
-              ? ['CONTRACT', 'MID', 'EV', 'UTILITY']
-              : ['CONTRACT', 'BID/ASK', 'SPREAD', 'DELTA', 'THETA', 'BREAKEVEN', 'EXEC', 'EV NET', 'UTILITY']
+              ? ['CONTRACT', 'MID', 'IF TGT', 'UTILITY']
+              : ['CONTRACT', 'BID/ASK', 'SPREAD', 'DELTA', 'THETA', 'BREAKEVEN', 'EXEC', 'IF TARGET', 'UTILITY']
           }
           grid={compact ? GRID_SM : GRID}
         />
@@ -78,7 +78,14 @@ const WeigherScene: React.FC = () => {
                   {!compact && <span className="text-bear">{r.theta.toFixed(2)}</span>}
                   {!compact && <span>{px(r.breakeven)}</span>}
                   {!compact && <span className="text-warn">{(r.executionCost * 100).toFixed(1)}%</span>}
-                  <span className={r.ev >= 0 ? 'text-bull' : 'text-bear'}>{(r.ev * 100).toFixed(1)}%</span>
+                  {/* The win branch, labelled as the win branch. Under an "EV NET"
+                      header this read as an expectation, so the row with the
+                      biggest number looked like the best decision — which is the
+                      exact confusion the scene exists to undo. UTILITY is the
+                      expectation. */}
+                  <span className={r.returnAtTarget >= 0 ? 'text-bull' : 'text-bear'}>
+                    {(r.returnAtTarget * 100).toFixed(1)}%
+                  </span>
                   <span className="flex items-center gap-1.5 min-w-0">
                     <span className={selectedRow ? 'text-select' : ''}>{(r.utility * 100).toFixed(1)}</span>
                     <span className="relative flex-1 h-[4px] rounded-sm bg-white/[0.06] overflow-hidden min-w-[24px]">
@@ -117,21 +124,23 @@ const WeigherScene: React.FC = () => {
 
       <div className="space-y-1">
         <SceneStatement p={p} from={0.7} reduced={reduced}>
-          {topEv.id === selected.id ? (
+          {topReturn.id === selected.id ? (
             <>
-              The Weigher prices the difference — on this board the best headline return survives execution cost, and the
-              same contract wins on both.
+              The Weigher prices the difference — on this board the biggest payoff at the target survives execution cost
+              and the probability of getting there, and the same contract wins on both.
             </>
           ) : (
             <>
-              The Weigher prices the difference — the {topEv.strike}
-              {topEv.right} {topEv.expiry} returns {(topEv.ev * 100).toFixed(0)}% if the target is reached and{' '}
-              {(topEv.expectedShortfall * 100).toFixed(0)}% if it is not, and that is why it is not the one taken.
+              The Weigher prices the difference — the {topReturn.strike}
+              {topReturn.right} {topReturn.expiry} returns {(topReturn.returnAtTarget * 100).toFixed(0)}% if the target is
+              reached and {(topReturn.expectedShortfall * 100).toFixed(0)}% if it is not, and that is why it is not the
+              one taken.
             </>
           )}
         </SceneStatement>
         <Caveat>
-          Modelled chain and quotes · expected value is net of the modelled spread and slippage · not a recommendation
+          Modelled chain and quotes · IF TARGET is the return in the branch that reaches the target, net of the modelled
+          spread and slippage · UTILITY weights it against the loss at the stop · not a recommendation
         </Caveat>
       </div>
     </div>

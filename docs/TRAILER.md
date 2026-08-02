@@ -133,17 +133,39 @@ own Black-Scholes, the one Compass's contract track is pinned against. Mid at th
 entry spot, exit at the target, expected shortfall at the stop, theta as the value
 of one day. Utility is the probability-weighted return net of execution minus the
 liquidity penalty, and the SELECTED / ALTERNATIVE / REJECTED labels are assigned
-*after* sorting on it. The scene's argument — the best headline return is not the
-best decision — is therefore an output. `storyClock.test.ts` fails if it stops
-being true.
+*after* sorting on it. The scene's argument — the biggest payoff at the target is
+not the best decision — is therefore an output. `storyClock.test.ts` fails if it
+stops being true.
+
+The table shows both: **IF TARGET** is the return in the branch that reaches the
+target, **UTILITY** is the expectation that weights it against the loss at the
+stop. They were once one column labelled "EV NET", which presented a conditional
+payoff as an expected value — so the row with the biggest number looked like the
+best decision, which is the exact confusion the scene exists to undo.
+
+**One calendar.** `buildDates()` derives every maturity from the session through
+`expiryFor` — the app's own calendar, which walks to a real trading day and
+reports the DTE it lands on. Expiry labels, contract DTEs, the gamma field's
+expiry axis, the setup horizons and the earnings date all read it. They used to be
+hard-coded strings hanging off the viewer's own date, so the film showed a weekly
+"11 days" and an event "12 days" out that were really 13 and 25 days from the
+session it claimed to be — and drifted further every day. The session itself is
+walked back to a trading day, because watched on a Saturday it was stamped 10:42
+on a day the market never opened.
 
 **Swapping in live data later:** replace the body of `buildTrailerStory()`. The
 scenes depend only on the `TrailerStory` shape in `trailerTypes.ts`, not on the
 simulator. The things to preserve are that `path`, `levels` and `level` stay
 mutually consistent — the whole narrative is one level being tested — and that
 nothing which depends on *where price is now* gets frozen into the story. Role,
-distance, touches held and the print list are all derived at draw time from the
-story clock, because every one of them was wrong when it was not.
+distance, touches held, the print list and the news feed are all derived at draw
+time from the story clock, because every one of them was wrong when it was not.
+
+The same rule holds at the seams. Contracts are priced at the spot the Weigher
+scene shows, the Tracker's forward path opens at the spot when the packet froze,
+and a feed shown in a 48-second window is stamped inside 48 seconds. Each of those
+was once taken from the session close — a price or a time from later than the
+moment it was labelled with.
 
 ## Performance decisions
 

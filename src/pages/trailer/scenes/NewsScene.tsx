@@ -9,9 +9,11 @@
 */
 
 import React from 'react';
-import { useTrailer, at, ease, lerp } from '../useTrailerState';
+import { useTrailer, clamp01, ease, lerp } from '../useTrailerState';
 import { Beat, Caveat, SceneHead, SceneStatement } from '../parts';
 import { prob } from '../format';
+import { STORY_SECONDS } from '../trailerStory';
+import { storyUAtSceneStart } from '../useTrailerTimeline';
 
 const Repricing: React.FC<{ t: number; before: { drift: number; width: number }; after: { drift: number; width: number }; height: number }> = ({
   t,
@@ -44,9 +46,26 @@ const Repricing: React.FC<{ t: number; before: { drift: number; width: number };
 };
 
 const NewsScene: React.FC = () => {
-  const { story, progress: p, reduced, compact } = useTrailer();
+  const { story, progress: p, storyU, reduced, compact } = useTrailer();
   const n = story.news;
-  const t = ease(at(p, 0.34, 0.74));
+
+  /*
+    Items arrive when the session reaches their timestamp.
+
+    Staged on scene progress they marched in evenly regardless of what the clock
+    said — and because the feed was stamped across 158 seconds while the scene
+    only advances the session by 48, the contradiction that drives the repricing
+    appeared a third of the way in, at a moment the HUD would never reach. The
+    timestamps are now laid out inside this scene's own window (`buildNews`), and
+    the reveal — and the repricing it causes — follow the same clock.
+  */
+  const elapsed = (storyU - storyUAtSceneStart('news')) * STORY_SECONDS;
+  const arrived = n.items.filter(item => item.at <= elapsed).length;
+  const last = n.items[n.items.length - 1];
+  // The distribution reprices as the evidence lands, finishing when the
+  // contradicting check does.
+  // The repricing resolves just after the last item, not exactly on it.
+  const t = ease(clamp01(elapsed / Math.max(1, last.at * 1.25)));
 
   return (
     <div className="h-full flex flex-col gap-3 min-h-0">
@@ -57,8 +76,10 @@ const NewsScene: React.FC = () => {
           <div className="font-mono text-micro uppercase tracking-widest text-textMuted mb-1.5">Arriving</div>
           <div className="flex-1 min-h-0 flex flex-col justify-evenly gap-1.5">
             {n.items.map((item, i) => {
-              const from = 0.06 + i * 0.11;
-              const e = ease(at(p, from, from + 0.08));
+              if (i >= arrived) return null;
+              // A short settle as each one lands, measured in story seconds so a
+              // paused film holds it rather than finishing the animation alone.
+              const e = ease(clamp01((elapsed - item.at) / 6));
               if (e <= 0.01) return null;
               const dup = item.duplicates > 0;
               return (

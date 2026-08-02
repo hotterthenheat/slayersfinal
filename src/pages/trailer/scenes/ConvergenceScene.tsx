@@ -14,6 +14,7 @@ import { ArrowUpRight } from 'lucide-react';
 import { useTrailer, at, clamp01, ease } from '../useTrailerState';
 import { Beat, Caveat, FillBox, PriceField, SceneHead } from '../parts';
 import { clock, prob, px } from '../format';
+import { useTicker } from '../../../context/MarketDataContext';
 
 interface Tile {
   product: string;
@@ -25,6 +26,7 @@ interface Tile {
 
 const ConvergenceScene: React.FC = () => {
   const { story, thread, timeline, progress: p, storyU, reduced } = useTrailer();
+  const { changeTicker } = useTicker();
 
   const build = ease(at(p, 0.06, 0.5));
   // Reaches the full path here because the session does, not because the scene says so.
@@ -89,6 +91,11 @@ const ConvergenceScene: React.FC = () => {
               <Link
                 key={t.product}
                 to={t.route}
+                state={{ focusTicker: story.ticker }}
+                /* Same handoff as the transport's Open desk. Twelve tiles that
+                   each summarise the NVDA event but open a desk still showing
+                   SPY is the same broken promise, twelve times over. */
+                onClick={() => changeTicker(story.ticker)}
                 style={{ opacity: e, transform: reduced ? undefined : `translate3d(0, ${(1 - e) * 6}px, 0)` }}
                 className="inst-surface rounded px-2 py-1.5 min-w-0 hover:bg-rowHover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-select/60 transition-colors"
               >
@@ -121,6 +128,7 @@ const ConvergenceScene: React.FC = () => {
         <div className="flex items-center gap-2 flex-wrap">
           <Link
             to="/terminal"
+            onClick={() => changeTicker(story.ticker)}
             className="inline-flex items-center gap-1.5 min-h-[44px] px-4 rounded-md font-mono text-label font-semibold uppercase tracking-wider text-ink holo-bg transition-transform active:scale-[0.98]"
           >
             Enter terminal <ArrowUpRight className="w-3.5 h-3.5" />

@@ -338,6 +338,30 @@ const Simulator = (() => {
     return { rsi, ema9, ema21, ema50, squeeze };
   }
 
+  /**
+   * A price series that ends at `spot`, derived rather than remembered.
+   *
+   * Only `buildSnapshotAt` uses this. The live `priceHistory` is a rolling buffer
+   * that `tick()` rewrites, so anything reading it inherits the wall clock; this
+   * is a pure function of (symbol, spot, regime day), which is what makes a
+   * pinned snapshot actually pinned. Shape matches the live seeding — a drift
+   * with per-bar texture — so the indicators come out in the same range.
+   */
+  function pinnedHistory(tickerKey: TickerSymbol, spot: number, regimeDay: number): number[] {
+    const cfg = TICKERS[tickerKey];
+    const key = `${tickerKey}:pin:${spot.toFixed(2)}:${regimeDay}`;
+    const out: number[] = [];
+    for (let i = 0; i < historyLimit; i++) {
+      const u = i / (historyLimit - 1);
+      const noise = ((symbolHash(`${key}:${i}`) % 1000) / 1000 - 0.5) * cfg.step * 1.6;
+      // Older bars sit below, so the series arrives at spot rather than wandering
+      // to it — the same "walked up into the level" shape the live seeding has.
+      out.push(Number((spot - (1 - u) * cfg.step * 5 + noise).toFixed(2)));
+    }
+    out[out.length - 1] = spot;
+    return out;
+  }
+
   // Generate Strike-by-Strike Chain
   function generateOptionsChain(tickerKey: TickerSymbol, spotOverride?: number, regimeDayOverride?: number): StrikeNode[] {
     const config = TICKERS[tickerKey];
@@ -649,10 +673,17 @@ const Simulator = (() => {
      * `buildSnapshot` reads the live `currentPrice` and pulls from the symbol's
      * random stream to mint a tape slice, so two calls a tick apart return
      * different books — right for a live desk, fatal for anything that has to be
-     * reproducible. The chain and plan builders are already pure functions of
-     * (symbol, spot, positioning regime); this exposes them at a fixed spot,
-     * draws nothing, and mutates nothing, so the same arguments always yield the
-     * same book and calling it leaves the live feed exactly where it was.
+     * reproducible. Every field here is a pure function of (symbol, spot,
+     * positioning regime): nothing is drawn, nothing is mutated, and calling it
+     * leaves the live feed exactly where it was.
+     *
+     * That includes the price history, which is the part that is easy to get
+     * wrong. Handing back `priceHistory[key]` looked harmless — the chain and the
+     * walls do not read it — but `tick()` rewrites that array every 1.5 seconds,
+     * so the indicators moved between two identical calls AND the array inside an
+     * already-returned snapshot kept changing underneath its holder. A pinned
+     * snapshot that aliases live state is not pinned. `pinnedHistory` synthesises
+     * its own series instead, ending exactly at the requested spot.
      *
      * `regimeDay` pins the daily positioning regime (the OI pivot, and therefore
      * the gamma flip). Omit it for today's regime; pass one to name the session
@@ -661,13 +692,15 @@ const Simulator = (() => {
     buildSnapshotAt: (sym: string, spot: number, regimeDay?: number): MarketSnapshot => {
       const key = ensureTicker(sym);
       const cfg = TICKERS[key];
-      const chain = generateOptionsChain(key, spot, regimeDay);
-      const indicators = getIndicators(priceHistory[key]);
+      const day = regimeDay ?? Math.floor(Date.now() / 86400000);
+      const chain = generateOptionsChain(key, spot, day);
+      const history = pinnedHistory(key, spot, day);
+      const indicators = getIndicators(history);
       return {
         ticker: key,
         spot,
         changePercent: ((spot - cfg.basePrice) / cfg.basePrice) * 100,
-        priceHistory: priceHistory[key],
+        priceHistory: history,
         chain,
         indicators,
         plan: generateTradePlan(key, spot, chain, indicators),

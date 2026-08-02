@@ -225,8 +225,18 @@ export interface ContractRow {
   breakeven: number;
   physicalExit: number;
   executionCost: number;
-  ev: number;
+  /**
+   * Return in the branch where the target is reached, net of execution.
+   *
+   * NOT an expectation — it was called `ev` and rendered under an "EV NET"
+   * column, which presented a conditional payoff as an expected value and made
+   * the "top EV" row look like a ranking it was not. `utility` is the
+   * expectation: it weights this against `expectedShortfall` by the setup's own
+   * probability.
+   */
+  returnAtTarget: number;
   expectedShortfall: number;
+  /** The probability-weighted expectation, net of execution and liquidity. */
   utility: number;
   liquidityRisk: number;
   verdict: 'SELECTED' | 'ALTERNATIVE' | 'REJECTED';

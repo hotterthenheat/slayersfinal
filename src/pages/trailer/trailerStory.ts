@@ -28,7 +28,8 @@
 import Simulator from '../../core/simulator';
 import { buildLevels } from '../../data/gex';
 import { h01, hGauss, hRange } from '../../core/rng';
-import { storyUAtSceneStart } from './useTrailerTimeline';
+import { storyUAtSceneEnd, storyUAtSceneStart } from './useTrailerTimeline';
+import { expiryFor, fmtMonthDay, isTradingDay } from '../../core/calendar';
 import { bsPriceAtT } from '../../components/compass/contractTrackModel';
 import type { StrikeNode } from '../../types/market';
 import type {
@@ -96,15 +97,53 @@ const clampUnit = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 /**
  * The session clock.
  *
- * Pinned to 10:42 ET on the story's own day rather than `Date.now()`, so the
+ * Pinned to 10:42 on the story's own day rather than `Date.now()`, so the
  * timestamp that travels the State Thread is a market time the viewer can read
  * against the narrative — and so two viewers watching at different hours see the
  * same film. The date advances with the calendar; only the time of day is fixed.
  */
-function sessionStart(): number {
+function sessionDate(): Date {
   const now = new Date();
   const d = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 10, 42, 0, 0);
-  return d.getTime();
+  // A session, not a calendar day. Watched on a Saturday the film was stamped
+  // 10:42 on a day the market never opened, and every DTE hung off it.
+  for (let i = 0; i < 7 && !isTradingDay(d); i++) d.setDate(d.getDate() - 1);
+  return d;
+}
+
+/**
+ * The story's maturities, on one calendar.
+ *
+ * Every expiry label used to be a hard-coded string — 'AUG 15' at a hard-coded
+ * 11 DTE, earnings on 'AUG 27' a hard-coded 12 days out — while the session date
+ * came from the viewer's own clock. So the film showed a weekly 11 days away and
+ * an event 12 days away that were in fact 13 and 25 days from the session it
+ * claimed to be, and both got worse every day the calendar advanced.
+ *
+ * `expiryFor` is the app's own calendar: it walks to a real session, and reports
+ * the DTE it actually lands on. Everything that names a maturity reads this, so
+ * the labels and the day counts can no longer disagree — with each other or with
+ * the session they hang off.
+ */
+interface StoryDates {
+  session: Date;
+  /** The weekly the story trades. */
+  near: { label: string; dte: number };
+  /** The short-dated rival the Weigher rejects. */
+  short: { label: string; dte: number };
+  /** The swing horizon Compass prices the event against. */
+  far: { label: string; dte: number };
+  /** Earnings — a date, not an expiry, but it still has to land on a session. */
+  earnings: { label: string; dte: number };
+}
+
+function buildDates(): StoryDates {
+  const session = sessionDate();
+  const at = (dte: number) => {
+    const e = expiryFor(dte, session);
+    return { label: fmtMonthDay(e.date).toUpperCase(), dte: e.dte };
+  };
+  return { session, near: at(11), short: at(4), far: at(18), earnings: at(25) };
 }
 
 // ---- price path -------------------------------------------------------------
@@ -196,9 +235,9 @@ function storyLevel(chain: StrikeNode[], spot: number): number {
 }
 
 // ---- option prints ----------------------------------------------------------
-function buildPrints(level: number, step: number): OptionPrint[] {
+function buildPrints(level: number, step: number, dates: StoryDates): OptionPrint[] {
   const parentStrike = round(Math.round((level + step * 2) / step) * step, 2);
-  const expiry = 'AUG 15';
+  const expiry = dates.near.label;
   const out: OptionPrint[] = [];
 
   // Nine children of one sequence plus nine unrelated prints, interleaved. The
@@ -214,7 +253,7 @@ function buildPrints(level: number, step: number): OptionPrint[] {
       strike: parentStrike,
       right: 'C',
       expiry,
-      dte: 11,
+      dte: dates.near.dte,
       size: Math.round(hRange(`${SEED}-cs-${i}`, 240, 1450)),
       premium: 0,
       fill: round(hRange(`${SEED}-cf-${i}`, 0.86, 1), 3),
@@ -241,8 +280,8 @@ function buildPrints(level: number, step: number): OptionPrint[] {
       at,
       strike,
       right,
-      expiry: i === 1 ? 'AUG 22' : expiry,
-      dte: i === 1 ? 18 : 11,
+      expiry: i === 1 ? dates.far.label : expiry,
+      dte: i === 1 ? dates.far.dte : dates.near.dte,
       size: Math.round(hRange(`${SEED}-ns-${i}`, 25, 190)),
       premium: 0,
       fill: round(hRange(`${SEED}-nf-${i}`, 0.18, 0.72), 3),
@@ -266,8 +305,11 @@ function buildPrints(level: number, step: number): OptionPrint[] {
 }
 
 // ---- scanner ----------------------------------------------------------------
-function buildScanner(prints: OptionPrint[], ticker: string, spot: number): ScannerRow[] {
+function buildScanner(prints: OptionPrint[], ticker: string, spot: number, dates: StoryDates): ScannerRow[] {
   const ours = prints.find(p => p.child)!;
+  const near = dates.near.label;
+  const far = dates.far.label;
+  const short = dates.short.label;
   const rows: ScannerRow[] = [
     {
       id: 'ours',
@@ -278,18 +320,18 @@ function buildScanner(prints: OptionPrint[], ticker: string, spot: number): Scan
       // scanner's own row is the one row a viewer can check against the tape
       // two scenes earlier.
       moneyness: round((ours.strike - spot) / spot, 4),
-      dte: 11,
+      dte: dates.near.dte,
       iv: 0.482,
       scoreFrom: 61,
       scoreTo: 88,
       state: 'LIVE READ',
       ours: true,
     },
-    { id: 'r1', label: 'AMD 168C AUG 15', premium: 1_940_000, volOi: 2.71, moneyness: 0.038, dte: 11, iv: 0.516, scoreFrom: 84, scoreTo: 79, state: 'DECAYING', ours: false },
-    { id: 'r2', label: 'SMCI 44P AUG 08', premium: 1_120_000, volOi: 1.42, moneyness: -0.019, dte: 4, iv: 0.694, scoreFrom: 77, scoreTo: 74, state: 'UNCONFIRMED', ours: false },
-    { id: 'r3', label: 'MU 118C AUG 22', premium: 880_000, volOi: 0.98, moneyness: 0.052, dte: 18, iv: 0.441, scoreFrom: 72, scoreTo: 70, state: 'LIVE READ', ours: false },
-    { id: 'r4', label: 'AVGO 172C AUG 15', premium: 640_000, volOi: 0.77, moneyness: 0.011, dte: 11, iv: 0.398, scoreFrom: 66, scoreTo: 63, state: 'UNCONFIRMED', ours: false },
-    { id: 'r5', label: 'INTC 22P AUG 15', premium: 410_000, volOi: 0.61, moneyness: -0.044, dte: 11, iv: 0.552, scoreFrom: 58, scoreTo: 55, state: 'DECAYING', ours: false },
+    { id: 'r1', label: `AMD 168C ${near}`, premium: 1_940_000, volOi: 2.71, moneyness: 0.038, dte: dates.near.dte, iv: 0.516, scoreFrom: 84, scoreTo: 79, state: 'DECAYING', ours: false },
+    { id: 'r2', label: `SMCI 44P ${short}`, premium: 1_120_000, volOi: 1.42, moneyness: -0.019, dte: dates.short.dte, iv: 0.694, scoreFrom: 77, scoreTo: 74, state: 'UNCONFIRMED', ours: false },
+    { id: 'r3', label: `MU 118C ${far}`, premium: 880_000, volOi: 0.98, moneyness: 0.052, dte: dates.far.dte, iv: 0.441, scoreFrom: 72, scoreTo: 70, state: 'LIVE READ', ours: false },
+    { id: 'r4', label: `AVGO 172C ${near}`, premium: 640_000, volOi: 0.77, moneyness: 0.011, dte: dates.near.dte, iv: 0.398, scoreFrom: 66, scoreTo: 63, state: 'UNCONFIRMED', ours: false },
+    { id: 'r5', label: `INTC 22P ${near}`, premium: 410_000, volOi: 0.61, moneyness: -0.044, dte: dates.near.dte, iv: 0.552, scoreFrom: 58, scoreTo: 55, state: 'DECAYING', ours: false },
   ];
   return rows;
 }
@@ -357,13 +399,16 @@ function buildGammaField(
   chain: { strike: number; netGex: number }[],
   levels: { callWall: number; putWall: number; flip: number; king: number },
   spot: number,
+  dates: StoryDates,
 ): GammaField {
   const sorted = [...chain].sort((a, b) => a.strike - b.strike);
   const centre = sorted.reduce((best, n) => (Math.abs(n.strike - spot) < Math.abs(best.strike - spot) ? n : best), sorted[0]);
   const ci = sorted.indexOf(centre);
   const window = sorted.slice(Math.max(0, ci - 9), Math.max(0, ci - 9) + 19);
   const strikes = window.map(n => n.strike);
-  const expiries = ['0DTE', '1D', '4D', '11D', '18D'];
+  // The same maturities the rest of the film trades, so the axis a viewer reads
+  // here is the axis the Weigher prices against.
+  const expiries = ['0DTE', '1D', `${dates.short.dte}D`, `${dates.near.dte}D`, `${dates.far.dte}D`];
   const cells: GammaCell[] = [];
   let maxAbs = 0;
   window.forEach(n => {
@@ -457,14 +502,14 @@ const STRESS: StressCase[] = [
 ];
 
 // ---- compass ----------------------------------------------------------------
-function buildSetups(ticker: string, level: number, step: number): SetupCandidate[] {
+function buildSetups(ticker: string, level: number, step: number, dates: StoryDates): SetupCandidate[] {
   const f = (key: string, label: string, value: number, weight: number) => ({ key, label, value, weight });
   return [
     {
       id: 'SU-1',
       label: `${ticker} reclaim of ${round(level)} shelf`,
       right: 'C',
-      horizon: 'WEEKLIES · 11D',
+      horizon: `WEEKLIES · ${dates.near.dte}D`,
       factors: [
         f('level', 'Level quality', 0.81, 0.24),
         f('flow', 'Flow corroboration', 0.74, 0.22),
@@ -485,7 +530,7 @@ function buildSetups(ticker: string, level: number, step: number): SetupCandidat
       id: 'SU-2',
       label: `${ticker} momentum continuation`,
       right: 'C',
-      horizon: 'WEEKLIES · 4D',
+      horizon: `WEEKLIES · ${dates.short.dte}D`,
       factors: [
         f('level', 'Level quality', 0.44, 0.24),
         f('flow', 'Flow corroboration', 0.91, 0.22),
@@ -508,7 +553,7 @@ function buildSetups(ticker: string, level: number, step: number): SetupCandidat
       id: 'SU-3',
       label: `${ticker} fade into the call wall`,
       right: 'P',
-      horizon: 'WEEKLIES · 11D',
+      horizon: `WEEKLIES · ${dates.near.dte}D`,
       factors: [
         f('level', 'Level quality', 0.69, 0.24),
         f('flow', 'Flow corroboration', 0.28, 0.22),
@@ -529,7 +574,7 @@ function buildSetups(ticker: string, level: number, step: number): SetupCandidat
       id: 'SU-4',
       label: `${ticker} straddle into the event`,
       right: 'C',
-      horizon: 'SWINGS · 18D',
+      horizon: `SWINGS · ${dates.far.dte}D`,
       factors: [
         f('level', 'Level quality', 0.36, 0.24),
         f('flow', 'Flow corroboration', 0.41, 0.22),
@@ -582,14 +627,17 @@ function buildContracts(
   target: number,
   stop: number,
   pModel: number,
+  dates: StoryDates,
 ): ContractRow[] {
   const base = Math.round((level + step * 2) / step) * step;
+  const near = dates.near;
+  const short = dates.short;
   const defs: { k: number; dte: number; expiry: string; why: string }[] = [
-    { k: base - step * 4, dte: 11, expiry: 'AUG 15', why: 'Most delta per dollar, and the most capital at risk per contract' },
-    { k: base, dte: 11, expiry: 'AUG 15', why: 'Carries the thesis with the least given away to execution' },
-    { k: base + step * 4, dte: 11, expiry: 'AUG 15', why: 'Struck at the target, so everything it is worth there is time value' },
-    { k: base, dte: 4, expiry: 'AUG 08', why: 'Same strike, and almost nothing left if the reclaim is not immediate' },
-    { k: base + step * 8, dte: 11, expiry: 'AUG 15', why: 'Struck beyond the target — the thesis alone does not pay for it' },
+    { k: base - step * 4, dte: near.dte, expiry: near.label, why: 'Most delta per dollar, and the most capital at risk per contract' },
+    { k: base, dte: near.dte, expiry: near.label, why: 'Carries the thesis with the least given away to execution' },
+    { k: base + step * 4, dte: near.dte, expiry: near.label, why: 'Struck at the target, so everything it is worth there is time value' },
+    { k: base, dte: short.dte, expiry: short.label, why: 'Same strike, and almost nothing left if the reclaim is not immediate' },
+    { k: base + step * 8, dte: near.dte, expiry: near.label, why: 'Struck beyond the target — the thesis alone does not pay for it' },
   ];
 
   // Winners resolve fast and losers grind: the target leg is marked one session
@@ -615,7 +663,7 @@ function buildContracts(
     const mid = round(bsPriceAtT(spot, d.k, iv, tNow, 'C'));
     // Absolute spread, floored at a penny and widening away from the money —
     // which is what makes a cheap contract expensive to trade, in percent.
-    const spreadAbs = round(Math.max(0.02, 0.03 + otm * 3.6 + Math.max(0, 8 - d.dte) * 0.012));
+    const spreadAbs = round(Math.max(0.02, 0.03 + otm * 3.6 + Math.max(0, near.dte - 3 - d.dte) * 0.012));
     const bid = round(Math.max(0.01, mid - spreadAbs / 2));
     const ask = round(mid + spreadAbs / 2);
     const spreadPct = round(spreadAbs / mid, 3);
@@ -627,11 +675,11 @@ function buildContracts(
     // Marked at the target and at the stop, each on its own clock.
     const physicalExit = round(bsPriceAtT(target, d.k, iv, tWin, 'C'));
     const atStop = bsPriceAtT(stop, d.k, iv, tLoss, 'C');
-    const ev = round((physicalExit - mid) / mid - executionCost, 3);
+    const returnAtTarget = round((physicalExit - mid) / mid - executionCost, 3);
     const expectedShortfall = round((atStop - mid) / mid - executionCost, 3);
 
-    const liquidityRisk = round(clampUnit(0.1 + otm * 22 + spreadPct * 1.4 + Math.max(0, 8 - d.dte) * 0.05), 2);
-    const utility = round(p * ev + (1 - p) * expectedShortfall - liquidityRisk * 0.22, 3);
+    const liquidityRisk = round(clampUnit(0.1 + otm * 22 + spreadPct * 1.4 + Math.max(0, near.dte - 3 - d.dte) * 0.05), 2);
+    const utility = round(p * returnAtTarget + (1 - p) * expectedShortfall - liquidityRisk * 0.22, 3);
 
     return {
       id: `K${d.k}-${d.expiry}`,
@@ -647,7 +695,7 @@ function buildContracts(
       // Open interest and volume concentrate at the money and thin out from
       // there, which is what the liquidity column is reading.
       oi: Math.round(400 + 7600 * Math.exp(-Math.pow(((d.k - spot) / spot) * 26, 2))),
-      volume: Math.round(180 + 5200 * Math.exp(-Math.pow(((d.k - spot) / spot) * 22, 2)) * (d.dte >= 8 ? 1 : 0.55)),
+      volume: Math.round(180 + 5200 * Math.exp(-Math.pow(((d.k - spot) / spot) * 22, 2)) * (d.dte >= near.dte - 3 ? 1 : 0.55)),
       delta: round(g.deltaCall, 3),
       gamma: round(g.gamma, 4),
       vega: round(g.vega, 3),
@@ -656,7 +704,7 @@ function buildContracts(
       breakeven: round(d.k + mid),
       physicalExit,
       executionCost,
-      ev,
+      returnAtTarget,
       expectedShortfall,
       utility,
       liquidityRisk,
@@ -715,7 +763,7 @@ function buildLotto(spot: number, step: number): LottoRow[] {
 }
 
 // ---- prove it ---------------------------------------------------------------
-function buildProveIt(spot: number): ProveItRead {
+function buildProveIt(spot: number, dates: StoryDates): ProveItRead {
   const bins: DistributionBin[] = [];
   const lo = spot * 0.955;
   const hi = spot * 1.055;
@@ -741,7 +789,7 @@ function buildProveIt(spot: number): ProveItRead {
     expectedLow: round(spot * 0.982),
     expectedHigh: round(spot * 1.026),
     tailProb: 0.041,
-    horizonLabel: 'Close-to-close, 11 sessions, ±1σ band',
+    horizonLabel: `Close-to-close, ${dates.near.dte} sessions, ±1σ band`,
     models: [
       { name: 'gex-drift v4', role: 'CHAMPION', crps: 0.0184, calibrationErr: 0.021, economicValue: 0.061, walkForward: 0.58, promoted: true, gate: 'IN PRODUCTION' },
       { name: 'flow-attn v1', role: 'CHALLENGER', crps: 0.0179, calibrationErr: 0.048, economicValue: 0.012, walkForward: 0.51, promoted: false, gate: 'FAILED · calibration error above 0.03 gate' },
@@ -762,14 +810,30 @@ function buildStocks(ticker: string): StockRow[] {
   return rows;
 }
 
-function buildNews(): NewsRead {
+/**
+ * The news cluster, stamped inside the story time it is shown in.
+ *
+ * The four items used to be stamped at 0/42/96/158 seconds while the News scene
+ * advances the session by 48 — so the feed printed a headline at +158s in a
+ * window the clock never reached, and the contradiction that drives the
+ * repricing arrived a third of the way through the scene having supposedly
+ * happened two and a half minutes in. The cadence (a filing, a fast syndication,
+ * a slower note, a late contradiction) is what matters; the absolute seconds
+ * were never load-bearing, so they are laid out across the window the scene
+ * actually has.
+ */
+function buildNews(windowSec: number): NewsRead {
+  // The last item lands with room to spare: the contradiction is the cause, and
+  // the scene still has to show its effect on the distribution.
+  const beats = [0, 0.2, 0.45, 0.7];
+  const at = (i: number) => Math.round(beats[i] * windowSec);
   return {
     // Sources are described by type, never by a fabricated masthead.
     items: [
-      { at: 0, source: 'Exchange filing', headline: 'Supply agreement expanded with a top-3 cloud customer', catalyst: 'GUIDANCE-ADJACENT', novelty: 0.81, duplicates: 0, contradiction: false },
-      { at: 42, source: 'Newswire summary', headline: 'Same agreement, syndicated', catalyst: 'GUIDANCE-ADJACENT', novelty: 0.12, duplicates: 6, contradiction: false },
-      { at: 96, source: 'Sell-side note', headline: 'Estimate raised on the same agreement', catalyst: 'ESTIMATE REVISION', novelty: 0.34, duplicates: 2, contradiction: false },
-      { at: 158, source: 'Trade press', headline: 'Channel check reads capacity as unchanged', catalyst: 'SUPPLY', novelty: 0.58, duplicates: 0, contradiction: true },
+      { at: at(0), source: 'Exchange filing', headline: 'Supply agreement expanded with a top-3 cloud customer', catalyst: 'GUIDANCE-ADJACENT', novelty: 0.81, duplicates: 0, contradiction: false },
+      { at: at(1), source: 'Newswire summary', headline: 'Same agreement, syndicated', catalyst: 'GUIDANCE-ADJACENT', novelty: 0.12, duplicates: 6, contradiction: false },
+      { at: at(2), source: 'Sell-side note', headline: 'Estimate raised on the same agreement', catalyst: 'ESTIMATE REVISION', novelty: 0.34, duplicates: 2, contradiction: false },
+      { at: at(3), source: 'Trade press', headline: 'Channel check reads capacity as unchanged', catalyst: 'SUPPLY', novelty: 0.58, duplicates: 0, contradiction: true },
     ],
     driftBefore: 0.004,
     driftAfter: 0.0061,
@@ -779,11 +843,11 @@ function buildNews(): NewsRead {
   };
 }
 
-function buildEarnings(spot: number): EarningsRead {
+function buildEarnings(spot: number, dates: StoryDates): EarningsRead {
   const straddle = round(spot * 0.078);
   return {
-    date: 'AUG 27',
-    daysAway: 12,
+    date: dates.earnings.label,
+    daysAway: dates.earnings.dte,
     timeConfirmed: false,
     session: 'AFTER CLOSE (estimated)',
     straddleCost: straddle,
@@ -820,7 +884,8 @@ function buildTracker(
   setup: SetupCandidate,
   contracts: ContractRow[],
   level: number,
-  spot: number,
+  /** Spot at the instant the packet freezes — NOT the session close. */
+  freezeSpot: number,
   target: number,
   stop: number,
   start: number,
@@ -849,14 +914,20 @@ function buildTracker(
     alternatives: [...others.map(c => c.id), 'SU-3'],
   };
 
-  // The market after the freeze: most of the way to the target, not all of it.
+  // The market after the freeze, starting at the freeze. It used to start at the
+  // session close — a price from later than the decision — so the "after the
+  // freeze" chart opened ahead of the packet it was scoring, and every
+  // counterfactual was marked from a path that began after the moment it claimed
+  // to begin at.
   const targetProgress = 0.82;
-  const finalPx = spot + (target - spot) * targetProgress;
+  const finalPx = freezeSpot + (target - freezeSpot) * targetProgress;
   const path: PricePoint[] = [];
   for (let i = 0; i < 60; i++) {
     const u = i / 59;
-    const spine = spot + (finalPx - spot) * Math.pow(u, 1.2);
-    path.push({ t: u, px: round(spine + hGauss(`${SEED}-out-${i}`) * spot * 0.0016) });
+    const spine = freezeSpot + (finalPx - freezeSpot) * Math.pow(u, 1.2);
+    // Noise fades in from the freeze, so the first point IS the freeze price
+    // rather than a tick either side of it.
+    path.push({ t: u, px: round(spine + hGauss(`${SEED}-out-${i}`) * freezeSpot * 0.0016 * Math.min(1, u * 6)) });
   }
 
   // Every contract marked at the price the market reached, one session of decay
@@ -937,12 +1008,21 @@ export function buildTrailerStory(): TrailerStory {
   // been available for half an hour of story time while the HUD beside it read
   // the current one.
   const entrySpot = round(pxAt(path, storyUAtSceneStart('weigher') * STORY_SECONDS));
-  const prints = buildPrints(level, step);
-  const setups = buildSetups(TICKER, level, step);
+  // Same discipline at the other end: the Tracker's forward path starts at the
+  // price on the tape when the packet froze.
+  const freezeSpot = round(pxAt(path, storyUAtSceneStart('tracker') * STORY_SECONDS));
+  const dates = buildDates();
+  const prints = buildPrints(level, step, dates);
+  const setups = buildSetups(TICKER, level, step, dates);
   const selectedSetup = setups.find(s => s.verdict === 'SELECTED')!;
-  const contracts = buildContracts(entrySpot, level, step, target, stop, selectedSetup.pTargetBeforeStop);
-  const start = sessionStart();
-  const { packet, outcome } = buildTracker(TICKER, selectedSetup, contracts, level, spotNow, target, stop, start);
+  const contracts = buildContracts(entrySpot, level, step, target, stop, selectedSetup.pTargetBeforeStop, dates);
+  const start = dates.session.getTime();
+  const { packet, outcome } = buildTracker(TICKER, selectedSetup, contracts, level, freezeSpot, target, stop, start);
+
+  // The news cluster has to land inside the story time the News scene occupies —
+  // stamped across 158 seconds and shown in a 48-second window, the feed was
+  // printing headlines the session clock had not reached.
+  const newsWindow = (storyUAtSceneEnd('news') - storyUAtSceneStart('news')) * STORY_SECONDS;
 
   cached = {
     ticker: TICKER,
@@ -952,10 +1032,10 @@ export function buildTrailerStory(): TrailerStory {
     path,
     levels,
     prints,
-    scanner: buildScanner(prints, TICKER, spot0),
+    scanner: buildScanner(prints, TICKER, spot0, dates),
     metaorder: buildMetaorder(prints),
     darkPool: buildDarkPool(level, path),
-    gamma: buildGammaField(snapshot.chain, levels, spot0),
+    gamma: buildGammaField(snapshot.chain, levels, spot0, dates),
     rankedLevels: buildRankedLevels(levels),
     greeks: buildGreeks(netGex),
     stress: STRESS,
@@ -964,10 +1044,10 @@ export function buildTrailerStory(): TrailerStory {
     lotto: buildLotto(spotNow, step),
     scalp: { horizonMin: 25, pTargetBeforeStop: 0.61, spreadCost: 0.019, quoteStability: 0.84, gammaEfficiency: 0.72, minutesToCutoff: 38 },
     rebound: { touch: level, displacement: -1.9, absorption: 0.68, flowReversal: 0.57, dealerSupport: 0.63, excursion: 1.4, invalidation: round(level * 0.988) },
-    proveIt: buildProveIt(spotNow),
+    proveIt: buildProveIt(spotNow, dates),
     stocks: buildStocks(TICKER),
-    news: buildNews(),
-    earnings: buildEarnings(spotNow),
+    news: buildNews(newsWindow),
+    earnings: buildEarnings(spotNow, dates),
     packet,
     outcome,
   };
