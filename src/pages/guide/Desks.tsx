@@ -48,11 +48,15 @@ const DESKS: DeskDoc[] = [
     controls: [
       <><span className="text-textPrimary">Customize</span> — drag, resize and add panels are off until you enter it;
       outside Customize the desk is chromeless. Your layout is saved in your browser.</>,
-      <>Panels resize from any edge or corner, to any size. There is no per-panel minimum: if you want a chart three
-      columns wide, it goes three columns wide. <span className="text-textPrimary">Fill</span> then grows every panel
-      into whatever space is left around it, so a desk you arranged by hand ends with no gaps and nothing moved.{' '}
-      <span className="text-textPrimary">Fit</span> is the other one — it re-flows the panels into tidy full rows, which
-      does move them.</>,
+      <>Panels resize from any edge or corner, to any size, and the desk stays gapless on its own: make one panel
+      smaller and its neighbours slide over and grow to take exactly the space it gave up. You never have to tidy up
+      after a drag. The one size limit is that a panel cannot be shrunk past its own title bar, because then there
+      would be nothing left to click to grow it back.</>,
+      <>A panel with no neighbour to hand space to — the only one in its row — springs back to full width instead. Any
+      other outcome would leave a hole nothing on the desk can reach.</>,
+      <><span className="text-textPrimary">Fill</span> re-packs everything on demand, for a desk that arrived with gaps
+      already in it. <span className="text-textPrimary">Fit</span> is the stronger one: it re-flows the panels into tidy
+      full rows, changing the arrangement rather than preserving it.</>,
       <>Every panel header carries <span className="text-textPrimary">Detach</span> and{' '}
       <span className="text-textPrimary">Pop out</span>, both available without entering Customize. Detach floats a panel
       free of the grid; pop out gives it its own window you can drag to a second monitor. Either way the panel keeps

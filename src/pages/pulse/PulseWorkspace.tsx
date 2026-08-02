@@ -66,10 +66,10 @@ import {
   boundsOnScreen,
   clampBounds,
   deadSpace,
-  fillGaps,
   mergeLayout,
   migrateWorkspace,
   screenIndexOf,
+  tile,
 } from './detach';
 import { useScreens, type DisplayInfo } from './useScreens';
 import PopoutPanel from './PopoutPanel';
@@ -624,6 +624,9 @@ const PulseWorkspace = () => {
   /** Stacking order for floating panels — last touched sits on top. */
   const [zOrder, setZOrder] = useState<Record<string, number>>({});
   const zTop = useRef(10);
+  /** The panel a drag or resize is currently about. Read once by
+      `onLayoutChange` to decide whose size to hold while the rest absorb. */
+  const touched = useRef<string | null>(null);
   /** The desk surface, measured so a detaching panel keeps its exact box. */
   const deskRef = useRef<HTMLDivElement | null>(null);
   const { displays, granted: displaysGranted, request: requestDisplays, supported: supportsDisplays } = useScreens();
@@ -828,15 +831,23 @@ const PulseWorkspace = () => {
    * stub, which is what the whole "keeps its layout entry while away" contract
    * was supposed to prevent. Carry the absent cells across untouched.
    */
-  const onLayoutChange = (next: Layout[]) =>
+  const onLayoutChange = (next: Layout[]) => {
+    // Only re-tile when a gesture put us here. On mount, on a layout switch and
+    // on a restore there is no touched panel, and re-packing then would reshape
+    // a preset the user never asked to change — Flow Command's full-height
+    // column being the obvious casualty.
+    const held = touched.current;
+    touched.current = null;
+    const settled = held ? tile(next, [held]) : next;
     mutate(l => ({
       ...l,
       layout: mergeLayout(
-        next,
+        settled,
         l.layout,
         l.panels.filter(p => p.detached || p.popout).map(p => p.id),
       ),
     }));
+  };
 
   // ---- placement: docked ⇄ detached ⇄ popped out --------------------------
   /**
@@ -971,15 +982,25 @@ const PulseWorkspace = () => {
     mutate(l => {
       const docked = l.layout.filter(g => l.panels.some(p => p.id === g.i && !p.detached && !p.popout));
       const before = deadSpace(docked);
-      const filled = fillGaps(docked);
-      const after = deadSpace(filled);
+      const packed = tile(docked);
       toast.info(
         before <= 0.001
           ? 'No dead space to reclaim'
-          : `Dead space ${Math.round(before * 100)}% to ${Math.round(after * 100)}%`,
+          : `Dead space ${Math.round(before * 100)}% to ${Math.round(deadSpace(packed) * 100)}%`,
       );
-      return { ...l, layout: mergeLayout(filled, l.layout, l.panels.filter(p => p.detached || p.popout).map(p => p.id)) };
+      return { ...l, layout: mergeLayout(packed, l.layout, l.panels.filter(p => p.detached || p.popout).map(p => p.id)) };
     });
+
+  /**
+   * Re-tile after a drag or a resize so the desk is never left with a hole.
+   *
+   * The invariant the user asked for: make one panel smaller and the others get
+   * bigger. `held` is the panel they just let go of — it keeps exactly the size
+   * they dragged it to, and the rest of the row absorbs what it gave up. A
+   * panel with no neighbour to donate to is grown back, because "keep my width"
+   * and "no dead space" cannot both hold when a panel is alone in its row.
+   */
+
 
   // ---- workspace-level ops ------------------------------------------------
   const switchLayout = (id: string) => {
@@ -1546,6 +1567,13 @@ const PulseWorkspace = () => {
               // which is two gestures for one intention.
               resizeHandles={['s', 'w', 'e', 'n', 'sw', 'nw', 'se', 'ne']}
               onLayoutChange={onLayoutChange}
+              // Record WHICH panel the gesture is about, then tile in
+              // onLayoutChange. Tiling in onResizeStop does not survive: RGL
+              // fires onResizeStop first and onLayoutChange straight after with
+              // its own untiled layout, so the absorb was computed and then
+              // immediately overwritten. Measured — the neighbour never moved.
+              onResizeStart={(_l, item) => (touched.current = item.i)}
+              onDragStart={(_l, item) => (touched.current = item.i)}
             >
               {dockedPanels.map(p => {
                 const ticker = p.ticker ?? activeTicker;

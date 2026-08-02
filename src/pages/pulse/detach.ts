@@ -184,48 +184,83 @@ export function mergeLayout(reported: Layout[], saved: Layout[], awayIds: readon
 const spansRow = (a: Layout, b: Layout) => a.y < b.y + b.h && b.y < a.y + a.h;
 const spansCol = (a: Layout, b: Layout) => a.x < b.x + b.w && b.x < a.x + a.w;
 
+/** Grow every panel right, then down, into space nothing else claims. `may`
+    decides which panels take part in this pass. */
+function grow(out: Layout[], may: (g: Layout) => boolean, cols: number): void {
+  for (const g of out) {
+    if (!may(g)) continue;
+    let right = cols;
+    for (const o of out) {
+      if (o === g || !spansRow(g, o)) continue;
+      if (o.x >= g.x + g.w) right = Math.min(right, o.x);
+    }
+    g.w = Math.max(g.w, right - g.x);
+  }
+  const floor = Math.max(...out.map(g => g.y + g.h));
+  for (const g of out) {
+    if (!may(g)) continue;
+    let below = floor;
+    for (const o of out) {
+      if (o === g || !spansCol(g, o)) continue;
+      if (o.y >= g.y + g.h) below = Math.min(below, o.y);
+    }
+    g.h = Math.max(g.h, below - g.y);
+  }
+}
+
 /**
- * Grow every panel into the empty space beside and below it.
+ * Keep the desk gapless as a RULE, not as a button.
  *
- * Freeing the resize floor lets a user BUILD a desk with no gaps; this closes
- * the gaps that are already there, which is the other half. Each panel extends
- * right until it meets a panel that shares any of its rows, then down until it
- * meets one that shares any of its columns. Limits are measured against the
- * ORIGINAL boxes, so growth can only ever consume space that was empty to begin
- * with and two panels can never be handed the same cell.
+ * Make one panel smaller and its neighbours take the space, the way a tiling
+ * window manager behaves. Growing alone cannot do this: it would hand the freed
+ * columns straight back to the panel that just gave them up, and the drag would
+ * appear to do nothing. The neighbours have to slide in FIRST.
  *
- * Deliberately not vertical-compaction: react-grid-layout already pulls panels
- * upward, and pulling up is what CREATES the ragged right edge in the first
- * place. This stretches instead of shuffling, so the desk the user arranged
- * keeps its shape and only loses its holes.
+ * Four moves, in this order:
+ *   1. Left-pack. This is what actually transfers the freed columns — the panel
+ *      to the right of the one you shrank slides over to meet it.
+ *   2. Up-pack, the vertical half of the same move.
+ *   3. Grow everything EXCEPT the panel you just let go of. Its size is the one
+ *      the user chose; every other panel absorbs what is left.
+ *   4. Grow anything still bordering a hole, held panel included. Step 3 cannot
+ *      always finish: a panel alone in its row has no neighbour to donate to,
+ *      and there "keep my width" and "no dead space" are contradictory. The
+ *      invariant wins, because a gap is visible and a few columns are not.
+ *
+ * `protect` is normally the single panel under the cursor.
  */
-export function fillGaps(layout: Layout[], cols: number = GRID.cols): Layout[] {
-  const out = layout.map(g => ({ ...g }));
+export function tile(layout: Layout[], protect: readonly string[] = [], cols: number = GRID.cols): Layout[] {
+  const out = layout.map(g => ({ ...g })).sort((a, b) => a.y - b.y || a.x - b.x);
   if (out.length === 0) return out;
 
-  // Two passes: widening a panel can expose a neighbour whose own downward
-  // growth is now bounded differently. Two is enough to settle every shape
-  // reachable from a 12-column grid; a third never changed a result in testing.
-  for (let pass = 0; pass < 2; pass++) {
-    for (const g of out) {
-      let right = cols;
-      for (const o of out) {
-        if (o === g || !spansRow(g, o)) continue;
-        if (o.x >= g.x + g.w) right = Math.min(right, o.x);
-      }
-      g.w = Math.max(g.w, right - g.x);
+  // Positions update as we go, in reading order, so a panel slides into the
+  // space the one before it just vacated — the same shape as react-grid-layout's
+  // own vertical compaction, turned on its side.
+  for (const g of out) {
+    let x = 0;
+    for (const o of out) {
+      if (o === g || !spansRow(g, o)) continue;
+      if (o.x + o.w <= g.x) x = Math.max(x, o.x + o.w);
     }
-
-    const floor = Math.max(...out.map(g => g.y + g.h));
-    for (const g of out) {
-      let below = floor;
-      for (const o of out) {
-        if (o === g || !spansCol(g, o)) continue;
-        if (o.y >= g.y + g.h) below = Math.min(below, o.y);
-      }
-      g.h = Math.max(g.h, below - g.y);
-    }
+    g.x = x;
   }
+
+  // RGL's `compactType="vertical"` usually does this before we ever see the
+  // layout, but relying on that would make this correct only by accident — and
+  // it is also called on paths RGL never touches, like a restored desk.
+  const byRow = [...out].sort((a, b) => a.y - b.y || a.x - b.x);
+  for (const g of byRow) {
+    let y = 0;
+    for (const o of byRow) {
+      if (o === g || !spansCol(g, o)) continue;
+      if (o.y + o.h <= g.y) y = Math.max(y, o.y + o.h);
+    }
+    g.y = y;
+  }
+
+  const held = new Set(protect);
+  grow(out, g => !held.has(g.i), cols);
+  grow(out, () => true, cols);
   return out;
 }
 

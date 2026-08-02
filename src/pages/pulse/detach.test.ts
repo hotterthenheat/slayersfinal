@@ -8,11 +8,11 @@ import {
   boxMoved,
   clampBounds,
   deadSpace,
-  fillGaps,
   mergeLayout,
   migrateWorkspace,
   popoutFeatures,
   screenIndexOf,
+  tile,
 } from './detach';
 import { PULSE_PRESETS, WORKSPACE_VERSION, type PulseWorkspaceState } from './presets';
 
@@ -244,73 +244,100 @@ describe('MIN_UNITS — small enough to pack, big enough to escape', () => {
   });
 });
 
-describe('fillGaps — the dead space goes away', () => {
-  it('stretches a short row out to the full 12 columns', () => {
-    // The exact complaint: a row of panels that cannot be made to sum to 12
-    // leaves a strip of canvas on the right that nothing can reach.
-    const filled = fillGaps([{ i: 'a', x: 0, y: 0, w: 5, h: 4 }]);
-    expect(filled[0].w).toBe(12);
-  });
-
-  it('stops a panel at its neighbour rather than overlapping it', () => {
-    const filled = fillGaps([
-      { i: 'a', x: 0, y: 0, w: 3, h: 4 },
-      { i: 'b', x: 8, y: 0, w: 4, h: 4 },
-    ]);
-    expect(filled.find(g => g.i === 'a')!.w).toBe(8); // grows 3 -> 8, meets b
-    expect(filled.find(g => g.i === 'b')!.w).toBe(4); // already at the edge
-  });
-
-  it('grows a panel downward into empty rows below it', () => {
-    const filled = fillGaps([
-      { i: 'tall', x: 0, y: 0, w: 6, h: 10 },
-      { i: 'short', x: 6, y: 0, w: 6, h: 4 },
-    ]);
-    // `short` had six columns of nothing under it for six rows.
-    expect(filled.find(g => g.i === 'short')!.h).toBe(10);
-  });
-
-  it('leaves a desk that is already full completely alone', () => {
-    const full = [
-      { i: 'a', x: 0, y: 0, w: 6, h: 4 },
-      { i: 'b', x: 6, y: 0, w: 6, h: 4 },
-      { i: 'c', x: 0, y: 4, w: 12, h: 4 },
+describe('tile — shrink one panel, the others take the space', () => {
+  it('hands the freed columns to the neighbour instead of springing back', () => {
+    // The behaviour asked for, and the exact thing plain fillGaps gets wrong:
+    // fillGaps would grow `a` straight back to 8 and the drag would look like
+    // it did nothing.
+    const shrunk = [
+      { i: 'a', x: 0, y: 0, w: 4, h: 6 }, // was 8, user just dragged it to 4
+      { i: 'b', x: 8, y: 0, w: 4, h: 6 },
     ];
-    expect(fillGaps(full)).toEqual(full);
+    const out = tile(shrunk, ['a']);
+    expect(out.find(g => g.i === 'a')!.w).toBe(4); // held
+    expect(out.find(g => g.i === 'b')!.x).toBe(4); // slid left to meet it
+    expect(out.find(g => g.i === 'b')!.w).toBe(8); // absorbed the 4 columns
+    expect(deadSpace(out)).toBe(0);
   });
 
-  it('never overlaps two panels, over every preset we ship', () => {
-    // The property that matters more than any single case: growth may only
-    // consume space that was empty, so no two boxes may ever intersect after.
+  it('gives the space back when the panel that shrank has no neighbour', () => {
+    // A panel alone in its row cannot both keep its width and leave no gap.
+    // The invariant wins; the alternative is a visible hole nothing can reach.
+    const out = tile([{ i: 'solo', x: 0, y: 0, w: 5, h: 4 }], ['solo']);
+    expect(out[0].w).toBe(12);
+    expect(deadSpace(out)).toBe(0);
+  });
+
+  it('splits the freed space across several neighbours', () => {
+    const out = tile(
+      [
+        { i: 'a', x: 0, y: 0, w: 2, h: 4 },
+        { i: 'b', x: 4, y: 0, w: 4, h: 4 },
+        { i: 'c', x: 8, y: 0, w: 4, h: 4 },
+      ],
+      ['a'],
+    );
+    expect(out.find(g => g.i === 'a')!.w).toBe(2);
+    expect(out.reduce((s, g) => s + g.w, 0)).toBe(12);
+    expect(deadSpace(out)).toBe(0);
+  });
+
+  it('absorbs vertically too — a shorter panel lets the one below grow', () => {
+    const out = tile(
+      [
+        { i: 'top', x: 0, y: 0, w: 12, h: 4 },
+        { i: 'bottom', x: 0, y: 8, w: 12, h: 4 },
+      ],
+      ['top'],
+    );
+    expect(out.find(g => g.i === 'top')!.h).toBe(4);
+    expect(deadSpace(out)).toBe(0);
+  });
+
+  it('never overlaps and never runs off the grid, for every preset', () => {
     for (const preset of PULSE_PRESETS) {
-      const filled = fillGaps(preset.layout);
-      for (let i = 0; i < filled.length; i++) {
-        for (let j = i + 1; j < filled.length; j++) {
-          const a = filled[i];
-          const b = filled[j];
-          const hit = a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
-          expect({ preset: preset.id, a: a.i, b: b.i, hit }).toEqual({ preset: preset.id, a: a.i, b: b.i, hit: false });
+      for (const held of [[], [preset.layout[0].i]]) {
+        const out = tile(preset.layout, held);
+        for (let i = 0; i < out.length; i++) {
+          for (let j = i + 1; j < out.length; j++) {
+            const a = out[i];
+            const b = out[j];
+            const hit = a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+            expect({ p: preset.id, a: a.i, b: b.i, hit }).toEqual({ p: preset.id, a: a.i, b: b.i, hit: false });
+          }
+        }
+        for (const g of out) {
+          expect(g.x).toBeGreaterThanOrEqual(0);
+          expect(g.x + g.w).toBeLessThanOrEqual(GRID.cols);
         }
       }
-      // And nothing may hang off the right edge of the grid.
-      for (const g of filled) expect(g.x + g.w).toBeLessThanOrEqual(GRID.cols);
     }
   });
 
-  it('never increases dead space on any preset, and removes it outright on most', () => {
-    let improved = 0;
+  it('leaves zero dead space on every preset it ships', () => {
     for (const preset of PULSE_PRESETS) {
-      const before = deadSpace(preset.layout);
-      const after = deadSpace(fillGaps(preset.layout));
-      expect(after).toBeLessThanOrEqual(before + 1e-9);
-      if (after < before) improved++;
+      expect({ id: preset.id, dead: deadSpace(tile(preset.layout)) }).toEqual({ id: preset.id, dead: 0 });
     }
-    expect(improved).toBeGreaterThan(0);
   });
 
-  it('handles an empty desk without dividing by zero', () => {
-    expect(fillGaps([])).toEqual([]);
-    expect(deadSpace([])).toBe(0);
+  it('is idempotent — tiling an already tiled desk changes nothing', () => {
+    for (const preset of PULSE_PRESETS) {
+      const once = tile(preset.layout);
+      expect(tile(once)).toEqual(once);
+    }
+  });
+
+  it('keeps every panel at or above the size floor', () => {
+    for (const preset of PULSE_PRESETS) {
+      for (const g of tile(preset.layout)) {
+        expect(g.w).toBeGreaterThanOrEqual(MIN_UNITS.w);
+        expect(g.h).toBeGreaterThanOrEqual(MIN_UNITS.h);
+      }
+    }
+  });
+
+  it('handles an empty desk', () => {
+    expect(tile([])).toEqual([]);
   });
 });
 
