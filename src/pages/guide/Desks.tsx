@@ -13,23 +13,9 @@ import {
 } from 'lucide-react';
 import { Card, Points } from './parts';
 
-/*
-  Every claim on this page is a claim about code that ships, so it goes stale
-  the moment a desk moves. Three rules keep it honest: name only panels and
-  controls that exist in the registries and subnavs (pulseRegistry, gex/subnav,
-  flowdesk/subnav, proveit/ProveIt); describe what an engine derives rather than
-  what a number looks like it means; and name the population before quoting a
-  rate, because a simulated analog is not a historical one and the difference is
-  the whole of the claim. Worked reads stay mechanical for the same reason — a
-  printed level here would be a second derivation of gex.ts, and it would be
-  wrong by the next tick.
-
-  Two rounds of spot-fixes left this page contradicting itself, so the standing
-  instruction is to re-read the code path, not the previous paragraph: the
-  board's score comes from data/compass.ts rankOf, the Weigher's from
-  core/contractScore.ts, and they are different scales that happen to share one
-  spoken lexicon.
-*/
+// The rule that governs this page now lives in ./parts.tsx, which every guide
+// page imports. It was here, and being here is why Overview.tsx and Faq.tsx
+// kept the stale wording through two waves that corrected this file.
 
 interface DeskDoc {
   icon: LucideIcon;

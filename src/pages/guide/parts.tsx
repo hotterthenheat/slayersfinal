@@ -1,6 +1,39 @@
 import type { ReactNode } from 'react';
 import { Info } from 'lucide-react';
 
+/*
+  THE RULE FOR EVERY PAGE IN THIS DIRECTORY. It lives here because every guide
+  page imports this file, and it used to live in Desks.tsx alone — which is
+  precisely how it failed: two waves corrected the desk descriptions in that
+  file and left the identical, now-false strings standing in Overview.tsx and
+  Faq.tsx, where nobody was looking at the rule.
+
+  Every claim in the guide is a claim about code that ships, so it goes stale
+  the moment a desk moves. Four rules keep it honest.
+
+  1. Name only panels, controls and routes that exist in the registries and
+     subnavs: pulseRegistry, gex/subnav, flowdesk/subnav, proveit/ProveIt, and
+     the route table in App.tsx. Routing failures here are SILENT — the
+     catch-all sends an unmatched URL to a real page and a wrong `?view=` falls
+     back to the first pane, so a broken link renders as a working one. Resolve
+     a destination by reading the table, never by assuming the path works.
+  2. Describe what an engine derives, not what a number looks like it means.
+  3. Name the population before quoting a rate. A modeled analog is not a
+     historical one and the difference is the whole of the claim.
+  4. Keep worked reads mechanical. A printed level here would be a second
+     derivation of gex.ts and would be wrong by the next tick.
+
+  When a desk changes, grep the whole directory for the old wording. The pages
+  overlap: Overview.tsx and Desks.tsx describe the same desks in different
+  words, and Faq.tsx answers questions about both.
+
+  Standing instruction, from two rounds of spot-fixes that left the guide
+  contradicting itself: re-read the code path, not the previous paragraph. The
+  board's score comes from data/compass.ts rankOf and the Weigher's from
+  core/contractScore.ts, and they are different scales that happen to share one
+  spoken lexicon.
+*/
+
 /** A titled content block with the standard mono eyebrow heading. */
 export const Section = ({ title, children }: { title: string; children: ReactNode }) => (
   <section className="flex flex-col gap-3">

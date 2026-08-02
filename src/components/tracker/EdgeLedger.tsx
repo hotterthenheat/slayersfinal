@@ -224,16 +224,32 @@ const EdgeLedger = () => {
 
   return (
     <>
+      {/* This component mounts directly under the user's own tracker book,
+          which is real, theirs, and stored in their browser. Everything below
+          this line is generated: `PROFILES` in data/edgeledger.ts is a
+          hand-typed win-probability surface and every trade is drawn from it,
+          so these rates are the rates that table was built to produce.
+          Without a divider the two populations render in the same chrome and
+          read as one book, and a stat card is the last place a reader expects
+          to have to ask whose trades it is counting. The engine names the
+          population in `sampleNote` too, but that sits below the fold. */}
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-t border-borderSubtle pt-5 mt-2">
+        <h2 className="font-mono text-label font-semibold uppercase tracking-widest text-textSecondary">Edge ledger</h2>
+        <span className="text-label text-textMuted leading-relaxed">
+          A worked demonstration over {view.tradeCount} modeled trades. Not your fills, and not counted from the book above.
+        </span>
+      </div>
+
       <MetricGrid min="170px">
         <StatCard
           label="Expectancy · per trade"
           value={fmtR(view.overallExpectancy)}
-          sub={`${fmtPct(view.overallExpectancyPct)} avg · ${view.tradeCount} closed`}
+          sub={`${fmtPct(view.overallExpectancyPct)} avg · ${view.tradeCount} modeled`}
           tone={expTone}
           emphasis
         />
         <StatCard
-          label="Win rate"
+          label="Win rate · modeled"
           value={`${view.winRate.toFixed(0)}%`}
           sub={`profit factor ${view.profitFactor.toFixed(2)}`}
           tone={view.profitFactor >= 1.3 ? 'bull' : view.profitFactor >= 1 ? 'warn' : 'bear'}
@@ -392,10 +408,10 @@ const EdgeLedger = () => {
       <Panel bodyClassName="py-3">
         <p className="text-caption text-textSecondary leading-relaxed">
           <span className="font-mono font-semibold uppercase tracking-wider mr-2 text-textSecondary">Beyond the P/L screen</span>
-          A P/L blotter tells you what you made; the edge ledger tells you why, and whether it still works. It reconstructs each
-          closed trade the way a review should — thesis, entry conditions, actual fill, the market state you took it in, the max
-          favorable and adverse excursion, and the better contract you could have held — then rolls that into expectancy by setup
-          and edge-decay warnings, the pattern where a good setup keeps getting run in the one regime it stopped paying in.{' '}
+          A P/L blotter says what a book made; the edge ledger says why, and whether it still works. Each trade is reconstructed
+          the way a review should be — thesis, entry conditions, fill, the market state it was taken in, the max favorable and
+          adverse excursion, and the better contract that was available — then rolled into expectancy by setup and edge-decay
+          warnings, the pattern where a good setup keeps getting run in the one regime it stopped paying in.{' '}
           {view.sampleNote}
         </p>
       </Panel>

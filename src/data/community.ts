@@ -32,12 +32,13 @@ const hoursAgo = (h: number) => new Date(Date.now() - h * 3600_000).toISOString(
  * nobody has ever written or backed one of these.
  *
  * `author` and `votes` stay on the shape because CommunityIdea is the future API
- * contract, and they now say the true thing: the author is the example itself,
- * and the tally is zero because no vote has ever been cast. The desk renders
- * neither (Ideas.tsx heads them "Worked examples"), but the landing page renders
- * BOTH — a vote box on every row, and the author from `md` up — which is exactly
- * why both have to be true in the data: the box reads 0 because nothing has been
- * voted on, and the byline reads as a label rather than a name.
+ * contract, and they say the true thing: the author is the example itself, and
+ * the tally is zero because no vote has ever been cast. Neither is rendered
+ * anywhere now — the desk heads them "Worked examples" (Ideas.tsx) and the
+ * landing page dropped its vote box, since a voting affordance nobody can use
+ * is a claim about other people whether or not the number beside it reads 0.
+ * They still have to be true in the data: this file is what a future API would
+ * be held to, and a placeholder that lies is worse than a field that is absent.
  *
  * The prices track the simulator's own reference book — SPY 500 and QQQ 440 are
  * core/simulator.ts's own ETF refs, NVDA 138.6 reaches it from data/universe.ts
