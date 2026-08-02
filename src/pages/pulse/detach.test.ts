@@ -16,6 +16,18 @@ import {
 } from './detach';
 import { PULSE_PRESETS, WORKSPACE_VERSION, type PulseWorkspaceState } from './presets';
 
+/** Boxes sharing a cell. Used by several suites, so it lives here once. */
+const overlapCount = (l: { x: number; y: number; w: number; h: number }[]) => {
+  let n = 0;
+  for (let i = 0; i < l.length; i++)
+    for (let j = i + 1; j < l.length; j++) {
+      const a = l[i];
+      const b = l[j];
+      if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) n++;
+    }
+  return n;
+};
+
 /** A 1536-wide desk, which is what the presets' comments were measured on. */
 const W = 1536;
 
@@ -220,12 +232,14 @@ describe('MIN_UNITS — small enough to pack, big enough to escape', () => {
     expect(px(MIN_UNITS.h - 1)).toBeLessThan(PANEL_HEADER_PX);
   });
 
-  it('is wide enough to hold the header’s control cluster', () => {
-    // Four 24px icon buttons plus the row's own padding. At one column (116px
-    // on a 1600 desk) the cluster overflows and 3 of 4 controls fall outside
-    // the panel box.
-    const CLUSTER_PX = 4 * 24 + 28;
-    expect(colPx(MIN_UNITS.w)).toBeGreaterThan(CLUSTER_PX);
+  it('is wide enough for the controls the header keeps at its narrowest', () => {
+    // NOT the full cluster. In Customize mode a panel carries eight controls
+    // and eight do not fit at two columns on any desk — the header sheds the
+    // secondary ones by measuring itself. What must always fit is the grip plus
+    // maximize and close, so a panel can never be stranded at a size it cannot
+    // be resized out of.
+    const ESSENTIAL_PX = 22 + 2 * 26 + 28; // grip + 2 buttons + row padding
+    expect(colPx(MIN_UNITS.w)).toBeGreaterThan(ESSENTIAL_PX);
   });
 
   it('stays far below the per-widget floors it replaced', () => {
@@ -245,6 +259,54 @@ describe('MIN_UNITS — small enough to pack, big enough to escape', () => {
 });
 
 describe('tile — shrink one panel, the others take the space', () => {
+  it('transfers space when the WEST edge is dragged, not just the east', () => {
+    // Reported by review and reproduced before fixing: with a=(0,6) and b=(6,6),
+    // dragging b's west edge right makes RGL report b=(8,4). Packing b back
+    // against a and then growing it returned it to (6,6) — the drag did
+    // nothing. The held panel is no longer packed, so its dragged edge stays
+    // anchored and the space goes to the neighbour.
+    const out = tile(
+      [
+        { i: 'a', x: 0, y: 0, w: 6, h: 4 },
+        { i: 'b', x: 8, y: 0, w: 4, h: 4 },
+      ],
+      { hold: ['b'] },
+    );
+    expect(out.find(g => g.i === 'b')).toMatchObject({ x: 8, w: 4 });
+    expect(out.find(g => g.i === 'a')).toMatchObject({ x: 0, w: 8 });
+    expect(deadSpace(out)).toBe(0);
+  });
+
+  it('never leaves an enclosed pocket, even when rectangles cannot close it', () => {
+    // Four panels around an L-shaped void. Growth alone stopped at 5.6% dead
+    // because no single panel can absorb the pocket and stay a rectangle.
+    const out = tile(
+      [
+        { i: 'p1', x: 0, y: 0, w: 2, h: 4 },
+        { i: 'p2', x: 0, y: 4, w: 4, h: 2 },
+        { i: 'p3', x: 2, y: 0, w: 4, h: 2 },
+        { i: 'p4', x: 4, y: 2, w: 2, h: 4 },
+      ],
+      { hold: ['p1'] },
+    );
+    expect(deadSpace(out)).toBe(0);
+    expect(out).toHaveLength(4);
+  });
+
+  it('packs a minimized panel but never grows it', () => {
+    // A minimized panel is a parked title bar. Growing it to a neighbour's
+    // height gives a tall empty card whose body is still hidden, and whose
+    // `minimized` flag then makes one click restore rather than minimize.
+    const out = tile(
+      [
+        { i: 'big', x: 0, y: 0, w: 6, h: 12 },
+        { i: 'min', x: 6, y: 0, w: 6, h: 2 },
+      ],
+      { hold: ['big'], noGrow: ['min'] },
+    );
+    expect(out.find(g => g.i === 'min')!.h).toBe(2);
+  });
+
   it('hands the freed columns to the neighbour instead of springing back', () => {
     // The behaviour asked for, and the exact thing plain fillGaps gets wrong:
     // fillGaps would grow `a` straight back to 8 and the drag would look like
@@ -253,7 +315,7 @@ describe('tile — shrink one panel, the others take the space', () => {
       { i: 'a', x: 0, y: 0, w: 4, h: 6 }, // was 8, user just dragged it to 4
       { i: 'b', x: 8, y: 0, w: 4, h: 6 },
     ];
-    const out = tile(shrunk, ['a']);
+    const out = tile(shrunk, { hold: ['a'] });
     expect(out.find(g => g.i === 'a')!.w).toBe(4); // held
     expect(out.find(g => g.i === 'b')!.x).toBe(4); // slid left to meet it
     expect(out.find(g => g.i === 'b')!.w).toBe(8); // absorbed the 4 columns
@@ -334,6 +396,30 @@ describe('tile — shrink one panel, the others take the space', () => {
         expect(g.h).toBeGreaterThanOrEqual(MIN_UNITS.h);
       }
     }
+  });
+
+  it('cleans up an overlapping input rather than trusting the dead-space metric', () => {
+    // Docking a panel puts it back on a cell a neighbour has since absorbed, so
+    // the input genuinely overlaps. `deadSpace` divides used cells by the
+    // bounding box, so overlap DOUBLE-COUNTS and the metric read ~0 on a broken
+    // desk — the fallback stayed asleep and the desk came back 8% empty.
+    const out = tile([
+      { i: 'a', x: 0, y: 0, w: 12, h: 6 },
+      { i: 'returning', x: 0, y: 0, w: 8, h: 6 },
+      { i: 'c', x: 0, y: 6, w: 6, h: 4 },
+    ]);
+    expect(overlapCount(out)).toBe(0);
+    expect(deadSpace(out)).toBe(0);
+    expect(out).toHaveLength(3);
+  });
+
+  it('repairs a layout that overflows the grid', () => {
+    const out = tile([
+      { i: 'a', x: 0, y: 0, w: 8, h: 4 },
+      { i: 'b', x: 8, y: 0, w: 9, h: 4 }, // x+w = 17
+    ]);
+    for (const g of out) expect(g.x + g.w).toBeLessThanOrEqual(GRID.cols);
+    expect(deadSpace(out)).toBe(0);
   });
 
   it('handles an empty desk', () => {

@@ -440,13 +440,38 @@ const PanelChrome = ({
 }) => {
   const def = pulsePanelByKey(panelKey);
   const [nudged, setNudged] = useState('');
+  /**
+   * Measure the header, do not guess from the column count.
+   *
+   * In Customize mode a docked panel carries eight interactive controls, not
+   * the four a read-only panel shows, and at the 2-column floor only four of
+   * them land inside the box — the rest overflow and are unclickable. A column
+   * count cannot tell you that, because two columns is 244px on a 1600 desk and
+   * 153px at the 1024 breakpoint. So the header watches its own width and drops
+   * the secondary controls when they stop fitting, which is also why the floor
+   * can stay at two units instead of being raised for the widest case.
+   */
+  const headRef = useRef<HTMLDivElement | null>(null);
+  const [room, setRoom] = useState(9999);
+  useEffect(() => {
+    const el = headRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(([e]) => setRoom(e.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  // Thresholds are the measured cost of each group: ~26px a button, plus the
+  // grip and a readable stub of title.
+  const showQuote = room >= 420;
+  const showSecondary = room >= 300; // duplicate + minimize
+  const showPlacement = room >= 210; // detach + pop out
   // A detached panel has its own drag strip and a popped-out one has the OS
   // window's title bar, so neither takes the grid's drag handle.
   const draggable = !maximizedView && placement === 'docked' && h.editLayout;
   const title = def?.title ?? panelKey;
   const up = (changePct ?? 0) >= 0;
   return (
-    <div className={`${draggable ? 'widget-drag cursor-grab active:cursor-grabbing' : ''} flex items-center gap-2 px-3.5 h-10 border-b border-borderSubtle bg-white/[0.015] shrink-0 select-none`}>
+    <div ref={headRef} className={`${draggable ? 'widget-drag cursor-grab active:cursor-grabbing' : ''} flex items-center gap-2 px-3.5 h-10 border-b border-borderSubtle bg-white/[0.015] shrink-0 select-none overflow-hidden`}>
       {draggable && (
         <>
           {/* react-grid-layout's handle is a bare div, so Customize mode
@@ -487,8 +512,8 @@ const PanelChrome = ({
       <h2 className="font-mono text-label font-semibold uppercase tracking-widest text-textPrimary truncate">
         {def?.title ?? panelKey}
       </h2>
-      <PanelTicker value={ticker} onChange={t => h.onTicker(panelId, t)} />
-      {price != null && Number.isFinite(price) && (
+      {showPlacement && <PanelTicker value={ticker} onChange={t => h.onTicker(panelId, t)} />}
+      {showQuote && price != null && Number.isFinite(price) && (
         <span className="hidden md:flex items-baseline gap-1.5 font-mono tnum whitespace-nowrap" onMouseDown={e => e.stopPropagation()}>
           <span className="text-caption text-textPrimary">${price.toFixed(2)}</span>
           {changePct != null && Number.isFinite(changePct) && (
@@ -500,7 +525,7 @@ const PanelChrome = ({
         </span>
       )}
       <div className="ml-auto flex items-center gap-0.5 shrink-0" onMouseDown={e => e.stopPropagation()}>
-        {draggable && (
+        {draggable && showSecondary && (
           <>
             <button onClick={() => h.onDuplicate(panelId)} title="Duplicate" aria-label={`Duplicate ${title} panel`} className={chromeBtn}>
               <Copy className="w-3 h-3" />
@@ -516,7 +541,7 @@ const PanelChrome = ({
             built, and gating it behind edit mode would be the same mistake as
             gating the ticker switcher. Maximized is the one exclusion — there
             is no grid cell to come back to mid-maximize. */}
-        {!maximizedView && placement !== 'popped' && (
+        {!maximizedView && placement !== 'popped' && showPlacement && (
           <>
             <button
               onClick={() => (placement === 'detached' ? h.onDock(panelId) : h.onDetach(panelId))}
@@ -838,7 +863,11 @@ const PulseWorkspace = () => {
     // column being the obvious casualty.
     const held = touched.current;
     touched.current = null;
-    const settled = held ? tile(next, [held]) : next;
+    // Minimized panels are a parked title bar. They pack like anything else but
+    // must never be GROWN, or the fill logic stretches one to a neighbour's
+    // height and it becomes a tall empty card with its body still hidden.
+    const minimized = active.panels.filter(p => p.minimized).map(p => p.id);
+    const settled = held ? tile(next, { hold: [held], noGrow: minimized }) : next;
     mutate(l => ({
       ...l,
       layout: mergeLayout(
@@ -874,7 +903,35 @@ const PulseWorkspace = () => {
 
   const dockPanel = (id: string) => {
     closePopout(id);
-    patchPanel(id, p => ({ ...p, detached: undefined, popout: undefined }));
+    mutate(l => {
+      const panels = l.panels.map(p => (p.id === id ? { ...p, detached: undefined, popout: undefined } : p));
+      // Re-tile the whole docked set, the returning panel included. Its saved
+      // cell is a HINT, not a reservation: the desk keeps itself gapless while a
+      // panel is away, so that cell has usually been absorbed by a neighbour and
+      // dropping the panel straight back onto it would overlap. Packing it in
+      // costs the exact-same-cell guarantee and buys never colliding.
+      const backIds = new Set(panels.filter(p => !p.detached && !p.popout).map(p => p.id));
+      const staying = l.layout.filter(g => backIds.has(g.i) && g.i !== id);
+      const returning = l.layout.find(g => g.i === id);
+      // Land the returning panel BELOW everything, then let the pack lift it in.
+      //
+      // Dropping it straight onto its saved cell overlaps whatever absorbed
+      // that space while it was away, and an overlapping desk trips the band
+      // reflow — which is correct but brutal: a chart came back 244px wide,
+      // shredded into a six-panel band. Arriving underneath costs nothing, and
+      // the up-pack then slots it into the first row with room for it.
+      const floor = staying.reduce((m, g) => Math.max(m, g.y + g.h), 0);
+      const docked = returning ? [...staying, { ...returning, y: floor }] : staying;
+      return {
+        ...l,
+        panels,
+        layout: mergeLayout(
+          tile(docked, { noGrow: panels.filter(p => p.minimized).map(p => p.id) }),
+          l.layout,
+          panels.filter(p => p.detached || p.popout).map(p => p.id),
+        ),
+      };
+    });
   };
 
   const moveDetached = (id: string, box: PixelBounds) => patchPanel(id, p => ({ ...p, detached: box }));
@@ -950,18 +1007,33 @@ const PulseWorkspace = () => {
     const minW = MIN_UNITS.w;
     const minH = MIN_UNITS.h;
     let announced = '';
-    mutate(l => ({
-      ...l,
-      layout: l.layout.map(g => {
-        if (g.i !== id) return g;
-        const w = Math.max(minW, Math.min(GRID_COLS, g.w + dw));
-        const h = Math.max(minH, g.h + dh);
-        const x = Math.max(0, Math.min(GRID_COLS - w, g.x + dx));
-        const y = Math.max(0, g.y + dy);
-        announced = dw || dh ? `${w} by ${h}` : `column ${x + 1}, row ${y + 1}`;
-        return { ...g, x, y, w, h };
-      }),
-    }));
+    mutate(l => {
+      const away = l.panels.filter(p => p.detached || p.popout).map(p => p.id);
+      const awaySet = new Set(away);
+      const moved = l.layout
+        .filter(g => !awaySet.has(g.i))
+        .map(g => {
+          if (g.i !== id) return g;
+          const w = Math.max(minW, Math.min(GRID_COLS, g.w + dw));
+          const h = Math.max(minH, g.h + dh);
+          const x = Math.max(0, Math.min(GRID_COLS - w, g.x + dx));
+          const y = Math.max(0, g.y + dy);
+          announced = dw || dh ? `${w} by ${h}` : `column ${x + 1}, row ${y + 1}`;
+          return { ...g, x, y, w, h };
+        });
+      // Tile the keyboard path too. It wrote straight to the layout and never
+      // went near `tile`, so Shift+Arrow left exactly the dead bands a mouse
+      // drag now removes automatically — the keyboard promised equivalent
+      // resizing and quietly delivered a worse desk.
+      return {
+        ...l,
+        layout: mergeLayout(
+          tile(moved, { hold: [id], noGrow: l.panels.filter(p => p.minimized).map(p => p.id) }),
+          l.layout,
+          away,
+        ),
+      };
+    });
     return announced;
   };
 
@@ -982,7 +1054,7 @@ const PulseWorkspace = () => {
     mutate(l => {
       const docked = l.layout.filter(g => l.panels.some(p => p.id === g.i && !p.detached && !p.popout));
       const before = deadSpace(docked);
-      const packed = tile(docked);
+      const packed = tile(docked, { noGrow: l.panels.filter(p => p.minimized).map(p => p.id) });
       toast.info(
         before <= 0.001
           ? 'No dead space to reclaim'
