@@ -6,8 +6,36 @@ import type { Layout } from 'react-grid-layout';
  * A panel carries an optional per-panel `ticker`; when unset it follows the
  * workspace's global ticker.
  */
-export const WORKSPACE_VERSION = 1;
+export const WORKSPACE_VERSION = 2;
+/**
+ * The storage key is frozen at `_v1` on purpose, and the schema version rides
+ * INSIDE the payload. Renaming this key does not migrate a saved desk, it
+ * orphans it — the old value stays in localStorage forever and the user simply
+ * finds their layouts gone, with nothing logged and no test red. Version the
+ * contents, migrate them in detach.ts, and leave the key alone.
+ */
 export const PULSE_STORAGE_KEY = 'slayer_pulse_workspace_v1';
+
+/** A free-floating panel's box, in CSS pixels relative to the desk surface. */
+export interface PixelBounds {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * A window box in VIRTUAL DESKTOP coordinates, which is the space the Window
+ * Management API reports and the space window.open expects. `left` is negative
+ * for a monitor sitting to the left of the primary — that is not an error to
+ * normalise away, it is how a second monitor is addressed.
+ */
+export interface ScreenBox {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
 
 export interface PulsePanel {
   id: string;
@@ -17,6 +45,18 @@ export interface PulsePanel {
   minimized?: boolean;
   /** Height to restore to when un-minimized */
   restoreH?: number;
+  /**
+   * Floating inside the workspace, above the grid, at these pixels. Absent
+   * means docked. The panel keeps its entry in `layout` while detached so
+   * re-docking returns it to the cell it left rather than the bottom row.
+   */
+  detached?: PixelBounds;
+  /**
+   * Open in its own OS window at this box. Saved with the layout, so restoring
+   * a layout reopens the window on the monitor it was on. Absent means it is
+   * not popped out.
+   */
+  popout?: ScreenBox;
 }
 
 export interface PulseLayout {

@@ -26,6 +26,10 @@ import {
   Pencil,
   Search,
   Check,
+  ExternalLink,
+  PictureInPicture2,
+  Anchor,
+  Monitor,
 } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
@@ -48,10 +52,17 @@ import {
   PULSE_STORAGE_KEY,
   WORKSPACE_VERSION,
   clonePreset,
+  type PixelBounds,
   type PulseLayout,
   type PulsePanel,
   type PulseWorkspaceState,
+  type ScreenBox,
 } from './presets';
+import { boundsFromGrid, boundsOnScreen, clampBounds, mergeLayout, migrateWorkspace, screenIndexOf } from './detach';
+import { useScreens, type DisplayInfo } from './useScreens';
+import PopoutPanel from './PopoutPanel';
+import { openPanelWindow } from './popoutWindow';
+import DetachedPanel from './DetachedPanel';
 
 const Grid = WidthProvider(RGL);
 /** Grid columns — shared by the layout and the keyboard nudge clamp. */
@@ -127,10 +138,13 @@ function loadState(): PulseWorkspaceState {
   try {
     const raw = localStorage.getItem(PULSE_STORAGE_KEY);
     if (!raw) return freshState();
-    const parsed = JSON.parse(raw) as PulseWorkspaceState;
-    if (parsed.version !== WORKSPACE_VERSION || !Array.isArray(parsed.layouts) || parsed.layouts.length === 0) {
-      return freshState();
-    }
+    // Migrate rather than discard. This used to compare the stored version to
+    // WORKSPACE_VERSION and hand back a fresh workspace on any mismatch, which
+    // meant the next schema bump would delete every desk the user had built,
+    // silently, with nothing red anywhere. migrateWorkspace returns null only
+    // for data it genuinely cannot read.
+    const parsed = migrateWorkspace(JSON.parse(raw) as PulseWorkspaceState);
+    if (!parsed) return freshState();
     // Drop panels whose keys no longer exist in the registry, then re-read every
     // size floor from the registry (see hydrateLayout).
     parsed.layouts = parsed.layouts.map(l => {
@@ -342,7 +356,20 @@ interface PanelChromeHandlers {
   onClose: (panelId: string) => void;
   /** Keyboard move/resize. Returns the new position or size, for announcing. */
   onNudge: (panelId: string, dx: number, dy: number, dw: number, dh: number) => string;
+  /** Float free of the grid, or snap back into the cell it left. */
+  onDetach: (panelId: string) => void;
+  onDock: (panelId: string) => void;
+  /** Open in its own OS window. `display` places it on a specific monitor. */
+  onPopout: (panelId: string, display?: DisplayInfo) => void;
+  /** Displays available to place a pop-out on; one entry means no picker. */
+  displays: DisplayInfo[];
+  requestDisplays: () => void;
 }
+
+/** One class for every icon button in the panel header. It was repeated
+    verbatim seven times, and the copies had already drifted. */
+const chromeBtn =
+  'p-1.5 rounded text-textMuted hover:text-textPrimary transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60';
 
 /** Panel header — title, per-panel ticker, a live quote, and edit/maximize
     affordances. The quote makes every panel read as a live instrument the way a
@@ -354,6 +381,7 @@ const PanelChrome = ({
   price,
   changePct,
   maximizedView,
+  placement = 'docked',
   h,
 }: {
   panelId: string;
@@ -362,11 +390,16 @@ const PanelChrome = ({
   price?: number;
   changePct?: number;
   maximizedView?: boolean;
+  /** Where this panel is living. Drives which of detach/dock/pop-out show. */
+  placement?: 'docked' | 'detached' | 'popped';
   h: PanelChromeHandlers;
 }) => {
   const def = pulsePanelByKey(panelKey);
   const [nudged, setNudged] = useState('');
-  const draggable = !maximizedView && h.editLayout;
+  // A detached panel has its own drag strip and a popped-out one has the OS
+  // window's title bar, so neither takes the grid's drag handle.
+  const draggable = !maximizedView && placement === 'docked' && h.editLayout;
+  const title = def?.title ?? panelKey;
   const up = (changePct ?? 0) >= 0;
   return (
     <div className={`${draggable ? 'widget-drag cursor-grab active:cursor-grabbing' : ''} flex items-center gap-2 px-3.5 h-10 border-b border-borderSubtle bg-white/[0.015] shrink-0 select-none`}>
@@ -425,24 +458,59 @@ const PanelChrome = ({
       <div className="ml-auto flex items-center gap-0.5 shrink-0" onMouseDown={e => e.stopPropagation()}>
         {draggable && (
           <>
-            <button onClick={() => h.onDuplicate(panelId)} title="Duplicate" aria-label={`Duplicate ${def?.title ?? panelKey} panel`} className="p-1.5 rounded text-textMuted hover:text-textPrimary transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60">
+            <button onClick={() => h.onDuplicate(panelId)} title="Duplicate" aria-label={`Duplicate ${title} panel`} className={chromeBtn}>
               <Copy className="w-3 h-3" />
             </button>
-            <button onClick={() => h.onMinimize(panelId)} title="Minimize" aria-label={`Minimize ${def?.title ?? panelKey} panel`} className="p-1.5 rounded text-textMuted hover:text-textPrimary transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60">
+            <button onClick={() => h.onMinimize(panelId)} title="Minimize" aria-label={`Minimize ${title} panel`} className={chromeBtn}>
               <Minus className="w-3.5 h-3.5" />
             </button>
           </>
         )}
-        <button
-          onClick={() => h.onMaximize(maximizedView ? null : panelId)}
-          title={maximizedView ? 'Restore' : 'Maximize'}
-          aria-label={`${maximizedView ? 'Restore' : 'Maximize'} ${def?.title ?? panelKey} panel`}
-          className="p-1.5 rounded text-textMuted hover:text-textPrimary transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60"
-        >
-          {maximizedView ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3 h-3" />}
-        </button>
-        {draggable && (
-          <button onClick={() => h.onClose(panelId)} title="Close" aria-label={`Close ${def?.title ?? panelKey} panel`} className="p-1.5 rounded text-textMuted hover:text-bear transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60">
+
+        {/* Window placement. Available whether or not Customize is on: moving a
+            panel to another monitor is how the desk is USED, not how it is
+            built, and gating it behind edit mode would be the same mistake as
+            gating the ticker switcher. Maximized is the one exclusion — there
+            is no grid cell to come back to mid-maximize. */}
+        {!maximizedView && placement !== 'popped' && (
+          <>
+            <button
+              onClick={() => (placement === 'detached' ? h.onDock(panelId) : h.onDetach(panelId))}
+              title={placement === 'detached' ? 'Dock back into the grid' : 'Detach — float free of the grid'}
+              aria-label={placement === 'detached' ? `Dock ${title} panel back into the grid` : `Detach ${title} panel from the grid`}
+              className={chromeBtn}
+            >
+              {placement === 'detached' ? <Anchor className="w-3.5 h-3.5" /> : <PictureInPicture2 className="w-3.5 h-3.5" />}
+            </button>
+            <button
+              onClick={() => h.onPopout(panelId)}
+              title={h.displays.length > 1 ? `Pop out to ${h.displays.find(d => !d.isCurrent)?.label ?? 'another display'}` : 'Pop out into its own window'}
+              aria-label={`Pop ${title} panel out into its own window`}
+              className={chromeBtn}
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+            </button>
+          </>
+        )}
+
+        {placement === 'popped' && (
+          <button onClick={() => h.onDock(panelId)} title="Return to the desk" aria-label={`Return ${title} panel to the desk`} className={chromeBtn}>
+            <Anchor className="w-3.5 h-3.5" />
+          </button>
+        )}
+
+        {placement !== 'popped' && (
+          <button
+            onClick={() => h.onMaximize(maximizedView ? null : panelId)}
+            title={maximizedView ? 'Restore' : 'Maximize'}
+            aria-label={`${maximizedView ? 'Restore' : 'Maximize'} ${title} panel`}
+            className={chromeBtn}
+          >
+            {maximizedView ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3 h-3" />}
+          </button>
+        )}
+        {(draggable || placement === 'detached') && (
+          <button onClick={() => h.onClose(panelId)} title="Close" aria-label={`Close ${title} panel`} className={`${chromeBtn} hover:text-bear`}>
             <X className="w-3.5 h-3.5" />
           </button>
         )}
@@ -502,6 +570,23 @@ const PulseWorkspace = () => {
   // cross-page "view on chart" deep-link (Exposure Profile / Ranked Targets).
   const [focus, setFocus] = useState<{ ticker: string; price: number } | null>(null);
   const counterRef = useRef(1);
+
+  // ---- out-of-grid panels -------------------------------------------------
+  /** Live handles on the pop-out windows. Deliberately NOT persisted: a Window
+      cannot be serialised, and after a reload the browser will not let us
+      reopen one without a fresh gesture. The layout remembers the BOX; this map
+      remembers the window that is currently showing it. */
+  const [popWins, setPopWins] = useState<Map<string, Window>>(() => new Map());
+  /** Stacking order for floating panels — last touched sits on top. */
+  const [zOrder, setZOrder] = useState<Record<string, number>>({});
+  const zTop = useRef(10);
+  /** The desk surface, measured so a detaching panel keeps its exact box. */
+  const deskRef = useRef<HTMLDivElement | null>(null);
+  const { displays, granted: displaysGranted, request: requestDisplays, supported: supportsDisplays } = useScreens();
+  /** Which monitor new pop-outs open on. Held by label rather than index, since
+      unplugging a monitor renumbers the list. */
+  const [popoutTarget, setPopoutTarget] = useState<string | null>(null);
+  const [winMenuOpen, setWinMenuOpen] = useState(false);
 
   const active = ws.layouts.find(l => l.id === ws.activeId) ?? ws.layouts[0];
   // Below lg the 12-col drag grid is unusable on a phone — stack instead.
@@ -688,7 +773,109 @@ const PulseWorkspace = () => {
       };
     });
 
-  const onLayoutChange = (next: Layout[]) => mutate(l => ({ ...l, layout: next }));
+  /**
+   * The grid only ever reports the panels it is rendering, so writing `next`
+   * straight back DELETES the cell of every panel that is currently detached or
+   * popped out. The panel then docks back as an item RGL has never seen and
+   * lands at the default 1x1 in the top-left corner — a chart collapsed to a
+   * stub, which is what the whole "keeps its layout entry while away" contract
+   * was supposed to prevent. Carry the absent cells across untouched.
+   */
+  const onLayoutChange = (next: Layout[]) =>
+    mutate(l => ({
+      ...l,
+      layout: mergeLayout(
+        next,
+        l.layout,
+        l.panels.filter(p => p.detached || p.popout).map(p => p.id),
+      ),
+    }));
+
+  // ---- placement: docked ⇄ detached ⇄ popped out --------------------------
+  /**
+   * A panel keeps its `layout` entry the whole time it is away, so docking
+   * returns it to the cell it left rather than to the bottom of the grid. The
+   * grid simply does not render it while `detached` or `popout` is set.
+   */
+  const patchPanel = (id: string, patch: (p: PulsePanel) => PulsePanel) =>
+    mutate(l => ({ ...l, panels: l.panels.map(p => (p.id === id ? patch(p) : p)) }));
+
+  const detachPanel = (id: string) => {
+    const geo = active.layout.find(g => g.i === id);
+    const surface = deskRef.current;
+    if (!geo || !surface) return;
+    // Hand it the pixel box it already occupies, so it lifts off the grid
+    // exactly where it was standing instead of jumping to a corner.
+    const box = clampBounds(boundsFromGrid(geo, surface.clientWidth), {
+      w: surface.clientWidth,
+      h: Math.max(surface.clientHeight, 400),
+    });
+    bumpZ(id);
+    patchPanel(id, p => ({ ...p, detached: box, popout: undefined }));
+  };
+
+  const dockPanel = (id: string) => {
+    closePopout(id);
+    patchPanel(id, p => ({ ...p, detached: undefined, popout: undefined }));
+  };
+
+  const moveDetached = (id: string, box: PixelBounds) => patchPanel(id, p => ({ ...p, detached: box }));
+
+  /**
+   * Pop a panel into its own window.
+   *
+   * `window.open` has to happen inside this call stack, which is still the
+   * click's, because a popup inherits the opener's user activation and an
+   * activation does not survive into an effect. That is also why the display
+   * list is requested lazily here rather than on mount: the Window Management
+   * permission prompt is itself gesture-gated.
+   */
+  const popoutPanel = (id: string, display?: DisplayInfo) => {
+    const panel = active.panels.find(p => p.id === id);
+    if (!panel) return;
+    const target = display ?? displays.find(d => d.label === popoutTarget) ?? displays.find(d => d.isCurrent) ?? displays[0];
+    const box = panel.popout ?? boundsOnScreen(target, 0.55);
+    const def = pulsePanelByKey(panel.key);
+    const title = `${def?.title ?? panel.key} · ${panel.ticker ?? activeTicker} · Slayer`;
+    const win = openPanelWindow(box, id, title);
+    if (!win) {
+      toast.warn('Your browser blocked the pop-out window. Allow pop-ups for this site, then try again.');
+      return;
+    }
+    setPopWins(m => new Map(m).set(id, win));
+    patchPanel(id, p => ({ ...p, popout: box, detached: undefined }));
+    // Ask for the real display list AFTER the window is open, so the next
+    // pop-out can offer a monitor picker. Doing it before would spend the
+    // gesture on the permission prompt and lose the window.
+    if (supportsDisplays && !displaysGranted) void requestDisplays();
+  };
+
+  /** Drop our handle on a pop-out and close it if it is still standing. */
+  const closePopout = (id: string) =>
+    setPopWins(m => {
+      const win = m.get(id);
+      if (!win) return m;
+      if (!win.closed) win.close();
+      const next = new Map(m);
+      next.delete(id);
+      return next;
+    });
+
+  /** The user closed the window from its own title bar. The panel comes home
+      rather than vanishing — a closed window is not a deleted panel. */
+  const onPopoutClosed = (id: string) => {
+    setPopWins(m => {
+      if (!m.has(id)) return m;
+      const next = new Map(m);
+      next.delete(id);
+      return next;
+    });
+    patchPanel(id, p => ({ ...p, popout: undefined }));
+  };
+
+  const onPopoutMoved = (id: string, box: ScreenBox) => patchPanel(id, p => ({ ...p, popout: box }));
+
+  const bumpZ = (id: string) => setZOrder(z => ({ ...z, [id]: (zTop.current += 1) }));
 
   /**
    * Keyboard move/resize. react-grid-layout ships no keyboard path — its drag
@@ -789,6 +976,39 @@ const PulseWorkspace = () => {
 
   const maximized = maximizedId ? active.panels.find(p => p.id === maximizedId) : null;
 
+  // ---- panel placement, derived -------------------------------------------
+  /** Only docked panels go into the grid. A detached or popped-out panel keeps
+      its `layout` entry so it can come home to the same cell, but the grid must
+      not render it or it appears in two places at once. */
+  const dockedPanels = active.panels.filter(p => !p.detached && !p.popout);
+  const dockedLayout = active.layout.filter(g => dockedPanels.some(p => p.id === g.i));
+  const detachedPanels = active.panels.filter(p => p.detached);
+  const outCount = active.panels.filter(p => p.detached || p.popout).length;
+  /**
+   * Panels the layout says are popped out but which have no live window —
+   * after a reload, or after the layout was switched away and back. They cannot
+   * be reopened automatically: `window.open` without a user gesture is exactly
+   * what a pop-up blocker exists to stop, and a silently-swallowed window would
+   * read as the feature being broken. So they are offered as one button.
+   */
+  const reopenable = active.panels.filter(p => p.popout && !popWins.has(p.id));
+
+  /**
+   * Windows belong to the layout that opened them. Switching desk profiles has
+   * to take its windows with it, or the second monitor keeps showing a panel
+   * from a layout that is no longer on screen.
+   */
+  useEffect(() => {
+    return () => {
+      popWins.forEach(w => {
+        if (!w.closed) w.close();
+      });
+    };
+    // Intentionally keyed on the layout id alone: this is a teardown for
+    // "the active desk changed", not for "the window map changed".
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active.id]);
+
   // ---- add-panel search ---------------------------------------------------
   // Reset the query each time the menu opens for a clean search.
   useEffect(() => {
@@ -835,6 +1055,11 @@ const PulseWorkspace = () => {
     onMaximize: setMaximizedId,
     onClose: removePanel,
     onNudge: nudgePanel,
+    onDetach: detachPanel,
+    onDock: dockPanel,
+    onPopout: popoutPanel,
+    displays,
+    requestDisplays: () => void requestDisplays(),
   };
 
   // Live quote for a panel's ticker (scan cadence — no per-second header churn).
@@ -1027,12 +1252,145 @@ const PulseWorkspace = () => {
               <Pencil className="w-3.5 h-3.5" /> Customize
             </button>
           )}
+          {/* Windows — where pop-outs land, and how to get them back. Only
+              earns a slot once there is something to say: a panel is out, or
+              the browser can actually place windows on a chosen monitor. */}
+          {(outCount > 0 || supportsDisplays) && (
+            <div className="relative">
+              <button
+                onClick={() => {
+                  setWinMenuOpen(o => !o);
+                  // Opening the menu IS the gesture the permission prompt needs.
+                  if (supportsDisplays && !displaysGranted) void requestDisplays();
+                }}
+                title="Window placement and pop-outs"
+                aria-haspopup="menu"
+                aria-expanded={winMenuOpen}
+                className={`${barBtn} ${outCount > 0 ? 'text-select' : ''}`}
+              >
+                <Monitor className="w-3.5 h-3.5" />
+                {outCount > 0 && <span className="ml-1 font-mono text-micro tnum">{outCount}</span>}
+              </button>
+              {winMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setWinMenuOpen(false)} />
+                  <div role="menu" className="absolute right-0 top-full mt-1 z-50 w-72 inst-surface rounded-md shadow-overlay p-1.5 flex flex-col gap-0.5">
+                    {displays.length > 1 && (
+                      <>
+                        <div className="px-2 py-1 font-mono text-micro uppercase tracking-widest text-textMuted">New pop-outs open on</div>
+                        {displays.map(d => {
+                          const on = d.label === (popoutTarget ?? displays.find(x => x.isCurrent)?.label);
+                          return (
+                            <button
+                              key={d.label}
+                              role="menuitemradio"
+                              aria-checked={on}
+                              onClick={() => setPopoutTarget(d.label)}
+                              className="flex items-center gap-2 px-2 py-1.5 rounded text-left text-label text-textSecondary hover:bg-rowHover hover:text-textPrimary transition-colors"
+                            >
+                              <Check className={`w-3 h-3 shrink-0 ${on ? 'text-select' : 'opacity-0'}`} />
+                              <span className="truncate">{d.label}</span>
+                              <span className="ml-auto font-mono text-micro text-textMuted tnum shrink-0">
+                                {d.width}×{d.height}
+                              </span>
+                            </button>
+                          );
+                        })}
+                        <div className="h-px bg-borderSubtle my-1" />
+                      </>
+                    )}
+                    {reopenable.length > 0 && (
+                      <button
+                        role="menuitem"
+                        onClick={() => {
+                          // One gesture, every window: the blocker counts the
+                          // click, not the windows, so reopening a saved
+                          // multi-monitor desk works in a single press.
+                          reopenable.forEach(p => popoutPanel(p.id));
+                          setWinMenuOpen(false);
+                        }}
+                        className="flex items-center gap-2 px-2 py-1.5 rounded text-left text-label text-textSecondary hover:bg-rowHover hover:text-textPrimary transition-colors"
+                      >
+                        <ExternalLink className="w-3 h-3 shrink-0" />
+                        Reopen {reopenable.length} saved {reopenable.length === 1 ? 'window' : 'windows'}
+                      </button>
+                    )}
+                    {outCount > 0 && (
+                      <>
+                        <div className="px-2 py-1 font-mono text-micro uppercase tracking-widest text-textMuted">Out of the grid</div>
+                        {active.panels
+                          .filter(p => p.detached || p.popout)
+                          .map(p => {
+                            // Name the actual monitor, not just "popped out".
+                            // With three displays, "which window is where" is
+                            // the entire question this menu exists to answer.
+                            const at = p.detached
+                              ? 'floating on the desk'
+                              : // A saved box is not an open window. Naming the
+                                // display for a pop-out that no reload has
+                                // reopened yet would claim a panel is showing
+                                // on a monitor where there is nothing.
+                                !popWins.has(p.id)
+                                ? 'saved, not open'
+                                : (displays[screenIndexOf(p.popout!, displays)]?.label ?? 'another display');
+                            return (
+                              <button
+                                key={p.id}
+                                role="menuitem"
+                                onClick={() => {
+                                  dockPanel(p.id);
+                                  setWinMenuOpen(false);
+                                }}
+                                className="flex items-center gap-2 px-2 py-1.5 rounded text-left text-label text-textSecondary hover:bg-rowHover hover:text-textPrimary transition-colors"
+                                title="Bring this panel back to the grid"
+                              >
+                                <Anchor className="w-3 h-3 shrink-0" />
+                                <span className="truncate">{pulsePanelByKey(p.key)?.title ?? p.key}</span>
+                                <span className="ml-auto text-micro text-textMuted shrink-0 truncate max-w-[9rem]">{at}</span>
+                              </button>
+                            );
+                          })}
+                        <div className="h-px bg-borderSubtle my-1" />
+                        <button
+                          role="menuitem"
+                          onClick={() => {
+                            active.panels.filter(p => p.detached || p.popout).forEach(p => dockPanel(p.id));
+                            setWinMenuOpen(false);
+                          }}
+                          className="flex items-center gap-2 px-2 py-1.5 rounded text-left text-label text-textSecondary hover:bg-rowHover hover:text-textPrimary transition-colors"
+                        >
+                          <Anchor className="w-3 h-3 shrink-0" />
+                          Bring every panel back
+                        </button>
+                      </>
+                    )}
+                    {!supportsDisplays && (
+                      <p className="px-2 py-1.5 text-micro text-textMuted leading-relaxed">
+                        This browser cannot place a window on a chosen monitor. Pop-outs open here and can be dragged
+                        across; where you leave them is saved with the layout.
+                      </p>
+                    )}
+                    {outCount === 0 && reopenable.length === 0 && displays.length <= 1 && supportsDisplays && (
+                      <p className="px-2 py-1.5 text-micro text-textMuted leading-relaxed">
+                        One display detected. Pop a panel out with the ⧉ button in its header.
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
           <button onClick={() => setFullscreen(f => !f)} title="Full-screen (F)" className={barBtn}>
             {fullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
           </button>
         </div>
       </div>
 
+      {/* The desk surface. `relative` is load-bearing: detached panels are
+          positioned against this box, and their saved coordinates mean nothing
+          without it. Measured on the ref so a panel lifting out of the grid
+          keeps the exact pixel box it had while docked. */}
+      <div ref={deskRef} className={`relative ${fullscreen ? 'flex-1 min-h-0 flex flex-col' : ''}`}>
       {/* Maximized single panel */}
       {maximized ? (
         <div
@@ -1098,7 +1456,7 @@ const PulseWorkspace = () => {
             transition={{ duration: DUR.slow, ease: EASE }}
           >
             <Grid
-              layout={active.layout}
+              layout={dockedLayout}
               cols={GRID_COLS}
               rowHeight={64}
               margin={[12, 12]}
@@ -1109,7 +1467,7 @@ const PulseWorkspace = () => {
               isResizable={editLayout}
               onLayoutChange={onLayoutChange}
             >
-              {active.panels.map(p => {
+              {dockedPanels.map(p => {
                 const ticker = p.ticker ?? activeTicker;
                 const minimized = p.minimized;
                 return (
@@ -1123,6 +1481,63 @@ const PulseWorkspace = () => {
           </motion.div>
         </AnimatePresence>
       )}
+
+      {/* Floating panels, above the grid and inside the desk. Not rendered
+          while one panel is maximized — a full-bleed panel with boxes hovering
+          over it is neither of the two things the user asked for. */}
+      {!maximized &&
+        isDesktop &&
+        detachedPanels.map(p => {
+          const ticker = p.ticker ?? activeTicker;
+          const surface = deskRef.current;
+          return (
+            <DetachedPanel
+              key={p.id}
+              bounds={p.detached!}
+              viewport={{ w: surface?.clientWidth ?? 1280, h: Math.max(surface?.clientHeight ?? 720, 400) }}
+              z={zOrder[p.id] ?? 10}
+              title={pulsePanelByKey(p.key)?.title ?? p.key}
+              onChange={b => moveDetached(p.id, b)}
+              onFocus={() => bumpZ(p.id)}
+            >
+              <PanelChrome
+                panelId={p.id}
+                panelKey={p.key}
+                ticker={ticker}
+                price={snapFor(ticker)?.spot}
+                changePct={snapFor(ticker)?.changePercent}
+                placement="detached"
+                h={chromeHandlers}
+              />
+              <div className="flex-grow min-h-0 overflow-hidden">{renderPanelBody(p.key, ticker)}</div>
+            </DetachedPanel>
+          );
+        })}
+      </div>
+
+      {/* Popped-out panels. Rendered through a portal into their own window, so
+          they stay in THIS React tree and keep ticking off the one shared
+          MarketDataContext — two React roots would mean two simulators and two
+          prices for the same symbol. */}
+      {[...popWins.entries()].map(([id, win]) => {
+        const p = active.panels.find(x => x.id === id);
+        if (!p) return null;
+        const ticker = p.ticker ?? activeTicker;
+        return (
+          <PopoutPanel key={id} win={win} onClosed={() => onPopoutClosed(id)} onMoved={box => onPopoutMoved(id, box)}>
+            <PanelChrome
+              panelId={id}
+              panelKey={p.key}
+              ticker={ticker}
+              price={snapFor(ticker)?.spot}
+              changePct={snapFor(ticker)?.changePercent}
+              placement="popped"
+              h={chromeHandlers}
+            />
+            <div className="flex-grow min-h-0 overflow-hidden">{renderPanelBody(p.key, ticker)}</div>
+          </PopoutPanel>
+        );
+      })}
     </div>
   );
 };

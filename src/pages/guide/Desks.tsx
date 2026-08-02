@@ -48,6 +48,14 @@ const DESKS: DeskDoc[] = [
     controls: [
       <><span className="text-textPrimary">Customize</span> — drag, resize and add panels are off until you enter it;
       outside Customize the desk is chromeless. Your layout is saved in your browser.</>,
+      <>Every panel header carries <span className="text-textPrimary">Detach</span> and{' '}
+      <span className="text-textPrimary">Pop out</span>, both available without entering Customize. Detach floats a panel
+      free of the grid; pop out gives it its own window you can drag to a second monitor. Either way the panel keeps
+      running off the same scan, and docking it returns it to the cell it left.</>,
+      <>The <span className="text-textPrimary">Windows</span> menu in the toolbar lists whatever is out of the grid and
+      where, brings it all back in one press, and — in browsers that allow it — picks which display new pop-outs open on.
+      Window positions are saved with the layout; after a reload the menu offers to reopen them, since a browser will not
+      let a page open windows without a click.</>,
       <>The <span className="text-textPrimary">Views</span> menu carries fourteen ready workspaces, Scalper, Swing,
       Macro and Earnings among them. Presets stay restorable however you edit them.</>,
       <>Each panel has its own ticker field, so you can watch SPY and NVDA side by side.</>,
