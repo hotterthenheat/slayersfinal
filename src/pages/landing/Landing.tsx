@@ -10,7 +10,7 @@
 import { useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowRight, Check, ChevronDown } from 'lucide-react';
+import { ArrowRight, Check, ChevronDown, PlayCircle } from 'lucide-react';
 import { SEED_IDEAS } from '../../data/community';
 import { useLaunch } from '../../components/layout/LaunchTransition';
 import SiteFooter from '../../components/layout/SiteFooter';
@@ -275,9 +275,19 @@ const Landing = () => {
               section, and which the scroll cue directly below already covers.
               Two affordances that mean different things were doing the same
               jump; this one now lands on the section its label promises. */}
+          {/* The trailer is a controlled entry, not a replacement front door:
+              the launch button still owns the primary path into the terminal.
+              This sits beside it for the visitor who would rather be shown the
+              system working than read about it. */}
+          <Link
+            to="/trailer"
+            className="pointer-events-auto inline-flex items-center gap-2 px-5 py-2.5 rounded-md border border-borderMuted bg-canvas/40 font-mono text-data uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-rowHover transition-colors"
+          >
+            <PlayCircle className="w-4 h-4" /> Watch terminal trailer
+          </Link>
           <a
             href="#live"
-            className="pointer-events-auto inline-flex items-center px-5 py-2.5 rounded-md border border-borderMuted bg-canvas/40 font-mono text-data uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-rowHover transition-colors"
+            className="pointer-events-auto inline-flex items-center px-5 py-2.5 rounded-md font-mono text-data uppercase tracking-wider text-textMuted hover:text-textPrimary transition-colors"
           >
             See the panels
           </a>
