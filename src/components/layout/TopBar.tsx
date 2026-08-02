@@ -19,6 +19,7 @@ import AnimatedNumber from '../ui/AnimatedNumber';
 import TickerSearch from '../ui/TickerSearch';
 import { NAV_GROUPS, itemsByGroup, NAV_ITEMS, type NavGroup, type NavItem } from './nav';
 import { DUR, EASE, PILL } from '../../lib/motion';
+import { marketClock } from '../../core/calendar';
 
 interface TopBarProps {
   onOpenPalette: () => void;
@@ -47,18 +48,38 @@ const Wordmark = ({ onClick, size = 'sm' }: { onClick: (e: React.MouseEvent) => 
   </a>
 );
 
+/**
+ * Routes where the active symbol actually drives the page.
+ *
+ * The chip used to render on all 21 shell routes and, measured by switching it
+ * and diffing the rendered text, changed six of them. On the Guide and Legal
+ * pages it was a live-looking quote decorating a help article and a legal
+ * document, which is the one thing this product must not imply.
+ *
+ * Pinpoint is listed whole. Its Stress tab looked unscoped by that test and is
+ * not — `HedgeImpact` reads the snapshot, it just never prints the symbol. A
+ * rendered-text diff can only see what a page says out loud, so check the
+ * source before concluding a page ignores something.
+ */
+const TICKER_SCOPED = ['/pulse', '/compass', '/pinpoint', '/prove-it'];
+const tickerScoped = (path: string) =>
+  TICKER_SCOPED.some(r => path === r || path.startsWith(`${r}/`));
+
 const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
   const { activeTicker, changeTicker } = useTicker();
   const navigate = useNavigate();
   const location = useLocation();
-  const [clock, setClock] = useState(() => new Date().toLocaleTimeString('en-US', { hour12: false }));
+  const [clock, setClock] = useState(marketClock);
   const [dropdown, setDropdown] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
-    const id = setInterval(() => setClock(new Date().toLocaleTimeString('en-US', { hour12: false })), 1000);
+    const id = setInterval(() => setClock(marketClock()), 1000);
     return () => clearInterval(id);
   }, []);
+
+  // The chip is only meaningful where the page is scoped to one symbol.
+  const scoped = tickerScoped(location.pathname);
 
   // Close the mobile drawer whenever the route changes
   useEffect(() => setMobileOpen(false), [location.pathname]);
@@ -168,13 +189,29 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
         >
           <Settings className="w-3.5 h-3.5" />
         </button>
-        {/* Global ticker switcher — click the symbol from any page to change it.
-            Visible on mobile too (price/change collapse to save room). */}
-        <div className="flex items-center gap-2.5 font-mono text-caption leading-4">
-          <TickerSearch value={activeTicker} onChange={changeTicker} />
-          <LivePrice />
-        </div>
-        <span className="hidden xl:block font-mono text-caption text-textSecondary tnum select-none leading-4">{clock}</span>
+        {/* Ticker switcher — click the symbol to change what the desk is looking
+            at. Only on the desks that are actually looking at one thing. */}
+        {scoped && (
+          <div className="flex items-center gap-2.5 font-mono text-caption leading-4">
+            <TickerSearch value={activeTicker} onChange={changeTicker} />
+            <LivePrice />
+          </div>
+        )}
+        {/* The market clock, in Eastern time, with the session it is in. Both
+            parts earn their place on every route: the phase is why a desk is
+            quiet at 03:00, and it is the same answer wherever the reader is. */}
+        <span
+          className="hidden xl:flex items-center gap-2 font-mono text-caption text-textSecondary tnum select-none leading-4"
+          title={`New York time — market ${clock.label.toLowerCase()}`}
+        >
+          <span>{clock.time}</span>
+          <span className="text-micro uppercase tracking-wider text-textMuted">ET</span>
+          <span
+            className={`text-micro uppercase tracking-wider ${clock.phase === 'open' ? 'text-textSecondary' : 'text-textMuted'}`}
+          >
+            {clock.label}
+          </span>
+        </span>
       </div>
 
     </header>

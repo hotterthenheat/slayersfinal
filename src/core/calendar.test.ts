@@ -7,6 +7,7 @@ import {
   sessionsBetween,
   expiryFor,
   isoDate,
+  marketClock,
   today,
 } from './calendar';
 import { expiryLadder } from './contractQuery';
@@ -216,6 +217,68 @@ describe('the calendar has not run out', () => {
     for (const e of ladder) {
       expect(e.date.getFullYear()).toBeLessThanOrEqual(CALENDAR_THROUGH);
       expect(isTradingDay(e.date)).toBe(true);
+    }
+  });
+});
+
+/**
+ * The market clock. Every case passes an explicit instant, so these are the
+ * rare assertions in this suite that do NOT read the wall clock — which is the
+ * point: the thing under test is that the answer depends on the instant and not
+ * on where the reader happens to be sitting.
+ */
+describe('marketClock', () => {
+  // 2026-06-15 is a Monday. 14:30Z is 10:30 in New York during EDT.
+  const at = (iso: string) => marketClock(new Date(iso));
+
+  it('reports New York time regardless of the runtime zone', () => {
+    expect(at('2026-06-15T14:30:00Z').time).toBe('10:30:00');
+    expect(at('2026-06-15T14:30:00Z').day).toBe('2026-06-15');
+  });
+
+  it('follows daylight saving rather than a fixed offset', () => {
+    // January is EST (UTC-5), June is EDT (UTC-4). Same UTC clock time, one
+    // hour apart in New York — a hardcoded offset gets one of these wrong.
+    expect(at('2026-01-15T14:30:00Z').time).toBe('09:30:00');
+    expect(at('2026-06-15T14:30:00Z').time).toBe('10:30:00');
+  });
+
+  it('names each session phase at its boundaries', () => {
+    expect(at('2026-06-15T13:29:00Z').phase).toBe('pre'); // 09:29 ET
+    expect(at('2026-06-15T13:30:00Z').phase).toBe('open'); // 09:30 ET
+    expect(at('2026-06-15T19:59:00Z').phase).toBe('open'); // 15:59 ET
+    expect(at('2026-06-15T20:00:00Z').phase).toBe('after'); // 16:00 ET
+    expect(at('2026-06-15T23:59:00Z').phase).toBe('after'); // 19:59 ET
+    expect(at('2026-06-16T00:00:00Z').phase).toBe('closed'); // 20:00 ET
+    expect(at('2026-06-15T07:59:00Z').phase).toBe('closed'); // 03:59 ET
+    expect(at('2026-06-15T08:00:00Z').phase).toBe('pre'); // 04:00 ET
+  });
+
+  it('knows weekends and holidays', () => {
+    expect(at('2026-06-13T14:30:00Z').phase).toBe('weekend'); // Saturday
+    expect(at('2026-06-14T14:30:00Z').phase).toBe('weekend'); // Sunday
+    // Independence Day observed, and it is in the table this code reads.
+    const jul3 = at('2026-07-03T14:30:00Z');
+    expect(MARKET_HOLIDAYS.has(jul3.day)).toBe(true);
+    expect(jul3.phase).toBe('holiday');
+  });
+
+  it('uses the Eastern day for the holiday lookup, not the reader\'s', () => {
+    // 2026-07-03T23:00Z is 19:00 on the 3rd in New York but already the 4th in
+    // Tokyo. Reading the local date would answer for the wrong day.
+    expect(at('2026-07-03T23:00:00Z').day).toBe('2026-07-03');
+  });
+
+  it('never renders midnight as hour 24', () => {
+    expect(at('2026-06-15T04:00:00Z').time.startsWith('00:')).toBe(true); // 00:00 ET
+  });
+
+  it('carries a caption for every phase it can return', () => {
+    for (const iso of [
+      '2026-06-15T14:30:00Z', '2026-06-15T12:00:00Z', '2026-06-15T21:00:00Z',
+      '2026-06-15T02:00:00Z', '2026-06-13T14:30:00Z', '2026-07-03T14:30:00Z',
+    ]) {
+      expect(at(iso).label).toMatch(/\S/);
     }
   });
 });

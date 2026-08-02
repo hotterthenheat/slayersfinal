@@ -906,3 +906,49 @@ describe('stepMove', () => {
     expect(stepMove(start, 'a', 0, 0).layout).toEqual(start);
   });
 });
+
+describe('stepMove probes the whole edge, not a corner', () => {
+  const cell = (i: string, x: number, y: number, w: number, h: number) =>
+    ({ i, x, y, w, h, minW: MIN_UNITS.w, minH: MIN_UNITS.h });
+
+  it('sees a neighbour touching the far end of a wide edge', () => {
+    // The reported shape: the cell directly under a's left corner is empty, so
+    // a 1x1 probe found nothing and slid straight into b.
+    const desk = [cell('a', 0, 0, 6, 2), cell('b', 2, 2, 4, 2)];
+    const { layout, swappedWith } = stepMove(desk, 'a', 0, 1);
+    expect(swappedWith).toBe('b');
+    expect(overlapCount(layout)).toBe(0);
+    expect(layout.find(g => g.i === 'a')).toMatchObject({ x: 2, y: 2, w: 4, h: 2 });
+  });
+
+  it('picks the neighbour sharing the most of the pushed edge', () => {
+    // Two panels line a's south edge; the wider one wins.
+    const desk = [cell('a', 0, 0, 12, 2), cell('b', 0, 2, 3, 2), cell('c', 3, 2, 9, 2)];
+    expect(stepMove(desk, 'a', 0, 1).swappedWith).toBe('c');
+  });
+
+  it('never overlaps or overflows on ragged desks, in any direction', () => {
+    const desks = [
+      [cell('a', 0, 0, 6, 2), cell('b', 2, 2, 4, 2), cell('c', 6, 0, 6, 4), cell('d', 0, 4, 12, 2)],
+      [cell('a', 0, 0, 12, 2), cell('b', 0, 2, 3, 6), cell('c', 3, 2, 9, 3), cell('d', 3, 5, 9, 3)],
+      [cell('a', 0, 0, 4, 4), cell('b', 4, 0, 4, 2), cell('c', 8, 0, 4, 4), cell('d', 4, 2, 4, 2)],
+    ];
+    for (const desk of desks) {
+      const before = deadSpace(desk);
+      for (const g of desk) {
+        for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+          const { layout } = stepMove(desk.map(c => ({ ...c })), g.i, dx, dy);
+          expect(overlapCount(layout)).toBe(0);
+          expect(layout.every(c => c.x >= 0 && c.x + c.w <= GRID.cols)).toBe(true);
+          expect(layout).toHaveLength(desk.length);
+          expect(deadSpace(layout)).toBeLessThanOrEqual(before + 1e-9);
+        }
+      }
+    }
+  });
+
+  it('refuses a move whose destination edge would leave the grid', () => {
+    const desk = [cell('a', 8, 0, 4, 4)];
+    expect(stepMove(desk, 'a', 1, 0).layout).toEqual(desk);
+  });
+});

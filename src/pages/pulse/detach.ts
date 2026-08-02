@@ -402,16 +402,36 @@ export function stepMove(
   const cols = opts.cols ?? GRID.cols;
   const g = layout.find(x => x.i === id);
   if (!g || (!dx && !dy)) return { layout };
-  // The single cell just past the edge being pushed against.
+  // The WHOLE edge being pushed against, not its corner cell. A 1x1 probe sees
+  // only one square of it, so a panel touching the far end of a wide edge is
+  // invisible: moving (0,0,6,2) down past a neighbour at (2,2,4,2) found the
+  // empty cell (0,2), slid into the collision anyway, and handed `tile` an
+  // overlap it answers with a band reflow.
   const probe: Layout = {
     i: '',
     x: dx < 0 ? g.x - 1 : dx > 0 ? g.x + g.w : g.x,
     y: dy < 0 ? g.y - 1 : dy > 0 ? g.y + g.h : g.y,
-    w: 1,
-    h: 1,
+    w: dx ? 1 : g.w,
+    h: dy ? 1 : g.h,
   };
-  if (probe.x < 0 || probe.x >= cols || probe.y < 0) return { layout };
-  const hit = layout.find(o => o.i !== id && collides(o, probe));
+  if (probe.x < 0 || probe.x + probe.w > cols || probe.y < 0) return { layout };
+  // More than one panel can line that edge. Exchange with whichever shares the
+  // most of it — the one you are mostly pushing against. Any choice is
+  // geometrically safe (two disjoint boxes permute without overlapping and the
+  // desk's dead space is unchanged), so the job here is only to be predictable.
+  const share = (o: Layout) =>
+    Math.max(0, Math.min(o.x + o.w, probe.x + probe.w) - Math.max(o.x, probe.x)) *
+    Math.max(0, Math.min(o.y + o.h, probe.y + probe.h) - Math.max(o.y, probe.y));
+  let hit: Layout | undefined;
+  let best = 0;
+  for (const o of layout) {
+    if (o.i === id) continue;
+    const s = share(o);
+    if (s > best) {
+      best = s;
+      hit = o;
+    }
+  }
   if (hit) return { layout: swapCells(layout, id, hit.i), swappedWith: hit.i };
   const moved = layout.map(o =>
     o.i === id

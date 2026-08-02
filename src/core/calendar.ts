@@ -192,3 +192,79 @@ export function expiryFor(dte: number, from: Date = today()): Expiry {
     sessions: sessionsBetween(base, date),
   };
 }
+
+// ---- market clock --------------------------------------------------------
+
+/** Where the session is, right now. */
+export type MarketPhase = 'pre' | 'open' | 'after' | 'closed' | 'weekend' | 'holiday';
+
+export interface MarketClock {
+  /** HH:MM:SS in New York, whatever zone the viewer is in. */
+  time: string;
+  /** The ET calendar day, as a holiday-table key. */
+  day: string;
+  phase: MarketPhase;
+  /** Short caption for the phase, for rendering beside the time. */
+  label: string;
+}
+
+/**
+ * One formatter, built once. `hourCycle: 'h23'` rather than `hour12: false`,
+ * which renders midnight as "24" on some engines.
+ */
+const ET = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York',
+  hourCycle: 'h23',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  weekday: 'short',
+});
+
+const PHASE_LABEL: Record<MarketPhase, string> = {
+  pre: 'Pre-market',
+  open: 'Open',
+  after: 'After hours',
+  closed: 'Closed',
+  weekend: 'Weekend',
+  holiday: 'Holiday',
+};
+
+/**
+ * The market clock, in Eastern time, with the session it is in.
+ *
+ * The top bar used to show `new Date().toLocaleTimeString()` — the VIEWER's
+ * wall clock, with nothing saying so. Measured at one instant: 03:01 in New
+ * York, 08:01 in London, 16:01 in Tokyo. Sitting flush against a SPY quote in a
+ * terminal, an unlabelled clock reads as market time, which is the convention it
+ * was borrowing without honouring.
+ *
+ * Derived from the ET calendar day, not the viewer's: east of New York the
+ * local date is already tomorrow for part of every session, so a holiday lookup
+ * on the local date answers for the wrong day.
+ */
+export function marketClock(now: Date = new Date()): MarketClock {
+  const p: Record<string, string> = {};
+  for (const { type, value } of ET.formatToParts(now)) p[type] = value;
+  const day = `${p.year}-${p.month}-${p.day}`;
+  const time = `${p.hour}:${p.minute}:${p.second}`;
+  const mins = Number(p.hour) * 60 + Number(p.minute);
+
+  const phase: MarketPhase =
+    p.weekday === 'Sat' || p.weekday === 'Sun'
+      ? 'weekend'
+      : MARKET_HOLIDAYS.has(day)
+        ? 'holiday'
+        : mins >= 9 * 60 + 30 && mins < 16 * 60
+          ? 'open'
+          : mins >= 4 * 60 && mins < 9 * 60 + 30
+            ? 'pre'
+            : mins >= 16 * 60 && mins < 20 * 60
+              ? 'after'
+              : 'closed';
+
+  return { time, day, phase, label: PHASE_LABEL[phase] };
+}
