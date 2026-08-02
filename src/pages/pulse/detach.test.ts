@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   GRID,
   MIN_DETACHED,
+  MIN_UNITS,
   boundsFromGrid,
   boundsOnScreen,
   boxMoved,
@@ -201,6 +202,48 @@ describe('boxMoved', () => {
   });
 });
 
+describe('MIN_UNITS — small enough to pack, big enough to escape', () => {
+  const PANEL_HEADER_PX = 40;
+  const px = (units: number) => units * GRID.rowHeight + (units - 1) * GRID.marginY;
+  /** Panel width at a given column span on the narrowest desktop the grid runs
+      at (1024px breakpoint, minus the shell's own padding). */
+  const colPx = (units: number, container = 976) => {
+    const col = (container - GRID.marginX * (GRID.cols - 1)) / GRID.cols;
+    return col * units + (units - 1) * GRID.marginX;
+  };
+
+  it('is tall enough that the panel header is never clipped', () => {
+    // Measured in Chromium: at one row the 40px header is cropped and NONE of
+    // the four controls can be clicked, so the panel cannot be resized back.
+    // A floor that creates an unrecoverable state is worse than no floor.
+    expect(px(MIN_UNITS.h)).toBeGreaterThanOrEqual(PANEL_HEADER_PX);
+    expect(px(MIN_UNITS.h - 1)).toBeLessThan(PANEL_HEADER_PX);
+  });
+
+  it('is wide enough to hold the header’s control cluster', () => {
+    // Four 24px icon buttons plus the row's own padding. At one column (116px
+    // on a 1600 desk) the cluster overflows and 3 of 4 controls fall outside
+    // the panel box.
+    const CLUSTER_PX = 4 * 24 + 28;
+    expect(colPx(MIN_UNITS.w)).toBeGreaterThan(CLUSTER_PX);
+  });
+
+  it('stays far below the per-widget floors it replaced', () => {
+    // The point of the change: the old floors ran to 6 columns and 4 coarse
+    // rows. If this ever creeps back up, the dead space comes back with it.
+    expect(MIN_UNITS.w).toBeLessThanOrEqual(2);
+    expect(MIN_UNITS.h).toBeLessThanOrEqual(2);
+  });
+
+  it('still lets a row be packed to exactly 12 columns', () => {
+    // The whole complaint was rows that could not sum to 12. With a floor of 2
+    // that holds for any row a preset would ever break (up to six panels).
+    for (let n = 1; n <= Math.floor(GRID.cols / MIN_UNITS.w); n++) {
+      expect(n * MIN_UNITS.w).toBeLessThanOrEqual(GRID.cols);
+    }
+  });
+});
+
 describe('fillGaps — the dead space goes away', () => {
   it('stretches a short row out to the full 12 columns', () => {
     // The exact complaint: a row of panels that cannot be made to sum to 12
@@ -391,8 +434,12 @@ describe('migrateWorkspace', () => {
       ],
     } as PulseWorkspaceState;
     const g = migrateWorkspace(v2)!.layouts[0].layout[0];
-    expect(g.minW).toBe(1);
-    expect(g.minH).toBe(1);
+    // Two units, not the widget's own 6x4. The floor that survives is the one
+    // that keeps a panel's controls reachable, measured — not a per-widget
+    // opinion about how small its content may get.
+    expect(g.minW).toBe(MIN_UNITS.w);
+    expect(g.minH).toBe(MIN_UNITS.h);
+    expect(g.minW).toBeLessThan(6);
   });
 
   it('carries a v1 desk all the way to the current version in one call', () => {
@@ -402,7 +449,7 @@ describe('migrateWorkspace', () => {
     expect(out.version).toBe(WORKSPACE_VERSION);
     expect(out.layouts[0].panels[0].ticker).toBe('SPY');
     expect(out.layouts[0].layout[0].h).toBe(10); // 5 doubled
-    expect(out.layouts[0].layout[0].minW).toBe(1);
+    expect(out.layouts[0].layout[0].minW).toBe(MIN_UNITS.w);
   });
 
   it('upgrades a v1 desk instead of throwing it away', () => {

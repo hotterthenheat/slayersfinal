@@ -28,14 +28,28 @@ import { WORKSPACE_VERSION } from './presets';
 export const GRID = { cols: 12, rowHeight: 26, marginX: 12, marginY: 12 } as const;
 
 /**
- * The only size limit left. The registry still declares a width and height per
- * widget, but those are the size a panel is BORN at and what the auto-arrange
- * modes aim for — not a floor the user's own drag is held to. Enforcing them
- * meant a row could not be made to sum to 12, so there was always a strip of
- * canvas on the right that nothing could reach. One unit keeps a panel large
- * enough to grab and no larger.
+ * The only size limit left, and it is not a readability opinion.
+ *
+ * The registry still declares a width and height per widget, but those are the
+ * size a panel is BORN at and what the auto-arrange modes aim for — not a floor
+ * the user's drag is held to. Enforcing them meant a row could not be made to
+ * sum to 12, so there was always a strip of canvas nothing could reach.
+ *
+ * Two units is where the panel stops being able to un-resize itself. Measured
+ * in Chromium at 1600px, not guessed:
+ *
+ *   1 x 1  (116 x 26)  header clipped entirely, 0 of 4 controls reachable
+ *   1 x 2  (116 x 64)  header fits, 1 of 4 controls reachable
+ *   2 x 2  (244 x 64)  4 of 4 reachable
+ *
+ * At one unit the panel is a trap: the header is 40px so h=1 crops it, and at
+ * 116px wide the button cluster overflows the box. You could shrink a panel and
+ * then have nothing left to click to grow it back. Two units costs nothing for
+ * packing — a row of seven 116px panels is not a desk anyone wants — and it is
+ * an order of magnitude below the old floors, which demanded six columns for
+ * the Exposure Matrix alone.
  */
-export const MIN_UNITS = { w: 1, h: 1 } as const;
+export const MIN_UNITS = { w: 2, h: 2 } as const;
 
 /** Smallest a floating panel may be dragged. Below this the header controls
     start overlapping and the body has nothing left to render into. */
