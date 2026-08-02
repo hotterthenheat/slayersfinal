@@ -6,6 +6,7 @@ import {
   nextSession,
   sessionsBetween,
   expiryFor,
+  EARLY_CLOSES,
   isoDate,
   marketClock,
   today,
@@ -279,6 +280,50 @@ describe('marketClock', () => {
       '2026-06-15T02:00:00Z', '2026-06-13T14:30:00Z', '2026-07-03T14:30:00Z',
     ]) {
       expect(at(iso).label).toMatch(/\S/);
+    }
+  });
+});
+
+describe('marketClock on scheduled half-days', () => {
+  const at = (iso: string) => marketClock(new Date(iso));
+
+  it('closes the Friday after Thanksgiving at 13:00 ET', () => {
+    // 2026-11-27. 18:30Z is 13:30 in New York during EST.
+    expect(EARLY_CLOSES.has('2026-11-27')).toBe(true);
+    expect(at('2026-11-27T17:59:00Z').phase).toBe('open'); // 12:59 ET
+    expect(at('2026-11-27T18:00:00Z').phase).toBe('after'); // 13:00 ET
+    expect(at('2026-11-27T18:30:00Z').phase).toBe('after'); // was 'open' for 3 more hours
+  });
+
+  it('leaves a normal session open until 16:00', () => {
+    // The Monday after, same week, not a half-day.
+    expect(EARLY_CLOSES.has('2026-11-30')).toBe(false);
+    expect(at('2026-11-30T18:30:00Z').phase).toBe('open'); // 13:30 ET
+    expect(at('2026-11-30T21:00:00Z').phase).toBe('after'); // 16:00 ET
+  });
+
+  it('does not invent half-days where the date lands on a weekend', () => {
+    // 2027 has neither a July nor a December half-day: Jul 3 is a Saturday and
+    // Dec 24 is the OBSERVED Christmas holiday, a full close.
+    expect([...EARLY_CLOSES].filter(d => d.startsWith('2027'))).toEqual(['2027-11-26']);
+    expect(EARLY_CLOSES.has('2026-07-03')).toBe(false); // full holiday, not a half-day
+  });
+
+  it('never marks a full holiday as an early close', () => {
+    for (const d of EARLY_CLOSES) expect(MARKET_HOLIDAYS.has(d)).toBe(false);
+  });
+
+  it('covers the same years as the holiday table', () => {
+    const years = new Set([...EARLY_CLOSES].map(d => d.slice(0, 4)));
+    for (let y = 2026; y <= CALENDAR_THROUGH; y++) expect(years.has(String(y))).toBe(true);
+  });
+
+  it('lands every early close on a weekday', () => {
+    for (const d of EARLY_CLOSES) {
+      const [y, m, day] = d.split('-').map(Number);
+      const dow = new Date(y, m - 1, day).getDay();
+      expect(dow).toBeGreaterThan(0);
+      expect(dow).toBeLessThan(6);
     }
   });
 });

@@ -60,8 +60,21 @@ const Wordmark = ({ onClick, size = 'sm' }: { onClick: (e: React.MouseEvent) => 
  * not — `HedgeImpact` reads the snapshot, it just never prints the symbol. A
  * rendered-text diff can only see what a page says out loud, so check the
  * source before concluding a page ignores something.
+ *
+ * Trace is listed per tab because it genuinely splits: Dark pool and Scanner
+ * rebuild around the active symbol, Live tape and Reconstruction do not. Live
+ * tape shows the same SPY prints whichever symbol is selected, so a chip there
+ * would not be merely inert — it would say the desk is looking at something it
+ * is not, which is worse than absent.
  */
-const TICKER_SCOPED = ['/pulse', '/compass', '/pinpoint', '/prove-it'];
+const TICKER_SCOPED = [
+  '/pulse',
+  '/compass',
+  '/pinpoint',
+  '/prove-it',
+  '/trace/dark-pool',
+  '/trace/scanner',
+];
 const tickerScoped = (path: string) =>
   TICKER_SCOPED.some(r => path === r || path.startsWith(`${r}/`));
 

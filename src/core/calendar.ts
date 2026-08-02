@@ -35,6 +35,26 @@ export const MARKET_HOLIDAYS = new Set([
 ]);
 
 /**
+ * Scheduled half-days: the regular session ends at 13:00 ET, not 16:00.
+ *
+ * Same year range as the holiday table above, and the dates are computed from
+ * the three NYSE rules rather than typed from memory — the day after
+ * Thanksgiving; July 3 when both it and the 4th are weekdays; December 24 when
+ * both it and the 25th are weekdays. The gaps are the point: 2027 has neither
+ * a July nor a December half-day because those dates land on a weekend, and
+ * 2026's July 3 is a full holiday rather than a half-day because the 4th is a
+ * Saturday. Guessing the rule instead of listing the days gets those wrong.
+ */
+export const EARLY_CLOSES = new Set([
+  '2026-11-27', '2026-12-24',
+  '2027-11-26',
+  '2028-07-03', '2028-11-24',
+  '2029-07-03', '2029-11-23', '2029-12-24',
+  '2030-07-03', '2030-11-29', '2030-12-24',
+  '2031-07-03', '2031-11-28', '2031-12-24',
+]);
+
+/**
  * The last year the table above covers. `contractQuery` reads its own copy off
  * the same set, and drops every ladder rung past it rather than counting
  * Thanksgiving as a session — so when this table runs out, the expiry picker
@@ -252,17 +272,20 @@ export function marketClock(now: Date = new Date()): MarketClock {
   const day = `${p.year}-${p.month}-${p.day}`;
   const time = `${p.hour}:${p.minute}:${p.second}`;
   const mins = Number(p.hour) * 60 + Number(p.minute);
+  // Half-days end at 13:00. Reading 16:00 for every session reported "Open"
+  // for three hours after the bell on the Friday after Thanksgiving.
+  const close = EARLY_CLOSES.has(day) ? 13 * 60 : 16 * 60;
 
   const phase: MarketPhase =
     p.weekday === 'Sat' || p.weekday === 'Sun'
       ? 'weekend'
       : MARKET_HOLIDAYS.has(day)
         ? 'holiday'
-        : mins >= 9 * 60 + 30 && mins < 16 * 60
+        : mins >= 9 * 60 + 30 && mins < close
           ? 'open'
           : mins >= 4 * 60 && mins < 9 * 60 + 30
             ? 'pre'
-            : mins >= 16 * 60 && mins < 20 * 60
+            : mins >= close && mins < 20 * 60
               ? 'after'
               : 'closed';
 
