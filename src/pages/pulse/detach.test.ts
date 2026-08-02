@@ -422,6 +422,16 @@ describe('tile — shrink one panel, the others take the space', () => {
     expect(deadSpace(out)).toBe(0);
   });
 
+  it('reports a settled size that differs from the requested one, so callers must read it back', () => {
+    // The contract the keyboard announcement depends on. Shrinking a sole panel
+    // to five columns cannot stick — there is no neighbour to take the space —
+    // so `tile` grows it back to twelve. Anything that announces the REQUESTED
+    // size tells a screen-reader user a number that never reaches the screen.
+    const settled = tile([{ i: 'solo', x: 0, y: 0, w: 5, h: 4 }], { hold: ['solo'] });
+    expect(settled.find(g => g.i === 'solo')!.w).toBe(12);
+    expect(settled.find(g => g.i === 'solo')!.w).not.toBe(5);
+  });
+
   it('handles an empty desk', () => {
     expect(tile([])).toEqual([]);
   });

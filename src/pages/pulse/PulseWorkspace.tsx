@@ -901,25 +901,27 @@ const PulseWorkspace = () => {
     patchPanel(id, p => ({ ...p, detached: box, popout: undefined }));
   };
 
-  const dockPanel = (id: string) => {
-    closePopout(id);
+  /**
+   * Bring a panel back to the grid, from wherever it was.
+   *
+   * Shared by every return path. It used to live inside `dockPanel` only, so
+   * closing a pop-out from the OS TITLE BAR — which lands in `onPopoutClosed`,
+   * not here — put the panel back at its stale cell with no reconciliation at
+   * all, handing an overlapping layout to the grid. Two ways home, one of them
+   * correct, is how that kind of bug survives review.
+   */
+  const returnToGrid = (id: string) =>
     mutate(l => {
       const panels = l.panels.map(p => (p.id === id ? { ...p, detached: undefined, popout: undefined } : p));
-      // Re-tile the whole docked set, the returning panel included. Its saved
-      // cell is a HINT, not a reservation: the desk keeps itself gapless while a
-      // panel is away, so that cell has usually been absorbed by a neighbour and
-      // dropping the panel straight back onto it would overlap. Packing it in
-      // costs the exact-same-cell guarantee and buys never colliding.
+      // The saved cell is a HINT, not a reservation: the desk keeps itself
+      // gapless while a panel is away, so a neighbour has usually absorbed that
+      // space and dropping the panel straight back onto it would overlap.
       const backIds = new Set(panels.filter(p => !p.detached && !p.popout).map(p => p.id));
       const staying = l.layout.filter(g => backIds.has(g.i) && g.i !== id);
       const returning = l.layout.find(g => g.i === id);
-      // Land the returning panel BELOW everything, then let the pack lift it in.
-      //
-      // Dropping it straight onto its saved cell overlaps whatever absorbed
-      // that space while it was away, and an overlapping desk trips the band
-      // reflow — which is correct but brutal: a chart came back 244px wide,
-      // shredded into a six-panel band. Arriving underneath costs nothing, and
-      // the up-pack then slots it into the first row with room for it.
+      // Land it BELOW everything and let the up-pack lift it in. Dropping it on
+      // an occupied cell trips the band reflow, which is correct but brutal — a
+      // chart came back 244px wide, shredded into a six-panel row.
       const floor = staying.reduce((m, g) => Math.max(m, g.y + g.h), 0);
       const docked = returning ? [...staying, { ...returning, y: floor }] : staying;
       return {
@@ -932,6 +934,10 @@ const PulseWorkspace = () => {
         ),
       };
     });
+
+  const dockPanel = (id: string) => {
+    closePopout(id);
+    returnToGrid(id);
   };
 
   const moveDetached = (id: string, box: PixelBounds) => patchPanel(id, p => ({ ...p, detached: box }));
@@ -985,7 +991,7 @@ const PulseWorkspace = () => {
       next.delete(id);
       return next;
     });
-    patchPanel(id, p => ({ ...p, popout: undefined }));
+    returnToGrid(id);
   };
 
   const onPopoutMoved = (id: string, box: ScreenBox) => patchPanel(id, p => ({ ...p, popout: box }));
@@ -1000,42 +1006,42 @@ const PulseWorkspace = () => {
    * RGL re-runs its vertical compaction from it.
    */
   const nudgePanel = (id: string, dx: number, dy: number, dw: number, dh: number): string => {
-    // The keyboard path gets exactly the freedom the mouse has. It used to
-    // read the registry floor, so Shift+Arrow stopped shrinking a panel at a
-    // size the mouse is now allowed past — two different limits for the same
-    // gesture.
-    const minW = MIN_UNITS.w;
-    const minH = MIN_UNITS.h;
-    let announced = '';
-    mutate(l => {
-      const away = l.panels.filter(p => p.detached || p.popout).map(p => p.id);
-      const awaySet = new Set(away);
-      const moved = l.layout
-        .filter(g => !awaySet.has(g.i))
-        .map(g => {
-          if (g.i !== id) return g;
-          const w = Math.max(minW, Math.min(GRID_COLS, g.w + dw));
-          const h = Math.max(minH, g.h + dh);
-          const x = Math.max(0, Math.min(GRID_COLS - w, g.x + dx));
-          const y = Math.max(0, g.y + dy);
-          announced = dw || dh ? `${w} by ${h}` : `column ${x + 1}, row ${y + 1}`;
-          return { ...g, x, y, w, h };
-        });
-      // Tile the keyboard path too. It wrote straight to the layout and never
-      // went near `tile`, so Shift+Arrow left exactly the dead bands a mouse
-      // drag now removes automatically — the keyboard promised equivalent
-      // resizing and quietly delivered a worse desk.
-      return {
-        ...l,
-        layout: mergeLayout(
-          tile(moved, { hold: [id], noGrow: l.panels.filter(p => p.minimized).map(p => p.id) }),
-          l.layout,
-          away,
-        ),
-      };
-    });
-    return announced;
+    // The keyboard path gets exactly the freedom the mouse has. It used to read
+    // the registry floor, so Shift+Arrow stopped shrinking a panel at a size the
+    // mouse is now allowed past — two different limits for the same gesture.
+    const away = active.panels.filter(p => p.detached || p.popout).map(p => p.id);
+    const awaySet = new Set(away);
+    const moved = active.layout
+      .filter(g => !awaySet.has(g.i))
+      .map(g => {
+        if (g.i !== id) return g;
+        const w = Math.max(MIN_UNITS.w, Math.min(GRID_COLS, g.w + dw));
+        const h = Math.max(MIN_UNITS.h, g.h + dh);
+        return {
+          ...g,
+          w,
+          h,
+          x: Math.max(0, Math.min(GRID_COLS - w, g.x + dx)),
+          y: Math.max(0, g.y + dy),
+        };
+      });
+
+    // Tile the keyboard path too. It wrote straight to the layout and never went
+    // near `tile`, so Shift+Arrow left exactly the dead bands a mouse drag now
+    // removes automatically.
+    const settled = tile(moved, { hold: [id], noGrow: active.panels.filter(p => p.minimized).map(p => p.id) });
+    mutate(l => ({ ...l, layout: mergeLayout(settled, l.layout, away) }));
+
+    // Announce the SETTLED geometry, not the requested one. Reading it off the
+    // pre-tile box told a screen-reader user "4 by 12" while tiling immediately
+    // grew that panel back to 12 columns, because a panel alone in its row has
+    // no neighbour to give the space to. A number that never reaches the screen
+    // is worse than silence.
+    const g = settled.find(x => x.i === id);
+    if (!g) return '';
+    return dw || dh ? `${g.w} by ${g.h}` : `column ${g.x + 1}, row ${g.y + 1}`;
   };
+
 
   const doArrange = (mode: 'one' | 'cols' | 'rows' | 'quad') =>
     mutate(l => ({ ...l, layout: arrange(mode, l.panels) }));
