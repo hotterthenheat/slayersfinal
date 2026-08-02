@@ -135,11 +135,19 @@ const MetaorderScene: React.FC = () => {
                 Explanations, weighted
               </div>
               <div className="space-y-1.5">
+                {/*
+                  The four explanations are mutually exhaustive, so the numbers
+                  are a distribution and have to read as one at every frame.
+                  Scaling each by the reveal made them sum to the reveal — four
+                  probabilities totalling 50% halfway through, and the film can be
+                  paused there and left. Only the bar grows now; the number is the
+                  number.
+                */}
                 {meta.hypotheses.map((h, i) => (
-                  <div key={h.label}>
+                  <div key={h.label} style={{ opacity: probT }}>
                     <div className="flex items-baseline justify-between gap-2 font-mono text-micro">
                       <span className={i === 0 ? 'text-textPrimary' : 'text-textSecondary'}>{h.label}</span>
-                      <span className="tnum text-textPrimary">{prob(h.probability * probT)}</span>
+                      <span className="tnum text-textPrimary">{prob(h.probability)}</span>
                     </div>
                     <div className="h-[3px] rounded-full bg-white/[0.06] overflow-hidden mt-0.5">
                       <div

@@ -35,11 +35,25 @@ const Btn: React.FC<{
   </button>
 );
 
+/**
+ * The chapter bar.
+ *
+ * Eighteen segments across a phone is 15px of tappable width each — a control
+ * the rest of this transport deliberately sizes at 44px, shrunk to a third of a
+ * fingertip because the desktop layout happened to divide evenly. On compact the
+ * row scrolls instead, each chapter keeping a 44×44 hit area with the same 3px
+ * bar centred in it; on desktop nothing changes, because there the segments are
+ * wide enough already.
+ */
 export const TrailerProgress: React.FC = () => {
-  const { timeline } = useTrailer();
+  const { timeline, compact } = useTrailer();
   const { timeMs, sceneIndex, goToScene } = timeline;
   return (
-    <div className="flex items-center gap-[3px] w-full" role="group" aria-label="Trailer chapters">
+    <div
+      className={`flex items-center gap-[3px] w-full ${compact ? 'overflow-x-auto no-scrollbar' : ''}`}
+      role="group"
+      aria-label="Trailer chapters"
+    >
       {SCENES.map((s, i) => {
         const local =
           timeMs <= s.enterAtMs ? 0 : timeMs >= s.exitAtMs ? 1 : (timeMs - s.enterAtMs) / (s.exitAtMs - s.enterAtMs);
@@ -51,7 +65,9 @@ export const TrailerProgress: React.FC = () => {
             aria-label={`Scene ${i + 1} of ${SCENES.length}: ${s.product}`}
             aria-current={i === sceneIndex ? 'step' : undefined}
             title={s.product}
-            className="group relative flex-1 h-6 flex items-center focus-visible:outline-none"
+            className={`group relative flex items-center focus-visible:outline-none ${
+              compact ? 'shrink-0 min-w-[44px] min-h-[44px] px-1' : 'flex-1 h-6'
+            }`}
           >
             <span className="relative block w-full h-[3px] rounded-full bg-white/[0.09] overflow-hidden group-hover:bg-white/20 group-focus-visible:bg-white/25">
               <span

@@ -181,6 +181,10 @@ const VERDICT_TONE: Record<string, Tone> = {
   REJECTED: 'bear',
   HOLDS: 'select',
   BREAKS: 'bear',
+  // Stocks routes a thesis to an instrument; the instrument is the label.
+  OPTIONS: 'select',
+  STOCK: 'info',
+  SPREAD: 'neutral',
   'NO TRADE': 'warn',
   CONSIDERED: 'info',
   FAVOURED: 'select',

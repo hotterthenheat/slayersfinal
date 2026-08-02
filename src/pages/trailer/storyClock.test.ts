@@ -20,6 +20,7 @@ import {
 import { buildTrailerStory, LOTTO_P_GATE, STORY_SECONDS, spotAt } from './trailerStory';
 import { expiryFor, fmtMonthDay, isTradingDay } from '../../core/calendar';
 import Simulator from '../../core/simulator';
+import { bsPriceAtT } from '../../components/compass/contractTrackModel';
 
 describe('story clock', () => {
   it('never runs the session backwards', () => {
@@ -255,6 +256,48 @@ describe('contract weigher', () => {
     // closing line has a branch for it — but this should fail loudly first.
     const top = [...story.contracts].sort((a, b) => b.returnAtTarget - a.returnAtTarget)[0];
     expect(top.verdict).not.toBe('SELECTED');
+  });
+
+  it('prices on the clock its DTEs are measured in', () => {
+    /*
+      `expiryFor().dte` is CALENDAR days. Dividing it by a 252-session year handed
+      the pricer ~45% more time than the contract has, inflating every mid, greek,
+      mark and therefore the ranking. Re-derive each mid at both clocks against
+      the spot the Weigher scene shows: the calendar one has to match, the session
+      one has to be visibly richer.
+    */
+    const entrySpot = Number(
+      spotAt(story, storyUAtSceneStart('weigher') * STORY_SECONDS).toFixed(2),
+    );
+    for (const c of story.contracts) {
+      const calendar = bsPriceAtT(entrySpot, c.strike, c.iv, c.dte / 365, 'C');
+      const sessions = bsPriceAtT(entrySpot, c.strike, c.iv, c.dte / 252, 'C');
+      expect(c.mid).toBeCloseTo(Number(calendar.toFixed(2)), 2);
+      expect(sessions).toBeGreaterThan(calendar * 1.05);
+    }
+  });
+
+  it('models Lotto and Prove It at the spot their own scenes show', () => {
+    // Both were built from the session close while playing at story progress
+    // 0.78 and 0.87 — a ladder struck off a future price, and distributions
+    // centred on one with the live marker drawn over them.
+    const at = (id: string) => Number(spotAt(story, storyUAtSceneStart(id) * STORY_SECONDS).toFixed(2));
+    const close = story.path[story.path.length - 1].px;
+
+    const lottoSpot = at('lotto');
+    expect(lottoSpot).not.toBe(close);
+    // The nearest rung is the first step above the spot the scene is standing on.
+    expect(story.lotto[0].strike).toBeGreaterThan(lottoSpot);
+    expect(story.lotto[0].requiredMove).toBeCloseTo(
+      ((story.lotto[0].strike - lottoSpot) / lottoSpot) * 100,
+      2,
+    );
+
+    const proveSpot = at('proveit');
+    expect(proveSpot).not.toBe(close);
+    // The forecast band brackets the spot it was built at.
+    expect(story.proveIt.expectedLow).toBeLessThan(proveSpot);
+    expect(story.proveIt.expectedHigh).toBeGreaterThan(proveSpot);
   });
 
   it('keeps utility an expectation and IF TARGET a branch', () => {

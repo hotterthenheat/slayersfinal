@@ -646,7 +646,17 @@ function buildContracts(
   // time that kills it.
   const HORIZON_WIN = 1;
   const HORIZON_LOSS = 2;
-  const YEAR = 252;
+  /*
+    Calendar days over a calendar year.
+
+    `expiryFor().dte` is measured in CALENDAR days, and this divided it by 252 —
+    a trading-day year. That handed the pricer 11/252 of a year for an 11-day
+    contract, about 45% more time than it has, which inflated every mid, greek,
+    theta, target and stop mark, and therefore the utility ranking the scene is
+    built on. `contractTrackModel` documents the same trap: 252 and 365 are two
+    different clocks and `dte * 252/365` is the only bridge between them.
+  */
+  const YEAR = 365;
   // The setup's own probability of reaching the target before the stop — the
   // desk's claimed edge, the same number Compass shows. It is a property of the
   // underlying, so it is the same for all five; what differs is what each
@@ -933,7 +943,8 @@ function buildTracker(
   // Every contract marked at the price the market reached, one session of decay
   // paid on the way.
   const markAt = (c: ContractRow) => {
-    const t = Math.max(0.5, c.dte - 1) / 252;
+    // Calendar days over a calendar year — see `buildContracts`.
+    const t = Math.max(0.5, c.dte - 1) / 365;
     return round((bsPriceAtT(finalPx, c.strike, c.iv, t, 'C') - c.mid) / c.mid - c.executionCost, 3);
   };
   const taken = markAt(contract);
@@ -1011,6 +1022,11 @@ export function buildTrailerStory(): TrailerStory {
   // Same discipline at the other end: the Tracker's forward path starts at the
   // price on the tape when the packet froze.
   const freezeSpot = round(pxAt(path, storyUAtSceneStart('tracker') * STORY_SECONDS));
+  // Every desk is modelled at the price its own scene shows. Built from the
+  // session close, Lotto struck its ladder off a future price and Prove It
+  // centred its distributions on one, while the live spot marker drawn over them
+  // came from the story clock — the same disagreement, two scenes further on.
+  const spotAtScene = (id: string) => round(pxAt(path, storyUAtSceneStart(id) * STORY_SECONDS));
   const dates = buildDates();
   const prints = buildPrints(level, step, dates);
   const setups = buildSetups(TICKER, level, step, dates);
@@ -1041,10 +1057,10 @@ export function buildTrailerStory(): TrailerStory {
     stress: STRESS,
     setups,
     contracts,
-    lotto: buildLotto(spotNow, step),
+    lotto: buildLotto(spotAtScene('lotto'), step),
     scalp: { horizonMin: 25, pTargetBeforeStop: 0.61, spreadCost: 0.019, quoteStability: 0.84, gammaEfficiency: 0.72, minutesToCutoff: 38 },
     rebound: { touch: level, displacement: -1.9, absorption: 0.68, flowReversal: 0.57, dealerSupport: 0.63, excursion: 1.4, invalidation: round(level * 0.988) },
-    proveIt: buildProveIt(spotNow, dates),
+    proveIt: buildProveIt(spotAtScene('proveit'), dates),
     stocks: buildStocks(TICKER),
     news: buildNews(newsWindow),
     earnings: buildEarnings(spotNow, dates),

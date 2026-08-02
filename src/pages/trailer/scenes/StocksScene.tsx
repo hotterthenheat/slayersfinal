@@ -64,7 +64,12 @@ const StocksScene: React.FC = () => {
                     </span>
                   ))}
                 <span className="font-mono text-label tnum text-textPrimary">{(s.composite * 100).toFixed(0)}</span>
-                <Verdict>{s.routing === 'NO TRADE' ? 'NO TRADE' : s.routing === 'OPTIONS' ? 'SELECTED' : 'ALTERNATIVE'}</Verdict>
+                {/* The routing itself, not a verdict word standing in for it.
+                    Mapped to SELECTED/ALTERNATIVE, STOCK and SPREAD both rendered
+                    ALTERNATIVE — so a column headed EXPRESSION hid the one thing
+                    it exists to show, and the scene's whole argument about
+                    routing to different instruments was invisible. */}
+                <Verdict>{s.routing}</Verdict>
               </div>
             );
           })}
