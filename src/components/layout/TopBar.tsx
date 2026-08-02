@@ -74,6 +74,11 @@ const TICKER_SCOPED = [
   '/prove-it',
   '/trace/dark-pool',
   '/trace/scanner',
+  // News looked unscoped for the same reason Stress did, one layer further in:
+  // its Deep read TAB builds from the active snapshot and prints the symbol,
+  // and the default tab is the wire. A rendered-text diff only ever sees the
+  // tab that happens to be open.
+  '/news',
 ];
 const tickerScoped = (path: string) =>
   TICKER_SCOPED.some(r => path === r || path.startsWith(`${r}/`));

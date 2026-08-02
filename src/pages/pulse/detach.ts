@@ -432,7 +432,23 @@ export function stepMove(
       hit = o;
     }
   }
-  if (hit) return { layout: swapCells(layout, id, hit.i), swappedWith: hit.i };
+  if (hit) {
+    // A minimized panel is a title bar parked at two rows. Handing it a
+    // neighbour's box in a swap gives it that neighbour's HEIGHT, and it
+    // becomes the tall empty card `noGrow` exists to prevent — the body is
+    // still hidden. Exchange origins only in that case and let the pack close
+    // up behind them, so each panel keeps the height it is entitled to.
+    const noGrow = new Set(opts.noGrow ?? []);
+    if (noGrow.has(id) || noGrow.has(hit.i)) {
+      const a = { x: g.x, y: g.y };
+      const b = { x: hit.x, y: hit.y };
+      const moved = layout.map(o =>
+        o.i === id ? { ...o, ...b } : o.i === hit.i ? { ...o, ...a } : { ...o },
+      );
+      return { layout: tile(moved, opts), swappedWith: hit.i };
+    }
+    return { layout: swapCells(layout, id, hit.i), swappedWith: hit.i };
+  }
   const moved = layout.map(o =>
     o.i === id
       ? { ...o, x: Math.max(0, Math.min(cols - o.w, o.x + dx)), y: Math.max(0, o.y + dy) }

@@ -952,3 +952,54 @@ describe('stepMove probes the whole edge, not a corner', () => {
     expect(stepMove(desk, 'a', 1, 0).layout).toEqual(desk);
   });
 });
+
+describe('stepMove and minimized neighbours', () => {
+  const cell = (i: string, x: number, y: number, w: number, h: number) =>
+    ({ i, x, y, w, h, minW: MIN_UNITS.w, minH: MIN_UNITS.h });
+
+  it('never hands a minimized panel a neighbour’s height', () => {
+    // Two full-width bands, the lower one collapsed to a title bar. A box swap
+    // would give it the tall panel's 12 rows with its body still hidden — the
+    // large empty card `noGrow` exists to prevent.
+    const desk = [cell('tall', 0, 0, 12, 12), cell('min', 0, 12, 12, 2)];
+    const { layout, swappedWith } = stepMove(desk, 'min', 0, -1, { noGrow: ['min'] });
+    expect(swappedWith).toBe('tall');
+    expect(layout.find(g => g.i === 'min')!.h).toBe(2);
+    expect(layout.find(g => g.i === 'tall')!.h).toBe(12);
+    expect(layout.find(g => g.i === 'min')!.y).toBe(0);
+    expect(overlapCount(layout)).toBe(0);
+    expect(deadSpace(layout)).toBeCloseTo(0, 9);
+  });
+
+  it('protects the minimized panel from either side of the gesture', () => {
+    const desk = [cell('tall', 0, 0, 12, 12), cell('min', 0, 12, 12, 2)];
+    const { layout } = stepMove(desk, 'tall', 0, 1, { noGrow: ['min'] });
+    expect(layout.find(g => g.i === 'min')!.h).toBe(2);
+    expect(overlapCount(layout)).toBe(0);
+  });
+
+  it('still exchanges boxes outright when neither panel is minimized', () => {
+    const desk = [cell('a', 0, 0, 6, 12), cell('b', 6, 0, 6, 12)];
+    const { layout } = stepMove(desk, 'b', -1, 0, { noGrow: [] });
+    expect(layout.find(g => g.i === 'b')).toMatchObject({ x: 0, w: 6, h: 12 });
+    expect(deadSpace(layout)).toBeCloseTo(0, 9);
+  });
+
+  it('keeps every minimized height across a sweep of moves', () => {
+    const desk = [
+      cell('a', 0, 0, 6, 10),
+      cell('b', 6, 0, 6, 2),
+      cell('c', 6, 2, 6, 8),
+      cell('d', 0, 10, 12, 2),
+    ];
+    for (const g of desk) {
+      for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+        const { layout } = stepMove(desk.map(c => ({ ...c })), g.i, dx, dy, { noGrow: ['b', 'd'] });
+        expect(layout.find(x => x.i === 'b')!.h).toBe(2);
+        expect(layout.find(x => x.i === 'd')!.h).toBe(2);
+        expect(overlapCount(layout)).toBe(0);
+        expect(layout.every(c => c.x >= 0 && c.x + c.w <= GRID.cols)).toBe(true);
+      }
+    }
+  });
+});

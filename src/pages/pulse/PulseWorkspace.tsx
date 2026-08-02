@@ -1036,6 +1036,15 @@ const PulseWorkspace = () => {
    */
   const returnToGrid = (id: string) =>
     mutate(l => {
+      // Which way it left decides how it comes back, and this has to be read
+      // BEFORE the flags are cleared. Detaching reserves the cell — the panel
+      // is floating over it — so a round trip must change nothing. Popping out
+      // releases it and the desk packs over the hole, so coming home is an
+      // arrival like any other. Routing both through `restore` honoured a cell
+      // the pop-out had already given up: two full-width bands with the lower
+      // one popped out came back to its old y and recreated the eight empty
+      // rows the pack had just closed.
+      const wasPopout = !!l.panels.find(p => p.id === id)?.popout;
       const panels = l.panels.map(p => (p.id === id ? { ...p, detached: undefined, popout: undefined } : p));
       // The saved cell is a HINT, not a reservation: the desk keeps itself
       // gapless while a panel is away, so a neighbour has usually absorbed that
@@ -1050,7 +1059,7 @@ const PulseWorkspace = () => {
       // full-width rows — gapless, non-overlapping, and not the desk the user
       // had. That is a change nothing asked for.
       const settled = returning
-        ? restore(staying, returning, { noGrow: noGrowIds(panels) })
+        ? (wasPopout ? place : restore)(staying, returning, { noGrow: noGrowIds(panels) })
         : tile(staying, { noGrow: noGrowIds(panels) });
       return { ...l, panels, layout: mergeLayout(settled, l.layout, away) };
     });
