@@ -28,14 +28,38 @@ import { WORKSPACE_VERSION } from './presets';
 export const GRID = { cols: 12, rowHeight: 26, marginX: 12, marginY: 12 } as const;
 
 /**
- * The only size limit left. The registry still declares a width and height per
- * widget, but those are the size a panel is BORN at and what the auto-arrange
- * modes aim for — not a floor the user's own drag is held to. Enforcing them
- * meant a row could not be made to sum to 12, so there was always a strip of
- * canvas on the right that nothing could reach. One unit keeps a panel large
- * enough to grab and no larger.
+ * The only size limit left, and it is not a readability opinion.
+ *
+ * The registry still declares a width and height per widget, but those are the
+ * size a panel is BORN at and what the auto-arrange modes aim for — not a floor
+ * the user's drag is held to. Enforcing them meant a row could not be made to
+ * sum to 12, so there was always a strip of canvas nothing could reach.
+ *
+ * Two units is where the panel stops being able to un-resize itself. Measured
+ * in Chromium at 1600px, not guessed:
+ *
+ *   1 x 1  (116 x 26)  header clipped entirely, 0 controls reachable
+ *   1 x 2  (116 x 64)  header fits, 1 control reachable
+ *   2 x 2  (244 x 64)  every control the header chooses to show
+ *
+ * At one unit the panel is a trap: the header is 40px so h=1 crops it, and at
+ * 116px wide the button cluster overflows the box. You could shrink a panel and
+ * then have nothing left to click to grow it back.
+ *
+ * Width alone is not enough, and an earlier version of this comment claimed
+ * more than it had measured. In Customize mode a docked panel carries EIGHT
+ * interactive controls, not the four a read-only panel shows, and eight do not
+ * fit at two columns on any desk. The header solves that where it belongs, by
+ * watching its own width and shedding the secondary controls when they stop
+ * fitting; maximize and close survive to the narrowest size, so the panel is
+ * never stranded. The floor's job is only to keep the title bar itself
+ * un-clipped.
+ *
+ * Two units costs nothing for packing — a row of seven 116px panels is not a
+ * desk anyone wants — and it is an order of magnitude below the old floors,
+ * which demanded six columns for the Exposure Matrix alone.
  */
-export const MIN_UNITS = { w: 1, h: 1 } as const;
+export const MIN_UNITS = { w: 2, h: 2 } as const;
 
 /** Smallest a floating panel may be dragged. Below this the header controls
     start overlapping and the body has nothing left to render into. */
@@ -170,47 +194,342 @@ export function mergeLayout(reported: Layout[], saved: Layout[], awayIds: readon
 const spansRow = (a: Layout, b: Layout) => a.y < b.y + b.h && b.y < a.y + a.h;
 const spansCol = (a: Layout, b: Layout) => a.x < b.x + b.w && b.x < a.x + a.w;
 
+/** Two cells sharing at least one grid square. */
+export const collides = (a: Layout, b: Layout) => spansRow(a, b) && spansCol(a, b);
+
+/** The first row below every panel — where a new or returning panel can always
+    stand without landing on anything. */
+export const floorOf = (layout: readonly Layout[]) => layout.reduce((m, g) => Math.max(m, g.y + g.h), 0);
+
+/** Grow every panel right, then down, into space nothing else claims. `may`
+    decides which panels take part in this pass. */
+function grow(out: Layout[], may: (g: Layout) => boolean, cols: number): void {
+  for (const g of out) {
+    if (!may(g)) continue;
+    let right = cols;
+    for (const o of out) {
+      if (o === g || !spansRow(g, o)) continue;
+      if (o.x >= g.x + g.w) right = Math.min(right, o.x);
+    }
+    g.w = Math.max(g.w, right - g.x);
+  }
+  const floor = Math.max(...out.map(g => g.y + g.h));
+  for (const g of out) {
+    if (!may(g)) continue;
+    let below = floor;
+    for (const o of out) {
+      if (o === g || !spansCol(g, o)) continue;
+      if (o.y >= g.y + g.h) below = Math.min(below, o.y);
+    }
+    g.h = Math.max(g.h, below - g.y);
+  }
+}
+
 /**
- * Grow every panel into the empty space beside and below it.
+ * Keep the desk gapless as a RULE, not as a button.
  *
- * Freeing the resize floor lets a user BUILD a desk with no gaps; this closes
- * the gaps that are already there, which is the other half. Each panel extends
- * right until it meets a panel that shares any of its rows, then down until it
- * meets one that shares any of its columns. Limits are measured against the
- * ORIGINAL boxes, so growth can only ever consume space that was empty to begin
- * with and two panels can never be handed the same cell.
+ * Make one panel smaller and its neighbours take the space, the way a tiling
+ * window manager behaves. Growing alone cannot do this: it would hand the freed
+ * columns straight back to the panel that just gave them up, and the drag would
+ * appear to do nothing. The neighbours have to slide in FIRST.
  *
- * Deliberately not vertical-compaction: react-grid-layout already pulls panels
- * upward, and pulling up is what CREATES the ragged right edge in the first
- * place. This stretches instead of shuffling, so the desk the user arranged
- * keeps its shape and only loses its holes.
+ * Four moves, in this order:
+ *   1. Left-pack. This is what actually transfers the freed columns — the panel
+ *      to the right of the one you shrank slides over to meet it.
+ *   2. Up-pack, the vertical half of the same move.
+ *   3. Grow everything EXCEPT the panel you just let go of. Its size is the one
+ *      the user chose; every other panel absorbs what is left.
+ *   4. Grow anything still bordering a hole, held panel included. Step 3 cannot
+ *      always finish: a panel alone in its row has no neighbour to donate to,
+ *      and there "keep my width" and "no dead space" are contradictory. The
+ *      invariant wins, because a gap is visible and a few columns are not.
+ *
+ * `protect` is normally the single panel under the cursor.
  */
-export function fillGaps(layout: Layout[], cols: number = GRID.cols): Layout[] {
-  const out = layout.map(g => ({ ...g }));
+export interface TileOptions {
+  /**
+   * The panel the gesture is about. Its box is left exactly where the drag put
+   * it — not packed, not grown in the first pass — so the edge the user dragged
+   * stays anchored. Without this, dragging a panel's WEST edge did nothing: the
+   * pack slid it back against its left neighbour and the final grow stretched
+   * it out again, landing on the size it started at.
+   */
+  hold?: readonly string[];
+  /**
+   * Panels that may be packed but never grown. A minimized panel is a title bar
+   * parked at two rows; letting the fill logic stretch it to a neighbour's
+   * height turns it into a tall empty card whose body is still hidden.
+   */
+  noGrow?: readonly string[];
+  cols?: number;
+}
+
+export function tile(layout: Layout[], opts: TileOptions | readonly string[] = {}): Layout[] {
+  const o: TileOptions = Array.isArray(opts) ? { hold: opts } : (opts as TileOptions);
+  const cols = o.cols ?? GRID.cols;
+  const hold = new Set(o.hold ?? []);
+  const noGrow = new Set(o.noGrow ?? []);
+
+  const out = layout.map(g => ({ ...g })).sort((a, b) => a.y - b.y || a.x - b.x);
   if (out.length === 0) return out;
 
-  // Two passes: widening a panel can expose a neighbour whose own downward
-  // growth is now bounded differently. Two is enough to settle every shape
-  // reachable from a 12-column grid; a third never changed a result in testing.
-  for (let pass = 0; pass < 2; pass++) {
-    for (const g of out) {
-      let right = cols;
-      for (const o of out) {
-        if (o === g || !spansRow(g, o)) continue;
-        if (o.x >= g.x + g.w) right = Math.min(right, o.x);
-      }
-      g.w = Math.max(g.w, right - g.x);
+  // Positions update as we go, in reading order, so a panel slides into the
+  // space the one before it just vacated — the same shape as react-grid-layout's
+  // own vertical compaction, turned on its side. Anchored panels keep their
+  // place and act as walls the rest pack against.
+  for (const g of out) {
+    if (hold.has(g.i)) continue;
+    let x = 0;
+    for (const p of out) {
+      if (p === g || !spansRow(g, p)) continue;
+      if (p.x + p.w <= g.x) x = Math.max(x, p.x + p.w);
     }
+    g.x = x;
+  }
 
-    const floor = Math.max(...out.map(g => g.y + g.h));
-    for (const g of out) {
-      let below = floor;
-      for (const o of out) {
-        if (o === g || !spansCol(g, o)) continue;
-        if (o.y >= g.y + g.h) below = Math.min(below, o.y);
-      }
-      g.h = Math.max(g.h, below - g.y);
+  // RGL's `compactType="vertical"` usually does this before we ever see the
+  // layout, but relying on that would make this correct only by accident — and
+  // it is also called on paths RGL never touches, like a restored desk.
+  for (const g of out) {
+    if (hold.has(g.i)) continue;
+    let y = 0;
+    for (const p of out) {
+      if (p === g || !spansCol(g, p)) continue;
+      if (p.y + p.h <= g.y) y = Math.max(y, p.y + p.h);
     }
+    g.y = y;
+  }
+
+  grow(out, g => !noGrow.has(g.i) && !hold.has(g.i), cols);
+  grow(out, g => !noGrow.has(g.i), cols);
+
+  // Rectangles cannot always close a hole. Four panels around an L-shaped void
+  // leave a pocket that no single panel can absorb without becoming non
+  // rectangular — measured at 5.6% on the shape
+  // (0,0,2,4) (0,4,4,2) (2,0,4,2) (4,2,2,4). Growth alone stops there, so when a
+  // pocket survives, fall back to a band reflow that cannot leave one.
+  //
+  // This MOVES panels, which the packing above deliberately avoids, so it only
+  // runs when there is genuinely a hole left. Zero dead space is the promise;
+  // preserving the exact arrangement is the preference.
+  // Trigger the fallback on overlap and overflow too, not just on a hole.
+  //
+  // `deadSpace` divides used cells by the bounding box, so OVERLAPPING panels
+  // double-count and it reads near zero on a layout that is visibly broken.
+  // That is not hypothetical: docking a panel puts it back at a cell a
+  // neighbour has since absorbed, the two overlap, dead space measured ~0, the
+  // fallback stayed asleep and the desk came back 8% empty. Check the shape
+  // before trusting the metric computed from it.
+  if (overlaps(out) || out.some(g => g.x + g.w > cols) || deadSpace(out, cols) > 1e-9) {
+    return reflowBands(out, cols, noGrow);
+  }
+  return out;
+}
+
+/**
+ * Land a panel on the desk and close whatever gaps that leaves.
+ *
+ * Every arrival takes this path — a brand-new panel, a duplicate, an undone
+ * close, a panel coming home from another monitor — because each of them was
+ * getting its own idea of where a panel goes and each idea was wrong somewhere.
+ * Adding a panel left a 14.7% hole, duplicating left 8%, and docking moved a
+ * side-by-side pair into two stacked rows it had no reason to touch.
+ *
+ * `at` is a REQUEST, not an instruction. Honour it exactly when the cell is
+ * genuinely free, which is what makes a detach/dock round trip with nothing in
+ * between a no-op. Otherwise drop the panel below the desk and let the up-pack
+ * lift it into the space that actually exists — landing it on an occupied cell
+ * instead trips the band reflow, which is correct but brutal: a chart came back
+ * 244px wide, shredded into a six-panel row.
+ */
+export function place(docked: Layout[], at: Layout, opts: TileOptions = {}): Layout[] {
+  const cols = opts.cols ?? GRID.cols;
+  const fits = at.x >= 0 && at.x + at.w <= cols && !docked.some(g => g.i !== at.i && collides(g, at));
+  const landed = fits ? at : { ...at, x: 0, y: floorOf(docked) };
+  return tile([...docked.filter(g => g.i !== at.i), landed], opts);
+}
+
+/**
+ * A panel coming HOME, as distinct from one arriving new.
+ *
+ * An arrival should pack in — that is what keeps the desk gapless. A return
+ * should change nothing it does not have to. `place` tiled unconditionally, so
+ * on a desk carrying a deliberate gap (nothing clamps those on load, by design)
+ * detaching a panel and docking it straight back moved it from `x=6,w=6` to
+ * `x=4,w=8`. Measured. The panel was only ever visiting.
+ */
+export function restore(docked: Layout[], at: Layout, opts: TileOptions = {}): Layout[] {
+  const cols = opts.cols ?? GRID.cols;
+  const rest = docked.filter(g => g.i !== at.i);
+  const free = at.x >= 0 && at.x + at.w <= cols && !rest.some(g => collides(g, at));
+  return free ? [...rest, { ...at }] : tile([...rest, { ...at, x: 0, y: floorOf(rest) }], opts);
+}
+
+/** Exchange two panels' boxes, keeping each panel's identity. Always valid:
+    the two rectangles are disjoint, so permuting them cannot overlap. */
+export function swapCells(layout: Layout[], a: string, b: string): Layout[] {
+  const A = layout.find(g => g.i === a);
+  const B = layout.find(g => g.i === b);
+  if (!A || !B) return layout;
+  return layout.map(g => (g.i === a ? { ...B, i: a } : g.i === b ? { ...A, i: b } : { ...g }));
+}
+
+/**
+ * Move a panel one cell with the keyboard, on a desk that has no spare cells.
+ *
+ * This is the arithmetic the mouse never has to do. Once the desk is gapless,
+ * a one-cell move ALWAYS lands on a neighbour, and handing that overlap to
+ * `tile` does not nudge anything — `tile` packs, it does not resolve
+ * collisions. Measured on a plain 6+6: ArrowLeft on the right panel was a
+ * no-op three presses running, and ArrowRight on the left panel swapped the two
+ * panels via the band-reflow fallback. So the keyboard advertised a
+ * rearrangeable desk and delivered nothing, or delivered something nobody
+ * asked for.
+ *
+ * Where there is genuinely free space, slide one cell. Where the next cell is
+ * occupied — the normal case — exchange places with whoever is standing there,
+ * which is what "move it left" means on a tiled desk and is the one answer that
+ * is always available. The caller announces which of the two happened, because
+ * a swap changes the panel's size and silence about that is its own defect.
+ */
+export function stepMove(
+  layout: Layout[],
+  id: string,
+  dx: number,
+  dy: number,
+  opts: TileOptions = {},
+): { layout: Layout[]; swappedWith?: string } {
+  const cols = opts.cols ?? GRID.cols;
+  const g = layout.find(x => x.i === id);
+  if (!g || (!dx && !dy)) return { layout };
+  // The WHOLE edge being pushed against, not its corner cell. A 1x1 probe sees
+  // only one square of it, so a panel touching the far end of a wide edge is
+  // invisible: moving (0,0,6,2) down past a neighbour at (2,2,4,2) found the
+  // empty cell (0,2), slid into the collision anyway, and handed `tile` an
+  // overlap it answers with a band reflow.
+  const probe: Layout = {
+    i: '',
+    x: dx < 0 ? g.x - 1 : dx > 0 ? g.x + g.w : g.x,
+    y: dy < 0 ? g.y - 1 : dy > 0 ? g.y + g.h : g.y,
+    w: dx ? 1 : g.w,
+    h: dy ? 1 : g.h,
+  };
+  if (probe.x < 0 || probe.x + probe.w > cols || probe.y < 0) return { layout };
+  // More than one panel can line that edge. Exchange with whichever shares the
+  // most of it — the one you are mostly pushing against. Any choice is
+  // geometrically safe (two disjoint boxes permute without overlapping and the
+  // desk's dead space is unchanged), so the job here is only to be predictable.
+  const share = (o: Layout) =>
+    Math.max(0, Math.min(o.x + o.w, probe.x + probe.w) - Math.max(o.x, probe.x)) *
+    Math.max(0, Math.min(o.y + o.h, probe.y + probe.h) - Math.max(o.y, probe.y));
+  let hit: Layout | undefined;
+  let best = 0;
+  for (const o of layout) {
+    if (o.i === id) continue;
+    const s = share(o);
+    if (s > best) {
+      best = s;
+      hit = o;
+    }
+  }
+  if (hit) {
+    // A minimized panel is a title bar parked at two rows. Handing it a
+    // neighbour's box in a swap gives it that neighbour's HEIGHT, and it
+    // becomes the tall empty card `noGrow` exists to prevent — the body is
+    // still hidden. Exchange origins only in that case and let the pack close
+    // up behind them, so each panel keeps the height it is entitled to.
+    const noGrow = new Set(opts.noGrow ?? []);
+    if (noGrow.has(id) || noGrow.has(hit.i)) {
+      const a = { x: g.x, y: g.y };
+      const b = { x: hit.x, y: hit.y };
+      const moved = layout.map(o =>
+        o.i === id ? { ...o, ...b } : o.i === hit.i ? { ...o, ...a } : { ...o },
+      );
+      return { layout: tile(moved, opts), swappedWith: hit.i };
+    }
+    return { layout: swapCells(layout, id, hit.i), swappedWith: hit.i };
+  }
+  const moved = layout.map(o =>
+    o.i === id
+      ? { ...o, x: Math.max(0, Math.min(cols - o.w, o.x + dx)), y: Math.max(0, o.y + dy) }
+      : { ...o },
+  );
+  return { layout: tile(moved, { ...opts, hold: [id] }) };
+}
+
+/**
+ * Change one panel's height and keep the desk whole.
+ *
+ * Minimizing is the easy half — the panel shrinks and `tile` closes the band it
+ * vacated. Restoring is the half that was broken: writing the taller box back
+ * grows it straight through its downstairs neighbour, and an overlapping layout
+ * sends `tile` to the band reflow, which rebuilds the desk the user arranged.
+ * Push everything below the panel's old bottom down by the growth first, so the
+ * layout handed to `tile` never overlaps and the up-pack pulls the desk snug
+ * again.
+ */
+export function resizeHeight(layout: Layout[], id: string, h: number, opts: TileOptions = {}): Layout[] {
+  const target = layout.find(g => g.i === id);
+  if (!target) return layout;
+  const delta = h - target.h;
+  const oldBottom = target.y + target.h;
+  const next = layout.map(g =>
+    g.i === id ? { ...g, h } : delta > 0 && g.y >= oldBottom ? { ...g, y: g.y + delta } : { ...g },
+  );
+  return tile(next, opts);
+}
+
+/** Any two boxes sharing a cell. Cheap at desk sizes (tens of panels). */
+function overlaps(l: Layout[]): boolean {
+  for (let i = 0; i < l.length; i++) {
+    for (let j = i + 1; j < l.length; j++) {
+      const a = l[i];
+      const b = l[j];
+      if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Last resort: lay the panels out as full-width bands.
+ *
+ * Reading order is preserved, every band sums to exactly `cols`, and the bands
+ * stack with no vertical gap, so the result cannot contain a pocket. Minimized
+ * panels take a band of their own at their own height — pairing one with a
+ * full-height neighbour would stretch it open with its body still hidden.
+ */
+function reflowBands(layout: Layout[], cols: number, noGrow: Set<string>): Layout[] {
+  const order = [...layout].sort((a, b) => a.y - b.y || a.x - b.x);
+  const bands: Layout[][] = [];
+  let band: Layout[] = [];
+  for (const g of order) {
+    if (noGrow.has(g.i)) {
+      if (band.length) bands.push(band);
+      bands.push([g]);
+      band = [];
+      continue;
+    }
+    band.push(g);
+    if (band.length * MIN_UNITS.w >= cols) {
+      bands.push(band);
+      band = [];
+    }
+  }
+  if (band.length) bands.push(band);
+
+  const out: Layout[] = [];
+  let y = 0;
+  for (const b of bands) {
+    const each = Math.floor(cols / b.length);
+    let x = 0;
+    const h = Math.max(...b.map(g => g.h));
+    b.forEach((g, k) => {
+      const w = k === b.length - 1 ? cols - x : each;
+      out.push({ ...g, x, y, w, h: noGrow.has(g.i) ? g.h : h });
+      x += w;
+    });
+    y += h;
   }
   return out;
 }

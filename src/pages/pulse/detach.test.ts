@@ -2,18 +2,36 @@ import { describe, it, expect } from 'vitest';
 import {
   GRID,
   MIN_DETACHED,
+  MIN_UNITS,
   boundsFromGrid,
   boundsOnScreen,
   boxMoved,
   clampBounds,
   deadSpace,
-  fillGaps,
   mergeLayout,
   migrateWorkspace,
+  place,
   popoutFeatures,
+  resizeHeight,
+  restore,
+  stepMove,
+  swapCells,
   screenIndexOf,
+  tile,
 } from './detach';
 import { PULSE_PRESETS, WORKSPACE_VERSION, type PulseWorkspaceState } from './presets';
+
+/** Boxes sharing a cell. Used by several suites, so it lives here once. */
+const overlapCount = (l: { x: number; y: number; w: number; h: number }[]) => {
+  let n = 0;
+  for (let i = 0; i < l.length; i++)
+    for (let j = i + 1; j < l.length; j++) {
+      const a = l[i];
+      const b = l[j];
+      if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) n++;
+    }
+  return n;
+};
 
 /** A 1536-wide desk, which is what the presets' comments were measured on. */
 const W = 1536;
@@ -201,73 +219,243 @@ describe('boxMoved', () => {
   });
 });
 
-describe('fillGaps — the dead space goes away', () => {
-  it('stretches a short row out to the full 12 columns', () => {
-    // The exact complaint: a row of panels that cannot be made to sum to 12
-    // leaves a strip of canvas on the right that nothing can reach.
-    const filled = fillGaps([{ i: 'a', x: 0, y: 0, w: 5, h: 4 }]);
-    expect(filled[0].w).toBe(12);
+describe('MIN_UNITS — small enough to pack, big enough to escape', () => {
+  const PANEL_HEADER_PX = 40;
+  const px = (units: number) => units * GRID.rowHeight + (units - 1) * GRID.marginY;
+  /** Panel width at a given column span on the narrowest desktop the grid runs
+      at (1024px breakpoint, minus the shell's own padding). */
+  const colPx = (units: number, container = 976) => {
+    const col = (container - GRID.marginX * (GRID.cols - 1)) / GRID.cols;
+    return col * units + (units - 1) * GRID.marginX;
+  };
+
+  it('is tall enough that the panel header is never clipped', () => {
+    // Measured in Chromium: at one row the 40px header is cropped and NONE of
+    // the four controls can be clicked, so the panel cannot be resized back.
+    // A floor that creates an unrecoverable state is worse than no floor.
+    expect(px(MIN_UNITS.h)).toBeGreaterThanOrEqual(PANEL_HEADER_PX);
+    expect(px(MIN_UNITS.h - 1)).toBeLessThan(PANEL_HEADER_PX);
   });
 
-  it('stops a panel at its neighbour rather than overlapping it', () => {
-    const filled = fillGaps([
-      { i: 'a', x: 0, y: 0, w: 3, h: 4 },
-      { i: 'b', x: 8, y: 0, w: 4, h: 4 },
-    ]);
-    expect(filled.find(g => g.i === 'a')!.w).toBe(8); // grows 3 -> 8, meets b
-    expect(filled.find(g => g.i === 'b')!.w).toBe(4); // already at the edge
+  it('is wide enough for the controls the header keeps at its narrowest', () => {
+    // NOT the full cluster. In Customize mode a panel carries eight controls
+    // and eight do not fit at two columns on any desk — the header sheds the
+    // secondary ones by measuring itself. What must always fit is the grip plus
+    // maximize and close, so a panel can never be stranded at a size it cannot
+    // be resized out of.
+    const ESSENTIAL_PX = 22 + 2 * 26 + 28; // grip + 2 buttons + row padding
+    expect(colPx(MIN_UNITS.w)).toBeGreaterThan(ESSENTIAL_PX);
   });
 
-  it('grows a panel downward into empty rows below it', () => {
-    const filled = fillGaps([
-      { i: 'tall', x: 0, y: 0, w: 6, h: 10 },
-      { i: 'short', x: 6, y: 0, w: 6, h: 4 },
-    ]);
-    // `short` had six columns of nothing under it for six rows.
-    expect(filled.find(g => g.i === 'short')!.h).toBe(10);
+  it('stays far below the per-widget floors it replaced', () => {
+    // The point of the change: the old floors ran to 6 columns and 4 coarse
+    // rows. If this ever creeps back up, the dead space comes back with it.
+    expect(MIN_UNITS.w).toBeLessThanOrEqual(2);
+    expect(MIN_UNITS.h).toBeLessThanOrEqual(2);
   });
 
-  it('leaves a desk that is already full completely alone', () => {
-    const full = [
-      { i: 'a', x: 0, y: 0, w: 6, h: 4 },
-      { i: 'b', x: 6, y: 0, w: 6, h: 4 },
-      { i: 'c', x: 0, y: 4, w: 12, h: 4 },
+  it('still lets a row be packed to exactly 12 columns', () => {
+    // The whole complaint was rows that could not sum to 12. With a floor of 2
+    // that holds for any row a preset would ever break (up to six panels).
+    for (let n = 1; n <= Math.floor(GRID.cols / MIN_UNITS.w); n++) {
+      expect(n * MIN_UNITS.w).toBeLessThanOrEqual(GRID.cols);
+    }
+  });
+});
+
+describe('tile — shrink one panel, the others take the space', () => {
+  it('transfers space when the WEST edge is dragged, not just the east', () => {
+    // Reported by review and reproduced before fixing: with a=(0,6) and b=(6,6),
+    // dragging b's west edge right makes RGL report b=(8,4). Packing b back
+    // against a and then growing it returned it to (6,6) — the drag did
+    // nothing. The held panel is no longer packed, so its dragged edge stays
+    // anchored and the space goes to the neighbour.
+    const out = tile(
+      [
+        { i: 'a', x: 0, y: 0, w: 6, h: 4 },
+        { i: 'b', x: 8, y: 0, w: 4, h: 4 },
+      ],
+      { hold: ['b'] },
+    );
+    expect(out.find(g => g.i === 'b')).toMatchObject({ x: 8, w: 4 });
+    expect(out.find(g => g.i === 'a')).toMatchObject({ x: 0, w: 8 });
+    expect(deadSpace(out)).toBe(0);
+  });
+
+  it('never leaves an enclosed pocket, even when rectangles cannot close it', () => {
+    // Four panels around an L-shaped void. Growth alone stopped at 5.6% dead
+    // because no single panel can absorb the pocket and stay a rectangle.
+    const out = tile(
+      [
+        { i: 'p1', x: 0, y: 0, w: 2, h: 4 },
+        { i: 'p2', x: 0, y: 4, w: 4, h: 2 },
+        { i: 'p3', x: 2, y: 0, w: 4, h: 2 },
+        { i: 'p4', x: 4, y: 2, w: 2, h: 4 },
+      ],
+      { hold: ['p1'] },
+    );
+    expect(deadSpace(out)).toBe(0);
+    expect(out).toHaveLength(4);
+  });
+
+  it('packs a minimized panel but never grows it', () => {
+    // A minimized panel is a parked title bar. Growing it to a neighbour's
+    // height gives a tall empty card whose body is still hidden, and whose
+    // `minimized` flag then makes one click restore rather than minimize.
+    const out = tile(
+      [
+        { i: 'big', x: 0, y: 0, w: 6, h: 12 },
+        { i: 'min', x: 6, y: 0, w: 6, h: 2 },
+      ],
+      { hold: ['big'], noGrow: ['min'] },
+    );
+    expect(out.find(g => g.i === 'min')!.h).toBe(2);
+  });
+
+  it('hands the freed columns to the neighbour instead of springing back', () => {
+    // The behaviour asked for, and the exact thing plain fillGaps gets wrong:
+    // fillGaps would grow `a` straight back to 8 and the drag would look like
+    // it did nothing.
+    const shrunk = [
+      { i: 'a', x: 0, y: 0, w: 4, h: 6 }, // was 8, user just dragged it to 4
+      { i: 'b', x: 8, y: 0, w: 4, h: 6 },
     ];
-    expect(fillGaps(full)).toEqual(full);
+    const out = tile(shrunk, { hold: ['a'] });
+    expect(out.find(g => g.i === 'a')!.w).toBe(4); // held
+    expect(out.find(g => g.i === 'b')!.x).toBe(4); // slid left to meet it
+    expect(out.find(g => g.i === 'b')!.w).toBe(8); // absorbed the 4 columns
+    expect(deadSpace(out)).toBe(0);
   });
 
-  it('never overlaps two panels, over every preset we ship', () => {
-    // The property that matters more than any single case: growth may only
-    // consume space that was empty, so no two boxes may ever intersect after.
+  it('gives the space back when the panel that shrank has no neighbour', () => {
+    // A panel alone in its row cannot both keep its width and leave no gap.
+    // The invariant wins; the alternative is a visible hole nothing can reach.
+    const out = tile([{ i: 'solo', x: 0, y: 0, w: 5, h: 4 }], ['solo']);
+    expect(out[0].w).toBe(12);
+    expect(deadSpace(out)).toBe(0);
+  });
+
+  it('splits the freed space across several neighbours', () => {
+    const out = tile(
+      [
+        { i: 'a', x: 0, y: 0, w: 2, h: 4 },
+        { i: 'b', x: 4, y: 0, w: 4, h: 4 },
+        { i: 'c', x: 8, y: 0, w: 4, h: 4 },
+      ],
+      ['a'],
+    );
+    expect(out.find(g => g.i === 'a')!.w).toBe(2);
+    expect(out.reduce((s, g) => s + g.w, 0)).toBe(12);
+    expect(deadSpace(out)).toBe(0);
+  });
+
+  it('absorbs vertically too — a shorter panel lets the one below grow', () => {
+    const out = tile(
+      [
+        { i: 'top', x: 0, y: 0, w: 12, h: 4 },
+        { i: 'bottom', x: 0, y: 8, w: 12, h: 4 },
+      ],
+      ['top'],
+    );
+    expect(out.find(g => g.i === 'top')!.h).toBe(4);
+    expect(deadSpace(out)).toBe(0);
+  });
+
+  it('never overlaps and never runs off the grid, for every preset', () => {
     for (const preset of PULSE_PRESETS) {
-      const filled = fillGaps(preset.layout);
-      for (let i = 0; i < filled.length; i++) {
-        for (let j = i + 1; j < filled.length; j++) {
-          const a = filled[i];
-          const b = filled[j];
-          const hit = a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
-          expect({ preset: preset.id, a: a.i, b: b.i, hit }).toEqual({ preset: preset.id, a: a.i, b: b.i, hit: false });
+      for (const held of [[], [preset.layout[0].i]]) {
+        const out = tile(preset.layout, held);
+        for (let i = 0; i < out.length; i++) {
+          for (let j = i + 1; j < out.length; j++) {
+            const a = out[i];
+            const b = out[j];
+            const hit = a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+            expect({ p: preset.id, a: a.i, b: b.i, hit }).toEqual({ p: preset.id, a: a.i, b: b.i, hit: false });
+          }
+        }
+        for (const g of out) {
+          expect(g.x).toBeGreaterThanOrEqual(0);
+          expect(g.x + g.w).toBeLessThanOrEqual(GRID.cols);
         }
       }
-      // And nothing may hang off the right edge of the grid.
-      for (const g of filled) expect(g.x + g.w).toBeLessThanOrEqual(GRID.cols);
     }
   });
 
-  it('never increases dead space on any preset, and removes it outright on most', () => {
-    let improved = 0;
+  it('leaves zero dead space on every preset it ships', () => {
     for (const preset of PULSE_PRESETS) {
-      const before = deadSpace(preset.layout);
-      const after = deadSpace(fillGaps(preset.layout));
-      expect(after).toBeLessThanOrEqual(before + 1e-9);
-      if (after < before) improved++;
+      expect({ id: preset.id, dead: deadSpace(tile(preset.layout)) }).toEqual({ id: preset.id, dead: 0 });
     }
-    expect(improved).toBeGreaterThan(0);
   });
 
-  it('handles an empty desk without dividing by zero', () => {
-    expect(fillGaps([])).toEqual([]);
-    expect(deadSpace([])).toBe(0);
+  it('is idempotent — tiling an already tiled desk changes nothing', () => {
+    for (const preset of PULSE_PRESETS) {
+      const once = tile(preset.layout);
+      expect(tile(once)).toEqual(once);
+    }
+  });
+
+  it('keeps every panel at or above the size floor', () => {
+    for (const preset of PULSE_PRESETS) {
+      for (const g of tile(preset.layout)) {
+        expect(g.w).toBeGreaterThanOrEqual(MIN_UNITS.w);
+        expect(g.h).toBeGreaterThanOrEqual(MIN_UNITS.h);
+      }
+    }
+  });
+
+  it('cleans up an overlapping input rather than trusting the dead-space metric', () => {
+    // Docking a panel puts it back on a cell a neighbour has since absorbed, so
+    // the input genuinely overlaps. `deadSpace` divides used cells by the
+    // bounding box, so overlap DOUBLE-COUNTS and the metric read ~0 on a broken
+    // desk — the fallback stayed asleep and the desk came back 8% empty.
+    const out = tile([
+      { i: 'a', x: 0, y: 0, w: 12, h: 6 },
+      { i: 'returning', x: 0, y: 0, w: 8, h: 6 },
+      { i: 'c', x: 0, y: 6, w: 6, h: 4 },
+    ]);
+    expect(overlapCount(out)).toBe(0);
+    expect(deadSpace(out)).toBe(0);
+    expect(out).toHaveLength(3);
+  });
+
+  it('repairs a layout that overflows the grid', () => {
+    const out = tile([
+      { i: 'a', x: 0, y: 0, w: 8, h: 4 },
+      { i: 'b', x: 8, y: 0, w: 9, h: 4 }, // x+w = 17
+    ]);
+    for (const g of out) expect(g.x + g.w).toBeLessThanOrEqual(GRID.cols);
+    expect(deadSpace(out)).toBe(0);
+  });
+
+  it('reports a settled size that differs from the requested one, so callers must read it back', () => {
+    // The contract the keyboard announcement depends on. Shrinking a sole panel
+    // to five columns cannot stick — there is no neighbour to take the space —
+    // so `tile` grows it back to twelve. Anything that announces the REQUESTED
+    // size tells a screen-reader user a number that never reaches the screen.
+    const settled = tile([{ i: 'solo', x: 0, y: 0, w: 5, h: 4 }], { hold: ['solo'] });
+    expect(settled.find(g => g.i === 'solo')!.w).toBe(12);
+    expect(settled.find(g => g.i === 'solo')!.w).not.toBe(5);
+  });
+
+  it('repairs a row of one-unit panels saved by the previous shipped build', () => {
+    // That build allowed a one-unit floor, so a saved row of (x=0,w=1) and
+    // (x=1,w=11) is real user data. Clamping the first to two widens it
+    // straight into the second — a clamp is not a repair on its own.
+    const clamped = [
+      { i: 'a', x: 0, y: 0, w: 2, h: 2 }, // was w:1, widened by the floor
+      { i: 'b', x: 1, y: 0, w: 11, h: 2 },
+    ];
+    const out = tile(clamped);
+    expect(overlapCount(out)).toBe(0);
+    expect(deadSpace(out)).toBe(0);
+    for (const g of out) {
+      expect(g.w).toBeGreaterThanOrEqual(MIN_UNITS.w);
+      expect(g.x + g.w).toBeLessThanOrEqual(GRID.cols);
+    }
+  });
+
+  it('handles an empty desk', () => {
+    expect(tile([])).toEqual([]);
   });
 });
 
@@ -391,8 +579,12 @@ describe('migrateWorkspace', () => {
       ],
     } as PulseWorkspaceState;
     const g = migrateWorkspace(v2)!.layouts[0].layout[0];
-    expect(g.minW).toBe(1);
-    expect(g.minH).toBe(1);
+    // Two units, not the widget's own 6x4. The floor that survives is the one
+    // that keeps a panel's controls reachable, measured — not a per-widget
+    // opinion about how small its content may get.
+    expect(g.minW).toBe(MIN_UNITS.w);
+    expect(g.minH).toBe(MIN_UNITS.h);
+    expect(g.minW).toBeLessThan(6);
   });
 
   it('carries a v1 desk all the way to the current version in one call', () => {
@@ -402,7 +594,7 @@ describe('migrateWorkspace', () => {
     expect(out.version).toBe(WORKSPACE_VERSION);
     expect(out.layouts[0].panels[0].ticker).toBe('SPY');
     expect(out.layouts[0].layout[0].h).toBe(10); // 5 doubled
-    expect(out.layouts[0].layout[0].minW).toBe(1);
+    expect(out.layouts[0].layout[0].minW).toBe(MIN_UNITS.w);
   });
 
   it('upgrades a v1 desk instead of throwing it away', () => {
@@ -467,5 +659,347 @@ describe('migrateWorkspace', () => {
     expect(out.layouts[0].panels[0].detached).toEqual({ x: 40, y: 60, w: 700, h: 500 });
     // The negative left survives serialisation — that is the second monitor.
     expect(out.layouts[0].panels[1].popout!.left).toBe(-1920);
+  });
+});
+
+/**
+ * Every way a panel arrives on the desk, and every way one changes height.
+ *
+ * These went in after a browser sweep of the paths that mutate the layout
+ * WITHOUT going through `tile`. All five were leaving the desk gapped: adding a
+ * panel 14.7% empty, duplicating 8%, minimizing 9.8%, closing 10.3%, and one
+ * press of Fit with a panel on a second monitor 16.7%. The numbers are measured,
+ * not estimated — the probe read them out of localStorage after each click.
+ */
+describe('place', () => {
+  const cell = (i: string, x: number, y: number, w: number, h: number) =>
+    ({ i, x, y, w, h, minW: MIN_UNITS.w, minH: MIN_UNITS.h });
+
+  it('honours a free cell exactly, so a detach/dock round trip is a no-op', () => {
+    // The desk the review named: 6 + 6, detach the right one, dock it straight
+    // back. It used to come home as two stacked full-width rows.
+    const staying = [cell('a', 0, 0, 6, 12)];
+    const back = cell('b', 6, 0, 6, 12);
+    expect(place(staying, back)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ i: 'a', x: 0, y: 0, w: 6, h: 12 }),
+      expect.objectContaining({ i: 'b', x: 6, y: 0, w: 6, h: 12 }),
+    ]));
+  });
+
+  it('relocates when a neighbour has taken the saved cell', () => {
+    // Same desk, but the panel that stayed grew into the space while it was
+    // away. Dropping the returning panel on top would overlap.
+    const staying = [cell('a', 0, 0, 12, 12)];
+    const out = place(staying, cell('b', 6, 0, 6, 12));
+    expect(overlapCount(out)).toBe(0);
+    expect(deadSpace(out)).toBeCloseTo(0, 9);
+    expect(out.find(g => g.i === 'b')!.y).toBeGreaterThan(0);
+  });
+
+  it('leaves no dead space when a panel arrives beside a short one', () => {
+    const out = place([cell('a', 0, 0, 6, 4)], cell('new', 6, 0, 4, 4));
+    expect(overlapCount(out)).toBe(0);
+    expect(deadSpace(out)).toBeCloseTo(0, 9);
+  });
+
+  it('refuses a cell that runs off the right edge', () => {
+    const out = place([cell('a', 0, 0, 6, 6)], cell('b', 8, 0, 8, 6));
+    expect(out.every(g => g.x + g.w <= GRID.cols)).toBe(true);
+    expect(overlapCount(out)).toBe(0);
+  });
+
+  it('is gapless for every arrival position on a three-panel desk', () => {
+    const desk = [cell('a', 0, 0, 6, 6), cell('b', 6, 0, 6, 6), cell('c', 0, 6, 12, 6)];
+    for (let x = 0; x <= 8; x++) {
+      for (let y = 0; y <= 12; y += 2) {
+        const out = place(desk, cell('new', x, y, 4, 4));
+        expect(overlapCount(out)).toBe(0);
+        expect(out.every(g => g.x + g.w <= GRID.cols)).toBe(true);
+        expect(deadSpace(out)).toBeCloseTo(0, 9);
+        expect(out).toHaveLength(4);
+      }
+    }
+  });
+
+  it('re-places rather than duplicates a panel already on the desk', () => {
+    const desk = [cell('a', 0, 0, 6, 6), cell('b', 6, 0, 6, 6)];
+    const out = place(desk, cell('b', 0, 6, 12, 6));
+    expect(out.filter(g => g.i === 'b')).toHaveLength(1);
+    expect(overlapCount(out)).toBe(0);
+  });
+});
+
+describe('resizeHeight', () => {
+  const cell = (i: string, x: number, y: number, w: number, h: number) =>
+    ({ i, x, y, w, h, minW: MIN_UNITS.w, minH: MIN_UNITS.h });
+
+  it('closes the band a collapsing panel gives up', () => {
+    const desk = [cell('a', 0, 0, 12, 12), cell('b', 0, 12, 12, 12)];
+    const out = resizeHeight(desk, 'a', 2, { noGrow: ['a'] });
+    expect(out.find(g => g.i === 'a')!.h).toBe(2);
+    expect(overlapCount(out)).toBe(0);
+    expect(deadSpace(out)).toBeCloseTo(0, 9);
+  });
+
+  it('re-opens through nothing — the desk below moves down, it is not overrun', () => {
+    // The bug: writing h back grew the panel straight through its neighbour,
+    // and an overlapping layout sends `tile` to the band reflow, which rebuilds
+    // the arrangement the user made.
+    const collapsed = [cell('a', 0, 0, 12, 2), cell('b', 0, 2, 6, 12), cell('c', 6, 2, 6, 12)];
+    const out = resizeHeight(collapsed, 'a', 12);
+    expect(overlapCount(out)).toBe(0);
+    expect(deadSpace(out)).toBeCloseTo(0, 9);
+    expect(out.find(g => g.i === 'a')!.h).toBe(12);
+    // b and c are still side by side underneath, not reflowed into bands.
+    const b = out.find(g => g.i === 'b')!;
+    const c = out.find(g => g.i === 'c')!;
+    expect(b.y).toBe(c.y);
+    expect(b.y).toBe(12);
+  });
+
+  it('survives a collapse/re-open round trip at every height', () => {
+    for (let h = MIN_UNITS.h; h <= 16; h++) {
+      const desk = [cell('a', 0, 0, 6, h), cell('b', 6, 0, 6, h), cell('c', 0, h, 12, 6)];
+      const min = resizeHeight(desk, 'a', 2, { noGrow: ['a'] });
+      expect(overlapCount(min)).toBe(0);
+      expect(deadSpace(min)).toBeCloseTo(0, 9);
+      const back = resizeHeight(min, 'a', h);
+      expect(overlapCount(back)).toBe(0);
+      expect(deadSpace(back)).toBeCloseTo(0, 9);
+    }
+  });
+
+  it('leaves a layout alone when the id is not on it', () => {
+    const desk = [cell('a', 0, 0, 12, 6)];
+    expect(resizeHeight(desk, 'ghost', 12)).toEqual(desk);
+  });
+});
+
+/**
+ * Keyboard movement, and the difference between a panel arriving and a panel
+ * coming home. Both went in after a browser reproduction: on a plain 6+6 desk
+ * ArrowLeft on the right panel was a no-op three presses running and ArrowRight
+ * on the left panel swapped both panels, while a detach/dock round trip on a
+ * desk with a deliberate gap moved the returning panel from x=6,w=6 to x=4,w=8.
+ */
+describe('restore', () => {
+  const cell = (i: string, x: number, y: number, w: number, h: number) =>
+    ({ i, x, y, w, h, minW: MIN_UNITS.w, minH: MIN_UNITS.h });
+
+  it('gives a gapped desk back exactly as it was', () => {
+    const staying = [cell('a', 0, 0, 4, 12)];
+    const back = cell('b', 6, 0, 6, 12);
+    const out = restore(staying, back);
+    expect(out.find(g => g.i === 'a')).toMatchObject({ x: 0, w: 4 });
+    expect(out.find(g => g.i === 'b')).toMatchObject({ x: 6, w: 6 });
+    // The hole the user left is still theirs. `place` would have packed it out.
+    expect(deadSpace(out)).toBeGreaterThan(0);
+  });
+
+  it('still relocates when the cell was taken while the panel was away', () => {
+    const out = restore([cell('a', 0, 0, 12, 12)], cell('b', 6, 0, 6, 12));
+    expect(overlapCount(out)).toBe(0);
+    expect(out.find(g => g.i === 'b')!.y).toBeGreaterThan(0);
+  });
+
+  it('refuses a cell that runs off the grid', () => {
+    const out = restore([cell('a', 0, 0, 4, 6)], cell('b', 8, 0, 8, 6));
+    expect(out.every(g => g.x + g.w <= GRID.cols)).toBe(true);
+    expect(overlapCount(out)).toBe(0);
+  });
+
+  it('never duplicates a panel already on the desk', () => {
+    const out = restore([cell('a', 0, 0, 6, 6), cell('b', 6, 0, 6, 6)], cell('b', 6, 0, 6, 6));
+    expect(out.filter(g => g.i === 'b')).toHaveLength(1);
+  });
+});
+
+describe('swapCells', () => {
+  const cell = (i: string, x: number, y: number, w: number, h: number) =>
+    ({ i, x, y, w, h, minW: MIN_UNITS.w, minH: MIN_UNITS.h });
+
+  it('exchanges two boxes without overlapping, whatever their sizes', () => {
+    const desk = [cell('a', 0, 0, 4, 12), cell('b', 4, 0, 8, 6), cell('c', 4, 6, 8, 6)];
+    const out = swapCells(desk, 'a', 'c');
+    expect(overlapCount(out)).toBe(0);
+    expect(deadSpace(out)).toBeCloseTo(deadSpace(desk), 9);
+    expect(out.find(g => g.i === 'a')).toMatchObject({ x: 4, y: 6, w: 8, h: 6 });
+    expect(out.find(g => g.i === 'c')).toMatchObject({ x: 0, y: 0, w: 4, h: 12 });
+  });
+
+  it('leaves the layout alone when an id is missing', () => {
+    const desk = [cell('a', 0, 0, 12, 6)];
+    expect(swapCells(desk, 'a', 'ghost')).toEqual(desk);
+  });
+});
+
+describe('stepMove', () => {
+  const cell = (i: string, x: number, y: number, w: number, h: number) =>
+    ({ i, x, y, w, h, minW: MIN_UNITS.w, minH: MIN_UNITS.h });
+  const row = () => [cell('a', 0, 0, 6, 12), cell('b', 6, 0, 6, 12)];
+
+  it('moves left into an occupied cell by exchanging places', () => {
+    const { layout, swappedWith } = stepMove(row(), 'b', -1, 0);
+    expect(swappedWith).toBe('a');
+    expect(layout.find(g => g.i === 'b')).toMatchObject({ x: 0, w: 6 });
+    expect(layout.find(g => g.i === 'a')).toMatchObject({ x: 6, w: 6 });
+    expect(overlapCount(layout)).toBe(0);
+    expect(deadSpace(layout)).toBeCloseTo(0, 9);
+  });
+
+  it('is its own inverse on a two-panel row', () => {
+    const start = row();
+    const once = stepMove(start, 'b', -1, 0).layout;
+    const back = stepMove(once, 'b', 1, 0).layout;
+    const key = (l: { i: string; x: number; y: number; w: number; h: number }[]) =>
+      l.map(g => `${g.i}:${g.x},${g.y},${g.w},${g.h}`).sort().join('|');
+    expect(key(back)).toBe(key(start));
+  });
+
+  it('does nothing at the west edge rather than pretending', () => {
+    const start = row();
+    const { layout, swappedWith } = stepMove(start, 'a', -1, 0);
+    expect(swappedWith).toBeUndefined();
+    expect(layout).toEqual(start);
+  });
+
+  it('swaps vertically too', () => {
+    const stack = [cell('a', 0, 0, 12, 6), cell('b', 0, 6, 12, 6)];
+    const { layout, swappedWith } = stepMove(stack, 'b', 0, -1);
+    expect(swappedWith).toBe('a');
+    expect(layout.find(g => g.i === 'b')!.y).toBe(0);
+    expect(overlapCount(layout)).toBe(0);
+  });
+
+  it('slides into genuinely free space instead of swapping', () => {
+    // A lone panel with the rest of the grid empty beside it.
+    const { layout, swappedWith } = stepMove([cell('a', 0, 0, 4, 6)], 'a', 1, 0);
+    expect(swappedWith).toBeUndefined();
+    expect(overlapCount(layout)).toBe(0);
+  });
+
+  it('never overlaps or overflows, from every panel in every direction', () => {
+    const desks = [
+      row(),
+      [cell('a', 0, 0, 4, 12), cell('b', 4, 0, 4, 12), cell('c', 8, 0, 4, 12)],
+      [cell('a', 0, 0, 6, 6), cell('b', 6, 0, 6, 6), cell('c', 0, 6, 12, 6)],
+      [cell('a', 0, 0, 3, 8), cell('b', 3, 0, 9, 4), cell('c', 3, 4, 9, 4), cell('d', 0, 8, 12, 4)],
+    ];
+    for (const desk of desks) {
+      const before = deadSpace(desk);
+      for (const g of desk) {
+        for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+          const { layout } = stepMove(desk.map(c => ({ ...c })), g.i, dx, dy);
+          expect(overlapCount(layout)).toBe(0);
+          expect(layout.every(c => c.x >= 0 && c.x + c.w <= GRID.cols)).toBe(true);
+          expect(layout).toHaveLength(desk.length);
+          // A move must never introduce dead space that was not already there.
+          expect(deadSpace(layout)).toBeLessThanOrEqual(before + 1e-9);
+        }
+      }
+    }
+  });
+
+  it('leaves the desk alone for an unknown id or a zero step', () => {
+    const start = row();
+    expect(stepMove(start, 'ghost', -1, 0).layout).toEqual(start);
+    expect(stepMove(start, 'a', 0, 0).layout).toEqual(start);
+  });
+});
+
+describe('stepMove probes the whole edge, not a corner', () => {
+  const cell = (i: string, x: number, y: number, w: number, h: number) =>
+    ({ i, x, y, w, h, minW: MIN_UNITS.w, minH: MIN_UNITS.h });
+
+  it('sees a neighbour touching the far end of a wide edge', () => {
+    // The reported shape: the cell directly under a's left corner is empty, so
+    // a 1x1 probe found nothing and slid straight into b.
+    const desk = [cell('a', 0, 0, 6, 2), cell('b', 2, 2, 4, 2)];
+    const { layout, swappedWith } = stepMove(desk, 'a', 0, 1);
+    expect(swappedWith).toBe('b');
+    expect(overlapCount(layout)).toBe(0);
+    expect(layout.find(g => g.i === 'a')).toMatchObject({ x: 2, y: 2, w: 4, h: 2 });
+  });
+
+  it('picks the neighbour sharing the most of the pushed edge', () => {
+    // Two panels line a's south edge; the wider one wins.
+    const desk = [cell('a', 0, 0, 12, 2), cell('b', 0, 2, 3, 2), cell('c', 3, 2, 9, 2)];
+    expect(stepMove(desk, 'a', 0, 1).swappedWith).toBe('c');
+  });
+
+  it('never overlaps or overflows on ragged desks, in any direction', () => {
+    const desks = [
+      [cell('a', 0, 0, 6, 2), cell('b', 2, 2, 4, 2), cell('c', 6, 0, 6, 4), cell('d', 0, 4, 12, 2)],
+      [cell('a', 0, 0, 12, 2), cell('b', 0, 2, 3, 6), cell('c', 3, 2, 9, 3), cell('d', 3, 5, 9, 3)],
+      [cell('a', 0, 0, 4, 4), cell('b', 4, 0, 4, 2), cell('c', 8, 0, 4, 4), cell('d', 4, 2, 4, 2)],
+    ];
+    for (const desk of desks) {
+      const before = deadSpace(desk);
+      for (const g of desk) {
+        for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+          const { layout } = stepMove(desk.map(c => ({ ...c })), g.i, dx, dy);
+          expect(overlapCount(layout)).toBe(0);
+          expect(layout.every(c => c.x >= 0 && c.x + c.w <= GRID.cols)).toBe(true);
+          expect(layout).toHaveLength(desk.length);
+          expect(deadSpace(layout)).toBeLessThanOrEqual(before + 1e-9);
+        }
+      }
+    }
+  });
+
+  it('refuses a move whose destination edge would leave the grid', () => {
+    const desk = [cell('a', 8, 0, 4, 4)];
+    expect(stepMove(desk, 'a', 1, 0).layout).toEqual(desk);
+  });
+});
+
+describe('stepMove and minimized neighbours', () => {
+  const cell = (i: string, x: number, y: number, w: number, h: number) =>
+    ({ i, x, y, w, h, minW: MIN_UNITS.w, minH: MIN_UNITS.h });
+
+  it('never hands a minimized panel a neighbour’s height', () => {
+    // Two full-width bands, the lower one collapsed to a title bar. A box swap
+    // would give it the tall panel's 12 rows with its body still hidden — the
+    // large empty card `noGrow` exists to prevent.
+    const desk = [cell('tall', 0, 0, 12, 12), cell('min', 0, 12, 12, 2)];
+    const { layout, swappedWith } = stepMove(desk, 'min', 0, -1, { noGrow: ['min'] });
+    expect(swappedWith).toBe('tall');
+    expect(layout.find(g => g.i === 'min')!.h).toBe(2);
+    expect(layout.find(g => g.i === 'tall')!.h).toBe(12);
+    expect(layout.find(g => g.i === 'min')!.y).toBe(0);
+    expect(overlapCount(layout)).toBe(0);
+    expect(deadSpace(layout)).toBeCloseTo(0, 9);
+  });
+
+  it('protects the minimized panel from either side of the gesture', () => {
+    const desk = [cell('tall', 0, 0, 12, 12), cell('min', 0, 12, 12, 2)];
+    const { layout } = stepMove(desk, 'tall', 0, 1, { noGrow: ['min'] });
+    expect(layout.find(g => g.i === 'min')!.h).toBe(2);
+    expect(overlapCount(layout)).toBe(0);
+  });
+
+  it('still exchanges boxes outright when neither panel is minimized', () => {
+    const desk = [cell('a', 0, 0, 6, 12), cell('b', 6, 0, 6, 12)];
+    const { layout } = stepMove(desk, 'b', -1, 0, { noGrow: [] });
+    expect(layout.find(g => g.i === 'b')).toMatchObject({ x: 0, w: 6, h: 12 });
+    expect(deadSpace(layout)).toBeCloseTo(0, 9);
+  });
+
+  it('keeps every minimized height across a sweep of moves', () => {
+    const desk = [
+      cell('a', 0, 0, 6, 10),
+      cell('b', 6, 0, 6, 2),
+      cell('c', 6, 2, 6, 8),
+      cell('d', 0, 10, 12, 2),
+    ];
+    for (const g of desk) {
+      for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+        const { layout } = stepMove(desk.map(c => ({ ...c })), g.i, dx, dy, { noGrow: ['b', 'd'] });
+        expect(layout.find(x => x.i === 'b')!.h).toBe(2);
+        expect(layout.find(x => x.i === 'd')!.h).toBe(2);
+        expect(overlapCount(layout)).toBe(0);
+        expect(layout.every(c => c.x >= 0 && c.x + c.w <= GRID.cols)).toBe(true);
+      }
+    }
   });
 });

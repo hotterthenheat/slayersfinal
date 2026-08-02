@@ -12,6 +12,7 @@
 import { dayKey, h01, hPick, hRange } from '../core/rng';
 import type { MarketSnapshot } from '../types/market';
 import type {
+  DarkPoolExecution,
   DarkPoolIntent,
   DarkPoolLevel,
   DarkPoolPrint,
@@ -20,7 +21,17 @@ import type {
   Posture,
 } from '../types/darkpool';
 
-const PRINT_COUNT = 26;
+/**
+ * A session's worth of off-exchange prints.
+ *
+ * This was 26, which is roughly the number of BLOCKS a name prints in a day —
+ * and it made the tape look like a summary rather than a tape. Real
+ * off-exchange flow is mostly small: hundreds of odd lots and round lots from
+ * internalisers and schedule algos, with a handful of negotiated crosses
+ * carrying most of the dollars. The size curve below produces that shape, so
+ * the row count went up without the notional running away with it.
+ */
+const PRINT_COUNT = 240;
 const LEVEL_COUNT = 6;
 /** Retests are displayed as "N×" with a "5+" top, so the count stops at 5. */
 const RETEST_CAP = 5;
@@ -98,6 +109,89 @@ function levelUsage(role: LevelRole, price: number, defended: number, sharePct: 
   }
   return `Two-way shelf at $${p} — institutions rotating, not committing. Direction follows whichever side absorbs the other.`;
 }
+
+
+/**
+ * How the print was executed.
+ *
+ * Keyed off the SAME size and price facts the venue archetype reads, so the two
+ * columns can never contradict each other — a conditional venue printing a
+ * hundred algo child fills would be a tell that this is generated rather than a
+ * read, since a conditional venue exists precisely to avoid that.
+ *
+ * `clips` is the count of child fills behind the print, and it is what actually
+ * separates the archetypes: one negotiated cross is 1, a reserve order working
+ * is dozens of identical ones, a schedule algo is many small ones.
+ */
+function execution(
+  seedBase: string,
+  sizePercentile: number,
+  vsSpotPct: number,
+  atLevel: boolean,
+): { execution: DarkPoolExecution; clips: number; atMid: boolean; reportLagSec: number } {
+  const r = h01(`${seedBase}-x`);
+  const far = Math.abs(vsSpotPct) > 0.35;
+  let kind: DarkPoolExecution;
+  let clips: number;
+
+  if (sizePercentile > 0.88) {
+    // Large-in-scale. Either a conditional match or a negotiated cross, and
+    // either way it prints once.
+    kind = r > 0.45 ? 'LIS CROSS' : 'BLOCK CROSS';
+    clips = 1;
+  } else if (far && r > 0.6) {
+    // Sitting well away from spot is what a late report looks like — it traded
+    // when price was there, and only reached the tape afterwards.
+    kind = 'LATE PRINT';
+    clips = 1 + Math.floor(h01(`${seedBase}-xc`) * 3);
+  } else if (sizePercentile < 0.28) {
+    // Retail-scale clips: a schedule algo, or a midpoint peg.
+    kind = r > 0.5 ? 'VWAP SLICE' : 'MIDPOINT';
+    clips = kind === 'VWAP SLICE' ? 12 + Math.floor(h01(`${seedBase}-xc`) * 90) : 1 + Math.floor(h01(`${seedBase}-xc`) * 4);
+  } else if (atLevel && r > 0.55) {
+    // Repeated equal clips parked at one price is a reserve order working.
+    kind = 'ICEBERG';
+    clips = 6 + Math.floor(h01(`${seedBase}-xc`) * 40);
+  } else if (r > 0.72) {
+    kind = 'SWEEP TO DARK';
+    clips = 2 + Math.floor(h01(`${seedBase}-xc`) * 7);
+  } else {
+    kind = r > 0.36 ? 'BLOCK CROSS' : 'MIDPOINT';
+    clips = kind === 'BLOCK CROSS' ? 1 : 1 + Math.floor(h01(`${seedBase}-xc`) * 5);
+  }
+
+  // A sweep is an aggressor by definition and never crosses at the mid; a
+  // midpoint peg always does. Everything else is a coin weighted by kind —
+  // negotiated size is the LEAST likely to sit at the mid, because the whole
+  // point of negotiating is agreeing a price. Weighting blocks toward the mid
+  // put 76% of session dollars there, which is not what a book of negotiated
+  // crosses looks like.
+  const atMid =
+    kind === 'MIDPOINT'
+      ? true
+      : kind === 'SWEEP TO DARK'
+        ? false
+        : h01(`${seedBase}-xm`) > (kind === 'LIS CROSS' || kind === 'BLOCK CROSS' ? 0.62 : 0.5);
+
+  // Report lag. A late print is late by definition; the rest clear in seconds.
+  const reportLagSec =
+    kind === 'LATE PRINT'
+      ? Math.round(hRange(`${seedBase}-xl`, 300, 5400))
+      : Math.round(hRange(`${seedBase}-xl`, 1, 28));
+
+  return { execution: kind, clips, atMid, reportLagSec };
+}
+
+/** One line on what each execution archetype is, for the tape's own legend. */
+export const EXECUTION_NOTE: Record<DarkPoolExecution, string> = {
+  'BLOCK CROSS': 'One negotiated print, agreed away from the book and reported as a single fill.',
+  'LIS CROSS': 'Conditional large-in-scale match — it only fires once both sides are big enough to qualify.',
+  MIDPOINT: 'Crossed inside the spread, so neither side paid it. Passive by construction.',
+  ICEBERG: 'A reserve order working: the same clip printing over and over at one price.',
+  'VWAP SLICE': 'Schedule-algo child orders — small, even, and about the clock rather than the price.',
+  'SWEEP TO DARK': 'An aggressor that took the lit book and finished off-exchange. Pays up to get done.',
+  'LATE PRINT': 'Reported well after it traded, which is why it can sit far from where price is now.',
+};
 
 function classify(
   seedBase: string,
@@ -186,14 +280,17 @@ export function buildDarkPoolView(snapshot: MarketSnapshot): DarkPoolView {
     const price = nearShelf
       ? shelfPrice * (1 + hRange(`${pSeed}-jit`, -0.0008, 0.0008))
       : lo + h01(`${pSeed}-px`) * range;
-    // Block sizes skew small with a rare institutional tail (5K–255K shares) —
-    // scaled so a single cross stays a plausible fraction of the day's DP flow.
+    // Heavily right-skewed, the way off-exchange size actually distributes: the
+    // median print is a few hundred shares and the top of the book is six
+    // figures. The exponent does the work — a linear draw here would put the
+    // average print at 125K shares and every row would read as a block.
     const sizePercentile = Math.pow(h01(`${pSeed}-sz`), 0.6);
-    const size = Math.round(5000 + Math.pow(sizePercentile, 2.5) * 250000);
+    const size = Math.round(100 + Math.pow(sizePercentile, 6) * 260000);
     const notional = size * price;
     const vsSpotPct = ((price - spot) / spot) * 100;
     const atLevel = nearShelf && Math.abs(price - shelfPrice) / shelfPrice < 0.001;
     const cls = classify(pSeed, vsSpotPct, sizePercentile, atLevel, sessionUp);
+    const exe = execution(pSeed, sizePercentile, vsSpotPct, atLevel);
     const minutesAgo = Math.floor(Math.pow(h01(`${pSeed}-t`), 1.3) * 380);
     const ts = new Date(now - minutesAgo * 60000);
     return {
@@ -206,6 +303,7 @@ export function buildDarkPoolView(snapshot: MarketSnapshot): DarkPoolView {
       venue: venueArchetype(pSeed, sizePercentile),
       vsSpotPct,
       atLevel,
+      ...exe,
       ...cls,
     };
   }).sort((a, b) => (a.time < b.time ? 1 : -1));

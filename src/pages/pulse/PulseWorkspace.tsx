@@ -66,10 +66,15 @@ import {
   boundsOnScreen,
   clampBounds,
   deadSpace,
-  fillGaps,
+  floorOf,
   mergeLayout,
   migrateWorkspace,
+  place,
+  resizeHeight,
+  restore,
+  stepMove,
   screenIndexOf,
+  tile,
 } from './detach';
 import { useScreens, type DisplayInfo } from './useScreens';
 import PopoutPanel from './PopoutPanel';
@@ -114,6 +119,23 @@ function buildCtx(snapshot: MarketSnapshot, revision: number, focusPrice: number
 
 // ---- layout constraints --------------------------------------------------
 /**
+ * The panels the grid is actually showing, and the ones it is not.
+ *
+ * A detached or popped-out panel keeps its saved cell as a hint for coming
+ * home, but it occupies nothing on screen. Every re-flow below works over the
+ * docked set and merges the absent cells back afterwards — passing the whole
+ * array made the desk reserve a band for a panel sitting on another monitor,
+ * measured at 16.7% empty after one press of Fit.
+ */
+const awayIds = (l: PulseLayout) => l.panels.filter(p => p.detached || p.popout).map(p => p.id);
+const dockedCells = (l: PulseLayout, away: readonly string[] = awayIds(l)) => {
+  const set = new Set(away);
+  return l.layout.filter(g => !set.has(g.i));
+};
+/** Minimized panels pack but never grow — see `TileOptions.noGrow`. */
+const noGrowIds = (panels: readonly PulsePanel[]) => panels.filter(p => p.minimized).map(p => p.id);
+
+/**
  * The registry is the one authority on how small a widget may get. Layout items
  * carry their own minW/minH — hand-typed in the presets, frozen at write time in
  * a saved layout — and nothing reconciled the two, so "GEX + Order Flow" shipped
@@ -122,24 +144,49 @@ function buildCtx(snapshot: MarketSnapshot, revision: number, focusPrice: number
  * registry on every load and clamp anything already under it.
  */
 function hydrateLayout(l: PulseLayout): PulseLayout {
+  const awaySet = new Set(awayIds(l));
+  /**
+   * Whether this desk needs re-flowing at all, which is two questions.
+   *
+   * A DOCKED cell being clamped is a repair — its neighbours have to move or
+   * the clamp overlaps them. An AWAY cell being clamped is not: a legacy
+   * one-unit cell belonging to a panel on another monitor was tripping the
+   * repair for panels that needed none, and a docked (x=0,w=4) beside it grew
+   * to all twelve columns and got saved that way.
+   *
+   * But the desk still packs when a POPPED-OUT panel is holding the gap,
+   * because popping out releases the cell — the same asymmetry the return path
+   * uses. A detached panel is floating over its own cell and keeps it.
+   */
+  const released = l.panels.some(p => p.popout && !p.detached);
+  let clamped = false;
+  const layout = l.layout.map(g => {
+    const w = Math.min(GRID_COLS, Math.max(MIN_UNITS.w, g.w));
+    const h = Math.max(MIN_UNITS.h, g.h);
+    if ((w !== g.w || h !== g.h) && !awaySet.has(g.i)) clamped = true;
+    return { ...g, minW: MIN_UNITS.w, minH: MIN_UNITS.h, w, h };
+  });
+  // Clamping a width without moving its neighbours produces OVERLAP, not a
+  // repair. The shipped build before this one allowed one-unit panels, so a
+  // saved row of (x=0,w=1) and (x=1,w=11) widens the first panel straight into
+  // the second. Re-tile when — and only when — something actually had to be
+  // clamped, so a desk already inside the floor (every preset) is untouched.
+  if (!clamped && !released) return { ...l, layout };
+  // Repair only what the grid will render. This used to re-tile the whole
+  // array, so loading a desk with a legacy one-unit panel POPPED OUT laid the
+  // docked panels out around a cell belonging to a window on another screen:
+  // measured at 50.0% dead, with the one visible chart at half the desk width.
+  const away = [...awaySet];
   return {
     ...l,
-    layout: l.layout.map(g => ({
-      ...g,
-      // Nothing is clamped. This used to read every widget's registered floor
-      // and raise `w` and `h` to it on EVERY load, which is why a panel could
-      // be dragged narrower and then silently sprang back the next time the
-      // desk opened, and why a row of panels could never be made to sum to 12:
-      // there was always a strip of canvas on the right that no combination of
-      // sizes could reach. The registry still says how big a panel is born;
-      // what it grows or shrinks to afterwards is the user's business.
-      minW: MIN_UNITS.w,
-      minH: MIN_UNITS.h,
-      w: Math.min(GRID_COLS, Math.max(MIN_UNITS.w, g.w)),
-      h: Math.max(MIN_UNITS.h, g.h),
-    })),
+    layout: mergeLayout(
+      tile(dockedCells({ ...l, layout }, away), { noGrow: noGrowIds(l.panels) }),
+      layout,
+      away,
+    ),
   };
 }
+
 
 const hydratedPreset = (p: PulseLayout): PulseLayout => hydrateLayout(clonePreset(p));
 
@@ -335,10 +382,11 @@ function fitRows(layout: Layout[], panels: PulsePanel[]): Layout[] {
  * the incoming widget's own minimum, and only fall back to a new bottom row when
  * no row has any.
  */
-function placeNew(layout: Layout[], def: { w: number; minW: number }): { x: number; y: number; w: number } {
+function placeNew(layout: Layout[], def: { w: number; h: number; minW: number }): Omit<Layout, 'i'> {
   // `def.minW` here is the width the widget WANTS, used to decide whether a
   // row has enough room to be worth landing in. It is not a floor on what the
   // panel may later be dragged to.
+  const cell = { w: def.w, h: def.h * 2, minW: MIN_UNITS.w, minH: MIN_UNITS.h };
   const bands = [...new Set(layout.map(g => g.y))].sort((a, b) => a - b);
   for (const y of bands) {
     // Everything whose vertical span COVERS this band, not just what starts on
@@ -346,9 +394,22 @@ function placeNew(layout: Layout[], def: { w: number; minW: number }): { x: numb
     // counting only the panels that begin at each y would offer its space away.
     const rightEdge = layout.reduce((m, g) => (g.y <= y && y < g.y + g.h ? Math.max(m, g.x + g.w) : m), 0);
     const free = GRID_COLS - rightEdge;
-    if (free >= def.minW) return { x: rightEdge, y, w: Math.min(def.w, free) };
+    if (free < def.minW) continue;
+    const w = Math.min(def.w, free);
+    // A free right edge is not a free rectangle. The pocket beside a short
+    // panel is only as deep as the next thing standing under those columns, and
+    // handing back the widget's full height there produced a box that reached
+    // straight through its downstairs neighbour. Take the depth that is there;
+    // `tile` grows it into anything further down that turns out to be empty.
+    const room = layout.reduce(
+      (m, g) => (g.y >= y && g.x < rightEdge + w && rightEdge < g.x + g.w ? Math.min(m, g.y) : m),
+      Infinity,
+    ) - y;
+    if (room >= MIN_UNITS.h) return { ...cell, x: rightEdge, y, w, h: Math.min(cell.h, room) };
   }
-  return { x: 0, y: Infinity, w: def.w };
+  // No band has room: a new bottom row. `floorOf`, not RGL's `y: Infinity`
+  // sentinel, because `place` has to do real arithmetic with this cell.
+  return { ...cell, x: 0, y: floorOf(layout) };
 }
 
 /** Per-panel ticker editor — click to type a symbol, Enter to switch. */
@@ -425,6 +486,7 @@ const PanelChrome = ({
   price,
   changePct,
   maximizedView,
+  minimized,
   placement = 'docked',
   h,
 }: {
@@ -434,19 +496,78 @@ const PanelChrome = ({
   price?: number;
   changePct?: number;
   maximizedView?: boolean;
+  /** Collapsed to its title bar. The one control that re-opens it is the same
+      button that collapsed it, so its label has to say which way it goes. */
+  minimized?: boolean;
   /** Where this panel is living. Drives which of detach/dock/pop-out show. */
   placement?: 'docked' | 'detached' | 'popped';
   h: PanelChromeHandlers;
 }) => {
   const def = pulsePanelByKey(panelKey);
   const [nudged, setNudged] = useState('');
+  /**
+   * Measure the header, do not guess from the column count.
+   *
+   * In Customize mode a docked panel carries eight interactive controls, not
+   * the four a read-only panel shows, and at the 2-column floor only four of
+   * them land inside the box — the rest overflow and are unclickable. A column
+   * count cannot tell you that, because two columns is 244px on a 1600 desk and
+   * 153px at the 1024 breakpoint. So the header watches its own width and drops
+   * the secondary controls when they stop fitting, which is also why the floor
+   * can stay at two units instead of being raised for the widest case.
+   */
+  const headRef = useRef<HTMLDivElement | null>(null);
+  const [room, setRoom] = useState(9999);
+  useEffect(() => {
+    const el = headRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(([e]) => setRoom(e.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   // A detached panel has its own drag strip and a popped-out one has the OS
   // window's title bar, so neither takes the grid's drag handle.
   const draggable = !maximizedView && placement === 'docked' && h.editLayout;
   const title = def?.title ?? panelKey;
+
+  /**
+   * Spend the measured width on controls in priority order.
+   *
+   * Fixed thresholds were wrong because the header renders a DIFFERENT set
+   * depending on mode: locked shows three controls, Customize shows eight. A
+   * single `room >= 210` therefore hid Detach and Pop out on a narrow LOCKED
+   * panel — where the user cannot widen it, cannot reach them by maximizing,
+   * and has no overflow menu. That is a dead end, and it was mine.
+   *
+   * Budgeting fixes it without raising the floor: locked panels have the room
+   * for placement because they are not paying for a grip, duplicate, minimize
+   * and close. In Customize the same panel does drop them, which is fine —
+   * there the user can simply make the panel wider.
+   */
+  const BTN = 26;
+  const closable = draggable || placement === 'detached';
+  let budget =
+    room -
+    (draggable ? 22 : 0) - // keyboard grip
+    24 - // a stub of title; it truncates, and placement matters more than letters
+    ((placement !== 'popped' && !maximizedView ? 1 : 0) + (closable ? 1 : 0) + (placement === 'popped' ? 1 : 0)) * BTN;
+  const afford = (cost: number) => {
+    if (budget < cost) return false;
+    budget -= cost;
+    return true;
+  };
+  // Priority order: getting the panel somewhere else beats editing the desk,
+  // which beats the ticker, which beats the quote.
+  // Short-circuit so a group that will not RENDER does not SPEND. Costing
+  // duplicate+minimize on a locked desk, where they never appear, silently
+  // priced Detach and Pop out out of the header.
+  const showPlacement = !maximizedView && placement !== 'popped' && afford(2 * BTN);
+  const showSecondary = draggable && afford(2 * BTN);
+  const showTicker = afford(34);
+  const showQuote = afford(96);
   const up = (changePct ?? 0) >= 0;
   return (
-    <div className={`${draggable ? 'widget-drag cursor-grab active:cursor-grabbing' : ''} flex items-center gap-2 px-3.5 h-10 border-b border-borderSubtle bg-white/[0.015] shrink-0 select-none`}>
+    <div ref={headRef} className={`${draggable ? 'widget-drag cursor-grab active:cursor-grabbing' : ''} flex items-center gap-2 px-3.5 h-10 border-b border-borderSubtle bg-white/[0.015] shrink-0 select-none overflow-hidden`}>
       {draggable && (
         <>
           {/* react-grid-layout's handle is a bare div, so Customize mode
@@ -487,8 +608,8 @@ const PanelChrome = ({
       <h2 className="font-mono text-label font-semibold uppercase tracking-widest text-textPrimary truncate">
         {def?.title ?? panelKey}
       </h2>
-      <PanelTicker value={ticker} onChange={t => h.onTicker(panelId, t)} />
-      {price != null && Number.isFinite(price) && (
+      {showTicker && <PanelTicker value={ticker} onChange={t => h.onTicker(panelId, t)} />}
+      {showQuote && price != null && Number.isFinite(price) && (
         <span className="hidden md:flex items-baseline gap-1.5 font-mono tnum whitespace-nowrap" onMouseDown={e => e.stopPropagation()}>
           <span className="text-caption text-textPrimary">${price.toFixed(2)}</span>
           {changePct != null && Number.isFinite(changePct) && (
@@ -500,13 +621,18 @@ const PanelChrome = ({
         </span>
       )}
       <div className="ml-auto flex items-center gap-0.5 shrink-0" onMouseDown={e => e.stopPropagation()}>
-        {draggable && (
+        {draggable && showSecondary && (
           <>
             <button onClick={() => h.onDuplicate(panelId)} title="Duplicate" aria-label={`Duplicate ${title} panel`} className={chromeBtn}>
               <Copy className="w-3 h-3" />
             </button>
-            <button onClick={() => h.onMinimize(panelId)} title="Minimize" aria-label={`Minimize ${title} panel`} className={chromeBtn}>
-              <Minus className="w-3.5 h-3.5" />
+            <button
+              onClick={() => h.onMinimize(panelId)}
+              title={minimized ? 'Expand' : 'Minimize'}
+              aria-label={`${minimized ? 'Expand' : 'Minimize'} ${title} panel`}
+              className={chromeBtn}
+            >
+              {minimized ? <Plus className="w-3.5 h-3.5" /> : <Minus className="w-3.5 h-3.5" />}
             </button>
           </>
         )}
@@ -516,7 +642,7 @@ const PanelChrome = ({
             built, and gating it behind edit mode would be the same mistake as
             gating the ticker switcher. Maximized is the one exclusion — there
             is no grid cell to come back to mid-maximize. */}
-        {!maximizedView && placement !== 'popped' && (
+        {!maximizedView && placement !== 'popped' && showPlacement && (
           <>
             <button
               onClick={() => (placement === 'detached' ? h.onDock(panelId) : h.onDetach(panelId))}
@@ -624,6 +750,9 @@ const PulseWorkspace = () => {
   /** Stacking order for floating panels — last touched sits on top. */
   const [zOrder, setZOrder] = useState<Record<string, number>>({});
   const zTop = useRef(10);
+  /** The panel a drag or resize is currently about. Read once by
+      `onLayoutChange` to decide whose size to hold while the rest absorb. */
+  const touched = useRef<string | null>(null);
   /** The desk surface, measured so a detaching panel keeps its exact box. */
   const deskRef = useRef<HTMLDivElement | null>(null);
   const { displays, granted: displaysGranted, request: requestDisplays, supported: supportsDisplays } = useScreens();
@@ -758,13 +887,14 @@ const PulseWorkspace = () => {
     if (!def) return;
     const id = `${key}-${++counterRef.current}`;
     mutate(l => {
-      const spot = placeNew(l.layout, def);
-      return {
-        ...l,
-        panels: [...l.panels, { id, key }],
-        // Born at the registry's size; free to be dragged anywhere after.
-        layout: [...l.layout, { i: id, ...spot, h: def.h * 2, minW: MIN_UNITS.w, minH: MIN_UNITS.h }],
-      };
+      const away = awayIds(l);
+      const docked = dockedCells(l, away);
+      // Born at the registry's size; free to be dragged anywhere after. It goes
+      // through `place` like every other arrival, because appending the cell
+      // raw left the desk 14.7% empty — the new panel took the width its widget
+      // asked for and nothing grew to meet it.
+      const landed = place(docked, { i: id, ...placeNew(docked, def) }, { noGrow: noGrowIds(l.panels) });
+      return { ...l, panels: [...l.panels, { id, key }], layout: mergeLayout(landed, l.layout, away) };
     });
     setAddOpen(false);
   };
@@ -777,47 +907,84 @@ const PulseWorkspace = () => {
     const panel = active.panels.find(p => p.id === id);
     const geo = active.layout.find(g => g.i === id);
     const title = (panel && pulsePanelByKey(panel.key)?.title) ?? 'Panel';
-    mutate(l => ({ ...l, panels: l.panels.filter(p => p.id !== id), layout: l.layout.filter(g => g.i !== id) }));
+    // Closing left a panel-shaped hole in the desk — 10.3% of it on a five-panel
+    // measurement. The neighbours take that space back, which is the same rule
+    // as shrinking one by dragging its edge.
+    mutate(l => {
+      const panels = l.panels.filter(p => p.id !== id);
+      const away = awayIds({ ...l, panels });
+      const docked = dockedCells({ ...l, panels }, away).filter(g => g.i !== id);
+      return { ...l, panels, layout: mergeLayout(tile(docked, { noGrow: noGrowIds(panels) }), l.layout, away) };
+    });
     if (!panel || !geo) return;
     toast.toast(`Closed ${title}`, 'info', {
       label: 'Undo',
       onClick: () =>
-        mutate(l =>
-          l.panels.some(p => p.id === id)
-            ? l
-            : { ...l, panels: [...l.panels, panel], layout: [...l.layout, geo] }
-        ),
+        mutate(l => {
+          if (l.panels.some(p => p.id === id)) return l;
+          const panels = [...l.panels, panel];
+          const away = awayIds({ ...l, panels });
+          const docked = dockedCells({ ...l, panels }, away);
+          const noGrow = noGrowIds(panels);
+          // Closing a DETACHED panel and undoing restores it still detached, so
+          // it is not returning to the grid and must not be tiled with the
+          // panels that are — it would be an obstacle they lay out around and
+          // then never render. Its cell rides back through the saved side,
+          // because removing the panel took it out of `l.layout`.
+          //
+          // The old cell is only a hint for a panel that IS coming back: the
+          // desk closed that gap when the panel went, so `place` honours it
+          // just when it is somehow still free.
+          const settled = away.includes(id) ? tile(docked, { noGrow }) : place(docked, geo, { noGrow });
+          return { ...l, panels, layout: mergeLayout(settled, [...l.layout, geo], away) };
+        }),
     });
   };
 
   const duplicatePanel = (id: string) => {
     const panel = active.panels.find(p => p.id === id);
-    const geo = active.layout.find(g => g.i === id);
-    if (!panel || !geo) return;
+    if (!panel) return;
     const nid = `${panel.key}-${++counterRef.current}`;
-    mutate(l => ({
-      ...l,
-      panels: [...l.panels, { ...panel, id: nid }],
-      layout: [...l.layout, { ...geo, i: nid, x: 0, y: Infinity }],
-    }));
+    mutate(l => {
+      const geo = l.layout.find(g => g.i === id);
+      if (!geo) return l;
+      const panels = [...l.panels, { ...panel, id: nid }];
+      const away = awayIds({ ...l, panels });
+      const docked = dockedCells({ ...l, panels }, away);
+      // A new bottom row, then packed in — appending the copy raw left 8% of
+      // the desk empty beside it.
+      const landed = place(docked, { ...geo, i: nid, x: 0, y: floorOf(docked) }, { noGrow: noGrowIds(panels) });
+      return { ...l, panels, layout: mergeLayout(landed, l.layout, away) };
+    });
   };
 
   const setPanelTicker = (id: string, ticker: string) =>
     mutate(l => ({ ...l, panels: l.panels.map(p => (p.id === id ? { ...p, ticker } : p)) }));
 
+  /**
+   * Collapse a panel to its title bar, or open it again.
+   *
+   * Both directions used to write the new height straight into the cell and
+   * stop. Collapsing then left the ten rows it gave up standing empty — 9.8% of
+   * the desk on a six-panel measurement — and re-opening grew the panel back
+   * through whatever had settled underneath it.
+   */
   const toggleMin = (id: string) =>
     mutate(l => {
       const p = l.panels.find(x => x.id === id);
       const geo = l.layout.find(g => g.i === id);
       if (!p || !geo) return l;
       const min = !p.minimized;
-      return {
-        ...l,
-        panels: l.panels.map(x => (x.id === id ? { ...x, minimized: min, restoreH: min ? geo.h : undefined } : x)),
-        layout: l.layout.map(g =>
-          g.i === id ? { ...g, h: min ? MINIMIZED_H : (p.restoreH ?? geo.h), minH: MIN_UNITS.h } : g,
-        ),
-      };
+      const h = min ? MINIMIZED_H : (p.restoreH ?? geo.h);
+      const panels = l.panels.map(x => (x.id === id ? { ...x, minimized: min, restoreH: min ? geo.h : undefined } : x));
+      const away = awayIds({ ...l, panels });
+      // A panel on another monitor has no cell on screen to re-flow around; its
+      // height is only a note for when it comes home.
+      if (away.includes(id)) {
+        return { ...l, panels, layout: l.layout.map(g => (g.i === id ? { ...g, h } : g)) };
+      }
+      const settled = resizeHeight(dockedCells({ ...l, panels }, away), id, h, { noGrow: noGrowIds(panels) });
+      return { ...l, panels, layout: mergeLayout(settled, l.layout, away) };
     });
 
   /**
@@ -828,15 +995,27 @@ const PulseWorkspace = () => {
    * stub, which is what the whole "keeps its layout entry while away" contract
    * was supposed to prevent. Carry the absent cells across untouched.
    */
-  const onLayoutChange = (next: Layout[]) =>
+  const onLayoutChange = (next: Layout[]) => {
+    // Only re-tile when a gesture put us here. On mount, on a layout switch and
+    // on a restore there is no touched panel, and re-packing then would reshape
+    // a preset the user never asked to change — Flow Command's full-height
+    // column being the obvious casualty.
+    const held = touched.current;
+    touched.current = null;
+    // Minimized panels are a parked title bar. They pack like anything else but
+    // must never be GROWN, or the fill logic stretches one to a neighbour's
+    // height and it becomes a tall empty card with its body still hidden.
+    const minimized = active.panels.filter(p => p.minimized).map(p => p.id);
+    const settled = held ? tile(next, { hold: [held], noGrow: minimized }) : next;
     mutate(l => ({
       ...l,
       layout: mergeLayout(
-        next,
+        settled,
         l.layout,
         l.panels.filter(p => p.detached || p.popout).map(p => p.id),
       ),
     }));
+  };
 
   // ---- placement: docked ⇄ detached ⇄ popped out --------------------------
   /**
@@ -861,9 +1040,48 @@ const PulseWorkspace = () => {
     patchPanel(id, p => ({ ...p, detached: box, popout: undefined }));
   };
 
+  /**
+   * Bring a panel back to the grid, from wherever it was.
+   *
+   * Shared by every return path. It used to live inside `dockPanel` only, so
+   * closing a pop-out from the OS TITLE BAR — which lands in `onPopoutClosed`,
+   * not here — put the panel back at its stale cell with no reconciliation at
+   * all, handing an overlapping layout to the grid. Two ways home, one of them
+   * correct, is how that kind of bug survives review.
+   */
+  const returnToGrid = (id: string) =>
+    mutate(l => {
+      // Which way it left decides how it comes back, and this has to be read
+      // BEFORE the flags are cleared. Detaching reserves the cell — the panel
+      // is floating over it — so a round trip must change nothing. Popping out
+      // releases it and the desk packs over the hole, so coming home is an
+      // arrival like any other. Routing both through `restore` honoured a cell
+      // the pop-out had already given up: two full-width bands with the lower
+      // one popped out came back to its old y and recreated the eight empty
+      // rows the pack had just closed.
+      const wasPopout = !!l.panels.find(p => p.id === id)?.popout;
+      const panels = l.panels.map(p => (p.id === id ? { ...p, detached: undefined, popout: undefined } : p));
+      // The saved cell is a HINT, not a reservation: the desk keeps itself
+      // gapless while a panel is away, so a neighbour has usually absorbed that
+      // space and dropping the panel straight back onto it would overlap.
+      const away = awayIds({ ...l, panels });
+      const staying = dockedCells({ ...l, panels }, away).filter(g => g.i !== id);
+      const returning = l.layout.find(g => g.i === id);
+      // `place` honours the saved cell when it is still free and only relocates
+      // when something has actually moved into it. Relocating unconditionally
+      // was wrong in the common case: detach a panel and dock it straight back
+      // with no edit in between and a 6+6 row came home as two stacked
+      // full-width rows — gapless, non-overlapping, and not the desk the user
+      // had. That is a change nothing asked for.
+      const settled = returning
+        ? (wasPopout ? place : restore)(staying, returning, { noGrow: noGrowIds(panels) })
+        : tile(staying, { noGrow: noGrowIds(panels) });
+      return { ...l, panels, layout: mergeLayout(settled, l.layout, away) };
+    });
+
   const dockPanel = (id: string) => {
     closePopout(id);
-    patchPanel(id, p => ({ ...p, detached: undefined, popout: undefined }));
+    returnToGrid(id);
   };
 
   const moveDetached = (id: string, box: PixelBounds) => patchPanel(id, p => ({ ...p, detached: box }));
@@ -890,7 +1108,24 @@ const PulseWorkspace = () => {
       return;
     }
     setPopWins(m => new Map(m).set(id, win));
-    patchPanel(id, p => ({ ...p, popout: box, detached: undefined }));
+    /**
+     * Closing the desk over a panel that has left the screen.
+     *
+     * Detaching and popping out look like the same move and are not. A detached
+     * panel floats over the desk in the very cell it left, so reserving that
+     * cell costs nothing — it is covered — and reserving it is what makes
+     * docking straight back a no-op. A popped-out panel is on another monitor,
+     * and the reserved cell is then a rectangle of this screen with nothing in
+     * it: measured at 50.4% of the desk with one of two panels popped out.
+     * So this one packs, and coming home goes through `place` like any other
+     * arrival.
+     */
+    mutate(l => {
+      const panels = l.panels.map(p => (p.id === id ? { ...p, popout: box, detached: undefined } : p));
+      const away = awayIds({ ...l, panels });
+      const settled = tile(dockedCells({ ...l, panels }, away), { noGrow: noGrowIds(panels) });
+      return { ...l, panels, layout: mergeLayout(settled, l.layout, away) };
+    });
     // Ask for the real display list AFTER the window is open, so the next
     // pop-out can offer a monitor picker. Doing it before would spend the
     // gesture on the permission prompt and lose the window.
@@ -917,7 +1152,12 @@ const PulseWorkspace = () => {
       next.delete(id);
       return next;
     });
-    patchPanel(id, p => ({ ...p, popout: undefined }));
+    // Only a panel that is popped out ON THIS DESK can be coming home. Saved
+    // and duplicated layouts reuse panel ids, so a callback arriving after a
+    // desk switch could otherwise reconcile a layout that merely shares the id
+    // with the window's real owner.
+    if (!active.panels.some(p => p.id === id && p.popout)) return;
+    returnToGrid(id);
   };
 
   const onPopoutMoved = (id: string, box: ScreenBox) => patchPanel(id, p => ({ ...p, popout: box }));
@@ -932,32 +1172,75 @@ const PulseWorkspace = () => {
    * RGL re-runs its vertical compaction from it.
    */
   const nudgePanel = (id: string, dx: number, dy: number, dw: number, dh: number): string => {
-    // The keyboard path gets exactly the freedom the mouse has. It used to
-    // read the registry floor, so Shift+Arrow stopped shrinking a panel at a
-    // size the mouse is now allowed past — two different limits for the same
-    // gesture.
-    const minW = MIN_UNITS.w;
-    const minH = MIN_UNITS.h;
-    let announced = '';
-    mutate(l => ({
-      ...l,
-      layout: l.layout.map(g => {
-        if (g.i !== id) return g;
-        const w = Math.max(minW, Math.min(GRID_COLS, g.w + dw));
-        const h = Math.max(minH, g.h + dh);
-        const x = Math.max(0, Math.min(GRID_COLS - w, g.x + dx));
-        const y = Math.max(0, g.y + dy);
-        announced = dw || dh ? `${w} by ${h}` : `column ${x + 1}, row ${y + 1}`;
-        return { ...g, x, y, w, h };
-      }),
-    }));
-    return announced;
+    // The keyboard path gets exactly the freedom the mouse has. It used to read
+    // the registry floor, so Shift+Arrow stopped shrinking a panel at a size the
+    // mouse is now allowed past — two different limits for the same gesture.
+    const away = awayIds(active);
+    const awaySet = new Set(away);
+    const docked = active.layout.filter(g => !awaySet.has(g.i));
+    const opts = { noGrow: noGrowIds(active.panels) };
+
+    // Move and resize are different problems and used to share one path.
+    //
+    // A RESIZE has an anchor: `hold` keeps the edge the user pulled where they
+    // put it and the neighbours absorb the rest, exactly as a mouse drag does.
+    // A MOVE on a gapless desk has no free cell to move into, so the same code
+    // handed `tile` an overlap — which it packs rather than resolves. The
+    // measured result on a plain 6+6 was a no-op in one direction and a
+    // two-panel swap in the other. `stepMove` does the collision arithmetic.
+    let settled: Layout[];
+    let swapped: string | undefined;
+    if (dw || dh) {
+      settled = tile(
+        docked.map(g => {
+          if (g.i !== id) return g;
+          const w = Math.max(MIN_UNITS.w, Math.min(GRID_COLS, g.w + dw));
+          const h = Math.max(MIN_UNITS.h, g.h + dh);
+          return { ...g, w, h, x: Math.min(g.x, GRID_COLS - w) };
+        }),
+        { ...opts, hold: [id] },
+      );
+    } else {
+      const step = stepMove(docked, id, dx, dy, opts);
+      settled = step.layout;
+      swapped = step.swappedWith;
+    }
+    mutate(l => ({ ...l, layout: mergeLayout(settled, l.layout, away) }));
+
+    // Announce the SETTLED geometry, not the requested one. Reading it off the
+    // pre-tile box told a screen-reader user "4 by 12" while tiling immediately
+    // grew that panel back to 12 columns, because a panel alone in its row has
+    // no neighbour to give the space to. A number that never reaches the screen
+    // is worse than silence — and a swap resizes the panel, so saying only
+    // where it went would be the same defect one step along.
+    const g = settled.find(x => x.i === id);
+    if (!g) return '';
+    if (swapped) {
+      const other = active.panels.find(p => p.id === swapped);
+      const name = (other && pulsePanelByKey(other.key)?.title) ?? 'panel';
+      return `swapped with ${name}, now column ${g.x + 1}, row ${g.y + 1}, ${g.w} by ${g.h}`;
+    }
+    return dw || dh ? `${g.w} by ${g.h}` : `column ${g.x + 1}, row ${g.y + 1}`;
   };
 
-  const doArrange = (mode: 'one' | 'cols' | 'rows' | 'quad') =>
-    mutate(l => ({ ...l, layout: arrange(mode, l.panels) }));
 
-  const doFit = () => mutate(l => ({ ...l, layout: fitRows(l.layout, l.panels) }));
+  // Both of these re-flow the desk, so both work over the panels the desk is
+  // actually showing. Handing them the full list laid out a band for a panel
+  // living on another monitor and then rendered the hole where it would have
+  // been: 16.7% empty, measured, after one press of Fit.
+  const doArrange = (mode: 'one' | 'cols' | 'rows' | 'quad') =>
+    mutate(l => {
+      const away = awayIds(l);
+      const shown = l.panels.filter(p => !p.detached && !p.popout);
+      return { ...l, layout: mergeLayout(arrange(mode, shown), l.layout, away) };
+    });
+
+  const doFit = () =>
+    mutate(l => {
+      const away = awayIds(l);
+      const shown = l.panels.filter(p => !p.detached && !p.popout);
+      return { ...l, layout: mergeLayout(fitRows(dockedCells(l, away), shown), l.layout, away) };
+    });
 
   /**
    * Stretch every panel into whatever space is left beside and below it.
@@ -971,15 +1254,25 @@ const PulseWorkspace = () => {
     mutate(l => {
       const docked = l.layout.filter(g => l.panels.some(p => p.id === g.i && !p.detached && !p.popout));
       const before = deadSpace(docked);
-      const filled = fillGaps(docked);
-      const after = deadSpace(filled);
+      const packed = tile(docked, { noGrow: l.panels.filter(p => p.minimized).map(p => p.id) });
       toast.info(
         before <= 0.001
           ? 'No dead space to reclaim'
-          : `Dead space ${Math.round(before * 100)}% to ${Math.round(after * 100)}%`,
+          : `Dead space ${Math.round(before * 100)}% to ${Math.round(deadSpace(packed) * 100)}%`,
       );
-      return { ...l, layout: mergeLayout(filled, l.layout, l.panels.filter(p => p.detached || p.popout).map(p => p.id)) };
+      return { ...l, layout: mergeLayout(packed, l.layout, l.panels.filter(p => p.detached || p.popout).map(p => p.id)) };
     });
+
+  /**
+   * Re-tile after a drag or a resize so the desk is never left with a hole.
+   *
+   * The invariant the user asked for: make one panel smaller and the others get
+   * bigger. `held` is the panel they just let go of — it keeps exactly the size
+   * they dragged it to, and the rest of the row absorbs what it gave up. A
+   * panel with no neighbour to donate to is grown back, because "keep my width"
+   * and "no dead space" cannot both hold when a panel is alone in its row.
+   */
+
 
   // ---- workspace-level ops ------------------------------------------------
   const switchLayout = (id: string) => {
@@ -1076,6 +1369,17 @@ const PulseWorkspace = () => {
       popWins.forEach(w => {
         if (!w.closed) w.close();
       });
+      // And forget them. Closing without clearing left dead windows in the map,
+      // so switching BACK to this desk remounted PopoutPanel against one — and
+      // its "already closed" guard fires on mount, which docked the panel.
+      // Measured: pop a panel out, switch desks, switch back, and the panel had
+      // quietly left the second monitor and rearranged the desk to fit,
+      // 6 columns at row 0 becoming 12 columns at row 12.
+      //
+      // The `popout` box stays on the panel, so the Windows menu still offers
+      // to reopen it — the same route a page reload already takes, since a
+      // browser will not open a window without a click.
+      setPopWins(m => (m.size ? new Map() : m));
     };
     // Intentionally keyed on the layout id alone: this is a teardown for
     // "the active desk changed", not for "the window map changed".
@@ -1509,7 +1813,7 @@ const PulseWorkspace = () => {
                   className="inst-surface rounded-md overflow-hidden flex flex-col"
                   style={{ height: p.minimized ? undefined : h }}
                 >
-                  <PanelChrome panelId={p.id} panelKey={p.key} ticker={ticker} price={snapFor(ticker)?.spot} changePct={snapFor(ticker)?.changePercent} h={chromeHandlers} />
+                  <PanelChrome panelId={p.id} panelKey={p.key} ticker={ticker} price={snapFor(ticker)?.spot} changePct={snapFor(ticker)?.changePercent} minimized={p.minimized} h={chromeHandlers} />
                   {!p.minimized && (
                     <div className="flex-grow min-h-0 overflow-hidden">{renderPanelBody(p.key, ticker)}</div>
                   )}
@@ -1546,13 +1850,28 @@ const PulseWorkspace = () => {
               // which is two gestures for one intention.
               resizeHandles={['s', 'w', 'e', 'n', 'sw', 'nw', 'se', 'ne']}
               onLayoutChange={onLayoutChange}
+              // Record WHICH panel the gesture is about, then tile in
+              // onLayoutChange. Tiling in onResizeStop does not survive: RGL
+              // fires onResizeStop first and onLayoutChange straight after with
+              // its own untiled layout, so the absorb was computed and then
+              // immediately overwritten. Measured — the neighbour never moved.
+              onResizeStart={(_l, item) => (touched.current = item.i)}
+              onDragStart={(_l, item) => (touched.current = item.i)}
+              // A press-and-release that moves nothing gives RGL no layout to
+              // report, so `onLayoutChange` never runs and never clears the ref.
+              // The next unrelated change — adding a panel, minimizing one —
+              // would then be treated as that stale gesture and tile while
+              // holding the wrong panel. RGL calls stop BEFORE onLayoutChange,
+              // so the clear is queued behind it rather than done inline.
+              onResizeStop={() => queueMicrotask(() => (touched.current = null))}
+              onDragStop={() => queueMicrotask(() => (touched.current = null))}
             >
               {dockedPanels.map(p => {
                 const ticker = p.ticker ?? activeTicker;
                 const minimized = p.minimized;
                 return (
                   <div key={p.id} className="inst-surface rounded-md overflow-hidden flex flex-col">
-                    <PanelChrome panelId={p.id} panelKey={p.key} ticker={ticker} price={snapFor(ticker)?.spot} changePct={snapFor(ticker)?.changePercent} h={chromeHandlers} />
+                    <PanelChrome panelId={p.id} panelKey={p.key} ticker={ticker} price={snapFor(ticker)?.spot} changePct={snapFor(ticker)?.changePercent} minimized={minimized} h={chromeHandlers} />
                     {!minimized && <div className="flex-grow min-h-0 overflow-hidden">{renderPanelBody(p.key, ticker)}</div>}
                   </div>
                 );

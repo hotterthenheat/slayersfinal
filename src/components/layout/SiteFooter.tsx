@@ -10,7 +10,7 @@
 ==================================================
 */
 
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useLaunch } from './LaunchTransition';
 
 const LEGAL_LINKS = [
@@ -59,10 +59,27 @@ const FOOTER_COLS = [
   { title: 'Legal', links: LEGAL_LINKS },
 ];
 
-/** Anchor / route / mailto — one link component so columns stay declarative.
-    Links into the terminal play the launch gate instead of jumping. */
+/**
+ * Anchor / route / mailto — one link component so columns stay declarative.
+ * Links into the terminal play the launch gate instead of jumping.
+ *
+ * A BARE hash is the interesting case. `#pricing` and `#faq` are sections of
+ * the landing page, and this footer used to appear only there, so a raw anchor
+ * was right. Now that every route carries it, `#pricing` clicked from
+ * `/compass` resolves to `/compass#pricing` — a section that does not exist,
+ * and measurably nothing happens. Off the landing page the hash has to carry
+ * its route with it.
+ */
 const SmartLink = ({ to, className, children }: { to: string; className: string; children: React.ReactNode }) => {
   const { launch } = useLaunch();
+  const { pathname } = useLocation();
+  if (to.startsWith('#') && pathname !== '/') {
+    return (
+      <Link to={{ pathname: '/', hash: to }} className={className}>
+        {children}
+      </Link>
+    );
+  }
   if (to === '/terminal') {
     return (
       <a
@@ -105,13 +122,27 @@ const DISCLAIMER = 'For informational purposes only. Not investment advice.';
 interface SiteFooterProps {
   /** `compact` drops the sitemap: one bar, wordmark and legal line only. */
   variant?: 'full' | 'compact';
+  /**
+   * Align to the page's own gutters instead of a centred column.
+   *
+   * The landing is a centred document and its footer should match it. An app
+   * route is full-bleed, so the same centred footer lands 115px in from the
+   * content directly above it — measured on Compass, Tracker and News at
+   * 1440px. That inset is what makes the bottom of the page read as belonging
+   * to a different site than the top.
+   */
+  bleed?: boolean;
 }
 
-const SiteFooter = ({ variant = 'full' }: SiteFooterProps) => {
+/** Page gutters, matching the shell's own `px-4 lg:px-6 2xl:px-8`. */
+const GUTTER = 'px-4 lg:px-6 2xl:px-8';
+
+const SiteFooter = ({ variant = 'full', bleed = false }: SiteFooterProps) => {
+  const pad = bleed ? GUTTER : 'px-6 md:px-10 max-w-6xl mx-auto';
   if (variant === 'compact') {
     return (
       <footer className="border-t border-borderSubtle">
-        <div className="px-4 lg:px-6 py-4 flex flex-wrap items-center gap-x-5 gap-y-2">
+        <div className={`${GUTTER} py-4 flex flex-wrap items-center gap-x-5 gap-y-2`}>
           <Wordmark caret={false} />
           <span className="font-mono text-micro uppercase tracking-wider text-textMuted">{COPYRIGHT}</span>
           <span className="font-mono text-micro tracking-wide text-textMuted">{DISCLAIMER}</span>
@@ -133,7 +164,7 @@ const SiteFooter = ({ variant = 'full' }: SiteFooterProps) => {
 
   return (
     <footer className="border-t border-borderSubtle">
-      <div className="px-6 md:px-10 py-14 max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-6 gap-10">
+      <div className={`${pad} py-14 grid grid-cols-2 md:grid-cols-6 gap-10`}>
         <div className="col-span-2">
           <Wordmark caret />
           <p className="mt-3 text-caption text-textSecondary leading-relaxed max-w-[36ch]">
@@ -172,7 +203,7 @@ const SiteFooter = ({ variant = 'full' }: SiteFooterProps) => {
         ))}
       </div>
       <div className="border-t border-borderSubtle/60">
-        <div className="px-6 md:px-10 py-5 max-w-6xl mx-auto flex flex-col md:flex-row gap-2 md:items-center">
+        <div className={`${pad} py-5 flex flex-col md:flex-row gap-2 md:items-center`}>
           <span className="font-mono text-micro uppercase tracking-wider text-textMuted">{COPYRIGHT}</span>
           <SmartLink
             to="/legal/disclaimer"

@@ -7,7 +7,8 @@
 ==================================================
 */
 
-import { Link } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowRight, Check, ChevronDown } from 'lucide-react';
 import { SEED_IDEAS } from '../../data/community';
@@ -189,7 +190,38 @@ const LandingNav = () => {
   );
 };
 
-const Landing = () => (
+/**
+ * Scroll to a section the user arrived pointing at.
+ *
+ * A real anchor click moves the viewport; a client-side navigation does not. So
+ * the footer's Pricing and FAQ links, followed from any other route, landed on
+ * this page at the top with the hash sitting unused in the address bar. One
+ * frame of delay because the sections below have to lay out before there is
+ * anything to scroll to.
+ */
+const useHashTarget = () => {
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (!hash) return;
+    let el: Element | null = null;
+    try {
+      el = document.querySelector(hash);
+    } catch {
+      return; // a hash that is not a valid selector is not ours to chase
+    }
+    if (!el) return;
+    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const t = window.setTimeout(
+      () => el!.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' }),
+      60,
+    );
+    return () => window.clearTimeout(t);
+  }, [hash]);
+};
+
+const Landing = () => {
+  useHashTarget();
+  return (
   <div className="min-h-screen bg-canvas text-textPrimary overflow-x-hidden">
     <LandingNav />
 
@@ -436,6 +468,7 @@ const Landing = () => (
 
     <SiteFooter />
   </div>
-);
+  );
+};
 
 export default Landing;

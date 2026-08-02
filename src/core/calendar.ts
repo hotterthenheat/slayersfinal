@@ -35,6 +35,26 @@ export const MARKET_HOLIDAYS = new Set([
 ]);
 
 /**
+ * Scheduled half-days: the regular session ends at 13:00 ET, not 16:00.
+ *
+ * Same year range as the holiday table above, and the dates are computed from
+ * the three NYSE rules rather than typed from memory — the day after
+ * Thanksgiving; July 3 when both it and the 4th are weekdays; December 24 when
+ * both it and the 25th are weekdays. The gaps are the point: 2027 has neither
+ * a July nor a December half-day because those dates land on a weekend, and
+ * 2026's July 3 is a full holiday rather than a half-day because the 4th is a
+ * Saturday. Guessing the rule instead of listing the days gets those wrong.
+ */
+export const EARLY_CLOSES = new Set([
+  '2026-11-27', '2026-12-24',
+  '2027-11-26',
+  '2028-07-03', '2028-11-24',
+  '2029-07-03', '2029-11-23', '2029-12-24',
+  '2030-07-03', '2030-11-29', '2030-12-24',
+  '2031-07-03', '2031-11-28', '2031-12-24',
+]);
+
+/**
  * The last year the table above covers. `contractQuery` reads its own copy off
  * the same set, and drops every ladder rung past it rather than counting
  * Thanksgiving as a session — so when this table runs out, the expiry picker
@@ -191,4 +211,83 @@ export function expiryFor(dte: number, from: Date = today()): Expiry {
     dte: Math.round((date.getTime() - base.getTime()) / DAY_MS),
     sessions: sessionsBetween(base, date),
   };
+}
+
+// ---- market clock --------------------------------------------------------
+
+/** Where the session is, right now. */
+export type MarketPhase = 'pre' | 'open' | 'after' | 'closed' | 'weekend' | 'holiday';
+
+export interface MarketClock {
+  /** HH:MM:SS in New York, whatever zone the viewer is in. */
+  time: string;
+  /** The ET calendar day, as a holiday-table key. */
+  day: string;
+  phase: MarketPhase;
+  /** Short caption for the phase, for rendering beside the time. */
+  label: string;
+}
+
+/**
+ * One formatter, built once. `hourCycle: 'h23'` rather than `hour12: false`,
+ * which renders midnight as "24" on some engines.
+ */
+const ET = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York',
+  hourCycle: 'h23',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  weekday: 'short',
+});
+
+const PHASE_LABEL: Record<MarketPhase, string> = {
+  pre: 'Pre-market',
+  open: 'Open',
+  after: 'After hours',
+  closed: 'Closed',
+  weekend: 'Weekend',
+  holiday: 'Holiday',
+};
+
+/**
+ * The market clock, in Eastern time, with the session it is in.
+ *
+ * The top bar used to show `new Date().toLocaleTimeString()` — the VIEWER's
+ * wall clock, with nothing saying so. Measured at one instant: 03:01 in New
+ * York, 08:01 in London, 16:01 in Tokyo. Sitting flush against a SPY quote in a
+ * terminal, an unlabelled clock reads as market time, which is the convention it
+ * was borrowing without honouring.
+ *
+ * Derived from the ET calendar day, not the viewer's: east of New York the
+ * local date is already tomorrow for part of every session, so a holiday lookup
+ * on the local date answers for the wrong day.
+ */
+export function marketClock(now: Date = new Date()): MarketClock {
+  const p: Record<string, string> = {};
+  for (const { type, value } of ET.formatToParts(now)) p[type] = value;
+  const day = `${p.year}-${p.month}-${p.day}`;
+  const time = `${p.hour}:${p.minute}:${p.second}`;
+  const mins = Number(p.hour) * 60 + Number(p.minute);
+  // Half-days end at 13:00. Reading 16:00 for every session reported "Open"
+  // for three hours after the bell on the Friday after Thanksgiving.
+  const close = EARLY_CLOSES.has(day) ? 13 * 60 : 16 * 60;
+
+  const phase: MarketPhase =
+    p.weekday === 'Sat' || p.weekday === 'Sun'
+      ? 'weekend'
+      : MARKET_HOLIDAYS.has(day)
+        ? 'holiday'
+        : mins >= 9 * 60 + 30 && mins < close
+          ? 'open'
+          : mins >= 4 * 60 && mins < 9 * 60 + 30
+            ? 'pre'
+            : mins >= close && mins < 20 * 60
+              ? 'after'
+              : 'closed';
+
+  return { time, day, phase, label: PHASE_LABEL[phase] };
 }

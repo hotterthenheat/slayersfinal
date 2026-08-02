@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
-import { ShieldCheck, ArrowDownToLine, ArrowUpFromLine, Scale } from 'lucide-react';
+import { ShieldCheck, ArrowDownToLine, ArrowUpFromLine, Scale, Search } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
-import { buildDarkPoolView } from '../../data/darkpool';
+import { EXECUTION_NOTE, buildDarkPoolView } from '../../data/darkpool';
 import { buildDarkPoolFeed } from '../../data/darkpoolfeed';
 import { fmtUsd } from '../../data/gex';
 import Panel from '../../components/ui/Panel';
@@ -9,9 +9,11 @@ import StatCard from '../../components/ui/StatCard';
 import MetricGrid from '../../components/ui/MetricGrid';
 import SignalBadge from '../../components/ui/SignalBadge';
 import DataTable, { type Column } from '../../components/ui/DataTable';
+import SegmentedControl from '../../components/ui/SegmentedControl';
+import EmptyState from '../../components/ui/EmptyState';
 import DarkPoolFeed from '../../components/flowdesk/DarkPoolFeed';
 import SpotRule from '../../components/ui/SpotRule';
-import type { DarkPoolIntent, DarkPoolLevel, DarkPoolPrint } from '../../types/darkpool';
+import type { DarkPoolExecution, DarkPoolIntent, DarkPoolLevel, DarkPoolPrint } from '../../types/darkpool';
 import type { Tone } from '../../components/ui/tones';
 
 const intentTone: Record<DarkPoolIntent, Tone> = {
@@ -20,6 +22,97 @@ const intentTone: Record<DarkPoolIntent, Tone> = {
   'HEDGE FLOW': 'warn',
   ROTATION: 'neutral',
 };
+
+/**
+ * Execution archetype colouring. The split is by what the print DOES to the
+ * spread, not by whether it is bullish: an aggressor pays it, a passive cross
+ * saves it, and a late report is neither because it already happened.
+ */
+const execTone: Record<DarkPoolExecution, Tone> = {
+  'BLOCK CROSS': 'neutral',
+  'LIS CROSS': 'select',
+  MIDPOINT: 'bull',
+  ICEBERG: 'info',
+  'VWAP SLICE': 'neutral',
+  'SWEEP TO DARK': 'warn',
+  'LATE PRINT': 'neutral',
+};
+
+const EXEC_OPTIONS = [
+  { value: 'ALL', label: 'All' },
+  { value: 'BLOCK CROSS', label: 'Blocks' },
+  { value: 'LIS CROSS', label: 'LIS' },
+  { value: 'MIDPOINT', label: 'Midpoint' },
+  { value: 'ICEBERG', label: 'Iceberg' },
+  { value: 'VWAP SLICE', label: 'Slices' },
+  { value: 'SWEEP TO DARK', label: 'Sweeps' },
+  { value: 'LATE PRINT', label: 'Late' },
+] as const;
+
+const INTENT_OPTIONS = [
+  { value: 'ALL', label: 'All' },
+  { value: 'ACCUMULATION', label: 'Accumulation' },
+  { value: 'DISTRIBUTION', label: 'Distribution' },
+  { value: 'HEDGE FLOW', label: 'Hedge' },
+  { value: 'ROTATION', label: 'Rotation' },
+] as const;
+
+const SIZE_OPTIONS = [
+  { value: '0', label: 'All' },
+  { value: '1000000', label: '≥$1M' },
+  { value: '10000000', label: '≥$10M' },
+  { value: '50000000', label: '≥$50M' },
+] as const;
+
+
+/**
+ * Inline meters.
+ *
+ * The lit tape carries a spread bar, a flow bar and a ratio bar on every row,
+ * and that is most of why it reads as a tape rather than a spreadsheet — the
+ * eye finds the outlier without reading a single number. This page had twelve
+ * columns of plain text and looked half empty at the same information density.
+ */
+const SizeBar = ({ pct }: { pct: number }) => (
+  <span className="inline-flex items-center gap-1.5 w-full justify-end">
+    <span className="relative h-1 w-14 rounded-full bg-inset overflow-hidden shrink-0" aria-hidden="true">
+      <span
+        className="absolute inset-y-0 left-0 rounded-full bg-textMuted/70"
+        style={{ width: `${Math.max(2, Math.min(100, pct))}%` }}
+      />
+    </span>
+  </span>
+);
+
+/** Where the print sits against spot. Centre is spot; the fill runs out to
+    whichever side it printed on, so a column of these reads as a distribution. */
+const VsSpotBar = ({ pct, max }: { pct: number; max: number }) => {
+  const half = Math.max(2, Math.min(50, (Math.abs(pct) / (max || 1)) * 50));
+  const up = pct >= 0;
+  return (
+    <span className="relative inline-block h-1 w-16 rounded-full bg-inset align-middle" aria-hidden="true">
+      <span className="absolute inset-y-0 left-1/2 w-px bg-borderMuted" />
+      <span
+        className={`absolute inset-y-0 ${up ? 'left-1/2' : 'right-1/2'} rounded-full ${up ? 'bg-bull/70' : 'bg-bear/70'}`}
+        style={{ width: `${half}%` }}
+      />
+    </span>
+  );
+};
+
+/** Conviction as a bar rather than a bare percentage — the point of the column
+    is comparing rows, and a number does that worse than a length. */
+const ConvBar = ({ pct }: { pct: number }) => (
+  <span className="inline-flex items-center gap-1.5 justify-end w-full">
+    <span className={`font-mono text-caption tnum leading-4 ${pct < 55 ? 'text-warn' : 'text-textSecondary'}`}>{pct}</span>
+    <span className="relative h-1 w-10 rounded-full bg-inset overflow-hidden shrink-0" aria-hidden="true">
+      <span
+        className={`absolute inset-y-0 left-0 rounded-full ${pct < 55 ? 'bg-warn/70' : 'bg-textMuted/70'}`}
+        style={{ width: `${Math.max(2, Math.min(100, pct))}%` }}
+      />
+    </span>
+  </span>
+);
 
 const roleTone: Record<DarkPoolLevel['role'], Tone> = {
   SUPPORT: 'bull',
@@ -91,6 +184,13 @@ const DarkPool = () => {
   const view = useMemo(() => (marketData ? buildDarkPoolView(marketData) : null), [marketData]);
   const [selectedPrice, setSelectedPrice] = useState<number | null>(null);
   const [selectedPrint, setSelectedPrint] = useState<number | null>(null);
+  // Tape controls. The dark tape is read the same way the lit one is — filter
+  // down to a kind of print, then look at what is left — so it carries the same
+  // three filters and a free-text box rather than a different vocabulary.
+  const [execFilter, setExecFilter] = useState<(typeof EXEC_OPTIONS)[number]['value']>('ALL');
+  const [intentFilter, setIntentFilter] = useState<(typeof INTENT_OPTIONS)[number]['value']>('ALL');
+  const [minNotional, setMinNotional] = useState<(typeof SIZE_OPTIONS)[number]['value']>('0');
+  const [query, setQuery] = useState('');
 
   // Universe scan read. buildDarkPoolFeed already returns its sectors ordered by
   // notional, so the leader is index 0 rather than a second ranking of its output.
@@ -117,16 +217,6 @@ const DarkPool = () => {
 
   const maxNotional = Math.max(...view.levels.map(l => l.notional));
   const selected = view.levels.find(l => l.price === selectedPrice) ?? [...view.levels].sort((a, b) => b.notional - a.notional)[0];
-  const activePrint = view.prints.find(p => p.id === selectedPrint) ?? null;
-  // Which tracked shelf did the selected print land on? Nearest by price — used to
-  // surface that shelf's retest count as evidence behind the inferred read.
-  const activePrintShelf =
-    activePrint && activePrint.atLevel && view.levels.length
-      ? view.levels.reduce((best, l) =>
-          Math.abs(l.price - activePrint.price) < Math.abs(best.price - activePrint.price) ? l : best
-        )
-      : null;
-
   const postureTone: Tone = view.posture === 'ACCUMULATING' ? 'bull' : view.posture === 'DISTRIBUTING' ? 'bear' : 'neutral';
   const PostureIcon = view.posture === 'ACCUMULATING' ? ArrowDownToLine : view.posture === 'DISTRIBUTING' ? ArrowUpFromLine : Scale;
 
@@ -143,50 +233,201 @@ const DarkPool = () => {
     { ACCUMULATION: 0, DISTRIBUTION: 0, 'HEDGE FLOW': 0, ROTATION: 0 }
   );
 
+  const q = query.trim().toUpperCase();
+  const rows = view.prints.filter(
+    p =>
+      (execFilter === 'ALL' || p.execution === execFilter) &&
+      (intentFilter === 'ALL' || p.intent === intentFilter) &&
+      p.notional >= Number(minNotional) &&
+      (!q ||
+        p.execution.includes(q) ||
+        p.intent.includes(q) ||
+        p.venue.includes(q) ||
+        // The field offers "read", so it has to search the reasoning too —
+        // typing a phrase visible in an expanded row was removing that row.
+        p.read.toUpperCase().includes(q) ||
+        String(p.price).includes(q)),
+  );
+
+  // Resolved from the rows ON SCREEN. Reading it off the full session left the
+  // expanded detail open for a print the active filters had just removed, with
+  // no row left to click to close it.
+  const activePrint = rows.find(p => p.id === selectedPrint) ?? null;
+
+  // Which tracked shelf did the selected print land on? Nearest by price — used to
+  // surface that shelf's retest count as evidence behind the inferred read.
+  const activePrintShelf =
+    activePrint && activePrint.atLevel && view.levels.length
+      ? view.levels.reduce((best, l) =>
+          Math.abs(l.price - activePrint.price) < Math.abs(best.price - activePrint.price) ? l : best
+        )
+      : null;
+
+
+  // Counted off the classifier's own output, like the intent tally below it, so
+  // the summary line is checkable against the rows rather than asserted over
+  // them. Dollars rather than prints: one LIS cross and forty algo slices are
+  // the same row count and nothing like the same flow.
+  const byExec = view.prints.reduce<Record<string, { n: number; usd: number }>>((a, p) => {
+    const e = (a[p.execution] ??= { n: 0, usd: 0 });
+    e.n += 1;
+    e.usd += p.notional;
+    return a;
+  }, {});
+  const leadExec = Object.entries(byExec).sort((a, b) => b[1].usd - a[1].usd)[0];
+  const midUsd = view.prints.filter(p => p.atMid).reduce((a, p) => a + p.notional, 0);
+  const midShare = view.totalNotional ? (midUsd / view.totalNotional) * 100 : 0;
+  const sweepUsd = byExec['SWEEP TO DARK']?.usd ?? 0;
+  const blockRead = leadExec
+    ? `${leadExec[0]} carries the session at ${fmtUsd(leadExec[1].usd)} across ${leadExec[1].n} ${leadExec[1].n === 1 ? 'print' : 'prints'} · ${midShare.toFixed(0)}% of block dollars crossed at the midpoint · ${sweepUsd > 0 ? `${fmtUsd(sweepUsd)} came in as sweeps that finished off-exchange` : 'no sweeps finished off-exchange'}.`
+    : 'Nothing crossed off-exchange this session.';
+
+  // Scales for the inline meters, off the rows ON SCREEN. The comment here said
+  // exactly that while the code read the whole session, so filtering out the
+  // day's outliers left every remaining bar normalised against something
+  // hidden — a column of identical stubs, which is the one thing a meter must
+  // not be.
+  const maxSize = Math.max(...rows.map(p => p.size), 1);
+  const maxVs = Math.max(...rows.map(p => Math.abs(p.vsSpotPct)), 0.01);
+
   const columns: Column<DarkPoolPrint>[] = [
-    { key: 'time', header: 'Time', width: '64px', render: p => <span className="font-mono text-caption text-textSecondary tnum leading-4">{p.time}</span> },
+    {
+      key: 'time',
+      group: 'Print',
+      header: 'Time',
+      width: '62px',
+      sortValue: p => p.time,
+      render: p => <span className="font-mono text-caption text-textSecondary tnum leading-4">{p.time}</span>,
+    },
+    {
+      key: 'exec',
+      group: 'Print',
+      header: 'Kind',
+      sortValue: p => p.execution,
+      render: p => (
+        <span className="inline-flex items-center gap-1.5" title={EXECUTION_NOTE[p.execution]}>
+          <SignalBadge tone={execTone[p.execution]}>{p.execution}</SignalBadge>
+          {p.atMid && (
+            <span className="font-mono text-micro uppercase tracking-wider text-bull" title="Crossed inside the spread">
+              MID
+            </span>
+          )}
+        </span>
+      ),
+    },
+    {
+      key: 'venue',
+      group: 'Print',
+      header: 'Venue',
+      help: 'ATS',
+      width: '128px',
+      sortValue: p => p.venue,
+      render: p => <span className="font-mono text-caption text-textMuted leading-4">{p.venue}</span>,
+    },
     {
       key: 'price',
+      group: 'Execution',
       header: 'Price',
       align: 'right',
+      width: '82px',
       sortValue: p => p.price,
       render: p => <span className="font-mono text-caption text-textPrimary tnum leading-4">${p.price.toFixed(2)}</span>,
     },
     {
       key: 'vs',
+      group: 'Execution',
       header: 'vs Spot',
       align: 'right',
       sortValue: p => p.vsSpotPct,
       render: p => (
-        <span className={`font-mono text-caption tnum ${p.vsSpotPct >= 0 ? 'text-bull' : 'text-bear'} leading-4`}>
-          {p.vsSpotPct >= 0 ? '+' : ''}
-          {p.vsSpotPct.toFixed(2)}%
+        <span className="inline-flex items-center gap-2 justify-end w-full">
+          <span className={`font-mono text-caption tnum ${p.vsSpotPct >= 0 ? 'text-bull' : 'text-bear'} leading-4`}>
+            {p.vsSpotPct >= 0 ? '+' : ''}
+            {p.vsSpotPct.toFixed(2)}%
+          </span>
+          <VsSpotBar pct={p.vsSpotPct} max={maxVs} />
         </span>
       ),
     },
     {
       key: 'size',
+      group: 'Execution',
       header: 'Size',
       align: 'right',
       sortValue: p => p.size,
-      render: p => <span className="font-mono text-caption text-textSecondary tnum leading-4">{p.size.toLocaleString()}</span>,
+      render: p => (
+        <span className="inline-flex items-center gap-2 justify-end w-full">
+          <span className="font-mono text-caption text-textSecondary tnum leading-4">{p.size.toLocaleString()}</span>
+          <SizeBar pct={(p.size / maxSize) * 100} />
+        </span>
+      ),
     },
     {
       key: 'notional',
+      group: 'Execution',
       header: 'Notional',
       align: 'right',
+      width: '104px',
       sortValue: p => p.notional,
-      render: p => <span className="font-mono text-caption font-semibold text-textPrimary tnum leading-4">{fmtUsd(p.notional)}</span>,
+      render: p => (
+        <span className="font-mono text-caption font-semibold text-textPrimary tnum leading-4">{fmtUsd(p.notional)}</span>
+      ),
     },
     {
-      key: 'venue',
-      header: 'Venue',
-      help: 'ATS',
-      render: p => <span className="font-mono text-caption text-textMuted leading-4">{p.venue}</span>,
+      key: 'share',
+      group: 'Execution',
+      header: 'Session',
+      align: 'right',
+      width: '70px',
+      sortValue: p => p.notional,
+      render: p => {
+        const pct = view.totalNotional ? (p.notional / view.totalNotional) * 100 : 0;
+        return (
+          <span
+            className={`font-mono text-caption tnum leading-4 ${pct >= 2 ? 'text-textSecondary' : 'text-textMuted'}`}
+            title="Share of session off-exchange dollars"
+          >
+            {pct < 0.01 ? '<0.01%' : `${pct.toFixed(2)}%`}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'clips',
+      group: 'Execution',
+      header: 'Clips',
+      align: 'right',
+      width: '62px',
+      sortValue: p => p.clips,
+      render: p => (
+        <span
+          className="font-mono text-caption text-textMuted tnum leading-4"
+          title={p.clips === 1 ? 'A single fill' : `${p.clips} child fills behind this print`}
+        >
+          {p.clips === 1 ? '1' : `${p.clips}×`}
+        </span>
+      ),
+    },
+    {
+      key: 'lag',
+      group: 'Execution',
+      header: 'Lag',
+      align: 'right',
+      width: '58px',
+      sortValue: p => p.reportLagSec,
+      render: p => (
+        <span
+          className={`font-mono text-caption tnum leading-4 ${p.reportLagSec > 120 ? 'text-warn' : 'text-textMuted'}`}
+          title="Time between the trade and its appearance on the tape"
+        >
+          {p.reportLagSec >= 60 ? `${Math.round(p.reportLagSec / 60)}m` : `${p.reportLagSec}s`}
+        </span>
+      ),
     },
     {
       key: 'intent',
-      header: 'Inferred read',
+      group: 'Read',
+      header: 'Inferred',
       sortValue: p => p.intent,
       render: p => (
         <span className="inline-flex items-center gap-2">
@@ -200,15 +441,34 @@ const DarkPool = () => {
       ),
     },
     {
+      key: 'shelf',
+      group: 'Read',
+      header: 'Shelf',
+      align: 'right',
+      width: '86px',
+      sortValue: p => (p.atLevel ? 1 : 0),
+      render: p => {
+        if (!p.atLevel || !view.levels.length) {
+          return <span className="font-mono text-caption text-textMuted leading-4">—</span>;
+        }
+        const near = view.levels.reduce((best, l) =>
+          Math.abs(l.price - p.price) < Math.abs(best.price - p.price) ? l : best,
+        );
+        return (
+          <span className="font-mono text-caption text-flip tnum leading-4" title={`${near.role} shelf`}>
+            ${near.price.toFixed(2)}
+          </span>
+        );
+      },
+    },
+    {
       key: 'conv',
+      group: 'Read',
       header: 'Conf',
       align: 'right',
+      width: '92px',
       sortValue: p => p.conviction,
-      render: p => (
-        <span className={`font-mono text-caption tnum ${p.conviction < 55 ? 'text-warn' : 'text-textSecondary'} leading-4`}>
-          {p.conviction}%
-        </span>
-      ),
+      render: p => <ConvBar pct={p.conviction} />,
     },
   ];
 
@@ -218,6 +478,144 @@ const DarkPool = () => {
           with no sentence in it, three screens above the one line that said what
           any of it meant. The ticker read leads now; the universe scan is the
           appendix at the bottom. */}
+      {/* The tape leads, the way the lit tape does: strip, controls, prints.
+          This page used to open on a five-paragraph verdict with the blocks
+          themselves three screens down, which is backwards for a tape — the
+          rows are the evidence and the verdict is the summary of them. */}
+      <MetricGrid min="170px">
+        <StatCard
+          label="Off-exchange share"
+          value={`${view.dpSharePct.toFixed(1)}%`}
+          sub="of today's volume printed away from the lit book"
+        />
+        <StatCard label="Block notional" value={fmtUsd(view.totalNotional)} sub={`${view.prints.length} prints · ${view.prints.filter(p => p.notional >= 1_000_000).length} over $1M`} />
+        <StatCard
+          label="Largest block"
+          value={view.largest ? fmtUsd(view.largest.notional) : '--'}
+          sub={view.largest ? `crossed at $${view.largest.price.toFixed(2)} on ${view.largest.venue}` : ''}
+          tone={view.largest ? intentTone[view.largest.intent] : 'neutral'}
+        />
+        <StatCard
+          label="Crossed at mid"
+          value={`${midShare.toFixed(0)}%`}
+          sub="of block dollars, inside the spread"
+        />
+        <StatCard
+          label="Swept to dark"
+          value={sweepUsd > 0 ? fmtUsd(sweepUsd) : '—'}
+          sub={sweepUsd > 0 ? 'aggressors that finished off-exchange' : 'no sweeps finished off-exchange'}
+          tone={sweepUsd > 0 ? 'warn' : undefined}
+        />
+        <StatCard
+          label="Nearest shelves"
+          value={
+            <span className="text-body leading-5">
+              {nextDown ? `$${nextDown.price.toFixed(2)}` : 'none'} / {nextUp ? `$${nextUp.price.toFixed(2)}` : 'none'}
+            </span>
+          }
+          sub="below spot / above spot"
+        />
+      </MetricGrid>
+
+      <Panel
+        title="Dark tape"
+        subtitle={`${view.ticker} · off-exchange prints, newest first`}
+        flush
+      >
+        {/* Same controls as the lit tape, in the same order, because it is the
+            same job: narrow to a kind of print, then read what is left. */}
+        <div className="px-4 py-3 border-b border-borderSubtle flex flex-wrap items-center gap-2">
+          <label className="relative flex items-center">
+            <Search className="absolute left-2.5 w-3.5 h-3.5 text-textMuted pointer-events-none" aria-hidden="true" />
+            <input
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Kind, read, venue, price…"
+              aria-label="Filter dark pool prints"
+              className="w-52 bg-inset border border-borderSubtle rounded-md pl-8 pr-2 py-1.5 font-mono text-caption text-textPrimary placeholder:text-textMuted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60"
+            />
+          </label>
+          <SegmentedControl
+            options={EXEC_OPTIONS}
+            value={execFilter}
+            onChange={setExecFilter}
+            ariaLabel="Filter by execution kind"
+          />
+          <SegmentedControl
+            options={INTENT_OPTIONS}
+            value={intentFilter}
+            onChange={setIntentFilter}
+            ariaLabel="Filter by inferred read"
+          />
+          <SegmentedControl
+            options={SIZE_OPTIONS}
+            value={minNotional}
+            onChange={setMinNotional}
+            ariaLabel="Filter by block notional"
+          />
+          <span className="ml-auto font-mono text-label uppercase tracking-wider text-textMuted tnum">
+            {rows.length} of {view.prints.length} prints
+          </span>
+        </div>
+        <p className="px-4 py-2.5 border-b border-borderSubtle flex flex-wrap items-baseline gap-x-2 gap-y-1">
+          <span className="font-mono text-label uppercase tracking-wider text-textMuted">Block read</span>
+          <span className="text-caption text-textSecondary leading-relaxed">{blockRead}</span>
+        </p>
+        {activePrint && (
+          <div className="px-4 py-3 border-b border-borderSubtle bg-inset flex flex-col gap-2.5 animate-soft-in">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-mono text-label uppercase tracking-wider text-textMuted">Inferred as</span>
+              <SignalBadge tone={intentTone[activePrint.intent]}>{activePrint.intent}</SignalBadge>
+              <ConfidenceChip conviction={activePrint.conviction} />
+              {activePrintShelf && (
+                <span className="inline-flex items-center gap-1 font-mono text-label uppercase tracking-wider text-flip">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  {activePrintShelf.defended > 0
+                    ? `shelf held, ${retestLabel(activePrintShelf.defended)}`
+                    : 'on an untested shelf'}
+                </span>
+              )}
+            </div>
+            <p className="text-caption text-textSecondary leading-relaxed">{activePrint.read}</p>
+            <div className="flex items-start gap-2 border-t border-borderSubtle pt-2.5">
+              <span className="font-mono text-label uppercase tracking-wider text-textMuted whitespace-nowrap mt-px">
+                Competing read
+              </span>
+              <p className="text-label text-textMuted leading-relaxed">{competingRead[activePrint.intent]}</p>
+            </div>
+          </div>
+        )}
+        {rows.length === 0 ? (
+          <EmptyState
+            title="No prints match"
+            body="Every block this session sits outside these filters. Widen the kind, the read or the size floor."
+          />
+        ) : (
+        <DataTable
+          columns={columns}
+          rows={rows}
+          rowKey={p => String(p.id)}
+          onRowClick={p => setSelectedPrint(prev => (prev === p.id ? null : p.id))}
+          selectedKey={activePrint ? String(activePrint.id) : null}
+          initialSort={{ key: 'notional', dir: 'desc' }}
+          maxHeight="max(560px, 62vh)"
+        />
+        )}
+        {/* What each kind means, once, under the tape that uses them. */}
+        <dl className="px-4 py-3 grid gap-x-6 gap-y-1.5 sm:grid-cols-2 xl:grid-cols-3 border-t border-borderSubtle">
+          {EXEC_OPTIONS.filter(o => o.value !== 'ALL').map(o => (
+            <div key={o.value} className="flex items-baseline gap-2">
+              <dt className="font-mono text-micro uppercase tracking-wider text-textSecondary whitespace-nowrap">
+                {o.value}
+              </dt>
+              <dd className="text-label text-textMuted leading-relaxed">
+                {EXECUTION_NOTE[o.value as DarkPoolExecution]}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </Panel>
+
       <Panel
         title="What the blocks say"
         subtitle={`${view.ticker} · session`}
@@ -249,7 +647,7 @@ const DarkPool = () => {
 
           <div className="flex flex-col gap-1 border-t border-borderSubtle pt-3">
             <span className="font-mono text-label text-textMuted tnum">
-              Of {view.prints.length} sized prints:{' '}
+              Across {view.prints.length} prints:{' '}
               <span className="text-bull">{tally.ACCUMULATION} accumulation</span>,{' '}
               <span className="text-bear">{tally.DISTRIBUTION} distribution</span>,{' '}
               <span className="text-warn">{tally['HEDGE FLOW']} hedge</span>,{' '}
@@ -269,30 +667,6 @@ const DarkPool = () => {
           </div>
         </div>
       </Panel>
-
-      <MetricGrid min="170px">
-        <StatCard
-          label="Off-exchange share"
-          value={`${view.dpSharePct.toFixed(1)}%`}
-          sub="of today's volume printed away from the lit book"
-        />
-        <StatCard label="Block notional" value={fmtUsd(view.totalNotional)} sub={`${view.prints.length} sized prints classified`} />
-        <StatCard
-          label="Largest block"
-          value={view.largest ? fmtUsd(view.largest.notional) : '--'}
-          sub={view.largest ? `crossed at $${view.largest.price.toFixed(2)} on ${view.largest.venue}` : ''}
-          tone={view.largest ? intentTone[view.largest.intent] : 'neutral'}
-        />
-        <StatCard
-          label="Nearest shelves"
-          value={
-            <span className="text-body leading-5">
-              {nextDown ? `$${nextDown.price.toFixed(2)}` : 'none'} / {nextUp ? `$${nextUp.price.toFixed(2)}` : 'none'}
-            </span>
-          }
-          sub="below spot / above spot"
-        />
-      </MetricGrid>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 items-start">
         {/* Shelf ladder */}
@@ -404,47 +778,6 @@ const DarkPool = () => {
       </div>
 
       {/* Classified prints */}
-      <Panel title="Sized prints" subtitle="inferred classification, a read and not a confirmed fact" flush>
-        <p className="px-4 py-3 border-b border-borderSubtle text-caption leading-relaxed text-textMuted">
-          One row is one block that crossed off-exchange. <span className="text-textSecondary">vs Spot</span> is where
-          it printed against the current price, which is the whole tell: size under the market reads as building, size
-          over it reads as leaving. <span className="text-textSecondary">Conf</span> is how hard the classifier
-          committed to that read. Open a row for the reasoning behind it and the story that fits it just as well.
-        </p>
-        {activePrint && (
-          <div className="px-4 py-3 border-b border-borderSubtle bg-inset flex flex-col gap-2.5 animate-soft-in">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-mono text-label uppercase tracking-wider text-textMuted">Inferred as</span>
-              <SignalBadge tone={intentTone[activePrint.intent]}>{activePrint.intent}</SignalBadge>
-              <ConfidenceChip conviction={activePrint.conviction} />
-              {activePrintShelf && (
-                <span className="inline-flex items-center gap-1 font-mono text-label uppercase tracking-wider text-flip">
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  {activePrintShelf.defended > 0
-                    ? `shelf held, ${retestLabel(activePrintShelf.defended)}`
-                    : 'on an untested shelf'}
-                </span>
-              )}
-            </div>
-            <p className="text-caption text-textSecondary leading-relaxed">{activePrint.read}</p>
-            <div className="flex items-start gap-2 border-t border-borderSubtle pt-2.5">
-              <span className="font-mono text-label uppercase tracking-wider text-textMuted whitespace-nowrap mt-px">
-                Competing read
-              </span>
-              <p className="text-label text-textMuted leading-relaxed">{competingRead[activePrint.intent]}</p>
-            </div>
-          </div>
-        )}
-        <DataTable
-          columns={columns}
-          rows={view.prints}
-          rowKey={p => String(p.id)}
-          onRowClick={p => setSelectedPrint(prev => (prev === p.id ? null : p.id))}
-          selectedKey={activePrint ? String(activePrint.id) : null}
-          initialSort={{ key: 'notional', dir: 'desc' }}
-          maxHeight="max(420px, 48vh)"
-        />
-      </Panel>
 
       {/* Appendix: the same question asked of the whole tracked list. It answers
           "where else is the size going", which is a different question to the one
