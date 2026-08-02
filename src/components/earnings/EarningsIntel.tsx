@@ -205,14 +205,21 @@ const ExpressionCard = ({ expr, recommended }: { expr: Expression; recommended: 
     <Panel
       title={
         <span className="inline-flex items-center gap-1.5">
-          <Scale className="w-3.5 h-3.5" /> {expr.side === 'LONG' ? 'Best long-vol expression' : 'Best short-vol expression'}
+          <Scale className="w-3.5 h-3.5" /> {expr.side === 'LONG' ? 'Long-vol expression' : 'Short-vol expression'}
         </span>
       }
-      subtitle={expr.side === 'LONG' ? 'own the move' : 'sell the crush'}
+      // The structure is the subject on both sides, so the long/short
+      // distinction survives without the two verbs earnings.ts:198 forbids.
+      subtitle={expr.side === 'LONG' ? 'pays for the move' : 'collects the crush'}
       tone={recommended ? tone : 'neutral'}
       emphasis={recommended}
       className="xl:col-span-6"
-      actions={recommended ? <SignalBadge tone={tone} dot pulse>THE TRADE</SignalBadge> : undefined}
+      // Not the board's QUALIFIED: that word is `EarningsVerdict.PLAY`, cut at
+      // richness 0.85/1.3, while `recommended` here is cut at 0.9/1.18 — a
+      // NO EDGE row could sit above a QUALIFIED card and the page would be
+      // naming one state two ways again. This badge says why the card is
+      // emphasised instead of putting a position forward.
+      actions={recommended ? <SignalBadge tone={tone} dot pulse>ISOLATES THE MISPRICING</SignalBadge> : undefined}
     >
       <div className="flex items-center justify-between gap-2">
         <span className={`font-mono text-base font-bold ${expr.side === 'LONG' ? 'text-bull' : 'text-king'}`}>{expr.name}</span>
@@ -379,7 +386,7 @@ const ScenarioTree = ({ view }: { view: EarningsIntelView }) => {
                 {isTarget && (
                   <div className="mt-1.5 flex items-center gap-1.5">
                     <SignalBadge tone="select" dot>
-                      Trade lives here
+                      Mispricing sits on this branch
                     </SignalBadge>
                   </div>
                 )}
@@ -431,11 +438,17 @@ const EarningsIntel = ({ event }: EarningsIntelProps) => {
   return (
     <div className="flex flex-col gap-4">
       <MetricGrid min="168px">
-        <StatCard label="Net EV · best trade" value={fmtEv(view.netEv)} sub="after spreads + IV crush" tone={evTone(view.netEv)} emphasis />
-        <StatCard label="Recommendation" value={recLabel[view.recommended]} sub={view.recommended === 'SKIP' ? 'no vol edge' : view.recommended === 'LONG' ? view.longVol.name : view.shortVol.name} tone={recTone[view.recommended]} />
+        {/*
+          "best trade" named a position and "Recommendation" was the advice word
+          itself. Both replacements are kept under ~20 glyphs because a StatCard
+          label truncates, and six cards on a 168px basis leave no more than that
+          at the narrowest desktop — a clipped label is its own defect.
+        */}
+        <StatCard label="Net EV · best fit" value={fmtEv(view.netEv)} sub="after spreads + IV crush" tone={evTone(view.netEv)} emphasis />
+        <StatCard label="Where the edge sits" value={recLabel[view.recommended]} sub={view.recommended === 'SKIP' ? 'no vol edge' : view.recommended === 'LONG' ? view.longVol.name : view.shortVol.name} tone={recTone[view.recommended]} />
         <StatCard label="Event vol extracted" value={`${view.eventVolPct.toFixed(1)}%`} sub="jump the base vol can’t explain" tone="neutral" />
         <StatCard label="IV crush" value={`${view.ivCrushPct.toFixed(0)}%`} sub={`${view.frontIv.toFixed(0)}% → ${view.baseIv.toFixed(0)}% ATM IV`} tone="warn" />
-        <StatCard label="Straddle richness" value={`${view.richness.toFixed(2)}×`} sub={`imp ${view.impliedMovePct.toFixed(1)}% vs ${view.histAvgMovePct.toFixed(1)}% real`} tone={richTone(view.richness)} />
+        <StatCard label="Straddle richness" value={`${view.richness.toFixed(2)}×`} sub={`imp ${view.impliedMovePct.toFixed(1)}% vs ${view.histAvgMovePct.toFixed(1)}% modeled`} tone={richTone(view.richness)} />
         <StatCard label="Reaction shape" value={`${view.gapProb.toFixed(0)}% gap`} sub={`${view.continuousProb.toFixed(0)}% continuation`} tone="neutral" />
       </MetricGrid>
 
@@ -537,14 +550,20 @@ const EarningsIntel = ({ event }: EarningsIntelProps) => {
           </div>
         </Panel>
 
-        {/* Similar-event search */}
+        {/*
+          These rows are `printHistory` — the record earnings.ts generates for
+          the name, the same eight reports the modeled average and the beat rate
+          are counted over. "Similar-event search" named a population of real
+          reports nobody searched, so the panel says whose prints these are and
+          how many, and only the implied column is a draw.
+        */}
         <Panel
           title={
             <span className="inline-flex items-center gap-1.5">
-              <History className="w-3.5 h-3.5" /> Similar-event search
+              <History className="w-3.5 h-3.5" /> Modeled prior prints
             </span>
           }
-          subtitle={`${view.analogHitRate.toFixed(0)}% straddle-covered`}
+          subtitle={`${view.analogs.length} modeled reports · straddle covered ${view.analogHitRate.toFixed(0)}%`}
           flush
           className="xl:col-span-7"
         >
@@ -597,7 +616,7 @@ const EarningsIntel = ({ event }: EarningsIntelProps) => {
         <p className="mt-3 font-mono text-label text-textMuted leading-relaxed">
           Each branch sums the state probabilities into a down / pin / up outcome; the bar is the odds, the white tick
           where the straddle + skew prices it. CHEAP = the read carries more of that branch than the market charges; the
-          highlighted branch is where the recommended structure lives.
+          highlighted branch is the one the mispricing sits on.
         </p>
       </Panel>
 
@@ -607,9 +626,10 @@ const EarningsIntel = ({ event }: EarningsIntelProps) => {
           <span className="font-mono font-semibold uppercase tracking-wider mr-2 text-textSecondary">Beyond the straddle</span>
           A single implied move hides the trade. This dossier strips the jump vol out of the front-month IV, traces the crush the
           overnight brings, and splits the reaction into an outcome distribution — so the edge is not &ldquo;vol is rich&rdquo; but
-          which slice of that distribution the market has wrong. The recommended expression is the one that harvests exactly that slice,
-          net EV taken after spreads and the IV crush. Implied move, richness and the event fields come straight from the earnings
-          contract; base vol, 25Δ skew, the crush depth and the prior-print analogs round out the read per name.
+          which slice of that distribution the market has wrong. The highlighted expression is the one whose payoff maps onto exactly
+          that slice, net EV taken after spreads and the IV crush. Implied move, richness and the event fields come straight from the
+          earnings contract; base vol, 25Δ skew and the crush depth round out the read per name, and the prior prints are the record
+          the model already generates for it.
         </p>
       </Panel>
     </div>

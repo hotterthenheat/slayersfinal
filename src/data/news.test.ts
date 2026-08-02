@@ -4,7 +4,9 @@ import {
   catalystPriors,
   categoryBaseRates,
   type NewsCategory,
+  type NewsItem,
 } from './news';
+import { lookup } from './universe';
 
 /*
   What the news surface is allowed to CLAIM, pinned.
@@ -37,8 +39,9 @@ const CATEGORIES: NewsCategory[] = [
 ];
 
 /*
-  Real-world proper nouns that must never reappear in rendered copy. Matched on
-  word boundaries because ordinary catalyst copy contains them as substrings —
+  Real-world proper nouns that must never reappear as an AUTHORITY — a firm
+  behind a rating, a wire behind a dateline, an official behind a quote. Matched
+  on word boundaries because ordinary catalyst copy contains them as substrings —
   "defend" carries "Fed", "second half" carries "SEC".
 */
 const REAL_WORLD_NAMES = [
@@ -48,6 +51,26 @@ const REAL_WORLD_NAMES = [
   'Bloomberg', 'Reuters', 'CNBC', 'WSJ', 'Barron', 'MarketWatch', 'Benzinga', 'Dow Jones',
   'Fed', 'FOMC', 'Powell', 'SEC', 'FTC', 'DOJ', 'FDA', 'Treasury',
 ];
+
+/*
+  A name headline opens on the universe row it is about — the template pool is
+  all `${u.name} …` — so the subject is stripped before the blacklist runs and
+  what is matched is the CLAIM. Five curated names collide with the list
+  word-for-word (Goldman Sachs, Morgan Stanley, JPMorgan Chase, Citigroup,
+  Kinder Morgan), and a company being the subject of its own story is not the
+  defect: "Goldman Sachs beats on top and bottom line" is a headline, "Goldman
+  Sachs raises its target" would be borrowed authority. The fields an
+  attribution would have to live in — source, and the model's own read — are
+  matched whole.
+
+  Blacklisting the subject too made this test a coin flip on the calendar:
+  buildNewsFeed() draws on the session day, so it went red on every date whose
+  roll landed on one of those five and green on the rest.
+*/
+const claimOf = (n: NewsItem): string => {
+  const subject = n.ticker ? lookup(n.ticker)?.name : null;
+  return subject && n.headline.startsWith(subject) ? n.headline.slice(subject.length) : n.headline;
+};
 
 const median = (xs: number[]): number => {
   const s = [...xs].sort((a, b) => a - b);
@@ -62,9 +85,9 @@ describe('news feed carries no borrowed authority', () => {
     expect(feed.length).toBeGreaterThan(0);
   });
 
-  it('names no real firm, wire or regulator in any rendered string', () => {
+  it('cites no real firm, wire or regulator behind any rendered claim', () => {
     const rendered = feed.flatMap(n => [
-      n.headline,
+      claimOf(n),
       n.source,
       n.prediction.analog,
       n.prediction.playbook,

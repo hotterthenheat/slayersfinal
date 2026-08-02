@@ -58,8 +58,8 @@ const FAQ: QA[] = [
     q: 'Can I customize my workspace?',
     a: (
       <>Yes — <Link to="/pulse" className="text-textPrimary underline underline-offset-2 decoration-white/40 hover:decoration-white/80">Pulse</Link> is fully arrangeable: drag and
-      resize panels, load a desk profile (Scalper / Swing / Macro / Earnings), and your layout is remembered in your
-      browser.</>
+      resize panels, load a view from the <span className="text-textPrimary">Views</span> menu (Scalper / Swing / Macro
+      / Earnings among fourteen), and your layout is remembered in your browser.</>
     ),
   },
   {
@@ -69,8 +69,11 @@ const FAQ: QA[] = [
   {
     q: 'Can I track my trades?',
     a: (
-      <>Yes — <Link to="/tracker" className="text-textPrimary underline underline-offset-2 decoration-white/40 hover:decoration-white/80">Tracker</Link> keeps your setups and a
-      journal, and the exposure ledger can export to CSV. Everything is stored locally in your browser.</>
+      <>Yes — <Link to="/tracker" className="text-textPrimary underline underline-offset-2 decoration-white/40 hover:decoration-white/80">Tracker</Link> keeps your setups, their
+      status and a journal, all stored locally in your browser. The CSV export lives elsewhere: the exposure ledger
+      under{' '}
+      <Link to="/pinpoint/levels" className="text-textPrimary underline underline-offset-2 decoration-white/40 hover:decoration-white/80">Pinpoint → Levels</Link> writes its
+      single-leg drill-down out as CSV.</>
     ),
   },
   {

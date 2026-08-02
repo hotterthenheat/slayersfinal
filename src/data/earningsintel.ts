@@ -14,15 +14,22 @@
   is underpriced" is a put spread, not a short straddle.
 
   Implied move, richness and the event fields are the
-  chain/consensus values from earnings.ts; base vol, skew,
-  depth of the crush and the prior-print analogs are modeled
-  per name and clearly swappable for a real options-surface
-  feed behind the same contract. Deterministic per ticker + day.
+  chain/consensus values from earnings.ts; base vol, skew and
+  the depth of the crush are modeled per name and clearly
+  swappable for a real options-surface feed behind the same
+  contract. The prior prints are not modeled here at all —
+  they are the record earnings.ts already prices the implied
+  move against, so this dossier cannot quote the name a
+  different history than the board does. Today's pricing is
+  deterministic per ticker + day; the record is not.
 ==================================================
 */
 
-import { dayKey, h01, hRange, hGauss, hash } from '../core/rng';
-import type { EarningsEvent } from './earnings';
+import { dayKey, h01, hRange, hGauss } from '../core/rng';
+// `printHistory` is a value import, which is the direction the module graph
+// already runs: earnings.ts reaches back for `EarningsIntelView` as a type only,
+// so this edge stays one-way.
+import { printHistory, type EarningsEvent } from './earnings';
 
 const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
 
@@ -48,14 +55,17 @@ export interface StateNode {
   priced: number;
 }
 
-/** A modeled prior print used for the similar-event search. */
+/** One report out of the name's generated record, read back as a prior print. */
 export interface EventAnalog {
+  /** How far back in that record the print sits, e.g. "3Q ago" */
   tag: string;
+  /** What the straddle charged into it — modeled, the one figure the record lacks, % */
   impliedPct: number;
+  /** The reaction the record carries for that print, % */
   realizedPct: number;
   gapped: boolean;
   direction: 'UP' | 'DOWN';
-  /** Did the straddle cover the realized move? */
+  /** Did the modeled straddle cover that reaction? */
   covered: boolean;
 }
 
@@ -136,7 +146,7 @@ export interface EarningsIntelView {
   upEdge: number;
 
   analogs: EventAnalog[];
-  /** Share of prior prints where the straddle covered the move, % */
+  /** Share of the record's prints the modeled straddle covered, % */
   analogHitRate: number;
 
   longVol: Expression;
@@ -150,7 +160,6 @@ export interface EarningsIntelView {
 }
 
 const CRUSH_DAYS = [-5, -4, -3, -2, -1, 0, 1, 2, 3];
-const QUARTERS = ['Q1', 'Q2', 'Q3', 'Q4'];
 
 export function buildEarningsIntel(e: EarningsEvent): EarningsIntelView {
   const day = dayKey();
@@ -230,23 +239,34 @@ export function buildEarningsIntel(e: EarningsEvent): EarningsIntelView {
   const downEdge = modelDown - pricedDown;
   const upEdge = modelUp - pricedUp;
 
-  // ---- similar-event search (modeled prior prints) ------------------------
-  const anchorYear = 24 + (hash(seed('yr')) % 2);
-  const anchorQ = hash(seed('anchor')) % 4;
-  const absQ = anchorYear * 4 + anchorQ;
-  const analogs: EventAnalog[] = Array.from({ length: 6 }, (_, i) => {
-    const s = (t: string) => seed(`an${i}${t}`);
-    const q = absQ - i;
-    const tag = `${QUARTERS[((q % 4) + 4) % 4]} '${Math.floor(q / 4)}`;
-    const impliedPct = histAvgMovePct * hRange(s('i'), 0.82, 1.35);
-    const realizedPct = histAvgMovePct * hRange(s('r'), 0.35, 1.85);
+  // ---- similar-event search (the name's own record) ------------------------
+  /*
+    These rows ARE `printHistory`, not a second pass at the same idea. They used
+    to be six quarters drawn here and tagged with calendar labels (`Q1 '24`),
+    which named a population of real reports, disagreed with the modeled average
+    quoted three cards away, and — because the draw carried `dayKey()` — gave a
+    finished quarter a new realized move every session. Reading the record fixes
+    all three at once: the realized column now averages to `histAvgMovePct` by
+    construction, and `analogHitRate` counts covers over the same eight reports
+    `beatRate8q` counts beats over.
+
+    What the record does not carry is what the straddle CHARGED into each print,
+    so that stays a draw — seeded per ticker and quarter with no day key, since a
+    past quarter's price is as finished as its reaction. `gapped` is the same
+    kind of attribute; deriving it from the reaction size would only restate the
+    bar sitting next to it.
+  */
+  const record = printHistory(e.ticker);
+  const analogs = record.prints.map((p): EventAnalog => {
+    const s = (t: string) => `${e.ticker}-eint-an${p.quartersBack}-${t}`;
+    const impliedPct = record.avgMovePct * hRange(s('i'), 0.82, 1.35);
     return {
-      tag,
+      tag: `${p.quartersBack}Q ago`,
       impliedPct,
-      realizedPct,
+      realizedPct: p.movePct,
       gapped: h01(s('g')) > 0.42,
-      direction: h01(s('d')) > 0.5 ? 'UP' : ('DOWN' as 'UP' | 'DOWN'),
-      covered: impliedPct >= realizedPct,
+      direction: p.surprise > 0 ? 'UP' : 'DOWN',
+      covered: impliedPct >= p.movePct,
     };
   });
   const analogHitRate = (analogs.filter(a => a.covered).length / analogs.length) * 100;
@@ -278,7 +298,7 @@ export function buildEarningsIntel(e: EarningsEvent): EarningsIntelView {
         maxLabel: 'Risk capped at the debit · convex on a big move',
         edgeLabel: `+${(histAvgMovePct - impliedMovePct).toFixed(1)} pts vol cheap`,
         ev: evStraddle,
-        fit: `The straddle charges ${impliedMovePct.toFixed(1)}% for a name that averages ${histAvgMovePct.toFixed(1)}%, so the gross move is on offer below what it has historically cost.`,
+        fit: `The straddle charges ${impliedMovePct.toFixed(1)}% for a name that averages ${histAvgMovePct.toFixed(1)}%, so the gross move is on offer below what its eight modeled reports average.`,
       }
     : wingDir < 0
       ? {
@@ -313,7 +333,7 @@ export function buildEarningsIntel(e: EarningsEvent): EarningsIntelView {
     maxLabel: 'Profit capped at the credit · risk defined at the wings',
     edgeLabel: `+${(impliedMovePct - histAvgMovePct).toFixed(1)} pts vol rich`,
     ev: evShort,
-    fit: `The straddle prices ${richness.toFixed(2)}× realized, so the crush accrues to the seller from outside the expected move, with the tails defined.`,
+    fit: `The straddle prices ${richness.toFixed(2)}× the modeled average, so the crush accrues to the seller from outside the expected move, with the tails defined.`,
   };
 
   // ---- which component is mispriced → the recommendation ------------------
@@ -351,11 +371,11 @@ export function buildEarningsIntel(e: EarningsEvent): EarningsIntelView {
     STRADDLE_CHEAP: {
       component,
       headline: `The straddle underprices the event: ${im}% implied against a ${hm}% average mover (${rx}×).`,
-      verdict: 'The mispricing is in the body, and a long straddle or strangle is the structure that isolates it, sized against the post-print crush.',
+      verdict: 'The mispricing is in the body, and a long straddle or strangle is the structure that isolates it, with the post-print crush setting what any size has to survive.',
     },
     STRADDLE_RICH: {
       component,
-      headline: `The straddle is uniformly rich: ${im}% implied against ${hm}% realized (${rx}×), and neither tail is underpriced.`,
+      headline: `The straddle is uniformly rich: ${im}% implied against a ${hm}% modeled average (${rx}×), and neither tail is underpriced.`,
       verdict: 'The whole edge sits on the premium seller’s side. An iron condor outside the expected move is the version of that with the tails defined against a surprise.',
     },
     DOWNSIDE_SKEW: {

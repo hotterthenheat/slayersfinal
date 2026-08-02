@@ -299,7 +299,12 @@ describe('scan ranking', () => {
       expect(g.sparkline[g.sparkline.length - 1]).toBe(g.spot);
       const slope = ((g.sparkline[g.sparkline.length - 1] - g.sparkline[0]) / g.sparkline[0]) * 100;
       expect(g.changePct).toBeCloseTo(slope, 2);
-      expect(g.changePct >= 0).toBe(slope >= 0);
+      // Flat is exempt, and only flat: rounding to a cent is allowed to collapse
+      // a move of a twentieth of a basis point, and a group that publishes 0
+      // makes no directional claim for a tint to contradict. Comparing the raw
+      // `>= 0` instead made every such day red, because 0 is on the up side of
+      // that test and the slope it rounded from is not.
+      if (g.changePct !== 0) expect(Math.sign(g.changePct)).toBe(Math.sign(slope));
     }
   });
 

@@ -12,9 +12,13 @@ describe('seedSessionTape', () => {
   });
 
   it('is newest first — the order LiveTape prepends live prints in', () => {
+    // Ordered on `at`, the instant the walk-back stamped, because that is what
+    // it orders by. Reading the order back off `time` re-parsed onto a fixed
+    // day says nothing on a window that straddles local midnight: the string
+    // carries no date, so 00:00:0x sorts under the 23:59:xx print ahead of it
+    // and a correct tape reads inverted for the first minute of every day.
     const tape = seedSessionTape(120);
-    const secs = tape.map(o => new Date(`1970-01-01 ${o.time}`).getTime());
-    for (let i = 1; i < secs.length; i++) expect(secs[i]).toBeLessThanOrEqual(secs[i - 1]);
+    for (let i = 1; i < tape.length; i++) expect(tape[i].at).toBeLessThanOrEqual(tape[i - 1].at);
   });
 
   it('replays identically for the same session', () => {

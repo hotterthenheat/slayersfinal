@@ -1,26 +1,28 @@
 /*
 ==================================================
   SLAYER TERMINAL - EDGE LEDGER & PERSONAL DECAY (edgeledger.ts)
-  A learning ledger over your own closed trades. Most
-  research tools grade the market; this one grades the
-  operator. It reconstructs each trade the way you
-  should review it — original thesis, the entry
-  conditions it required, the fill you actually got,
-  the market state at entry, the max favorable / adverse
-  excursion, exit quality, an honest reason for the W/L,
-  and the better-contract you could have held for the
-  same idea.
+  A learning ledger over a modeled book of closed trades.
+  Most research tools grade the market; this one grades the
+  operator. It reconstructs each trade the way a review
+  should — original thesis, the entry conditions it
+  required, the fill against the plan, the market state at
+  entry, the max favorable / adverse excursion, exit
+  quality, a reason for the W/L, and the better-contract
+  that expressed the same idea.
 
-  From that history it derives what actually pays: your
-  expectancy by setup type, your best and worst plays,
-  and — the part no P/L screen shows — personalized
-  edge-decay warnings. The same setup can be a machine
-  in one vol regime and a slow bleed in another; this
-  finds where your edge has quietly stopped working.
+  Off that book it derives what pays: expectancy by setup
+  type, best and worst plays, and — the part no P/L screen
+  shows — edge-decay warnings. The same setup can be a
+  machine in one vol regime and a slow bleed in another;
+  this is the shape of a book where edge has quietly
+  stopped working.
 
-  Real closed-trade history is sparse, so the ledger is
-  a modeled sample: deterministic per ticker + day, and
-  swappable for your real fills behind the same contract.
+  The book is generated, not recorded. Outcomes are drawn
+  against the hand-built edge surface in PROFILES, so the
+  win rate, expectancy and decay flags describe that
+  surface — no fill happened and no market history stands
+  behind them. Deterministic per ticker + day, and
+  swappable for real fills behind the same contract.
 ==================================================
 */
 
@@ -253,7 +255,7 @@ export function buildEdgeLedger(snapshot: MarketSnapshot): EdgeLedgerView {
   const day = dayKey();
 
   // Name pool always includes the active ticker with a stable, seeded anchor
-  // price so it shows up in the operator's book.
+  // price so the active name shows up in the book.
   const pool = [...NAMES];
   if (!pool.some(n => n.sym === ticker)) {
     pool.unshift({ sym: ticker, px: Math.round(hRange(`${ticker}-${day}-anchor`, 60, 520)) });
@@ -406,9 +408,10 @@ export function buildEdgeLedger(snapshot: MarketSnapshot): EdgeLedgerView {
   const bestStrategy = strategies[0];
   const worstStrategy = strategies[strategies.length - 1];
 
-  // ---- personalized edge-decay warnings ----
+  // ---- edge-decay warnings ----
   // A setup whose expectancy is strong in one regime but has bled out in
-  // another is edge that's quietly stopped working where you keep using it.
+  // another is edge that has quietly stopped working in the tape it keeps
+  // getting run in — the pattern the modeled surface is built to expose.
   const decayWarnings: DecayWarning[] = strategies
     .map(st => {
       const entries = VOL_REGIMES.map(r => ({ r, avgR: st.regimeExpectancy[r] })).filter(e => Number.isFinite(e.avgR));
@@ -418,9 +421,9 @@ export function buildEdgeLedger(snapshot: MarketSnapshot): EdgeLedgerView {
       const gap = strong.avgR - weak.avgR;
       if (gap < 0.5 || weak.avgR > 0.2) return null;
       const severity: DecaySeverity = gap >= 0.95 && weak.avgR <= -0.05 ? 'DECAYING' : 'SOFTENING';
-      const message = `Your ${st.setup.toLowerCase()} setups hold their edge in ${regimeLabel(
+      const message = `In this modeled book the ${st.setup.toLowerCase()} setups hold their edge in ${regimeLabel(
         strong.r
-      )} regimes (${fmtR(strong.avgR)}) but have bled expectancy in ${regimeLabel(weak.r)} sessions (${fmtR(
+      )} regimes (${fmtR(strong.avgR)}) but give it back in ${regimeLabel(weak.r)} sessions (${fmtR(
         weak.avgR
       )}) — same setup, wrong tape.`;
       return {
@@ -446,28 +449,42 @@ export function buildEdgeLedger(snapshot: MarketSnapshot): EdgeLedgerView {
   const winRate = trades.length ? (allWins.length / trades.length) * 100 : 0;
   const profitFactor = grossLoss > 0 ? grossWin / grossLoss : 99;
 
+  /*
+    Every string below names the population before it quotes a rate, and none of
+    them says "your". The arithmetic is honest — each figure is counted off the
+    48 trades this module just generated — but the copy read as the operator's
+    own record: "your book", "Your ... setups". Not one of these trades was
+    taken, and the win rates are the ones the PROFILES table was hand-built to
+    produce. A disclosure at the foot of the panel cannot undo an attribution
+    made at the top of it, so the modeled population is named at every surface
+    that quotes a number, the way statereplay.ts does.
+  */
   const edgeSign = overallExpectancy >= 0;
   const headline = edgeSign
-    ? `Across ${trades.length} closed trades your book runs a ${fmtR(overallExpectancy)} expectancy — carried by ${
+    ? `Across ${trades.length} modeled trades this book runs a ${fmtR(overallExpectancy)} expectancy — carried by ${
         bestStrategy.setup
       } (${fmtR(bestStrategy.avgR)}) and dragged by ${worstStrategy.setup} (${fmtR(worstStrategy.avgR)}). ${
         decayWarnings.length
-      } ${decayWarnings.length === 1 ? 'setup shows' : 'setups show'} regime-dependent edge decay.`
-    : `Across ${trades.length} closed trades your book runs a ${fmtR(
+      } ${
+        decayWarnings.length === 1 ? 'setup shows' : 'setups show'
+      } regime-dependent edge decay. Generated by this model, not a record of your fills.`
+    : `Across ${trades.length} modeled trades this book runs a ${fmtR(
         overallExpectancy
       )} expectancy — the edge is there in ${bestStrategy.setup} (${fmtR(
         bestStrategy.avgR
       )}) but ${worstStrategy.setup} (${fmtR(worstStrategy.avgR)}) is bleeding it back. ${
         decayWarnings.length
-      } ${decayWarnings.length === 1 ? 'setup shows' : 'setups show'} regime-dependent edge decay.`;
+      } ${
+        decayWarnings.length === 1 ? 'setup shows' : 'setups show'
+      } regime-dependent edge decay. Generated by this model, not a record of your fills.`;
 
   const note =
     decayWarnings.length > 0
-      ? 'Your edge is regime-conditional: several setups only pay in the vol environment they were built for. Trade them where they work, stand down where they have bled.'
-      : 'No setup is leaking edge across regimes right now — your plays are holding expectancy wherever the tape has put them.';
+      ? 'The edge in this book is regime-conditional: several setups only pay in the vol environment they were built for, and give it back in the one they were not.'
+      : 'No setup is leaking edge across regimes here — the book holds expectancy wherever the modeled tape has put it.';
 
   const sampleNote =
-    'Every closed trade is scored against its own plan — planned vs actual, slippage, MFE/MAE and capture — so the expectancy below is measured off the fills, not a headline win rate.';
+    'Every trade here is generated by this model — two per setup and vol regime, outcomes drawn against a modeled edge surface — and none of it is recorded from your own trading. Nothing was filled and no market history stands behind it, so the expectancy, win rate and decay flags are counted off that synthesized book and describe nothing else. Each trade is still scored against its own plan — planned vs actual, slippage, MFE/MAE and capture — which is what makes the expectancy arithmetic rather than a headline win rate.';
 
   return {
     ticker,

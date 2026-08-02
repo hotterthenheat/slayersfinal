@@ -40,6 +40,18 @@ const TICKS_PER_BAR = BAR_MS / TICK_MS;
 const MAX_TICKS_BACK = 600;
 
 /**
+ * A backfilled print, carrying the instant it crossed as well as the clock
+ * string LiveTape renders. `time` is `toLocaleTimeString()`, which has no date
+ * on it, so two prints either side of local midnight read out of order as text
+ * while the tape itself is in order; `at` is the number the walk-back is
+ * actually ordered by.
+ */
+export interface SeededPrint extends TapeOrder {
+  /** Epoch ms the print crossed — `time` is this instant rendered. */
+  at: number;
+}
+
+/**
  * The session window immediately behind `Date.now()`, newest print first — the
  * same order LiveTape prepends live prints in.
  *
@@ -48,10 +60,10 @@ const MAX_TICKS_BACK = 600;
  * opening tape and it re-rolls as the session advances a minute rather than
  * replaying a frozen window.
  */
-export function seedSessionTape(want: number): TapeOrder[] {
+export function seedSessionTape(want: number): SeededPrint[] {
   const symbols = Array.from(new Set([Simulator.getActiveTicker(), ...Simulator.WATCHLIST]));
   const now = Date.now();
-  const out: TapeOrder[] = [];
+  const out: SeededPrint[] = [];
 
   for (let k = 1; out.length < want && k <= MAX_TICKS_BACK; k++) {
     const at = now - k * TICK_MS;
@@ -77,6 +89,7 @@ export function seedSessionTape(want: number): TapeOrder[] {
         const offset = (Math.floor(h01(`${s}-off`) * 7) - 3) * cfg.step;
         const strike = Math.round(bar.close / cfg.step) * cfg.step + offset;
         out.push({
+          at,
           time: new Date(at).toLocaleTimeString(),
           ticker: sym,
           strike: strike.toFixed(2),

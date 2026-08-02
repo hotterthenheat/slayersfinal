@@ -657,7 +657,11 @@ function buildFeed(scanner: ScannerKey, activeTicker: string, epoch: number, siz
       ticker,
       spot: name.spot,
       sparkline,
-      changePct: Number(changePct.toFixed(2)),
+      // `+ 0` is load-bearing: Number((-0.002).toFixed(2)) is NEGATIVE zero, so a
+      // group whose move rounds away publishes a signed flat — `>= 0` yet not
+      // `Object.is` 0. Rounding a sub-cent move to flat is fine; carrying the
+      // sign of a move that no longer exists is not.
+      changePct: Number(changePct.toFixed(2)) + 0,
       found: bucket.length,
       get setups(): Setup[] {
         return (built ??= bucket.map(c =>

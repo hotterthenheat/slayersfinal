@@ -24,6 +24,7 @@
 */
 
 import { dayKey, hRange, hGauss } from '../core/rng';
+import { buildLevels } from './gex';
 import type { MarketSnapshot } from '../types/market';
 
 export interface HedgeWindow {
@@ -87,7 +88,7 @@ function windowMovePct(sigmaAnnual: number, mins: number): number {
 }
 
 export function buildHedgeImpact(snapshot: MarketSnapshot): HedgeImpactView {
-  const { ticker, spot, chain, changePercent, indicators, plan } = snapshot;
+  const { ticker, spot, chain, changePercent, indicators } = snapshot;
   const day = dayKey();
 
   const netGex = chain.reduce((a, n) => a + n.netGex, 0);
@@ -144,8 +145,13 @@ export function buildHedgeImpact(snapshot: MarketSnapshot): HedgeImpactView {
   const failureSide: 'UP' | 'DOWN' = longGamma ? (driftSign > 0 ? 'UP' : 'DOWN') : driftSign > 0 ? 'UP' : 'DOWN';
   const failureBoundaryPrice = spot * (1 + (failureSide === 'UP' ? 1 : -1) * failureBoundaryPct / 100);
 
-  // Dealer inventory stress — how stretched the book is right now.
-  const distFromFlip = Math.abs((spot - plan.flipZone) / spot);
+  // Dealer inventory stress — how stretched the book is right now. The flip comes
+  // off the levels rail rather than `plan`, which holds the same number today but
+  // is not the definition: distance from it is what pushes this into STRETCHED or
+  // CRITICAL, and a label the reader takes as a fact about the book must not be
+  // measured against a flip the GEX rail has stopped drawing.
+  const { flip } = buildLevels(snapshot);
+  const distFromFlip = Math.abs((spot - flip) / spot);
   const dexStrain = Math.min(1, Math.abs(netDex) / (gammaMag * 0.6 + 1));
   const rawStress =
     (longGamma ? 26 : 58) +

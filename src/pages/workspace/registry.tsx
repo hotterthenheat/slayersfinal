@@ -31,9 +31,11 @@ import Sparkline from '../../components/compass/Sparkline';
 import type { Tone } from '../../components/ui/tones';
 import { makeAutoNote } from '../../data/command';
 import { buildDarkPoolView } from '../../data/darkpool';
-import { buildStockBoard } from '../../data/stocks';
+// Aliased: both engines name their observational verdict map the same thing.
+// Rendering through them is what keeps the engine's own word off the screen.
+import { buildStockBoard, VERDICT_LABEL as STOCK_VERDICT_LABEL, VERDICT_TONE as STOCK_VERDICT_TONE } from '../../data/stocks';
 import { buildNewsFeed } from '../../data/news';
-import { buildEarningsCalendar } from '../../data/earnings';
+import { buildEarningsCalendar, VERDICT_LABEL as EARNINGS_VERDICT_LABEL, VERDICT_TONE as EARNINGS_VERDICT_TONE } from '../../data/earnings';
 import { runMonteCarlo } from '../../core/quant';
 import { fmtUsd } from '../../data/gex';
 import type { MarketSnapshot } from '../../types/market';
@@ -453,7 +455,7 @@ export const WIDGETS: WidgetDef[] = [
           .map(p => (
             <div key={p.ticker} className="flex items-center gap-2 px-2.5 py-2 border-b border-borderSubtle/30 last:border-0">
               <span className="font-mono text-label font-bold text-textPrimary">{p.ticker}</span>
-              <SignalBadge tone={p.verdict === 'ACCUMULATE' ? 'bull' : p.verdict === 'AVOID' ? 'bear' : 'neutral'}>{p.verdict}</SignalBadge>
+              <SignalBadge tone={STOCK_VERDICT_TONE[p.verdict]}>{STOCK_VERDICT_LABEL[p.verdict]}</SignalBadge>
               <span className="ml-auto font-mono text-label font-semibold text-textPrimary tnum">{p.composite}</span>
             </div>
           ))}
@@ -505,7 +507,7 @@ export const WIDGETS: WidgetDef[] = [
               <span className="font-mono text-label font-bold text-textPrimary">{e.ticker}</span>
               <span className="font-mono text-micro text-textMuted">{e.dateLabel}</span>
               <span className="ml-auto font-mono text-micro text-textSecondary tnum">{e.impliedMovePct.toFixed(1)}%</span>
-              <SignalBadge tone={e.verdict === 'PLAY' ? 'bull' : e.verdict === 'FADE' ? 'magenta' : 'neutral'}>{e.verdict}</SignalBadge>
+              <SignalBadge tone={EARNINGS_VERDICT_TONE[e.verdict]}>{EARNINGS_VERDICT_LABEL[e.verdict]}</SignalBadge>
             </div>
           ))}
       </div>

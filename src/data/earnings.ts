@@ -14,6 +14,7 @@ import { expiryFor, fmtExpiryShort } from '../core/calendar';
 import { tickerSentiment } from './news';
 import { UNIVERSE } from './universe';
 import type { Sector } from './universe';
+import type { Tone } from '../components/ui/tones';
 // Type-only, so there is no runtime edge back from earningsintel.ts (which
 // imports EarningsEvent from here). The plays builder takes the intel view as
 // an argument rather than calling for it, which keeps the module graph acyclic.
@@ -21,6 +22,40 @@ import type { EarningsIntelView } from './earningsintel';
 
 export type EarningsVerdict = 'PLAY' | 'FADE' | 'SKIP';
 export type ReportSlot = 'BMO' | 'AMC';
+
+/**
+ * Observational labels, same rule as `compass/verdict.ts` and the Stocks board:
+ * the engine keeps PLAY/FADE/SKIP, every screen states the condition.
+ *
+ * PLAY deliberately does NOT map to a price word — it fires on three different
+ * conditions (rich premium with strong direction, cheap premium, fair premium
+ * with direction), so anything about the premium would be wrong for two of the
+ * three. What all three share is that a defined structure qualifies. FADE is the
+ * one branch that IS a premium statement (richness >= 1.3 with no direction),
+ * and SKIP is the absence of an edge.
+ *
+ * It lives beside the union rather than on the earnings board because the board
+ * is not the only surface that renders a verdict, and the surfaces that had
+ * nothing to render through printed the union itself — the engine word "PLAY"
+ * put on screen as an order, which is the one thing the map exists to prevent.
+ * Type-only import of `Tone`, so nothing from the component layer survives into
+ * the bundle here.
+ */
+export const VERDICT_LABEL: Record<EarningsVerdict, string> = {
+  PLAY: 'QUALIFIED',
+  FADE: 'RICH',
+  SKIP: 'NO EDGE',
+};
+
+// A verdict is a process state, so it takes the chrome tones — see the rule in
+// compass/setupState.ts. QUALIFIED = silver (a structure qualifies), RICH =
+// amber caution (premium favours the seller), NO EDGE = grey. Magenta stays
+// reserved for the king/standout signal, not a verdict.
+export const VERDICT_TONE: Record<EarningsVerdict, Tone> = {
+  PLAY: 'select',
+  FADE: 'warn',
+  SKIP: 'neutral',
+};
 
 export interface EarningsEvent {
   ticker: string;
@@ -494,7 +529,7 @@ export function buildEarningsPlays(e: EarningsEvent, view: EarningsIntelView): E
       ? component === 'STRADDLE_RICH'
         ? `No wing is underpriced into this print. The straddle prices ${e.richness.toFixed(2)}× the record and neither tail carries an edge, so the structure here is the ${view.shortVol.name.toLowerCase()}, which is a premium sale and not a lotto.`
         : `No wing is mispriced: the model and the skew agree on both tails. A long ticket into this print pays the ${crush}% crush for a coin flip.`
-      : `${side === 'BOTH' ? `The straddle underprices the whole event, and of the two wings the model underprices the ${wing?.right === 'C' ? 'upside' : 'downside'}. ` : ''}A long ticket has to clear the crush first: ATM IV goes ${view.frontIv.toFixed(0)}% to ${view.baseIv.toFixed(0)}% the morning after, so ${crush}% of the volatility you pay for is spent on the print itself. The nearer strike buys the odds, the further one the payout.`;
+      : `${side === 'BOTH' ? `The straddle underprices the whole event, and of the two wings the model underprices the ${wing?.right === 'C' ? 'upside' : 'downside'}. ` : ''}A long ticket has to clear the crush first: ATM IV goes ${view.frontIv.toFixed(0)}% to ${view.baseIv.toFixed(0)}% the morning after, so ${crush}% of the premium in the front expiry is spent on the print itself. The nearer strike buys the odds, the further one the payout.`;
 
   return {
     ticker: e.ticker,

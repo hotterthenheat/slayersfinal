@@ -13,6 +13,8 @@ import {
   buildEarningsCalendar,
   buildEarningsPlays,
   directionVote,
+  VERDICT_LABEL,
+  VERDICT_TONE,
   type EarningsEvent,
   type EarningsPlay,
   type EarningsVerdict,
@@ -49,33 +51,6 @@ const WATCHLIST_KEY = 'slayer.earnings.watchlist';
 /** Anchor for the "full dossier" jump out of the selected-row read. */
 const DOSSIER_ID = 'earnings-dossier';
 
-// A verdict is a process state, so it takes the chrome tones — see the rule in
-// compass/setupState.ts. QUALIFIED = silver (a structure qualifies), RICH =
-// amber caution (premium favours the seller), NO EDGE = grey. Magenta stays
-// reserved for the king/standout signal, not a verdict.
-const verdictTone: Record<EarningsVerdict, Tone> = {
-  PLAY: 'select',
-  FADE: 'warn',
-  SKIP: 'neutral',
-};
-
-/**
- * Observational labels, same rule as `compass/verdict.ts` and the Stocks
- * board: the engine keeps PLAY/FADE/SKIP, the screen states the condition.
- *
- * PLAY deliberately does NOT map to a price word — it fires on three different
- * conditions (rich premium with strong direction, cheap premium, fair premium
- * with direction), so anything about the premium would be wrong for two of the
- * three. What all three share is that a defined structure qualifies. FADE is
- * the one branch that IS a premium statement (richness >= 1.3 with no
- * direction), and SKIP is the absence of an edge.
- */
-const VERDICT_LABEL: Record<EarningsVerdict, string> = {
-  PLAY: 'QUALIFIED',
-  FADE: 'RICH',
-  SKIP: 'NO EDGE',
-};
-
 /*
   Report-time confirmation is INFERRED from proximity: prints inside the near-term
   window carry a confirmed date/slot, further-out ones are still analyst-estimated
@@ -92,7 +67,7 @@ const reportConfirmed = (e: EarningsEvent): boolean => e.daysOut <= CONFIRM_WIND
  *
  * Cheap vol is silver, not green. Green on this page is the direction sleeves
  * (revisions, flow, setup, conviction) and nothing else; a straddle priced under
- * what the name realizes is a statement about the premium, not about which way
+ * the name's modeled average is a statement about the premium, not about which way
  * the print goes, and a cheap straddle is bought by bears as often as bulls. The
  * three tones here are the process vocabulary: select qualifies, warn cautions,
  * neutral is the absence of either.
@@ -103,7 +78,7 @@ const edgeRead = (e: EarningsEvent): { label: string; tone: Tone } => {
   return { label: 'Vol fair', tone: 'neutral' };
 };
 
-/** Signed implied − realized gap, in points — the raw edge behind richness. */
+/** Signed implied − modeled-average gap, in points — the raw edge behind richness. */
 const edgePtsLabel = (e: EarningsEvent): string => {
   const d = e.impliedMovePct - e.histAvgMovePct;
   return `${d >= 0 ? '+' : '−'}${Math.abs(d).toFixed(1)}pt`;
@@ -145,20 +120,30 @@ const structureOf = (view: EarningsIntelView | undefined): { label: string; risk
   return { label: 'Day-2 continuation', risk: 'no pre-print risk', tone: 'neutral' };
 };
 
-/** Implied vs realized, drawn against each other — the whole edge in one glance. */
+/**
+ * Implied vs the modeled average, drawn against each other — the whole edge in
+ * one glance.
+ *
+ * The lower bar is `histAvgMovePct`, which is measured over the eight reports
+ * `printHistory` generates for the name, so it is captioned "model" and not
+ * "real": no market history stands behind it. StockDetailDrawer.tsx settled that
+ * wording first and every surface quoting the field now matches it.
+ */
 const MoveCompare = ({ implied, hist }: { implied: number; hist: number }) => {
   const max = Math.max(implied, hist, 1);
   return (
     <span className="flex flex-col gap-1 w-full py-0.5">
       <span className="flex items-center gap-1.5">
-        <span className="w-7 font-mono text-micro uppercase text-textMuted">imp</span>
+        {/* Both captions went w-7 → w-8 together: "model" is five glyphs of 10px
+            mono and overhangs a 28px box, and the two bars have to stay aligned. */}
+        <span className="w-8 font-mono text-micro uppercase text-textMuted">imp</span>
         <span className="flex-1 h-[4px] rounded-full bg-white/[0.06] overflow-hidden">
           <span className="block h-full rounded-full data-bar" style={{ width: `${(implied / max) * 100}%` }} />
         </span>
         <span className="w-11 font-mono text-label text-textPrimary tnum text-right">{implied.toFixed(1)}%</span>
       </span>
       <span className="flex items-center gap-1.5">
-        <span className="w-7 font-mono text-micro uppercase text-textMuted">real</span>
+        <span className="w-8 font-mono text-micro uppercase text-textMuted">model</span>
         <span className="flex-1 h-[4px] rounded-full bg-white/[0.06] overflow-hidden">
           <span className="block h-full rounded-full bg-white/30" style={{ width: `${(hist / max) * 100}%` }} />
         </span>
@@ -321,7 +306,7 @@ const TradeRead = ({ e, view }: { e: EarningsEvent; view: EarningsIntelView | un
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center gap-1.5">
-        <SignalBadge tone={verdictTone[e.verdict]}>{VERDICT_LABEL[e.verdict]}</SignalBadge>
+        <SignalBadge tone={VERDICT_TONE[e.verdict]}>{VERDICT_LABEL[e.verdict]}</SignalBadge>
         <span className="font-mono text-label text-textPrimary">{st.label}</span>
       </div>
       <div className="flex items-center gap-2 font-mono text-label whitespace-nowrap">
@@ -530,7 +515,7 @@ const EarningsHub = () => {
     },
     {
       key: 'move',
-      header: 'Implied vs realized',
+      header: 'Implied vs modeled',
       width: '190px',
       sortValue: e => e.richness,
       render: e => <MoveCompare implied={e.impliedMovePct} hist={e.histAvgMovePct} />,
@@ -600,24 +585,28 @@ const EarningsHub = () => {
       <PageHeader
         breadcrumb={['Terminal', 'Earnings']}
         title="Earnings Hub"
-        subtitle="Every upcoming print priced: implied vs what it actually moves, then edge, conviction and the risk-defined structure for each"
+        // "what it actually moves" claimed market history for `histAvgMovePct`,
+        // which is an average of the eight reports this model generates for the
+        // name. StockDetailDrawer.tsx:134 already prints it as "Modeled avg /
+        // 8 modeled reports"; one field cannot have two provenances.
+        subtitle="Every upcoming print priced: implied vs the move this model records for the name, then edge, conviction and the risk-defined structure for each"
         actions={<SegmentedControl ariaLabel="Verdict filter" options={FILTER_OPTIONS} value={filter} onChange={setFilter} />}
       />
 
       <MetricGrid min="170px">
         <StatCard label="Reports tracked" value={events.length} sub="next two weeks" />
         <StatCard label="Qualified" value={plays.length} sub="a defined structure fits" tone="select" />
-        <StatCard label="Premium rich" value={fades.length} sub="implied over realized" tone="magenta" />
+        <StatCard label="Premium rich" value={fades.length} sub="implied over the modeled avg" tone="magenta" />
         <StatCard
           label="Richest straddle"
           value={richest ? `${richest.ticker} ${richest.richness.toFixed(2)}×` : '--'}
-          sub={richest ? `implied ${richest.impliedMovePct.toFixed(1)}% vs ${richest.histAvgMovePct.toFixed(1)}% real` : ''}
+          sub={richest ? `implied ${richest.impliedMovePct.toFixed(1)}% vs ${richest.histAvgMovePct.toFixed(1)}% modeled` : ''}
           tone="warn"
         />
         <StatCard
           label="Cheapest straddle"
           value={cheapest ? `${cheapest.ticker} ${cheapest.richness.toFixed(2)}×` : '--'}
-          sub={cheapest ? `market under-pricing an ${cheapest.histAvgMovePct.toFixed(1)}% mover` : ''}
+          sub={cheapest ? `under the ${cheapest.histAvgMovePct.toFixed(1)}% modeled avg` : ''}
           tone="select"
         />
       </MetricGrid>
@@ -665,7 +654,7 @@ const EarningsHub = () => {
                     {watchlist.has(e.ticker) && <Star className="w-3 h-3 shrink-0 text-select fill-current" />}
                     <span className="font-mono text-caption font-bold text-textPrimary">{e.ticker}</span>
                     <span className="font-mono text-micro text-textMuted">{e.slot}</span>
-                    <SignalBadge tone={verdictTone[e.verdict]} className="ml-auto">
+                    <SignalBadge tone={VERDICT_TONE[e.verdict]} className="ml-auto">
                       {VERDICT_LABEL[e.verdict]}
                     </SignalBadge>
                   </button>
@@ -720,7 +709,7 @@ const EarningsHub = () => {
                   </div>
 
                   <div className="flex items-center justify-between gap-2">
-                    <SignalBadge tone={verdictTone[e.verdict]}>{VERDICT_LABEL[e.verdict]}</SignalBadge>
+                    <SignalBadge tone={VERDICT_TONE[e.verdict]}>{VERDICT_LABEL[e.verdict]}</SignalBadge>
                     <ReportTimeTag e={e} />
                   </div>
 
@@ -813,13 +802,13 @@ const EarningsHub = () => {
           <div className="px-4 py-3 border-b border-borderSubtle bg-inset flex flex-col gap-2.5 animate-soft-in">
             <div className="flex items-center gap-2 flex-wrap">
               <WatchStar on={watchlist.has(selected.ticker)} onClick={() => toggleWatch(selected.ticker)} />
-              <SignalBadge tone={verdictTone[selected.verdict]}>{VERDICT_LABEL[selected.verdict]}</SignalBadge>
+              <SignalBadge tone={VERDICT_TONE[selected.verdict]}>{VERDICT_LABEL[selected.verdict]}</SignalBadge>
               <span className="font-mono text-caption font-bold text-textPrimary leading-4">
                 {selected.ticker} · {selected.dateLabel} {selected.slot}
               </span>
               <ReportTimeTag e={selected} />
               <span className="font-mono text-label text-textMuted">
-                implied {selected.impliedMovePct.toFixed(1)}% · realized {selected.histAvgMovePct.toFixed(1)}% ·{' '}
+                implied {selected.impliedMovePct.toFixed(1)}% · modeled avg {selected.histAvgMovePct.toFixed(1)}% ·{' '}
                 {selected.richness.toFixed(2)}×
               </span>
               <span className="ml-auto flex items-center gap-2">

@@ -6,6 +6,8 @@ import { buildExposureProfile } from './exposure';
 import { buildGexView, buildLevels, pinStrike } from './gex';
 import * as gexHistoryModule from './gexhistory';
 import { buildGexHistory } from './gexhistory';
+import * as hedgeImpactModule from './hedgeimpact';
+import { buildHedgeImpact } from './hedgeimpact';
 import { buildRankedTargets } from './rankedtargets';
 import { buildVannaCharm, levelsOfProfile } from './vannacharm';
 import type { IvShift, KeyLevelKind, KeyLevelRow, ShiftMode, TargetTag } from '../types/gex';
@@ -301,7 +303,13 @@ describe('single derivation: the panels that used to roll their own', () => {
 
       // Every "now → scenario" the prose draws is a row of the shift table, so
       // the sentence and the table can never quote the level differently.
-      const arrows = [...prose.matchAll(/(-?[\d.]+)\s*→\s*(-?[\d.]+)/g)].map(m => `${Number(m[1])}→${Number(m[2])}`);
+      // The decimal is optional; the full stop after one is not part of the
+      // number. A [\d.] class eats the terminator when an arrow pair ends the
+      // sentence, `Number('232.50.')` is NaN, and the comparison below quietly
+      // stopped happening on every date whose walls land on a half-dollar strike.
+      const arrows = [...prose.matchAll(/(-?\d+(?:\.\d+)?)\s*→\s*(-?\d+(?:\.\d+)?)/g)].map(
+        m => `${Number(m[1])}→${Number(m[2])}`
+      );
       const rows = view.shifts.map(s => `${s.current}→${s.projected}`);
       for (const arrow of arrows) expect(rows).toContain(arrow);
     }
@@ -517,6 +525,55 @@ describe('session replay: the fourth derivation', () => {
   */
   it('the history module builds a view and derives no level of its own', () => {
     expect(Object.keys(gexHistoryModule).sort()).toEqual(['buildGexHistory']);
+  });
+});
+
+/*
+  The fifth, and it hid exactly the way the fourth did: hedgeimpact.ts imported
+  nothing from gex.ts, so a sweep over "who imports the levels rail" walked past
+  it while it read the gamma flip off `plan` by hand.
+
+  What made it harder to see than gexhistory.ts is that the HEX desk prints no
+  level at all. The flip enters as a DISTANCE and leaves as the inventory-stress
+  score and its LIGHT / BUILDING / STRETCHED / CRITICAL badge, so a flip that
+  drifted from the rail's would have moved a label the reader takes as a fact
+  about the book with no price on screen to look wrong.
+
+  That distance is the only handle these tests have, so it is pinned by moving
+  the rail's flip and requiring the score to follow.
+*/
+describe('hedge impact: the fifth derivation', () => {
+  it.each(snapshots)('$ticker inventory stress is measured from the rail’s flip', ({ snap }) => {
+    const { longGamma } = buildHedgeImpact(snap);
+    const withFlip = (flipZone: number) => buildHedgeImpact({ ...snap, plan: { ...snap.plan, flipZone } });
+    // Distance zero against a distance past the term's own cap — the widest
+    // swing a flip can produce here, so a module scanning the chain for a flip
+    // of its own returns the same score for both.
+    const atSpot = withFlip(snap.spot).inventoryStress;
+    const away = withFlip(snap.spot * 0.9).inventoryStress;
+
+    // Short gamma: distance from the flip is strain, and stress rises with it.
+    // Long gamma: it is room, and stress falls. The engine's 3–99 clamp is the
+    // one honest way the two can tie — pinned at an end of the scale, the term
+    // has nowhere left to move the score.
+    if (atSpot === away) expect([3, 99]).toContain(atSpot);
+    else if (longGamma) expect(away).toBeLessThan(atSpot);
+    else expect(away).toBeGreaterThan(atSpot);
+  });
+
+  it.each(snapshots)('$ticker the HEX view is the rail’s spot and a pure read', ({ snap }) => {
+    const view = buildHedgeImpact(snap);
+    expect(view.spot).toBe(buildLevels(snap).spot);
+    expect(buildHedgeImpact(snap)).toEqual(view);
+  });
+
+  /*
+    Same tripwire the positioning map and the replay carry. This module turns
+    levels into forced flow; the moment it exports one there are two answers to
+    where the flip is again.
+  */
+  it('the hedge-impact module builds a view and derives no level of its own', () => {
+    expect(Object.keys(hedgeImpactModule).sort()).toEqual(['buildHedgeImpact']);
   });
 });
 
