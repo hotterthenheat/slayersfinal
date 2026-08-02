@@ -5,7 +5,12 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['dist', 'coverage', 'node_modules'] },
+  // `.agents` is vendored agent skills — third-party docs and example
+  // components installed by `npx skills add`. They are not this project's
+  // source, they are not built or imported by it, and they are written against
+  // their own conventions: linting them put 88 errors in the gate for code
+  // nobody here wrote or ships.
+  { ignores: ['dist', 'coverage', 'node_modules', '.agents'] },
   {
     files: ['**/*.{ts,tsx}'],
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
