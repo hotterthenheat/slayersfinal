@@ -1,6 +1,6 @@
 # /trailer — the in-app product trailer
 
-An interactive, 78-second cinematic walk through the terminal that follows **one
+An interactive, 84-second cinematic walk through the terminal that follows **one
 simulated market event on one symbol through every desk**. It is a route in the
 app, not a video: the instruments are live compositions reading a shared story
 layer, and at any point you can pause, step, or open the real desk you are
@@ -13,7 +13,7 @@ npm run dev          # then open /trailer
 ```
 
 The route opens on a launch card. Nothing plays until the viewer presses **Play
-trailer** — a 78-second timeline that starts running at someone who has not
+trailer** — an 84-second timeline that starts running at someone who has not
 asked for it is worse than the autoplay policy it would be dodging.
 
 Entry points: the hero on `/` ("Watch terminal trailer") and the URL directly.
@@ -78,10 +78,24 @@ Three rules hold the thing together:
 ### Retiming
 
 `SCENE_SPEC` at the top of `useTrailerTimeline.ts` — one array of
-`{ id, product, route, durationMs, description }`. Change a duration and
-everything downstream (chapter bar, remaining time, story clock, thread
-acquisition) follows. The story time maps linearly across the whole film, so the
-session clock and spot stay monotonic no matter how the scenes are retimed.
+`{ storyEnd, id, product, route, durationMs, description }`. Change a duration
+and everything downstream (chapter bar, remaining time, thread acquisition)
+follows.
+
+`storyEnd` is the other half and it is not the same axis: it says where the
+**market** has got to by the end of that scene, as a fraction of the session,
+independent of how long the scene runs on screen. `storyUAt()` is the only place
+that maps the two together, and everything reads it — the spot on the thread, the
+timestamp in the HUD, the reveal on every price chart, the moment the Tracker
+packet freezes.
+
+Mapping the two linearly instead is what the first version did, and it put Pulse
+at minute 2 of a 40-minute session while its chart drew the session's closing
+rebound: the pulsing live edge and the price beside it described different
+moments. If you retime a scene, check `storyEnd` still lands on the beat that
+scene is about. `storyClock.test.ts` asserts the invariants that can be
+asserted — monotonic, ends at the close, Tracker's packet frozen at the instant
+its scene opens.
 
 ### Where the data comes from
 

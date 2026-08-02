@@ -11,26 +11,40 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TrailerSceneDefinition } from './trailerTypes';
 
-/** Scene running order and lengths, in ms. Edit here to retime the whole film. */
-const SCENE_SPEC: Omit<TrailerSceneDefinition, 'enterAtMs' | 'exitAtMs'>[] = [
-  { id: 'ignition', product: 'Terminal', durationMs: 4200, description: 'The terminal comes online and locks onto one symbol.' },
-  { id: 'pulse', product: 'Pulse', route: '/pulse', durationMs: 6000, description: 'Pulse shows price pressing into a structural level while order-flow pressure builds and the regime turns.', },
-  { id: 'trace', product: 'Trace · Live Tape', route: '/trace/live-tape', durationMs: 5200, description: 'Option prints arrive on the tape with fill position, size and an unresolved directional classification.' },
-  { id: 'scanner', product: 'Trace · Flow Scanner', route: '/trace/scanner', durationMs: 4000, description: 'A cross-contract scan ranks anomalies; one contract climbs the board as evidence accumulates.' },
-  { id: 'metaorder', product: 'Trace · Reconstruction', route: '/trace/reconstruction', durationMs: 4600, description: 'Child prints are grouped into a probable parent sequence with a probability, not a label.' },
-  { id: 'darkpool', product: 'Trace · Dark Pool', route: '/trace/dark-pool', durationMs: 4200, description: 'Off-exchange prints leave a persistent price shelf at the same structural level.' },
-  { id: 'gamma', product: 'Pinpoint · Gamma', route: '/pinpoint/gamma', durationMs: 5400, description: 'The dealer exposure field across strike and expiry, with the gamma flip above spot.' },
-  { id: 'levels', product: 'Pinpoint · Levels, Greeks, Stress', route: '/pinpoint/levels', durationMs: 5400, description: 'Ranked levels, exposure greeks, and a stress test that finds where the level stops surviving.' },
-  { id: 'compass', product: 'Compass · Setups', route: '/compass', durationMs: 5200, description: 'Candidate setups inherit the market state; the highest-scoring one is rejected on data quality.' },
-  { id: 'weigher', product: 'Compass · Contract Weigher', route: '/compass', durationMs: 5200, description: 'Five contracts express the same thesis; the anatomy of each decision is shown.' },
-  { id: 'lotto', product: 'Compass · Lotto', route: '/compass', durationMs: 4800, description: 'Terminal-outcome check on far out-of-the-money contracts; the cheapest is a no trade.' },
-  { id: 'scalp', product: 'Compass · Scalp and Rebound', route: '/compass', durationMs: 4600, description: 'Two intraday models side by side: continuation in negative gamma, reversion in positive gamma.' },
-  { id: 'proveit', product: 'Prove It', route: '/prove-it', durationMs: 5000, description: 'Forecast and risk-neutral distributions, calibration, and a challenger model failing its promotion gate.' },
-  { id: 'stocks', product: 'Stocks', route: '/stocks', durationMs: 3400, description: 'Ranking across momentum, quality, flow and news, then routing the thesis to an instrument.' },
-  { id: 'news', product: 'News', route: '/news', durationMs: 3400, description: 'A catalyst arrives, duplicates cluster, and the forecast distribution repriced rather than a sentiment score.' },
-  { id: 'earnings', product: 'Earnings', route: '/earnings', durationMs: 4000, description: 'Implied against realized against forecast move, with direction and magnitude kept separate.' },
-  { id: 'tracker', product: 'Tracker', route: '/tracker', durationMs: 5200, description: 'The decision is frozen into an immutable packet, the market advances, and the alternatives are scored against it.' },
-  { id: 'convergence', product: 'Slayer Terminal', route: '/terminal', durationMs: 4600, description: 'All desks operating on the same event at once.' },
+/**
+ * Scene running order, lengths and story position.
+ *
+ * `storyEnd` is where the market has got to by the end of that scene, as a
+ * fraction of the session the story covers. It is NOT the scene's position in
+ * the film, and that distinction is the whole point: mapping story time linearly
+ * onto film time put Pulse at minute 2 of a 40-minute session while its chart
+ * drew the session's closing rebound, so the live edge of the chart and the spot
+ * beside it described different moments. Anchoring each scene to the beat it
+ * needs — Pulse ends with price pressed into the level, Dark Pool ends with the
+ * shelf tested, Tracker ends after the outcome — makes them agree by
+ * construction instead of by coincidence.
+ *
+ * Values must be strictly increasing; `storyClockIsMonotonic` asserts it.
+ */
+const SCENE_SPEC: (Omit<TrailerSceneDefinition, 'enterAtMs' | 'exitAtMs'> & { storyEnd: number })[] = [
+  { storyEnd: 0.02, id: 'ignition', product: 'Terminal', durationMs: 4200, description: 'The terminal comes online and locks onto one symbol.' },
+  { storyEnd: 0.44, id: 'pulse', product: 'Pulse', route: '/pulse', durationMs: 6000, description: 'Pulse shows price pressing into a structural level while order-flow pressure builds and the regime turns.', },
+  { storyEnd: 0.5, id: 'trace', product: 'Trace · Live Tape', route: '/trace/live-tape', durationMs: 5200, description: 'Option prints arrive on the tape with fill position, size and an unresolved directional classification.' },
+  { storyEnd: 0.54, id: 'scanner', product: 'Trace · Flow Scanner', route: '/trace/scanner', durationMs: 4000, description: 'A cross-contract scan ranks anomalies; one contract climbs the board as evidence accumulates.' },
+  { storyEnd: 0.58, id: 'metaorder', product: 'Trace · Reconstruction', route: '/trace/reconstruction', durationMs: 4600, description: 'Child prints are grouped into a probable parent sequence with a probability, not a label.' },
+  { storyEnd: 0.62, id: 'darkpool', product: 'Trace · Dark Pool', route: '/trace/dark-pool', durationMs: 4200, description: 'Off-exchange prints leave a persistent price shelf at the same structural level.' },
+  { storyEnd: 0.66, id: 'gamma', product: 'Pinpoint · Gamma', route: '/pinpoint/gamma', durationMs: 5400, description: 'The dealer exposure field across strike and expiry, with the gamma flip above spot.' },
+  { storyEnd: 0.7, id: 'levels', product: 'Pinpoint · Levels, Greeks, Stress', route: '/pinpoint/levels', durationMs: 5400, description: 'Ranked levels, exposure greeks, and a stress test that finds where the level stops surviving.' },
+  { storyEnd: 0.74, id: 'compass', product: 'Compass · Setups', route: '/compass', durationMs: 5200, description: 'Candidate setups inherit the market state; the highest-scoring one is rejected on data quality.' },
+  { storyEnd: 0.78, id: 'weigher', product: 'Compass · Contract Weigher', route: '/compass?view=weigher', durationMs: 5200, description: 'Five contracts express the same thesis; the anatomy of each decision is shown.' },
+  { storyEnd: 0.81, id: 'lotto', product: 'Compass · Lotto', route: '/compass?view=lotto', durationMs: 4800, description: 'Terminal-outcome check on far out-of-the-money contracts; the cheapest is a no trade.' },
+  { storyEnd: 0.84, id: 'scalp', product: 'Compass · Scalp and Rebound', route: '/compass?view=quick-scalp', durationMs: 4600, description: 'Two intraday models side by side: continuation in negative gamma, reversion in positive gamma.' },
+  { storyEnd: 0.87, id: 'proveit', product: 'Prove It', route: '/prove-it', durationMs: 5000, description: 'Forecast and risk-neutral distributions, calibration, and a challenger model failing its promotion gate.' },
+  { storyEnd: 0.89, id: 'stocks', product: 'Stocks', route: '/stocks', durationMs: 3400, description: 'Ranking across momentum, quality, flow and news, then routing the thesis to an instrument.' },
+  { storyEnd: 0.91, id: 'news', product: 'News', route: '/news', durationMs: 3400, description: 'A catalyst arrives, duplicates cluster, and the forecast distribution repriced rather than a sentiment score.' },
+  { storyEnd: 0.93, id: 'earnings', product: 'Earnings', route: '/earnings', durationMs: 4000, description: 'Implied against realized against forecast move, with direction and magnitude kept separate.' },
+  { storyEnd: 0.97, id: 'tracker', product: 'Tracker', route: '/tracker', durationMs: 5200, description: 'The decision is frozen into an immutable packet, the market advances, and the alternatives are scored against it.' },
+  { storyEnd: 1.0, id: 'convergence', product: 'Slayer Terminal', route: '/terminal', durationMs: 4600, description: 'All desks operating on the same event at once.' },
 ];
 
 /**
@@ -71,6 +85,34 @@ export const SCENES: TrailerSceneDefinition[] = (() => {
 })();
 
 export const TRAILER_DURATION_MS = SCENES[SCENES.length - 1].exitAtMs;
+
+/** Story fraction at the head of each scene — the previous scene's end. */
+const STORY_START: number[] = SCENE_SPEC.map((_, i) => (i === 0 ? 0 : SCENE_SPEC[i - 1].storyEnd));
+
+/**
+ * Where the market has got to, 0..1 of the session.
+ *
+ * Every consumer reads this: the spot on the thread, the reveal on each chart,
+ * the timestamp in the HUD, the moment the Tracker packet freezes. One function
+ * means they cannot drift apart.
+ */
+export function storyUAt(sceneIndex: number, sceneProgress: number): number {
+  const i = Math.max(0, Math.min(SCENE_SPEC.length - 1, sceneIndex));
+  const from = STORY_START[i];
+  const to = SCENE_SPEC[i].storyEnd;
+  return from + (to - from) * Math.max(0, Math.min(1, sceneProgress));
+}
+
+/** Story fraction at the instant a named scene begins. */
+export function storyUAtSceneStart(id: string): number {
+  const i = SCENE_SPEC.findIndex(s => s.id === id);
+  return i < 0 ? 0 : STORY_START[i];
+}
+
+/** Guard for the one invariant the keyframes have: the session cannot run backwards. */
+export function storyClockIsMonotonic(): boolean {
+  return SCENE_SPEC.every((s, i) => s.storyEnd > STORY_START[i] && s.storyEnd <= 1);
+}
 
 export const sceneIndexAt = (t: number): number => {
   for (let i = 0; i < SCENES.length; i++) if (t < SCENES[i].exitAtMs) return i;

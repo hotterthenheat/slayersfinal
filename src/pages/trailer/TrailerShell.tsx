@@ -17,7 +17,7 @@ import { useReducedMotion } from 'framer-motion';
 import useMediaQuery from '../../hooks/useMediaQuery';
 import { buildTrailerStory } from './trailerStory';
 import { deriveThread, TrailerCtx, ease, at } from './useTrailerState';
-import { useTrailerTimeline, SCENES } from './useTrailerTimeline';
+import { useTrailerTimeline, SCENES, storyUAt } from './useTrailerTimeline';
 import TrailerHUD from './TrailerHUD';
 import TrailerControls from './TrailerControls';
 import StateThread from './StateThread';
@@ -82,8 +82,12 @@ const TrailerShell: React.FC<{ autoStart: boolean }> = ({ autoStart }) => {
   const [chromeVisible, setChromeVisible] = useState(true);
   const idleRef = useRef<number | null>(null);
 
-  const { sceneIndex, scene, sceneProgress, timeMs, playing, goToScene, toggle, replay, step } = timeline;
-  const thread = useMemo(() => deriveThread(story, timeMs, sceneIndex), [story, timeMs, sceneIndex]);
+  const { sceneIndex, scene, sceneProgress, playing, goToScene, toggle, replay, step } = timeline;
+  const storyU = storyUAt(sceneIndex, sceneProgress);
+  const thread = useMemo(
+    () => deriveThread(story, sceneIndex, sceneProgress),
+    [story, sceneIndex, sceneProgress],
+  );
 
   // Chrome hides while the film runs and comes back on any input.
   useEffect(() => {
@@ -134,8 +138,8 @@ const TrailerShell: React.FC<{ autoStart: boolean }> = ({ autoStart }) => {
   }, [toggle, step, replay, goToScene]);
 
   const ctx = useMemo(
-    () => ({ story, thread, timeline, progress: sceneProgress, reduced, compact }),
-    [story, thread, timeline, sceneProgress, reduced, compact],
+    () => ({ story, thread, timeline, progress: sceneProgress, storyU, reduced, compact }),
+    [story, thread, timeline, sceneProgress, storyU, reduced, compact],
   );
 
   const Scene = SCENE_COMPONENTS[scene.id] ?? IgnitionScene;

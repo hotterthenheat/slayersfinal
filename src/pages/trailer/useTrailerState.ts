@@ -11,7 +11,7 @@ import { createContext, useContext } from 'react';
 import { STORY_SECONDS, spotAt } from './trailerStory';
 import type { TrailerStateThread, TrailerStory } from './trailerTypes';
 import type { TrailerTimeline } from './useTrailerTimeline';
-import { SCENES, TRAILER_DURATION_MS } from './useTrailerTimeline';
+import { SCENES, storyUAt } from './useTrailerTimeline';
 
 /**
  * Which scene first establishes each field of the thread.
@@ -47,13 +47,14 @@ export function threadHas(field: keyof TrailerStateThread, sceneIndex: number): 
 /**
  * The thread at a moment.
  *
- * Story time runs linearly across the whole film, so the session clock and the
- * spot advance monotonically from the first scene to the last — the timestamp
- * Pulse shows is earlier than the one Tracker freezes, because it is the same
- * clock and not a per-scene decoration.
+ * `u` comes from the scene table's story keyframes, so the session clock and the
+ * spot advance monotonically from the first scene to the last AND each scene
+ * sits on the market beat it is about. It is the same clock every chart reveals
+ * from, which is what stops a chart's live edge describing a different moment
+ * than the price printed beside it.
  */
-export function deriveThread(story: TrailerStory, timeMs: number, sceneIndex: number): TrailerStateThread {
-  const u = TRAILER_DURATION_MS ? Math.min(1, timeMs / TRAILER_DURATION_MS) : 0;
+export function deriveThread(story: TrailerStory, sceneIndex: number, sceneProgress: number): TrailerStateThread {
+  const u = storyUAt(sceneIndex, sceneProgress);
   const storySec = u * STORY_SECONDS;
   const spot = spotAt(story, storySec);
   const changePct = ((spot - story.spot0) / story.spot0) * 100;
@@ -88,6 +89,11 @@ export interface TrailerContextValue {
   timeline: TrailerTimeline;
   /** Progress inside the current scene, 0..1. The one input scenes animate from. */
   progress: number;
+  /**
+   * How far the session has got, 0..1. Anything that draws the price path reveals
+   * to exactly this, so the live edge is always the moment the HUD is showing.
+   */
+  storyU: number;
   reduced: boolean;
   /** Compact composition for phones — a different layout, not a squeezed one. */
   compact: boolean;

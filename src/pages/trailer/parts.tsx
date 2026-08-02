@@ -236,10 +236,19 @@ export const PriceField: React.FC<{
   height?: number;
   /** Marks where the live edge is, with a breathing dot. */
   markLive?: boolean;
+  /**
+   * Scale the time axis to the session so far rather than to the whole series.
+   *
+   * Without it a partial reveal draws into the left fifth of the frame and leaves
+   * the rest blank, which reads as an unfinished chart rather than a session in
+   * progress. With it the drawn path fills the width and the live edge sits just
+   * inside the right margin — the way an intraday chart actually behaves.
+   */
+  follow?: boolean;
   pulse?: number;
   className?: string;
   ariaLabel: string;
-}> = ({ points, reveal, levels = [], height = 180, markLive = true, pulse = 0, className = '', ariaLabel }) => {
+}> = ({ points, reveal, levels = [], height = 180, markLive = true, follow = false, pulse = 0, className = '', ariaLabel }) => {
   const W = 1000;
   const H = height;
   const shown = Math.max(2, Math.round(points.length * clamp01(reveal)));
@@ -250,7 +259,10 @@ export const PriceField: React.FC<{
   const span = hi - lo || 1;
   const pad = span * 0.12;
   const y = (v: number) => H - ((v - (lo - pad)) / (span + pad * 2)) * H;
-  const x = (i: number) => (i / (points.length - 1)) * W;
+  // Following keeps a slice of headroom past the live edge so the dot never sits
+  // flush against the frame.
+  const lastIdx = follow ? Math.max(1, (shown - 1) / 0.88) : points.length - 1;
+  const x = (i: number) => (i / lastIdx) * W;
   const d = slice.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(p.px).toFixed(1)}`).join('');
   const last = slice[slice.length - 1];
   const lastX = x(shown - 1);

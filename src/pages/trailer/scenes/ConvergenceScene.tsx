@@ -24,10 +24,11 @@ interface Tile {
 }
 
 const ConvergenceScene: React.FC = () => {
-  const { story, thread, timeline, progress: p, reduced } = useTrailer();
+  const { story, thread, timeline, progress: p, storyU, reduced } = useTrailer();
 
   const build = ease(at(p, 0.06, 0.5));
-  const reveal = clamp01(0.35 + ease(at(p, 0.02, 0.7)) * 0.65);
+  // Reaches the full path here because the session does, not because the scene says so.
+  const reveal = storyU;
 
   const tiles: Tile[] = [
     { product: 'Pulse', route: '/pulse', label: 'Regime', value: thread.regime.split(' · ')[0], tone: 'text-warn' },

@@ -13,10 +13,11 @@ import { Beat, Caveat, Cell, FillBox, PriceField, SceneHead, SceneStatement } fr
 import { px, usd } from '../format';
 
 const DarkPoolScene: React.FC = () => {
-  const { story, thread, progress: p, reduced } = useTrailer();
+  const { story, thread, progress: p, storyU, reduced } = useTrailer();
   const dp = story.darkPool;
 
-  const reveal = clamp01(0.2 + ease(at(p, 0.04, 0.6)) * 0.8);
+  // Reveals to the session's position — see PulseScene.
+  const reveal = storyU;
   const readT = ease(at(p, 0.5, 0.76));
 
   const shown = dp.prints.filter((_, i) => p > 0.12 + (i / dp.prints.length) * 0.42);
@@ -35,6 +36,7 @@ const DarkPoolScene: React.FC = () => {
             <PriceField
               points={story.path}
               reveal={reveal}
+              follow
               pulse={p * 3}
               height={h}
               ariaLabel={`Off-exchange prints forming a shelf at ${px(dp.shelf)} beneath the simulated price path`}

@@ -20,6 +20,7 @@
 import Simulator from '../../core/simulator';
 import { buildLevels } from '../../data/gex';
 import { h01, hGauss, hRange } from '../../core/rng';
+import { storyUAtSceneStart } from './useTrailerTimeline';
 import type {
   ContractRow,
   DarkPoolRead,
@@ -614,7 +615,11 @@ function buildTracker(
 ): { packet: TrackerPacket; outcome: TrackerOutcome } {
   const packet: TrackerPacket = {
     id: 'TR-4417',
-    frozenAt: start + STORY_SECONDS * 1000,
+    // The instant the Tracker scene opens, not the end of the session. Pinning it
+    // to the end of the story meant the HUD read 11:17 while the packet claimed a
+    // freeze at 11:22 — and the scene was already showing the outcome of a
+    // decision that had not been taken yet.
+    frozenAt: start + storyUAtSceneStart('tracker') * STORY_SECONDS * 1000,
     ticker,
     setupId: setup.id,
     contractId: contract.id,

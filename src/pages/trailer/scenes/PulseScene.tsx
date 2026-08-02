@@ -13,10 +13,13 @@ import { Bar, Beat, Caveat, Cell, FillBox, KeyValue, PriceField, SceneHead, Scen
 import { px, pct } from '../format';
 
 const PulseScene: React.FC = () => {
-  const { story, thread, progress: p, reduced } = useTrailer();
+  const { story, thread, progress: p, storyU, reduced } = useTrailer();
 
-  // The chart reveals across the first two thirds; the reads land behind it.
-  const reveal = clamp01(0.12 + ease(at(p, 0.05, 0.72)) * 0.88);
+  // The chart reveals to the session's own position, never past it. Staging this
+  // scene-locally drew the whole path — including the closing rebound — while the
+  // spot beside it still read the open, so the pulsing live edge and the price it
+  // sat next to described different moments.
+  const reveal = storyU;
   const grow = ease(at(p, 0.3, 0.62));
   const belowFlip = thread.spot < story.levels.flip;
 
@@ -46,6 +49,7 @@ const PulseScene: React.FC = () => {
             <PriceField
               points={story.path}
               reveal={reveal}
+              follow
               pulse={p * 3}
               height={h}
               ariaLabel={`Simulated ${thread.ticker} session path pressing into the ${px(story.level)} structural level`}
