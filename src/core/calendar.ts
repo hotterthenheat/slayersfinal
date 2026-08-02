@@ -24,7 +24,25 @@ export const MARKET_HOLIDAYS = new Set([
   // preceding Friday, which is the one case the observed-weekday rule skips.
   '2028-01-17', '2028-02-21', '2028-04-14', '2028-05-29', '2028-06-19',
   '2028-07-04', '2028-09-04', '2028-11-23', '2028-12-25',
+  // 2029-2031 — every one of these falls on a weekday already, so the
+  // observed-weekday rule never fires across the three years.
+  '2029-01-01', '2029-01-15', '2029-02-19', '2029-03-30', '2029-05-28',
+  '2029-06-19', '2029-07-04', '2029-09-03', '2029-11-22', '2029-12-25',
+  '2030-01-01', '2030-01-21', '2030-02-18', '2030-04-19', '2030-05-27',
+  '2030-06-19', '2030-07-04', '2030-09-02', '2030-11-28', '2030-12-25',
+  '2031-01-01', '2031-01-20', '2031-02-17', '2031-04-11', '2031-05-26',
+  '2031-06-19', '2031-07-04', '2031-09-01', '2031-11-27', '2031-12-25',
 ]);
+
+/**
+ * The last year the table above covers. `contractQuery` reads its own copy off
+ * the same set, and drops every ladder rung past it rather than counting
+ * Thanksgiving as a session — so when this table runs out, the expiry picker
+ * silently gets shorter instead of getting wrong. Silent is the problem: the
+ * only thing that notices is `calendar.test.ts`, which fails on lead time
+ * while there are still years left to act on it.
+ */
+export const CALENDAR_THROUGH = Math.max(...[...MARKET_HOLIDAYS].map(k => Number(k.slice(0, 4))));
 
 const DAY_MS = 86400000;
 const WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];

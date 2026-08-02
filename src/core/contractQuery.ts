@@ -27,7 +27,7 @@
 ==================================================
 */
 
-import { expiryFor, fmtExpiry, isoDate, today, MARKET_HOLIDAYS, type Expiry } from './calendar';
+import { expiryFor, fmtExpiry, isoDate, today, CALENDAR_THROUGH, MARKET_HOLIDAYS, type Expiry } from './calendar';
 
 export type SlotState = 'typed' | 'assumed' | 'missing' | 'unknown' | 'pending';
 
@@ -124,10 +124,10 @@ function fmtStrike(v: number): string {
 /**
  * The last year `calendar.ts` carries holidays for. Past it `sessions` would
  * quietly count Thanksgiving as a trading day, and a session count that looks
- * right and is not is exactly the failure this module exists to prevent. So the
- * horizon is read off the holiday table rather than hardcoded beside it.
+ * right and is not is exactly the failure this module exists to prevent. The
+ * calendar publishes the horizon now, so the two cannot drift apart.
  */
-const CALENDAR_LAST_YEAR = Math.max(...[...MARKET_HOLIDAYS].map(k => Number(k.slice(0, 4))));
+const CALENDAR_LAST_YEAR = CALENDAR_THROUGH;
 
 const NOT_A_DATE = 'is not a date on the calendar';
 const PAST_CALENDAR = `is past the market calendar, which runs through ${CALENDAR_LAST_YEAR}`;

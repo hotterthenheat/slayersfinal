@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { parseContractQuery, expiryLadder, slotValue, type QueryCtx } from './contractQuery';
+import { CALENDAR_THROUGH } from './calendar';
+
+/** June 15th of the first year the holiday table does NOT carry. Derived, not
+    typed: this file used to name 2029 outright, and extending the table three
+    years turned a real assertion into a passing one that checked nothing. */
+const PAST_CALENDAR_ISO = `${CALENDAR_THROUGH + 1}-06-15`;
 
 /** Fri 07/31/26 — the date every number in the build spec was measured on. */
 const FRI = new Date(2026, 6, 31);
@@ -237,23 +243,39 @@ describe('parseContractQuery — dates the calendar does not have', () => {
   });
 
   it('refuses a date past the holiday table rather than miscounting its sessions', () => {
-    // calendar.ts carries holidays through 2028. Past that, `sessions` counts
-    // Thanksgiving as a trading day, and a session count that reads right and
-    // is not is the whole failure this module exists to prevent.
-    const q = parseContractQuery('spy 505c 2029-06-15', ctx());
+    // Past the table, `sessions` counts Thanksgiving as a trading day, and a
+    // session count that reads right and is not is the whole failure this
+    // module exists to prevent.
+    const q = parseContractQuery(`spy 505c ${PAST_CALENDAR_ISO}`, ctx());
     expect(q.expiry).toEqual({ state: 'missing' });
     expect(q.complete).toBe(false);
     expect(q.notes).toContainEqual({
       slot: 'expiry',
-      text: '2029-06-15 is past the market calendar, which runs through 2028.',
+      text: `${PAST_CALENDAR_ISO} is past the market calendar, which runs through ${CALENDAR_THROUGH}.`,
     });
   });
 
-  it('refuses a day count that lands past it too', () => {
-    const q = parseContractQuery('spy 505c 999d', ctx());
-    expect(q.expiry).toEqual({ state: 'missing' });
-    expect(q.leftovers).toContain('999D');
-    expect(q.notes.some(n => n.text.includes('past the market calendar'))).toBe(true);
+  it('has a calendar long enough that no expressible day count can run past it', () => {
+    // This test used to type `999d` and assert the refusal. Extending the
+    // holiday table to 2031 made that scenario UNREACHABLE rather than merely
+    // stale: `RE_DTE` accepts at most three digits, so the furthest contract
+    // the grammar can name is today + 999 days, and the table now covers it.
+    //
+    // Asserting the refusal by reaching for a bigger number would have been
+    // theatre — the parser rejects `2145d` as an unknown token, so the test
+    // would pass on the wrong mechanism. The property worth pinning is the one
+    // that makes the branch unreachable, and it fails loudly if the table is
+    // ever shortened back under the grammar's own reach.
+    const MAX_EXPRESSIBLE_DTE = 999;
+    const furthest = new Date(FRI);
+    furthest.setDate(furthest.getDate() + MAX_EXPRESSIBLE_DTE);
+    expect(furthest.getFullYear()).toBeLessThanOrEqual(CALENDAR_THROUGH);
+
+    const q = parseContractQuery(`spy 505c ${MAX_EXPRESSIBLE_DTE}d`, ctx());
+    expect(q.complete).toBe(true);
+    expect(q.notes.some(n => n.text.includes('past the market calendar'))).toBe(false);
+    // The refusal itself still has coverage: an ISO date carries an unbounded
+    // year, so the test above reaches it through the one door still open.
   });
 
   it('keeps every other slot when an OCC symbol carries an impossible date', () => {

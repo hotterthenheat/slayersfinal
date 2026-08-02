@@ -18,6 +18,10 @@ import type {
   TradePlan,
 } from '../types/market';
 import { lookup as universeLookup } from '../data/universe';
+// rng.ts imports nothing, so this cannot cycle. (scanUniverse.ts is the one
+// module this file must never import: that dependency runs the other way, and
+// the cycle surfaces as `undefined` at module init rather than as a type error.)
+import { dayKey } from './rng';
 
 const Simulator = (() => {
   // Math Helpers
@@ -124,7 +128,16 @@ const Simulator = (() => {
   // the same tape" — core/rng.ts). Every stochastic draw below comes from a
   // per-symbol mulberry32 stream seeded from the symbol and the calendar day,
   // so a reload replays the identical month of candles and session tape.
-  const daySeed = Math.floor(Date.now() / 86400000);
+  //
+  // The day comes from `dayKey()`, the same function the twenty research
+  // modules use. It used to be `Math.floor(Date.now() / 86400000)`, which is a
+  // UTC boundary while `dayKey()` reads the LOCAL date — so west of Greenwich
+  // the terminal had two new-day events. Reload after 5pm Pacific and every
+  // candle regenerated while the scanners, news and dossiers stayed on the
+  // previous draw; reload again at local midnight and the reverse happened.
+  // Both halves are arbitrary generated data, which is exactly why nothing
+  // caught it: neither one looks wrong on its own.
+  const daySeed = symbolHash(dayKey());
   const rngStreams: Record<string, () => number> = {};
   function mulberry32(a: number): () => number {
     return () => {
