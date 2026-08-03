@@ -10,6 +10,7 @@ import { VERDICT_TONE } from './verdict';
 import GreeksRow from './GreeksRow';
 import ContractTrack from './ContractTrack';
 import { buildTrack, setupToPlan, tpStatusTone, type TrackRung } from './contractTrackModel';
+import { contractFacts } from './contractFacts';
 import type { Setup, TakeProfit } from '../../types/compass';
 
 interface SignalMonitorProps {
@@ -54,6 +55,12 @@ const SignalMonitor = ({ setup, onBack }: SignalMonitorProps) => {
   // be the primitives that actually move.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const track = useMemo(() => buildTrack(plan, bars), [plan.key, plan.sessionsLeft, plan.entry, bars.length, spotQ]);
+
+  /* The facts read against the SAME spot the setup was priced at, not a fresher
+     one — a breakeven distance measured from a different price than the premium
+     beside it is the two-panel disagreement this whole pass is about. */
+  const spot = spotQ / 100;
+  const facts = useMemo(() => contractFacts(setup, spot), [setup, spot]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -101,38 +108,57 @@ const SignalMonitor = ({ setup, onBack }: SignalMonitorProps) => {
           </div>
         </Panel>
 
-        <Panel title="Read" className="w-full">
-          <div className="flex flex-col gap-4 h-full">
-            {/* Confidence meter */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="font-mono text-micro uppercase tracking-widest text-textMuted flex items-center gap-1.5">
-                  Confidence
-                </span>
-                <span className="font-mono text-caption font-semibold text-textPrimary tnum leading-4">
-                  <AnimatedNumber value={setup.confidence} format={v => `${Math.round(v)}%`} />
-                </span>
-              </div>
-              <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
-                <span
-                  className={`block h-full rounded-full transition-[width] duration-700 ease-out ${tone === 'warn' ? 'bg-warn/80' : 'data-bar'}`}
-                  style={{ width: `${setup.confidence}%` }}
-                />
-              </div>
+        {/*
+          The Read panel used to open with a confidence meter. `Setup.confidence`
+          is `(score - 55) * 2.1` — the score with a percent sign — so a user
+          reading "97, and 88% confident" believed two numbers agreed when they
+          were one number twice. SetupScanCard had already reached that
+          conclusion and left it off the card, which meant the desk both featured
+          and excluded it depending on the pane.
+
+          What replaces it is the contract: what it costs, where it starts making
+          money, how much of the price is already real, what a session takes, and
+          what the book charges for the round trip. None of it can be recovered
+          from the score, which is the whole test for whether it belongs here.
+        */}
+        <Panel title="Read" subtitle="the contract, not the grade" className="w-full">
+          <div className="flex flex-col gap-3 h-full">
+            <div className="flex flex-col divide-y divide-borderSubtle">
+              {facts.map(f => (
+                <div key={f.label} className="flex items-baseline justify-between gap-3 py-2 first:pt-0">
+                  <span className="font-mono text-micro uppercase tracking-widest text-textMuted shrink-0">
+                    {f.label}
+                  </span>
+                  <span className="min-w-0 text-right">
+                    <span
+                      className={`block font-mono text-caption font-semibold tnum leading-4 ${
+                        f.warn ? 'text-warn' : 'text-textPrimary'
+                      }`}
+                    >
+                      {f.value}
+                    </span>
+                    {f.note && (
+                      <span className="block font-mono text-micro text-textMuted leading-snug">{f.note}</span>
+                    )}
+                  </span>
+                </div>
+              ))}
             </div>
 
-            <div>
-              <div className="font-mono text-micro uppercase tracking-widest text-textMuted mb-2">Greeks</div>
+            <div className="mt-auto pt-3 border-t border-borderSubtle">
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-mono text-micro uppercase tracking-widest text-textMuted">Greeks</span>
+                <span className="font-mono text-micro uppercase tracking-widest text-textMuted">
+                  1σ{' '}
+                  <span className="text-textPrimary tnum">
+                    <AnimatedNumber
+                      value={setup.expectedMovePct}
+                      format={v => `${v >= 0 ? '±' : ''}${v.toFixed(1)}%`}
+                    />
+                  </span>
+                </span>
+              </div>
               <GreeksRow greeks={setup.greeks} fourth="vega" />
-            </div>
-
-            <div className="mt-auto flex items-center justify-between border-t border-borderSubtle pt-3">
-              <span className="font-mono text-micro uppercase tracking-widest text-textMuted flex items-center gap-1.5">
-                Expected Move
-              </span>
-              <span className="font-mono text-body font-semibold text-select tnum leading-5">
-                <AnimatedNumber value={setup.expectedMovePct} format={v => `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`} />
-              </span>
             </div>
           </div>
         </Panel>

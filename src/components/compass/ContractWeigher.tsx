@@ -38,6 +38,7 @@ import { setupState } from './setupState';
 import { StateBadge } from './StateBadge';
 import ContractTrack from './ContractTrack';
 import { buildTrack, weighedToPlan } from './contractTrackModel';
+import { CONTRACT_MULTIPLIER } from './contractFacts';
 import type { Verdict } from '../../types/compass';
 import type { MarketSnapshot } from '../../types/market';
 import { DUR, EASE, PILL } from '../../lib/motion';
@@ -73,8 +74,6 @@ const SLEEVE_LABEL: Record<Horizon, string> = {
 
 const dteForHorizon: Record<Horizon, number> = { LOTTO: 0, WEEKLIES: 5, SWINGS: 30, LEAPS: 365 };
 
-/** Standard equity-option contract multiplier (shares per contract). */
-const CONTRACT_MULTIPLIER = 100;
 /** Listed strikes either side of spot the neighbour rail reaches for. */
 const RAIL_REACH = 8;
 const RECENT_KEY = 'slayer_weigher_recent';

@@ -8,10 +8,8 @@ import DataTable, { type Column } from '../ui/DataTable';
 import VerdictBadge from './VerdictBadge';
 import { useTracker } from '../../context/TrackerContext';
 import { expiryRead, horizonCopy } from './setupHorizon';
+import { CONTRACT_MULTIPLIER } from './contractFacts';
 import type { ScannerKey, Setup } from '../../types/compass';
-
-/** Standard equity-option contract multiplier (shares per contract). */
-const CONTRACT_MULTIPLIER = 100;
 
 interface SetupCompareProps {
   setup: Setup;
