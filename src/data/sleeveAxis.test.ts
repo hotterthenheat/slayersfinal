@@ -276,3 +276,107 @@ describe('structures: the worst case is arithmetic, not a stop', () => {
     expect(condor.maxProfit).toBeLessThan(fly.maxProfit);
   });
 });
+
+describe('a structure can only be built from contracts that exist', () => {
+  /*
+    Percentage wings rounded to the strike increment produce strikes that are
+    correctly shaped and are not listed. Measured before this held: SPY lists
+    489 through 519, and the bear call spread sold a 529C while the iron condor
+    priced both a 479P and a 529C — two of the eight cards deriving their risk,
+    reward, breakevens and profit probability from contracts nobody can trade.
+    QQQ and AAPL carried the same three. NVDA was clean only because its grid
+    happens to be wide enough, which is exactly the kind of accident that makes
+    a defect survive a spot check.
+  */
+  it('every leg on every structure is a strike the chain lists', () => {
+    for (const ticker of ['SPY', 'QQQ', 'AAPL', 'NVDA', 'MSFT']) {
+      Simulator.ensureTicker(ticker);
+      const snap = Simulator.buildSnapshot(ticker);
+      const listed = new Set(snap.chain.map(c => c.strike));
+      for (const dte of [0, 7, 45]) {
+        for (const st of buildStructures(snap, dte)) {
+          for (const leg of st.legs) {
+            expect(listed.has(leg.strike), `${ticker} ${dte}DTE ${st.kind} leg ${leg.strike}${leg.right}`).toBe(true);
+          }
+        }
+      }
+    }
+  });
+
+  it('never emits a spread whose two legs are the same strike', () => {
+    for (const ticker of ['SPY', 'NVDA', 'F', 'T']) {
+      Simulator.ensureTicker(ticker);
+      const snap = Simulator.buildSnapshot(ticker);
+      for (const st of buildStructures(snap, 30)) {
+        // A vertical with one strike is two contracts that cancel, and its
+        // reward-to-risk divides by zero.
+        const spread = st.legs.filter(l => l.right === st.legs[0].right);
+        if (spread.length === 2) expect(spread[0].strike).not.toBe(spread[1].strike);
+        expect(Number.isFinite(st.maxLoss)).toBe(true);
+        expect(st.maxLoss).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('prices legs at the name’s own volatility, not at a function of its price', () => {
+    /*
+      The old term was `0.18 + |spot % 7| / 100`: a shape that looks like an IV
+      and is not one. NVDA is configured at 35% and was priced at 23.3%, SPY at
+      15% and priced at 24.9%, and the value stepped discontinuously every time
+      spot crossed a multiple of seven.
+    */
+    for (const ticker of ['SPY', 'NVDA', 'AAPL']) {
+      Simulator.ensureTicker(ticker);
+      const snap = Simulator.buildSnapshot(ticker);
+      const built = buildStructures(snap, 30);
+      expect(built.length).toBeGreaterThan(0);
+      expect(built[0].iv).toBeCloseTo(Simulator.TICKERS[ticker].iv, 6);
+    }
+    // And the two names differ, which the price-derived term could not promise.
+    Simulator.ensureTicker('SPY');
+    Simulator.ensureTicker('NVDA');
+    const spy = buildStructures(Simulator.buildSnapshot('SPY'), 30)[0].iv;
+    const nvda = buildStructures(Simulator.buildSnapshot('NVDA'), 30)[0].iv;
+    expect(nvda).toBeGreaterThan(spy);
+  });
+});
+
+describe('a tracked setup keeps the horizon it was found on', () => {
+  /*
+    Tracker does not store a setup, it stores enough to rebuild one — and it
+    rebuilt through makeSetup, whose sleeve parameter defaults to same-session.
+    So a LEAP tracked from the board came back priced as a 0DTE: wrong premium,
+    wrong greeks, and an expiry test that would close a year-out contract the
+    next morning. The engine side of that is pinned here; the field that carries
+    it is TrackedSetup.sleeve.
+  */
+  it('rebuilding a LEAP without its sleeve prices it as a same-session contract', () => {
+    Simulator.ensureTicker('SPY');
+    const cfg = Simulator.TICKERS.SPY;
+    const strike = Math.round(cfg.currentPrice);
+    const asLeap = makeSetup('SPY', cfg.currentPrice, strike, 'C', 'top-setups', cfg.iv, true, 'leaps');
+    const forgotten = makeSetup('SPY', cfg.currentPrice, strike, 'C', 'top-setups', cfg.iv, true);
+
+    expect(asLeap.expiry).toBe('365DTE');
+    expect(forgotten.expiry).toBe('0DTE');
+    // A year of extrinsic against a session's worth is not a rounding gap.
+    expect(asLeap.mid).toBeGreaterThan(forgotten.mid * 3);
+  });
+
+  it('every sleeve rebuilds to its own expiry, so the round trip is lossless', () => {
+    Simulator.ensureTicker('SPY');
+    const cfg = Simulator.TICKERS.SPY;
+    const strike = Math.round(cfg.currentPrice);
+    for (const sleeve of CONTRACT_SLEEVES) {
+      const built = makeSetup('SPY', cfg.currentPrice, strike, 'C', 'top-setups', cfg.iv, true, sleeve);
+      expect(built.sleeve).toBe(sleeve);
+      expect(built.expiry).toBe(sleeveExpiry(sleeve));
+      // The premium has to be monotone in the horizon or the sleeve is cosmetic.
+      expect(built.mid).toBeGreaterThan(0);
+    }
+    const mids = CONTRACT_SLEEVES.map(
+      s => makeSetup('SPY', cfg.currentPrice, strike, 'C', 'top-setups', cfg.iv, true, s).mid
+    );
+    for (let i = 1; i < mids.length; i++) expect(mids[i]).toBeGreaterThan(mids[i - 1]);
+  });
+});

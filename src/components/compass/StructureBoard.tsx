@@ -182,9 +182,11 @@ const StructureBoard = ({ snapshot, dte }: StructureBoardProps) => {
       </div>
 
       <p className="px-3 py-2 border-t border-borderSubtle font-mono text-micro text-textMuted leading-relaxed">
-        Legs priced on the same clock as the rest of the desk. Risk and reward are the payoff at expiry, read off the
-        curve drawn above them; P(profit) is the modelled share of terminal prices that finish between the breakevens.
-        Assignment and early exercise are not modelled.
+        Legs are listed strikes on this chain, priced at {snapshot.ticker}&apos;s own{' '}
+        {(ranked[0].iv * 100).toFixed(0)}% volatility and on the same clock as the rest of the desk. Risk and reward are the payoff at expiry, read off the curve drawn above them; P(profit)
+        is the modelled share of terminal prices that land where the curve is above zero — inside the breakevens for
+        the spreads and condors, outside them for the straddle and the strangle, which is the whole difference between
+        the two families. Assignment and early exercise are not modelled.
       </p>
     </Panel>
   );

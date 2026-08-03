@@ -15,10 +15,17 @@ import type { Setup } from '../../types/compass';
 
 interface SignalMonitorProps {
   setup: Setup;
+  /**
+   * The underlying's price in the sweep that priced this setup. Zero when the
+   * sweep has no row for the name, and then the facts fall back to the live
+   * buffer — a stale-vs-live mismatch is worse than a slightly old spot, but a
+   * missing spot would mean no facts at all.
+   */
+  sweepSpot: number;
   onBack: () => void;
 }
 
-const SignalMonitor = ({ setup, onBack }: SignalMonitorProps) => {
+const SignalMonitor = ({ setup, sweepSpot, onBack }: SignalMonitorProps) => {
   const tone = VERDICT_TONE[setup.verdict];
 
   const plan = useMemo(() => setupToPlan(setup), [setup]);
@@ -31,10 +38,20 @@ const SignalMonitor = ({ setup, onBack }: SignalMonitorProps) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const track = useMemo(() => buildTrack(plan, bars), [plan.key, plan.sessionsLeft, plan.entry, bars.length, spotQ]);
 
-  /* The facts read against the SAME spot the setup was priced at, not a fresher
-     one — a breakeven distance measured from a different price than the premium
-     beside it is the two-panel disagreement this whole pass is about. */
-  const spot = spotQ / 100;
+  /*
+    The facts read against the SAME spot the setup was priced at, not a fresher
+    one — a breakeven distance measured from a different price than the premium
+    beside it is the two-panel disagreement this whole pass is about.
+
+    That used to mean the live candle buffer, which is not the same spot at all:
+    `setup` is the frozen row the sweep returned and only changes every 10s,
+    while the buffer moves every 1.5s. Between sweeps the panel was pairing a
+    stale premium and stale greeks with a live underlying, so intrinsic, time
+    value and breakeven distance drifted apart from the mid printed beside them
+    — far enough, after a real move, to claim more exercise value than the whole
+    contract costs. The sweep's own spot arrives as a prop now.
+  */
+  const spot = sweepSpot > 0 ? sweepSpot : spotQ / 100;
   const facts = useMemo(() => contractFacts(setup, spot), [setup, spot]);
 
   return (

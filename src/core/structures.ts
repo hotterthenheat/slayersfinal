@@ -9,6 +9,7 @@
 
 import { yearsToExpiry } from './optionTime';
 import { expiryFor } from './calendar';
+import Simulator from './simulator';
 import type { MarketSnapshot } from '../types/market';
 import type { OptionRight } from '../types/compass';
 
@@ -67,6 +68,13 @@ export interface Structure {
   probProfit: number;
   /** maxProfit / maxLoss. Infinity where the upside is unbounded. */
   rewardRisk: number;
+  /**
+   * The volatility every leg was priced at — the name's own, from the
+   * simulator. Carried on the structure rather than left implicit because the
+   * board states it, and a claim about how something was priced should be
+   * inspectable from the thing it priced.
+   */
+  iv: number;
   /** What the structure needs the underlying to do, in one clause. */
   thesis: string;
   /** The cost that decides it, in one clause. */
@@ -258,6 +266,7 @@ function assemble(
     breakevens,
     probProfit: Number(probProfit.toFixed(4)),
     rewardRisk: Number.isFinite(rewardRisk) ? Number(rewardRisk.toFixed(2)) : Infinity,
+    iv,
     thesis: thesisFor(kind, ticker, breakevens),
     cost: costFor(kind, netDebit, loss),
   };
@@ -308,15 +317,42 @@ function costFor(kind: StructureKind, netDebit: number, maxLoss: number): string
 export function buildStructures(snapshot: MarketSnapshot, dte: number): Structure[] {
   const { ticker, spot, chain } = snapshot;
   const sorted = [...chain].sort((a, b) => a.strike - b.strike);
-  const step = sorted.length > 1 ? Math.abs(sorted[1].strike - sorted[0].strike) : Math.max(spot * 0.005, 0.5);
-  const snap = (raw: number) => Math.max(step, Math.round(raw / step) * step);
-  const iv = Math.max(0.12, 0.18 + Math.abs(spot % 7) / 100);
+  const strikes = sorted.map(r => r.strike);
+  if (strikes.length < 4) return [];
 
-  const atm = snap(spot);
-  const near = snap(spot * 1.025);
-  const far = snap(spot * 1.05);
-  const nearDown = snap(spot * 0.975);
-  const farDown = snap(spot * 0.95);
+  /*
+    Legs come off the listed chain, not off a percentage rounded to the grid.
+
+    Rounding a share of spot to the strike increment produces a strike that is
+    correctly shaped and does not exist. Measured on the default snapshots: SPY
+    lists 489 through 519, and the bear call spread was selling a 529C while the
+    iron condor priced both a 479P and a 529C — so two of the eight cards
+    derived their risk, reward, breakevens and profit probability from contracts
+    nobody can trade. QQQ and AAPL had the same three. Only NVDA, whose grid
+    happens to be wide enough, was clean.
+
+    The wings clamp to the widest listed strike now, which is what a desk would
+    actually do: take the furthest wing the chain offers.
+  */
+  const nearestListed = (raw: number): number =>
+    strikes.reduce((best, k) => (Math.abs(k - raw) < Math.abs(best - raw) ? k : best), strikes[0]);
+
+  /*
+    Volatility is the name's, not a number derived from its price.
+
+    This was `0.18 + |spot % 7| / 100`, which is a shape that looks like an IV
+    and is not one: NVDA is configured at 35% and priced at 23.3%, SPY at 15%
+    and priced at 24.9%, and the value stepped discontinuously every time spot
+    crossed a multiple of seven. Every premium, breakeven, risk/reward figure
+    and profit probability on the board hangs off it.
+  */
+  const iv = Simulator.TICKERS[ticker]?.iv ?? 0.25;
+
+  const atm = nearestListed(spot);
+  const near = nearestListed(spot * 1.025);
+  const far = nearestListed(spot * 1.05);
+  const nearDown = nearestListed(spot * 0.975);
+  const farDown = nearestListed(spot * 0.95);
 
   const leg = (right: OptionRight, strike: number, qty: 1 | -1): StructureLeg => ({
     right,
@@ -325,21 +361,33 @@ export function buildStructures(snapshot: MarketSnapshot, dte: number): Structur
     premium: Number(bs(spot, strike, iv, dte, right).toFixed(2)),
   });
 
-  const make = (kind: StructureKind, legs: StructureLeg[]) => assemble(kind, ticker, spot, iv, dte, legs);
+  /*
+    Clamping to the listed grid can collapse two anchors onto one strike when a
+    name's chain is narrow — and a vertical whose legs share a strike is not a
+    vertical, it is two contracts that cancel. Those are dropped rather than
+    drawn as a flat line with zero width and an infinite reward-to-risk.
+  */
+  const make = (kind: StructureKind, legs: StructureLeg[], distinct: number[]): Structure | null => {
+    if (new Set(distinct).size !== distinct.length) return null;
+    return assemble(kind, ticker, spot, iv, dte, legs);
+  };
 
   return [
-    make('bull-call', [leg('C', atm, 1), leg('C', near, -1)]),
-    make('bear-put', [leg('P', atm, 1), leg('P', nearDown, -1)]),
-    make('bull-put', [leg('P', nearDown, 1), leg('P', atm, -1)]),
-    make('bear-call', [leg('C', near, -1), leg('C', far, 1)]),
-    make('iron-condor', [
-      leg('P', farDown, 1),
-      leg('P', nearDown, -1),
-      leg('C', near, -1),
-      leg('C', far, 1),
-    ]),
-    make('iron-butterfly', [leg('P', nearDown, 1), leg('P', atm, -1), leg('C', atm, -1), leg('C', near, 1)]),
-    make('long-straddle', [leg('C', atm, 1), leg('P', atm, 1)]),
-    make('long-strangle', [leg('C', near, 1), leg('P', nearDown, 1)]),
-  ];
+    make('bull-call', [leg('C', atm, 1), leg('C', near, -1)], [atm, near]),
+    make('bear-put', [leg('P', atm, 1), leg('P', nearDown, -1)], [atm, nearDown]),
+    make('bull-put', [leg('P', nearDown, 1), leg('P', atm, -1)], [nearDown, atm]),
+    make('bear-call', [leg('C', near, -1), leg('C', far, 1)], [near, far]),
+    make(
+      'iron-condor',
+      [leg('P', farDown, 1), leg('P', nearDown, -1), leg('C', near, -1), leg('C', far, 1)],
+      [farDown, nearDown, near, far]
+    ),
+    make(
+      'iron-butterfly',
+      [leg('P', nearDown, 1), leg('P', atm, -1), leg('C', atm, -1), leg('C', near, 1)],
+      [nearDown, atm, near]
+    ),
+    make('long-straddle', [leg('C', atm, 1), leg('P', atm, 1)], [atm]),
+    make('long-strangle', [leg('C', near, 1), leg('P', nearDown, 1)], [near, nearDown]),
+  ].filter((s): s is Structure => s !== null);
 }

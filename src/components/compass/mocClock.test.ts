@@ -50,6 +50,33 @@ describe('the ET clock the Lotto desk runs on', () => {
     expect(at('2026-08-01T19:50:00Z').mocOpen).toBe(false);
     expect(at('2026-08-02T19:50:00Z').mocOpen).toBe(false);
   });
+
+  /*
+    The two cases a weekday test cannot see. This clock was weekday-only for one
+    commit, which meant Thanksgiving read as a normal session and armed the gate
+    at 15:45 for a market that never opened, and the half-days missed their real
+    pre-cross window entirely — arming instead nearly three hours after the
+    13:00 bell. core/calendar already knew both; the fix was to stop having a
+    second opinion.
+  */
+  it('knows a market holiday is not a session', () => {
+    // Thanksgiving 2026 is Thursday 11/26. ET is UTC-5 in November.
+    const noon = at('2026-11-26T17:00:00Z');
+    expect(noon.marketOpen).toBe(false);
+    expect(noon.label).toBe('market holiday');
+    expect(at('2026-11-26T20:50:00Z').mocOpen).toBe(false);
+  });
+
+  it('puts the auction window before the bell on a half day', () => {
+    // The Friday after Thanksgiving closes at 13:00 ET.
+    expect(at('2026-11-27T17:30:00Z').mocOpen).toBe(false); // 12:30 ET, still trading
+    expect(at('2026-11-27T17:45:00Z').mocOpen).toBe(true); // 12:45 ET, the window
+    expect(at('2026-11-27T17:59:00Z').mocOpen).toBe(true); // 12:59 ET
+    expect(at('2026-11-27T18:00:00Z').marketOpen).toBe(false); // 13:00 ET, shut
+    // And the old rule's window is dead on that day: 15:50 ET is after the bell.
+    expect(at('2026-11-27T20:50:00Z').mocOpen).toBe(false);
+    expect(at('2026-11-27T17:30:00Z').label).toBe('market open, early close');
+  });
 });
 
 describe('the acceptance gate is proportional to what it acknowledges', () => {

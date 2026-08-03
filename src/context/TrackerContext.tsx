@@ -10,7 +10,7 @@
 
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import type { TrackedSetup } from '../types/tracker';
-import type { Setup, ScannerKey, OptionRight, Verdict } from '../types/compass';
+import type { Setup, ScannerKey, SleeveKey, OptionRight, Verdict } from '../types/compass';
 
 /** Minimal shape to bookmark a contract weighed outside the setups scan. */
 export interface TrackContractInput {
@@ -22,6 +22,8 @@ export interface TrackContractInput {
   score: number;
   verdict: Verdict;
   scanner?: ScannerKey;
+  /** Horizon the contract was weighed on. Same-session when unstated. */
+  sleeve?: SleeveKey;
 }
 
 const STORAGE_KEY = 'slayer_tracked_setups';
@@ -29,7 +31,15 @@ const STORAGE_KEY = 'slayer_tracked_setups';
 function loadFromStorage(): TrackedSetup[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    if (!raw) return [];
+    /*
+      Rows written before the sleeve existed get 'odte', which is not a fallback
+      so much as the truth: every horizon the desk could produce at the time
+      they were tracked was same-session. Without it they rebuild as `undefined`
+      and makeSetup silently prices them 0DTE anyway — the same answer, arrived
+      at by accident instead of on purpose.
+    */
+    return (JSON.parse(raw) as TrackedSetup[]).map(t => ({ ...t, sleeve: t.sleeve ?? 'odte' }));
   } catch {
     return [];
   }
@@ -70,6 +80,7 @@ export const TrackerProvider = ({ children }: { children: React.ReactNode }) => 
           strike: setup.strike,
           right: setup.right,
           scanner,
+          sleeve: setup.sleeve,
           trackedAt: Date.now(),
           scoreAtTrack: setup.score,
           verdictAtTrack: setup.verdict,
@@ -92,6 +103,7 @@ export const TrackerProvider = ({ children }: { children: React.ReactNode }) => 
           strike: c.strike,
           right: c.right,
           scanner: c.scanner ?? 'top-setups',
+          sleeve: c.sleeve ?? 'odte',
           trackedAt: Date.now(),
           scoreAtTrack: c.score,
           verdictAtTrack: c.verdict,

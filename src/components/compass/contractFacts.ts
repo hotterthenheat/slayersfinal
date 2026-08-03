@@ -102,10 +102,18 @@ export function contractFacts(setup: Setup, spot: number): ContractFact[] {
     },
     {
       label: 'Decay',
-      value: `${usd(thetaDay)}/session`,
+      /*
+        Per DAY, not per session. data/compass.ts derives theta as extrinsic
+        over twice the sleeve's `dte`, and a sleeve's dte is calendar days —
+        the same two-clock split core/optionTime.ts exists to keep straight. A
+        7DTE contract was being announced as losing a fourteenth of its time
+        value per SESSION when the model had computed that per calendar day.
+        The label moves to the model; the model does not move to the label.
+      */
+      value: `${usd(thetaDay)}/day`,
       note:
         thetaShare > 0
-          ? `${(thetaShare * 100).toFixed(0)}% of the time value, per session held`
+          ? `${(thetaShare * 100).toFixed(0)}% of the time value, per calendar day held`
           : 'no time value left to lose',
       warn: thetaShare > 0.25,
     },

@@ -79,7 +79,7 @@ const SetupCompare = ({ setup, peers, spot, scanner, onSelectPeer, onStudy }: Se
   const { trackSetup, untrackSetup, isTracked } = useTracker();
   const tracked = isTracked(setup.id);
   const exp = expiryRead(setup.expiry);
-  const horizon = horizonCopy(exp.bucketDte);
+  const horizon = horizonCopy(exp.bucketDte, exp.sessions);
   const spreadPct = setup.mid > 0 ? ((setup.ask - setup.bid) / setup.mid) * 100 : 0;
   const crossCost = (setup.ask - setup.bid) * CONTRACT_MULTIPLIER;
 

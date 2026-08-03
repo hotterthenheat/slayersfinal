@@ -61,7 +61,10 @@ export const SLEEVES: SleeveDef[] = [
   {
     key: 'weekly',
     label: 'Weekly',
-    window: 'this week',
+    // "one week out", not "this week": seven CALENDAR days from a Monday
+    // resolves to the following Monday, so the tab was contradicting the date
+    // printed directly beneath it.
+    window: 'one week out',
     blurb: 'A handful of sessions. Long enough for a thesis, short enough that decay still votes.',
     dte: 7,
     rungPct: 0.012,

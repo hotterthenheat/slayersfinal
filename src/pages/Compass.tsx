@@ -280,6 +280,23 @@ const Compass = () => {
 
   const scanClock = scanAt ? sweepClock(scanAt) : '';
 
+  /*
+    Stable identities for the two props that were undoing SetupScanBoard's memo.
+
+    The board is wrapped in React.memo precisely so the scan tier does not
+    re-render on the live tier's 1.5s tick. An inline arrow and an inline
+    <Freshness/> element are both new objects on every one of those ticks, and
+    memo's shallow compare sees two changed props — so up to 240 rows
+    reconciled every 1.5 seconds to display data that only changes every 10.
+    The boundary this whole two-clock design rests on was being defeated by two
+    lines of JSX inside it.
+  */
+  const handleScanLayout = useCallback((next: ScanLayout) => {
+    setScanLayout(next);
+    setScanPage(0);
+  }, []);
+  const scanFreshness = useMemo(() => <Freshness kind="sweep" at={scanAt} />, [scanAt]);
+
   // Scan tier: feed groups, counts, impact — stable between sweeps
   const data = useMemo(
     () => (scanSnapshot ? buildCompass(scanSnapshot, scanner, { sleeve }) : null),
@@ -812,7 +829,15 @@ const Compass = () => {
               {inReviewMode && monitored ? (
                 <div className="flex flex-col gap-4">
                   {monitored.heldFrom !== null && <HeldFromSweep from={monitored.heldFrom} now={scanClock} />}
-                  <SignalMonitor setup={monitored.setup} onBack={handleBackToBrowse} />
+                  <SignalMonitor
+                    setup={monitored.setup}
+                    /* The sweep's spot for this name — the one the setup was
+                       priced and invalidated against, same source the compare
+                       pane takes. The chart below keeps the live buffer; it is
+                       a price chart and belongs on the live tier. */
+                    sweepSpot={data?.groups.find(g => g.ticker === monitored.setup.ticker)?.spot ?? 0}
+                    onBack={handleBackToBrowse}
+                  />
                 </div>
               ) : (
                 <SetupScanBoard
@@ -821,10 +846,10 @@ const Compass = () => {
                   scannerLabel={activeScanner.label}
                   expiryLabel={activeExpiry}
                   layout={scanLayout}
-                  onLayoutChange={next => { setScanLayout(next); setScanPage(0); }}
+                  onLayoutChange={handleScanLayout}
                   page={scanPage}
                   onPageChange={setScanPage}
-                  freshness={<Freshness kind="sweep" at={scanAt} />}
+                  freshness={scanFreshness}
                   selectedId={effectiveSelected?.setup.id ?? null}
                   onSelect={handleSelectSetup}
                   onStudy={handleReviewSetup}

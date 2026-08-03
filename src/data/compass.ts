@@ -9,6 +9,7 @@
 
 import Simulator from '../core/simulator';
 import { yearsToExpiry } from '../core/optionTime';
+import { expiryFor } from '../core/calendar';
 import {
   SCAN_UNIVERSE_SIZE,
   buildScanUniverse,
@@ -992,7 +993,16 @@ function chainSide(
 
 function buildChain(snapshot: MarketSnapshot, iv: number, expiry: string): ContractChain {
   const { ticker, spot, chain } = snapshot;
-  const dte = dteOf(expiry);
+  /*
+    The RESOLVED expiry's calendar distance, not the bucket number.
+
+    A 1DTE preset viewed on a Friday resolves to Monday — three calendar days —
+    but `dteOf` reads the label and returns 1, so every premium in a chain
+    stamped with Monday's date was priced with one day of life in it.
+    estimatePremium consumes calendar days through yearsToExpiry, so the number
+    handed to it has to be the one the date actually implies.
+  */
+  const dte = expiryFor(dteOf(expiry)).dte;
   const sorted = [...chain].sort((a, b) => a.strike - b.strike);
 
   const rows: ChainRow[] = sorted.map(node => ({
