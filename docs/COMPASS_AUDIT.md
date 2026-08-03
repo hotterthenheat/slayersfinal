@@ -872,3 +872,135 @@ Two questions I need answered before the first line of code:
    change, however well-justified) is in scope at all.
 2. **The stashed sleeve work** — rejoin, park, or drop. It overlaps four findings
    and changes the URL vocabulary, so it should not be decided by default.
+
+---
+
+# 10. Resolution — what shipped, and what it measured after
+
+Written after the fact, against the same harness that produced §7. Every number
+below was re-measured on the built app, not inferred from the diff. The findings
+above are left as written; this section says what happened to each.
+
+The two questions at the end of §9 were answered by the client as *"do what you
+must"*: all seven waves are in, and the stashed sleeve work rejoined rather than
+being dropped.
+
+## Findings
+
+| # | Status | Measured after |
+| --- | --- | --- |
+| P0-1 | Fixed | Sleeve axis landed; the horizon is the tab row and the five scanners are a style row beneath it |
+| P0-2 | Fixed | Confidence meter replaced by `contractFacts` — cost, breakeven, time value, decay, delta, spread, each with a sentence |
+| P0-3 | Fixed | One time bridge in `core/optionTime.ts`; the two pricers no longer disagree by 45% on 0DTE |
+| P1-1 | Fixed | Paging survives a return from review — reset moved to the three sites where a scan actually changes |
+| P1-2 | Fixed | The ticker switch names what it does |
+| P1-3 | Fixed | LIVE / SWEEP / HELD, and `HELD from the 14:31:48 sweep` observed rendering in review mode |
+| P1-4 | Fixed | 189 axe violations across four desks → **0**. See below |
+| P1-5 | Fixed | Gate fires in 1 of 5 market states, not 5 of 5. See below |
+| P1-6 | Fixed | `NO CLEAN AUCTION EDGE` reachable in two clicks; `HELD from sweep` observed |
+| P2-1 | Fixed | Score column carried 2 distinct values across 240 rows; a per-name edge term takes it to 22 |
+| P2-2 | Fixed | Chips derive per contract now (`ITM x%`, `1σ CLEARS BREAKEVEN`, `TIGHT BOOK`, `BLOCK STRIKE`, `ALL TIME VALUE`) instead of three per preset |
+| P2-3 | Fixed | First card at 390×844 moved from 555px to **453px** |
+| P2-4 | Fixed | The 12-cell `Stat` grid is three named readouts; the Weigher lands on a real contract |
+| P2-5 | Not changed | Agreed with the original decision; `replace: true` stands |
+| P3-1 | Fixed | Gone with the `Stat` grid it lived in |
+| P3-2 | Fixed | Gauge track narrows below `sm`; 0px clipped at 390 |
+| P3-3 | Fixed | Gone with the `Stat` grid it lived in |
+| P3-4 | Fixed | Chain cells `min-h-11` — 44px, up from 30px |
+| P3-5 | Fixed | Stale comment rewritten to describe the two components truthfully |
+
+One clipped string is left, deliberately: the scan board's own **"Top Setups"**
+panel title, 15px at 390 against the sweep badge and the layout switch beside
+it. The same label is fully legible in the active style pill 40px above it, and
+the alternatives are hiding the freshness signal or changing `Panel`'s fixed
+header height for every panel in the app. Not worth either.
+
+## P1-4 · accessibility, before and after
+
+The cause was one shared helper. `interactiveRowProps` set `role="button"` and
+`aria-selected`, and because it came from one place it was wrong 189 times.
+
+`aria-selected` is not allowed on a button — it belongs to a listbox option, a
+tab, or a row inside a grid. Selection travels as `aria-current` now, which is a
+global attribute, valid on every role involved.
+
+`role="button"` on a `<tr>` is worse than invalid. A row claiming to be a button
+is no longer a row, so its table loses it and the numbers inside lose the
+columns that name them — and it makes the row's children presentational, which
+is why the 46 rows carrying their own buttons reported `nested-interactive`.
+Rows keep their own role; the helper takes a third argument naming what the
+element already is.
+
+Compass's card boards are `listitem`s in a `list`. A card carries its own
+Analysis button, and `listitem` is the one role here whose children stay
+exposed. Four shapes were probed against axe before choosing:
+
+| Shape | Result |
+| --- | --- |
+| `listbox` → `presentation` → `option` + sibling button | `aria-required-children` |
+| `listbox` → `option` containing a button | `nested-interactive` |
+| `grid` → `row` → `gridcell` + button | clean |
+| plain `<tr>`, no role override, `aria-current` | clean |
+
+| Route | Before | After |
+| --- | --- | --- |
+| `/compass` | 24 critical + 24 serious + 1 contrast | clean |
+| `/trace/live-tape` | 22 critical + 22 serious | clean |
+| `/pinpoint/levels` | 63 critical + 1 minor | clean |
+| `/pulse` | 34 critical + 1 serious | clean |
+| `/` (landing) | 57 `region` + 1 `landmark-unique` | clean |
+
+Also swept: the landing page had no `<main>` at all; six scroll containers
+declared `role="region"`, which is a landmark, so a panel that scrolls was
+announcing itself as a section of the page; two watchlist columns had an empty
+`<th>`; the flow-alerts feed scrolled with no tab stop. Every route scanned now
+reports clean — landing, terminal, Compass across all five sleeves and all three
+modes, Pulse, Stocks, News, Earnings, Tracker, Community, five Pinpoint desks,
+four Trace desks, Guide and the legal pages.
+
+## P1-5 · the Lotto gate, before and after
+
+| Market state | Gate before | Board before | Gate after | Board after |
+| --- | --- | --- | --- | --- |
+| pre-market 09:00 ET | yes | no | no | yes, 9 rows |
+| mid-session 13:00 ET | yes | no | no | yes, 9 rows |
+| MOC window 15:50 ET | yes | no | **yes** | withheld |
+| after close 17:30 ET | yes | no | no | yes, 9 rows |
+| weekend | yes | no | no | yes, 5 rows |
+
+The risk paragraph is not conditional and never was — it stays pinned above the
+board in every state, unchanged. Ten tests in `mocClock.test.ts` pin the rule,
+including a five-minute walk of the session returning exactly
+`['15:45', '15:50', '15:55']`. Five-minute steps rather than thirty because a
+coarser walk steps over the window, and an empty result would then look
+identical to a gate that never fires at all.
+
+## Two defects the audit did not find
+
+Both surfaced from *rendering* a panel rather than reading it, which is the
+same lesson §7 already carries.
+
+**The compare pane had no spot, so it fetched one.** Naming the underlying's
+price beside the invalidation level produced *"breaks above $445.81, 1.9% below
+the $454.50 spot"* — a sentence that contradicts itself in eleven words. The
+obvious correction was worse than the bug: `scanNameFor` is described in its own
+file as the single derivation, but `Simulator.getCandles` calls `ensureTicker`,
+so the first component to ask about a name **materialises** it, and `scanNameFor`
+then returns the simulator's price instead of the synthetic walk it returned a
+moment earlier. Measured on REGN inside one sweep: 1073.50, then 1041.52.
+Reading the price changed the price. The spot travels with the setup now
+(`SetupGroup.spot`, the same value `makeSetup` was handed), and two tests in
+`compassCoherence` pin it across every sleeve.
+
+**The full chain opened at the wrong end.** Making the chain list every strike —
+the original ask — meant it opened on 31 rows of deep in-the-money calls, and
+`xl:max-h-none` laid them out as one 2,141px column with no viewport to centre
+in. Capped at every width and centred on `atmIndex`: 620px viewport, scrollTop
+841, spot rule 187px inside the frame.
+
+## Gate at the time of writing
+
+876 tests, typecheck clean, `eslint .` exit 0 (checked for a real exit code —
+piping it to `tail` always exits 0 and masked three real errors earlier in this
+work), production build green, no horizontal overflow at 390, 768, 1280 or 1600
+on any Compass mode.
