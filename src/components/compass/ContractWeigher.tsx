@@ -294,9 +294,9 @@ interface LadderProps {
 /**
  * Listed strikes on the resolved expiry and side, spot anchored. This is a new,
  * smaller component rather than a lift of ContractChain: that one takes
- * ContractChainData from buildCompass rather than a MarketSnapshot, and it is
- * currently rendering at zero height in Compass review mode at xl. Only the
- * SpotRule idiom is reused.
+ * ContractChainData from buildCompass rather than a MarketSnapshot, and it
+ * lists both sides at once where this rail lists the one the query resolved to.
+ * Only the SpotRule idiom is reused.
  */
 const ContractLadder = ({ rows, spot, ticker, selectedId, deskPickId, onSelect, outOfRange }: LadderProps) => {
   const crossing = rows.findIndex(r => r.strike > spot);

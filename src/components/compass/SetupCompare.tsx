@@ -268,7 +268,10 @@ const SetupCompare = ({ setup, peers, spot, scanner, onSelectPeer, onStudy }: Se
                     shorter rung can be seen to be half the distance, which is
                     the only thing the pair is worth drawing for. */}
                 <span
-                  className="block h-1 w-24 shrink-0 rounded-full bg-white/[0.06] overflow-hidden"
+                  /* Narrower track below sm so the label keeps its width:
+                     "SESSION TARGET" is 14 uppercase characters at
+                     tracking-widest and was clipping by 4px at 390. */
+                  className="block h-1 w-14 sm:w-24 shrink-0 rounded-full bg-white/[0.06] overflow-hidden"
                   title={`${r.level.pct}% of the ${topPct}% furthest rung`}
                 >
                   <span

@@ -664,7 +664,11 @@ const Compass = () => {
       {/* Style second — a LENS on the sleeve above, not a horizon of its own.
           Each states what its own bar admits, because six presets printing one
           capped number told a trader nothing about which is worth opening. */}
-      <div className="flex items-center gap-1 flex-wrap">
+      {/* One scrolling row on a phone, the same treatment the sleeve strip
+          above it gets. Wrapped, six presets took three rows at 390px, and with
+          the sleeve strip added the first card began 555px into an 844px
+          viewport — five stacked control rows before any data. */}
+      <div className="flex items-center gap-1 overflow-x-auto sm:flex-wrap -mx-3 px-3 sm:mx-0 sm:px-0">
         {SCANNERS.map(s => {
           const isActive = scanner === s.key;
           const meta = scannerMeta[s.key];
@@ -679,7 +683,11 @@ const Compass = () => {
                   ? `${expiryRead(meta.expiry).sentence}. ${s.blurb}. ${meta.found.toLocaleString()} contracts scored ${floor}+ on the last sweep; the board shows the top ${meta.shown}.`
                   : s.blurb
               }
-              className={`relative inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md font-mono text-label uppercase tracking-wider transition-colors ${
+              /* shrink-0 and nowrap: in a scrolling row a flex child still
+                 shrinks, so without them the labels wrapped inside their own
+                 pills and the strip was three lines tall again by another
+                 route. */
+              className={`relative shrink-0 whitespace-nowrap inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md font-mono text-label uppercase tracking-wider transition-colors ${
                 isActive
                   ? 'text-ink font-semibold'
                   : 'text-textMuted font-medium hover:text-textSecondary hover:bg-rowHover'
@@ -708,7 +716,12 @@ const Compass = () => {
           in that panel's own header. */}
       {!inReviewMode && (
         <div className="flex items-center gap-x-3 gap-y-2 flex-wrap">
-          <span className="font-mono text-label text-textMuted uppercase tracking-wider">
+          {/* Hidden on a phone: the sleeve tab above already prints the expiry
+              and the active style already prints its own name, so on the
+              narrowest screen this is two wrapped lines restating the two rows
+              directly above it. Each style button's title keeps the full
+              sentence one press away. */}
+          <span className="hidden sm:inline font-mono text-label text-textMuted uppercase tracking-wider">
             {activeExpiry ? `${activeExpiry} · ` : ''}
             {activeScanner.blurb}
           </span>
