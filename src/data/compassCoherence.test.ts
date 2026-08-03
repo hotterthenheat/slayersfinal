@@ -172,3 +172,57 @@ describe('the scan engine and the weigher price the same contract the same way',
     expect(ratio).toBeLessThan(2);
   });
 });
+
+describe('the level that kills a setup and the price it is measured from', () => {
+  /*
+    The compare pane prints "breaks above $445.81, 1.9% below the $454.50 spot"
+    — one sentence carrying both numbers, so the moment they come from different
+    spots the sentence contradicts itself in eleven words. That is what happened:
+    the pane fetched its own spot from Simulator.getCandles while the engine had
+    invalidated against SetupGroup.spot.
+
+    Worse, the obvious correction was worse. getCandles calls ensureTicker, so
+    asking the simulator about a name MATERIALISES it, and scanNameFor then
+    starts returning the simulator's price instead of the synthetic walk it
+    returned a moment earlier. Measured on REGN inside a single sweep: 1073.50
+    on the first read, 1041.52 on the second. The pane was changing the
+    scanner's inputs by rendering.
+
+    So the spot travels with the setup, and this is the invariant that holds it:
+    read against its own group's spot, a call dies below and a put dies above.
+    Any future panel that re-derives a spot instead of taking the group's will
+    break this on the first name the simulator has not materialised yet.
+  */
+  it('a call invalidates below its own sweep spot and a put above it', () => {
+    const data = buildCompass(snap(), 'top-setups', { epoch: EPOCH, sleeve: 'odte' });
+    let checked = 0;
+    for (const group of data.groups) {
+      for (const s of group.setups) {
+        const gap = s.invalidationPrice - group.spot;
+        if (s.right === 'C') expect(gap).toBeLessThan(0);
+        else expect(gap).toBeGreaterThan(0);
+        // 0.8-2% away, per makeSetup's own offset band. A level further out
+        // than that is a level measured from a different price.
+        const pct = Math.abs(gap / group.spot) * 100;
+        expect(pct).toBeGreaterThan(0.7);
+        expect(pct).toBeLessThan(2.1);
+        checked++;
+      }
+    }
+    expect(checked).toBeGreaterThan(50);
+  });
+
+  it('holds across every sleeve, since each prices its own ladder', () => {
+    for (const sleeve of CONTRACT_SLEEVES) {
+      const data = buildCompass(snap(), 'rebounds', { epoch: EPOCH, sleeve });
+      const groups = data.groups.slice(0, 12);
+      expect(groups.length).toBeGreaterThan(0);
+      for (const group of groups) {
+        for (const s of group.setups) {
+          const gap = s.invalidationPrice - group.spot;
+          expect(Math.sign(gap)).toBe(s.right === 'C' ? -1 : 1);
+        }
+      }
+    }
+  });
+});
