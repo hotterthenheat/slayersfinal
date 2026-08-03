@@ -5,8 +5,16 @@ import { Filter, History } from 'lucide-react';
 import { useMarketData } from '../context/MarketDataContext';
 import type { MarketSnapshot } from '../types/market';
 import Simulator from '../core/simulator';
-import { buildCompass, makeSetup, scannerExpiry, scannerFloor } from '../data/compass';
-import { SCANNERS, type OptionRight, type ScannerKey, type Setup } from '../types/compass';
+import { buildCompass, makeSetup, scannerFloor, sleeveExpiry } from '../data/compass';
+import {
+  SCANNERS,
+  SLEEVES,
+  SLEEVE_BY_KEY,
+  type OptionRight,
+  type ScannerKey,
+  type Setup,
+  type SleeveKey,
+} from '../types/compass';
 import PageHeader from '../components/ui/PageHeader';
 import Panel from '../components/ui/Panel';
 import ContractChain, { type ChainSelection } from '../components/compass/ContractChain';
@@ -17,6 +25,8 @@ import LottoBoard from '../components/compass/LottoBoard';
 import SetupScanBoard, { type ScanLayout } from '../components/compass/SetupScanBoard';
 import SetupCompare from '../components/compass/SetupCompare';
 import Freshness from '../components/compass/Freshness';
+import { SLEEVE_INK } from '../components/compass/sleeveInk';
+import StructureBoard from '../components/compass/StructureBoard';
 import { sweepClock } from '../components/compass/sweepClock';
 import { expiryRangeLabel, expiryRead } from '../components/compass/setupHorizon';
 import type { Horizon } from '../core/contractScore';
@@ -40,9 +50,11 @@ const SCAN_INTERVAL_MS = 10_000;
 /* One membership test per vocabulary, used by every entry into this page. */
 const SCANNER_KEYS = new Set<string>(SCANNERS.map(s => s.key));
 const COMPASS_MODES = new Set<string>(MODE_OPTIONS.map(o => o.value));
+const SLEEVE_KEYS = new Set<string>(SLEEVES.map(s => s.key));
 
 const isScannerKey = (v: unknown): v is ScannerKey => typeof v === 'string' && SCANNER_KEYS.has(v);
 const isCompassMode = (v: unknown): v is CompassMode => typeof v === 'string' && COMPASS_MODES.has(v);
+const isSleeveKey = (v: unknown): v is SleeveKey => typeof v === 'string' && SLEEVE_KEYS.has(v);
 
 /**
  * A contract the pane is pointed at, carrying the row it was opened FROM.
@@ -122,6 +134,13 @@ const HeldFromSweep = ({ from, now }: { from: number; now: string }) => (
  * (Setups / Top Setups), an unreadable value falls back the same way, and the
  * URL is only written once the user actually moves — so an existing /compass
  * bookmark is left alone until it is used.
+ *
+ * The HORIZON is a second param rather than a second vocabulary in the first
+ * one. `?view=` names the pane or the style exactly as it always did, and
+ * `?sleeve=` names the clock; a link written before sleeves existed still opens
+ * the style it names, on the same-session sleeve it was written against. Folding
+ * both axes into one param would have meant either thirty new values or breaking
+ * every link already in the wild.
  */
 interface ViewRead {
   mode: CompassMode;
@@ -140,7 +159,9 @@ const Compass = () => {
   const location = useLocation();
   const [params, setParams] = useSearchParams();
   const landedOn = readView(params.get('view'));
+  const landedSleeve = params.get('sleeve');
   const [scanner, setScanner] = useState<ScannerKey>(landedOn?.scanner ?? 'top-setups');
+  const [sleeve, setSleeve] = useState<SleeveKey>(isSleeveKey(landedSleeve) ? landedSleeve : 'odte');
   const [mode, setMode] = useState<CompassMode>(landedOn?.mode ?? 'setups');
   const [weigherHorizon, setWeigherHorizon] = useState<Horizon | undefined>(undefined);
 
@@ -162,15 +183,22 @@ const Compass = () => {
 
   const inReviewMode = monitorTarget !== null;
 
-  const writeView = (value: string) => {
+  const writeView = (value: string, nextSleeve?: SleeveKey) => {
     const next = new URLSearchParams(params);
     next.set('view', value);
+    const s = nextSleeve ?? sleeve;
+    // Same-session is the default, so it stays out of the URL — a shared link
+    // only carries the horizon when it is not the one you would have got anyway.
+    if (s === 'odte') next.delete('sleeve');
+    else next.set('sleeve', s);
     setParams(next, { replace: true });
   };
 
   // The URL is the source of truth once it carries a view, so a reload and a
   // pasted link both land where they say they will.
   useEffect(() => {
+    const raw = params.get('sleeve');
+    setSleeve(isSleeveKey(raw) ? raw : 'odte');
     const view = readView(params.get('view'));
     if (!view) return;
     setMode(view.mode);
@@ -253,12 +281,15 @@ const Compass = () => {
   const scanClock = scanAt ? sweepClock(scanAt) : '';
 
   // Scan tier: feed groups, counts, impact — stable between sweeps
-  const data = useMemo(() => (scanSnapshot ? buildCompass(scanSnapshot, scanner) : null), [scanSnapshot, scanner]);
+  const data = useMemo(
+    () => (scanSnapshot ? buildCompass(scanSnapshot, scanner, { sleeve }) : null),
+    [scanSnapshot, scanner, sleeve]
+  );
 
   // Live tier: the contract chain tracks every tick (prices should breathe)
   const liveChain = useMemo(
-    () => (marketData ? buildCompass(marketData, scanner).chain : null),
-    [marketData, scanner]
+    () => (marketData ? buildCompass(marketData, scanner, { sleeve }).chain : null),
+    [marketData, scanner, sleeve]
   );
 
   /**
@@ -295,11 +326,26 @@ const Compass = () => {
       Simulator.ensureTicker(target.ticker);
       const cfg = Simulator.TICKERS[target.ticker];
       return {
-        setup: makeSetup(target.ticker, cfg.currentPrice, target.strike, target.right, scanner, cfg.iv),
+        // The SLEEVE has to travel here too. This branch grades a contract that
+        // was never on the board — a Tracker deep-link, or a strike picked off
+        // the chain — and without it that contract would be priced on the
+        // default same-session clock while the chain beside it quotes the
+        // sleeve the user is actually on. Exactly the disagreement this pass
+        // exists to remove, one call site further down.
+        setup: makeSetup(
+          target.ticker,
+          cfg.currentPrice,
+          target.strike,
+          target.right,
+          scanner,
+          cfg.iv,
+          undefined,
+          sleeve
+        ),
         heldFrom: null,
       };
     },
-    [sweptRow, scanner]
+    [sweptRow, scanner, sleeve]
   );
 
   const monitored = useMemo(
@@ -367,12 +413,13 @@ const Compass = () => {
   const scannerMeta = useMemo(() => {
     const meta = {} as Record<ScannerKey, { found: number; shown: number; expiry: string }>;
     if (!scanSnapshot) return meta;
+    const expiry = sleeveExpiry(sleeve);
     for (const s of SCANNERS) {
-      const built = s.key === scanner && data ? data : buildCompass(scanSnapshot, s.key);
-      meta[s.key] = { found: built.totalFound, shown: built.shown, expiry: scannerExpiry(s.key) };
+      const built = s.key === scanner && data ? data : buildCompass(scanSnapshot, s.key, { sleeve });
+      meta[s.key] = { found: built.totalFound, shown: built.shown, expiry };
     }
     return meta;
-  }, [scanSnapshot, scanner, data]);
+  }, [scanSnapshot, scanner, sleeve, data]);
 
   // Collect unique tickers across the feed for the filter dropdown
   const feedTickers = useMemo(() => {
@@ -389,6 +436,16 @@ const Compass = () => {
     () => expiryRangeLabel(rankedSetups.map(s => s.expiry)) || scannerMeta[scanner]?.expiry || '',
     [rankedSetups, scannerMeta, scanner]
   );
+
+  const handleSleeve = (next: SleeveKey) => {
+    setSleeve(next);
+    setScanPage(0);
+    setMonitorTarget(null);
+    setSelected(null);
+    setChainSel(null);
+    setTickerFilter(null);
+    writeView(scanner, next);
+  };
 
   const handleScanner = (next: ScannerKey) => {
     setScanner(next);
@@ -547,10 +604,63 @@ const Compass = () => {
       ) : (
         <>
 
-      {/* Scanner tabs — each one states the expiry it selects, because "Quick
-          Scalp" is a style and a trader needs the horizon, and the count of
-          what its own bar admits, because six presets printing one capped
-          number told a trader nothing about which of them is worth opening. */}
+      {/*
+        HORIZON first. This is the question a trader answers before any other,
+        and until now the desk never asked it: every preset in the strip was
+        same-session or next-day, so "where are the weeklies, the swings, the
+        LEAPS" had no answer on the page. Five sleeves, each carrying its own
+        colour and the expiry it resolves to.
+
+        The strip scrolls rather than wraps below sm. Wrapping put three rows of
+        chrome above the first card on a phone and pushed the board under the
+        fold; a horizontal rail keeps the sleeve you are on visible and the rest
+        one swipe away.
+      */}
+      <div
+        role="tablist"
+        aria-label="Contract horizon"
+        className="flex items-stretch gap-1 overflow-x-auto sm:flex-wrap -mx-3 px-3 sm:mx-0 sm:px-0"
+      >
+        {SLEEVES.map(sl => {
+          const isActive = sleeve === sl.key;
+          const c = SLEEVE_INK[sl.key];
+          return (
+            <button
+              key={sl.key}
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => handleSleeve(sl.key)}
+              title={sl.blurb}
+              className={`relative shrink-0 text-left px-3 py-2 rounded-md transition-colors ${
+                isActive ? c.activeBg : 'hover:bg-rowHover'
+              }`}
+            >
+              <span
+                className={`block font-mono text-label font-semibold uppercase tracking-wider ${
+                  isActive ? c.text : 'text-textSecondary'
+                }`}
+              >
+                {sl.label}
+              </span>
+              <span className="block font-mono text-micro text-textMuted tnum">
+                {sl.key === 'structures' ? sl.window : expiryRead(sleeveExpiry(sl.key)).chip}
+              </span>
+              {isActive && <span className={`absolute left-3 right-3 -bottom-px h-px ${c.rule}`} />}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Structures is a different instrument, not a longer one: the styles
+          below screen single contracts on a strike ladder, and a condor has no
+          strike. The sleeve strip stays; everything under it is replaced. */}
+      {sleeve === 'structures' ? (
+        <StructureBoard snapshot={marketData} dte={SLEEVE_BY_KEY.structures.dte} />
+      ) : (
+      <>
+      {/* Style second — a LENS on the sleeve above, not a horizon of its own.
+          Each states what its own bar admits, because six presets printing one
+          capped number told a trader nothing about which is worth opening. */}
       <div className="flex items-center gap-1 flex-wrap">
         {SCANNERS.map(s => {
           const isActive = scanner === s.key;
@@ -756,6 +866,8 @@ const Compass = () => {
           scan, which is how a leaderboard ends up reading as padding under the
           setups rather than as the desk-level context it is. */}
       <ImpactLeaderboard rows={data.impact} />
+      </>
+      )}
         </>
       )}
     </>

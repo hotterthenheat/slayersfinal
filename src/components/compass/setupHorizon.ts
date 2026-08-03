@@ -84,7 +84,8 @@ export interface HorizonCopy {
  * Horizon-honest names for the two exit levels. The engine's two multipliers are
  * aggressiveness tiers, not time horizons, so the word for them has to come from
  * the DTE. "Swing" survives only past a week, which is the point at which it
- * describes something — it matches the SWINGS sleeve in core/contractScore.ts.
+ * describes something; past a quarter even that is wrong, and a LEAP gets its
+ * own word rather than borrowing one from a trade that closes in a month.
  *
  * Feed this `bucketDte`, never `dte`. A 0DTE contract read on a Saturday is two
  * calendar days from its expiry and is still a same-session trade; keying off
@@ -93,8 +94,22 @@ export interface HorizonCopy {
 export function horizonCopy(bucketDte: number): HorizonCopy {
   if (bucketDte <= 0) return { target: 'Session Target', exit: 'Momentum Exit', hold: 'Expires this session' };
   if (bucketDte === 1) return { target: 'Overnight Target', exit: 'Scalp Exit', hold: 'Carries one session' };
-  if (bucketDte <= 7) return { target: 'Weekly Target', exit: 'Scalp Exit', hold: `Carries ${bucketDte} sessions` };
-  return { target: 'Swing Target', exit: 'Scalp Exit', hold: `Carries ${bucketDte} sessions` };
+  /*
+    The bucket counts CALENDAR days, so the hold has to be converted before it
+    can be spoken in sessions — 252/365 is the only bridge. It previously
+    printed the bucket verbatim, which was harmless while every bucket was 0 or
+    1 and became "carries 365 sessions" on a LEAP the moment the sleeves landed:
+    a year and a half of trading, on a contract with a year on it.
+  */
+  const sessions = Math.max(1, Math.round(bucketDte * (252 / 365)));
+  if (bucketDte <= 10) return { target: 'Weekly Target', exit: 'Scalp Exit', hold: `Carries ${sessions} sessions` };
+  if (bucketDte <= 90) return { target: 'Swing Target', exit: 'Scalp Exit', hold: `Carries ${sessions} sessions` };
+  const years = bucketDte / 365;
+  return {
+    target: 'Long-Dated Target',
+    exit: 'Scalp Exit',
+    hold: years >= 0.95 && years < 1.05 ? 'Carries about a year' : `Carries about ${years.toFixed(1)} years`,
+  };
 }
 
 /**

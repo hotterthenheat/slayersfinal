@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import Simulator from '../core/simulator';
 import { MIN_YEARS, yearsToExpiry } from '../core/optionTime';
 import { weighContract } from '../core/contractScore';
-import { buildCompass, makeSetup, resetCompassCache, scannerExpiry } from './compass';
-import { SCANNERS, type ImpactMetric, type ImpactRow } from '../types/compass';
+import { buildCompass, makeSetup, resetCompassCache, sleeveExpiry } from './compass';
+import { CONTRACT_SLEEVES, SCANNERS, type ImpactMetric, type ImpactRow } from '../types/compass';
 
 /*
   Two panels, one moment, one set of numbers.
@@ -31,33 +31,35 @@ describe('the contract chain and the board it sits beside quote the same session
       for the identical contract read $0.47.
     */
     const s = snap();
-    for (const scanner of SCANNERS) {
-      resetCompassCache();
-      const data = buildCompass(s, scanner.key, { epoch: EPOCH });
-      expect(data.chain.expiry, scanner.key).toBe(scannerExpiry(scanner.key));
+    const iv = Simulator.TICKERS.SPY.iv;
+    for (const sleeve of CONTRACT_SLEEVES) {
+      for (const scanner of SCANNERS) {
+        resetCompassCache();
+        const data = buildCompass(s, scanner.key, { epoch: EPOCH, sleeve });
+        expect(data.chain.expiry, `${sleeve}/${scanner.key}`).toBe(sleeveExpiry(sleeve));
 
-      const iv = Simulator.TICKERS.SPY.iv;
-      for (const row of data.chain.rows) {
-        for (const right of ['C', 'P'] as const) {
-          const cell = right === 'C' ? row.call : row.put;
-          const asSetup = makeSetup('SPY', s.spot, row.strike, right, scanner.key, iv, true);
-          expect(cell.premium, `${scanner.key} ${row.strike}${right}`).toBeCloseTo(asSetup.mid, 2);
+        for (const row of data.chain.rows) {
+          for (const right of ['C', 'P'] as const) {
+            const cell = right === 'C' ? row.call : row.put;
+            const asSetup = makeSetup('SPY', s.spot, row.strike, right, scanner.key, iv, true, sleeve);
+            expect(cell.premium, `${sleeve} ${row.strike}${right}`).toBeCloseTo(asSetup.mid, 2);
+          }
         }
       }
     }
   });
 
-  it('a same-session chain is cheaper than a next-day one, on every strike', () => {
+  it('a same-session chain is cheaper than a weekly one, on every strike', () => {
     // The direction of the bug, held as an invariant: less time cannot be worth
-    // more. If the chain ever stops taking the preset's clock this flips.
+    // more. If the chain ever stops taking the sleeve's clock this flips.
     const s = snap();
     resetCompassCache();
-    const sameDay = buildCompass(s, 'top-setups', { epoch: EPOCH }).chain;
+    const sameDay = buildCompass(s, 'top-setups', { epoch: EPOCH, sleeve: 'odte' }).chain;
     resetCompassCache();
-    const nextDay = buildCompass(s, 'discounted', { epoch: EPOCH }).chain;
+    const nextDay = buildCompass(s, 'top-setups', { epoch: EPOCH, sleeve: 'weekly' }).chain;
 
     expect(sameDay.expiry).toBe('0DTE');
-    expect(nextDay.expiry).toBe('1DTE');
+    expect(nextDay.expiry).toBe('7DTE');
     let strictlyCheaper = 0;
     for (let i = 0; i < sameDay.rows.length; i++) {
       expect(sameDay.rows[i].strike).toBe(nextDay.rows[i].strike);
