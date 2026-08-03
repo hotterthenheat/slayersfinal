@@ -8,6 +8,7 @@
 */
 
 import Simulator from '../core/simulator';
+import { yearsToExpiry } from '../core/optionTime';
 import {
   SCAN_UNIVERSE_SIZE,
   buildScanUniverse,
@@ -168,15 +169,20 @@ const WHY_LIBRARY: Record<ScannerKey, { chips: string[]; text: (t: string, k: nu
 };
 
 // ---- premium / greeks model ----------------------------------------------
-/** DTE for a profile expiry label; 0DTE floors at half a trading day. */
+/**
+ * CALENDAR days for a profile expiry label. The floor that keeps a same-session
+ * contract from carrying zero time lives in `yearsToExpiry`, not here — a day
+ * count is a day count, and folding a modelling floor into it is how the two
+ * engines came to disagree about what a 0DTE is worth.
+ */
 function dteOf(expiry: string): number {
-  return expiry === '0DTE' ? 0.5 : 1;
+  return expiry === '0DTE' ? 0 : 1;
 }
 
 /** Intrinsic + normal-shaped time value with a REAL √T term, so a 0DTE
     contract prices cheaper than a 1DTE and OTM decay width scales with vol. */
 function estimatePremium(spot: number, strike: number, right: OptionRight, iv: number, dte: number): number {
-  const t = Math.max(0.5, dte) / 252;
+  const t = yearsToExpiry(dte);
   const width = iv * Math.sqrt(t);
   const m = Math.log(strike / spot) / (width || 1e-6);
   const timeValue = spot * width * 0.4 * Math.exp(-(m * m) / 2);
@@ -357,9 +363,9 @@ export function makeSetup(
   const score = displayScore(rank);
   // ±1σ expected move of the UNDERLYING over the contract's life — real math
   // (iv·√t), not a decorative random percentage
-  const expectedMovePct = Number((iv * Math.sqrt(Math.max(0.5, dte) / 252) * 100).toFixed(1));
+  const expectedMovePct = Number((iv * Math.sqrt(yearsToExpiry(dte)) * 100).toFixed(1));
 
-  const greeks = Simulator.getGreeks(spot, strike, Math.max(0.5, dte) / 252, iv);
+  const greeks = Simulator.getGreeks(spot, strike, yearsToExpiry(dte), iv);
   const delta = right === 'C' ? greeks.deltaCall : greeks.deltaPut;
   const verdict: Verdict = score >= 88 ? 'ENTER' : score >= 72 ? 'WATCH' : 'EXIT';
 
@@ -767,7 +773,7 @@ function buildChain(snapshot: MarketSnapshot, iv: number, expiry: string): Contr
 function buildImpact(snapshot: MarketSnapshot, expiry: string): ImpactRow[] {
   const { ticker, spot, chain } = snapshot;
   const iv = Simulator.TICKERS[ticker]?.iv ?? 0.2;
-  const t = Math.max(0.5, dteOf(expiry)) / 252;
+  const t = yearsToExpiry(dteOf(expiry));
   const totalGamma = chain.reduce((a, n) => a + Math.abs(n.netGex), 0) || 1;
   const rows = chain.flatMap(node => {
     const greeks = Simulator.getGreeks(spot, node.strike, t, iv);

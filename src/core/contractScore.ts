@@ -12,6 +12,7 @@
 
 import { dayKey, hRange } from './rng';
 import { expiryFor } from './calendar';
+import { yearsToExpiry } from './optionTime';
 import { buildDarkPoolView } from '../data/darkpool';
 import { tickerSentiment } from '../data/news';
 import type { MarketSnapshot } from '../types/market';
@@ -95,7 +96,10 @@ interface BsOut {
 }
 
 function blackScholes(spot: number, strike: number, ivAnnual: number, dte: number, right: 'C' | 'P'): BsOut {
-  const T = Math.max(dte, 0.5) / 365;
+  // Shared with data/compass.ts. The two used to floor a 0DTE differently — half
+  // a calendar day here, half a session there — so the same contract carried two
+  // prices on the Weigher screen at once. See core/optionTime.ts.
+  const T = yearsToExpiry(dte);
   const r = 0.045;
   const sq = ivAnnual * Math.sqrt(T);
   const d1 = (Math.log(spot / strike) + (r + (ivAnnual * ivAnnual) / 2) * T) / sq;
@@ -208,8 +212,9 @@ function scoreCandidate(
   const oiCount = Math.max(50, Math.round(baseOi * Math.exp((-Math.abs(strike - (node?.strike ?? strike)) / spot) * 24)));
   const spreadPct = clamp((6 - Math.log10(Math.max(oiCount, 10)) * 1.4) * (dte > 180 ? 1.5 : 1), 0.4, 6);
 
-  // Effective time floors at half a day so 0DTE still carries a real 1σ move
-  const tYears = Math.max(dte, 0.5) / 365;
+  // Time floors at half a SESSION so a 0DTE still carries a real 1σ move —
+  // one convention, shared with the scan engine. See core/optionTime.ts.
+  const tYears = yearsToExpiry(dte);
   const expectedMovePct = iv * Math.sqrt(tYears) * 100;
   const beMove = right === 'C' ? (strike + mid) / spot - 1 : 1 - (strike - mid) / spot;
   const breakevenMovePct = beMove * 100;

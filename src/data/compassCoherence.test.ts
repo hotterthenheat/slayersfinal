@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import Simulator from '../core/simulator';
+import { MIN_YEARS, yearsToExpiry } from '../core/optionTime';
+import { weighContract } from '../core/contractScore';
 import { buildCompass, makeSetup, resetCompassCache, scannerExpiry } from './compass';
 import { SCANNERS, type ImpactMetric, type ImpactRow } from '../types/compass';
 
@@ -122,5 +124,49 @@ describe('the impact leaderboard ranks the field, not a pre-selection', () => {
     const calls = impact.filter(r => r.contract.endsWith('C') && r.openInterest > 0);
     const perOi = calls.map(r => r.deltaNotional / r.openInterest);
     expect(Math.max(...perOi)).toBeGreaterThan(Math.min(...perOi) * 1.5);
+  });
+});
+
+describe('the scan engine and the weigher price the same contract the same way', () => {
+  it('both floor a same-session contract at half a session, not half a day', () => {
+    /*
+      The two used to disagree by 45% about how much time a 0DTE has —
+      `max(dte, 0.5)/365` in core/contractScore.ts against `max(0.5, dte)/252`
+      in data/compass.ts — and both rendered on the Weigher at once: the headline
+      mid from one, the take-profit targets beneath it from the other. Same
+      contract, two prices, three inches apart, no signal that two models were
+      involved.
+    */
+    expect(yearsToExpiry(0)).toBe(MIN_YEARS);
+    expect(yearsToExpiry(0)).toBeCloseTo(0.5 / 252, 12);
+    // Half a calendar day is the value that was wrong, and it is meaningfully
+    // different — this is the size of the disagreement, held as a fact.
+    expect(yearsToExpiry(0) / (0.5 / 365)).toBeGreaterThan(1.4);
+  });
+
+  it('is monotone in the day count and never returns zero time', () => {
+    let prev = 0;
+    for (const dte of [0, 1, 7, 30, 45, 90, 365, 730]) {
+      const y = yearsToExpiry(dte);
+      expect(y).toBeGreaterThan(0);
+      expect(y).toBeGreaterThanOrEqual(prev);
+      prev = y;
+    }
+    // A calendar year is a year. Dividing a calendar count by 252 would make it 1.45.
+    expect(yearsToExpiry(365)).toBeCloseTo(1, 12);
+  });
+
+  it('the two engines agree on a 0DTE mid to within the rounding', () => {
+    const s = snap();
+    const iv = Simulator.TICKERS.SPY.iv;
+    const atm = Math.round(s.spot / Simulator.TICKERS.SPY.step) * Simulator.TICKERS.SPY.step;
+    const scanned = makeSetup('SPY', s.spot, atm, 'C', 'top-setups', iv, true);
+    const weighed = weighContract(s, 'C', atm, 0);
+    // Two different models — a normal-shaped approximation and Black-Scholes —
+    // so they will not match to the cent. What has to match is the amount of
+    // TIME in them, which shows up as the same order of magnitude of extrinsic.
+    const ratio = scanned.mid / weighed.mid;
+    expect(ratio).toBeGreaterThan(0.5);
+    expect(ratio).toBeLessThan(2);
   });
 });
