@@ -169,22 +169,22 @@ Fix: `scrollIntoView({inline:'nearest', block:'nearest'})` on the active tab in 
 
 ### F-06 · P2 · Gate 17 — Every desk burns a full-width header band that is ~70% empty
 
-On 20 of 25 routes the **largest empty rectangle in the fold starts at y=56** — immediately under the top
-bar — and runs from roughly x=400 to the right edge. The breadcrumb + `<h1>` + subtitle + sub-nav occupy only
-the left ~450px of a 168–232px-tall band; the rest is void.
+**On 86 of 200 route×viewport combinations the largest empty rectangle in the fold begins at exactly y=56**
+— immediately under the top bar. At the three desktop widths it is 18, 19 and 18 routes out of 25
+respectively. Mean band height 278px, mean 10.2% of the fold. The breadcrumb + `<h1>` + subtitle occupy only
+the left ~450px; the rest of a 168–232px band is void, and the sub-nav rail sits *below* it.
 
-Worst measured (corrected ink rasteriser; `% of fold` = share of the area between y=56 and the viewport bottom):
+Measured (corrected ink rasteriser; `% of fold` = share of the area between y=56 and the viewport bottom):
 
-| route | viewport | empty rect | at | % of fold | fold ink coverage |
-|---|---|---|---|---|---|
-| `/terminal` | 1600×1000 | 1040 × 168 | (384, 56) | 11.6% | 24.3% |
-| `/trace/dark-pool` | 1440×900 | 984 × 168 | (456, 56) | 13.6%* | 33.3% |
-| `/trace/scanner` | 1440×900 | 1024 × 168 | (416, 56) | 14.2%* | 23.1% |
-| `/pinpoint/history` | 1440×900 | 968 × 168 | (472, 56) | 13.4%* | 37.1% |
-| `/pinpoint/stress` | 1440×900 | 736 × 216 | (704, 56) | 13.1%* | 31.6% |
-| `/pinpoint/gamma` | 1440×900 | 624 × 232 | (816, 56) | 11.9% | 59.4% |
-
-\* first-pass figure; the corrected pass lowers these by ~1pt but does not change the pattern.
+| route | 1600×1000 | 1440×900 | 1280×800 |
+|---|---|---|---|
+| `/trace/scanner` | 1144×168 @(456,56) — 12.7% | 992×168 @(448,56) — 13.7% | 832×168 @(448,56) — **14.7%** |
+| `/trace/dark-pool` | 1136×168 @(464,56) — 12.6% | 984×168 @(456,56) — 13.6% | 824×168 @(456,56) — **14.5%** |
+| `/pinpoint/history` | 1120×168 @(480,56) — 12.5% | 968×168 @(472,56) — 13.4% | 808×168 @(472,56) — 14.3% |
+| `/trace/live-tape` | 1112×168 @(488,56) — 12.4% | 960×168 @(480,56) — 13.3% | 800×168 @(480,56) — 14.1% |
+| `/terminal` | 1040×168 @(384,56) — 11.6% | 896×168 @(376,56) — 12.4% | 736×168 @(376,56) — 13.0% |
+| `/pinpoint/stress` | 888×216 @(712,56) — 12.7% | 736×216 @(704,56) — 13.1% | 576×216 @(704,56) — 13.1% |
+| `/pinpoint/gamma` | 776×232 @(824,56) — 11.9% | 624×232 @(816,56) — 11.9% | — |
 
 Evidence: `docs/audit64/shots/DEAD_trace_dark-pool_1440x900.png` (magenta box outlines the measured
 rectangle: the header band's empty right 984px).
@@ -312,19 +312,28 @@ not reachability.
 
 ---
 
-### F-11 · P3 · Gate 17 — `/community/ideas` thesis form leaves a 1000 × 336px void at ≥1280px
+### F-11 · P3 · Gate 17 — `/community/ideas` thesis form: first row uses 36% of the width, the next row uses 100%
 
-The form's first row (`TICKER` 250px, `DIRECTION`, `HORIZON`) stops at x≈600 while the next row
-(`ENTRY / INVALIDATION / TARGETS / RISK`) spans the full 1536px content width.
+The form's first row (`TICKER` / `DIRECTION` / `HORIZON`) stops well short of the container while the row
+directly beneath it (`ENTRY / INVALIDATION / TARGETS / RISK`) spans the full content width, so the panel
+reads as unfinished.
 
-| viewport | empty rect | at | % of fold | fold ink |
+Measured on the row element directly (right edge of last child vs right edge of the row):
+
+| viewport | row width | content ends at | unused | unused share |
 |---|---|---|---|---|
-| 1600×1000 | 1000 × 336 | (600, 56) | **22.2%** | 25.3% |
-| 1440×900 | 848 × 336 | (592, 56) | 23.4% | 27.3% |
-| 1280×800 | 688 × 352 | (592, 56) | 25.4% | 29.5% |
-| 1024×768 | 432 × 352 | (592, 56) | 20.9% | 32.9% |
+| 1600×1000 | 1492px | x=593 | **948px** | **63.5%** |
+| 1440×900 | 1348px | x=585 | 804px | 59.6% |
+| 1280×800 | 1188px | x=585 | 644px | 54.2% |
 
-Evidence: `docs/audit64/shots/DEAD_community_ideas_1600x1000.png`.
+Evidence: `docs/audit64/shots/DEAD2_community_ideas_1600x1000.png` — the `TICKER`/`DIRECTION`/`HORIZON`
+controls end at x≈593 while `ENTRY … RISK` below run to x=1541.
+
+**Correction to my own first pass:** I initially reported this as a "1000 × 336px void at (600,56), 22.2%
+of the fold." That figure was produced by a rasteriser bug (see §3) — the region it named actually contains
+the `LOCAL TO THIS BROWSER` banner and the `WRITE A THESIS` header. The corrected largest empty rect on this
+route at 1600×1000 is 552 × 384 @ (928,608) = 14.0%, which is the right-hand side of the legitimate
+`NO THESES YET` empty state and is **not** a defect. The row-raggedness above is measured directly and stands.
 
 ---
 
@@ -419,4 +428,206 @@ Columns:
   390, 360 only; `-` elsewhere.
 * **tap<44 both** — interactive elements under 44px in both dimensions. Measured at 430/390/360 only.
 
-<!--TABLE-->
+| route | viewport | h-ovf (main) | content H | first data Y | clipped | max empty rect | fold ink | label ovl | tap<44 both |
+|---|---|---|---|---|---|---|---|---|---|
+| `/` | 1600x1000 | 0 | 9262 | 5 | 1 | 480x8 (0.3%) | 99.2% | - | - |
+| `/` | 1440x900 | 0 | 9188 | 0 | 1 | 168x8 (0.1%) | 99.2% | 1 | - |
+| `/` | 1280x800 | 0 | 9094 | 2 | 1 | 312x8 (0.3%) | 99.1% | - | - |
+| `/` | 1024x768 | 0 | 9102 | 0 | 3 | 344x8 (0.4%) | 98.8% | 0 | - |
+| `/` | 768x1024 | 0 | 10757 | 4 | 4 | 296x8 (0.3%) | 99.2% | 0 | - |
+| `/` | 430x932 | 0 | 12992 | 7 | 0 | 168x8 (0.4%) | 99.3% | - | 14 |
+| `/` | 390x844 | 0 | 13157 | 23 | 0 | 72x8 (0.2%) | 99.8% | 18 | 14 |
+| `/` | 360x800 | 0 | 13416 | 4 | 1 | 64x8 (0.2%) | 99.8% | 2 | 14 |
+| `/terminal` | 1600x1000 | 0 | 1216 | 1181 | 0 | 1040x168 (11.6%) | 24.3% | - | - |
+| `/terminal` | 1440x900 | 0 | 1216 | 1181 | 0 | 896x168 (12.4%) | 27.5% | 0 | - |
+| `/terminal` | 1280x800 | 0 | 1216 | 1181 | 2 | 736x168 (13%) | 30.8% | - | - |
+| `/terminal` | 1024x768 | 0 | 1614 | 1579 | 0 | 456x200 (12.5%) | 31.6% | 0 | - |
+| `/terminal` | 768x1024 | 0 | 1734 | 1699 | 0 | 400x104 (5.6%) | 54.1% | 0 | - |
+| `/terminal` | 430x932 | 0 | 2268 | 2210 | 0 | 24x880 (5.6%) | 58.4% | - | 25 |
+| `/terminal` | 390x844 | 0 | 2334 | 2276 | 0 | 24x792 (6.2%) | 58% | 0 | 25 |
+| `/terminal` | 360x800 | 0 | 2419 | 2346 | 0 | 24x744 (6.7%) | 60.6% | 0 | 25 |
+| `/pulse` | 1600x1000 | 0 | 2841 | 136 | 0 | 1144x72 (5.5%) | 62.1% | - | - |
+| `/pulse` | 1440x900 | 0 | 2841 | 136 | 0 | 1000x72 (5.9%) | 68.6% | 0 | - |
+| `/pulse` | 1280x800 | 0 | 2841 | 136 | 0 | 840x72 (6.4%) | 68.9% | - | - |
+| `/pulse` | 1024x768 | 0 | 2864 | 136 | 4 | 552x80 (6.1%) | 67.3% | 0 | - |
+| `/pulse` | 768x1024 | 0 | 3800 | 136 | 0 | 328x120 (5.3%) | 68.2% | 0 | - |
+| `/pulse` | 430x932 | 0 | 3884 | 591 | 0 | 80x280 (5.9%) | 62.5% | - | 68 |
+| `/pulse` | 390x844 | 0 | 3884 | 591 | 0 | 80x256 (6.7%) | 59.6% | 0 | 68 |
+| `/pulse` | 360x800 | 0 | 3899 | 591 | 0 | 24x720 (6.5%) | 59% | 0 | 68 |
+| `/compass` | 1600x1000 | 0 | 2539 | 185 | 0 | 744x168 (8.3%) | 36.6% | - | - |
+| `/compass` | 1440x900 | 0 | 2871 | 185 | 0 | 600x168 (8.3%) | 35.9% | 0 | - |
+| `/compass` | 1280x800 | 0 | 3163 | 185 | 0 | 440x168 (7.8%) | 39.1% | - | - |
+| `/compass` | 1024x768 | 0 | 2505 | 185 | 0 | 424x96 (5.6%) | 39.9% | 0 | - |
+| `/compass` | 768x1024 | 0 | 3163 | 185 | 0 | 632x56 (4.8%) | 43.2% | 0 | - |
+| `/compass` | 430x932 | 0 | 6154 | 247 | 1 | 48x568 (7.2%) | 44.3% | - | 9 |
+| `/compass` | 390x844 | 0 | 6040 | 247 | 2 | 48x496 (7.7%) | 46.6% | 0 | 9 |
+| `/compass` | 360x800 | 0 | 6117 | 293 | 1 | 48x448 (8%) | 48.8% | 0 | 9 |
+| `/compass?sleeve=weekly` | 1600x1000 | 0 | 2505 | 185 | 0 | 744x168 (8.3%) | 36.8% | - | - |
+| `/compass?sleeve=weekly` | 1440x900 | 0 | 2871 | 185 | 0 | 600x168 (8.3%) | 35.8% | 0 | - |
+| `/compass?sleeve=weekly` | 1280x800 | 0 | 3136 | 185 | 0 | 440x168 (7.8%) | 39% | - | - |
+| `/compass?sleeve=weekly` | 1024x768 | 0 | 2505 | 185 | 0 | 424x96 (5.6%) | 39.9% | 0 | - |
+| `/compass?sleeve=weekly` | 768x1024 | 0 | 3057 | 185 | 0 | 632x56 (4.8%) | 43.3% | 0 | - |
+| `/compass?sleeve=weekly` | 430x932 | 0 | 6022 | 247 | 1 | 48x568 (7.2%) | 44.3% | - | 9 |
+| `/compass?sleeve=weekly` | 390x844 | 0 | 6066 | 247 | 2 | 48x496 (7.7%) | 46.4% | 0 | 9 |
+| `/compass?sleeve=weekly` | 360x800 | 0 | 6064 | 293 | 1 | 48x448 (8%) | 48.8% | 0 | 9 |
+| `/compass?sleeve=structures` | 1600x1000 | 0 | 1415 | 185 | 0 | 744x216 (10.6%) | 44.8% | - | - |
+| `/compass?sleeve=structures` | 1440x900 | 0 | 1443 | 185 | 0 | 600x216 (10.7%) | 42.5% | 0 | - |
+| `/compass?sleeve=structures` | 1280x800 | 0 | 1498 | 185 | 0 | 440x216 (10%) | 47.4% | - | - |
+| `/compass?sleeve=structures` | 1024x768 | 0 | 1565 | 185 | 0 | 272x184 (6.9%) | 48.9% | 0 | - |
+| `/compass?sleeve=structures` | 768x1024 | 0 | 2514 | 185 | 0 | 32x968 (4.2%) | 51.9% | 0 | - |
+| `/compass?sleeve=structures` | 430x932 | 0 | 2880 | 247 | 0 | 40x672 (7.1%) | 54.2% | - | 5 |
+| `/compass?sleeve=structures` | 390x844 | 0 | 3008 | 247 | 0 | 40x584 (7.6%) | 55.9% | 0 | 5 |
+| `/compass?sleeve=structures` | 360x800 | 0 | 3094 | 341 | 0 | 32x536 (6.4%) | 56.8% | 0 | 5 |
+| `/compass?view=weigher` | 1600x1000 | 0 | 1931 | 307 | 0 | 232x872 (13.4%) | 34.7% | - | - |
+| `/compass?view=weigher` | 1440x900 | 0 | 1931 | 307 | 0 | 152x776 (9.7%) | 39.2% | 17 | - |
+| `/compass?view=weigher` | 1280x800 | 0 | 1931 | 307 | 0 | 608x128 (8.2%) | 44.3% | - | - |
+| `/compass?view=weigher` | 1024x768 | 0 | 2564 | 307 | 0 | 352x128 (6.2%) | 47.3% | 0 | - |
+| `/compass?view=weigher` | 768x1024 | 0 | 2664 | 353 | 0 | 40x968 (5.2%) | 55.8% | 17 | - |
+| `/compass?view=weigher` | 430x932 | 0 | 2755 | 396 | 0 | 40x664 (7.1%) | 59.4% | - | 6 |
+| `/compass?view=weigher` | 390x844 | 0 | 2845 | 396 | 0 | 40x576 (7.5%) | 58.9% | 0 | 6 |
+| `/compass?view=weigher` | 360x800 | 0 | 3042 | 412 | 0 | 40x512 (7.6%) | 59.2% | 0 | 6 |
+| `/compass?view=lotto` | 1600x1000 | 0 | 1970 | 196 | 0 | 1200x80 (6.4%) | 38.1% | - | - |
+| `/compass?view=lotto` | 1440x900 | 0 | 1989 | 196 | 0 | 1048x80 (6.9%) | 37.8% | 0 | - |
+| `/compass?view=lotto` | 1280x800 | 0 | 2039 | 196 | 0 | 888x80 (7.5%) | 40.7% | - | - |
+| `/compass?view=lotto` | 1024x768 | 0 | 2080 | 196 | 0 | 632x80 (6.9%) | 45.1% | 0 | - |
+| `/compass?view=lotto` | 768x1024 | 0 | 2410 | 242 | 0 | 520x72 (5%) | 42.8% | 0 | - |
+| `/compass?view=lotto` | 430x932 | 0 | 3416 | 280 | 0 | 24x768 (4.9%) | 49.1% | - | 5 |
+| `/compass?view=lotto` | 390x844 | 0 | 3918 | 280 | 0 | 24x680 (5.3%) | 49% | 0 | 5 |
+| `/compass?view=lotto` | 360x800 | 0 | 4579 | 296 | 1 | 40x400 (6%) | 50.6% | 0 | 5 |
+| `/trace/live-tape` | 1600x1000 | 0 | 18455 | 250 | 0 | 1112x168 (12.4%) | 53.3% | - | - |
+| `/trace/live-tape` | 1440x900 | 0 | 18455 | 250 | 0 | 960x168 (13.3%) | 52.6% | 0 | - |
+| `/trace/live-tape` | 1280x800 | 0 | 18455 | 250 | 0 | 800x168 (14.1%) | 49.5% | - | - |
+| `/trace/live-tape` | 1024x768 | 0 | 18455 | 250 | 0 | 544x168 (12.5%) | 47.8% | 0 | - |
+| `/trace/live-tape` | 768x1024 | 0 | 18455 | 250 | 0 | 296x168 (6.7%) | 55.4% | 0 | - |
+| `/trace/live-tape` | 430x932 | 0 | 18455 | 266 | 0 | 40x560 (5.9%) | 47.1% | - | 32 |
+| `/trace/live-tape` | 390x844 | 0 | 18455 | 266 | 0 | 40x560 (7.3%) | 46.7% | 0 | 32 |
+| `/trace/live-tape` | 360x800 | 0 | 18455 | 266 | 2 | 40x528 (7.9%) | 45.4% | 0 | 32 |
+| `/trace/scanner` | 1600x1000 | 0 | 2192 | 250 | 0 | 1144x168 (12.7%) | 26.9% | - | - |
+| `/trace/scanner` | 1440x900 | 0 | 2192 | 250 | 0 | 992x168 (13.7%) | 28% | 0 | - |
+| `/trace/scanner` | 1280x800 | 0 | 2192 | 250 | 0 | 832x168 (14.7%) | 29.9% | - | - |
+| `/trace/scanner` | 1024x768 | 0 | 2192 | 250 | 1 | 576x168 (13.3%) | 31.8% | 0 | - |
+| `/trace/scanner` | 768x1024 | 0 | 2192 | 250 | 1 | 328x168 (7.4%) | 40% | 0 | - |
+| `/trace/scanner` | 430x932 | 0 | 2192 | 266 | 1 | 40x432 (4.6%) | 47.3% | - | 8 |
+| `/trace/scanner` | 390x844 | 0 | 2192 | 266 | 1 | 40x440 (5.7%) | 46.2% | 0 | 8 |
+| `/trace/scanner` | 360x800 | 0 | 2192 | 266 | 2 | 40x352 (5.3%) | 47.1% | 0 | 8 |
+| `/trace/reconstruction` | 1600x1000 | 0 | 2325 | 250 | 0 | 1088x168 (12.1%) | 31.1% | - | - |
+| `/trace/reconstruction` | 1440x900 | 0 | 2385 | 250 | 0 | 936x168 (12.9%) | 37% | 1 | - |
+| `/trace/reconstruction` | 1280x800 | 0 | 2363 | 250 | 0 | 776x168 (13.7%) | 40% | - | - |
+| `/trace/reconstruction` | 1024x768 | 0 | 2395 | 250 | 1 | 520x168 (12%) | 39.4% | 0 | - |
+| `/trace/reconstruction` | 768x1024 | 0 | 2803 | 250 | 2 | 272x168 (6.1%) | 49.2% | 1 | - |
+| `/trace/reconstruction` | 430x932 | 0 | 3906 | 362 | 1 | 40x720 (7.6%) | 51.9% | - | 5 |
+| `/trace/reconstruction` | 390x844 | 0 | 4125 | 362 | 2 | 40x632 (8.2%) | 50.7% | 1 | 5 |
+| `/trace/reconstruction` | 360x800 | 0 | 4437 | 362 | 3 | 40x584 (8.7%) | 51.9% | 1 | 5 |
+| `/trace/dark-pool` | 1600x1000 | 0 | 9424 | 250 | 1 | 1136x168 (12.6%) | 32.1% | - | - |
+| `/trace/dark-pool` | 1440x900 | 0 | 9424 | 250 | 2 | 984x168 (13.6%) | 33.9% | 0 | - |
+| `/trace/dark-pool` | 1280x800 | 0 | 9424 | 250 | 4 | 824x168 (14.5%) | 35.9% | - | - |
+| `/trace/dark-pool` | 1024x768 | 0 | 9424 | 250 | 4 | 568x168 (13.1%) | 39.8% | 0 | - |
+| `/trace/dark-pool` | 768x1024 | 0 | 9424 | 250 | 5 | 320x168 (7.2%) | 39% | 0 | - |
+| `/trace/dark-pool` | 430x932 | 0 | 11358 | 266 | 4 | 328x72 (6.3%) | 48.8% | - | 6 |
+| `/trace/dark-pool` | 390x844 | **+17px** | 11521 | 266 | 5 | 288x72 (6.7%) | 45.5% | 0 | 6 |
+| `/trace/dark-pool` | 360x800 | **+47px** | 11581 | 266 | 7 | 256x72 (6.9%) | 43.4% | 0 | 6 |
+| `/pinpoint/gamma` | 1600x1000 | 0 | 1000 | 289 | 0 | 776x232 (11.9%) | 60.4% | - | - |
+| `/pinpoint/gamma` | 1440x900 | 0 | 900 | 289 | 0 | 624x232 (11.9%) | 59.4% | 0 | - |
+| `/pinpoint/gamma` | 1280x800 | 0 | 800 | 289 | 0 | 816x136 (11.7%) | 55.9% | - | - |
+| `/pinpoint/gamma` | 1024x768 | 0 | 768 | 289 | 0 | 560x136 (10.4%) | 55.5% | 0 | - |
+| `/pinpoint/gamma` | 768x1024 | 0 | 1167 | 305 | 2 | 448x152 (9.2%) | 60.1% | 0 | - |
+| `/pinpoint/gamma` | 430x932 | 0 | 1283 | 321 | 1 | 112x248 (7.4%) | 60.1% | - | 8 |
+| `/pinpoint/gamma` | 390x844 | 0 | 1215 | 321 | 0 | 72x248 (5.8%) | 58.9% | 0 | 8 |
+| `/pinpoint/gamma` | 360x800 | **+10px** | 1205 | 321 | 0 | 80x200 (6%) | 59% | 0 | 8 |
+| `/pinpoint/levels` | 1600x1000 | 0 | 2111 | 129 | 0 | 840x208 (11.6%) | 53% | - | - |
+| `/pinpoint/levels` | 1440x900 | 0 | 2051 | 129 | 0 | 688x208 (11.8%) | 50.9% | 0 | - |
+| `/pinpoint/levels` | 1280x800 | 0 | 2051 | 129 | 0 | 528x208 (11.5%) | 48.6% | - | - |
+| `/pinpoint/levels` | 1024x768 | 0 | 2529 | 129 | 0 | 560x112 (8.6%) | 47.9% | 0 | - |
+| `/pinpoint/levels` | 768x1024 | 0 | 2621 | 129 | 2 | 536x72 (5.2%) | 56.6% | 0 | - |
+| `/pinpoint/levels` | 430x932 | **+6px** | 2837 | 129 | 1 | 224x72 (4.3%) | 53.5% | - | 21 |
+| `/pinpoint/levels` | 390x844 | **+46px** | 2850 | 129 | 1 | 184x72 (4.3%) | 51.6% | 3 | 21 |
+| `/pinpoint/levels` | 360x800 | **+76px** | 2882 | 129 | 1 | 16x744 (4.4%) | 52% | 3 | 21 |
+| `/pinpoint/greeks` | 1600x1000 | 0 | 1793 | 274 | 0 | 824x216 (11.8%) | 21.5% | - | - |
+| `/pinpoint/greeks` | 1440x900 | 0 | 1793 | 274 | 0 | 672x216 (11.9%) | 24.1% | 0 | - |
+| `/pinpoint/greeks` | 1280x800 | 0 | 1793 | 274 | 0 | 512x216 (11.6%) | 25.9% | - | - |
+| `/pinpoint/greeks` | 1024x768 | 0 | 2166 | 274 | 2 | 560x120 (9.2%) | 30.1% | 0 | - |
+| `/pinpoint/greeks` | 768x1024 | 0 | 2296 | 290 | 3 | 96x464 (6%) | 39.7% | 0 | - |
+| `/pinpoint/greeks` | 430x932 | 0 | 2552 | 312 | 0 | 40x512 (5.4%) | 48.8% | - | 6 |
+| `/pinpoint/greeks` | 390x844 | 0 | 2613 | 328 | 1 | 40x544 (7.1%) | 47.2% | 0 | 6 |
+| `/pinpoint/greeks` | 360x800 | 0 | 2628 | 328 | 1 | 40x512 (7.6%) | 47.7% | 0 | 6 |
+| `/pinpoint/stress` | 1600x1000 | 0 | 1095 | 274 | 0 | 888x216 (12.7%) | 36.5% | - | - |
+| `/pinpoint/stress` | 1440x900 | 0 | 1115 | 274 | 0 | 736x216 (13.1%) | 37.1% | 0 | - |
+| `/pinpoint/stress` | 1280x800 | 0 | 1156 | 274 | 2 | 576x216 (13.1%) | 37.6% | - | - |
+| `/pinpoint/stress` | 1024x768 | 0 | 1471 | 274 | 0 | 320x216 (9.5%) | 32.7% | 0 | - |
+| `/pinpoint/stress` | 768x1024 | 0 | 1621 | 296 | 0 | 536x72 (5.2%) | 42.6% | 0 | - |
+| `/pinpoint/stress` | 430x932 | 0 | 2019 | 312 | 0 | 40x768 (8.2%) | 48.6% | - | 5 |
+| `/pinpoint/stress` | 390x844 | 0 | 2079 | 312 | 0 | 40x680 (8.9%) | 51.1% | 0 | 5 |
+| `/pinpoint/stress` | 360x800 | **+29px** | 2246 | 328 | 1 | 40x616 (9.2%) | 50.8% | 0 | 5 |
+| `/pinpoint/history` | 1600x1000 | 0 | 1518 | 250 | 0 | 1120x168 (12.5%) | 37% | - | - |
+| `/pinpoint/history` | 1440x900 | 0 | 1518 | 250 | 0 | 968x168 (13.4%) | 39.1% | 1 | - |
+| `/pinpoint/history` | 1280x800 | 0 | 1518 | 250 | 0 | 808x168 (14.3%) | 35.7% | - | - |
+| `/pinpoint/history` | 1024x768 | 0 | 1518 | 250 | 1 | 552x168 (12.7%) | 36.8% | 0 | - |
+| `/pinpoint/history` | 768x1024 | 0 | 1518 | 250 | 3 | 304x168 (6.9%) | 50.5% | 1 | - |
+| `/pinpoint/history` | 430x932 | 0 | 1518 | 250 | 0 | 40x736 (7.8%) | 44.3% | - | 16 |
+| `/pinpoint/history` | 390x844 | 0 | 2133 | 250 | 1 | 40x648 (8.4%) | 47.8% | 0 | 16 |
+| `/pinpoint/history` | 360x800 | 0 | 2164 | 266 | 3 | 40x584 (8.7%) | 47.9% | 0 | 16 |
+| `/prove-it` | 1600x1000 | 0 | 2587 | 220 | 1 | 832x264 (14.5%) | 42.1% | - | - |
+| `/prove-it` | 1440x900 | 0 | 2640 | 220 | 2 | 632x192 (10%) | 44.9% | 0 | - |
+| `/prove-it` | 1280x800 | 0 | 2671 | 220 | 2 | 520x160 (8.7%) | 48.5% | - | - |
+| `/prove-it` | 1024x768 | 0 | 4046 | 220 | 2 | 592x80 (6.5%) | 55.8% | 0 | - |
+| `/prove-it` | 768x1024 | 0 | 4253 | 220 | 6 | 608x88 (7.2%) | 49.7% | 0 | - |
+| `/prove-it` | 430x932 | 0 | 5376 | 304 | 3 | 40x768 (8.2%) | 54.2% | - | 7 |
+| `/prove-it` | 390x844 | 0 | 5497 | 304 | 7 | 40x600 (7.8%) | 54% | 0 | 7 |
+| `/prove-it` | 360x800 | 0 | 5770 | 304 | 7 | 40x552 (8.2%) | 51.8% | 0 | 7 |
+| `/stocks` | 1600x1000 | 0 | 18660 | 196 | 0 | 816x112 (6.1%) | 25.6% | - | - |
+| `/stocks` | 1440x900 | 0 | 18660 | 196 | 0 | 1080x72 (6.4%) | 27.1% | 1 | - |
+| `/stocks` | 1280x800 | 0 | 18660 | 196 | 0 | 920x72 (7%) | 29.2% | - | - |
+| `/stocks` | 1024x768 | 0 | 18660 | 196 | 1 | 512x136 (9.6%) | 25.9% | 1 | - |
+| `/stocks` | 768x1024 | 0 | 18660 | 196 | 3 | 384x136 (7%) | 32.1% | 1 | - |
+| `/stocks` | 430x932 | 0 | 18660 | 280 | 1 | 40x768 (8.2%) | 32.6% | - | 208 |
+| `/stocks` | 390x844 | 0 | 18660 | 280 | 2 | 40x680 (8.9%) | 33.8% | 4 | 208 |
+| `/stocks` | 360x800 | 0 | 18660 | 280 | 4 | 40x632 (9.4%) | 36.2% | 5 | 208 |
+| `/news` | 1600x1000 | 0 | 1634 | 196 | 0 | 1032x104 (7.1%) | 43.9% | - | - |
+| `/news` | 1440x900 | 0 | 1634 | 196 | 0 | 888x104 (7.6%) | 43.8% | 0 | - |
+| `/news` | 1280x800 | 0 | 1634 | 196 | 3 | 728x104 (8%) | 42.6% | - | - |
+| `/news` | 1024x768 | 0 | 2011 | 196 | 7 | 472x104 (6.7%) | 44% | 0 | - |
+| `/news` | 768x1024 | 0 | 2380 | 242 | 1 | 632x72 (6.1%) | 45.6% | 0 | - |
+| `/news` | 430x932 | 0 | 2654 | 357 | 2 | 40x768 (8.2%) | 47.6% | - | 49 |
+| `/news` | 390x844 | 0 | 3099 | 357 | 5 | 40x680 (8.9%) | 46.8% | 0 | 49 |
+| `/news` | 360x800 | **+11px** | 3310 | 357 | 7 | 40x600 (9%) | 47.7% | 0 | 49 |
+| `/earnings` | 1600x1000 | 0 | 2050 | 196 | 0 | 848x152 (8.5%) | 28.3% | - | - |
+| `/earnings` | 1440x900 | 0 | 1990 | 196 | 0 | 704x152 (8.8%) | 29.9% | 0 | - |
+| `/earnings` | 1280x800 | 0 | 1990 | 196 | 0 | 544x152 (8.7%) | 30.2% | - | - |
+| `/earnings` | 1024x768 | 0 | 2069 | 242 | 3 | 464x144 (9.2%) | 29.4% | 0 | - |
+| `/earnings` | 768x1024 | 0 | 2256 | 258 | 2 | 456x144 (8.8%) | 37.4% | 0 | - |
+| `/earnings` | 430x932 | 0 | 2754 | 370 | 2 | 432x136 (15.6%) | 39.3% | - | 29 |
+| `/earnings` | 390x844 | **+5px** | 2781 | 370 | 2 | 336x80 (8.7%) | 43.5% | 0 | 29 |
+| `/earnings` | 360x800 | **+35px** | 2830 | 370 | 5 | 304x80 (9.1%) | 43.1% | 0 | 29 |
+| `/tracker` | 1600x1000 | 0 | 2385 | 697 | 0 | 848x184 (10.3%) | 36.3% | - | - |
+| `/tracker` | 1440x900 | 0 | 2385 | 697 | 0 | 696x184 (10.5%) | 36.8% | 0 | - |
+| `/tracker` | 1280x800 | 0 | 2385 | 697 | 0 | 1200x88 (11.1%) | 36.5% | - | - |
+| `/tracker` | 1024x768 | 0 | 2875 | 858 | 2 | 944x88 (11.4%) | 36.3% | 0 | - |
+| `/tracker` | 768x1024 | 0 | 3204 | 978 | 1 | 488x168 (11%) | 38.4% | 0 | - |
+| `/tracker` | 430x932 | 0 | 4376 | 1431 | 1 | 376x104 (10.4%) | 42.9% | - | 17 |
+| `/tracker` | 390x844 | 0 | 4528 | 1520 | 2 | 272x120 (10.6%) | 42.7% | 0 | 17 |
+| `/tracker` | 360x800 | 0 | 4628 | 1541 | 4 | 304x104 (11.8%) | 46.9% | 0 | 17 |
+| `/guide/overview` | 1600x1000 | 0 | 1484 | 1449 | 0 | 288x944 (18%) | 28.4% | - | - |
+| `/guide/overview` | 1440x900 | 0 | 1484 | 1449 | 0 | 208x848 (14.5%) | 31.3% | 0 | - |
+| `/guide/overview` | 1280x800 | 0 | 1484 | 1449 | 0 | 128x744 (10%) | 36.9% | - | - |
+| `/guide/overview` | 1024x768 | 0 | 1620 | 1585 | 0 | 688x104 (9.8%) | 36.3% | 0 | - |
+| `/guide/overview` | 768x1024 | 0 | 1682 | 1647 | 0 | 440x104 (6.2%) | 51.4% | 0 | - |
+| `/guide/overview` | 430x932 | 0 | 2581 | 2523 | 0 | 328x64 (5.6%) | 49.7% | - | 16 |
+| `/guide/overview` | 390x844 | 0 | 2646 | 2588 | 0 | 392x48 (6.1%) | 53.5% | 0 | 16 |
+| `/guide/overview` | 360x800 | 0 | 2745 | 2672 | 0 | 256x64 (6.1%) | 57.3% | 0 | 16 |
+| `/community/ideas` | 1600x1000 | 0 | 1701 | 998 | 0 | 552x384 (14%) | 28.3% | - | - |
+| `/community/ideas` | 1440x900 | 0 | 1701 | 998 | 0 | 1000x160 (13.2%) | 31.1% | 0 | - |
+| `/community/ideas` | 1280x800 | 0 | 1734 | 1016 | 0 | 840x160 (14.1%) | 36% | - | - |
+| `/community/ideas` | 1024x768 | 0 | 1779 | 1016 | 0 | 584x160 (12.8%) | 39.7% | 0 | - |
+| `/community/ideas` | 768x1024 | 0 | 1799 | 1016 | 0 | 256x232 (8%) | 36.6% | 0 | - |
+| `/community/ideas` | 430x932 | 0 | 2707 | 1300 | 0 | 40x768 (8.2%) | 52.7% | - | 18 |
+| `/community/ideas` | 390x844 | 0 | 2740 | 1314 | 0 | 40x680 (8.9%) | 56.3% | 0 | 18 |
+| `/community/ideas` | 360x800 | 0 | 2871 | 1411 | 0 | 176x200 (13.1%) | 52.3% | 0 | 18 |
+| `/legal/disclaimer` | 1600x1000 | 0 | 1569 | 1534 | 0 | 368x944 (23%) | 41.3% | - | - |
+| `/legal/disclaimer` | 1440x900 | 0 | 1569 | 1534 | 0 | 288x848 (20.1%) | 46% | 0 | - |
+| `/legal/disclaimer` | 1280x800 | 0 | 1569 | 1534 | 0 | 208x744 (16.3%) | 51.1% | - | - |
+| `/legal/disclaimer` | 1024x768 | 0 | 1590 | 1555 | 0 | 256x488 (17.1%) | 61.9% | 0 | - |
+| `/legal/disclaimer` | 768x1024 | 0 | 1590 | 1555 | 0 | 632x56 (4.8%) | 75.6% | 0 | - |
+| `/legal/disclaimer` | 430x932 | 0 | 2318 | 2260 | 0 | 24x880 (5.6%) | 75.8% | - | 14 |
+| `/legal/disclaimer` | 390x844 | 0 | 2404 | 2346 | 0 | 24x792 (6.2%) | 75.3% | 0 | 14 |
+| `/legal/disclaimer` | 360x800 | 0 | 2543 | 2470 | 0 | 24x744 (6.7%) | 75.6% | 0 | 14 |
+
