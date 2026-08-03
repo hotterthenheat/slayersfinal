@@ -9,39 +9,14 @@ import VerdictBadge from './VerdictBadge';
 import { VERDICT_TONE } from './verdict';
 import GreeksRow from './GreeksRow';
 import ContractTrack from './ContractTrack';
-import { buildTrack, setupToPlan, tpStatusTone, type TrackRung } from './contractTrackModel';
+import { buildTrack, setupToPlan } from './contractTrackModel';
 import { contractFacts } from './contractFacts';
-import type { Setup, TakeProfit } from '../../types/compass';
+import type { Setup } from '../../types/compass';
 
 interface SignalMonitorProps {
   setup: Setup;
   onBack: () => void;
 }
-
-/**
- * A rung of the ladder. The engine still supplies the level and the target; the
- * STATUS comes from the track above, which reached it or didn't. Sharing one
- * derivation is the point: a green HIT badge sitting four inches under a curve
- * that never touched it would indict the whole panel.
- */
-const TakeProfitCard = ({ tp, rung, ticker }: { tp: TakeProfit; rung: TrackRung; ticker: string }) => (
-  <div className="border border-borderSubtle bg-inset rounded-md px-3 py-2.5 flex flex-col gap-1">
-    <div className="flex items-center justify-between">
-      <span className="font-mono text-micro uppercase tracking-widest text-textMuted">Take Profit {tp.level}</span>
-      <span className="font-mono text-micro uppercase tracking-wider text-textMuted">Expected</span>
-    </div>
-    <div className="flex items-end justify-between">
-      <SignalBadge tone={tpStatusTone[rung.status]}>{rung.status}</SignalBadge>
-      <span className={`font-mono text-lg font-semibold tnum leading-none ${rung.status === 'HIT' ? 'text-bull' : 'text-textPrimary'}`}>
-        +{tp.expectedPct}%
-      </span>
-    </div>
-    <div className="font-mono text-micro text-textSecondary tnum">
-      Target ${tp.target.toFixed(2)}
-      {rung.spotNeeded != null && ` · needs ${ticker} ${rung.spotNeeded.toFixed(2)}`}
-    </div>
-  </div>
-);
 
 const SignalMonitor = ({ setup, onBack }: SignalMonitorProps) => {
   const tone = VERDICT_TONE[setup.verdict];
@@ -164,15 +139,10 @@ const SignalMonitor = ({ setup, onBack }: SignalMonitorProps) => {
         </Panel>
       </div>
 
+      {/* The chart carries its own level table now — same rungs, same order, same
+          tones, same derivation of what has been reached — so the four cards that
+          used to sit under it were the identical four numbers a second time. */}
       <ContractTrack plan={plan} bars={bars} track={track} className="animate-soft-in" />
-
-      {/* Take-profit ladder — now the chart's legend: same four rungs, same
-          order, same tones, same derivation of what has been reached */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 animate-soft-in">
-        {setup.takeProfits.map((tp, i) => (
-          <TakeProfitCard key={tp.level} tp={tp} rung={track.rungs[i]} ticker={setup.ticker} />
-        ))}
-      </div>
       </div>
     </div>
   );
