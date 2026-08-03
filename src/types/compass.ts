@@ -123,6 +123,15 @@ export interface ContractChain {
   ticker: string;
   spot: number;
   rows: ChainRow[];
+  /**
+   * The expiry these premiums are quoted for, verbatim from the active preset.
+   *
+   * It is on the data rather than assumed by the panel because the two used to
+   * disagree silently: the chain priced every strike at a fixed 1DTE while the
+   * board beside it was 0DTE, so one contract printed two premiums on one
+   * screen. Carrying the stamp is what lets the panel say which clock it is on.
+   */
+  expiry: string;
 }
 
 export type ImpactMetric = 'gamma' | 'volume' | 'notional' | 'oi';

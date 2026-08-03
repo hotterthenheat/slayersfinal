@@ -695,8 +695,24 @@ export function resetCompassCache(): void {
 }
 
 // ---- contract chain -------------------------------------------------------
-function buildChain(snapshot: MarketSnapshot, iv: number): ContractChain {
+/*
+  The chain prices the expiry the BOARD is on.
+
+  It used to hardcode `1` here regardless of the preset, so on the four
+  same-session presets the ladder beside the monitor quoted next-day premiums:
+  measured on BAC 41.50P, the monitor header read $0.16 and the chain cell for
+  the identical contract read $0.47, at the same instant, on one screen. The
+  chain is the strike-PICKING instrument — every comparison a user makes on it
+  was against the wrong clock, and clicking a strike then repriced it on the
+  board's clock, so the number moved on the click with nothing to explain it.
+
+  `buildImpact` was already handed the preset's expiry. The chain was simply
+  missed. It takes the same source now, and `ContractChain.expiry` carries the
+  stamp out so the panel can say which session it is quoting.
+*/
+function buildChain(snapshot: MarketSnapshot, iv: number, expiry: string): ContractChain {
   const { ticker, spot, chain } = snapshot;
+  const dte = dteOf(expiry);
   const sorted = [...chain].sort((a, b) => a.strike - b.strike);
   const spotIdx = sorted.findIndex(n => n.strike >= spot);
   const start = Math.max(0, spotIdx - 6);
@@ -710,7 +726,7 @@ function buildChain(snapshot: MarketSnapshot, iv: number): ContractChain {
     return {
       strike: node.strike,
       call: {
-        premium: Number(estimatePremium(spot, node.strike, 'C', iv, 1).toFixed(2)),
+        premium: Number(estimatePremium(spot, node.strike, 'C', iv, dte).toFixed(2)),
         // Centered noise so OTM strikes can print red — a change column that
         // can never go negative reads fake.
         changePct: Math.round(clamp((spot - node.strike) / spot * 800 + (callRng() - 0.35) * 30, -60, 130)),
@@ -719,7 +735,7 @@ function buildChain(snapshot: MarketSnapshot, iv: number): ContractChain {
         action: actionFromHealth(callHealth),
       },
       put: {
-        premium: Number(estimatePremium(spot, node.strike, 'P', iv, 1).toFixed(2)),
+        premium: Number(estimatePremium(spot, node.strike, 'P', iv, dte).toFixed(2)),
         changePct: Math.round(clamp((node.strike - spot) / spot * 800 + (putRng() - 0.35) * 30, -60, 130)),
         health: putHealth,
         momentum: momentumFromHealth(putHealth),
@@ -728,29 +744,49 @@ function buildChain(snapshot: MarketSnapshot, iv: number): ContractChain {
     };
   });
 
-  return { ticker, spot, rows };
+  return { ticker, spot, rows, expiry };
 }
 
 // ---- impact leaderboard ---------------------------------------------------
+/*
+  The WHOLE field, ranked by gamma as a default. The leaderboard slices it.
+
+  This used to sort by gamma and slice to eight here, and the panel then offered
+  four "rank by" metrics over those eight — so Volume, Notional and Open Int all
+  showed the largest-by-GAMMA contracts in a different order, which is not the
+  question any of those three controls asks. The engine hands over the field and
+  the panel picks its own top eight, which is the only way a metric switch can
+  mean what it says.
+
+  Delta notional is a REAL delta now. It was `oi * 100 * spot * 0.5` — a flat
+  half-delta on every strike and both sides — so with spot constant across rows
+  it was a monotone transform of open interest, and the two columns could never
+  disagree about a ranking. A column headed DEX has to be exposure rather than
+  open interest in different units.
+*/
 function buildImpact(snapshot: MarketSnapshot, expiry: string): ImpactRow[] {
   const { ticker, spot, chain } = snapshot;
+  const iv = Simulator.TICKERS[ticker]?.iv ?? 0.2;
+  const t = Math.max(0.5, dteOf(expiry)) / 252;
   const totalGamma = chain.reduce((a, n) => a + Math.abs(n.netGex), 0) || 1;
   const rows = chain.flatMap(node => {
-    // Delta notional in $B: shares of exposure × spot at ~0.5 avg delta
-    const mk = (right: OptionRight, oi: number, gammaScale: number): Omit<ImpactRow, 'rank'> => ({
-      contract: `${ticker} ${node.strike % 1 === 0 ? node.strike.toFixed(0) : node.strike.toFixed(2)}${right}`,
-      expiry,
-      openInterest: oi,
-      volume: Math.round(oi * (0.3 + (hash(`${node.strike}${right}`) % 50) / 100)),
-      deltaNotional: Number(((oi * 100 * spot * 0.5) / 1e9).toFixed(2)),
-      gamma: Number(((Math.abs(node.netGex) / totalGamma) * 100 * gammaScale).toFixed(1)),
-    });
+    const greeks = Simulator.getGreeks(spot, node.strike, t, iv);
+    const mk = (right: OptionRight, oi: number, gammaScale: number): Omit<ImpactRow, 'rank'> => {
+      const delta = right === 'C' ? greeks.deltaCall : greeks.deltaPut;
+      return {
+        contract: `${ticker} ${node.strike % 1 === 0 ? node.strike.toFixed(0) : node.strike.toFixed(2)}${right}`,
+        expiry,
+        openInterest: oi,
+        volume: Math.round(oi * (0.3 + (hash(`${node.strike}${right}`) % 50) / 100)),
+        // $B of underlying the book is effectively long or short through this
+        // contract: |delta| × shares × spot.
+        deltaNotional: Number(((Math.abs(delta) * oi * 100 * spot) / 1e9).toFixed(2)),
+        gamma: Number(((Math.abs(node.netGex) / totalGamma) * 100 * gammaScale).toFixed(1)),
+      };
+    };
     return [mk('C', node.callOI, 0.45), mk('P', node.putOI, 0.38)];
   });
-  return rows
-    .sort((a, b) => b.gamma - a.gamma)
-    .slice(0, 8)
-    .map((r, i) => ({ ...r, rank: i + 1 }));
+  return rows.sort((a, b) => b.gamma - a.gamma).map((r, i) => ({ ...r, rank: i + 1 }));
 }
 
 // ---- top-level assembly ---------------------------------------------------
@@ -791,7 +827,7 @@ export function buildCompass(
     get shown() {
       return feed().shown;
     },
-    chain: buildChain(snapshot, activeIv),
+    chain: buildChain(snapshot, activeIv, PROFILES[scanner].expiry),
     impact: buildImpact(snapshot, PROFILES[scanner].expiry),
   };
 }

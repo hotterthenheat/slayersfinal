@@ -1,5 +1,6 @@
 import Panel from '../ui/Panel';
 import SpotRule from '../ui/SpotRule';
+import { expiryRead } from './setupHorizon';
 import type { ChainAction, ChainSide, ContractChain as ContractChainData, Momentum, OptionRight } from '../../types/compass';
 
 export interface ChainSelection {
@@ -81,7 +82,8 @@ const ChainCell = ({ side, right, strike, ticker, isSelected, onSelect }: CellPr
 };
 
 const ContractChain = ({ data, selected, onSelect }: ContractChainProps) => {
-  const { ticker, spot, rows } = data;
+  const { ticker, spot, rows, expiry } = data;
+  const exp = expiryRead(expiry);
 
   // Find where the live price sits so the marker embeds between strikes
   let spotRowIndex = rows.findIndex(r => r.strike > spot) - 1;
@@ -90,7 +92,11 @@ const ContractChain = ({ data, selected, onSelect }: ContractChainProps) => {
   return (
     <Panel
       title="Contract Chain"
-      subtitle="health · momentum · premium"
+      /* The expiry leads, because the premiums below are quoted for it and for
+         nothing else. Without it the ladder read as a general price list and
+         could be compared against a board on a different session — which is
+         exactly what it was doing before the chain took the preset's clock. */
+      subtitle={exp.chip}
       flush
       className="w-full h-full"
       bodyClassName="flex flex-col"

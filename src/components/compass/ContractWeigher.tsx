@@ -1132,6 +1132,31 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
       </div>
     ) : null;
 
+  /*
+    ONE discriminant for what the pane is currently showing.
+
+    The same question was being answered in three places with three hand-rolled
+    predicates — the grade body's if-ladder, `showTrack`, and the `weighed &&
+    priceable` guard on "If you take it" — and they drifted, which is how a
+    symbol with no listing ended up with a full cost breakdown under it. Typing
+    `ZZZZ 505C` printed NO LISTING FOR ZZZZ in the grade panel and then, directly
+    beneath, days to expiry, cost per contract, contracts in budget, expected
+    fill, spread round-trip and theta drag — sizing economics for a ticker the
+    page had just said it could not find.
+
+    Derived once, switched on everywhere. A panel that quotes what a trade costs
+    may only render in the one state where a trade exists.
+  */
+  const gradeState: 'expired' | 'unknown-ticker' | 'no-strike' | 'unpriceable' | 'graded' = parsed.expired
+    ? 'expired'
+    : parsed.ticker.state === 'unknown'
+      ? 'unknown-ticker'
+      : parsed.strike.state === 'missing' || !weighed
+        ? 'no-strike'
+        : !priceable
+          ? 'unpriceable'
+          : 'graded';
+
   const gradePanelBody = () => {
     if (parsed.expired) {
       return (
@@ -1276,7 +1301,7 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
 
   // The chart follows the grade. Where the panel above is an empty state — a date
   // that has passed, a symbol with no listing — there is no contract to draw.
-  const showTrack = trackPlan != null && track != null && !parsed.expired && parsed.ticker.state !== 'unknown';
+  const showTrack = trackPlan != null && track != null && gradeState !== 'expired' && gradeState !== 'unknown-ticker';
 
   return (
     <div className="mx-auto w-full max-w-[1180px] flex flex-col gap-4">
@@ -1344,7 +1369,7 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
 
       {showTrack && <ContractTrack key={trackPlan.key} plan={trackPlan} bars={trackBars} track={track} className="animate-soft-in" />}
 
-      {weighed && priceable && (
+      {gradeState === 'graded' && weighed && (
         <Panel
           title={
             <span className="inline-flex items-center gap-1.5">
