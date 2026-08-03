@@ -16,6 +16,8 @@ import ContractWeigher from '../components/compass/ContractWeigher';
 import LottoBoard from '../components/compass/LottoBoard';
 import SetupScanBoard, { type ScanLayout } from '../components/compass/SetupScanBoard';
 import SetupCompare from '../components/compass/SetupCompare';
+import Freshness from '../components/compass/Freshness';
+import { sweepClock } from '../components/compass/sweepClock';
 import { expiryRangeLabel, expiryRead } from '../components/compass/setupHorizon';
 import type { Horizon } from '../core/contractScore';
 import SegmentedControl from '../components/ui/SegmentedControl';
@@ -41,9 +43,6 @@ const COMPASS_MODES = new Set<string>(MODE_OPTIONS.map(o => o.value));
 
 const isScannerKey = (v: unknown): v is ScannerKey => typeof v === 'string' && SCANNER_KEYS.has(v);
 const isCompassMode = (v: unknown): v is CompassMode => typeof v === 'string' && COMPASS_MODES.has(v);
-
-/** Sweep clock, one format wherever a sweep time is printed. */
-const sweepClock = (ms: number): string => new Date(ms).toLocaleTimeString('en-GB');
 
 /**
  * A contract the pane is pointed at, carrying the row it was opened FROM.
@@ -157,6 +156,9 @@ const Compass = () => {
 
   // Scan presentation: card grid vs sortable table. Two densities of one list.
   const [scanLayout, setScanLayout] = useState<ScanLayout>('cards');
+  /* Which page of the card grid. It lives here rather than in the board because
+     review mode unmounts the board — see the note on SetupScanBoardProps.page. */
+  const [scanPage, setScanPage] = useState(0);
 
   const inReviewMode = monitorTarget !== null;
 
@@ -390,6 +392,7 @@ const Compass = () => {
 
   const handleScanner = (next: ScannerKey) => {
     setScanner(next);
+    setScanPage(0);
     setMonitorTarget(null);
     setSelected(null);
     setChainSel(null);
@@ -499,7 +502,16 @@ const Compass = () => {
           ? `Monitoring ${monitorTarget.ticker} ${monitorTarget.strike}${monitorTarget.right}`
           : 'Signal Monitor'
       }
-      subtitle="Watching one setup as it moves. The card that graded it now tracks whether the structure under it holds."
+      subtitle={
+        monitorTarget
+          ? /* Opening a setup calls changeTicker so the chain beside the monitor
+               prices the right underlying — correct, and previously invisible: a
+               global, cross-desk state change happened as a silent side effect of
+               an in-page click, and did not unwind on the way back. Saying so is
+               cheaper and less surprising than reverting it. */
+            `Watching one setup as it moves. The desk is pointed at ${monitorTarget.ticker} so the chain prices this contract's underlying.`
+          : 'Watching one setup as it moves. The card that graded it now tracks whether the structure under it holds.'
+      }
       actions={modeSwitch}
     />
   );
@@ -596,8 +608,7 @@ const Compass = () => {
             className="ml-auto font-mono text-label text-textMuted uppercase tracking-widest tnum"
             title={`${activeScanner.label} admits any contract scoring ${activeFloor} or better on an 8 to 99 scale. ${data.totalFound.toLocaleString()} cleared it across the whole field this sweep; the board shows the top ${data.shown}.`}
           >
-            Showing {rankedSetups.length} of {data.totalFound.toLocaleString()} scoring {activeFloor}+ · scan{' '}
-            {scanClock} · 10s
+            Showing {rankedSetups.length} of {data.totalFound.toLocaleString()} scoring {activeFloor}+
           </span>
           <div className="relative">
             <button
@@ -618,7 +629,7 @@ const Compass = () => {
                  no longer four items long. */
               <div className="absolute right-0 top-full mt-1 z-20 min-w-[140px] max-h-72 overflow-y-auto border border-borderSubtle bg-panel rounded-md shadow-overlay animate-slide-in">
                 <button
-                  onClick={() => { setTickerFilter(null); setShowTickerDropdown(false); }}
+                  onClick={() => { setTickerFilter(null); setScanPage(0); setShowTickerDropdown(false); }}
                   className={`w-full text-left px-3 py-2 font-mono text-label transition-colors ${
                     !tickerFilter ? 'text-select bg-select/[0.06]' : 'text-textSecondary hover:bg-rowHover'
                   }`}
@@ -628,7 +639,7 @@ const Compass = () => {
                 {feedTickers.map(t => (
                   <button
                     key={t}
-                    onClick={() => { setTickerFilter(t); setShowTickerDropdown(false); }}
+                    onClick={() => { setTickerFilter(t); setScanPage(0); setShowTickerDropdown(false); }}
                     className={`w-full text-left px-3 py-2 font-mono text-label transition-colors ${
                       tickerFilter === t ? 'text-select bg-select/[0.06]' : 'text-textSecondary hover:bg-rowHover'
                     }`}
@@ -649,6 +660,10 @@ const Compass = () => {
             {activeExpiry ? `${activeExpiry} · ` : ''}
             {activeScanner.blurb}
           </span>
+          {/* The grade on the monitor came off a sweep; the chain beside it is
+              live. Both say so rather than leaving the reader to infer that two
+              panels updating at different rates is a fault. */}
+          <Freshness kind="sweep" at={scanAt} className="ml-auto" />
         </div>
       )}
 
@@ -680,11 +695,13 @@ const Compass = () => {
                   scannerLabel={activeScanner.label}
                   expiryLabel={activeExpiry}
                   layout={scanLayout}
-                  onLayoutChange={setScanLayout}
+                  onLayoutChange={next => { setScanLayout(next); setScanPage(0); }}
+                  page={scanPage}
+                  onPageChange={setScanPage}
+                  freshness={<Freshness kind="sweep" at={scanAt} />}
                   selectedId={effectiveSelected?.setup.id ?? null}
                   onSelect={handleSelectSetup}
                   onStudy={handleReviewSetup}
-                  resetKey={`${scanner}|${tickerFilter ?? 'all'}`}
                 />
               )}
             </motion.div>
@@ -703,7 +720,12 @@ const Compass = () => {
               className="flex-1 flex flex-col"
             >
               {inReviewMode && liveChain ? (
-                <ContractChain data={liveChain} selected={chainSel} onSelect={handleChainSelect} />
+                <ContractChain
+                  data={liveChain}
+                  selected={chainSel}
+                  onSelect={handleChainSelect}
+                  freshness={<Freshness kind="live" />}
+                />
               ) : effectiveSelected ? (
                 <div className="flex flex-col gap-3">
                   {effectiveSelected.heldFrom !== null && (

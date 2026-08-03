@@ -1,3 +1,4 @@
+import React from 'react';
 import Panel from '../ui/Panel';
 import SpotRule from '../ui/SpotRule';
 import { expiryRead } from './setupHorizon';
@@ -13,6 +14,8 @@ interface ContractChainProps {
   data: ContractChainData;
   selected: ChainSelection | null;
   onSelect: (sel: ChainSelection) => void;
+  /** Which clock these premiums are on — the live tier, unlike the board. */
+  freshness?: React.ReactNode;
 }
 
 // Neutral is deliberately the quietest tone — signals (green/red) should stand
@@ -81,7 +84,7 @@ const ChainCell = ({ side, right, strike, ticker, isSelected, onSelect }: CellPr
   );
 };
 
-const ContractChain = ({ data, selected, onSelect }: ContractChainProps) => {
+const ContractChain = ({ data, selected, onSelect, freshness }: ContractChainProps) => {
   const { ticker, spot, rows, expiry } = data;
   const exp = expiryRead(expiry);
 
@@ -97,6 +100,7 @@ const ContractChain = ({ data, selected, onSelect }: ContractChainProps) => {
          could be compared against a board on a different session — which is
          exactly what it was doing before the chain took the preset's clock. */
       subtitle={exp.chip}
+      actions={freshness}
       flush
       className="w-full h-full"
       bodyClassName="flex flex-col"
