@@ -1,11 +1,9 @@
 import { useId, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type TouchEvent } from 'react';
-import { motion } from 'framer-motion';
 import Simulator from '../../core/simulator';
-import { DUR, EASE } from '../../lib/motion';
-import { MUTED_INK, SPOT } from '../gex/palette';
+import useMediaQuery from '../../hooks/useMediaQuery';
+import { BEAR, BULL, FOCUS } from '../gex/palette';
 import EmptyState from '../ui/EmptyState';
 import HoverReadout from '../ui/HoverReadout';
-import SpotRule from '../ui/SpotRule';
 import { svgHoverIndex } from '../ui/svgHover';
 import {
   RUNG_INK,
@@ -21,57 +19,89 @@ import {
   trackSummary,
   type ContractPlan,
   type TrackData,
+  type TrackRung,
 } from './contractTrackModel';
 import type { Candle } from '../../types/market';
 
 /*
-  CONTRACT TRACK — the contract's own premium, on two lanes sharing one x-axis.
+  CONTRACT TRACK — one contract's own premium, on one lane.
 
-  Lane A is the hero: the modeled mid in dollars on the left ruler and the
-  identical series as % from reference on the right. Left of NOW, time is the
-  variable and spot moves — that is what happened. Right of NOW, spot is HELD at
-  today's close and only time runs — that is what standing still costs, and it is
-  the reason a 0DTE reads the way it does.
+  What changed and why. This was two stacked lanes: the premium above, the
+  underlying below, with every target inverted into a spot level and projected
+  down into 64px of second chart. Everything in it was true, and it read as an
+  engineering diagram — the price line squashed into the bottom quarter because
+  the y-axis had to reach a +275% target, four label stacks competing at the top
+  right, and the number a holder actually looks at (what is this worth right now,
+  and am I up or down) nowhere on the screen.
 
-  Lane B answers the question lane A can't: how close is the reason to being
-  wrong, and what does the underlying actually have to do. Every premium target
-  on lane A is inverted through the same pricer into a spot level here, which is
-  what makes a rung the chart cannot fit still legible.
+  The frame is now the one a position chart uses. The premium is the hero and it
+  is stated once, large, with the move from reference beside it in dollars and
+  percent, coloured by its sign — that IS market direction on this instrument, so
+  green and red are the correct language rather than a borrowed one. The scale
+  fits the path rather than the furthest target, so the line has room to be read;
+  a target the scale cannot hold is not dropped but docked to the top edge with
+  the move it needs, which is more honest than compressing the chart until every
+  level fits and none of them is legible.
+
+  Left of NOW time is the variable and spot moves — that is what happened. Right
+  of NOW spot is HELD and only time runs — that is what standing still costs, and
+  it is why a 0DTE reads the way it does. The two halves are drawn differently
+  for that reason and the divider is labelled.
+
+  The reference, the stop and every target are horizontal rules with a tag on the
+  right gutter, which is where a position chart puts a level. The table beneath
+  carries what a tag cannot: what each level is worth, how far it is from
+  reference, and the underlying price that gets you there.
 
   Hand-rolled SVG, no recharts: recharts lives in exactly one file repo-wide and
   importing it here would pull it into the main Compass chunk for one path, one
-  dashed curve and a handful of rules. Both lanes use preserveAspectRatio="none",
-  so there is no <text> inside either SVG — non-uniform scaling distorts glyphs.
-  Every label is HTML positioned in percent over the plot, which also puts it in
-  the accessibility tree for free.
+  dashed curve and a handful of rules. The plot uses preserveAspectRatio="none",
+  so there is no <text> inside it — non-uniform scaling distorts glyphs. Every
+  label is HTML positioned in percent over the plot, which also puts it in the
+  accessibility tree for free.
 */
 
 const VB_W = 1000;
-const A_H = 176;
-const A_TOP = 8;
-const A_BOT = 6;
-const B_H = 64;
-const B_PAD = 9;
+const VB_H = 220;
+/**
+ * Right gutter, in viewBox units, reserved for level tags.
+ *
+ * Zero on a phone. 13% of 348px is 46px, which cannot hold "TP2 $13.46" — the
+ * tags clipped mid-number and the docked ones overprinted each other, so the
+ * chart carried four truncated labels and gave up an eighth of its width to do
+ * it. Below `sm` the tags stand down and the plot takes the whole frame; the
+ * table underneath already carries every level in full, so nothing is lost.
+ */
+const GUTTER = 132;
+const PAD_TOP = 10;
+const PAD_BOT = 8;
 
-/** Docked-rung carets park here so they never collide with the right gutter. */
-const DOCK_X = 78;
-/** Rung projections step across the forward half so four of them stay readable
-    inside 64px of lane B. Percent of plot width. */
-const rungX = (i: number) => 46 + i * 9;
+/** Share of the visible premium range kept as breathing room above and below. */
+const Y_PAD = 0.12;
 
-const GRID_INK = 'rgba(255,255,255,0.30)';
+const GRID_INK = 'rgba(255,255,255,0.16)';
 
-/** A ruler tick. HTML, not <text> — both SVGs scale non-uniformly. */
-const Tick = ({ top, text, strong = false }: { top: number; text: string; strong?: boolean }) => (
-  <span
-    className={`absolute right-1 -translate-y-1/2 whitespace-nowrap font-mono text-micro tnum ${
-      strong ? 'font-semibold text-textPrimary' : 'text-textMuted'
-    }`}
-    style={{ top: `${top}%` }}
-  >
-    {text}
-  </span>
-);
+/** Vertical gap between stacked docked tags, in viewBox units. */
+const DOCK_STEP = 15;
+
+/** Where a docked level sits in the stack — its index among the docked ones. */
+const dockSlot = (level: LevelMark, all: LevelMark[]): number =>
+  all.filter(l => l.docked).indexOf(level);
+
+interface LevelMark {
+  key: string;
+  label: string;
+  premium: number;
+  ink: string;
+  /** Underlying price that puts the contract here, when the model can invert it. */
+  needs: number | null;
+  /** Docked levels sit above the scale — tagged at the ceiling, never dropped. */
+  docked: boolean;
+  /** Reached, on the path the chart actually drew. */
+  hit: boolean;
+  /** One line the columns cannot carry. */
+  note?: string;
+}
 
 export interface ContractTrackProps {
   plan: ContractPlan;
@@ -93,9 +123,10 @@ interface Cursor {
 
 const ContractTrack = ({ plan, bars, track, className = '' }: ContractTrackProps) => {
   const plotRef = useRef<HTMLDivElement | null>(null);
+  const compact = useMediaQuery('(max-width: 639px)');
   const [cursor, setCursor] = useState<Cursor | null>(null);
   // useId returns ':r0:', which url(#...) can't parse.
-  const revealId = `ct-reveal-${useId().replace(/:/g, '')}`;
+  const uid = `ct-${useId().replace(/:/g, '')}`;
 
   const resolvedBars = bars ?? Simulator.getCandles(plan.ticker) ?? [];
   const n = resolvedBars.length;
@@ -111,10 +142,9 @@ const ContractTrack = ({ plan, bars, track, className = '' }: ContractTrackProps
   );
 
   const cursorPts = useMemo(() => buildCursorPoints(t), [t]);
-
   const name = contractLabel(plan);
 
-  if (n === 0 || !Number.isFinite(t.spotNow)) {
+  if (n === 0 || !Number.isFinite(t.spotNow) || t.past.length === 0) {
     return (
       <div className={`inst-surface rounded-md ${className}`}>
         <EmptyState size="sm" title="No bars for this ticker" />
@@ -122,50 +152,138 @@ const ContractTrack = ({ plan, bars, track, className = '' }: ContractTrackProps
     );
   }
 
-  // ---- scales ---------------------------------------------------------------
+  const now = t.past[t.past.length - 1].premium;
+  /*
+    The headline change is over the WINDOW DRAWN, not against the reference.
+
+    Nobody entered anything — `entry` is the premium the engine quotes right now,
+    at the current spot, so `now - entry` is zero by construction and the header
+    read "+$0.00 (+0.0%)" on every contract while the line above it visibly fell
+    a third. A change of nothing, printed in green, over a chart of a decline.
+
+    What moved is the session: the contract repriced along real bars from the
+    left edge of the frame to here. That is the number a position chart shows and
+    the only one this series can honestly put in the hero slot. The reference
+    keeps its own line below, because it is what the ladder is measured from.
+  */
+  const windowOpen = t.past[0].premium;
+  const move = now - windowOpen;
+  const movePct = pctFrom(windowOpen, now);
+  const up = move >= 0;
+  const ink = up ? BULL : BEAR;
+
+  /*
+    The stop is the invalidation level expressed in the contract's own currency.
+
+    `plan.invalidation` is a SPOT — the price at which the reason for the trade
+    stops being true — and a holder reading a premium chart cannot convert that
+    in their head. The model already reprices the contract along that spot
+    (invalidationCurve), so its value at NOW is what the position is worth if the
+    thesis breaks today. That is the number a stop means here.
+  */
+  const stopPremium = plan.invalidation
+    ? plan.priceAt(plan.invalidation.spot, plan.sessionsLeft)
+    : null;
+  /*
+    The LEVEL and the CURVE are separate decisions, and conflating them lost the
+    stop on about half of setups.
+
+    buildTrack nulls `invalidationCurve` when it would lie flat on the model
+    floor for most of the span — correct, a dotted line along the axis is noise.
+    The old chart could afford that because lane B carried the stop as a spot
+    rule regardless. With lane B gone, reading the level off the curve meant the
+    stop simply vanished whenever the curve was suppressed, which is the one
+    thing on this chart a holder cannot be allowed to lose. The level is priced
+    directly; the curve is drawn only when the model says it is worth drawing.
+  */
+  const stopAtFloor = stopPremium != null && stopPremium <= plan.floor + 1e-6;
+
+  /*
+    Scale to the PATH, not to the furthest target.
+
+    The old ceiling was whatever the highest rung needed, so a +275% target
+    pinned the line into the bottom quarter of the frame and the movement a
+    reader came for was unreadable. The scale now fits what actually happened
+    plus the levels close enough to matter; anything above is docked.
+  */
+  const pathVals = [...t.past.map(p => p.premium), ...t.forward.map(p => p.premium), t.entry];
+  if (stopPremium != null) pathVals.push(stopPremium);
+  const rawLo = Math.min(...pathVals);
+  const rawHi = Math.max(...pathVals);
+  // Admit a target only while it stays within half a frame of the path — beyond
+  // that it costs more legibility than it buys.
+  const headroom = (rawHi - rawLo || rawHi || 1) * 0.5;
+  const reachable = t.rungs.filter(r => r.premium <= rawHi + headroom);
+  const hiWith = Math.max(rawHi, ...reachable.map(r => r.premium));
+  const pad = (hiWith - rawLo || hiWith || 1) * Y_PAD;
+  const yLo = Math.max(0, rawLo - pad);
+  // `pathVals` already carries the stop, so the floor of the scale is at or below
+  // it — the stop rule is always inside the frame rather than docked off it.
+
+  const yHi = hiWith + pad;
+
+  const plotW = compact ? VB_W : VB_W - GUTTER;
   const span = t.xMax - t.xMin || 1;
-  const X = (bar: number) => ((bar - t.xMin) / span) * VB_W;
-  const YA = (v: number) => {
-    const f = Math.max(0, Math.min(1, v / (t.yMax || 1)));
-    return A_H - A_BOT - f * (A_H - A_TOP - A_BOT);
-  };
-  const sSpan = t.spotHi - t.spotLo || 1;
-  const YB = (s: number) => {
-    const f = Math.max(0, Math.min(1, (s - t.spotLo) / sSpan));
-    return B_H - B_PAD - f * (B_H - B_PAD * 2);
+  const X = (bar: number) => ((bar - t.xMin) / span) * plotW;
+  const Y = (v: number) => {
+    const f = Math.max(0, Math.min(1, (v - yLo) / (yHi - yLo || 1)));
+    return VB_H - PAD_BOT - f * (VB_H - PAD_TOP - PAD_BOT);
   };
   const pctX = (bar: number) => (X(bar) / VB_W) * 100;
-  const pctYA = (v: number) => (YA(v) / A_H) * 100;
-  const pctYB = (s: number) => (YB(s) / B_H) * 100;
+  const pctY = (v: number) => (Y(v) / VB_H) * 100;
 
-  const path = (pts: { bar: number; premium: number }[]) =>
-    pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${X(p.bar).toFixed(2)},${YA(p.premium).toFixed(2)}`).join(' ');
+  const line = (pts: { bar: number; premium: number }[]) =>
+    pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${X(p.bar).toFixed(2)},${Y(p.premium).toFixed(2)}`).join(' ');
 
-  const forwardFill = t.forward.length
-    ? `${path(t.forward)} L${X(t.forward[t.forward.length - 1].bar).toFixed(2)},${YA(0).toFixed(2)} L${X(t.forward[0].bar).toFixed(2)},${YA(0).toFixed(2)} Z`
+  const pastLine = line(t.past);
+  const pastFill = t.past.length
+    ? `${pastLine} L${X(t.past[t.past.length - 1].bar).toFixed(2)},${(VB_H - PAD_BOT).toFixed(2)} L${X(
+        t.past[0].bar
+      ).toFixed(2)},${(VB_H - PAD_BOT).toFixed(2)} Z`
     : '';
 
-  const spotPath = t.past
-    .map((p, i) => `${i === 0 ? 'M' : 'L'}${X(p.bar).toFixed(2)},${YB(p.spot).toFixed(2)}`)
-    .join(' ');
+  const rungMark = (r: TrackRung, docked: boolean): LevelMark => ({
+    key: r.label,
+    label: r.label,
+    premium: r.premium,
+    ink: RUNG_INK[r.status],
+    needs: r.spotNeeded,
+    docked,
+    hit: r.status === 'HIT',
+  });
 
-  // Complement of the docked set, not a second `<= yMax` test: yMax carries the
-  // carets' headroom, so a threshold here would disagree with what docked.
-  const docked = new Set(t.dockedRungs);
-  const inFrame = t.rungs.filter(r => !docked.has(r));
+  const levels: LevelMark[] = [
+    {
+      key: 'ref',
+      label: plan.entryLabel,
+      premium: t.entry,
+      ink: FOCUS,
+      needs: null,
+      docked: false,
+      hit: false,
+    },
+    ...(stopPremium != null && plan.invalidation
+      ? [
+          {
+            key: 'stop',
+            label: 'Stop',
+            premium: stopPremium,
+            ink: WARN_INK,
+            needs: plan.invalidation.spot,
+            docked: false,
+            hit: false,
+            note: stopAtFloor
+              ? `${plan.invalidation.note} — at that price the model prices this contract on its $${plan.floor.toFixed(2)} floor, so treat it as a total loss rather than a quote.`
+              : plan.invalidation.note,
+          },
+        ]
+      : []),
+    ...reachable.map(r => rungMark(r, false)),
+    ...t.rungs.filter(r => !reachable.includes(r)).map(r => rungMark(r, true)),
+  ];
+
   const forwardOnly = t.past.length < 2;
   const cur = cursor ? cursorPts[cursor.i] : null;
-
-  // ---- stat strip -----------------------------------------------------------
-  const reach = pctFrom(t.entry, t.pathMax);
-  const nextRung = t.rungs.find(r => r.status !== 'HIT') ?? null;
-  const breakevenMark = plan.spotMarks.find(m => m.label === 'BREAKEVEN') ?? null;
-  const needLabel =
-    nextRung && nextRung.spotNeeded != null
-      ? { k: `${nextRung.label} needs`, v: nextRung.spotNeeded.toFixed(2) }
-      : breakevenMark
-        ? { k: 'Breakeven', v: breakevenMark.spot.toFixed(2) }
-        : null;
 
   // ---- cursor ---------------------------------------------------------------
   const moveTo = (i: number, x: number, y: number, pointer: boolean) => setCursor({ i, x, y, pointer });
@@ -205,453 +323,253 @@ const ContractTrack = ({ plan, bars, track, className = '' }: ContractTrackProps
 
   return (
     <div
-      className={`inst-surface rounded-md p-2 flex flex-col gap-1.5 ${className}`}
+      className={`inst-surface rounded-md p-3 flex flex-col gap-2.5 ${className}`}
       role="group"
       aria-label={`Contract track for ${name}`}
     >
-      {/* Title + identity. MODELED, never "live" — this series is derived. */}
-      <div className="flex items-baseline justify-between gap-3 flex-wrap">
-        <span className="font-mono text-micro font-semibold uppercase tracking-widest text-textSecondary">
-          Contract Track
-        </span>
-        <span className="font-mono text-micro uppercase tracking-wider text-textMuted tnum">
-          {name} · {plan.expiryLabel} · Modeled
-        </span>
-      </div>
-
-      {/* Stat strip */}
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 font-mono text-micro text-textMuted tnum">
-        <span>
-          {plan.entryLabel} <span className="font-semibold text-textPrimary">${t.entry.toFixed(2)}</span>
-        </span>
-        <span>
-          Now <span className="font-semibold text-textPrimary">${t.past[t.past.length - 1].premium.toFixed(2)}</span>
-        </span>
-        <span>
-          Reach <span className="font-semibold text-textPrimary">{signedPct(reach)}</span>
-        </span>
-        <span>
-          Left <span className="font-semibold text-textPrimary">{barsToSpan(t.forwardMinutes)}</span>
-        </span>
-        {needLabel && (
-          <span>
-            {needLabel.k} <span className="font-semibold text-textPrimary">{needLabel.v}</span>
-          </span>
-        )}
-      </div>
-
-      {/* ---- plot: [$ gutter] [lanes] [% gutter] ---- */}
-      <div className="flex items-stretch">
-        {/* left ruler — dollars. Always present, at every width. */}
-        <div className="w-10 sm:w-11 shrink-0 flex flex-col">
-          <div className="relative h-[148px] sm:h-[176px]">
-            <Tick top={pctYA(0)} text="0.00" />
-            <Tick top={pctYA(t.entry)} text={t.entry.toFixed(2)} strong />
-            {inFrame.map(r => (
-              <Tick key={r.label} top={pctYA(r.premium)} text={r.premium.toFixed(2)} />
-            ))}
+      {/*
+        The header a holder reads first: what it is, what it is worth, and
+        whether that is up or down on the reference. One large number, one
+        signed move, nothing competing with them.
+      */}
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="min-w-0">
+          <div className="font-mono text-micro uppercase tracking-widest text-textMuted">
+            {name} · {plan.expiryLabel}
           </div>
-          <div className="h-1" />
-          <div className="relative h-[52px] sm:h-[64px]">
-            <Tick top={pctYB(t.spotHi)} text={t.spotHi.toFixed(2)} />
-            <Tick top={pctYB(t.spotLo)} text={t.spotLo.toFixed(2)} />
+          <div className="flex items-baseline gap-2.5 mt-0.5">
+            <span className="font-mono text-2xl font-bold text-textPrimary tnum leading-none">
+              ${now.toFixed(2)}
+            </span>
+            <span className="font-mono text-caption font-semibold tnum leading-none" style={{ color: ink }}>
+              {move >= 0 ? '+' : '−'}${Math.abs(move).toFixed(2)} ({signedPct(movePct, 1)})
+            </span>
+          </div>
+          <div className="font-mono text-micro text-textMuted tnum mt-1">
+            over {barsToSpan(t.pastMinutes)} · {plan.entryLabel.toLowerCase()} ${t.entry.toFixed(2)} ·{' '}
+            {barsToSpan(t.forwardMinutes)} left
           </div>
         </div>
+        {/* MODELED, never "live" — this series is derived, and the label is the
+            only thing standing between a model and a claim about the tape. */}
+        <span className="font-mono text-micro uppercase tracking-widest text-textMuted shrink-0">Modeled</span>
+      </div>
 
-        {/* the lanes */}
-        <div
-          ref={plotRef}
-          tabIndex={0}
-          onMouseMove={onMouseMove}
-          onMouseLeave={() => setCursor(null)}
-          onTouchMove={onTouchMove}
-          onKeyDown={onKeyDown}
-          className="relative flex-1 min-w-0 cursor-crosshair focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60"
+      {/* ---- the plot ---- */}
+      <div
+        ref={plotRef}
+        className="relative w-full select-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 rounded"
+        style={{ height: 220 }}
+        tabIndex={0}
+        role="application"
+        aria-label={trackSummary(plan, t)}
+        onMouseMove={onMouseMove}
+        onMouseLeave={() => setCursor(null)}
+        onTouchStart={onTouchMove}
+        onTouchMove={onTouchMove}
+        onTouchEnd={() => setCursor(null)}
+        onKeyDown={onKeyDown}
+        onBlur={() => setCursor(null)}
+      >
+        <svg
+          viewBox={`0 0 ${VB_W} ${VB_H}`}
+          preserveAspectRatio="none"
+          className="absolute inset-0 w-full h-full"
+          aria-hidden="true"
         >
-          {/* ---------------- LANE A ---------------- */}
-          <div className="relative h-[148px] sm:h-[176px]">
-            <svg
-              viewBox={`0 0 ${VB_W} ${A_H}`}
-              width="100%"
-              height="100%"
-              preserveAspectRatio="none"
-              role="img"
-              aria-label={trackSummary(plan, t)}
-            >
-              {/* baseline */}
+          <defs>
+            <linearGradient id={`${uid}-fill`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={ink} stopOpacity={0.24} />
+              <stop offset="100%" stopColor={ink} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+
+          {/* Level rules. Drawn under the path so the price is never crossed out. */}
+          {levels
+            .filter(l => !l.docked)
+            .map(l => (
               <line
+                key={l.key}
                 x1={0}
-                x2={VB_W}
-                y1={YA(0)}
-                y2={YA(0)}
-                stroke="rgba(255,255,255,0.10)"
+                x2={plotW}
+                y1={Y(l.premium)}
+                y2={Y(l.premium)}
+                stroke={l.ink}
+                strokeOpacity={l.key === 'ref' ? 0.5 : 0.34}
+                strokeWidth={1}
+                strokeDasharray={l.key === 'ref' ? '2 3' : '5 4'}
+                vectorEffect="non-scaling-stroke"
+              />
+            ))}
+
+          {/* NOW — the boundary between what happened and what waiting costs. */}
+          <line
+            x1={X(0)}
+            x2={X(0)}
+            y1={0}
+            y2={VB_H}
+            stroke={GRID_INK}
+            strokeWidth={1}
+            vectorEffect="non-scaling-stroke"
+          />
+
+          {/* What waiting costs: spot held, only time running. Dashed and dimmed
+              so it can never be mistaken for something that happened. */}
+          {t.forward.length > 1 && (
+            <path
+              d={line(t.forward)}
+              fill="none"
+              stroke={ink}
+              strokeOpacity={0.42}
+              strokeWidth={1.5}
+              strokeDasharray="4 4"
+              vectorEffect="non-scaling-stroke"
+            />
+          )}
+
+          {/* If the thesis breaks today. */}
+          {t.invalidationCurve && t.invalidationCurve.length > 1 && (
+            <path
+              d={line(t.invalidationCurve)}
+              fill="none"
+              stroke={WARN_INK}
+              strokeOpacity={0.5}
+              strokeWidth={1.25}
+              strokeDasharray="2 4"
+              vectorEffect="non-scaling-stroke"
+            />
+          )}
+
+          {/* What happened. */}
+          {!forwardOnly && (
+            <>
+              <path d={pastFill} fill={`url(#${uid}-fill)`} stroke="none" />
+              <path
+                d={pastLine}
+                fill="none"
+                stroke={ink}
+                strokeWidth={2}
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                vectorEffect="non-scaling-stroke"
+              />
+            </>
+          )}
+
+          {/* Where it is now. */}
+          <circle cx={X(0)} cy={Y(now)} r={3.5} fill={ink} stroke="#000" strokeWidth={1} />
+
+          {cur && (
+            <>
+              <line
+                x1={X(cur.bar)}
+                x2={X(cur.bar)}
+                y1={0}
+                y2={VB_H}
+                stroke={FOCUS}
+                strokeOpacity={0.45}
                 strokeWidth={1}
                 vectorEffect="non-scaling-stroke"
               />
-
-              {/* rungs — in-frame only; higher ones dock to the top edge */}
-              {inFrame.map(r => (
-                <line
-                  key={r.label}
-                  x1={0}
-                  x2={VB_W}
-                  y1={YA(r.premium)}
-                  y2={YA(r.premium)}
-                  stroke={RUNG_INK[r.status]}
-                  strokeOpacity={r.status === 'PENDING' ? 0.65 : 0.85}
-                  strokeWidth={1}
-                  strokeDasharray="5 4"
-                  vectorEffect="non-scaling-stroke"
-                />
-              ))}
-
-              {/* forward: spot held, only time elapses */}
-              {t.forward.length > 1 && (
-                <>
-                  <path d={forwardFill} fill="rgba(255,255,255,0.045)" stroke="none" />
-                  <path
-                    d={path(t.forward)}
-                    fill="none"
-                    stroke={MUTED_INK}
-                    strokeWidth={1.4}
-                    strokeDasharray="4 3"
-                    vectorEffect="non-scaling-stroke"
-                  />
-                </>
-              )}
-
-              {/* the same contract, repriced with spot pinned at invalidation */}
-              {t.invalidationCurve && (
-                <path
-                  d={path(t.invalidationCurve)}
-                  fill="none"
-                  stroke={WARN_INK}
-                  strokeOpacity={0.55}
-                  strokeWidth={1}
-                  strokeDasharray="2 3"
-                  vectorEffect="non-scaling-stroke"
-                />
-              )}
-
-              {/* reference — the heaviest horizontal on the chart */}
-              <line
-                x1={0}
-                x2={VB_W}
-                y1={YA(t.entry)}
-                y2={YA(t.entry)}
-                stroke={SPOT}
-                strokeWidth={1.5}
-                vectorEffect="non-scaling-stroke"
-              />
-
-              {/* past — real bars, repriced. Sweeps in once per contract.
-                  The reveal is a clip, not `pathLength`: framer implements
-                  pathLength as a dash offset measured against the path's USER
-                  space length, but `non-scaling-stroke` under this viewBox's
-                  non-uniform scale makes the browser lay dashes out in device
-                  space. The line then stopped ~20% short of NOW and just looked
-                  like missing data. A clip sweep is immune to both. */}
-              {!forwardOnly && (
-                <>
-                  <defs>
-                    <clipPath id={revealId}>
-                      <motion.rect
-                        key={plan.key}
-                        x={0}
-                        y={0}
-                        height={A_H}
-                        initial={{ width: 0 }}
-                        animate={{ width: Math.max(X(0), 1) }}
-                        transition={{ duration: DUR.data, ease: EASE }}
-                      />
-                    </clipPath>
-                  </defs>
-                  <path
-                    d={path(t.past)}
-                    fill="none"
-                    stroke={SPOT}
-                    strokeWidth={1.6}
-                    strokeLinejoin="round"
-                    strokeLinecap="round"
-                    vectorEffect="non-scaling-stroke"
-                    clipPath={`url(#${revealId})`}
-                  />
-                </>
-              )}
-
-              {cur && (
-                <circle
-                  cx={X(cur.bar)}
-                  cy={YA(cur.premium)}
-                  r={2.5}
-                  fill={cur.held ? MUTED_INK : SPOT}
-                  vectorEffect="non-scaling-stroke"
-                />
-              )}
-            </svg>
-
-            {/* reference tag, TradingView price-label idiom */}
-            <span
-              className="pointer-events-none absolute right-0.5 -translate-y-1/2 inline-flex items-center rounded-[3px] bg-textPrimary px-1 py-px font-mono text-micro font-bold tnum text-ink"
-              style={{ top: `${pctYA(t.entry)}%` }}
-            >
-              {t.entry.toFixed(2)}
-            </span>
-
-            {/* rungs the ceiling can't hold — present, labelled, out of scale */}
-            {t.dockedRungs.map((r, i) => (
-              <span
-                key={r.label}
-                className="pointer-events-none absolute flex items-center gap-1 whitespace-nowrap font-mono text-micro tnum text-textMuted"
-                style={{ left: `${DOCK_X}%`, top: `${4 + i * 12}px`, transform: 'translateX(-100%)' }}
-              >
-                <span className="hidden sm:inline">
-                  {r.label} ${r.premium.toFixed(2)} · {signedPct(r.pct)}
-                  {r.spotNeeded != null && ` · needs ${r.spotNeeded.toFixed(2)}`}
-                </span>
-                <span className="translate-x-1" style={{ color: RUNG_INK[r.status] }}>
-                  ▲
-                </span>
-              </span>
-            ))}
-
-            {/* Sits just inside the forward half at the baseline — dead space in
-                every profile, and right under the terminus it labels. */}
-            {t.atFloor && (
-              <span
-                className="pointer-events-none absolute bottom-0 font-mono text-micro tnum text-textMuted"
-                style={{ left: `${pctX(0)}%`, marginLeft: 6 }}
-              >
-                ${plan.floor.toFixed(2)} model floor
-              </span>
-            )}
-
-            {forwardOnly && (
-              <span className="pointer-events-none absolute left-1 top-1 font-mono text-micro uppercase tracking-wider text-textMuted">
-                No prior bars for this contract yet
-              </span>
-            )}
-          </div>
-
-          <div className="h-1" />
-
-          {/* ---------------- LANE B ---------------- */}
-          <div className="relative h-[52px] sm:h-[64px]">
-            <svg
-              viewBox={`0 0 ${VB_W} ${B_H}`}
-              width="100%"
-              height="100%"
-              preserveAspectRatio="none"
-              role="img"
-              aria-label={`${plan.ticker} underlying over the same window, ${t.spotLo.toFixed(2)} to ${t.spotHi.toFixed(2)}. Spot ${t.spotNow.toFixed(2)}.`}
-            >
-              {plan.invalidation && (
-                <line
-                  x1={0}
-                  x2={VB_W}
-                  y1={YB(plan.invalidation.spot)}
-                  y2={YB(plan.invalidation.spot)}
-                  stroke={WARN_INK}
-                  strokeWidth={1}
-                  vectorEffect="non-scaling-stroke"
-                />
-              )}
-
-              {plan.spotMarks.map(m => (
-                <line
-                  key={m.label}
-                  x1={0}
-                  x2={VB_W}
-                  y1={YB(m.spot)}
-                  y2={YB(m.spot)}
-                  stroke="rgba(255,255,255,0.18)"
-                  strokeWidth={1}
-                  vectorEffect="non-scaling-stroke"
-                />
-              ))}
-
-              {/* Every rung, inverted into a level the user can actually watch.
-                  Four of these do not fit a 300px lane, so below sm they drop
-                  entirely rather than pile up: the stat strip still names the
-                  live one and every ladder card carries its own level. */}
-              <g className="hidden sm:inline">
-                {t.rungs.map((r, i) =>
-                  r.spotNeeded == null ? null : (
-                    <line
-                      key={r.label}
-                      x1={(VB_W * rungX(i)) / 100}
-                      x2={(VB_W * rungX(i)) / 100 + 22}
-                      y1={YB(r.spotNeeded)}
-                      y2={YB(r.spotNeeded)}
-                      stroke={RUNG_INK[r.status]}
-                      strokeOpacity={0.8}
-                      strokeWidth={1}
-                      vectorEffect="non-scaling-stroke"
-                    />
-                  )
-                )}
-              </g>
-
-              {/* the SAME spot array lane A was priced from — the lanes cannot
-                  contradict each other by construction */}
-              {!forwardOnly && (
-                <path
-                  d={spotPath}
-                  fill="none"
-                  stroke={MUTED_INK}
-                  strokeWidth={1}
-                  strokeLinejoin="round"
-                  vectorEffect="non-scaling-stroke"
-                />
-              )}
-
-              {cur && !cur.held && (
-                <circle cx={X(cur.bar)} cy={YB(cur.spot)} r={2} fill={MUTED_INK} vectorEffect="non-scaling-stroke" />
-              )}
-            </svg>
-
-            {/* dead-thesis hatch on the wrong side of the invalidation level */}
-            {plan.invalidation && (
-              <span
-                className="pointer-events-none absolute inset-x-0"
-                style={{
-                  top: plan.right === 'C' ? `${pctYB(plan.invalidation.spot)}%` : 0,
-                  bottom: plan.right === 'C' ? 0 : `${100 - pctYB(plan.invalidation.spot)}%`,
-                  backgroundImage:
-                    'repeating-linear-gradient(45deg, rgba(255,149,0,0.10) 0 5px, rgba(255,149,0,0) 5px 10px)',
-                }}
-              />
-            )}
-
-            {plan.invalidation && (
-              <span
-                className="pointer-events-none absolute left-1 -translate-y-1/2 whitespace-nowrap font-mono text-micro tnum text-warn/90"
-                style={{ top: `${pctYB(plan.invalidation.spot)}%` }}
-              >
-                {plan.invalidation.spot.toFixed(2)}
-                <span className="hidden sm:inline">
-                  {' '}
-                  · {plan.invalidation.note} ·{' '}
-                  {Math.abs((plan.invalidation.spot / t.spotNow - 1) * 100).toFixed(2)}% away
-                </span>
-              </span>
-            )}
-
-            {plan.spotMarks.map(m => (
-              <span
-                key={m.label}
-                className="pointer-events-none absolute left-1 -translate-y-1/2 whitespace-nowrap font-mono text-micro tnum text-textMuted"
-                style={{ top: `${pctYB(m.spot)}%` }}
-              >
-                {m.spot.toFixed(2)} <span className="hidden sm:inline">{m.label}</span>
-              </span>
-            ))}
-
-            {t.rungs.map((r, i) =>
-              r.spotNeeded == null ? null : (
-                <span
-                  key={r.label}
-                  className="pointer-events-none absolute hidden sm:block -translate-y-1/2 whitespace-nowrap font-mono text-micro tnum"
-                  style={{
-                    left: `${rungX(i) + 2.4}%`,
-                    top: `${pctYB(r.spotNeeded)}%`,
-                    color: RUNG_INK[r.status],
-                  }}
-                >
-                  ◂{r.label} {r.spotNeeded.toFixed(2)}
-                </span>
-              )
-            )}
-
-            {/* spot reads the same here as it does in the chain */}
-            <span
-              className="pointer-events-none absolute right-0.5 w-[104px] sm:w-[132px] -translate-y-1/2"
-              style={{ top: `${pctYB(t.spotNow)}%` }}
-            >
-              <SpotRule ticker={plan.ticker} price={t.spotNow} />
-            </span>
-          </div>
-
-          {/* NOW — fixed, never moves as bars append */}
-          <span
-            className="pointer-events-none absolute inset-y-0 w-px"
-            style={{ left: `${pctX(0)}%`, backgroundColor: GRID_INK }}
-          />
-
-          {/* crosshair spans both lanes */}
-          {cur && (
-            <span
-              className="pointer-events-none absolute inset-y-0 w-px bg-select/45"
-              style={{ left: `${pctX(cur.bar)}%` }}
-            />
+              <circle cx={X(cur.bar)} cy={Y(cur.premium)} r={3} fill={FOCUS} />
+            </>
           )}
-        </div>
+        </svg>
 
-        {/* right ruler — the identical series as % from reference. Labels drop
-            below sm and the gutter collapses; the dollar ruler always stays. */}
-        <div className="w-2 sm:w-11 shrink-0 flex flex-col">
-          <div className="relative h-[148px] sm:h-[176px]">
+        {/* Level tags, in the gutter. HTML rather than <text>: the plot scales
+            non-uniformly and glyphs inside it would shear. */}
+        <div className="absolute inset-0 pointer-events-none">
+          {!compact && levels.map(l => (
             <span
-              className="absolute right-0 hidden sm:block -translate-y-1/2 font-mono text-micro font-semibold uppercase tracking-wider text-textPrimary"
-              style={{ top: `${pctYA(t.entry)}%` }}
+              key={l.key}
+              className="absolute -translate-y-1/2 whitespace-nowrap font-mono text-micro font-semibold tnum px-1 rounded-sm"
+              style={{
+                left: `${(plotW / VB_W) * 100 + 0.8}%`,
+                /* Docked tags STACK. Pinning them all to the ceiling overprinted
+                   them into an unreadable smear — two levels the chart could not
+                   hold became one glyph pile, which is worse than dropping them. */
+                top: l.docked
+                  ? `${((PAD_TOP + dockSlot(l, levels) * DOCK_STEP) / VB_H) * 100}%`
+                  : `${pctY(l.premium)}%`,
+                color: l.ink,
+                opacity: l.docked ? 0.7 : 1,
+              }}
             >
-              Ref
+              {l.label} ${l.premium.toFixed(2)}
+              {l.docked && ' ↑'}
             </span>
-            {inFrame.map(r => (
-              <span
-                key={r.label}
-                className="absolute right-0 hidden sm:flex flex-col items-end leading-tight"
-                style={{ top: `${pctYA(r.premium)}%`, transform: 'translateY(-50%)' }}
-              >
-                <span className="font-mono text-micro font-semibold tnum" style={{ color: RUNG_INK[r.status] }}>
-                  {r.label}
-                </span>
-                <span className="font-mono text-micro tnum text-textMuted">{signedPct(r.pct)}</span>
-              </span>
-            ))}
-          </div>
-          <div className="h-1" />
-          <div className="relative h-[52px] sm:h-[64px]" />
-        </div>
-      </div>
-
-      {/* x labels — relative time only */}
-      <div className="flex items-baseline font-mono text-micro uppercase tracking-wider text-textMuted">
-        <span className="w-10 sm:w-11 shrink-0" />
-        <span className="relative flex-1 min-w-0 h-3">
-          {/* A long-dated contract puts NOW near the left edge, where this label
-              would sit on top of it. The window is still spoken in the aria
-              sentence and read out by the crosshair. */}
-          <span className="absolute left-0">
-            {t.pastMinutes >= 2 && pctX(0) >= 30 ? `−${barsToSpan(t.pastMinutes)}` : ''}
-          </span>
-          <span className="absolute -translate-x-1/2 text-textSecondary" style={{ left: `${pctX(0)}%` }}>
+          ))}
+          <span
+            className="absolute font-mono text-micro uppercase tracking-widest text-textMuted"
+            style={{ left: `${pctX(0)}%`, bottom: 2, transform: 'translateX(-50%)' }}
+          >
             Now
           </span>
-          <span className="absolute right-0">Expiry</span>
-        </span>
-        <span className="w-2 sm:w-11 shrink-0" />
+          <span className="absolute left-0 bottom-0.5 font-mono text-micro text-textMuted tnum">
+            {barsToSpan(t.pastMinutes)} ago
+          </span>
+        </div>
+
+        {readout && cursor?.pointer && (
+          <HoverReadout x={cursor.x} y={cursor.y}>
+            <div className="font-mono text-micro tnum leading-relaxed">
+              <div className="text-textPrimary font-semibold">{readout.px}</div>
+              <div className="text-textSecondary">{readout.delta}</div>
+              <div className="text-textMuted">
+                {readout.when} · {readout.spot}
+              </div>
+            </div>
+          </HoverReadout>
+        )}
       </div>
 
-      {/* keyboard traversal announces here; the pointer gets the floating card */}
-      <p aria-live="polite" className="min-h-[13px] font-mono text-micro tnum text-textSecondary">
-        {readout ? `${readout.when} · ${readout.spot} · ${readout.px} · ${readout.delta}` : ''}
+      {/* Keyboard cursors read here rather than through a floating card. */}
+      <p className="sr-only" aria-live="polite">
+        {readout ? `${readout.px}, ${readout.delta}, ${readout.when}, ${readout.spot}` : ''}
       </p>
 
-      <p className="text-micro leading-relaxed text-textMuted">
-        {plan.modelNote}
-        {plan.entryLabel === 'Reference' && ' Reference is the mid every take-profit rung is measured from.'}
-      </p>
+      {/*
+        The levels as a table.
 
-      {cursor?.pointer && readout && (
-        <HoverReadout x={cursor.x} y={cursor.y}>
-          <div className="font-mono text-micro uppercase tracking-wider text-textMuted">{readout.when}</div>
-          <div className="font-mono text-caption font-bold text-textPrimary tnum">{readout.px}</div>
-          <div className="mt-0.5 font-mono text-micro tnum text-textSecondary">{readout.delta}</div>
-          <div className="font-mono text-micro tnum text-textMuted">{readout.spot}</div>
-        </HoverReadout>
-      )}
+        A tag on the axis can carry a price and nothing else. What a holder needs
+        beside it is how far the level is from where they started and what the
+        UNDERLYING has to do to get there — the second one being the question the
+        old lane B existed to answer, asked in words instead of a second chart.
+      */}
+      <div className="border-t border-borderSubtle pt-2">
+        <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 gap-y-1 font-mono text-micro tnum">
+          <span className="uppercase tracking-widest text-textMuted">Level</span>
+          <span className="uppercase tracking-widest text-textMuted text-right">Premium</span>
+          <span className="uppercase tracking-widest text-textMuted text-right">From {plan.entryLabel.toLowerCase()}</span>
+          <span className="uppercase tracking-widest text-textMuted text-right">{plan.ticker} needs</span>
+          {levels.map(l => (
+            <Row key={l.key} level={l} entry={t.entry} />
+          ))}
+        </div>
+      </div>
+
+      <p className="font-mono text-micro text-textMuted leading-relaxed">{plan.modelNote}</p>
     </div>
+  );
+};
+
+/** One level. Split out so the grid stays four columns of one row each. */
+const Row = ({ level, entry }: { level: LevelMark; entry: number }) => {
+  const pct = pctFrom(entry, level.premium);
+  return (
+    <>
+      <span className="truncate" style={{ color: level.ink }}>
+        {level.label}
+        {level.hit && <span className="ml-1.5 text-textMuted uppercase tracking-wider">reached</span>}
+        {level.docked && <span className="ml-1.5 text-textMuted uppercase tracking-wider">off scale</span>}
+      </span>
+      <span className="text-right text-textPrimary">${level.premium.toFixed(2)}</span>
+      <span className="text-right text-textSecondary">{level.key === 'ref' ? '—' : signedPct(pct, 0)}</span>
+      <span className="text-right text-textSecondary">{level.needs != null ? level.needs.toFixed(2) : '—'}</span>
+      {level.note && (
+        <span className="col-span-4 -mt-0.5 text-textMuted leading-snug">{level.note}</span>
+      )}
+    </>
   );
 };
 

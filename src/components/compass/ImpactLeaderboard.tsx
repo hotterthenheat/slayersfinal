@@ -10,6 +10,9 @@ interface ImpactLeaderboardProps {
   rows: ImpactRow[];
 }
 
+/** How deep the leaderboard goes, once the selected metric has ranked the field. */
+const ROWS_SHOWN = 8;
+
 const METRIC_OPTIONS = [
   { value: 'gamma', label: 'Gamma' },
   { value: 'volume', label: 'Volume' },
@@ -78,10 +81,20 @@ const COLUMNS: Column<ImpactRow>[] = [
 const ImpactLeaderboard = ({ rows }: ImpactLeaderboardProps) => {
   const [metric, setMetric] = useState<ImpactMetric>('gamma');
 
+  /*
+    Rank the FIELD, then take the top eight — in that order.
+
+    It used to be handed eight rows the engine had already chosen by gamma, and
+    re-sorting those eight is not what "rank by volume" claims: three of the four
+    metrics returned the largest-by-gamma contracts in a different order. The
+    engine now hands over every contract in the chain and the slice happens here,
+    after the sort, so each metric selects its own eight.
+  */
   const ranked = useMemo(
     () =>
       [...rows]
         .sort((a, b) => metricValue(b, metric) - metricValue(a, metric))
+        .slice(0, ROWS_SHOWN)
         .map((r, i) => ({ ...r, rank: i + 1 })),
     [rows, metric]
   );

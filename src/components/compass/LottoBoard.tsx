@@ -8,6 +8,7 @@ import { weighContract, type WeighedContract, type ContractVerdict } from '../..
 import { pinStrike } from '../../data/gex';
 import { UNIVERSE } from '../../data/universe';
 import { VERDICT_LABEL, VERDICT_TONE } from './verdict';
+import { computeClock, lottoGateArmed } from './mocClock';
 import ContractTrack from './ContractTrack';
 import { weighedToPlan } from './contractTrackModel';
 import type { Verdict } from '../../types/compass';
@@ -42,55 +43,6 @@ const mocToneOf = (moc: MocRead): Tone =>
  * tone map, so the same state was spoken three ways depending on the pane.
  */
 const GRADE_VERDICT: Record<ContractVerdict, Verdict> = { BUY: 'ENTER', WATCH: 'WATCH', FADE: 'EXIT' };
-
-/* ---- ET market clock: countdown to the 16:00 cross + MOC window status ---- */
-const fmtDur = (secs: number): string => {
-  const s = Math.max(0, secs);
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const ss = Math.floor(s % 60);
-  return `${h}:${String(m).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
-};
-
-interface MocClock {
-  marketOpen: boolean;
-  mocOpen: boolean;
-  toClose: string;
-  secsToClose: number;
-  label: string;
-}
-
-const computeClock = (ms: number): MocClock => {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York',
-    hour12: false,
-    weekday: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  }).formatToParts(new Date(ms));
-  const get = (t: string) => parts.find(p => p.type === t)?.value ?? '';
-  const wd = get('weekday');
-  let hh = parseInt(get('hour'), 10);
-  if (hh === 24) hh = 0;
-  const mm = parseInt(get('minute'), 10);
-  const ss = parseInt(get('second'), 10);
-  const isWeekday = !['Sat', 'Sun'].includes(wd);
-  const mins = hh * 60 + mm;
-  const marketOpen = isWeekday && mins >= 570 && mins < 960; // 9:30-16:00 ET
-  const mocOpen = isWeekday && mins >= 945 && mins < 960; // 15:45-16:00 ET
-  const secsToClose = 960 * 60 - (mins * 60 + ss);
-  const label = marketOpen
-    ? mocOpen
-      ? 'MOC window open'
-      : 'market open'
-    : isWeekday
-      ? mins < 570
-        ? 'pre-market'
-        : 'after hours, closed'
-      : 'weekend, closed';
-  return { marketOpen, mocOpen, toClose: marketOpen ? fmtDur(secsToClose) : '—', secsToClose, label };
-};
 
 /* ================================================================
    The auction board model. Direction is read off buildMoc's own
@@ -537,9 +489,27 @@ const LottoBoard = ({ snapshot }: LottoBoardProps) => {
 
   const read = useMemo(() => readAuction(selectedSnap), [selectedSnap]);
   const moc = read.moc;
+
+  /*
+    The acknowledgement is proportional to what it is acknowledging.
+
+    Measured with the page clock faked to five market states, the wall fired in
+    all five — pre-market, mid-session, the MOC window, after the close, and on
+    a Saturday — and the board was unreachable in every one. Two of those are
+    states with nothing to trade at all, so the page was asking consent to a
+    total loss on a session that had already settled. A gate that fires
+    unconditionally trains people to dismiss it unread, which defeats the only
+    thing it is for.
+
+    So it fires in the window where it bites: 15:45 to 16:00 ET, when a
+    same-session ticket is minutes from being worth its intrinsic or nothing.
+    Outside it the board shows and the risk paragraph stays pinned above it,
+    unchanged and unweakened — relocated, not softened.
+  */
+  const gateArmed = lottoGateArmed(clock);
   // Switching from a same-session name to a next-session one re-arms the gate:
   // the paragraph the user accepted no longer describes the board behind it.
-  const acked = ackedDte === read.boardDte;
+  const acked = !gateArmed || ackedDte === read.boardDte;
   const pin = useMemo(() => pinStrike(selectedSnap, 6), [selectedSnap]);
 
   const board = useMemo(
@@ -683,16 +653,26 @@ const LottoBoard = ({ snapshot }: LottoBoardProps) => {
           // Computed, never hardcoded. The old title read "0DTE lotto board"
           // over a 0-and-1DTE mix, and said nothing about which way the board
           // was leaning relative to the imbalance printed above it.
-          read.side
-            ? `${sideWord(read.side)} only, ${read.stance === 'AGAINST' ? 'against' : 'with'} the ${moc.side} imbalance`
-            : 'no side named on this read'
+          //
+          // With the market shut the board is a read on a session that has not
+          // opened, and saying so is the difference between a stale page and a
+          // page about tomorrow.
+          !clock.marketOpen
+            ? `${clock.label} · these price the next session`
+            : read.side
+              ? `${sideWord(read.side)} only, ${read.stance === 'AGAINST' ? 'against' : 'with'} the ${moc.side} imbalance`
+              : 'no side named on this read'
         }
         flush
       >
         {!acked ? (
-          <div className="px-4 py-8 flex flex-col items-center text-center gap-3">
-            <ShieldAlert className="w-6 h-6 text-warn" aria-hidden />
-            <p className="text-caption text-textSecondary leading-relaxed max-w-[38ch]">
+          /* A bar, not a curtain. This used to be eight rows of centred
+             padding around one paragraph, so the panel it gated was a hole in
+             the page even in the states where it had no business firing. */
+          <div className="px-3.5 py-3 flex items-start gap-3 flex-wrap border-b border-warn/20 bg-warn/[0.05]">
+            <ShieldAlert className="w-4 h-4 text-warn shrink-0 mt-0.5" aria-hidden />
+            <p className="flex-1 min-w-[24ch] text-caption text-textSecondary leading-relaxed">
+              The cross is minutes away.{' '}
               {read.boardDte === 0
                 ? 'These are same-session lotto tickets, held into today’s bell.'
                 : 'These are next-session lotto tickets. This read argues for the reversion after the cross, so the ticket is carried through the close and the overnight gap.'}{' '}
@@ -700,7 +680,7 @@ const LottoBoard = ({ snapshot }: LottoBoardProps) => {
             </p>
             <button
               onClick={() => setAckedDte(read.boardDte)}
-              className="mt-1 inline-flex items-center gap-2 px-3.5 py-2 rounded-md border border-warn/40 bg-warn/10 hover:bg-warn/15 font-mono text-label font-semibold uppercase tracking-wider text-warn transition-colors"
+              className="shrink-0 inline-flex items-center gap-2 px-3.5 py-2 rounded-md border border-warn/40 bg-warn/10 hover:bg-warn/15 font-mono text-label font-semibold uppercase tracking-wider text-warn transition-colors"
             >
               I accept a total loss, show the board
             </button>

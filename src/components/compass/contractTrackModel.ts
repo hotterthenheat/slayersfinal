@@ -25,6 +25,7 @@
 import { BULL, FOCUS, MUTED_INK } from '../gex/palette';
 import type { Tone } from '../ui/tones';
 import type { Candle } from '../../types/market';
+import { dteOfBucket } from './setupHorizon';
 import type { OptionRight, Setup, TakeProfitStatus } from '../../types/compass';
 import type { WeighedContract } from '../../core/contractScore';
 
@@ -53,7 +54,7 @@ export const SESSION_BARS = 390;
 
 /*
   ---- the pricers ----------------------------------------------------------
-  Both engines floor their time input at half a day (`Math.max(0.5, dte)`), so
+  Both engines floor their time input at half a session (core/optionTime.ts), so
   NEITHER can express intraday decay as shipped: a forward curve drawn through
   them is a horizontal line on every 0DTE profile. These are the uncapped cores
   of those two functions, byte-for-byte, with the clamped time taken as an
@@ -123,7 +124,10 @@ export function bsPriceAtT(
 
 /** Trading sessions a compass profile expiry stands for. Mirrors `dteOf`. */
 export function sessionsForExpiry(expiry: string): number {
-  return expiry === '0DTE' ? 0.5 : 1;
+  // The engine's own bridge, expressed in the sessions this file measures in:
+  // `yearsToExpiry(dte) === sessionsForExpiry(expiry) / 252` by construction.
+  // A 0DTE floors at half a session, which is where its 0.5 comes from.
+  return Math.max(dteOfBucket(expiry) * (252 / 365), 0.5);
 }
 
 // ---- the plan ---------------------------------------------------------------
@@ -251,6 +255,11 @@ export function setupToPlan(setup: Setup): ContractPlan {
  * 365; the track measures it in sessions over 252. `dte * 252/365` converts
  * exactly: a 30d contract is 20.712 sessions, and 20.712/252 === 30/365.
  *
+ * The floor goes on the SESSION count, not on the day count. Flooring `dte` at
+ * half a calendar day and then converting gave a 0DTE 0.345 sessions where the
+ * engine gives it 0.5 — the same half-a-day-versus-half-a-session split that had
+ * the two pricers disagreeing (core/optionTime.ts).
+ *
  * No rungs and no invalidation, because the weigher genuinely produces neither.
  * That is the pre-trade question (is this worth buying: decay vs breakeven), not
  * the post-signal one (where does this go). Do not synthesise a ladder.
@@ -268,7 +277,7 @@ export function weighedToPlan(w: WeighedContract): ContractPlan {
     strike: w.strike,
     right: w.right,
     expiryLabel: w.expiryLabel,
-    sessionsLeft: Math.max(w.dte, 0.5) * (252 / 365),
+    sessionsLeft: Math.max(w.dte * (252 / 365), 0.5),
     entry: w.mid,
     entryLabel: 'Mid',
     priceAt: (s, sessions) => bsPriceAtT(s, w.strike, iv, sessions / 252, w.right),

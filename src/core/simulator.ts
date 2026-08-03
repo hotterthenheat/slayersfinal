@@ -338,8 +338,32 @@ const Simulator = (() => {
     return { rsi, ema9, ema21, ema50, squeeze };
   }
 
+  /**
+   * A price series that ends at `spot`, derived rather than remembered.
+   *
+   * Only `buildSnapshotAt` uses this. The live `priceHistory` is a rolling buffer
+   * that `tick()` rewrites, so anything reading it inherits the wall clock; this
+   * is a pure function of (symbol, spot, regime day), which is what makes a
+   * pinned snapshot actually pinned. Shape matches the live seeding — a drift
+   * with per-bar texture — so the indicators come out in the same range.
+   */
+  function pinnedHistory(tickerKey: TickerSymbol, spot: number, regimeDay: number): number[] {
+    const cfg = TICKERS[tickerKey];
+    const key = `${tickerKey}:pin:${spot.toFixed(2)}:${regimeDay}`;
+    const out: number[] = [];
+    for (let i = 0; i < historyLimit; i++) {
+      const u = i / (historyLimit - 1);
+      const noise = ((symbolHash(`${key}:${i}`) % 1000) / 1000 - 0.5) * cfg.step * 1.6;
+      // Older bars sit below, so the series arrives at spot rather than wandering
+      // to it — the same "walked up into the level" shape the live seeding has.
+      out.push(Number((spot - (1 - u) * cfg.step * 5 + noise).toFixed(2)));
+    }
+    out[out.length - 1] = spot;
+    return out;
+  }
+
   // Generate Strike-by-Strike Chain
-  function generateOptionsChain(tickerKey: TickerSymbol, spotOverride?: number): StrikeNode[] {
+  function generateOptionsChain(tickerKey: TickerSymbol, spotOverride?: number, regimeDayOverride?: number): StrikeNode[] {
     const config = TICKERS[tickerKey];
     const spot = spotOverride ?? config.currentPrice;
     const step = config.step;
@@ -354,7 +378,11 @@ const Simulator = (() => {
     // gamma flip — so the flip is a real structural level that sits away from
     // spot and moves day to day, not an artifact glued half a step above price.
     // Mostly a touch below spot (positive-gamma days), sometimes above.
-    const regime01 = (symbolHash(`${tickerKey}:regime:${Math.floor(Date.now() / 86400000)}`) % 1000) / 1000;
+    //
+    // The day is overridable so a caller that must be reproducible can name the
+    // session it is showing. Live desks pass nothing and get today's regime.
+    const regimeDay = regimeDayOverride ?? Math.floor(Date.now() / 86400000);
+    const regime01 = (symbolHash(`${tickerKey}:regime:${regimeDay}`) % 1000) / 1000;
     const pivot = spot * (1 + (regime01 * 0.014 - 0.011)); // −1.1% … +0.3% of spot
 
     for (let i = -strikeRange; i <= strikeRange; i++) {
@@ -637,6 +665,46 @@ const Simulator = (() => {
         indicators,
         plan,
         tape,
+      };
+    },
+    /**
+     * A snapshot pinned to a caller-supplied spot, with no tape and no RNG draw.
+     *
+     * `buildSnapshot` reads the live `currentPrice` and pulls from the symbol's
+     * random stream to mint a tape slice, so two calls a tick apart return
+     * different books — right for a live desk, fatal for anything that has to be
+     * reproducible. Every field here is a pure function of (symbol, spot,
+     * positioning regime): nothing is drawn, nothing is mutated, and calling it
+     * leaves the live feed exactly where it was.
+     *
+     * That includes the price history, which is the part that is easy to get
+     * wrong. Handing back `priceHistory[key]` looked harmless — the chain and the
+     * walls do not read it — but `tick()` rewrites that array every 1.5 seconds,
+     * so the indicators moved between two identical calls AND the array inside an
+     * already-returned snapshot kept changing underneath its holder. A pinned
+     * snapshot that aliases live state is not pinned. `pinnedHistory` synthesises
+     * its own series instead, ending exactly at the requested spot.
+     *
+     * `regimeDay` pins the daily positioning regime (the OI pivot, and therefore
+     * the gamma flip). Omit it for today's regime; pass one to name the session
+     * being shown.
+     */
+    buildSnapshotAt: (sym: string, spot: number, regimeDay?: number): MarketSnapshot => {
+      const key = ensureTicker(sym);
+      const cfg = TICKERS[key];
+      const day = regimeDay ?? Math.floor(Date.now() / 86400000);
+      const chain = generateOptionsChain(key, spot, day);
+      const history = pinnedHistory(key, spot, day);
+      const indicators = getIndicators(history);
+      return {
+        ticker: key,
+        spot,
+        changePercent: ((spot - cfg.basePrice) / cfg.basePrice) * 100,
+        priceHistory: history,
+        chain,
+        indicators,
+        plan: generateTradePlan(key, spot, chain, indicators),
+        tape: [],
       };
     },
     tick,

@@ -38,6 +38,16 @@ export interface ExpiryRead {
   chip: string;
   /** "Expires Mon 08/03/26 · 0DTE" — what a panel header shows. */
   sentence: string;
+  /**
+   * TRADING sessions to the resolved expiry, counted on the market calendar.
+   *
+   * Not `dte * 252 / 365`. That ratio is an average across a year and it
+   * disagrees with the actual date whenever a holiday falls inside the window:
+   * a 7-day weekly asked for on Monday 2026-08-31 resolves back off Labor Day
+   * to Friday 09/04, which carries four sessions, and the ratio says five.
+   * core/calendar already counts them, so nothing here needs to estimate.
+   */
+  sessions: number;
 }
 
 /** "0DTE" → 0, "1DTE" → 1. Anything unreadable is treated as same-session. */
@@ -66,6 +76,7 @@ export function expiryRead(bucket: string): ExpiryRead {
     weekday: exp.weekday,
     chip: `${bucket} · ${exp.label}`,
     sentence: `Expires ${exp.weekday} ${exp.label} · ${bucket}`,
+    sessions: exp.sessions,
   };
   readCache.set(key, read);
   return read;
@@ -84,17 +95,33 @@ export interface HorizonCopy {
  * Horizon-honest names for the two exit levels. The engine's two multipliers are
  * aggressiveness tiers, not time horizons, so the word for them has to come from
  * the DTE. "Swing" survives only past a week, which is the point at which it
- * describes something — it matches the SWINGS sleeve in core/contractScore.ts.
+ * describes something; past a quarter even that is wrong, and a LEAP gets its
+ * own word rather than borrowing one from a trade that closes in a month.
  *
  * Feed this `bucketDte`, never `dte`. A 0DTE contract read on a Saturday is two
  * calendar days from its expiry and is still a same-session trade; keying off
  * the calendar gap would have it calling itself a weekly.
+ *
+ * `sessions` is ExpiryRead.sessions — the market calendar's own count to the
+ * resolved date. It used to be `bucketDte * 252 / 365`, which is a yearly
+ * average standing in for a specific window: across Labor Day a 7-day weekly
+ * resolves to a date four sessions out and the ratio announced five. An
+ * estimate that renders as an exact integer beside a real date is a number
+ * pretending to be a fact.
  */
-export function horizonCopy(bucketDte: number): HorizonCopy {
+export function horizonCopy(bucketDte: number, sessions: number): HorizonCopy {
   if (bucketDte <= 0) return { target: 'Session Target', exit: 'Momentum Exit', hold: 'Expires this session' };
   if (bucketDte === 1) return { target: 'Overnight Target', exit: 'Scalp Exit', hold: 'Carries one session' };
-  if (bucketDte <= 7) return { target: 'Weekly Target', exit: 'Scalp Exit', hold: `Carries ${bucketDte} sessions` };
-  return { target: 'Swing Target', exit: 'Scalp Exit', hold: `Carries ${bucketDte} sessions` };
+  const held = Math.max(1, sessions);
+  const plural = held === 1 ? 'session' : 'sessions';
+  if (bucketDte <= 10) return { target: 'Weekly Target', exit: 'Scalp Exit', hold: `Carries ${held} ${plural}` };
+  if (bucketDte <= 90) return { target: 'Swing Target', exit: 'Scalp Exit', hold: `Carries ${held} ${plural}` };
+  const years = bucketDte / 365;
+  return {
+    target: 'Long-Dated Target',
+    exit: 'Scalp Exit',
+    hold: years >= 0.95 && years < 1.05 ? 'Carries about a year' : `Carries about ${years.toFixed(1)} years`,
+  };
 }
 
 /**

@@ -8,6 +8,8 @@
 */
 
 import Simulator from '../core/simulator';
+import { yearsToExpiry } from '../core/optionTime';
+import { expiryFor } from '../core/calendar';
 import {
   SCAN_UNIVERSE_SIZE,
   buildScanUniverse,
@@ -17,9 +19,11 @@ import {
   type ScanName,
 } from '../core/scanUniverse';
 import type { MarketSnapshot } from '../types/market';
+import { SLEEVE_BY_KEY } from '../types/compass';
 import type {
   ChainAction,
   ChainRow,
+  ChainSide,
   ContractChain,
   ImpactRow,
   Momentum,
@@ -27,6 +31,7 @@ import type {
   ScannerKey,
   Setup,
   SetupGroup,
+  SleeveKey,
   CompassData,
   TakeProfit,
   Verdict,
@@ -57,13 +62,39 @@ function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
 }
 
+// ---- sleeve: the horizon axis ---------------------------------------------
+/*
+  The sleeve owns the clock and nothing else does.
+
+  It used to be the scanner's, which made the horizon and the edge a single
+  choice: every preset was 0DTE or 1DTE by construction, so the desk had no way
+  to ask for a weekly, a swing or a LEAP at all. Splitting them is what lets one
+  style be asked of four horizons — and it is what makes the ladder honest, since
+  a 0.5% rung is a real spread of strikes on a same-day contract and pure noise
+  on one with a year to run.
+*/
+
+/** The engine's bucket stamp for a sleeve, e.g. "45DTE". Read by setupHorizon. */
+export function sleeveExpiry(sleeve: SleeveKey): string {
+  return `${SLEEVE_BY_KEY[sleeve].dte}DTE`;
+}
+
 // ---- scanner tuning -------------------------------------------------------
 interface ScannerProfile {
-  expiry: string;
-  swingMul: number; // swing target aggressiveness
-  scalpMul: number; // scalp exit tightness
+  swingMul: number; // upper target aggressiveness
+  scalpMul: number; // tighter exit
   moveBias: number; // expected-move scaling
   scoreFloor: number; // min score to surface a setup
+  /**
+   * Where on the ladder this style looks, in window units: 0 is at the money,
+   * +1 is the far edge of the sleeve's window on the side the trade wants,
+   * negative is in the money. This is the whole difference between the styles.
+   */
+  seek: number;
+  /** How fast it loses interest either side of `seek`, in window units. */
+  reach: number;
+  /** Marks a contract down when it is off the grid blocks print on. */
+  blockBias?: boolean;
 }
 
 /*
@@ -93,30 +124,52 @@ interface ScannerProfile {
   setup the user already carries, and the Weigher grades whatever strike the
   user points at.
 */
+/*
+  `seek` and `reach` ARE the styles. Everything else here is presentation.
+
+  Top Setups and All look straight at the money and fall away evenly — the
+  neutral ranking. The other four each want a different part of the ladder, and
+  that is what stops five tabs from printing one board:
+
+  - Quick Scalp wants the gamma peak and nothing else, so it dies inside half the
+    window. On a 0DTE that is the at-the-money strike and its neighbour.
+  - Discounted wants the contract that is cheap against the move it needs, which
+    is never the at-the-money one — it sits about half a window out, where
+    premium per unit of expected move bottoms out.
+  - Rebounds wants delta, because a reversal has to pay before the tape agrees
+    with you. It leans slightly IN the money, and it is the one style that reads
+    the tape backwards (see scanLean).
+  - Whale Sweeps wants the strikes size actually prints on: the round numbers
+    nearest the money. Off the block grid it marks a contract down hard.
+
+  Two calibration notes on Whale Sweeps, because both bit.
+
+  The block penalty and an off-centre seek compound. At seek 0.35 the strike
+  nearest the sweet spot was rarely also on the grid, so the best whale contract
+  topped out near pref 0.6 and the whole board fell under its own floor —
+  measured, 63 contracts cleared against 389 for Top Setups. A style's BEST
+  contract has to be able to reach pref 1 or its floor stops meaning what the
+  other tabs' floors mean. Seek 0 puts the penalty and the seek on one strike,
+  which is also the truer claim: blocks concentrate at the money.
+
+  Its floor then had to come down, from 83 to 72. The floors were calibrated
+  against a score that read proximity and nothing else; a style carrying a hard
+  0.55 penalty on most of its ladder is being asked a materially harder question
+  by the same number. 83 admitted only the perfect contract — the at-the-money
+  strike that also happened to be on the grid — and nothing one rung either side
+  of it, which is not a screen, it is a coincidence detector.
+*/
 const PROFILES: Record<ScannerKey, ScannerProfile> = {
-  'top-setups': { expiry: '0DTE', swingMul: 0.38, scalpMul: 0.18, moveBias: 1.0, scoreFloor: 84 },
-  'quick-scalp': { expiry: '0DTE', swingMul: 0.22, scalpMul: 0.1, moveBias: 0.7, scoreFloor: 82 },
-  discounted: { expiry: '1DTE', swingMul: 0.6, scalpMul: 0.28, moveBias: 1.35, scoreFloor: 78 },
-  rebounds: { expiry: '1DTE', swingMul: 0.45, scalpMul: 0.22, moveBias: 1.15, scoreFloor: 76 },
-  'whale-sweeps': { expiry: '0DTE', swingMul: 0.42, scalpMul: 0.2, moveBias: 1.1, scoreFloor: 83 },
-  all: { expiry: '0DTE', swingMul: 0.38, scalpMul: 0.18, moveBias: 1.0, scoreFloor: 8 },
+  'top-setups': { swingMul: 0.38, scalpMul: 0.18, moveBias: 1.0, scoreFloor: 84, seek: 0, reach: 1 },
+  'quick-scalp': { swingMul: 0.22, scalpMul: 0.1, moveBias: 0.7, scoreFloor: 82, seek: 0, reach: 0.5 },
+  discounted: { swingMul: 0.6, scalpMul: 0.28, moveBias: 1.35, scoreFloor: 78, seek: 0.55, reach: 0.75 },
+  rebounds: { swingMul: 0.45, scalpMul: 0.22, moveBias: 1.15, scoreFloor: 76, seek: -0.25, reach: 1.1 },
+  'whale-sweeps': { swingMul: 0.42, scalpMul: 0.2, moveBias: 1.1, scoreFloor: 72, seek: 0, reach: 1.3, blockBias: true },
+  all: { swingMul: 0.38, scalpMul: 0.18, moveBias: 1.0, scoreFloor: 8, seek: 0, reach: 1 },
 };
 
 export function scannerFloor(scanner: ScannerKey): number {
   return PROFILES[scanner].scoreFloor;
-}
-
-/**
- * The expiry a preset actually stamps on every setup it emits.
- *
- * Four of the six are same-day and two are next-day, and the tab strip is where
- * that choice is made, so the strip has to be able to say so. It reads the
- * profile rather than a second table in types/compass.ts: a horizon copied into
- * the type can drift from the one the engine selects, and a label that lies about
- * DTE is worse than no label. scannerHorizon.test.ts pins it against makeSetup.
- */
-export function scannerExpiry(scanner: ScannerKey): string {
-  return PROFILES[scanner].expiry;
 }
 
 // Thesis prose is DIRECTIONAL — a put setup must never carry a buy-wall
@@ -128,55 +181,61 @@ export function scannerExpiry(scanner: ScannerKey): string {
 // holds nothing, so there is no "our entry" for a wall to sit under, and the
 // top-setups variant renders on the public landing page where a sentence
 // telling a reader to scalp a pop is the product speaking, not the model.
-const WHY_LIBRARY: Record<ScannerKey, { chips: string[]; text: (t: string, k: number, bullish: boolean) => string }> = {
+const WHY_LIBRARY: Record<ScannerKey, { tag: string; text: (t: string, k: number, bullish: boolean) => string }> = {
   'top-setups': {
-    chips: ['TREND ALIGNED', 'DEALER SUPPORT', 'RSI CONFIRM'],
+    tag: 'TREND ALIGNED',
     text: (t, k, bullish) =>
       bullish
         ? `Solid institutional buy walls are supporting price at ${k}. Market makers are heavily short this strike and must buy ${t} to stay hedged, forming an automatic protective floor beneath the level.`
         : `Heavy institutional supply caps price at ${k}. Market makers unload ${t} delta into every push toward the strike, forming an automatic ceiling pressing on each bounce.`,
   },
   'quick-scalp': {
-    chips: ['HIGH GAMMA', 'FAST DECAY', 'NARROW WINDOW'],
+    tag: 'GAMMA PEAK',
     text: (t) =>
       `Concentrated gamma at this strike makes ${t} whippy, and dealer re-hedging amplifies small moves. That same concentration comes with steep decay, so the window in which a move outruns theta is a narrow one.`,
   },
   discounted: {
-    chips: ['CHEAP PREMIUM', 'ASYMMETRIC', 'VALUE'],
+    tag: 'CHEAP VS 1σ',
     text: (t) =>
       `Premium is mispriced relative to the projected move. Implied vol is underpricing the expected ${t} range, giving an asymmetric payout if the move materializes.`,
   },
   rebounds: {
-    chips: ['OVERSOLD', 'STRUCTURE SUPPORT', 'MEAN REVERSION'],
+    tag: 'FADES THE TAPE',
     text: (t, k, bullish) =>
       bullish
         ? `${t} is oversold near key support at ${k}. Price has compressed into a structure floor where dealer hedging creates a natural bounce zone. Reversal probability is elevated.`
         : `${t} is overbought into key resistance at ${k}. Price has stretched into a structure ceiling where dealer hedging leans against the move. Rejection probability is elevated.`,
   },
   'whale-sweeps': {
-    chips: ['BLOCK PRINTS', 'SMART MONEY', 'ACCUMULATION'],
+    tag: 'SWEEP FOOTPRINT',
     text: (t, k, bullish) =>
       bullish
         ? `Repeated large sweep orders are accumulating ${t} upside exposure near ${k}. Size and persistence of the prints read as informed positioning rather than incidental flow.`
         : `Repeated large sweep orders are stacking ${t} downside protection near ${k}. Size and persistence of the prints read as informed hedging, or an outright short lean.`,
   },
   all: {
-    chips: ['MULTI-SIGNAL', 'COMPOSITE', 'BROAD SCAN'],
+    tag: 'UNFILTERED',
     text: (t, k) =>
       `${t} at ${k} qualifies across multiple scanner criteria. Composite scoring aggregates trend alignment, premium value, and flow signals into a single unified ranking.`,
   },
 };
 
 // ---- premium / greeks model ----------------------------------------------
-/** DTE for a profile expiry label; 0DTE floors at half a trading day. */
+/**
+ * CALENDAR days for a profile expiry label. The floor that keeps a same-session
+ * contract from carrying zero time lives in `yearsToExpiry`, not here — a day
+ * count is a day count, and folding a modelling floor into it is how the two
+ * engines came to disagree about what a 0DTE is worth.
+ */
 function dteOf(expiry: string): number {
-  return expiry === '0DTE' ? 0.5 : 1;
+  const n = parseInt(expiry, 10);
+  return Number.isFinite(n) ? Math.max(0, n) : 0;
 }
 
 /** Intrinsic + normal-shaped time value with a REAL √T term, so a 0DTE
     contract prices cheaper than a 1DTE and OTM decay width scales with vol. */
 function estimatePremium(spot: number, strike: number, right: OptionRight, iv: number, dte: number): number {
-  const t = Math.max(0.5, dte) / 252;
+  const t = yearsToExpiry(dte);
   const width = iv * Math.sqrt(t);
   const m = Math.log(strike / spot) / (width || 1e-6);
   const timeValue = spot * width * 0.4 * Math.exp(-(m * m) / 2);
@@ -219,8 +278,6 @@ function actionFromHealth(health: number): ChainAction {
 
 /** How hard a contract facing the tape is marked down. */
 const COUNTER_TREND_MULT = 0.72;
-/** Window the score reads moneyness over: outside 3% of spot, proximity is 0. */
-const PROXIMITY_WINDOW = 0.03;
 /*
   Half-width of the per-contract jitter, in score points. It is a tiebreaker
   between names, NOT a ranking signal, and the size is what makes that true: one
@@ -229,20 +286,133 @@ const PROXIMITY_WINDOW = 0.03;
   the money. At the ±4 it used to carry it could, and did.
 */
 const JITTER_HALF = 1.5;
+/*
+  Half-width of the per-NAME term, in score points.
+
+  This is what stops the board being a wall of one number. Ranking on moneyness
+  alone means the head of a 9,000-contract field is one at-the-money contract per
+  name, and every one of those scores 96 or better — measured on the shipped
+  board, 240 rows printed TWO distinct scores. That is a ranking nobody can read.
+
+  The term is constant across a name's own strikes, so it cannot reorder that
+  name's ladder — the invariant scanRanking.test.ts holds the engine to — but it
+  spreads the at-the-money contracts of ~194 different names across a readable
+  range. It is derived from things true about the NAME rather than the strike:
+  how hard the tape is running, what the vol is worth, and whether the terminal
+  can actually open the thing.
+
+  It defaults to 1, i.e. no markdown. Every caller outside the sweep — the
+  Weigher's evidence, the Tracker rebuilding a setup a user already carries, the
+  landing page's live pick — is grading ONE named contract rather than ranking a
+  field, and has no business docking it for a quality it was never asked to
+  measure. Only the sweep, which knows each name's own edge, passes one.
+
+  It only ever marks DOWN. A centred ±8 term looks equivalent and is not: the
+  base already tops out at 96 and the printed score clamps at 99, so half the
+  term was spent pushing contracts past a ceiling that flattened them straight
+  back — measured, the board still printed two distinct values. Subtracting from
+  the ideal keeps the whole range inside the scale, and it leaves the maximum
+  where every floor was calibrated against it.
+*/
+const NAME_EDGE_SPAN = 8;
 /**
  * Ceiling a counter-trend contract's SCORE can reach — an exact bound on the
- * rounded number the floors compare against, used to prune.
+ * rounded number the floors compare against, used to prune. Preference is capped
+ * at 1 on every style, so this bounds all six.
  */
 export const COUNTER_TREND_CEILING = displayScore(96 * COUNTER_TREND_MULT + JITTER_HALF);
 
 /**
- * The ranking quantity: near-the-money and aligned with the ticker's lean ranks
- * highest, far-OTM or opposed ranks low. Continuous on purpose — see
- * displayScore. `jitter01` is the candidate's third RNG draw.
+ * Signed moneyness in window units, oriented toward the trade.
+ *
+ * Positive is out of the money for the side being bought, negative is in. It has
+ * to be SIGNED because that is the axis the styles disagree on: unsigned
+ * proximity cannot tell "cheap because it is a stretch" from "expensive because
+ * it is already working", and those are opposite trades.
  */
-function rankOf(spot: number, strike: number, aligned: boolean, jitter01: number): number {
-  const proximity = 1 - Math.min(1, Math.abs(strike - spot) / (spot * PROXIMITY_WINDOW));
-  return 96 * (0.4 + 0.6 * proximity) * (aligned ? 1 : COUNTER_TREND_MULT) + (jitter01 - 0.5) * (JITTER_HALF * 2);
+function moneynessU(spot: number, strike: number, right: OptionRight, windowPct: number): number {
+  const otm = right === 'C' ? (strike - spot) / spot : (spot - strike) / spot;
+  return otm / windowPct;
+}
+
+/**
+ * How much a style wants a contract at that point on the ladder, 0 to 1.
+ *
+ * A tent centred on the style's `seek`, falling to zero over its `reach`. Capped
+ * at 1 by construction, which is what keeps COUNTER_TREND_CEILING an exact bound
+ * rather than an estimate. Top Setups is seek 0 / reach 1 — plain proximity, the
+ * neutral ranking the board has always used.
+ */
+function preference(u: number, profile: ScannerProfile): number {
+  return 1 - Math.min(1, Math.abs(u - profile.seek) / profile.reach);
+}
+
+/**
+ * Strikes size prints on. Blocks land on round numbers, so a sweep screen that
+ * ignores the grid is scanning for something that does not print.
+ */
+function onBlockGrid(strike: number, step: number): boolean {
+  /*
+    The grid is a multiple of the NAME'S OWN strike step, not an absolute price.
+
+    Absolute tiers (multiples of ten above $200, five above $50) sound right and
+    are useless here: the sweep ladder samples nine strikes about 0.5% apart, so
+    on a $400 name those are 392 through 408 in twos and exactly one of them is a
+    multiple of ten — and only when the rounded spot happens to land there.
+    Measured, the whole style admitted 55 contracts against Top Setups' 389,
+    because most names had no qualifying strike at all.
+
+    Five steps is round at whatever granularity the name actually lists, so every
+    ladder carries two or three of them and the claim on the tab is true on every
+    name rather than one in ten.
+  */
+  const grid = step * 5;
+  return Math.abs(strike / grid - Math.round(strike / grid)) < 1e-6;
+}
+
+/**
+ * The ranking quantity. Continuous on purpose — see displayScore.
+ * `jitter01` is the candidate's third RNG draw; `edge01` is the name's own
+ * quality, constant across that name's ladder.
+ */
+function rankOf(
+  spot: number,
+  strike: number,
+  right: OptionRight,
+  aligned: boolean,
+  jitter01: number,
+  profile: ScannerProfile,
+  windowPct: number,
+  edge01: number,
+  step: number
+): number {
+  const u = moneynessU(spot, strike, right, windowPct);
+  let pref = preference(u, profile);
+  /* The block penalty has to outweigh a rung of the ladder or it decides
+     nothing. At 0.72 the strike one rung nearer the sweet spot still won even
+     when it was off the grid, so the board filled with 404s and the tab was a
+     lie. At 0.55 the nearest block strike wins, which is the claim the tab makes. */
+  if (profile.blockBias && !onBlockGrid(strike, step)) pref *= 0.55;
+  return (
+    96 * (0.4 + 0.6 * pref) * (aligned ? 1 : COUNTER_TREND_MULT) +
+    (edge01 - 1) * NAME_EDGE_SPAN +
+    (jitter01 - 0.5) * (JITTER_HALF * 2)
+  );
+}
+
+/**
+ * A name's own quality, 0 to 1 — constant across its ladder, so it separates
+ * names without ever reordering one name's strikes.
+ *
+ * Exported so a test that re-derives the field independently can MIRROR the
+ * engine's inputs rather than re-implement them. A test that reimplements the
+ * formula stops checking the engine and starts checking its own copy.
+ */
+export function nameEdge01(name: ScanName): number {
+  const trend = clamp(Math.abs(name.changePct) / 2.5, 0, 1); // conviction, either way
+  const vol = clamp((name.iv - 0.15) / 0.45, 0, 1); // premium worth paying attention to
+  const depth = name.coverage === 'modeled' ? 1 : name.coverage === 'covered' ? 0.55 : 0.2;
+  return clamp(0.42 * trend + 0.3 * vol + 0.28 * depth, 0, 1);
 }
 
 /**
@@ -267,12 +437,25 @@ export function prescreenRank(
   strike: number,
   right: OptionRight,
   scanner: ScannerKey,
-  aligned: boolean
+  aligned: boolean,
+  sleeve: SleeveKey = 'odte',
+  edge01 = 1,
+  step = 1
 ): number {
   const rng = mulberry(hash(`${ticker}-${strike}-${right}-${scanner}`));
   rng(); // live mid
   rng(); // health
-  return rankOf(spot, strike, aligned, rng());
+  return rankOf(
+    spot,
+    strike,
+    right,
+    aligned,
+    rng(),
+    PROFILES[scanner],
+    SLEEVE_BY_KEY[sleeve].windowPct,
+    edge01,
+    step
+  );
 }
 
 /** The same prescreen, rounded to the score a setup would carry. */
@@ -282,9 +465,12 @@ export function prescreenScore(
   strike: number,
   right: OptionRight,
   scanner: ScannerKey,
-  aligned: boolean
+  aligned: boolean,
+  sleeve: SleeveKey = 'odte',
+  edge01 = 1,
+  step = 1
 ): number {
-  return displayScore(prescreenRank(ticker, spot, strike, right, scanner, aligned));
+  return displayScore(prescreenRank(ticker, spot, strike, right, scanner, aligned, sleeve, edge01, step));
 }
 
 // ---- setup builder --------------------------------------------------------
@@ -327,14 +513,18 @@ export function makeSetup(
   right: OptionRight,
   scanner: ScannerKey,
   iv: number,
-  leanBullish?: boolean
+  leanBullish?: boolean,
+  sleeve: SleeveKey = 'odte',
+  edge01 = 1,
+  step = 1
 ): Setup {
   const profile = PROFILES[scanner];
+  const sleeveDef = SLEEVE_BY_KEY[sleeve];
   const rng = mulberry(hash(`${ticker}-${strike}-${right}-${scanner}`));
   const strikeLabel = strike % 1 === 0 ? strike.toFixed(0) : strike.toFixed(2);
   const contract = `${ticker} ${strikeLabel}${right}`;
 
-  const dte = dteOf(profile.expiry);
+  const dte = sleeveDef.dte;
   const mid = Number(estimatePremium(spot, strike, right, iv, dte).toFixed(2));
   // Spread widens with distance from spot and 0DTE urgency — liquidity is a
   // real variable here, not a constant 3% decoration
@@ -353,17 +543,40 @@ export function makeSetup(
   // The setup carries BOTH: the continuous quantity a board orders by and the
   // integer it prints. Rounding stays the last step, so nothing downstream has to
   // re-derive a rank the sweep already computed.
-  const rank = rankOf(spot, strike, aligned, rng());
+  const rank = rankOf(spot, strike, right, aligned, rng(), profile, sleeveDef.windowPct, edge01, step);
   const score = displayScore(rank);
   // ±1σ expected move of the UNDERLYING over the contract's life — real math
   // (iv·√t), not a decorative random percentage
-  const expectedMovePct = Number((iv * Math.sqrt(Math.max(0.5, dte) / 252) * 100).toFixed(1));
+  const expectedMovePct = Number((iv * Math.sqrt(yearsToExpiry(dte)) * 100).toFixed(1));
 
-  const greeks = Simulator.getGreeks(spot, strike, Math.max(0.5, dte) / 252, iv);
+  const greeks = Simulator.getGreeks(spot, strike, yearsToExpiry(dte), iv);
   const delta = right === 'C' ? greeks.deltaCall : greeks.deltaPut;
   const verdict: Verdict = score >= 88 ? 'ENTER' : score >= 72 ? 'WATCH' : 'EXIT';
 
   const why = WHY_LIBRARY[scanner];
+  /*
+    Evidence, read off THIS contract.
+
+    Every card on the board used to wear the same three chips, because the chips
+    were a constant on the scanner rather than a fact about the row — 240 cards
+    all saying TREND ALIGNED / DEALER SUPPORT / RSI CONFIRM, which is decoration
+    with the shape of information. SetupScanBoard had already dropped the column
+    from the table for exactly that reason while the card kept it. These are
+    computed, so two rows on one board disagree whenever the contracts do.
+  */
+  const intrinsic = Math.max(0, right === 'C' ? spot - strike : strike - spot);
+  const breakeven = right === 'C' ? strike + mid : strike - mid;
+  const beMovePct = ((right === 'C' ? breakeven - spot : spot - breakeven) / spot) * 100;
+  const moneyPct = ((right === 'C' ? spot - strike : strike - spot) / spot) * 100;
+  const chips: string[] = [
+    why.tag,
+    moneyPct > 0.15 ? `ITM ${moneyPct.toFixed(1)}%` : moneyPct < -0.15 ? `OTM ${(-moneyPct).toFixed(1)}%` : 'AT THE MONEY',
+  ];
+  if (beMovePct <= expectedMovePct) chips.push('1σ CLEARS BREAKEVEN');
+  if (spreadPctModel <= 2) chips.push('TIGHT BOOK');
+  else if (spreadPctModel >= 5) chips.push('WIDE BOOK');
+  if (profile.blockBias && onBlockGrid(strike, step)) chips.push('BLOCK STRIKE');
+  if (intrinsic <= 0) chips.push('ALL TIME VALUE');
   // Observational headlines only — the engine describes what the signal shows,
   // it never instructs the user to place an order ("enter now" is off-limits).
   // Colon, not an em dash, and it matches the landing page's own rendering of
@@ -394,12 +607,13 @@ export function makeSetup(
   const invalidationReason = invalidationReasons[Math.floor(rng() * invalidationReasons.length)];
 
   return {
-    id: `${ticker}-${strikeLabel}-${right}-${scanner}`,
+    id: `${ticker}-${strikeLabel}-${right}-${scanner}-${sleeve}`,
     ticker,
     contract,
     right,
     strike,
-    expiry: profile.expiry,
+    expiry: sleeveExpiry(sleeve),
+    sleeve,
     rank,
     score,
     verdict,
@@ -409,7 +623,7 @@ export function makeSetup(
     swingTarget: { price: Number((mid * (1 + profile.swingMul)).toFixed(2)), pct: Math.round(profile.swingMul * 100) },
     scalpExit: { price: Number((mid * (1 + profile.scalpMul)).toFixed(2)), pct: Math.round(profile.scalpMul * 100) },
     headline,
-    whyChips: why.chips,
+    whyChips: chips,
     whyText: why.text(ticker, strike, right === 'C'),
     greeks: {
       delta: Number(delta.toFixed(2)),
@@ -506,8 +720,8 @@ const RUNG_PCT = 0.005;
  * money than a $600 name's. The score marks it down for the grid it trades on,
  * which is a real handicap and not an arithmetic one.
  */
-export function strikeLadder(spot: number, step: number): number[] {
-  const rung = Math.max(1, Math.round((spot * RUNG_PCT) / step));
+export function strikeLadder(spot: number, step: number, rungPct: number = RUNG_PCT): number[] {
+  const rung = Math.max(1, Math.round((spot * rungPct) / step));
   const atm = Math.round(spot / step);
   return STRIKE_RUNGS.map(k => (atm + k * rung) * step);
 }
@@ -555,6 +769,8 @@ interface Candidate {
   score: number;
   /** The scanner's read on the name — carried so stage two need not re-derive it */
   leanBullish: boolean;
+  /** The name's own quality, carried for the same reason */
+  edge01: number;
 }
 
 interface Feed {
@@ -575,8 +791,15 @@ interface Feed {
  * every contract on it beats every contract off it, and scanRanking.test.ts
  * re-derives the field independently to hold that line.
  */
-function buildFeed(scanner: ScannerKey, activeTicker: string, epoch: number, size: number): Feed {
+function buildFeed(
+  scanner: ScannerKey,
+  sleeve: SleeveKey,
+  activeTicker: string,
+  epoch: number,
+  size: number
+): Feed {
   const floor = PROFILES[scanner].scoreFloor;
+  const { rungPct } = SLEEVE_BY_KEY[sleeve];
   const universe = buildScanUniverse(epoch, size);
   // Whatever the user is looking at is always in the field, even when it sits
   // outside the ranked pool.
@@ -592,16 +815,17 @@ function buildFeed(scanner: ScannerKey, activeTicker: string, epoch: number, siz
   const survivors: Candidate[] = [];
   for (const name of names) {
     const bullish = scanLean(name, scanner);
-    const ladder = strikeLadder(name.spot, name.step);
+    const edge01 = nameEdge01(name);
+    const ladder = strikeLadder(name.spot, name.step, rungPct);
     for (const right of RIGHTS) {
       const aligned = bullish ? right === 'C' : right === 'P';
       if (!aligned && skipCounterTrend) continue;
       for (const strike of ladder) {
-        const rank = prescreenRank(name.ticker, name.spot, strike, right, scanner, aligned);
+        const rank = prescreenRank(name.ticker, name.spot, strike, right, scanner, aligned, sleeve, edge01, name.step);
         // The floor is a bar on the number the user will see, so it is read
         // against the rounded score; the ordering is not.
         const score = displayScore(rank);
-        if (score >= floor) survivors.push({ name, strike, right, rank, score, leanBullish: bullish });
+        if (score >= floor) survivors.push({ name, strike, right, rank, score, leanBullish: bullish, edge01 });
       }
     }
   }
@@ -665,7 +889,7 @@ function buildFeed(scanner: ScannerKey, activeTicker: string, epoch: number, siz
       found: bucket.length,
       get setups(): Setup[] {
         return (built ??= bucket.map(c =>
-          makeSetup(ticker, name.spot, c.strike, c.right, scanner, name.iv, c.leanBullish)
+          makeSetup(ticker, name.spot, c.strike, c.right, scanner, name.iv, c.leanBullish, sleeve, c.edge01, name.step)
         ));
       },
     });
@@ -677,13 +901,19 @@ function buildFeed(scanner: ScannerKey, activeTicker: string, epoch: number, siz
 // and Compass re-enters every tick for the contract chain. Keyed on the epoch,
 // so the repeats are free and the field is identical across all six.
 const feedCache = new Map<string, Feed>();
-const FEED_CACHE_MAX = 12;
+const FEED_CACHE_MAX = 24;
 
-function cachedFeed(scanner: ScannerKey, activeTicker: string, epoch: number, size: number): Feed {
-  const key = `${scanner}|${activeTicker}|${epoch}|${size}`;
+function cachedFeed(
+  scanner: ScannerKey,
+  sleeve: SleeveKey,
+  activeTicker: string,
+  epoch: number,
+  size: number
+): Feed {
+  const key = `${scanner}|${sleeve}|${activeTicker}|${epoch}|${size}`;
   const hit = feedCache.get(key);
   if (hit) return hit;
-  const built = buildFeed(scanner, activeTicker, epoch, size);
+  const built = buildFeed(scanner, sleeve, activeTicker, epoch, size);
   if (feedCache.size >= FEED_CACHE_MAX) feedCache.delete(feedCache.keys().next().value as string);
   feedCache.set(key, built);
   return built;
@@ -695,62 +925,142 @@ export function resetCompassCache(): void {
 }
 
 // ---- contract chain -------------------------------------------------------
-function buildChain(snapshot: MarketSnapshot, iv: number): ContractChain {
+/*
+  The chain prices the expiry the BOARD is on.
+
+  It used to hardcode `1` here regardless of the preset, so on the four
+  same-session presets the ladder beside the monitor quoted next-day premiums:
+  measured on BAC 41.50P, the monitor header read $0.16 and the chain cell for
+  the identical contract read $0.47, at the same instant, on one screen. The
+  chain is the strike-PICKING instrument — every comparison a user makes on it
+  was against the wrong clock, and clicking a strike then repriced it on the
+  board's clock, so the number moved on the click with nothing to explain it.
+
+  `buildImpact` was already handed the preset's expiry. The chain was simply
+  missed. It takes the same source now, and `ContractChain.expiry` carries the
+  stamp out so the panel can say which session it is quoting.
+
+  It also carries EVERY listed strike rather than a twelve-row window. Six rungs
+  either side is a fine default and a useless instrument: the whole reason to put
+  a chain on the screen is that the user picks the strike, and six rungs of a
+  large-cap's grid is a fraction of a percent of spot. The simulator lists 31
+  strikes a name; all 31 are here, the panel scrolls, and `atmIndex` is what lets
+  it open at the money without re-deriving where spot sits.
+*/
+/**
+ * One side of one strike. Split out because the chain now carries real depth —
+ * a book, a delta and an implied vol per side rather than a premium and a mood.
+ */
+function chainSide(
+  ticker: string,
+  spot: number,
+  node: { strike: number; callOI: number; putOI: number },
+  right: OptionRight,
+  iv: number,
+  dte: number
+): ChainSide {
+  const { strike } = node;
+  const health = healthFor(spot, strike, right);
+  const rng = mulberry(hash(`${ticker}-${strike}-${right}-chain`));
+  const premium = Number(estimatePremium(spot, strike, right, iv, dte).toFixed(2));
+  const greeks = Simulator.getGreeks(spot, strike, yearsToExpiry(dte), iv);
+  const delta = right === 'C' ? greeks.deltaCall : greeks.deltaPut;
+  const otmDist = Math.abs(strike - spot) / spot;
+  const spreadPct = clamp(1.2 + otmDist * 180 + 0.6, 0.8, 12);
+  const half = Math.max(0.01, (premium * spreadPct) / 200);
+  const oi = right === 'C' ? node.callOI : node.putOI;
+  // Skew: the wings are bid for, so they carry more implied than the money does.
+  const sideIv = iv * (1 + otmDist * 1.6);
+  return {
+    premium,
+    bid: Number(Math.max(0.01, premium - half).toFixed(2)),
+    ask: Number((premium + half).toFixed(2)),
+    // Centred noise so OTM strikes can print red — a change column that can
+    // never go negative reads fake.
+    changePct: Math.round(
+      clamp((((right === 'C' ? spot - strike : strike - spot) / spot) * 800) + (rng() - 0.35) * 30, -60, 130)
+    ),
+    delta: Number(delta.toFixed(2)),
+    ivPct: Number((sideIv * 100).toFixed(1)),
+    volume: Math.round(oi * (0.18 + rng() * 0.5)),
+    openInterest: oi,
+    itm: right === 'C' ? strike < spot : strike > spot,
+    health,
+    momentum: momentumFromHealth(health),
+    action: actionFromHealth(health),
+  };
+}
+
+function buildChain(snapshot: MarketSnapshot, iv: number, expiry: string): ContractChain {
   const { ticker, spot, chain } = snapshot;
+  /*
+    The RESOLVED expiry's calendar distance, not the bucket number.
+
+    A 1DTE preset viewed on a Friday resolves to Monday — three calendar days —
+    but `dteOf` reads the label and returns 1, so every premium in a chain
+    stamped with Monday's date was priced with one day of life in it.
+    estimatePremium consumes calendar days through yearsToExpiry, so the number
+    handed to it has to be the one the date actually implies.
+  */
+  const dte = expiryFor(dteOf(expiry)).dte;
   const sorted = [...chain].sort((a, b) => a.strike - b.strike);
-  const spotIdx = sorted.findIndex(n => n.strike >= spot);
-  const start = Math.max(0, spotIdx - 6);
-  const window = sorted.slice(start, start + 12);
 
-  const rows: ChainRow[] = window.map(node => {
-    const callHealth = healthFor(spot, node.strike, 'C');
-    const putHealth = healthFor(spot, node.strike, 'P');
-    const callRng = mulberry(hash(`${ticker}-${node.strike}-C-chain`));
-    const putRng = mulberry(hash(`${ticker}-${node.strike}-P-chain`));
-    return {
-      strike: node.strike,
-      call: {
-        premium: Number(estimatePremium(spot, node.strike, 'C', iv, 1).toFixed(2)),
-        // Centered noise so OTM strikes can print red — a change column that
-        // can never go negative reads fake.
-        changePct: Math.round(clamp((spot - node.strike) / spot * 800 + (callRng() - 0.35) * 30, -60, 130)),
-        health: callHealth,
-        momentum: momentumFromHealth(callHealth),
-        action: actionFromHealth(callHealth),
-      },
-      put: {
-        premium: Number(estimatePremium(spot, node.strike, 'P', iv, 1).toFixed(2)),
-        changePct: Math.round(clamp((node.strike - spot) / spot * 800 + (putRng() - 0.35) * 30, -60, 130)),
-        health: putHealth,
-        momentum: momentumFromHealth(putHealth),
-        action: actionFromHealth(putHealth),
-      },
-    };
-  });
+  const rows: ChainRow[] = sorted.map(node => ({
+    strike: node.strike,
+    call: chainSide(ticker, spot, node, 'C', iv, dte),
+    put: chainSide(ticker, spot, node, 'P', iv, dte),
+  }));
 
-  return { ticker, spot, rows };
+  const found = rows.findIndex(r => r.strike >= spot);
+  return {
+    ticker,
+    spot,
+    rows,
+    atmIndex: found === -1 ? Math.max(0, rows.length - 1) : found,
+    expiry,
+  };
 }
 
 // ---- impact leaderboard ---------------------------------------------------
+/*
+  The WHOLE field, ranked by gamma as a default. The leaderboard slices it.
+
+  This used to sort by gamma and slice to eight here, and the panel then offered
+  four "rank by" metrics over those eight — so Volume, Notional and Open Int all
+  showed the largest-by-GAMMA contracts in a different order, which is not the
+  question any of those three controls asks. The engine hands over the field and
+  the panel picks its own top eight, which is the only way a metric switch can
+  mean what it says.
+
+  Delta notional is a REAL delta now. It was `oi * 100 * spot * 0.5` — a flat
+  half-delta on every strike and both sides — so with spot constant across rows
+  it was a monotone transform of open interest, and the two columns could never
+  disagree about a ranking. A column headed DEX has to be exposure rather than
+  open interest in different units.
+*/
 function buildImpact(snapshot: MarketSnapshot, expiry: string): ImpactRow[] {
   const { ticker, spot, chain } = snapshot;
+  const iv = Simulator.TICKERS[ticker]?.iv ?? 0.2;
+  const t = yearsToExpiry(dteOf(expiry));
   const totalGamma = chain.reduce((a, n) => a + Math.abs(n.netGex), 0) || 1;
   const rows = chain.flatMap(node => {
-    // Delta notional in $B: shares of exposure × spot at ~0.5 avg delta
-    const mk = (right: OptionRight, oi: number, gammaScale: number): Omit<ImpactRow, 'rank'> => ({
-      contract: `${ticker} ${node.strike % 1 === 0 ? node.strike.toFixed(0) : node.strike.toFixed(2)}${right}`,
-      expiry,
-      openInterest: oi,
-      volume: Math.round(oi * (0.3 + (hash(`${node.strike}${right}`) % 50) / 100)),
-      deltaNotional: Number(((oi * 100 * spot * 0.5) / 1e9).toFixed(2)),
-      gamma: Number(((Math.abs(node.netGex) / totalGamma) * 100 * gammaScale).toFixed(1)),
-    });
+    const greeks = Simulator.getGreeks(spot, node.strike, t, iv);
+    const mk = (right: OptionRight, oi: number, gammaScale: number): Omit<ImpactRow, 'rank'> => {
+      const delta = right === 'C' ? greeks.deltaCall : greeks.deltaPut;
+      return {
+        contract: `${ticker} ${node.strike % 1 === 0 ? node.strike.toFixed(0) : node.strike.toFixed(2)}${right}`,
+        expiry,
+        openInterest: oi,
+        volume: Math.round(oi * (0.3 + (hash(`${node.strike}${right}`) % 50) / 100)),
+        // $B of underlying the book is effectively long or short through this
+        // contract: |delta| × shares × spot.
+        deltaNotional: Number(((Math.abs(delta) * oi * 100 * spot) / 1e9).toFixed(2)),
+        gamma: Number(((Math.abs(node.netGex) / totalGamma) * 100 * gammaScale).toFixed(1)),
+      };
+    };
     return [mk('C', node.callOI, 0.45), mk('P', node.putOI, 0.38)];
   });
-  return rows
-    .sort((a, b) => b.gamma - a.gamma)
-    .slice(0, 8)
-    .map((r, i) => ({ ...r, rank: i + 1 }));
+  return rows.sort((a, b) => b.gamma - a.gamma).map((r, i) => ({ ...r, rank: i + 1 }));
 }
 
 // ---- top-level assembly ---------------------------------------------------
@@ -759,6 +1069,8 @@ function buildImpact(snapshot: MarketSnapshot, expiry: string): ImpactRow[] {
 export interface CompassOptions {
   epoch?: number;
   universeSize?: number;
+  /** Horizon to sweep. Defaults to same-session, the desk's landing sleeve. */
+  sleeve?: SleeveKey;
 }
 
 /**
@@ -775,11 +1087,13 @@ export function buildCompass(
 ): CompassData {
   const epoch = options.epoch ?? scanEpoch();
   const size = options.universeSize ?? SCAN_UNIVERSE_SIZE;
+  const sleeve = options.sleeve ?? 'odte';
   const activeIv = Simulator.TICKERS[snapshot.ticker]?.iv ?? 0.2;
-  const feed = () => cachedFeed(scanner, snapshot.ticker, epoch, size);
+  const feed = () => cachedFeed(scanner, sleeve, snapshot.ticker, epoch, size);
 
   return {
     scanner,
+    sleeve,
     get groups() {
       return feed().groups;
     },
@@ -791,7 +1105,7 @@ export function buildCompass(
     get shown() {
       return feed().shown;
     },
-    chain: buildChain(snapshot, activeIv),
-    impact: buildImpact(snapshot, PROFILES[scanner].expiry),
+    chain: buildChain(snapshot, activeIv, sleeveExpiry(sleeve)),
+    impact: buildImpact(snapshot, sleeveExpiry(sleeve)),
   };
 }

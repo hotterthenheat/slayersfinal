@@ -134,7 +134,7 @@ const ExposureLedger = ({
       className="min-w-0"
       bodyClassName="flex flex-col max-h-[max(560px,62vh)]"
     >
-      <div tabIndex={0} role="region" aria-label="Exposure ledger — scrollable" className="overflow-auto h-full min-h-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60">
+      <div tabIndex={0} role="group" aria-label="Exposure ledger — scrollable" className="overflow-auto h-full min-h-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60">
         {/* Sticky legend — stays pinned while the rows scroll */}
         <div className="sticky top-0 z-20 flex items-center gap-3 h-9 px-2.5 bg-panelRaised border-b border-borderSubtle overflow-hidden whitespace-nowrap">
           <span className="flex items-center gap-1.5 font-mono text-label font-semibold uppercase tracking-wider text-textPrimary">
@@ -176,7 +176,9 @@ const ExposureLedger = ({
                   onMouseEnter={onHoverStrike ? () => onHoverStrike(row.strike) : undefined}
                   onMouseLeave={onHoverStrike ? () => onHoverStrike(null) : undefined}
                   onClick={onSelectStrike ? () => onSelectStrike(row.strike) : undefined}
-                  {...(onSelectStrike ? interactiveRowProps(() => onSelectStrike(row.strike), selectedStrike === row.strike) : {})}
+                  {...(onSelectStrike
+                    ? interactiveRowProps(() => onSelectStrike(row.strike), selectedStrike === row.strike, 'native')
+                    : {})}
                   className={`border-b border-borderSubtle/30 transition-colors ${row.pin ? 'bg-white/[0.03]' : ''} ${
                     onSelectStrike ? ROW_INTERACTIVE : ''
                   } ${

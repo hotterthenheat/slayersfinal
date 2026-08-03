@@ -44,6 +44,12 @@ import Privacy from './pages/legal/Privacy';
 // page and every other desk paint without downloading the 3D engine.
 const ProveIt = lazy(() => import('./pages/proveit/ProveIt'));
 
+// The trailer is a self-contained 78-second timeline with seventeen scenes and
+// its own story layer. None of it is reachable from a desk, so it has no
+// business in the initial bundle: lazy-loading keeps the landing page and every
+// route that is not /trailer free of it.
+const SlayerTrailer = lazy(() => import('./pages/trailer/SlayerTrailer'));
+
 /** One loading grammar for the whole app — the Skeleton sheen, not a second
     animation. `animate-pulse` here was a third language competing with the
     launch gate and the skeletons. */
@@ -88,6 +94,16 @@ const App = () => {
               visitor sees; "Launch terminal" plays the gate into /terminal. */}
           <Route path="/" element={<Landing />} />
           <Route path="/welcome" element={<Navigate to="/" replace />} />
+          {/* Full-bleed and outside the app shell, like the landing page: the
+              trailer owns the viewport and supplies its own chrome. */}
+          <Route
+            path="/trailer"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <SlayerTrailer />
+              </Suspense>
+            }
+          />
           {/* Retired routes → the quant desk is Prove It */}
           <Route path="/experience" element={<Navigate to="/prove-it" replace />} />
           <Route path="/quant-lab" element={<Navigate to="/prove-it" replace />} />

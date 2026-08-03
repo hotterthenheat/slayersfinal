@@ -102,10 +102,10 @@ const implicationOf = (key: GreekKey, net: number): string => {
 };
 
 /**
- * `role="button"` on the row already costs the screen reader its table
- * semantics, so without a label the name is ten bare numbers with no column to
- * hang them on. Signs are spelled out: fmtUsd formats with U+2212, which is not
- * reliably announced as minus.
+ * Ten numbers in a row read as ten numbers unless something names them, and a
+ * screen reader announcing cell-by-cell has already lost which greek and which
+ * leg it is inside. Signs are spelled out: fmtUsd formats with U+2212, which is
+ * not reliably announced as minus.
  */
 const rowLabel = (row: StrikeExposure, levels: ExposureLevels): string => {
   const tags: string[] = [];
@@ -208,7 +208,7 @@ const ExposureMatrix = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
   return (
     <div
       tabIndex={0}
-      role="region"
+      role="group"
       aria-label="Exposure matrix, scrollable"
       onMouseLeave={() => setHover(null)}
       className="overflow-auto h-full min-h-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60"
@@ -236,7 +236,12 @@ const ExposureMatrix = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
             ))}
           </tr>
           <tr className="bg-panelRaised">
-            <th className="border-b border-borderSubtle" />
+            {/* The strike column's second header cell. It reads empty on
+                screen because "Strike" is already spanned above it, but a
+                header with no name at all is a column with no name. */}
+            <th className="border-b border-borderSubtle">
+              <span className="sr-only">Strike</span>
+            </th>
             {GROUPS.map(g =>
               (['put', 'call', 'net'] as Leg[]).map(leg => (
                 <th
@@ -261,7 +266,7 @@ const ExposureMatrix = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
                 onClick={onSelectStrike ? () => onSelectStrike(row.strike) : undefined}
                 {...(onSelectStrike
                   ? {
-                      ...interactiveRowProps(() => onSelectStrike(row.strike), selectedStrike === row.strike),
+                      ...interactiveRowProps(() => onSelectStrike(row.strike), selectedStrike === row.strike, 'native'),
                       'aria-label': rowLabel(row, levels),
                     }
                   : {})}

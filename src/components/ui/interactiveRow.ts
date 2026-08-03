@@ -23,18 +23,44 @@ export const rowKeyDown =
     activate();
   };
 
-/** Props every clickable row needs. Spread onto the `<tr>` (or row div). */
+/**
+ * What the element should be called, once it is clickable.
+ *
+ * - `button`   — a standalone clickable region that is nothing else: a gamma
+ *                band, an entry on the key-levels rail. It contains text only.
+ * - `listitem` — one card in a list of cards. A card may hold its own button
+ *                (Compass cards carry "Analysis"), and `listitem` is the one of
+ *                these three whose children are still exposed, so that nested
+ *                button keeps its own name and its own focus stop.
+ * - `native`   — leave the element's own role alone. This is what a `<tr>`
+ *                needs: it is already a row inside its table, and overriding
+ *                that to `button` deletes it from the table for every screen
+ *                reader, which is what four desks were doing.
+ */
+export type RowRole = 'button' | 'listitem' | 'native';
+
+/**
+ * Props every clickable row needs. Spread onto the `<tr>` (or row div).
+ *
+ * Selection travels as `aria-current`, not `aria-selected`. `aria-selected`
+ * belongs to a listbox option, a tab, or a row inside a grid — none of which
+ * these are — and setting it on a `button` is invalid, which axe reports as a
+ * critical fault (143 of them across four desks before this changed).
+ * `aria-current` is a global attribute, valid on every role here, and it says
+ * the true thing: this is the one the desk is showing you right now.
+ */
 export const interactiveRowProps = (
   activate: () => void,
-  selected?: boolean
+  selected?: boolean,
+  role: RowRole = 'button'
 ): {
   tabIndex: number;
-  role: 'button';
-  'aria-selected': boolean | undefined;
+  role: 'button' | 'listitem' | undefined;
+  'aria-current': true | undefined;
   onKeyDown: (e: React.KeyboardEvent) => void;
 } => ({
   tabIndex: 0,
-  role: 'button',
-  'aria-selected': selected,
+  role: role === 'native' ? undefined : role,
+  'aria-current': selected ? true : undefined,
   onKeyDown: rowKeyDown(activate),
 });

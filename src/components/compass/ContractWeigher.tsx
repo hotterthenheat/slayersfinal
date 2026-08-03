@@ -16,7 +16,7 @@
 ==================================================
 */
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Search, Scale, Plus, Check, Target, ChevronDown, CornerDownLeft } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
@@ -38,12 +38,13 @@ import { setupState } from './setupState';
 import { StateBadge } from './StateBadge';
 import ContractTrack from './ContractTrack';
 import { buildTrack, weighedToPlan } from './contractTrackModel';
+import { CONTRACT_MULTIPLIER } from './contractFacts';
 import type { Verdict } from '../../types/compass';
 import type { MarketSnapshot } from '../../types/market';
 import { DUR, EASE, PILL } from '../../lib/motion';
 import Panel from '../ui/Panel';
 import SignalBadge from '../ui/SignalBadge';
-import Stat from '../ui/Stat';
+import { preserveGreek } from '../ui/greek';
 import EmptyState from '../ui/EmptyState';
 import SegmentedControl from '../ui/SegmentedControl';
 import AnimatedNumber from '../ui/AnimatedNumber';
@@ -73,8 +74,6 @@ const SLEEVE_LABEL: Record<Horizon, string> = {
 
 const dteForHorizon: Record<Horizon, number> = { LOTTO: 0, WEEKLIES: 5, SWINGS: 30, LEAPS: 365 };
 
-/** Standard equity-option contract multiplier (shares per contract). */
-const CONTRACT_MULTIPLIER = 100;
 /** Listed strikes either side of spot the neighbour rail reaches for. */
 const RAIL_REACH = 8;
 const RECENT_KEY = 'slayer_weigher_recent';
@@ -161,6 +160,41 @@ function writeRecents(list: string[]): void {
  * print `score × weight` and foot to the headline turn an asserted grade into
  * arithmetic the user can add up.
  */
+
+/**
+ * A readout: a named group of small figures on one hairline-bounded strip.
+ *
+ * What it replaces is twenty bordered tiles — an eight-cell grid under the
+ * grade and a twelve-cell grid under the plan — in which every figure had the
+ * same border, the same padding and the same weight as every other. A tile
+ * grid says "these are peers"; twelve peers is a list nobody reads, and the
+ * two most important numbers on it were indistinguishable from the two least.
+ *
+ * The strip flows instead of gridding, so a group is as wide as its contents
+ * and the eye can tell four figures from twelve without counting, and the
+ * group carries a name, so what each answers is stated rather than implied.
+ */
+const Figures = ({
+  label,
+  items,
+}: {
+  label: string;
+  items: { k: ReactNode; v: ReactNode; note?: string; tone?: string }[];
+}) => (
+  <div className="flex flex-col gap-1.5">
+    <span className="font-mono text-micro font-semibold uppercase tracking-widest text-textSecondary">{label}</span>
+    <div className="flex flex-wrap gap-x-6 gap-y-2 border-y border-borderSubtle py-2">
+      {items.map((f, i) => (
+        <div key={i} className="min-w-0">
+          <div className="font-mono text-micro uppercase tracking-widest text-textMuted whitespace-nowrap">{f.k}</div>
+          <div className={`font-mono text-caption font-semibold tnum leading-4 ${f.tone ?? 'text-textPrimary'}`}>{f.v}</div>
+          {f.note && <div className="font-mono text-micro text-textMuted leading-snug">{f.note}</div>}
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
 const FactorRow = ({
   label,
   weight,
@@ -260,9 +294,9 @@ interface LadderProps {
 /**
  * Listed strikes on the resolved expiry and side, spot anchored. This is a new,
  * smaller component rather than a lift of ContractChain: that one takes
- * ContractChainData from buildCompass rather than a MarketSnapshot, and it is
- * currently rendering at zero height in Compass review mode at xl. Only the
- * SpotRule idiom is reused.
+ * ContractChainData from buildCompass rather than a MarketSnapshot, and it
+ * lists both sides at once where this rail lists the one the query resolved to.
+ * Only the SpotRule idiom is reused.
  */
 const ContractLadder = ({ rows, spot, ticker, selectedId, deskPickId, onSelect, outOfRange }: LadderProps) => {
   const crossing = rows.findIndex(r => r.strike > spot);
@@ -278,16 +312,29 @@ const ContractLadder = ({ rows, spot, ticker, selectedId, deskPickId, onSelect, 
       )}
       <div
         role="listbox"
-        aria-label={`Listed strikes on ${ticker}`}
+        /* Spot rides the list's own name because the rule that draws it inside
+           the list cannot: a listbox may own options and groups and nothing
+           else, so the marker is hidden from the tree and the price it marks
+           is said here instead, once, where it is actually reachable. */
+        aria-label={`Listed strikes on ${ticker}, spot $${spot.toFixed(2)}`}
         className="flex sm:flex-col overflow-x-auto sm:overflow-x-visible sm:overflow-y-auto sm:max-h-[520px] gap-1 sm:gap-0 no-scrollbar"
       >
         {rows.map((r, i) => {
           const hasPremium = isPriceable(r);
           const selected = r.id === selectedId;
           return (
-            <div key={r.id} className="contents sm:block">
+            /* A Fragment, not a wrapper div. A listbox's children have to BE
+               options — put a generic between the two and the whole rail stops
+               being a listbox, which axe reports as a critical
+               aria-required-children fault. The div was only ever carrying
+               `contents sm:block`, and `contents` already made its children
+               direct flex items, so both layouts survive it going away.
+
+               The spot rule is presentational for the same reason: it is a
+               marker between two options, not a third option. */
+            <Fragment key={r.id}>
               {i === crossing && (
-                <div className="hidden sm:block py-1">
+                <div aria-hidden className="hidden sm:block py-1">
                   <SpotRule ticker={ticker} price={spot} />
                 </div>
               )}
@@ -329,7 +376,7 @@ const ContractLadder = ({ rows, spot, ticker, selectedId, deskPickId, onSelect, 
                   </SignalBadge>
                 )}
               </button>
-            </div>
+            </Fragment>
           );
         })}
       </div>
@@ -359,11 +406,30 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
   const { trackContract, untrackSetup, isTracked } = useTracker();
   const listId = useId();
 
+  /*
+    What the desk weighs when nothing has been typed.
+
+    It used to weigh nothing: the panel was a search field centred in half a
+    screen of black, and the first thing the Weigher told anyone was that it had
+    nothing to say. It always had something to say — the ticker in the top bar
+    is a real name with a real ladder, and grading its at-the-money call is the
+    same work the desk does for a typed one.
+
+    Same construction as the sleeve deep-link below it, so the landing contract
+    and a linked contract are built one way.
+  */
+  const restingQuery = useMemo(
+    () => canonicalQuery(snapshot.ticker, Math.round(snapshot.spot), 'C', expiryFor(dteForHorizon[initialHorizon ?? 'LOTTO'])),
+    // The strike only needs to be sensible, not live: re-deriving it every tick
+    // would retype the user's search box under them.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [snapshot.ticker, initialHorizon]
+  );
+
   const [query, setQuery] = useState(() => {
     if (initialQuery) return initialQuery;
-    if (!initialHorizon) return '';
     // A sleeve deep-link is a request to see that sleeve graded, so it commits.
-    const e = expiryFor(dteForHorizon[initialHorizon]);
+    const e = expiryFor(dteForHorizon[initialHorizon ?? 'LOTTO']);
     const atm = Math.round(snapshot.spot);
     return canonicalQuery(snapshot.ticker, atm, 'C', e);
   });
@@ -774,10 +840,13 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
       {committed && (
         <button
           onClick={() => {
-            setQuery('');
+            // Back to the desk's own contract, not to nothing. Clearing a
+            // search box should hand you the page you started on, and the page
+            // this one starts on is the ticker in the top bar.
+            setQuery(restingQuery);
             inputRef.current?.focus();
           }}
-          aria-label="Clear the search"
+          aria-label="Back to this desk's contract"
           className="absolute right-2 top-1/2 -translate-y-1/2 -m-1 p-1 text-textMuted hover:text-textPrimary transition-colors"
         >
           <CornerDownLeft className="w-3.5 h-3.5 rotate-180" />
@@ -826,50 +895,48 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
     </div>
   );
 
-  // ---- STATE 0: at rest -------------------------------------------------------
+  /*
+    STATE 0: the box has been emptied by hand.
+
+    This is now the only way to reach it — the desk lands on restingQuery and
+    the clear button returns to it — and it used to be the Weigher's front page:
+    a search field alone in the middle of half a screen of black, with three
+    example strings under it. Centring one input in a void is what a page does
+    when it has nothing, and this page never had nothing.
+
+    So it is top-aligned, panelled like the rest of the desk, and the fastest
+    way out of it is the first thing in it: the contract the desk was weighing
+    before the box was emptied.
+  */
   if (!committed) {
-    return (
-      <div className="mx-auto w-full max-w-[1180px] flex flex-col gap-4">
-        <div className="min-h-[46vh] flex flex-col items-center justify-center gap-5">
-          {searchField}
-          <p className="font-mono text-label text-textMuted text-center">
-            ticker · strike · call or put · expiry, in any order
-          </p>
-          <div className="flex flex-wrap items-center justify-center gap-2">
-            {['07/27 spy 747C', 'SPY 505C 7/31', 'spy 505 call aug 7'].map(ex => (
-              <button
-                key={ex}
-                onClick={() => setQuery(ex)}
-                className={`${CHIP_BASE} ${CHIP_TONE.assumed}`}
-                aria-label={`Try the example ${ex}`}
-              >
-                {ex}
-              </button>
-            ))}
-          </div>
-
-          {feedSeeds.length > 0 && (
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              <span className="font-mono text-micro uppercase tracking-widest text-textMuted">From the setups feed</span>
-              {feedSeeds.map(q => (
-                <button key={q} onClick={() => setQuery(q)} className={`${CHIP_BASE} ${CHIP_TONE.typed}`} aria-label={`Weigh ${q}`}>
-                  {q}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {recents.length > 0 && (
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              <span className="font-mono text-micro uppercase tracking-widest text-textMuted">Recent</span>
-              {recents.map(q => (
-                <button key={q} onClick={() => setQuery(q)} className={`${CHIP_BASE} ${CHIP_TONE.assumed}`} aria-label={`Weigh ${q} again`}>
-                  {q}
-                </button>
-              ))}
-            </div>
-          )}
+    const seedRow = (label: string, items: string[], tone: 'typed' | 'assumed') =>
+      items.length > 0 && (
+        <div className="flex flex-wrap items-baseline gap-2 py-2 first:pt-0">
+          <span className="font-mono text-micro uppercase tracking-widest text-textMuted w-[104px] shrink-0">{label}</span>
+          {items.map(q => (
+            <button key={q} onClick={() => setQuery(q)} className={`${CHIP_BASE} ${CHIP_TONE[tone]}`} aria-label={`Weigh ${q}`}>
+              {q}
+            </button>
+          ))}
         </div>
+      );
+
+    return (
+      <div className="mx-auto w-full max-w-[1180px]">
+        {/* Not "Contract Weigher" — the page heading two lines above already
+            says that, and a panel repeating its own page is a panel with
+            nothing to add. This one names the action. */}
+        <Panel title="Weigh a contract" subtitle="ticker · strike · call or put · expiry, in any order" className="w-full">
+          <div className="flex flex-col gap-3">
+            {searchField}
+            <div className="flex flex-col divide-y divide-borderSubtle">
+              {seedRow('This desk', [restingQuery], 'typed')}
+              {seedRow('From the feed', feedSeeds, 'typed')}
+              {seedRow('Recent', recents, 'assumed')}
+              {seedRow('Or type', ['07/27 spy 747C', 'SPY 505C 7/31', 'spy 505 call aug 7'], 'assumed')}
+            </div>
+          </div>
+        </Panel>
       </div>
     );
   }
@@ -1063,27 +1130,34 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
   ) : null;
 
   const statGrid = weighed ? (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-      <Stat label="Mid" value={`$${weighed.mid.toFixed(2)}`} />
-      <Stat label="Δ delta" value={weighed.delta.toFixed(2)} />
-      {/* At the premium floor these two are model output, not readings, so they
-          say so on the tile rather than in a tooltip nobody hovers. */}
-      <Stat
-        label="θ / day"
-        value={priceable ? `−${weighed.thetaPerDayPct.toFixed(1)}%` : '—'}
-        sub={priceable ? undefined : 'not a reading at the premium floor'}
-        tone={priceable && weighed.thetaPerDayPct > 5 ? 'bear' : 'neutral'}
-      />
-      <Stat
-        label="Spread"
-        value={priceable ? `${weighed.spreadPct.toFixed(1)}%` : '—'}
-        sub={priceable ? undefined : 'not a reading at the premium floor'}
-      />
-      <Stat label="IV rank" value={`${weighed.ivRank}`} />
-      <Stat label="Open int" value={weighed.oi.toLocaleString()} />
-      <Stat label="1σ move" value={`${weighed.expectedMovePct.toFixed(1)}%`} />
-      <Stat label="Breakeven" value={`${weighed.breakevenMovePct.toFixed(1)}%`} tone={coverage >= 1 ? 'select' : 'warn'} />
-    </div>
+    <Figures
+      label="The quote"
+      items={[
+        { k: 'Mid', v: `$${weighed.mid.toFixed(2)}` },
+        { k: preserveGreek('Δ delta'), v: weighed.delta.toFixed(2) },
+        // At the premium floor these two are model output, not readings, so
+        // they say so in the strip rather than in a tooltip nobody hovers.
+        {
+          k: preserveGreek('θ / day'),
+          v: priceable ? `−${weighed.thetaPerDayPct.toFixed(1)}%` : '—',
+          note: priceable ? undefined : 'not a reading at the floor',
+          tone: priceable && weighed.thetaPerDayPct > 5 ? 'text-bear' : undefined,
+        },
+        {
+          k: 'Spread',
+          v: priceable ? `${weighed.spreadPct.toFixed(1)}%` : '—',
+          note: priceable ? undefined : 'not a reading at the floor',
+        },
+        { k: 'IV rank', v: `${weighed.ivRank}` },
+        { k: 'Open int', v: weighed.oi.toLocaleString() },
+        { k: preserveGreek('1σ move'), v: `${weighed.expectedMovePct.toFixed(1)}%` },
+        {
+          k: 'Breakeven',
+          v: `${weighed.breakevenMovePct.toFixed(1)}%`,
+          tone: coverage >= 1 ? 'text-select' : 'text-warn',
+        },
+      ]}
+    />
   ) : null;
 
   const factorLedger =
@@ -1131,6 +1205,31 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
         </details>
       </div>
     ) : null;
+
+  /*
+    ONE discriminant for what the pane is currently showing.
+
+    The same question was being answered in three places with three hand-rolled
+    predicates — the grade body's if-ladder, `showTrack`, and the `weighed &&
+    priceable` guard on "If you take it" — and they drifted, which is how a
+    symbol with no listing ended up with a full cost breakdown under it. Typing
+    `ZZZZ 505C` printed NO LISTING FOR ZZZZ in the grade panel and then, directly
+    beneath, days to expiry, cost per contract, contracts in budget, expected
+    fill, spread round-trip and theta drag — sizing economics for a ticker the
+    page had just said it could not find.
+
+    Derived once, switched on everywhere. A panel that quotes what a trade costs
+    may only render in the one state where a trade exists.
+  */
+  const gradeState: 'expired' | 'unknown-ticker' | 'no-strike' | 'unpriceable' | 'graded' = parsed.expired
+    ? 'expired'
+    : parsed.ticker.state === 'unknown'
+      ? 'unknown-ticker'
+      : parsed.strike.state === 'missing' || !weighed
+        ? 'no-strike'
+        : !priceable
+          ? 'unpriceable'
+          : 'graded';
 
   const gradePanelBody = () => {
     if (parsed.expired) {
@@ -1276,7 +1375,7 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
 
   // The chart follows the grade. Where the panel above is an empty state — a date
   // that has passed, a symbol with no listing — there is no contract to draw.
-  const showTrack = trackPlan != null && track != null && !parsed.expired && parsed.ticker.state !== 'unknown';
+  const showTrack = trackPlan != null && track != null && gradeState !== 'expired' && gradeState !== 'unknown-ticker';
 
   return (
     <div className="mx-auto w-full max-w-[1180px] flex flex-col gap-4">
@@ -1344,7 +1443,7 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
 
       {showTrack && <ContractTrack key={trackPlan.key} plan={trackPlan} bars={trackBars} track={track} className="animate-soft-in" />}
 
-      {weighed && priceable && (
+      {gradeState === 'graded' && weighed && (
         <Panel
           title={
             <span className="inline-flex items-center gap-1.5">
@@ -1401,24 +1500,54 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
               </label>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <Stat label="Days to expiry" value={`${railExpiry.dte}d`} sub={`${railExpiry.sessions} sessions`} />
-              <Stat label="Hold to target" value={`${daysToTarget}d`} />
-              <Stat label="Runway to expiry" value={`${runway}d`} tone={runway <= 0 ? 'warn' : 'neutral'} />
-              <Stat label="1σ move" value={`${effExpMove.toFixed(1)}%`} />
-              <Stat label="Cost / contract" value={`$${costPerContract.toFixed(0)}`} />
-              <Stat
-                label="Contracts in budget"
-                value={contractsInBudget != null ? `${contractsInBudget}` : '—'}
-                tone={contractsInBudget === 0 ? 'warn' : 'neutral'}
-              />
-              <Stat label="Est. outlay" value={outlay != null ? `$${outlay.toFixed(0)}` : '—'} />
-              <Stat label="Expected fill" value={`$${expFill.toFixed(2)}`} sub={`~${halfSpread.toFixed(1)}% exit slippage`} />
-              <Stat label="Spread round-trip" value={`${weighed.spreadPct.toFixed(1)}%`} tone={weighed.spreadPct > 4 ? 'warn' : 'neutral'} />
-              <Stat label="Fill probability" value={`${fillProb}%`} tone={fillProb >= 70 ? 'select' : fillProb < 45 ? 'warn' : 'neutral'} />
-              <Stat label="Theta drag" value={`−${weighed.thetaPerDayPct.toFixed(1)}%/d`} tone={weighed.thetaPerDayPct > 5 ? 'bear' : 'neutral'} />
-              <Stat label="Total friction" value={`${friction.toFixed(1)}%`} tone={costEatsEdge ? 'warn' : 'neutral'} />
-            </div>
+            {/* Three readouts, not twelve tiles. The twelve were one grid with
+                no grouping, so "runway to expiry" and "fill probability" — a
+                clock and an execution guess — carried identical weight and sat
+                three cells apart. Split by what each answers: how long, how
+                much, and what it costs to get in and out. */}
+            <Figures
+              label="How long"
+              items={[
+                { k: 'Days to expiry', v: `${railExpiry.dte}d`, note: `${railExpiry.sessions} sessions` },
+                { k: 'Hold to target', v: `${daysToTarget}d` },
+                { k: 'Runway to expiry', v: `${runway}d`, tone: runway <= 0 ? 'text-warn' : undefined },
+                { k: preserveGreek('1σ move'), v: `${effExpMove.toFixed(1)}%` },
+              ]}
+            />
+            <Figures
+              label="How much"
+              items={[
+                { k: 'Cost / contract', v: `$${costPerContract.toFixed(0)}` },
+                {
+                  k: 'Contracts in budget',
+                  v: contractsInBudget != null ? `${contractsInBudget}` : '—',
+                  tone: contractsInBudget === 0 ? 'text-warn' : undefined,
+                },
+                { k: 'Est. outlay', v: outlay != null ? `$${outlay.toFixed(0)}` : '—' },
+              ]}
+            />
+            <Figures
+              label="What the round trip costs"
+              items={[
+                { k: 'Expected fill', v: `$${expFill.toFixed(2)}`, note: `~${halfSpread.toFixed(1)}% exit slippage` },
+                {
+                  k: 'Spread round-trip',
+                  v: `${weighed.spreadPct.toFixed(1)}%`,
+                  tone: weighed.spreadPct > 4 ? 'text-warn' : undefined,
+                },
+                {
+                  k: 'Fill probability',
+                  v: `${fillProb}%`,
+                  tone: fillProb >= 70 ? 'text-select' : fillProb < 45 ? 'text-warn' : undefined,
+                },
+                {
+                  k: 'Theta drag',
+                  v: `−${weighed.thetaPerDayPct.toFixed(1)}%/d`,
+                  tone: weighed.thetaPerDayPct > 5 ? 'text-bear' : undefined,
+                },
+                { k: 'Total friction', v: `${friction.toFixed(1)}%`, tone: costEatsEdge ? 'text-warn' : undefined },
+              ]}
+            />
 
             <p className="text-caption text-textSecondary leading-relaxed">
               {costEatsEdge

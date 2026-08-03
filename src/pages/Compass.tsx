@@ -5,8 +5,16 @@ import { Filter, History } from 'lucide-react';
 import { useMarketData } from '../context/MarketDataContext';
 import type { MarketSnapshot } from '../types/market';
 import Simulator from '../core/simulator';
-import { buildCompass, makeSetup, scannerExpiry, scannerFloor } from '../data/compass';
-import { SCANNERS, type OptionRight, type ScannerKey, type Setup } from '../types/compass';
+import { buildCompass, makeSetup, scannerFloor, sleeveExpiry } from '../data/compass';
+import {
+  SCANNERS,
+  SLEEVES,
+  SLEEVE_BY_KEY,
+  type OptionRight,
+  type ScannerKey,
+  type Setup,
+  type SleeveKey,
+} from '../types/compass';
 import PageHeader from '../components/ui/PageHeader';
 import Panel from '../components/ui/Panel';
 import ContractChain, { type ChainSelection } from '../components/compass/ContractChain';
@@ -16,6 +24,10 @@ import ContractWeigher from '../components/compass/ContractWeigher';
 import LottoBoard from '../components/compass/LottoBoard';
 import SetupScanBoard, { type ScanLayout } from '../components/compass/SetupScanBoard';
 import SetupCompare from '../components/compass/SetupCompare';
+import Freshness from '../components/compass/Freshness';
+import { SLEEVE_INK } from '../components/compass/sleeveInk';
+import StructureBoard from '../components/compass/StructureBoard';
+import { sweepClock } from '../components/compass/sweepClock';
 import { expiryRangeLabel, expiryRead } from '../components/compass/setupHorizon';
 import type { Horizon } from '../core/contractScore';
 import SegmentedControl from '../components/ui/SegmentedControl';
@@ -38,12 +50,11 @@ const SCAN_INTERVAL_MS = 10_000;
 /* One membership test per vocabulary, used by every entry into this page. */
 const SCANNER_KEYS = new Set<string>(SCANNERS.map(s => s.key));
 const COMPASS_MODES = new Set<string>(MODE_OPTIONS.map(o => o.value));
+const SLEEVE_KEYS = new Set<string>(SLEEVES.map(s => s.key));
 
 const isScannerKey = (v: unknown): v is ScannerKey => typeof v === 'string' && SCANNER_KEYS.has(v);
 const isCompassMode = (v: unknown): v is CompassMode => typeof v === 'string' && COMPASS_MODES.has(v);
-
-/** Sweep clock, one format wherever a sweep time is printed. */
-const sweepClock = (ms: number): string => new Date(ms).toLocaleTimeString('en-GB');
+const isSleeveKey = (v: unknown): v is SleeveKey => typeof v === 'string' && SLEEVE_KEYS.has(v);
 
 /**
  * A contract the pane is pointed at, carrying the row it was opened FROM.
@@ -123,6 +134,13 @@ const HeldFromSweep = ({ from, now }: { from: number; now: string }) => (
  * (Setups / Top Setups), an unreadable value falls back the same way, and the
  * URL is only written once the user actually moves — so an existing /compass
  * bookmark is left alone until it is used.
+ *
+ * The HORIZON is a second param rather than a second vocabulary in the first
+ * one. `?view=` names the pane or the style exactly as it always did, and
+ * `?sleeve=` names the clock; a link written before sleeves existed still opens
+ * the style it names, on the same-session sleeve it was written against. Folding
+ * both axes into one param would have meant either thirty new values or breaking
+ * every link already in the wild.
  */
 interface ViewRead {
   mode: CompassMode;
@@ -141,7 +159,9 @@ const Compass = () => {
   const location = useLocation();
   const [params, setParams] = useSearchParams();
   const landedOn = readView(params.get('view'));
+  const landedSleeve = params.get('sleeve');
   const [scanner, setScanner] = useState<ScannerKey>(landedOn?.scanner ?? 'top-setups');
+  const [sleeve, setSleeve] = useState<SleeveKey>(isSleeveKey(landedSleeve) ? landedSleeve : 'odte');
   const [mode, setMode] = useState<CompassMode>(landedOn?.mode ?? 'setups');
   const [weigherHorizon, setWeigherHorizon] = useState<Horizon | undefined>(undefined);
 
@@ -157,18 +177,28 @@ const Compass = () => {
 
   // Scan presentation: card grid vs sortable table. Two densities of one list.
   const [scanLayout, setScanLayout] = useState<ScanLayout>('cards');
+  /* Which page of the card grid. It lives here rather than in the board because
+     review mode unmounts the board — see the note on SetupScanBoardProps.page. */
+  const [scanPage, setScanPage] = useState(0);
 
   const inReviewMode = monitorTarget !== null;
 
-  const writeView = (value: string) => {
+  const writeView = (value: string, nextSleeve?: SleeveKey) => {
     const next = new URLSearchParams(params);
     next.set('view', value);
+    const s = nextSleeve ?? sleeve;
+    // Same-session is the default, so it stays out of the URL — a shared link
+    // only carries the horizon when it is not the one you would have got anyway.
+    if (s === 'odte') next.delete('sleeve');
+    else next.set('sleeve', s);
     setParams(next, { replace: true });
   };
 
   // The URL is the source of truth once it carries a view, so a reload and a
   // pasted link both land where they say they will.
   useEffect(() => {
+    const raw = params.get('sleeve');
+    setSleeve(isSleeveKey(raw) ? raw : 'odte');
     const view = readView(params.get('view'));
     if (!view) return;
     setMode(view.mode);
@@ -250,13 +280,33 @@ const Compass = () => {
 
   const scanClock = scanAt ? sweepClock(scanAt) : '';
 
+  /*
+    Stable identities for the two props that were undoing SetupScanBoard's memo.
+
+    The board is wrapped in React.memo precisely so the scan tier does not
+    re-render on the live tier's 1.5s tick. An inline arrow and an inline
+    <Freshness/> element are both new objects on every one of those ticks, and
+    memo's shallow compare sees two changed props — so up to 240 rows
+    reconciled every 1.5 seconds to display data that only changes every 10.
+    The boundary this whole two-clock design rests on was being defeated by two
+    lines of JSX inside it.
+  */
+  const handleScanLayout = useCallback((next: ScanLayout) => {
+    setScanLayout(next);
+    setScanPage(0);
+  }, []);
+  const scanFreshness = useMemo(() => <Freshness kind="sweep" at={scanAt} />, [scanAt]);
+
   // Scan tier: feed groups, counts, impact — stable between sweeps
-  const data = useMemo(() => (scanSnapshot ? buildCompass(scanSnapshot, scanner) : null), [scanSnapshot, scanner]);
+  const data = useMemo(
+    () => (scanSnapshot ? buildCompass(scanSnapshot, scanner, { sleeve }) : null),
+    [scanSnapshot, scanner, sleeve]
+  );
 
   // Live tier: the contract chain tracks every tick (prices should breathe)
   const liveChain = useMemo(
-    () => (marketData ? buildCompass(marketData, scanner).chain : null),
-    [marketData, scanner]
+    () => (marketData ? buildCompass(marketData, scanner, { sleeve }).chain : null),
+    [marketData, scanner, sleeve]
   );
 
   /**
@@ -293,11 +343,26 @@ const Compass = () => {
       Simulator.ensureTicker(target.ticker);
       const cfg = Simulator.TICKERS[target.ticker];
       return {
-        setup: makeSetup(target.ticker, cfg.currentPrice, target.strike, target.right, scanner, cfg.iv),
+        // The SLEEVE has to travel here too. This branch grades a contract that
+        // was never on the board — a Tracker deep-link, or a strike picked off
+        // the chain — and without it that contract would be priced on the
+        // default same-session clock while the chain beside it quotes the
+        // sleeve the user is actually on. Exactly the disagreement this pass
+        // exists to remove, one call site further down.
+        setup: makeSetup(
+          target.ticker,
+          cfg.currentPrice,
+          target.strike,
+          target.right,
+          scanner,
+          cfg.iv,
+          undefined,
+          sleeve
+        ),
         heldFrom: null,
       };
     },
-    [sweptRow, scanner]
+    [sweptRow, scanner, sleeve]
   );
 
   const monitored = useMemo(
@@ -365,12 +430,13 @@ const Compass = () => {
   const scannerMeta = useMemo(() => {
     const meta = {} as Record<ScannerKey, { found: number; shown: number; expiry: string }>;
     if (!scanSnapshot) return meta;
+    const expiry = sleeveExpiry(sleeve);
     for (const s of SCANNERS) {
-      const built = s.key === scanner && data ? data : buildCompass(scanSnapshot, s.key);
-      meta[s.key] = { found: built.totalFound, shown: built.shown, expiry: scannerExpiry(s.key) };
+      const built = s.key === scanner && data ? data : buildCompass(scanSnapshot, s.key, { sleeve });
+      meta[s.key] = { found: built.totalFound, shown: built.shown, expiry };
     }
     return meta;
-  }, [scanSnapshot, scanner, data]);
+  }, [scanSnapshot, scanner, sleeve, data]);
 
   // Collect unique tickers across the feed for the filter dropdown
   const feedTickers = useMemo(() => {
@@ -388,8 +454,19 @@ const Compass = () => {
     [rankedSetups, scannerMeta, scanner]
   );
 
+  const handleSleeve = (next: SleeveKey) => {
+    setSleeve(next);
+    setScanPage(0);
+    setMonitorTarget(null);
+    setSelected(null);
+    setChainSel(null);
+    setTickerFilter(null);
+    writeView(scanner, next);
+  };
+
   const handleScanner = (next: ScannerKey) => {
     setScanner(next);
+    setScanPage(0);
     setMonitorTarget(null);
     setSelected(null);
     setChainSel(null);
@@ -499,7 +576,16 @@ const Compass = () => {
           ? `Monitoring ${monitorTarget.ticker} ${monitorTarget.strike}${monitorTarget.right}`
           : 'Signal Monitor'
       }
-      subtitle="Watching one setup as it moves. The card that graded it now tracks whether the structure under it holds."
+      subtitle={
+        monitorTarget
+          ? /* Opening a setup calls changeTicker so the chain beside the monitor
+               prices the right underlying — correct, and previously invisible: a
+               global, cross-desk state change happened as a silent side effect of
+               an in-page click, and did not unwind on the way back. Saying so is
+               cheaper and less surprising than reverting it. */
+            `Watching one setup as it moves. The desk is pointed at ${monitorTarget.ticker} so the chain prices this contract's underlying.`
+          : 'Watching one setup as it moves. The card that graded it now tracks whether the structure under it holds.'
+      }
       actions={modeSwitch}
     />
   );
@@ -535,11 +621,71 @@ const Compass = () => {
       ) : (
         <>
 
-      {/* Scanner tabs — each one states the expiry it selects, because "Quick
-          Scalp" is a style and a trader needs the horizon, and the count of
-          what its own bar admits, because six presets printing one capped
-          number told a trader nothing about which of them is worth opening. */}
-      <div className="flex items-center gap-1 flex-wrap">
+      {/*
+        HORIZON first. This is the question a trader answers before any other,
+        and until now the desk never asked it: every preset in the strip was
+        same-session or next-day, so "where are the weeklies, the swings, the
+        LEAPS" had no answer on the page. Five sleeves, each carrying its own
+        colour and the expiry it resolves to.
+
+        The strip scrolls rather than wraps below sm. Wrapping put three rows of
+        chrome above the first card on a phone and pushed the board under the
+        fold; a horizontal rail keeps the sleeve you are on visible and the rest
+        one swipe away.
+      */}
+      <div
+        role="tablist"
+        aria-label="Contract horizon"
+        className="flex items-stretch gap-1 overflow-x-auto sm:flex-wrap -mx-3 px-3 sm:mx-0 sm:px-0"
+      >
+        {SLEEVES.map(sl => {
+          const isActive = sleeve === sl.key;
+          const c = SLEEVE_INK[sl.key];
+          return (
+            <button
+              key={sl.key}
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => handleSleeve(sl.key)}
+              title={sl.blurb}
+              className={`relative shrink-0 text-left px-3 py-2 rounded-md transition-colors ${
+                isActive ? c.activeBg : 'hover:bg-rowHover'
+              }`}
+            >
+              <span
+                className={`block font-mono text-label font-semibold uppercase tracking-wider ${
+                  isActive ? c.text : 'text-textSecondary'
+                }`}
+              >
+                {sl.label}
+              </span>
+              {/* textSecondary, not textMuted: #7d7d7d at 10px over the tab's
+                  own colour wash measured under 4.5:1, and the expiry is the
+                  half of the tab a user actually reads. */}
+              <span className="block font-mono text-micro text-textSecondary tnum">
+                {sl.key === 'structures' ? sl.window : expiryRead(sleeveExpiry(sl.key)).chip}
+              </span>
+              {isActive && <span className={`absolute left-3 right-3 -bottom-px h-px ${c.rule}`} />}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Structures is a different instrument, not a longer one: the styles
+          below screen single contracts on a strike ladder, and a condor has no
+          strike. The sleeve strip stays; everything under it is replaced. */}
+      {sleeve === 'structures' ? (
+        <StructureBoard snapshot={marketData} dte={SLEEVE_BY_KEY.structures.dte} />
+      ) : (
+      <>
+      {/* Style second — a LENS on the sleeve above, not a horizon of its own.
+          Each states what its own bar admits, because six presets printing one
+          capped number told a trader nothing about which is worth opening. */}
+      {/* One scrolling row on a phone, the same treatment the sleeve strip
+          above it gets. Wrapped, six presets took three rows at 390px, and with
+          the sleeve strip added the first card began 555px into an 844px
+          viewport — five stacked control rows before any data. */}
+      <div className="flex items-center gap-1 overflow-x-auto sm:flex-wrap -mx-3 px-3 sm:mx-0 sm:px-0">
         {SCANNERS.map(s => {
           const isActive = scanner === s.key;
           const meta = scannerMeta[s.key];
@@ -554,7 +700,11 @@ const Compass = () => {
                   ? `${expiryRead(meta.expiry).sentence}. ${s.blurb}. ${meta.found.toLocaleString()} contracts scored ${floor}+ on the last sweep; the board shows the top ${meta.shown}.`
                   : s.blurb
               }
-              className={`relative inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md font-mono text-label uppercase tracking-wider transition-colors ${
+              /* shrink-0 and nowrap: in a scrolling row a flex child still
+                 shrinks, so without them the labels wrapped inside their own
+                 pills and the strip was three lines tall again by another
+                 route. */
+              className={`relative shrink-0 whitespace-nowrap inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md font-mono text-label uppercase tracking-wider transition-colors ${
                 isActive
                   ? 'text-ink font-semibold'
                   : 'text-textMuted font-medium hover:text-textSecondary hover:bg-rowHover'
@@ -583,7 +733,12 @@ const Compass = () => {
           in that panel's own header. */}
       {!inReviewMode && (
         <div className="flex items-center gap-x-3 gap-y-2 flex-wrap">
-          <span className="font-mono text-label text-textMuted uppercase tracking-wider">
+          {/* Hidden on a phone: the sleeve tab above already prints the expiry
+              and the active style already prints its own name, so on the
+              narrowest screen this is two wrapped lines restating the two rows
+              directly above it. Each style button's title keeps the full
+              sentence one press away. */}
+          <span className="hidden sm:inline font-mono text-label text-textMuted uppercase tracking-wider">
             {activeExpiry ? `${activeExpiry} · ` : ''}
             {activeScanner.blurb}
           </span>
@@ -596,8 +751,7 @@ const Compass = () => {
             className="ml-auto font-mono text-label text-textMuted uppercase tracking-widest tnum"
             title={`${activeScanner.label} admits any contract scoring ${activeFloor} or better on an 8 to 99 scale. ${data.totalFound.toLocaleString()} cleared it across the whole field this sweep; the board shows the top ${data.shown}.`}
           >
-            Showing {rankedSetups.length} of {data.totalFound.toLocaleString()} scoring {activeFloor}+ · scan{' '}
-            {scanClock} · 10s
+            Showing {rankedSetups.length} of {data.totalFound.toLocaleString()} scoring {activeFloor}+
           </span>
           <div className="relative">
             <button
@@ -618,7 +772,7 @@ const Compass = () => {
                  no longer four items long. */
               <div className="absolute right-0 top-full mt-1 z-20 min-w-[140px] max-h-72 overflow-y-auto border border-borderSubtle bg-panel rounded-md shadow-overlay animate-slide-in">
                 <button
-                  onClick={() => { setTickerFilter(null); setShowTickerDropdown(false); }}
+                  onClick={() => { setTickerFilter(null); setScanPage(0); setShowTickerDropdown(false); }}
                   className={`w-full text-left px-3 py-2 font-mono text-label transition-colors ${
                     !tickerFilter ? 'text-select bg-select/[0.06]' : 'text-textSecondary hover:bg-rowHover'
                   }`}
@@ -628,7 +782,7 @@ const Compass = () => {
                 {feedTickers.map(t => (
                   <button
                     key={t}
-                    onClick={() => { setTickerFilter(t); setShowTickerDropdown(false); }}
+                    onClick={() => { setTickerFilter(t); setScanPage(0); setShowTickerDropdown(false); }}
                     className={`w-full text-left px-3 py-2 font-mono text-label transition-colors ${
                       tickerFilter === t ? 'text-select bg-select/[0.06]' : 'text-textSecondary hover:bg-rowHover'
                     }`}
@@ -649,6 +803,10 @@ const Compass = () => {
             {activeExpiry ? `${activeExpiry} · ` : ''}
             {activeScanner.blurb}
           </span>
+          {/* The grade on the monitor came off a sweep; the chain beside it is
+              live. Both say so rather than leaving the reader to infer that two
+              panels updating at different rates is a fault. */}
+          <Freshness kind="sweep" at={scanAt} className="ml-auto" />
         </div>
       )}
 
@@ -671,7 +829,15 @@ const Compass = () => {
               {inReviewMode && monitored ? (
                 <div className="flex flex-col gap-4">
                   {monitored.heldFrom !== null && <HeldFromSweep from={monitored.heldFrom} now={scanClock} />}
-                  <SignalMonitor setup={monitored.setup} onBack={handleBackToBrowse} />
+                  <SignalMonitor
+                    setup={monitored.setup}
+                    /* The sweep's spot for this name — the one the setup was
+                       priced and invalidated against, same source the compare
+                       pane takes. The chart below keeps the live buffer; it is
+                       a price chart and belongs on the live tier. */
+                    sweepSpot={data?.groups.find(g => g.ticker === monitored.setup.ticker)?.spot ?? 0}
+                    onBack={handleBackToBrowse}
+                  />
                 </div>
               ) : (
                 <SetupScanBoard
@@ -680,11 +846,13 @@ const Compass = () => {
                   scannerLabel={activeScanner.label}
                   expiryLabel={activeExpiry}
                   layout={scanLayout}
-                  onLayoutChange={setScanLayout}
+                  onLayoutChange={handleScanLayout}
+                  page={scanPage}
+                  onPageChange={setScanPage}
+                  freshness={scanFreshness}
                   selectedId={effectiveSelected?.setup.id ?? null}
                   onSelect={handleSelectSetup}
                   onStudy={handleReviewSetup}
-                  resetKey={`${scanner}|${tickerFilter ?? 'all'}`}
                 />
               )}
             </motion.div>
@@ -703,7 +871,12 @@ const Compass = () => {
               className="flex-1 flex flex-col"
             >
               {inReviewMode && liveChain ? (
-                <ContractChain data={liveChain} selected={chainSel} onSelect={handleChainSelect} />
+                <ContractChain
+                  data={liveChain}
+                  selected={chainSel}
+                  onSelect={handleChainSelect}
+                  freshness={<Freshness kind="live" />}
+                />
               ) : effectiveSelected ? (
                 <div className="flex flex-col gap-3">
                   {effectiveSelected.heldFrom !== null && (
@@ -712,6 +885,9 @@ const Compass = () => {
                   <SetupCompare
                     setup={effectiveSelected.setup}
                     peers={rankedSetups}
+                    /* The sweep's own spot for this name, not a fresher one:
+                       it is what the setup beside it was priced against. */
+                    spot={data?.groups.find(g => g.ticker === effectiveSelected.setup.ticker)?.spot ?? 0}
                     scanner={scanner}
                     onSelectPeer={handleSelectSetup}
                     onStudy={() => handleReviewSetup(effectiveSelected.setup)}
@@ -734,6 +910,8 @@ const Compass = () => {
           scan, which is how a leaderboard ends up reading as padding under the
           setups rather than as the desk-level context it is. */}
       <ImpactLeaderboard rows={data.impact} />
+      </>
+      )}
         </>
       )}
     </>

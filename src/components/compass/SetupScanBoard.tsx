@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from 'react';
+import React, { memo, useMemo } from 'react';
 import { AlertTriangle, ChevronLeft, ChevronRight, SearchX } from 'lucide-react';
 import Panel from '../ui/Panel';
 import SegmentedControl from '../ui/SegmentedControl';
@@ -37,11 +37,21 @@ interface SetupScanBoardProps {
   expiryLabel: string;
   layout: ScanLayout;
   onLayoutChange: (layout: ScanLayout) => void;
+  /**
+   * Controlled by Compass, not held here.
+   *
+   * Review mode swaps this whole board out for the SignalMonitor, so local page
+   * state was destroyed on unmount: browse to row 60, open a setup, come back,
+   * and you were on page 1 with the contract you had just been reading three
+   * pages away. Every other piece of browse state already lived in the page.
+   */
+  page: number;
+  onPageChange: (page: number) => void;
+  /** Rendered in the panel header — which clock these rows are on. */
+  freshness?: React.ReactNode;
   selectedId: string | null;
   onSelect: (setup: Setup) => void;
   onStudy: (setup: Setup) => void;
-  /** Changes when the scan itself changes, so paging starts from the top again. */
-  resetKey: string;
 }
 
 /**
@@ -61,16 +71,23 @@ const SetupScanBoard = ({
   expiryLabel,
   layout,
   onLayoutChange,
+  page,
+  onPageChange,
+  freshness,
   selectedId,
   onSelect,
   onStudy,
-  resetKey,
 }: SetupScanBoardProps) => {
-  const [page, setPage] = useState(0);
+  /*
+    The board no longer resets its own paging.
 
-  useEffect(() => {
-    setPage(0);
-  }, [resetKey, layout]);
+    It used to, on a `resetKey` effect — but review mode unmounts this component,
+    so the effect fired again on the way back and sent the user to page 1 with
+    the setup they had just been reading three pages away. An effect keyed on
+    "what changed" cannot tell a change from a remount. Compass owns the page
+    number and zeroes it at the three places a scan actually changes, which is
+    where the decision belongs.
+  */
 
   const pageCount = Math.max(1, Math.ceil(setups.length / CARDS_PER_PAGE));
   const safePage = Math.min(page, pageCount - 1);
@@ -176,12 +193,15 @@ const SetupScanBoard = ({
       subtitle={`${expiryLabel ? `${expiryLabel} · ` : ''}${setups.length} of ${totalFound}`}
       className="w-full"
       actions={
-        <SegmentedControl
-          ariaLabel="Scan layout"
-          options={SCAN_LAYOUT_OPTIONS}
-          value={layout}
-          onChange={v => onLayoutChange(v as ScanLayout)}
-        />
+        <div className="flex items-center gap-2">
+          {freshness}
+          <SegmentedControl
+            ariaLabel="Scan layout"
+            options={SCAN_LAYOUT_OPTIONS}
+            value={layout}
+            onChange={v => onLayoutChange(v as ScanLayout)}
+          />
+        </div>
       }
     >
       {setups.length === 0 ? (
@@ -212,7 +232,9 @@ const SetupScanBoard = ({
         />
       ) : (
         <div className="overflow-y-auto p-2.5" style={{ maxHeight: SCROLL_CAP }}>
-          <div className="grid gap-2 sm:grid-cols-2">
+          {/* The cards are listitems, so the thing holding them has to be a
+              list — an orphaned listitem is dropped from the tree entirely. */}
+          <div role="list" aria-label="Ranked contracts" className="grid gap-2 sm:grid-cols-2">
             {cardPage.map((setup, i) => (
               <SetupScanCard
                 key={setup.id}
@@ -236,7 +258,7 @@ const SetupScanBoard = ({
                 {pageStart + 1}-{Math.min(pageStart + CARDS_PER_PAGE, setups.length)} of {setups.length}
               </span>
               <button
-                onClick={() => setPage(p => Math.max(0, p - 1))}
+                onClick={() => onPageChange(Math.max(0, safePage - 1))}
                 disabled={safePage === 0}
                 aria-label="Previous page of setups"
                 className="-my-1 py-1 px-1.5 rounded-md border border-borderSubtle text-textSecondary hover:text-textPrimary hover:border-borderMuted disabled:opacity-40 disabled:hover:text-textSecondary transition-colors"
@@ -244,7 +266,7 @@ const SetupScanBoard = ({
                 <ChevronLeft className="w-3.5 h-3.5" />
               </button>
               <button
-                onClick={() => setPage(p => Math.min(pageCount - 1, p + 1))}
+                onClick={() => onPageChange(Math.min(pageCount - 1, safePage + 1))}
                 disabled={safePage >= pageCount - 1}
                 aria-label="Next page of setups"
                 className="-my-1 py-1 px-1.5 rounded-md border border-borderSubtle text-textSecondary hover:text-textPrimary hover:border-borderMuted disabled:opacity-40 disabled:hover:text-textSecondary transition-colors"

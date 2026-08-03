@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import Simulator from '../../core/simulator';
+import { yearsToExpiry } from '../../core/optionTime';
 import { makeSetup } from '../../data/compass';
 import { weighContracts, type Horizon } from '../../core/contractScore';
 import {
@@ -155,7 +156,7 @@ describe('contract track: the uncapped cores reproduce the engines', () => {
               setup.strike,
               right,
               setup.greeks.iv / 100,
-              Math.max(0.5, sessions) / 252
+              sessions / 252
             );
             expect(Number(re.toFixed(2))).toBe(setup.mid);
           }
@@ -168,7 +169,11 @@ describe('contract track: the uncapped cores reproduce the engines', () => {
     const snap = Simulator.buildSnapshot('QQQ');
     for (const horizon of ['LOTTO', 'WEEKLIES', 'SWINGS', 'LEAPS'] as Horizon[]) {
       for (const w of weighContracts(snap, horizon)) {
-        const re = bsPriceAtT(snap.spot, w.strike, w.ivPct / 100, Math.max(w.dte, 0.5) / 365, w.right);
+        // yearsToExpiry, not a local copy of it. This assertion exists to catch
+        // the track model drifting from the engine, so spelling the engine's
+        // time base out here a second time would defeat it — which is how the
+        // two came to floor a 0DTE differently in the first place.
+        const re = bsPriceAtT(snap.spot, w.strike, w.ivPct / 100, yearsToExpiry(w.dte), w.right);
         expect(Math.abs(re - w.mid)).toBeLessThanOrEqual(ivRoundingBound(snap.spot, w.dte));
       }
     }

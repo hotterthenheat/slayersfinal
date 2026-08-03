@@ -1,5 +1,7 @@
+import React, { useEffect, useRef } from 'react';
 import Panel from '../ui/Panel';
 import SpotRule from '../ui/SpotRule';
+import { expiryRead } from './setupHorizon';
 import type { ChainAction, ChainSide, ContractChain as ContractChainData, Momentum, OptionRight } from '../../types/compass';
 
 export interface ChainSelection {
@@ -12,6 +14,8 @@ interface ContractChainProps {
   data: ContractChainData;
   selected: ChainSelection | null;
   onSelect: (sel: ChainSelection) => void;
+  /** Which clock these premiums are on — the live tier, unlike the board. */
+  freshness?: React.ReactNode;
 }
 
 // Neutral is deliberately the quietest tone — signals (green/red) should stand
@@ -50,7 +54,11 @@ const ChainCell = ({ side, right, strike, ticker, isSelected, onSelect }: CellPr
   return (
     <button
       onClick={onSelect}
-      className={`text-left px-2.5 py-2 transition-colors ${
+      /* min-h-11 is 44px: these cells measured 104x30, under the 32px hit-area
+         floor and well under a finger. Two lines of content already nearly
+         fill it, so the floor costs a couple of pixels a row and buys a
+         tappable chain. */
+      className={`min-h-11 text-left px-2.5 py-2 transition-colors ${
         isSelected ? 'bg-select/[0.07] shadow-[inset_0_0_0_1px_rgba(199,211,232,0.5)]' : 'hover:bg-rowHover'
       }`}
     >
@@ -80,17 +88,47 @@ const ChainCell = ({ side, right, strike, ticker, isSelected, onSelect }: CellPr
   );
 };
 
-const ContractChain = ({ data, selected, onSelect }: ContractChainProps) => {
-  const { ticker, spot, rows } = data;
+const ContractChain = ({ data, selected, onSelect, freshness }: ContractChainProps) => {
+  const { ticker, spot, rows, expiry, atmIndex } = data;
+  const exp = expiryRead(expiry);
 
   // Find where the live price sits so the marker embeds between strikes
   let spotRowIndex = rows.findIndex(r => r.strike > spot) - 1;
   if (spotRowIndex < -1) spotRowIndex = rows.length - 1; // spot above all strikes
 
+  /*
+    Open on the money.
+
+    The chain lists every strike the name has, which is the point — a twelve-row
+    window is a chain with the picking already done for you. But a full chain
+    starts at the lowest strike, so on SPY the panel opened on 31 rows of deep
+    in-the-money calls and the reader had a thousand pixels of scrolling before
+    reaching anything anyone trades.
+
+    Centred by arithmetic on the scroller rather than by scrollIntoView, which
+    would also scroll the page the panel sits in. Only on a change of name or
+    expiry: re-centring on every 1.5s repricing tick would fight the scrollbar
+    under the user's hand.
+  */
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    const row = scroller?.children[Math.max(0, Math.min(atmIndex, rows.length - 1))] as HTMLElement | undefined;
+    if (!scroller || !row) return;
+    scroller.scrollTop = Math.max(0, row.offsetTop - scroller.clientHeight / 2 + row.offsetHeight / 2);
+    // rows.length guards the case where a name's ladder changes shape.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ticker, expiry, rows.length]);
+
   return (
     <Panel
       title="Contract Chain"
-      subtitle="health · momentum · premium"
+      /* The expiry leads, because the premiums below are quoted for it and for
+         nothing else. Without it the ladder read as a general price list and
+         could be compared against a board on a different session — which is
+         exactly what it was doing before the chain took the preset's clock. */
+      subtitle={exp.chip}
+      actions={freshness}
       flush
       className="w-full h-full"
       bodyClassName="flex flex-col"
@@ -103,7 +141,11 @@ const ContractChain = ({ data, selected, onSelect }: ContractChainProps) => {
         <div className="px-3 py-1.5 font-mono text-micro font-semibold uppercase tracking-widest text-bear">Puts</div>
       </div>
 
-      <div className="overflow-y-auto flex-1 min-h-0 max-h-[max(560px,62vh)] xl:max-h-none">
+      {/* Capped at every width now. `xl:max-h-none` was fine over a twelve-row
+          window and is not over a full chain: it laid 31 strikes out as one
+          2,141px column, so the money sat a thousand pixels down the page and
+          the panel had no viewport to centre it in. */}
+      <div ref={scrollerRef} className="overflow-y-auto flex-1 min-h-0 max-h-[max(560px,62vh)]">
         {rows.map((row, i) => (
           <div key={row.strike}>
             <div className="grid grid-cols-2 border-b border-borderSubtle/50 divide-x divide-borderSubtle">

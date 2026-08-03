@@ -1066,7 +1066,7 @@ const LiveTape = () => {
                     key={r.id}
                     ref={idx === 0 ? firstRowRef : undefined}
                     onClick={() => setSelected(r)}
-                    {...interactiveRowProps(() => setSelected(r), selected?.id === r.id)}
+                    {...interactiveRowProps(() => setSelected(r), selected?.id === r.id, 'native')}
                     className={`${ROW_INTERACTIVE} border-b border-borderSubtle/30 last:border-0 ${
                       selected?.id === r.id ? 'inst-selected' : 'hover:bg-rowHover'
                     } ${rowAccent(r.premium)}`}

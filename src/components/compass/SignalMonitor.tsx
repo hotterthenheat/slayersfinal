@@ -9,40 +9,23 @@ import VerdictBadge from './VerdictBadge';
 import { VERDICT_TONE } from './verdict';
 import GreeksRow from './GreeksRow';
 import ContractTrack from './ContractTrack';
-import { buildTrack, setupToPlan, tpStatusTone, type TrackRung } from './contractTrackModel';
-import type { Setup, TakeProfit } from '../../types/compass';
+import { buildTrack, setupToPlan } from './contractTrackModel';
+import { contractFacts } from './contractFacts';
+import type { Setup } from '../../types/compass';
 
 interface SignalMonitorProps {
   setup: Setup;
+  /**
+   * The underlying's price in the sweep that priced this setup. Zero when the
+   * sweep has no row for the name, and then the facts fall back to the live
+   * buffer — a stale-vs-live mismatch is worse than a slightly old spot, but a
+   * missing spot would mean no facts at all.
+   */
+  sweepSpot: number;
   onBack: () => void;
 }
 
-/**
- * A rung of the ladder. The engine still supplies the level and the target; the
- * STATUS comes from the track above, which reached it or didn't. Sharing one
- * derivation is the point: a green HIT badge sitting four inches under a curve
- * that never touched it would indict the whole panel.
- */
-const TakeProfitCard = ({ tp, rung, ticker }: { tp: TakeProfit; rung: TrackRung; ticker: string }) => (
-  <div className="border border-borderSubtle bg-inset rounded-md px-3 py-2.5 flex flex-col gap-1">
-    <div className="flex items-center justify-between">
-      <span className="font-mono text-micro uppercase tracking-widest text-textMuted">Take Profit {tp.level}</span>
-      <span className="font-mono text-micro uppercase tracking-wider text-textMuted">Expected</span>
-    </div>
-    <div className="flex items-end justify-between">
-      <SignalBadge tone={tpStatusTone[rung.status]}>{rung.status}</SignalBadge>
-      <span className={`font-mono text-lg font-semibold tnum leading-none ${rung.status === 'HIT' ? 'text-bull' : 'text-textPrimary'}`}>
-        +{tp.expectedPct}%
-      </span>
-    </div>
-    <div className="font-mono text-micro text-textSecondary tnum">
-      Target ${tp.target.toFixed(2)}
-      {rung.spotNeeded != null && ` · needs ${ticker} ${rung.spotNeeded.toFixed(2)}`}
-    </div>
-  </div>
-);
-
-const SignalMonitor = ({ setup, onBack }: SignalMonitorProps) => {
+const SignalMonitor = ({ setup, sweepSpot, onBack }: SignalMonitorProps) => {
   const tone = VERDICT_TONE[setup.verdict];
 
   const plan = useMemo(() => setupToPlan(setup), [setup]);
@@ -54,6 +37,22 @@ const SignalMonitor = ({ setup, onBack }: SignalMonitorProps) => {
   // be the primitives that actually move.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const track = useMemo(() => buildTrack(plan, bars), [plan.key, plan.sessionsLeft, plan.entry, bars.length, spotQ]);
+
+  /*
+    The facts read against the SAME spot the setup was priced at, not a fresher
+    one — a breakeven distance measured from a different price than the premium
+    beside it is the two-panel disagreement this whole pass is about.
+
+    That used to mean the live candle buffer, which is not the same spot at all:
+    `setup` is the frozen row the sweep returned and only changes every 10s,
+    while the buffer moves every 1.5s. Between sweeps the panel was pairing a
+    stale premium and stale greeks with a live underlying, so intrinsic, time
+    value and breakeven distance drifted apart from the mid printed beside them
+    — far enough, after a real move, to claim more exercise value than the whole
+    contract costs. The sweep's own spot arrives as a prop now.
+  */
+  const spot = sweepSpot > 0 ? sweepSpot : spotQ / 100;
+  const facts = useMemo(() => contractFacts(setup, spot), [setup, spot]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -101,52 +100,66 @@ const SignalMonitor = ({ setup, onBack }: SignalMonitorProps) => {
           </div>
         </Panel>
 
-        <Panel title="Read" className="w-full">
-          <div className="flex flex-col gap-4 h-full">
-            {/* Confidence meter */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="font-mono text-micro uppercase tracking-widest text-textMuted flex items-center gap-1.5">
-                  Confidence
-                </span>
-                <span className="font-mono text-caption font-semibold text-textPrimary tnum leading-4">
-                  <AnimatedNumber value={setup.confidence} format={v => `${Math.round(v)}%`} />
-                </span>
-              </div>
-              <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
-                <span
-                  className={`block h-full rounded-full transition-[width] duration-700 ease-out ${tone === 'warn' ? 'bg-warn/80' : 'data-bar'}`}
-                  style={{ width: `${setup.confidence}%` }}
-                />
-              </div>
+        {/*
+          The Read panel used to open with a confidence meter. `Setup.confidence`
+          is `(score - 55) * 2.1` — the score with a percent sign — so a user
+          reading "97, and 88% confident" believed two numbers agreed when they
+          were one number twice. SetupScanCard had already reached that
+          conclusion and left it off the card, which meant the desk both featured
+          and excluded it depending on the pane.
+
+          What replaces it is the contract: what it costs, where it starts making
+          money, how much of the price is already real, what a session takes, and
+          what the book charges for the round trip. None of it can be recovered
+          from the score, which is the whole test for whether it belongs here.
+        */}
+        <Panel title="Read" subtitle="the contract, not the grade" className="w-full">
+          <div className="flex flex-col gap-3 h-full">
+            <div className="flex flex-col divide-y divide-borderSubtle">
+              {facts.map(f => (
+                <div key={f.label} className="flex items-baseline justify-between gap-3 py-2 first:pt-0">
+                  <span className="font-mono text-micro uppercase tracking-widest text-textMuted shrink-0">
+                    {f.label}
+                  </span>
+                  <span className="min-w-0 text-right">
+                    <span
+                      className={`block font-mono text-caption font-semibold tnum leading-4 ${
+                        f.warn ? 'text-warn' : 'text-textPrimary'
+                      }`}
+                    >
+                      {f.value}
+                    </span>
+                    {f.note && (
+                      <span className="block font-mono text-micro text-textMuted leading-snug">{f.note}</span>
+                    )}
+                  </span>
+                </div>
+              ))}
             </div>
 
-            <div>
-              <div className="font-mono text-micro uppercase tracking-widest text-textMuted mb-2">Greeks</div>
+            <div className="mt-auto pt-3 border-t border-borderSubtle">
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-mono text-micro uppercase tracking-widest text-textMuted">Greeks</span>
+                <span className="font-mono text-micro uppercase tracking-widest text-textMuted">
+                  1σ{' '}
+                  <span className="text-textPrimary tnum">
+                    <AnimatedNumber
+                      value={setup.expectedMovePct}
+                      format={v => `${v >= 0 ? '±' : ''}${v.toFixed(1)}%`}
+                    />
+                  </span>
+                </span>
+              </div>
               <GreeksRow greeks={setup.greeks} fourth="vega" />
-            </div>
-
-            <div className="mt-auto flex items-center justify-between border-t border-borderSubtle pt-3">
-              <span className="font-mono text-micro uppercase tracking-widest text-textMuted flex items-center gap-1.5">
-                Expected Move
-              </span>
-              <span className="font-mono text-body font-semibold text-select tnum leading-5">
-                <AnimatedNumber value={setup.expectedMovePct} format={v => `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`} />
-              </span>
             </div>
           </div>
         </Panel>
       </div>
 
+      {/* The chart carries its own level table now — same rungs, same order, same
+          tones, same derivation of what has been reached — so the four cards that
+          used to sit under it were the identical four numbers a second time. */}
       <ContractTrack plan={plan} bars={bars} track={track} className="animate-soft-in" />
-
-      {/* Take-profit ladder — now the chart's legend: same four rungs, same
-          order, same tones, same derivation of what has been reached */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 animate-soft-in">
-        {setup.takeProfits.map((tp, i) => (
-          <TakeProfitCard key={tp.level} tp={tp} rung={track.rungs[i]} ticker={setup.ticker} />
-        ))}
-      </div>
       </div>
     </div>
   );

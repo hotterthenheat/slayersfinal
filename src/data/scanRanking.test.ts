@@ -5,6 +5,7 @@ import {
   CANDIDATES_PER_NAME,
   buildCompass,
   makeSetup,
+  nameEdge01,
   prescreenRank,
   prescreenScore,
   resetCompassCache,
@@ -65,8 +66,11 @@ function scannedField(names: ScanName[], scanner = 'top-setups' as const): Field
   for (const n of names) {
     if (n.live) continue;
     const right: OptionRight = n.trendUp ? 'C' : 'P';
+    const edge = nameEdge01(n);
     for (const strike of strikeLadder(n.spot, n.step)) {
-      const rank = prescreenRank(n.ticker, n.spot, strike, right, scanner, true);
+      // Mirrors the engine's inputs — sleeve, the name's own edge, its own strike
+      // step. Anything less and this is ranking a different field than the board.
+      const rank = prescreenRank(n.ticker, n.spot, strike, right, scanner, true, 'odte', edge, n.step);
       if (displayScore(rank) >= floor) {
         out.push({ key: `${n.ticker}|${strike}|${right}`, ticker: n.ticker, strike, right, rank });
       }
@@ -81,9 +85,21 @@ describe('scan board: it is the global top-N, with nothing in between', () => {
     const onBoard = new Map(rows.map(r => [`${r.setup.ticker}|${r.setup.strike}|${r.setup.right}`, r]));
 
     // Rank every board row from the outside, off the same spot its group prints.
-    const boardRanks = rows.map(r =>
-      prescreenRank(r.setup.ticker, r.spot, r.setup.strike, r.setup.right, 'top-setups', true)
-    );
+    const byTicker = new Map(buildScanUniverse(EPOCH).map(n => [n.ticker, n]));
+    const boardRanks = rows.map(r => {
+      const n = byTicker.get(r.setup.ticker);
+      return prescreenRank(
+        r.setup.ticker,
+        r.spot,
+        r.setup.strike,
+        r.setup.right,
+        'top-setups',
+        true,
+        'odte',
+        n ? nameEdge01(n) : 0.5,
+        n?.step ?? 1
+      );
+    });
     const weakestOnBoard = Math.min(...boardRanks);
 
     const missed = scannedField(buildScanUniverse(EPOCH)).filter(
@@ -120,13 +136,29 @@ describe('scan board: it is the global top-N, with nothing in between', () => {
     );
   });
 
-  it('the board fills its row cap while the field still has qualifiers left over', () => {
+  it('the board never shows more than the field holds', () => {
     for (const s of SCANNERS) {
       const { data, rows } = board(s.key as 'top-setups');
       expect(rows.length).toBe(data.shown);
       expect(data.shown).toBeLessThanOrEqual(data.totalFound);
-      // Something is being left out — otherwise "top" means nothing.
-      expect(data.totalFound).toBeGreaterThan(data.shown);
+    }
+  });
+
+  it('the broad screens leave something out, so "top" means something', () => {
+    /*
+      Only the broad ones. This used to assert it of all six, which was true
+      while every style ranked on proximity alone — they all qualified thousands
+      and the cap did the selecting.
+
+      A style with a real strike preference qualifies far fewer: Quick Scalp
+      wants the gamma peak and nothing else, Whale Sweeps wants block strikes
+      near the money, and both of those legitimately return a board smaller than
+      the cap. That is the screen doing its job, not the cap failing to bite, and
+      asserting otherwise would force every style to be broad.
+    */
+    for (const key of ['top-setups', 'all'] as const) {
+      const { data } = board(key as 'top-setups');
+      expect(data.totalFound, key).toBeGreaterThan(data.shown);
     }
   });
 
@@ -167,10 +199,23 @@ describe('scan board: ranked by the field, never by the alphabet', () => {
     const tickers = board().setups.map(s => s.ticker);
     expect(tickers.length).toBeGreaterThan(100);
 
-    // Sorted-by-spelling would be 1.0 here; the previous engine's board was.
-    let ascending = 0;
-    for (let i = 1; i < tickers.length; i++) if (tickers[i] > tickers[i - 1]) ascending++;
-    const share = ascending / (tickers.length - 1);
+    /*
+      Measured only where the NAME changes.
+
+      A name's contracts now sit next to each other on the board, because the
+      rank carries a per-name term that is constant across its ladder. Counting
+      every adjacent pair therefore counts a run of one ticker as "not
+      ascending" and drags the share down without any spelling bias existing —
+      measured 0.32 on a board that is not alphabetical at all. Comparing at the
+      transitions asks the question the test means to ask.
+    */
+    const changes: number[] = [];
+    for (let i = 1; i < tickers.length; i++) {
+      if (tickers[i] !== tickers[i - 1]) changes.push(tickers[i] > tickers[i - 1] ? 1 : 0);
+    }
+    expect(changes.length).toBeGreaterThan(50);
+    const ascending = changes.reduce((a, b) => a + b, 0);
+    const share = ascending / changes.length;
     expect(share).toBeGreaterThan(0.35);
     expect(share).toBeLessThan(0.65);
     expect([...tickers].sort()).not.toEqual(tickers);
@@ -276,10 +321,35 @@ describe('the vocabulary is reachable: no dead verdicts, no dead states', () => 
       // faded contract cannot appear in one. EXIT reaches a screen through
       // Tracker and the Weigher, which evaluate rather than rank.
       expect(setups.some(x => x.verdict === 'EXIT')).toBe(false);
-      const states = new Set(setups.map(setupState));
-      expect(states.has('ARMED')).toBe(true);
-      expect(states.has('TRIGGERED')).toBe(true);
     }
+  });
+
+  it('the lifecycle vocabulary is reachable across the strip', () => {
+    /*
+      ARMED and TRIGGERED both have to exist somewhere, or one of them is dead
+      language. They used to be asserted of EVERY board, which held while all six
+      styles ranked on proximity and therefore all picked at-the-money contracts.
+
+      A style with a real strike preference cannot promise both. TRIGGERED means
+      price has taken the strike — |delta| at or past 0.50 — so a style that buys
+      out of the money by construction never shows one, and a style that leans in
+      the money never shows ARMED. Measured, Discounted's rows sit under 0.50
+      delta and Rebounds' sit at or over it, so the two boards carry opposite
+      halves of the vocabulary. That is both styles doing exactly what their tabs
+      claim, and pinning it is a stronger check than the uniformity it replaces.
+    */
+    const seen = new Set<SetupState>();
+    for (const s of SCANNERS) board(s.key as 'top-setups').setups.forEach(x => seen.add(setupState(x)));
+    expect(seen.has('ARMED')).toBe(true);
+    expect(seen.has('TRIGGERED')).toBe(true);
+
+    const sideOf = (key: 'discounted' | 'rebounds') => {
+      const rows = board(key as 'top-setups').setups;
+      return rows.filter(r => Math.abs(r.greeks.delta) >= 0.5).length / rows.length;
+    };
+    // Discounted reaches for a stretch; Rebounds pays for delta. Opposite ends.
+    expect(sideOf('discounted')).toBeLessThan(0.1);
+    expect(sideOf('rebounds')).toBeGreaterThan(0.9);
   });
 
   it('a scanned setup carries an untouched ladder, because nothing was entered', () => {

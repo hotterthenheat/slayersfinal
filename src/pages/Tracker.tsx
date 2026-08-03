@@ -17,7 +17,8 @@ import EdgeLedger from '../components/tracker/EdgeLedger';
 import { useMarketData } from '../context/MarketDataContext';
 import Simulator from '../core/simulator';
 import { makeSetup } from '../data/compass';
-import type { ScannerKey, Setup } from '../types/compass';
+import { SLEEVE_BY_KEY } from '../types/compass';
+import type { Setup } from '../types/compass';
 import type { TrackedSetup } from '../types/tracker';
 import PageHeader from '../components/ui/PageHeader';
 import SegmentedControl from '../components/ui/SegmentedControl';
@@ -90,20 +91,19 @@ const STATUS_PICK_ACTIVE: Record<'auto' | UserStatus, string> = {
 };
 
 /** Days-to-expiry per scanner — mirrors the scanner profiles in data/compass. */
-const DTE_BY_SCANNER: Record<ScannerKey, number> = {
-  'top-setups': 0,
-  'quick-scalp': 0,
-  'whale-sweeps': 0,
-  all: 0,
-  discounted: 1,
-  rebounds: 1,
-};
-
 const DAY_MS = 86_400_000;
 
 /** Expiry read for a tracked contract — both derived from the tracked day + DTE. */
 function expiryInfo(tracked: TrackedSetup): { expired: boolean; expiringSoon: boolean } {
-  const dte = DTE_BY_SCANNER[tracked.scanner] ?? 0;
+  /*
+    The SLEEVE's day count, not a table keyed on the scanner.
+
+    That table read `discounted: 1, rebounds: 1` and zero for everything else,
+    which was true back when the scanner chose the expiry. Once the horizon
+    moved to its own axis it meant a tracked LEAP expired the day after it was
+    tracked, and a tracked weekly expired the same day.
+  */
+  const dte = SLEEVE_BY_KEY[tracked.sleeve]?.dte ?? 0;
   const expiryDay = new Date(tracked.trackedAt);
   expiryDay.setHours(0, 0, 0, 0);
   const expiryTs = expiryDay.getTime() + (dte + 1) * DAY_MS;
@@ -115,7 +115,18 @@ function expiryInfo(tracked: TrackedSetup): { expired: boolean; expiringSoon: bo
 function rebuildLive(tracked: TrackedSetup): Setup {
   Simulator.ensureTicker(tracked.ticker);
   const cfg = Simulator.TICKERS[tracked.ticker];
-  return makeSetup(tracked.ticker, cfg.currentPrice, tracked.strike, tracked.right, tracked.scanner, cfg.iv);
+  // The sleeve is the sixth argument's job: makeSetup defaults to same-session,
+  // so omitting it repriced every tracked weekly, swing and LEAP as a 0DTE.
+  return makeSetup(
+    tracked.ticker,
+    cfg.currentPrice,
+    tracked.strike,
+    tracked.right,
+    tracked.scanner,
+    cfg.iv,
+    true,
+    tracked.sleeve
+  );
 }
 
 /** The item's lane when the operator hasn't pinned one — read straight off the engine. */

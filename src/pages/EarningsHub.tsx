@@ -449,7 +449,8 @@ const EarningsHub = () => {
   const columns: Column<EarningsEvent>[] = [
     {
       key: 'watch',
-      header: '',
+      header: 'Watch',
+      headerHidden: true,
       width: '34px',
       render: e => <WatchStar on={watchlist.has(e.ticker)} onClick={() => toggleWatch(e.ticker)} />,
     },

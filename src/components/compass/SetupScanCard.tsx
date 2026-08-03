@@ -58,10 +58,13 @@ const SetupScanCard = ({ setup, rank, selected, onSelect, onStudy }: SetupScanCa
 
   return (
     <div
-      {...interactiveRowProps(onSelect, selected)}
+      {...interactiveRowProps(onSelect, selected, 'listitem')}
       onClick={onSelect}
-      /* role="button" makes the card a leaf, so the badges inside it are not
-         read out on their own. Whatever the card claims has to be in the name. */
+      /* listitem, not button. The card carries its own Analysis button, and a
+         button's children are presentational — nesting one inside another
+         swallows its name and its focus stop, which is what axe reports as
+         `nested-interactive`. A listitem keeps both, and the card genuinely is
+         one entry in a list of contracts. */
       aria-label={`Preview ${setup.contract}, rank ${rank}, ${COVERAGE_META[coverage].label.toLowerCase()} coverage`}
       /* Selection is one signal, not three. This used to carry a 2px near-white
          inset rail on top of the border and the wash, and it fired on mount, so
