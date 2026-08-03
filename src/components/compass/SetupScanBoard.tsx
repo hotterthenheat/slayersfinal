@@ -232,7 +232,9 @@ const SetupScanBoard = ({
         />
       ) : (
         <div className="overflow-y-auto p-2.5" style={{ maxHeight: SCROLL_CAP }}>
-          <div className="grid gap-2 sm:grid-cols-2">
+          {/* The cards are listitems, so the thing holding them has to be a
+              list — an orphaned listitem is dropped from the tree entirely. */}
+          <div role="list" aria-label="Ranked contracts" className="grid gap-2 sm:grid-cols-2">
             {cardPage.map((setup, i) => (
               <SetupScanCard
                 key={setup.id}

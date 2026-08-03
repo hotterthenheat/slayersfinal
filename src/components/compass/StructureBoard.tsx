@@ -123,14 +123,14 @@ const StructureBoard = ({ snapshot, dte }: StructureBoardProps) => {
         </span>
       }
     >
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-px bg-borderSubtle">
+      <div role="list" aria-label="Defined-risk structures" className="grid grid-cols-1 lg:grid-cols-2 gap-px bg-borderSubtle">
         {ranked.map(st => {
           const selected = selectedId === st.id;
           const credit = st.netDebit < 0;
           return (
             <div
               key={st.id}
-              {...interactiveRowProps(() => setSelectedId(st.id), selected)}
+              {...interactiveRowProps(() => setSelectedId(st.id), selected, 'listitem')}
               onClick={() => setSelectedId(st.id)}
               aria-label={`${st.label} on ${st.ticker}, risking ${money(st.maxLoss)} to make ${money(st.maxProfit)}`}
               className={`${ROW_INTERACTIVE} bg-panel p-3 flex flex-col gap-2 ${selected ? ink.wash : ''}`}

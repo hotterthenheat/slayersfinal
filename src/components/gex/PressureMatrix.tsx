@@ -76,7 +76,7 @@ const PressureMatrix = ({ rows, maxAbs, spot }: PressureMatrixProps) => {
       <div
         className="flex-grow overflow-y-auto min-h-0"
         tabIndex={0}
-        role="region"
+        role="group"
         aria-label="Dealer pressure ladder — scrollable"
       >
         {rows.map(r => {

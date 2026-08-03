@@ -281,7 +281,7 @@ const RankedTargets = () => {
                   <tr
                     key={t.strike}
                     onClick={() => flash(t)}
-                    {...interactiveRowProps(() => flash(t))}
+                    {...interactiveRowProps(() => flash(t), false, 'native')}
                     title="Flash on chart"
                     onMouseEnter={e => setHover({ t, x: e.clientX, y: e.clientY })}
                     onMouseMove={e => setHover({ t, x: e.clientX, y: e.clientY })}

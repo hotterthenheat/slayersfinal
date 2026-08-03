@@ -19,6 +19,14 @@ export interface Column<T> {
   group?: string;
   /** Dictionary key — wraps the header in a <Term> jargon explainer */
   help?: TermKey;
+  /**
+   * Keep the header out of the layout but not out of the table. A column of
+   * watchlist stars needs no visible caption above 34px of icon, but a header
+   * cell with nothing in it is a column nobody can name — which is what a
+   * screen reader gets when it reads the cell and finds the row's star has no
+   * column to belong to.
+   */
+  headerHidden?: boolean;
   align?: 'left' | 'right';
   width?: string;
   /** Provide to make the column sortable */
@@ -135,7 +143,7 @@ const DataTable = <T,>({
                 } ${col.sortValue ? 'cursor-pointer select-none hover:text-textPrimary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60' : ''}`}
                 onClick={() => toggleSort(col)}
               >
-                <span className="inline-flex items-center gap-1">
+                <span className={`inline-flex items-center gap-1 ${col.headerHidden ? 'sr-only' : ''}`}>
                   {col.align === 'right' && sort?.key === col.key && (
                     sort.dir === 'desc' ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />
                   )}
@@ -159,12 +167,15 @@ const DataTable = <T,>({
             sortedRows.map(row => {
               const key = rowKey(row);
               const selected = selectedKey === key;
+              // aria-current, not aria-selected: a `row` only supports selection
+              // inside a grid, and this is a table. ui/interactiveRow.ts states
+              // the rule once for every clickable row in the app.
               return (
                 <tr
                   key={key}
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
                   tabIndex={onRowClick ? 0 : undefined}
-                  aria-selected={onRowClick ? selected : undefined}
+                  aria-current={onRowClick && selected ? true : undefined}
                   onKeyDown={
                     onRowClick
                       ? e => {

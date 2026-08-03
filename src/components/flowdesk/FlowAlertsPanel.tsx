@@ -40,7 +40,15 @@ const FlowAlertsPanel = ({ ticker, revision }: FlowAlertsPanelProps) => {
   }
 
   return (
-    <div className="h-full min-h-0 overflow-y-auto p-2 flex flex-col gap-2">
+    /* Focusable because it scrolls and nothing inside it is: without a tab
+       stop the feed is reachable by mouse wheel only, and a keyboard user
+       cannot read past the first two alerts. */
+    <div
+      tabIndex={0}
+      role="group"
+      aria-label="Flow alerts"
+      className="h-full min-h-0 overflow-y-auto p-2 flex flex-col gap-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60"
+    >
       {alerts.map((a, i) => {
         const meta = KIND_META[a.kind];
         const Icon = meta.icon;

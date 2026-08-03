@@ -642,7 +642,10 @@ const Compass = () => {
               >
                 {sl.label}
               </span>
-              <span className="block font-mono text-micro text-textMuted tnum">
+              {/* textSecondary, not textMuted: #7d7d7d at 10px over the tab's
+                  own colour wash measured under 4.5:1, and the expiry is the
+                  half of the tab a user actually reads. */}
+              <span className="block font-mono text-micro text-textSecondary tnum">
                 {sl.key === 'structures' ? sl.window : expiryRead(sleeveExpiry(sl.key)).chip}
               </span>
               {isActive && <span className={`absolute left-3 right-3 -bottom-px h-px ${c.rule}`} />}

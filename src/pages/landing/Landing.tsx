@@ -225,257 +225,265 @@ const Landing = () => {
   <div className="min-h-screen bg-canvas text-textPrimary overflow-x-hidden">
     <LandingNav />
 
-    {/* ── Hero: the statement. The product waits one scroll below. ── */}
-    <section className="relative h-[94vh] min-h-[620px]">
-      <div className="absolute inset-0">
-        <HeroScene />
-        {/* Light scrims — the rain now sits near-invisible, so the lockup reads
-            without a heavy veil, and the cursor's revealed window can glow up
-            even behind the copy. A soft center well + vignette + bottom fade,
-            pointer-events off so the flashlight still tracks through them. */}
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background:
-              'radial-gradient(ellipse 64% 54% at 50% 45%, rgba(8,9,10,0.52) 0%, rgba(8,9,10,0.24) 46%, transparent 80%)',
-          }}
-        />
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{ background: 'radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.5) 100%)' }}
-        />
-        <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-transparent via-transparent to-canvas" />
-      </div>
+    {/* Everything between the nav and the footer is the page itself. Without
+        a <main> the landing page has no landmark at all, so a screen reader
+        arrives with 57 blocks of content and no way to skip the chrome —
+        and the skip-to-content link every other route relies on has nowhere
+        to land. */}
+    <main id="main-content">
 
-      {/* pointer-events-none so mouse moves reach the scene's effector below;
-          the CTAs re-enable their own pointer events. */}
-      <div className="relative z-10 h-full flex flex-col items-center justify-center text-center px-6 pointer-events-none">
-        <span className="font-mono text-label font-semibold uppercase tracking-[0.3em] text-select">
-          Dealer-flow analytics
+      {/* ── Hero: the statement. The product waits one scroll below. ── */}
+      <section className="relative h-[94vh] min-h-[620px]">
+        <div className="absolute inset-0">
+          <HeroScene />
+          {/* Light scrims — the rain now sits near-invisible, so the lockup reads
+              without a heavy veil, and the cursor's revealed window can glow up
+              even behind the copy. A soft center well + vignette + bottom fade,
+              pointer-events off so the flashlight still tracks through them. */}
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background:
+                'radial-gradient(ellipse 64% 54% at 50% 45%, rgba(8,9,10,0.52) 0%, rgba(8,9,10,0.24) 46%, transparent 80%)',
+            }}
+          />
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{ background: 'radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.5) 100%)' }}
+          />
+          <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-transparent via-transparent to-canvas" />
+        </div>
+
+        {/* pointer-events-none so mouse moves reach the scene's effector below;
+            the CTAs re-enable their own pointer events. */}
+        <div className="relative z-10 h-full flex flex-col items-center justify-center text-center px-6 pointer-events-none">
+          <span className="font-mono text-label font-semibold uppercase tracking-[0.3em] text-select">
+            Dealer-flow analytics
+          </span>
+          <h1 className="mt-5 text-4xl md:text-6xl font-bold tracking-tight leading-[1.04] max-w-3xl">
+            See the forces that
+            <br />
+            <span className="holo-text">move the market.</span>
+          </h1>
+          <p className="mt-6 max-w-xl text-read md:text-base text-textSecondary leading-relaxed">
+            Market makers have to hedge. That hedging pushes price toward some levels and away from
+            others, every session, mechanically. Slayer maps those forces, then grades the trades.
+          </p>
+
+          <div className="mt-9 flex items-center gap-4 flex-wrap justify-center">
+            <SmartLink
+              to="/terminal"
+              className="pointer-events-auto inline-flex items-center gap-2 px-5 py-2.5 rounded-md font-mono text-data font-semibold uppercase tracking-wider text-ink holo-bg holo-glow transition-transform hover:scale-[1.03]"
+            >
+              Launch terminal <ArrowRight className="w-4 h-4" />
+            </SmartLink>
+            {/* Points at `#live` — the section headed "Not screenshots. The actual
+                panels." It used to point at `#showcase`, which is the charting
+                section, and which the scroll cue directly below already covers.
+                Two affordances that mean different things were doing the same
+                jump; this one now lands on the section its label promises. */}
+            {/* The trailer is a controlled entry, not a replacement front door:
+                the launch button still owns the primary path into the terminal.
+                This sits beside it for the visitor who would rather be shown the
+                system working than read about it. */}
+            <Link
+              to="/trailer"
+              className="pointer-events-auto inline-flex items-center gap-2 px-5 py-2.5 rounded-md border border-borderMuted bg-canvas/40 font-mono text-data uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-rowHover transition-colors"
+            >
+              <PlayCircle className="w-4 h-4" /> Watch terminal trailer
+            </Link>
+            <a
+              href="#live"
+              className="pointer-events-auto inline-flex items-center px-5 py-2.5 rounded-md font-mono text-data uppercase tracking-wider text-textMuted hover:text-textPrimary transition-colors"
+            >
+              See the panels
+            </a>
+          </div>
+        </div>
+
+        {/* Scroll cue */}
+        <a
+          href="#showcase"
+          className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-1 text-textMuted hover:text-textSecondary transition-colors"
+        >
+          <span className="font-mono text-micro uppercase tracking-[0.3em]">Scroll</span>
+          <ChevronDown className="w-4 h-4 animate-bounce" />
+        </a>
+      </section>
+
+      {/* ── Showcase → marquee → pillars → live engines → story → workspace ── */}
+      <LiveSections />
+
+      {/* ── The desks ── */}
+      <section className="px-6 md:px-10 py-20 max-w-6xl mx-auto">
+        <span className="font-mono text-label font-semibold uppercase tracking-[0.25em] text-textSecondary">
+          The desks
         </span>
-        <h1 className="mt-5 text-4xl md:text-6xl font-bold tracking-tight leading-[1.04] max-w-3xl">
-          See the forces that
-          <br />
-          <span className="holo-text">move the market.</span>
-        </h1>
-        <p className="mt-6 max-w-xl text-read md:text-base text-textSecondary leading-relaxed">
-          Market makers have to hedge. That hedging pushes price toward some levels and away from
-          others, every session, mechanically. Slayer maps those forces, then grades the trades.
+        <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">One chain, five desks.</h2>
+        <p className="mt-4 text-body text-textSecondary leading-relaxed max-w-xl">
+          Watch on Pulse, choose on Compass, read the flow on Trace, map the dealers on Pinpoint, and let Prove It keep the
+          receipts. Every desk feeds the next.
+        </p>
+        <div className="mt-10 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {[
+            { n: '01', name: 'Pulse', sub: 'The workspace you arrange', to: '/pulse' },
+            { n: '02', name: 'Compass', sub: 'Scores the setup', to: '/compass' },
+            { n: '03', name: 'Trace', sub: 'Reads the flow', to: '/trace' },
+            { n: '04', name: 'Pinpoint', sub: 'Maps dealer positioning', to: '/pinpoint' },
+            { n: '05', name: 'Prove It', sub: 'Keeps the receipts', to: '/prove-it' },
+          ].map(d => (
+            <SmartLink
+              key={d.name}
+              to={d.to}
+              className="group rounded-lg border border-borderSubtle bg-panel hover:border-select/40 transition-colors p-4 flex flex-col justify-between gap-8 min-h-[140px]"
+            >
+              <span className="font-mono text-label tnum text-textMuted">{d.n}</span>
+              <span className="flex flex-col gap-1">
+                <span className="font-mono text-data font-bold uppercase tracking-wider text-textPrimary">{d.name}</span>
+                <span className="text-caption text-textMuted leading-relaxed">{d.sub}</span>
+              </span>
+            </SmartLink>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Community ── */}
+      <section className="px-6 md:px-10 py-20 max-w-6xl mx-auto">
+        <span className="font-mono text-label font-semibold uppercase tracking-[0.25em] text-textSecondary">
+          Community
+        </span>
+        <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">Built in the open.</h2>
+        <p className="mt-4 text-body text-textSecondary leading-relaxed max-w-xl">
+          A desk for theses, feature requests and feedback, with the roadmap published beside it: what is
+          planned, what is being built, what shipped. Anything you write stays in your browser.
+        </p>
+        <div className="mt-8 border border-borderSubtle bg-panel rounded-lg overflow-hidden">
+          {SEED_IDEAS.slice(0, 3).map(idea => (
+            // Phones stack: the ticker and direction chip still eat a third of a
+            // 342px row, and the quote is the whole point of it, so below `sm` the
+            // quote gets its own full-width line and clamps to three instead.
+            <div
+              key={idea.id}
+              className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 px-5 py-4 border-b border-borderSubtle/50 last:border-0"
+            >
+              {/* No vote box. These are the app's own worked examples on a desk with
+                  no accounts and no server, so a tally affordance would offer the
+                  reader a vote nobody can cast. */}
+              <span className="flex items-center gap-3 sm:gap-4 shrink-0">
+                <span className="font-mono text-caption font-bold text-textPrimary shrink-0">{idea.ticker}</span>
+                <span
+                  className={`inline-flex items-center rounded px-1.5 py-0.5 font-mono text-micro font-bold uppercase tracking-wider shrink-0 ${
+                    idea.direction === 'BULLISH' ? 'bg-bull/10 text-bull' : 'bg-bear/10 text-bear'
+                  }`}
+                >
+                  {idea.direction}
+                </span>
+              </span>
+              <span className="min-w-0 flex-1 text-caption text-textSecondary line-clamp-3 sm:line-clamp-none sm:truncate">
+                "{idea.thesis}"
+              </span>
+              <span className="ml-auto hidden md:block font-mono text-micro text-textMuted shrink-0">
+                {idea.author}
+              </span>
+            </div>
+          ))}
+          <Link
+            to="/community"
+            className="flex items-center justify-center gap-1.5 py-3 font-mono text-label uppercase tracking-wider text-textSecondary hover:text-select hover:bg-rowHover transition-colors"
+          >
+            Open the community <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+      </section>
+
+      {/* ── Pricing ── */}
+      <section id="pricing" className="px-6 md:px-10 py-20 max-w-6xl mx-auto">
+        <span className="font-mono text-label font-semibold uppercase tracking-[0.25em] text-textSecondary">
+          Pricing
+        </span>
+        <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-5 items-stretch">
+          {TIERS.map(tier => (
+            <TiltBox
+              key={tier.name}
+              maxTilt={4}
+              className={tier.featured ? 'border-select/50 bg-select/[0.03]' : ''}
+            >
+              <div className="h-full p-6 flex flex-col gap-4">
+                {/* Badge lives inside the card — TiltBox clips overflow, so a
+                    border-straddling chip would get cut in half. */}
+                {tier.featured && (
+                  <span className="self-start inline-flex px-2 py-0.5 rounded font-mono text-micro font-bold uppercase tracking-widest text-ink holo-bg">
+                    The whole desk
+                  </span>
+                )}
+                <div>
+                  <h3 className="text-read font-bold text-textPrimary tracking-tight">{tier.name}</h3>
+                  <span className="block mt-0.5 font-mono text-micro font-semibold uppercase tracking-widest text-textMuted">
+                    {tier.kicker}
+                  </span>
+                  <div className="mt-3 flex items-baseline gap-1.5">
+                    <span className="text-3xl font-bold tracking-tight text-textPrimary tnum">{tier.price}</span>
+                    <span className="font-mono text-label text-textMuted">{tier.period}</span>
+                  </div>
+                </div>
+                <ul className="flex flex-col gap-2.5">
+                  {tier.features.map(f => (
+                    <li key={f} className="flex items-start gap-2 text-caption text-textSecondary leading-snug">
+                      <Check
+                        className={`w-3.5 h-3.5 shrink-0 mt-px ${tier.featured ? 'text-select' : 'text-textMuted'}`}
+                      />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+                <SmartLink
+                  to={tier.to}
+                  className={`mt-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-md font-mono text-caption font-semibold uppercase tracking-wider transition-colors ${
+                    tier.featured
+                      ? 'holo-bg text-ink'
+                      : 'border border-borderMuted text-textSecondary hover:text-textPrimary hover:bg-rowHover'
+                  }`}
+                >
+                  {tier.cta}
+                </SmartLink>
+              </div>
+            </TiltBox>
+          ))}
+        </div>
+        <p className="mt-6 text-center font-mono text-micro uppercase tracking-wider text-textMuted">
+          Prices in USD · sign in to check out · access is granted at payment · cancel anytime
         </p>
 
-        <div className="mt-9 flex items-center gap-4 flex-wrap justify-center">
+        <ComparePlans />
+      </section>
+
+      {/* ── FAQ ── */}
+      <Faq />
+
+      {/* ── Closing CTA ── */}
+      <section className="px-6 md:px-10 py-20 border-t border-borderSubtle text-center">
+        <h2 className="text-3xl md:text-4xl font-bold tracking-tight max-w-2xl mx-auto">
+          Trade with the machine,
+          <br />
+          not against it.
+        </h2>
+        <div className="mt-8 flex items-center justify-center gap-4 flex-wrap">
           <SmartLink
             to="/terminal"
-            className="pointer-events-auto inline-flex items-center gap-2 px-5 py-2.5 rounded-md font-mono text-data font-semibold uppercase tracking-wider text-ink holo-bg holo-glow transition-transform hover:scale-[1.03]"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md font-mono text-data font-semibold uppercase tracking-wider text-ink holo-bg holo-glow transition-transform hover:scale-[1.03]"
           >
             Launch terminal <ArrowRight className="w-4 h-4" />
           </SmartLink>
-          {/* Points at `#live` — the section headed "Not screenshots. The actual
-              panels." It used to point at `#showcase`, which is the charting
-              section, and which the scroll cue directly below already covers.
-              Two affordances that mean different things were doing the same
-              jump; this one now lands on the section its label promises. */}
-          {/* The trailer is a controlled entry, not a replacement front door:
-              the launch button still owns the primary path into the terminal.
-              This sits beside it for the visitor who would rather be shown the
-              system working than read about it. */}
-          <Link
-            to="/trailer"
-            className="pointer-events-auto inline-flex items-center gap-2 px-5 py-2.5 rounded-md border border-borderMuted bg-canvas/40 font-mono text-data uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-rowHover transition-colors"
-          >
-            <PlayCircle className="w-4 h-4" /> Watch terminal trailer
-          </Link>
           <a
-            href="#live"
-            className="pointer-events-auto inline-flex items-center px-5 py-2.5 rounded-md font-mono text-data uppercase tracking-wider text-textMuted hover:text-textPrimary transition-colors"
+            href="#pricing"
+            className="inline-flex items-center px-5 py-2.5 rounded-md border border-borderMuted font-mono text-data uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-rowHover transition-colors"
           >
-            See the panels
+            See pricing
           </a>
         </div>
-      </div>
+      </section>
 
-      {/* Scroll cue */}
-      <a
-        href="#showcase"
-        className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-1 text-textMuted hover:text-textSecondary transition-colors"
-      >
-        <span className="font-mono text-micro uppercase tracking-[0.3em]">Scroll</span>
-        <ChevronDown className="w-4 h-4 animate-bounce" />
-      </a>
-    </section>
-
-    {/* ── Showcase → marquee → pillars → live engines → story → workspace ── */}
-    <LiveSections />
-
-    {/* ── The desks ── */}
-    <section className="px-6 md:px-10 py-20 max-w-6xl mx-auto">
-      <span className="font-mono text-label font-semibold uppercase tracking-[0.25em] text-textSecondary">
-        The desks
-      </span>
-      <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">One chain, five desks.</h2>
-      <p className="mt-4 text-body text-textSecondary leading-relaxed max-w-xl">
-        Watch on Pulse, choose on Compass, read the flow on Trace, map the dealers on Pinpoint, and let Prove It keep the
-        receipts. Every desk feeds the next.
-      </p>
-      <div className="mt-10 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        {[
-          { n: '01', name: 'Pulse', sub: 'The workspace you arrange', to: '/pulse' },
-          { n: '02', name: 'Compass', sub: 'Scores the setup', to: '/compass' },
-          { n: '03', name: 'Trace', sub: 'Reads the flow', to: '/trace' },
-          { n: '04', name: 'Pinpoint', sub: 'Maps dealer positioning', to: '/pinpoint' },
-          { n: '05', name: 'Prove It', sub: 'Keeps the receipts', to: '/prove-it' },
-        ].map(d => (
-          <SmartLink
-            key={d.name}
-            to={d.to}
-            className="group rounded-lg border border-borderSubtle bg-panel hover:border-select/40 transition-colors p-4 flex flex-col justify-between gap-8 min-h-[140px]"
-          >
-            <span className="font-mono text-label tnum text-textMuted">{d.n}</span>
-            <span className="flex flex-col gap-1">
-              <span className="font-mono text-data font-bold uppercase tracking-wider text-textPrimary">{d.name}</span>
-              <span className="text-caption text-textMuted leading-relaxed">{d.sub}</span>
-            </span>
-          </SmartLink>
-        ))}
-      </div>
-    </section>
-
-    {/* ── Community ── */}
-    <section className="px-6 md:px-10 py-20 max-w-6xl mx-auto">
-      <span className="font-mono text-label font-semibold uppercase tracking-[0.25em] text-textSecondary">
-        Community
-      </span>
-      <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">Built in the open.</h2>
-      <p className="mt-4 text-body text-textSecondary leading-relaxed max-w-xl">
-        A desk for theses, feature requests and feedback, with the roadmap published beside it: what is
-        planned, what is being built, what shipped. Anything you write stays in your browser.
-      </p>
-      <div className="mt-8 border border-borderSubtle bg-panel rounded-lg overflow-hidden">
-        {SEED_IDEAS.slice(0, 3).map(idea => (
-          // Phones stack: the ticker and direction chip still eat a third of a
-          // 342px row, and the quote is the whole point of it, so below `sm` the
-          // quote gets its own full-width line and clamps to three instead.
-          <div
-            key={idea.id}
-            className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 px-5 py-4 border-b border-borderSubtle/50 last:border-0"
-          >
-            {/* No vote box. These are the app's own worked examples on a desk with
-                no accounts and no server, so a tally affordance would offer the
-                reader a vote nobody can cast. */}
-            <span className="flex items-center gap-3 sm:gap-4 shrink-0">
-              <span className="font-mono text-caption font-bold text-textPrimary shrink-0">{idea.ticker}</span>
-              <span
-                className={`inline-flex items-center rounded px-1.5 py-0.5 font-mono text-micro font-bold uppercase tracking-wider shrink-0 ${
-                  idea.direction === 'BULLISH' ? 'bg-bull/10 text-bull' : 'bg-bear/10 text-bear'
-                }`}
-              >
-                {idea.direction}
-              </span>
-            </span>
-            <span className="min-w-0 flex-1 text-caption text-textSecondary line-clamp-3 sm:line-clamp-none sm:truncate">
-              "{idea.thesis}"
-            </span>
-            <span className="ml-auto hidden md:block font-mono text-micro text-textMuted shrink-0">
-              {idea.author}
-            </span>
-          </div>
-        ))}
-        <Link
-          to="/community"
-          className="flex items-center justify-center gap-1.5 py-3 font-mono text-label uppercase tracking-wider text-textSecondary hover:text-select hover:bg-rowHover transition-colors"
-        >
-          Open the community <ArrowRight className="w-3.5 h-3.5" />
-        </Link>
-      </div>
-    </section>
-
-    {/* ── Pricing ── */}
-    <section id="pricing" className="px-6 md:px-10 py-20 max-w-6xl mx-auto">
-      <span className="font-mono text-label font-semibold uppercase tracking-[0.25em] text-textSecondary">
-        Pricing
-      </span>
-      <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-5 items-stretch">
-        {TIERS.map(tier => (
-          <TiltBox
-            key={tier.name}
-            maxTilt={4}
-            className={tier.featured ? 'border-select/50 bg-select/[0.03]' : ''}
-          >
-            <div className="h-full p-6 flex flex-col gap-4">
-              {/* Badge lives inside the card — TiltBox clips overflow, so a
-                  border-straddling chip would get cut in half. */}
-              {tier.featured && (
-                <span className="self-start inline-flex px-2 py-0.5 rounded font-mono text-micro font-bold uppercase tracking-widest text-ink holo-bg">
-                  The whole desk
-                </span>
-              )}
-              <div>
-                <h3 className="text-read font-bold text-textPrimary tracking-tight">{tier.name}</h3>
-                <span className="block mt-0.5 font-mono text-micro font-semibold uppercase tracking-widest text-textMuted">
-                  {tier.kicker}
-                </span>
-                <div className="mt-3 flex items-baseline gap-1.5">
-                  <span className="text-3xl font-bold tracking-tight text-textPrimary tnum">{tier.price}</span>
-                  <span className="font-mono text-label text-textMuted">{tier.period}</span>
-                </div>
-              </div>
-              <ul className="flex flex-col gap-2.5">
-                {tier.features.map(f => (
-                  <li key={f} className="flex items-start gap-2 text-caption text-textSecondary leading-snug">
-                    <Check
-                      className={`w-3.5 h-3.5 shrink-0 mt-px ${tier.featured ? 'text-select' : 'text-textMuted'}`}
-                    />
-                    {f}
-                  </li>
-                ))}
-              </ul>
-              <SmartLink
-                to={tier.to}
-                className={`mt-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-md font-mono text-caption font-semibold uppercase tracking-wider transition-colors ${
-                  tier.featured
-                    ? 'holo-bg text-ink'
-                    : 'border border-borderMuted text-textSecondary hover:text-textPrimary hover:bg-rowHover'
-                }`}
-              >
-                {tier.cta}
-              </SmartLink>
-            </div>
-          </TiltBox>
-        ))}
-      </div>
-      <p className="mt-6 text-center font-mono text-micro uppercase tracking-wider text-textMuted">
-        Prices in USD · sign in to check out · access is granted at payment · cancel anytime
-      </p>
-
-      <ComparePlans />
-    </section>
-
-    {/* ── FAQ ── */}
-    <Faq />
-
-    {/* ── Closing CTA ── */}
-    <section className="px-6 md:px-10 py-20 border-t border-borderSubtle text-center">
-      <h2 className="text-3xl md:text-4xl font-bold tracking-tight max-w-2xl mx-auto">
-        Trade with the machine,
-        <br />
-        not against it.
-      </h2>
-      <div className="mt-8 flex items-center justify-center gap-4 flex-wrap">
-        <SmartLink
-          to="/terminal"
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md font-mono text-data font-semibold uppercase tracking-wider text-ink holo-bg holo-glow transition-transform hover:scale-[1.03]"
-        >
-          Launch terminal <ArrowRight className="w-4 h-4" />
-        </SmartLink>
-        <a
-          href="#pricing"
-          className="inline-flex items-center px-5 py-2.5 rounded-md border border-borderMuted font-mono text-data uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-rowHover transition-colors"
-        >
-          See pricing
-        </a>
-      </div>
-    </section>
-
+    </main>
     <SiteFooter />
   </div>
   );

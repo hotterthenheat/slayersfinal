@@ -470,7 +470,8 @@ const Stocks = () => {
   const columns: Column<StockPick>[] = [
     {
       key: 'watch',
-      header: '',
+      header: 'Watch',
+      headerHidden: true,
       width: '34px',
       render: p => <WatchStar on={watchlist.has(p.ticker)} onClick={() => toggleWatch(p.ticker)} />,
     },

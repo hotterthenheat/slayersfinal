@@ -143,7 +143,8 @@ const PulseFlowTape = ({ ticker, revision }: PulseFlowTapeProps) => {
                 onClick={() => setIsolated(prev => (prev === contractKey(p) ? null : contractKey(p)))}
                 {...interactiveRowProps(
                   () => setIsolated(prev => (prev === contractKey(p) ? null : contractKey(p))),
-                  isolated === contractKey(p)
+                  isolated === contractKey(p),
+                  'native'
                 )}
                 /* Focus drives the same read-out hover does, so the premium
                    arithmetic and the aggression sentence are not mouse-only. */

@@ -155,7 +155,7 @@ const MigrationMap = ({ data }: MigrationMapProps) => {
       {/* Rows */}
       <div
         tabIndex={0}
-        role="region"
+        role="group"
         aria-label="Exposure migration, scrollable"
         className="flex-grow overflow-y-auto min-h-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60"
         onMouseLeave={() => setHover(null)}
