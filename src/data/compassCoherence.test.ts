@@ -3,7 +3,8 @@ import Simulator from '../core/simulator';
 import { MIN_YEARS, yearsToExpiry } from '../core/optionTime';
 import { weighContract } from '../core/contractScore';
 import { buildCompass, makeSetup, resetCompassCache, sleeveExpiry } from './compass';
-import { CONTRACT_SLEEVES, SCANNERS, type ImpactMetric, type ImpactRow } from '../types/compass';
+import { CONTRACT_SLEEVES, SCANNERS, SLEEVE_BY_KEY, type ImpactMetric, type ImpactRow } from '../types/compass';
+import { MARKET_HOLIDAYS, expiryFor } from '../core/calendar';
 
 /*
   Two panels, one moment, one set of numbers.
@@ -224,5 +225,86 @@ describe('the level that kills a setup and the price it is measured from', () =>
         }
       }
     }
+  });
+});
+
+describe('a setup and the chain beside it resolve the same expiry', () => {
+  /*
+    The nominal horizon and the resolved date are two numbers, and the desk
+    renders both. buildChain was corrected to price on the resolved distance —
+    a 1DTE asked for on a Friday is a Monday contract, three calendar days out —
+    and makeSetup was left on the nominal bucket, which did not fix the split so
+    much as move it: the board and the ladder next to it then disagreed about
+    the same contract, which is the one thing this file exists to prevent.
+
+    Fixing one side of a two-sided defect is worse than fixing neither, because
+    it looks fixed.
+  */
+  it('prices a setup on the same day count the chain prices its strikes on', () => {
+    const s = snap();
+    const iv = Simulator.TICKERS.SPY.iv;
+    const step = Simulator.TICKERS.SPY.step;
+    const atm = Math.round(s.spot / step) * step;
+
+    for (const sleeve of CONTRACT_SLEEVES) {
+      const data = buildCompass(s, 'top-setups', { epoch: EPOCH, sleeve });
+      const bucket = sleeveExpiry(sleeve);
+      const setup = makeSetup('SPY', s.spot, atm, 'C', 'top-setups', iv, true, sleeve);
+
+      // Same bucket label on both, and the chain stamps the one it priced.
+      expect(setup.expiry).toBe(bucket);
+      expect(data.chain.expiry).toBe(bucket);
+
+      const row = data.chain.rows.find(r => r.strike === atm);
+      expect(row, `${sleeve} chain has no ${atm} strike`).toBeTruthy();
+
+      /*
+        Two different pricers — estimatePremium for the board, chainSide for the
+        ladder — so they will not match to the cent. What has to match is the
+        amount of TIME in them. Priced on 7 days against 4, a weekly's premium
+        differs by roughly the square root of that ratio; the band below is
+        tight enough to catch it and loose enough to survive the model split.
+      */
+      const ratio = setup.mid / row!.call.premium;
+      expect(ratio, `${sleeve}: board ${setup.mid} vs chain ${row!.call.premium}`).toBeGreaterThan(0.8);
+      expect(ratio).toBeLessThan(1.25);
+    }
+  });
+
+  it('walks a whole year of session starts without the two ever splitting', () => {
+    /*
+      One snapshot cannot see this: the gap only opens when the nominal target
+      lands on a weekend or a holiday, which is a property of the day the sweep
+      runs, not of the contract. So the assertion is on the resolution itself,
+      swept across every calendar day of a year — including the ten holidays
+      and the two half-days core/calendar knows about.
+    */
+    const p2 = (n: number) => String(n).padStart(2, '0');
+    const atMidnightUTC = (d: Date) => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+    let checked = 0;
+    let differed = 0;
+    for (let d = 0; d < 365; d++) {
+      const from = new Date(Date.UTC(2026, 0, 1 + d, 12));
+      for (const sleeve of CONTRACT_SLEEVES) {
+        const nominal = SLEEVE_BY_KEY[sleeve].dte;
+        const exp = expiryFor(nominal, from);
+
+        // The resolved day count is the real gap to the real date, so anything
+        // that prices on it is pricing the contract that date names.
+        const gapDays = Math.round((exp.date.getTime() - atMidnightUTC(from)) / 86_400_000);
+        expect(exp.dte, `${sleeve} on ${from.toISOString().slice(0, 10)}`).toBe(gapDays);
+
+        // And it always lands on a session — never a weekend, never a holiday.
+        const iso = `${exp.date.getFullYear()}-${p2(exp.date.getMonth() + 1)}-${p2(exp.date.getDate())}`;
+        expect(['Sat', 'Sun']).not.toContain(exp.weekday);
+        expect(MARKET_HOLIDAYS.has(iso), `${iso} is a holiday`).toBe(false);
+
+        if (exp.dte !== nominal) differed++;
+        checked++;
+      }
+    }
+    expect(checked).toBe(365 * CONTRACT_SLEEVES.length);
+    // If nothing ever differed the test would be proving nothing.
+    expect(differed).toBeGreaterThan(200);
   });
 });

@@ -57,24 +57,43 @@ const SetupScanCard = ({ setup, rank, selected, onSelect, onStudy }: SetupScanCa
   const coverage = scanCoverage(setup.ticker);
 
   return (
+    /*
+      Three elements, because one could not carry all three jobs.
+
+      The card is a `listitem`: it is one entry in a list of contracts, and a
+      listitem's children stay exposed, which is what lets the Analysis button
+      inside keep its own name and its own focus stop.
+
+      The preview target inside it is a `button`. It was the listitem itself for
+      one commit, and that announced a focusable card as an ordinary list entry
+      — Enter and Space did something the screen reader never said was there,
+      and `aria-current` reported the state after selection without ever
+      offering the action. It cannot be an `option` in a `listbox`: measured
+      against axe, a listbox may own options and groups and nothing else, and an
+      option's children are presentational, so the Analysis button would lose
+      its name either way.
+
+      The click handler sits on the wrapper so the footer line is live to a
+      mouse too; it reaches the same handler by bubbling, and Analysis stops
+      propagation.
+    */
     <div
-      {...interactiveRowProps(onSelect, selected, 'listitem')}
+      role="listitem"
       onClick={onSelect}
-      /* listitem, not button. The card carries its own Analysis button, and a
-         button's children are presentational — nesting one inside another
-         swallows its name and its focus stop, which is what axe reports as
-         `nested-interactive`. A listitem keeps both, and the card genuinely is
-         one entry in a list of contracts. */
-      aria-label={`Preview ${setup.contract}, rank ${rank}, ${COVERAGE_META[coverage].label.toLowerCase()} coverage`}
       /* Selection is one signal, not three. This used to carry a 2px near-white
          inset rail on top of the border and the wash, and it fired on mount, so
          a card nobody had clicked wore the brightest marker on the screen. */
-      className={`${ROW_INTERACTIVE} flex flex-col gap-2.5 rounded-md border px-3 py-2.5 transition-colors ${
+      className={`flex flex-col gap-2.5 rounded-md border px-3 py-2.5 transition-colors ${
         selected
           ? 'border-select/40 bg-select/[0.04]'
           : 'border-borderSubtle bg-panel hover:border-borderMuted hover:bg-rowHover'
       }`}
     >
+      <div
+        {...interactiveRowProps(onSelect, selected, 'button')}
+        aria-label={`Preview ${setup.contract}, rank ${rank}, ${COVERAGE_META[coverage].label.toLowerCase()} coverage`}
+        className={`${ROW_INTERACTIVE} flex flex-col gap-2.5 rounded-sm`}
+      >
       {/* Identity */}
       <div className="flex items-center gap-2 flex-wrap">
         <span className="font-mono text-micro text-textMuted tnum">#{rank}</span>
@@ -124,7 +143,9 @@ const SetupScanCard = ({ setup, rank, selected, onSelect, onStudy }: SetupScanCa
           ))}
         </div>
       )}
+      </div>
 
+      {/* Outside the preview button, because it holds one of its own. */}
       <div className="flex items-center gap-2 border-t border-borderSubtle pt-2">
         <span
           title={setup.invalidationReason}

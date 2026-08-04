@@ -524,12 +524,33 @@ export function makeSetup(
   const strikeLabel = strike % 1 === 0 ? strike.toFixed(0) : strike.toFixed(2);
   const contract = `${ticker} ${strikeLabel}${right}`;
 
-  const dte = sleeveDef.dte;
+  /*
+    Two day counts, and they are not interchangeable.
+
+    `sleeveDef.dte` is the HORIZON — what the sleeve asked for, and what the
+    board stamps on the row. `dte` below is what the calendar actually resolved
+    it to, which differs whenever the nominal target lands on a weekend or a
+    holiday: a weekly asked for on Monday 2026-08-31 backs off Labor Day to
+    Friday 09/04, four calendar days out rather than seven.
+
+    Anything with time in it prices on the resolved distance, because that is
+    how much life the contract on that date really has. buildChain was already
+    corrected this way; leaving makeSetup on the nominal bucket meant the setup
+    and the chain beside it disagreed about the same contract — which is the
+    exact cross-panel split this file's whole coherence suite exists to catch,
+    reintroduced by fixing one side of it.
+  */
+  const horizonDte = sleeveDef.dte;
+  const dte = expiryFor(horizonDte).dte;
   const mid = Number(estimatePremium(spot, strike, right, iv, dte).toFixed(2));
   // Spread widens with distance from spot and 0DTE urgency — liquidity is a
-  // real variable here, not a constant 3% decoration
+  // real variable here, not a constant 3% decoration.
+  //
+  // The urgency test reads the HORIZON, not the resolved gap: a same-session
+  // contract quoted on a Saturday is still a same-session contract, and its
+  // book is wide for that reason rather than because Monday is two days away.
   const otmDist = Math.abs(strike - spot) / spot;
-  const spreadPctModel = clamp(1.2 + otmDist * 180 + (dte <= 0.5 ? 0.6 : 0), 0.8, 7);
+  const spreadPctModel = clamp(1.2 + otmDist * 180 + (horizonDte <= 0.5 ? 0.6 : 0), 0.8, 7);
   const spread = Math.max(0.02, mid * (spreadPctModel / 100));
   const bid = Number((mid - spread / 2).toFixed(2));
   const ask = Number((mid + spread / 2).toFixed(2));
