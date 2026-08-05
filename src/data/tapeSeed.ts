@@ -28,6 +28,7 @@
 import Simulator from '../core/simulator';
 import { h01, hash } from '../core/rng';
 import type { TapeOrder } from '../types/market';
+import { etTime } from '../core/calendar';
 
 /** The provider's tick cadence (MarketDataContext) — the backfill walks the same clock. */
 const TICK_MS = 1500;
@@ -90,7 +91,7 @@ export function seedSessionTape(want: number): SeededPrint[] {
         const strike = Math.round(bar.close / cfg.step) * cfg.step + offset;
         out.push({
           at,
-          time: new Date(at).toLocaleTimeString(),
+          time: etTime(at),
           ticker: sym,
           strike: strike.toFixed(2),
           type: h01(`${s}-cp`) > 0.5 ? 'C' : 'P',

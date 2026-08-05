@@ -19,6 +19,7 @@ import PositioningMap from '../../components/gex/PositioningMap';
 import ExposureInsight from '../../components/gex/ExposureInsight';
 import ExposureLedger from './ExposureLedger';
 import { DUR, EASE } from '../../lib/motion';
+import { etTime } from '../../core/calendar';
 
 /** Exposure sweeps on its own cadence — bars must not vibrate with every tick. */
 const SCAN_INTERVAL_MS = 10_000;
@@ -65,7 +66,7 @@ const ExposureProfile = () => {
       scanRef.current = marketData;
       lastScanTimeRef.current = now;
       setScanSnapshot(marketData);
-      setLastScanAt(new Date(now).toLocaleTimeString('en-GB'));
+      setLastScanAt(etTime(now));
     }
   }, [marketData]);
 

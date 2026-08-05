@@ -22,6 +22,7 @@ import { lookup as universeLookup } from '../data/universe';
 // module this file must never import: that dependency runs the other way, and
 // the cycle surfaces as `undefined` at module init rather than as a type error.)
 import { dayKey } from './rng';
+import { etTime } from './calendar';
 
 const Simulator = (() => {
   // Math Helpers
@@ -583,7 +584,7 @@ const Simulator = (() => {
         const offset = (Math.floor(rand(sym) * 7) - 3) * cfg.step;
         const strike = Math.round(cfg.currentPrice / cfg.step) * cfg.step + offset;
         tape.push({
-          time: new Date().toLocaleTimeString(),
+          time: etTime(Date.now()),
           ticker: sym,
           strike: strike.toFixed(2),
           type: rand(sym) > 0.5 ? 'C' : 'P',
@@ -647,7 +648,7 @@ const Simulator = (() => {
         const offset = (Math.floor(rand(key) * 7) - 3) * cfg.step;
         const strike = Math.round(cfg.currentPrice / cfg.step) * cfg.step + offset;
         tape.push({
-          time: new Date().toLocaleTimeString(),
+          time: etTime(Date.now()),
           ticker: key,
           strike: strike.toFixed(2),
           type: rand(key) > 0.5 ? 'C' : 'P',

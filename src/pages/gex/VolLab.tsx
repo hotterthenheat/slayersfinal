@@ -11,6 +11,7 @@ import RiskNeutralDist from '../../components/gex/vollab/RiskNeutralDist';
 import RegimePanel from '../../components/gex/vollab/RegimePanel';
 import VolSliceChart, { type SlicePoint } from './VolSliceChart';
 import type { IvSurfaceData } from '../../types/gex';
+import { etTime } from '../../core/calendar';
 
 /** Vol analytics recalibrate on the scan tier — surfaces must not flicker per tick. */
 const SCAN_INTERVAL_MS = 10_000;
@@ -63,7 +64,7 @@ const VolLab = () => {
     if (due) {
       lastScanTimeRef.current = now;
       setScanKey({ ticker: marketData.ticker, spot: marketData.spot });
-      setCalibratedAt(new Date(now).toLocaleTimeString('en-GB'));
+      setCalibratedAt(etTime(now));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [marketData]);

@@ -15,6 +15,7 @@ import { buildLevels } from '../../data/gex';
 import { useMarketData } from '../../context/MarketDataContext';
 import type { KeyLevels } from '../../types/gex';
 import type { IdeaDirection } from '../../types/community';
+import { etTime } from '../../core/calendar';
 
 export interface Books {
   /** Key levels per symbol, from buildLevels(). */
@@ -112,5 +113,6 @@ export const fmtPct = (v: number): string => `${v >= 0 ? '+' : ''}${v.toFixed(2)
 
 export const fmtLevel = (v: number): string => v.toFixed(2);
 
-export const clockOf = (ms: number): string =>
-  new Date(ms).toLocaleTimeString('en-US', { hour12: false });
+// Idea and comment stamps sit beside entry prices and gamma flips, so they
+// belong on the market's clock like every other time in the terminal.
+export const clockOf = (ms: number): string => etTime(ms);
