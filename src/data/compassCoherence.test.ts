@@ -172,6 +172,49 @@ describe('the scan engine and the weigher price the same contract the same way',
     expect(ratio).toBeGreaterThan(0.5);
     expect(ratio).toBeLessThan(2);
   });
+
+  it('both price a name at the name\'s own volatility', () => {
+    /*
+      The band above is necessary and it is not sufficient, which this test
+      exists to say.
+
+      `buildScoreCtx` used to set its base IV to
+      `0.18 + (squeeze ? -0.03 : 0.02) + hRange(ticker-day-iv, 0, 0.25)` — a
+      daily hash in 0.20–0.45 that never read the ticker it was pricing. The
+      board reads `Simulator.TICKERS[t].iv`. So SPY (0.15) was quoted off two
+      volatilities at once, by two panels on one screen, and how far apart they
+      landed was a function of the DATE.
+
+      That is why a ratio band could not hold it: for most of the hash's range
+      the two engines stayed inside 0.5–2 and the test passed while the defect
+      was live. On 2026-08-05 the hash reached ~0.38 and the same ATM 0DTE
+      printed $1.40 on the board and $3.39 in the Weigher — 2.4×, and only then
+      did anything go red.
+
+      So assert the anchor itself, not the symptom. The tolerance is the squeeze
+      term (±0.03 absolute) plus the strike skew (`baseIv * |moneyness| * 1.6`,
+      negligible at the money) — everything the Weigher is still allowed to add.
+      A hashed level of 0.20–0.45 fails this on SPY at every point in its range.
+    */
+    for (const t of ['SPY', 'QQQ', 'AAPL', 'NVDA'] as const) {
+      Simulator.ensureTicker(t);
+      const snapT = Simulator.buildSnapshot(t);
+      const nameIv = Simulator.TICKERS[t].iv;
+      const atmT = Math.round(snapT.spot / Simulator.TICKERS[t].step) * Simulator.TICKERS[t].step;
+      const w = weighContract(snapT, 'C', atmT, 7);
+      expect(Math.abs(w.ivPct / 100 - nameIv), `${t}: weigher ${w.ivPct}% vs name ${nameIv * 100}%`).toBeLessThan(0.04);
+    }
+    // And the spread across the four names has to survive the trip: NVDA is
+    // more than twice as volatile as SPY, and an engine that flattens that is
+    // not pricing the name at all.
+    const ivOf = (t: 'SPY' | 'NVDA') => {
+      Simulator.ensureTicker(t);
+      const sn = Simulator.buildSnapshot(t);
+      const k = Math.round(sn.spot / Simulator.TICKERS[t].step) * Simulator.TICKERS[t].step;
+      return weighContract(sn, 'C', k, 7).ivPct;
+    };
+    expect(ivOf('NVDA') / ivOf('SPY')).toBeGreaterThan(1.6);
+  });
 });
 
 describe('the level that kills a setup and the price it is measured from', () => {

@@ -1148,7 +1148,15 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
           v: priceable ? `${weighed.spreadPct.toFixed(1)}%` : '—',
           note: priceable ? undefined : 'not a reading at the floor',
         },
-        { k: 'IV rank', v: `${weighed.ivRank}` },
+        {
+          /* Was "IV rank", and the number under it was a daily hash unrelated
+             to the IV in the header two rows up. This is the same IV measured
+             against the name's own — one quantity, one source, and it moves
+             when the header moves. */
+          k: 'Vol vs name',
+          v: `${weighed.ivPremiumPct > 0 ? '+' : ''}${weighed.ivPremiumPct}%`,
+          note: `this strike at ${weighed.ivPct}% IV against what ${weighed.ticker} normally carries`,
+        },
         { k: 'Open int', v: weighed.oi.toLocaleString() },
         { k: preserveGreek('1σ move'), v: `${weighed.expectedMovePct.toFixed(1)}%` },
         {

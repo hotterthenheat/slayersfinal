@@ -83,9 +83,19 @@ const DESKS: DeskDoc[] = [
     icon: Compass,
     name: 'Compass',
     to: '/compass',
-    tagline: 'Finds the setup — a ranked same-day board, plus a weigher for any contract you name.',
+    tagline: 'Finds the setup — a ranked board at four horizons, plus a weigher for any contract you name.',
     shows: [
-      'A ranked board of contracts, each with a score from 8 to 99 and the scanner\'s thesis written out for that ticker and strike. Every preset stamps its own expiry, and all six are 0DTE or 1DTE — the board is a same-day and next-day instrument.',
+      /* This line said "all six are 0DTE or 1DTE — the board is a same-day and
+         next-day instrument". That was true before the sleeve axis existed;
+         `SLEEVES` in `types/compass.ts` now stamps 0, 7, 45 and 365 days, and
+         the page was telling a LEAPS reader their 365-day board was a same-day
+         instrument. */
+      <>A ranked board of contracts, each with a score from 8 to 99 and the scanner's thesis written out for that
+      ticker and strike. The horizon is the top axis — <span className="text-textPrimary">0DTE</span>,
+      {' '}<span className="text-textPrimary">Weekly</span> (7 days), <span className="text-textPrimary">Swing</span>
+      {' '}(45) and <span className="text-textPrimary">LEAPS</span> (365) — and it decides the expiry every row is
+      stamped with. The scanners are a filter <em>inside</em> a horizon, not a horizon of their own, so the same
+      scanner produces a different board on each tab.</>,
       <>The <span className="text-textPrimary">Weigher</span>: search any contract you already hold, at any expiry from
       same-day to LEAPS, and have it graded on its own six-factor composite — the math, theta burden, vol pricing, flow
       and dark pool, news lean, liquidity — with a better-risk/reward alternative beside it. It speaks the board's
@@ -105,12 +115,25 @@ const DESKS: DeskDoc[] = [
       score, so read them as a second opinion rather than a confirmation.</>,
       'The paragraph under a setup is the scanner\'s premise applied to that name, not a breakdown of why this contract outranked the next one.',
     ],
+    /* Two of the desk's five control groups used to be documented here — the
+       modes and the scanners. A reader looking for the sleeve tabs, the
+       Structures board, the Cards/Table density switch or the leaderboard's
+       rank-by control found nothing, on the one page whose job is to say what
+       the controls do. */
     controls: [
       'Three modes: Setups, Weigher and Lotto.',
-      <>Inside Setups, six scanners: Top Setups, Quick Scalp, Discounted, Rebounds, Whale Sweeps and All — each with its
-      own score floor. The count beside a tab is what that floor admitted across the whole field, not what fits on
-      screen: the board itself is capped at the top 240 rows. All's floor is the bottom of the scale, so its count
-      is the field.</>,
+      <>Inside Setups, the horizon runs along the top: <span className="text-textPrimary">0DTE</span>, Weekly, Swing,
+      LEAPS — and <span className="text-textPrimary">Structures</span>, which is a different instrument rather than a
+      different horizon: verticals, condors, butterflies and straddles, each with its payoff curve and its
+      defined risk.</>,
+      <>Under the horizon, six scanners: Top Setups, Quick Scalp, Discounted, Rebounds, Whale Sweeps and All — each
+      with its own score floor. The count beside a tab is what that floor admitted across the whole field, not what
+      fits on screen: the board itself is capped at the top 240 rows. All's floor is the bottom of the scale, so its
+      count is the field.</>,
+      <><span className="text-textPrimary">Cards</span> and <span className="text-textPrimary">Table</span> are the
+      same board at two densities — cards carry the evidence chips and the invalidation line, the table trades those
+      for rows on screen and sortable columns.</>,
+      'The Largest Impact Contracts leaderboard has its own rank-by control, and it ranks the whole book by that column rather than re-sorting the rows you can see.',
     ],
     example: (
       <>A near-the-money call on a bullish name will outrank a far-OTM one on the same name, because proximity is most

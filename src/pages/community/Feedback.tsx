@@ -21,15 +21,22 @@ const CATEGORY_OPTIONS = [
 
 // Real environment values — no fabricated version string. Falls back to the
 // build channel (MODE) when no explicit app version is injected at build time.
-const APP_VERSION =
-  (import.meta.env as unknown as Record<string, string | undefined>).VITE_APP_VERSION ?? import.meta.env.MODE;
+//
+// The label has to follow the fallback. `VITE_APP_VERSION` is not injected in
+// this build, so this resolves to `production` and the field was captioned "App
+// version" — which reads as a version number and is a build channel. A bug
+// report whose version field says "production" tells the reader nothing and
+// looks like it told them something.
+const RAW_VERSION = (import.meta.env as unknown as Record<string, string | undefined>).VITE_APP_VERSION;
+const APP_VERSION = RAW_VERSION ?? import.meta.env.MODE;
+const VERSION_LABEL = RAW_VERSION ? 'App version' : 'Build channel';
 const USER_AGENT = typeof navigator !== 'undefined' ? navigator.userAgent : '';
 const BROWSER = shortBrowser(USER_AGENT);
 
 // Order for the captured-context read-out on saved notes.
 const CAPTURE_FIELDS: { key: string; label: string }[] = [
   { key: 'route', label: 'Route' },
-  { key: 'version', label: 'Version' },
+  { key: 'version', label: VERSION_LABEL },
   { key: 'browser', label: 'Browser' },
 ];
 
@@ -128,7 +135,7 @@ const Feedback = () => {
               </span>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <Field label="Route" value={route} onChange={setRoute} placeholder="/community/feedback" />
-                <ReadOnlyField label="App version" value={APP_VERSION} />
+                <ReadOnlyField label={VERSION_LABEL} value={APP_VERSION} />
                 <ReadOnlyField label="Browser" value={BROWSER} title={USER_AGENT} />
               </div>
             </div>
