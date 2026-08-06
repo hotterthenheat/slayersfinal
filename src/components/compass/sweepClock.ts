@@ -4,4 +4,5 @@
  * Value-only module (no component export) so importing it never trips
  * react-refresh — same split as ./verdict.ts and ./setupState.ts.
  */
-export const sweepClock = (ms: number): string => new Date(ms).toLocaleTimeString('en-GB');
+import { etTime } from '../../core/calendar';
+export const sweepClock = (ms: number): string => etTime(ms);

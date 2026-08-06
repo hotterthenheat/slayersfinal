@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   CALENDAR_THROUGH,
   MARKET_HOLIDAYS,
+  etHm,
+  etTime,
   isTradingDay,
   nextSession,
   sessionsBetween,
@@ -325,5 +327,51 @@ describe('marketClock on scheduled half-days', () => {
       expect(dow).toBeGreaterThan(0);
       expect(dow).toBeLessThan(6);
     }
+  });
+});
+
+describe('etTime — one Eastern clock for every stamp in the app', () => {
+  /*
+    Nine sites used to call `toLocaleTimeString()` and print the VIEWER's wall
+    clock: both simulator tape builders, the seeded tape, the Compass sweep
+    stamp, the Vanna wall-drift axis, the community book, and the "scan HH:MM:SS
+    · 10s" line on four Pinpoint views. The top bar had already been fixed to
+    read New York, so the shell and the panel under it disagreed by the reader's
+    UTC offset — in London a print stamped 14:32 sat beneath a clock reading
+    09:32, with nothing on screen saying which was the market's.
+
+    Fixed instants, so this cannot pass by running in a lucky timezone. If the
+    process TZ ever leaks into the formatter, the second assertion in each pair
+    is what catches it: 21:30 UTC is a different ET hour in August than in
+    January, and a local-time implementation would return the same string twice.
+  */
+  it('returns New York time, not the process timezone', () => {
+    // 2026-08-05 is EDT (UTC-4). 16:30 UTC is 12:30 in New York.
+    expect(etTime(Date.parse('2026-08-05T16:30:00Z'))).toBe('12:30:00');
+    // 2026-01-14 is EST (UTC-5). The same UTC clock time is an hour earlier.
+    expect(etTime(Date.parse('2026-01-14T16:30:00Z'))).toBe('11:30:00');
+  });
+
+  it('crosses midnight on the ET side, not the UTC side', () => {
+    // 03:15 UTC on the 6th is still 23:15 on the 5th in New York.
+    expect(etTime(Date.parse('2026-08-06T03:15:42Z'))).toBe('23:15:42');
+  });
+
+  it('renders midnight as 00, never 24', () => {
+    // `hourCycle: 'h23'`, not `hour12: false` — some engines print "24:07:00".
+    expect(etTime(Date.parse('2026-08-06T04:07:00Z'))).toBe('00:07:00');
+  });
+
+  it('etHm is etTime without the seconds', () => {
+    const ms = Date.parse('2026-08-05T19:59:59Z');
+    expect(etTime(ms)).toBe('15:59:59');
+    expect(etHm(ms)).toBe('15:59');
+  });
+
+  it('agrees with the market clock the top bar renders', () => {
+    // The one thing that must never drift: the shell's time and a desk stamp
+    // are the same instant through the same formatter.
+    const ms = Date.parse('2026-08-05T18:04:33Z');
+    expect(etTime(ms)).toBe(marketClock(new Date(ms)).time);
   });
 });

@@ -291,3 +291,21 @@ export function marketClock(now: Date = new Date()): MarketClock {
 
   return { time, day, phase, label: PHASE_LABEL[phase] };
 }
+
+/**
+ * `HH:MM:SS` in New York for any instant.
+ *
+ * Every desk timestamp in the app used to be `toLocaleTimeString()` — the
+ * VIEWER's wall clock — under headers that say ET, on a page rendering a US
+ * session. The top bar was fixed to read New York and the desks were not, so
+ * the shell and the panel under it disagreed by the reader's UTC offset: in
+ * London a print stamped 14:32 sat beneath a clock reading 09:32, and nothing
+ * on screen said which one was the market's.
+ *
+ * Same `Intl` formatter as `marketClock`, so there is one ET in the codebase
+ * and not two that can drift.
+ */
+export const etTime = (ms: number): string => marketClock(new Date(ms)).time;
+
+/** `HH:MM` in New York — axes and tick labels, where seconds are noise. */
+export const etHm = (ms: number): string => etTime(ms).slice(0, 5);

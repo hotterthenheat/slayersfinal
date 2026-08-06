@@ -10,7 +10,14 @@
 ==================================================
 */
 
-import { dayKey, hRange } from './rng';
+/*
+  `dayKey`/`hRange` used to be imported here and this module has stopped needing
+  them: its only two hashed quantities were the base IV and the IV rank, and
+  both were numbers the reader was told were measurements. Nothing else on the
+  Weigher is drawn — every factor comes off the chain, the tape, the dark-pool
+  view or the news lean.
+*/
+import Simulator from './simulator';
 import { expiryFor } from './calendar';
 import { yearsToExpiry } from './optionTime';
 import { buildDarkPoolView } from '../data/darkpool';
@@ -41,7 +48,20 @@ export interface WeighedContract {
   mid: number;
   delta: number;
   ivPct: number;
-  ivRank: number;
+  /**
+   * What this contract's vol costs relative to the name's own baseline, in
+   * percent: `+30` is paying 30% more vol than the ticker usually carries,
+   * `-20` is paying 20% less.
+   *
+   * This replaced `ivRank`, which was a daily hash in 12–92 with no connection
+   * to the IV printed beside it. With the pricing IV anchored to the name, the
+   * two sat three inches apart and disagreed out loud — a header reading
+   * "IV 12%" under a factor row reading "IV rank 82 — premium is expensive".
+   * A percentile also needs a distribution over time to be a percentile, and
+   * this engine has no IV history to take one from; a ratio against the name's
+   * baseline is a quantity it can actually compute.
+   */
+  ivPremiumPct: number;
   /** Daily decay as % of premium (negative burden expressed positive) */
   thetaPerDayPct: number;
   spreadPct: number;
@@ -157,7 +177,8 @@ export function horizonForDte(dte: number): Horizon {
 interface ScoreCtx {
   dp: ReturnType<typeof buildDarkPoolView>;
   news: number;
-  ivRank: number;
+  /** The name's own volatility — the reference every vol read on the desk is against. */
+  nameIv: number;
   baseIv: number;
   trendUp: boolean;
   rsi: number;
@@ -166,18 +187,40 @@ interface ScoreCtx {
 
 function buildScoreCtx(snapshot: MarketSnapshot): ScoreCtx {
   const { ticker, spot, chain, indicators } = snapshot;
-  const day = dayKey();
   const dp = buildDarkPoolView(snapshot);
   const news = tickerSentiment(ticker);
-  const ivRank = Math.round(hRange(`${ticker}-${day}-ivr`, 12, 92));
-  const baseIv = Math.max(0.12, chain.length > 0 ? 0.18 + (indicators.squeeze ? -0.03 : 0.02) + hRange(`${ticker}-${day}-iv`, 0, 0.25) : 0.25);
+  /*
+    The level options are priced at is the NAME's, not this module's opinion of
+    it.
+
+    This read `0.18 + (squeeze ? -0.03 : 0.02) + hRange(ticker-day-iv, 0, 0.25)`
+    — a daily hash in 0.20–0.45 that never looked at the ticker the snapshot
+    came from. Every other pricer in the app reads `Simulator.TICKERS[t].iv`
+    (0.15 on SPY, 0.35 on NVDA), so the Weigher and the board were quoting the
+    same contract off two different volatilities, and the gap moved with the
+    calendar rather than with anything a reader could see.
+
+    Measured on 2026-08-05, SPY 500C 0DTE with spot at 500.06: the board said
+    $1.40 and the Weigher $3.39 — a 2.4× disagreement between two panels on one
+    screen. `compassCoherence.test.ts` bounds that ratio at 0.5–2, and this is
+    the day the hash drifted far enough to trip it; the defect was there on every
+    other day too, just inside the band.
+
+    The squeeze term is left exactly as it was. It is a real signal about
+    compressed range and it is not what was wrong — only the level was. It stays
+    additive, which means it is worth proportionally more on a low-IV name than
+    a high-IV one; that is a separate question and not one this fix should
+    answer silently.
+  */
+  const nameIv = Simulator.TICKERS[ticker]?.iv ?? 0.25;
+  const baseIv = Math.max(0.12, chain.length > 0 ? nameIv + (indicators.squeeze ? -0.03 : 0.02) : nameIv);
   const trendUp = indicators.ema9 >= indicators.ema21;
   const rsi = indicators.rsi;
   // Strike increment from the chain grid — candidates stay on listed strikes
   // even past the chain window's edge (LEAPS reach further OTM than it holds).
   const sorted = [...chain].sort((a, b) => a.strike - b.strike);
   const step = sorted.length > 1 ? Math.abs(sorted[1].strike - sorted[0].strike) : Math.max(spot * 0.005, 0.5);
-  return { dp, news, ivRank, baseIv, trendUp, rsi, step };
+  return { dp, news, nameIv, baseIv, trendUp, rsi, step };
 }
 
 /** Weigh one concrete contract with the full factor stack. This is the single
@@ -193,7 +236,7 @@ function scoreCandidate(
 ): WeighedContract {
   const { ticker, spot, chain } = snapshot;
   const weights = WEIGHTS[horizon];
-  const { dp, news, ivRank, baseIv, trendUp, rsi, step } = ctx;
+  const { dp, news, nameIv, baseIv, trendUp, rsi, step } = ctx;
 
   const strike = Math.max(step, Math.round(strikeInput / step) * step);
   const node = chain.reduce(
@@ -234,11 +277,34 @@ function scoreCandidate(
       ? `Theta ${thetaPerDayPct.toFixed(1)}%/day is carryable for the holding window.`
       : `Theta ${thetaPerDayPct.toFixed(1)}%/day — the clock beats you unless the move comes fast.`;
 
-  const volScore = Math.round(clamp(100 - ivRank + (horizon === 'LEAPS' ? 0 : 18), 4, 96));
+  /*
+    What you are paying for volatility, against what this name normally carries.
+
+    `iv` here is the priced volatility — the name's baseline, plus the squeeze
+    adjustment, plus the strike's skew — so on the money it is roughly the
+    baseline and out on the wings it is meaningfully above it. Dividing by the
+    baseline gives a number the panel can defend: `-20` means this contract's
+    vol is a fifth cheaper than the name's own, `+45` means you are paying
+    nearly half again for the wing.
+
+    The old form was `100 - ivRank`, and `ivRank` was `hRange(ticker-day-ivr,
+    12, 92)` — a hash. It moved with the date and with nothing on screen, and
+    once the pricing IV was anchored to the name it started contradicting the
+    header out loud: "IV 12%" three inches above "IV rank 82 — premium is
+    expensive". The `LEAPS ? 0 : 18` term is inherited unchanged and not
+    re-derived here; it is not what was wrong.
+  */
+  // One rounding, used by the sentence below and by the field the card renders,
+  // so the prose and the number can never disagree about the same IV.
+  const ivPct = Number((iv * 100).toFixed(1));
+  const ivPremiumPct = Math.round((iv / nameIv - 1) * 100);
+  const volScore = Math.round(clamp(62 - ivPremiumPct * 0.9 + (horizon === 'LEAPS' ? 0 : 18), 4, 96));
   const volDetail =
-    ivRank >= 65
-      ? `IV rank ${ivRank} — premium is expensive; vol crush works against longs.`
-      : `IV rank ${ivRank} — you're not overpaying for volatility here.`;
+    ivPremiumPct >= 25
+      ? `${ivPct}% IV is ${ivPremiumPct}% over what ${ticker} normally carries — you're paying up for this strike, and vol crush works against longs.`
+      : ivPremiumPct <= -8
+        ? `${ivPct}% IV is ${Math.abs(ivPremiumPct)}% under ${ticker}'s own — you're not overpaying for volatility here.`
+        : `${ivPct}% IV is within a few points of what ${ticker} normally carries — vol is neither the reason to take this nor the reason to skip it.`;
 
   const dirSign = right === 'C' ? 1 : -1;
   const flowAlign = dp.netPosturePct * dirSign;
@@ -290,8 +356,8 @@ function scoreCandidate(
     expiryLabel: expiryLabel(dte),
     mid,
     delta: Number(bs.delta.toFixed(2)),
-    ivPct: Number((iv * 100).toFixed(1)),
-    ivRank,
+    ivPct,
+    ivPremiumPct,
     thetaPerDayPct: Number(thetaPerDayPct.toFixed(2)),
     spreadPct: Number(spreadPct.toFixed(1)),
     oi: oiCount,

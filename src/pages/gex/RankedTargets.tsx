@@ -14,6 +14,7 @@ import HoverReadout from '../../components/ui/HoverReadout';
 import type { MarketSnapshot } from '../../types/market';
 import type { HedgingClass, RankedTarget, TargetTag } from '../../types/gex';
 import type { Tone } from '../../components/ui/tones';
+import { etTime } from '../../core/calendar';
 
 /** Rankings sweep on the scan tier — priority must not reshuffle per tick. */
 const SCAN_INTERVAL_MS = 10_000;
@@ -123,7 +124,7 @@ const RankedTargets = () => {
       scanRef.current = marketData;
       lastScanTimeRef.current = now;
       setScanSnapshot(marketData);
-      setLastScanAt(new Date(now).toLocaleTimeString('en-GB'));
+      setLastScanAt(etTime(now));
     }
   }, [marketData]);
 

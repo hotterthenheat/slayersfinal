@@ -6,6 +6,7 @@ import HoverReadout from '../../ui/HoverReadout';
 import { svgHoverIndex } from '../../ui/svgHover';
 import { DUR, EASE } from '../../../lib/motion';
 import type { IvShift, LevelShift, ShiftMode, WallDriftPoint } from '../../../types/gex';
+import { etHm } from '../../../core/calendar';
 
 interface WallDriftProps {
   drift: WallDriftPoint[];
@@ -44,8 +45,8 @@ interface WallStep {
   to: number;
 }
 
-const timeLabel = (t: number) =>
-  new Date(t * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+// The axis under a US session chart reads New York, not the viewer's zone.
+const timeLabel = (t: number) => etHm(t * 1000);
 
 const price = (v: number) => `$${v.toFixed(2)}`;
 
