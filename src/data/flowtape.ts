@@ -11,6 +11,14 @@ import Simulator, { settledOI } from '../core/simulator';
 import { expiryFor, fmtExpiryLong } from '../core/calendar';
 import type { TapeOrder } from '../types/market';
 import type { FlowPrint, PrintSentiment, StratTag, TapeSummary } from '../types/flowdesk';
+import {
+  TRADE_CONDITION,
+  MULTI_LEG_CODES,
+  STOCK_OPTION_CODES,
+  SINGLE_LEG_MECHANISM_CODES,
+  aggressorSide,
+  isSweep,
+} from '../types/conditions';
 
 // ---- deterministic RNG ------------------------------------------------------
 function hash(seed: string): number {
@@ -58,7 +66,39 @@ export function enrichPrint(order: TapeOrder, id: number): FlowPrint {
   const ask = Number((mid + spreadW / 2).toFixed(2));
 
   const isMid = h('mid') > 0.82;
-  const side: FlowPrint['side'] = isMid ? 'MID' : order.side;
+  const legs = h('legs') > 0.78 ? 2 + Math.floor(h('legs2') * 3) : 1;
+  const strat: StratTag = legs > 1 ? STRATS[Math.floor(h('strat') * STRATS.length)] : h('strat') > 0.9 ? 'Custom' : '—';
+
+  // ---- Trade condition codes (P3.1) --------------------------------------
+  // The real feed stamps these; here the enrichment derives them from the order
+  // the simulator produced, so downstream reads the exchange fact — aggressor,
+  // sweep, structure — instead of inferring side from the fill. Frequencies are
+  // plausible, not uniform: most prints plain with an exchange aggressor, a
+  // sweep minority, a meaningful multi-leg share, a smaller delta-hedged slice,
+  // and rare auction/cabinet mechanisms.
+  const conditions: number[] = [];
+  if (!isMid) {
+    conditions.push(order.side === 'ASK' ? TRADE_CONDITION.ASK_AGGRESSOR : TRADE_CONDITION.BID_AGGRESSOR);
+  }
+  if (order.orderType === 'SWEEP') conditions.push(TRADE_CONDITION.INTERMARKET_SWEEP);
+  if (legs > 1) {
+    // A spread leg — aligned with legs > 1 so the ×N marker and the code agree.
+    conditions.push(MULTI_LEG_CODES[Math.floor(h('mleg') * MULTI_LEG_CODES.length)]);
+  } else if (h('hedge') > 0.92) {
+    // Delta-hedged: qualified-contingent or a stock+option print. Non-directional.
+    conditions.push(
+      h('hedge2') > 0.5
+        ? TRADE_CONDITION.QUALIFIED_CONTINGENT_TRADE
+        : STOCK_OPTION_CODES[Math.floor(h('hedge3') * STOCK_OPTION_CODES.length)]
+    );
+  }
+  if (h('mech') > 0.96) {
+    conditions.push(SINGLE_LEG_MECHANISM_CODES[Math.floor(h('mech2') * SINGLE_LEG_MECHANISM_CODES.length)]);
+  }
+  if (h('cab') > 0.99) conditions.push(TRADE_CONDITION.CABINET);
+
+  // Side and sweep now read the codes rather than the fill.
+  const side: FlowPrint['side'] = aggressorSide(conditions) ?? 'MID';
   const flowScore = isMid
     ? Math.round((h('fs') - 0.5) * 24)
     : Math.round((side === 'ASK' ? 1 : -1) * (48 + h('fs') * 52));
@@ -69,9 +109,6 @@ export function enrichPrint(order: TapeOrder, id: number): FlowPrint {
   const volume = Math.round(order.size * (4 + h('vol') * 80));
   const oi = Math.max(1, Math.round(volume * (0.4 + h('oi') * 3.2)));
   const deltaOI = h('doi') > 0.35 ? Math.round((h('doi2') - 0.4) * oi * 0.25) : 0;
-
-  const legs = h('legs') > 0.78 ? 2 + Math.floor(h('legs2') * 3) : 1;
-  const strat: StratTag = legs > 1 ? STRATS[Math.floor(h('strat') * STRATS.length)] : h('strat') > 0.9 ? 'Custom' : '—';
 
   return {
     id,
@@ -100,7 +137,8 @@ export function enrichPrint(order: TapeOrder, id: number): FlowPrint {
     iv: Number((baseIv * 100 * (0.8 + h('iv') * 0.6)).toFixed(2)),
     volOverOI: Number((volume / oi).toFixed(2)),
     strat,
-    sweep: order.orderType === 'SWEEP',
+    sweep: isSweep(conditions),
+    conditions,
   };
 }
 
