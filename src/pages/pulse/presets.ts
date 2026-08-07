@@ -131,7 +131,6 @@ export const PULSE_PRESETS: PulseLayout[] = [
       { id: 'c-tape', key: 'flow-tape' },
       { id: 'c-alerts', key: 'flow-alerts' },
       { id: 'c-dp', key: 'dark-pool' },
-      { id: 'c-liq', key: 'liquidity-map' },
     ],
     layout: [
       L('c-chart', 0, 0, 8, 6),
@@ -156,7 +155,6 @@ export const PULSE_PRESETS: PulseLayout[] = [
     panels: [
       { id: 'cmd-dp', key: 'dark-pool' },
       { id: 'cmd-flow', key: 'order-flow' },
-      { id: 'cmd-liq', key: 'liquidity-map' },
       { id: 'cmd-chart', key: 'live-chart' },
       { id: 'cmd-gex', key: 'gex-heatmap' },
     ],
@@ -301,7 +299,6 @@ export const PULSE_PRESETS: PulseLayout[] = [
     panels: [
       { id: 'sc-chart', key: 'live-chart' },
       { id: 'sc-flow', key: 'order-flow' },
-      { id: 'sc-liq', key: 'liquidity-map' },
     ],
     layout: [
       L('sc-chart', 0, 0, 8, 7),

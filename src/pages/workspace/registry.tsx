@@ -15,7 +15,6 @@ import OrderFlowPanel from '../../components/gex/OrderFlowPanel';
 import WallDrift from '../../components/gex/vannacharm/WallDrift';
 import RegimePanel from '../../components/gex/vollab/RegimePanel';
 import MonteCarloPanel from '../proveit/MonteCarloPanel';
-import LiquidityPanel from '../../components/flowdesk/LiquidityPanel';
 import NetPremiumPanel from '../../components/flowdesk/NetPremiumPanel';
 import PulseFlowTape from '../../components/flowdesk/PulseFlowTape';
 import FlowAlertsPanel from '../../components/flowdesk/FlowAlertsPanel';
@@ -178,31 +177,6 @@ export const WIDGETS: WidgetDef[] = [
     minW: 3,
     minH: 3,
     render: ctx => <NetPremiumPanel ticker={ctx.ticker} revision={ctx.revision} />,
-  },
-  {
-    key: 'liquidity-map',
-    title: 'Liquidity Map',
-    description: 'Order-book heatmap over time: resting shelves, pulls & absorption behind price',
-    w: 8,
-    h: 9,
-    minW: 4,
-    minH: 5,
-    render: ctx => {
-      const dp = buildDarkPoolView(ctx.snapshot);
-      return (
-        <LiquidityPanel
-          ticker={ctx.ticker}
-          spot={ctx.snapshot.spot}
-          revision={ctx.revision}
-          levels={ctx.gex.levels}
-          darkPoolLevels={dp.levels.map(l => ({ price: l.price, notional: l.notional }))}
-          nodes={ctx.gex.nodes}
-          oiByStrike={ctx.snapshot.chain.map(n => ({ strike: n.strike, oi: n.callOI.value + n.putOI.value }))}
-          orderFlow={{ vwap: ctx.cmd.orderFlow.vwap, poc: ctx.cmd.orderFlow.poc }}
-          focusPrice={ctx.focusPrice ?? null}
-        />
-      );
-    },
   },
   {
     key: 'swing-map',
