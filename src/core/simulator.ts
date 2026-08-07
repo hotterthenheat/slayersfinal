@@ -24,6 +24,7 @@ import { lookup as universeLookup } from '../data/universe';
 // the cycle surfaces as `undefined` at module init rather than as a type error.)
 import { dayKey } from './rng';
 import { etTime, isoDate, isTradingDay, today } from './calendar';
+import { expiryCalendar, listingConvention } from './expiryCalendar';
 
 /** The session date settled open interest represents: the last trading day
     strictly before today. OI publishes ~06:30 ET for the PRIOR session's close,
@@ -391,7 +392,17 @@ const Simulator = (() => {
 
     const strikes: StrikeNode[] = [];
     const baseStrike = Math.round(spot / step) * step;
-    const strikeRange = 15;
+    // Chain-realistic, ticker-dependent width: an index or large ETF lists a
+    // deep ladder, a single name a shallower one. Kept moderate so the panels
+    // that read the whole chain do not regress — the exposure profile and the
+    // matrix window around spot regardless of how many strikes exist.
+    const conv = listingConvention(tickerKey);
+    const strikeRange = conv === 'daily' ? 30 : conv === 'weekly' ? 22 : 16;
+    // Time from the ticker's actual FRONT expiry, not a hardcoded 0DTE. A daily
+    // root's front is ~0DTE; a monthlies-only name's is weeks out, so its gamma
+    // is spread across strikes instead of spiked at the money. Every greek in
+    // the chain is priced at this t.
+    const t = expiryCalendar(tickerKey)[0].t;
 
     // Daily positioning regime: the price where customer call-overwriting supply
     // gives way to put-hedging demand. It pivots the OI skew — and therefore the
@@ -425,7 +436,6 @@ const Simulator = (() => {
         putOI = Math.round(putOI * 2.2);
       }
 
-      const t = 0.003; // 0DTE
       const greeks = calculateGreeks(spot, strike, t, iv);
 
       // Dealer book, standard convention: net LONG calls (customers overwrite
