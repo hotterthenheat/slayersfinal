@@ -85,13 +85,19 @@ export default {
           on a desk, where each hue already means something (gamma sign, flip
           level, dark pool, direction), and never on a number anywhere.
 
-          Values are chosen away from bull green, bear red and warn orange so a
-          group chip can never be mistaken for a direction.
+          There are only TWO of them, and that is a measured constraint rather
+          than a preference. Plot every structural hue this palette already
+          spends — bear 3°, warn 35°, shortGamma 44°, bull 135°, darkpool 172°,
+          flip 199°, longGamma 213°, king 295° — and the only arcs left with
+          25°+ of clearance are ~250° and ~330°. The first pass invented four
+          identity hues and two of them landed one degree from a token that was
+          already there (scan 199° on flip 199°, models 171° on darkpool 172°):
+          two names for one colour, which is the drift this file exists to stop.
+          Scan and Models now BORROW flip and darkpool — see NAV_GROUP_ACCENT in
+          layout/nav.ts, where the disjointness argument lives.
         */
-        groupScan: '#4FC3F7',
         groupRead: '#B39DFF',
         groupYours: '#FF8FC7',
-        groupModels: '#5EEAD4',
 
         // GEX structural levels
         // Flip = baby blue (the cool regime border against silver/red direction)
@@ -100,13 +106,6 @@ export default {
         king: '#EA00FF',
         darkpool: '#2dd4bf',
 
-        // Legacy aliases (pre-redesign pages)
-        primary: '#ededed',
-        secondary: '#a3a3a3',
-        silver: '#a1a1aa',
-        gammaPos: '#C7D3E8',
-        gammaNeg: '#FF3B30',
-        warning: '#FF9500',
       },
       // Terminal type ramp. Every size below `text-lg` came from ~1,180
       // scattered `text-[Npx]` utilities; these name them as one system.

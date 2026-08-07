@@ -143,12 +143,27 @@ export interface GroupAccent {
   chipBorder: string;
 }
 
+/**
+ * Scan borrows `flip` and Models borrows `darkpool` rather than carrying hues
+ * of their own.
+ *
+ * The first pass gave all four groups new tokens and two of them landed one
+ * degree from a structural colour that already existed — scan at 199° on flip's
+ * 199°, models at 171° on dark pool's 172°. Two names for one colour is exactly
+ * the drift the token file exists to prevent, and the palette has no free arc
+ * near either: see the hue survey in tailwind.config.ts.
+ *
+ * Sharing them is safe because the two uses are DISJOINT BY CONSTRUCTION. A flip
+ * level and a dark-pool print are drawn on desks; a group accent is drawn only
+ * where the product is being described. No surface in the app renders both, so
+ * no reader is ever asked to hold two meanings for one hue at once.
+ */
 export const NAV_GROUP_ACCENT: Record<NavGroup, GroupAccent> = {
   Scan: {
-    text: 'text-groupScan',
-    border: 'border-groupScan/35',
-    bg: 'bg-groupScan/[0.08]',
-    chipBorder: 'border-groupScan/30',
+    text: 'text-flip',
+    border: 'border-flip/35',
+    bg: 'bg-flip/[0.08]',
+    chipBorder: 'border-flip/30',
   },
   Read: {
     text: 'text-groupRead',
@@ -163,10 +178,10 @@ export const NAV_GROUP_ACCENT: Record<NavGroup, GroupAccent> = {
     chipBorder: 'border-groupYours/30',
   },
   Models: {
-    text: 'text-groupModels',
-    border: 'border-groupModels/35',
-    bg: 'bg-groupModels/[0.08]',
-    chipBorder: 'border-groupModels/30',
+    text: 'text-darkpool',
+    border: 'border-darkpool/35',
+    bg: 'bg-darkpool/[0.08]',
+    chipBorder: 'border-darkpool/30',
   },
 };
 
