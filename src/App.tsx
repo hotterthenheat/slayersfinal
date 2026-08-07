@@ -8,6 +8,7 @@ import { FocusProvider } from './context/FocusContext';
 import { ToastProvider } from './components/ui/Toast';
 import AppShell from './components/layout/AppShell';
 import { LaunchProvider } from './components/layout/LaunchTransition';
+import RouteTitle from './components/layout/RouteTitle';
 import Compass from './pages/Compass';
 import Tracker from './pages/Tracker';
 import GuideLayout from './pages/guide/GuideLayout';
@@ -28,6 +29,7 @@ import FlowScanner from './pages/flowdesk/FlowScanner';
 import MetaorderReconstruction from './components/flowdesk/MetaorderReconstruction';
 import DarkPool from './pages/flowdesk/DarkPool';
 import Stocks from './pages/Stocks';
+import NotFound from './pages/NotFound';
 import EarningsHub from './pages/EarningsHub';
 import Landing from './pages/landing/Landing';
 import TerminalIndex from './pages/terminal/TerminalIndex';
@@ -89,6 +91,7 @@ const App = () => {
         <TrackerProvider>
         <LaunchProvider>
         <FocusProvider>
+        <RouteTitle />
         <LastDeskRecorder />
         <Routes>
           {/* Public landing — full-bleed, outside the app shell. First thing a
@@ -193,11 +196,13 @@ const App = () => {
             <Route path="/legal/terms" element={<Terms />} />
             <Route path="/legal/privacy" element={<Privacy />} />
             <Route path="/auditor-log" element={<Navigate to="/tracker" replace />} />
+            {/* Any unmatched URL (typo, stale bookmark, removed path) renders a
+                real not-found page INSIDE the shell, so it keeps the nav, the
+                footer and the command palette. It used to redirect silently to
+                the terminal index, which rewrote the address bar and left a
+                typo indistinguishable from a working link. */}
+            <Route path="*" element={<NotFound />} />
           </Route>
-          {/* Any unmatched URL (typo, stale bookmark, removed path) falls back to
-              the terminal index instead of rendering a blank page: a stale
-              bookmark should land somewhere neutral, not inside a desk. */}
-          <Route path="*" element={<Navigate to="/terminal" replace />} />
         </Routes>
         </FocusProvider>
         </LaunchProvider>

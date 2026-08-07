@@ -8,6 +8,8 @@ import SettingsPanel from './SettingsPanel';
 import ShortcutsOverlay from './ShortcutsOverlay';
 import RouteErrorBoundary from './RouteErrorBoundary';
 import SiteFooter from './SiteFooter';
+import BackToTop from './BackToTop';
+import { footerVariant, isTerminalRoute } from './chromeRoutes';
 import { useTicker } from '../../context/MarketDataContext';
 import Simulator from '../../core/simulator';
 import { DUR } from '../../lib/motion';
@@ -20,36 +22,13 @@ const isTypingTarget = (el: EventTarget | null): boolean => {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || node.isContentEditable;
 };
 
-/**
- * Which routes get the one-line bar instead of the real footer.
- *
- * Every route did, and that was the bug: the landing page carried a 503px
- * sitemap footer and everything else got a 53px legal strip, which does not
- * read as the end of a page at all — it reads as a status bar, and the site
- * looks like it stops mid-air.
- *
- * The DESKS are the exception, and Pulse is the sharpest case of it: its panels
- * are dragged against the bottom edge of the viewport, so growing a 500px
- * scroll region underneath them would put the drag surface in a page that
- * scrolls out from under the cursor.
- *
- * The others earn it for a plainer reason. A desk is a working surface that
- * fills the screen with rows, and parking a five-column sitemap under a
- * 240-row tape is furniture in the middle of the work. They still get a real
- * footer — wordmark, copyright, the not-advice line and the legal links — just
- * as one bar rather than a directory. Documents (the terminal index, the guide,
- * the legal pages, community) get the full one, because on a document the
- * footer IS the next thing you want.
- */
-const DESK_ROUTES = ['/pulse', '/trace', '/pinpoint', '/compass', '/prove-it'];
-const deskRoute = (path: string) => DESK_ROUTES.some(r => path === r || path.startsWith(`${r}/`));
-
 const AppShell = () => {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const location = useLocation();
   const { activeTicker, changeTicker } = useTicker();
+  const footer = footerVariant(location.pathname);
 
   const openPalette = useCallback(() => setPaletteOpen(true), []);
   const closePalette = useCallback(() => setPaletteOpen(false), []);
@@ -59,6 +38,17 @@ const AppShell = () => {
   // Keep the live handler reading the current ticker without re-binding the listener.
   const tickerRef = useRef(activeTicker);
   tickerRef.current = activeTicker;
+
+  // The app scrolls inside <main>, not the window, so the browser's own scroll
+  // restoration never sees it: leaving the Guide 3,000px down and opening
+  // Compass used to land 3,000px into Compass. Reset on every route change —
+  // except when the URL carries a hash, where the target section is the
+  // requested position and jumping to the top would fight the anchor.
+  const scrollRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (location.hash) return;
+    scrollRef.current?.scrollTo({ top: 0, behavior: 'auto' });
+  }, [location.pathname, location.hash]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -100,7 +90,12 @@ const AppShell = () => {
       <TopBar onOpenPalette={openPalette} onOpenSettings={openSettings} />
       {/* pt-14 clears the overlaid glass bar; content scrolls under it so the
           blur has the live desk behind it to refract. */}
-      <main id="main-content" tabIndex={-1} className="h-full overflow-y-auto pt-14 focus:outline-none">
+      <main
+        id="main-content"
+        ref={scrollRef}
+        tabIndex={-1}
+        className="h-full overflow-y-auto pt-14 focus:outline-none"
+      >
         {/* Keyed by top-level section only — subpage changes animate inside
             their section layout so the header/tabs never remount */}
         {/* Opacity-only crossfade — no vertical translate (which nudged the whole
@@ -123,13 +118,21 @@ const AppShell = () => {
                 viewport on short desks instead of letting it float mid-page;
                 on tall desks it simply trails the content. The negative margins
                 undo the column gutters so the rule runs edge to edge — the
-                compact bar carries its own padding. */}
-            <div className="mt-auto -mx-4 -mb-5 lg:-mx-6 2xl:-mx-8">
-              <SiteFooter variant={deskRoute(location.pathname) ? 'compact' : 'full'} bleed />
-            </div>
+                compact bar carries its own padding. Pulse renders nothing at
+                all, so its panels keep the viewport's bottom edge. */}
+            {footer != null && (
+              <div className="mt-auto -mx-4 -mb-5 lg:-mx-6 2xl:-mx-8">
+                <SiteFooter variant={footer} bleed />
+              </div>
+            )}
           </motion.div>
         </AnimatePresence>
       </main>
+      {/* Not on Pulse: the workspace is a fixed surface with panels in every
+          corner, and a floating control over the bottom-right one is furniture
+          in the middle of the work. Everywhere else it self-gates on scroll
+          depth, so short pages never show it. */}
+      {!isTerminalRoute(location.pathname) && <BackToTop scrollRef={scrollRef} />}
       <CommandPalette
         open={paletteOpen}
         onClose={closePalette}
