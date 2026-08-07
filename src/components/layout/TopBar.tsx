@@ -17,7 +17,7 @@ import { ChevronDown, Search, Menu, X, Settings, type LucideIcon } from 'lucide-
 import { useMarketData, useTicker } from '../../context/MarketDataContext';
 import AnimatedNumber from '../ui/AnimatedNumber';
 import TickerSearch from '../ui/TickerSearch';
-import { NAV_GROUPS, NAV_GROUP_ACCENT, itemsByGroup, NAV_ITEMS, type NavGroup, type NavItem } from './nav';
+import { NAV_GROUPS, itemsByGroup, NAV_ITEMS, type NavGroup, type NavItem } from './nav';
 import { DUR, EASE, PILL } from '../../lib/motion';
 import { marketClock } from '../../core/calendar';
 
@@ -176,7 +176,6 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
                 {dropdown === group && (
                   <DropMenu
                     title={group}
-                    accent={NAV_GROUP_ACCENT[group]}
                     items={items.map(i => ({ path: i.path, label: i.label, icon: i.icon }))}
                     descriptions={Object.fromEntries(items.map(i => [i.path, i.description]))}
                     section={section}
@@ -294,15 +293,12 @@ const DropMenu = ({
   items,
   descriptions,
   section,
-  accent,
   onPick,
 }: {
   title: string;
   items: SubLink[];
   descriptions?: Record<string, string>;
   section?: string;
-  /** The group's identity hue, when this menu is a desk group. */
-  accent?: { text: string; border: string };
   onPick: () => void;
 }) => (
   <motion.div
@@ -312,12 +308,10 @@ const DropMenu = ({
     exit={{ opacity: 0, y: -6 }}
     transition={{ duration: DUR.quick, ease: EASE }}
   >
-    {/* The group's hue on the header and the left edge — the same one the
-        terminal index and the guide use, so the menu, the map and the docs all
-        agree on which family a desk belongs to. */}
-    <div className={`mt-1 min-w-[248px] border border-borderMuted bg-panel rounded-md shadow-overlay overflow-hidden ${accent ? `border-l-2 ${accent.border}` : ''}`}>
+    <div className="relative mt-1 min-w-[248px] border border-borderMuted bg-panel rounded-md shadow-overlay overflow-hidden">
+      <span aria-hidden className="holo-bar absolute inset-y-0 left-0 w-[2px] z-10" />
       <div className="flex items-center justify-between gap-3 px-3 py-2 border-b border-borderSubtle">
-        <span className={`font-mono text-micro font-semibold uppercase tracking-widest whitespace-nowrap ${accent?.text ?? 'text-textPrimary'}`}>
+        <span className="font-mono text-micro font-semibold uppercase tracking-widest whitespace-nowrap text-textPrimary">
           {title}
         </span>
       </div>
@@ -335,7 +329,7 @@ const DropMenu = ({
                   : 'text-textSecondary hover:text-textPrimary hover:bg-rowHover'
               }`}
             >
-              {sub.icon && <sub.icon className={`w-3.5 h-3.5 ${accent?.text ?? 'text-textMuted'}`} />}
+              {sub.icon && <sub.icon className="w-3.5 h-3.5 text-textMuted" />}
               <span className="flex flex-col">
                 {sub.label}
                 {descriptions?.[sub.path] && (
@@ -359,9 +353,7 @@ const MobileNav = ({ section, onPick }: { section: string; onPick: () => void })
       const items = itemsByGroup(group);
       return (
         <div key={group}>
-          <div className={`px-2 pb-1.5 font-mono text-micro uppercase tracking-widest ${NAV_GROUP_ACCENT[group].text}`}>
-            {group}
-          </div>
+          <div className="holo-text w-fit px-2 pb-1.5 font-mono text-micro uppercase tracking-widest">{group}</div>
           <div className="grid grid-cols-2 gap-1.5">
             {items.map((item: NavItem) => {
               const active = item.path === section;

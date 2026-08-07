@@ -6,19 +6,22 @@ import { BEAR, BULL, CALL_WALL, PUT_WALL } from '../components/gex/palette';
 /*
 ==================================================
   SLAYER TERMINAL - PALETTE GUARD (lib/palette.test.ts)
-  Two things a colour system fails at silently.
+  The house system is holographic silver, white and black.
 
-  1. Two names for one colour. A measured census of the running app found 91
-     distinct saturated colours on screen, and two pairs of tokens sitting ONE
-     degree of hue apart — near-duplicates that nobody can tell apart but that
-     both have to be maintained, and that make "which token is this?" an
-     unanswerable question at a call site.
-  2. Two colours for one meaning. The candles drew a down bar violet while the
+  Three ways that has been broken, each now failing loudly rather than turning
+  up in a screenshot six waves later.
+
+  1. A hue invented for chrome. Four "desk identity" colours were added to give
+     the guide and the index some life. They had no basis: the brand has a
+     living-foil silver for exactly that job. HUE_BUDGET below is the whole
+     permitted list, and it contains only colours that describe the MARKET.
+  2. Two names for one colour. Two of those invented hues landed one degree
+     from tokens that already existed — near-duplicates nobody can tell apart
+     but both of which have to be maintained.
+  3. Two colours for one meaning. The candles drew a down bar violet while the
      cumulative delta, the walls and the exposure grid beside them drew down
-     red. That is the more expensive failure: a reader learns the language once
-     and then one panel speaks a dialect.
-
-  These fail loudly rather than being caught in a screenshot six waves later.
+     red — a reader learns the language once and then one panel speaks a
+     dialect.
 ==================================================
 */
 
@@ -41,6 +44,19 @@ function hsl(hex: string): Hsl {
   return { h: (h + 360) % 360, s: d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1)), l };
 }
 
+/**
+ * How much colour a value actually carries, 0..255.
+ *
+ * Chroma, not HSL saturation: saturation is `d / (1 - |2l - 1|)`, whose
+ * denominator collapses near white, so holo-silver #E4E8F4 scores 0.42 and
+ * would be filed as a hue. Its chroma is 16 — which is what the eye sees.
+ */
+const chroma = (hex: string): number => {
+  const n = parseInt(hex.replace('#', ''), 16);
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  return Math.max(r, g, b) - Math.min(r, g, b);
+};
+
 /** Shortest arc between two hues, so 359° and 1° are 2° apart, not 358°. */
 const hueGap = (a: number, b: number) => {
   const d = Math.abs(a - b) % 360;
@@ -49,8 +65,8 @@ const hueGap = (a: number, b: number) => {
 
 const colors = config.theme?.extend?.colors as Record<string, string>;
 
-/** Tokens that carry a hue. Surfaces, borders and text are greys by design. */
-const HUED = Object.entries(colors).filter(([, v]) => typeof v === 'string' && v.startsWith('#') && hsl(v).s > 0.25);
+/** Tokens that carry a hue. Surfaces, borders, text and the silver are not. */
+const HUED = Object.entries(colors).filter(([, v]) => typeof v === 'string' && v.startsWith('#') && chroma(v) >= 40);
 
 /**
  * Pairs allowed to share a hue, each with the reason it is safe.
@@ -59,9 +75,8 @@ const HUED = Object.entries(colors).filter(([, v]) => typeof v === 'string' && v
  * different enough" and not "they probably won't collide".
  */
 const SHARED_HUE_OK: [string, string, string][] = [
-  // Nothing yet. Scan/Models identity reuses the flip and darkpool TOKENS
-  // outright (see NAV_GROUP_ACCENT) rather than minting look-alikes, which is
-  // why this list is empty: sharing a value is fine, minting a twin is not.
+  // Empty, and it should stay that way. The identity hues that once needed an
+  // exemption here were deleted instead: chrome uses the animated foil.
 ];
 
 const allowed = (a: string, b: string) =>
@@ -83,18 +98,38 @@ describe('token palette', () => {
     expect(clashes, clashes.join('\n')).toEqual([]);
   });
 
-  it('keeps the identity hues clear of every structural hue', () => {
-    // The rule in tailwind.config.ts: an identity accent must not be mistakable
-    // for a colour that means something about the market.
-    const identity = ['groupRead', 'groupYours'];
-    const structural = ['bull', 'bear', 'warn', 'shortGamma', 'longGamma', 'flip', 'king', 'darkpool'];
-    for (const id of identity) {
-      expect(colors[id], `${id} is missing`).toBeDefined();
-      for (const st of structural) {
-        const gap = hueGap(hsl(colors[id]).h, hsl(colors[st]).h);
-        expect(gap, `${id} sits ${gap.toFixed(0)}° from ${st} — too close to read as a different thing`).toBeGreaterThanOrEqual(25);
-      }
-    }
+  /**
+   * The whole hue budget, and why each entry is allowed to exist.
+   *
+   * The house system is holographic silver, white and black. A hue is spent
+   * ONLY where the market itself is the thing being coloured — direction,
+   * dealer-gamma sign, and three structural levels — and every one of those
+   * predates this list. Nothing gets a hue for identity, for decoration, or to
+   * stop a page looking plain; a page that needs life uses the animated foil
+   * (.holo-text / .holo-bar / .holo-border), which IS the brand.
+   *
+   * A new entry here is a design decision, not a styling one. If a token needs
+   * to be added, the reason goes in this table beside it.
+   */
+  const HUE_BUDGET: Record<string, string> = {
+    bull: 'direction — up',
+    bear: 'direction — down',
+    warn: 'caution and data freshness',
+    shortGamma: 'dealer gamma sign — amplifying',
+    longGamma: 'dealer gamma sign — absorbing',
+    flip: 'the gamma flip level',
+    king: 'the peak-exposure strike',
+    darkpool: 'off-exchange prints',
+  };
+
+  it('spends a hue only where the market is what is being coloured', () => {
+    const spent = HUED.map(([name]) => name).sort();
+    const allowed = Object.keys(HUE_BUDGET).sort();
+    expect(
+      spent,
+      `The palette is holo-silver, white and black. Every hue must earn its place in HUE_BUDGET — ` +
+        `use .holo-text / .holo-bar / .holo-border for anything that is chrome.`
+    ).toEqual(allowed);
   });
 
   it('does not resurrect the dead aliases', () => {
@@ -104,6 +139,14 @@ describe('token palette', () => {
     for (const dead of ['primary', 'secondary', 'silver', 'gammaPos', 'gammaNeg', 'warning']) {
       expect(colors[dead], `${dead} is back — it had no call sites and duplicated a live token`).toBeUndefined();
     }
+  });
+
+  it('keeps the interface accent a silver, not a hue', () => {
+    // `select` is the flat fallback for the animated foil, so it has to stay in
+    // the silver family: the gradient's first and last stops are the same
+    // value, and reduced-motion degrades to it.
+    expect(chroma(colors.select)).toBeLessThan(40);
+    expect(hsl(colors.select).l).toBeGreaterThan(0.85);
   });
 });
 

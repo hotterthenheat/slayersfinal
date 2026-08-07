@@ -70,35 +70,6 @@ export default {
         // Interface accent — holographic silver, ~14:1 on canvas. Interface only, never data.
         select: '#E4E8F4',
 
-        /*
-          Desk-group identity — the ONE hue axis that is not about the market.
-
-          The four workflow groups (Scan / Read / Yours / Models) are a real
-          taxonomy in nav.ts, and colouring a taxonomy is what hue is for. It
-          exists because the pages that describe the product — the terminal
-          index, the guide, the nav menus — carry no market data at all, so
-          every hue below is unavailable to them and they were rendering as
-          walls of grey.
-
-          The rule that keeps this from colliding with everything else: an
-          identity hue appears only where the product is being DESCRIBED. Never
-          on a desk, where each hue already means something (gamma sign, flip
-          level, dark pool, direction), and never on a number anywhere.
-
-          There are only TWO of them, and that is a measured constraint rather
-          than a preference. Plot every structural hue this palette already
-          spends — bear 3°, warn 35°, shortGamma 44°, bull 135°, darkpool 172°,
-          flip 199°, longGamma 213°, king 295° — and the only arcs left with
-          25°+ of clearance are ~250° and ~330°. The first pass invented four
-          identity hues and two of them landed one degree from a token that was
-          already there (scan 199° on flip 199°, models 171° on darkpool 172°):
-          two names for one colour, which is the drift this file exists to stop.
-          Scan and Models now BORROW flip and darkpool — see NAV_GROUP_ACCENT in
-          layout/nav.ts, where the disjointness argument lives.
-        */
-        groupRead: '#B39DFF',
-        groupYours: '#FF8FC7',
-
         // GEX structural levels
         // Flip = baby blue (the cool regime border against silver/red direction)
         flip: '#7DD3FC',

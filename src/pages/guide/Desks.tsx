@@ -11,7 +11,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { Card, Points } from './parts';
-import { NAV_GROUP_ACCENT, groupOfPath } from '../../components/layout/nav';
+import { groupOfPath } from '../../components/layout/nav';
 
 // The rule that governs this page now lives in ./parts.tsx, which every guide
 // page imports. It was here, and being here is why Overview.tsx and Faq.tsx
@@ -248,26 +248,20 @@ const Block = ({ title, children }: { title: string; children: React.ReactNode }
 const Desks = () => (
   <div className="flex flex-col gap-5">
     {DESKS.map(d => {
-      // The desk's workflow-group hue, the same one it wears on the terminal
-      // index — so nine grey cards become four visibly related families, and a
-      // reader scrolling this page can tell a Read desk from a Scan desk before
-      // reading a word.
+      // The group is named in text beside the desk, so a reader scrolling can
+      // tell a Read desk from a Scan desk without reading the whole card.
       const group = groupOfPath(d.to);
-      const accent = group ? NAV_GROUP_ACCENT[group] : null;
       return (
-      <Card key={d.name} className={`p-5 flex flex-col gap-4 border-l-2 ${accent?.border ?? ''}`}>
+      <Card key={d.name} className="relative p-5 flex flex-col gap-4 overflow-hidden">
+        <span aria-hidden className="holo-bar absolute inset-y-0 left-0 w-[2px]" />
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2.5">
-            <span
-              className={`flex h-8 w-8 items-center justify-center rounded-md border ${
-                accent ? `${accent.chipBorder} ${accent.bg}` : 'border-borderSubtle bg-inset'
-              }`}
-            >
-              <d.icon className={`w-4 h-4 ${accent?.text ?? 'text-textSecondary'}`} />
+            <span className="holo-border flex h-8 w-8 items-center justify-center rounded-md">
+              <d.icon className="w-4 h-4 text-select" />
             </span>
             <span className="font-mono text-read font-bold uppercase tracking-wider text-textPrimary">{d.name}</span>
             {group && (
-              <span className={`font-mono text-micro uppercase tracking-widest ${accent?.text ?? ''}`}>{group}</span>
+              <span className="font-mono text-micro uppercase tracking-widest text-textMuted">{group}</span>
             )}
           </div>
           <Link
@@ -303,25 +297,20 @@ const Desks = () => (
         Research desks
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-        {RESEARCH.map(d => {
-          const group = groupOfPath(d.to);
-          const accent = group ? NAV_GROUP_ACCENT[group] : null;
-          return (
-            <Link
-              key={d.name}
-              to={d.to}
-              className={`group rounded-lg border border-borderSubtle border-l-2 bg-panel hover:bg-panelRaised hover:border-borderMuted transition-colors p-4 flex flex-col gap-2 ${
-                accent?.border ?? ''
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <d.icon className={`w-4 h-4 ${accent?.text ?? 'text-textSecondary'}`} />
-                <span className="font-mono text-caption font-bold uppercase tracking-wider text-textPrimary">{d.name}</span>
-              </div>
-              <p className="text-caption text-textMuted leading-relaxed">{d.blurb}</p>
-            </Link>
-          );
-        })}
+        {RESEARCH.map(d => (
+          <Link
+            key={d.name}
+            to={d.to}
+            className="group relative rounded-lg border border-borderSubtle bg-panel hover:bg-panelRaised hover:border-borderMuted transition-colors p-4 flex flex-col gap-2 overflow-hidden"
+          >
+            <span aria-hidden className="holo-bar absolute inset-y-0 left-0 w-[2px]" />
+            <div className="flex items-center gap-2">
+              <d.icon className="w-4 h-4 text-textSecondary group-hover:text-textPrimary transition-colors" />
+              <span className="font-mono text-caption font-bold uppercase tracking-wider text-textPrimary">{d.name}</span>
+            </div>
+            <p className="text-caption text-textMuted leading-relaxed">{d.blurb}</p>
+          </Link>
+        ))}
       </div>
     </div>
   </div>

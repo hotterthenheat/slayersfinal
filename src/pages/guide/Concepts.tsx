@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import { Callout } from './parts';
-import { NAV_GROUP_ACCENT, groupOfPath } from '../../components/layout/nav';
 
 interface Term {
   term: string;
@@ -81,13 +80,10 @@ const GROUPS: Group[] = [
 
 const Concepts = () => (
   <div className="flex flex-col gap-6">
-    {GROUPS.map(g => {
-      const group = groupOfPath(g.deskPath);
-      const accent = group ? NAV_GROUP_ACCENT[group] : null;
-      return (
+    {GROUPS.map(g => (
       <div key={g.title} className="flex flex-col gap-3">
         <div className="flex items-baseline gap-3 flex-wrap">
-          <h2 className={`font-mono text-label font-semibold uppercase tracking-widest ${accent?.text ?? 'text-textMuted'}`}>
+          <h2 className="holo-text w-fit font-mono text-label font-semibold uppercase tracking-widest">
             {g.title}
           </h2>
           <Link
@@ -98,7 +94,8 @@ const Concepts = () => (
             <ArrowRight className="w-3 h-3 opacity-0 transition-opacity group-hover:opacity-100" />
           </Link>
         </div>
-        <div className={`rounded-lg border border-borderSubtle border-l-2 bg-panel divide-y divide-borderSubtle ${accent?.border ?? ''}`}>
+        <div className="relative rounded-lg border border-borderSubtle bg-panel divide-y divide-borderSubtle overflow-hidden">
+          <span aria-hidden className="holo-bar absolute inset-y-0 left-0 w-[2px] z-10" />
           {g.terms.map(t => (
             <div key={t.term} className="px-4 py-3 grid grid-cols-1 sm:grid-cols-[210px_1fr] gap-1 sm:gap-4">
               <span className="font-mono text-caption font-semibold uppercase tracking-wide text-textPrimary">{t.term}</span>
@@ -107,8 +104,7 @@ const Concepts = () => (
           ))}
         </div>
       </div>
-      );
-    })}
+    ))}
 
     <Callout>
       These definitions describe how the terms are used inside Slayer. They are educational, not a recommendation — see
