@@ -95,8 +95,13 @@ function tapeRead(rows: FlowPrint[], summary: TapeSummary): string {
   if (rows.length === 0) return 'Awaiting prints…';
   const zdte = rows.filter(r => r.dte === 0).length;
   const parts = [
+    // netPremium is bull − bear premium, where the bull cohort is call BUYERS
+    // and put SELLERS and the bear cohort is put buyers and call sellers. Name
+    // the cohort the number actually measures — "call buying leads" pins a
+    // single mechanism to a two-mechanism net, so a put-selling-led bull tape
+    // would print a claim the Call/Put premium card beside it contradicts.
     `${summary.bullish ? 'Bullish' : 'Bearish'} tape: ${
-      summary.bullish ? 'aggressive call buying leads' : 'put premium leads'
+      summary.bullish ? 'call buyers and put sellers lead' : 'put buyers and call sellers lead'
     } by ${fmtUsd(Math.abs(summary.netPremium))}`,
   ];
   if (summary.largest)
