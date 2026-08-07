@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ReferenceArea, ResponsiveContainer } from 'recharts';
 import { Gauge, Waves, TrendingDown, SlidersHorizontal, ChevronDown } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
-import { BEAR, MUTED_INK } from '../../components/gex/palette';
+import { BEAR, SPOT } from '../../components/gex/palette';
 import { buildHedgeImpact, type HedgeImpactView, type StressLabel } from '../../data/hedgeimpact';
-import HoverReadout from '../../components/ui/HoverReadout';
-import { svgHoverIndex } from '../../components/ui/svgHover';
+import { ChartTip, TipHead, TipRow, TipNote } from '../../components/charts/ChartTip';
+import { GRID, CURSOR, valueAxis, categoryAxis, niceTicks } from '../../components/charts/chartTheme';
 import Panel from '../../components/ui/Panel';
 import StatCard from '../../components/ui/StatCard';
 import MetricGrid from '../../components/ui/MetricGrid';
@@ -30,64 +31,121 @@ const stressTone: Record<StressLabel, Tone> = {
   CRITICAL: 'bear',
 };
 
-/** HEX(move%) curve — where hedging outruns the book (crosses 1). */
+interface HexPoint {
+  movePct: number;
+  hex: number;
+}
+
+/*
+  HEX(move%) curve — where hedging outruns the book (crosses 1). On recharts.
+
+  Two things the port fixes. The x axis was a run of `<text>` labels floating at
+  the top of the plot rather than a real axis, and the y axis did not exist at
+  all: HEX = 1 was drawn but the values either side of it were unreadable, on the
+  one chart whose whole subject is how far a ratio sits from one.
+*/
 const HexCurve = ({ view }: { view: HedgeImpactView }) => {
-  const W = 560;
-  const H = 170;
   const maxMove = 3;
   const maxHex = Math.max(1.4, ...view.curve.map(c => c.hex));
-  const X = (m: number) => (m / maxMove) * W;
-  const Y = (h: number) => H - (h / maxHex) * (H - 10) - 4;
-  const oneY = Y(1);
-  const line = view.curve.map((c, i) => `${i === 0 ? 'M' : 'L'}${X(c.movePct).toFixed(1)},${Y(c.hex).toFixed(1)}`).join(' ');
-  const bx = X(Math.min(maxMove, view.failureBoundaryPct));
-  const [hover, setHover] = useState<{ i: number; x: number; y: number } | null>(null);
-  const hp = hover ? view.curve[hover.i] : null;
+  const withinBoundary = view.failureBoundaryPct <= maxMove;
+
   return (
-    <>
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      className="w-full cursor-crosshair"
-      style={{ height: H }}
-      preserveAspectRatio="none"
+    <div
+      style={{ height: 186 }}
+      className="w-full"
       role="img"
-      aria-label="Hedge failure boundary — HEX versus the size of the move"
-      onMouseMove={e => setHover({ i: svgHoverIndex(e, view.curve.length), x: e.clientX, y: e.clientY })}
-      onMouseLeave={() => setHover(null)}
+      aria-label={`Hedge failure boundary: HEX against the size of the move. HEX crosses one at a ${view.failureBoundaryPct.toFixed(2)} percent move, beyond which dealer hedging outruns the liquidity available to absorb it.`}
     >
-      {/* danger zone above HEX = 1 */}
-      <rect x={0} y={0} width={W} height={oneY} fill="rgba(255,59,48,0.05)" />
-      <line x1={0} x2={W} y1={oneY} y2={oneY} stroke={BEAR} strokeOpacity={0.5} strokeWidth={1} strokeDasharray="4 3" />
-      <text x={4} y={oneY - 4} fontSize={10} fill={BEAR} fontFamily="monospace">HEX = 1 · hedging outruns liquidity</text>
-      {/* failure boundary marker */}
-      {view.failureBoundaryPct <= maxMove && (
-        <>
-          <line x1={bx} x2={bx} y1={0} y2={H} className="stroke-warn" strokeOpacity={0.6} strokeWidth={1} />
-          <text x={bx + 4} y={H - 5} fontSize={10} className="fill-warn" fontFamily="monospace">{view.failureBoundaryPct.toFixed(2)}% boundary</text>
-        </>
-      )}
-      <path d={line} fill="none" className="stroke-textPrimary" strokeWidth={1.75} />
-      {[0, 1, 2, 3].map(m => (
-        <text key={m} x={X(m)} y={12} fontSize={10} fill={MUTED_INK} fontFamily="monospace">{m}%</text>
-      ))}
-      {hp && (
-        <line x1={X(hp.movePct)} x2={X(hp.movePct)} y1={0} y2={H} stroke="rgba(255,255,255,0.25)" strokeWidth={1} vectorEffect="non-scaling-stroke" />
-      )}
-    </svg>
-    {hover && hp && (
-      <HoverReadout x={hover.x} y={hover.y}>
-        <div className="font-mono text-caption font-bold text-textPrimary tnum">±{hp.movePct.toFixed(2)}% move</div>
-        <div className="font-mono text-micro text-textMuted uppercase tracking-wider">15-min window</div>
-        <div className={`mt-1 font-mono text-data font-bold tnum ${hp.hex >= 1 ? 'text-bear' : hp.hex >= 0.7 ? 'text-warn' : 'text-bull'}`}>
-          HEX {hp.hex.toFixed(2)}
-        </div>
-        <div className="font-mono text-micro text-textMuted tnum">hedge ≈ {fmtUsd(view.hedgePer1pctUsd * hp.movePct)}</div>
-        <div className="mt-0.5 font-mono text-micro text-textSecondary">
-          {hp.hex >= 1 ? 'over 1 — hedging outruns liquidity and amplifies the move' : 'under 1 — the book absorbs the hedge'}
-        </div>
-      </HoverReadout>
-    )}
-    </>
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={view.curve} margin={{ top: 12, right: 6, bottom: 2, left: 0 }}>
+          <CartesianGrid stroke={GRID} vertical={false} />
+          <XAxis
+            {...categoryAxis}
+            type="number"
+            dataKey="movePct"
+            domain={[0, maxMove]}
+            ticks={[0, 1, 2, 3]}
+            tickFormatter={(v: number) => `${v}%`}
+          />
+          <YAxis
+            {...valueAxis}
+            domain={[0, maxHex]}
+            ticks={niceTicks(0, maxHex)}
+            tickFormatter={(v: number) => v.toFixed(1)}
+            width={38}
+          />
+          {/* Everything above HEX = 1 is the zone where the hedge is bigger than
+              the book that has to take it. */}
+          <ReferenceArea y1={1} y2={maxHex} fill={BEAR} fillOpacity={0.05} />
+          <ReferenceLine
+            y={1}
+            stroke={BEAR}
+            strokeOpacity={0.55}
+            strokeDasharray="4 3"
+            label={{
+              value: 'HEX = 1 · hedging outruns liquidity',
+              position: 'insideTopLeft',
+              fill: BEAR,
+              fontSize: 10,
+              fontFamily: 'JetBrains Mono, monospace',
+            }}
+          />
+          {withinBoundary && (
+            <ReferenceLine
+              x={view.failureBoundaryPct}
+              stroke="#FF9500"
+              strokeOpacity={0.65}
+              label={{
+                value: `${view.failureBoundaryPct.toFixed(2)}% boundary`,
+                position: 'insideBottomRight',
+                fill: '#FF9500',
+                fontSize: 10,
+                fontFamily: 'JetBrains Mono, monospace',
+              }}
+            />
+          )}
+          <Tooltip
+            cursor={CURSOR}
+            content={
+              <ChartTip<HexPoint>
+                render={p => (
+                  <>
+                    <TipHead sub="15-min window">±{p.movePct.toFixed(2)}% move</TipHead>
+                    <TipRow
+                      label="HEX"
+                      value={p.hex.toFixed(2)}
+                      tone={p.hex >= 1 ? 'text-bear' : p.hex >= 0.7 ? 'text-warn' : 'text-bull'}
+                    />
+                    <TipRow label="Hedge size" value={fmtUsd(view.hedgePer1pctUsd * p.movePct)} tone="text-textSecondary" />
+                    <TipRow
+                      label="Boundary at"
+                      value={`${view.failureBoundaryPct.toFixed(2)}%`}
+                      tone="text-textMuted"
+                    />
+                    <TipNote>
+                      {p.hex >= 1
+                        ? 'Over one: the delta dealers must trade to stay flat is larger than the liquidity available to take it, so hedging pushes price further in the direction it was already going.'
+                        : 'Under one: the book absorbs the hedge. Dealers can flatten without moving price against themselves.'}
+                    </TipNote>
+                  </>
+                )}
+              />
+            }
+          />
+          <Area
+            type="monotone"
+            dataKey="hex"
+            stroke={SPOT}
+            strokeWidth={1.75}
+            fill={SPOT}
+            fillOpacity={0.07}
+            dot={false}
+            activeDot={{ r: 3, fill: SPOT, stroke: 'none' }}
+            isAnimationActive={false}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
   );
 };
 

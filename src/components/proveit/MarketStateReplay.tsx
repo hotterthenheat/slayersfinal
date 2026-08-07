@@ -1,12 +1,16 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
+import { ScatterChart, Scatter, LineChart, Line, XAxis, YAxis, ZAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer } from 'recharts';
 import { History, Target, Activity, TrendingDown, Layers } from 'lucide-react';
-import HoverReadout from '../ui/HoverReadout';
+import { ChartTip, TipHead, TipRow, TipSeries, TipNote } from '../charts/ChartTip';
+import { GRID, CURSOR, valueAxis, categoryAxis, axisPct, niceTicks } from '../charts/chartTheme';
 import {
   buildStateReplay,
   type StateReplayView,
   type SimSession,
   type Outcome,
   type MatchQuality,
+  type CalibrationBin,
+  type EdgeDecayPoint,
 } from '../../data/statereplay';
 import type { MarketSnapshot } from '../../types/market';
 import Panel from '../ui/Panel';
@@ -43,7 +47,6 @@ const matchTone: Record<MatchQuality, Tone> = {
 const SERIES = SPOT;
 const GREEN = BULL;
 const RED = BEAR;
-const AMBER = '#FF9500';
 const MUTED = MUTED_INK;
 
 /** Stacked outcome distribution — target (foil) / stop (red) / neither (dim). */
@@ -89,131 +92,146 @@ const SessionRow = ({ s }: { s: SimSession }) => {
   );
 };
 
-/** Reliability plot — predicted P(target) on X, realized frequency on Y. */
-const CalibrationPlot = ({ view }: { view: StateReplayView }) => {
-  const W = 250;
-  const H = 180;
-  const pad = 22;
-  const X = (p: number) => pad + (p / 100) * (W - pad - 6);
-  const Y = (p: number) => H - pad - (p / 100) * (H - pad - 8);
-  const [h, setH] = useState<{ b: StateReplayView['calibration'][number]; x: number; y: number } | null>(null);
-  return (
-    <>
-      {/* calibration scatter keeps its 1:1 aspect (the y=x diagonal must stay
-          diagonal), so it's capped and centered rather than stretched full-width */}
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-[340px] mx-auto block" style={{ height: H }} role="img" aria-label="Probability calibration — predicted target rate versus realized frequency">
-        {/* frame */}
-        <line x1={pad} y1={H - pad} x2={W - 6} y2={H - pad} className="stroke-borderMuted" strokeWidth={1} />
-        <line x1={pad} y1={8} x2={pad} y2={H - pad} className="stroke-borderMuted" strokeWidth={1} />
-        {/* perfect-calibration diagonal */}
-        <line x1={X(0)} y1={Y(0)} x2={X(100)} y2={Y(100)} stroke={MUTED} strokeOpacity={0.5} strokeWidth={1} strokeDasharray="3 3" />
-        <text x={X(100) - 2} y={Y(100) + 2} fontSize={10} fill={MUTED} fontFamily="monospace" textAnchor="end">
-          ideal
-        </text>
-        {/* points */}
-        {view.calibration.map((b, i) => (
-          <g key={i}>
-            <line x1={X(b.predictedPct)} y1={Y(b.predictedPct)} x2={X(b.predictedPct)} y2={Y(b.realizedPct)} stroke={AMBER} strokeOpacity={0.45} strokeWidth={1} />
-            <circle cx={X(b.predictedPct)} cy={Y(b.realizedPct)} r={Math.max(2.5, Math.min(6, 2 + b.count / 12))} fill={SERIES} fillOpacity={0.9} />
-            <circle
-              cx={X(b.predictedPct)}
-              cy={Y(b.realizedPct)}
-              r={9}
-              fill="transparent"
-              className="cursor-crosshair"
-              onMouseEnter={e => setH({ b, x: e.clientX, y: e.clientY })}
-              onMouseMove={e => setH({ b, x: e.clientX, y: e.clientY })}
-              onMouseLeave={() => setH(cur => (cur?.b === b ? null : cur))}
-            />
-          </g>
-        ))}
-        <text x={pad} y={H - 6} fontSize={10} fill={MUTED} fontFamily="monospace">
-          predicted →
-        </text>
-        <text x={6} y={14} fontSize={10} fill={MUTED} fontFamily="monospace">
-          realized ↑
-        </text>
-      </svg>
-      {h && (
-        <HoverReadout x={h.x} y={h.y}>
-          <div className="font-mono text-micro uppercase tracking-widest text-textMuted">Predicted {h.b.predictedPct.toFixed(0)}%</div>
-          <div className="mt-0.5 font-mono text-data font-bold tnum text-textPrimary">Realized {h.b.realizedPct.toFixed(0)}%</div>
-          <div className="mt-0.5 font-mono text-micro text-textSecondary tnum">{h.b.count} samples</div>
-        </HoverReadout>
-      )}
-    </>
-  );
-};
+/*
+  Reliability plot — predicted P(target) on X, resolved rate on Y. On
+  recharts.
 
-/** Edge captured (target − stop) as the trade is held longer. */
-const EdgeDecayChart = ({ view }: { view: StateReplayView }) => {
-  const W = 250;
-  const H = 180;
-  const pad = 22;
-  const pts = view.edgeDecay;
-  const maxBar = view.horizonBars;
-  const maxEdge = Math.max(10, ...pts.map(p => p.cumTargetPct));
-  const X = (b: number) => pad + (b / maxBar) * (W - pad - 6);
-  const Y = (v: number) => H - pad - (v / maxEdge) * (H - pad - 8);
-  const path = (sel: (p: (typeof pts)[number]) => number) =>
-    pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${X(p.bar).toFixed(1)},${Y(sel(p)).toFixed(1)}`).join(' ');
-  const [h, setH] = useState<{ p: (typeof pts)[number]; x: number; y: number } | null>(null);
-  return (
-    <>
-      {/* edge-decay is a time series — fill the panel width like the app's other
-          bar charts. The stretch that buys that (preserveAspectRatio="none" with
-          a fixed height) scales x ~2.9x and y 1x, which is correct for the paths
-          and wrong for glyphs, so the axis captions are HTML siblings positioned
-          over the plot rather than <text> inside it. */}
-      <div className="relative" style={{ height: H }}>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-full" preserveAspectRatio="none" role="img" aria-label="Edge decay — net edge captured as the trade is held longer">
-        <line x1={pad} y1={H - pad} x2={W - 6} y2={H - pad} className="stroke-borderMuted" strokeWidth={1} />
-        <line x1={pad} y1={8} x2={pad} y2={H - pad} className="stroke-borderMuted" strokeWidth={1} />
-        {/* cumulative target / stop as faint context */}
-        <path d={path(p => p.cumStopPct)} fill="none" stroke={RED} strokeOpacity={0.4} strokeWidth={1} />
-        <path d={path(p => p.cumTargetPct)} fill="none" stroke={GREEN} strokeOpacity={0.4} strokeWidth={1} />
-        {/* net edge — the headline line */}
-        <path d={path(p => p.edgePct)} fill="none" stroke={SERIES} strokeWidth={1.9} />
-        {pts.map((p, i) => (
-          <g key={i}>
-            <circle cx={X(p.bar)} cy={Y(p.edgePct)} r={2} fill={SERIES} />
-            <circle
-              cx={X(p.bar)}
-              cy={Y(p.edgePct)}
-              r={8}
-              fill="transparent"
-              className="cursor-crosshair"
-              onMouseEnter={e => setH({ p, x: e.clientX, y: e.clientY })}
-              onMouseMove={e => setH({ p, x: e.clientX, y: e.clientY })}
-              onMouseLeave={() => setH(cur => (cur?.p === p ? null : cur))}
+  The 1:1 aspect is load-bearing here: the y = x diagonal is what "well
+  calibrated" LOOKS like, and it stops being a 45-degree line the moment the
+  plot is stretched. recharts draws into a square coordinate space, so the
+  diagonal stays diagonal and the bubbles stay round — the hand-rolled version
+  had to cap and centre its SVG to avoid exactly that.
+*/
+const CalibrationPlot = ({ view }: { view: StateReplayView }) => (
+  <div
+    style={{ height: 210 }}
+    className="w-full max-w-[360px] mx-auto"
+    role="img"
+    aria-label={`Probability calibration: predicted target rate against resolved rate across ${view.calibration.length} modeled bands. Mean absolute gap ${view.calibrationErrorPct.toFixed(1)} percentage points.`}
+  >
+    <ResponsiveContainer width="100%" height="100%">
+      <ScatterChart margin={{ top: 12, right: 10, bottom: 4, left: 0 }}>
+        <CartesianGrid stroke={GRID} />
+        <XAxis {...categoryAxis} type="number" dataKey="predictedPct" domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} tickFormatter={axisPct} name="predicted" />
+        <YAxis {...valueAxis} type="number" dataKey="realizedPct" domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} tickFormatter={axisPct} width={40} name="realized" />
+        {/* Bubble area carries the sample count — a band with three comparables
+            behind it should not read as loudly as one with forty. */}
+        <ZAxis type="number" dataKey="count" range={[40, 340]} name="count" />
+        {/* Perfect calibration, drawn as a segment so it is a true y = x. */}
+        <ReferenceLine
+          segment={[{ x: 0, y: 0 }, { x: 100, y: 100 }]}
+          stroke={MUTED}
+          strokeOpacity={0.5}
+          strokeDasharray="3 3"
+          label={{ value: 'ideal', position: 'insideTopRight', fill: MUTED, fontSize: 10, fontFamily: 'JetBrains Mono, monospace' }}
+        />
+        <Tooltip
+          cursor={{ stroke: 'rgba(255,255,255,0.18)' }}
+          content={
+            <ChartTip<CalibrationBin>
+              render={b => {
+                const miss = b.realizedPct - b.predictedPct;
+                return (
+                  <>
+                    <TipHead sub={`${b.count} comparable${b.count === 1 ? '' : 's'}`}>{b.label}</TipHead>
+                    <TipRow label="Model predicted" value={`${b.predictedPct.toFixed(1)}%`} />
+                    <TipRow label="Resolved rate" value={`${b.realizedPct.toFixed(1)}%`} />
+                    <TipRow
+                      label="Gap"
+                      value={`${miss >= 0 ? '+' : ''}${miss.toFixed(1)} pts`}
+                      tone={Math.abs(miss) <= 5 ? 'text-textMuted' : Math.abs(miss) <= 12 ? 'text-warn' : 'text-bear'}
+                    />
+                    <TipNote>
+                      {Math.abs(miss) <= 5
+                        ? 'On the diagonal. The comparables are drawn from the model\'s own predicted probability, so agreement here is a consistency check on the sampler — it cannot corroborate the model.'
+                        : miss > 0
+                          ? 'Above the diagonal: the draw resolved to target more often than the band predicted. With this few paths that is sampling noise before it is anything else.'
+                          : 'Below the diagonal: the draw resolved to target less often than the band predicted. With this few paths that is sampling noise before it is anything else.'}
+                      {b.count < 8 ? ' Thin sample, so read the position loosely.' : ''}
+                    </TipNote>
+                  </>
+                );
+              }}
             />
-          </g>
-        ))}
-      </svg>
-        <span
-          className="pointer-events-none absolute font-mono text-micro"
-          style={{ color: MUTED, left: pad, bottom: 2 }}
-        >
-          bars held →
-        </span>
-        <span className="pointer-events-none absolute left-1.5 top-1 font-mono text-micro" style={{ color: MUTED }}>
-          net edge ↑
-        </span>
-      </div>
-      {h && (
-        <HoverReadout x={h.x} y={h.y}>
-          <div className="font-mono text-micro uppercase tracking-widest text-textMuted">{h.p.bar} bars held</div>
-          <div className={`mt-0.5 font-mono text-data font-bold tnum ${h.p.edgePct >= 0 ? 'text-bull' : 'text-bear'}`}>
-            {h.p.edgePct >= 0 ? '+' : '−'}
-            {Math.abs(h.p.edgePct).toFixed(1)}pt edge
-          </div>
-          <div className="mt-0.5 flex items-center gap-2.5 font-mono text-micro tnum text-textSecondary">
-            <span className="text-bull">tgt {h.p.cumTargetPct.toFixed(1)}%</span>
-            <span className="text-bear">stop {h.p.cumStopPct.toFixed(1)}%</span>
-          </div>
-        </HoverReadout>
-      )}
-    </>
+          }
+        />
+        <Scatter data={view.calibration} fill={SERIES} fillOpacity={0.85} isAnimationActive={false} />
+      </ScatterChart>
+    </ResponsiveContainer>
+  </div>
+);
+
+/*
+  Edge captured (target − stop) as the trade is held longer. On recharts.
+
+  The hand-rolled version stretched a 250x180 viewBox to panel width with
+  preserveAspectRatio="none", scaling x about 2.9x and y 1x. Correct for paths,
+  wrong for glyphs — which is why its axis captions had to be HTML siblings
+  positioned over the plot. recharts scales the plot without scaling the type,
+  so they are just axis labels again.
+*/
+const EdgeDecayChart = ({ view }: { view: StateReplayView }) => {
+  const pts = view.edgeDecay;
+  const maxEdge = Math.max(10, ...pts.map(p => p.cumTargetPct));
+
+  return (
+    <div
+      style={{ height: 196 }}
+      className="w-full"
+      role="img"
+      aria-label={`Edge decay: modeled net edge against bars held, from ${pts[0]?.label ?? ''} to ${pts[pts.length - 1]?.label ?? ''}, with cumulative target and stop rates behind it.`}
+    >
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={pts} margin={{ top: 12, right: 8, bottom: 12, left: 0 }}>
+          <CartesianGrid stroke={GRID} vertical={false} />
+          <XAxis
+            {...categoryAxis}
+            type="number"
+            dataKey="bar"
+            domain={[0, view.horizonBars]}
+            label={{ value: 'bars held', position: 'insideBottom', offset: -8, fill: MUTED, fontSize: 10, fontFamily: 'JetBrains Mono, monospace' }}
+          />
+          <YAxis {...valueAxis} domain={[0, maxEdge]} ticks={niceTicks(0, maxEdge)} tickFormatter={axisPct} width={42} />
+          <Tooltip
+            cursor={CURSOR}
+            content={
+              <ChartTip<EdgeDecayPoint>
+                render={p => (
+                  <>
+                    <TipHead sub={`${p.bar} bars`}>{p.label}</TipHead>
+                    <TipRow label="Net edge" value={`${p.edgePct.toFixed(1)} pts`} tone={p.edgePct >= 0 ? 'text-bull' : 'text-bear'} />
+                    <TipSeries color={GREEN} label="Reached target by now" value={`${p.cumTargetPct.toFixed(1)}%`} />
+                    <TipSeries color={RED} label="Reached stop by now" value={`${p.cumStopPct.toFixed(1)}%`} />
+                    <TipRow
+                      label="Added since last"
+                      value={`${p.marginalEdgePts >= 0 ? '+' : ''}${p.marginalEdgePts.toFixed(1)} pts`}
+                      tone={p.marginalEdgePts > 0.5 ? 'text-textSecondary' : 'text-textMuted'}
+                    />
+                    <TipNote>
+                      {p.marginalEdgePts <= 0.2
+                        ? 'Holding past the previous checkpoint added almost nothing — this is where the modeled edge stops paying for the risk of staying in.'
+                        : 'Still accruing: across the modeled paths, target is reached faster than stop through this window.'}
+                    </TipNote>
+                  </>
+                )}
+              />
+            }
+          />
+          {/* Cumulative target and stop sit behind as context, not as subjects. */}
+          <Line type="monotone" dataKey="cumStopPct" stroke={RED} strokeOpacity={0.4} strokeWidth={1} dot={false} isAnimationActive={false} />
+          <Line type="monotone" dataKey="cumTargetPct" stroke={GREEN} strokeOpacity={0.4} strokeWidth={1} dot={false} isAnimationActive={false} />
+          <Line
+            type="monotone"
+            dataKey="edgePct"
+            stroke={SERIES}
+            strokeWidth={1.9}
+            dot={{ r: 2, fill: SERIES, stroke: 'none' }}
+            activeDot={{ r: 3.4, fill: SERIES, stroke: 'none' }}
+            isAnimationActive={false}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
   );
 };
 

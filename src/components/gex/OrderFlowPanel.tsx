@@ -1,11 +1,14 @@
 import { useState } from 'react';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ReferenceLine, ResponsiveContainer } from 'recharts';
 import { fmtUsd } from '../../data/gex';
-import type { DeltaEquivFlow, OrderFlowData } from '../../types/gex';
+import type { DeltaEquivFlow, DeltaPoint, OrderFlowData } from '../../types/gex';
 import { BULL, BEAR } from './palette';
 import HoverReadout from '../ui/HoverReadout';
+import { ChartTip, TipHead, TipRow, TipNote } from '../charts/ChartTip';
+import { splitBySign, type SignSplitRow } from '../charts/signSplit';
+import { CURSOR, zeroAnchoredDomain } from '../charts/chartTheme';
 import Term from '../ui/Term';
 import type { TermKey } from '../../data/terms';
-import { svgHoverIndex } from '../ui/svgHover';
 import DataUnavailablePanel from '../workspace/DataUnavailablePanel';
 
 interface OrderFlowPanelProps {
@@ -18,63 +21,76 @@ const sessionClock = (minute: number): string => {
   return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
 };
 
-/** SVG area chart of session cumulative delta — sign decides the fill tone. */
+/*
+  Session cumulative delta, on recharts.
+
+  Coloured by the sign it is AT each point, not the sign it happens to end on.
+  The old version picked one colour from the last value and painted the whole
+  path with it, so a session that spent the morning on net buying and closed on
+  net selling was drawn entirely red — the same defect the render pass caught on
+  the Gamma Tape. components/charts/signSplit inserts the interpolated crossings
+  so the two halves meet exactly on the zero rule.
+*/
 const CumulativeDelta = ({ data }: { data: OrderFlowData }) => {
   const points = data.cumulativeDelta;
-  const [hover, setHover] = useState<{ i: number; x: number; y: number } | null>(null);
   if (points.length < 2) return null;
 
-  const W = 100;
-  const H = 40;
-  let min = Infinity;
-  let max = -Infinity;
-  for (const p of points) {
-    if (p.value < min) min = p.value;
-    if (p.value > max) max = p.value;
-  }
-  const span = max - min || 1;
-  const x = (i: number) => (i / (points.length - 1)) * W;
-  const y = (v: number) => H - ((v - min) / span) * H;
-  const zeroY = Math.max(0, Math.min(H, y(0)));
-
-  const line = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(2)},${y(p.value).toFixed(2)}`).join(' ');
-  const area = `${line} L${W},${zeroY.toFixed(2)} L0,${zeroY.toFixed(2)} Z`;
-  const negative = (points[points.length - 1]?.value ?? 0) < 0;
-  const stroke = negative ? BEAR : BULL;
-  const fill = negative ? 'rgba(255,59,48,0.10)' : 'rgba(48,209,88,0.10)';
-  const hp = hover ? points[hover.i] : null;
+  const series = splitBySign(points, p => p.value);
+  const domain = zeroAnchoredDomain(points.map(p => p.value));
+  const n = points.length;
 
   return (
-    <>
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        preserveAspectRatio="none"
-        className="w-full h-24 cursor-crosshair"
-        role="img"
-        aria-label="Session cumulative delta"
-        onMouseMove={e => setHover({ i: svgHoverIndex(e, points.length), x: e.clientX, y: e.clientY })}
-        onMouseLeave={() => setHover(null)}
-      >
-        <line x1="0" y1={zeroY} x2={W} y2={zeroY} stroke="rgba(255,255,255,0.08)" strokeWidth="0.4" />
-        <path d={area} fill={fill} />
-        <path d={line} fill="none" stroke={stroke} strokeWidth="0.7" vectorEffect="non-scaling-stroke" />
-        {hover && (
-          <line x1={x(hover.i)} x2={x(hover.i)} y1={0} y2={H} stroke="rgba(255,255,255,0.25)" strokeWidth="0.5" vectorEffect="non-scaling-stroke" />
-        )}
-      </svg>
-      {hover && hp && (
-        <HoverReadout x={hover.x} y={hover.y}>
-          <div className="font-mono text-caption font-bold text-textPrimary tnum">{sessionClock(hp.minute)}</div>
-          <div className={`mt-0.5 font-mono text-data font-bold tnum ${hp.value >= 0 ? 'text-bull' : 'text-bear'}`}>
-            {hp.value >= 0 ? '+' : '−'}
-            {fmtUsd(Math.abs(hp.value))}
-          </div>
-          <div className="mt-0.5 font-mono text-micro text-textSecondary">
-            {hp.value >= 0 ? 'net buying pressure building' : 'net selling pressure building'}
-          </div>
-        </HoverReadout>
-      )}
-    </>
+    <div
+      className="h-24 w-full"
+      role="img"
+      aria-label={`Session cumulative delta, closing ${points[n - 1].value >= 0 ? 'net buying' : 'net selling'} at ${fmtUsd(Math.abs(points[n - 1].value))}.`}
+    >
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={series} margin={{ top: 4, right: 2, bottom: 0, left: 0 }}>
+          <XAxis type="number" dataKey="x" domain={[0, Math.max(n - 1, 1)]} hide />
+          <YAxis type="number" domain={domain} hide />
+          <ReferenceLine y={0} stroke="rgba(255,255,255,0.10)" />
+          <Tooltip
+            cursor={CURSOR}
+            content={
+              <ChartTip<SignSplitRow<DeltaPoint>>
+                render={r => {
+                  if (!r.src) {
+                    return (
+                      <>
+                        <TipHead>Delta crossed flat</TipHead>
+                        <TipRow label="Cumulative" value="$0" />
+                        <TipNote>Session buying and selling balanced exactly here before the pressure changed sides.</TipNote>
+                      </>
+                    );
+                  }
+                  const p = r.src;
+                  const last = points[n - 1].value;
+                  return (
+                    <>
+                      <TipHead sub="cumulative Δ">{sessionClock(p.minute)}</TipHead>
+                      <TipRow
+                        label={p.value >= 0 ? 'Net buying' : 'Net selling'}
+                        value={fmtUsd(Math.abs(p.value))}
+                        tone={p.value >= 0 ? 'text-bull' : 'text-bear'}
+                      />
+                      <TipRow label="Share of final" value={last === 0 ? '—' : `${Math.round((p.value / last) * 100)}%`} tone="text-textMuted" />
+                      <TipNote>
+                        {p.value >= 0
+                          ? 'Buyers had paid the offer more than sellers hit the bid up to this point — pressure building on the bid side.'
+                          : 'Sellers had hit the bid more than buyers lifted the offer up to this point — pressure building on the offer side.'}
+                      </TipNote>
+                    </>
+                  );
+                }}
+              />
+            }
+          />
+          <Area type="linear" dataKey="pos" stroke={BULL} strokeWidth={1.2} fill={BULL} fillOpacity={0.12} baseValue={0} connectNulls={false} dot={false} activeDot={{ r: 2.5, fill: BULL, stroke: 'none' }} isAnimationActive={false} />
+          <Area type="linear" dataKey="neg" stroke={BEAR} strokeWidth={1.2} fill={BEAR} fillOpacity={0.12} baseValue={0} connectNulls={false} dot={false} activeDot={{ r: 2.5, fill: BEAR, stroke: 'none' }} isAnimationActive={false} />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
   );
 };
 
