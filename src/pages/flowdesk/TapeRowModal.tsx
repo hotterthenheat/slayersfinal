@@ -19,7 +19,7 @@ const SENT_TONE: Record<PrintSentiment, Tone> = {
   NEUTRAL: 'neutral',
 };
 
-interface TapeRowDrawerProps {
+interface TapeRowModalProps {
   print: FlowPrint | null;
   onClose: () => void;
   isMarked: boolean;
@@ -56,7 +56,7 @@ const signed = (v: number): string => (v > 0 ? `+${fmtUsd(v)}` : fmtUsd(v));
  *     Informed Flow desk runs
  *   - what the underlying has to do for the contract to break even
  */
-const TapeRowDrawer = ({ print, onClose, isMarked, onToggleMark }: TapeRowDrawerProps) => {
+const TapeRowModal = ({ print, onClose, isMarked, onToggleMark }: TapeRowModalProps) => {
   const sent = print ? sentimentOf(print) : 'NEUTRAL';
   const agg = print ? aggressorOf(print) : null;
   const money = print ? moneyness(print) : null;
@@ -407,4 +407,4 @@ const TapeRowDrawer = ({ print, onClose, isMarked, onToggleMark }: TapeRowDrawer
   );
 };
 
-export default TapeRowDrawer;
+export default TapeRowModal;

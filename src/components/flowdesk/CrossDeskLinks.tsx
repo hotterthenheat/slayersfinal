@@ -7,7 +7,7 @@ interface CrossDeskLinksProps {
   ticker: string;
   strike: number;
   right: 'C' | 'P';
-  /** Called before navigating so the host drawer can close itself. */
+  /** Called before navigating so the host modal can close itself. */
   onNavigate?: () => void;
 }
 

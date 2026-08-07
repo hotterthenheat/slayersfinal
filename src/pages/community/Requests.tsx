@@ -4,10 +4,11 @@ import Panel from '../../components/ui/Panel';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import SignalBadge from '../../components/ui/SignalBadge';
 import EmptyState from '../../components/ui/EmptyState';
-import { toneDot, type Tone } from '../../components/ui/tones';
+import { toneDot } from '../../components/ui/tones';
 import { isShippedId, ROADMAP, timeAgo } from '../../data/community';
 import type { FeatureRequest, RequestKind, RequestStatus } from '../../types/community';
 import { useCommunity } from './store';
+import { STATUS_BLURB, STATUS_ORDER, STATUS_RAIL, STATUS_TONE } from './status';
 import { PrimaryButton, RowAction, TextArea, TextInput } from './controls';
 
 const KIND_OPTIONS = [
@@ -16,31 +17,6 @@ const KIND_OPTIONS = [
   { value: 'IMPROVEMENT', label: 'Improvement' },
 ] as const;
 
-// Roadmap status is a process, not a direction — chrome tones only, per the rule
-// in components/compass/setupState.ts.
-const STATUS_TONE: Record<RequestStatus, Tone> = {
-  'UNDER REVIEW': 'neutral',
-  PLANNED: 'info',
-  BUILDING: 'warn',
-  SHIPPED: 'select',
-};
-
-// Left-edge rail per status — the fastest read of where an item sits.
-const STATUS_RAIL: Record<RequestStatus, string> = {
-  'UNDER REVIEW': 'border-l-textMuted/50',
-  PLANNED: 'border-l-flip/60',
-  BUILDING: 'border-l-warn/70',
-  SHIPPED: 'border-l-select/70',
-};
-
-const STATUS_BLURB: Record<RequestStatus, string> = {
-  BUILDING: 'In progress right now',
-  PLANNED: 'On the roadmap, not started',
-  'UNDER REVIEW': 'Being weighed, alongside anything you add',
-  SHIPPED: 'Already in the terminal',
-};
-
-const STATUS_ORDER: RequestStatus[] = ['BUILDING', 'PLANNED', 'UNDER REVIEW', 'SHIPPED'];
 
 type StatusFilter = 'ALL' | RequestStatus;
 

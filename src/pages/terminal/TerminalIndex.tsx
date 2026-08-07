@@ -15,6 +15,7 @@ import { ArrowRight } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import {
   NAV_GROUPS,
+  NAV_GROUP_ACCENT,
   NAV_GROUP_PURPOSE,
   NAV_ITEMS,
   REFERENCE_ITEMS,
@@ -120,6 +121,11 @@ const ResumeRow = () => {
 const DeskRow = ({ item }: { item: NavItem }) => {
   const Icon = item.icon;
   const subs = SUBTABS[item.path];
+  // Hue names the workflow group, so the eye can find "the Read desks" without
+  // reading four headings. It is on the chip and the icon only — chrome, never
+  // a value — and the group's name is still written above in text, so colour
+  // reinforces the grouping rather than carrying it alone.
+  const accent = NAV_GROUP_ACCENT[item.group];
 
   return (
     <li>
@@ -129,11 +135,11 @@ const DeskRow = ({ item }: { item: NavItem }) => {
       >
         <span
           aria-hidden
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-borderSubtle bg-inset font-mono text-label text-textMuted tnum"
+          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border font-mono text-label tnum ${accent.chipBorder} ${accent.bg} ${accent.text}`}
         >
           {item.code}
         </span>
-        <Icon className="w-4 h-4 shrink-0 text-textMuted mt-0.5 lg:mt-0" />
+        <Icon className={`w-4 h-4 shrink-0 mt-0.5 lg:mt-0 ${accent.text}`} />
         <span className="min-w-0 flex flex-col lg:flex-row lg:items-center lg:gap-3 flex-1">
           <span className="font-mono text-caption font-bold uppercase tracking-wider text-textPrimary lg:w-24 shrink-0">
             {item.label}
@@ -168,13 +174,17 @@ const DeskRow = ({ item }: { item: NavItem }) => {
 
 const GroupBlock = ({ group, className }: { group: NavGroup; className: string }) => {
   const id = `desks-${group.toLowerCase()}`;
+  const accent = NAV_GROUP_ACCENT[group];
   return (
     <section aria-labelledby={id} className={className}>
-      <h2 id={id} className="font-mono text-label font-semibold uppercase tracking-widest text-textMuted">
+      <h2 id={id} className={`font-mono text-label font-semibold uppercase tracking-widest ${accent.text}`}>
         {group}
       </h2>
       <p className="text-caption text-textSecondary mt-0.5 mb-2">{NAV_GROUP_PURPOSE[group]}</p>
-      <Card className="overflow-hidden">
+      {/* The group's hue runs down the left edge of its card, so the four
+          blocks read as four families at a glance rather than as one long
+          list broken by headings. */}
+      <Card className={`overflow-hidden border-l-2 ${accent.border}`}>
         <ul className="divide-y divide-borderSubtle/60">
           {itemsByGroup(group).map(item => (
             <DeskRow key={item.path} item={item} />

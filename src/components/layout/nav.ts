@@ -62,7 +62,7 @@ export const NAV_ITEMS: NavItem[] = [
     icon: Activity,
     // The Key Levels panel was removed from Pulse (levels ride the chart now),
     // so the promise had to go with it.
-    description: 'The market desk: chart, dealer pressure, order flow and the liquidity map',
+    description: 'The market desk: chart, dealer pressure, order flow and the options tape',
     group: 'Read',
   },
   {
@@ -120,6 +120,59 @@ export const NAV_GROUP_PURPOSE: Record<NavGroup, string> = {
   Yours: 'The two desks whose contents you write, kept in this browser',
   Models: 'The math behind the calls, and how it scored against what happened',
 };
+
+/**
+ * The classes that carry a group's identity hue.
+ *
+ * Written as whole literal class names, never composed — Tailwind scans source
+ * text, so `text-group${x}` produces a class that is real in the type system and
+ * absent from the stylesheet.
+ *
+ * Read the rule in tailwind.config.ts before adding a call site: these belong on
+ * surfaces that DESCRIBE the product (the terminal index, the guide, the nav),
+ * never on a desk, where every hue is already spoken for by data.
+ */
+export interface GroupAccent {
+  /** Ink for the group's own label and for its desks' icons. */
+  text: string;
+  /** The rule or left edge that ties a card to its group. */
+  border: string;
+  /** A barely-there wash behind a code chip or an icon tile. */
+  bg: string;
+  /** Border for that same chip — one step up from the wash. */
+  chipBorder: string;
+}
+
+export const NAV_GROUP_ACCENT: Record<NavGroup, GroupAccent> = {
+  Scan: {
+    text: 'text-groupScan',
+    border: 'border-groupScan/35',
+    bg: 'bg-groupScan/[0.08]',
+    chipBorder: 'border-groupScan/30',
+  },
+  Read: {
+    text: 'text-groupRead',
+    border: 'border-groupRead/35',
+    bg: 'bg-groupRead/[0.08]',
+    chipBorder: 'border-groupRead/30',
+  },
+  Yours: {
+    text: 'text-groupYours',
+    border: 'border-groupYours/35',
+    bg: 'bg-groupYours/[0.08]',
+    chipBorder: 'border-groupYours/30',
+  },
+  Models: {
+    text: 'text-groupModels',
+    border: 'border-groupModels/35',
+    bg: 'bg-groupModels/[0.08]',
+    chipBorder: 'border-groupModels/30',
+  },
+};
+
+/** The group a desk path belongs to, for surfaces that hold a path and not an item. */
+export const groupOfPath = (path: string): NavGroup | undefined =>
+  NAV_ITEMS.find(i => i.path === path || path.startsWith(`${i.path}/`))?.group;
 
 export interface ReferenceItem {
   path: string;

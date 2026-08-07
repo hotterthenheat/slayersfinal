@@ -11,7 +11,7 @@ import OiFreshness from '../../components/ui/OiFreshness';
 import SignalBadge from '../../components/ui/SignalBadge';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import DataTable, { type Column } from '../../components/ui/DataTable';
-import ScannerRowDrawer from './ScannerRowDrawer';
+import ScannerRowModal from './ScannerRowModal';
 import { useToast } from '../../components/ui/Toast';
 import type { Tone } from '../../components/ui/tones';
 
@@ -706,7 +706,7 @@ const FlowScanner = () => {
         />
       </Panel>
 
-      <ScannerRowDrawer row={selected} spot={marketData?.spot ?? 0} onClose={() => setSelectedId(null)} />
+      <ScannerRowModal row={selected} spot={marketData?.spot ?? 0} onClose={() => setSelectedId(null)} />
     </>
   );
 };

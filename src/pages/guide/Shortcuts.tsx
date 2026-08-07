@@ -6,7 +6,7 @@ const Shortcuts = () => (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
       {SHORTCUT_GROUPS.map(group => (
         <div key={group.title} className="flex flex-col gap-2">
-          <span className="font-mono text-label font-semibold uppercase tracking-widest text-textMuted">
+          <span className="font-mono text-label font-semibold uppercase tracking-widest text-select/80">
             {group.title}
           </span>
           <div className="rounded-lg border border-borderSubtle bg-panel divide-y divide-borderSubtle overflow-hidden">

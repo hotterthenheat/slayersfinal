@@ -15,7 +15,7 @@ import type { Tone } from '../../components/ui/tones';
 import { useToast } from '../../components/ui/Toast';
 import Term from '../../components/ui/Term';
 import type { TermKey } from '../../data/terms';
-import TapeRowDrawer from './TapeRowDrawer';
+import TapeRowModal from './TapeRowModal';
 import type { FlowPrint, PrintSentiment, TapeSummary } from '../../types/flowdesk';
 
 const MAX_ROWS = 400;
@@ -1129,7 +1129,7 @@ const LiveTape = () => {
         </div>
       </Panel>
 
-      <TapeRowDrawer
+      <TapeRowModal
         print={selected}
         onClose={() => setSelected(null)}
         isMarked={selected ? marked.has(selected.id) : false}

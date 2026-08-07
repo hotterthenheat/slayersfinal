@@ -70,6 +70,29 @@ export default {
         // Interface accent — holographic silver, ~14:1 on canvas. Interface only, never data.
         select: '#E4E8F4',
 
+        /*
+          Desk-group identity — the ONE hue axis that is not about the market.
+
+          The four workflow groups (Scan / Read / Yours / Models) are a real
+          taxonomy in nav.ts, and colouring a taxonomy is what hue is for. It
+          exists because the pages that describe the product — the terminal
+          index, the guide, the nav menus — carry no market data at all, so
+          every hue below is unavailable to them and they were rendering as
+          walls of grey.
+
+          The rule that keeps this from colliding with everything else: an
+          identity hue appears only where the product is being DESCRIBED. Never
+          on a desk, where each hue already means something (gamma sign, flip
+          level, dark pool, direction), and never on a number anywhere.
+
+          Values are chosen away from bull green, bear red and warn orange so a
+          group chip can never be mistaken for a direction.
+        */
+        groupScan: '#4FC3F7',
+        groupRead: '#B39DFF',
+        groupYours: '#FF8FC7',
+        groupModels: '#5EEAD4',
+
         // GEX structural levels
         // Flip = baby blue (the cool regime border against silver/red direction)
         flip: '#7DD3FC',

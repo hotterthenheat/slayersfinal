@@ -43,7 +43,7 @@ function scannerToRef(r: ScannerRow, spot: number): ContractRef {
   };
 }
 
-interface ScannerRowDrawerProps {
+interface ScannerRowModalProps {
   row: ScannerRow | null;
   spot: number;
   onClose: () => void;
@@ -61,7 +61,7 @@ interface ScannerRowDrawerProps {
  * Those are here now, modelled through the math seam (core/mathProvider) so a
  * house model replaces them along with everything else.
  */
-const ScannerRowDrawer = ({ row, spot, onClose }: ScannerRowDrawerProps) => {
+const ScannerRowModal = ({ row, spot, onClose }: ScannerRowModalProps) => {
   // Greeks for the contract as the scanner sees it — the row's own IV and DTE,
   // priced on the one shared pricer rather than a second model here.
   const g = row ? math.optionGreeks(spot, row.strike, row.iv / 100, math.yearsToExpiry(row.dte), row.right) : null;
@@ -248,4 +248,4 @@ const ScannerRowDrawer = ({ row, spot, onClose }: ScannerRowDrawerProps) => {
   );
 };
 
-export default ScannerRowDrawer;
+export default ScannerRowModal;

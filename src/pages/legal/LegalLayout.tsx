@@ -29,7 +29,7 @@ const LegalLayout = ({ title, intro, sections }: LegalLayoutProps) => (
     {/* Sticky contents — desktop only; jumps to each section anchor */}
     <nav aria-label="Contents" className="hidden lg:block">
       <div className="sticky top-6 flex flex-col gap-1.5">
-        <span className="font-mono text-micro font-semibold uppercase tracking-widest text-textMuted mb-1.5">
+        <span className="font-mono text-micro font-semibold uppercase tracking-widest text-select/80 mb-1.5">
           Contents
         </span>
         {sections.map((s, i) => (
@@ -38,7 +38,7 @@ const LegalLayout = ({ title, intro, sections }: LegalLayoutProps) => (
             href={`#${slug(i)}`}
             className="group inline-flex gap-2 font-mono text-label text-textMuted hover:text-textPrimary transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 focus-visible:text-textPrimary"
           >
-            <span className="tnum text-textMuted group-hover:text-textSecondary">{String(i + 1).padStart(2, '0')}</span>
+            <span className="tnum text-select/70 group-hover:text-select">{String(i + 1).padStart(2, '0')}</span>
             <span className="capitalize leading-snug">{s.heading}</span>
           </a>
         ))}
@@ -55,7 +55,10 @@ const LegalLayout = ({ title, intro, sections }: LegalLayoutProps) => (
 
       <header className="mt-4 pb-5 border-b border-borderSubtle">
         <h1 className="text-2xl font-bold text-textPrimary">{title}</h1>
-        <p className="mt-1 font-mono text-label uppercase tracking-widest text-textMuted">
+        {/* The one fact on the page that goes stale. Amber is the house's
+            data-freshness colour, and an effective date is exactly that: a
+            stamp saying which version of the document you are reading. */}
+        <p className="mt-1 inline-flex items-center gap-1.5 rounded border border-warn/25 bg-warn/[0.06] px-2 py-0.5 font-mono text-label uppercase tracking-widest text-warn">
           Effective {LEGAL_EFFECTIVE}
         </p>
         <p className="mt-4 text-body leading-relaxed text-textSecondary">{intro}</p>
@@ -63,9 +66,9 @@ const LegalLayout = ({ title, intro, sections }: LegalLayoutProps) => (
 
       <div className="mt-6 flex flex-col gap-6 pb-4">
         {sections.map((s, i) => (
-          <section key={s.heading} id={slug(i)} className="scroll-mt-6">
+          <section key={s.heading} id={slug(i)} className="scroll-mt-6 border-l-2 border-select/20 pl-4 -ml-4">
             <h2 className="font-mono text-caption font-semibold uppercase tracking-wider text-textPrimary">
-              <span className="text-textMuted mr-2 tnum">{String(i + 1).padStart(2, '0')}</span>
+              <span className="text-select/70 mr-2 tnum">{String(i + 1).padStart(2, '0')}</span>
               {s.heading}
             </h2>
             <div className="mt-2 text-data leading-relaxed text-textSecondary space-y-2.5">{s.body}</div>

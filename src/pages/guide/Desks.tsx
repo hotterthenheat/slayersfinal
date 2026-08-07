@@ -11,6 +11,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { Card, Points } from './parts';
+import { NAV_GROUP_ACCENT, groupOfPath } from '../../components/layout/nav';
 
 // The rule that governs this page now lives in ./parts.tsx, which every guide
 // page imports. It was here, and being here is why Overview.tsx and Faq.tsx
@@ -34,7 +35,7 @@ const DESKS: DeskDoc[] = [
     to: '/pulse',
     tagline: 'Your customizable workspace — the cockpit you build once and work from.',
     shows: [
-      'A grid of panels you arrange yourself: chart, GEX heatmap, dealer positioning, exposure matrix, order flow, the options tape, dark pool, the liquidity map and more.',
+      'A grid of panels you arrange yourself: chart, GEX heatmap, dealer positioning, exposure matrix, order flow, the options tape, dark pool, the swing map and more.',
       'Each panel is a compact version of a full desk, all following the active ticker (or its own ticker, if you pin one).',
       <>A separate <span className="text-textPrimary">Data connections</span> tray holds modules that stay dark until a
       feed is wired up — DOM ladder, footprint, true time &amp; sales. They name the feed they need instead of drawing
@@ -73,7 +74,7 @@ const DESKS: DeskDoc[] = [
       <>Each panel has its own ticker field, so you can watch SPY and NVDA side by side.</>,
     ],
     example: (
-      <>Load the <span className="text-textPrimary">Scalper</span> view for chart + order flow + the liquidity map.
+      <>Load the <span className="text-textPrimary">Scalper</span> view for chart + order flow.
       Watch cumulative delta against price — when delta pushes up but price stalls at a call wall, that is
       absorption.</>
     ),
@@ -246,14 +247,28 @@ const Block = ({ title, children }: { title: string; children: React.ReactNode }
 
 const Desks = () => (
   <div className="flex flex-col gap-5">
-    {DESKS.map(d => (
-      <Card key={d.name} className="p-5 flex flex-col gap-4">
+    {DESKS.map(d => {
+      // The desk's workflow-group hue, the same one it wears on the terminal
+      // index — so nine grey cards become four visibly related families, and a
+      // reader scrolling this page can tell a Read desk from a Scan desk before
+      // reading a word.
+      const group = groupOfPath(d.to);
+      const accent = group ? NAV_GROUP_ACCENT[group] : null;
+      return (
+      <Card key={d.name} className={`p-5 flex flex-col gap-4 border-l-2 ${accent?.border ?? ''}`}>
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2.5">
-            <span className="flex h-8 w-8 items-center justify-center rounded-md border border-borderSubtle bg-inset">
-              <d.icon className="w-4 h-4 text-textSecondary" />
+            <span
+              className={`flex h-8 w-8 items-center justify-center rounded-md border ${
+                accent ? `${accent.chipBorder} ${accent.bg}` : 'border-borderSubtle bg-inset'
+              }`}
+            >
+              <d.icon className={`w-4 h-4 ${accent?.text ?? 'text-textSecondary'}`} />
             </span>
             <span className="font-mono text-read font-bold uppercase tracking-wider text-textPrimary">{d.name}</span>
+            {group && (
+              <span className={`font-mono text-micro uppercase tracking-widest ${accent?.text ?? ''}`}>{group}</span>
+            )}
           </div>
           <Link
             to={d.to}
@@ -280,26 +295,33 @@ const Desks = () => (
           </Block>
         </div>
       </Card>
-    ))}
+      );
+    })}
 
     <div>
       <div className="font-mono text-label font-semibold uppercase tracking-widest text-textMuted mb-3">
         Research desks
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-        {RESEARCH.map(d => (
-          <Link
-            key={d.name}
-            to={d.to}
-            className="group rounded-lg border border-borderSubtle bg-panel hover:bg-panelRaised hover:border-borderMuted transition-colors p-4 flex flex-col gap-2"
-          >
-            <div className="flex items-center gap-2">
-              <d.icon className="w-4 h-4 text-textSecondary group-hover:text-textPrimary transition-colors" />
-              <span className="font-mono text-caption font-bold uppercase tracking-wider text-textPrimary">{d.name}</span>
-            </div>
-            <p className="text-caption text-textMuted leading-relaxed">{d.blurb}</p>
-          </Link>
-        ))}
+        {RESEARCH.map(d => {
+          const group = groupOfPath(d.to);
+          const accent = group ? NAV_GROUP_ACCENT[group] : null;
+          return (
+            <Link
+              key={d.name}
+              to={d.to}
+              className={`group rounded-lg border border-borderSubtle border-l-2 bg-panel hover:bg-panelRaised hover:border-borderMuted transition-colors p-4 flex flex-col gap-2 ${
+                accent?.border ?? ''
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <d.icon className={`w-4 h-4 ${accent?.text ?? 'text-textSecondary'}`} />
+                <span className="font-mono text-caption font-bold uppercase tracking-wider text-textPrimary">{d.name}</span>
+              </div>
+              <p className="text-caption text-textMuted leading-relaxed">{d.blurb}</p>
+            </Link>
+          );
+        })}
       </div>
     </div>
   </div>

@@ -9,6 +9,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { Section, Card, Callout, Kbd } from './parts';
+import { NAV_GROUP_ACCENT, groupOfPath } from '../../components/layout/nav';
 
 const DESKS: { icon: LucideIcon; name: string; to: string; blurb: string }[] = [
   { icon: LayoutDashboard, name: 'Pulse', to: '/pulse', blurb: 'Your customizable workspace — the home desk.' },
@@ -44,19 +45,27 @@ const Overview = () => (
 
     <Section title="The desks">
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-        {DESKS.map(d => (
-          <Link
-            key={d.name}
-            to={d.to}
-            className="group rounded-lg border border-borderSubtle bg-panel hover:bg-panelRaised hover:border-borderMuted transition-colors p-4 flex flex-col gap-2"
-          >
-            <div className="flex items-center gap-2">
-              <d.icon className="w-4 h-4 text-textSecondary group-hover:text-textPrimary transition-colors" />
-              <span className="font-mono text-data font-bold uppercase tracking-wider text-textPrimary">{d.name}</span>
-            </div>
-            <p className="text-data text-textSecondary leading-relaxed">{d.blurb}</p>
-          </Link>
-        ))}
+        {DESKS.map(d => {
+          // Same hue the terminal index uses for this desk's workflow group, so
+          // the map a reader builds on the index still holds in the guide.
+          const group = groupOfPath(d.to);
+          const accent = group ? NAV_GROUP_ACCENT[group] : null;
+          return (
+            <Link
+              key={d.name}
+              to={d.to}
+              className={`group rounded-lg border border-borderSubtle border-l-2 bg-panel hover:bg-panelRaised hover:border-borderMuted transition-colors p-4 flex flex-col gap-2 ${
+                accent?.border ?? ''
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <d.icon className={`w-4 h-4 ${accent?.text ?? 'text-textSecondary'}`} />
+                <span className="font-mono text-data font-bold uppercase tracking-wider text-textPrimary">{d.name}</span>
+              </div>
+              <p className="text-data text-textSecondary leading-relaxed">{d.blurb}</p>
+            </Link>
+          );
+        })}
         <Link
           to="/guide/desks"
           className="group rounded-lg border border-dashed border-borderMuted hover:border-textMuted transition-colors p-4 flex items-center justify-center gap-2 text-textMuted hover:text-textPrimary"

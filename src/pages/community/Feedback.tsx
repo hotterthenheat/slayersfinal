@@ -5,10 +5,12 @@ import Panel from '../../components/ui/Panel';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import EmptyState from '../../components/ui/EmptyState';
 import { useToast } from '../../components/ui/Toast';
+import { toneDot, toneText, type Tone } from '../../components/ui/tones';
 import { communityMarkdown, ROADMAP, timeAgo } from '../../data/community';
-import type { FeedbackCategory, RequestStatus } from '../../types/community';
+import type { FeedbackCategory } from '../../types/community';
 import { packMeta, shortBrowser, unpackMeta } from './localMeta';
 import { useCommunity } from './store';
+import { STATUS_ORDER, STATUS_TONE } from './status';
 import { Field, PrimaryButton, RowAction, TextArea } from './controls';
 import { copyText, downloadText, mailtoLink, CONTACT } from './share';
 
@@ -40,7 +42,6 @@ const CAPTURE_FIELDS: { key: string; label: string }[] = [
   { key: 'browser', label: 'Browser' },
 ];
 
-const STATUS_GLANCE: RequestStatus[] = ['BUILDING', 'PLANNED', 'UNDER REVIEW', 'SHIPPED'];
 
 const ReadOnlyField = ({ label, value, title }: { label: string; value: string; title?: string }) => (
   <div className="flex flex-col gap-1 min-w-0">
@@ -54,9 +55,19 @@ const ReadOnlyField = ({ label, value, title }: { label: string; value: string; 
   </div>
 );
 
-const Tally = ({ label, value }: { label: string; value: number }) => (
+/**
+ * One counted line. `tone` exists because the roadmap tally repeats the four
+ * statuses the Roadmap tab already colours — drawing them grey here made one
+ * board speak two languages about the same four things.
+ */
+const Tally = ({ label, value, tone }: { label: string; value: number; tone?: Tone }) => (
   <div className="flex items-baseline justify-between gap-3 px-4 py-2 border-b border-borderSubtle/40 last:border-0">
-    <span className="font-mono text-label uppercase tracking-wider text-textMuted">{label}</span>
+    <span className="flex items-center gap-2 min-w-0">
+      {tone && <span aria-hidden className={`h-1.5 w-1.5 rounded-full shrink-0 ${toneDot[tone]}`} />}
+      <span className={`font-mono text-label uppercase tracking-wider truncate ${tone ? toneText[tone] : 'text-textMuted'}`}>
+        {label}
+      </span>
+    </span>
     <span className="font-mono text-data text-textPrimary tnum">{value}</span>
   </div>
 );
@@ -77,7 +88,7 @@ const Feedback = () => {
 
   const roadmapCounts = useMemo(() => {
     const all = [...state.requests, ...ROADMAP];
-    return STATUS_GLANCE.map(status => ({ status, n: all.filter(r => r.status === status).length }));
+    return STATUS_ORDER.map(status => ({ status, n: all.filter(r => r.status === status).length }));
   }, [state.requests]);
 
   const submit = () => {
@@ -251,7 +262,7 @@ const Feedback = () => {
 
         <Panel title="Roadmap at a glance" subtitle="one board, on the Roadmap tab" flush className="w-full">
           {roadmapCounts.map(r => (
-            <Tally key={r.status} label={r.status} value={r.n} />
+            <Tally key={r.status} label={r.status} value={r.n} tone={STATUS_TONE[r.status]} />
           ))}
           <div className="px-4 py-2.5">
             <Link

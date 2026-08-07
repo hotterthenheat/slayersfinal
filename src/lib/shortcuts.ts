@@ -17,7 +17,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { keys: ['['], label: 'Previous ticker in the watchlist' },
       { keys: [']'], label: 'Next ticker in the watchlist' },
       { keys: ['?'], label: 'Show the shortcuts sheet' },
-      { keys: ['Esc'], label: 'Close palette, drawer or overlay' },
+      { keys: ['Esc'], label: 'Close the palette, a drilldown or any overlay' },
     ],
   },
   {
@@ -29,10 +29,10 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     ],
   },
   {
-    title: 'Tables & drawers',
+    title: 'Tables & drilldowns',
     rows: [
       { keys: ['Click'], label: 'Open a row’s contract drilldown' },
-      { keys: ['Esc'], label: 'Close the drilldown drawer' },
+      { keys: ['Esc'], label: 'Close the drilldown' },
     ],
   },
 ];
