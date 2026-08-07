@@ -39,8 +39,17 @@ describe('P4.5 — gamma roll-off calendar', () => {
     // rounding sliver of the book.
     const view = buildGammaRolloff(Simulator.buildSnapshot('SPY'));
     expect(view.expiries[0].share).toBeGreaterThan(0.05);
-    // Half the book rolls off within the shown horizon.
-    expect(view.halfLifeSessions).toBeGreaterThanOrEqual(0);
+
+    // Half-life has to MEAN half. `halfLifeSessions >= 0` was the old
+    // assertion, which a session count satisfies by construction — it would
+    // hold if the field were hard-coded to zero. What the stat card claims is
+    // that this is the FIRST rung whose cumulative share reaches 50%, so pin
+    // exactly that: the rung at the half-life is at or past half, and every
+    // rung before it is short of it.
+    const halfIdx = view.expiries.findIndex(r => r.sessions === view.halfLifeSessions);
+    expect(halfIdx).toBeGreaterThanOrEqual(0);
+    expect(view.expiries[halfIdx].cumShare).toBeGreaterThanOrEqual(0.5);
+    for (let i = 0; i < halfIdx; i++) expect(view.expiries[i].cumShare).toBeLessThan(0.5);
     expect(view.halfLifeSessions).toBeLessThanOrEqual(view.expiries[view.expiries.length - 1].sessions);
   });
 

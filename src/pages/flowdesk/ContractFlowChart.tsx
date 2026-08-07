@@ -15,7 +15,9 @@ import {
 } from 'recharts';
 import { buildContractFlow, flowClock, type ContractRef } from '../../data/contractflow';
 import { fmtUsd } from '../../data/gex';
-import { BULL, BEAR, SPOT, MUTED_INK } from '../../components/gex/palette';
+import { ChartTip, TipHead, TipRow, TipSeries, TipNote } from '../../components/charts/ChartTip';
+import { GRID, CURSOR, axisTick } from '../../components/charts/chartTheme';
+import { BULL, BEAR, SPOT } from '../../components/gex/palette';
 
 /*
   Contract drilldown rendered on recharts — this contract's
@@ -32,10 +34,7 @@ const BID = BEAR;
 const MID = '#8b8f96';
 // neutral price/avg reference line — white ("where the market is"); silver is selection-only
 const PRICE_LINE = SPOT;
-const AXIS = MUTED_INK;
-const GRID = 'rgba(255,255,255,0.05)';
 
-const axisTick = { fill: AXIS, fontSize: 10, fontFamily: 'JetBrains Mono, monospace' };
 const timeTick = (v: number) => (v <= 0 ? 'Open' : flowClock(v));
 
 const Stat = ({ k, v, tone = 'text-textPrimary' }: { k: string; v: string; tone?: string }) => (
@@ -44,45 +43,27 @@ const Stat = ({ k, v, tone = 'text-textPrimary' }: { k: string; v: string; tone?
   </span>
 );
 
-const Box = ({ children }: { children: React.ReactNode }) => (
-  <div className="rounded border border-borderMuted bg-panel px-2.5 py-1.5 shadow-overlay font-mono text-label">{children}</div>
-);
+/*
+  Both read-outs use the house chart tooltip (components/charts/ChartTip) rather
+  than the local card this file used to carry. That card was the last one in the
+  app on `bg-panel` instead of `bg-panelRaised`, so a hover here and a hover on
+  any other chart were visibly different objects — the exact seam the shared
+  layer exists to close.
+*/
 
-interface FlowTip {
-  active?: boolean;
-  payload?: { payload: { min: number; price: number; size: number; side: string } }[];
+interface FlowPoint {
+  min: number;
+  price: number;
+  size: number;
+  side: string;
 }
-const FlowTooltip = ({ active, payload }: FlowTip) => {
-  if (!active || !payload?.length) return null;
-  const p = payload[0].payload;
-  const c = p.side === 'ASK' ? ASK : p.side === 'BID' ? BID : MID;
-  return (
-    <Box>
-      <div className="text-textMuted">{flowClock(p.min)} ET</div>
-      <div className="text-textPrimary">
-        ${p.price.toFixed(2)} · <span style={{ color: c }}>{p.side}</span> · {p.size.toLocaleString()}x
-      </div>
-      {/* premium = price × contracts × 100 — the number the rest of the desk sorts on */}
-      <div className="text-textSecondary">prem {fmtUsd(p.price * p.size * 100)}</div>
-    </Box>
-  );
-};
 
-interface NetTip {
-  active?: boolean;
-  payload?: { payload: { min: number; netCall: number; netPut: number; price: number } }[];
+interface NetPoint {
+  min: number;
+  netCall: number;
+  netPut: number;
+  price: number;
 }
-const NetTooltip = ({ active, payload }: NetTip) => {
-  if (!active || !payload?.length) return null;
-  const p = payload[0].payload;
-  return (
-    <Box>
-      <div className="text-textMuted">{flowClock(p.min)} ET · ${p.price.toFixed(2)}</div>
-      <div style={{ color: ASK }}>net call {fmtUsd(p.netCall)}</div>
-      <div style={{ color: BID }}>net put {fmtUsd(p.netPut)}</div>
-    </Box>
-  );
-};
 
 const ContractFlowChart = ({ contract }: { contract: ContractRef }) => {
   const cf = useMemo(() => buildContractFlow(contract), [contract]);
@@ -166,7 +147,31 @@ const ContractFlowChart = ({ contract }: { contract: ContractRef }) => {
                 axisLine={false}
               />
               <ZAxis type="number" dataKey="size" range={[24, 440]} />
-              <Tooltip content={<FlowTooltip />} cursor={{ stroke: 'rgba(255,255,255,0.15)' }} />
+              <Tooltip
+                cursor={CURSOR}
+                content={
+                  <ChartTip<FlowPoint>
+                    render={p => {
+                      const c = p.side === 'ASK' ? ASK : p.side === 'BID' ? BID : MID;
+                      return (
+                        <>
+                          <TipHead sub={`${flowClock(p.min)} ET`}>${p.price.toFixed(2)}</TipHead>
+                          <TipSeries color={c} label={p.side} value={`${p.size.toLocaleString()}x`} />
+                          {/* premium = price x contracts x 100 — the number the rest of the desk sorts on */}
+                          <TipRow label="Premium" value={fmtUsd(p.price * p.size * 100)} tone="text-textSecondary" />
+                          <TipNote>
+                            {p.side === 'ASK'
+                              ? 'Lifted the offer — a buyer paid the spread to get done here.'
+                              : p.side === 'BID'
+                                ? 'Hit the bid — a seller paid the spread to get out here.'
+                                : 'Crossed at the mid, so the tape names no initiator: size moved without a stated direction.'}
+                          </TipNote>
+                        </>
+                      );
+                    }}
+                  />
+                }
+              />
               {showAvg && (
                 <Scatter data={cf.avg} line={{ stroke: PRICE_LINE, strokeWidth: 1.5 }} lineType="joint" shape={() => <g />} legendType="none" />
               )}
@@ -246,7 +251,29 @@ const ContractFlowChart = ({ contract }: { contract: ContractRef }) => {
                 axisLine={false}
               />
               <ReferenceLine yAxisId="prem" y={0} stroke="rgba(255,255,255,0.18)" strokeDasharray="3 3" />
-              <Tooltip content={<NetTooltip />} cursor={{ stroke: 'rgba(255,255,255,0.15)' }} />
+              <Tooltip
+                cursor={CURSOR}
+                content={
+                  <ChartTip<NetPoint>
+                    render={p => {
+                      const net = p.netCall + p.netPut;
+                      return (
+                        <>
+                          <TipHead sub={`${flowClock(p.min)} ET`}>{contract.ticker} ${p.price.toFixed(2)}</TipHead>
+                          <TipSeries color={ASK} label="Net call" value={fmtUsd(p.netCall)} />
+                          <TipSeries color={BID} label="Net put" value={fmtUsd(p.netPut)} />
+                          <TipRow label="Net" value={fmtUsd(net)} tone={net >= 0 ? 'text-bull' : 'text-bear'} />
+                          <TipNote>
+                            {Math.abs(net) < premAbs * 0.02
+                              ? 'Call and put premium balance here — neither side is paying up.'
+                              : `${net > 0 ? 'Call' : 'Put'} buyers had paid up by ${fmtUsd(Math.abs(net))} net on the underlying by this point.`}
+                          </TipNote>
+                        </>
+                      );
+                    }}
+                  />
+                }
+              />
               <Area yAxisId="prem" type="monotone" dataKey="netCall" stroke={ASK} strokeWidth={1.3} fill={ASK} fillOpacity={0.16} isAnimationActive={false} />
               <Area yAxisId="prem" type="monotone" dataKey="netPut" stroke={BID} strokeWidth={1.3} fill={BID} fillOpacity={0.16} isAnimationActive={false} />
               {showPrice && (
