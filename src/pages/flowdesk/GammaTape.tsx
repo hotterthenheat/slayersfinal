@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import { useMarketData } from '../../context/MarketDataContext';
-import { enrichPrint } from '../../data/flowtape';
-import { seedSessionTape } from '../../data/tapeSeed';
+import { buildSessionTape } from '../../data/flowtape';
 import { buildGammaTape, type GammaPrint } from '../../data/gammatape';
 import { fmtUsd } from '../../data/gex';
 import Panel from '../../components/ui/Panel';
@@ -40,11 +39,10 @@ const gammaInk = (v: number): string => (v > 0 ? BULL : v < 0 ? BEAR : MUTED_INK
 const GammaTape = () => {
   const { activeTicker } = useMarketData();
 
-  const view = useMemo(() => {
-    const seed = seedSessionTape(HOW_FAR_BACK);
-    const prints = seed.map((o, i) => enrichPrint(o, seed.length - i));
-    return buildGammaTape(prints, activeTicker);
-  }, [activeTicker]);
+  const view = useMemo(
+    () => buildGammaTape(buildSessionTape(HOW_FAR_BACK), activeTicker),
+    [activeTicker]
+  );
 
   const { prints, netGamma, longGamma, addedLong, addedShort, netDelta, troughGamma, peakGamma, biggest, flips, directed } = view;
 

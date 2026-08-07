@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { enrichPrint, sentimentOf, summarizeTape } from './flowtape';
+import { TAPE_ID_CEILING, buildSessionTape, enrichPrint, sentimentOf, summarizeTape } from './flowtape';
 import type { TapeOrder } from '../types/market';
 import { aggressorSide, isSweep, isMultiLeg, isDeltaHedged, isDirectional } from '../types/conditions';
 
@@ -61,6 +61,50 @@ describe('P3.1 — condition codes + aggressor on every print', () => {
     expect(multi).toBeGreaterThan(0);
     expect(hedged).toBeGreaterThan(0);
     expect(hedged).toBeLessThan(multi);
+  });
+});
+
+describe('one print, one identity — regardless of how much tape a desk asks for', () => {
+  /*
+    enrichPrint seeds its hash with the print's id, so the id IS the print's
+    identity. Each Trace tab used to derive it as `seed.length - i` off a
+    different window (400 on Live Tape, 600 on Gamma Tape and Informed Flow), so
+    the SAME order enriched into a different contract, side, premium and
+    sentiment on each tab. These pin the fix: a shorter window must be a PREFIX
+    of a longer one, never a different reality.
+  */
+  const deep = buildSessionTape(600);
+  const shallow = buildSessionTape(400);
+
+  it('gives the newest print the same identity at every window depth', () => {
+    expect(deep.length).toBeGreaterThan(0);
+    expect(shallow.length).toBeGreaterThan(0);
+    expect(shallow[0].id).toBe(TAPE_ID_CEILING);
+    expect(deep[0].id).toBe(TAPE_ID_CEILING);
+  });
+
+  it('is a strict prefix — every overlapping print is the SAME contract', () => {
+    const n = Math.min(deep.length, shallow.length);
+    expect(n).toBeGreaterThan(50);
+    for (let i = 0; i < n; i++) {
+      // Identity, and everything the desks render off it.
+      expect(shallow[i].id).toBe(deep[i].id);
+      expect(shallow[i].ticker).toBe(deep[i].ticker);
+      expect(shallow[i].strike).toBe(deep[i].strike);
+      expect(shallow[i].right).toBe(deep[i].right);
+      expect(shallow[i].side).toBe(deep[i].side);
+      expect(shallow[i].premium).toBe(deep[i].premium);
+      expect(shallow[i].expiry).toBe(deep[i].expiry);
+      expect(sentimentOf(shallow[i])).toBe(sentimentOf(deep[i]));
+      expect(shallow[i].greeks?.gamma).toBe(deep[i].greeks?.gamma);
+    }
+  });
+
+  it('keeps ids strictly descending, so higher id still means newer', () => {
+    // The unread pill and the pause-pending count both read ids as recency, and
+    // live prints continue upward from the ceiling.
+    for (let i = 1; i < deep.length; i++) expect(deep[i].id).toBeLessThan(deep[i - 1].id);
+    expect(deep[0].id).toBe(TAPE_ID_CEILING);
   });
 });
 

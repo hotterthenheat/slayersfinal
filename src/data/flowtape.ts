@@ -10,6 +10,7 @@
 import Simulator, { settledOI } from '../core/simulator';
 import { expiryFor, fmtExpiryLong } from '../core/calendar';
 import { math } from '../core/mathProvider';
+import { seedSessionTape } from './tapeSeed';
 import type { ContractGreeks, TapeOrder } from '../types/market';
 import type { FlowPrint, PrintSentiment, StratTag, TapeSummary } from '../types/flowdesk';
 import {
@@ -48,6 +49,36 @@ const STRATS: StratTag[] = ['Vertical', 'Butterfly', 'Ratio', 'Custom'];
  */
 function tradeGreeks(spot: number, strike: number, dte: number, iv: number, right: 'C' | 'P'): ContractGreeks {
   return math.optionGreeks(spot, strike, iv, math.yearsToExpiry(dte), right);
+}
+
+/**
+ * The id ceiling every desk's opening tape counts DOWN from.
+ *
+ * `enrichPrint` seeds its hash with the print's id, so the id is the print's
+ * IDENTITY, not just its position. Each Trace tab used to build its own tape as
+ * `seed.map((o, i) => enrichPrint(o, seed.length - i))` with a different `want`
+ * — 400 on Live Tape, 600 on Gamma Tape and Informed Flow — which made the id
+ * of a given print a function of HOW MUCH TAPE THE PAGE ASKED FOR. The same
+ * order therefore enriched into a different contract, side, premium and
+ * sentiment depending on which tab you were looking at: a cross-panel
+ * disagreement of exactly the kind this codebase's coherence suites exist to
+ * prevent.
+ *
+ * Counting down from a fixed ceiling instead makes the id depend only on the
+ * print's age, so a shorter window is a prefix of a longer one and every desk
+ * agrees. It must stay above any window a desk requests; live prints continue
+ * UPWARD from it, which preserves the "higher id = newer" ordering that the
+ * unread pill and the pause-pending count both read.
+ */
+export const TAPE_ID_CEILING = 100_000;
+
+/**
+ * THE opening tape. One builder, so three desks cannot drift apart on window
+ * size or id scheme again. Returns newest-first, matching the order LiveTape
+ * prepends live prints in.
+ */
+export function buildSessionTape(want: number): FlowPrint[] {
+  return seedSessionTape(want).map((o, i) => enrichPrint(o, TAPE_ID_CEILING - i));
 }
 
 export function enrichPrint(order: TapeOrder, id: number): FlowPrint {

@@ -4,8 +4,7 @@ import { ROW_INTERACTIVE, interactiveRowProps } from '../../components/ui/intera
 import { ArrowUp, Bookmark, Check, Pause, Play, Plus, Save, Search, SlidersHorizontal, Trash2, X } from 'lucide-react';
 import { DUR, EASE, PILL } from '../../lib/motion';
 import { useMarketData } from '../../context/MarketDataContext';
-import { enrichPrint, sentimentOf, summarizeTape } from '../../data/flowtape';
-import { seedSessionTape } from '../../data/tapeSeed';
+import { TAPE_ID_CEILING, buildSessionTape, enrichPrint, sentimentOf, summarizeTape } from '../../data/flowtape';
 import { fmtUsd } from '../../data/gex';
 import Panel from '../../components/ui/Panel';
 import EmptyState from '../../components/ui/EmptyState';
@@ -86,8 +85,7 @@ const rowAccent = (premium: number): string =>
  * unread pill both read ids as recency.
  */
 function openingTape(): FlowPrint[] {
-  const seed = seedSessionTape(MAX_ROWS);
-  return seed.map((o, i) => enrichPrint(o, seed.length - i));
+  return buildSessionTape(MAX_ROWS);
 }
 
 /** The terminal's read of the tape — same voice as market notes. */
@@ -608,7 +606,11 @@ const LiveTape = () => {
   });
 
   /** Ids ascend with recency; the opening tape already claims 1…n. */
-  const idRef = useRef(rows.length);
+  // Live prints continue UPWARD from the backfill ceiling, so "higher id =
+  // newer" still holds for the unread pill and the pause-pending count. It is
+  // the ceiling, not rows.length, because the newest backfilled print is now
+  // TAPE_ID_CEILING regardless of how deep the window went.
+  const idRef = useRef(TAPE_ID_CEILING);
   /** Highest id the backfill owns, so a row can be told apart from a live print. */
   const seedMaxId = useRef(rows.length).current;
   const lastReadRef = useRef(0);

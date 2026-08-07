@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import { useMarketData } from '../../context/MarketDataContext';
-import { enrichPrint } from '../../data/flowtape';
-import { seedSessionTape } from '../../data/tapeSeed';
+import { buildSessionTape } from '../../data/flowtape';
 import { buildInformedFlow, type ClassifiedPrint, type FlowClass } from '../../data/informedFlow';
 import { fmtUsd } from '../../data/gex';
 import Panel from '../../components/ui/Panel';
@@ -32,11 +31,10 @@ const classLabel: Record<FlowClass, string> = { INFORMED: 'INFORMED', MIXED: 'MI
 const InformedFlow = () => {
   const { activeTicker } = useMarketData();
 
-  const view = useMemo(() => {
-    const seed = seedSessionTape(HOW_FAR_BACK);
-    const prints = seed.map((o, i) => enrichPrint(o, seed.length - i));
-    return buildInformedFlow(prints, activeTicker);
-  }, [activeTicker]);
+  const view = useMemo(
+    () => buildInformedFlow(buildSessionTape(HOW_FAR_BACK), activeTicker),
+    [activeTicker]
+  );
 
   const { prints, informedPremium, uninformedPremium, mixedPremium, informedShare, smartNet, smartBullish, topInformed, informedCount, uninformedCount } = view;
 
