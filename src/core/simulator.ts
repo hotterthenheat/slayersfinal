@@ -18,6 +18,7 @@ import type {
   TickerSymbol,
   TradePlan,
 } from '../types/market';
+import type { MarketDataProvider } from './marketDataProvider';
 import { lookup as universeLookup } from '../data/universe';
 // rng.ts imports nothing, so this cannot cycle. (scanUniverse.ts is the one
 // module this file must never import: that dependency runs the other way, and
@@ -751,4 +752,13 @@ const Simulator = (() => {
   };
 })();
 
-export default Simulator;
+/*
+  The provider seam (P5.1). The whole terminal depends on the MarketDataProvider
+  shape, never on the simulator's internals — every view builder is
+  (snapshot) => view and the snapshot comes from here. A real ThetaData-backed
+  feed implements the same interface and drops in at context/MarketDataContext
+  without a view builder changing. `satisfies` is the compile-time proof: if a
+  method drifts from the contract, the build fails on this line rather than in a
+  panel. It does not narrow the export — the simulator's own extras stay visible.
+*/
+export default Simulator satisfies MarketDataProvider;
