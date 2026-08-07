@@ -125,6 +125,12 @@ const SESSION_BARS = 390; // one cash session of 1m bars (mirrors the simulator)
  */
 function buildOrderFlow(snapshot: MarketSnapshot): OrderFlowData {
   const { ticker, spot } = snapshot;
+  if (Simulator.isIndex(ticker)) {
+    // A cash index has no share volume, so cumulative delta, delta-by-price,
+    // VWAP and POC cannot exist. Emit an explicit unavailable state rather than
+    // fabricate them — the panel routes to DataUnavailablePanel.
+    return { available: false, cumulativeDelta: [], deltaByPrice: [], buyVolume: 0, sellVolume: 0, netDelta: 0, vwap: spot, poc: spot };
+  }
   const all = Simulator.getCandles(ticker) ?? [];
   // Trailing session-sized window. NOT length % SESSION_BARS — bars roll in one
   // at a time, and a modulo window would collapse the "session" stats to a
@@ -132,7 +138,7 @@ function buildOrderFlow(snapshot: MarketSnapshot): OrderFlowData {
   const bars = all.slice(-SESSION_BARS);
 
   if (!bars.length) {
-    return { cumulativeDelta: [], deltaByPrice: [], buyVolume: 0, sellVolume: 0, netDelta: 0, vwap: spot, poc: spot };
+    return { available: true, cumulativeDelta: [], deltaByPrice: [], buyVolume: 0, sellVolume: 0, netDelta: 0, vwap: spot, poc: spot };
   }
 
   // One signed dollar-delta per bar — bar body × traded shares (× a flow
@@ -190,6 +196,7 @@ function buildOrderFlow(snapshot: MarketSnapshot): OrderFlowData {
   const sellVolume = (notional - netDelta) / 2;
 
   return {
+    available: true,
     cumulativeDelta,
     deltaByPrice,
     buyVolume,

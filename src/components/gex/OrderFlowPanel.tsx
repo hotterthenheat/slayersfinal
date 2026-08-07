@@ -6,6 +6,7 @@ import HoverReadout from '../ui/HoverReadout';
 import Term from '../ui/Term';
 import type { TermKey } from '../../data/terms';
 import { svgHoverIndex } from '../ui/svgHover';
+import DataUnavailablePanel from '../workspace/DataUnavailablePanel';
 
 interface OrderFlowPanelProps {
   data: OrderFlowData;
@@ -144,7 +145,11 @@ const Stat = ({ label, help, value, tone = 'text-textPrimary' }: { label: string
 );
 
 /** Session order-flow read: cumulative delta, delta by price, tape stats. */
-const OrderFlowPanel = ({ data }: OrderFlowPanelProps) => (
+const OrderFlowPanel = ({ data }: OrderFlowPanelProps) => {
+  if (!data.available) {
+    return <DataUnavailablePanel requires="real share volume, which cash indices do not have" />;
+  }
+  return (
   <div className="flex flex-col gap-3 h-full min-h-0">
     <div>
       <div className="font-mono text-micro uppercase tracking-widest text-textMuted mb-1">Cumulative Delta</div>
@@ -162,6 +167,7 @@ const OrderFlowPanel = ({ data }: OrderFlowPanelProps) => (
       <Stat label="POC" help="POC" value={`$${data.poc.toFixed(2)}`} />
     </div>
   </div>
-);
+  );
+};
 
 export default OrderFlowPanel;

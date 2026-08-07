@@ -190,6 +190,9 @@ export interface DeltaByPrice {
 }
 
 export interface OrderFlowData {
+  /** False when the symbol has no share volume (a cash index): the fields below
+      are placeholders and the panel renders an explicit unavailable state. */
+  available: boolean;
   cumulativeDelta: DeltaPoint[];
   deltaByPrice: DeltaByPrice[];
   buyVolume: number;

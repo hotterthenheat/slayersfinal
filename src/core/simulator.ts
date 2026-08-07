@@ -116,6 +116,12 @@ const Simulator = (() => {
   /** Core watchlist that always populates the opportunity feed. */
   const WATCHLIST = ['SPY', 'QQQ', 'AAPL', 'NVDA'];
 
+  // Cash indices carry no share volume — not a vendor gap, a definitional fact.
+  // Marked here so the volume-derived Pulse panels can say so rather than
+  // fabricate a cumulative delta / VWAP / POC that cannot exist. The
+  // delta-equivalent substitute is a later phase (P4.4).
+  const INDEX_SYMBOLS = new Set(['SPX', 'NDX', 'RUT', 'VIX', 'XSP', 'DJX']);
+
   let activeTicker = 'SPY';
   const priceHistory: Record<string, number[]> = {};
   const historyLimit = 100;
@@ -647,6 +653,9 @@ const Simulator = (() => {
       return activeTicker;
     },
     getActiveTicker: (): string => activeTicker,
+    /** True for cash indices (SPX/NDX/RUT/VIX…) — they have no share volume, so
+        the volume-derived views null out instead of fabricating one. */
+    isIndex: (sym: string): boolean => INDEX_SYMBOLS.has(sym.toUpperCase()),
     /** Live intraday OHLC bars (mutated in place each tick — treat as read-only). */
     getCandles: (sym: string): Candle[] => {
       const key = ensureTicker(sym);
