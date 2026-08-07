@@ -1,12 +1,17 @@
 import { useMemo } from 'react';
+import { BarChart, Bar, AreaChart, Area, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine } from 'recharts';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildSessionTape } from '../../data/flowtape';
-import { buildInformedFlow, type ClassifiedPrint, type FlowClass } from '../../data/informedFlow';
+import { buildInformedFlow, type ClassifiedPrint, type FlowClass, type ScoreBucket, type TiltPoint } from '../../data/informedFlow';
 import { fmtUsd } from '../../data/gex';
 import Panel from '../../components/ui/Panel';
 import StatCard from '../../components/ui/StatCard';
 import MetricGrid from '../../components/ui/MetricGrid';
 import EmptyState from '../../components/ui/EmptyState';
+import ChartFrame, { Swatch } from '../../components/charts/ChartFrame';
+import { ChartTip, TipHead, TipRow, TipNote } from '../../components/charts/ChartTip';
+import { splitBySign, type SignSplitRow } from '../../components/charts/signSplit';
+import { GRID, CURSOR, BAR_CURSOR, chartMargin, valueAxis, valueAxisLeft, categoryAxis, axisUsd, symmetricDomain, symmetricTicks, REF_LINE } from '../../components/charts/chartTheme';
 import { BULL, BEAR, FOCUS, MUTED_INK } from '../../components/gex/palette';
 
 /*
@@ -36,7 +41,12 @@ const InformedFlow = () => {
     [activeTicker]
   );
 
-  const { prints, informedPremium, uninformedPremium, mixedPremium, informedShare, smartNet, smartBullish, topInformed, informedCount, uninformedCount } = view;
+  const { prints, informedPremium, uninformedPremium, mixedPremium, informedShare, smartNet, smartBullish, topInformed, informedCount, uninformedCount, thresholds, scoreBuckets, tilt } = view;
+
+  // The tilt path, coloured by which side of flat it is on at each point rather
+  // than by where it closed — see components/charts/signSplit.
+  const tiltSeries = splitBySign(tilt, p => p.net);
+  const tiltMax = Math.max(...tilt.map(p => Math.abs(p.net)), 1);
 
   if (prints.length === 0) {
     return (
@@ -47,10 +57,17 @@ const InformedFlow = () => {
   }
 
   const total = informedPremium + mixedPremium + uninformedPremium || 1;
-  const tilt = Math.abs(smartNet);
+  const lead = Math.abs(smartNet);
+  // The window the tape actually covers, read off the tape rather than asserted.
+  // The backfill is ~600 provider ticks (data/tapeSeed), which is roughly the
+  // last quarter hour — calling it "this session" told the reader it ran from
+  // the open, and it does not.
+  const windowFrom = tilt[0]?.time.slice(0, 5) ?? '';
+  const windowTo = tilt[tilt.length - 1]?.time.slice(0, 5) ?? '';
+  const windowLabel = windowFrom && windowTo ? `${windowFrom}–${windowTo} ET` : 'the recent tape';
   const read = informedCount === 0
-    ? `No clearly informed prints on ${activeTicker} this session — the tape is retail and mid-market noise.`
-    : `Smart money is ${smartBullish ? 'net long' : 'net short'} ${activeTicker}: informed flow's ${smartBullish ? 'call buyers and put sellers' : 'put buyers and call sellers'} lead by ${fmtUsd(tilt)}. Informed prints are ${Math.round(informedShare * 100)}% of session premium — the rest is mixed or noise.`;
+    ? `No clearly informed prints on ${activeTicker} across ${windowLabel} — the tape is retail and mid-market noise.`
+    : `Smart money is ${smartBullish ? 'net long' : 'net short'} ${activeTicker}: informed flow's ${smartBullish ? 'call buyers and put sellers' : 'put buyers and call sellers'} lead by ${fmtUsd(lead)}. Informed prints are ${Math.round(informedShare * 100)}% of premium across ${windowLabel} — the rest is mixed or noise.`;
 
   return (
     <div className="flex flex-col gap-4">
@@ -79,6 +96,139 @@ const InformedFlow = () => {
               sub={topInformed ? `${topInformed.print.strike}${topInformed.print.right} · ${fmtUsd(topInformed.print.premium)}` : 'awaiting tape'}
             />
           </MetricGrid>
+
+          {/* The classification itself. Every print lands in a bar; the two
+              rules drawn on the axis are the exact cut-points the scorer used,
+              so the reader can see how close the tape sits to each boundary
+              instead of taking the counts on trust. */}
+          <ChartFrame
+            title="Information score distribution"
+            meta={`${prints.length} prints · cut-points at ${thresholds.uninformed} / ${thresholds.informed}`}
+            height={176}
+            legend={
+              <>
+                <Swatch color={classInk.INFORMED} label="Informed" />
+                <Swatch color={classInk.MIXED} label="Mixed" />
+                <Swatch color={classInk.UNINFORMED} label="Noise" />
+              </>
+            }
+            ariaLabel={`Distribution of information scores across ${prints.length} ${activeTicker} prints. ${informedCount} score at or above ${thresholds.informed} and are classed informed; ${uninformedCount} score at or below ${thresholds.uninformed} and are classed noise.`}
+          >
+            <BarChart data={scoreBuckets} margin={chartMargin}>
+              <CartesianGrid stroke={GRID} vertical={false} />
+              <XAxis
+                {...categoryAxis}
+                type="number"
+                dataKey="lo"
+                domain={[0, 100]}
+                ticks={[0, 20, 38, 64, 80, 100]}
+              />
+              <YAxis {...valueAxisLeft} width={34} allowDecimals={false} />
+              <ReferenceLine x={thresholds.uninformed} stroke={REF_LINE} strokeDasharray="3 3" />
+              <ReferenceLine x={thresholds.informed} stroke={REF_LINE} strokeDasharray="3 3" />
+              <Tooltip
+                cursor={BAR_CURSOR}
+                content={
+                  <ChartTip<ScoreBucket>
+                    render={b => (
+                      <>
+                        <TipHead sub={classLabel[b.klass]}>Score {b.lo}</TipHead>
+                        <TipRow label="Prints" value={b.count.toLocaleString()} tone={b.count === 0 ? 'text-textMuted' : 'text-textPrimary'} />
+                        <TipRow label="Premium" value={b.premium === 0 ? '—' : fmtUsd(b.premium)} tone="text-textSecondary" />
+                        <TipRow
+                          label={b.klass === 'INFORMED' ? `Above cut ${thresholds.informed}` : b.klass === 'UNINFORMED' ? `At/below cut ${thresholds.uninformed}` : 'Between the cuts'}
+                          value={b.klass === 'INFORMED' ? `+${b.lo - thresholds.informed}` : b.klass === 'UNINFORMED' ? `−${thresholds.uninformed - b.lo}` : `${b.lo - thresholds.uninformed}/${thresholds.informed - b.lo}`}
+                          tone="text-textMuted"
+                        />
+                        <TipNote>
+                          {b.klass === 'INFORMED'
+                            ? 'Prints here cleared the informed bar: a paid spread, urgency, size or opening risk stacked up. Only these feed the smart-money tilt.'
+                            : b.klass === 'UNINFORMED'
+                              ? 'Prints here are noise: crossed at the mid, small, closing risk, or a structure leg with no directional view.'
+                              : 'Prints here carry some information but not enough to lean on — they sit between the two cut-points and feed neither the tilt nor the noise bucket.'}
+                        </TipNote>
+                      </>
+                    )}
+                  />
+                }
+              />
+              <Bar dataKey="count" isAnimationActive={false} maxBarSize={10}>
+                {scoreBuckets.map(b => (
+                  <Cell key={b.lo} fill={classInk[b.klass]} fillOpacity={b.klass === 'INFORMED' ? 0.9 : 0.65} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ChartFrame>
+
+          {/* Where the tilt came from. The headline stat is one number; this is
+              the path that produced it, so a late reversal cannot hide inside
+              a net figure that happens to close flat. */}
+          <ChartFrame
+            title="Smart-money tilt, cumulative"
+            meta={`${informedCount} informed prints · Modeled`}
+            height={176}
+            legend={
+              <>
+                <Swatch color={BULL} label="Net long" dash />
+                <Swatch color={BEAR} label="Net short" dash />
+                <span className="font-mono text-micro uppercase tracking-wider text-textMuted">Informed slice only</span>
+              </>
+            }
+            ariaLabel={`Running net premium of informed ${activeTicker} prints, bullish minus bearish, closing ${smartNet >= 0 ? 'long' : 'short'} ${fmtUsd(Math.abs(smartNet))}.`}
+          >
+            <AreaChart data={tiltSeries} margin={chartMargin}>
+              <CartesianGrid stroke={GRID} />
+              <XAxis
+                {...categoryAxis}
+                type="number"
+                dataKey="x"
+                domain={[0, Math.max(tilt.length - 1, 1)]}
+                ticks={tilt.length > 1 ? [0, Math.round((tilt.length - 1) / 2), tilt.length - 1] : [0]}
+                tickFormatter={(x: number) => tilt[Math.round(x)]?.time.slice(0, 5) ?? ''}
+              />
+              <YAxis {...valueAxis} domain={symmetricDomain(tilt.map(p => p.net))} ticks={symmetricTicks(tiltMax * 1.1)} tickFormatter={axisUsd} width={56} />
+              <ReferenceLine y={0} stroke={REF_LINE} strokeDasharray="3 3" />
+              <Tooltip
+                cursor={CURSOR}
+                content={
+                  <ChartTip<SignSplitRow<TiltPoint>>
+                    render={r => {
+                      if (!r.src) {
+                        return (
+                          <>
+                            <TipHead>Tilt crossed flat</TipHead>
+                            <TipRow label="Net" value="$0" />
+                            <TipNote>Informed bullish and bearish premium balanced exactly here before the lean changed sides.</TipNote>
+                          </>
+                        );
+                      }
+                      const p = r.src;
+                      const done = p.i + 1;
+                      return (
+                        <>
+                          <TipHead sub={p.time}>Informed net</TipHead>
+                          <TipRow
+                            label={p.net >= 0 ? 'Net long' : 'Net short'}
+                            value={fmtUsd(Math.abs(p.net))}
+                            tone={p.net >= 0 ? 'text-bull' : 'text-bear'}
+                          />
+                          <TipRow label="Prints elapsed" value={`${done} of ${tilt.length}`} tone="text-textSecondary" />
+                          <TipRow label="Share of final tilt" value={smartNet === 0 ? '—' : `${Math.round((p.net / smartNet) * 100)}%`} tone="text-textMuted" />
+                          <TipNote>
+                            {Math.abs(p.net) < 1
+                              ? 'Informed flow is balanced at this point — bullish and bearish premium cancel.'
+                              : `By this print, informed ${p.net >= 0 ? 'call buyers and put sellers' : 'put buyers and call sellers'} led by ${fmtUsd(Math.abs(p.net))}. Only prints scoring ${thresholds.informed} or better move this line.`}
+                          </TipNote>
+                        </>
+                      );
+                    }}
+                  />
+                }
+              />
+              <Area type="linear" dataKey="pos" stroke={BULL} strokeWidth={1.6} fill={BULL} fillOpacity={0.14} baseValue={0} connectNulls={false} dot={false} activeDot={{ r: 3, fill: BULL, stroke: 'none' }} isAnimationActive={false} />
+              <Area type="linear" dataKey="neg" stroke={BEAR} strokeWidth={1.6} fill={BEAR} fillOpacity={0.14} baseValue={0} connectNulls={false} dot={false} activeDot={{ r: 3, fill: BEAR, stroke: 'none' }} isAnimationActive={false} />
+            </AreaChart>
+          </ChartFrame>
 
           <div className="flex items-center gap-4 font-mono text-micro uppercase tracking-wider text-textMuted">
             <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: FOCUS }} /> Informed</span>
@@ -124,7 +274,7 @@ const InformedFlow = () => {
         </div>
         {prints.length > MAX_ROWS && (
           <p className="mt-2 font-mono text-micro uppercase tracking-wider text-textMuted">
-            Showing the {MAX_ROWS} newest of {prints.length} · the read above is the whole session
+            Showing the {MAX_ROWS} newest of {prints.length} · the read above spans all of them ({windowLabel})
           </p>
         )}
       </Panel>

@@ -94,15 +94,41 @@ function weeklyExpiries(base: Date, count: number): Date[] {
   return out;
 }
 
+/**
+ * The standard monthly expiry for the month `d` falls in — the third Friday,
+ * rolled back to the prior session if that Friday is a holiday (Good Friday is
+ * the third Friday in some years, and the monthly then settles on Thursday).
+ */
+export function monthlyExpiryFor(d: Date): Date {
+  const first = new Date(d.getFullYear(), d.getMonth(), 1);
+  const firstFriday = 1 + ((5 - first.getDay() + 7) % 7);
+  return toSession(new Date(d.getFullYear(), d.getMonth(), firstFriday + 14));
+}
+
+/**
+ * Is this date a standard monthly (OPEX) expiry? THE test — every consumer that
+ * needs to know whether a rung is an OPEX rung must call this.
+ *
+ * Callers used to open-code `day === Friday && date between 15 and 21`, which is
+ * the third Friday only when the third Friday is a trading day. In a year where
+ * it is Good Friday, the monthly rolls to Thursday the 17th-20th, the open-coded
+ * test says "not OPEX", and the panel drops the open-interest concentration off
+ * the single most important expiry on the board. Reconstructing the month's
+ * expiry through the same `toSession` roll the calendar itself uses cannot
+ * disagree with the calendar by construction.
+ */
+export function isMonthlyExpiry(d: Date): boolean {
+  const m = monthlyExpiryFor(d);
+  return m.getFullYear() === d.getFullYear() && m.getMonth() === d.getMonth() && m.getDate() === d.getDate();
+}
+
 /** The next `count` monthly (third-Friday) expiries on or after `base`. */
 function monthlyExpiries(base: Date, count: number): Date[] {
   const out: Date[] = [];
   let y = base.getFullYear();
   let m = base.getMonth();
   for (let guard = 0; out.length < count && guard < count + 14; guard++) {
-    const first = new Date(y, m, 1);
-    const firstFriday = 1 + ((5 - first.getDay() + 7) % 7);
-    const f = toSession(new Date(y, m, firstFriday + 14)); // third Friday
+    const f = monthlyExpiryFor(new Date(y, m, 1));
     if (f.getTime() >= base.getTime()) out.push(f);
     m += 1;
     if (m > 11) {

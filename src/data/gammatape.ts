@@ -97,11 +97,15 @@ export interface GammaTapeView {
  * is a single coherent book rather than a sum across underlyings.
  */
 export function buildGammaTape(prints: FlowPrint[], ticker: string): GammaTapeView {
-  // Chronological for the running total: `time` is HH:MM:SS (lexically ordered
-  // within a session), id breaks ties. The display order is the reverse.
-  const chrono = prints
-    .filter(p => p.ticker === ticker)
-    .sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : a.id - b.id));
+  // Chronological for the running total. Ordering is by ID, not by `time`:
+  // `time` is a bare HH:MM:SS string, so a lexical compare is only accidentally
+  // chronological — it inverts the moment a tape spans midnight (or a session
+  // that crosses into the next day), which would silently reverse the entire
+  // cumulative. The tape's id scheme is monotonic in time by construction
+  // (data/flowtape assigns TAPE_ID_CEILING − index over a newest-first seed, so
+  // a HIGHER id is a NEWER print), which makes ascending id exactly
+  // chronological with no string parsing and no calendar assumption.
+  const chrono = prints.filter(p => p.ticker === ticker).sort((a, b) => a.id - b.id);
 
   let cum = 0;
   let addedLong = 0;

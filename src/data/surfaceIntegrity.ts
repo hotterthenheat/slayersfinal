@@ -22,7 +22,7 @@
 */
 
 import { buildVolLab } from './vollab';
-import { blackScholes } from '../core/contractScore';
+import { math } from '../core/mathProvider';
 import type { IvSurfaceData } from '../types/gex';
 
 export type IntegrityKey = 'calendar' | 'butterfly' | 'smoothness';
@@ -40,12 +40,33 @@ export interface IntegrityCheck {
   note: string;
 }
 
+/** One tenor of the ATM total-variance curve — the calendar check, plotted. */
+export interface VariancePoint {
+  dte: number;
+  /** ATM implied vol at this tenor, %. */
+  iv: number;
+  /** Total variance σ²·t at this tenor. Must not fall as dte rises. */
+  variance: number;
+  /** Whether the step INTO this tenor held (the first point is always true). */
+  holds: boolean;
+}
+
 export interface SurfaceIntegrityView {
   ticker: string;
   checks: IntegrityCheck[];
   /** 0-100: share of examined adjacencies that hold, across all checks. */
   score: number;
   clean: boolean;
+  /** Adjacencies examined across all three checks. */
+  adjacencies: number;
+  /** Adjacencies that failed. */
+  breaks: number;
+  /**
+   * The ATM column's total variance by tenor. The calendar check is exactly the
+   * claim that this series never falls, so publishing it lets the panel SHOW the
+   * check rather than only reporting its verdict.
+   */
+  varianceCurve: VariancePoint[];
   read: string;
 }
 
@@ -84,7 +105,15 @@ export function inspectSurface(ticker: string, surface: IvSurfaceData): SurfaceI
   let bWorst: IntegrityCheck['worst'] = null;
   let bWorstMag = 0;
   for (let ti = 0; ti < dte.length; ti++) {
-    const prices = moneyness.map((m, mi) => blackScholes(forward, forward * m, cells[ti][mi] / 100, dte[ti], 'C').price);
+    // The RAW model price, not the quotable one. `blackScholes` floors its
+    // output at the $0.02 minimum increment — a market convention for what can
+    // be quoted, not a statement about value. Reading the floored price here
+    // clamped every far-OTM strike to the same 0.02, which makes the butterfly
+    // identically zero across the wing and hides exactly the convexity break
+    // this check exists to find.
+    const prices = moneyness.map((m, mi) =>
+      math.optionPrice(forward, forward * m, cells[ti][mi] / 100, math.yearsToExpiry(dte[ti]), 'C')
+    );
     for (let mi = 1; mi < moneyness.length - 1; mi++) {
       const fly = prices[mi - 1] - 2 * prices[mi] + prices[mi + 1];
       bTotal++;
@@ -159,7 +188,24 @@ export function inspectSurface(ticker: string, surface: IvSurfaceData): SurfaceI
     ? `${ticker}'s surface is arbitrage-free across all ${totalAdj} checks — total variance rises with expiry, call prices stay convex, and the smile is smooth.`
     : `${ticker}'s surface holds on ${score}% of ${totalAdj} checks. ${failed.map(c => `${c.label}: ${c.violations} ${c.violations === 1 ? 'break' : 'breaks'}${c.worst ? ` (worst — ${c.worst.detail})` : ''}`).join('; ')}.`;
 
-  return { ticker, checks, score, clean, read };
+  // The ATM column — the moneyness rung closest to the forward. The calendar
+  // check runs on every column; this is the one a reader recognises.
+  const atmIdx = moneyness.reduce((best, m, i) => (Math.abs(m - 1) < Math.abs(moneyness[best] - 1) ? i : best), 0);
+  const varianceCurve: VariancePoint[] = dte.map((t, ti) => {
+    const ivPct = cells[ti][atmIdx];
+    const variance = Math.pow(ivPct / 100, 2) * (t / 365);
+    const prev = ti === 0 ? null : Math.pow(cells[ti - 1][atmIdx] / 100, 2) * (dte[ti - 1] / 365);
+    return {
+      dte: t,
+      iv: ivPct,
+      variance,
+      // Same 1e-6 tolerance the calendar check itself uses, so the picture and
+      // the verdict cannot disagree about a given step.
+      holds: prev === null || prev - variance <= 1e-6,
+    };
+  });
+
+  return { ticker, checks, score, clean, adjacencies: totalAdj, breaks: totalViol, varianceCurve, read };
 }
 
 export function buildSurfaceIntegrity(ticker: string, spot: number, iv: number): SurfaceIntegrityView {

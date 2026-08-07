@@ -1,22 +1,48 @@
 import { useMemo } from 'react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ReferenceDot } from 'recharts';
 import { useMarketData } from '../../context/MarketDataContext';
 import Simulator from '../../core/simulator';
 import { buildVolComplex } from '../../data/volComplex';
 import Panel from '../../components/ui/Panel';
 import StatCard from '../../components/ui/StatCard';
 import MetricGrid from '../../components/ui/MetricGrid';
+import ChartFrame, { Swatch } from '../../components/charts/ChartFrame';
+import { ChartTip, TipHead, TipRow, TipNote, TipSeries } from '../../components/charts/ChartTip';
+import { GRID, CURSOR, chartMargin, valueAxis, categoryAxis, axisVol, paddedDomain, REF_LINE } from '../../components/charts/chartTheme';
 import type { Tone } from '../../components/ui/tones';
-import { FOCUS, MUTED_INK } from '../../components/gex/palette';
+import { FOCUS, MUTED_INK, SPOT } from '../../components/gex/palette';
 
 /*
   THE VOLATILITY COMPLEX — the four numbers a vol trader reads first, per name.
   Data in data/volComplex.ts: term-structure regime, implied vs realized (the
   vol risk premium), the vol of the vol, IV rank (the one shared rank, P2.1) and
   skew — one synthesized verdict off measures that usually live on four screens.
+
+  Both charts are recharts, on the house chart theme (components/charts). The
+  term axis is LOG in time, the convention for a term structure: 7d to 360d is a
+  50x range, and on a linear axis the front month — the part that actually moves —
+  is crushed into the first eighth of the plot.
 */
 
 const regimeTone: Record<string, Tone> = { CONTANGO: 'neutral', FLAT: 'neutral', BACKWARDATION: 'warn' };
 const rcTone: Record<string, Tone> = { RICH: 'warn', CHEAP: 'select', FAIR: 'neutral' };
+
+/** Vintages of the term curve. Older = dimmer, so "now" reads first. */
+const VINTAGE = [
+  { key: 'monthAgo' as const, label: '1mo ago', color: 'rgba(228,232,244,0.22)' },
+  { key: 'weekAgo' as const, label: '1wk ago', color: 'rgba(228,232,244,0.34)' },
+  { key: 'dayAgo' as const, label: '1d ago', color: 'rgba(228,232,244,0.52)' },
+];
+
+const TERM_TICKS = [7, 14, 30, 60, 90, 180, 360];
+
+interface TermRow {
+  dte: number;
+  now: number;
+  dayAgo: number;
+  weekAgo: number;
+  monthAgo: number;
+}
 
 const VolComplex = () => {
   const { activeTicker, marketData } = useMarketData();
@@ -36,19 +62,16 @@ const VolComplex = () => {
     );
   }
 
-  const { termCurve, frontIv, backIv, slope, termRegime, realizedVol, vrp, volOfVol, ivRank, skew, richCheap, read } = view;
+  const { termHistory, frontIv, backIv, slope, termRegime, realizedVol, vrp, volOfVol, ivRank, skew, richCheap, read } = view;
 
-  // Term curve chart — iv vs evenly-spaced expiry, front and back marked.
-  const ivs = termCurve.map(p => p.iv);
-  const lo = Math.min(...ivs);
-  const hi = Math.max(...ivs);
-  const span = hi - lo || 1;
-  const n = termCurve.length;
-  const xAt = (i: number) => (n > 1 ? (i / (n - 1)) * 100 : 50);
-  const yAt = (v: number) => 90 - ((v - lo) / span) * 80;
-  const path = termCurve.map((p, i) => `${i === 0 ? 'M' : 'L'}${xAt(i).toFixed(2)},${yAt(p.iv).toFixed(2)}`).join(' ');
-  const frontIdx = termCurve.findIndex(p => p.dte >= 30);
-  const backIdx = termCurve.findIndex(p => p.dte >= 90);
+  // Domain spans every vintage plus the realized line, so no series and no
+  // reference rule can fall outside the plot.
+  const allIvs = termHistory.flatMap(p => [p.now, p.dayAgo, p.weekAgo, p.monthAgo]).concat(realizedVol);
+  const ivDomain = paddedDomain(allIvs, 0.1);
+  const ticks = TERM_TICKS.filter(t => t >= termHistory[0].dte && t <= termHistory[termHistory.length - 1].dte);
+
+  const front = termHistory.find(p => p.dte >= 30) ?? termHistory[0];
+  const back = termHistory.find(p => p.dte >= 90) ?? termHistory[termHistory.length - 1];
 
   return (
     <div className="flex flex-col gap-4">
@@ -65,31 +88,111 @@ const VolComplex = () => {
             <StatCard label="Vol-of-vol" value={`${volOfVol.toFixed(1)}`} sub={`skew RR ${skew.toFixed(1)}`} />
           </MetricGrid>
 
-          {/* The term structure itself. Above-flat and rising = contango. */}
-          <div className="inst-surface rounded-md p-3">
-            <div className="flex items-baseline justify-between gap-3 mb-2">
-              <span className="font-mono text-micro font-semibold uppercase tracking-widest text-textSecondary">ATM term structure</span>
-              <span className="font-mono text-micro uppercase tracking-wider text-textMuted tnum">7d → 360d · Modeled</span>
-            </div>
-            <div className="relative h-[150px]">
-              <svg viewBox="0 0 100 100" width="100%" height="100%" preserveAspectRatio="none" role="img" aria-label={`${activeTicker} ATM implied-vol term structure from ${frontIv.toFixed(1)}% at 30 days to ${backIv.toFixed(1)}% at 90 days, ${termRegime.toLowerCase()}.`}>
-                <path d={path} fill="none" stroke={FOCUS} strokeWidth={1.6} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-                {frontIdx >= 0 && <circle cx={xAt(frontIdx)} cy={yAt(termCurve[frontIdx].iv)} r={1.6} fill={FOCUS} vectorEffect="non-scaling-stroke" />}
-                {backIdx >= 0 && <circle cx={xAt(backIdx)} cy={yAt(termCurve[backIdx].iv)} r={1.6} fill={MUTED_INK} vectorEffect="non-scaling-stroke" />}
-              </svg>
-              <span className="pointer-events-none absolute font-mono text-micro tnum text-textMuted" style={{ left: `${xAt(Math.max(0, frontIdx))}%`, top: '2%', transform: 'translateX(-50%)' }}>30d</span>
-              <span className="pointer-events-none absolute font-mono text-micro tnum text-textMuted" style={{ left: `${xAt(Math.max(0, backIdx))}%`, bottom: '2%', transform: 'translateX(-50%)' }}>90d</span>
-            </div>
-            <div className="flex justify-between font-mono text-micro uppercase tracking-wider text-textMuted mt-1">
-              <span>Front</span>
-              <span>Back</span>
-            </div>
-          </div>
+          {/* The term structure itself, with its own recent history behind it —
+              the spread between those four lines at 30d IS the vol-of-vol stat
+              above, so the number and the picture check each other. */}
+          <ChartFrame
+            title="ATM term structure"
+            meta="7d → 360d · log time · Modeled"
+            height={214}
+            legend={
+              <>
+                <Swatch color={FOCUS} label="Now" dash />
+                {VINTAGE.map(v => (
+                  <Swatch key={v.key} color={v.color} label={v.label} dash />
+                ))}
+                <Swatch color={SPOT} label={`Realized ${realizedVol.toFixed(1)}%`} dash />
+              </>
+            }
+            ariaLabel={`${activeTicker} ATM implied-vol term structure, ${termRegime.toLowerCase()}: ${frontIv.toFixed(1)}% at 30 days rising to ${backIv.toFixed(1)}% at 90 days, against ${realizedVol.toFixed(1)}% realized, with the curve as it stood a day, a week and a month ago behind it.`}
+          >
+            <LineChart data={termHistory} margin={chartMargin}>
+              <CartesianGrid stroke={GRID} />
+              <XAxis
+                {...categoryAxis}
+                type="number"
+                dataKey="dte"
+                scale="log"
+                domain={['dataMin', 'dataMax']}
+                ticks={ticks}
+                tickFormatter={(v: number) => `${v}d`}
+              />
+              <YAxis {...valueAxis} domain={ivDomain} tickFormatter={axisVol} width={44} />
+              {/* Realized is the bar implied has to clear — draw it, don't just quote it. */}
+              <ReferenceLine
+                y={realizedVol}
+                stroke={REF_LINE}
+                strokeDasharray="4 4"
+                label={{ value: 'realized', position: 'insideBottomLeft', fill: MUTED_INK, fontSize: 10, fontFamily: 'JetBrains Mono, monospace' }}
+              />
+              <Tooltip
+                cursor={CURSOR}
+                content={
+                  <ChartTip<TermRow>
+                    render={r => {
+                      const vsFront = r.now - front.now;
+                      const vsRealized = r.now - realizedVol;
+                      const moved = r.now - r.monthAgo;
+                      return (
+                        <>
+                          <TipHead sub={`${r.dte}D`}>{activeTicker} ATM</TipHead>
+                          <TipRow label="Implied" value={`${r.now.toFixed(2)}%`} />
+                          <TipSeries color={SPOT} label="vs realized" value={`${vsRealized >= 0 ? '+' : ''}${vsRealized.toFixed(2)} pt`} />
+                          <TipRow label="vs 30d point" value={`${vsFront >= 0 ? '+' : ''}${vsFront.toFixed(2)} pt`} />
+                          <TipSeries color={VINTAGE[0].color} label="1mo ago" value={`${r.monthAgo.toFixed(2)}%`} />
+                          <TipNote>
+                            {Math.abs(moved) < 0.25
+                              ? 'This tenor has barely moved in a month.'
+                              : `This tenor is ${Math.abs(moved).toFixed(1)} pt ${moved > 0 ? 'higher' : 'lower'} than a month ago.`}{' '}
+                            {vsRealized >= 0
+                              ? `Options here charge ${vsRealized.toFixed(1)} pt more vol than the tape delivered.`
+                              : `Options here charge ${Math.abs(vsRealized).toFixed(1)} pt less vol than the tape delivered.`}
+                          </TipNote>
+                        </>
+                      );
+                    }}
+                  />
+                }
+              />
+              {VINTAGE.map(v => (
+                <Line
+                  key={v.key}
+                  type="monotone"
+                  dataKey={v.key}
+                  stroke={v.color}
+                  strokeWidth={1.2}
+                  dot={false}
+                  activeDot={false}
+                  isAnimationActive={false}
+                />
+              ))}
+              <Line type="monotone" dataKey="now" stroke={FOCUS} strokeWidth={1.9} dot={false} activeDot={{ r: 3, fill: FOCUS, stroke: 'none' }} isAnimationActive={false} />
+              {/* Recharts draws these in its own square-aspect coordinate space,
+                  so they are true circles — the hand-rolled version stretched
+                  them into ellipses via preserveAspectRatio="none". */}
+              <ReferenceDot
+                x={front.dte}
+                y={front.now}
+                r={3.2}
+                fill={FOCUS}
+                stroke="none"
+                label={{ value: '30d', position: 'top', fill: MUTED_INK, fontSize: 10, fontFamily: 'JetBrains Mono, monospace' }}
+              />
+              <ReferenceDot
+                x={back.dte}
+                y={back.now}
+                r={3.2}
+                fill={MUTED_INK}
+                stroke="none"
+                label={{ value: '90d', position: 'bottom', fill: MUTED_INK, fontSize: 10, fontFamily: 'JetBrains Mono, monospace' }}
+              />
+            </LineChart>
+          </ChartFrame>
 
           <p className="text-micro leading-relaxed text-textMuted">
             The vol risk premium is implied minus REALIZED — what options charged for vol against what the tape actually
-            delivered. Positive is the normal state; a negative premium means the market underpriced the move. Modeled from
-            the seeded surface, not a live quote.
+            delivered. Positive is the normal state; a negative premium means the market underpriced the move. Realized is
+            measured off the modeled 1-minute series, and both sides come from the seeded surface, not a live quote.
           </p>
         </div>
       </Panel>

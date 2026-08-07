@@ -13,10 +13,10 @@
   The score is a transparent sum of microstructure priors, not a black box:
     + a directional aggressor (someone paid the spread to get done)
     + a sweep (paid across venues for immediacy — the signature of urgency)
-    + block size (institutional)
+    + block premium (institutional — the $150k exchange block threshold)
     + size percentile within the tape
     + opening risk (volume > open interest — a new position, not a close)
-    − an odd lot (a retail-participation proxy)
+    − a retail-size lot (a retail-participation proxy)
     − structure (a spread leg or delta-hedged print takes no directional view)
 
   Deterministic: reads FlowPrint fields and the conditions predicates, nothing
@@ -27,7 +27,7 @@
 
 import type { FlowPrint, PrintSentiment } from '../types/flowdesk';
 import { sentimentOf } from './flowtape';
-import { isBlock, isOddLot, isDirectional } from '../types/conditions';
+import { isDirectional } from '../types/conditions';
 
 export type FlowClass = 'INFORMED' | 'MIXED' | 'UNINFORMED';
 
@@ -60,10 +60,62 @@ export interface InformedFlowView {
   smartBullish: boolean;
   /** The highest-information single print. */
   topInformed: ClassifiedPrint | null;
+  /** The two class cut-points, so a chart draws exactly what the scorer used. */
+  thresholds: { informed: number; uninformed: number };
+  /** Score distribution in fixed buckets — the classification, made visible. */
+  scoreBuckets: ScoreBucket[];
+  /** Running informed net premium through the window, OLDEST first. */
+  tilt: TiltPoint[];
 }
+
+export interface ScoreBucket {
+  /** Bucket floor, inclusive. */
+  lo: number;
+  /** Bucket ceiling, exclusive (except the top bucket, which includes 100). */
+  hi: number;
+  count: number;
+  premium: number;
+  /** Which class this bucket falls in — bucket edges align with the cut-points. */
+  klass: FlowClass;
+}
+
+export interface TiltPoint {
+  /** Position in the window, oldest first. */
+  i: number;
+  time: string;
+  /** Running informed bull premium − informed bear premium, $. */
+  net: number;
+}
+
+/**
+ * Bucket width for the score histogram. One point per bucket, deliberately: the
+ * score is an integer 0-100 and both cut-points are integers, so a wider bucket
+ * would straddle a class boundary (a 2-wide bucket at 38 holds one UNINFORMED
+ * print and one MIXED one) and no single colour for that bar would be true.
+ */
+const BUCKET = 1;
 
 const INFORMED_AT = 64;
 const UNINFORMED_AT = 38;
+
+/*
+  Block and retail size are OPTIONS-NATIVE tests, not condition codes.
+
+  This scorer used to gate its block bonus on `isBlock` (OPRA 75 / 14 / 29) and
+  its retail penalty on `isOddLot` (OPRA 115). Both of those are EQUITY-feed
+  conditions — types/conditions.ts labels them so — and an options print never
+  carries either: options have no odd lot (the round lot IS one contract), and
+  an options block is defined by size and premium rather than by a tag. So both
+  branches were unreachable on any print this desk can see, and +14 / −20 never
+  once entered a score. The two facts are real and worth scoring, so the tests
+  move to the definitions that actually apply to an option rather than the
+  branches being deleted.
+*/
+
+/** The exchange block threshold for options — $150k of premium on one print. */
+const BLOCK_PREMIUM = 150_000;
+/** Retail-scale lot. Options round-lot is 1, so "small" is the retail proxy. */
+const RETAIL_LOT = 10;
 
 const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
 
@@ -87,9 +139,9 @@ export function scorePrint(p: FlowPrint, sizePctile: number): ClassifiedPrint {
     s += 18;
     reasons.push('swept for immediacy');
   }
-  if (isBlock(p.conditions)) {
+  if (p.premium >= BLOCK_PREMIUM) {
     s += 14;
-    reasons.push('block size');
+    reasons.push('block premium');
   }
   const sizeAdj = (sizePctile - 0.5) * 30;
   s += sizeAdj;
@@ -100,9 +152,9 @@ export function scorePrint(p: FlowPrint, sizePctile: number): ClassifiedPrint {
   } else {
     s -= 6;
   }
-  if (isOddLot(p.conditions)) {
+  if (p.size <= RETAIL_LOT) {
     s -= 20;
-    reasons.push('odd lot — retail proxy');
+    reasons.push('retail-size lot');
   }
   if (!isDirectional(p.conditions)) {
     s -= 15;
@@ -162,12 +214,54 @@ export function buildInformedFlow(prints: FlowPrint[], ticker: string): Informed
   const total = informedPremium + mixedPremium + uninformedPremium || 1;
   const smartNet = smartBull - smartBear;
 
+  // Score distribution. Each bucket takes its class from the SAME expression the
+  // scorer uses, so a bar can never be coloured differently from the prints
+  // inside it.
+  const buckets: ScoreBucket[] = [];
+  for (let lo = 0; lo <= 100; lo += BUCKET) {
+    buckets.push({
+      lo,
+      hi: lo + BUCKET,
+      count: 0,
+      premium: 0,
+      klass: lo >= INFORMED_AT ? 'INFORMED' : lo <= UNINFORMED_AT ? 'UNINFORMED' : 'MIXED',
+    });
+  }
+  for (const r of rows) {
+    const b = buckets[Math.min(buckets.length - 1, Math.floor(r.score / BUCKET))];
+    b.count++;
+    b.premium += r.print.premium;
+  }
+
+  // Running smart-money tilt. The walk MUST be chronological, and `rows` is not:
+  // buildSessionTape returns newest-first, so an in-place walk would accumulate
+  // the session backwards and hand back a mirror image of the real path. Sort a
+  // copy ascending by id — ids are monotonic in time by construction, so that is
+  // exactly chronological without parsing the clock string.
+  //
+  // Only INFORMED prints move the tilt; it is a read of the informed slice, by
+  // definition, and the same premium that feeds smartBull / smartBear above.
+  let runBull = 0;
+  let runBear = 0;
+  const tilt: TiltPoint[] = [...rows]
+    .sort((a, b) => a.print.id - b.print.id)
+    .map((r, i) => {
+      if (r.klass === 'INFORMED') {
+        if (r.sentiment === 'BULLISH') runBull += r.print.premium;
+        else if (r.sentiment === 'BEARISH') runBear += r.print.premium;
+      }
+      return { i, time: r.print.time, net: runBull - runBear };
+    });
+
   // Newest first for display.
   rows.sort((a, b) => b.print.id - a.print.id);
 
   return {
     ticker,
     prints: rows,
+    thresholds: { informed: INFORMED_AT, uninformed: UNINFORMED_AT },
+    scoreBuckets: buckets,
+    tilt,
     informedPremium,
     mixedPremium,
     uninformedPremium,

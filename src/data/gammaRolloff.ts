@@ -16,7 +16,7 @@
 ==================================================
 */
 
-import { expiryCalendar, listingConvention, type ListingConvention } from '../core/expiryCalendar';
+import { expiryCalendar, listingConvention, isMonthlyExpiry, type ListingConvention } from '../core/expiryCalendar';
 import { fmtExpiryShort } from '../core/calendar';
 import type { MarketSnapshot } from '../types/market';
 
@@ -48,10 +48,14 @@ export interface GammaRolloffView {
   halfLifeSessions: number;
 }
 
-/** A standard monthly expiry — the third Friday, where OI concentrates. */
-function isOpex(d: Date): boolean {
-  return d.getDay() === 5 && d.getDate() >= 15 && d.getDate() <= 21;
-}
+/*
+  The OPEX test lives in core/expiryCalendar (`isMonthlyExpiry`) — the same
+  module that BUILDS the ladder. This file used to open-code
+  `day === Friday && date in 15..21`, which is the third Friday only when the
+  third Friday is a trading day: in a year where it falls on Good Friday, the
+  monthly settles Thursday, the open-coded test returned false, and the largest
+  expiry on the board silently lost its open-interest concentration.
+*/
 
 /** OI concentration relative to the front: 0DTE is heavy, OPEX carries a bump,
     ordinary rungs sit below. Multiplies the 1/sqrt(t) gamma density. */
@@ -69,7 +73,7 @@ export function buildGammaRolloff(snapshot: MarketSnapshot): GammaRolloffView {
 
   const raw = expiries.map(e => {
     const density = Math.sqrt(tFront / e.t); // 1 at the front, <1 further out
-    return gross * density * oiWeight(e.dte, isOpex(e.date));
+    return gross * density * oiWeight(e.dte, isMonthlyExpiry(e.date));
   });
   const totalGamma = raw.reduce((a, x) => a + x, 0) || 1;
 
@@ -82,7 +86,7 @@ export function buildGammaRolloff(snapshot: MarketSnapshot): GammaRolloffView {
       label: e.dte === 0 ? '0DTE' : fmtExpiryShort(e.date),
       dte: e.dte,
       sessions: e.sessions,
-      opex: isOpex(e.date),
+      opex: isMonthlyExpiry(e.date),
       gamma: raw[i],
       share,
       cumShare: cum,

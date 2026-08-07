@@ -130,4 +130,32 @@ describe('P4.3 — the running dealer book', () => {
     expect(view.troughGamma).toBeLessThanOrEqual(0);
     expect(view.troughGamma).toBeLessThanOrEqual(view.peakGamma);
   });
+
+  it('orders by id, not by the clock string — a tape spanning midnight stays in order', () => {
+    // `time` is a bare HH:MM:SS with no date on it. Sorting on it lexically is
+    // only accidentally chronological: across midnight it inverts. The tape's
+    // ids are monotonic in time by construction, so they are the real order.
+    //
+    // Two prints that cancel: a customer SELL (dealer buys, gamma up) at 23:59,
+    // then a customer BUY (dealer sells, gamma down) five minutes later. The net
+    // is zero either way — order only shows up in the PATH.
+    const late = mkPrint({ id: 1, time: '23:59:00', side: 'BID', size: 500 });
+    const early = mkPrint({ id: 2, time: '00:04:00', side: 'ASK', size: 500 });
+
+    const v = buildGammaTape([early, late], 'SPY'); // deliberately array-unordered
+
+    // True order: the book goes LONG first, then back to flat. So the session
+    // has a positive peak and never goes short.
+    expect(v.peakGamma).toBeGreaterThan(0);
+    expect(v.troughGamma).toBe(0);
+    expect(v.netGamma).toBeCloseTo(0, 6);
+
+    // Display is newest-first, so the 00:04 print (the later one) leads.
+    expect(v.prints[0].print.id).toBe(2);
+    expect(v.prints[1].print.id).toBe(1);
+
+    // A lexical `time` sort would have put 00:04 first and produced the mirror
+    // image: a negative trough and a zero peak. Pin that it did not.
+    expect(v.troughGamma).not.toBeLessThan(0);
+  });
 });

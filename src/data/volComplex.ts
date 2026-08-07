@@ -47,6 +47,12 @@ export interface VolComplexView {
   richCheap: RichCheap;
   /** The term curve for a small chart: {dte, iv%}. */
   termCurve: { dte: number; iv: number }[];
+  /**
+   * The same curve a day, a week and a month ago, aligned on DTE. Vol-of-vol is
+   * the spread of the 30-day point across these four — publishing them lets the
+   * panel DRAW the number it quotes instead of asserting it.
+   */
+  termHistory: { dte: number; now: number; dayAgo: number; weekAgo: number; monthAgo: number }[];
   /** One observational sentence — describes the complex, never instructs. */
   read: string;
 }
@@ -67,6 +73,26 @@ const MINUTE_BARS_PER_YEAR = 252 * 390;
 export function realizedVolFromCandles(candles: Candle[]): number {
   const closes = candles.map(c => c.close);
   return Number(math.realizedVol(closes, MINUTE_BARS_PER_YEAR).toFixed(2));
+}
+
+/**
+ * English ordinal. The read used to interpolate `${ivRank}th`, which printed
+ * "82th", "1th" and "23th" on the panel — visible in the rendered Vol Complex.
+ */
+function ordinal(n: number): string {
+  const abs = Math.abs(Math.round(n));
+  const tens = abs % 100;
+  if (tens >= 11 && tens <= 13) return `${abs}th`;
+  switch (abs % 10) {
+    case 1:
+      return `${abs}st`;
+    case 2:
+      return `${abs}nd`;
+    case 3:
+      return `${abs}rd`;
+    default:
+      return `${abs}th`;
+  }
 }
 
 /** The 30-day point of a term curve, %. */
@@ -113,9 +139,9 @@ export function buildVolComplex(ticker: string, spot: number, iv: number, candle
         : 'flat — neither calm nor stressed across the curve';
   const rcWord =
     richCheap === 'RICH'
-      ? `implied is rich: it prices ${vrp.toFixed(1)} points more vol than the tape realized, and IV sits in the ${ivRank}th percentile of its year`
+      ? `implied is rich: it prices ${vrp.toFixed(1)} points more vol than the tape realized, and IV sits in the ${ordinal(ivRank)} percentile of its year`
       : richCheap === 'CHEAP'
-        ? `implied looks cheap: ${vrp <= 0 ? 'the tape realized more than options are pricing' : `IV is only in the ${ivRank}th percentile of its year`}`
+        ? `implied looks cheap: ${vrp <= 0 ? 'the tape realized more than options are pricing' : `IV is only in the ${ordinal(ivRank)} percentile of its year`}`
         : `implied is roughly fair against the ${realizedVol.toFixed(0)}% the tape realized`;
   const read = `${ticker} vol is ${regimeWord}. ${rcWord.charAt(0).toUpperCase()}${rcWord.slice(1)}. The volatility itself moved ${volOfVol.toFixed(1)} points over the month, and the 25-delta risk reversal at ${skew.toFixed(1)} shows ${skew < 0 ? 'puts bid over calls' : 'calls bid over puts'}.`;
 
@@ -133,6 +159,15 @@ export function buildVolComplex(ticker: string, spot: number, iv: number, candle
     skew,
     richCheap,
     termCurve: term.current.map(p => ({ dte: p.dte, iv: p.iv })),
+    // All four vintages come off the same TERM_DTE ladder in data/vollab, so
+    // index alignment is exact — no interpolation, no silent hole.
+    termHistory: term.current.map((p, i) => ({
+      dte: p.dte,
+      now: p.iv,
+      dayAgo: term.dayAgo[i]?.iv ?? p.iv,
+      weekAgo: term.weekAgo[i]?.iv ?? p.iv,
+      monthAgo: term.monthAgo[i]?.iv ?? p.iv,
+    })),
     read,
   };
 }
