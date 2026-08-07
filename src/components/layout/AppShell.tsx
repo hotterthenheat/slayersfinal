@@ -10,6 +10,7 @@ import RouteErrorBoundary from './RouteErrorBoundary';
 import SiteFooter from './SiteFooter';
 import BackToTop from './BackToTop';
 import { footerVariant, isTerminalRoute } from './chromeRoutes';
+import { PAGE_CONTAINER } from './container';
 import { useTicker } from '../../context/MarketDataContext';
 import Simulator from '../../core/simulator';
 import { DUR } from '../../lib/motion';
@@ -42,6 +43,31 @@ const AppShell = () => {
     if (location.hash) return;
     scrollRef.current?.scrollTo({ top: 0, behavior: 'auto' });
   }, [location.pathname, location.hash]);
+
+  /**
+   * Publish the scrollbar's width so the top bar can reserve the same gutter.
+   *
+   * The bar is fixed to the VIEWPORT and the page scrolls inside <main>, which
+   * takes a scrollbar out of its own width. Both centre a 1800px column, but in
+   * boxes that differ by the scrollbar — so the wordmark sat 5px right of the
+   * first column of the page under it, at every width above the cap. Measured,
+   * not assumed: the gutter is 0 on overlay-scrollbar platforms and ~15px on
+   * Windows, and hard-coding either is wrong on the other.
+   *
+   * `scrollbar-gutter: stable` on <main> makes it a constant, which also fixes
+   * a second shift nobody had named: a short desk and a long one reserved
+   * different widths, so navigating between them nudged the whole layout.
+   */
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const publish = () =>
+      document.documentElement.style.setProperty('--scrollbar-gutter', `${el.offsetWidth - el.clientWidth}px`);
+    publish();
+    const ro = new ResizeObserver(publish);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -91,7 +117,7 @@ const AppShell = () => {
         id="main-content"
         ref={scrollRef}
         tabIndex={-1}
-        className="h-full overflow-y-auto pt-14 focus:outline-none"
+        className="h-full overflow-y-auto [scrollbar-gutter:stable] pt-14 focus:outline-none"
       >
         {/* Keyed by top-level section only — subpage changes animate inside
             their section layout so the header/tabs never remount */}
@@ -104,21 +130,24 @@ const AppShell = () => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: DUR.fast, ease: 'easeOut' }}
-            className="w-full min-h-full px-4 lg:px-6 2xl:px-8 py-5 flex flex-col gap-4"
+            className="w-full min-h-full flex flex-col"
           >
             {/* One broken desk should never blank the whole terminal; the key
                 resets the boundary whenever the route changes. */}
-            <RouteErrorBoundary resetKey={location.pathname}>
-              <Outlet />
-            </RouteErrorBoundary>
-            {/* min-h-full above + mt-auto here pin the bar to the bottom of the
-                viewport on short desks instead of letting it float mid-page;
-                on tall desks it simply trails the content. The negative margins
-                undo the column gutters so the rule runs edge to edge — the
-                compact bar carries its own padding. Pulse renders nothing at
-                all, so its panels keep the viewport's bottom edge. */}
+            <div data-page-container="body" className={`${PAGE_CONTAINER} flex flex-1 flex-col gap-4 py-5`}>
+              <RouteErrorBoundary resetKey={location.pathname}>
+                <Outlet />
+              </RouteErrorBoundary>
+            </div>
+            {/* min-h-full above + mt-auto here pin the footer to the bottom of
+                the viewport on short desks instead of letting it float
+                mid-page; on tall desks it simply trails the content. It sits
+                OUTSIDE the page container and supplies its own, so its rule
+                and its columns land on the same left and right edges as the
+                content above. Pulse renders nothing at all, so its panels keep
+                the viewport's bottom edge. */}
             {footer != null && (
-              <div className="mt-auto -mx-4 -mb-5 lg:-mx-6 2xl:-mx-8">
+              <div className="mt-auto">
                 <SiteFooter variant={footer} bleed />
               </div>
             )}

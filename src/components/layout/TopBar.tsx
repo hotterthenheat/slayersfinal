@@ -18,6 +18,7 @@ import { useMarketData, useTicker } from '../../context/MarketDataContext';
 import AnimatedNumber from '../ui/AnimatedNumber';
 import TickerSearch from '../ui/TickerSearch';
 import { NAV_GROUPS, itemsByGroup, NAV_ITEMS, type NavGroup, type NavItem } from './nav';
+import { PAGE_CONTAINER } from './container';
 import { DUR, EASE, PILL } from '../../lib/motion';
 import { marketClock } from '../../core/calendar';
 
@@ -116,7 +117,16 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
 
   return (
     <>
-    <header className="glass absolute top-0 inset-x-0 h-14 border-b border-white/[0.07] flex items-center gap-3 px-4 z-40">
+    {/* The glass spans the viewport — it is the window's chrome — but its
+        CONTENTS ride the page container, so the wordmark starts exactly where
+        the page's first column starts instead of 32px inside it. */}
+    <header
+      className="glass absolute top-0 inset-x-0 h-14 border-b border-white/[0.07] z-40"
+      // Reserve the page's scrollbar gutter so the bar's column lands on the
+      // same left and right edges as the content scrolling beneath it.
+      style={{ paddingRight: 'var(--scrollbar-gutter, 0px)' }}
+    >
+      <div data-page-container="bar" className={`${PAGE_CONTAINER} h-full flex items-center gap-3`}>
       {/* Left zone: mobile menu + wordmark. Reserved, high-stacking so nav can
           never paint over it. */}
       <div className="flex items-center gap-2 shrink-0 relative z-10">
@@ -234,7 +244,7 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
           <span className="text-micro uppercase tracking-wider text-textMuted">ET</span>
         </span>
       </div>
-
+      </div>
     </header>
 
       {/* Mobile overlay — a SIBLING of the glass header, not a child. A

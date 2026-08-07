@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { PROSE_MEASURE } from '../../components/layout/container';
 
 export const LEGAL_EFFECTIVE = 'July 2026';
 
@@ -23,9 +24,20 @@ interface LegalLayoutProps {
 const slug = (i: number) => `section-${i + 1}`;
 
 const LegalLayout = ({ title, intro, sections }: LegalLayoutProps) => (
-  // Wider outer frame on desktop so the section TOC fills the left rail that a
-  // centered prose column otherwise leaves empty; single column below lg.
-  <div className="w-full max-w-6xl mx-auto lg:grid lg:grid-cols-[190px_minmax(0,1fr)] lg:gap-12">
+  /*
+    A document, so it keeps a readable measure — but it is CENTRED on the page,
+    not pinned to the left of it.
+
+    This used to be `max-w-6xl mx-auto` wrapping a `[190px, 1fr]` grid whose
+    prose cell then capped itself at `max-w-3xl` and left-aligned. The outer box
+    was centred; the words inside it were not, so the text sat left of the
+    page's midline while the bar above and the footer below were symmetric.
+
+    Now the page container owns the width (see layout/container.ts), the pair is
+    centred within it, and the prose is centred in its own cell. Everything on
+    the page shares one midline.
+  */
+  <div className="w-full lg:grid lg:grid-cols-[190px_minmax(0,auto)] lg:justify-center lg:gap-12">
     {/* Sticky contents — desktop only; jumps to each section anchor */}
     <nav aria-label="Contents" className="hidden lg:block">
       <div className="sticky top-6 flex flex-col gap-1.5">
@@ -45,7 +57,7 @@ const LegalLayout = ({ title, intro, sections }: LegalLayoutProps) => (
       </div>
     </nav>
 
-    <div className="max-w-3xl min-w-0">
+    <div className={`${PROSE_MEASURE} min-w-0`}>
       <Link
         to="/"
         className="inline-flex items-center gap-1.5 font-mono text-label uppercase tracking-widest text-textMuted hover:text-textPrimary transition-colors"
