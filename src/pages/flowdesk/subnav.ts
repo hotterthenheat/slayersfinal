@@ -1,4 +1,4 @@
-import { Radio, Sigma, Layers, ScanLine, Network, type LucideIcon } from 'lucide-react';
+import { Radio, Sigma, BrainCircuit, Layers, ScanLine, Network, type LucideIcon } from 'lucide-react';
 
 /** Trace subpage registry — drives the sub-tab bar and command palette. */
 export interface FlowDeskSubpage {
@@ -20,6 +20,12 @@ export const FLOWDESK_SUBPAGES: FlowDeskSubpage[] = [
     label: 'Gamma Tape',
     subtitle: 'Dealer gamma inventory built print-by-print from trade greeks and the aggressor',
     icon: Sigma,
+  },
+  {
+    path: '/trace/informed-flow',
+    label: 'Informed Flow',
+    subtitle: 'Smart money vs noise: each print scored for information content, and the informed tilt',
+    icon: BrainCircuit,
   },
   {
     path: '/trace/dark-pool',

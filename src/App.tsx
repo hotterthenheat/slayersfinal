@@ -23,6 +23,7 @@ import GexHistory from './pages/gex/GexHistory';
 import FlowDeskLayout from './pages/flowdesk/FlowDeskLayout';
 import LiveTape from './pages/flowdesk/LiveTape';
 import GammaTape from './pages/flowdesk/GammaTape';
+import InformedFlow from './pages/flowdesk/InformedFlow';
 import FlowScanner from './pages/flowdesk/FlowScanner';
 import MetaorderReconstruction from './components/flowdesk/MetaorderReconstruction';
 import DarkPool from './pages/flowdesk/DarkPool';
@@ -166,6 +167,7 @@ const App = () => {
               <Route index element={<Navigate to="/trace/live-tape" replace />} />
               <Route path="live-tape" element={<LiveTape />} />
               <Route path="gamma-tape" element={<GammaTape />} />
+              <Route path="informed-flow" element={<InformedFlow />} />
               <Route path="dark-pool" element={<DarkPool />} />
               {/* Liquidity Map moved to Pulse — it's an order-flow overlay surface, not a Trace desk */}
               <Route path="liquidity" element={<Navigate to="/pulse" replace />} />
