@@ -29,7 +29,6 @@ const FOOTER_COLS = [
       { label: 'Pinpoint', to: '/pinpoint' },
       { label: 'Prove It', to: '/prove-it' },
       { label: 'Stocks', to: '/stocks' },
-      { label: 'News', to: '/news' },
       { label: 'Earnings Hub', to: '/earnings' },
       { label: 'Tracker', to: '/tracker' },
     ],

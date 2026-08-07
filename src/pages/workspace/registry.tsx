@@ -33,7 +33,6 @@ import { buildDarkPoolView } from '../../data/darkpool';
 // Aliased: both engines name their observational verdict map the same thing.
 // Rendering through them is what keeps the engine's own word off the screen.
 import { buildStockBoard, VERDICT_LABEL as STOCK_VERDICT_LABEL, VERDICT_TONE as STOCK_VERDICT_TONE } from '../../data/stocks';
-import { buildNewsFeed } from '../../data/news';
 import { buildEarningsCalendar, VERDICT_LABEL as EARNINGS_VERDICT_LABEL, VERDICT_TONE as EARNINGS_VERDICT_TONE } from '../../data/earnings';
 import { runMonteCarlo } from '../../core/quant';
 import { fmtUsd } from '../../data/gex';
@@ -431,34 +430,6 @@ export const WIDGETS: WidgetDef[] = [
               <span className="font-mono text-label font-bold text-textPrimary">{p.ticker}</span>
               <SignalBadge tone={STOCK_VERDICT_TONE[p.verdict]}>{STOCK_VERDICT_LABEL[p.verdict]}</SignalBadge>
               <span className="ml-auto font-mono text-label font-semibold text-textPrimary tnum">{p.composite}</span>
-            </div>
-          ))}
-      </div>
-    ),
-  },
-  {
-    key: 'news-wire',
-    title: 'News Wire',
-    description: 'Latest headlines with expected move',
-    w: 5,
-    h: 4,
-    minW: 4,
-    minH: 3,
-    render: () => (
-      <div className="h-full min-h-0 overflow-y-auto">
-        {buildNewsFeed()
-          .slice(0, 8)
-          .map(n => (
-            <div key={n.id} className="px-2.5 py-2 border-b border-borderSubtle/30 last:border-0">
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-micro text-textMuted tnum">{n.time}</span>
-                {n.ticker && <span className="font-mono text-micro font-bold text-textPrimary">{n.ticker}</span>}
-                <span className={`ml-auto font-mono text-micro tnum ${n.prediction.expMove1dPct >= 0 ? 'text-bull' : 'text-bear'}`}>
-                  {n.prediction.expMove1dPct >= 0 ? '+' : ''}
-                  {n.prediction.expMove1dPct.toFixed(1)}%
-                </span>
-              </div>
-              <p className="mt-0.5 text-label text-textSecondary leading-snug line-clamp-1">{n.headline}</p>
             </div>
           ))}
       </div>

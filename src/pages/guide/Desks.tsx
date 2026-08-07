@@ -6,7 +6,6 @@ import {
   Crosshair,
   Sigma,
   BarChart3,
-  Newspaper,
   CalendarClock,
   BookMarked,
   type LucideIcon,
@@ -234,7 +233,6 @@ const DESKS: DeskDoc[] = [
 
 const RESEARCH: { icon: LucideIcon; name: string; to: string; blurb: string }[] = [
   { icon: BarChart3, name: 'Stocks', to: '/stocks', blurb: 'Equity picks and sector rotation — which groups are leading or lagging.' },
-  { icon: Newspaper, name: 'News', to: '/news', blurb: 'Headlines paired with a read on the likely reaction.' },
   { icon: CalendarClock, name: 'Earnings', to: '/earnings', blurb: 'The slate ahead, each print read QUALIFIED / RICH / NO EDGE against its implied move.' },
   { icon: BookMarked, name: 'Tracker', to: '/tracker', blurb: 'Your tracked setups and trade journal, saved in your browser.' },
 ];

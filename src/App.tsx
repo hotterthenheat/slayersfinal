@@ -26,7 +26,6 @@ import FlowScanner from './pages/flowdesk/FlowScanner';
 import MetaorderReconstruction from './components/flowdesk/MetaorderReconstruction';
 import DarkPool from './pages/flowdesk/DarkPool';
 import Stocks from './pages/Stocks';
-import News from './pages/News';
 import EarningsHub from './pages/EarningsHub';
 import Landing from './pages/landing/Landing';
 import TerminalIndex from './pages/terminal/TerminalIndex';
@@ -121,7 +120,6 @@ const App = () => {
             <Route path="/workspace" element={<Navigate to="/pulse" replace />} />
             <Route path="/compass" element={<Compass />} />
             <Route path="/stocks" element={<Stocks />} />
-            <Route path="/news" element={<News />} />
             <Route path="/earnings" element={<EarningsHub />} />
             <Route path="/prove-it" element={<Suspense fallback={<RouteFallback />}><ProveIt /></Suspense>} />
             {/* Fracture folded into Pinpoint Stress; Lotto folded into Compass */}

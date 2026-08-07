@@ -11,7 +11,6 @@
 
 import { dayKey, hGauss, hRange } from '../core/rng';
 import { buildDarkPoolFeed } from './darkpoolfeed';
-import { tickerSentiment } from './news';
 import { SECTORS, UNIVERSE, type Sector } from './universe';
 import type { Tone } from '../components/ui/tones';
 
@@ -61,7 +60,6 @@ export interface StockSleeves {
   momentum: number;
   quality: number;
   flow: number;
-  news: number;
 }
 
 export interface StockPick {
@@ -106,7 +104,9 @@ export interface SectorRow {
 
 // ---- sleeves ------------------------------------------------------------------
 
-const SLEEVE_WEIGHTS = { momentum: 0.32, quality: 0.24, flow: 0.26, news: 0.18 } as const;
+// News sleeve removed (no news wire on any feed tier); the three survivors are
+// renormalised to sum to 1 so the composite still spans its 0-100 range.
+const SLEEVE_WEIGHTS = { momentum: 0.39, quality: 0.293, flow: 0.317 } as const;
 
 function sleevesFor(ticker: string, day: string): StockSleeves {
   const s = (tag: string) => `${ticker}-${day}-stk-${tag}`;
@@ -114,7 +114,6 @@ function sleevesFor(ticker: string, day: string): StockSleeves {
     momentum: Math.round(hRange(s('mom'), 18, 96)),
     quality: Math.round(hRange(s('qual'), 25, 94)),
     flow: Math.round(hRange(s('flow'), 15, 95)),
-    news: Math.round(50 + tickerSentiment(ticker) * 48),
   };
 }
 
@@ -122,8 +121,7 @@ function composite(sl: StockSleeves): number {
   return Math.round(
     sl.momentum * SLEEVE_WEIGHTS.momentum +
       sl.quality * SLEEVE_WEIGHTS.quality +
-      sl.flow * SLEEVE_WEIGHTS.flow +
-      sl.news * SLEEVE_WEIGHTS.news
+      sl.flow * SLEEVE_WEIGHTS.flow
   );
 }
 
@@ -132,9 +130,6 @@ function thesisFor(name: string, sl: StockSleeves, verdict: StockVerdict): strin
     { k: 'momentum', v: sl.momentum, good: 'trend and RSI both constructive', bad: 'trend is broken and momentum works against you' },
     { k: 'quality', v: sl.quality, good: 'fundamentals screen clean (margins, growth, balance sheet)', bad: 'fundamental screen flags deterioration' },
     { k: 'flow', v: sl.flow, good: 'options flow and dark pool lean accumulative', bad: 'smart-money flow is distributive' },
-    // "live" reads as a freshness claim about the feed rather than about the
-    // risk, and this desk never claims a live feed.
-    { k: 'news', v: sl.news, good: 'news tape is a tailwind', bad: 'headline risk is open' },
   ].sort((a, b) => b.v - a.v);
   const best = ranked[0];
   const worst = ranked[ranked.length - 1];

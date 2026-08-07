@@ -11,7 +11,6 @@
 
 import { dayKey, hGauss, h01, hRange } from '../core/rng';
 import { expiryFor, fmtExpiryShort } from '../core/calendar';
-import { tickerSentiment } from './news';
 import { UNIVERSE } from './universe';
 import type { Sector } from './universe';
 import type { Tone } from '../components/ui/tones';
@@ -336,7 +335,7 @@ export function buildEarningsCalendar(): EarningsEvent[] {
         histAvgMovePct,
         richness,
         beatRate8q: record.beatRatePct,
-        revisionTrend: Math.max(-1, Math.min(1, hGauss(s('rev')) * 0.45 + tickerSentiment(u.ticker) * 0.4)),
+        revisionTrend: Math.max(-1, Math.min(1, hGauss(s('rev')) * 0.85)),
         ivRank: Math.round(hRange(s('ivr'), 35, 96)),
         technicalScore: Math.round(hRange(s('tech'), 22, 92)),
         flowLean: Math.max(-1, Math.min(1, hGauss(s('flow')) * 0.5)),

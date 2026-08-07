@@ -561,7 +561,6 @@ const Stocks = () => {
           <SleeveBar label="Mom" value={p.sleeves.momentum} title="Momentum: trend and RSI posture" />
           <SleeveBar label="Qual" value={p.sleeves.quality} title="Quality: margins, growth, balance sheet" />
           <SleeveBar label="Flow" value={p.sleeves.flow} title="Flow: options and dark-pool positioning" />
-          <SleeveBar label="News" value={p.sleeves.news} title="News: headline sentiment tape" />
         </span>
       ),
     },
@@ -709,7 +708,6 @@ const Stocks = () => {
                   <SleeveBar label="Mom" value={p.sleeves.momentum} />
                   <SleeveBar label="Qual" value={p.sleeves.quality} />
                   <SleeveBar label="Flow" value={p.sleeves.flow} />
-                  <SleeveBar label="News" value={p.sleeves.news} />
                 </div>
               </div>
             ))}

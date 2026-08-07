@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { X, Star, GitCompare, Info, Newspaper, CalendarClock, Waves, Ruler } from 'lucide-react';
+import { X, Star, GitCompare, Info, CalendarClock, Waves, Ruler } from 'lucide-react';
 import SignalBadge from '../components/ui/SignalBadge';
 import SegmentedControl from '../components/ui/SegmentedControl';
 import EmptyState from '../components/ui/EmptyState';
@@ -13,7 +13,6 @@ import { buildDarkPoolFeed } from '../data/darkpoolfeed';
 import { buildEarningsCalendar, type EarningsEvent } from '../data/earnings';
 import { FACTOR_GUIDE } from '../data/factorGuide';
 import { fmtUsd } from '../data/gex';
-import { buildNewsFeed, type NewsItem } from '../data/news';
 import { buildFlowAlerts, buildPulseFlow } from '../data/pulseflow';
 import { VERDICT_LABEL, VERDICT_TONE, scoreBand, type ScoreBand, type SectorRow, type StockPick } from '../data/stocks';
 import { buildSwingModel } from '../data/swingModel';
@@ -32,12 +31,8 @@ const signed = (v: number, dp = 1) => `${v >= 0 ? '+' : ''}${v.toFixed(dp)}%`;
     about a revision or flow lean is a fraction of anything. */
 const leanIdx = (v: number) => `${v >= 0 ? '+' : ''}${Math.round(v * 100)}`;
 const moveTone = (v: number): Tone => (v > 0 ? 'bull' : v < 0 ? 'bear' : 'neutral');
-/** Wire age. Past an hour "230m" stops being a duration anyone reads. */
-const age = (m: number) => (m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`);
-
 const TABS = [
   { value: 'READ', label: 'Read' },
-  { value: 'NEWS', label: 'News' },
   { value: 'EARNINGS', label: 'Earnings' },
   { value: 'FLOW', label: 'Flow' },
   { value: 'LEVELS', label: 'Levels' },
@@ -76,42 +71,6 @@ const FactorRow = ({ v, name, desc }: { v: number; name: string; desc: string })
       </span>
       <span className="text-label text-textMuted leading-snug">{desc}</span>
     </div>
-  );
-};
-
-/** One wire item with the outcome model that news.ts already ships for it. */
-const NewsCard = ({ n }: { n: NewsItem }) => {
-  const tone: Tone = n.sentiment > 0.12 ? 'bull' : n.sentiment < -0.12 ? 'bear' : 'neutral';
-  const p = n.prediction;
-  return (
-    <article className="inst-surface rounded-md px-3 py-2.5 flex flex-col gap-2">
-      <div className="flex items-center gap-2 font-mono text-micro text-textMuted min-w-0">
-        <span className="tnum shrink-0">{n.time}</span>
-        <span className="tnum shrink-0">{age(n.minutesAgo)} old</span>
-        <span className="truncate">{n.source}</span>
-        <span className="ml-auto shrink-0 tnum">impact {Math.round(n.magnitude * 100)}</span>
-        <SignalBadge tone={tone} className="shrink-0">
-          {n.category}
-        </SignalBadge>
-      </div>
-      <p className="text-data text-textPrimary leading-snug">{n.headline}</p>
-      <div className="grid grid-cols-4 gap-1.5">
-        <Stat label="P up" value={`${p.probUpPct}%`} tone={p.probUpPct >= 55 ? 'bull' : p.probUpPct <= 45 ? 'bear' : 'neutral'} />
-        <Stat label="1d" value={signed(p.expMove1dPct)} tone={moveTone(p.expMove1dPct)} />
-        <Stat label="5d" value={signed(p.expMove5dPct)} tone={moveTone(p.expMove5dPct)} />
-        <Stat label="Conf" value={`${p.confidencePct}%`} />
-      </div>
-      <div className="flex flex-col gap-1">
-        <p className="text-label text-textMuted leading-snug">
-          <span className="font-mono uppercase tracking-wider text-textSecondary">Base rate </span>
-          {p.analog}
-        </p>
-        <p className="text-label text-textSecondary leading-snug">
-          <span className="font-mono uppercase tracking-wider text-textMuted">Playbook </span>
-          {p.playbook}
-        </p>
-      </div>
-    </article>
   );
 };
 
@@ -226,8 +185,6 @@ const StockDetailDrawer = ({
   // Both are whole-board builds. They stay eager because they are cheap and the
   // empty states quote their own sizes, so the copy can never state a count the
   // engine has since changed.
-  const feed = useMemo(() => (ticker ? buildNewsFeed() : []), [ticker]);
-  const news = useMemo(() => feed.filter(n => n.ticker === ticker), [feed, ticker]);
   const calendar = useMemo(() => (ticker ? buildEarningsCalendar() : []), [ticker]);
   const earnings = calendar.find(e => e.ticker === ticker) ?? null;
 
@@ -387,26 +344,6 @@ const StockDetailDrawer = ({
                     </Section>
                   )}
                 </>
-              )}
-
-              {tab === 'NEWS' && (
-                <Section title="Wire" sub={news.length ? `${news.length} item${news.length > 1 ? 's' : ''}` : undefined}>
-                  {news.length ? (
-                    <div className="flex flex-col gap-2">
-                      {news.map(n => (
-                        <NewsCard key={n.id} n={n} />
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="inst-surface rounded-md">
-                      <EmptyState
-                        icon={Newspaper}
-                        title={`No ${pick.ticker} story on the wire`}
-                        body={`${feed.length} items ran across the screened universe today and none were on this name. Its News sleeve (${pick.sleeves.news}) reads the group's tone instead of a headline.`}
-                      />
-                    </div>
-                  )}
-                </Section>
               )}
 
               {tab === 'EARNINGS' && (

@@ -5,7 +5,6 @@ import {
   Radar,
   Sigma,
   BarChart3,
-  Newspaper,
   CalendarClock,
   Bookmark,
   Users,
@@ -72,14 +71,6 @@ export const NAV_ITEMS: NavItem[] = [
     code: '05',
     icon: Crosshair,
     description: 'GEX, dealer positioning, hedge impact and the fracture line',
-    group: 'Read',
-  },
-  {
-    path: '/news',
-    label: 'News',
-    code: '06',
-    icon: Newspaper,
-    description: 'Stock news with a predicted outcome per headline',
     group: 'Read',
   },
   {

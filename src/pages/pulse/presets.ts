@@ -327,13 +327,11 @@ export const PULSE_PRESETS: PulseLayout[] = [
     preset: true,
     panels: [
       { id: 'mc-stocks', key: 'stocks-board' },
-      { id: 'mc-news', key: 'news-wire' },
       { id: 'mc-chart', key: 'live-chart' },
       { id: 'mc-heat', key: 'gex-heatmap' },
     ],
     layout: [
-      L('mc-stocks', 0, 0, 6, 6),
-      L('mc-news', 6, 0, 6, 6),
+      L('mc-stocks', 0, 0, 12, 6),
       L('mc-chart', 0, 6, 8, 5),
       L('mc-heat', 8, 6, 4, 5),
     ],

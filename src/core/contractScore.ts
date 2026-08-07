@@ -21,7 +21,6 @@ import Simulator from './simulator';
 import { expiryFor } from './calendar';
 import { yearsToExpiry } from './optionTime';
 import { buildDarkPoolView } from '../data/darkpool';
-import { tickerSentiment } from '../data/news';
 import type { MarketSnapshot } from '../types/market';
 
 export type Horizon = 'LOTTO' | 'WEEKLIES' | 'SWINGS' | 'LEAPS';
@@ -86,7 +85,7 @@ export const HORIZONS: { key: Horizon; label: string; blurb: string }[] = [
   {
     key: 'SWINGS',
     label: 'Swings',
-    blurb: '2–6 week holds — the balanced sleeve: math, flow and news all get a vote.',
+    blurb: '2–6 week holds — the balanced sleeve: math and flow both get a vote.',
   },
   {
     key: 'LEAPS',
@@ -149,10 +148,14 @@ const HORIZON_SHAPE: Record<Horizon, { dtes: number[]; otm: number[] }> = {
 
 const WEIGHTS: Record<Horizon, Record<string, number>> = {
   // 0DTE: the math is a coin-flip, so the tape (flow) and decay/liquidity carry the vote
-  LOTTO: { math: 0.16, decay: 0.24, vol: 0.1, flow: 0.28, news: 0.06, liq: 0.16 },
-  WEEKLIES: { math: 0.24, decay: 0.26, vol: 0.08, flow: 0.22, news: 0.08, liq: 0.12 },
-  SWINGS: { math: 0.22, decay: 0.14, vol: 0.14, flow: 0.2, news: 0.16, liq: 0.14 },
-  LEAPS: { math: 0.18, decay: 0.04, vol: 0.28, flow: 0.12, news: 0.22, liq: 0.16 },
+  // The news lean is gone (no news wire on any feed tier). Each horizon's
+  // remaining five weights are renormalised to sum to 1 so the composite still
+  // spans 0-100 — the news weight is not dropped as dead weight, it is
+  // redistributed proportionally across the survivors.
+  LOTTO: { math: 0.17, decay: 0.255, vol: 0.106, flow: 0.299, liq: 0.17 },
+  WEEKLIES: { math: 0.261, decay: 0.283, vol: 0.087, flow: 0.239, liq: 0.13 },
+  SWINGS: { math: 0.262, decay: 0.167, vol: 0.167, flow: 0.238, liq: 0.166 },
+  LEAPS: { math: 0.231, decay: 0.051, vol: 0.359, flow: 0.154, liq: 0.205 },
 };
 
 // Theta scored against a horizon-realistic ceiling — 0DTE burns a huge % of
@@ -176,7 +179,6 @@ export function horizonForDte(dte: number): Horizon {
 /** Shared per-name context — one read per build, reused across every candidate. */
 interface ScoreCtx {
   dp: ReturnType<typeof buildDarkPoolView>;
-  news: number;
   /** The name's own volatility — the reference every vol read on the desk is against. */
   nameIv: number;
   baseIv: number;
@@ -188,7 +190,6 @@ interface ScoreCtx {
 function buildScoreCtx(snapshot: MarketSnapshot): ScoreCtx {
   const { ticker, spot, chain, indicators } = snapshot;
   const dp = buildDarkPoolView(snapshot);
-  const news = tickerSentiment(ticker);
   /*
     The level options are priced at is the NAME's, not this module's opinion of
     it.
@@ -220,7 +221,7 @@ function buildScoreCtx(snapshot: MarketSnapshot): ScoreCtx {
   // even past the chain window's edge (LEAPS reach further OTM than it holds).
   const sorted = [...chain].sort((a, b) => a.strike - b.strike);
   const step = sorted.length > 1 ? Math.abs(sorted[1].strike - sorted[0].strike) : Math.max(spot * 0.005, 0.5);
-  return { dp, news, nameIv, baseIv, trendUp, rsi, step };
+  return { dp, nameIv, baseIv, trendUp, rsi, step };
 }
 
 /** Weigh one concrete contract with the full factor stack. This is the single
@@ -236,7 +237,7 @@ function scoreCandidate(
 ): WeighedContract {
   const { ticker, spot, chain } = snapshot;
   const weights = WEIGHTS[horizon];
-  const { dp, news, nameIv, baseIv, trendUp, rsi, step } = ctx;
+  const { dp, nameIv, baseIv, trendUp, rsi, step } = ctx;
 
   const strike = Math.max(step, Math.round(strikeInput / step) * step);
   const node = chain.reduce(
@@ -317,14 +318,6 @@ function scoreCandidate(
         ? `Smart-money flow leans against ${right === 'C' ? 'calls' : 'puts'} here — you'd be fading the desks.`
         : 'Flow is mixed — no institutional wind either way.';
 
-  const newsScore = Math.round(clamp(50 + news * 48 * dirSign, 4, 96));
-  const newsDetail =
-    Math.abs(news) < 0.12
-      ? 'Quiet tape on the name — news is a non-factor.'
-      : newsScore >= 55
-        ? 'The headline tape supports the direction.'
-        : 'Headline risk points the other way.';
-
   const liqScore = Math.round(clamp(100 - spreadPct * 13 + Math.log10(Math.max(oiCount, 10)) * 6, 4, 98));
   const liqDetail =
     liqScore >= 55
@@ -339,7 +332,6 @@ function scoreCandidate(
     { key: 'decay', label: 'Theta burden', score: decayScore, weight: weights.decay, detail: decayDetail },
     { key: 'vol', label: 'Vol pricing', score: volScore, weight: weights.vol, detail: volDetail },
     { key: 'flow', label: 'Flow & dark pool', score: flowScore, weight: weights.flow, detail: flowDetail },
-    { key: 'news', label: 'News lean', score: newsScore, weight: weights.news, detail: newsDetail },
     { key: 'liq', label: 'Liquidity', score: liqScore, weight: weights.liq, detail: liqDetail },
   ];
 

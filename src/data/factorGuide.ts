@@ -30,10 +30,4 @@ export const FACTOR_GUIDE: {
     name: 'Flow',
     desc: 'Positioning — options flow and dark-pool lean, accumulation vs distribution.',
   },
-  {
-    key: 'news',
-    short: 'News',
-    name: 'News',
-    desc: 'News-tape sentiment — headline tailwind against live headline risk.',
-  },
 ];
