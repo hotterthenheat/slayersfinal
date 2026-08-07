@@ -7,7 +7,8 @@
 ==================================================
 */
 
-import Simulator, { settledOI } from '../core/simulator';
+import Simulator from '../core/simulator';
+import { settledOI } from '../core/openInterest';
 import { expiryFor, fmtExpiryLong } from '../core/calendar';
 import { math } from '../core/mathProvider';
 import { seedSessionTape } from './tapeSeed';

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { enrichPrint } from './flowtape';
 import { buildInformedFlow, scorePrint } from './informedFlow';
-import { settledOI } from '../core/simulator';
+import { settledOI } from '../core/openInterest';
 import { TRADE_CONDITION, STOCK_OPTION_CODES } from '../types/conditions';
 import type { FlowPrint } from '../types/flowdesk';
 import type { TapeOrder } from '../types/market';

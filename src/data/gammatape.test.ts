@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { enrichPrint } from './flowtape';
 import { buildGammaTape, dealerSignOf } from './gammatape';
-import { settledOI } from '../core/simulator';
+import { settledOI } from '../core/openInterest';
 import type { FlowPrint } from '../types/flowdesk';
 import type { TapeOrder } from '../types/market';
 

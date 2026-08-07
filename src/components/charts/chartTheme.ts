@@ -70,12 +70,21 @@ export const valueAxisLeft = {
   width: 52,
 } as const;
 
-/** Standard axis props for the category / time axis along the bottom. */
+/**
+ * Standard axis props for the category / time axis along the bottom.
+ *
+ * `padding` insets the first and last tick from the plot edges. Tick labels are
+ * centred on their tick, so a tick sitting exactly on the left edge has half its
+ * label outside the clip region: the Vol Lab's skew slice rendered its 0.60
+ * column as "60". The inset is inside the plot area, not an outer margin, so it
+ * costs nothing on charts that already reserve width for a left-hand axis.
+ */
 export const categoryAxis = {
   tick: axisTick,
   tickLine: false,
   axisLine: AXIS_LINE,
   minTickGap: 18,
+  padding: { left: 10, right: 10 },
 } as const;
 
 /**

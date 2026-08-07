@@ -11,7 +11,6 @@ import type {
   Greeks,
   Indicators,
   MarketSnapshot,
-  OpenInterest,
   StrikeNode,
   TapeOrder,
   TickerConfig,
@@ -25,26 +24,21 @@ import { lookup as universeLookup } from '../data/universe';
 // module this file must never import: that dependency runs the other way, and
 // the cycle surfaces as `undefined` at module init rather than as a type error.)
 import { dayKey } from './rng';
-import { etTime, isoDate, isTradingDay, today } from './calendar';
+import { etTime } from './calendar';
 import { expiryCalendar, listingConvention } from './expiryCalendar';
 
-/** The session date settled open interest represents: the last trading day
-    strictly before today. OI publishes ~06:30 ET for the PRIOR session's close,
-    so this is the honest "as of" for every OI the simulator emits. Computed once. */
-const OI_SETTLED_ASOF: string = (() => {
-  const d = today();
-  do {
-    d.setDate(d.getDate() - 1);
-  } while (!isTradingDay(d));
-  return isoDate(d);
-})();
+/*
+  OI freshness lives in core/openInterest.ts, not here.
 
-/** Wrap a raw open-interest count as a SETTLED figure. The simulator has no
-    intraday estimator (that is a later phase), so every OI it emits is the prior
-    session's settled value. Source: ThetaData daily open_interest. */
-export function settledOI(value: number): OpenInterest {
-  return { value, asOf: OI_SETTLED_ASOF, freshness: 'SETTLED' };
-}
+  The provider seam says in its own header that the simulator's conveniences are
+  not part of the contract and nothing outside core/ should import them — but
+  data/flowtape needed to stamp the OI on each print, so it was importing
+  `settledOI` straight off this module. Re-exported below so existing callers
+  inside core/ keep working; new callers should import from core/openInterest.
+*/
+import { settledOI, OI_SETTLED_ASOF } from './openInterest';
+
+export { settledOI, OI_SETTLED_ASOF };
 
 const Simulator = (() => {
   /*
