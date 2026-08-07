@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
-import { AnimatePresence, motion } from 'framer-motion';
-import { X, Star, GitCompare, Info, CalendarClock, Waves, Ruler } from 'lucide-react';
+import { Star, GitCompare, Info, CalendarClock, Waves, Ruler } from 'lucide-react';
+import DetailModal from '../components/ui/DetailModal';
+import { useExpandPreference } from '../hooks/useExpandPreference';
 import SignalBadge from '../components/ui/SignalBadge';
 import SegmentedControl from '../components/ui/SegmentedControl';
 import EmptyState from '../components/ui/EmptyState';
@@ -17,8 +17,6 @@ import { buildFlowAlerts, buildPulseFlow } from '../data/pulseflow';
 import { VERDICT_LABEL, VERDICT_TONE, scoreBand, type ScoreBand, type SectorRow, type StockPick } from '../data/stocks';
 import { buildSwingModel } from '../data/swingModel';
 import { toneText, type Tone } from '../components/ui/tones';
-import { useFocusTrap } from '../hooks/useFocusTrap';
-import { DUR, EASE } from '../lib/motion';
 
 // A sleeve score is a magnitude, so the fill is `data-bar`; only the weak band
 // takes a tone, because a sub-40 sleeve is the one reading that argues against
@@ -164,8 +162,11 @@ const StockDetailModal = ({
   sectorRow = null,
   sectorRank = null,
 }: StockDetailModalProps) => {
-  const trapRef = useFocusTrap<HTMLElement>(!!pick);
   const [tab, setTab] = useState<DrawerTab>('READ');
+  // Held here rather than inside the modal because expanding this drilldown
+  // means BUILDING more — the dark-pool read, the options book and the swing
+  // model are memos below, above the point a render prop could reach.
+  const [expanded, toggleExpanded] = useExpandPreference();
   const ticker = pick?.ticker ?? null;
   const price = pick?.price ?? 0;
 
@@ -173,23 +174,17 @@ const StockDetailModal = ({
     setTab('READ');
   }, [ticker]);
 
-  useEffect(() => {
-    if (!pick) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [pick, onClose]);
-
   // Both are whole-board builds. They stay eager because they are cheap and the
   // empty states quote their own sizes, so the copy can never state a count the
   // engine has since changed.
   const calendar = useMemo(() => (ticker ? buildEarningsCalendar() : []), [ticker]);
   const earnings = calendar.find(e => e.ticker === ticker) ?? null;
 
-  const wantsFlow = tab === 'FLOW';
-  const wantsBook = tab === 'FLOW' || tab === 'LEVELS';
+  // Expanded is the whole record at once, so everything is wanted. Collapsed
+  // still builds only what the open tab needs — the dark-pool sweep and the
+  // options book are not free.
+  const wantsFlow = tab === 'FLOW' || expanded;
+  const wantsBook = tab === 'FLOW' || tab === 'LEVELS' || expanded;
 
   // The feed is sector-grouped and ordered by notional, so the row's position
   // in its group IS its off-exchange rank — no second ranking pass.
@@ -213,69 +208,76 @@ const StockDetailModal = ({
   }, [snapshot]);
 
   const swing = useMemo(
-    () => (ticker && tab === 'LEVELS' ? buildSwingModel(ticker, price, Math.floor(Date.now() / 1000)) : null),
-    [ticker, price, tab]
+    () => (ticker && (tab === 'LEVELS' || expanded) ? buildSwingModel(ticker, price, Math.floor(Date.now() / 1000)) : null),
+    [ticker, price, tab, expanded]
   );
 
   const topPrints = pulse ? [...pulse.prints].sort((a, b) => b.value - a.value).slice(0, 4) : [];
 
-  return createPortal(
-    <AnimatePresence>
-      {pick && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-6">
-          <motion.div
-            className="absolute inset-0 bg-black/70 backdrop-blur-[3px]"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: DUR.fast }}
-            onClick={onClose}
-          />
-          {/* Centred, not a right-hand slide-in. The drawer this replaces was a
-              560px column pinned to the screen edge; the same four tabs now open
-              in the middle at nearly twice the width, so the read, the earnings
-              record, the flow and the levels each get room to be read rather
-              than scrolled past one narrow line at a time. */}
-          <motion.aside
-            ref={trapRef}
-            tabIndex={-1}
-            role="dialog"
-            aria-modal="true"
-            aria-label={`${pick.ticker} detail`}
-            className="relative flex w-full max-w-4xl flex-col overflow-hidden rounded-lg border border-borderMuted bg-panel shadow-overlay focus:outline-none max-h-[calc(100vh-1.5rem)] sm:max-h-[88vh]"
-            initial={{ opacity: 0, scale: 0.97, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.97, y: 10 }}
-            transition={{ duration: DUR.quick, ease: EASE }}
-          >
-            {/* Header */}
-            <header className="shrink-0 border-b border-borderSubtle bg-panelRaised">
-              <div className="flex items-start justify-between gap-3 px-4 py-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-base font-bold text-textPrimary">{pick.ticker}</span>
-                    <SignalBadge tone={VERDICT_TONE[pick.verdict]}>{VERDICT_LABEL[pick.verdict]}</SignalBadge>
-                  </div>
-                  <div className="mt-0.5 text-caption text-textSecondary truncate">{pick.name}</div>
-                  <div className="mt-0.5 font-mono text-label uppercase tracking-wider text-textMuted">
-                    {pick.sector}
-                    {sectorRank && sectorRank.rank > 0 ? ` · #${sectorRank.rank} of ${sectorRank.of}` : ''}
-                  </div>
-                </div>
-                <button
-                  onClick={onClose}
-                  aria-label="Close detail"
-                  className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded border border-borderSubtle bg-white/[0.02] text-textSecondary hover:text-textPrimary hover:border-borderMuted transition-colors"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="px-4 pb-2.5">
+  return (
+    <DetailModal
+      open={!!pick}
+      onClose={onClose}
+      ariaLabel={pick ? `${pick.ticker} detail` : 'stock detail'}
+      expanded={expanded}
+      onToggleExpanded={toggleExpanded}
+      header={
+        pick && (
+          <>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-base font-bold text-textPrimary">{pick.ticker}</span>
+              <SignalBadge tone={VERDICT_TONE[pick.verdict]}>{VERDICT_LABEL[pick.verdict]}</SignalBadge>
+            </div>
+            <div className="mt-0.5 text-caption text-textSecondary truncate">{pick.name}</div>
+            <div className="mt-0.5 font-mono text-label uppercase tracking-wider text-textMuted">
+              {pick.sector}
+              {sectorRank && sectorRank.rank > 0 ? ` · #${sectorRank.rank} of ${sectorRank.of}` : ''}
+            </div>
+            {/* Expanded shows all four sections at once, so the picker would be
+                choosing between things that are all already on screen. */}
+            {!expanded && (
+              <div className="mt-2">
                 <SegmentedControl ariaLabel="Detail section" options={TABS} value={tab} onChange={setTab} />
               </div>
-            </header>
+            )}
+          </>
+        )
+      }
+      footer={
+        pick && (
+          <>
+            <button
+              onClick={() => onToggleWatch(pick.ticker)}
+              aria-pressed={isWatched}
+              className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded border font-mono text-caption uppercase tracking-wider transition-colors ${
+                isWatched
+                  ? 'border-select/30 bg-select/10 text-select'
+                  : 'border-borderSubtle bg-white/[0.02] text-textSecondary hover:text-textPrimary hover:border-borderMuted'
+              }`}
+            >
+              <Star className={`w-3.5 h-3.5 ${isWatched ? 'fill-current' : ''}`} />
+              {isWatched ? 'Watching' : 'Watch'}
+            </button>
+            <button
+              onClick={() => onToggleCompare(pick.ticker)}
+              aria-pressed={inCompare}
+              className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded border font-mono text-caption uppercase tracking-wider transition-colors ${
+                inCompare
+                  ? 'border-select/30 bg-select/10 text-select'
+                  : 'border-borderSubtle bg-white/[0.02] text-textSecondary hover:text-textPrimary hover:border-borderMuted'
+              }`}
+            >
+              <GitCompare className="w-3.5 h-3.5" />
+              {inCompare ? 'Comparing' : 'Compare'}
+            </button>
+            <TickerJump ticker={pick.ticker} horizon="SWINGS" />
+          </>
+        )
+      }
+    >
+      {pick && (
+        <div className="flex flex-col gap-4">
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-4 sm:px-5">
               {/* Price / score / risk — carried on every tab so the number the
                   reader is reasoning about never leaves the screen. */}
               <div className="grid grid-cols-4 gap-1.5">
@@ -303,7 +305,8 @@ const StockDetailModal = ({
                 />
               </div>
 
-              {tab === 'READ' && (
+              {(tab === 'READ' || expanded) && (
+
                 <>
                   <Section title="30d relative strength">
                     <div className="inst-surface rounded-md px-3 py-2.5 overflow-x-auto no-scrollbar">
@@ -352,7 +355,8 @@ const StockDetailModal = ({
                 </>
               )}
 
-              {tab === 'EARNINGS' && (
+              {(tab === 'EARNINGS' || expanded) && (
+
                 <Section title="Reporting record" sub={earnings ? earnings.dateLabel : undefined}>
                   {earnings ? (
                     <EarningsBlock e={earnings} />
@@ -368,7 +372,8 @@ const StockDetailModal = ({
                 </Section>
               )}
 
-              {tab === 'FLOW' && (
+              {(tab === 'FLOW' || expanded) && (
+
                 <>
                   <Section title="Off-exchange tape" sub={darkPool ? `#${darkPool.rank} of ${darkPool.of} by notional` : undefined}>
                     {darkPool ? (
@@ -456,7 +461,8 @@ const StockDetailModal = ({
                 </>
               )}
 
-              {tab === 'LEVELS' && (
+              {(tab === 'LEVELS' || expanded) && (
+
                 <>
                   {swing && (
                     <Section title="Swing zones" sub="daily model, anchored to last">
@@ -527,42 +533,9 @@ const StockDetailModal = ({
                 </>
               )}
 
-              {/* Actions */}
-              <div className="flex flex-col gap-2 pt-1">
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => onToggleWatch(pick.ticker)}
-                    aria-pressed={isWatched}
-                    className={`flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded border font-mono text-caption uppercase tracking-wider transition-colors ${
-                      isWatched
-                        ? 'border-select/30 bg-select/10 text-select'
-                        : 'border-borderSubtle bg-white/[0.02] text-textSecondary hover:text-textPrimary hover:border-borderMuted'
-                    }`}
-                  >
-                    <Star className={`w-3.5 h-3.5 ${isWatched ? 'fill-current' : ''}`} />
-                    {isWatched ? 'Watching' : 'Watch'}
-                  </button>
-                  <button
-                    onClick={() => onToggleCompare(pick.ticker)}
-                    aria-pressed={inCompare}
-                    className={`flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded border font-mono text-caption uppercase tracking-wider transition-colors ${
-                      inCompare
-                        ? 'border-select/30 bg-select/10 text-select'
-                        : 'border-borderSubtle bg-white/[0.02] text-textSecondary hover:text-textPrimary hover:border-borderMuted'
-                    }`}
-                  >
-                    <GitCompare className="w-3.5 h-3.5" />
-                    {inCompare ? 'Comparing' : 'Compare'}
-                  </button>
-                </div>
-                <TickerJump ticker={pick.ticker} horizon="SWINGS" className="justify-center" />
-              </div>
-            </div>
-          </motion.aside>
         </div>
       )}
-    </AnimatePresence>,
-    document.body
+    </DetailModal>
   );
 };
 

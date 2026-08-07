@@ -3,6 +3,7 @@ import { SkeletonRows } from '../../components/ui/Skeleton';
 import SignalBadge from '../../components/ui/SignalBadge';
 import DetailModal, { Field, Section, Block } from '../../components/ui/DetailModal';
 import CrossDeskLinks from '../../components/flowdesk/CrossDeskLinks';
+import PayoffLadder from '../../components/flowdesk/PayoffLadder';
 import { math } from '../../core/mathProvider';
 import { fmtUsd } from '../../data/gex';
 import type { ContractRef } from '../../data/contractflow';
@@ -72,6 +73,11 @@ const ScannerRowModal = ({ row, spot, onClose }: ScannerRowModalProps) => {
   const perLot = row ? row.avgFill * 100 : 0;
   const oiNotional = row ? row.oi * perLot : 0;
   const askPct = row ? 100 - row.bidPct : 0;
+  // Definitional split of the day's average fill: what the contract is already
+  // worth against what is being paid for time and vol.
+  const intrinsic = row ? Math.max(row.right === 'C' ? spot - row.strike : row.strike - spot, 0) : 0;
+  const extrinsic = row ? Math.max(row.avgFill - intrinsic, 0) : 0;
+  const extrinsicPct = row && row.avgFill > 0 ? (extrinsic / row.avgFill) * 100 : 0;
 
   return (
     <DetailModal
@@ -106,8 +112,9 @@ const ScannerRowModal = ({ row, spot, onClose }: ScannerRowModalProps) => {
         row && <CrossDeskLinks ticker={row.ticker} strike={row.strike} right={row.right} onNavigate={onClose} />
       }
     >
-      {row && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {expanded =>
+        row && (
+        <div className={`grid grid-cols-1 gap-4 ${expanded ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
           <div className="flex flex-col gap-4 min-w-0">
           {/* Headline premium + conviction */}
           <div className="inst-surface rounded-md px-4 py-3 flex items-end justify-between gap-3">
@@ -242,6 +249,63 @@ const ScannerRowModal = ({ row, spot, onClose }: ScannerRowModalProps) => {
             </p>
           </Block>
           </div>
+
+          {/* ── third column: only at full width ── */}
+          {expanded && (
+            <div className="flex flex-col gap-4 min-w-0">
+              <Section title="What the premium buys" cols={3}>
+                <Field
+                  label="Intrinsic"
+                  value={`$${intrinsic.toFixed(2)}`}
+                  sub={intrinsic > 0 ? 'already in the money' : 'nothing yet'}
+                  tone={intrinsic > 0 ? 'text-bull' : 'text-textMuted'}
+                />
+                <Field
+                  label="Time & vol"
+                  value={`$${extrinsic.toFixed(2)}`}
+                  sub={`${extrinsicPct.toFixed(0)}% of the fill`}
+                  tone={extrinsicPct >= 80 ? 'text-warn' : 'text-textPrimary'}
+                />
+                <Field
+                  label="Theta / day"
+                  value={g ? `$${Math.abs(g.theta * 100).toFixed(2)}` : '—'}
+                  sub="one lot, per day"
+                  tone="text-bear"
+                />
+              </Section>
+
+              <PayoffLadder
+                spot={spot}
+                strike={row.strike}
+                right={row.right}
+                cost={row.avgFill}
+                size={1}
+              />
+
+              <Block title="Scale">
+                <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
+                  <span className="flex flex-col">
+                    <span className="font-mono text-label uppercase tracking-widest text-textMuted">Per lot</span>
+                    <span className="font-mono text-data font-bold tnum text-textPrimary">{fmtUsd(perLot)}</span>
+                  </span>
+                  <span className="flex flex-col">
+                    <span className="font-mono text-label uppercase tracking-widest text-textMuted">Open interest</span>
+                    <span className="font-mono text-data font-bold tnum text-textSecondary">
+                      {row.oi.toLocaleString()} lots
+                    </span>
+                  </span>
+                  <span className="flex flex-col">
+                    <span className="font-mono text-label uppercase tracking-widest text-textMuted">OI notional</span>
+                    <span className="font-mono text-data font-bold tnum text-textSecondary">{fmtUsd(oiNotional)}</span>
+                  </span>
+                </div>
+                <p className="text-micro leading-relaxed text-textMuted">
+                  Open interest valued at today&rsquo;s average fill — what the whole outstanding position would cost to
+                  put on at this price, not what it was paid for.
+                </p>
+              </Block>
+            </div>
+          )}
         </div>
       )}
     </DetailModal>

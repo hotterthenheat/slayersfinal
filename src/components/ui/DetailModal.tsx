@@ -1,9 +1,10 @@
-import { useEffect, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { X } from 'lucide-react';
+import { Maximize2, Minimize2, X } from 'lucide-react';
 import { DUR, EASE } from '../../lib/motion';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { readExpandPref, writeExpandPref } from '../../hooks/useExpandPreference';
 
 /*
 ==================================================
@@ -24,6 +25,14 @@ import { useFocusTrap } from '../../hooks/useFocusTrap';
   Owns the portal, the backdrop, the focus trap, Escape-to-close and the scroll
   region — callers supply a header and a body and nothing else, so every
   drilldown in the terminal behaves identically.
+
+  TWO SIZES, because two readers want different things from the same click. The
+  default is the drilldown: enough to answer the question the row raised,
+  without taking the desk away. Expand gives the same object the whole screen —
+  and callers are handed the flag, so expanding is not just the card getting
+  bigger, it is the card showing what it left out. The choice is remembered, so
+  whoever prefers the full view gets it on every drilldown from then on rather
+  than pressing the same button every time.
 ==================================================
 */
 
@@ -87,17 +96,63 @@ interface DetailModalProps {
   /** Sticky header content (title chips, timestamp, …). */
   header: ReactNode;
   /**
-   * Max width. `wide` (default) is the two-column drilldown; `standard` suits a
-   * drilldown that genuinely has one column of content.
+   * Max width when NOT expanded. `wide` (default) is the two-column drilldown;
+   * `standard` suits a drilldown that genuinely has one column of content.
    */
   size?: 'standard' | 'wide';
+  /**
+   * Offer the full-screen view. Default on. Turn it off for a drilldown that
+   * has nothing more to say at full width — a control that only makes the same
+   * content wider is a control that lies about there being more.
+   */
+  expandable?: boolean;
+  /**
+   * Drive the expanded state from the caller instead of internally. Pair with
+   * `useExpandPreference` when the caller needs the flag above its markup.
+   */
+  expanded?: boolean;
+  onToggleExpanded?: () => void;
   /** Optional pinned footer — actions that should not scroll away. */
   footer?: ReactNode;
-  children: ReactNode;
+  /**
+   * A function child is handed the expanded flag, so a caller can render the
+   * extra columns and deeper sections that only earn their place at full width.
+   */
+  children: ReactNode | ((expanded: boolean) => ReactNode);
 }
 
-const DetailModal = ({ open, onClose, ariaLabel, header, size = 'wide', footer, children }: DetailModalProps) => {
+const DetailModal = ({
+  open,
+  onClose,
+  ariaLabel,
+  header,
+  size = 'wide',
+  expandable = true,
+  expanded: expandedProp,
+  onToggleExpanded,
+  footer,
+  children,
+}: DetailModalProps) => {
   const trapRef = useFocusTrap<HTMLDivElement>(open);
+  const [ownExpanded, setOwnExpanded] = useState(readExpandPref);
+  const controlled = expandedProp != null;
+
+  // Re-read on each open so a preference set in one drilldown is already in
+  // force in the next, including one opened on another desk.
+  useEffect(() => {
+    if (open && !controlled) setOwnExpanded(readExpandPref());
+  }, [open, controlled]);
+
+  const toggleOwn = useCallback(() => {
+    setOwnExpanded(prev => {
+      writeExpandPref(!prev);
+      return !prev;
+    });
+  }, []);
+
+  const expanded = controlled ? expandedProp : ownExpanded;
+  const toggleExpanded = controlled ? (onToggleExpanded ?? (() => {})) : toggleOwn;
+  const isFull = expandable && expanded;
 
   useEffect(() => {
     if (!open) return;
@@ -138,8 +193,13 @@ const DetailModal = ({ open, onClose, ariaLabel, header, size = 'wide', footer, 
             role="dialog"
             aria-modal="true"
             aria-label={ariaLabel}
-            className={`relative flex w-full flex-col overflow-hidden rounded-lg border border-borderMuted bg-panel shadow-overlay focus:outline-none max-h-[calc(100vh-1.5rem)] sm:max-h-[88vh] ${
-              size === 'wide' ? 'max-w-5xl' : 'max-w-2xl'
+            className={`relative flex w-full flex-col overflow-hidden rounded-lg border border-borderMuted bg-panel shadow-overlay focus:outline-none ${
+              isFull
+                // Fills what the padding leaves, rather than growing to fit its
+                // content — the expanded view is a page, and a page has a
+                // bottom edge the reader can rely on.
+                ? 'max-w-[110rem] h-[calc(100vh-1.5rem)] sm:h-[calc(100vh-3rem)]'
+                : `max-h-[calc(100vh-1.5rem)] sm:max-h-[88vh] ${size === 'wide' ? 'max-w-5xl' : 'max-w-2xl'}`
             }`}
             // Rises into the middle of the screen rather than sliding in from an
             // edge — the drilldown is the thing you asked for, not a side tab.
@@ -150,15 +210,34 @@ const DetailModal = ({ open, onClose, ariaLabel, header, size = 'wide', footer, 
           >
             <header className="flex shrink-0 items-start justify-between gap-3 border-b border-borderSubtle bg-panelRaised px-4 py-3 sm:px-5">
               <div className="min-w-0">{header}</div>
-              <button
-                onClick={onClose}
-                aria-label="Close detail"
-                className="shrink-0 inline-flex h-7 w-7 items-center justify-center rounded border border-borderSubtle bg-white/[0.02] text-textSecondary transition-colors hover:border-borderMuted hover:text-textPrimary"
-              >
-                <X className="h-4 w-4" />
-              </button>
+              <div className="flex shrink-0 items-center gap-1.5">
+                {expandable && (
+                  <button
+                    onClick={toggleExpanded}
+                    aria-pressed={isFull}
+                    aria-label={isFull ? 'Collapse to the drilldown view' : 'Expand to the full view'}
+                    title={isFull ? 'Back to the drilldown view' : 'Expand — full screen, with everything this print carries'}
+                    className={`inline-flex h-7 w-7 items-center justify-center rounded border transition-colors ${
+                      isFull
+                        ? 'border-select/40 bg-select/10 text-select'
+                        : 'border-borderSubtle bg-white/[0.02] text-textSecondary hover:border-borderMuted hover:text-textPrimary'
+                    }`}
+                  >
+                    {isFull ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                  </button>
+                )}
+                <button
+                  onClick={onClose}
+                  aria-label="Close detail"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded border border-borderSubtle bg-white/[0.02] text-textSecondary transition-colors hover:border-borderMuted hover:text-textPrimary"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
             </header>
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">{children}</div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
+              {typeof children === 'function' ? children(isFull) : children}
+            </div>
             {footer != null && (
               <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-borderSubtle bg-panelRaised px-4 py-3 sm:px-5">
                 {footer}

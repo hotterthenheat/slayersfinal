@@ -3,6 +3,7 @@ import SignalBadge from '../../components/ui/SignalBadge';
 import DetailModal, { Field, Section, Block } from '../../components/ui/DetailModal';
 import CrossDeskLinks from '../../components/flowdesk/CrossDeskLinks';
 import PrintSessionChart from './PrintSessionChart';
+import PayoffLadder from '../../components/flowdesk/PayoffLadder';
 import { aggressorOf, competingRead, moneyness, printImplication, printRead, sizeVsOi } from './printRead';
 import { sentimentOf } from '../../data/flowtape';
 import { scorePrint } from '../../data/informedFlow';
@@ -86,6 +87,28 @@ const TapeRowModal = ({ print, onClose, isMarked, onToggleMark }: TapeRowModalPr
   const breakeven = print ? (print.right === 'C' ? print.strike + print.fill : print.strike - print.fill) : 0;
   const beMovePct = print ? ((breakeven - print.spot) / print.spot) * 100 : 0;
 
+  // Value split at the fill — definitional, not a valuation: intrinsic is what
+  // the contract would be worth if expiry were now, and the rest is what the
+  // buyer paid for the time and the vol.
+  const intrinsic = print ? Math.max(print.right === 'C' ? print.spot - print.strike : print.strike - print.spot, 0) : 0;
+  const extrinsic = print ? Math.max(print.fill - intrinsic, 0) : 0;
+  const extrinsicPct = print && print.fill > 0 ? (extrinsic / print.fill) * 100 : 0;
+  // The bid/ask IV pair the single-`iv` model collapses to a mid. Present only
+  // once a provider supplies it (P0.1) — the snapshot simulator does not.
+  const volSpread = print?.bidIv != null && print?.askIv != null ? print.askIv - print.bidIv : null;
+  // 2nd/3rd order. The snapshot math ships 1st order only, so this is the seam
+  // where a house model's extra columns appear the moment it is installed.
+  const higher = print?.greeks
+    ? ([
+        ['Vanna', print.greeks.vanna, 'dΔ per vol point'],
+        ['Charm', print.greeks.charm, 'dΔ per day'],
+        ['Vomma', print.greeks.vomma, 'dVega per vol point'],
+        ['Veta', print.greeks.veta, 'dVega per day'],
+        ['Speed', print.greeks.speed, 'dΓ per $1'],
+        ['Zomma', print.greeks.zomma, 'dΓ per vol point'],
+      ] as const).filter(([, v]) => typeof v === 'number' && Number.isFinite(v))
+    : [];
+
   const conditions = print ? describeConditions(print.conditions) : [];
   // sizePctile is a property of the whole tape, not the print; the drilldown
   // scores this print on its own, so the neutral 0.5 is passed rather than a
@@ -153,8 +176,9 @@ const TapeRowModal = ({ print, onClose, isMarked, onToggleMark }: TapeRowModalPr
         )
       }
     >
-      {print && agg && money && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {expanded =>
+        print && agg && money && (
+        <div className={`grid grid-cols-1 gap-4 ${expanded ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
           {/* ── left column: what happened ── */}
           <div className="flex flex-col gap-4 min-w-0">
             {/* The lead: what it cost, who pressed, and how far into the spread
@@ -401,6 +425,96 @@ const TapeRowModal = ({ print, onClose, isMarked, onToggleMark }: TapeRowModalPr
               />
             </Section>
           </div>
+
+          {/* ── third column: only at full width ──
+              Everything here is a table or a ladder. In the drilldown they
+              would push the read below the fold, which is why expanding shows
+              MORE rather than the same content stretched. */}
+          {expanded && (
+            <div className="flex flex-col gap-4 min-w-0">
+              <Section title="What the premium bought" cols={3}>
+                <Field
+                  label="Intrinsic"
+                  value={`$${intrinsic.toFixed(2)}`}
+                  sub={intrinsic > 0 ? 'already in the money' : 'nothing yet'}
+                  tone={intrinsic > 0 ? 'text-bull' : 'text-textMuted'}
+                />
+                <Field
+                  label="Time & vol"
+                  value={`$${extrinsic.toFixed(2)}`}
+                  sub={`${extrinsicPct.toFixed(0)}% of the fill`}
+                  tone={extrinsicPct >= 80 ? 'text-warn' : 'text-textPrimary'}
+                />
+                <Field
+                  label="Theta / day"
+                  value={g ? fmtUsd(Math.abs(g.theta * print.size * 100)) : '—'}
+                  sub="whole position"
+                  tone="text-bear"
+                />
+              </Section>
+
+              <PayoffLadder
+                spot={print.spot}
+                strike={print.strike}
+                right={print.right}
+                cost={print.fill}
+                size={print.size}
+              />
+
+              <Block title="Vol at execution">
+                <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
+                  <span className="flex flex-col">
+                    <span className="font-mono text-label uppercase tracking-widest text-textMuted">Mid IV</span>
+                    <span className="font-mono text-data font-bold tnum text-textPrimary">{print.iv.toFixed(1)}%</span>
+                  </span>
+                  {volSpread != null ? (
+                    <>
+                      <span className="flex flex-col">
+                        <span className="font-mono text-label uppercase tracking-widest text-textMuted">Bid / ask IV</span>
+                        <span className="font-mono text-data font-bold tnum text-textSecondary">
+                          {print.bidIv?.toFixed(1)}% / {print.askIv?.toFixed(1)}%
+                        </span>
+                      </span>
+                      <span className="flex flex-col">
+                        <span className="font-mono text-label uppercase tracking-widest text-textMuted">Vol spread</span>
+                        <span
+                          className={`font-mono text-data font-bold tnum ${volSpread >= 4 ? 'text-warn' : 'text-textSecondary'}`}
+                        >
+                          {volSpread.toFixed(1)} pts
+                        </span>
+                      </span>
+                    </>
+                  ) : (
+                    <p className="text-micro leading-relaxed text-textMuted max-w-[42ch]">
+                      The feed publishes a vol BID and a vol ASK; this print carries a single mid. The pair appears here
+                      as soon as a provider supplies it.
+                    </p>
+                  )}
+                </div>
+              </Block>
+
+              <Block title="Higher-order greeks">
+                {higher.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
+                    {higher.map(([label, v, unit]) => (
+                      <span key={label} className="flex items-baseline justify-between gap-3">
+                        <span className="font-mono text-label uppercase tracking-wider text-textMuted">{label}</span>
+                        <span className="flex items-baseline gap-2">
+                          <span className="font-mono text-caption tnum text-textPrimary">{(v as number).toFixed(4)}</span>
+                          <span className="font-mono text-micro text-textMuted whitespace-nowrap">{unit}</span>
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-micro leading-relaxed text-textMuted">
+                    The print carries first-order greeks only. Vanna, charm, vomma, veta, speed and zomma are typed and
+                    read here, and fill in the moment a math provider returns them — nothing else on this card changes.
+                  </p>
+                )}
+              </Block>
+            </div>
+          )}
         </div>
       )}
     </DetailModal>
