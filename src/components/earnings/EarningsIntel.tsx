@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { MUTED_INK } from '../gex/palette';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ReferenceArea, ResponsiveContainer } from 'recharts';
+import { MUTED_INK, SPOT } from '../gex/palette';
 import { Target, TrendingDown, Layers, Scale, History, ArrowDownUp, GitBranch } from 'lucide-react';
 import {
   buildEarningsIntel,
@@ -7,6 +8,7 @@ import {
   type Expression,
   type StateNode,
   type MispricedComponent,
+  type CrushPoint,
 } from '../../data/earningsintel';
 import type { EarningsEvent } from '../../data/earnings';
 import Panel from '../ui/Panel';
@@ -14,7 +16,8 @@ import StatCard from '../ui/StatCard';
 import MetricGrid from '../ui/MetricGrid';
 import SignalBadge from '../ui/SignalBadge';
 import HoverReadout from '../ui/HoverReadout';
-import { svgHoverIndex } from '../ui/svgHover';
+import { ChartTip, TipHead, TipRow, TipNote } from '../charts/ChartTip';
+import { GRID, CURSOR, valueAxis, categoryAxis, axisVol, niceTicks } from '../charts/chartTheme';
 import { toneText, type Tone } from '../ui/tones';
 
 interface EarningsIntelProps {
@@ -57,78 +60,110 @@ const componentLabel: Record<MispricedComponent, string> = {
   FAIR: 'FAIRLY PRICED',
 };
 
-/** ATM IV ramping into the print, then the overnight crush. */
+/*
+  ATM IV ramping into the print, then the overnight crush. On recharts, house
+  chart theme.
+
+  The vol axis is the point of this chart — the whole claim is how far implied
+  runs above its own post-print baseline and how much of that is given back
+  overnight — and the hand-rolled version had no vol axis at all, only a single
+  dashed baseline with its value written beside it in <text>. The crush zone and
+  the print marker are on the axis now rather than floating rectangles, so they
+  stay aligned with the plot at any panel width.
+*/
 const CrushPath = ({ view }: { view: EarningsIntelView }) => {
-  const W = 560;
-  const H = 184;
   const pts = view.crushPath;
-  const n = pts.length;
-  const ivs = pts.map(p => p.iv);
-  const minIv = Math.min(...ivs) * 0.94;
-  const maxIv = Math.max(...ivs) * 1.03;
-  const X = (i: number) => 6 + (i / (n - 1)) * (W - 12);
-  const Y = (iv: number) => H - ((iv - minIv) / (maxIv - minIv)) * (H - 30) - 12;
-  const line = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${X(i).toFixed(1)},${Y(p.iv).toFixed(1)}`).join(' ');
   const printIdx = pts.findIndex(p => p.phase === 'print');
-  const px = X(printIdx);
-  const baseY = Y(view.baseIv);
-  const [hover, setHover] = useState<{ i: number; x: number; y: number } | null>(null);
-  const hp = hover ? pts[hover.i] : null;
+  const printDay = pts[printIdx]?.day ?? 0;
+  const lastDay = pts[pts.length - 1]?.day ?? 0;
+  const ivs = pts.map(p => p.iv).concat(view.baseIv);
+  const domain: [number, number] = [Math.min(...ivs) * 0.94, Math.max(...ivs) * 1.03];
+
   return (
-    <>
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      className="w-full cursor-crosshair"
-      style={{ height: H }}
-      preserveAspectRatio="none"
+    <div
+      style={{ height: 200 }}
+      className="w-full"
       role="img"
-      aria-label="Expected IV-crush path — ATM implied volatility around the earnings print"
-      onMouseMove={e => setHover({ i: svgHoverIndex(e, n), x: e.clientX, y: e.clientY })}
-      onMouseLeave={() => setHover(null)}
+      aria-label={`Expected implied-volatility crush path: at-the-money IV runs to ${view.frontIv.toFixed(0)}% into the print, then gives back ${view.ivCrushPct.toFixed(0)}% overnight against a post-print baseline of ${view.baseIv.toFixed(0)}%.`}
     >
-      {/* post-print crush zone */}
-      <rect x={px} y={0} width={W - px} height={H} fill="rgba(255,149,0,0.05)" />
-      {/* post-crush baseline */}
-      <line x1={6} x2={W - 6} y1={baseY} y2={baseY} stroke={MUTED_INK} strokeOpacity={0.6} strokeWidth={1} strokeDasharray="4 3" />
-      <text x={8} y={baseY - 4} fontSize={10} className="fill-textMuted" fontFamily="monospace">
-        base IV {view.baseIv.toFixed(0)}%
-      </text>
-      {/* print marker */}
-      <line x1={px} x2={px} y1={6} y2={H - 4} className="stroke-warn" strokeOpacity={0.65} strokeWidth={1} />
-      <text x={px + 4} y={14} fontSize={10} className="fill-warn" fontFamily="monospace">
-        PRINT · {view.frontIv.toFixed(0)}% → crush {view.ivCrushPct.toFixed(0)}%
-      </text>
-      {/* IV path */}
-      <path d={line} fill="none" className="stroke-textPrimary" strokeWidth={1.9} strokeLinejoin="round" />
-      {pts.map((p, i) => (
-        <circle key={p.day} cx={X(i)} cy={Y(p.iv)} r={p.phase === 'print' ? 3 : 1.8} className={p.phase === 'print' ? 'fill-warn' : 'fill-textPrimary'} />
-      ))}
-      {/* x labels */}
-      {pts.map((p, i) =>
-        p.day % 2 === 0 || p.phase === 'print' ? (
-          <text key={`l${p.day}`} x={X(i)} y={H - 2} fontSize={10} fill={MUTED_INK} fontFamily="monospace" textAnchor="middle">
-            {p.label}
-          </text>
-        ) : null
-      )}
-      {hover && (
-        <line x1={X(hover.i)} x2={X(hover.i)} y1={0} y2={H} stroke="rgba(255,255,255,0.25)" strokeWidth={1} vectorEffect="non-scaling-stroke" />
-      )}
-    </svg>
-    {hover && hp && (
-      <HoverReadout x={hover.x} y={hover.y}>
-        <div className="font-mono text-caption font-bold text-textPrimary tnum">{hp.label}</div>
-        <div className="mt-0.5 font-mono text-data font-bold tnum text-textPrimary">{hp.iv.toFixed(1)}% ATM IV</div>
-        <div className={`font-mono text-micro tnum ${hp.iv - view.baseIv >= 0 ? 'text-warn' : 'text-bull'}`}>
-          {hp.iv - view.baseIv >= 0 ? '+' : '−'}
-          {Math.abs(hp.iv - view.baseIv).toFixed(1)} pts vs base
-        </div>
-        <div className="mt-0.5 font-mono text-micro text-textSecondary">
-          {hp.phase === 'print' ? 'the print — crush hits overnight' : hp.phase === 'ramp' ? 'pre-print · event premium building' : 'post-print · premium crushed'}
-        </div>
-      </HoverReadout>
-    )}
-    </>
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={pts} margin={{ top: 16, right: 6, bottom: 2, left: 0 }}>
+          <CartesianGrid stroke={GRID} vertical={false} />
+          <XAxis
+            {...categoryAxis}
+            type="number"
+            dataKey="day"
+            domain={[pts[0]?.day ?? 0, lastDay]}
+            ticks={pts.filter(p => p.day % 2 === 0 || p.phase === 'print').map(p => p.day)}
+            tickFormatter={(d: number) => pts.find(p => p.day === d)?.label ?? ''}
+          />
+          <YAxis {...valueAxis} domain={domain} ticks={niceTicks(domain[0], domain[1])} tickFormatter={axisVol} width={40} />
+          {/* Everything after the print is the crush window. */}
+          <ReferenceArea x1={printDay} x2={lastDay} fill="#FF9500" fillOpacity={0.05} />
+          <ReferenceLine
+            y={view.baseIv}
+            stroke={MUTED_INK}
+            strokeOpacity={0.6}
+            strokeDasharray="4 3"
+            label={{ value: `base IV ${view.baseIv.toFixed(0)}%`, position: 'insideTopLeft', fill: MUTED_INK, fontSize: 10, fontFamily: 'JetBrains Mono, monospace' }}
+          />
+          <ReferenceLine
+            x={printDay}
+            stroke="#FF9500"
+            strokeOpacity={0.65}
+            label={{ value: `PRINT · crush ${view.ivCrushPct.toFixed(0)}%`, position: 'insideTopRight', fill: '#FF9500', fontSize: 10, fontFamily: 'JetBrains Mono, monospace' }}
+          />
+          <Tooltip
+            cursor={CURSOR}
+            content={
+              <ChartTip<CrushPoint>
+                render={p => {
+                  const vsBase = p.iv - view.baseIv;
+                  return (
+                    <>
+                      <TipHead sub="ATM implied">{p.label}</TipHead>
+                      <TipRow label="Implied vol" value={`${p.iv.toFixed(1)}%`} />
+                      <TipRow
+                        label="vs post-print base"
+                        value={`${vsBase >= 0 ? '+' : '−'}${Math.abs(vsBase).toFixed(1)} pt`}
+                        tone={vsBase >= 0 ? 'text-warn' : 'text-bull'}
+                      />
+                      <TipNote>
+                        {p.phase === 'print'
+                          ? 'The print itself. Everything above the baseline is event premium, and it is gone by the next open whichever way the number lands.'
+                          : p.phase === 'ramp'
+                            ? 'Pre-print: event premium is still building, so anything bought here is paying for a catalyst that has not happened yet.'
+                            : 'Post-print: the premium is crushed. What is left is the name\'s ordinary vol.'}
+                      </TipNote>
+                    </>
+                  );
+                }}
+              />
+            }
+          />
+          <Line
+            type="monotone"
+            dataKey="iv"
+            stroke={SPOT}
+            strokeWidth={1.9}
+            dot={(props: { cx?: number; cy?: number; payload?: CrushPoint }) => {
+              const isPrint = props.payload?.phase === 'print';
+              return (
+                <circle
+                  key={`${props.payload?.day}`}
+                  cx={props.cx}
+                  cy={props.cy}
+                  r={isPrint ? 3 : 1.8}
+                  fill={isPrint ? '#FF9500' : SPOT}
+                />
+              );
+            }}
+            activeDot={{ r: 3.6, fill: SPOT, stroke: 'none' }}
+            isAnimationActive={false}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
   );
 };
 
