@@ -95,15 +95,17 @@ function tapeRead(rows: FlowPrint[], summary: TapeSummary): string {
   if (rows.length === 0) return 'Awaiting prints…';
   const zdte = rows.filter(r => r.dte === 0).length;
   const parts = [
-    // netPremium is bull − bear premium, where the bull cohort is call BUYERS
-    // and put SELLERS and the bear cohort is put buyers and call sellers. Name
-    // the cohort the number actually measures — "call buying leads" pins a
-    // single mechanism to a two-mechanism net, so a put-selling-led bull tape
-    // would print a claim the Call/Put premium card beside it contradicts.
+    // netPremium is bull − bear premium over the DIRECTIONAL tape only (P4.2):
+    // the bull cohort is call BUYERS and put SELLERS, the bear cohort put buyers
+    // and call sellers. Name the cohort the number measures — "call buying leads"
+    // pins a single mechanism to a two-mechanism net — and say directional, since
+    // spread legs and delta-hedged prints are excluded from it.
     `${summary.bullish ? 'Bullish' : 'Bearish'} tape: ${
       summary.bullish ? 'call buyers and put sellers lead' : 'put buyers and call sellers lead'
-    } by ${fmtUsd(Math.abs(summary.netPremium))}`,
+    } directional flow by ${fmtUsd(Math.abs(summary.netPremium))}`,
   ];
+  if (summary.structurePremium / (summary.totalPremium || 1) > 0.25)
+    parts.push(`${Math.round((summary.structurePremium / summary.totalPremium) * 100)}% is spreads & hedges`);
   if (summary.largest)
     parts.push(
       `largest print ${summary.largest.ticker} ${summary.largest.strike}${summary.largest.right} at ${fmtUsd(summary.largest.premium)}`
@@ -860,10 +862,16 @@ const LiveTape = () => {
         <StatCard
           label="Bullish vs Bearish"
           value={bearPct >= 50 ? `${bearPct}% BEAR` : `${100 - bearPct}% BULL`}
+          sub="of directional flow"
           tone={bearPct >= 50 ? 'bear' : 'bull'}
         >
           <RatioBar left={summary.bullPremium} right={summary.bearPremium} />
         </StatCard>
+        <StatCard
+          label="Structure"
+          value={`${Math.round((summary.structurePremium / (summary.totalPremium || 1)) * 100)}%`}
+          sub={`${fmtUsd(summary.structurePremium)} spreads & hedges`}
+        />
         <StatCard label="Sweeps" value={String(summary.sweeps)} sub="aggressive orders" tone="warn" />
         <StatCard label="Blocks" value={String(summary.blocks)} sub="negotiated size" />
         <StatCard

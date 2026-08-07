@@ -90,6 +90,11 @@ export interface TapeSummary {
   bullish: boolean;
   bullPremium: number;
   bearPremium: number;
+  /** Premium from single-leg, un-hedged prints — the only flow the bias reads. */
+  directionalPremium: number;
+  /** Premium from multi-leg legs and delta-hedged prints — spreads and hedges
+      with no standalone direction, excluded from the bull/bear net (P4.2). */
+  structurePremium: number;
   callCount: number;
   callPremium: number;
   putCount: number;

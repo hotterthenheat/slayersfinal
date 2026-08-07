@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { enrichPrint } from './flowtape';
+import { enrichPrint, sentimentOf, summarizeTape } from './flowtape';
 import type { TapeOrder } from '../types/market';
-import { aggressorSide, isSweep, isMultiLeg, isDeltaHedged } from '../types/conditions';
+import { aggressorSide, isSweep, isMultiLeg, isDeltaHedged, isDirectional } from '../types/conditions';
 
 /**
  * P3.1 — the enrichment stamps OPRA condition codes on every print and derives
@@ -61,5 +61,43 @@ describe('P3.1 — condition codes + aggressor on every print', () => {
     expect(multi).toBeGreaterThan(0);
     expect(hedged).toBeGreaterThan(0);
     expect(hedged).toBeLessThan(multi);
+  });
+});
+
+describe('P4.2 — directional vs structure premium', () => {
+  const prints = sampleTape();
+  const summary = summarizeTape(prints);
+
+  it('a multi-leg or delta-hedged print never carries a directional sentiment', () => {
+    for (const p of prints) {
+      if (!isDirectional(p.conditions)) expect(sentimentOf(p)).toBe('NEUTRAL');
+    }
+    // and the clean-flow contract holds both ways
+    for (const p of prints) {
+      if (isMultiLeg(p.conditions) || isDeltaHedged(p.conditions)) expect(isDirectional(p.conditions)).toBe(false);
+    }
+  });
+
+  it('splits every dollar into exactly one of directional or structure', () => {
+    const byHand = prints.reduce(
+      (a, p) => {
+        if (isDirectional(p.conditions)) a.dir += p.premium;
+        else a.str += p.premium;
+        return a;
+      },
+      { dir: 0, str: 0 }
+    );
+    expect(summary.directionalPremium).toBe(byHand.dir);
+    expect(summary.structurePremium).toBe(byHand.str);
+    // The two partitions cover the whole tape, no double counting.
+    expect(summary.directionalPremium + summary.structurePremium).toBe(summary.totalPremium);
+    // Structure is a real, non-empty slice on any session-sized draw.
+    expect(summary.structurePremium).toBeGreaterThan(0);
+  });
+
+  it('keeps structure premium out of the bull/bear net', () => {
+    // bull + bear counts only directional, non-MID prints, so it can never
+    // exceed the directional pool — the net is a read of that pool alone.
+    expect(summary.bullPremium + summary.bearPremium).toBeLessThanOrEqual(summary.directionalPremium + 1e-6);
   });
 });

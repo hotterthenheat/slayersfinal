@@ -18,6 +18,7 @@ import {
   SINGLE_LEG_MECHANISM_CODES,
   aggressorSide,
   isSweep,
+  isDirectional,
 } from '../types/conditions';
 
 // ---- deterministic RNG ------------------------------------------------------
@@ -142,9 +143,15 @@ export function enrichPrint(order: TapeOrder, id: number): FlowPrint {
   };
 }
 
-/** Aggressive call buys / put sells read bullish; the inverse reads bearish. */
+/**
+ * Aggressive call buys / put sells read bullish; the inverse reads bearish.
+ * A multi-leg leg or a delta-hedged print carries no standalone direction, so it
+ * reads NEUTRAL regardless of which side it hit — the P4.2 clean-flow contract.
+ * A spread leg lifting the ask is not a bull; its delta is offset by the other
+ * legs the print does not show.
+ */
 export function sentimentOf(p: FlowPrint): PrintSentiment {
-  if (p.side === 'MID') return 'NEUTRAL';
+  if (p.side === 'MID' || !isDirectional(p.conditions)) return 'NEUTRAL';
   return (p.right === 'C' && p.side === 'ASK') || (p.right === 'P' && p.side === 'BID') ? 'BULLISH' : 'BEARISH';
 }
 
@@ -156,6 +163,8 @@ export function summarizeTape(prints: FlowPrint[]): TapeSummary {
   let putCount = 0;
   let putPremium = 0;
   let sweeps = 0;
+  let directional = 0;
+  let structure = 0;
   let largest: FlowPrint | null = null;
 
   for (const p of prints) {
@@ -167,6 +176,11 @@ export function summarizeTape(prints: FlowPrint[]): TapeSummary {
       putPremium += p.premium;
     }
     if (p.sweep) sweeps++;
+    // Directional = single-leg, un-hedged (P4.2). Spread legs and delta-hedged
+    // prints are structure: they trade but they do not take a side, so they are
+    // split out here and never reach the bull/bear net below.
+    if (isDirectional(p.conditions)) directional += p.premium;
+    else structure += p.premium;
     if (!largest || p.premium > largest.premium) largest = p;
     const s = sentimentOf(p);
     if (s === 'BULLISH') bull += p.premium;
@@ -180,6 +194,8 @@ export function summarizeTape(prints: FlowPrint[]): TapeSummary {
     bullish: netPremium >= 0,
     bullPremium: bull,
     bearPremium: bear,
+    directionalPremium: directional,
+    structurePremium: structure,
     callCount,
     callPremium,
     putCount,

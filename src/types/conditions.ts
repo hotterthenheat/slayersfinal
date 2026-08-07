@@ -164,6 +164,16 @@ export const isMultiLeg = (codes: Codes): boolean => hasAny(codes, MULTI_LEG_COD
 export const isDeltaHedged = (codes: Codes): boolean =>
   has(codes, TRADE_CONDITION.QUALIFIED_CONTINGENT_TRADE) || hasAny(codes, STOCK_OPTION_CODES);
 
+/**
+ * Directional flow: a single-leg, un-hedged print — a standalone bet on
+ * direction. NOT a multi-leg leg (130-134) and NOT delta-hedged (124, 135-143),
+ * both of which carry zero standalone directional content. This is the P4.2
+ * clean-flow contract: only directional prints feed the bull/bear read. An
+ * untagged print (no conditions) is directional by default.
+ */
+export const isDirectional = (codes: Codes): boolean =>
+  !isMultiLeg(codes) && !isDeltaHedged(codes);
+
 /** Late report: out-of-sequence (2), prior-reference (8) or sold-last (13). */
 export const isLateReport = (codes: Codes): boolean => hasAny(codes, LATE_REPORT_CODES);
 
