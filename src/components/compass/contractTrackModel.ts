@@ -23,6 +23,7 @@
 ==================================================
 */
 
+import { math } from '../../core/mathProvider';
 import { BULL, FOCUS, MUTED_INK } from '../gex/palette';
 import type { Tone } from '../ui/tones';
 import type { Candle } from '../../types/market';
@@ -74,20 +75,18 @@ export const SESSION_BARS = 390;
 /** blackScholes's clamp (core/contractScore.ts) — the floor every adapter bottoms out at. */
 export const BS_FLOOR = 0.02;
 
-function normCdf(x: number): number {
-  // Abramowitz–Stegun 7.1.26 via erf
-  const t = 1 / (1 + (0.3275911 * Math.abs(x)) / Math.SQRT2);
-  const erf =
-    1 -
-    ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) *
-      t *
-      Math.exp(-(x * x) / 2);
-  return 0.5 * (1 + Math.sign(x) * erf);
-}
-
-/** Uncapped core of `blackScholes`, price leg only. At T <= 0 it returns the
-    analytic limit (intrinsic) instead of dividing by a zero sigma-root-T — the
-    engine never reaches that input, so no shipped number moves. */
+/**
+ * The pricer at an ARBITRARY remaining time — the forward curve's engine.
+ *
+ * This was a byte-for-byte copy of blackScholes's core, kept because the engine
+ * only exported its clamped form. The MATH SEAM (core/mathProvider.ts) now
+ * exposes the uncapped pricer directly on a tYears input, so the copy is gone
+ * and this is the extraction its own header called for. A house model
+ * registered on the seam redraws this curve too.
+ *
+ * The floor stays here: it is the quote convention the engine clamps to, not a
+ * property of the model.
+ */
 export function bsPriceAtT(
   spot: number,
   strike: number,
@@ -95,18 +94,7 @@ export function bsPriceAtT(
   tYears: number,
   right: OptionRight
 ): number {
-  const intrinsic = right === 'C' ? Math.max(spot - strike, 0) : Math.max(strike - spot, 0);
-  if (!(tYears > 0) || !(ivAnnual > 0)) return Math.max(intrinsic, BS_FLOOR);
-  const r = 0.045;
-  const sq = ivAnnual * Math.sqrt(tYears);
-  const d1 = (Math.log(spot / strike) + (r + (ivAnnual * ivAnnual) / 2) * tYears) / sq;
-  const d2 = d1 - sq;
-  const disc = Math.exp(-r * tYears);
-  const price =
-    right === 'C'
-      ? spot * normCdf(d1) - strike * disc * normCdf(d2)
-      : strike * disc * normCdf(-d2) - spot * normCdf(-d1);
-  return Math.max(price, BS_FLOOR);
+  return Math.max(math.optionPrice(spot, strike, ivAnnual, tYears, right), BS_FLOOR);
 }
 
 /** Trading sessions a compass profile expiry stands for. Mirrors `dteOf`. */

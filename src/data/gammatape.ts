@@ -31,6 +31,7 @@
 ==================================================
 */
 
+import { math } from '../core/mathProvider';
 import type { FlowPrint } from '../types/flowdesk';
 
 /** Dealer position sign implied by the exchange aggressor. */
@@ -83,15 +84,12 @@ export interface GammaTapeView {
   directed: number;
 }
 
-/** GEX unit: $ gamma per 1% underlying move = Γ · contracts · 100 · S² · 0.01. */
-function gammaDollars(gamma: number, contracts: number, spot: number): number {
-  return gamma * contracts * 100 * spot * spot * 0.01;
-}
-
-/** Dealer delta in dollars = position · Δ · contracts · 100 · S. */
-function deltaDollars(delta: number, contracts: number, spot: number): number {
-  return delta * contracts * 100 * spot;
-}
+/*
+  The $ unit conventions (GEX per 1% move, dealer delta) come from the MATH SEAM
+  (core/mathProvider.ts). They are a convention, not a formula — a house model
+  that expresses gamma per 1-point move, or prices a non-100 multiplier,
+  overrides them there and this whole tape restates itself.
+*/
 
 /**
  * Turn a tape into the dealer's gamma book for ONE name. Pass the whole tape;
@@ -119,8 +117,8 @@ export function buildGammaTape(prints: FlowPrint[], ticker: string): GammaTapeVi
     const dealerSign = dealerSignOf(p);
     const gamma = p.greeks?.gamma ?? 0;
     const delta = p.greeks?.delta ?? 0;
-    const dGamma = dealerSign * gammaDollars(gamma, p.size, p.spot);
-    const dDelta = dealerSign * deltaDollars(delta, p.size, p.spot);
+    const dGamma = dealerSign * math.gammaDollars(gamma, p.size, p.spot);
+    const dDelta = dealerSign * math.deltaDollars(delta, p.size, p.spot);
 
     if (dealerSign !== 0) directed++;
     if (dGamma > 0) addedLong += dGamma;

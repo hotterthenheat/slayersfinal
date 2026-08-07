@@ -9,6 +9,7 @@
 
 import { yearsToExpiry } from './optionTime';
 import { expiryFor } from './calendar';
+import { math } from './mathProvider';
 import Simulator from './simulator';
 import type { MarketSnapshot } from '../types/market';
 import type { OptionRight } from '../types/compass';
@@ -86,27 +87,18 @@ const MULT = 100;
 
 // ---- pricing --------------------------------------------------------------
 
-function normCdf(x: number): number {
-  const t = 1 / (1 + (0.2316419 * Math.abs(x)));
-  const d = 0.3989423 * Math.exp(-(x * x) / 2);
-  const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
-  return x > 0 ? 1 - p : p;
+/**
+ * Leg pricing, from the MATH SEAM (core/mathProvider.ts). Structures are built
+ * out of legs, so a spread board that priced on a private copy would disagree
+ * with the single-leg board beside it the moment a house model landed. This
+ * module carried its own normal CDF and pricer; both are gone.
+ */
+function bs(spot: number, strike: number, iv: number, dte: number, right: OptionRight): number {
+  return Math.max(0.02, math.optionPrice(spot, strike, iv, math.yearsToExpiry(dte), right));
 }
 
-/** Black-Scholes price, on the desk's shared clock (core/optionTime.ts). */
-function bs(spot: number, strike: number, iv: number, dte: number, right: OptionRight): number {
-  const T = yearsToExpiry(dte);
-  const r = 0.045;
-  const sq = iv * Math.sqrt(T);
-  const d1 = (Math.log(spot / strike) + (r + (iv * iv) / 2) * T) / sq;
-  const d2 = d1 - sq;
-  const disc = Math.exp(-r * T);
-  const price =
-    right === 'C'
-      ? spot * normCdf(d1) - strike * disc * normCdf(d2)
-      : strike * disc * normCdf(-d2) - spot * normCdf(-d1);
-  return Math.max(0.02, price);
-}
+/** The seam's normal CDF — the one copy, shared with every other desk. */
+const normCdf = (x: number): number => math.normCdf(x);
 
 /**
  * Probability the underlying finishes between `lo` and `hi`, under a lognormal

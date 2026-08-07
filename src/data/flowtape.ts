@@ -9,7 +9,7 @@
 
 import Simulator, { settledOI } from '../core/simulator';
 import { expiryFor, fmtExpiryLong } from '../core/calendar';
-import { yearsToExpiry } from '../core/optionTime';
+import { math } from '../core/mathProvider';
 import type { ContractGreeks, TapeOrder } from '../types/market';
 import type { FlowPrint, PrintSentiment, StratTag, TapeSummary } from '../types/flowdesk';
 import {
@@ -39,49 +39,15 @@ function h01(seed: string): number {
 const DTE_POOL = [0, 1, 2, 5, 9, 16, 30, 44, 72, 102, 254];
 const STRATS: StratTag[] = ['Vertical', 'Butterfly', 'Ratio', 'Custom'];
 
-// ---- trade-stamped greeks ---------------------------------------------------
-function normCdf(x: number): number {
-  const t = 1 / (1 + (0.3275911 * Math.abs(x)) / Math.SQRT2);
-  const erf =
-    1 -
-    ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) *
-      t *
-      Math.exp(-(x * x) / 2);
-  return 0.5 * (1 + Math.sign(x) * erf);
-}
-function normPdf(x: number): number {
-  return Math.exp(-(x * x) / 2) / Math.sqrt(2 * Math.PI);
-}
-
 /**
- * The 1st-order Black-Scholes greek vector ThetaData stamps on a trade
- * (`trade_greeks`). This is the input to per-print dealer-inventory change
- * (P4.3): gamma and delta are read there, but the full 1st-order vector is
- * stamped because that is what the vendor field carries. r = 0.045 matches
- * core/contractScore.ts; time floors at half a session via yearsToExpiry, one
- * convention shared with every pricer on the desk.
+ * The greek vector ThetaData stamps on a trade (`trade_greeks`) — the input to
+ * per-print dealer-inventory change (P4.3). It comes from the MATH SEAM
+ * (core/mathProvider.ts) rather than a local Black-Scholes copy, so a house
+ * model registered there restamps every print on the tape too. This module used
+ * to carry its own CDF and pricer; that copy is gone.
  */
 function tradeGreeks(spot: number, strike: number, dte: number, iv: number, right: 'C' | 'P'): ContractGreeks {
-  const T = yearsToExpiry(dte);
-  const r = 0.045;
-  const sig = Math.max(iv, 1e-4);
-  const sqT = Math.sqrt(T);
-  const d1 = (Math.log(spot / strike) + (r + (sig * sig) / 2) * T) / (sig * sqT);
-  const d2 = d1 - sig * sqT;
-  const disc = Math.exp(-r * T);
-  const pdf = normPdf(d1);
-  const gamma = pdf / (spot * sig * sqT);
-  const vega = (spot * pdf * sqT) / 100; // per 1 vol point
-  const delta = right === 'C' ? normCdf(d1) : normCdf(d1) - 1;
-  const thetaAnnual =
-    right === 'C'
-      ? -(spot * pdf * sig) / (2 * sqT) - r * strike * disc * normCdf(d2)
-      : -(spot * pdf * sig) / (2 * sqT) + r * strike * disc * normCdf(-d2);
-  const rho =
-    right === 'C'
-      ? (strike * T * disc * normCdf(d2)) / 100
-      : (-strike * T * disc * normCdf(-d2)) / 100;
-  return { delta, gamma, theta: thetaAnnual / 365, vega, rho };
+  return math.optionGreeks(spot, strike, iv, math.yearsToExpiry(dte), right);
 }
 
 export function enrichPrint(order: TapeOrder, id: number): FlowPrint {

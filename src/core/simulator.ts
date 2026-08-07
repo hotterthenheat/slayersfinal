@@ -19,6 +19,7 @@ import type {
   TradePlan,
 } from '../types/market';
 import type { MarketDataProvider } from './marketDataProvider';
+import { math } from './mathProvider';
 import { lookup as universeLookup } from '../data/universe';
 // rng.ts imports nothing, so this cannot cycle. (scanUniverse.ts is the one
 // module this file must never import: that dependency runs the other way, and
@@ -46,58 +47,34 @@ export function settledOI(value: number): OpenInterest {
 }
 
 const Simulator = (() => {
-  // Math Helpers
-  function normalCDF(x: number): number {
-    const t = 1 / (1 + 0.2316419 * Math.abs(x));
-    const d = 0.3989422804 * Math.exp(-x * x / 2);
-    const p = t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
-    return x >= 0 ? 1 - d * p : d * p;
-  }
+  /*
+    The chain's greeks — the single biggest math surface in the terminal, since
+    every GEX / DEX / VEX number on every desk is built from these.
 
-  function normalPDF(x: number): number {
-    return Math.exp(-x * x / 2) / Math.sqrt(2 * Math.PI);
-  }
+    They come from the MATH SEAM (core/mathProvider.ts) rather than a private
+    Black-Scholes here. That matters for the handoff: a house model registered on
+    the seam has to reach the CHAIN, or it would restate the Weigher and the tape
+    while the entire Pinpoint desk kept quoting the old model.
 
-  // Black-Scholes Greeks Calculator
-  // S: Spot, K: Strike, t: Time to expiry in years, v: Implied Volatility, r: Risk-free rate
-  function calculateGreeks(S: number, K: number, t: number, v: number, r = 0.05): Greeks {
-    if (t <= 0) t = 0.0001; // Avoid division by zero
-    if (v <= 0) v = 0.01;
-
-    const d1 = (Math.log(S / K) + (r + (v * v) / 2) * t) / (v * Math.sqrt(t));
-    const d2 = d1 - v * Math.sqrt(t);
-
-    const Nd1 = normalCDF(d1);
-    const Np_d1 = normalPDF(d1);
-
-    // Delta
-    const deltaCall = Nd1;
-    const deltaPut = Nd1 - 1;
-
-    // Gamma (same for call/put)
-    const gamma = Np_d1 / (S * v * Math.sqrt(t));
-
-    // Vega (same for call/put)
-    const vega = (S * Math.sqrt(t) * Np_d1) / 100; // Divided by 100 to show price change per 1% vol change
-
-    // Vanna
-    const vanna = -Np_d1 * d2 / v;
-
-    // Charm (Delta decay). With no dividend yield modeled (q = 0), put charm
-    // equals call charm exactly — deltaPut = deltaCall − 1, a constant apart,
-    // so their time-decay is identical. (A nonzero adjustment only appears
-    // with a dividend yield: charmPut = charmCall + q·e^(−qt).)
-    const charmCall = -Np_d1 * (r / (v * Math.sqrt(t)) - d2 / (2 * t));
-    const charmPut = charmCall;
-
+    This wrapper keeps two things that are the SIMULATOR's business, not the
+    model's: the degenerate-input floors below, and the Greeks shape the feed
+    contract publishes (call/put split, charm equal across rights because no
+    dividend yield is modelled — see the note that was here before).
+  */
+  function calculateGreeks(S: number, K: number, t: number, v: number): Greeks {
+    const tt = t <= 0 ? 0.0001 : t; // Avoid division by zero
+    const vv = v <= 0 ? 0.01 : v;
+    const g = math.optionGreeks(S, K, vv, tt, 'C');
     return {
-      deltaCall,
-      deltaPut,
-      gamma,
-      vega,
-      vanna,
-      charmCall,
-      charmPut
+      deltaCall: g.delta,
+      // Put delta is a constant one below call delta with q = 0.
+      deltaPut: g.delta - 1,
+      // Gamma and vega are right-independent.
+      gamma: g.gamma,
+      vega: g.vega,
+      vanna: g.vanna ?? 0,
+      charmCall: g.charm ?? 0,
+      charmPut: g.charm ?? 0,
     };
   }
 

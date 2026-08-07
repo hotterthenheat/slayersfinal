@@ -16,6 +16,7 @@
 */
 
 import { buildVolLab } from './vollab';
+import { math } from '../core/mathProvider';
 import type { Candle } from '../types/market';
 
 export type TermRegime = 'CONTANGO' | 'FLAT' | 'BACKWARDATION';
@@ -50,24 +51,22 @@ export interface VolComplexView {
   read: string;
 }
 
-/** Annualized realized vol from close-to-close log returns (zero-mean), %. */
+/**
+ * Bars in a year for the simulator's 1-minute series: 390 per session x 252
+ * sessions. Passed explicitly to the seam so the annualization can never be
+ * silently wrong if the bar width changes.
+ */
+const MINUTE_BARS_PER_YEAR = 252 * 390;
+
+/**
+ * Annualized realized vol (%) from the candle series. The estimator itself lives
+ * on the MATH SEAM (core/mathProvider.ts) — a house model that prefers
+ * Parkinson, Garman-Klass or a windowed estimator overrides it there and every
+ * vol read on the desk follows.
+ */
 export function realizedVolFromCandles(candles: Candle[]): number {
-  if (candles.length < 3) return 0;
-  let sumSq = 0;
-  let n = 0;
-  for (let i = 1; i < candles.length; i++) {
-    const a = candles[i - 1].close;
-    const b = candles[i].close;
-    if (a > 0 && b > 0) {
-      const r = Math.log(b / a);
-      sumSq += r * r;
-      n += 1;
-    }
-  }
-  if (n === 0) return 0;
-  // Per-bar stdev, annualized from 1-minute bars (390 per session, 252 sessions).
-  const perBar = Math.sqrt(sumSq / n);
-  return Number((perBar * Math.sqrt(252 * 390) * 100).toFixed(2));
+  const closes = candles.map(c => c.close);
+  return Number(math.realizedVol(closes, MINUTE_BARS_PER_YEAR).toFixed(2));
 }
 
 /** The 30-day point of a term curve, %. */

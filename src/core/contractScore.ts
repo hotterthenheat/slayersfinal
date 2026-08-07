@@ -20,6 +20,7 @@
 import Simulator from './simulator';
 import { expiryFor } from './calendar';
 import { yearsToExpiry } from './optionTime';
+import { math } from './mathProvider';
 import { buildDarkPoolView } from '../data/darkpool';
 import type { MarketSnapshot } from '../types/market';
 
@@ -96,17 +97,6 @@ export const HORIZONS: { key: Horizon; label: string; blurb: string }[] = [
 
 // ---- Black-Scholes ------------------------------------------------------------
 
-function normCdf(x: number): number {
-  // Abramowitz–Stegun 7.1.26 via erf
-  const t = 1 / (1 + 0.3275911 * Math.abs(x) / Math.SQRT2);
-  const erf =
-    1 -
-    (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) *
-      t *
-      Math.exp(-(x * x) / 2);
-  return 0.5 * (1 + Math.sign(x) * erf);
-}
-
 export interface BsOut {
   price: number;
   delta: number;
@@ -114,30 +104,30 @@ export interface BsOut {
   thetaDay: number;
 }
 
-export function blackScholes(spot: number, strike: number, ivAnnual: number, dte: number, right: 'C' | 'P'): BsOut {
-  // The ONE option pricer. data/compass.ts (the setups board and the chain) used
-  // to carry its own normal-shaped estimator that disagreed with this by up to
-  // ~2× on the same contract; estimatePremium now delegates here, so every
-  // surface quotes one mid. See compassCoherence.test.ts.
-  //
-  // The two also used to floor a 0DTE differently — half a calendar day in one,
-  // half a session in the other — which is settled in core/optionTime.ts.
-  const T = yearsToExpiry(dte);
-  const r = 0.045;
-  const sq = ivAnnual * Math.sqrt(T);
-  const d1 = (Math.log(spot / strike) + (r + (ivAnnual * ivAnnual) / 2) * T) / sq;
-  const d2 = d1 - sq;
-  const pdf = Math.exp(-(d1 * d1) / 2) / Math.sqrt(2 * Math.PI);
-  const disc = Math.exp(-r * T);
+/**
+ * The ONE option pricer the desks quote through — now a thin adapter over the
+ * MATH SEAM (core/mathProvider.ts) rather than its own copy of Black-Scholes.
+ *
+ * data/compass.ts (the setups board and the chain) used to carry a normal-shaped
+ * estimator that disagreed with this by up to ~2× on the same contract;
+ * estimatePremium delegates here, so every surface quotes one mid
+ * (compassCoherence.test.ts). The two also floored a 0DTE differently, which is
+ * settled in core/optionTime.ts and now expressed as math.yearsToExpiry.
+ *
+ * What stays HERE rather than in the seam: the $0.02 quote floor. That is a
+ * market convention (an option does not quote below a penny-ish tick), not a
+ * property of the model, so replacing the math must not silently remove it.
+ */
+export const QUOTE_FLOOR = 0.02;
 
-  if (right === 'C') {
-    const price = spot * normCdf(d1) - strike * disc * normCdf(d2);
-    const theta = (-(spot * pdf * ivAnnual) / (2 * Math.sqrt(T)) - r * strike * disc * normCdf(d2)) / 365;
-    return { price: Math.max(price, 0.02), delta: normCdf(d1), thetaDay: theta };
-  }
-  const price = strike * disc * normCdf(-d2) - spot * normCdf(-d1);
-  const theta = (-(spot * pdf * ivAnnual) / (2 * Math.sqrt(T)) + r * strike * disc * normCdf(-d2)) / 365;
-  return { price: Math.max(price, 0.02), delta: normCdf(d1) - 1, thetaDay: theta };
+export function blackScholes(spot: number, strike: number, ivAnnual: number, dte: number, right: 'C' | 'P'): BsOut {
+  const t = math.yearsToExpiry(dte);
+  const g = math.optionGreeks(spot, strike, ivAnnual, t, right);
+  return {
+    price: Math.max(math.optionPrice(spot, strike, ivAnnual, t, right), QUOTE_FLOOR),
+    delta: g.delta,
+    thetaDay: g.theta,
+  };
 }
 
 // ---- candidate generation --------------------------------------------------------
