@@ -13,14 +13,7 @@ import { footerVariant, isTerminalRoute } from './chromeRoutes';
 import { useTicker } from '../../context/MarketDataContext';
 import Simulator from '../../core/simulator';
 import { DUR } from '../../lib/motion';
-
-/** True when focus is in a field, so global single-key shortcuts don't fire mid-typing. */
-const isTypingTarget = (el: EventTarget | null): boolean => {
-  const node = el as HTMLElement | null;
-  if (!node) return false;
-  const tag = node.tagName;
-  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || node.isContentEditable;
-};
+import { isTypingTarget, overlayOwnsKeyboard } from '../../lib/keys';
 
 const AppShell = () => {
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -58,6 +51,10 @@ const AppShell = () => {
         return;
       }
       if (e.metaKey || e.ctrlKey || e.altKey || isTypingTarget(e.target)) return;
+      // A dialog owns the keyboard while it is open: `?` must not stack the
+      // shortcuts sheet on top of Settings, and `]` must not switch the ticker
+      // out from under a drilldown that is showing one print.
+      if (overlayOwnsKeyboard()) return;
       // `?` (Shift+/) opens the shortcuts sheet
       if (e.key === '?') {
         e.preventDefault();

@@ -142,13 +142,13 @@ export const PULSE_PRESETS: PulseLayout[] = [
       L('c-tape', 0, 17, 8, 6),
       L('c-alerts', 8, 17, 4, 6),
       L('c-dp', 0, 23, 12, 4),
-      L('c-liq', 0, 27, 12, 8),
     ],
   },
   {
-    // Three-column command deck: institutional flow feed on the left, the
-    // liquidity chart + price in the center, the GEX grid + levels on the right —
-    // the whole desk on one screen, dealer-flow-terminal style.
+    // Three-column command deck: institutional flow feed on the left, price in
+    // the center, the GEX grid on the right — the whole desk on one screen,
+    // dealer-flow-terminal style. All three columns are 13 rows, so the deck
+    // reads as three columns rather than a ragged stack.
     id: 'flow-command',
     name: 'Flow Command',
     preset: true,
@@ -161,11 +161,12 @@ export const PULSE_PRESETS: PulseLayout[] = [
     layout: [
       // left column — flow / dark-pool feed
       L('cmd-dp', 0, 0, 3, 6),
-      L('cmd-flow', 0, 6, 3, 5),
-      // center column — liquidity chart (flagship, tall) over the live chart
-      L('cmd-liq', 3, 0, 5, 9),
-      L('cmd-chart', 3, 9, 5, 4),
-      // right column — GEX heatmap grid, full height (matches the center stack)
+      L('cmd-flow', 0, 6, 3, 7),
+      // center column — price, full height. It used to sit UNDER a taller
+      // liquidity heatmap; that panel was retired and the chart now owns the
+      // column, which is what the three-column read needs.
+      L('cmd-chart', 3, 0, 5, 13),
+      // right column — GEX heatmap grid, full height
       L('cmd-gex', 8, 0, 4, 13),
     ],
   },
@@ -303,7 +304,6 @@ export const PULSE_PRESETS: PulseLayout[] = [
     layout: [
       L('sc-chart', 0, 0, 8, 7),
       L('sc-flow', 8, 0, 4, 7),
-      L('sc-liq', 0, 7, 12, 7),
     ],
   },
   {

@@ -26,19 +26,12 @@ import { GEX_SUBPAGES } from '../gex/subnav';
 import { FLOWDESK_SUBPAGES } from '../flowdesk/subnav';
 import { COMMUNITY_SUBPAGES } from '../community/subnav';
 import { readLastDesk } from './lastDesk';
+import { isTypingTarget, overlayOwnsKeyboard } from '../../lib/keys';
 
 /** The house content panel, distinct from the titled data `Panel`. */
 const Card = ({ children, className = '' }: { children: ReactNode; className?: string }) => (
   <div className={`rounded-lg border border-borderSubtle bg-panel ${className}`}>{children}</div>
 );
-
-/** True when focus is in a field, so global single-key shortcuts don't fire mid-typing. */
-const isTypingTarget = (el: EventTarget | null): boolean => {
-  const node = el as HTMLElement | null;
-  if (!node) return false;
-  const tag = node.tagName;
-  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || node.isContentEditable;
-};
 
 /** Only `label` is read. The registries' `subtitle` fields describe the tape and
     have no business on a page that shows no data. */
@@ -227,7 +220,7 @@ const TerminalIndex = () => {
       // A digit must not navigate out from under an open overlay, or while the
       // ticker search in the bar above has focus.
       if (isTypingTarget(e.target)) return;
-      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+      if (overlayOwnsKeyboard()) return;
       const to = DIGIT_MAP[e.key];
       if (!to) return;
       e.preventDefault();
