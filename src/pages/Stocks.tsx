@@ -9,7 +9,7 @@ import SegmentedControl from '../components/ui/SegmentedControl';
 import DataTable, { type Column } from '../components/ui/DataTable';
 import Sparkline from '../components/compass/Sparkline';
 import HoverReadout from '../components/ui/HoverReadout';
-import StockDetailDrawer from './StockDetailDrawer';
+import StockDetailModal from './StockDetailModal';
 import { FACTOR_GUIDE } from '../data/factorGuide';
 import { fmtUsd } from '../data/gex';
 import {
@@ -806,7 +806,7 @@ const Stocks = () => {
         />
       </Panel>
 
-      <StockDetailDrawer
+      <StockDetailModal
         pick={selected}
         onClose={() => setSelectedTicker(null)}
         isWatched={selected ? watchlist.has(selected.ticker) : false}

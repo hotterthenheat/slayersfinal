@@ -200,3 +200,59 @@ export const aggressorSide = (codes: Codes): 'BID' | 'ASK' | null => {
   if (has(codes, TRADE_CONDITION.ASK_AGGRESSOR)) return 'ASK';
   return null;
 };
+
+// ---- Human-readable decoding ------------------------------------------------
+
+/**
+ * Reverse index from code to its SCREAMING_SNAKE name. Built once from
+ * TRADE_CONDITION so a code can never be labelled with a name the map does not
+ * actually give it.
+ */
+const NAME_BY_CODE: ReadonlyMap<number, TradeConditionName> = new Map(
+  (Object.entries(TRADE_CONDITION) as [TradeConditionName, number][]).map(([name, code]) => [code, name])
+);
+
+/** SCREAMING_SNAKE -> Title Case, for display. */
+function titleCase(name: string): string {
+  return name
+    .toLowerCase()
+    .split('_')
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
+export interface DecodedCondition {
+  code: number;
+  /** What to show. A named code gets its own name; a family member gets the
+      family's name; anything else is reported as an unmapped code. */
+  label: string;
+  /** True when the label came from a range rather than a per-code name — the
+      source describes those families, not each member, so the UI should not
+      imply more precision than the vendor table gives. */
+  family: boolean;
+  /** False when the code is in no map we carry. Shown, never hidden: an
+      unrecognised condition on a print is information, and silently dropping it
+      would make the tape look cleaner than the feed actually is. */
+  known: boolean;
+}
+
+/**
+ * Decode a print's raw OPRA condition codes for display.
+ *
+ * The terminal has carried these codes since P0.2 and branched on them
+ * everywhere — side, sweep, structure, directionality — but never showed them.
+ * A drilldown is exactly where they belong: it is the one place a reader asks
+ * "why is this print classified that way", and the answer is this list.
+ */
+export function describeConditions(codes: Codes): DecodedCondition[] {
+  if (!Array.isArray(codes)) return [];
+  return codes.map(code => {
+    const name = NAME_BY_CODE.get(code);
+    if (name) return { code, label: titleCase(name), family: false, known: true };
+    if (MULTI_LEG_CODES.includes(code)) return { code, label: 'Multi-leg order leg', family: true, known: true };
+    if (STOCK_OPTION_CODES.includes(code)) return { code, label: 'Stock + option (hedged)', family: true, known: true };
+    if (SINGLE_LEG_MECHANISM_CODES.includes(code)) return { code, label: 'Single-leg mechanism', family: true, known: true };
+    if (EXTENDED_HOURS_CODES.includes(code)) return { code, label: 'Extended hours', family: true, known: true };
+    return { code, label: `Unmapped code ${code}`, family: false, known: false };
+  });
+}

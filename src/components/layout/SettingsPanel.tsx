@@ -66,27 +66,32 @@ const SettingsPanel = ({ open, onClose }: SettingsPanelProps) => {
   return createPortal(
     <AnimatePresence>
       {open && (
-        <>
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-6">
           <motion.div
-            className="fixed inset-0 z-[70] bg-black/60"
+            className="absolute inset-0 bg-black/70 backdrop-blur-[3px]"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            transition={{ duration: DUR.fast }}
             onClick={onClose}
           />
+          {/* Centred like every other overlay in the terminal. Settings was the
+              last right-hand slide-in; a panel that arrives from the edge reads
+              as a side tab you have to go and find, and the shortcuts sheet and
+              the command palette already open in the middle. */}
           <motion.aside
             ref={trapRef}
             tabIndex={-1}
             role="dialog"
             aria-modal="true"
             aria-label="Settings"
-            className="fixed inset-y-0 right-0 z-[70] w-full max-w-[440px] bg-panel border-l border-borderMuted shadow-overlay overflow-y-auto focus:outline-none"
-            initial={{ x: '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '100%' }}
-            transition={{ duration: DUR.slow, ease: EASE }}
+            className="relative flex w-full max-w-xl flex-col overflow-hidden rounded-lg border border-borderMuted bg-panel shadow-overlay focus:outline-none max-h-[calc(100vh-1.5rem)] sm:max-h-[85vh]"
+            initial={{ opacity: 0, scale: 0.97, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.97, y: 10 }}
+            transition={{ duration: DUR.quick, ease: EASE }}
           >
-            <header className="sticky top-0 z-10 flex items-center justify-between gap-3 px-4 py-3 border-b border-borderSubtle bg-panel/95 backdrop-blur">
+            <header className="flex shrink-0 items-center justify-between gap-3 px-4 py-3 border-b border-borderSubtle bg-panelRaised">
               <span className="font-mono text-caption font-semibold uppercase tracking-widest text-textPrimary">Settings</span>
               <button
                 onClick={onClose}
@@ -97,7 +102,7 @@ const SettingsPanel = ({ open, onClose }: SettingsPanelProps) => {
               </button>
             </header>
 
-            <div className="px-4 py-4 flex flex-col gap-5">
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-5 sm:px-5">
               {/* Privacy note */}
               <div className="inst-surface rounded-md px-3.5 py-3 flex items-start gap-2.5">
                 <ShieldCheck className="w-4 h-4 mt-0.5 shrink-0 text-bull" />
@@ -206,7 +211,7 @@ const SettingsPanel = ({ open, onClose }: SettingsPanelProps) => {
               </div>
             </div>
           </motion.aside>
-        </>
+        </div>
       )}
     </AnimatePresence>,
     document.body

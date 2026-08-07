@@ -122,7 +122,7 @@ const EarningsBlock = ({ e }: { e: EarningsEvent }) => (
   </div>
 );
 
-interface StockDetailDrawerProps {
+interface StockDetailModalProps {
   pick: StockPick | null;
   onClose: () => void;
   isWatched: boolean;
@@ -153,7 +153,7 @@ interface StockDetailDrawerProps {
  * name seeds a month of candles (~90ms). Everything else is cheap enough to
  * build the moment a row is clicked.
  */
-const StockDetailDrawer = ({
+const StockDetailModal = ({
   pick,
   onClose,
   isWatched,
@@ -163,7 +163,7 @@ const StockDetailDrawer = ({
   beta,
   sectorRow = null,
   sectorRank = null,
-}: StockDetailDrawerProps) => {
+}: StockDetailModalProps) => {
   const trapRef = useFocusTrap<HTMLElement>(!!pick);
   const [tab, setTab] = useState<DrawerTab>('READ');
   const ticker = pick?.ticker ?? null;
@@ -222,28 +222,34 @@ const StockDetailDrawer = ({
   return createPortal(
     <AnimatePresence>
       {pick && (
-        <>
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-6">
           <motion.div
-            className="fixed inset-0 z-[60] bg-black/60"
+            className="absolute inset-0 bg-black/70 backdrop-blur-[3px]"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            transition={{ duration: DUR.fast }}
             onClick={onClose}
           />
+          {/* Centred, not a right-hand slide-in. The drawer this replaces was a
+              560px column pinned to the screen edge; the same four tabs now open
+              in the middle at nearly twice the width, so the read, the earnings
+              record, the flow and the levels each get room to be read rather
+              than scrolled past one narrow line at a time. */}
           <motion.aside
             ref={trapRef}
             tabIndex={-1}
             role="dialog"
             aria-modal="true"
             aria-label={`${pick.ticker} detail`}
-            className="fixed inset-y-0 right-0 z-[60] w-full max-w-[560px] bg-panel border-l border-borderMuted shadow-overlay overflow-y-auto focus:outline-none"
-            initial={{ x: '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '100%' }}
-            transition={{ duration: DUR.slow, ease: EASE }}
+            className="relative flex w-full max-w-4xl flex-col overflow-hidden rounded-lg border border-borderMuted bg-panel shadow-overlay focus:outline-none max-h-[calc(100vh-1.5rem)] sm:max-h-[88vh]"
+            initial={{ opacity: 0, scale: 0.97, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.97, y: 10 }}
+            transition={{ duration: DUR.quick, ease: EASE }}
           >
             {/* Header */}
-            <header className="sticky top-0 z-10 border-b border-borderSubtle bg-panel/95 backdrop-blur">
+            <header className="shrink-0 border-b border-borderSubtle bg-panelRaised">
               <div className="flex items-start justify-between gap-3 px-4 py-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
@@ -269,7 +275,7 @@ const StockDetailDrawer = ({
               </div>
             </header>
 
-            <div className="px-4 py-4 flex flex-col gap-4">
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-4 sm:px-5">
               {/* Price / score / risk — carried on every tab so the number the
                   reader is reasoning about never leaves the screen. */}
               <div className="grid grid-cols-4 gap-1.5">
@@ -553,11 +559,11 @@ const StockDetailDrawer = ({
               </div>
             </div>
           </motion.aside>
-        </>
+        </div>
       )}
     </AnimatePresence>,
     document.body
   );
 };
 
-export default StockDetailDrawer;
+export default StockDetailModal;
