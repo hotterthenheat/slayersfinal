@@ -11,7 +11,7 @@ import EmptyState from '../../components/ui/EmptyState';
 import ChartFrame, { Swatch } from '../../components/charts/ChartFrame';
 import { ChartTip, TipHead, TipRow, TipNote } from '../../components/charts/ChartTip';
 import { splitBySign, type SignSplitRow } from '../../components/charts/signSplit';
-import { GRID, CURSOR, chartMargin, valueAxis, categoryAxis, axisUsd, symmetricDomain, symmetricTicks, REF_LINE } from '../../components/charts/chartTheme';
+import { GRID, CURSOR, chartMargin, valueAxis, categoryAxis, axisUsd, zeroAnchoredDomain, niceTicks, REF_LINE } from '../../components/charts/chartTheme';
 import { BULL, BEAR, MUTED_INK } from '../../components/gex/palette';
 import type { Tone } from '../../components/ui/tones';
 
@@ -65,9 +65,11 @@ const GammaTape = () => {
   // Each half of the path is coloured by the regime it is IN, not by the regime
   // the session happened to close in — see components/charts/signSplit.
   const series = splitBySign(chrono, r => r.cumGamma);
-  const yMax = Math.max(Math.abs(troughGamma), Math.abs(peakGamma), 1);
-  const yDomain = symmetricDomain([troughGamma, peakGamma]);
-  const yTicks = symmetricTicks(yMax * 1.1);
+  // Zero-anchored, not symmetric: the flat line has to be on the plot (it is the
+  // regime boundary the whole panel turns on), but a book that spent the window
+  // long should not give half its height to a short range it never reached.
+  const yDomain = zeroAnchoredDomain([troughGamma, peakGamma]);
+  const yTicks = niceTicks(yDomain[0], yDomain[1]);
   // Four evenly spaced time ticks across the session.
   const xTicks = n > 1 ? [0, Math.round((n - 1) / 3), Math.round(((n - 1) * 2) / 3), n - 1] : [0];
   const timeAt = (x: number): string => chrono[Math.round(x)]?.print.time.slice(0, 5) ?? '';

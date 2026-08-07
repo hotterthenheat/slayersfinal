@@ -8,7 +8,7 @@ import StatCard from '../../components/ui/StatCard';
 import MetricGrid from '../../components/ui/MetricGrid';
 import ChartFrame, { Swatch } from '../../components/charts/ChartFrame';
 import { ChartTip, TipHead, TipRow, TipNote, TipSeries } from '../../components/charts/ChartTip';
-import { GRID, CURSOR, chartMargin, valueAxis, categoryAxis, axisVol, paddedDomain, REF_LINE } from '../../components/charts/chartTheme';
+import { GRID, CURSOR, chartMargin, valueAxis, categoryAxis, axisVol, paddedDomain, niceTicks, REF_LINE } from '../../components/charts/chartTheme';
 import type { Tone } from '../../components/ui/tones';
 import { FOCUS, MUTED_INK, SPOT } from '../../components/gex/palette';
 
@@ -27,11 +27,18 @@ import { FOCUS, MUTED_INK, SPOT } from '../../components/gex/palette';
 const regimeTone: Record<string, Tone> = { CONTANGO: 'neutral', FLAT: 'neutral', BACKWARDATION: 'warn' };
 const rcTone: Record<string, Tone> = { RICH: 'warn', CHEAP: 'select', FAIR: 'neutral' };
 
-/** Vintages of the term curve. Older = dimmer, so "now" reads first. */
+/*
+  Vintages of the term curve. Older = dimmer AND more broken up.
+
+  Opacity alone was not enough: at chart scale four near-parallel silver curves
+  0.12 apart in alpha read as one thick line, which the render pass showed. Each
+  vintage now carries its own dash signature too, so they separate by pattern
+  even where they overlap.
+*/
 const VINTAGE = [
-  { key: 'monthAgo' as const, label: '1mo ago', color: 'rgba(228,232,244,0.22)' },
-  { key: 'weekAgo' as const, label: '1wk ago', color: 'rgba(228,232,244,0.34)' },
-  { key: 'dayAgo' as const, label: '1d ago', color: 'rgba(228,232,244,0.52)' },
+  { key: 'monthAgo' as const, label: '1mo ago', color: 'rgba(228,232,244,0.30)', dash: '2 4' },
+  { key: 'weekAgo' as const, label: '1wk ago', color: 'rgba(228,232,244,0.45)', dash: '5 3' },
+  { key: 'dayAgo' as const, label: '1d ago', color: 'rgba(228,232,244,0.62)', dash: '9 3' },
 ];
 
 const TERM_TICKS = [7, 14, 30, 60, 90, 180, 360];
@@ -117,7 +124,7 @@ const VolComplex = () => {
                 ticks={ticks}
                 tickFormatter={(v: number) => `${v}d`}
               />
-              <YAxis {...valueAxis} domain={ivDomain} tickFormatter={axisVol} width={44} />
+              <YAxis {...valueAxis} domain={ivDomain} ticks={niceTicks(ivDomain[0], ivDomain[1])} tickFormatter={axisVol} width={44} />
               {/* Realized is the bar implied has to clear — draw it, don't just quote it. */}
               <ReferenceLine
                 y={realizedVol}
@@ -160,7 +167,8 @@ const VolComplex = () => {
                   type="monotone"
                   dataKey={v.key}
                   stroke={v.color}
-                  strokeWidth={1.2}
+                  strokeDasharray={v.dash}
+                  strokeWidth={1.3}
                   dot={false}
                   activeDot={false}
                   isAnimationActive={false}

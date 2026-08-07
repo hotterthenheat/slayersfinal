@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ReferenceDot, ResponsiveContainer } from 'recharts';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildGexHistory, type LevelPoint } from '../../data/gexhistory';
 import { fmtUsd } from '../../data/gex';
@@ -9,7 +10,8 @@ import MetricGrid from '../../components/ui/MetricGrid';
 import SignalBadge from '../../components/ui/SignalBadge';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import DataTable, { type Column } from '../../components/ui/DataTable';
-import HoverReadout from '../../components/ui/HoverReadout';
+import { ChartTip, TipHead, TipRow, TipSeries, TipNote } from '../../components/charts/ChartTip';
+import { GRID, CURSOR, valueAxis, categoryAxis } from '../../components/charts/chartTheme';
 import { Play, Pause, SkipBack, SkipForward, ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react';
 
 const SERIES = [
@@ -56,7 +58,21 @@ const TBtn = ({
   </button>
 );
 
-/** Multi-line session timeline — every structural level plus spot, one SVG. */
+/*
+  Multi-line session timeline — every structural level plus spot, on recharts.
+
+  This one keeps behaviour the plain chart components do not: hovering scrubs a
+  read-out AND drives the "Showing as of" card in the parent, clicking parks the
+  replay playhead, and structural events (spot crossing the flip, net GEX
+  changing sign) are marked on the x axis. recharts reports the active index on
+  move and click, so both survive the port with the index staying the single
+  source of truth for the whole page.
+
+  The port also gives the chart the price axis it never had: the old SVG put the
+  last value of each series in a coloured tag at the right edge and nothing else,
+  so a reader could see the lines converge without being able to read a level off
+  the plot.
+*/
 const MigrationChart = ({
   points,
   hover,
@@ -72,93 +88,103 @@ const MigrationChart = ({
   onHover: (i: number | null) => void;
   onScrub: (i: number) => void;
 }) => {
-  // Cursor position for the floating read-out — the crosshair index lives in
-  // the parent (it also drives the "Showing as of" card), only x/y is local.
-  const [mouse, setMouse] = useState<{ x: number; y: number } | null>(null);
-  const W = 1000;
-  const H = 340;
-  const padL = 4;
-  const padR = 56;
-  const padY = 16;
+  const rows = points.map((p, i) => ({ ...p, i }));
   const lo = Math.min(...points.map(p => Math.min(p.putWall, p.spot))) * 0.999;
   const hi = Math.max(...points.map(p => Math.max(p.callWall, p.spot))) * 1.001;
-  const X = (i: number) => padL + (i / (points.length - 1)) * (W - padL - padR);
-  const Y = (v: number) => padY + (1 - (v - lo) / (hi - lo)) * (H - padY * 2);
-  const path = (key: keyof LevelPoint) =>
-    points.map((p, i) => `${i === 0 ? 'M' : 'L'}${X(i).toFixed(1)},${Y(p[key] as number).toFixed(1)}`).join(' ');
   const last = points[points.length - 1];
-  const idxFrom = (clientX: number, rect: DOMRect) =>
-    Math.max(0, Math.min(points.length - 1, Math.round(((clientX - rect.left) / rect.width) * (points.length - 1))));
+  const n = points.length;
+  const xTicks = n > 1 ? [0, Math.round((n - 1) / 3), Math.round(((n - 1) * 2) / 3), n - 1] : [0];
+
+  /** recharts 3 widens activeTooltipIndex to number | TooltipIndex | null. */
+  const idxOf = (raw: unknown): number | null => {
+    const v = typeof raw === 'number' ? raw : raw != null ? Number(raw) : NaN;
+    return Number.isFinite(v) ? Math.max(0, Math.min(n - 1, v)) : null;
+  };
 
   return (
-    <>
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
+    <div
+      style={{ height: 340 }}
       className="w-full cursor-pointer"
-      style={{ height: H }}
-      preserveAspectRatio="none"
-      onMouseLeave={() => {
-        onHover(null);
-        setMouse(null);
-      }}
-      onMouseMove={e => {
-        onHover(idxFrom(e.clientX, (e.currentTarget as SVGElement).getBoundingClientRect()));
-        setMouse({ x: e.clientX, y: e.clientY });
-      }}
-      onClick={e => onScrub(idxFrom(e.clientX, (e.currentTarget as SVGElement).getBoundingClientRect()))}
+      role="img"
+      aria-label={`Session timeline of ${points[0].time} to ${last.time}: call wall, gamma flip, put wall, king strike and spot. Spot closes at $${last.spot.toFixed(2)} against a call wall of $${last.callWall.toFixed(2)} and a put wall of $${last.putWall.toFixed(2)}.`}
     >
-      {/* event markers sit behind the level lines */}
-      {events.map(e => (
-        <g key={`ev-${e.i}-${e.kind}`}>
-          <line x1={X(e.i)} x2={X(e.i)} y1={padY} y2={H - padY} stroke={e.color} strokeOpacity={0.26} strokeWidth={1} strokeDasharray="2 4" />
-          <circle cx={X(e.i)} cy={padY} r={2.5} fill={e.color} />
-        </g>
-      ))}
-      <path d={path('spot')} fill="none" stroke={SPOT} strokeOpacity={0.5} strokeWidth={1.25} strokeDasharray="3 3" />
-      {SERIES.map(s => (
-        <path key={s.key} d={path(s.key)} fill="none" stroke={s.color} strokeWidth={1.75} strokeLinejoin="round" />
-      ))}
-      {SERIES.map(s => (
-        <g key={`tag-${s.key}`}>
-          <rect x={W - padR + 2} y={Y(last[s.key] as number) - 7} width={padR - 4} height={14} rx={2} fill={s.color} fillOpacity={0.16} />
-          <text x={W - padR + 5} y={Y(last[s.key] as number) + 3} fontSize={10} fill={s.color} fontFamily="monospace">
-            {(last[s.key] as number).toFixed(0)}
-          </text>
-        </g>
-      ))}
-      {hover !== null && (
-        <line x1={X(hover)} x2={X(hover)} y1={padY} y2={H - padY} stroke="#fff" strokeOpacity={0.25} strokeWidth={1} />
-      )}
-      {/* replay playhead — holo silver selection language */}
-      <line x1={X(cursor)} x2={X(cursor)} y1={padY - 8} y2={H - padY} stroke={FOCUS} strokeOpacity={0.9} strokeWidth={1.5} />
-      <circle cx={X(cursor)} cy={Y(points[cursor].spot)} r={3.5} fill={FOCUS} />
-    </svg>
-    {hover !== null && mouse && (
-      <HoverReadout x={mouse.x} y={mouse.y}>
-        <div className="flex items-baseline gap-2">
-          <span className="font-mono text-caption font-bold text-textPrimary tnum">{points[hover].time}</span>
-          <span className="font-mono text-micro text-textMuted tnum">spot ${points[hover].spot.toFixed(2)}</span>
-        </div>
-        <div className="mt-1 flex flex-col gap-0.5">
-          {SERIES.map(s => (
-            <div key={s.key} className="flex items-center justify-between gap-4 font-mono text-micro">
-              <span className="flex items-center gap-1.5 text-textSecondary">
-                <span className="inline-block w-2 h-0.5 rounded-full" style={{ background: s.color }} />
-                {s.label}
-              </span>
-              <span className="tnum text-textPrimary">${(points[hover][s.key] as number).toFixed(2)}</span>
-            </div>
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart
+          data={rows}
+          margin={{ top: 16, right: 8, bottom: 2, left: 0 }}
+          onMouseMove={s => onHover(idxOf(s?.activeTooltipIndex))}
+          onMouseLeave={() => onHover(null)}
+          onClick={s => {
+            const i = idxOf(s?.activeTooltipIndex);
+            if (i !== null) onScrub(i);
+          }}
+        >
+          <CartesianGrid stroke={GRID} />
+          <XAxis
+            {...categoryAxis}
+            type="number"
+            dataKey="i"
+            domain={[0, Math.max(n - 1, 1)]}
+            ticks={xTicks}
+            tickFormatter={(x: number) => points[Math.round(x)]?.time ?? ''}
+          />
+          <YAxis
+            {...valueAxis}
+            domain={[lo, hi]}
+            tickFormatter={(v: number) => `$${v.toFixed(0)}`}
+            width={52}
+          />
+          {/* Structural events sit behind the level lines. */}
+          {events.map(e => (
+            <ReferenceLine key={`ev-${e.i}-${e.kind}`} x={e.i} stroke={e.color} strokeOpacity={0.26} strokeDasharray="2 4" />
           ))}
-          <div className="flex items-center justify-between gap-4 font-mono text-micro">
-            <span className="text-textSecondary">Net GEX</span>
-            <span className={`tnum font-semibold ${points[hover].netGex >= 0 ? 'text-bull' : 'text-bear'}`}>
-              {fmtUsd(points[hover].netGex)}
-            </span>
-          </div>
-        </div>
-      </HoverReadout>
-    )}
-  </>
+          {/* The replay playhead, in the selection language. */}
+          <ReferenceLine x={cursor} stroke={FOCUS} strokeOpacity={0.9} strokeWidth={1.5} />
+          <ReferenceDot x={cursor} y={points[cursor].spot} r={3.5} fill={FOCUS} stroke="none" />
+          <Tooltip
+            cursor={CURSOR}
+            content={
+              <ChartTip<LevelPoint & { i: number }>
+                render={p => {
+                  const ev = events.filter(e => e.i === p.i);
+                  const above = p.spot >= p.flip;
+                  return (
+                    <>
+                      <TipHead sub={`spot $${p.spot.toFixed(2)}`}>{p.time}</TipHead>
+                      {SERIES.map(s => (
+                        <TipSeries key={s.key} color={s.color} label={s.label} value={`$${(p[s.key] as number).toFixed(2)}`} />
+                      ))}
+                      <TipRow label="Net GEX" value={fmtUsd(p.netGex)} tone={p.netGex >= 0 ? 'text-bull' : 'text-bear'} />
+                      <TipNote>
+                        {ev.length > 0
+                          ? `${ev.map(e => e.label).join('; ')}.`
+                          : `Spot sits ${above ? 'above' : 'below'} the gamma flip, so dealer hedging ${above ? 'dampens' : 'amplifies'} moves here.`}
+                      </TipNote>
+                    </>
+                  );
+                }}
+              />
+            }
+          />
+          <Line type="monotone" dataKey="spot" stroke={SPOT} strokeOpacity={0.5} strokeWidth={1.25} strokeDasharray="3 3" dot={false} isAnimationActive={false} />
+          {SERIES.map(s => (
+            <Line
+              key={s.key}
+              type="monotone"
+              dataKey={s.key}
+              stroke={s.color}
+              strokeWidth={1.75}
+              dot={false}
+              activeDot={{ r: 3, fill: s.color, stroke: 'none' }}
+              isAnimationActive={false}
+            />
+          ))}
+        </LineChart>
+      </ResponsiveContainer>
+      {/* `hover` drives the parent's "Showing as of" card; the tooltip above is
+          the in-chart read-out. Both read the same index. */}
+      <span className="sr-only">{hover !== null ? `Hovering ${points[hover].time}` : ''}</span>
+    </div>
   );
 };
 

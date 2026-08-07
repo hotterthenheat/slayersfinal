@@ -11,7 +11,7 @@ import EmptyState from '../../components/ui/EmptyState';
 import ChartFrame, { Swatch } from '../../components/charts/ChartFrame';
 import { ChartTip, TipHead, TipRow, TipNote } from '../../components/charts/ChartTip';
 import { splitBySign, type SignSplitRow } from '../../components/charts/signSplit';
-import { GRID, CURSOR, BAR_CURSOR, chartMargin, valueAxis, valueAxisLeft, categoryAxis, axisUsd, symmetricDomain, symmetricTicks, REF_LINE } from '../../components/charts/chartTheme';
+import { GRID, CURSOR, BAR_CURSOR, chartMargin, valueAxis, valueAxisLeft, categoryAxis, axisUsd, zeroAnchoredDomain, niceTicks, REF_LINE } from '../../components/charts/chartTheme';
 import { BULL, BEAR, FOCUS, MUTED_INK } from '../../components/gex/palette';
 
 /*
@@ -33,6 +33,24 @@ const signed = (v: number): string => (v > 0 ? `+${fmtUsd(v)}` : fmtUsd(v));
 const classInk: Record<FlowClass, string> = { INFORMED: FOCUS, MIXED: '#9aa0aa', UNINFORMED: MUTED_INK };
 const classLabel: Record<FlowClass, string> = { INFORMED: 'INFORMED', MIXED: 'MIXED', UNINFORMED: 'NOISE' };
 
+/*
+  Chart FILLS for the three classes, deliberately separate from `classInk`.
+
+  classInk colours TEXT, so its darkest member is pinned at the readability floor
+  (#7d7d7d) — which leaves MIXED and UNINFORMED only 0x1d apart in luminance. On
+  a histogram that read as one grey: the render pass showed three classes and one
+  visible tone. A fill has no contrast floor to clear, only its neighbours to be
+  told apart from, so these are spread across the range the text inks cannot use.
+
+  Still a single neutral family, because class is a confidence and not a
+  direction — green and red stay the market's.
+*/
+const classFill: Record<FlowClass, { color: string; opacity: number }> = {
+  INFORMED: { color: FOCUS, opacity: 1 },
+  MIXED: { color: '#8e949e', opacity: 0.75 },
+  UNINFORMED: { color: '#4a4f57', opacity: 1 },
+};
+
 const InformedFlow = () => {
   const { activeTicker } = useMarketData();
 
@@ -46,7 +64,10 @@ const InformedFlow = () => {
   // The tilt path, coloured by which side of flat it is on at each point rather
   // than by where it closed — see components/charts/signSplit.
   const tiltSeries = splitBySign(tilt, p => p.net);
-  const tiltMax = Math.max(...tilt.map(p => Math.abs(p.net)), 1);
+  // Zero-anchored, not symmetric — a tape that leaned one way all window should
+  // not reserve half the plot for a side it never visited.
+  const tiltDomain = zeroAnchoredDomain(tilt.map(p => p.net));
+  const tiltTicks = niceTicks(tiltDomain[0], tiltDomain[1]);
 
   if (prints.length === 0) {
     return (
@@ -107,9 +128,9 @@ const InformedFlow = () => {
             height={176}
             legend={
               <>
-                <Swatch color={classInk.INFORMED} label="Informed" />
-                <Swatch color={classInk.MIXED} label="Mixed" />
-                <Swatch color={classInk.UNINFORMED} label="Noise" />
+                <Swatch color={classFill.INFORMED.color} label="Informed" />
+                <Swatch color={classFill.MIXED.color} label="Mixed" />
+                <Swatch color={classFill.UNINFORMED.color} label="Noise" />
               </>
             }
             ariaLabel={`Distribution of information scores across ${prints.length} ${activeTicker} prints. ${informedCount} score at or above ${thresholds.informed} and are classed informed; ${uninformedCount} score at or below ${thresholds.uninformed} and are classed noise.`}
@@ -154,7 +175,7 @@ const InformedFlow = () => {
               />
               <Bar dataKey="count" isAnimationActive={false} maxBarSize={10}>
                 {scoreBuckets.map(b => (
-                  <Cell key={b.lo} fill={classInk[b.klass]} fillOpacity={b.klass === 'INFORMED' ? 0.9 : 0.65} />
+                  <Cell key={b.lo} fill={classFill[b.klass].color} fillOpacity={classFill[b.klass].opacity} />
                 ))}
               </Bar>
             </BarChart>
@@ -186,7 +207,7 @@ const InformedFlow = () => {
                 ticks={tilt.length > 1 ? [0, Math.round((tilt.length - 1) / 2), tilt.length - 1] : [0]}
                 tickFormatter={(x: number) => tilt[Math.round(x)]?.time.slice(0, 5) ?? ''}
               />
-              <YAxis {...valueAxis} domain={symmetricDomain(tilt.map(p => p.net))} ticks={symmetricTicks(tiltMax * 1.1)} tickFormatter={axisUsd} width={56} />
+              <YAxis {...valueAxis} domain={tiltDomain} ticks={tiltTicks} tickFormatter={axisUsd} width={56} />
               <ReferenceLine y={0} stroke={REF_LINE} strokeDasharray="3 3" />
               <Tooltip
                 cursor={CURSOR}

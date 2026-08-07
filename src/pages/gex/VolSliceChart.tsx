@@ -1,4 +1,8 @@
-import { useState, type MouseEvent } from 'react';
+import { useState } from 'react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ReferenceDot, ResponsiveContainer } from 'recharts';
+import { ChartTip, TipHead, TipRow, TipNote } from '../../components/charts/ChartTip';
+import { GRID, CURSOR, chartMargin, valueAxis, categoryAxis, axisVol, paddedDomain, niceTicks, REF_LINE } from '../../components/charts/chartTheme';
+import { FOCUS, MUTED_INK, SPOT } from '../../components/gex/palette';
 
 export interface SlicePoint {
   /** numeric position on the x axis (moneyness or DTE) */
@@ -21,44 +25,36 @@ interface VolSliceChartProps {
   refLabel: string;
 }
 
-const W = 100;
-const H = 46;
-
 /**
  * A single 2D cross-section of the IV surface — one row (skew) or one column
- * (term) — with a movable crosshair and a live selected-point readout. Every
- * value shown is read directly from the points passed in; nothing is refit.
+ * (term) — with a pinned point and a live read-out. Every value shown is read
+ * directly from the points passed in; nothing is refit.
+ *
+ * On recharts, on the house chart theme. Two things the port fixes:
+ *
+ * The curve was lilac (rgba(151,136,196,·)), an ink used nowhere else in the
+ * system. A slice of a modelled surface takes holo-silver like every other
+ * model output.
+ *
+ * The vol axis was two corner labels — the min at the bottom-left and the max at
+ * the top-left — with nothing between them, so a reader could see the shape but
+ * could not read a value off it without hovering. It is a real axis now.
+ *
+ * Click-to-pin survives the port: recharts reports the active index on both
+ * move and click, so the pin is set from the same index the tooltip is showing.
  */
 const VolSliceChart = ({ points, xCaption, xTitle, refIndex, refLabel }: VolSliceChartProps) => {
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const [pinIdx, setPinIdx] = useState<number>(refIndex);
 
-  const ys = points.map(p => p.y);
-  const rawMin = Math.min(...ys);
-  const rawMax = Math.max(...ys);
-  const pad = (rawMax - rawMin) * 0.14 || 1;
-  const min = rawMin - pad;
-  const max = rawMax + pad;
-  const span = max - min || 1;
-
-  const px = (i: number) => (points.length <= 1 ? W / 2 : (i / (points.length - 1)) * W);
-  const py = (v: number) => H - ((v - min) / span) * H;
-
-  const line = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${px(i).toFixed(2)},${py(p.y).toFixed(2)}`).join(' ');
-  const area = `${line} L${W.toFixed(2)},${H} L0,${H} Z`;
-
-  const activeIdx = hoverIdx ?? Math.min(pinIdx, points.length - 1);
+  const activeIdx = Math.min(hoverIdx ?? pinIdx, points.length - 1);
   const active = points[activeIdx];
   const ref = points[Math.min(refIndex, points.length - 1)];
   const dIv = active.y - ref.y;
+  const domain = paddedDomain(points.map(p => p.y), 0.14);
 
-  const onMove = (e: MouseEvent<SVGSVGElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const rel = (e.clientX - rect.left) / (rect.width || 1);
-    const idx = Math.round(rel * (points.length - 1));
-    setHoverIdx(Math.max(0, Math.min(points.length - 1, idx)));
-  };
-
+  // Up to five x ticks, evenly spaced through the slice — enough to locate a
+  // point, few enough that the labels never collide.
   const tickIdxs = Array.from(
     new Set(
       points.length <= 6
@@ -66,6 +62,12 @@ const VolSliceChart = ({ points, xCaption, xTitle, refIndex, refLabel }: VolSlic
         : [0, 0.25, 0.5, 0.75, 1].map(f => Math.round(f * (points.length - 1)))
     )
   );
+
+  /** recharts 3 widens activeTooltipIndex to number | TooltipIndex | null. */
+  const idxOf = (raw: unknown): number | null => {
+    const n = typeof raw === 'number' ? raw : raw != null ? Number(raw) : NaN;
+    return Number.isFinite(n) ? Math.max(0, Math.min(points.length - 1, n)) : null;
+  };
 
   return (
     <div className="flex flex-col gap-2 h-full min-h-0">
@@ -91,61 +93,89 @@ const VolSliceChart = ({ points, xCaption, xTitle, refIndex, refLabel }: VolSlic
         </span>
       </div>
 
-      {/* Curve + crosshair */}
-      <div className="flex-grow min-h-0 relative">
-        <svg
-          viewBox={`0 0 ${W} ${H}`}
-          preserveAspectRatio="none"
-          className="w-full h-full cursor-crosshair"
-          role="img"
-          aria-label="Implied volatility slice — IV across the surface cross-section"
-          onMouseMove={onMove}
-          onMouseLeave={() => setHoverIdx(null)}
-          onClick={() => hoverIdx !== null && setPinIdx(hoverIdx)}
-        >
-          {[0.25, 0.5, 0.75].map(f => (
-            <line key={f} x1="0" y1={H * f} x2={W} y2={H * f} stroke="rgba(255,255,255,0.04)" strokeWidth="0.3" />
-          ))}
-          {/* Reference (ATM / 30D) */}
-          <line
-            x1={px(refIndex)}
-            y1="0"
-            x2={px(refIndex)}
-            y2={H}
-            stroke="rgba(143,143,143,0.5)"
-            strokeWidth="0.4"
-            strokeDasharray="2 2"
-            vectorEffect="non-scaling-stroke"
-          />
-          <path d={area} fill="rgba(151,136,196,0.12)" />
-          <path d={line} fill="none" stroke="rgba(151,136,196,0.9)" strokeWidth="0.9" vectorEffect="non-scaling-stroke" />
-          {/* Crosshair */}
-          <line x1={px(activeIdx)} y1="0" x2={px(activeIdx)} y2={H} stroke="rgba(237,237,237,0.5)" strokeWidth="0.4" vectorEffect="non-scaling-stroke" />
-          <line x1="0" y1={py(active.y)} x2={W} y2={py(active.y)} stroke="rgba(237,237,237,0.28)" strokeWidth="0.4" vectorEffect="non-scaling-stroke" />
-        </svg>
-
-        {/* Reference tag */}
-        <span
-          className="absolute top-0 -translate-x-1/2 font-mono text-micro uppercase tracking-wider text-textMuted pointer-events-none"
-          style={{ left: `${px(refIndex)}%` }}
-        >
-          {refLabel}
-        </span>
-        {/* Selected point marker (HTML so it stays round under the stretched viewBox) */}
-        <span
-          className="absolute w-[9px] h-[9px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-textPrimary ring-2 ring-panel pointer-events-none"
-          style={{ left: `${px(activeIdx)}%`, top: `${(py(active.y) / H) * 100}%` }}
-        />
-        <span className="absolute left-0 top-0 font-mono text-micro tnum text-textMuted">{max.toFixed(0)}%</span>
-        <span className="absolute left-0 bottom-0 font-mono text-micro tnum text-textMuted">{min.toFixed(0)}%</span>
+      <div
+        className="flex-grow min-h-0 cursor-crosshair"
+        role="img"
+        aria-label={`Implied volatility slice across ${xTitle.toLowerCase()}, from ${points[0].y.toFixed(1)}% at ${points[0].label} to ${points[points.length - 1].y.toFixed(1)}% at ${points[points.length - 1].label}, referenced to ${refLabel} at ${ref.y.toFixed(1)}%.`}
+      >
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart
+            data={points}
+            margin={{ ...chartMargin, top: 14 }}
+            onMouseMove={s => setHoverIdx(idxOf(s?.activeTooltipIndex))}
+            onMouseLeave={() => setHoverIdx(null)}
+            onClick={s => {
+              const i = idxOf(s?.activeTooltipIndex);
+              if (i !== null) setPinIdx(i);
+            }}
+          >
+            <CartesianGrid stroke={GRID} vertical={false} />
+            <XAxis
+              {...categoryAxis}
+              type="category"
+              dataKey="label"
+              interval={0}
+              ticks={tickIdxs.map(i => points[i].label)}
+            />
+            <YAxis {...valueAxis} domain={domain} ticks={niceTicks(domain[0], domain[1])} tickFormatter={axisVol} width={40} />
+            {/* The reference column (ATM / 30D) the read-out measures against. */}
+            <ReferenceLine
+              x={ref.label}
+              stroke={MUTED_INK}
+              strokeOpacity={0.6}
+              strokeDasharray="2 2"
+              label={{ value: refLabel, position: 'top', fill: MUTED_INK, fontSize: 10, fontFamily: 'JetBrains Mono, monospace' }}
+            />
+            {/* The pinned point stays marked while the cursor scans elsewhere. */}
+            <ReferenceLine x={points[Math.min(pinIdx, points.length - 1)].label} stroke={REF_LINE} />
+            <Tooltip
+              cursor={CURSOR}
+              content={
+                <ChartTip<SlicePoint>
+                  render={p => {
+                    const d = p.y - ref.y;
+                    return (
+                      <>
+                        <TipHead sub={xCaption}>{p.label}</TipHead>
+                        <TipRow label="Implied vol" value={`${p.y.toFixed(2)}%`} />
+                        <TipRow
+                          label={`vs ${refLabel}`}
+                          value={`${d > 0 ? '+' : d < 0 ? '−' : ''}${Math.abs(d).toFixed(2)} pt`}
+                          tone={Math.abs(d) < 0.05 ? 'text-textMuted' : 'text-textSecondary'}
+                        />
+                        <TipNote>
+                          {Math.abs(d) < 0.05
+                            ? `This point prices the same vol as ${refLabel}.`
+                            : `Options here price ${Math.abs(d).toFixed(1)} vol points ${d > 0 ? 'more' : 'less'} than ${refLabel} — read straight off the surface, not refit.`}
+                        </TipNote>
+                      </>
+                    );
+                  }}
+                />
+              }
+            />
+            <Area
+              type="monotone"
+              dataKey="y"
+              stroke={FOCUS}
+              strokeWidth={1.6}
+              fill={FOCUS}
+              fillOpacity={0.1}
+              dot={false}
+              activeDot={{ r: 3.5, fill: SPOT, stroke: 'none' }}
+              isAnimationActive={false}
+            />
+            <ReferenceDot
+              x={points[Math.min(pinIdx, points.length - 1)].label}
+              y={points[Math.min(pinIdx, points.length - 1)].y}
+              r={3.5}
+              fill={SPOT}
+              stroke="none"
+            />
+          </AreaChart>
+        </ResponsiveContainer>
       </div>
 
-      {/* X axis */}
-      <div className="flex justify-between font-mono text-micro tnum text-textMuted select-none">
-        {tickIdxs.map(i => (
-          <span key={i}>{points[i].label}</span>
-        ))}
-      </div>
       <div className="text-center font-mono text-micro uppercase tracking-wider text-textMuted select-none">{xTitle}</div>
     </div>
   );

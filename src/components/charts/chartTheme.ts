@@ -118,9 +118,15 @@ export function paddedDomain(values: number[], pad = 0.12): [number, number] {
 }
 
 /**
- * A zero-anchored symmetric domain — for any series that has a meaningful sign
- * (net premium, dealer gamma, charm). Keeps $0 dead-centre so "above the line"
- * and "below the line" carry their plain meaning.
+ * A zero-anchored symmetric domain — $0 dead-centre, equal room either side.
+ * Correct ONLY where the two halves are genuinely comparable by construction
+ * (net call vs net put premium, where the builder hands over one shared bound).
+ *
+ * For a signed series that simply happens to have a sign — a cumulative dealer
+ * gamma book that spent the session long — use `zeroAnchoredDomain` instead.
+ * Forcing symmetry there reserves half the plot for a range the data never
+ * visits, which is exactly what the render pass caught: a book running −$9M to
+ * +$21M drawn on a ±$30M axis, using 40% of its own height.
  */
 export function symmetricDomain(values: number[], pad = 1.1): [number, number] {
   const clean = values.filter(Number.isFinite).map(Math.abs);
@@ -131,4 +137,46 @@ export function symmetricDomain(values: number[], pad = 1.1): [number, number] {
 /** Evenly spaced ticks across a symmetric domain, always including 0. */
 export function symmetricTicks(max: number): number[] {
   return [-max, -max / 2, 0, max / 2, max];
+}
+
+/**
+ * A padded domain that always CONTAINS zero without being centred on it. Use for
+ * any signed series where above-the-line and below-the-line carry meaning but
+ * the two sides are not the same size: the zero rule stays on the plot, and the
+ * data still fills the height it has earned.
+ */
+export function zeroAnchoredDomain(values: number[], pad = 0.1): [number, number] {
+  const clean = values.filter(Number.isFinite);
+  if (clean.length === 0) return [0, 1];
+  const lo = Math.min(0, ...clean);
+  const hi = Math.max(0, ...clean);
+  const span = hi - lo || Math.abs(hi) || 1;
+  // A side that sits exactly on zero is not padded away from it — the axis
+  // should read $0 at the floor, not a negative number the series never reaches.
+  return [lo === 0 ? 0 : lo - span * pad, hi === 0 ? 0 : hi + span * pad];
+}
+
+/**
+ * Round tick values across a domain — 1 / 2 / 5 x a power of ten, the ticks a
+ * person would choose. recharts' own auto-ticks divide the domain evenly, so a
+ * padded domain produces ticks like 37.8 / 31.6 / 21.6 / 11.6 / 1.6, which is a
+ * scale nobody can read a value off.
+ *
+ * Zero is included whenever the domain spans it, so a signed chart always shows
+ * its own baseline.
+ */
+export function niceTicks(lo: number, hi: number, count = 5): number[] {
+  if (!Number.isFinite(lo) || !Number.isFinite(hi) || hi <= lo) return [];
+  const raw = (hi - lo) / Math.max(1, count - 1);
+  const mag = Math.pow(10, Math.floor(Math.log10(Math.abs(raw) || 1)));
+  const norm = raw / mag;
+  const step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * mag;
+  const out: number[] = [];
+  for (let v = Math.ceil(lo / step) * step; v <= hi + step * 1e-9; v += step) {
+    // Re-round each step: repeated addition of a fractional step accumulates
+    // float error, and a tick labelled 20.000000000000004 is a visible bug.
+    out.push(Number(v.toPrecision(12)));
+  }
+  if (lo < 0 && hi > 0 && !out.includes(0)) out.push(0);
+  return out.sort((a, b) => a - b);
 }

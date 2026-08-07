@@ -1,8 +1,12 @@
 import { useMemo, useState } from 'react';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ReferenceLine, ReferenceDot, ResponsiveContainer } from 'recharts';
 import Panel from '../ui/Panel';
 import SignalBadge from '../ui/SignalBadge';
 import EmptyState from '../ui/EmptyState';
 import { ROW_INTERACTIVE, interactiveRowProps } from '../ui/interactiveRow';
+import { ChartTip, TipHead, TipRow, TipNote } from '../charts/ChartTip';
+import { splitBySign } from '../charts/signSplit';
+import { CURSOR, REF_LINE, paddedDomain } from '../charts/chartTheme';
 import { BULL, BEAR, FOCUS } from '../gex/palette';
 import { buildStructures, payoffCurve, type Structure } from '../../core/structures';
 import { SLEEVE_INK } from './sleeveInk';
@@ -25,56 +29,103 @@ import type { MarketSnapshot } from '../../types/market';
   share of the terminal distribution that finishes in profit.
 */
 
-const CURVE_W = 320;
-const CURVE_H = 84;
+const CURVE_H = 96;
 
-/** The payoff at expiry — the shape that IS the instrument. */
+interface PayoffRow {
+  /** Underlying price at expiry. Interpolated on a breakeven crossing. */
+  spot: number;
+  profit: number;
+  pos: number | null;
+  neg: number | null;
+  /** True on an interpolated point — which, on a payoff curve, IS a breakeven. */
+  isBreakeven: boolean;
+}
+
+/*
+  The payoff at expiry — the shape that IS the instrument.
+
+  On recharts, and on the shared zero-split (components/charts/signSplit) rather
+  than the hand-rolled segment walker this used to carry. The split matters more
+  here than anywhere else on the desk: the point where the curve crosses zero is
+  the BREAKEVEN, so an interpolated crossing is not a drawing convenience — it is
+  the number the card quotes, landing exactly where the colour changes.
+
+  Green above / red below is correct here without borrowing: this axis is money
+  made and money lost, which is the one thing those two colours are for.
+*/
 const Payoff = ({ st, spot }: { st: Structure; spot: number }) => {
-  const pts = useMemo(() => payoffCurve(st, spot, 121), [st, spot]);
-  const lo = Math.min(...pts.map(p => p.profit));
-  const hi = Math.max(...pts.map(p => p.profit));
-  const pad = (hi - lo || 1) * 0.15;
-  const yLo = lo - pad;
-  const yHi = hi + pad;
-  const X = (i: number) => (i / (pts.length - 1)) * CURVE_W;
-  const Y = (v: number) => CURVE_H - ((v - yLo) / (yHi - yLo || 1)) * CURVE_H;
-  const zeroY = Y(0);
-  const spotX = X(pts.findIndex(p => p.spot >= spot));
+  const rows: PayoffRow[] = useMemo(() => {
+    const pts = payoffCurve(st, spot, 121);
+    return splitBySign(pts, p => p.profit).map(r => {
+      if (r.src) return { spot: r.src.spot, profit: r.v, pos: r.pos, neg: r.neg, isBreakeven: false };
+      // Interpolate the price at the crossing with the same fraction the split
+      // used for the profit, so the breakeven sits on the real underlying scale.
+      const i = Math.floor(r.x);
+      const u = r.x - i;
+      const a = pts[i];
+      const b = pts[Math.min(i + 1, pts.length - 1)];
+      return { spot: a.spot + (b.spot - a.spot) * u, profit: 0, pos: 0, neg: 0, isBreakeven: true };
+    });
+  }, [st, spot]);
 
-  // Split at the zero line so profit and loss carry the market's own colours —
-  // this is money made or lost, which is the one thing green and red are for.
-  const seg = (want: 'up' | 'down') =>
-    pts
-      .map((p, i) => {
-        const inSeg = want === 'up' ? p.profit >= 0 : p.profit <= 0;
-        return inSeg ? `${X(i).toFixed(1)},${Y(p.profit).toFixed(1)}` : null;
-      })
-      .reduce<string[]>((acc, cur) => {
-        if (cur) acc.push(acc.length && acc[acc.length - 1] !== 'GAP' ? `L${cur}` : `M${cur}`);
-        else if (acc.length && acc[acc.length - 1] !== 'GAP') acc.push('GAP');
-        return acc;
-      }, [])
-      .filter(v => v !== 'GAP')
-      .join(' ');
+  const domain = paddedDomain(rows.map(r => r.profit), 0.15);
+  const breakevens = rows.filter(r => r.isBreakeven);
 
   return (
-    <svg
-      viewBox={`0 0 ${CURVE_W} ${CURVE_H}`}
-      preserveAspectRatio="none"
-      className="w-full"
+    <div
       style={{ height: CURVE_H }}
+      className="w-full"
       role="img"
       aria-label={`Profit at expiry across the underlying's range. Maximum loss $${st.maxLoss.toFixed(0)}, ${
         Number.isFinite(st.maxProfit) ? `maximum profit $${st.maxProfit.toFixed(0)}` : 'profit unbounded'
-      }.`}
+      }. ${st.breakevens.length === 1 ? `Breakeven at ${st.breakevens[0].toFixed(2)}` : `Breakevens at ${st.breakevens.map(b => b.toFixed(2)).join(' and ')}`}.`}
     >
-      <line x1={0} x2={CURVE_W} y1={zeroY} y2={zeroY} stroke="rgba(255,255,255,0.22)" strokeWidth={1} vectorEffect="non-scaling-stroke" />
-      {spotX >= 0 && (
-        <line x1={spotX} x2={spotX} y1={0} y2={CURVE_H} stroke={FOCUS} strokeOpacity={0.3} strokeWidth={1} strokeDasharray="2 3" vectorEffect="non-scaling-stroke" />
-      )}
-      <path d={seg('down')} fill="none" stroke={BEAR} strokeWidth={1.75} vectorEffect="non-scaling-stroke" />
-      <path d={seg('up')} fill="none" stroke={BULL} strokeWidth={1.75} vectorEffect="non-scaling-stroke" />
-    </svg>
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={rows} margin={{ top: 6, right: 4, bottom: 0, left: 0 }}>
+          <XAxis type="number" dataKey="spot" domain={['dataMin', 'dataMax']} hide />
+          <YAxis type="number" domain={domain} hide />
+          <ReferenceLine y={0} stroke={REF_LINE} strokeWidth={1} />
+          <ReferenceLine x={spot} stroke={FOCUS} strokeOpacity={0.32} strokeDasharray="2 3" />
+          <Tooltip
+            cursor={CURSOR}
+            content={
+              <ChartTip<PayoffRow>
+                render={r => {
+                  const move = ((r.spot - spot) / spot) * 100;
+                  return (
+                    <>
+                      <TipHead sub={`${move >= 0 ? '+' : ''}${move.toFixed(1)}%`}>
+                        {st.ticker} {r.spot.toFixed(2)}
+                      </TipHead>
+                      <TipRow
+                        label={r.isBreakeven ? 'Breakeven' : r.profit >= 0 ? 'Profit' : 'Loss'}
+                        value={r.isBreakeven ? '$0' : `${r.profit >= 0 ? '+' : '−'}$${Math.abs(r.profit).toFixed(0)}`}
+                        tone={r.isBreakeven ? 'text-textPrimary' : r.profit >= 0 ? 'text-bull' : 'text-bear'}
+                      />
+                      <TipRow label="Paid" value={`${st.netDebit >= 0 ? '' : '+'}$${Math.abs(st.netDebit).toFixed(0)}`} tone="text-textSecondary" />
+                      <TipRow label="Worst case" value={`−$${st.maxLoss.toFixed(0)}`} tone="text-textMuted" />
+                      <TipNote>
+                        {r.isBreakeven
+                          ? `At ${r.spot.toFixed(2)} the structure returns exactly what it cost — this is the breakeven the card quotes.`
+                          : r.profit >= 0
+                            ? `${st.ticker} finishing here returns ${Math.abs(r.profit).toFixed(0)} dollars per contract against the ${st.maxLoss.toFixed(0)} at risk.`
+                            : `${st.ticker} finishing here costs ${Math.abs(r.profit).toFixed(0)} of the ${st.maxLoss.toFixed(0)} at risk. The loss is capped at expiry regardless of how far it goes.`}
+                      </TipNote>
+                    </>
+                  );
+                }}
+              />
+            }
+          />
+          <Area type="linear" dataKey="neg" stroke={BEAR} strokeWidth={1.75} fill={BEAR} fillOpacity={0.1} baseValue={0} connectNulls={false} dot={false} activeDot={{ r: 3, fill: BEAR, stroke: 'none' }} isAnimationActive={false} />
+          <Area type="linear" dataKey="pos" stroke={BULL} strokeWidth={1.75} fill={BULL} fillOpacity={0.1} baseValue={0} connectNulls={false} dot={false} activeDot={{ r: 3, fill: BULL, stroke: 'none' }} isAnimationActive={false} />
+          {/* Each breakeven marked where the colour turns over. */}
+          {breakevens.map(b => (
+            <ReferenceDot key={b.spot} x={b.spot} y={0} r={2.6} fill={FOCUS} stroke="none" />
+          ))}
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
   );
 };
 
