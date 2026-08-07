@@ -15,6 +15,7 @@ import type {
   CommandView,
   DealerBias,
   DeltaByPrice,
+  DeltaEquivFlow,
   DeltaPoint,
   KeyLevelRow,
   KeyLevels,
@@ -123,13 +124,53 @@ const SESSION_BARS = 390; // one cash session of 1m bars (mirrors the simulator)
  *   max-VOLUME price bucket, not the most-visited one.
  * - Buy/sell $ volume derive from the session's actual traded notional.
  */
+/**
+ * Delta-equivalent flow for a cash index (P4.4). Share volume is undefined, but
+ * the options book is not: callDex/putDex are its $ delta exposure per strike
+ * (callDex = callOI·100·Δcall·spot, so a call is long delta and a put short).
+ * Summing them expresses the whole book as one underlying-equivalent delta, and
+ * dividing by spot restates the net in share-equivalents — the honest index
+ * stand-in for the missing share flow.
+ */
+function buildDeltaEquiv(snapshot: MarketSnapshot): DeltaEquivFlow {
+  const { spot, chain } = snapshot;
+  let callDollars = 0;
+  let putDollars = 0;
+  const byStrike = [...chain]
+    .sort((a, b) => b.strike - a.strike)
+    .map(n => {
+      callDollars += n.callDex;
+      putDollars += n.putDex;
+      return { strike: n.strike, value: Math.round(n.netDex) };
+    });
+  const netDollars = callDollars + putDollars;
+  return {
+    callDollars: Math.round(callDollars),
+    putDollars: Math.round(putDollars),
+    netDollars: Math.round(netDollars),
+    netShares: Math.round(netDollars / spot),
+    byStrike,
+  };
+}
+
 function buildOrderFlow(snapshot: MarketSnapshot): OrderFlowData {
   const { ticker, spot } = snapshot;
   if (Simulator.isIndex(ticker)) {
     // A cash index has no share volume, so cumulative delta, delta-by-price,
-    // VWAP and POC cannot exist. Emit an explicit unavailable state rather than
-    // fabricate them — the panel routes to DataUnavailablePanel.
-    return { available: false, cumulativeDelta: [], deltaByPrice: [], buyVolume: 0, sellVolume: 0, netDelta: 0, vwap: spot, poc: spot };
+    // VWAP and POC cannot exist. Share flow stays unavailable, but the options
+    // book does exist — deltaEquiv carries its delta-equivalent flow (P4.4), and
+    // the panel renders that instead of a bare unavailable state.
+    return {
+      available: false,
+      cumulativeDelta: [],
+      deltaByPrice: [],
+      buyVolume: 0,
+      sellVolume: 0,
+      netDelta: 0,
+      vwap: spot,
+      poc: spot,
+      deltaEquiv: buildDeltaEquiv(snapshot),
+    };
   }
   const all = Simulator.getCandles(ticker) ?? [];
   // Trailing session-sized window. NOT length % SESSION_BARS — bars roll in one
@@ -138,7 +179,7 @@ function buildOrderFlow(snapshot: MarketSnapshot): OrderFlowData {
   const bars = all.slice(-SESSION_BARS);
 
   if (!bars.length) {
-    return { available: true, cumulativeDelta: [], deltaByPrice: [], buyVolume: 0, sellVolume: 0, netDelta: 0, vwap: spot, poc: spot };
+    return { available: true, cumulativeDelta: [], deltaByPrice: [], buyVolume: 0, sellVolume: 0, netDelta: 0, vwap: spot, poc: spot, deltaEquiv: null };
   }
 
   // One signed dollar-delta per bar — bar body × traded shares (× a flow
@@ -204,6 +245,7 @@ function buildOrderFlow(snapshot: MarketSnapshot): OrderFlowData {
     netDelta,
     vwap: Number(vwap.toFixed(2)),
     poc: Number(poc.toFixed(2)),
+    deltaEquiv: null,
   };
 }
 

@@ -29,3 +29,31 @@ describe('P3.3 — cash indices emit no order flow', () => {
     expect(view.orderFlow.available).toBe(true);
   });
 });
+
+/**
+ * P4.4 — share flow stays unavailable for a cash index, but the options book is
+ * not: deltaEquiv restates it as an underlying-equivalent delta, so the panel
+ * shows a real measure instead of a bare unavailable state.
+ */
+describe('P4.4 — cash indices carry delta-equivalent flow', () => {
+  it('provides options delta-equivalent flow that reconciles across strikes', () => {
+    const snap = Simulator.buildSnapshot('SPX');
+    const de = buildCommandView(snap).orderFlow.deltaEquiv;
+    expect(de).toBeTruthy();
+    // net = call + put, and the per-strike profile sums to the net.
+    expect(de!.netDollars).toBeCloseTo(de!.callDollars + de!.putDollars, 0);
+    const sum = de!.byStrike.reduce((a, r) => a + r.value, 0);
+    expect(sum).toBeCloseTo(de!.netDollars, -2); // per-strike rounding
+    // Calls are long delta, puts short — the two sides carry opposite signs.
+    expect(de!.callDollars).toBeGreaterThan(0);
+    expect(de!.putDollars).toBeLessThan(0);
+    // netShares is the net restated at spot.
+    expect(de!.netShares).toBeCloseTo(de!.netDollars / snap.spot, -1);
+  });
+
+  it('an ETF reports real share flow and no delta-equivalent stand-in', () => {
+    const view = buildCommandView(Simulator.buildSnapshot('SPY'));
+    expect(view.orderFlow.available).toBe(true);
+    expect(view.orderFlow.deltaEquiv ?? null).toBeNull();
+  });
+});
