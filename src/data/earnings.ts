@@ -10,6 +10,7 @@
 */
 
 import { dayKey, hGauss, h01, hRange } from '../core/rng';
+import { ivRankFor } from '../core/ivRank';
 import { expiryFor, fmtExpiryShort } from '../core/calendar';
 import { UNIVERSE } from './universe';
 import type { Sector } from './universe';
@@ -336,7 +337,7 @@ export function buildEarningsCalendar(): EarningsEvent[] {
         richness,
         beatRate8q: record.beatRatePct,
         revisionTrend: Math.max(-1, Math.min(1, hGauss(s('rev')) * 0.85)),
-        ivRank: Math.round(hRange(s('ivr'), 35, 96)),
+        ivRank: ivRankFor(u.ticker, dayKey()).rank,
         technicalScore: Math.round(hRange(s('tech'), 22, 92)),
         flowLean: Math.max(-1, Math.min(1, hGauss(s('flow')) * 0.5)),
       };
