@@ -66,13 +66,13 @@ function buildPressure(
     const jp = h01(`${ticker}-${n.strike}-pp`);
     const call = {
       pressure: n.callGex * (0.7 + jc * 0.6),
-      deltaOI: Math.round((jc - 0.45) * n.callOI * 0.3),
-      volume: Math.round(n.callOI * (0.25 + jc * 0.55)),
+      deltaOI: Math.round((jc - 0.45) * n.callOI.value * 0.3),
+      volume: Math.round(n.callOI.value * (0.25 + jc * 0.55)),
     };
     const put = {
       pressure: n.putGex * (0.7 + jp * 0.6),
-      deltaOI: Math.round((jp - 0.45) * n.putOI * 0.3),
-      volume: Math.round(n.putOI * (0.25 + jp * 0.55)),
+      deltaOI: Math.round((jp - 0.45) * n.putOI.value * 0.3),
+      volume: Math.round(n.putOI.value * (0.25 + jp * 0.55)),
     };
     const net = call.pressure + put.pressure;
     maxAbs = Math.max(maxAbs, Math.abs(call.pressure), Math.abs(put.pressure), Math.abs(net));

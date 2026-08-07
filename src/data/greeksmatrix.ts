@@ -95,7 +95,7 @@ export function buildGreeksRegime(snapshot: MarketSnapshot): GreeksRegimeView {
     const m = (n.strike - spot) / spot;
     // per-1%-shift notional so vanna/charm sit on the same $ scale family as
     // gamma/delta instead of an arbitrary 1e-4 haircut
-    const oiScale = (n.callOI + n.putOI) * 100 * spot * 0.01;
+    const oiScale = (n.callOI.value + n.putOI.value) * 100 * spot * 0.01;
     const gamma = n.netGex;
     const delta = n.netDex;
     const vega = n.netVex;

@@ -45,7 +45,7 @@ export function buildRankedTargets(snapshot: MarketSnapshot): RankedTargetsView 
   // Synthesized session volume per strike (deterministic, OI-anchored)
   const volumes = nodes.map(n => {
     const j = h01(`${ticker}-${n.strike}-tvol`);
-    return Math.round((n.callOI + n.putOI) * (0.2 + j * 0.7));
+    return Math.round((n.callOI.value + n.putOI.value) * (0.2 + j * 0.7));
   });
 
   // Structural landmarks for tagging. Read from the single derivation, not
@@ -61,7 +61,7 @@ export function buildRankedTargets(snapshot: MarketSnapshot): RankedTargetsView 
   let maxOI = 0;
   for (const n of nodes) {
     maxAll = Math.max(maxAll, Math.abs(n.netGex));
-    maxOI = Math.max(maxOI, n.callOI + n.putOI);
+    maxOI = Math.max(maxOI, n.callOI.value + n.putOI.value);
   }
 
   const maxVolume = Math.max(...volumes, 1);
@@ -85,7 +85,7 @@ export function buildRankedTargets(snapshot: MarketSnapshot): RankedTargetsView 
 
     // Composite priority: gamma weight leads, then OI, isolation, proximity
     const gexN = Math.abs(n.netGex) / (maxAll || 1);
-    const oiN = (n.callOI + n.putOI) / maxTotalOI;
+    const oiN = (n.callOI.value + n.putOI.value) / maxTotalOI;
     const nbrN = Math.min(nbr / 3, 1);
     const proxN = Math.max(0, 1 - Math.abs(n.strike - spot) / (spot * 0.02));
     const score = Math.round(100 * (0.4 * gexN + 0.22 * oiN + 0.22 * nbrN + 0.16 * proxN));
@@ -116,9 +116,9 @@ export function buildRankedTargets(snapshot: MarketSnapshot): RankedTargetsView 
       volume,
       nbr: Number(nbr.toFixed(2)),
       netGex: n.netGex,
-      openInterest: n.callOI + n.putOI,
-      callVol: Math.round(volume * (n.callOI / (n.callOI + n.putOI || 1))),
-      putVol: Math.round(volume * (n.putOI / (n.callOI + n.putOI || 1))),
+      openInterest: n.callOI.value + n.putOI.value,
+      callVol: Math.round(volume * (n.callOI.value / (n.callOI.value + n.putOI.value || 1))),
+      putVol: Math.round(volume * (n.putOI.value / (n.callOI.value + n.putOI.value || 1))),
       pressure: n.strike >= spot ? 'RESISTANCE' : 'SUPPORT',
       hedgingClass,
       tags,

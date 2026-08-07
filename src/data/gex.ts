@@ -115,8 +115,8 @@ export function pinStrike(snapshot: MarketSnapshot, half: number): number {
   let pin = window[0]?.strike ?? spot;
   let heaviest = 0;
   for (const n of window) {
-    if (n.callOI + n.putOI > heaviest) {
-      heaviest = n.callOI + n.putOI;
+    if (n.callOI.value + n.putOI.value > heaviest) {
+      heaviest = n.callOI.value + n.putOI.value;
       pin = n.strike;
     }
   }

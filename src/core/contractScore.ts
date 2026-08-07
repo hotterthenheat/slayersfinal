@@ -251,7 +251,7 @@ function scoreCandidate(
   const mid = Number(bs.price.toFixed(2));
   const thetaPerDayPct = (Math.abs(bs.thetaDay) / mid) * 100;
   // OI thins out the further the strike sits past the chain window
-  const baseOi = node ? (right === 'C' ? node.callOI : node.putOI) : 500;
+  const baseOi = node ? (right === 'C' ? node.callOI.value : node.putOI.value) : 500;
   const oiCount = Math.max(50, Math.round(baseOi * Math.exp((-Math.abs(strike - (node?.strike ?? strike)) / spot) * 24)));
   const spreadPct = clamp((6 - Math.log10(Math.max(oiCount, 10)) * 1.4) * (dte > 180 ? 1.5 : 1), 0.4, 6);
 

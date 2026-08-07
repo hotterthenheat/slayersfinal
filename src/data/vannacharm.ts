@@ -138,7 +138,7 @@ function projectStrike(n: StrikeNode, mode: ShiftMode, ivShift: IvShift, maxChar
   // VANNA: an IV move re-prices dealer deltas; vanna is signed per strike so
   // the profile tilts rather than scales — jitter keeps the tilt uneven enough
   // to re-rank walls under a real vol shock.
-  const oiNotional = (n.callOI + n.putOI) * spot;
+  const oiNotional = (n.callOI.value + n.putOI.value) * spot;
   const j = 0.6 + h01(`${ticker}-${n.strike}-vanna`) * 0.7;
   return n.netGex + n.vanna * oiNotional * 0.8 * j * ivShift;
 }

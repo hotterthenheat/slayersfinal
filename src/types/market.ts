@@ -55,10 +55,30 @@ export interface Indicators {
   squeeze: boolean;
 }
 
+/** Whether an open-interest figure is the settled prior-close value, an intraday
+    estimate, or simply unavailable for the instrument. */
+export type OpenInterestFreshness = 'SETTLED' | 'ESTIMATED' | 'UNAVAILABLE';
+
+/**
+ * Open interest with its own staleness. OI publishes once per day at ~06:30 ET
+ * for the PRIOR session's close, so every figure carries the session date it
+ * represents and an explicit freshness state — a bare number cannot tell a panel
+ * whether it is looking at today's positioning or a day-and-a-half-old snapshot.
+ * The simulator emits SETTLED for now; ESTIMATED is reserved for a future
+ * intraday estimator (none exists yet). Source: ThetaData daily `open_interest`.
+ */
+export interface OpenInterest {
+  /** Contracts outstanding (or, for a delta, the change vs the prior session). */
+  value: number;
+  /** Session date this figure represents, ISO `YYYY-MM-DD` (the prior close). */
+  asOf: string;
+  freshness: OpenInterestFreshness;
+}
+
 export interface StrikeNode {
   strike: number;
-  callOI: number;
-  putOI: number;
+  callOI: OpenInterest;
+  putOI: OpenInterest;
   gamma: number;
   callGex: number;
   putGex: number;

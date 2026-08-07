@@ -250,8 +250,8 @@ const StockDetailDrawer = ({
   const snapshot = useMemo(() => (ticker && wantsBook ? Simulator.buildSnapshot(ticker) : null), [ticker, wantsBook]);
   const chainOI = useMemo(() => {
     if (!snapshot) return null;
-    const call = snapshot.chain.reduce((a, n) => a + n.callOI, 0);
-    const put = snapshot.chain.reduce((a, n) => a + n.putOI, 0);
+    const call = snapshot.chain.reduce((a, n) => a + n.callOI.value, 0);
+    const put = snapshot.chain.reduce((a, n) => a + n.putOI.value, 0);
     return { call, put, ratio: call ? put / call : 0 };
   }, [snapshot]);
 

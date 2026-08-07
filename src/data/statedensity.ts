@@ -258,8 +258,8 @@ export function buildStateDensity(snapshot: MarketSnapshot): StateDensityView {
 
   // ---- skew: put-wing steepness from chain OI tilt + model ----
   const near = [...chain].sort((a, b) => Math.abs(a.strike - spot) - Math.abs(b.strike - spot)).slice(0, 16);
-  const putOI = near.reduce((s, n) => s + n.putOI, 0);
-  const callOI = near.reduce((s, n) => s + n.callOI, 0);
+  const putOI = near.reduce((s, n) => s + n.putOI.value, 0);
+  const callOI = near.reduce((s, n) => s + n.callOI.value, 0);
   const oiTilt = (putOI - callOI) / (putOI + callOI + 1); // >0 = puts crowded
   const skewParam = clamp(0.12 + oiTilt * 0.45 + hRange(seed('skew'), -0.04, 0.16), 0.03, 0.6);
 

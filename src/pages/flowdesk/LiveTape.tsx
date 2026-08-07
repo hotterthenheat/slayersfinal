@@ -329,12 +329,12 @@ const ALL_COLS: TapeCol[] = [
     align: 'right',
     cls: 'text-label tnum',
     cell: r =>
-      r.deltaOI === 0 ? (
+      r.deltaOI.value === 0 ? (
         <span className="text-textMuted">—</span>
       ) : (
-        <span className={r.deltaOI > 0 ? 'text-bull' : 'text-bear'}>
-          {r.deltaOI > 0 ? '↑' : '↓'}
-          {Math.abs(r.deltaOI).toLocaleString()}
+        <span className={r.deltaOI.value > 0 ? 'text-bull' : 'text-bear'}>
+          {r.deltaOI.value > 0 ? '↑' : '↓'}
+          {Math.abs(r.deltaOI.value).toLocaleString()}
         </span>
       ),
   },

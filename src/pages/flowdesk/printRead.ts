@@ -58,10 +58,10 @@ export function printImplication(p: FlowPrint): string {
       : 'It crossed in a single clip rather than sweeping, so the buyer took the liquidity that was already sitting there.';
 
   const oi =
-    p.deltaOI > 0
-      ? `Open interest in the contract is up ${p.deltaOI.toLocaleString()} on the session, so the day's flow here has been opening positions.`
-      : p.deltaOI < 0
-        ? `Open interest in the contract is down ${Math.abs(p.deltaOI).toLocaleString()} on the session, so some of the day's flow here has been closing.`
+    p.deltaOI.value > 0
+      ? `Open interest in the contract is up ${p.deltaOI.value.toLocaleString()} on the session, so the day's flow here has been opening positions.`
+      : p.deltaOI.value < 0
+        ? `Open interest in the contract is down ${Math.abs(p.deltaOI.value).toLocaleString()} on the session, so some of the day's flow here has been closing.`
         : 'Open interest in the contract is unchanged on the session, so whether the position was opened or closed is still undecided.';
 
   return `${how} ${oi}`;
@@ -83,5 +83,5 @@ export function competingRead(p: FlowPrint): string {
 
 /** Print size against the contract's open interest — the "does this matter" ratio. */
 export function sizeVsOi(p: FlowPrint): number {
-  return p.oi > 0 ? (p.size / p.oi) * 100 : 0;
+  return p.oi.value > 0 ? (p.size / p.oi.value) * 100 : 0;
 }

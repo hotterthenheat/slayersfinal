@@ -5,7 +5,7 @@
 ==================================================
 */
 
-import type { ContractGreeks, TradeQuoteContext } from './market';
+import type { ContractGreeks, OpenInterest, TradeQuoteContext } from './market';
 
 export type StratTag = '—' | 'Vertical' | 'Butterfly' | 'Ratio' | 'Custom';
 
@@ -38,9 +38,11 @@ export interface FlowPrint {
   /** Total premium of the print, dollars */
   premium: number;
   volume: number;
-  oi: number;
-  /** vs prior session; 0 = unchanged/unknown */
-  deltaOI: number;
+  /** Open interest with its staleness. Prior-session settled value for now. */
+  oi: OpenInterest;
+  /** OI change vs prior session (value may be 0 when unchanged/unknown), carried
+      with the same freshness as `oi`. */
+  deltaOI: OpenInterest;
   spot: number;
   /** % */
   iv: number;

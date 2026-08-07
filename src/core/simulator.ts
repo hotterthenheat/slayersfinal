@@ -11,6 +11,7 @@ import type {
   Greeks,
   Indicators,
   MarketSnapshot,
+  OpenInterest,
   StrikeNode,
   TapeOrder,
   TickerConfig,
@@ -22,7 +23,25 @@ import { lookup as universeLookup } from '../data/universe';
 // module this file must never import: that dependency runs the other way, and
 // the cycle surfaces as `undefined` at module init rather than as a type error.)
 import { dayKey } from './rng';
-import { etTime } from './calendar';
+import { etTime, isoDate, isTradingDay, today } from './calendar';
+
+/** The session date settled open interest represents: the last trading day
+    strictly before today. OI publishes ~06:30 ET for the PRIOR session's close,
+    so this is the honest "as of" for every OI the simulator emits. Computed once. */
+const OI_SETTLED_ASOF: string = (() => {
+  const d = today();
+  do {
+    d.setDate(d.getDate() - 1);
+  } while (!isTradingDay(d));
+  return isoDate(d);
+})();
+
+/** Wrap a raw open-interest count as a SETTLED figure. The simulator has no
+    intraday estimator (that is a later phase), so every OI it emits is the prior
+    session's settled value. Source: ThetaData daily open_interest. */
+export function settledOI(value: number): OpenInterest {
+  return { value, asOf: OI_SETTLED_ASOF, freshness: 'SETTLED' };
+}
 
 const Simulator = (() => {
   // Math Helpers
@@ -437,8 +456,8 @@ const Simulator = (() => {
 
       strikes.push({
         strike,
-        callOI,
-        putOI,
+        callOI: settledOI(callOI),
+        putOI: settledOI(putOI),
         gamma: greeks.gamma,
         callGex,
         putGex,

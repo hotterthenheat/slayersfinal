@@ -42,7 +42,7 @@ const verbOf = (side: string) =>
 const xPct = (i: number, n: number) => 3 + (n > 1 ? i / (n - 1) : 0.5) * 84;
 
 const PrintSessionChart = ({ print }: { print: FlowPrint }) => {
-  const cf = useMemo(() => buildContractFlow(print), [print]);
+  const cf = useMemo(() => buildContractFlow({ ...print, oi: print.oi.value }), [print]);
   const plotRef = useRef<HTMLDivElement | null>(null);
   const [cursor, setCursor] = useState<{ i: number; x: number; y: number; pointer: boolean } | null>(null);
 

@@ -320,8 +320,8 @@ export function buildNewsIntel(snapshot: MarketSnapshot): NewsIntelView {
   const { ticker, spot, chain } = snapshot;
 
   // --- Options positioning lean off the live chain (+ = call-heavy / bullish) ---
-  const callOI = chain.reduce((a, n) => a + n.callOI, 0);
-  const putOI = chain.reduce((a, n) => a + n.putOI, 0);
+  const callOI = chain.reduce((a, n) => a + n.callOI.value, 0);
+  const putOI = chain.reduce((a, n) => a + n.putOI.value, 0);
   const pcSkew = (callOI - putOI) / Math.max(callOI + putOI, 1);
   const dexScale = chain.reduce((a, n) => a + Math.abs(n.netDex), 0) || 1;
   const netDex = chain.reduce((a, n) => a + n.netDex, 0);

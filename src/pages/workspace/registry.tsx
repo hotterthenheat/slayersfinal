@@ -197,7 +197,7 @@ export const WIDGETS: WidgetDef[] = [
           levels={ctx.gex.levels}
           darkPoolLevels={dp.levels.map(l => ({ price: l.price, notional: l.notional }))}
           nodes={ctx.gex.nodes}
-          oiByStrike={ctx.snapshot.chain.map(n => ({ strike: n.strike, oi: n.callOI + n.putOI }))}
+          oiByStrike={ctx.snapshot.chain.map(n => ({ strike: n.strike, oi: n.callOI.value + n.putOI.value }))}
           orderFlow={{ vwap: ctx.cmd.orderFlow.vwap, poc: ctx.cmd.orderFlow.poc }}
           focusPrice={ctx.focusPrice ?? null}
         />

@@ -178,12 +178,12 @@ const TapeRowDrawer = ({ print, onClose, isMarked, onToggleMark }: TapeRowDrawer
             <Field
               label="ΔOI"
               value={
-                print.deltaOI === 0
+                print.deltaOI.value === 0
                   ? 'Unchanged'
-                  : `${print.deltaOI > 0 ? '↑' : '↓'}${Math.abs(print.deltaOI).toLocaleString()}`
+                  : `${print.deltaOI.value > 0 ? '↑' : '↓'}${Math.abs(print.deltaOI.value).toLocaleString()}`
               }
               sub="vs the prior session"
-              tone={print.deltaOI === 0 ? 'text-textMuted' : print.deltaOI > 0 ? 'text-bull' : 'text-bear'}
+              tone={print.deltaOI.value === 0 ? 'text-textMuted' : print.deltaOI.value > 0 ? 'text-bull' : 'text-bear'}
             />
             <Field label="IV" value={`${print.iv.toFixed(1)}%`} sub="annualized" />
           </Section>

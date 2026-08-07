@@ -7,7 +7,7 @@
 ==================================================
 */
 
-import Simulator from '../core/simulator';
+import Simulator, { settledOI } from '../core/simulator';
 import { expiryFor, fmtExpiryLong } from '../core/calendar';
 import type { TapeOrder } from '../types/market';
 import type { FlowPrint, PrintSentiment, StratTag, TapeSummary } from '../types/flowdesk';
@@ -94,8 +94,8 @@ export function enrichPrint(order: TapeOrder, id: number): FlowPrint {
     size: order.size,
     premium: Math.round(fill * order.size * 100),
     volume,
-    oi,
-    deltaOI,
+    oi: settledOI(oi),
+    deltaOI: settledOI(deltaOI),
     spot: Number(spot.toFixed(2)),
     iv: Number((baseIv * 100 * (0.8 + h('iv') * 0.6)).toFixed(2)),
     volOverOI: Number((volume / oi).toFixed(2)),
