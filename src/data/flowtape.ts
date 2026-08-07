@@ -9,7 +9,8 @@
 
 import Simulator, { settledOI } from '../core/simulator';
 import { expiryFor, fmtExpiryLong } from '../core/calendar';
-import type { TapeOrder } from '../types/market';
+import { yearsToExpiry } from '../core/optionTime';
+import type { ContractGreeks, TapeOrder } from '../types/market';
 import type { FlowPrint, PrintSentiment, StratTag, TapeSummary } from '../types/flowdesk';
 import {
   TRADE_CONDITION,
@@ -37,6 +38,51 @@ function h01(seed: string): number {
 
 const DTE_POOL = [0, 1, 2, 5, 9, 16, 30, 44, 72, 102, 254];
 const STRATS: StratTag[] = ['Vertical', 'Butterfly', 'Ratio', 'Custom'];
+
+// ---- trade-stamped greeks ---------------------------------------------------
+function normCdf(x: number): number {
+  const t = 1 / (1 + (0.3275911 * Math.abs(x)) / Math.SQRT2);
+  const erf =
+    1 -
+    ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) *
+      t *
+      Math.exp(-(x * x) / 2);
+  return 0.5 * (1 + Math.sign(x) * erf);
+}
+function normPdf(x: number): number {
+  return Math.exp(-(x * x) / 2) / Math.sqrt(2 * Math.PI);
+}
+
+/**
+ * The 1st-order Black-Scholes greek vector ThetaData stamps on a trade
+ * (`trade_greeks`). This is the input to per-print dealer-inventory change
+ * (P4.3): gamma and delta are read there, but the full 1st-order vector is
+ * stamped because that is what the vendor field carries. r = 0.045 matches
+ * core/contractScore.ts; time floors at half a session via yearsToExpiry, one
+ * convention shared with every pricer on the desk.
+ */
+function tradeGreeks(spot: number, strike: number, dte: number, iv: number, right: 'C' | 'P'): ContractGreeks {
+  const T = yearsToExpiry(dte);
+  const r = 0.045;
+  const sig = Math.max(iv, 1e-4);
+  const sqT = Math.sqrt(T);
+  const d1 = (Math.log(spot / strike) + (r + (sig * sig) / 2) * T) / (sig * sqT);
+  const d2 = d1 - sig * sqT;
+  const disc = Math.exp(-r * T);
+  const pdf = normPdf(d1);
+  const gamma = pdf / (spot * sig * sqT);
+  const vega = (spot * pdf * sqT) / 100; // per 1 vol point
+  const delta = right === 'C' ? normCdf(d1) : normCdf(d1) - 1;
+  const thetaAnnual =
+    right === 'C'
+      ? -(spot * pdf * sig) / (2 * sqT) - r * strike * disc * normCdf(d2)
+      : -(spot * pdf * sig) / (2 * sqT) + r * strike * disc * normCdf(-d2);
+  const rho =
+    right === 'C'
+      ? (strike * T * disc * normCdf(d2)) / 100
+      : (-strike * T * disc * normCdf(-d2)) / 100;
+  return { delta, gamma, theta: thetaAnnual / 365, vega, rho };
+}
 
 export function enrichPrint(order: TapeOrder, id: number): FlowPrint {
   const seed = `${order.ticker}-${order.strike}-${order.side}-${order.size}-${id}`;
@@ -111,6 +157,10 @@ export function enrichPrint(order: TapeOrder, id: number): FlowPrint {
   const oi = Math.max(1, Math.round(volume * (0.4 + h('oi') * 3.2)));
   const deltaOI = h('doi') > 0.35 ? Math.round((h('doi2') - 0.4) * oi * 0.25) : 0;
 
+  // The print's own implied vol — the vol the greeks below are stamped at, so the
+  // displayed iv and the trade_greeks vector describe the same contract.
+  const ivFrac = baseIv * (0.8 + h('iv') * 0.6);
+
   return {
     id,
     time: order.time,
@@ -135,11 +185,14 @@ export function enrichPrint(order: TapeOrder, id: number): FlowPrint {
     oi: settledOI(oi),
     deltaOI: settledOI(deltaOI),
     spot: Number(spot.toFixed(2)),
-    iv: Number((baseIv * 100 * (0.8 + h('iv') * 0.6)).toFixed(2)),
+    iv: Number((ivFrac * 100).toFixed(2)),
     volOverOI: Number((volume / oi).toFixed(2)),
     strat,
     sweep: isSweep(conditions),
     conditions,
+    // trade_greeks: the greek vector stamped at this print, the input the Gamma
+    // Tape reads to turn one print into a dealer-inventory change (P4.3).
+    greeks: tradeGreeks(spot, strike, dte, ivFrac, right),
   };
 }
 
