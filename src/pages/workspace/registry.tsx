@@ -384,7 +384,7 @@ export const WIDGETS: WidgetDef[] = [
               {dp.posture}
             </SignalBadge>
             <span className="font-mono text-micro text-textMuted tnum">
-              {dp.dpSharePct.toFixed(0)}% off-exchange · {dp.netPosturePct >= 0 ? '+' : ''}
+              net posture {dp.netPosturePct >= 0 ? '+' : ''}
               {dp.netPosturePct.toFixed(0)}
             </span>
           </div>

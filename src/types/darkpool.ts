@@ -25,8 +25,6 @@ export type DarkPoolIntent = 'ACCUMULATION' | 'DISTRIBUTION' | 'HEDGE FLOW' | 'R
 export type DarkPoolExecution =
   /** One negotiated print, large-in-scale, agreed away from the book. */
   | 'BLOCK CROSS'
-  /** Conditional large-in-scale match — only fires when both sides are big. */
-  | 'LIS CROSS'
   /** Crossed at the midpoint of the quote, neither side paying the spread. */
   | 'MIDPOINT'
   /** A reserve order working: repeated equal clips at one price. */
@@ -91,8 +89,6 @@ export type Posture = 'ACCUMULATING' | 'DISTRIBUTING' | 'BALANCED';
 export interface DarkPoolView {
   ticker: string;
   spot: number;
-  /** % of total session volume executed off-exchange */
-  dpSharePct: number;
   /** −100…+100 — net accumulation vs distribution across sized prints */
   netPosturePct: number;
   posture: Posture;

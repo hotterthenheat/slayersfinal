@@ -6,6 +6,14 @@
   and a net institutional posture. Deterministic per
   ticker + session day — swaps for a real DP feed
   without touching the page.
+
+  Execution archetype -> the real trade condition it maps to under the feed:
+    BLOCK CROSS   -> 75 / 14 / 29  (block, Rule 127 / 155)
+    VWAP SLICE    -> 59            (VWAP)
+    SWEEP TO DARK -> 95            (ISO) + a TRF-reported off-exchange print
+    LATE PRINT    -> 2 / 8 / 13    (out-of-seq / prior-reference / sold-last)
+    MIDPOINT      -> derived: trade price at the NBBO mid (trade_quote)
+    ICEBERG       -> inferred from repeated equal clips at one price
 ==================================================
 */
 
@@ -137,7 +145,9 @@ function execution(
   if (sizePercentile > 0.88) {
     // Large-in-scale. Either a conditional match or a negotiated cross, and
     // either way it prints once.
-    kind = r > 0.45 ? 'LIS CROSS' : 'BLOCK CROSS';
+    // Large-in-scale is a MiFID II construct with no US equivalent; a large
+    // negotiated US cross is just a block. Its prints fold into BLOCK CROSS.
+    kind = 'BLOCK CROSS';
     clips = 1;
   } else if (far && r > 0.6) {
     // Sitting well away from spot is what a late report looks like — it traded
@@ -171,7 +181,7 @@ function execution(
       ? true
       : kind === 'SWEEP TO DARK'
         ? false
-        : h01(`${seedBase}-xm`) > (kind === 'LIS CROSS' || kind === 'BLOCK CROSS' ? 0.62 : 0.5);
+        : h01(`${seedBase}-xm`) > (kind === 'BLOCK CROSS' ? 0.62 : 0.5);
 
   // Report lag. A late print is late by definition; the rest clear in seconds.
   const reportLagSec =
@@ -185,7 +195,6 @@ function execution(
 /** One line on what each execution archetype is, for the tape's own legend. */
 export const EXECUTION_NOTE: Record<DarkPoolExecution, string> = {
   'BLOCK CROSS': 'One negotiated print, agreed away from the book and reported as a single fill.',
-  'LIS CROSS': 'Conditional large-in-scale match — it only fires once both sides are big enough to qualify.',
   MIDPOINT: 'Crossed inside the spread, so neither side paid it. Passive by construction.',
   ICEBERG: 'A reserve order working: the same clip printing over and over at one price.',
   'VWAP SLICE': 'Schedule-algo child orders — small, even, and about the clock rather than the price.',
@@ -391,10 +400,6 @@ export function buildDarkPoolView(snapshot: MarketSnapshot): DarkPoolView {
   return {
     ticker,
     spot,
-    // A modelled session share, not a measured one: nothing in the snapshot
-    // carries consolidated volume, so this is the assumption the page is built
-    // on rather than a count of anything. Swapping in a real feed replaces it.
-    dpSharePct: hRange(seed('share'), 34, 52),
     netPosturePct,
     posture,
     postureNote,

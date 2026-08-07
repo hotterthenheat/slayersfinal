@@ -19,7 +19,6 @@ const allPrints = views.flatMap(v => v.prints);
 
 const KINDS: DarkPoolExecution[] = [
   'BLOCK CROSS',
-  'LIS CROSS',
   'MIDPOINT',
   'ICEBERG',
   'VWAP SLICE',
@@ -54,7 +53,7 @@ describe('dark pool execution archetypes', () => {
 
   it('reports a negotiated cross as a single fill', () => {
     for (const p of allPrints) {
-      if (p.execution === 'BLOCK CROSS' || p.execution === 'LIS CROSS') expect(p.clips).toBe(1);
+      if (p.execution === 'BLOCK CROSS') expect(p.clips).toBe(1);
     }
   });
 
@@ -99,7 +98,7 @@ describe('dark pool execution archetypes', () => {
   it('reaches the largest sizes only through large-in-scale kinds', () => {
     for (const v of views) {
       const biggest = [...v.prints].sort((a, b) => b.notional - a.notional)[0];
-      expect(['BLOCK CROSS', 'LIS CROSS']).toContain(biggest.execution);
+      expect(['BLOCK CROSS']).toContain(biggest.execution);
     }
   });
 
