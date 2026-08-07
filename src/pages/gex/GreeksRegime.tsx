@@ -207,7 +207,7 @@ const GreeksRegime = () => {
 
   const aboveCount = view.rows.filter(r => r.distPct > 0).length;
   const dominant = GREEKS.map(g => ({ g, v: Math.abs(view.netByGreek[g.key]) }))
-    .filter(x => ['vanna', 'charm', 'vomma', 'speed', 'color', 'ultima'].includes(x.g.key))
+    .filter(x => ['vanna', 'charm', 'vomma', 'veta', 'speed', 'color', 'ultima', 'zomma'].includes(x.g.key))
     .sort((a, b) => b.v - a.v)[0];
 
   // "What would change the regime" — from existing probabilities + net gamma.
@@ -270,7 +270,7 @@ const GreeksRegime = () => {
           {/* table-fixed + colgroup: pin Strike/Dist narrow so the heat-filled
               greek columns absorb the desktop width, instead of Strike ballooning
               into a wide black gutter next to a cluster of numbers. */}
-          <table className="w-full min-w-[640px] table-fixed border-collapse">
+          <table className={`w-full ${showAdvanced ? 'min-w-[760px]' : 'min-w-[640px]'} table-fixed border-collapse`}>
             <colgroup>
               <col className="w-[104px]" />
               <col className="w-[76px]" />

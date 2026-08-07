@@ -20,7 +20,17 @@ import { dayKey, hRange } from '../core/rng';
 import { buildLevels, pinStrike } from './gex';
 import type { MarketSnapshot } from '../types/market';
 
-export type GreekKey = 'gamma' | 'delta' | 'vanna' | 'charm' | 'vomma' | 'speed' | 'color' | 'ultima';
+export type GreekKey =
+  | 'gamma'
+  | 'delta'
+  | 'vanna'
+  | 'charm'
+  | 'vomma'
+  | 'veta'
+  | 'speed'
+  | 'color'
+  | 'ultima'
+  | 'zomma';
 
 export const GREEKS: { key: GreekKey; label: string; blurb: string }[] = [
   { key: 'gamma', label: 'Gamma', blurb: 'hedging vs price — the pin/chase engine' },
@@ -28,9 +38,11 @@ export const GREEKS: { key: GreekKey; label: string; blurb: string }[] = [
   { key: 'vanna', label: 'Vanna', blurb: 'delta drift as IV moves' },
   { key: 'charm', label: 'Charm', blurb: 'delta drift as time passes' },
   { key: 'vomma', label: 'Vomma', blurb: 'vega convexity — vol of vol' },
+  { key: 'veta', label: 'Veta', blurb: 'vega decay as time passes' },
   { key: 'speed', label: 'Speed', blurb: 'how fast gamma changes with price' },
   { key: 'color', label: 'Color', blurb: 'how fast gamma changes with time' },
   { key: 'ultima', label: 'Ultima', blurb: 'third-order vol sensitivity' },
+  { key: 'zomma', label: 'Zomma', blurb: 'how fast gamma changes with IV' },
 ];
 
 export interface GreekRow {
@@ -41,9 +53,11 @@ export interface GreekRow {
   vanna: number;
   charm: number;
   vomma: number;
+  veta: number;
   speed: number;
   color: number;
   ultima: number;
+  zomma: number;
 }
 
 export type DealerRegime = 'PINNED / CHOPPY' | 'CONTROLLED TREND' | 'UNSTABLE BREAKOUT' | 'LIQUIDATION CASCADE';
@@ -106,6 +120,14 @@ export function buildGreeksRegime(snapshot: MarketSnapshot): GreeksRegimeView {
     const color = gamma * (0.35 + Math.abs(m) * 4) * (indicators.squeeze ? 0.6 : 1) * -0.5; // dGamma/dTime
     const vomma = vega * (0.4 + Math.abs(m) * 6) * (1 + seed(`vom-${n.strike}`) * 0.15);
     const ultima = vomma * -m * 5;
+    // Veta = dVega/dTime. Vega bleeds toward zero into expiry, so it is signed
+    // against vega and damped in a squeeze; the (1 + |m|) envelope keeps it from
+    // being a flat multiple of the vega it rides on (its own d1·d2 term).
+    const veta = vega * -(0.45 + Math.abs(m) * 1.5) * (indicators.squeeze ? 0.7 : 1);
+    // Zomma = dGamma/dVol, the Γ·(d1·d2 − 1)/σ shape with σ folded into the
+    // scale: negative near the money (gamma falls as vol rises), flipping
+    // positive out in the wings where d1·d2 clears 1.
+    const zomma = gamma * (Math.abs(m) * 8 - 0.55);
     return {
       strike: n.strike,
       distPct: m * 100,
@@ -114,9 +136,11 @@ export function buildGreeksRegime(snapshot: MarketSnapshot): GreeksRegimeView {
       vanna,
       charm,
       vomma,
+      veta,
       speed,
       color,
       ultima,
+      zomma,
     };
   });
 
@@ -127,9 +151,11 @@ export function buildGreeksRegime(snapshot: MarketSnapshot): GreeksRegimeView {
     vanna: sum('vanna'),
     charm: sum('charm'),
     vomma: sum('vomma'),
+    veta: sum('veta'),
     speed: sum('speed'),
     color: sum('color'),
     ultima: sum('ultima'),
+    zomma: sum('zomma'),
   } as Record<GreekKey, number>;
 
   // ---- dealer regime probability ----
