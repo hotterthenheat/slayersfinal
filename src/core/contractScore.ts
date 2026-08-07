@@ -107,17 +107,21 @@ function normCdf(x: number): number {
   return 0.5 * (1 + Math.sign(x) * erf);
 }
 
-interface BsOut {
+export interface BsOut {
   price: number;
   delta: number;
   /** Per-day theta, absolute dollars */
   thetaDay: number;
 }
 
-function blackScholes(spot: number, strike: number, ivAnnual: number, dte: number, right: 'C' | 'P'): BsOut {
-  // Shared with data/compass.ts. The two used to floor a 0DTE differently — half
-  // a calendar day here, half a session there — so the same contract carried two
-  // prices on the Weigher screen at once. See core/optionTime.ts.
+export function blackScholes(spot: number, strike: number, ivAnnual: number, dte: number, right: 'C' | 'P'): BsOut {
+  // The ONE option pricer. data/compass.ts (the setups board and the chain) used
+  // to carry its own normal-shaped estimator that disagreed with this by up to
+  // ~2× on the same contract; estimatePremium now delegates here, so every
+  // surface quotes one mid. See compassCoherence.test.ts.
+  //
+  // The two also used to floor a 0DTE differently — half a calendar day in one,
+  // half a session in the other — which is settled in core/optionTime.ts.
   const T = yearsToExpiry(dte);
   const r = 0.045;
   const sq = ivAnnual * Math.sqrt(T);

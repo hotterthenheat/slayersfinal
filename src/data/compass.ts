@@ -10,6 +10,7 @@
 import Simulator from '../core/simulator';
 import { yearsToExpiry } from '../core/optionTime';
 import { expiryFor } from '../core/calendar';
+import { blackScholes } from '../core/contractScore';
 import {
   SCAN_UNIVERSE_SIZE,
   buildScanUniverse,
@@ -232,15 +233,22 @@ function dteOf(expiry: string): number {
   return Number.isFinite(n) ? Math.max(0, n) : 0;
 }
 
-/** Intrinsic + normal-shaped time value with a REAL √T term, so a 0DTE
-    contract prices cheaper than a 1DTE and OTM decay width scales with vol. */
+/**
+ * The premium of a listed option, for the setups board and the chain.
+ *
+ * This was a normal-shaped estimator (intrinsic + a Gaussian bump of time value)
+ * that disagreed with the Weigher's Black-Scholes by up to ~2× on the same
+ * contract — two prices on one screen. It now delegates to that ONE pricer
+ * (core/contractScore.ts), so the board, the chain and the Weigher quote a
+ * single mid off this name's own volatility. compassCoherence.test.ts pins it.
+ *
+ * The wing skew the Weigher layers on for a searched contract is a property of
+ * that surface, not of the pricer; the board and chain price at the name IV, so
+ * near-the-money the three agree to the cent and only diverge on deep wings by
+ * exactly that skew.
+ */
 function estimatePremium(spot: number, strike: number, right: OptionRight, iv: number, dte: number): number {
-  const t = yearsToExpiry(dte);
-  const width = iv * Math.sqrt(t);
-  const m = Math.log(strike / spot) / (width || 1e-6);
-  const timeValue = spot * width * 0.4 * Math.exp(-(m * m) / 2);
-  const intrinsic = right === 'C' ? Math.max(spot - strike, 0) : Math.max(strike - spot, 0);
-  return Math.max(0.05, intrinsic + timeValue);
+  return blackScholes(spot, strike, iv, dte, right).price;
 }
 
 function healthFor(spot: number, strike: number, right: OptionRight): number {

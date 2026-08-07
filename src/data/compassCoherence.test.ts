@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import Simulator from '../core/simulator';
 import { MIN_YEARS, yearsToExpiry } from '../core/optionTime';
-import { weighContract } from '../core/contractScore';
+import { blackScholes, weighContract } from '../core/contractScore';
 import { buildCompass, makeSetup, resetCompassCache, sleeveExpiry } from './compass';
 import { CONTRACT_SLEEVES, SCANNERS, SLEEVE_BY_KEY, type ImpactMetric, type ImpactRow } from '../types/compass';
 import { MARKET_HOLIDAYS, expiryFor } from '../core/calendar';
@@ -131,6 +131,36 @@ describe('the impact leaderboard ranks the field, not a pre-selection', () => {
 });
 
 describe('the scan engine and the weigher price the same contract the same way', () => {
+  it('the setups board quotes the ONE Black-Scholes pricer, to the cent', () => {
+    /*
+      P2.2 — one pricer. compass's estimatePremium was a normal-shaped estimator
+      (intrinsic + a Gaussian bump of time value) that disagreed with the
+      Weigher's Black-Scholes by up to ~2× on the same contract: two prices, one
+      screen. It now delegates to that exported pricer, so the board mid IS
+      blackScholes(spot, strike, nameIv, resolvedDte, right) exactly — one
+      contract, queried through both surfaces, returns one mid. The Weigher's own
+      base-IV bump and wing skew are a property of THAT surface (see the ratio
+      band below), not of the pricer they now share.
+    */
+    const s = snap();
+    const iv = Simulator.TICKERS.SPY.iv;
+    const step = Simulator.TICKERS.SPY.step;
+    let checked = 0;
+    for (const sleeve of CONTRACT_SLEEVES) {
+      const dte = expiryFor(SLEEVE_BY_KEY[sleeve].dte).dte;
+      for (const k of [-4, -1, 0, 2, 6]) {
+        const strike = Math.round((s.spot + k * step) / step) * step;
+        for (const right of ['C', 'P'] as const) {
+          const setup = makeSetup('SPY', s.spot, strike, right, 'top-setups', iv, true, sleeve);
+          const bs = Number(blackScholes(s.spot, strike, iv, dte, right).price.toFixed(2));
+          expect(setup.mid, `${sleeve} ${strike}${right}`).toBe(bs);
+          checked++;
+        }
+      }
+    }
+    expect(checked).toBeGreaterThanOrEqual(40);
+  });
+
   it('both floor a same-session contract at half a session, not half a day', () => {
     /*
       The two used to disagree by 45% about how much time a 0DTE has —
@@ -165,9 +195,10 @@ describe('the scan engine and the weigher price the same contract the same way',
     const atm = Math.round(s.spot / Simulator.TICKERS.SPY.step) * Simulator.TICKERS.SPY.step;
     const scanned = makeSetup('SPY', s.spot, atm, 'C', 'top-setups', iv, true);
     const weighed = weighContract(s, 'C', atm, 0);
-    // Two different models — a normal-shaped approximation and Black-Scholes —
-    // so they will not match to the cent. What has to match is the amount of
-    // TIME in them, which shows up as the same order of magnitude of extrinsic.
+    // Since P2.2 both call the SAME Black-Scholes pricer, so what remains is not
+    // model shape but the volatility each surface feeds it: the board prices at
+    // the name IV, the Weigher adds a base-IV bump and a wing skew. On an ATM
+    // 0DTE that gap is small, and this band holds it well inside 0.5–2.
     const ratio = scanned.mid / weighed.mid;
     expect(ratio).toBeGreaterThan(0.5);
     expect(ratio).toBeLessThan(2);

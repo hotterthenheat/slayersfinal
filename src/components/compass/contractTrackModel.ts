@@ -7,13 +7,14 @@
   contract repriced on a real 1-minute bar close.
 
   The one rule that makes it honest: reprice with the
-  model that MINTED the entry. Setups are quoted by
-  the compass estimator, the Weigher/Lotto by
-  Black-Scholes, and the two disagree by 16-77% on the
-  same contract. Crossing them would put a line on the
-  screen that contradicts the number printed beside
-  it. Matching them lands the series on that number to
-  the cent (measured: worst error $0.0047, which is
+  SAME pricer that minted the entry. Since P2.2 that is
+  one function — Black-Scholes (core/contractScore.ts) —
+  which the setups board reaches through compass's
+  estimatePremium and the Weigher/Lotto call directly.
+  The adapters below differ only in where they read the
+  contract's IV from, not in how they price it, so the
+  series lands on the printed number to the cent
+  (measured: worst error $0.0047, which is
   Number(x.toFixed(2)) and nothing else).
 
   Value-only module — no component export, so importing
@@ -53,39 +54,25 @@ export const WARN_INK = '#FF9500';
 export const SESSION_BARS = 390;
 
 /*
-  ---- the pricers ----------------------------------------------------------
-  Both engines floor their time input at half a session (core/optionTime.ts), so
-  NEITHER can express intraday decay as shipped: a forward curve drawn through
-  them is a horizontal line on every 0DTE profile. These are the uncapped cores
-  of those two functions, byte-for-byte, with the clamped time taken as an
-  argument instead of computed.
+  ---- the pricer -----------------------------------------------------------
+  One engine now prices every contract on this screen: Black-Scholes
+  (core/contractScore.ts), which the setups board reaches through compass's
+  estimatePremium and the Weigher/Lotto call directly. It floors its time input
+  at half a session (core/optionTime.ts), so it cannot express intraday decay as
+  shipped: a forward curve drawn through it is a horizontal line on every 0DTE
+  profile. `bsPriceAtT` is the uncapped core of that function, byte-for-byte,
+  with the clamped time taken as an argument instead of computed.
 
-  They are copies rather than imports because neither engine exports its core
-  today. contractTrack.test.ts pins both against the engines' own output on a
-  grid, so a change to either engine that this file does not follow fails the
-  build rather than drawing a quietly wrong line. The permanent fix is the
-  two-line extraction described in the test's header.
+  It is a copy rather than an import because the engine exports the CLAMPED
+  `blackScholes`, not its uncapped core. contractTrackModel.test.ts pins this copy
+  against the engine's own output on a grid — through both the Weigher and the
+  setups board, which now share it — so a change to the engine that this file
+  does not follow fails the build rather than drawing a quietly wrong line. The
+  permanent fix is the two-line extraction described in the test's header.
 */
 
-/** estimatePremium's clamp (data/compass.ts). */
-export const PREMIUM_FLOOR = 0.05;
-/** blackScholes's clamp (core/contractScore.ts). */
+/** blackScholes's clamp (core/contractScore.ts) — the floor every adapter bottoms out at. */
 export const BS_FLOOR = 0.02;
-
-/** Uncapped core of `estimatePremium` — intrinsic + normal-shaped time value. */
-export function premiumAtT(
-  spot: number,
-  strike: number,
-  right: OptionRight,
-  iv: number,
-  tYears: number
-): number {
-  const width = iv * Math.sqrt(Math.max(tYears, 0));
-  const m = Math.log(strike / spot) / (width || 1e-6);
-  const timeValue = spot * width * 0.4 * Math.exp(-(m * m) / 2);
-  const intrinsic = right === 'C' ? Math.max(spot - strike, 0) : Math.max(strike - spot, 0);
-  return Math.max(PREMIUM_FLOOR, intrinsic + timeValue);
-}
 
 function normCdf(x: number): number {
   // Abramowitz–Stegun 7.1.26 via erf
@@ -237,8 +224,11 @@ export function setupToPlan(setup: Setup): ContractPlan {
     // Nobody entered anything: TrackedSetup carries no mid, so this is the
     // reference every rung is measured from, never "your entry".
     entryLabel: 'Reference',
-    priceAt: (spot, sessions) => premiumAtT(spot, setup.strike, setup.right, iv, sessions / 252),
-    floor: PREMIUM_FLOOR,
+    // The setups board mints its mid with Black-Scholes now (compass's
+    // estimatePremium delegates to it), so the track reprices with the same
+    // core the Weigher uses — one pricer, one floor.
+    priceAt: (spot, sessions) => bsPriceAtT(spot, setup.strike, iv, sessions / 252, setup.right),
+    floor: BS_FLOOR,
     rungs: setup.takeProfits.map(tp => ({
       label: `TP${tp.level}`,
       premium: tp.target,

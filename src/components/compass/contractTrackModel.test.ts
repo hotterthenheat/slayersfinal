@@ -6,10 +6,8 @@ import { weighContracts, type Horizon } from '../../core/contractScore';
 import {
   BS_FLOOR,
   DOCK_HEADROOM,
-  PREMIUM_FLOOR,
   bsPriceAtT,
   buildTrack,
-  premiumAtT,
   sessionsForExpiry,
   setupToPlan,
   spotForPremium,
@@ -22,17 +20,21 @@ import type { OptionRight, ScannerKey } from '../../types/compass';
   same thing showed two prices": a line whose last point is not the number
   printed beside it is exactly the failure the derived series exists to avoid.
 
-  Tests 4a/4b are the load-bearing ones. `premiumAtT` and `bsPriceAtT` in
-  contractTrack.ts are the UNCAPPED cores of `estimatePremium` (data/compass.ts)
-  and `blackScholes` (core/contractScore.ts) — copies, because neither engine
-  exports its core today. Feeding the clamped time back in must reproduce the
-  engine's own output exactly, so any change to either engine that this file does
-  not follow fails here rather than drawing a quietly wrong line.
+  Tests 4a/4b are the load-bearing ones. Since P2.2 there is ONE pricer:
+  `estimatePremium` (data/compass.ts) delegates to `blackScholes`
+  (core/contractScore.ts), so the setups board and the Weigher quote the same
+  contract off the same math. `bsPriceAtT` in contractTrackModel.ts is the
+  UNCAPPED core of that function — a copy, because the engine exports the clamped
+  `blackScholes`, not its core. 4a feeds the clamped time back in through the
+  SETUP surface (makeSetup.mid) and 4b through the WEIGHER surface
+  (weighContract.mid); both must reproduce the engine's output exactly, so any
+  change to the engine that this file does not follow fails here rather than
+  drawing a quietly wrong line.
 
-  The permanent fix is a pure extraction in each engine (`bsAtT` / `premiumAtT`
-  taking T as an argument, with the existing clamped wrapper kept byte-identical
-  for every current caller); once those exist, delete the copies here and import
-  them. These tests keep passing either way.
+  The permanent fix is a pure extraction in the engine (`bsAtT` taking T as an
+  argument, with the existing clamped wrapper kept byte-identical for every
+  current caller); once it exists, delete the copy here and import it. These
+  tests keep passing either way.
 */
 
 const SCANNERS: ScannerKey[] = ['top-setups', 'quick-scalp', 'discounted', 'rebounds', 'whale-sweeps'];
@@ -140,9 +142,11 @@ describe('contract track: weigher adapter', () => {
 });
 
 describe('contract track: the uncapped cores reproduce the engines', () => {
-  it('premiumAtT at the clamped time equals the compass mid on a grid', () => {
+  it('bsPriceAtT at the clamped time equals the compass setup mid on a grid', () => {
     // estimatePremium is not exported, so the engine is probed through its only
-    // consumer: makeSetup rounds to 2dp, which is the whole tolerance.
+    // consumer: makeSetup rounds to 2dp, which is the whole tolerance. Since P2.2
+    // the setup surface prices with Black-Scholes, so its uncapped core is
+    // bsPriceAtT — the SAME core the Weigher is checked against in 4b.
     for (const ticker of ['SPY', 'NVDA']) {
       Simulator.ensureTicker(ticker);
       const cfg = Simulator.TICKERS[ticker];
@@ -151,12 +155,12 @@ describe('contract track: the uncapped cores reproduce the engines', () => {
           for (const right of ['C', 'P'] as OptionRight[]) {
             const setup = setupFor(ticker, k, right, scanner);
             const sessions = sessionsForExpiry(setup.expiry);
-            const re = premiumAtT(
+            const re = bsPriceAtT(
               cfg.currentPrice,
               setup.strike,
-              right,
               setup.greeks.iv / 100,
-              sessions / 252
+              sessions / 252,
+              right
             );
             expect(Number(re.toFixed(2))).toBe(setup.mid);
           }
@@ -179,14 +183,11 @@ describe('contract track: the uncapped cores reproduce the engines', () => {
     }
   });
 
-  it('both cores converge at expiry instead of hanging on a floor', () => {
+  it('the core converges at expiry instead of hanging on a floor', () => {
     // ITM lands on intrinsic; ATM/OTM land on the model's own clamp.
-    expect(premiumAtT(500, 498, 'C', 0.15, 0)).toBeCloseTo(2, 10);
-    expect(premiumAtT(500, 501, 'C', 0.15, 0)).toBeCloseTo(PREMIUM_FLOOR, 10);
     expect(bsPriceAtT(500, 498, 0.15, 0, 'C')).toBeCloseTo(2, 10);
     expect(bsPriceAtT(500, 501, 0.15, 0, 'C')).toBeCloseTo(BS_FLOOR, 10);
     // and puts, which invert
-    expect(premiumAtT(500, 502, 'P', 0.15, 0)).toBeCloseTo(2, 10);
     expect(bsPriceAtT(500, 502, 0.15, 0, 'P')).toBeCloseTo(2, 10);
   });
 });
@@ -201,7 +202,7 @@ describe('contract track: the forward half', () => {
     }
     const intrinsic = Math.max(track.spotNow - setup.strike, 0);
     expect(track.forward[track.forward.length - 1].premium).toBeCloseTo(
-      Math.max(intrinsic, PREMIUM_FLOOR),
+      Math.max(intrinsic, BS_FLOOR),
       6
     );
     expect(track.atFloor).toBe(true);
@@ -251,7 +252,7 @@ describe('contract track: inverting the pricer into spot space', () => {
     const spot = Simulator.TICKERS.SPY.currentPrice;
     // Above the bracket: intrinsic alone can't get there inside a +/-60% move.
     expect(spotForPremium(spot * 2, 'C', plan.priceAt, plan.sessionsLeft, spot)).toBeNull();
-    // Below it: the model floors at 0.05, so nothing prices at a cent.
+    // Below it: the model floors at 0.02, so nothing prices at a cent.
     expect(spotForPremium(0.01, 'C', plan.priceAt, plan.sessionsLeft, spot)).toBeNull();
   });
 });
