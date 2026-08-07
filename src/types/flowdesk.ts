@@ -5,6 +5,8 @@
 ==================================================
 */
 
+import type { ContractGreeks, TradeQuoteContext } from './market';
+
 export type StratTag = '—' | 'Vertical' | 'Butterfly' | 'Ratio' | 'Custom';
 
 export interface FlowPrint {
@@ -45,6 +47,28 @@ export interface FlowPrint {
   volOverOI: number;
   strat: StratTag;
   sweep: boolean;
+  // ---- ThetaData vendor fields (P0.1, additive) --------------------------
+  /** IV implied from the bid — low leg of the vol bid/ask pair. The current
+      single `iv` above is effectively the mid. Source: ThetaData `quote`. */
+  bidIv?: number;
+  /** IV implied from the ask — high leg of the vol bid/ask pair.
+      Source: ThetaData `quote`. */
+  askIv?: number;
+  /** Raw OPRA trade condition codes on this print; the exchange-reported
+      aggressor (145/146), sweeps (95), multi-leg (130-134) and delta-hedged
+      (124, 135-143) flags all live here. Predicates in
+      src/types/conditions.ts (P0.2) read these. Source: ThetaData `trade`. */
+  conditions?: number[];
+  /** Reporting exchange code. Source: ThetaData `trade` (exch). */
+  exchange?: string;
+  /** Trade sequence number. Source: ThetaData `trade` (sequence). */
+  sequence?: number;
+  /** Greeks stamped at the instant of this print — the input to per-print
+      dealer-inventory change. Source: ThetaData `trade_greeks`. */
+  greeks?: ContractGreeks;
+  /** NBBO at execution plus the two post-trade quote updates, for measured
+      market impact. Source: ThetaData `trade_quote`. */
+  tradeQuote?: TradeQuoteContext;
 }
 
 export type PrintSentiment = 'BULLISH' | 'BEARISH' | 'NEUTRAL';

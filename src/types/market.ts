@@ -97,6 +97,9 @@ export interface TapeOrder {
   size: number;
   orderType: 'SWEEP' | 'BLOCK';
   side: 'ASK' | 'BID';
+  /** Raw OPRA/CTA trade condition codes for this print. Semantic predicates
+      live in src/types/conditions.ts (P0.2). Source: ThetaData `trade`. */
+  conditions?: number[];
 }
 
 export interface MarketSnapshot {
@@ -138,4 +141,84 @@ export interface ExecuteResult {
   success: boolean;
   message?: string;
   trade?: TradeRecord;
+}
+
+/*
+==================================================
+  THETADATA VENDOR CONTRACT PRIMITIVES (P0.1)
+  Additive homes for per-contract fields the live
+  OPRA/CTA feed delivers that the simulator does not
+  yet fill. Every new field is optional at the call
+  site until the provider (or an honest simulator
+  pass) supplies it, so nothing that constructs these
+  objects today is forced to change.
+==================================================
+*/
+
+/**
+ * Top-of-book NBBO for a single option contract.
+ * ThetaData delivers a *pair* of implied vols — one implied from the bid and
+ * one from the ask — not a single mid IV. The gap between them is the
+ * volatility bid/ask spread, a direct read on per-contract vol uncertainty
+ * that the current single-`iv` model discards.
+ * Source: ThetaData `option` bulk `quote` (and the NBBO leg of `trade_quote`).
+ */
+export interface OptionQuote {
+  bid: number;
+  bidSize: number;
+  ask: number;
+  askSize: number;
+  /** IV implied from the bid — low leg of the vol pair. Source: ThetaData `quote`. */
+  bidIv?: number;
+  /** IV implied from the ask — high leg of the vol pair. Source: ThetaData `quote`. */
+  askIv?: number;
+}
+
+/**
+ * Full vendor greek vector for one contract, computed under Black-Scholes.
+ * ThetaData supplies 1st, 2nd and 3rd order. Orders beyond the 1st are
+ * optional until the provider fills them; `veta` and `zomma` in particular
+ * are not modelled anywhere today.
+ * Source: ThetaData `greeks`, `greeks_second_order`, `greeks_third_order`
+ * (and `trade_greeks` / `all_trade_greeks` when stamped at a trade).
+ */
+export interface ContractGreeks {
+  // 1st order — Source: ThetaData `greeks`
+  delta: number;
+  gamma: number;
+  theta: number;
+  vega: number;
+  rho: number;
+  // 2nd order — Source: ThetaData `greeks_second_order`
+  /** dΔ/dσ */
+  vanna?: number;
+  /** dΔ/dt */
+  charm?: number;
+  /** dVega/dσ */
+  vomma?: number;
+  /** dVega/dt — vega decay. Not modelled today. */
+  veta?: number;
+  // 3rd order — Source: ThetaData `greeks_third_order`
+  /** dΓ/dS */
+  speed?: number;
+  /** dΓ/dσ — gamma sensitivity to vol. Not modelled today. */
+  zomma?: number;
+  /** dΓ/dt */
+  color?: number;
+  /** dVomma/dσ */
+  ultima?: number;
+}
+
+/**
+ * The NBBO prevailing at an execution plus the two post-trade quote updates
+ * ThetaData returns alongside every trade. The post-trade quotes are what
+ * make realised market impact — how far the quote moved after the print —
+ * measurable per trade.
+ * Source: ThetaData `trade_quote` (24 fields).
+ */
+export interface TradeQuoteContext {
+  /** NBBO at the instant of execution. */
+  nbboAtTrade: OptionQuote;
+  /** The two quote updates published immediately after the trade. */
+  postTrade: OptionQuote[];
 }
