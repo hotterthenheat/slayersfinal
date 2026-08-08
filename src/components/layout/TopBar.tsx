@@ -17,6 +17,7 @@ import { ChevronDown, Search, Menu, X, Settings, type LucideIcon } from 'lucide-
 import { useMarketData, useTicker } from '../../context/MarketDataContext';
 import AnimatedNumber from '../ui/AnimatedNumber';
 import TickerSearch from '../ui/TickerSearch';
+import FeedBadge from './FeedBadge';
 import { NAV_GROUPS, itemsByGroup, NAV_ITEMS, type NavGroup, type NavItem } from './nav';
 import { PAGE_CONTAINER } from './container';
 import { DUR, EASE, PILL } from '../../lib/motion';
@@ -247,6 +248,8 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
           <span>{clock.time}</span>
           <span className="text-micro uppercase tracking-wider text-textMuted">ET</span>
         </span>
+        {/* What the numbers are. Every width, every desk — see FeedBadge. */}
+        <FeedBadge />
       </div>
       </div>
     </header>
