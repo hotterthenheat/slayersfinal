@@ -44,10 +44,30 @@ const ROUTES = [
 */
 const FONT_CSS = `@font-face{font-family:Inter;src:local("Inter");font-display:swap}`;
 
+/*
+  --interact additionally drives the paths that inject a <style> element at
+  RUNTIME, which a load-only sweep never reaches.
+
+  This matters for one directive. Three of the four bundles that call
+  `createElement('style')` fill it with inline content — react-draggable with
+  `innerHTML`, lightweight-charts with `innerText`, and this app's own Pulse
+  pop-out (src/pages/pulse/detach.ts) with `textContent` — and CSP refuses all
+  three without `style-src 'unsafe-inline'`. Only framer-motion uses
+  `sheet.insertRule`, which is CSSOM and exempt. All of them are behind a user
+  action, which is exactly why loading every route reports nothing.
+
+  The style-element count is reported alongside the violations on purpose. A run
+  that drove nothing produces the same clean zero as a run that drove everything,
+  and only one of those means anything.
+*/
+const INTERACT = process.argv.includes('--interact');
+
 const violations = [];
 const pageErrors = [];
 const failedRequests = [];
 const unobserved = [];
+let styleElsAdded = 0;
+let interactionsRun = 0;
 
 const browser = await chromium.launch({ executablePath: CHROME });
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -75,6 +95,58 @@ await context.addInitScript(() => {
   });
 });
 
+const countStyleEls = page => page.evaluate(() => document.querySelectorAll('style').length);
+
+/** Returns how many <style> elements the interactions caused to appear. */
+async function interact(page, route) {
+  const before = await countStyleEls(page);
+
+  // Chart crosshairs — lightweight-charts and the SVG desks both build their
+  // read-out on pointer move.
+  for (const sel of ['canvas', 'svg']) {
+    const el = page.locator(sel).first();
+    if (await el.count()) {
+      const box = await el.boundingBox().catch(() => null);
+      if (box) {
+        for (const f of [0.3, 0.5, 0.7]) {
+          await page.mouse.move(box.x + box.width * f, box.y + box.height / 2);
+          await page.waitForTimeout(120);
+        }
+        interactionsRun++;
+      }
+    }
+  }
+
+  // The command palette, which mounts an overlay and traps focus.
+  await page.keyboard.press('Meta+k').catch(() => {});
+  await page.waitForTimeout(300);
+  await page.keyboard.press('Escape').catch(() => {});
+
+  // Pulse's workspace drag is the one that reaches react-draggable's
+  // `innerHTML` injection. It only becomes draggable in edit mode, which the
+  // desk binds to `E`.
+  if (route === '/pulse') {
+    await page.keyboard.press('e').catch(() => {});
+    await page.waitForTimeout(600);
+    const item = page.locator('.react-grid-item').first();
+    if (await item.count()) {
+      const box = await item.boundingBox().catch(() => null);
+      if (box) {
+        await page.mouse.move(box.x + box.width / 2, box.y + 12);
+        await page.mouse.down();
+        await page.mouse.move(box.x + box.width / 2 + 140, box.y + 90, { steps: 12 });
+        await page.waitForTimeout(300);
+        await page.mouse.up();
+        interactionsRun++;
+      }
+    }
+    await page.waitForTimeout(400);
+  }
+
+  await page.waitForTimeout(300);
+  return (await countStyleEls(page)) - before;
+}
+
 const page = await context.newPage();
 page.on('pageerror', e => pageErrors.push({ route: page.url(), message: String(e).slice(0, 300) }));
 page.on('requestfailed', r => {
@@ -91,6 +163,8 @@ for (const route of ROUTES) {
   // The trailer is an autoplaying timeline and Prove It builds a WebGL scene —
   // both reach for more of the platform than a static desk does.
   await page.waitForTimeout(route === '/trailer' || route === '/prove-it' ? 6000 : 1500);
+
+  if (INTERACT) styleElsAdded += await interact(page, route);
 
   /*
     `null` means the init script never ran — a navigation failure, or an error
@@ -122,6 +196,12 @@ for (const v of violations) {
 
 console.log(`\n${'='.repeat(70)}`);
 console.log(`CSP violations: ${violations.length} across ${ROUTES.length} routes`);
+if (INTERACT) {
+  console.log(`interactions driven: ${interactionsRun}; <style> elements they added: ${styleElsAdded}`);
+  if (styleElsAdded === 0) {
+    console.log('!! nothing injected a stylesheet — this run says nothing about runtime <style> paths');
+  }
+}
 if (unobserved.length) {
   console.log(`\n!! ${unobserved.length} route(s) were never observed — treat the run as invalid:`);
   for (const r of unobserved) console.log(`     ${r}`);

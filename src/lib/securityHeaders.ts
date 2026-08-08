@@ -10,39 +10,49 @@
 
   On the Content-Security-Policy specifically: every source below was arrived at
   by serving the production build under this exact policy and driving a real
-  browser over all 31 routes with a `securitypolicyviolation` listener attached,
-  then removing anything nothing asked for. It is not a policy copied from a
-  blog post, and it is deliberately narrower than one — there is no `https:`
-  wildcard anywhere, because this app talks to exactly one third party.
+  browser over all 32 routes with a `securitypolicyviolation` listener attached
+  — `npm run audit:csp`, and `--interact` for the paths a page load never
+  reaches — then removing anything nothing asked for. It is not a policy copied
+  from a blog post, and it is deliberately narrower than one: there is no
+  `https:` wildcard anywhere, because this app talks to exactly one third party.
 ==================================================
 */
 
 /**
- * `style-src` keeps 'unsafe-inline'. That is a considered decision, not a copied
- * default, and it is the one directive here that is looser than measurement
- * alone would justify.
+ * `style-src` keeps 'unsafe-inline'. Removing it was tried, measured, and would
+ * break the app.
  *
- * Removing it was tested: served with `style-src 'self'` and swept across all
- * 32 routes, the ONLY violations were the Google Fonts stylesheet — not a
- * single `style-src-attr`. That is expected once you look at why. CSP governs
- * style ATTRIBUTES parsed from markup or written with `setAttribute('style')`;
- * it does not govern CSSOM, and React, framer-motion and recharts all animate
- * through `element.style.property = …`, which is CSSOM. Nothing in the built
- * `index.html` carries a style attribute, and nothing in the bundles calls
- * `setAttribute('style')`.
+ * Loading all 32 routes under `style-src 'self'` reports only the Google Fonts
+ * stylesheet — not one `style-src-attr` — and that clean result is a trap. CSP
+ * governs style ATTRIBUTES parsed from markup or set with
+ * `setAttribute('style')`; it does not govern CSSOM, and React, framer-motion
+ * and recharts all animate through `element.style.property = …`. Nothing in the
+ * built index.html carries a style attribute and nothing in the bundles calls
+ * `setAttribute('style')`, so a load-only sweep has nothing to find.
  *
- * So why keep it. Four bundles — framer-motion, react-grid-layout,
- * lightweight-charts and the app itself — call `document.createElement('style')`
- * and inject a sheet at runtime. Whether that is blocked depends on how each one
- * fills it: `sheet.insertRule` is CSSOM and exempt, `textContent` is inline
- * style content and is refused. The sweep only LOADS each route. It never drags
- * a workspace panel, opens a modal or hovers a chart crosshair, which is exactly
- * where those injections happen — so the run proves nothing about them.
+ * What it misses is the four bundles that call `createElement('style')` and
+ * inject a sheet at RUNTIME, every one of them behind a user action:
  *
- * A blocked stylesheet does not throw. It silently does not apply, and the
- * failure would land in production, on an interaction, looking like a CSS bug.
- * Trading that for a directive whose realistic worst case is CSS-based
- * defacement is a bad trade while the evidence is this thin.
+ *   react-draggable      `n.innerHTML = '.react-draggable-transparent-selection…'`
+ *   lightweight-charts   `this.Uv.innerText = 'a#tv-attr-logo{…}'`
+ *   src/pages/pulse/detach.ts  `l.textContent = i.textContent`  (pop-out window)
+ *   framer-motion        `V.sheet.insertRule(…)`
+ *
+ * `npm run audit:csp -- --interact` drives those paths — chart crosshairs, the
+ * command palette, and Pulse's workspace drag behind its `E` toggle. Under the
+ * real policy: 0 violations, and one <style> element genuinely injected, so the
+ * run reaches them. Under `style-src 'self'`: FIVE `style-src-elem | inline`
+ * refusals, on the landing's motion layer and on the Pulse drag.
+ *
+ * Note what the element count does in that failing run: it still goes up. The
+ * <style> element is appended either way; only its CSS is dropped. Nothing
+ * throws, nothing logs, and the damage is invisible without the violation
+ * listener — which is the whole failure mode. It would land in production, on
+ * an interaction, looking like a CSS bug.
+ *
+ * That, against a directive whose realistic worst case is CSS-based defacement,
+ * is not a trade worth making. (lightweight-charts' path happens to be dormant —
+ * both charts pass `attributionLogo: false` — but the other two are live.)
  *
  * `script-src` is the directive that stops injected script, and that one IS
  * clean — no 'unsafe-inline', no 'unsafe-eval', no wildcard. That is why the

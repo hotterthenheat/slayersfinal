@@ -60,6 +60,7 @@ npm run test:dates          # the whole suite across N simulated dates
 npm run audit:ui            # browser sweep: contrast, focus, overflow, tap targets
 npm run audit:ui:self-test  # checks the audit's own colour maths against published anchors
 npm run audit:csp           # every route under the real CSP, listening for violations
+npm run audit:csp -- --interact   # ...plus the drag/hover paths a page load never reaches
 ```
 
 `audit:ui` and `audit:csp` measure the built app, so they need one serving:
