@@ -225,7 +225,7 @@ const StockDetailModal = ({
         pick && (
           <>
             <div className="flex items-center gap-2">
-              <span className="font-mono text-base font-bold text-textPrimary">{pick.ticker}</span>
+              <span className="font-mono text-lead leading-6 font-bold text-textPrimary">{pick.ticker}</span>
               <SignalBadge tone={VERDICT_TONE[pick.verdict]}>{VERDICT_LABEL[pick.verdict]}</SignalBadge>
             </div>
             <div className="mt-0.5 text-caption text-textSecondary truncate">{pick.name}</div>

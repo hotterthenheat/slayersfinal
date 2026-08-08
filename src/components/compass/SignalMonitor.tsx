@@ -85,7 +85,7 @@ const SignalMonitor = ({ setup, sweepSpot, onBack }: SignalMonitorProps) => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch animate-soft-in">
         <Panel title="The Setup" tone={tone} className="w-full">
           <div className="flex flex-col gap-3 h-full">
-            <h3 className={`text-base font-semibold leading-snug ${toneText[tone]}`}>{setup.headline}</h3>
+            <h3 className={`text-lead font-semibold leading-snug ${toneText[tone]}`}>{setup.headline}</h3>
             <p className="text-label text-textSecondary leading-relaxed">{setup.whyText}</p>
             <div className="mt-auto pt-2 border-t border-borderSubtle">
               <div className="font-mono text-micro uppercase tracking-widest text-textMuted mb-2">Why</div>

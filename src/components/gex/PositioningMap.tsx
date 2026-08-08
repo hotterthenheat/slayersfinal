@@ -134,7 +134,7 @@ const StrikeReadout = ({
 
       <div className="mt-2">
         <div className="font-mono text-micro uppercase tracking-widest text-textMuted">Net gamma</div>
-        <div className="font-mono text-base font-bold tnum" style={{ color: short ? SHORT_GAMMA : LONG_GAMMA }}>
+        <div className="font-mono text-lead leading-6 font-bold tnum" style={{ color: short ? SHORT_GAMMA : LONG_GAMMA }}>
           {now >= 0 ? '+' : ''}
           {fmtUsd(now)}
         </div>
@@ -590,6 +590,16 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
                   className={`absolute inset-x-0 transition-colors ${interactive ? ROW_INTERACTIVE : ''} ${
                     selected ? 'inst-selected' : ''
                   }`}
+                  /*
+                    WCAG 2.2 SC 2.5.8 "Essential": a band's height and position
+                    ARE the price axis. Padding it to 24px would put the strike
+                    somewhere it isn't, which is a worse defect than a small
+                    target. The keyboard path is the accessible route through
+                    this rail — roving tabindex, arrow keys, Enter — and it is
+                    wired directly below. Declared here rather than skipped
+                    silently in the audit so the claim is visible in review.
+                  */
+                  data-target-size="essential"
                   style={{ top: b.top, height: b.height }}
                   onMouseEnter={() => {
                     setHoverRow(row);

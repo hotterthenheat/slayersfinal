@@ -257,7 +257,7 @@ const ExpressionCard = ({ expr, recommended }: { expr: Expression; recommended: 
       actions={recommended ? <SignalBadge tone={tone} dot pulse>ISOLATES THE MISPRICING</SignalBadge> : undefined}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className={`font-mono text-base font-bold ${expr.side === 'LONG' ? 'text-bull' : 'text-king'}`}>{expr.name}</span>
+        <span className={`font-mono text-lead leading-6 font-bold ${expr.side === 'LONG' ? 'text-bull' : 'text-king'}`}>{expr.name}</span>
         <span className={`font-mono text-lg font-bold tnum ${evTone(expr.ev) === 'bull' ? 'text-bull' : evTone(expr.ev) === 'bear' ? 'text-bear' : 'text-textPrimary'}`}>
           {fmtEv(expr.ev)}
         </span>

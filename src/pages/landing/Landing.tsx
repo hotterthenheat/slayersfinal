@@ -265,7 +265,7 @@ const Landing = () => {
             <br />
             <span className="holo-text">move the market.</span>
           </h1>
-          <p className="mt-6 max-w-xl text-read md:text-base text-textSecondary leading-relaxed">
+          <p className="mt-6 max-w-xl text-read md:text-lead text-textSecondary leading-relaxed">
             Market makers have to hedge. That hedging pushes price toward some levels and away from
             others, every session, mechanically. Slayer maps those forces, then grades the trades.
           </p>

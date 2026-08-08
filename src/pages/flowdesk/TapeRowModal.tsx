@@ -200,7 +200,7 @@ const TapeRowModal = ({ print, onClose, isMarked, onToggleMark }: TapeRowModalPr
                 </div>
                 <div className="flex flex-col items-end gap-0.5 shrink-0">
                   <span className="font-mono text-label uppercase tracking-widest text-textMuted">Aggressor</span>
-                  <span className={`font-mono text-base font-bold ${agg.tone}`}>{agg.label}</span>
+                  <span className={`font-mono text-lead leading-6 font-bold ${agg.tone}`}>{agg.label}</span>
                   <span className="font-mono text-label text-textSecondary tnum">
                     {Math.abs(print.flowScore) < 15
                       ? 'no pressure either way'
