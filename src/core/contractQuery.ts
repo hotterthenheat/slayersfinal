@@ -102,8 +102,15 @@ const MONTHS: Record<string, number> = {
 const WEEKDAY_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const DAY_MS = 86400000;
 
-/** Rungs the expiry picker offers. Several collapse onto one session. */
-const LADDER_RUNGS = [0, 1, 2, 3, 4, 5, 7, 10, 14, 21, 30, 45, 60, 90, 180, 365];
+/**
+ * Rungs the expiry picker offers, in calendar days. Several collapse onto one
+ * session — from a Friday, 1d, 2d and 3d are all the following Monday — so the
+ * rail is SHORTER than this list by an amount that depends on the weekday and
+ * on which holidays fall inside the horizons. Measured over a year it lands
+ * between 12 and 15 entries. Exported so a test can compute that expected count
+ * rather than encode one day's.
+ */
+export const LADDER_RUNGS = [0, 1, 2, 3, 4, 5, 7, 10, 14, 21, 30, 45, 60, 90, 180, 365];
 
 const p2 = (n: number) => String(n).padStart(2, '0');
 

@@ -13,7 +13,7 @@ import {
   marketClock,
   today,
 } from './calendar';
-import { expiryLadder } from './contractQuery';
+import { LADDER_RUNGS, expiryLadder } from './contractQuery';
 
 /** Local-midnight date from a y-m-d triple — never `new Date('2026-07-04')`,
     which parses as UTC and shifts a day in negative-offset zones. */
@@ -213,10 +213,31 @@ describe('the calendar has not run out', () => {
   });
 
   it('drops no rung from today’s expiry ladder', () => {
-    // The symptom the lead-time guard exists to pre-empt, asserted directly:
-    // the year clamp silently `continue`s past any rung the table cannot price.
+    /*
+      The symptom the lead-time guard exists to pre-empt, asserted directly:
+      the year clamp silently `continue`s past any rung the table cannot price.
+
+      This used to read `expect(ladder.length).toBeGreaterThanOrEqual(14)`,
+      which is a different claim and a false one. `expiryLadder` drops a rung
+      for TWO reasons, and only one of them is the defect. The other is the
+      de-dup: from a Friday, 1d/2d/3d all resolve to the following Monday, and
+      a holiday inside a horizon collapses another pair. Swept across a year the
+      rail is 12 entries once, 13 on 61 days, 14 on 266 and 15 on 37 — so the
+      floor of 14 was one weekday's count read off the day it was written, and
+      it went red on 62 days in 365 while the calendar was perfectly healthy.
+
+      Comparing against the rungs' own distinct-session count separates the two.
+      De-dup moves both sides of the comparison and cancels out; the year clamp
+      moves only `ladder`, which is exactly the failure worth waking up for.
+      (The de-dup's own behaviour is pinned in contractQuery.test.ts, against a
+      FIXED Friday, where counting rungs is a stable thing to do.)
+    */
     const ladder = expiryLadder();
-    expect(ladder.length).toBeGreaterThanOrEqual(14);
+    const distinct = new Set(LADDER_RUNGS.map(r => expiryFor(r).label));
+    expect(
+      ladder.length,
+      `${distinct.size - ladder.length} rung(s) fell past MARKET_HOLIDAYS. Extend the table.`,
+    ).toBe(distinct.size);
     for (const e of ladder) {
       expect(e.date.getFullYear()).toBeLessThanOrEqual(CALENDAR_THROUGH);
       expect(isTradingDay(e.date)).toBe(true);

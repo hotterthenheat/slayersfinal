@@ -228,16 +228,41 @@ describe('scan cost: the wide field stays off the tick loop', () => {
   });
 
   it('reading only the contract chain does not run the sweep', () => {
+    /*
+      Compass rebuilds this object every 1.5s purely for the chain, so the
+      five-hundred-name sweep has to stay behind the feed getters. That is a
+      structural property, and this asserts it structurally.
+
+      It used to time 50 chain reads and require the mean under 2ms. The
+      threshold was not a claim about the code — it was one measurement of one
+      idle machine, and the number it guards is not the number that regresses:
+      whether the sweep runs is a yes/no, while 2ms is a stopwatch reading that
+      moves with whatever else the box is doing. Run three times back to back
+      here it failed twice at 2.97ms and 3.31ms, on a tree where nothing was
+      wrong. A gate that red-lights a healthy build two runs in three does not
+      report a regression, it teaches everyone to press re-run.
+
+      `buildCompass` returns `groups`, `totalFound` and `shown` as getters and
+      `chain` as a plain value; `feed()` — the only path to `buildScanUniverse`
+      — is reachable through those getters and nowhere else. So "reading the
+      chain does not run the sweep" is exactly "those three are still getters",
+      which is decidable rather than measurable. Making any of them eager, the
+      one edit that reintroduces the bug, fails this immediately and on every
+      machine.
+    */
     resetCompassCache();
     resetScanUniverse();
     buildScanUniverse(EPOCH);
-    const t0 = performance.now();
-    let rows = 0;
-    for (let i = 0; i < 50; i++) rows += buildCompass(snap, 'top-setups', { epoch: EPOCH }).chain.rows.length;
-    const perCall = (performance.now() - t0) / 50;
-    expect(rows).toBeGreaterThan(0);
-    // Compass rebuilds this object every 1.5s purely for the chain.
-    expect(perCall).toBeLessThan(2);
+    const data = buildCompass(snap, 'top-setups', { epoch: EPOCH });
+    expect(data.chain.rows.length).toBeGreaterThan(0);
+    for (const key of ['groups', 'totalFound', 'shown'] as const) {
+      const desc = Object.getOwnPropertyDescriptor(data, key);
+      expect(
+        typeof desc?.get,
+        `buildCompass().${key} must stay behind a getter — an eager one puts the ` +
+          `500-name sweep on the 1.5s chain refresh.`,
+      ).toBe('function');
+    }
   });
 });
 
