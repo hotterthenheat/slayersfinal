@@ -665,7 +665,6 @@ export function makeSetup(
     ask,
     mid,
     liveMid,
-    confidence: Math.round(clamp((score - 55) * 2.1, 5, 98)),
     health,
     momentum,
     takeProfits: buildTakeProfits(mid, profile),

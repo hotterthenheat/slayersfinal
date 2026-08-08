@@ -32,7 +32,10 @@ export const THREAD_ACQUISITION: { field: keyof TrailerStateThread; sceneId: str
   { field: 'volatilityState', sceneId: 'levels', label: 'VOL' },
   { field: 'setupId', sceneId: 'compass', label: 'SETUP' },
   { field: 'contractId', sceneId: 'weigher', label: 'CONTRACT' },
-  { field: 'modelConfidence', sceneId: 'proveit', label: 'CONF' },
+  // Was `CONF`, over a field called modelConfidence. Prove It emits a
+  // probability that the sampler produced; it emits nothing at all about how
+  // sure it is of that probability, so the thread names the former.
+  { field: 'upProbability', sceneId: 'proveit', label: 'P(UP)' },
 ];
 
 const sceneOrder = (id: string) => SCENES.findIndex(s => s.id === id);
@@ -79,7 +82,7 @@ export function deriveThread(story: TrailerStory, sceneIndex: number, sceneProgr
     activeLevel: story.level,
     setupId: threadHas('setupId', sceneIndex) ? story.packet.setupId : undefined,
     contractId: threadHas('contractId', sceneIndex) ? story.packet.contractId : undefined,
-    modelConfidence: threadHas('modelConfidence', sceneIndex) ? 0.63 : undefined,
+    upProbability: threadHas('upProbability', sceneIndex) ? 0.63 : undefined,
   };
 }
 

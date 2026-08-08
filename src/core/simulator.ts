@@ -520,8 +520,19 @@ const Simulator = (() => {
     score = Math.max(10, Math.min(90, score));
 
     const direction = score >= 50 ? 'BULLISH' : 'BEARISH';
-    // Conviction stays a true percentage: score ∈ [10, 90] maps to [50, 100].
-    const confidence = 50 + Math.abs(score - 50) * 1.25;
+    /*
+      A `confidence` field used to be derived here as
+      `50 + Math.abs(score - 50) * 1.25`, under a comment claiming it "stays a
+      true percentage". It was not one. `score` is clamped to [10, 90] two lines
+      up, so the expression spans [50, 100] exactly: the strongest read printed
+      100% certainty, and — because it is a V in `score`, monotone in the
+      DISTANCE from 50 rather than in the score itself — the most bearish read
+      printed 100% too. It could not express doubt at all; its floor was 50.
+
+      Nothing ever read it. It is gone rather than renamed: `score` is already on
+      this object and carries the same information without the percent sign that
+      made it look like a second, agreeing opinion.
+    */
 
     const entry = spot;
     let stopLoss = direction === 'BULLISH' ? supportWall - config.step * 0.5 : resistanceWall + config.step * 0.5;
@@ -537,7 +548,6 @@ const Simulator = (() => {
       ticker: tickerKey,
       direction,
       score,
-      confidence: Math.round(confidence),
       entry: Number(entry.toFixed(2)),
       stopLoss: Number(stopLoss.toFixed(2)),
       target1: Number(target1.toFixed(2)),

@@ -47,7 +47,10 @@ const RegimePanel = ({ data }: RegimePanelProps) => {
   );
 
   const stats: { label: string; value: string }[] = [
-    { label: 'Confidence', value: `${prob}%` },
+    // Not "Confidence". `prob` is this regime's weight in a three-way mixture
+    // that sums to 1 — a real share of the model's own state, which is a
+    // different claim from how likely the model is to be right about it.
+    { label: 'Probability', value: `${prob}%` },
     { label: 'Since', value: since },
     { label: 'Avg Duration', value: `${avgDurationDays}d` },
     { label: 'Next Low 1M', value: `${nextLow}%` },
@@ -74,7 +77,7 @@ const RegimePanel = ({ data }: RegimePanelProps) => {
       <div
         className="flex-grow min-h-0"
         role="img"
-        aria-label={`Volatility-regime probability history across ${rows.length} months, stacked to one hundred percent. The current regime is ${current.toLowerCase()} at ${prob} percent confidence, held since ${since}.`}
+        aria-label={`Volatility-regime probability history across ${rows.length} months, stacked to one hundred percent. The current regime is ${current.toLowerCase()} at ${prob} percent probability, held since ${since}.`}
       >
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={rows} margin={chartMargin} stackOffset="expand">

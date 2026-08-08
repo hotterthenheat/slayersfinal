@@ -258,7 +258,11 @@ const ItemDetail = ({ row, onStatus, onNotes, onReview, onUntrack }: ItemDetailP
           </span>
         </MiniStat>
         <MiniStat label="Premium">${live.mid.toFixed(2)}</MiniStat>
-        <MiniStat label="Confidence">{live.confidence}%</MiniStat>
+        {/* Was Confidence — `(score - 55) * 2.1`, the Score tile above it wearing
+            a percent sign. Health reads moneyness, so it can disagree with the
+            score, which is the only thing that makes a second number worth the
+            space. */}
+        <MiniStat label="Health">{live.health}/100</MiniStat>
         <MiniStat label="Exp. Move">
           <span className={moveUp ? 'text-bull' : 'text-bear'}>
             {moveUp ? '+' : ''}
@@ -408,11 +412,11 @@ const COLUMNS: Column<Row>[] = [
     render: r => <span className="text-textPrimary tnum">${r.live.mid.toFixed(2)}</span>,
   },
   {
-    key: 'confidence',
-    header: 'Confidence',
+    key: 'health',
+    header: 'Health',
     align: 'right',
-    sortValue: r => r.live.confidence,
-    render: r => <span className="text-textPrimary tnum">{r.live.confidence}%</span>,
+    sortValue: r => r.live.health,
+    render: r => <span className="text-textPrimary tnum">{r.live.health}</span>,
   },
   {
     key: 'expMove',
@@ -600,7 +604,7 @@ const Tracker = () => {
               </div>
               <h2 className="text-lg font-semibold text-textPrimary">Nothing on watch yet</h2>
               <p className="mt-1.5 text-data text-textSecondary leading-relaxed max-w-xl">
-                The Tracker keeps your best ideas in one table and re-reads each one's score, signal and confidence from the
+                The Tracker keeps your best ideas in one table and re-reads each one's score, signal and health from the
                 current market read every time you open it. Bookmark something from any desk below, then set a status and keep
                 notes as your thesis plays out.
               </p>

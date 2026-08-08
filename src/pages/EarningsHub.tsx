@@ -66,7 +66,7 @@ const reportConfirmed = (e: EarningsEvent): boolean => e.daysOut <= CONFIRM_WIND
  * Edge = the straddle mispricing, straight off the existing richness field.
  *
  * Cheap vol is silver, not green. Green on this page is the direction sleeves
- * (revisions, flow, setup, conviction) and nothing else; a straddle priced under
+ * (revisions, flow, setup, agreement) and nothing else; a straddle priced under
  * the name's modeled average is a statement about the premium, not about which way
  * the print goes, and a cheap straddle is bought by bears as often as bulls. The
  * three tones here are the process vocabulary: select qualifies, warn cautions,
@@ -84,13 +84,23 @@ const edgePtsLabel = (e: EarningsEvent): string => {
   return `${d >= 0 ? '+' : '−'}${Math.abs(d).toFixed(1)}pt`;
 };
 
-interface Conviction {
+/*
+  How many of the three signals point the same way. Not a confidence.
+
+  This was labelled "Conviction", which reads as the model stating how sure it
+  is. What `agreementRead` actually counts is `aligned` — the number of the
+  three chips (revisions / flow / setup) that agree on a direction — and it
+  returns High at three, Moderate at two, Split otherwise. That is a fact about
+  the signals, checkable against the chips rendered directly beside it, and it
+  is silent on whether they are right. Three signals can agree and all be wrong.
+*/
+interface Agreement {
   label: string;
   tone: Tone;
   dir: 'UP' | 'DOWN' | 'MIXED';
   aligned: number;
 }
-const convictionRead = (e: EarningsEvent): Conviction => {
+const agreementRead = (e: EarningsEvent): Agreement => {
   const { net, aligned } = directionVote(e);
   const dir = net > 0 ? 'UP' : net < 0 ? 'DOWN' : 'MIXED';
   const dirTone: Tone = net > 0 ? 'bull' : net < 0 ? 'bear' : 'warn';
@@ -190,7 +200,7 @@ const WatchStar = ({ on, onClick }: { on: boolean; onClick: () => void }) => (
   </button>
 );
 
-/** Three signal chips (revisions / flow / setup) that back the conviction read. */
+/** Three signal chips (revisions / flow / setup) that back the agreement read. */
 const VoteChips = ({ e }: { e: EarningsEvent }) => {
   const { rev, flow, setup } = directionVote(e);
   const chip = (label: string, v: number) => (
@@ -301,7 +311,7 @@ const AlertCountdown = ({
 /** The three-part read that replaces a bare QUALIFIED / RICH badge. */
 const TradeRead = ({ e, view }: { e: EarningsEvent; view: EarningsIntelView | undefined }) => {
   const edge = edgeRead(e);
-  const conv = convictionRead(e);
+  const conv = agreementRead(e);
   const st = structureOf(view);
   return (
     <div className="flex flex-col gap-1">
@@ -590,7 +600,7 @@ const EarningsHub = () => {
         // which is an average of the eight reports this model generates for the
         // name. StockDetailDrawer.tsx:134 already prints it as "Modeled avg /
         // 8 modeled reports"; one field cannot have two provenances.
-        subtitle="Every upcoming print priced: implied vs the move this model records for the name, then edge, conviction and the risk-defined structure for each"
+        subtitle="Every upcoming print priced: implied vs the move this model records for the name, then edge, signal agreement and the risk-defined structure for each"
         actions={<SegmentedControl ariaLabel="Verdict filter" options={FILTER_OPTIONS} value={filter} onChange={setFilter} />}
       />
 
@@ -674,7 +684,7 @@ const EarningsHub = () => {
               <GitCompare className="w-3.5 h-3.5" /> Strategy compare
             </span>
           }
-          subtitle={`${compared.length} print${compared.length > 1 ? 's' : ''} · edge · conviction · structure`}
+          subtitle={`${compared.length} print${compared.length > 1 ? 's' : ''} · edge · agreement · structure`}
           tone="select"
           actions={
             <button
@@ -689,7 +699,7 @@ const EarningsHub = () => {
           <div className="flex gap-px bg-borderSubtle overflow-x-auto">
             {compared.map(e => {
               const edge = edgeRead(e);
-              const conv = convictionRead(e);
+              const conv = agreementRead(e);
               const st = structureOf(intelByTicker.get(e.ticker));
               return (
                 <div key={e.ticker} className="bg-panel px-3.5 py-3 flex flex-col gap-2.5 min-w-[220px]">
@@ -722,7 +732,7 @@ const EarningsHub = () => {
                       </span>
                     </div>
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-mono text-label uppercase tracking-wider text-textMuted">Conviction</span>
+                      <span className="font-mono text-label uppercase tracking-wider text-textMuted">Agreement</span>
                       <span className={`font-mono text-caption font-semibold ${toneText[conv.tone]}`}>
                         {conv.dir === 'MIXED' ? 'Split' : `${conv.dir} ${conv.label}`}
                       </span>
@@ -834,11 +844,11 @@ const EarningsHub = () => {
               </span>
             </div>
 
-            {/* Edge · conviction · structure — the read that replaces a bare call */}
+            {/* Edge · agreement · structure — the read that replaces a bare call */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               {(() => {
                 const edge = edgeRead(selected);
-                const conv = convictionRead(selected);
+                const conv = agreementRead(selected);
                 const st = structureOf(selectedView);
                 return (
                   <>
@@ -850,7 +860,7 @@ const EarningsHub = () => {
                     </div>
                     <div className="inst-surface rounded-md px-3 py-2">
                       <div className="flex items-center justify-between">
-                        <span className="font-mono text-label uppercase tracking-widest text-textMuted">Conviction</span>
+                        <span className="font-mono text-label uppercase tracking-widest text-textMuted">Agreement</span>
                         <VoteChips e={selected} />
                       </div>
                       <div className={`mt-1 font-mono text-body font-semibold ${toneText[conv.tone]} leading-5`}>

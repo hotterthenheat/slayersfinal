@@ -40,7 +40,9 @@ const ConvergenceScene: React.FC = () => {
     { product: 'Trace · Dark Pool', route: '/trace/dark-pool', label: 'Shelf', value: px(story.darkPool.shelf), tone: 'text-darkpool' },
     { product: 'Pinpoint', route: '/pinpoint/gamma', label: 'Flip', value: px(story.levels.flip), tone: 'text-flip' },
     { product: 'Compass', route: '/compass', label: 'Setup', value: story.packet.setupId, tone: 'text-select' },
-    { product: 'Prove It', route: '/prove-it', label: 'Confidence', value: prob(0.63) },
+    // Was `Confidence`, on a hardcoded 0.63. Prove It's headline figure is a
+    // probability the sampler produces — name that, not a certainty about it.
+    { product: 'Prove It', route: '/prove-it', label: 'P(up)', value: prob(0.63) },
     { product: 'Stocks', route: '/stocks', label: 'Expression', value: 'OPTIONS' },
     // News reads as a Stocks sleeve now; `/news` is a retired route.
     { product: 'News', route: '/stocks', label: 'Repricing', value: `${(story.news.widthAfter * 100).toFixed(1)}% wide` },

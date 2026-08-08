@@ -132,7 +132,15 @@ const sentTone: Record<FlowSentiment, Tone> = {
   NEUTRAL: 'neutral',
 };
 
-/** Diverging conviction bar centered at 0 — bullish right (green), bearish left (red). */
+/*
+  Diverging LEAN bar centred at 0 — bullish right (green), bearish left (red).
+
+  The column read "Conviction", which named a certainty. `bullScore` is a signed
+  -100..+100 skew of call premium against put premium: it says which way the
+  tape leans and how hard, and says nothing whatever about how likely that lean
+  is to be right. A bar that is already signed and already coloured by direction
+  needs the directional word, not the epistemic one.
+*/
 const ScoreBar = ({ score }: { score: number }) => (
   <span className="flex items-center gap-1.5 w-full">
     <span className="relative flex-1 h-[6px] rounded-full bg-white/[0.05] overflow-hidden">
@@ -160,7 +168,7 @@ const COL_META: { key: string; label: string; locked?: boolean }[] = [
   { key: 'voi', label: 'Vol / OI' },
   { key: 'premium', label: 'Premium' },
   { key: 'iv', label: 'IV' },
-  { key: 'score', label: 'Conviction' },
+  { key: 'score', label: 'Lean' },
   { key: 'sent', label: 'Read' },
 ];
 
@@ -208,7 +216,7 @@ const ALL_COLUMNS: Column<ScannerRow>[] = [
   },
   { key: 'premium', header: 'Premium', align: 'right', sortValue: r => r.premium, render: r => <span className="font-mono text-caption font-semibold text-textPrimary tnum leading-4">{fmtUsd(r.premium)}</span> },
   { key: 'iv', header: 'IV', help: 'IV', align: 'right', sortValue: r => r.iv, render: r => <span className="font-mono text-caption text-textSecondary tnum leading-4">{r.iv.toFixed(0)}%</span> },
-  { key: 'score', header: 'Conviction', width: '150px', sortValue: r => r.bullScore, render: r => <ScoreBar score={r.bullScore} /> },
+  { key: 'score', header: 'Lean', width: '150px', sortValue: r => r.bullScore, render: r => <ScoreBar score={r.bullScore} /> },
   { key: 'sent', header: 'Read', sortValue: r => r.sentiment, render: r => <SignalBadge tone={sentTone[r.sentiment]}>{r.sentiment}</SignalBadge> },
 ];
 
@@ -691,7 +699,7 @@ const FlowScanner = () => {
             <ScanLine className="w-3.5 h-3.5" /> Contract aggregation
           </span>
         }
-        subtitle="volume · estimated daily ΔOI · premium · bull/bear conviction"
+        subtitle="volume · estimated daily ΔOI · premium · bull/bear lean"
         flush
       >
         <DataTable
