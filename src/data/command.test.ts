@@ -40,10 +40,25 @@ describe('P4.4 — cash indices carry delta-equivalent flow', () => {
     const snap = Simulator.buildSnapshot('SPX');
     const de = buildCommandView(snap).orderFlow.deltaEquiv;
     expect(de).toBeTruthy();
-    // net = call + put, and the per-strike profile sums to the net.
-    expect(de!.netDollars).toBeCloseTo(de!.callDollars + de!.putDollars, 0);
+    /*
+      net = call + put, and the per-strike profile sums to the net — both to a
+      RELATIVE tolerance, because these are ten-figure dollar sums.
+
+      `toBeCloseTo(x, 0)` asks for agreement within 50c on ~$10.2bn, which is
+      about one part in 2e10 — past what summing thousands of per-strike terms
+      in two different groupings can promise, and the sweep duly found dates
+      where the two landed a dollar apart. The line below already carried slack
+      for exactly this, so the assertion above was the odd one out rather than
+      the strict one.
+
+      A part in a billion still catches any real reconciliation break: the
+      failure this guards is a side going missing or double-counted, which moves
+      the total by percent, not by a dollar.
+    */
+    const rel = (a: number, b: number) => Math.abs(a - b) / Math.max(Math.abs(a), Math.abs(b), 1);
+    expect(rel(de!.netDollars, de!.callDollars + de!.putDollars)).toBeLessThan(1e-9);
     const sum = de!.byStrike.reduce((a, r) => a + r.value, 0);
-    expect(sum).toBeCloseTo(de!.netDollars, -2); // per-strike rounding
+    expect(rel(sum, de!.netDollars)).toBeLessThan(1e-6); // per-strike rounding
     // Calls are long delta, puts short — the two sides carry opposite signs.
     expect(de!.callDollars).toBeGreaterThan(0);
     expect(de!.putDollars).toBeLessThan(0);

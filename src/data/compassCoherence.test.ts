@@ -194,7 +194,19 @@ describe('the scan engine and the weigher price the same contract the same way',
     const iv = Simulator.TICKERS.SPY.iv;
     const atm = Math.round(s.spot / Simulator.TICKERS.SPY.step) * Simulator.TICKERS.SPY.step;
     const scanned = makeSetup('SPY', s.spot, atm, 'C', 'top-setups', iv, true);
-    const weighed = weighContract(s, 'C', atm, 0);
+    /*
+      The Weigher gets the RESOLVED distance, because that is the contract the
+      board actually quoted.
+
+      This passed a literal 0. On any day a 0DTE resolves to today the two are
+      the same contract, and on any day it does not — a weekend, the session
+      before a holiday — they are not: `makeSetup` prices the Monday expiry the
+      calendar returned while a raw 0 floors at half a session. The engines were
+      then handed different amounts of life and asked to agree, and the ratio ran
+      to 2.03 on 2026-09-19, just outside a band whose whole purpose is to catch
+      a model split rather than a calendar one.
+    */
+    const weighed = weighContract(s, 'C', atm, expiryFor(0).dte);
     // Since P2.2 both call the SAME Black-Scholes pricer, so what remains is not
     // model shape but the volatility each surface feeds it: the board prices at
     // the name IV, the Weigher adds a base-IV bump and a wing skew. On an ATM
