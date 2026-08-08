@@ -52,12 +52,22 @@ npm test           # vitest
 npm run build      # tsc + vite build
 ```
 
-Two more do not run on the gate, because they take minutes rather than seconds:
+Three more do not run on the gate, because they take minutes rather than seconds
+and two of them need a browser:
 
 ```bash
 npm run test:dates          # the whole suite across N simulated dates
 npm run audit:ui            # browser sweep: contrast, focus, overflow, tap targets
 npm run audit:ui:self-test  # checks the audit's own colour maths against published anchors
+npm run audit:csp           # every route under the real CSP, listening for violations
+```
+
+`audit:ui` and `audit:csp` measure the built app, so they need one serving:
+
+```bash
+npm run build && npm run serve &
+npm run audit:csp
+npm run audit:ui -- --base http://localhost:8080
 ```
 
 `test:dates` exists because the suite reads the real clock on purpose. Freezing it would
@@ -74,6 +84,7 @@ Beyond the usual unit coverage, a few suites exist to stop specific things drift
 | `src/lib/palette.test.ts` | The colour budget. Holographic silver, white and black, plus eight hues that may only colour the market |
 | `src/lib/designSystem.test.ts` | `design-system/*.html` cannot advertise a token `tailwind.config.ts` does not define |
 | `src/lib/routes.test.ts` | Every internal link resolves against the route table in `App.tsx` |
+| `src/lib/securityHeaders.test.ts` | `vercel.json` sends exactly what `server.ts` sends, and `script-src` stays free of `unsafe-inline` |
 | `src/lib/sitemap.test.ts` | `public/sitemap.xml` matches the nav registry exactly |
 | `src/components/ui/focusRing.test.ts` | Nothing removes a focus outline without replacing it |
 | `src/core/calendar.test.ts` | Market holidays, sessions and expiry resolution — with two years of lead time on the table running out |

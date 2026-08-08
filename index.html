@@ -40,18 +40,30 @@
        every navigation stalled ~13.6s before showing anything — the same shape
        a reader on a slow or filtered network gets, just with the dial turned up.
 
-       `media="print"` makes the browser fetch it at low priority without
-       applying it or blocking; the onload flip promotes it to `all` once it has
-       arrived. The <noscript> copy keeps the fonts for readers without JS, and
-       tailwind.config.ts already carries real fallback stacks with close
-       metrics, so the pre-swap paint is a refinement rather than a reflow. -->
+       `media="print"` makes the browser fetch it without applying it or
+       blocking. The promotion to `all` happens in src/main.tsx rather than in an
+       `onload` attribute here, and that is a CSP decision: an inline event
+       handler is inline script, so keeping it would have forced
+       `script-src 'unsafe-inline'` — surrendering the directive that does the
+       most work, to save one line. Doing it from the bundle costs nothing in
+       practice, because this is a SPA whose first paint already waits on that
+       same bundle.
+
+       The <noscript> copy keeps the fonts for readers without JS.
+       tailwind.config.ts declares full fallback stacks (system-ui, then the
+       platform sans), so the first paint is real text in a system face rather
+       than nothing — but `display=swap` does mean the webfont replaces it when
+       it lands, and how much that reflows depends on metric differences that
+       have NOT been measured here. It is a deliberate trade: a possible late
+       reflow, against a first paint that used to wait on a third-party host and
+       stalled ~13.6s when that host could not be reached. -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
+    id="webfonts"
     rel="stylesheet"
     href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap"
-    media="print"
-    onload="this.media='all';this.onload=null">
+    media="print">
   <noscript>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap">
   </noscript>

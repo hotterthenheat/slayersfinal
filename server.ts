@@ -2,6 +2,12 @@ import express from 'express';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  IMMUTABLE_CACHE,
+  IMMUTABLE_PREFIX,
+  REVALIDATE_CACHE,
+  SECURITY_HEADERS,
+} from './src/lib/securityHeaders';
 
 /*
 ==================================================
@@ -26,21 +32,15 @@ import { fileURLToPath } from 'node:url';
     because it is what points at the current fingerprints, and it was getting
     the same silence.
 
-  Header choices are deliberately narrow. nosniff, DENY and a referrer policy
-  are safe for a same-origin SPA with no embeds. A Content-Security-Policy is
-  NOT set here: this app loads a third-party font stylesheet, and three.js,
-  framer-motion and recharts all write inline styles, so an honest policy needs
-  `style-src 'unsafe-inline'` and careful per-directive verification against a
-  real render. That is worth doing as its own change, with the same policy
-  mirrored into vercel.json — guessing at one here would either break the app
-  or read as protection it isn't providing.
+  The headers, the CSP and the two cache policies all come from
+  src/lib/securityHeaders.ts, which vercel.json is tested against — the deployed
+  policy and the reviewed one have to be the same policy.
 ==================================================
 */
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST = path.join(__dirname, 'dist');
 const INDEX = path.join(DIST, 'index.html');
-const ASSETS = path.join(DIST, 'assets') + path.sep;
 const PORT = Number(process.env.PORT ?? 8080);
 
 // Without this the server starts happily and every route 404s, which reads as
@@ -54,9 +54,7 @@ const app = express();
 app.disable('x-powered-by');
 
 app.use((_req, res, next) => {
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'DENY');
-  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  for (const [name, value] of Object.entries(SECURITY_HEADERS)) res.setHeader(name, value);
   next();
 });
 
@@ -65,14 +63,11 @@ app.use(
     // index.html is served by the fallback below, so it gets one set of headers
     // from one place rather than two that can drift.
     index: false,
-    setHeaders(res, filePath) {
-      res.setHeader(
-        'Cache-Control',
-        // Fingerprinted by Vite: the name changes when the bytes do, so it can
-        // never be stale. Everything else (favicon, manifest, robots, sitemap)
-        // keeps its name across deploys and must be revalidated.
-        filePath.startsWith(ASSETS) ? 'public, max-age=31536000, immutable' : 'no-cache',
-      );
+    // Matched on the URL path, not the filesystem path, so this and the
+    // `/assets/(.*)` rule in vercel.json are keyed off the same string.
+    setHeaders(res) {
+      const immutable = res.req.path.startsWith(IMMUTABLE_PREFIX);
+      res.setHeader('Cache-Control', immutable ? IMMUTABLE_CACHE : REVALIDATE_CACHE);
     },
   }),
 );
