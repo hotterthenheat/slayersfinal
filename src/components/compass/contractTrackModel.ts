@@ -27,7 +27,7 @@ import { math } from '../../core/mathProvider';
 import { BULL, FOCUS, MUTED_INK } from '../gex/palette';
 import type { Tone } from '../ui/tones';
 import type { Candle } from '../../types/market';
-import { dteOfBucket } from './setupHorizon';
+import { expiryRead } from './setupHorizon';
 import type { OptionRight, Setup, TakeProfitStatus } from '../../types/compass';
 import type { WeighedContract } from '../../core/contractScore';
 
@@ -97,12 +97,28 @@ export function bsPriceAtT(
   return Math.max(math.optionPrice(spot, strike, ivAnnual, tYears, right), BS_FLOOR);
 }
 
-/** Trading sessions a compass profile expiry stands for. Mirrors `dteOf`. */
+/**
+ * Trading sessions a compass profile expiry stands for.
+ *
+ * The RESOLVED calendar distance, not the nominal bucket, because that is what
+ * the engine prices with: `makeSetup` quotes its mid off `expiryFor(dte).dte`
+ * — the date the calendar actually landed on — precisely so a bucket that backs
+ * off a weekend or a holiday is priced with the life it really has.
+ *
+ * This read `dteOfBucket(expiry)` instead, which is the nominal number in the
+ * label. The two agree on any day a bucket resolves to itself and diverge on
+ * every day one does not: quoted on a Saturday, a 0DTE resolves forward to
+ * Monday and the engine prices two calendar days of life, while this floored
+ * the same contract at half a session. The chart's line then ended somewhere
+ * the mid printed beside it did not — an SPY 498 call was 2.47 on the card and
+ * 1.55 on its own curve — which is the split this whole model exists to avoid.
+ *
+ * With the resolved distance the identity the line below claims is finally
+ * true: `sessionsForExpiry(expiry) / 252 === yearsToExpiry(resolvedDte)`,
+ * including the floor, which both express as half a trading session.
+ */
 export function sessionsForExpiry(expiry: string): number {
-  // The engine's own bridge, expressed in the sessions this file measures in:
-  // `yearsToExpiry(dte) === sessionsForExpiry(expiry) / 252` by construction.
-  // A 0DTE floors at half a session, which is where its 0.5 comes from.
-  return Math.max(dteOfBucket(expiry) * (252 / 365), 0.5);
+  return Math.max(expiryRead(expiry).dte * (252 / 365), 0.5);
 }
 
 // ---- the plan ---------------------------------------------------------------
@@ -384,7 +400,14 @@ export function buildTrack(plan: ContractPlan, bars: Candle[]): TrackData {
   let onFloor = 0;
   for (let i = 0; i <= FWD_PTS; i++) {
     const rem = plan.sessionsLeft * (1 - i / FWD_PTS);
-    const bar = (plan.sessionsLeft - rem) * SESSION_BARS;
+    // The x axis is BARS, and bars are whole, so `lifeBars` rounds. Placing the
+    // points on `sessionsLeft * SESSION_BARS` instead left the last one up to
+    // half a bar short of `xMax` — invisible while `sessionsLeft` was always
+    // 0.5 or a whole number, since 390 divides both exactly, and immediately
+    // visible once a resolved 0DTE made it 2 × 252/365. Scaling by `lifeBars`
+    // puts the terminus ON the expiry edge by construction. `rem` is untouched:
+    // the price at each point is still the contract's true remaining life.
+    const bar = lifeBars * (i / FWD_PTS);
     const premium = finite(plan.priceAt(spotNow, rem), prevF);
     prevF = premium;
     forward.push({ bar, premium });

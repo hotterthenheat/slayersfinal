@@ -8,6 +8,8 @@
   relationships between them are asserted rather than eyeballed.
 */
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import {
   SCENES,
@@ -310,12 +312,58 @@ describe('contract weigher', () => {
     expect(new Set(scored).size).toBe(scored.length);
   });
 
-  it('still makes the argument the scene is built on', () => {
-    // The point of the scene is that the biggest payoff at the target is not the
-    // best decision. If a re-pin ever collapses those onto one row, the scene's
-    // closing line has a branch for it — but this should fail loudly first.
-    const top = [...story.contracts].sort((a, b) => b.returnAtTarget - a.returnAtTarget)[0];
-    expect(top.verdict).not.toBe('SELECTED');
+  it('leaves the scene a closing line that is true of the board', () => {
+    /*
+      This assertion has now been wrong twice, in opposite directions, and both
+      times for the same reason: it tried to make a property of ONE DAY'S
+      generated board into an invariant.
+
+      It began as `top-by-return is never SELECTED` — the scene's thesis that the
+      biggest payoff is not the best decision — carrying a note that the closing
+      line branches if the two ever collapse and that this "should fail loudly
+      first". It duly did, on a date where the set's only near expiry, K136
+      AUG 11, topped both columns. That is not a defect: a nearer expiry has more
+      leverage, so it can win payoff and utility at once, and which expiries the
+      story mints depends on the day it is built.
+
+      The obvious repair — assert that utility REORDERS the payoff ranking — is
+      the same mistake one step out. Swept across 45 consecutive dates it failed
+      on 2026-09-03, where the two orderings happen to coincide exactly.
+
+      Neither is invariant, because neither can be: `utility = p·return +
+      (1-p)·shortfall - 0.22·liquidityRisk`, and whether that reorders five rows
+      depends on how p, shortfall and liquidity vary across the contracts a given
+      day produces. WeigherScene knows this and prints one of two sentences.
+
+      So this tests what is actually guaranteed: whichever branch the scene
+      takes, the sentence it prints is true of the board it is printed beside.
+      Both readings are checked, so the day decides which one runs and neither
+      can quietly start lying.
+    */
+    const selected = story.contracts.find(c => c.verdict === 'SELECTED')!;
+    const topReturn = story.contracts.reduce(
+      (best, r) => (r.returnAtTarget > best.returnAtTarget ? r : best),
+      story.contracts[0]
+    );
+
+    if (topReturn.id === selected.id) {
+      // "…the same contract wins on both."
+      expect(topReturn.utility).toBe(Math.max(...story.contracts.map(c => c.utility)));
+    } else {
+      // "…returns X% if the target is reached and Y% if it is not, and that is
+      //  why it is not the one taken."
+      expect(topReturn.returnAtTarget).toBeGreaterThan(selected.returnAtTarget);
+      expect(topReturn.utility).toBeLessThan(selected.utility);
+      expect(topReturn.expectedShortfall).toBeLessThan(0);
+    }
+  });
+
+  it('keeps the closing line branched, so it cannot assert a shape again', () => {
+    // The data test above is only honest because the scene has both sentences.
+    // Hard-coding either one back in is the regression it cannot see, so the
+    // branch itself is guarded here rather than left to a reviewer to notice.
+    const scene = readFileSync(join(process.cwd(), 'src/pages/trailer/scenes/WeigherScene.tsx'), 'utf8');
+    expect(scene).toContain('topReturn.id === selected.id');
   });
 
   it('prices on the clock its DTEs are measured in', () => {
