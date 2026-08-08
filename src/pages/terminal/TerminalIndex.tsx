@@ -26,6 +26,7 @@ import { GEX_SUBPAGES } from '../gex/subnav';
 import { FLOWDESK_SUBPAGES } from '../flowdesk/subnav';
 import { COMMUNITY_SUBPAGES } from '../community/subnav';
 import { readLastDesk } from './lastDesk';
+import { FOCUS_RING, FOCUS_RING_ON_HOLO } from '../../components/ui/focusRing';
 import { isTypingTarget, overlayOwnsKeyboard } from '../../lib/keys';
 
 /** The house content panel, distinct from the titled data `Panel`. */
@@ -52,10 +53,14 @@ const DIGIT_MAP: Record<string, string> = Object.fromEntries(
   })
 );
 
-const FOCUS_RING = 'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60';
-
+/**
+ * The separator between inline facts. `text-textMuted` is the tone every other
+ * middot in the app uses; this one reached for `borderMuted` — a BORDER value
+ * pressed into service as ink — and measured 1.38:1 on the card behind it,
+ * which is not a faint dot, it is no dot at all.
+ */
 const Dot = () => (
-  <span aria-hidden className="text-borderMuted">
+  <span aria-hidden className="text-textMuted">
     ·
   </span>
 );
@@ -84,7 +89,7 @@ const ResumeRow = () => {
   const button =
     'inline-flex items-center gap-1.5 rounded-md px-3 py-2 holo-bg text-ink ' +
     'font-mono text-label font-semibold uppercase tracking-wider ' +
-    `transition-transform active:scale-[0.98] ${FOCUS_RING} w-full sm:w-auto justify-center ml-auto`;
+    `transition-transform active:scale-[0.98] ${FOCUS_RING_ON_HOLO} w-full sm:w-auto justify-center ml-auto`;
 
   return (
     <Card className="px-3 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-2">

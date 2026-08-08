@@ -65,9 +65,13 @@ const KeyLevelsRail = ({ rows, maxPressure, onSelect }: KeyLevelsRailProps) => (
             </span>
             <span className="block font-mono text-label font-bold tnum text-textPrimary">{price}</span>
           </span>
+          {/* The spot row is lifted (`bg-white/[0.04]`), and textMuted on that
+              measures 4.48:1 — just under AA. textSecondary also matches the
+              Pressure column's own NIL beside it, which was already secondary:
+              two cells saying "nothing to print" were saying it in two tones. */}
           <span
             className={`w-14 text-right font-mono text-micro tnum ${
-              isSpot ? 'text-textMuted' : row.distPct >= 0 ? 'text-bull' : 'text-bear'
+              isSpot ? 'text-textSecondary' : row.distPct >= 0 ? 'text-bull' : 'text-bear'
             }`}
           >
             {isSpot ? NIL : `${row.distPct >= 0 ? '+' : ''}${row.distPct.toFixed(2)}%`}
