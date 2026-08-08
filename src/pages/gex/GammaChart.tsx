@@ -122,7 +122,14 @@ const GammaChart = () => {
         focusable
         focusId={HEATMAP_FOCUS_ID}
         actions={
-          <div className="inline-flex items-center gap-0.5 rounded-md border border-borderSubtle bg-panel p-0.5 max-w-full overflow-x-auto no-scrollbar">
+          /* `max-w-full` was inert here: the Panel header's actions wrapper is
+             `shrink-0`, so it sizes to its content and a percentage max-width
+             against it resolves to no constraint at all. Seven expiries then
+             measured 396px inside a 358px phone column and pushed the whole
+             desk sideways. A concrete cap leaves the panel title its room and
+             lets the rail scroll — the same treatment the desk subnav uses when
+             its tabs outrun the screen. */
+          <div className="inline-flex items-center gap-0.5 rounded-md border border-borderSubtle bg-panel p-0.5 max-w-[10rem] sm:max-w-none overflow-x-auto no-scrollbar">
             {['All', ...matrix.expiries].map((label, i) => {
               const col = i === 0 ? null : i - 1;
               const on = highlightCol === col;

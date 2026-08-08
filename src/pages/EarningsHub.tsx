@@ -789,8 +789,13 @@ const EarningsHub = () => {
         {/* Filter toolbar — date window + watchlist scope */}
         <div className="flex items-center gap-3 flex-wrap px-4 py-2.5 border-b border-borderSubtle bg-inset">
           <SlidersHorizontal className="w-3.5 h-3.5 text-textMuted shrink-0" />
-          <div className="flex items-center gap-1.5">
-            <span className="font-mono text-label uppercase tracking-widest text-textMuted">Window</span>
+          {/* `min-w-0`: a flex item defaults to `min-width: auto`, so without it
+              this group refuses to shrink below its content and the whole
+              toolbar runs past the panel. SegmentedControl already carries
+              `max-w-full overflow-x-auto`, but that resolves against THIS box —
+              which was as wide as the four segments, so it never bit. */}
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="font-mono text-label uppercase tracking-widest text-textMuted shrink-0">Window</span>
             <SegmentedControl ariaLabel="Date window" options={WINDOW_OPTIONS} value={windowFilter} onChange={setWindowFilter} />
           </div>
           <span className="inline-flex items-center gap-1.5 font-mono text-label uppercase tracking-wider text-textMuted">

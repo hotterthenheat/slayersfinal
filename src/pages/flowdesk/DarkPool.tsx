@@ -669,7 +669,20 @@ const DarkPool = () => {
           flush
           className="lg:col-span-3"
         >
-          <div className="flex flex-col">
+          {/* Five columns — price, role, shelf bar, distance, defends — need
+              396px of fixed track before the bar gets a pixel, which no phone
+              has. Scroll the ladder instead of dropping a column: the desk's
+              other dense tables already do exactly this, and losing "3× held"
+              on a phone would make two devices disagree about the same shelf.
+              Focusable with a name, so the scroll region is reachable without a
+              pointer. */}
+          <div
+            tabIndex={0}
+            role="group"
+            aria-label="Liquidity shelves — scrollable"
+            className="overflow-x-auto focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60"
+          >
+          <div className="flex flex-col min-w-[520px]">
             {view.levels.map((level, i) => {
               const spotBetween =
                 i < view.levels.length - 1 && view.spot <= level.price && view.spot > view.levels[i + 1].price;
@@ -715,6 +728,7 @@ const DarkPool = () => {
                 </div>
               );
             })}
+          </div>
           </div>
         </Panel>
 
