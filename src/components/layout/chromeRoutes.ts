@@ -13,7 +13,7 @@
  *
  * `full` is the real thing: wordmark, sitemap, social, copyright, the
  * not-advice line. Documents get it — the terminal index, the guide, the legal
- * pages, community, Stocks, Earnings, Tracker — because on a document the
+ * pages, community, Stocks, Tracker — because on a document the
  * footer IS the next thing you want.
  *
  * `compact` is the same footer as one bar. A desk is a working surface that

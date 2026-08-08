@@ -11,14 +11,20 @@ import React from 'react';
 import { useTrailer, at, clamp01, ease } from '../useTrailerState';
 import { Bar, Beat, Caveat, HeadRow, SceneHead, SceneStatement, Verdict } from '../parts';
 
-const GRID = '64px 1fr 1fr 1fr 1fr 74px 92px';
+const GRID = '64px 1fr 1fr 74px 92px';
 const GRID_SM = '58px 1fr 92px';
 
-const FACTORS: { key: 'momentum' | 'quality' | 'flow' | 'news'; label: string }[] = [
+/*
+  Two factors, matching the live engine.
+
+  This drew four — MOM / QUAL / FLOW / NEWS — long after data/stocks.ts had cut
+  news for want of a wire, and it kept drawing QUAL after quality went for want
+  of a fundamentals feed. A trailer that shows a sleeve the product does not
+  compute is selling one.
+*/
+const FACTORS: { key: 'momentum' | 'flow'; label: string }[] = [
   { key: 'momentum', label: 'MOM' },
-  { key: 'quality', label: 'QUAL' },
   { key: 'flow', label: 'FLOW' },
-  { key: 'news', label: 'NEWS' },
 ];
 
 const StocksScene: React.FC = () => {
@@ -32,10 +38,10 @@ const StocksScene: React.FC = () => {
       <div className="flex-1 min-h-0 inst-surface rounded-md p-3 flex flex-col overflow-hidden">
         <div className="flex items-baseline justify-between gap-2 mb-1.5">
           <span className="font-mono text-micro uppercase tracking-widest text-textMuted">
-            Semis · relative strength and breadth
+            Semis · momentum and options flow
           </span>
           <span className="font-mono text-micro uppercase tracking-wider text-textSecondary">
-            sector {story.stocks[0].sector} · breadth 62%
+            sector {story.stocks[0].sector}
           </span>
         </div>
         <HeadRow

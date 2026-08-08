@@ -91,7 +91,7 @@ function buildTerm(ticker: string, baseIv: number): TermStructureData {
   const monthAgo = termCurve(ticker, baseIv, 1.9, 0.9, 'm1');
 
   const atm30 = Number(ivAt(current, 30).toFixed(2));
-  const ivr = ivRankFor(ticker, dayKey()); // one source of truth, shared with Earnings
+  const ivr = ivRankFor(ticker, dayKey()); // one source of truth, shared with the Vol Complex
   return {
     current,
     dayAgo,

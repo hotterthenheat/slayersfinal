@@ -33,7 +33,6 @@ import { buildDarkPoolView } from '../../data/darkpool';
 // Aliased: both engines name their observational verdict map the same thing.
 // Rendering through them is what keeps the engine's own word off the screen.
 import { buildStockBoard, VERDICT_LABEL as STOCK_VERDICT_LABEL, VERDICT_TONE as STOCK_VERDICT_TONE } from '../../data/stocks';
-import { buildEarningsCalendar, VERDICT_LABEL as EARNINGS_VERDICT_LABEL, VERDICT_TONE as EARNINGS_VERDICT_TONE } from '../../data/earnings';
 import { runMonteCarlo } from '../../core/quant';
 import { fmtUsd } from '../../data/gex';
 import type { MarketSnapshot } from '../../types/market';
@@ -430,29 +429,6 @@ export const WIDGETS: WidgetDef[] = [
               <span className="font-mono text-label font-bold text-textPrimary">{p.ticker}</span>
               <SignalBadge tone={STOCK_VERDICT_TONE[p.verdict]}>{STOCK_VERDICT_LABEL[p.verdict]}</SignalBadge>
               <span className="ml-auto font-mono text-label font-semibold text-textPrimary tnum">{p.composite}</span>
-            </div>
-          ))}
-      </div>
-    ),
-  },
-  {
-    key: 'earnings-calendar',
-    title: 'Earnings Slate',
-    description: 'Upcoming prints: implied move & verdict',
-    w: 4,
-    h: 4,
-    minW: 3,
-    minH: 3,
-    render: () => (
-      <div className="h-full min-h-0 overflow-y-auto">
-        {buildEarningsCalendar()
-          .slice(0, 8)
-          .map(e => (
-            <div key={e.ticker} className="flex items-center gap-2 px-2.5 py-2 border-b border-borderSubtle/30 last:border-0">
-              <span className="font-mono text-label font-bold text-textPrimary">{e.ticker}</span>
-              <span className="font-mono text-micro text-textMuted">{e.dateLabel}</span>
-              <span className="ml-auto font-mono text-micro text-textSecondary tnum">{e.impliedMovePct.toFixed(1)}%</span>
-              <SignalBadge tone={EARNINGS_VERDICT_TONE[e.verdict]}>{EARNINGS_VERDICT_LABEL[e.verdict]}</SignalBadge>
             </div>
           ))}
       </div>

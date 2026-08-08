@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Star, GitCompare, Info, CalendarClock, Waves, Ruler } from 'lucide-react';
+import { Star, GitCompare, Info, Waves, Ruler } from 'lucide-react';
 import DetailModal from '../components/ui/DetailModal';
 import { useExpandPreference } from '../hooks/useExpandPreference';
 import SignalBadge from '../components/ui/SignalBadge';
@@ -10,11 +10,10 @@ import TickerJump from '../components/ui/TickerJump';
 import Sparkline from '../components/compass/Sparkline';
 import Simulator from '../core/simulator';
 import { buildDarkPoolFeed } from '../data/darkpoolfeed';
-import { buildEarningsCalendar, type EarningsEvent } from '../data/earnings';
 import { FACTOR_GUIDE } from '../data/factorGuide';
 import { fmtUsd } from '../data/gex';
 import { buildFlowAlerts, buildPulseFlow } from '../data/pulseflow';
-import { VERDICT_LABEL, VERDICT_TONE, scoreBand, type ScoreBand, type SectorRow, type StockPick } from '../data/stocks';
+import { VERDICT_LABEL, VERDICT_TONE, scoreBand, type ScoreBand, type StockPick } from '../data/stocks';
 import { buildSwingModel } from '../data/swingModel';
 import { toneText, type Tone } from '../components/ui/tones';
 
@@ -27,11 +26,9 @@ const BAND_TEXT: Record<ScoreBand, string> = { strong: 'text-textPrimary', mid: 
 const signed = (v: number, dp = 1) => `${v >= 0 ? '+' : ''}${v.toFixed(dp)}%`;
 /** −1…+1 engine leans, restated on a −100…+100 index. Never a percent: nothing
     about a revision or flow lean is a fraction of anything. */
-const leanIdx = (v: number) => `${v >= 0 ? '+' : ''}${Math.round(v * 100)}`;
 const moveTone = (v: number): Tone => (v > 0 ? 'bull' : v < 0 ? 'bear' : 'neutral');
 const TABS = [
   { value: 'READ', label: 'Read' },
-  { value: 'EARNINGS', label: 'Earnings' },
   { value: 'FLOW', label: 'Flow' },
   { value: 'LEVELS', label: 'Levels' },
 ] as const;
@@ -72,53 +69,6 @@ const FactorRow = ({ v, name, desc }: { v: number; name: string; desc: string })
   );
 };
 
-/** The reporting record earnings.ts already models for this name. The verdict
-    word is deliberately absent: the earnings desk owns that lexicon, and a
-    second copy of it here is how two screens end up calling one state two
-    different things. The observations below are what the verdict is made of.
-
-    The record itself is generated — earnings.ts measures both the average
-    reaction and the beat rate over the eight reports it models for the name —
-    so the labels say so. "Avg of last 8" over a figure nothing had counted was
-    the same claim about evidence that news.ts had to take out of its base
-    rates. */
-const EarningsBlock = ({ e }: { e: EarningsEvent }) => (
-  <div className="flex flex-col gap-3">
-    <div className="grid grid-cols-4 gap-1.5">
-      <Stat label="Reports" value={e.dateLabel} sub={e.slot} />
-      <Stat label="Sessions out" value={e.daysOut} sub={e.daysOut === 0 ? 'today' : 'until the print'} />
-      <Stat label="Implied" value={`${e.impliedMovePct.toFixed(1)}%`} sub="straddle move" />
-      <Stat label="Modeled avg" value={`${e.histAvgMovePct.toFixed(1)}%`} sub="8 modeled reports" />
-    </div>
-    <div className="inst-surface rounded-md px-3 py-2.5 flex flex-col gap-1">
-      <KV
-        k="Richness (implied ÷ modeled avg)"
-        v={`${e.richness.toFixed(2)}×`}
-        tone={e.richness >= 1.3 ? 'warn' : e.richness <= 0.9 ? 'select' : 'neutral'}
-      />
-      <KV k="Cleared consensus, those 8 reports" v={`${e.beatRate8q}%`} />
-      <KV k="Estimate drift into the print" v={leanIdx(e.revisionTrend)} tone={moveTone(e.revisionTrend)} />
-      <KV k="IV rank" v={`${e.ivRank}%`} />
-      <KV k="Setup quality" v={e.technicalScore} />
-      <KV k="Options lean" v={leanIdx(e.flowLean)} tone={moveTone(e.flowLean)} />
-      <p className="mt-1 text-micro text-textMuted leading-snug">
-        Drift and lean are engine indices on a −100 to +100 scale, not percentages. The average and the beat rate are measured
-        over the eight reports this model generates for the name — no market history stands behind them.
-      </p>
-    </div>
-    <div className="flex flex-col gap-1.5">
-      {/* `strategy` names the structure the mispricing describes. It reads
-          observationally because earnings.ts authors it that way; the earnings
-          board dropped this field when it was still written as an order, which
-          left the drawer rendering the instruction nobody had looked at. */}
-      <p className="text-data text-textPrimary leading-snug inst-surface rounded-md px-3 py-2.5">
-        <span className="font-mono text-label uppercase tracking-wider text-textMuted">Structure </span>
-        {e.strategy}
-      </p>
-      <p className="text-label text-textMuted leading-snug">{e.rationale}</p>
-    </div>
-  </div>
-);
 
 interface StockDetailModalProps {
   pick: StockPick | null;
@@ -130,7 +80,6 @@ interface StockDetailModalProps {
   /** Reference beta from the shared universe, shown as a risk/size lens */
   beta?: number;
   /** The name's own group from the same rotation board the page renders */
-  sectorRow?: SectorRow | null;
   /** Standing inside that group, by composite */
   sectorRank?: { rank: number; of: number } | null;
 }
@@ -141,7 +90,7 @@ interface StockDetailModalProps {
  * board's reasoning read as single-sourced.
  *
  * Every tab here is a different ENGINE answering for the same ticker: the wire
- * and its outcome model (data/news.ts), the reporting record (data/earnings.ts),
+ * and its outcome model (data/news.ts),
  * the off-exchange tape (data/darkpoolfeed.ts) and session option prints
  * (data/pulseflow.ts), the swing model (data/swingModel.ts) and the dealer book
  * (core/simulator.ts via data/gex.ts). Nothing is composed for the drawer; if a
@@ -159,7 +108,6 @@ const StockDetailModal = ({
   inCompare,
   onToggleCompare,
   beta,
-  sectorRow = null,
   sectorRank = null,
 }: StockDetailModalProps) => {
   const [tab, setTab] = useState<DrawerTab>('READ');
@@ -177,8 +125,6 @@ const StockDetailModal = ({
   // Both are whole-board builds. They stay eager because they are cheap and the
   // empty states quote their own sizes, so the copy can never state a count the
   // engine has since changed.
-  const calendar = useMemo(() => (ticker ? buildEarningsCalendar() : []), [ticker]);
-  const earnings = calendar.find(e => e.ticker === ticker) ?? null;
 
   // Expanded is the whole record at once, so everything is wanted. Collapsed
   // still builds only what the open tab needs — the dark-pool sweep and the
@@ -280,7 +226,7 @@ const StockDetailModal = ({
 
               {/* Price / score / risk — carried on every tab so the number the
                   reader is reasoning about never leaves the screen. */}
-              <div className="grid grid-cols-4 gap-1.5">
+              <div className="grid grid-cols-3 gap-1.5">
                 <Stat
                   label="Last"
                   value={`$${pick.price.toFixed(2)}`}
@@ -297,11 +243,6 @@ const StockDetailModal = ({
                   label="Beta"
                   value={beta != null ? beta.toFixed(2) : '—'}
                   sub={beta == null ? 'risk lens' : beta < 1 ? 'defensive' : 'cyclical'}
-                />
-                <Stat
-                  label="Group score"
-                  value={sectorRow ? sectorRow.score : '—'}
-                  sub={sectorRow ? sectorRow.phase.toLowerCase() : 'no group read'}
                 />
               </div>
 
@@ -340,36 +281,7 @@ const StockDetailModal = ({
                     </div>
                   </Section>
 
-                  {sectorRow && (
-                    <Section title="Group context" sub={`${sectorRow.memberCount} names screened`}>
-                      <div className="inst-surface rounded-md px-3 py-2.5 flex flex-col gap-1">
-                        <KV k="Phase" v={sectorRow.phase} />
-                        <KV k="1w relative strength" v={signed(sectorRow.rs1w)} tone={moveTone(sectorRow.rs1w)} />
-                        <KV k="1m relative strength" v={signed(sectorRow.rs1m)} tone={moveTone(sectorRow.rs1m)} />
-                        <KV k="Members above trend" v={`${sectorRow.breadthPct}%`} />
-                        <KV k="Off-exchange dollars" v={`${fmtUsd(sectorRow.offExDollars)} · ${sectorRow.dollarSharePct}% of board`} />
-                        <p className="mt-1 text-label text-textMuted leading-snug">{sectorRow.note}</p>
-                      </div>
-                    </Section>
-                  )}
                 </>
-              )}
-
-              {(tab === 'EARNINGS' || expanded) && (
-
-                <Section title="Reporting record" sub={earnings ? earnings.dateLabel : undefined}>
-                  {earnings ? (
-                    <EarningsBlock e={earnings} />
-                  ) : (
-                    <div className="inst-surface rounded-md">
-                      <EmptyState
-                        icon={CalendarClock}
-                        title={`${pick.ticker} is not in the modelled reporting window`}
-                        body={`The earnings desk models ${calendar.length} reporters in the current window. Nothing is estimated for a name outside it, so nothing is shown for one.`}
-                      />
-                    </div>
-                  )}
-                </Section>
               )}
 
               {(tab === 'FLOW' || expanded) && (
@@ -378,7 +290,7 @@ const StockDetailModal = ({
                   <Section title="Off-exchange tape" sub={darkPool ? `#${darkPool.rank} of ${darkPool.of} by notional` : undefined}>
                     {darkPool ? (
                       <>
-                        <div className="grid grid-cols-4 gap-1.5">
+                        <div className="grid grid-cols-3 gap-1.5">
                           <Stat label="Notional" value={fmtUsd(darkPool.row.notional)} sub="dollars printed" />
                           <Stat
                             label="Vs own avg"
@@ -403,7 +315,7 @@ const StockDetailModal = ({
                   <Section title="Session option prints" sub={pulse ? `${pulse.prints.length} prints` : undefined}>
                     {pulse ? (
                       <>
-                        <div className="grid grid-cols-4 gap-1.5">
+                        <div className="grid grid-cols-3 gap-1.5">
                           <Stat label="Calls" value={pulse.calls} sub="prints" />
                           <Stat label="Puts" value={pulse.puts} sub="prints" />
                           <Stat label="Bull premium" value={fmtUsd(pulse.bullPrem)} tone="bull" sub="call lift / put hit" />

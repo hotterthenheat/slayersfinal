@@ -19,7 +19,6 @@ added in one place.
 | Scan | **Trace** | `/trace` | Options flow and dark-pool prints, and what they mean |
 | Read | **Pulse** | `/pulse` | The market desk: chart, dealer pressure, order flow and the options tape |
 | Read | **Pinpoint** | `/pinpoint` | GEX, dealer positioning, hedge impact and the fracture line |
-| Read | **Earnings** | `/earnings` | Implied against realized, play it or fade it |
 | Yours | **Tracker** | `/tracker` | Bookmarked setups, contracts and names, watched in one place |
 | Yours | **Community** | `/community` | Trade ideas, requests and feedback |
 | Models | **Prove It** | `/prove-it` | Quantitative modeling and predictive analytics |

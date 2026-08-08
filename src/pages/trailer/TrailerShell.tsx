@@ -36,8 +36,6 @@ import LottoScene from './scenes/LottoScene';
 import ScalpReboundScene from './scenes/ScalpReboundScene';
 import ProveItScene from './scenes/ProveItScene';
 import StocksScene from './scenes/StocksScene';
-import NewsScene from './scenes/NewsScene';
-import EarningsScene from './scenes/EarningsScene';
 import TrackerScene from './scenes/TrackerScene';
 import ConvergenceScene from './scenes/ConvergenceScene';
 
@@ -56,8 +54,6 @@ const SCENE_COMPONENTS: Record<string, React.ComponentType> = {
   scalp: ScalpReboundScene,
   proveit: ProveItScene,
   stocks: StocksScene,
-  news: NewsScene,
-  earnings: EarningsScene,
   tracker: TrackerScene,
   convergence: ConvergenceScene,
 };

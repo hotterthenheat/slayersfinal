@@ -6,7 +6,6 @@ import {
   Crosshair,
   Sigma,
   BarChart3,
-  CalendarClock,
   BookMarked,
   type LucideIcon,
 } from 'lucide-react';
@@ -69,8 +68,8 @@ const DESKS: DeskDoc[] = [
       where, brings it all back in one press, and — in browsers that allow it — picks which display new pop-outs open on.
       Window positions are saved with the layout; after a reload the menu offers to reopen them, since a browser will not
       let a page open windows without a click.</>,
-      <>The <span className="text-textPrimary">Views</span> menu carries fourteen ready workspaces, Scalper, Swing,
-      Macro and Earnings among them. Presets stay restorable however you edit them.</>,
+      <>The <span className="text-textPrimary">Views</span> menu carries thirteen ready workspaces, Scalper, Swing
+      and Macro among them. Presets stay restorable however you edit them.</>,
       <>Each panel has its own ticker field, so you can watch SPY and NVDA side by side.</>,
     ],
     example: (
@@ -234,7 +233,6 @@ const DESKS: DeskDoc[] = [
 
 const RESEARCH: { icon: LucideIcon; name: string; to: string; blurb: string }[] = [
   { icon: BarChart3, name: 'Stocks', to: '/stocks', blurb: 'Equity picks and sector rotation — which groups are leading or lagging.' },
-  { icon: CalendarClock, name: 'Earnings', to: '/earnings', blurb: 'The slate ahead, each print read QUALIFIED / RICH / NO EDGE against its implied move.' },
   { icon: BookMarked, name: 'Tracker', to: '/tracker', blurb: 'Your tracked setups and trade journal, saved in your browser.' },
 ];
 

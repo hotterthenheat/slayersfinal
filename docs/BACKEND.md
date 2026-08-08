@@ -98,12 +98,19 @@ current shape to back.
 
 ---
 
-## 7. News & Earnings feeds
+## 7. Not planned — and why
 
-**Now:** simulated headlines/outcomes and an earnings slate.
+This section used to read "News & Earnings feeds" and ask for a news wire and an
+earnings calendar. Both desks have since been **deleted**, along with the Stocks
+quality sleeve and the sector-rotation board. The reason is not effort, it is
+entitlement: the product is built on three market-data subscriptions — options
+(OPRA trades, NBBO and vendor greeks), equities and index quotes — and none of
+them carries fundamentals, estimates, revisions, a report calendar, a news wire,
+a sector taxonomy, short interest, holdings or securities lending.
 
-**Needs:** a real news wire + earnings calendar, plus wherever the outcome/
-mispricing models should run for real (server-side if they get heavy).
+Do not re-add these as backend work items. A desk whose primary object cannot be
+sourced is not a backend gap, it is a desk that should not exist. `docs/DATA-
+FEASIBILITY.md` holds the per-desk analysis and the record of what was removed.
 
 ---
 
@@ -111,5 +118,10 @@ mispricing models should run for real (server-side if they get heavy).
 - Nothing above changes the interface — the FAQ line "Live market data lands
   with launch, and nothing about the interface changes when it does" is the
   design intent, and the `MarketSnapshot` seam is what makes it true.
-- No user-facing copy anywhere says "simulated / mock / demo" — keep it that way;
-  these are internal engineering notes only.
+- The one thing that **does** change is the feed declaration. `core/feedSource.ts`
+  holds the active `FeedSource`; the `FeedBadge` in the TopBar renders it at every
+  width and reads `SIM` today. Registering a real feed is what turns that badge
+  over. This note used to say no user-facing copy anywhere admits the data is
+  simulated and to keep it that way — that was the wrong instruction, and the
+  badge is the deliberate reversal of it. Do not remove it to make a demo look
+  live.

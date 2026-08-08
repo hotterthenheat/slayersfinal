@@ -393,7 +393,7 @@ interface ContractWeigherProps {
    * arrives at, the grade card does not move at it.
    */
   snapshot: MarketSnapshot;
-  /** Deep-link entry point — seeds the sleeve (e.g. from Earnings). */
+  /** Deep-link entry point — seeds the sleeve (e.g. from Stocks). */
   initialHorizon?: Horizon;
   /** Deep-link seed, e.g. "SPY 505C 08/07". */
   initialQuery?: string;

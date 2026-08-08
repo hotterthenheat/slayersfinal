@@ -37,13 +37,11 @@ import type {
   DarkPoolRead,
   DarkPrint,
   DistributionBin,
-  EarningsRead,
   GammaCell,
   GammaField,
   GreekRow,
   LottoRow,
   MetaorderRead,
-  NewsRead,
   OptionPrint,
   PricePoint,
   ProveItRead,
@@ -107,7 +105,7 @@ const clampUnit = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
  * The day is resolved in `America/New_York`, not the browser's zone. Built
  * locally it was a local date wearing an ET label: at Monday breakfast in Asia it
  * is still Sunday in New York, so the film picked Monday as its session instead
- * of rolling back to Friday — and every expiry, DTE and earnings date hung off
+ * of rolling back to Friday — and every expiry and DTE hung off
  * the wrong one. Same trap the HUD had, one layer down.
  */
 function nyToday(): { y: number; m: number; d: number } {
@@ -134,7 +132,7 @@ function sessionDate(): Date {
  * The story's maturities, on one calendar.
  *
  * Every expiry label used to be a hard-coded string — 'AUG 15' at a hard-coded
- * 11 DTE, earnings on 'AUG 27' a hard-coded 12 days out — while the session date
+ * 11 DTE and a hard-coded expiry label — while the session date
  * came from the viewer's own clock. So the film showed a weekly 11 days away and
  * an event 12 days away that were in fact 13 and 25 days from the session it
  * claimed to be, and both got worse every day the calendar advanced.
@@ -159,8 +157,6 @@ interface StoryDates {
   short: { label: string; dte: number; sessions: number };
   /** The swing horizon Compass prices the event against. */
   far: { label: string; dte: number; sessions: number };
-  /** Earnings — a date, not an expiry, but it still has to land on a session. */
-  earnings: { label: string; dte: number; sessions: number };
 }
 
 function buildDates(): StoryDates {
@@ -169,7 +165,7 @@ function buildDates(): StoryDates {
     const e = expiryFor(dte, session);
     return { label: fmtMonthDay(e.date).toUpperCase(), dte: e.dte, sessions: e.sessions };
   };
-  return { session, near: at(11), short: at(4), far: at(18), earnings: at(25) };
+  return { session, near: at(11), short: at(4), far: at(18) };
 }
 
 // ---- price path -------------------------------------------------------------
@@ -389,6 +385,7 @@ function buildMetaorder(prints: OptionPrint[]): MetaorderRead {
 
 // ---- dark pool --------------------------------------------------------------
 function buildDarkPool(level: number, path: PricePoint[]): DarkPoolRead {
+  const spotNow = path[path.length - 1].px;
   const prints: DarkPrint[] = [];
   const venues = ['CONDITIONAL ATS', 'BANK ATS', 'AGENCY ATS', 'MIDPOINT ATS'];
   for (let i = 0; i < 9; i++) {
@@ -401,7 +398,6 @@ function buildDarkPool(level: number, path: PricePoint[]): DarkPoolRead {
     });
   }
   prints.sort((a, b) => a.at - b.at);
-  const spotNow = path[path.length - 1].px;
   return {
     shelf: round(level),
     prints,
@@ -873,75 +869,28 @@ function buildProveIt(spot: number, dates: StoryDates): ProveItRead {
   };
 }
 
-// ---- stocks / news / earnings ----------------------------------------------
+// ---- stocks -------------------------------------------------------
+/*
+  Composites are the two live sleeve weights applied to the two factors beside
+  them — momentum 0.552, flow 0.448 (`data/stocks.ts SLEEVE_WEIGHTS`) — so the
+  ranking the film shows is the ranking the desk computes. They were a third
+  hand-set number carrying a quality sleeve the engine no longer has, which is
+  why MU and AVGO are ordered the way they are: 0.52 against 0.51 is what the
+  two surviving factors actually say, and the old third factor was the only
+  thing that had put AVGO above.
+*/
 function buildStocks(ticker: string): StockRow[] {
   const rows: StockRow[] = [
-    { ticker, momentum: 0.74, quality: 0.68, flow: 0.88, news: 0.52, composite: 0.76, sector: 'SEMIS', relStrength: 0.81, offExchange: 0.63, routing: 'OPTIONS', ours: true },
-    { ticker: 'AMD', momentum: 0.66, quality: 0.51, flow: 0.71, news: 0.44, composite: 0.62, sector: 'SEMIS', relStrength: 0.69, offExchange: 0.48, routing: 'STOCK', ours: false },
-    { ticker: 'AVGO', momentum: 0.58, quality: 0.79, flow: 0.42, news: 0.38, composite: 0.57, sector: 'SEMIS', relStrength: 0.61, offExchange: 0.39, routing: 'SPREAD', ours: false },
-    { ticker: 'MU', momentum: 0.49, quality: 0.44, flow: 0.55, news: 0.61, composite: 0.51, sector: 'SEMIS', relStrength: 0.47, offExchange: 0.51, routing: 'STOCK', ours: false },
-    { ticker: 'INTC', momentum: 0.22, quality: 0.31, flow: 0.28, news: 0.34, composite: 0.27, sector: 'SEMIS', relStrength: 0.19, offExchange: 0.24, routing: 'NO TRADE', ours: false },
+    { ticker, momentum: 0.74, flow: 0.88, composite: 0.8, sector: 'SEMIS', relStrength: 0.81, offExchange: 0.63, routing: 'OPTIONS', ours: true },
+    { ticker: 'AMD', momentum: 0.66, flow: 0.71, composite: 0.68, sector: 'SEMIS', relStrength: 0.69, offExchange: 0.48, routing: 'STOCK', ours: false },
+    { ticker: 'MU', momentum: 0.49, flow: 0.55, composite: 0.52, sector: 'SEMIS', relStrength: 0.47, offExchange: 0.51, routing: 'STOCK', ours: false },
+    { ticker: 'AVGO', momentum: 0.58, flow: 0.42, composite: 0.51, sector: 'SEMIS', relStrength: 0.61, offExchange: 0.39, routing: 'SPREAD', ours: false },
+    { ticker: 'INTC', momentum: 0.22, flow: 0.28, composite: 0.25, sector: 'SEMIS', relStrength: 0.19, offExchange: 0.24, routing: 'NO TRADE', ours: false },
   ];
   return rows;
 }
 
-/**
- * The news cluster, stamped inside the story time it is shown in.
- *
- * The four items used to be stamped at 0/42/96/158 seconds while the News scene
- * advances the session by 48 — so the feed printed a headline at +158s in a
- * window the clock never reached, and the contradiction that drives the
- * repricing arrived a third of the way through the scene having supposedly
- * happened two and a half minutes in. The cadence (a filing, a fast syndication,
- * a slower note, a late contradiction) is what matters; the absolute seconds
- * were never load-bearing, so they are laid out across the window the scene
- * actually has.
- */
-function buildNews(windowSec: number): NewsRead {
-  // The last item lands with room to spare: the contradiction is the cause, and
-  // the scene still has to show its effect on the distribution.
-  const beats = [0, 0.2, 0.45, 0.7];
-  const at = (i: number) => Math.round(beats[i] * windowSec);
-  return {
-    // Sources are described by type, never by a fabricated masthead.
-    items: [
-      { at: at(0), source: 'Exchange filing', headline: 'Supply agreement expanded with a top-3 cloud customer', catalyst: 'GUIDANCE-ADJACENT', novelty: 0.81, duplicates: 0, contradiction: false },
-      { at: at(1), source: 'Newswire summary', headline: 'Same agreement, syndicated', catalyst: 'GUIDANCE-ADJACENT', novelty: 0.12, duplicates: 6, contradiction: false },
-      { at: at(2), source: 'Sell-side note', headline: 'Estimate raised on the same agreement', catalyst: 'ESTIMATE REVISION', novelty: 0.34, duplicates: 2, contradiction: false },
-      { at: at(3), source: 'Trade press', headline: 'Channel check reads capacity as unchanged', catalyst: 'SUPPLY', novelty: 0.58, duplicates: 0, contradiction: true },
-    ],
-    driftBefore: 0.004,
-    driftAfter: 0.0061,
-    widthBefore: 0.017,
-    widthAfter: 0.0206,
-    confidence: 0.44,
-  };
-}
 
-function buildEarnings(spot: number, dates: StoryDates): EarningsRead {
-  const straddle = round(spot * 0.078);
-  return {
-    date: dates.earnings.label,
-    daysAway: dates.earnings.dte,
-    timeConfirmed: false,
-    session: 'AFTER CLOSE (estimated)',
-    straddleCost: straddle,
-    impliedMovePct: round((straddle / spot) * 100, 2),
-    realizedMedianPct: 6.4,
-    forecastMovePct: 6.9,
-    ivCrush: 0.38,
-    pDirection: 0.52,
-    pMagnitude: 0.61,
-    structures: [
-      { label: 'LONG VOL', verdict: 'AGAINST', note: 'Implied move sits above both the realized median and the forecast' },
-      { label: 'SHORT VOL', verdict: 'NEUTRAL', note: 'Edge is real but thin once crush timing risk is priced' },
-      { label: 'DIRECTIONAL', verdict: 'AGAINST', note: 'Direction probability is a coin flip; magnitude is the only signal' },
-      { label: 'WAIT FOR DAY TWO', verdict: 'FAVOURED', note: 'Post-event continuation has the only measured edge here' },
-      { label: 'NO EDGE', verdict: 'NEUTRAL', note: 'Valid outcome; the desk is not required to have a position' },
-    ],
-    selected: 'WAIT FOR DAY TWO',
-  };
-}
 
 // ---- tracker ----------------------------------------------------------------
 /**
@@ -1063,7 +1012,7 @@ let cached: TrailerStory | null = null;
 /**
  * The session day the cached story belongs to.
  *
- * The memo holds `sessionStart`, every expiry label, every DTE and the earnings
+ * The memo holds `sessionStart`, every expiry label and every DTE — the
  * date — all resolved from New York's calendar at first build. A tab left open
  * across an ET midnight or a weekend and returned to would replay the previous
  * day's session and maturities as if they were today's. Keyed by the day, the
@@ -1098,7 +1047,6 @@ export function buildTrailerStory(): TrailerStory {
   const step = Math.max(0.5, round((levels.callWall - levels.putWall) / 12, 1));
 
   const path = buildPath(spot0, level, levels.flip);
-  const spotNow = path[path.length - 1].px;
   // The setup plays from the shelf to the call wall and dies below the shelf.
   // Both prices are structural, not percentages of one — every contract is
   // marked against them, so the Weigher, the packet and the Tracker's
@@ -1127,11 +1075,6 @@ export function buildTrailerStory(): TrailerStory {
   const start = dates.session.getTime();
   const { packet, outcome } = buildTracker(TICKER, selectedSetup, contracts, level, freezeSpot, target, stop, start);
 
-  // The news cluster has to land inside the story time the News scene occupies —
-  // stamped across 158 seconds and shown in a 48-second window, the feed was
-  // printing headlines the session clock had not reached.
-  const newsWindow = (storyUAtSceneEnd('news') - storyUAtSceneStart('news')) * STORY_SECONDS;
-
   cached = {
     ticker: TICKER,
     sessionStart: start,
@@ -1154,8 +1097,6 @@ export function buildTrailerStory(): TrailerStory {
     rebound: { touch: level, displacement: -1.9, absorption: 0.68, flowReversal: 0.57, dealerSupport: 0.63, excursion: 1.4, invalidation: round(level * 0.988) },
     proveIt: buildProveIt(spotAtScene('proveit'), dates),
     stocks: buildStocks(TICKER),
-    news: buildNews(newsWindow),
-    earnings: buildEarnings(spotNow, dates),
     packet,
     outcome,
   };

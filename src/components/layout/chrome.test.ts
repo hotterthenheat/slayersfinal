@@ -23,7 +23,6 @@ describe('footerVariant', () => {
     for (const path of [
       '/terminal',
       '/stocks',
-      '/earnings',
       '/tracker',
       '/guide/overview',
       '/community/ideas',

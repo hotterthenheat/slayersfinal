@@ -68,7 +68,6 @@ const ROUTES = [
   '/pulse',
   '/compass',
   '/stocks',
-  '/earnings',
   '/prove-it',
   '/tracker',
   '/guide/overview',

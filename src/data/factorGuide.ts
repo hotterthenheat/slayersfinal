@@ -19,12 +19,6 @@ export const FACTOR_GUIDE: {
     desc: 'Trend & RSI posture — is price working with the trade or against it.',
   },
   {
-    key: 'quality',
-    short: 'Qual',
-    name: 'Quality',
-    desc: 'Fundamental screen — margins, growth and balance-sheet health.',
-  },
-  {
     key: 'flow',
     short: 'Flow',
     name: 'Flow',

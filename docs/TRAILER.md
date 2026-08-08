@@ -35,9 +35,14 @@ left a shelf at the same level → the dealer field shows the flip just above sp
 setups and **rejects the highest-flow one on a data-quality gate** → the Weigher
 prices five contracts on the same thesis → Lotto marks the cheapest far-OTM
 contract **NO TRADE** → Prove It fails a challenger model on calibration →
-Stocks routes the thesis to options → News widens the distribution without
-flipping it → Earnings says wait → Tracker freezes the packet, advances the
-market, and scores the alternatives against what actually happened.
+Stocks routes the thesis to options rather than to stock or a spread → Tracker
+freezes the packet, advances the market, and scores the alternatives against
+what actually happened.
+
+The News and Earnings beats used to sit between Stocks and Tracker. Both desks
+were removed — a news wire, an earnings calendar and analyst estimates are none
+of them in the three market-data entitlements the product is built on — so the
+scenes went with them rather than staying as film for a desk that does not open.
 
 Every desk refers to the **same timestamp, the same level and the same setup id**.
 That continuity is the point, and the **State Thread** along the bottom is how it
@@ -146,7 +151,7 @@ best decision, which is the exact confusion the scene exists to undo.
 **One calendar.** `buildDates()` derives every maturity from the session through
 `expiryFor` — the app's own calendar, which walks to a real trading day and
 reports the DTE it lands on. Expiry labels, contract DTEs, the gamma field's
-expiry axis, the setup horizons and the earnings date all read it. They used to be
+expiry axis and the setup horizons all read it. They used to be
 hard-coded strings hanging off the viewer's own date, so the film showed a weekly
 "11 days" and an event "12 days" out that were really 13 and 25 days from the
 session it claimed to be — and drifted further every day. The session itself is
@@ -158,8 +163,8 @@ scenes depend only on the `TrailerStory` shape in `trailerTypes.ts`, not on the
 simulator. The things to preserve are that `path`, `levels` and `level` stay
 mutually consistent — the whole narrative is one level being tested — and that
 nothing which depends on *where price is now* gets frozen into the story. Role,
-distance, touches held, the print list and the news feed are all derived at draw
-time from the story clock, because every one of them was wrong when it was not.
+distance, touches held and the print list are all derived at draw time from the
+story clock, because every one of them was wrong when it was not.
 
 The same rule holds at the seams. Contracts are priced at the spot the Weigher
 scene shows, the Tracker's forward path opens at the spot when the packet froze,

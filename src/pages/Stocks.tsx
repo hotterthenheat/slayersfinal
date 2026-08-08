@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Layers3, TrendingUp, ChevronDown, Star, GitCompare, Info, X, SlidersHorizontal } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { TrendingUp, ChevronDown, Star, GitCompare, Info, X, SlidersHorizontal } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import Panel from '../components/ui/Panel';
 import StatCard from '../components/ui/StatCard';
@@ -8,23 +8,17 @@ import SignalBadge from '../components/ui/SignalBadge';
 import SegmentedControl from '../components/ui/SegmentedControl';
 import DataTable, { type Column } from '../components/ui/DataTable';
 import Sparkline from '../components/compass/Sparkline';
-import HoverReadout from '../components/ui/HoverReadout';
 import StockDetailModal from './StockDetailModal';
 import { FACTOR_GUIDE } from '../data/factorGuide';
-import { fmtUsd } from '../data/gex';
 import {
   VERDICT_LABEL,
   VERDICT_TONE,
-  buildSectorBoard,
   buildStockBoard,
   scoreBand,
-  type RotationPhase,
   type ScoreBand,
-  type SectorRow,
   type StockPick,
 } from '../data/stocks';
-import { lookup, type Sector } from '../data/universe';
-import { toneDot, type Tone } from '../components/ui/tones';
+import { lookup } from '../data/universe';
 
 type ViewFilter = 'ALL' | 'ACCUMULATE' | 'AVOID';
 type PriceBand = 'ALL' | 'LOW' | 'MID' | 'HIGH';
@@ -53,29 +47,10 @@ const BETA_OPTIONS = [
 
 const WATCHLIST_KEY = 'slayer.stocks.watchlist';
 
-const phaseTone: Record<SectorRow['phase'], Tone> = {
-  LEADING: 'bull',
-  IMPROVING: 'select',
-  WEAKENING: 'warn',
-  LAGGING: 'bear',
-};
 
 /** Map/strip labels. Ten sector names do not fit a scatter marker; the codes
     are display shorthand only, never a key anything is stored under. */
-const SECTOR_CODE: Record<Sector, string> = {
-  Technology: 'TECH',
-  Communication: 'COMM',
-  'Consumer Discretionary': 'DISC',
-  Financials: 'FINL',
-  Energy: 'ENRG',
-  'Health Care': 'HLTH',
-  Industrials: 'INDU',
-  'Consumer Staples': 'STPL',
-  Utilities: 'UTIL',
-  Materials: 'MATL',
-};
 
-const signed = (v: number, dp = 1) => `${v >= 0 ? '+' : ''}${v.toFixed(dp)}%`;
 
 const betaOf = (ticker: string) => lookup(ticker)?.beta ?? null;
 
@@ -182,178 +157,8 @@ const WatchStar = ({ on, onClick }: { on: boolean; onClick: () => void }) => (
   </button>
 );
 
-/**
- * Rotation map. x is 1-month relative strength, y is 1-week, so the four
- * quadrants ARE the four phases `buildSectorBoard` already assigns and a group's
- * dot can never sit in a quadrant its own label disagrees with.
- *
- * It replaces ten equal tiles. Equal tiles answered "how does each group score",
- * which is a ranking question; rotation asks where a group is MOVING relative to
- * the others, and only a shared pair of axes shows that without the reader
- * diffing twenty numbers by eye.
- */
-const QUADRANTS: { phase: RotationPhase; box: string; tint: string }[] = [
-  { phase: 'IMPROVING', box: 'left-0 top-0 items-start justify-start', tint: 'bg-select/[0.04]' },
-  { phase: 'LEADING', box: 'right-0 top-0 items-start justify-end', tint: 'bg-bull/[0.04]' },
-  { phase: 'LAGGING', box: 'left-0 bottom-0 items-end justify-start', tint: 'bg-bear/[0.04]' },
-  { phase: 'WEAKENING', box: 'right-0 bottom-0 items-end justify-end', tint: 'bg-warn/[0.035]' },
-];
-
-const ReadoutRow = ({ k, v }: { k: string; v: ReactNode }) => (
-  <>
-    <span className="text-textMuted">{k}</span>
-    <span className="text-right text-textPrimary tnum">{v}</span>
-  </>
-);
-
-const RotationMap = ({
-  sectors,
-  scope,
-  onScope,
-  onFocus,
-}: {
-  sectors: SectorRow[];
-  scope: string;
-  onScope: (s: Sector) => void;
-  onFocus: (s: Sector | null) => void;
-}) => {
-  const [hover, setHover] = useState<{ row: SectorRow; x: number; y: number } | null>(null);
-  // Symmetric domain so the crosshair is a true zero on both axes; the floor
-  // keeps a quiet session from magnifying noise into apparent rotation.
-  const dom = Math.max(0.8, ...sectors.flatMap(s => [Math.abs(s.rs1m), Math.abs(s.rs1w)])) * 1.18;
-  const xOf = (v: number) => 50 + (v / dom) * 43;
-  const yOf = (v: number) => 50 - (v / dom) * 43;
-
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="relative h-[340px] rounded-md inst-surface overflow-hidden">
-        {QUADRANTS.map(q => (
-          <div key={q.phase} className={`absolute w-1/2 h-1/2 flex p-2 pointer-events-none ${q.box} ${q.tint}`}>
-            <span className="font-mono text-micro uppercase tracking-widest text-textMuted/60">{q.phase}</span>
-          </div>
-        ))}
-        <span className="absolute inset-x-0 top-1/2 h-px bg-borderMuted pointer-events-none" />
-        <span className="absolute inset-y-0 left-1/2 w-px bg-borderMuted pointer-events-none" />
-        {sectors.map(s => {
-          const scoped = scope === s.sector;
-          return (
-            <button
-              key={s.sector}
-              type="button"
-              onClick={() => onScope(s.sector)}
-              onMouseEnter={e => {
-                onFocus(s.sector);
-                setHover({ row: s, x: e.clientX, y: e.clientY });
-              }}
-              onMouseMove={e => setHover({ row: s, x: e.clientX, y: e.clientY })}
-              onMouseLeave={() => {
-                onFocus(null);
-                setHover(null);
-              }}
-              onFocus={() => onFocus(s.sector)}
-              onBlur={() => onFocus(null)}
-              aria-pressed={scoped}
-              aria-label={`${s.sector}: ${s.phase}, score ${s.score}, 1 week ${signed(s.rs1w)}, 1 month ${signed(s.rs1m)}`}
-              style={{ left: `${xOf(s.rs1m)}%`, top: `${yOf(s.rs1w)}%` }}
-              className={`absolute -translate-x-1/2 -translate-y-1/2 inline-flex items-center gap-1.5 h-6 pl-1.5 pr-2 rounded border font-mono text-micro tracking-wider transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-select/60 ${
-                scoped
-                  ? 'z-20 border-select/50 bg-select/15 text-select'
-                  : 'z-10 border-borderMuted bg-panelRaised text-textSecondary hover:z-20 hover:border-select/40 hover:text-textPrimary'
-              }`}
-            >
-              <span className={`w-1.5 h-1.5 rounded-full ${toneDot[phaseTone[s.phase]]}`} />
-              {SECTOR_CODE[s.sector]}
-            </button>
-          );
-        })}
-      </div>
-      <p className="font-mono text-micro text-textMuted">x 1 month relative strength · y 1 week · crosshair is flat on both</p>
-      {hover && (
-        <HoverReadout x={hover.x} y={hover.y}>
-          <div className="flex flex-col gap-1.5 min-w-[186px]">
-            <div className="flex items-center justify-between gap-3">
-              <span className="font-mono text-caption font-semibold text-textPrimary">{hover.row.sector}</span>
-              <SignalBadge tone={phaseTone[hover.row.phase]}>{hover.row.phase}</SignalBadge>
-            </div>
-            <div className="grid grid-cols-2 gap-x-3 font-mono text-micro leading-relaxed">
-              <ReadoutRow k="Composite" v={hover.row.score} />
-              <ReadoutRow k="1w RS" v={signed(hover.row.rs1w)} />
-              <ReadoutRow k="1m RS" v={signed(hover.row.rs1m)} />
-              <ReadoutRow k="Above trend" v={`${hover.row.breadthPct}%`} />
-              <ReadoutRow k="Names" v={hover.row.memberCount} />
-              <ReadoutRow k="Off-exch" v={fmtUsd(hover.row.offExDollars)} />
-            </div>
-          </div>
-        </HoverReadout>
-      )}
-    </div>
-  );
-};
-
-/** The exact scores beside the map. Dollars ride here rather than on the map so
-    a marker encodes only the two axes it is plotted on. */
-const SectorStrip = ({
-  sectors,
-  scope,
-  onScope,
-  onFocus,
-}: {
-  sectors: SectorRow[];
-  scope: string;
-  onScope: (s: Sector) => void;
-  onFocus: (s: Sector | null) => void;
-}) => {
-  const maxShare = Math.max(1, ...sectors.map(s => s.dollarSharePct));
-  const cols = 'grid grid-cols-[16px_44px_minmax(28px,1fr)_24px_86px_minmax(28px,1fr)_38px] items-center gap-2';
-  return (
-    <div className="rounded-md inst-surface overflow-hidden">
-      <div className={`${cols} px-2.5 py-1.5 bg-inset font-mono text-micro uppercase tracking-widest text-textMuted`}>
-        <span>#</span>
-        <span>Grp</span>
-        <span className="col-span-2">Composite</span>
-        <span>Phase</span>
-        <span className="col-span-2">Off-exchange $</span>
-      </div>
-      {sectors.map((s, i) => {
-        const scoped = scope === s.sector;
-        return (
-          <button
-            key={s.sector}
-            type="button"
-            onClick={() => onScope(s.sector)}
-            onMouseEnter={() => onFocus(s.sector)}
-            onMouseLeave={() => onFocus(null)}
-            onFocus={() => onFocus(s.sector)}
-            onBlur={() => onFocus(null)}
-            aria-pressed={scoped}
-            aria-label={`${s.sector}: rank ${i + 1}, composite ${s.score}, ${s.phase}, ${s.dollarSharePct}% of off-exchange dollars`}
-            className={`w-full ${cols} px-2.5 py-1.5 border-t border-borderSubtle text-left transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 ${
-              scoped ? 'rail-silver bg-select/[0.06]' : 'hover:bg-rowHover'
-            }`}
-          >
-            <span className="font-mono text-micro text-textMuted tnum">{i + 1}</span>
-            <span className="font-mono text-label font-semibold text-textPrimary">{SECTOR_CODE[s.sector]}</span>
-            <span className="h-[4px] rounded-full bg-white/[0.06] overflow-hidden">
-              <span className="block h-full rounded-full data-bar" style={{ width: `${s.score}%` }} />
-            </span>
-            <span className="font-mono text-label text-textSecondary tnum text-right">{s.score}</span>
-            <SignalBadge tone={phaseTone[s.phase]} className="justify-center">
-              {s.phase}
-            </SignalBadge>
-            <span className="h-[4px] rounded-full bg-white/[0.06] overflow-hidden">
-              <span className="block h-full rounded-full bg-white/25" style={{ width: `${(s.dollarSharePct / maxShare) * 100}%` }} />
-            </span>
-            <span className="font-mono text-label text-textMuted tnum text-right">{s.dollarSharePct.toFixed(1)}%</span>
-          </button>
-        );
-      })}
-    </div>
-  );
-};
-
 const Stocks = () => {
   const picks = useMemo(() => buildStockBoard(), []);
-  const sectors = useMemo(() => buildSectorBoard(picks), [picks]);
 
   const [view, setView] = useState<ViewFilter>('ALL');
   const [scope, setScope] = useState<string>('ALL'); // 'ALL' | 'WATCHLIST' | Sector
@@ -363,9 +168,6 @@ const Stocks = () => {
   const [compareSet, setCompareSet] = useState<Set<string>>(new Set());
   const [factorsOpen, setFactorsOpen] = useState(false);
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
-  // Which group the rotation caption is describing — hover/focus, falling back
-  // to whatever the board is scoped to, then to the leader.
-  const [focusSector, setFocusSector] = useState<Sector | null>(null);
 
   const [watchlist, setWatchlist] = useState<Set<string>>(() => {
     try {
@@ -451,15 +253,19 @@ const Stocks = () => {
   const buys = picks.filter(p => p.verdict === 'ACCUMULATE');
   const avoids = picks.filter(p => p.verdict === 'AVOID');
   const breadth = Math.round((picks.filter(p => p.sleeves.momentum > 50).length / picks.length) * 100);
-  const topSector = sectors[0];
-  const bottomSector = sectors[sectors.length - 1];
-  const captionRow = sectors.find(s => s.sector === focusSector) ?? sectors.find(s => s.sector === scope) ?? topSector;
-  const scopeSector = (s: Sector) => setScope(prev => (prev === s ? 'ALL' : s));
 
-  // The name's standing inside its own group — picks are composite-ranked, so
-  // the position in the filtered list IS the rank; the drawer states it rather
-  // than re-scoring anything.
-  const selectedSector = selected ? sectors.find(s => s.sector === selected.sector) ?? null : null;
+  /*
+    The name's standing inside its own group — picks are composite-ranked, so
+    the position in the filtered list IS the rank; the drawer states it rather
+    than re-scoring anything.
+
+    This is what survives of the sector axis, and it is the part that was always
+    honest: `sector` is a label a human typed onto each row of data/universe.ts,
+    so counting and grouping by it claims nothing. The ROTATION board that used
+    to sit here did claim something — relative strength and a LEADING/LAGGING
+    phase per group — and that needs a real sector taxonomy, which no feed tier
+    supplies.
+  */
   const selectedRank = selected
     ? (() => {
         const members = picks.filter(p => p.sector === selected.sector);
@@ -554,14 +360,14 @@ const Stocks = () => {
     },
     {
       key: 'sleeves',
-      // Three bars render below; the header named a fourth. The News sleeve
-      // went with the retired News desk.
-      header: 'Sleeves · Mom / Qual / Flow',
+      // The header names exactly the bars that render. It has been wrong twice
+      // — once when News went, once when Quality did — so it is worth saying:
+      // this string is a list of the sleeves below it, not a label.
+      header: 'Sleeves · Mom / Flow',
       width: '220px',
       render: p => (
         <span className="flex flex-col gap-1 py-0.5">
           <SleeveBar label="Mom" value={p.sleeves.momentum} title="Momentum: trend and RSI posture" />
-          <SleeveBar label="Qual" value={p.sleeves.quality} title="Quality: margins, growth, balance sheet" />
           <SleeveBar label="Flow" value={p.sleeves.flow} title="Flow: options and dark-pool positioning" />
         </span>
       ),
@@ -596,7 +402,7 @@ const Stocks = () => {
 
       {/*
         This was the one desk of the four here with no provenance line at all.
-        Earnings says "modeled avg" beside each
+        the board says "modeled" above
         implied move, the Tracker's ledger names its trades as modelled — and
         Stocks printed 192 rows of scores, relative strength and off-exchange
         share with nothing on the page saying where any of it came from. A
@@ -604,8 +410,8 @@ const Stocks = () => {
         every column on it looks like a measurement of a listed company.
       */}
       <p className="font-mono text-label text-textMuted leading-4">
-        Every figure on this board is <span className="text-textSecondary">modeled</span> — scores, relative strength,
-        breadth and off-exchange share are generated by the simulator, not measured from a market feed. The tickers
+        Every figure on this board is <span className="text-textSecondary">modeled</span> — scores, momentum, flow and
+        breadth are generated by the simulator, not measured from a market feed. The tickers
         name real companies; the numbers beside them are not those companies&rsquo; market data.
       </p>
 
@@ -613,48 +419,7 @@ const Stocks = () => {
         <StatCard label="Strong names" value={buys.length} sub={`of ${picks.length} names screened`} tone="bull" />
         <StatCard label="Weak names" value={avoids.length} sub="screens read as supply, not a base" tone="bear" />
         <StatCard label="Breadth" value={`${breadth}%`} sub="names above trend" tone={breadth >= 55 ? 'bull' : breadth <= 40 ? 'bear' : 'neutral'} />
-        <StatCard label="Strongest sector" value={topSector.sector} sub={`score ${topSector.score} · ${topSector.phase}`} tone="bull" />
-        <StatCard label="Weakest sector" value={bottomSector.sector} sub={`score ${bottomSector.score} · ${bottomSector.phase}`} tone="bear" />
       </MetricGrid>
-
-      {/* Sector rotation board */}
-      <Panel
-        title={
-          <span className="inline-flex items-center gap-1.5">
-            <Layers3 className="w-3.5 h-3.5" /> Sector rotation
-          </span>
-        }
-        subtitle="two relative-strength windows, and the share of off-exchange dollars each group took"
-        actions={
-          scope !== 'ALL' && scope !== 'WATCHLIST' ? (
-            <button
-              onClick={() => setScope('ALL')}
-              aria-label={`Clear the ${scope} sector scope`}
-              // -my-1 py-2: the hit box clears 24px, the header row does not grow.
-              className="inline-flex items-center gap-1 px-2 py-2 -my-1 rounded border border-borderSubtle bg-white/[0.02] font-mono text-label uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:border-borderMuted transition-colors"
-            >
-              <X className="w-3 h-3" /> {SECTOR_CODE[scope as Sector] ?? scope}
-            </button>
-          ) : undefined
-        }
-      >
-        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1fr)] gap-3">
-          <RotationMap sectors={sectors} scope={scope} onScope={scopeSector} onFocus={setFocusSector} />
-          <SectorStrip sectors={sectors} scope={scope} onScope={scopeSector} onFocus={setFocusSector} />
-        </div>
-        {/* One caption, for the group under the cursor. Ten cards each carrying
-            their own paragraph meant ten paragraphs nobody read. */}
-        <div className="mt-3 pt-3 border-t border-borderSubtle flex items-start gap-2.5">
-          <SignalBadge tone={phaseTone[captionRow.phase]}>{captionRow.phase}</SignalBadge>
-          <div className="min-w-0">
-            <span className="font-mono text-caption font-semibold text-textPrimary">{captionRow.sector}</span>
-            <span className="ml-2 font-mono text-label text-textMuted tnum">
-              {captionRow.memberCount} names · {captionRow.verdict}
-            </span>
-            <p className="mt-0.5 text-label text-textSecondary leading-snug">{captionRow.note}</p>
-          </div>
-        </div>
-      </Panel>
 
       {/* Compare tray — side-by-side factor read of the picked names */}
       {compared.length > 0 && (
@@ -708,7 +473,6 @@ const Stocks = () => {
                 </div>
                 <div className="flex flex-col gap-1 pt-0.5">
                   <SleeveBar label="Mom" value={p.sleeves.momentum} />
-                  <SleeveBar label="Qual" value={p.sleeves.quality} />
                   <SleeveBar label="Flow" value={p.sleeves.flow} />
                 </div>
               </div>
@@ -816,7 +580,6 @@ const Stocks = () => {
         inCompare={selected ? compareSet.has(selected.ticker) : false}
         onToggleCompare={toggleCompare}
         beta={selected ? betaOf(selected.ticker) ?? undefined : undefined}
-        sectorRow={selectedSector}
         sectorRank={selectedRank}
       />
     </>

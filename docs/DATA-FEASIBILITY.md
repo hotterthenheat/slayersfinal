@@ -65,19 +65,33 @@ stated in the UI · **RED** = no data source; remove, or reduce to the part that
 
 ---
 
-## What to remove, in one line each
+## What was removed — DONE
 
-1. **Earnings Hub** — delete the desk, or reduce it to "expected move vs realized move"
-   driven purely by options, with the user supplying the date. Do not ship PLAY/FADE
-   grading built on estimates you cannot obtain. It is currently sold in a paid tier.
-2. **Stocks quality + news sleeves** — remove the two unbacked sleeves. A two-sleeve
-   composite (momentum + options flow) that is *true* beats a four-sleeve composite that
-   is half invented.
-3. **Sector rotation** — remove until you have a classification source.
-4. **`catalystPriors`** — remove the news-derived prior from `quant.ts`, or replace it
-   with something measurable.
-5. **Dark Pool** — hold pending the TRF answer from your vendor. If it is consolidated
-   only, either keep it and label it 15-MIN DELAYED everywhere, or cut it.
+Actioned on the owner's instruction. Each line is now a record, not a proposal.
+
+1. **Earnings Hub — DELETED.** The desk needed a report calendar and analyst estimates;
+   neither is on any tier. Without knowing *when* a company reports it had no spine, so
+   the whole desk went rather than a trimmed version of it: the page, `data/earnings.ts`,
+   `data/earningsintel.ts`, `EarningsIntel`, the trailer scene, the route, the nav entry,
+   the Pulse preset and widget, the Stocks-drawer tab, and every paid-tier line selling
+   it. An options-only "Event Vol" surface (implied move vs realized, user-supplied date)
+   remains available as future work — it is a new build, not a survivor.
+2. **`data/news.ts` — DELETED,** with `catalystPriors` and the "News outcome model" row it
+   fed on Prove It's scoreboard. The scoreboard's other engine (sweep prints, resolved
+   against the seeded candle series) survives, and `quant.test.ts` now guards the news
+   model as unscoreable so it cannot come back.
+3. **Stocks quality sleeve — REMOVED.** It screened "margins, growth, balance sheet" and
+   there is no fundamentals feed. Momentum and flow renormalised over 0.707 to 0.552 /
+   0.448 so the composite still spans 0-100 and the verdict cuts keep their meaning.
+4. **Sector rotation — REMOVED.** Relative-strength phases per group need a real
+   taxonomy. The `sector` LABEL survives everywhere it is only a label a human typed onto
+   a universe row — the scope filter, the sortable column, the dark-pool grouping.
+5. **Dark Pool — KEPT.** Verified against the source before touching it: the desk models
+   EQUITY off-exchange prints, not options ones. Share-based sizes with no 100-multiplier,
+   an ATS venue taxonomy, no options fields on the type, and `darkpool.ts:217` explicitly
+   disclaiming the option chain. It is delayed-data-constrained, not conceptually broken,
+   and `core/contractScore.ts` folds its posture into every Compass grade — deleting it
+   would have silently re-graded the whole Compass desk. Still pending the TRF answer.
 
 ---
 

@@ -129,7 +129,7 @@ const ModelsView = ({ window_ }: { window_: Window }) => {
         />
         {/* Hit rate is model QUALITY, not market direction, so a strong composite
             takes the holo select accent and never bull green — the same
-            correction the earnings board made for cheap vol. Green on this grid
+            correction the vol desk makes for cheap vol. Green on this grid
             is reserved for the two directional cards above it. */}
         <StatCard
           label="Model composite"

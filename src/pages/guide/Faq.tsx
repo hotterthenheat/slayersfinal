@@ -58,7 +58,7 @@ const FAQ: QA[] = [
     a: (
       <>Use the ticker switcher in the top bar, press <Kbd>]</Kbd> / <Kbd>[</Kbd> to step through the watchlist, or open
       the command palette with <Kbd>⌘</Kbd><Kbd>K</Kbd> and type a symbol. Pulse, Compass, Pinpoint, Prove It
-      and Tracker rebuild around it, and so do Trace's Dark pool and Scanner. Stocks and Earnings survey the whole
+      and Tracker rebuild around it, and so do Trace's Dark pool and Scanner. Stocks surveys the whole
       field rather than one name, and Trace's Live tape and Reconstruction stay on the same prints — the switcher is
       hidden wherever it would not change the page.</>
     ),
@@ -68,7 +68,7 @@ const FAQ: QA[] = [
     a: (
       <>Yes — <Link to="/pulse" className="text-textPrimary underline underline-offset-2 decoration-white/40 hover:decoration-white/80">Pulse</Link> is fully arrangeable: drag and
       resize panels, load a view from the <span className="text-textPrimary">Views</span> menu (Scalper / Swing / Macro
-      / Earnings among fourteen), and your layout is remembered in your browser.</>
+      among thirteen), and your layout is remembered in your browser.</>
     ),
   },
   {

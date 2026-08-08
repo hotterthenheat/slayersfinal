@@ -29,7 +29,7 @@ describe('What-Else — volatility complex', () => {
     // The vol risk premium is implied minus REALIZED, not a guess.
     expect(v.vrp).toBeCloseTo(v.frontIv - v.realizedVol, 2);
 
-    // IV rank is the ONE shared rank (P2.1) — the Vol Lab and Earnings read it too.
+    // IV rank is the ONE shared rank (P2.1) — the Vol Lab reads it too.
     expect(v.ivRank).toBe(ivRankFor('NVDA', dayKey()).rank);
 
     expect(v.termCurve.length).toBeGreaterThan(3);

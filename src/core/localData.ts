@@ -20,7 +20,10 @@ export const LOCAL_DATA_GROUPS: LocalDataGroup[] = [
   {
     id: 'watchlists',
     label: 'Watchlists',
-    description: 'Stocks and Earnings symbols you follow',
+    description: 'Stocks symbols you follow',
+    // 'slayer.earnings.watchlist' stays listed for one release even though the
+    // desk that wrote it is gone: dropping the key here would leave anyone who
+    // still has one stored with no way to clear it from the settings panel.
     keys: ['slayer.stocks.watchlist', 'slayer.earnings.watchlist'],
   },
   {

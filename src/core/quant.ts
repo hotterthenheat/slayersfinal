@@ -12,7 +12,6 @@
 
 import { dayKey, hGauss } from './rng';
 import Simulator from './simulator';
-import { catalystPriors } from '../data/news';
 import { buildFlowSweeps } from '../data/flowSweeps';
 import type { Candle, MarketSnapshot } from '../types/market';
 
@@ -138,16 +137,17 @@ export function histogram(terminal: number[], spot: number, bins: number): HistB
 
   This is the Prove It desk. So the board now grades only calls that RESOLVE on
   the history this terminal actually generates, and n is the count of those
-  calls. Two engines qualify:
+  calls. One engine qualifies: the sweep prints, which are derived from the
+  seeded candle series (flowSweeps.ts) and carry a side, so the next bars of
+  that same series resolve them.
 
-    • the news outcome model, which publishes its own prior population
-      (news.ts:catalystPriors) with both the call and what the same generator
-      did next — the pattern this file follows;
-    • the sweep prints, which are derived from the seeded candle series
-      (flowSweeps.ts) and carry a side, so the next bars of that same series
-      resolve them.
+  A second used to — a news outcome model scored against its own prior
+  population. It came off with data/news.ts, which was deleted because no feed
+  tier carries a news wire: the priors were the generator's own invention, so
+  the row graded the model against itself on a subject the product cannot
+  observe at all.
 
-  Four engines came off the board rather than keep a number. The Weigher, the
+  Five engines came off the board rather than keep a number. The Weigher, the
   dark-pool posture read and the wall-reaction model each need a full option
   chain and trade plan at every historical bar, and the simulator keeps no such
   history: `getGexHistory` carries net GEX per strike but no plan, so scoring a
@@ -158,7 +158,7 @@ export function histogram(terminal: number[], spot: number, bins: number): HistB
   nothing to resolve it belongs off the board, not on it with a plausible-looking
   number.
 
-  Unlike news.ts's base rates, this is a TRACK RECORD, not a prior: the candle
+  This is a TRACK RECORD, not a prior: the candle
   series re-seeds each session day, so the sweep row moves with the tape it was
   scored over. That is what a track record is supposed to do.
 */
@@ -230,26 +230,6 @@ function grade(model: string, scope: string, note: string, calls: ScoredCall[]):
   };
 }
 
-/**
- * The news outcome model's direction calls, scored over the population it
- * publishes for exactly this purpose. `expMove1dPct` is the call; the same
- * generator's `realized1dPct` is what resolved it, so the hit rate cannot drift
- * away from the feed it describes. Ordered oldest-first — priors count
- * backwards, so the largest `sessionsBack` is the oldest.
- */
-function gradeCatalystModel(): ModelRow | null {
-  const calls = catalystPriors().map<ScoredCall>(p => ({
-    order: -p.sessionsBack,
-    side: Math.sign(p.expMove1dPct),
-    movePct: p.realized1dPct,
-  }));
-  return grade(
-    'News outcome model',
-    'headline lean vs next-session move',
-    `Scored over the model's own simulated priors — the same generator that prints the live feed. No market history stands behind it.`,
-    calls
-  );
-}
 
 /** Bars a sweep print is given to resolve — half a session hour. */
 const SWEEP_FOLLOW = 30;
@@ -315,5 +295,5 @@ function gradeSweepPrints(): ModelRow | null {
  * distribution, not a call, and the cone on the same page is where it is judged.
  */
 export function modelScoreboard(): ModelRow[] {
-  return [gradeCatalystModel(), gradeSweepPrints()].filter((r): r is ModelRow => r !== null);
+  return [gradeSweepPrints()].filter((r): r is ModelRow => r !== null);
 }

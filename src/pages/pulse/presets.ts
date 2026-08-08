@@ -337,25 +337,6 @@ export const PULSE_PRESETS: PulseLayout[] = [
     ],
   },
   {
-    id: 'desk-earnings',
-    name: 'Earnings',
-    preset: true,
-    panels: [
-      { id: 'ea-cal', key: 'earnings-calendar' },
-      { id: 'ea-vol', key: 'vol-state' },
-      { id: 'ea-setups', key: 'top-setups' },
-      { id: 'ea-chart', key: 'live-chart' },
-    ],
-    layout: [
-      // Right column is 3 + 4 tall (Top Setups is a six-column board and will
-      // not read at h=3), so the calendar beside it matches at 7.
-      L('ea-cal', 0, 0, 7, 7),
-      L('ea-vol', 7, 0, 5, 3),
-      L('ea-setups', 7, 3, 5, 4),
-      L('ea-chart', 0, 7, 12, 5),
-    ],
-  },
-  {
     id: 'minimal-chart',
     name: 'Minimal Chart',
     preset: true,

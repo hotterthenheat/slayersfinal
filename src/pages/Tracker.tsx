@@ -11,7 +11,7 @@
 
 import { useMemo, useState, useEffect, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bookmark, Trash2, ArrowUpRight, Compass, Scale, Radar, CalendarClock, StickyNote } from 'lucide-react';
+import { Bookmark, Trash2, ArrowUpRight, Compass, Scale, Radar, StickyNote } from 'lucide-react';
 import { useTracker } from '../context/TrackerContext';
 import EdgeLedger from '../components/tracker/EdgeLedger';
 import { useMarketData } from '../context/MarketDataContext';
@@ -841,12 +841,11 @@ const Tracker = () => {
             </div>
           </Panel>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
             {[
               { icon: Compass, title: 'Compass setups', body: 'Graded QUALIFIED / WATCH / FADED setups with a full plan.', to: '/compass', cta: 'Open Compass' },
               { icon: Scale, title: 'Contract Weigher', body: 'Weeklies, swings & LEAPS scored STRONG / WATCH / WEAK.', to: '/compass', cta: 'Weigh contracts' },
               { icon: Radar, title: 'Trace flow', body: 'Notable options prints and dark-pool blocks.', to: '/trace/scanner', cta: 'Open Trace' },
-              { icon: CalendarClock, title: 'Earnings prints', body: 'Implied-vs-realized reads graded QUALIFIED / RICH / NO EDGE.', to: '/earnings', cta: 'Open Earnings' },
             ].map(card => (
               <div key={card.title} className="inst-surface rounded-md p-4 flex flex-col gap-2.5">
                 <span className="inline-flex w-8 h-8 rounded-md border border-borderSubtle bg-inset items-center justify-center">
