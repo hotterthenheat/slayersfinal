@@ -803,13 +803,21 @@ async function waitForServer(base, timeoutMs = 60_000) {
 }
 
 /**
- * Every context gets the same two things before the app boots: the colour
- * maths the checks call, and the onboarding flag — without which the first-run
- * overlay is the only thing a fresh profile ever measures.
+ * Every context gets three things before the app boots.
+ *
+ * The colour maths the checks call, and two flags that put a fresh browser
+ * profile into the state this sweep is actually about — the terminal in use.
+ * Without them, every context is a first-ever visit: the onboarding overlay
+ * covers the first route, and the launch gate holds a full-screen splash for
+ * 1350ms. Neither changes layout, so the measurements survived; screenshots did
+ * not, and a returning visitor sees neither.
  */
 const SEED = `
   window.__auditColor = (${colorMath.toString()})();
-  try { localStorage.setItem('slayer_onboarded_v1', '1'); } catch (e) { /* private mode */ }
+  try {
+    localStorage.setItem('slayer_onboarded_v1', '1');
+    localStorage.setItem('slayer_booted_v1', '1');
+  } catch (e) { /* private mode */ }
 `;
 
 async function main() {
