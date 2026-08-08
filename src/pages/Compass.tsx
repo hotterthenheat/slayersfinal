@@ -204,7 +204,7 @@ const Compass = () => {
   }, [params]);
 
   /* Deep links: from Tracker (land in review mode on the tracked setup) or
-     from Earnings/Stocks/News ("weigh this name's contracts"). Router state
+     from Earnings/Stocks ("weigh this name's contracts"). Router state
      still wins over the param — /lotto redirects through it.
 
      Every value is read through the same membership tests the ?view= path

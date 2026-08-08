@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { NAV_ITEMS, REFERENCE_ITEMS } from '../components/layout/nav';
+import { CANONICAL_ORIGIN } from '../components/layout/RouteTitle';
 
 /*
 ==================================================
@@ -51,6 +52,18 @@ describe('sitemap', () => {
       .map(p => (p === '' ? '/' : p))
       .sort();
     expect(paths).toEqual(EXPECTED_PATHS);
+  });
+
+  it('agrees with the canonical the app writes at runtime', () => {
+    /*
+      The defect this closes: index.html carries one static
+      <link rel="canonical"> naming the homepage, and every route is served that
+      same file. So all fifteen URLs below were declaring `/` as their canonical
+      — this file asking a crawler to index fifteen pages while the markup on
+      each of them asked it not to. RouteTitle now rewrites the tag per route;
+      if the two origins ever diverge, the contradiction comes straight back.
+    */
+    expect(CANONICAL_ORIGIN).toBe(ORIGIN);
   });
 
   it('uses one origin, with no trailing-slash variants to split ranking', () => {

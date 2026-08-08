@@ -71,7 +71,7 @@ const TIERS = [
       'Volatility Lab · IV surface & expected move',
       'Contract health scores',
       'Prove It · Monte Carlo, model scoreboard & 3D dealer surface',
-      'Research suite · Stocks, News & Earnings Hub',
+      'Research suite · Stocks board & Earnings Hub',
     ],
     cta: 'Select plan',
     to: '/terminal',

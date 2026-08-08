@@ -59,13 +59,40 @@ describe('the page column', () => {
   });
 
   it('no page inside the shell sets its own width', () => {
-    // The exact shape that caused it: a root element that both caps its width
-    // and centres itself, which makes a page a box inside the page.
-    const OWN_WIDTH = /className="[^"]*\bmax-w-(?:\d?xl|\[[^\]]+\])\b[^"]*\bmx-auto\b|className="[^"]*\bmx-auto\b[^"]*\bmax-w-(?:\d?xl|\[[^\]]+\])\b/;
+    /*
+      The exact shape that caused it: a root element that both caps its width
+      and centres itself, which makes a page a box inside the page.
+
+      This had TWO independent holes, and each one on its own made the check
+      decorative:
+
+      1. It read `className="…"` and nothing else. Under src/pages the split is
+         2,613 double-quoted against 271 written {`…`}, because conditional
+         classes need interpolation — so the guard was blind in the spelling the
+         regression is most likely to arrive in. Reintroducing the original bug
+         (the Guide capping itself at max-w-5xl) as a template literal left the
+         suite green; the same edit in double quotes failed it.
+      2. The arbitrary-value branch `\[[^\]]+\])\b` could never match ANYTHING,
+         in either spelling. `]` is a non-word character, so the trailing `\b`
+         demanded a word character immediately after the bracket, which never
+         happens in a class list. `max-w-[1100px] mx-auto` sailed through from
+         the day it was written.
+
+      Both classes have to be read off the SAME attribute value: max-w on one
+      element and mx-auto on another is not this bug.
+    */
+    const CLASS_ATTR = /className=(?:"([^"]*)"|'([^']*)'|\{\s*(?:`([^`]*)`|'([^']*)'|"([^"]*)")\s*\})/g;
+    const CAPS_WIDTH = /\bmax-w-(?:\d?xl\b|\[[^\]]+\])/;
+    const CENTRES = /\bmx-auto\b/;
+    const setsOwnWidth = (text: string) =>
+      [...text.matchAll(CLASS_ATTR)].some(m => {
+        const classes = m[1] ?? m[2] ?? m[3] ?? m[4] ?? m[5] ?? '';
+        return CAPS_WIDTH.test(classes) && CENTRES.test(classes);
+      });
     const offenders = FILES.filter(f => {
       const r = rel(f.path);
       if (!r.startsWith('pages/') || OUTSIDE_SHELL.test(r)) return false;
-      return OWN_WIDTH.test(f.text);
+      return setsOwnWidth(f.text);
     }).map(f => rel(f.path));
     expect(
       offenders,

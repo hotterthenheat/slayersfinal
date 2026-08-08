@@ -401,9 +401,10 @@ function predict(category: NewsCategory, sentiment: number, magnitude: number, b
   // told the reader to stack the item with flow "before acting". This terminal
   // observes: PLAY renders QUALIFIED, FADE renders RICH, and nothing here is
   // allowed to hand out a ticket. It is authored observationally HERE because
-  // three surfaces already render the field — the News outcome panel, the News
-  // row hover, and the stock drawer — so laundering the copy at one of them
-  // would only fix the surface somebody happened to look at.
+  // three surfaces rendered the field when this was written — the News outcome
+  // panel, the News row hover, and the stock drawer — so laundering the copy at
+  // one of them would only have fixed the surface somebody happened to look at.
+  // The first two went with the News desk; the stock drawer still reads it.
   //
   // Each branch now points at the quantity that produced it: the residual the
   // model already assumes, the 5-day expected move, or the expected move itself.
@@ -482,7 +483,18 @@ export function buildNewsFeed(): NewsItem[] {
   return items.sort((a, b) => a.minutesAgo - b.minutesAgo);
 }
 
-/** Aggregate news lean for one name, −1…+1 — consumed by Compass and Stocks. */
+/**
+ * Aggregate news lean for one name, −1…+1.
+ *
+ * NO CONSUMER. The doc here used to read "consumed by Compass and Stocks";
+ * neither imports it, and a repo-wide search finds no caller at all. The News
+ * desk was retired in 457e24b and this module outlived its surfaces.
+ *
+ * Kept rather than deleted: it is model code, and the pricing/model layer is
+ * being replaced wholesale from a separate source. Deleting it now would risk
+ * a collision for no benefit — but a doc that names consumers it does not have
+ * is worse than silence, so it says what is true.
+ */
 export function tickerSentiment(ticker: string): number {
   const feed = buildNewsFeed();
   const mine = feed.filter(n => n.ticker === ticker);
@@ -516,7 +528,13 @@ export interface MarketMood {
   macroCount: number;
 }
 
-/** Overall tape mood from the feed — the gauge at the top of the News page. */
+/**
+ * Overall tape mood from the feed.
+ *
+ * NO CONSUMER. The gauge this fed sat at the top of the News page, which was
+ * deleted along with the desk. Kept for the same reason as `tickerSentiment`
+ * above; documented so nobody goes looking for the gauge.
+ */
 export function marketMood(): MarketMood {
   const feed = buildNewsFeed();
   const w = feed.reduce((a, n) => a + n.magnitude, 0) || 1;
