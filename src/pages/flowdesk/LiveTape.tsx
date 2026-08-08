@@ -14,6 +14,7 @@ import MetricGrid from '../../components/ui/MetricGrid';
 import type { Tone } from '../../components/ui/tones';
 import { useToast } from '../../components/ui/Toast';
 import Term from '../../components/ui/Term';
+import { FOCUS_RING_ON_HOLO } from '../../components/ui/focusRing';
 import type { TermKey } from '../../data/terms';
 import TapeRowModal from './TapeRowModal';
 import type { FlowPrint, PrintSentiment, TapeSummary } from '../../types/flowdesk';
@@ -1016,7 +1017,7 @@ const LiveTape = () => {
                   // and has to read as an object above the tape rather than a
                   // smudge on it — and it is the one silver thing in a field of
                   // red and green, so it can't be mistaken for a print.
-                  className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full holo-bg pl-2 pr-2.5 py-1 font-mono text-micro font-semibold uppercase tracking-wide text-ink shadow-[0_2px_12px_rgba(0,0,0,0.65)] ring-1 ring-black/40 transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-select active:scale-[0.98]"
+                  className={`pointer-events-auto inline-flex items-center gap-1.5 rounded-full holo-bg pl-2 pr-2.5 py-1 font-mono text-micro font-semibold uppercase tracking-wide text-ink shadow-[0_2px_12px_rgba(0,0,0,0.65)] ring-1 ring-black/40 transition-transform active:scale-[0.98] ${FOCUS_RING_ON_HOLO}`}
                 >
                   <ArrowUp className="w-3 h-3" />
                   <span className="tabular-nums">
