@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import GammaChart from './GammaChart';
 import ComplexBoard from './ComplexBoard';
+import GammaRolloff from './GammaRolloff';
 import ExposureProfile from './ExposureProfile';
 import RankedTargets from './RankedTargets';
 import GreeksRegime from './GreeksRegime';
@@ -57,6 +58,7 @@ export const GammaDesk = () => (
     views={[
       { key: 'this', label: 'This ticker', node: <GammaChart /> },
       { key: 'complex', label: 'Complex', node: <ComplexBoard /> },
+      { key: 'rolloff', label: 'Roll-off', node: <GammaRolloff /> },
     ]}
   />
 );

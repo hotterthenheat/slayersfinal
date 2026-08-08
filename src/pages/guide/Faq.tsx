@@ -110,9 +110,11 @@ const FAQ: QA[] = [
 const Faq = () => (
   <div className="rounded-lg border border-borderSubtle bg-panel divide-y divide-borderSubtle overflow-hidden">
     {FAQ.map(item => (
-      <details key={item.q} className="group">
+      <details key={item.q} className="group open:bg-white/[0.015]">
         <summary className="flex items-center gap-3 px-4 py-3.5 cursor-pointer list-none [&::-webkit-details-marker]:hidden hover:bg-rowHover transition-colors">
-          <ChevronRight className="w-4 h-4 text-textMuted shrink-0 transition-transform group-open:rotate-90" />
+          {/* The open row is the one thing on this page with state, so it is
+              the one thing that earns the accent. */}
+          <ChevronRight className="w-4 h-4 text-textMuted group-open:text-select shrink-0 transition-transform group-open:rotate-90" />
           <span className="text-body font-medium text-textPrimary">{item.q}</span>
         </summary>
         <div className="px-4 pb-4 pl-11 text-data text-textSecondary leading-relaxed">{item.a}</div>

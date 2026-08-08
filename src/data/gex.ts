@@ -9,7 +9,8 @@
 */
 
 import Simulator from '../core/simulator';
-import { expiryFor, nextSession, fmtMonthDay } from '../core/calendar';
+import { fmtMonthDay } from '../core/calendar';
+import { expiryCalendar, type ChainExpiry } from '../core/expiryCalendar';
 import type { MarketSnapshot, StrikeNode } from '../types/market';
 import type {
   BoardTicker,
@@ -115,8 +116,8 @@ export function pinStrike(snapshot: MarketSnapshot, half: number): number {
   let pin = window[0]?.strike ?? spot;
   let heaviest = 0;
   for (const n of window) {
-    if (n.callOI + n.putOI > heaviest) {
-      heaviest = n.callOI + n.putOI;
+    if (n.callOI.value + n.putOI.value > heaviest) {
+      heaviest = n.callOI.value + n.putOI.value;
       pin = n.strike;
     }
   }
@@ -141,46 +142,25 @@ function buildNodes(snapshot: MarketSnapshot, metric: GexMetric, range: StrikeRa
 }
 
 // ---- strike × expiry matrix ---------------------------------------------------
-// Keyed by days-to-expiry; the header shows the real calendar date, not "7D",
-// since nobody converts a day-count to a date in their head at the tape.
-const MATRIX_EXPIRIES = [
-  { dte: 0, t: 0.003, decay: 1 },
-  { dte: 1, t: 0.008, decay: 0.52 },
-  { dte: 2, t: 0.012, decay: 0.38 },
-  { dte: 5, t: 0.024, decay: 0.22 },
-  { dte: 7, t: 0.032, decay: 0.16 },
-];
+// The columns are the expiries the ticker ACTUALLY lists — dailies for an index
+// or large ETF, weeklies for a liquid single name, monthlies for the rest —
+// resolved through the shared, holiday-aware expiry calendar. The header shows
+// the real date; nobody converts a day-count to a date in their head at the tape.
 
 /**
- * Column labels for the expiry matrix. Same-day keeps "0DTE" (traders read it
- * instantly); every later column shows its actual date (e.g. "Jul 24").
- *
- * Each horizon is calendar days — what a trader means by "7 DTE" — but two
- * horizons can resolve to the SAME session: standing on a Thursday, both "1 day"
- * and "2 days" land on that Friday, and two columns sharing a header reads as a
- * rendering bug. Horizons are ascending, so resolving them in order and forcing
- * each column strictly past the previous one keeps every column on its own
- * expiry.
+ * Column labels for the expiry matrix. A same-day expiry keeps "0DTE" (traders
+ * read it instantly); every later column shows its actual date (e.g. "Jul 24").
+ * The calendar returns strictly-increasing, holiday-correct expiries, so no two
+ * columns can share a header.
  */
-function matrixExpiryLabels(): string[] {
-  const out: string[] = [];
-  let prev: Date | null = null;
-  for (let i = 0; i < MATRIX_EXPIRIES.length; i++) {
-    const { dte } = MATRIX_EXPIRIES[i];
-    let date = expiryFor(dte).date;
-    if (prev !== null && date <= prev) {
-      const after = new Date(prev);
-      after.setDate(after.getDate() + 1);
-      date = nextSession(after);
-    }
-    prev = date;
-    out.push(i === 0 && dte === 0 ? '0DTE' : fmtMonthDay(date));
-  }
-  return out;
+function matrixExpiryLabels(expiries: ChainExpiry[]): string[] {
+  return expiries.map(e => (e.dte === 0 ? '0DTE' : fmtMonthDay(e.date)));
 }
 
 function buildMatrix(snapshot: MarketSnapshot, metric: GexMetric, range: StrikeRange, levels: KeyLevels): GexMatrixData {
   const { ticker, chain, spot } = snapshot;
+  const expiries = expiryCalendar(ticker); // the expiries this root actually lists
+  const tFront = expiries[0].t; // nearest expiry — the decay anchor
   const sorted = [...chain].sort((a, b) => b.strike - a.strike); // descending
   const spotIdx = Math.max(0, sorted.findIndex(n => n.strike <= spot));
   const half = range === 10 ? 10 : 15; // strikes per side (chain carries 15 max)
@@ -191,7 +171,7 @@ function buildMatrix(snapshot: MarketSnapshot, metric: GexMetric, range: StrikeR
 
   const cells: MatrixCell[][] = window.map(node => {
     const base = metricValue(node, metric);
-    return MATRIX_EXPIRIES.map((exp, c) => {
+    return expiries.map((exp, c) => {
       const noise = h01(`${ticker}-${node.strike}-${exp.dte}`);
       // 0DTE is not a projection — the chain IS today's book at that expiry, so
       // that column prints the strike's own exposure untouched. GexMatrix puts
@@ -201,7 +181,10 @@ function buildMatrix(snapshot: MarketSnapshot, metric: GexMetric, range: StrikeR
       // could hand the crown to a cell that was no longer the column's largest.
       // Farther expiries decay and occasionally flip sign (charm/vanna migration).
       const flip = c > 0 && noise > 0.86 ? -1 : 1;
-      const value = c === 0 ? base : base * exp.decay * (0.55 + noise * 0.9) * flip;
+      // Decay derives from the real year-fraction: gamma scales ~1/sqrt(t), so a
+      // farther expiry projects less exposure than the front. tFront anchors it.
+      const decay = c === 0 ? 1 : Math.sqrt(tFront / exp.t);
+      const value = c === 0 ? base : base * decay * (0.55 + noise * 0.9) * flip;
       const abs = Math.abs(value);
       if (abs > maxAbs) maxAbs = abs;
       // King crowns the 0DTE cell at the book's max-exposure strike (matches the chart level)
@@ -224,7 +207,7 @@ function buildMatrix(snapshot: MarketSnapshot, metric: GexMetric, range: StrikeR
   };
 
   return {
-    expiries: matrixExpiryLabels(),
+    expiries: matrixExpiryLabels(expiries),
     strikes,
     cells,
     maxAbs,

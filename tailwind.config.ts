@@ -77,13 +77,6 @@ export default {
         king: '#EA00FF',
         darkpool: '#2dd4bf',
 
-        // Legacy aliases (pre-redesign pages)
-        primary: '#ededed',
-        secondary: '#a3a3a3',
-        silver: '#a1a1aa',
-        gammaPos: '#C7D3E8',
-        gammaNeg: '#FF3B30',
-        warning: '#FF9500',
       },
       // Terminal type ramp. Every size below `text-lg` came from ~1,180
       // scattered `text-[Npx]` utilities; these name them as one system.

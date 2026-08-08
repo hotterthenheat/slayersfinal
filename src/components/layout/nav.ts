@@ -5,7 +5,6 @@ import {
   Radar,
   Sigma,
   BarChart3,
-  Newspaper,
   CalendarClock,
   Bookmark,
   Users,
@@ -63,7 +62,7 @@ export const NAV_ITEMS: NavItem[] = [
     icon: Activity,
     // The Key Levels panel was removed from Pulse (levels ride the chart now),
     // so the promise had to go with it.
-    description: 'The market desk: chart, dealer pressure, order flow and the liquidity map',
+    description: 'The market desk: chart, dealer pressure, order flow and the options tape',
     group: 'Read',
   },
   {
@@ -72,14 +71,6 @@ export const NAV_ITEMS: NavItem[] = [
     code: '05',
     icon: Crosshair,
     description: 'GEX, dealer positioning, hedge impact and the fracture line',
-    group: 'Read',
-  },
-  {
-    path: '/news',
-    label: 'News',
-    code: '06',
-    icon: Newspaper,
-    description: 'Stock news with a predicted outcome per headline',
     group: 'Read',
   },
   {
@@ -129,6 +120,10 @@ export const NAV_GROUP_PURPOSE: Record<NavGroup, string> = {
   Yours: 'The two desks whose contents you write, kept in this browser',
   Models: 'The math behind the calls, and how it scored against what happened',
 };
+
+/** The group a desk path belongs to, for surfaces that hold a path and not an item. */
+export const groupOfPath = (path: string): NavGroup | undefined =>
+  NAV_ITEMS.find(i => i.path === path || path.startsWith(`${i.path}/`))?.group;
 
 export interface ReferenceItem {
   path: string;

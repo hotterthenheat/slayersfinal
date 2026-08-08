@@ -10,6 +10,7 @@ import { TERMS, type TermKey } from '../../data/terms';
 import Panel from '../../components/ui/Panel';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import SignalBadge from '../../components/ui/SignalBadge';
+import OiFreshness from '../../components/ui/OiFreshness';
 import HoverReadout from '../../components/ui/HoverReadout';
 import type { MarketSnapshot } from '../../types/market';
 import type { HedgingClass, RankedTarget, TargetTag } from '../../types/gex';
@@ -211,9 +212,12 @@ const RankedTargets = () => {
             <ArrowUpRight className="w-3 h-3 text-textSecondary" />
           </button>
         )}
-        <span className="ml-auto font-mono text-micro text-textMuted uppercase tracking-widest tnum">
-          {filtered.length} of {view.targets.length} strikes · scan {lastScanAt} · 10s
-        </span>
+        <div className="ml-auto flex items-center gap-2.5">
+          {scanSnapshot?.chain[0] && <OiFreshness oi={scanSnapshot.chain[0].callOI} />}
+          <span className="font-mono text-micro text-textMuted uppercase tracking-widest tnum">
+            {filtered.length} of {view.targets.length} strikes · scan {lastScanAt} · 10s
+          </span>
+        </div>
       </div>
 
       {/* Compact top-3 summary — a glance, not a podium */}

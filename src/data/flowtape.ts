@@ -8,9 +8,21 @@
 */
 
 import Simulator from '../core/simulator';
+import { settledOI } from '../core/openInterest';
 import { expiryFor, fmtExpiryLong } from '../core/calendar';
-import type { TapeOrder } from '../types/market';
+import { math } from '../core/mathProvider';
+import { seedSessionTape } from './tapeSeed';
+import type { ContractGreeks, TapeOrder } from '../types/market';
 import type { FlowPrint, PrintSentiment, StratTag, TapeSummary } from '../types/flowdesk';
+import {
+  TRADE_CONDITION,
+  MULTI_LEG_CODES,
+  STOCK_OPTION_CODES,
+  SINGLE_LEG_MECHANISM_CODES,
+  aggressorSide,
+  isSweep,
+  isDirectional,
+} from '../types/conditions';
 
 // ---- deterministic RNG ------------------------------------------------------
 function hash(seed: string): number {
@@ -28,6 +40,47 @@ function h01(seed: string): number {
 
 const DTE_POOL = [0, 1, 2, 5, 9, 16, 30, 44, 72, 102, 254];
 const STRATS: StratTag[] = ['Vertical', 'Butterfly', 'Ratio', 'Custom'];
+
+/**
+ * The greek vector ThetaData stamps on a trade (`trade_greeks`) — the input to
+ * per-print dealer-inventory change (P4.3). It comes from the MATH SEAM
+ * (core/mathProvider.ts) rather than a local Black-Scholes copy, so a house
+ * model registered there restamps every print on the tape too. This module used
+ * to carry its own CDF and pricer; that copy is gone.
+ */
+function tradeGreeks(spot: number, strike: number, dte: number, iv: number, right: 'C' | 'P'): ContractGreeks {
+  return math.optionGreeks(spot, strike, iv, math.yearsToExpiry(dte), right);
+}
+
+/**
+ * The id ceiling every desk's opening tape counts DOWN from.
+ *
+ * `enrichPrint` seeds its hash with the print's id, so the id is the print's
+ * IDENTITY, not just its position. Each Trace tab used to build its own tape as
+ * `seed.map((o, i) => enrichPrint(o, seed.length - i))` with a different `want`
+ * — 400 on Live Tape, 600 on Gamma Tape and Informed Flow — which made the id
+ * of a given print a function of HOW MUCH TAPE THE PAGE ASKED FOR. The same
+ * order therefore enriched into a different contract, side, premium and
+ * sentiment depending on which tab you were looking at: a cross-panel
+ * disagreement of exactly the kind this codebase's coherence suites exist to
+ * prevent.
+ *
+ * Counting down from a fixed ceiling instead makes the id depend only on the
+ * print's age, so a shorter window is a prefix of a longer one and every desk
+ * agrees. It must stay above any window a desk requests; live prints continue
+ * UPWARD from it, which preserves the "higher id = newer" ordering that the
+ * unread pill and the pause-pending count both read.
+ */
+export const TAPE_ID_CEILING = 100_000;
+
+/**
+ * THE opening tape. One builder, so three desks cannot drift apart on window
+ * size or id scheme again. Returns newest-first, matching the order LiveTape
+ * prepends live prints in.
+ */
+export function buildSessionTape(want: number): FlowPrint[] {
+  return seedSessionTape(want).map((o, i) => enrichPrint(o, TAPE_ID_CEILING - i));
+}
 
 export function enrichPrint(order: TapeOrder, id: number): FlowPrint {
   const seed = `${order.ticker}-${order.strike}-${order.side}-${order.size}-${id}`;
@@ -58,7 +111,39 @@ export function enrichPrint(order: TapeOrder, id: number): FlowPrint {
   const ask = Number((mid + spreadW / 2).toFixed(2));
 
   const isMid = h('mid') > 0.82;
-  const side: FlowPrint['side'] = isMid ? 'MID' : order.side;
+  const legs = h('legs') > 0.78 ? 2 + Math.floor(h('legs2') * 3) : 1;
+  const strat: StratTag = legs > 1 ? STRATS[Math.floor(h('strat') * STRATS.length)] : h('strat') > 0.9 ? 'Custom' : '—';
+
+  // ---- Trade condition codes (P3.1) --------------------------------------
+  // The real feed stamps these; here the enrichment derives them from the order
+  // the simulator produced, so downstream reads the exchange fact — aggressor,
+  // sweep, structure — instead of inferring side from the fill. Frequencies are
+  // plausible, not uniform: most prints plain with an exchange aggressor, a
+  // sweep minority, a meaningful multi-leg share, a smaller delta-hedged slice,
+  // and rare auction/cabinet mechanisms.
+  const conditions: number[] = [];
+  if (!isMid) {
+    conditions.push(order.side === 'ASK' ? TRADE_CONDITION.ASK_AGGRESSOR : TRADE_CONDITION.BID_AGGRESSOR);
+  }
+  if (order.orderType === 'SWEEP') conditions.push(TRADE_CONDITION.INTERMARKET_SWEEP);
+  if (legs > 1) {
+    // A spread leg — aligned with legs > 1 so the ×N marker and the code agree.
+    conditions.push(MULTI_LEG_CODES[Math.floor(h('mleg') * MULTI_LEG_CODES.length)]);
+  } else if (h('hedge') > 0.92) {
+    // Delta-hedged: qualified-contingent or a stock+option print. Non-directional.
+    conditions.push(
+      h('hedge2') > 0.5
+        ? TRADE_CONDITION.QUALIFIED_CONTINGENT_TRADE
+        : STOCK_OPTION_CODES[Math.floor(h('hedge3') * STOCK_OPTION_CODES.length)]
+    );
+  }
+  if (h('mech') > 0.96) {
+    conditions.push(SINGLE_LEG_MECHANISM_CODES[Math.floor(h('mech2') * SINGLE_LEG_MECHANISM_CODES.length)]);
+  }
+  if (h('cab') > 0.99) conditions.push(TRADE_CONDITION.CABINET);
+
+  // Side and sweep now read the codes rather than the fill.
+  const side: FlowPrint['side'] = aggressorSide(conditions) ?? 'MID';
   const flowScore = isMid
     ? Math.round((h('fs') - 0.5) * 24)
     : Math.round((side === 'ASK' ? 1 : -1) * (48 + h('fs') * 52));
@@ -70,8 +155,9 @@ export function enrichPrint(order: TapeOrder, id: number): FlowPrint {
   const oi = Math.max(1, Math.round(volume * (0.4 + h('oi') * 3.2)));
   const deltaOI = h('doi') > 0.35 ? Math.round((h('doi2') - 0.4) * oi * 0.25) : 0;
 
-  const legs = h('legs') > 0.78 ? 2 + Math.floor(h('legs2') * 3) : 1;
-  const strat: StratTag = legs > 1 ? STRATS[Math.floor(h('strat') * STRATS.length)] : h('strat') > 0.9 ? 'Custom' : '—';
+  // The print's own implied vol — the vol the greeks below are stamped at, so the
+  // displayed iv and the trade_greeks vector describe the same contract.
+  const ivFrac = baseIv * (0.8 + h('iv') * 0.6);
 
   return {
     id,
@@ -94,19 +180,29 @@ export function enrichPrint(order: TapeOrder, id: number): FlowPrint {
     size: order.size,
     premium: Math.round(fill * order.size * 100),
     volume,
-    oi,
-    deltaOI,
+    oi: settledOI(oi),
+    deltaOI: settledOI(deltaOI),
     spot: Number(spot.toFixed(2)),
-    iv: Number((baseIv * 100 * (0.8 + h('iv') * 0.6)).toFixed(2)),
+    iv: Number((ivFrac * 100).toFixed(2)),
     volOverOI: Number((volume / oi).toFixed(2)),
     strat,
-    sweep: order.orderType === 'SWEEP',
+    sweep: isSweep(conditions),
+    conditions,
+    // trade_greeks: the greek vector stamped at this print, the input the Gamma
+    // Tape reads to turn one print into a dealer-inventory change (P4.3).
+    greeks: tradeGreeks(spot, strike, dte, ivFrac, right),
   };
 }
 
-/** Aggressive call buys / put sells read bullish; the inverse reads bearish. */
+/**
+ * Aggressive call buys / put sells read bullish; the inverse reads bearish.
+ * A multi-leg leg or a delta-hedged print carries no standalone direction, so it
+ * reads NEUTRAL regardless of which side it hit — the P4.2 clean-flow contract.
+ * A spread leg lifting the ask is not a bull; its delta is offset by the other
+ * legs the print does not show.
+ */
 export function sentimentOf(p: FlowPrint): PrintSentiment {
-  if (p.side === 'MID') return 'NEUTRAL';
+  if (p.side === 'MID' || !isDirectional(p.conditions)) return 'NEUTRAL';
   return (p.right === 'C' && p.side === 'ASK') || (p.right === 'P' && p.side === 'BID') ? 'BULLISH' : 'BEARISH';
 }
 
@@ -118,6 +214,8 @@ export function summarizeTape(prints: FlowPrint[]): TapeSummary {
   let putCount = 0;
   let putPremium = 0;
   let sweeps = 0;
+  let directional = 0;
+  let structure = 0;
   let largest: FlowPrint | null = null;
 
   for (const p of prints) {
@@ -129,6 +227,11 @@ export function summarizeTape(prints: FlowPrint[]): TapeSummary {
       putPremium += p.premium;
     }
     if (p.sweep) sweeps++;
+    // Directional = single-leg, un-hedged (P4.2). Spread legs and delta-hedged
+    // prints are structure: they trade but they do not take a side, so they are
+    // split out here and never reach the bull/bear net below.
+    if (isDirectional(p.conditions)) directional += p.premium;
+    else structure += p.premium;
     if (!largest || p.premium > largest.premium) largest = p;
     const s = sentimentOf(p);
     if (s === 'BULLISH') bull += p.premium;
@@ -142,6 +245,8 @@ export function summarizeTape(prints: FlowPrint[]): TapeSummary {
     bullish: netPremium >= 0,
     bullPremium: bull,
     bearPremium: bear,
+    directionalPremium: directional,
+    structurePremium: structure,
     callCount,
     callPremium,
     putCount,

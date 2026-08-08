@@ -1,7 +1,29 @@
+import { BEAR, BULL } from './palette';
+
 /*
-  Candlestick color themes. The heatmap/nodes carry the page's color, so the
-  default keeps price structure neutral (monochrome) to complement the minimal
-  dark UI without competing with the analytics. Flip CANDLE_THEME to switch.
+==================================================
+  SLAYER TERMINAL - CANDLE THEME (gex/candleTheme.ts)
+  What an up bar and a down bar are coloured.
+
+  This file used to ship four themes and select a "signature" one: holographic
+  silver up, luminous violet down, on the grounds that price should not compete
+  with the analytics for the green/red channel.
+
+  Measured on a single Pulse screen, that is not what it did. The price chart
+  drew a down bar VIOLET while, in the same viewport, the cumulative delta drew
+  down RED, the put wall drew red, the delta-by-price rows drew red and the GEX
+  heatmap drew red. One concept, two colours, side by side — and price, the
+  largest and most-looked-at object on the desk, was the one element speaking the
+  minority language.
+
+  Direction is direction. The candles now read off BULL and BEAR directly, so
+  they are the same two values the walls, the tape, the flow and the exposure
+  grid use, and they cannot drift from them: there is no second literal to
+  update.
+
+  The three unused variants went with the selector. A theme map with no UI to
+  switch it is four palettes maintained and one rendered.
+==================================================
 */
 
 export interface CandleTheme {
@@ -13,49 +35,20 @@ export interface CandleTheme {
   volDown: string;
 }
 
-export const CANDLE_THEMES = {
-  // Slayer signature — holographic silver up / violet down. The house look: the
-  // brand's holo-silver for strength, a luminous purple for weakness. Its OWN
-  // two-tone, distinct from the green/red the walls & GEX nodes own.
-  slayer: {
-    up: '#DCE3F5',
-    down: '#A47CF2',
-    wickUp: '#F1F4FF',
-    wickDown: '#C0A2FF',
-    volUp: 'rgba(220,227,245,0.22)',
-    volDown: 'rgba(164,124,242,0.26)',
-  },
-  // Neutral, premium — near-white up / slate down
-  mono: {
-    up: '#eef1f5',
-    down: '#565c68',
-    wickUp: '#eef1f5',
-    wickDown: '#565c68',
-    volUp: 'rgba(238,241,245,0.22)',
-    volDown: 'rgba(86,92,104,0.30)',
-  },
-  // House chrome — green up / hot red down (matches bull/bear tokens)
-  classic: {
-    up: '#30D158',
-    down: '#FF3B30',
-    wickUp: '#30D158',
-    wickDown: '#FF3B30',
-    volUp: 'rgba(48,209,88,0.28)',
-    volDown: 'rgba(255,59,48,0.28)',
-  },
-  // Desaturated sage / clay
-  muted: {
-    up: '#6fae94',
-    down: '#c47484',
-    wickUp: '#6fae94',
-    wickDown: '#c47484',
-    volUp: 'rgba(111,174,148,0.24)',
-    volDown: 'rgba(196,116,132,0.26)',
-  },
-} as const;
+/** `#RRGGBB` → `rgba(r,g,b,a)`. The chart libraries want volume as a tint, and
+    an alpha hex suffix is not portable across lightweight-charts' parsers. */
+const tint = (hex: string, alpha: number): string => {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
+};
 
-export type CandleThemeKey = keyof typeof CANDLE_THEMES;
-
-export const CANDLE_THEME_KEY: CandleThemeKey = 'slayer';
-
-export const candleTheme: CandleTheme = CANDLE_THEMES[CANDLE_THEME_KEY];
+export const candleTheme: CandleTheme = {
+  up: BULL,
+  down: BEAR,
+  wickUp: BULL,
+  wickDown: BEAR,
+  // Volume sits behind price, so it takes the same hue at a fraction of the
+  // weight rather than a colour of its own.
+  volUp: tint(BULL, 0.28),
+  volDown: tint(BEAR, 0.28),
+};

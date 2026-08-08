@@ -1,52 +1,59 @@
-import { useState } from 'react';
-import type { TermPoint, TermStructureData } from '../../../types/gex';
-import HoverReadout from '../../ui/HoverReadout';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import type { TermStructureData } from '../../../types/gex';
+import { ChartTip, TipHead, TipRow, TipSeries, TipNote } from '../../charts/ChartTip';
+import { GRID, CURSOR, chartMargin, valueAxis, categoryAxis, axisVol, paddedDomain, niceTicks } from '../../charts/chartTheme';
+import { Swatch } from '../../charts/ChartFrame';
 
 interface TermStructureProps {
   data: TermStructureData;
 }
 
-const W = 100;
-const H = 44;
+/*
+  ATM IV vs DTE — the current curve over its own history.
 
-function pathFor(curve: TermPoint[], min: number, span: number): string {
-  return curve
-    .map((p, i) => {
-      const x = (p.dte / 360) * W;
-      const y = H - ((p.iv - min) / span) * H;
-      return `${i === 0 ? 'M' : 'L'}${x.toFixed(2)},${y.toFixed(2)}`;
-    })
-    .join(' ');
-}
+  On recharts, on the house chart theme. Two things changed with the port:
 
-const GHOSTS: { key: keyof Pick<TermStructureData, 'monthAgo' | 'weekAgo' | 'dayAgo'>; label: string; stroke: string; dash?: string }[] = [
-  { key: 'monthAgo', label: '1M ago', stroke: 'rgba(143,143,143,0.35)', dash: '2 2' },
-  { key: 'weekAgo', label: '1W ago', stroke: 'rgba(143,143,143,0.55)', dash: '3 2' },
-  { key: 'dayAgo', label: '1D ago', stroke: 'rgba(188,169,209,0.7)' },
+  The x axis is LOG in time. 7d to 360d is a fifty-fold range, and the old
+  linear axis (x = dte/360) put the entire front month — the part that actually
+  moves, and the part every other panel quotes — inside the first eighth of the
+  plot. Log time is the convention for a term structure for exactly that reason.
+
+  The vintages are silver at descending opacity rather than grey-plus-a-lilac.
+  The lilac (rgba(188,169,209,·)) was the last off-palette ink in the Vol Lab;
+  a curve's AGE is not a category that deserves its own hue.
+*/
+
+/** Older vintages, dimmer. Drawn back-to-front so "now" reads first. */
+const VINTAGE = [
+  { key: 'monthAgo' as const, label: '1M ago', color: 'rgba(228,232,244,0.30)', dash: '2 4' },
+  { key: 'weekAgo' as const, label: '1W ago', color: 'rgba(228,232,244,0.45)', dash: '5 3' },
+  { key: 'dayAgo' as const, label: '1D ago', color: 'rgba(228,232,244,0.62)', dash: '9 3' },
 ];
 
-/** ATM IV vs DTE — current curve over its own history ghosts. */
+const TICKS = [7, 14, 30, 60, 90, 180, 270, 360];
+
+interface Row {
+  dte: number;
+  now: number;
+  dayAgo: number;
+  weekAgo: number;
+  monthAgo: number;
+}
+
 const TermStructure = ({ data }: TermStructureProps) => {
-  const all = [...data.current, ...data.dayAgo, ...data.weekAgo, ...data.monthAgo];
-  const min = Math.min(...all.map(p => p.iv)) - 1;
-  const max = Math.max(...all.map(p => p.iv)) + 1;
-  const span = max - min || 1;
-  const [h, setH] = useState<{ i: number; x: number; y: number } | null>(null);
-  const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const dte = ((e.clientX - rect.left) / (rect.width || 1)) * 360;
-    let i = 0;
-    let best = Infinity;
-    data.current.forEach((p, idx) => {
-      const d = Math.abs(p.dte - dte);
-      if (d < best) {
-        best = d;
-        i = idx;
-      }
-    });
-    setH({ i, x: e.clientX, y: e.clientY });
-  };
-  const cx = (i: number) => (data.current[i].dte / 360) * W;
+  // All four vintages come off one DTE ladder (data/vollab builds them from the
+  // same TERM_DTE array), so index alignment is exact — no interpolation.
+  const rows: Row[] = data.current.map((p, i) => ({
+    dte: p.dte,
+    now: p.iv,
+    dayAgo: data.dayAgo[i]?.iv ?? p.iv,
+    weekAgo: data.weekAgo[i]?.iv ?? p.iv,
+    monthAgo: data.monthAgo[i]?.iv ?? p.iv,
+  }));
+
+  const domain = paddedDomain(rows.flatMap(r => [r.now, r.dayAgo, r.weekAgo, r.monthAgo]), 0.1);
+  const ticks = TICKS.filter(t => t >= rows[0].dte && t <= rows[rows.length - 1].dte);
+  const front = rows.find(r => r.dte >= 30) ?? rows[0];
 
   const stats: { label: string; value: string }[] = [
     { label: 'ATM IV 30D', value: `${data.stats.atm30.toFixed(2)}%` },
@@ -60,69 +67,94 @@ const TermStructure = ({ data }: TermStructureProps) => {
 
   return (
     <div className="flex flex-col gap-3 h-full min-h-0">
-      {/* Legend */}
       <div className="flex items-center gap-3 flex-wrap select-none">
-        <span className="flex items-center gap-1.5 font-mono text-micro uppercase tracking-wider text-textPrimary">
-          <span className="inline-block w-3 h-[2px] rounded-full bg-textPrimary" /> Current
-        </span>
-        {GHOSTS.slice().reverse().map(g => (
-          <span key={g.key} className="flex items-center gap-1.5 font-mono text-micro uppercase tracking-wider text-textMuted">
-            <span className="inline-block w-3 h-px rounded-full" style={{ background: g.stroke }} /> {g.label}
-          </span>
+        <Swatch color="#ededed" label="Current" dash />
+        {VINTAGE.slice().reverse().map(v => (
+          <Swatch key={v.key} color={v.color} label={v.label} dash />
         ))}
+        <span className="ml-auto font-mono text-micro uppercase tracking-wider text-textMuted">Log time</span>
       </div>
 
-      {/* Curves */}
-      <div className="flex-grow min-h-0 relative">
-        <svg
-          viewBox={`0 0 ${W} ${H}`}
-          preserveAspectRatio="none"
-          className="w-full h-full cursor-crosshair"
-          role="img"
-          aria-label="Implied volatility term structure — ATM IV versus days to expiry"
-          onMouseMove={onMove}
-          onMouseLeave={() => setH(null)}
-        >
-          {[0.25, 0.5, 0.75].map(f => (
-            <line key={f} x1="0" y1={H * f} x2={W} y2={H * f} stroke="rgba(255,255,255,0.04)" strokeWidth="0.3" />
-          ))}
-          {GHOSTS.map(g => (
-            <path
-              key={g.key}
-              d={pathFor(data[g.key], min, span)}
-              fill="none"
-              stroke={g.stroke}
-              strokeWidth="0.5"
-              strokeDasharray={g.dash}
-              vectorEffect="non-scaling-stroke"
+      <div
+        className="flex-grow min-h-0"
+        role="img"
+        aria-label={`Implied volatility term structure: at-the-money implied vol from ${rows[0].now.toFixed(1)}% at ${rows[0].dte} days to ${rows[rows.length - 1].now.toFixed(1)}% at ${rows[rows.length - 1].dte} days, with the curve as it stood a day, a week and a month ago behind it.`}
+      >
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={rows} margin={chartMargin}>
+            <CartesianGrid stroke={GRID} />
+            <XAxis
+              {...categoryAxis}
+              type="number"
+              dataKey="dte"
+              scale="log"
+              domain={['dataMin', 'dataMax']}
+              ticks={ticks}
+              tickFormatter={(v: number) => `${v}d`}
             />
-          ))}
-          <path d={pathFor(data.current, min, span)} fill="none" className="stroke-textPrimary" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-          {h && (
-            <line x1={cx(h.i)} x2={cx(h.i)} y1={0} y2={H} stroke="rgba(255,255,255,0.35)" strokeWidth="0.4" vectorEffect="non-scaling-stroke" />
-          )}
-        </svg>
-        <span className="absolute left-0 top-0 font-mono text-micro tnum text-textMuted">{max.toFixed(0)}%</span>
-        <span className="absolute left-0 bottom-0 font-mono text-micro tnum text-textMuted">{min.toFixed(0)}%</span>
-        {h && (
-          <HoverReadout x={h.x} y={h.y}>
-            <div className="font-mono text-micro uppercase tracking-widest text-textMuted">{data.current[h.i].dte}D</div>
-            <div className="mt-0.5 font-mono text-data font-bold tnum text-textPrimary">{data.current[h.i].iv.toFixed(2)}%</div>
-            <div className="mt-0.5 flex items-center gap-2.5 font-mono text-micro tnum text-textSecondary">
-              {data.dayAgo[h.i] && <span>1D {data.dayAgo[h.i].iv.toFixed(1)}%</span>}
-              {data.weekAgo[h.i] && <span>1W {data.weekAgo[h.i].iv.toFixed(1)}%</span>}
-              {data.monthAgo[h.i] && <span>1M {data.monthAgo[h.i].iv.toFixed(1)}%</span>}
-            </div>
-          </HoverReadout>
-        )}
-      </div>
-      <div className="flex justify-between font-mono text-micro tnum text-textMuted select-none">
-        {[7, 90, 180, 270, 360].map(t => (
-          <span key={t}>{t}d</span>
-        ))}
+            <YAxis {...valueAxis} domain={domain} ticks={niceTicks(domain[0], domain[1])} tickFormatter={axisVol} width={40} />
+            <Tooltip
+              cursor={CURSOR}
+              content={
+                <ChartTip<Row>
+                  render={r => {
+                    const dDay = r.now - r.dayAgo;
+                    const dMonth = r.now - r.monthAgo;
+                    const vsFront = r.now - front.now;
+                    return (
+                      <>
+                        <TipHead sub={`${r.dte}D`}>ATM implied</TipHead>
+                        <TipRow label="Now" value={`${r.now.toFixed(2)}%`} />
+                        <TipRow
+                          label="Since yesterday"
+                          value={`${dDay >= 0 ? '+' : ''}${dDay.toFixed(2)} pt`}
+                          tone={Math.abs(dDay) < 0.05 ? 'text-textMuted' : 'text-textSecondary'}
+                        />
+                        <TipSeries color={VINTAGE[1].color} label="1W ago" value={`${r.weekAgo.toFixed(2)}%`} />
+                        <TipSeries color={VINTAGE[0].color} label="1M ago" value={`${r.monthAgo.toFixed(2)}%`} />
+                        <TipRow label="vs 30d point" value={`${vsFront >= 0 ? '+' : ''}${vsFront.toFixed(2)} pt`} tone="text-textMuted" />
+                        <TipNote>
+                          {Math.abs(dMonth) < 0.25
+                            ? 'This tenor has barely moved in a month.'
+                            : `This tenor is ${Math.abs(dMonth).toFixed(1)} pt ${dMonth > 0 ? 'higher' : 'lower'} than a month ago.`}{' '}
+                          {Math.abs(vsFront) < 0.25
+                            ? 'It prices about the same vol as the 30-day point.'
+                            : vsFront > 0
+                              ? 'Longer-dated vol is bid over the front here — the calm shape.'
+                              : 'It sits under the 30-day point, the shape of near-term stress.'}
+                        </TipNote>
+                      </>
+                    );
+                  }}
+                />
+              }
+            />
+            {VINTAGE.map(v => (
+              <Line
+                key={v.key}
+                type="monotone"
+                dataKey={v.key}
+                stroke={v.color}
+                strokeDasharray={v.dash}
+                strokeWidth={1.2}
+                dot={false}
+                activeDot={false}
+                isAnimationActive={false}
+              />
+            ))}
+            <Line
+              type="monotone"
+              dataKey="now"
+              stroke="#ededed"
+              strokeWidth={1.9}
+              dot={false}
+              activeDot={{ r: 3, fill: '#ededed', stroke: 'none' }}
+              isAnimationActive={false}
+            />
+          </LineChart>
+        </ResponsiveContainer>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 pt-2 border-t border-borderSubtle">
         {stats.map(s => (
           <span key={s.label} className="min-w-0">

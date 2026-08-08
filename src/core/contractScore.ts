@@ -20,8 +20,8 @@
 import Simulator from './simulator';
 import { expiryFor } from './calendar';
 import { yearsToExpiry } from './optionTime';
+import { math } from './mathProvider';
 import { buildDarkPoolView } from '../data/darkpool';
-import { tickerSentiment } from '../data/news';
 import type { MarketSnapshot } from '../types/market';
 
 export type Horizon = 'LOTTO' | 'WEEKLIES' | 'SWINGS' | 'LEAPS';
@@ -86,7 +86,7 @@ export const HORIZONS: { key: Horizon; label: string; blurb: string }[] = [
   {
     key: 'SWINGS',
     label: 'Swings',
-    blurb: '2–6 week holds — the balanced sleeve: math, flow and news all get a vote.',
+    blurb: '2–6 week holds — the balanced sleeve: math and flow both get a vote.',
   },
   {
     key: 'LEAPS',
@@ -97,44 +97,37 @@ export const HORIZONS: { key: Horizon; label: string; blurb: string }[] = [
 
 // ---- Black-Scholes ------------------------------------------------------------
 
-function normCdf(x: number): number {
-  // Abramowitz–Stegun 7.1.26 via erf
-  const t = 1 / (1 + 0.3275911 * Math.abs(x) / Math.SQRT2);
-  const erf =
-    1 -
-    (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) *
-      t *
-      Math.exp(-(x * x) / 2);
-  return 0.5 * (1 + Math.sign(x) * erf);
-}
-
-interface BsOut {
+export interface BsOut {
   price: number;
   delta: number;
   /** Per-day theta, absolute dollars */
   thetaDay: number;
 }
 
-function blackScholes(spot: number, strike: number, ivAnnual: number, dte: number, right: 'C' | 'P'): BsOut {
-  // Shared with data/compass.ts. The two used to floor a 0DTE differently — half
-  // a calendar day here, half a session there — so the same contract carried two
-  // prices on the Weigher screen at once. See core/optionTime.ts.
-  const T = yearsToExpiry(dte);
-  const r = 0.045;
-  const sq = ivAnnual * Math.sqrt(T);
-  const d1 = (Math.log(spot / strike) + (r + (ivAnnual * ivAnnual) / 2) * T) / sq;
-  const d2 = d1 - sq;
-  const pdf = Math.exp(-(d1 * d1) / 2) / Math.sqrt(2 * Math.PI);
-  const disc = Math.exp(-r * T);
+/**
+ * The ONE option pricer the desks quote through — now a thin adapter over the
+ * MATH SEAM (core/mathProvider.ts) rather than its own copy of Black-Scholes.
+ *
+ * data/compass.ts (the setups board and the chain) used to carry a normal-shaped
+ * estimator that disagreed with this by up to ~2× on the same contract;
+ * estimatePremium delegates here, so every surface quotes one mid
+ * (compassCoherence.test.ts). The two also floored a 0DTE differently, which is
+ * settled in core/optionTime.ts and now expressed as math.yearsToExpiry.
+ *
+ * What stays HERE rather than in the seam: the $0.02 quote floor. That is a
+ * market convention (an option does not quote below a penny-ish tick), not a
+ * property of the model, so replacing the math must not silently remove it.
+ */
+export const QUOTE_FLOOR = 0.02;
 
-  if (right === 'C') {
-    const price = spot * normCdf(d1) - strike * disc * normCdf(d2);
-    const theta = (-(spot * pdf * ivAnnual) / (2 * Math.sqrt(T)) - r * strike * disc * normCdf(d2)) / 365;
-    return { price: Math.max(price, 0.02), delta: normCdf(d1), thetaDay: theta };
-  }
-  const price = strike * disc * normCdf(-d2) - spot * normCdf(-d1);
-  const theta = (-(spot * pdf * ivAnnual) / (2 * Math.sqrt(T)) + r * strike * disc * normCdf(-d2)) / 365;
-  return { price: Math.max(price, 0.02), delta: normCdf(d1) - 1, thetaDay: theta };
+export function blackScholes(spot: number, strike: number, ivAnnual: number, dte: number, right: 'C' | 'P'): BsOut {
+  const t = math.yearsToExpiry(dte);
+  const g = math.optionGreeks(spot, strike, ivAnnual, t, right);
+  return {
+    price: Math.max(math.optionPrice(spot, strike, ivAnnual, t, right), QUOTE_FLOOR),
+    delta: g.delta,
+    thetaDay: g.theta,
+  };
 }
 
 // ---- candidate generation --------------------------------------------------------
@@ -149,10 +142,14 @@ const HORIZON_SHAPE: Record<Horizon, { dtes: number[]; otm: number[] }> = {
 
 const WEIGHTS: Record<Horizon, Record<string, number>> = {
   // 0DTE: the math is a coin-flip, so the tape (flow) and decay/liquidity carry the vote
-  LOTTO: { math: 0.16, decay: 0.24, vol: 0.1, flow: 0.28, news: 0.06, liq: 0.16 },
-  WEEKLIES: { math: 0.24, decay: 0.26, vol: 0.08, flow: 0.22, news: 0.08, liq: 0.12 },
-  SWINGS: { math: 0.22, decay: 0.14, vol: 0.14, flow: 0.2, news: 0.16, liq: 0.14 },
-  LEAPS: { math: 0.18, decay: 0.04, vol: 0.28, flow: 0.12, news: 0.22, liq: 0.16 },
+  // The news lean is gone (no news wire on any feed tier). Each horizon's
+  // remaining five weights are renormalised to sum to 1 so the composite still
+  // spans 0-100 — the news weight is not dropped as dead weight, it is
+  // redistributed proportionally across the survivors.
+  LOTTO: { math: 0.17, decay: 0.255, vol: 0.106, flow: 0.299, liq: 0.17 },
+  WEEKLIES: { math: 0.261, decay: 0.283, vol: 0.087, flow: 0.239, liq: 0.13 },
+  SWINGS: { math: 0.262, decay: 0.167, vol: 0.167, flow: 0.238, liq: 0.166 },
+  LEAPS: { math: 0.231, decay: 0.051, vol: 0.359, flow: 0.154, liq: 0.205 },
 };
 
 // Theta scored against a horizon-realistic ceiling — 0DTE burns a huge % of
@@ -176,7 +173,6 @@ export function horizonForDte(dte: number): Horizon {
 /** Shared per-name context — one read per build, reused across every candidate. */
 interface ScoreCtx {
   dp: ReturnType<typeof buildDarkPoolView>;
-  news: number;
   /** The name's own volatility — the reference every vol read on the desk is against. */
   nameIv: number;
   baseIv: number;
@@ -188,7 +184,6 @@ interface ScoreCtx {
 function buildScoreCtx(snapshot: MarketSnapshot): ScoreCtx {
   const { ticker, spot, chain, indicators } = snapshot;
   const dp = buildDarkPoolView(snapshot);
-  const news = tickerSentiment(ticker);
   /*
     The level options are priced at is the NAME's, not this module's opinion of
     it.
@@ -220,7 +215,7 @@ function buildScoreCtx(snapshot: MarketSnapshot): ScoreCtx {
   // even past the chain window's edge (LEAPS reach further OTM than it holds).
   const sorted = [...chain].sort((a, b) => a.strike - b.strike);
   const step = sorted.length > 1 ? Math.abs(sorted[1].strike - sorted[0].strike) : Math.max(spot * 0.005, 0.5);
-  return { dp, news, nameIv, baseIv, trendUp, rsi, step };
+  return { dp, nameIv, baseIv, trendUp, rsi, step };
 }
 
 /** Weigh one concrete contract with the full factor stack. This is the single
@@ -236,7 +231,7 @@ function scoreCandidate(
 ): WeighedContract {
   const { ticker, spot, chain } = snapshot;
   const weights = WEIGHTS[horizon];
-  const { dp, news, nameIv, baseIv, trendUp, rsi, step } = ctx;
+  const { dp, nameIv, baseIv, trendUp, rsi, step } = ctx;
 
   const strike = Math.max(step, Math.round(strikeInput / step) * step);
   const node = chain.reduce(
@@ -251,7 +246,7 @@ function scoreCandidate(
   const mid = Number(bs.price.toFixed(2));
   const thetaPerDayPct = (Math.abs(bs.thetaDay) / mid) * 100;
   // OI thins out the further the strike sits past the chain window
-  const baseOi = node ? (right === 'C' ? node.callOI : node.putOI) : 500;
+  const baseOi = node ? (right === 'C' ? node.callOI.value : node.putOI.value) : 500;
   const oiCount = Math.max(50, Math.round(baseOi * Math.exp((-Math.abs(strike - (node?.strike ?? strike)) / spot) * 24)));
   const spreadPct = clamp((6 - Math.log10(Math.max(oiCount, 10)) * 1.4) * (dte > 180 ? 1.5 : 1), 0.4, 6);
 
@@ -317,14 +312,6 @@ function scoreCandidate(
         ? `Smart-money flow leans against ${right === 'C' ? 'calls' : 'puts'} here — you'd be fading the desks.`
         : 'Flow is mixed — no institutional wind either way.';
 
-  const newsScore = Math.round(clamp(50 + news * 48 * dirSign, 4, 96));
-  const newsDetail =
-    Math.abs(news) < 0.12
-      ? 'Quiet tape on the name — news is a non-factor.'
-      : newsScore >= 55
-        ? 'The headline tape supports the direction.'
-        : 'Headline risk points the other way.';
-
   const liqScore = Math.round(clamp(100 - spreadPct * 13 + Math.log10(Math.max(oiCount, 10)) * 6, 4, 98));
   const liqDetail =
     liqScore >= 55
@@ -339,7 +326,6 @@ function scoreCandidate(
     { key: 'decay', label: 'Theta burden', score: decayScore, weight: weights.decay, detail: decayDetail },
     { key: 'vol', label: 'Vol pricing', score: volScore, weight: weights.vol, detail: volDetail },
     { key: 'flow', label: 'Flow & dark pool', score: flowScore, weight: weights.flow, detail: flowDetail },
-    { key: 'news', label: 'News lean', score: newsScore, weight: weights.news, detail: newsDetail },
     { key: 'liq', label: 'Liquidity', score: liqScore, weight: weights.liq, detail: liqDetail },
   ];
 

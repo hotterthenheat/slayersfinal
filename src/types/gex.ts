@@ -189,7 +189,29 @@ export interface DeltaByPrice {
   value: number;
 }
 
+/**
+ * Options delta-equivalent flow — the index stand-in for share volume (P4.4). A
+ * cash index has no shares to measure, but its options do, and Σ(delta × OI ×
+ * 100) expresses that book as an underlying-equivalent delta exposure.
+ */
+export interface DeltaEquivFlow {
+  /** $ delta-equivalent from the call book — long-delta side (positive). */
+  callDollars: number;
+  /** $ delta-equivalent from the put book — short-delta side (negative). */
+  putDollars: number;
+  /** Net options-implied delta, dollars (callDollars + putDollars). */
+  netDollars: number;
+  /** Net underlying-equivalent shares = netDollars / spot. */
+  netShares: number;
+  /** Per-strike net $ delta-equivalent, price-descending like the ladder. */
+  byStrike: { strike: number; value: number }[];
+}
+
 export interface OrderFlowData {
+  /** False when the symbol has no share volume (a cash index): the share-flow
+      fields below are placeholders. Indices carry `deltaEquiv` instead, the
+      options delta-equivalent stand-in; equities/ETFs leave it null. */
+  available: boolean;
   cumulativeDelta: DeltaPoint[];
   deltaByPrice: DeltaByPrice[];
   buyVolume: number;
@@ -199,6 +221,9 @@ export interface OrderFlowData {
   vwap: number;
   /** Point of control — price bucket with the most traded volume */
   poc: number;
+  /** Cash-index delta-equivalent flow (P4.4). Present when `available` is false
+      for an index; null for equities/ETFs, which report real share flow. */
+  deltaEquiv?: DeltaEquivFlow | null;
 }
 
 export interface MarketNote {

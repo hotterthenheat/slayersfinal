@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
+import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ReferenceArea, ResponsiveContainer } from 'recharts';
 import { Activity, GitCompareArrows, Layers, TrendingDown } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildStateDensity, type StateDensityView, type MassShift, type SkewLabel } from '../../data/statedensity';
@@ -6,9 +7,9 @@ import type { MarketSnapshot } from '../../types/market';
 import Panel from '../ui/Panel';
 import StatCard from '../ui/StatCard';
 import MetricGrid from '../ui/MetricGrid';
-import { BULL, BEAR, SPOT, MUTED_INK } from './palette';
-import HoverReadout from '../ui/HoverReadout';
-import { svgHoverIndex } from '../ui/svgHover';
+import { BULL, BEAR, SPOT, MUTED_INK, FOCUS } from './palette';
+import { ChartTip, TipHead, TipRow, TipSeries, TipNote } from '../charts/ChartTip';
+import { GRID, CURSOR, valueAxis, categoryAxis, axisVol, paddedDomain, niceTicks } from '../charts/chartTheme';
 import SignalBadge from '../ui/SignalBadge';
 import PriceThresholdOdds from './PriceThresholdOdds';
 import type { Tone } from '../ui/tones';
@@ -29,86 +30,125 @@ const skewTone: Record<SkewLabel, Tone> = {
   STRESSED: 'bear',
 };
 
-/** Risk-neutral terminal density: implied vs realized, spot marker, shaded 2σ tails. */
+interface DensityRow {
+  price: number;
+  implied: number;
+  realized: number;
+  cdf: number;
+}
+
+/*
+  Risk-neutral terminal density: implied vs realized, spot marker, shaded 2-sigma
+  tails. On recharts, house chart theme.
+
+  The implied area was lilac (rgba(151,136,196,·)), the last of the off-palette
+  inks in this file — a modelled distribution takes holo-silver like every other
+  model output. Realized stays a dotted grey overlay: same shape language, no
+  claim to being the subject.
+*/
 const DensityChart = ({ view }: { view: StateDensityView }) => {
-  const W = 560;
-  const H = 190;
   const { density: D, realizedDensity: R, sigma2, forward, spot } = view;
-  const [hover, setHover] = useState<{ i: number; x: number; y: number } | null>(null);
-  const lo = D[0].price;
-  const hi = D[D.length - 1].price;
-  const span = hi - lo || 1;
-  const maxD = Math.max(...D.map(p => p.density), ...R.map(p => p.density)) || 1;
-  const X = (p: number): number => ((p - lo) / span) * W;
-  const Y = (d: number): number => H - (d / maxD) * (H - 30) - 10;
-
-  const impLine = D.map((p, i) => `${i ? 'L' : 'M'}${X(p.price).toFixed(1)},${Y(p.density).toFixed(1)}`).join(' ');
-  const impArea = `${impLine} L${X(hi).toFixed(1)},${H} L${X(lo).toFixed(1)},${H} Z`;
-  const realLine = R.map((p, i) => `${i ? 'L' : 'M'}${X(p.price).toFixed(1)},${Y(p.density).toFixed(1)}`).join(' ');
-
-  const lTail = X(sigma2[0]);
-  const rTail = X(sigma2[1]);
-  const sx = X(spot);
-  const fx = X(forward);
-  const hp = hover ? D[hover.i] : null;
-  const hr = hover ? R[hover.i] : null;
+  const rows: DensityRow[] = D.map((p, i) => ({
+    price: p.price,
+    implied: p.density,
+    realized: R[i]?.density ?? 0,
+    cdf: p.cdf,
+  }));
+  const lo = rows[0].price;
+  const hi = rows[rows.length - 1].price;
 
   return (
-    <>
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      className="w-full cursor-crosshair"
-      style={{ height: H }}
-      preserveAspectRatio="none"
+    <div
+      style={{ height: 208 }}
+      className="w-full"
       role="img"
-      aria-label="Risk-neutral terminal-price density — implied versus realized"
-      onMouseMove={e => setHover({ i: svgHoverIndex(e, D.length), x: e.clientX, y: e.clientY })}
-      onMouseLeave={() => setHover(null)}
+      aria-label={`Risk-neutral terminal-price density for ${view.ticker} over ${view.horizonDays} days, implied against realized, centred on a forward of ${forward.toFixed(0)} with spot at ${spot.toFixed(2)}. Two-sigma bounds at ${sigma2[0].toFixed(0)} and ${sigma2[1].toFixed(0)}.`}
     >
-      {/* shaded 2σ tails */}
-      <rect x={0} y={0} width={Math.max(0, lTail)} height={H} fill="rgba(255,59,48,0.06)" />
-      <rect x={rTail} y={0} width={Math.max(0, W - rTail)} height={H} fill="rgba(48,209,88,0.06)" />
-      {/* implied density */}
-      <path d={impArea} fill="rgba(151,136,196,0.12)" />
-      <path d={impLine} fill="none" className="stroke-textPrimary" strokeWidth={1.75} vectorEffect="non-scaling-stroke" />
-      {/* realized density — dotted overlay */}
-      <path d={realLine} fill="none" stroke="#8f8f8f" strokeWidth={1.1} strokeDasharray="2 2.5" vectorEffect="non-scaling-stroke" />
-      {/* forward marker */}
-      <line x1={fx} x2={fx} y1={0} y2={H} stroke={MUTED_INK} strokeOpacity={0.7} strokeWidth={1} strokeDasharray="3 3" />
-      <text x={fx + 3} y={12} fontSize={10} fill={MUTED_INK} fontFamily="monospace">FWD {forward.toFixed(0)}</text>
-      {/* spot marker — white, "where the market is" */}
-      <line x1={sx} x2={sx} y1={0} y2={H} stroke={SPOT} strokeOpacity={0.85} strokeWidth={1.25} />
-      <text x={sx + 3} y={H - 5} fontSize={10} fill={SPOT} fontFamily="monospace">SPOT {spot.toFixed(2)}</text>
-      {/* 2σ tick labels */}
-      <text x={Math.max(2, lTail - 2)} y={H - 5} fontSize={10} fill={BEAR} fontFamily="monospace" textAnchor="end">−2σ</text>
-      <text x={Math.min(W - 2, rTail + 2)} y={12} fontSize={10} fill={BULL} fontFamily="monospace">+2σ</text>
-      {hp && (
-        <line x1={X(hp.price)} x2={X(hp.price)} y1={0} y2={H} stroke="rgba(255,255,255,0.25)" strokeWidth={1} vectorEffect="non-scaling-stroke" />
-      )}
-    </svg>
-    {hover && hp && (
-      <HoverReadout x={hover.x} y={hover.y}>
-        <div className="font-mono text-caption font-bold text-textPrimary tnum">{hp.price.toFixed(2)}</div>
-        <div className="font-mono text-micro text-textMuted uppercase tracking-wider">
-          terminal price · {signed(((hp.price - spot) / spot) * 100, 1)}% vs spot
-        </div>
-        <div className="mt-1 flex flex-col gap-0.5 font-mono text-micro tnum">
-          <div className="flex items-center gap-3">
-            <span className="text-textMuted uppercase tracking-wider">implied</span>
-            <span className="ml-auto text-textPrimary">{hp.density.toFixed(4)}</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-textMuted uppercase tracking-wider">realized</span>
-            <span className="ml-auto text-textPrimary">{(hr?.density ?? 0).toFixed(4)}</span>
-          </div>
-        </div>
-        <div className="mt-1 flex items-center gap-2.5 font-mono text-micro font-semibold tnum">
-          <span className="text-bear">P&lt; {(hp.cdf * 100).toFixed(1)}%</span>
-          <span className="text-bull">P&gt; {((1 - hp.cdf) * 100).toFixed(1)}%</span>
-        </div>
-      </HoverReadout>
-    )}
-    </>
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={rows} margin={{ top: 18, right: 6, bottom: 2, left: 0 }}>
+          <CartesianGrid stroke={GRID} vertical={false} />
+          <XAxis
+            {...categoryAxis}
+            type="number"
+            dataKey="price"
+            domain={[lo, hi]}
+            tickFormatter={(v: number) => v.toFixed(0)}
+          />
+          {/* The density value carries no unit a reader can act on; the read-out
+              gives the probability instead. Axis kept for layout only. */}
+          <YAxis hide domain={[0, 'dataMax']} />
+          {/* Beyond two sigma either way — the tails the panel grades. */}
+          <ReferenceArea x1={lo} x2={sigma2[0]} fill={BEAR} fillOpacity={0.06} />
+          <ReferenceArea x1={sigma2[1]} x2={hi} fill={BULL} fillOpacity={0.06} />
+          <ReferenceLine
+            x={forward}
+            stroke={MUTED_INK}
+            strokeOpacity={0.7}
+            strokeDasharray="3 3"
+            label={{ value: `FWD ${forward.toFixed(0)}`, position: 'insideTopLeft', fill: MUTED_INK, fontSize: 10, fontFamily: 'JetBrains Mono, monospace' }}
+          />
+          <ReferenceLine
+            x={spot}
+            stroke={SPOT}
+            strokeOpacity={0.85}
+            strokeWidth={1.25}
+            label={{ value: `SPOT ${spot.toFixed(2)}`, position: 'insideBottomRight', fill: SPOT, fontSize: 10, fontFamily: 'JetBrains Mono, monospace' }}
+          />
+          <Tooltip
+            cursor={CURSOR}
+            content={
+              <ChartTip<DensityRow>
+                render={r => {
+                  const below = r.cdf * 100;
+                  const rich = r.implied > r.realized;
+                  const inTail = r.price < sigma2[0] || r.price > sigma2[1];
+                  return (
+                    <>
+                      <TipHead sub={`${signed(((r.price - spot) / spot) * 100, 1)}% vs spot`}>{r.price.toFixed(2)}</TipHead>
+                      <TipRow label="Settles below" value={`${below.toFixed(1)}%`} tone="text-bear" />
+                      <TipRow label="Settles above" value={`${(100 - below).toFixed(1)}%`} tone="text-bull" />
+                      <TipSeries color={FOCUS} label="Implied density" value={r.implied.toFixed(4)} />
+                      <TipSeries color={MUTED_INK} label="Realized density" value={r.realized.toFixed(4)} />
+                      <TipNote>
+                        {inTail
+                          ? 'Past two sigma. The market prices this as a tail, and the two curves usually disagree most out here.'
+                          : rich
+                            ? 'Options price MORE weight on this outcome than the tape has actually delivered around it.'
+                            : 'Options price LESS weight on this outcome than the tape has actually delivered around it.'}
+                      </TipNote>
+                    </>
+                  );
+                }}
+              />
+            }
+          />
+          <Area
+            type="monotone"
+            dataKey="implied"
+            stroke={FOCUS}
+            strokeWidth={1.75}
+            fill={FOCUS}
+            fillOpacity={0.12}
+            dot={false}
+            activeDot={{ r: 3, fill: FOCUS, stroke: 'none' }}
+            isAnimationActive={false}
+          />
+          {/* Realized overlaid as a dotted line, never filled — it is the check
+              on the implied curve, not a second subject competing with it. */}
+          <Area
+            type="monotone"
+            dataKey="realized"
+            stroke={MUTED_INK}
+            strokeWidth={1.1}
+            strokeDasharray="2 2.5"
+            fill="none"
+            dot={false}
+            activeDot={{ r: 2.5, fill: MUTED_INK, stroke: 'none' }}
+            isAnimationActive={false}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
   );
 };
 
@@ -145,33 +185,72 @@ const MassRow = ({ m }: { m: MassShift }) => {
   );
 };
 
-/** Forward-vol curve — the vol priced between tenors, not just to them. */
+/*
+  Forward-vol curve — the vol priced BETWEEN tenors, not just to them. On
+  recharts.
+
+  This chart previously had no hover at all, on a panel whose entire point is
+  that forward vol and spot vol diverge: the reader could see two lines cross
+  and had no way to ask by how much.
+*/
 const ForwardVolChart = ({ view }: { view: StateDensityView }) => {
-  const W = 520;
-  const H = 150;
   const pts = view.forwardVols;
-  const vols = pts.flatMap(p => [p.forwardVol, p.spotVol]);
-  const vMin = Math.min(...vols) * 0.9;
-  const vMax = Math.max(...vols) * 1.08;
-  const vSpan = vMax - vMin || 1;
-  const X = (i: number): number => 14 + (i / Math.max(1, pts.length - 1)) * (W - 28);
-  const Y = (v: number): number => H - 22 - ((v - vMin) / vSpan) * (H - 44);
-  const fwdLine = pts.map((p, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(p.forwardVol).toFixed(1)}`).join(' ');
-  const spotLine = pts.map((p, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(p.spotVol).toFixed(1)}`).join(' ');
+  const domain = paddedDomain(pts.flatMap(p => [p.forwardVol, p.spotVol]), 0.1);
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none" role="img" aria-label="Forward-vol curve — volatility priced between tenors">
-      <path d={spotLine} fill="none" stroke={MUTED_INK} strokeWidth={1.1} strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
-      <path d={fwdLine} fill="none" className="stroke-textPrimary" strokeWidth={1.75} vectorEffect="non-scaling-stroke" />
-      {pts.map((p, i) => (
-        <g key={p.label}>
-          <circle cx={X(i)} cy={Y(p.forwardVol)} r={2.4} className="fill-textPrimary" />
-          <text x={X(i)} y={H - 6} fontSize={10} fill={MUTED_INK} fontFamily="monospace" textAnchor="middle">{p.label}</text>
-          <text x={X(i)} y={Y(p.forwardVol) - 6} fontSize={10} className="fill-textPrimary" fontFamily="monospace" textAnchor="middle">
-            {p.forwardVol.toFixed(1)}
-          </text>
-        </g>
-      ))}
-    </svg>
+    <div
+      style={{ height: 168 }}
+      className="w-full"
+      role="img"
+      aria-label={`Forward volatility priced between tenors, against spot volatility to each tenor, across ${pts.map(p => p.label).join(', ')}.`}
+    >
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={pts} margin={{ top: 14, right: 6, bottom: 2, left: 0 }}>
+          <CartesianGrid stroke={GRID} vertical={false} />
+          <XAxis {...categoryAxis} dataKey="label" interval={0} />
+          <YAxis {...valueAxis} domain={domain} ticks={niceTicks(domain[0], domain[1])} tickFormatter={axisVol} width={40} />
+          <Tooltip
+            cursor={CURSOR}
+            content={
+              <ChartTip<(typeof pts)[number]>
+                render={p => {
+                  const spread = p.forwardVol - p.spotVol;
+                  return (
+                    <>
+                      <TipHead sub="tenor">{p.label}</TipHead>
+                      <TipSeries color={SPOT} label="Forward vol" value={`${p.forwardVol.toFixed(2)}%`} />
+                      <TipSeries color={MUTED_INK} label="Spot vol" value={`${p.spotVol.toFixed(2)}%`} />
+                      <TipRow
+                        label="Spread"
+                        value={`${spread >= 0 ? '+' : ''}${spread.toFixed(2)} pt`}
+                        tone={Math.abs(spread) < 0.1 ? 'text-textMuted' : 'text-textSecondary'}
+                      />
+                      <TipNote>
+                        {Math.abs(spread) < 0.1
+                          ? 'Forward and spot vol agree at this tenor — the curve is priced flat through it.'
+                          : spread > 0
+                            ? 'The market prices MORE vol in the window between tenors than the running average to this one implies. Buying the calendar here is paying up for the gap.'
+                            : 'The market prices LESS vol in the window between tenors than the running average implies — the front is carrying the level.'}
+                      </TipNote>
+                    </>
+                  );
+                }}
+              />
+            }
+          />
+          <Line type="monotone" dataKey="spotVol" stroke={MUTED_INK} strokeWidth={1.1} strokeDasharray="3 3" dot={false} isAnimationActive={false} />
+          <Line
+            type="monotone"
+            dataKey="forwardVol"
+            stroke={SPOT}
+            strokeWidth={1.75}
+            dot={{ r: 2.4, fill: SPOT, stroke: 'none' }}
+            activeDot={{ r: 3.4, fill: SPOT, stroke: 'none' }}
+            isAnimationActive={false}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
   );
 };
 

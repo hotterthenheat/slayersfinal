@@ -30,7 +30,6 @@ const intentTone: Record<DarkPoolIntent, Tone> = {
  */
 const execTone: Record<DarkPoolExecution, Tone> = {
   'BLOCK CROSS': 'neutral',
-  'LIS CROSS': 'select',
   MIDPOINT: 'bull',
   ICEBERG: 'info',
   'VWAP SLICE': 'neutral',
@@ -41,7 +40,6 @@ const execTone: Record<DarkPoolExecution, Tone> = {
 const EXEC_OPTIONS = [
   { value: 'ALL', label: 'All' },
   { value: 'BLOCK CROSS', label: 'Blocks' },
-  { value: 'LIS CROSS', label: 'LIS' },
   { value: 'MIDPOINT', label: 'Midpoint' },
   { value: 'ICEBERG', label: 'Iceberg' },
   { value: 'VWAP SLICE', label: 'Slices' },
@@ -483,11 +481,6 @@ const DarkPool = () => {
           themselves three screens down, which is backwards for a tape — the
           rows are the evidence and the verdict is the summary of them. */}
       <MetricGrid min="170px">
-        <StatCard
-          label="Off-exchange share"
-          value={`${view.dpSharePct.toFixed(1)}%`}
-          sub="of today's volume printed away from the lit book"
-        />
         <StatCard label="Block notional" value={fmtUsd(view.totalNotional)} sub={`${view.prints.length} prints · ${view.prints.filter(p => p.notional >= 1_000_000).length} over $1M`} />
         <StatCard
           label="Largest block"

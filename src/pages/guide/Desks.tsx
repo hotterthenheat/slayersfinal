@@ -6,12 +6,12 @@ import {
   Crosshair,
   Sigma,
   BarChart3,
-  Newspaper,
   CalendarClock,
   BookMarked,
   type LucideIcon,
 } from 'lucide-react';
 import { Card, Points } from './parts';
+import { groupOfPath } from '../../components/layout/nav';
 
 // The rule that governs this page now lives in ./parts.tsx, which every guide
 // page imports. It was here, and being here is why Overview.tsx and Faq.tsx
@@ -35,7 +35,7 @@ const DESKS: DeskDoc[] = [
     to: '/pulse',
     tagline: 'Your customizable workspace — the cockpit you build once and work from.',
     shows: [
-      'A grid of panels you arrange yourself: chart, GEX heatmap, dealer positioning, exposure matrix, order flow, the options tape, dark pool, the liquidity map and more.',
+      'A grid of panels you arrange yourself: chart, GEX heatmap, dealer positioning, exposure matrix, order flow, the options tape, dark pool, the swing map and more.',
       'Each panel is a compact version of a full desk, all following the active ticker (or its own ticker, if you pin one).',
       <>A separate <span className="text-textPrimary">Data connections</span> tray holds modules that stay dark until a
       feed is wired up — DOM ladder, footprint, true time &amp; sales. They name the feed they need instead of drawing
@@ -74,7 +74,7 @@ const DESKS: DeskDoc[] = [
       <>Each panel has its own ticker field, so you can watch SPY and NVDA side by side.</>,
     ],
     example: (
-      <>Load the <span className="text-textPrimary">Scalper</span> view for chart + order flow + the liquidity map.
+      <>Load the <span className="text-textPrimary">Scalper</span> view for chart + order flow.
       Watch cumulative delta against price — when delta pushes up but price stalls at a call wall, that is
       absorption.</>
     ),
@@ -234,7 +234,6 @@ const DESKS: DeskDoc[] = [
 
 const RESEARCH: { icon: LucideIcon; name: string; to: string; blurb: string }[] = [
   { icon: BarChart3, name: 'Stocks', to: '/stocks', blurb: 'Equity picks and sector rotation — which groups are leading or lagging.' },
-  { icon: Newspaper, name: 'News', to: '/news', blurb: 'Headlines paired with a read on the likely reaction.' },
   { icon: CalendarClock, name: 'Earnings', to: '/earnings', blurb: 'The slate ahead, each print read QUALIFIED / RICH / NO EDGE against its implied move.' },
   { icon: BookMarked, name: 'Tracker', to: '/tracker', blurb: 'Your tracked setups and trade journal, saved in your browser.' },
 ];
@@ -248,14 +247,22 @@ const Block = ({ title, children }: { title: string; children: React.ReactNode }
 
 const Desks = () => (
   <div className="flex flex-col gap-5">
-    {DESKS.map(d => (
-      <Card key={d.name} className="p-5 flex flex-col gap-4">
+    {DESKS.map(d => {
+      // The group is named in text beside the desk, so a reader scrolling can
+      // tell a Read desk from a Scan desk without reading the whole card.
+      const group = groupOfPath(d.to);
+      return (
+      <Card key={d.name} className="relative p-5 flex flex-col gap-4 overflow-hidden">
+        <span aria-hidden className="holo-bar absolute inset-y-0 left-0 w-[2px]" />
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2.5">
-            <span className="flex h-8 w-8 items-center justify-center rounded-md border border-borderSubtle bg-inset">
-              <d.icon className="w-4 h-4 text-textSecondary" />
+            <span className="holo-border flex h-8 w-8 items-center justify-center rounded-md">
+              <d.icon className="w-4 h-4 text-select" />
             </span>
             <span className="font-mono text-read font-bold uppercase tracking-wider text-textPrimary">{d.name}</span>
+            {group && (
+              <span className="font-mono text-micro uppercase tracking-widest text-textMuted">{group}</span>
+            )}
           </div>
           <Link
             to={d.to}
@@ -282,7 +289,8 @@ const Desks = () => (
           </Block>
         </div>
       </Card>
-    ))}
+      );
+    })}
 
     <div>
       <div className="font-mono text-label font-semibold uppercase tracking-widest text-textMuted mb-3">
@@ -293,8 +301,9 @@ const Desks = () => (
           <Link
             key={d.name}
             to={d.to}
-            className="group rounded-lg border border-borderSubtle bg-panel hover:bg-panelRaised hover:border-borderMuted transition-colors p-4 flex flex-col gap-2"
+            className="group relative rounded-lg border border-borderSubtle bg-panel hover:bg-panelRaised hover:border-borderMuted transition-colors p-4 flex flex-col gap-2 overflow-hidden"
           >
+            <span aria-hidden className="holo-bar absolute inset-y-0 left-0 w-[2px]" />
             <div className="flex items-center gap-2">
               <d.icon className="w-4 h-4 text-textSecondary group-hover:text-textPrimary transition-colors" />
               <span className="font-mono text-caption font-bold uppercase tracking-wider text-textPrimary">{d.name}</span>

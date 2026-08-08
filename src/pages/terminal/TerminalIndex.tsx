@@ -26,19 +26,12 @@ import { GEX_SUBPAGES } from '../gex/subnav';
 import { FLOWDESK_SUBPAGES } from '../flowdesk/subnav';
 import { COMMUNITY_SUBPAGES } from '../community/subnav';
 import { readLastDesk } from './lastDesk';
+import { isTypingTarget, overlayOwnsKeyboard } from '../../lib/keys';
 
 /** The house content panel, distinct from the titled data `Panel`. */
 const Card = ({ children, className = '' }: { children: ReactNode; className?: string }) => (
   <div className={`rounded-lg border border-borderSubtle bg-panel ${className}`}>{children}</div>
 );
-
-/** True when focus is in a field, so global single-key shortcuts don't fire mid-typing. */
-const isTypingTarget = (el: EventTarget | null): boolean => {
-  const node = el as HTMLElement | null;
-  if (!node) return false;
-  const tag = node.tagName;
-  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || node.isContentEditable;
-};
 
 /** Only `label` is read. The registries' `subtitle` fields describe the tape and
     have no business on a page that shows no data. */
@@ -136,11 +129,11 @@ const DeskRow = ({ item }: { item: NavItem }) => {
       >
         <span
           aria-hidden
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-borderSubtle bg-inset font-mono text-label text-textMuted tnum"
+          className="holo-border flex h-6 w-6 shrink-0 items-center justify-center rounded-md font-mono text-label tnum text-select"
         >
           {item.code}
         </span>
-        <Icon className="w-4 h-4 shrink-0 text-textMuted mt-0.5 lg:mt-0" />
+        <Icon className="w-4 h-4 shrink-0 mt-0.5 lg:mt-0 text-textSecondary" />
         <span className="min-w-0 flex flex-col lg:flex-row lg:items-center lg:gap-3 flex-1">
           <span className="font-mono text-caption font-bold uppercase tracking-wider text-textPrimary lg:w-24 shrink-0">
             {item.label}
@@ -177,11 +170,15 @@ const GroupBlock = ({ group, className }: { group: NavGroup; className: string }
   const id = `desks-${group.toLowerCase()}`;
   return (
     <section aria-labelledby={id} className={className}>
-      <h2 id={id} className="font-mono text-label font-semibold uppercase tracking-widest text-textMuted">
+      <h2 id={id} className="holo-text w-fit font-mono text-label font-semibold uppercase tracking-widest">
         {group}
       </h2>
       <p className="text-caption text-textSecondary mt-0.5 mb-2">{NAV_GROUP_PURPOSE[group]}</p>
-      <Card className="overflow-hidden">
+      {/* A living foil rail down the left edge, so the four blocks read as four
+          families without four colours. The sheen is the brand's, and it is the
+          only thing on this page that moves. */}
+      <Card className="relative overflow-hidden">
+        <span aria-hidden className="holo-bar absolute inset-y-0 left-0 w-[2px]" />
         <ul className="divide-y divide-borderSubtle/60">
           {itemsByGroup(group).map(item => (
             <DeskRow key={item.path} item={item} />
@@ -227,7 +224,7 @@ const TerminalIndex = () => {
       // A digit must not navigate out from under an open overlay, or while the
       // ticker search in the bar above has focus.
       if (isTypingTarget(e.target)) return;
-      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+      if (overlayOwnsKeyboard()) return;
       const to = DIGIT_MAP[e.key];
       if (!to) return;
       e.preventDefault();

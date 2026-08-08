@@ -7,10 +7,11 @@ import type { MarketSnapshot } from '../../types/market';
 import Panel from '../../components/ui/Panel';
 import StatCard from '../../components/ui/StatCard';
 import MetricGrid from '../../components/ui/MetricGrid';
+import OiFreshness from '../../components/ui/OiFreshness';
 import SignalBadge from '../../components/ui/SignalBadge';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import DataTable, { type Column } from '../../components/ui/DataTable';
-import ScannerRowDrawer from './ScannerRowDrawer';
+import ScannerRowModal from './ScannerRowModal';
 import { useToast } from '../../components/ui/Toast';
 import type { Tone } from '../../components/ui/tones';
 
@@ -640,6 +641,10 @@ const FlowScanner = () => {
 
   return (
     <>
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-mono text-micro font-semibold uppercase tracking-widest text-textMuted">Session scan</span>
+        {scanSnapshot?.chain[0] && <OiFreshness oi={scanSnapshot.chain[0].callOI} />}
+      </div>
       <MetricGrid min="170px">
         <StatCard label="Contracts scanned" value={summary.contracts} sub={`${filtered.length} shown`} />
         <StatCard label="Total premium" value={fmtUsd(summary.totalPremium)} sub={`${fmtUsd(summary.callPremium)} calls / ${fmtUsd(summary.putPremium)} puts`} />
@@ -701,7 +706,7 @@ const FlowScanner = () => {
         />
       </Panel>
 
-      <ScannerRowDrawer row={selected} spot={marketData?.spot ?? 0} onClose={() => setSelectedId(null)} />
+      <ScannerRowModal row={selected} spot={marketData?.spot ?? 0} onClose={() => setSelectedId(null)} />
     </>
   );
 };

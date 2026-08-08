@@ -17,66 +17,58 @@ import type {
   TickerSymbol,
   TradePlan,
 } from '../types/market';
+import type { MarketDataProvider } from './marketDataProvider';
+import { math } from './mathProvider';
 import { lookup as universeLookup } from '../data/universe';
 // rng.ts imports nothing, so this cannot cycle. (scanUniverse.ts is the one
 // module this file must never import: that dependency runs the other way, and
 // the cycle surfaces as `undefined` at module init rather than as a type error.)
 import { dayKey } from './rng';
 import { etTime } from './calendar';
+import { expiryCalendar, listingConvention } from './expiryCalendar';
+
+/*
+  OI freshness lives in core/openInterest.ts, not here.
+
+  The provider seam says in its own header that the simulator's conveniences are
+  not part of the contract and nothing outside core/ should import them — but
+  data/flowtape needed to stamp the OI on each print, so it was importing
+  `settledOI` straight off this module. Re-exported below so existing callers
+  inside core/ keep working; new callers should import from core/openInterest.
+*/
+import { settledOI, OI_SETTLED_ASOF } from './openInterest';
+
+export { settledOI, OI_SETTLED_ASOF };
 
 const Simulator = (() => {
-  // Math Helpers
-  function normalCDF(x: number): number {
-    const t = 1 / (1 + 0.2316419 * Math.abs(x));
-    const d = 0.3989422804 * Math.exp(-x * x / 2);
-    const p = t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
-    return x >= 0 ? 1 - d * p : d * p;
-  }
+  /*
+    The chain's greeks — the single biggest math surface in the terminal, since
+    every GEX / DEX / VEX number on every desk is built from these.
 
-  function normalPDF(x: number): number {
-    return Math.exp(-x * x / 2) / Math.sqrt(2 * Math.PI);
-  }
+    They come from the MATH SEAM (core/mathProvider.ts) rather than a private
+    Black-Scholes here. That matters for the handoff: a house model registered on
+    the seam has to reach the CHAIN, or it would restate the Weigher and the tape
+    while the entire Pinpoint desk kept quoting the old model.
 
-  // Black-Scholes Greeks Calculator
-  // S: Spot, K: Strike, t: Time to expiry in years, v: Implied Volatility, r: Risk-free rate
-  function calculateGreeks(S: number, K: number, t: number, v: number, r = 0.05): Greeks {
-    if (t <= 0) t = 0.0001; // Avoid division by zero
-    if (v <= 0) v = 0.01;
-
-    const d1 = (Math.log(S / K) + (r + (v * v) / 2) * t) / (v * Math.sqrt(t));
-    const d2 = d1 - v * Math.sqrt(t);
-
-    const Nd1 = normalCDF(d1);
-    const Np_d1 = normalPDF(d1);
-
-    // Delta
-    const deltaCall = Nd1;
-    const deltaPut = Nd1 - 1;
-
-    // Gamma (same for call/put)
-    const gamma = Np_d1 / (S * v * Math.sqrt(t));
-
-    // Vega (same for call/put)
-    const vega = (S * Math.sqrt(t) * Np_d1) / 100; // Divided by 100 to show price change per 1% vol change
-
-    // Vanna
-    const vanna = -Np_d1 * d2 / v;
-
-    // Charm (Delta decay). With no dividend yield modeled (q = 0), put charm
-    // equals call charm exactly — deltaPut = deltaCall − 1, a constant apart,
-    // so their time-decay is identical. (A nonzero adjustment only appears
-    // with a dividend yield: charmPut = charmCall + q·e^(−qt).)
-    const charmCall = -Np_d1 * (r / (v * Math.sqrt(t)) - d2 / (2 * t));
-    const charmPut = charmCall;
-
+    This wrapper keeps two things that are the SIMULATOR's business, not the
+    model's: the degenerate-input floors below, and the Greeks shape the feed
+    contract publishes (call/put split, charm equal across rights because no
+    dividend yield is modelled — see the note that was here before).
+  */
+  function calculateGreeks(S: number, K: number, t: number, v: number): Greeks {
+    const tt = t <= 0 ? 0.0001 : t; // Avoid division by zero
+    const vv = v <= 0 ? 0.01 : v;
+    const g = math.optionGreeks(S, K, vv, tt, 'C');
     return {
-      deltaCall,
-      deltaPut,
-      gamma,
-      vega,
-      vanna,
-      charmCall,
-      charmPut
+      deltaCall: g.delta,
+      // Put delta is a constant one below call delta with q = 0.
+      deltaPut: g.delta - 1,
+      // Gamma and vega are right-independent.
+      gamma: g.gamma,
+      vega: g.vega,
+      vanna: g.vanna ?? 0,
+      charmCall: g.charm ?? 0,
+      charmPut: g.charm ?? 0,
     };
   }
 
@@ -95,6 +87,12 @@ const Simulator = (() => {
 
   /** Core watchlist that always populates the opportunity feed. */
   const WATCHLIST = ['SPY', 'QQQ', 'AAPL', 'NVDA'];
+
+  // Cash indices carry no share volume — not a vendor gap, a definitional fact.
+  // Marked here so the volume-derived Pulse panels can say so rather than
+  // fabricate a cumulative delta / VWAP / POC that cannot exist. The
+  // delta-equivalent substitute is a later phase (P4.4).
+  const INDEX_SYMBOLS = new Set(['SPX', 'NDX', 'RUT', 'VIX', 'XSP', 'DJX']);
 
   let activeTicker = 'SPY';
   const priceHistory: Record<string, number[]> = {};
@@ -372,7 +370,17 @@ const Simulator = (() => {
 
     const strikes: StrikeNode[] = [];
     const baseStrike = Math.round(spot / step) * step;
-    const strikeRange = 15;
+    // Chain-realistic, ticker-dependent width: an index or large ETF lists a
+    // deep ladder, a single name a shallower one. Kept moderate so the panels
+    // that read the whole chain do not regress — the exposure profile and the
+    // matrix window around spot regardless of how many strikes exist.
+    const conv = listingConvention(tickerKey);
+    const strikeRange = conv === 'daily' ? 30 : conv === 'weekly' ? 22 : 16;
+    // Time from the ticker's actual FRONT expiry, not a hardcoded 0DTE. A daily
+    // root's front is ~0DTE; a monthlies-only name's is weeks out, so its gamma
+    // is spread across strikes instead of spiked at the money. Every greek in
+    // the chain is priced at this t.
+    const t = expiryCalendar(tickerKey)[0].t;
 
     // Daily positioning regime: the price where customer call-overwriting supply
     // gives way to put-hedging demand. It pivots the OI skew — and therefore the
@@ -406,7 +414,6 @@ const Simulator = (() => {
         putOI = Math.round(putOI * 2.2);
       }
 
-      const t = 0.003; // 0DTE
       const greeks = calculateGreeks(spot, strike, t, iv);
 
       // Dealer book, standard convention: net LONG calls (customers overwrite
@@ -437,8 +444,8 @@ const Simulator = (() => {
 
       strikes.push({
         strike,
-        callOI,
-        putOI,
+        callOI: settledOI(callOI),
+        putOI: settledOI(putOI),
         gamma: greeks.gamma,
         callGex,
         putGex,
@@ -618,6 +625,9 @@ const Simulator = (() => {
       return activeTicker;
     },
     getActiveTicker: (): string => activeTicker,
+    /** True for cash indices (SPX/NDX/RUT/VIX…) — they have no share volume, so
+        the volume-derived views null out instead of fabricating one. */
+    isIndex: (sym: string): boolean => INDEX_SYMBOLS.has(sym.toUpperCase()),
     /** Live intraday OHLC bars (mutated in place each tick — treat as read-only). */
     getCandles: (sym: string): Candle[] => {
       const key = ensureTicker(sym);
@@ -713,4 +723,13 @@ const Simulator = (() => {
   };
 })();
 
-export default Simulator;
+/*
+  The provider seam (P5.1). The whole terminal depends on the MarketDataProvider
+  shape, never on the simulator's internals — every view builder is
+  (snapshot) => view and the snapshot comes from here. A real ThetaData-backed
+  feed implements the same interface and drops in at context/MarketDataContext
+  without a view builder changing. `satisfies` is the compile-time proof: if a
+  method drifts from the contract, the build fails on this line rather than in a
+  panel. It does not narrow the export — the simulator's own extras stay visible.
+*/
+export default Simulator satisfies MarketDataProvider;

@@ -12,6 +12,7 @@
 
 import { Link, useLocation } from 'react-router-dom';
 import { useLaunch } from './LaunchTransition';
+import { PAGE_CONTAINER } from './container';
 
 const LEGAL_LINKS = [
   { label: 'Disclaimer', to: '/legal/disclaimer' },
@@ -29,7 +30,6 @@ const FOOTER_COLS = [
       { label: 'Pinpoint', to: '/pinpoint' },
       { label: 'Prove It', to: '/prove-it' },
       { label: 'Stocks', to: '/stocks' },
-      { label: 'News', to: '/news' },
       { label: 'Earnings Hub', to: '/earnings' },
       { label: 'Tracker', to: '/tracker' },
     ],
@@ -134,15 +134,16 @@ interface SiteFooterProps {
   bleed?: boolean;
 }
 
-/** Page gutters, matching the shell's own `px-4 lg:px-6 2xl:px-8`. */
-const GUTTER = 'px-4 lg:px-6 2xl:px-8';
+/** In the app the footer lands on the shell's own column, so its rule and its
+    sitemap columns share the content's left and right edges. */
+const GUTTER = PAGE_CONTAINER;
 
 const SiteFooter = ({ variant = 'full', bleed = false }: SiteFooterProps) => {
   const pad = bleed ? GUTTER : 'px-6 md:px-10 max-w-6xl mx-auto';
   if (variant === 'compact') {
     return (
       <footer className="border-t border-borderSubtle">
-        <div className={`${GUTTER} py-4 flex flex-wrap items-center gap-x-5 gap-y-2`}>
+        <div data-page-container="footer" className={`${GUTTER} py-4 flex flex-wrap items-center gap-x-5 gap-y-2`}>
           <Wordmark caret={false} />
           <span className="font-mono text-micro uppercase tracking-wider text-textMuted">{COPYRIGHT}</span>
           <span className="font-mono text-micro tracking-wide text-textMuted">{DISCLAIMER}</span>
@@ -164,7 +165,7 @@ const SiteFooter = ({ variant = 'full', bleed = false }: SiteFooterProps) => {
 
   return (
     <footer className="border-t border-borderSubtle">
-      <div className={`${pad} py-14 grid grid-cols-2 md:grid-cols-6 gap-10`}>
+      <div data-page-container="footer" className={`${pad} py-14 grid grid-cols-2 md:grid-cols-6 gap-10`}>
         <div className="col-span-2">
           <Wordmark caret />
           <p className="mt-3 text-caption text-textSecondary leading-relaxed max-w-[36ch]">

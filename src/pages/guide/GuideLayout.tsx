@@ -14,7 +14,7 @@ const GuideLayout = () => {
     GUIDE_SUBPAGES.find(page => location.pathname.startsWith(page.path)) ?? GUIDE_SUBPAGES[0];
 
   return (
-    <div className="max-w-5xl mx-auto w-full">
+    <div className="w-full">
       <PageHeader breadcrumb={['Terminal', 'Guide', active.label]} title="Guide & Help" subtitle={active.subtitle} />
       <div className="mt-4">
         <SubNav ariaLabel="Guide subpages" items={GUIDE_SUBPAGES} />

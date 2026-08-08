@@ -445,7 +445,7 @@ function remarkGex(chain: StrikeNode[], spot: number, ivAnnual: number): { strik
   return chain.map(n => {
     const g = Simulator.getGreeks(spot, n.strike, t, ivAnnual).gamma;
     const scale = 100 * g * spot * spot * 0.01;
-    return { strike: n.strike, netGex: n.callOI * scale * 0.5 + n.putOI * scale * -0.6 };
+    return { strike: n.strike, netGex: n.callOI.value * scale * 0.5 + n.putOI.value * scale * -0.6 };
   });
 }
 

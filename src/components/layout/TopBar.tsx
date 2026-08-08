@@ -18,6 +18,7 @@ import { useMarketData, useTicker } from '../../context/MarketDataContext';
 import AnimatedNumber from '../ui/AnimatedNumber';
 import TickerSearch from '../ui/TickerSearch';
 import { NAV_GROUPS, itemsByGroup, NAV_ITEMS, type NavGroup, type NavItem } from './nav';
+import { PAGE_CONTAINER } from './container';
 import { DUR, EASE, PILL } from '../../lib/motion';
 import { marketClock } from '../../core/calendar';
 
@@ -74,11 +75,6 @@ const TICKER_SCOPED = [
   '/prove-it',
   '/trace/dark-pool',
   '/trace/scanner',
-  // News looked unscoped for the same reason Stress did, one layer further in:
-  // its Deep read TAB builds from the active snapshot and prints the symbol,
-  // and the default tab is the wire. A rendered-text diff only ever sees the
-  // tab that happens to be open.
-  '/news',
   // Tracker for the same reason again: EdgeLedger seeds every modelled trade
   // from the active snapshot, so the global [ / ] shortcuts were silently
   // rebuilding the ledger with nothing on screen naming the symbol or able to
@@ -121,7 +117,16 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
 
   return (
     <>
-    <header className="glass absolute top-0 inset-x-0 h-14 border-b border-white/[0.07] flex items-center gap-3 px-4 z-40">
+    {/* The glass spans the viewport — it is the window's chrome — but its
+        CONTENTS ride the page container, so the wordmark starts exactly where
+        the page's first column starts instead of 32px inside it. */}
+    <header
+      className="glass absolute top-0 inset-x-0 h-14 border-b border-white/[0.07] z-40"
+      // Reserve the page's scrollbar gutter so the bar's column lands on the
+      // same left and right edges as the content scrolling beneath it.
+      style={{ paddingRight: 'var(--scrollbar-gutter, 0px)' }}
+    >
+      <div data-page-container="bar" className={`${PAGE_CONTAINER} h-full flex items-center gap-3`}>
       {/* Left zone: mobile menu + wordmark. Reserved, high-stacking so nav can
           never paint over it. */}
       <div className="flex items-center gap-2 shrink-0 relative z-10">
@@ -239,7 +244,7 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
           <span className="text-micro uppercase tracking-wider text-textMuted">ET</span>
         </span>
       </div>
-
+      </div>
     </header>
 
       {/* Mobile overlay — a SIBLING of the glass header, not a child. A
@@ -313,9 +318,10 @@ const DropMenu = ({
     exit={{ opacity: 0, y: -6 }}
     transition={{ duration: DUR.quick, ease: EASE }}
   >
-    <div className="mt-1 min-w-[248px] border border-borderMuted bg-panel rounded-md shadow-overlay overflow-hidden">
+    <div className="relative mt-1 min-w-[248px] border border-borderMuted bg-panel rounded-md shadow-overlay overflow-hidden">
+      <span aria-hidden className="holo-bar absolute inset-y-0 left-0 w-[2px] z-10" />
       <div className="flex items-center justify-between gap-3 px-3 py-2 border-b border-borderSubtle">
-        <span className="font-mono text-micro font-semibold uppercase tracking-widest text-textPrimary whitespace-nowrap">
+        <span className="font-mono text-micro font-semibold uppercase tracking-widest whitespace-nowrap text-textPrimary">
           {title}
         </span>
       </div>
@@ -357,7 +363,7 @@ const MobileNav = ({ section, onPick }: { section: string; onPick: () => void })
       const items = itemsByGroup(group);
       return (
         <div key={group}>
-          <div className="px-2 pb-1.5 font-mono text-micro uppercase tracking-widest text-textMuted">{group}</div>
+          <div className="holo-text w-fit px-2 pb-1.5 font-mono text-micro uppercase tracking-widest">{group}</div>
           <div className="grid grid-cols-2 gap-1.5">
             {items.map((item: NavItem) => {
               const active = item.path === section;

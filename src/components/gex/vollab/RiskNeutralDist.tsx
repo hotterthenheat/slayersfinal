@@ -1,43 +1,62 @@
-import { useState } from 'react';
+import { useMemo } from 'react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer } from 'recharts';
 import type { RndData } from '../../../types/gex';
-import HoverReadout from '../../ui/HoverReadout';
-import { svgHoverIndex } from '../../ui/svgHover';
 import { preserveGreek } from '../../ui/greek';
+import { ChartTip, TipHead, TipRow, TipNote } from '../../charts/ChartTip';
+import { GRID, CURSOR, chartMargin, categoryAxis, axisTick } from '../../charts/chartTheme';
+import { FOCUS, BULL, BEAR, SPOT, MUTED_INK } from '../palette';
 
 interface RiskNeutralDistProps {
   data: RndData;
 }
 
-const W = 100;
-const H = 42;
+/*
+  Options-implied price density with sigma markers — where the market prices the
+  odds. On recharts, on the house chart theme.
 
-/** Options-implied price density with σ markers — where the market prices the odds. */
+  Two things the port fixes beyond the furniture:
+
+  The density curve was lilac (rgba(151,136,196,·)), an ink that appears nowhere
+  else in the system. A modelled distribution is not a direction and not a
+  selection; it takes holo-silver like every other model output.
+
+  The cumulative probability under the cursor was recomputed by summing the
+  density from index 0 on every mouse move — O(n) per hover, O(n^2) across a
+  sweep. It is now a prefix sum computed once, which is also what lets the
+  read-out afford to show the local probability mass as well as the tails.
+*/
+
+interface Row {
+  price: number;
+  density: number;
+  /** Market-implied probability of settling at or below this price, %. */
+  cumBelow: number;
+  /** Probability mass in this grid cell alone, %. */
+  mass: number;
+}
+
 const RiskNeutralDist = ({ data }: RiskNeutralDistProps) => {
   const { prices, density, forward, sigma1, sigma2, stats } = data;
+
+  const rows: Row[] = useMemo(() => {
+    // `density` is the plotting-normalised curve, so its running share IS the CDF.
+    const total = density.reduce((s, d) => s + d, 0) || 1;
+    let run = 0;
+    return prices.map((price, i) => {
+      run += density[i];
+      return { price, density: density[i], cumBelow: (run / total) * 100, mass: (density[i] / total) * 100 };
+    });
+  }, [prices, density]);
+
   const lo = prices[0];
   const hi = prices[prices.length - 1];
-  const span = hi - lo || 1;
-  const x = (price: number) => ((price - lo) / span) * W;
-  const [h, setH] = useState<{ i: number; x: number; y: number } | null>(null);
 
-  // Market-implied cumulative probability below each grid price (density is the
-  // plotting-normalised curve, so its running share IS the CDF).
-  const total = density.reduce((s, d) => s + d, 0) || 1;
-  const cumBelow = (idx: number): number => {
-    let s = 0;
-    for (let i = 0; i <= idx; i++) s += density[i];
-    return (s / total) * 100;
-  };
-
-  const line = prices.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(p).toFixed(2)},${(H - density[i] * (H - 4)).toFixed(2)}`).join(' ');
-  const area = `${line} L${W},${H} L0,${H} Z`;
-
-  const markers: { price: number; label: string; cls: string; dash?: string }[] = [
-    { price: sigma2[0], label: '-2σ', cls: 'rgba(255,59,48,0.7)', dash: '2 2' },
-    { price: sigma1[0], label: '-1σ', cls: 'rgba(143,143,143,0.7)', dash: '3 2' },
-    { price: forward, label: 'Fwd', cls: '#ededed' },
-    { price: sigma1[1], label: '+1σ', cls: 'rgba(143,143,143,0.7)', dash: '3 2' },
-    { price: sigma2[1], label: '+2σ', cls: 'rgba(48,209,88,0.85)', dash: '2 2' },
+  const markers: { price: number; label: string; color: string; dash?: string }[] = [
+    { price: sigma2[0], label: '−2σ', color: BEAR, dash: '2 2' },
+    { price: sigma1[0], label: '−1σ', color: MUTED_INK, dash: '3 2' },
+    { price: forward, label: 'Fwd', color: SPOT },
+    { price: sigma1[1], label: '+1σ', color: MUTED_INK, dash: '3 2' },
+    { price: sigma2[1], label: '+2σ', color: BULL, dash: '2 2' },
   ];
 
   // `full` is the long name for the `title` tooltip. Seven cells of a panel-width
@@ -57,76 +76,92 @@ const RiskNeutralDist = ({ data }: RiskNeutralDistProps) => {
 
   return (
     <div className="flex flex-col gap-2 h-full min-h-0">
-      {/* Marker labels */}
-      <div className="relative h-4 select-none">
-        {markers.map(m => (
-          <span
-            key={m.label}
-            className={`absolute -translate-x-1/2 font-mono text-micro tnum ${m.label === 'Fwd' ? 'text-textPrimary font-semibold' : 'text-textMuted'}`}
-            style={{ left: `${x(m.price)}%` }}
-          >
-            {m.label} {m.price.toFixed(0)}
-          </span>
-        ))}
-      </div>
-
-      {/* Density */}
-      <div className="flex-grow min-h-0">
-        <svg
-          viewBox={`0 0 ${W} ${H}`}
-          preserveAspectRatio="none"
-          className="w-full h-full cursor-crosshair"
-          role="img"
-          aria-label="Options-implied risk-neutral price density with sigma markers"
-          onMouseMove={e => setH({ i: svgHoverIndex(e, prices.length), x: e.clientX, y: e.clientY })}
-          onMouseLeave={() => setH(null)}
-        >
-          <path d={area} fill="rgba(151,136,196,0.12)" />
-          <path d={line} fill="none" stroke="rgba(151,136,196,0.9)" strokeWidth="0.8" vectorEffect="non-scaling-stroke" />
-          {markers.map(m => (
-            <line
-              key={m.label}
-              x1={x(m.price)}
-              y1="0"
-              x2={x(m.price)}
-              y2={H}
-              stroke={m.cls}
-              strokeWidth={m.label === 'Fwd' ? 0.7 : 0.5}
-              strokeDasharray={m.dash}
-              vectorEffect="non-scaling-stroke"
+      <div
+        className="flex-grow min-h-0"
+        role="img"
+        aria-label={`Options-implied risk-neutral price density from ${lo.toFixed(0)} to ${hi.toFixed(0)}, centred on a forward of ${forward.toFixed(0)}, with one and two sigma markers. Expected move plus or minus ${stats.expMovePct.toFixed(2)} percent.`}
+      >
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={rows} margin={{ ...chartMargin, top: 16 }}>
+            <CartesianGrid stroke={GRID} vertical={false} />
+            <XAxis
+              {...categoryAxis}
+              type="number"
+              dataKey="price"
+              domain={[lo, hi]}
+              ticks={markers.map(m => m.price)}
+              tickFormatter={(v: number) => v.toFixed(0)}
             />
-          ))}
-          {h && (
-            <line x1={x(prices[h.i])} x2={x(prices[h.i])} y1={0} y2={H} stroke="rgba(255,255,255,0.4)" strokeWidth="0.4" vectorEffect="non-scaling-stroke" />
-          )}
-        </svg>
-      </div>
-      {h && prices[h.i] != null && (
-        <HoverReadout x={h.x} y={h.y}>
-          <div className="font-mono text-micro uppercase tracking-widest text-textMuted">
-            {prices[h.i].toFixed(0)} · {((prices[h.i] - forward) / forward >= 0 ? '+' : '')}
-            {(((prices[h.i] - forward) / forward) * 100).toFixed(1)}% vs fwd
-          </div>
-          <div className="mt-1 flex items-center gap-2.5 font-mono text-label tnum">
-            <span className="text-bear">P&lt; {cumBelow(h.i).toFixed(1)}%</span>
-            <span className="text-bull">P&gt; {(100 - cumBelow(h.i)).toFixed(1)}%</span>
-          </div>
-        </HoverReadout>
-      )}
-      <div className="flex justify-between font-mono text-micro tnum text-textMuted select-none">
-        <span>{lo.toFixed(0)}</span>
-        <span className="uppercase tracking-wider">underlying price</span>
-        <span>{hi.toFixed(0)}</span>
+            {/* The y value is a normalised density — the NUMBER carries no unit a
+                reader can use, so the axis is hidden and the read-out gives the
+                probability instead. Keeping the axis for layout only. */}
+            <YAxis hide domain={[0, 'dataMax']} tick={axisTick} />
+            {markers.map(m => (
+              <ReferenceLine
+                key={m.label}
+                x={m.price}
+                stroke={m.color}
+                strokeOpacity={m.label === 'Fwd' ? 0.9 : 0.6}
+                strokeDasharray={m.dash}
+                label={{
+                  value: m.label,
+                  position: 'top',
+                  fill: m.label === 'Fwd' ? SPOT : MUTED_INK,
+                  fontSize: 10,
+                  fontFamily: 'JetBrains Mono, monospace',
+                }}
+              />
+            ))}
+            <Tooltip
+              cursor={CURSOR}
+              content={
+                <ChartTip<Row>
+                  render={r => {
+                    const vsFwd = ((r.price - forward) / forward) * 100;
+                    const above = 100 - r.cumBelow;
+                    const inside = r.price >= sigma1[0] && r.price <= sigma1[1];
+                    return (
+                      <>
+                        <TipHead sub={`${vsFwd >= 0 ? '+' : ''}${vsFwd.toFixed(1)}% vs fwd`}>{r.price.toFixed(0)}</TipHead>
+                        <TipRow label="Settles below" value={`${r.cumBelow.toFixed(1)}%`} tone="text-bear" />
+                        <TipRow label="Settles above" value={`${above.toFixed(1)}%`} tone="text-bull" />
+                        <TipRow label="Mass at this price" value={`${r.mass.toFixed(2)}%`} tone="text-textSecondary" />
+                        <TipNote>
+                          {inside
+                            ? 'Inside the one-sigma band — the market prices roughly two thirds of outcomes into this range.'
+                            : r.price < sigma2[0] || r.price > sigma2[1]
+                              ? 'Beyond two sigma. The market prices this as a tail, and tail pricing is where the surface is thinnest.'
+                              : 'Between one and two sigma — a move the market considers possible but not the base case.'}
+                        </TipNote>
+                      </>
+                    );
+                  }}
+                />
+              }
+            />
+            <Area
+              type="monotone"
+              dataKey="density"
+              stroke={FOCUS}
+              strokeWidth={1.5}
+              fill={FOCUS}
+              fillOpacity={0.12}
+              dot={false}
+              activeDot={{ r: 3, fill: FOCUS, stroke: 'none' }}
+              isAnimationActive={false}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
       </div>
 
-      {/* Stats */}
+      <div className="text-center font-mono text-micro uppercase tracking-wider text-textMuted select-none">
+        underlying price
+      </div>
+
       <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 pt-2 border-t border-borderSubtle">
         {statCells.map(s => (
           <span key={s.label} className="min-w-0">
-            <span
-              title={s.full}
-              className="block font-mono text-micro uppercase tracking-widest text-textMuted truncate"
-            >
+            <span title={s.full} className="block font-mono text-micro uppercase tracking-widest text-textMuted truncate">
               {preserveGreek(s.label)}
             </span>
             <span className={`block font-mono text-micro font-semibold tnum ${s.tone ?? 'text-textPrimary'}`}>{s.value}</span>

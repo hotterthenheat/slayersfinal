@@ -14,6 +14,8 @@ import MonteCarloPanel from './MonteCarloPanel';
 import Surface3D from './Surface3D';
 import MarketStateReplay from '../../components/proveit/MarketStateReplay';
 import VolLab from '../gex/VolLab';
+import VolComplex from './VolComplex';
+import SurfaceIntegrity from './SurfaceIntegrity';
 import StatePriceDensity from '../../components/gex/StatePriceDensity';
 
 type Window = '10' | '30' | '60';
@@ -30,6 +32,8 @@ const WINDOW_OPTIONS = [
 const VIEW_OPTIONS = [
   { value: 'models', label: 'Models' },
   { value: 'volatility', label: 'Volatility lab' },
+  { value: 'complex', label: 'Vol complex' },
+  { value: 'integrity', label: 'Surface QC' },
   { value: 'density', label: 'Risk-neutral density' },
 ] as const;
 type ViewKey = (typeof VIEW_OPTIONS)[number]['value'];
@@ -288,6 +292,8 @@ const ProveIt = () => {
 
       {view === 'models' && <ModelsView window_={window_} />}
       {view === 'volatility' && <VolLab />}
+      {view === 'complex' && <VolComplex />}
+      {view === 'integrity' && <SurfaceIntegrity />}
       {view === 'density' && <StatePriceDensity />}
     </>
   );

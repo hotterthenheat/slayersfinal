@@ -316,6 +316,37 @@ describe('single derivation: the panels that used to roll their own', () => {
   });
 
   /*
+    The reachability guard for the arrow comparison above.
+
+    That comparison only runs when the prose actually quotes a level MOVING, and
+    on several names (MSFT, META, COST at the time of writing) nothing moves
+    under any of the five scenarios — so per-ticker it legitimately runs zero
+    times, and demanding otherwise would be demanding behaviour the model does
+    not produce.
+
+    What must never be true is that it runs zero times EVERYWHERE. This file has
+    already been there once: a `[\d.]` character class ate the sentence
+    terminator, `Number('232.50.')` came back NaN, and the comparison quietly
+    stopped happening on every date whose walls landed on a half-dollar strike —
+    while the suite stayed green. So the reachability is asserted across the
+    whole snapshot set, exactly once, where it is a real claim.
+  */
+  it('the migration arrow comparison is reachable — some name, some scenario, moves a level', () => {
+    let arrowsSeen = 0;
+    let matchedRows = 0;
+    for (const { snap } of snapshots) {
+      for (const [mode, ivShift] of SCENARIOS) {
+        const prose = buildVannaCharm(snap, mode, ivShift, HALF).insights.join(' | ');
+        const arrows = [...prose.matchAll(/(-?\d+(?:\.\d+)?)\s*→\s*(-?\d+(?:\.\d+)?)/g)];
+        arrowsSeen += arrows.length;
+      }
+      matchedRows++;
+    }
+    expect(matchedRows).toBe(snapshots.length);
+    expect(arrowsSeen).toBeGreaterThan(0);
+  });
+
+  /*
     Pin is the one level that is honestly a function of the window (gex.ts
     `pinStrike`), so a wider panel naming a different strike is correct — but it
     must be THAT panel's window, and it must be marked once. Reading the rail's

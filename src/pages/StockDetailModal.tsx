@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
-import { AnimatePresence, motion } from 'framer-motion';
-import { X, Star, GitCompare, Info, Newspaper, CalendarClock, Waves, Ruler } from 'lucide-react';
+import { Star, GitCompare, Info, CalendarClock, Waves, Ruler } from 'lucide-react';
+import DetailModal from '../components/ui/DetailModal';
+import { useExpandPreference } from '../hooks/useExpandPreference';
 import SignalBadge from '../components/ui/SignalBadge';
 import SegmentedControl from '../components/ui/SegmentedControl';
 import EmptyState from '../components/ui/EmptyState';
@@ -13,13 +13,10 @@ import { buildDarkPoolFeed } from '../data/darkpoolfeed';
 import { buildEarningsCalendar, type EarningsEvent } from '../data/earnings';
 import { FACTOR_GUIDE } from '../data/factorGuide';
 import { fmtUsd } from '../data/gex';
-import { buildNewsFeed, type NewsItem } from '../data/news';
 import { buildFlowAlerts, buildPulseFlow } from '../data/pulseflow';
 import { VERDICT_LABEL, VERDICT_TONE, scoreBand, type ScoreBand, type SectorRow, type StockPick } from '../data/stocks';
 import { buildSwingModel } from '../data/swingModel';
 import { toneText, type Tone } from '../components/ui/tones';
-import { useFocusTrap } from '../hooks/useFocusTrap';
-import { DUR, EASE } from '../lib/motion';
 
 // A sleeve score is a magnitude, so the fill is `data-bar`; only the weak band
 // takes a tone, because a sub-40 sleeve is the one reading that argues against
@@ -32,12 +29,8 @@ const signed = (v: number, dp = 1) => `${v >= 0 ? '+' : ''}${v.toFixed(dp)}%`;
     about a revision or flow lean is a fraction of anything. */
 const leanIdx = (v: number) => `${v >= 0 ? '+' : ''}${Math.round(v * 100)}`;
 const moveTone = (v: number): Tone => (v > 0 ? 'bull' : v < 0 ? 'bear' : 'neutral');
-/** Wire age. Past an hour "230m" stops being a duration anyone reads. */
-const age = (m: number) => (m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`);
-
 const TABS = [
   { value: 'READ', label: 'Read' },
-  { value: 'NEWS', label: 'News' },
   { value: 'EARNINGS', label: 'Earnings' },
   { value: 'FLOW', label: 'Flow' },
   { value: 'LEVELS', label: 'Levels' },
@@ -76,42 +69,6 @@ const FactorRow = ({ v, name, desc }: { v: number; name: string; desc: string })
       </span>
       <span className="text-label text-textMuted leading-snug">{desc}</span>
     </div>
-  );
-};
-
-/** One wire item with the outcome model that news.ts already ships for it. */
-const NewsCard = ({ n }: { n: NewsItem }) => {
-  const tone: Tone = n.sentiment > 0.12 ? 'bull' : n.sentiment < -0.12 ? 'bear' : 'neutral';
-  const p = n.prediction;
-  return (
-    <article className="inst-surface rounded-md px-3 py-2.5 flex flex-col gap-2">
-      <div className="flex items-center gap-2 font-mono text-micro text-textMuted min-w-0">
-        <span className="tnum shrink-0">{n.time}</span>
-        <span className="tnum shrink-0">{age(n.minutesAgo)} old</span>
-        <span className="truncate">{n.source}</span>
-        <span className="ml-auto shrink-0 tnum">impact {Math.round(n.magnitude * 100)}</span>
-        <SignalBadge tone={tone} className="shrink-0">
-          {n.category}
-        </SignalBadge>
-      </div>
-      <p className="text-data text-textPrimary leading-snug">{n.headline}</p>
-      <div className="grid grid-cols-4 gap-1.5">
-        <Stat label="P up" value={`${p.probUpPct}%`} tone={p.probUpPct >= 55 ? 'bull' : p.probUpPct <= 45 ? 'bear' : 'neutral'} />
-        <Stat label="1d" value={signed(p.expMove1dPct)} tone={moveTone(p.expMove1dPct)} />
-        <Stat label="5d" value={signed(p.expMove5dPct)} tone={moveTone(p.expMove5dPct)} />
-        <Stat label="Conf" value={`${p.confidencePct}%`} />
-      </div>
-      <div className="flex flex-col gap-1">
-        <p className="text-label text-textMuted leading-snug">
-          <span className="font-mono uppercase tracking-wider text-textSecondary">Base rate </span>
-          {p.analog}
-        </p>
-        <p className="text-label text-textSecondary leading-snug">
-          <span className="font-mono uppercase tracking-wider text-textMuted">Playbook </span>
-          {p.playbook}
-        </p>
-      </div>
-    </article>
   );
 };
 
@@ -163,7 +120,7 @@ const EarningsBlock = ({ e }: { e: EarningsEvent }) => (
   </div>
 );
 
-interface StockDetailDrawerProps {
+interface StockDetailModalProps {
   pick: StockPick | null;
   onClose: () => void;
   isWatched: boolean;
@@ -194,7 +151,7 @@ interface StockDetailDrawerProps {
  * name seeds a month of candles (~90ms). Everything else is cheap enough to
  * build the moment a row is clicked.
  */
-const StockDetailDrawer = ({
+const StockDetailModal = ({
   pick,
   onClose,
   isWatched,
@@ -204,9 +161,12 @@ const StockDetailDrawer = ({
   beta,
   sectorRow = null,
   sectorRank = null,
-}: StockDetailDrawerProps) => {
-  const trapRef = useFocusTrap<HTMLElement>(!!pick);
+}: StockDetailModalProps) => {
   const [tab, setTab] = useState<DrawerTab>('READ');
+  // Held here rather than inside the modal because expanding this drilldown
+  // means BUILDING more — the dark-pool read, the options book and the swing
+  // model are memos below, above the point a render prop could reach.
+  const [expanded, toggleExpanded] = useExpandPreference();
   const ticker = pick?.ticker ?? null;
   const price = pick?.price ?? 0;
 
@@ -214,25 +174,17 @@ const StockDetailDrawer = ({
     setTab('READ');
   }, [ticker]);
 
-  useEffect(() => {
-    if (!pick) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [pick, onClose]);
-
   // Both are whole-board builds. They stay eager because they are cheap and the
   // empty states quote their own sizes, so the copy can never state a count the
   // engine has since changed.
-  const feed = useMemo(() => (ticker ? buildNewsFeed() : []), [ticker]);
-  const news = useMemo(() => feed.filter(n => n.ticker === ticker), [feed, ticker]);
   const calendar = useMemo(() => (ticker ? buildEarningsCalendar() : []), [ticker]);
   const earnings = calendar.find(e => e.ticker === ticker) ?? null;
 
-  const wantsFlow = tab === 'FLOW';
-  const wantsBook = tab === 'FLOW' || tab === 'LEVELS';
+  // Expanded is the whole record at once, so everything is wanted. Collapsed
+  // still builds only what the open tab needs — the dark-pool sweep and the
+  // options book are not free.
+  const wantsFlow = tab === 'FLOW' || expanded;
+  const wantsBook = tab === 'FLOW' || tab === 'LEVELS' || expanded;
 
   // The feed is sector-grouped and ordered by notional, so the row's position
   // in its group IS its off-exchange rank — no second ranking pass.
@@ -250,69 +202,82 @@ const StockDetailDrawer = ({
   const snapshot = useMemo(() => (ticker && wantsBook ? Simulator.buildSnapshot(ticker) : null), [ticker, wantsBook]);
   const chainOI = useMemo(() => {
     if (!snapshot) return null;
-    const call = snapshot.chain.reduce((a, n) => a + n.callOI, 0);
-    const put = snapshot.chain.reduce((a, n) => a + n.putOI, 0);
+    const call = snapshot.chain.reduce((a, n) => a + n.callOI.value, 0);
+    const put = snapshot.chain.reduce((a, n) => a + n.putOI.value, 0);
     return { call, put, ratio: call ? put / call : 0 };
   }, [snapshot]);
 
   const swing = useMemo(
-    () => (ticker && tab === 'LEVELS' ? buildSwingModel(ticker, price, Math.floor(Date.now() / 1000)) : null),
-    [ticker, price, tab]
+    () => (ticker && (tab === 'LEVELS' || expanded) ? buildSwingModel(ticker, price, Math.floor(Date.now() / 1000)) : null),
+    [ticker, price, tab, expanded]
   );
 
   const topPrints = pulse ? [...pulse.prints].sort((a, b) => b.value - a.value).slice(0, 4) : [];
 
-  return createPortal(
-    <AnimatePresence>
-      {pick && (
-        <>
-          <motion.div
-            className="fixed inset-0 z-[60] bg-black/60"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={onClose}
-          />
-          <motion.aside
-            ref={trapRef}
-            tabIndex={-1}
-            role="dialog"
-            aria-modal="true"
-            aria-label={`${pick.ticker} detail`}
-            className="fixed inset-y-0 right-0 z-[60] w-full max-w-[560px] bg-panel border-l border-borderMuted shadow-overlay overflow-y-auto focus:outline-none"
-            initial={{ x: '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '100%' }}
-            transition={{ duration: DUR.slow, ease: EASE }}
-          >
-            {/* Header */}
-            <header className="sticky top-0 z-10 border-b border-borderSubtle bg-panel/95 backdrop-blur">
-              <div className="flex items-start justify-between gap-3 px-4 py-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-base font-bold text-textPrimary">{pick.ticker}</span>
-                    <SignalBadge tone={VERDICT_TONE[pick.verdict]}>{VERDICT_LABEL[pick.verdict]}</SignalBadge>
-                  </div>
-                  <div className="mt-0.5 text-caption text-textSecondary truncate">{pick.name}</div>
-                  <div className="mt-0.5 font-mono text-label uppercase tracking-wider text-textMuted">
-                    {pick.sector}
-                    {sectorRank && sectorRank.rank > 0 ? ` · #${sectorRank.rank} of ${sectorRank.of}` : ''}
-                  </div>
-                </div>
-                <button
-                  onClick={onClose}
-                  aria-label="Close detail"
-                  className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded border border-borderSubtle bg-white/[0.02] text-textSecondary hover:text-textPrimary hover:border-borderMuted transition-colors"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="px-4 pb-2.5">
+  return (
+    <DetailModal
+      open={!!pick}
+      onClose={onClose}
+      ariaLabel={pick ? `${pick.ticker} detail` : 'stock detail'}
+      expanded={expanded}
+      onToggleExpanded={toggleExpanded}
+      header={
+        pick && (
+          <>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-base font-bold text-textPrimary">{pick.ticker}</span>
+              <SignalBadge tone={VERDICT_TONE[pick.verdict]}>{VERDICT_LABEL[pick.verdict]}</SignalBadge>
+            </div>
+            <div className="mt-0.5 text-caption text-textSecondary truncate">{pick.name}</div>
+            <div className="mt-0.5 font-mono text-label uppercase tracking-wider text-textMuted">
+              {pick.sector}
+              {sectorRank && sectorRank.rank > 0 ? ` · #${sectorRank.rank} of ${sectorRank.of}` : ''}
+            </div>
+            {/* Expanded shows all four sections at once, so the picker would be
+                choosing between things that are all already on screen. */}
+            {!expanded && (
+              <div className="mt-2">
                 <SegmentedControl ariaLabel="Detail section" options={TABS} value={tab} onChange={setTab} />
               </div>
-            </header>
+            )}
+          </>
+        )
+      }
+      footer={
+        pick && (
+          <>
+            <button
+              onClick={() => onToggleWatch(pick.ticker)}
+              aria-pressed={isWatched}
+              className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded border font-mono text-caption uppercase tracking-wider transition-colors ${
+                isWatched
+                  ? 'border-select/30 bg-select/10 text-select'
+                  : 'border-borderSubtle bg-white/[0.02] text-textSecondary hover:text-textPrimary hover:border-borderMuted'
+              }`}
+            >
+              <Star className={`w-3.5 h-3.5 ${isWatched ? 'fill-current' : ''}`} />
+              {isWatched ? 'Watching' : 'Watch'}
+            </button>
+            <button
+              onClick={() => onToggleCompare(pick.ticker)}
+              aria-pressed={inCompare}
+              className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded border font-mono text-caption uppercase tracking-wider transition-colors ${
+                inCompare
+                  ? 'border-select/30 bg-select/10 text-select'
+                  : 'border-borderSubtle bg-white/[0.02] text-textSecondary hover:text-textPrimary hover:border-borderMuted'
+              }`}
+            >
+              <GitCompare className="w-3.5 h-3.5" />
+              {inCompare ? 'Comparing' : 'Compare'}
+            </button>
+            <TickerJump ticker={pick.ticker} horizon="SWINGS" />
+          </>
+        )
+      }
+    >
+      {pick && (
+        <div className="flex flex-col gap-4">
 
-            <div className="px-4 py-4 flex flex-col gap-4">
               {/* Price / score / risk — carried on every tab so the number the
                   reader is reasoning about never leaves the screen. */}
               <div className="grid grid-cols-4 gap-1.5">
@@ -340,7 +305,8 @@ const StockDetailDrawer = ({
                 />
               </div>
 
-              {tab === 'READ' && (
+              {(tab === 'READ' || expanded) && (
+
                 <>
                   <Section title="30d relative strength">
                     <div className="inst-surface rounded-md px-3 py-2.5 overflow-x-auto no-scrollbar">
@@ -389,27 +355,8 @@ const StockDetailDrawer = ({
                 </>
               )}
 
-              {tab === 'NEWS' && (
-                <Section title="Wire" sub={news.length ? `${news.length} item${news.length > 1 ? 's' : ''}` : undefined}>
-                  {news.length ? (
-                    <div className="flex flex-col gap-2">
-                      {news.map(n => (
-                        <NewsCard key={n.id} n={n} />
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="inst-surface rounded-md">
-                      <EmptyState
-                        icon={Newspaper}
-                        title={`No ${pick.ticker} story on the wire`}
-                        body={`${feed.length} items ran across the screened universe today and none were on this name. Its News sleeve (${pick.sleeves.news}) reads the group's tone instead of a headline.`}
-                      />
-                    </div>
-                  )}
-                </Section>
-              )}
+              {(tab === 'EARNINGS' || expanded) && (
 
-              {tab === 'EARNINGS' && (
                 <Section title="Reporting record" sub={earnings ? earnings.dateLabel : undefined}>
                   {earnings ? (
                     <EarningsBlock e={earnings} />
@@ -425,7 +372,8 @@ const StockDetailDrawer = ({
                 </Section>
               )}
 
-              {tab === 'FLOW' && (
+              {(tab === 'FLOW' || expanded) && (
+
                 <>
                   <Section title="Off-exchange tape" sub={darkPool ? `#${darkPool.rank} of ${darkPool.of} by notional` : undefined}>
                     {darkPool ? (
@@ -513,7 +461,8 @@ const StockDetailDrawer = ({
                 </>
               )}
 
-              {tab === 'LEVELS' && (
+              {(tab === 'LEVELS' || expanded) && (
+
                 <>
                   {swing && (
                     <Section title="Swing zones" sub="daily model, anchored to last">
@@ -584,43 +533,10 @@ const StockDetailDrawer = ({
                 </>
               )}
 
-              {/* Actions */}
-              <div className="flex flex-col gap-2 pt-1">
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => onToggleWatch(pick.ticker)}
-                    aria-pressed={isWatched}
-                    className={`flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded border font-mono text-caption uppercase tracking-wider transition-colors ${
-                      isWatched
-                        ? 'border-select/30 bg-select/10 text-select'
-                        : 'border-borderSubtle bg-white/[0.02] text-textSecondary hover:text-textPrimary hover:border-borderMuted'
-                    }`}
-                  >
-                    <Star className={`w-3.5 h-3.5 ${isWatched ? 'fill-current' : ''}`} />
-                    {isWatched ? 'Watching' : 'Watch'}
-                  </button>
-                  <button
-                    onClick={() => onToggleCompare(pick.ticker)}
-                    aria-pressed={inCompare}
-                    className={`flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded border font-mono text-caption uppercase tracking-wider transition-colors ${
-                      inCompare
-                        ? 'border-select/30 bg-select/10 text-select'
-                        : 'border-borderSubtle bg-white/[0.02] text-textSecondary hover:text-textPrimary hover:border-borderMuted'
-                    }`}
-                  >
-                    <GitCompare className="w-3.5 h-3.5" />
-                    {inCompare ? 'Comparing' : 'Compare'}
-                  </button>
-                </div>
-                <TickerJump ticker={pick.ticker} horizon="SWINGS" className="justify-center" />
-              </div>
-            </div>
-          </motion.aside>
-        </>
+        </div>
       )}
-    </AnimatePresence>,
-    document.body
+    </DetailModal>
   );
 };
 
-export default StockDetailDrawer;
+export default StockDetailModal;

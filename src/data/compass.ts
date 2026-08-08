@@ -10,6 +10,7 @@
 import Simulator from '../core/simulator';
 import { yearsToExpiry } from '../core/optionTime';
 import { expiryFor } from '../core/calendar';
+import { blackScholes } from '../core/contractScore';
 import {
   SCAN_UNIVERSE_SIZE,
   buildScanUniverse,
@@ -18,7 +19,7 @@ import {
   scanSparkline,
   type ScanName,
 } from '../core/scanUniverse';
-import type { MarketSnapshot } from '../types/market';
+import type { MarketSnapshot, OpenInterest } from '../types/market';
 import { SLEEVE_BY_KEY } from '../types/compass';
 import type {
   ChainAction,
@@ -232,15 +233,22 @@ function dteOf(expiry: string): number {
   return Number.isFinite(n) ? Math.max(0, n) : 0;
 }
 
-/** Intrinsic + normal-shaped time value with a REAL √T term, so a 0DTE
-    contract prices cheaper than a 1DTE and OTM decay width scales with vol. */
+/**
+ * The premium of a listed option, for the setups board and the chain.
+ *
+ * This was a normal-shaped estimator (intrinsic + a Gaussian bump of time value)
+ * that disagreed with the Weigher's Black-Scholes by up to ~2× on the same
+ * contract — two prices on one screen. It now delegates to that ONE pricer
+ * (core/contractScore.ts), so the board, the chain and the Weigher quote a
+ * single mid off this name's own volatility. compassCoherence.test.ts pins it.
+ *
+ * The wing skew the Weigher layers on for a searched contract is a property of
+ * that surface, not of the pricer; the board and chain price at the name IV, so
+ * near-the-money the three agree to the cent and only diverge on deep wings by
+ * exactly that skew.
+ */
 function estimatePremium(spot: number, strike: number, right: OptionRight, iv: number, dte: number): number {
-  const t = yearsToExpiry(dte);
-  const width = iv * Math.sqrt(t);
-  const m = Math.log(strike / spot) / (width || 1e-6);
-  const timeValue = spot * width * 0.4 * Math.exp(-(m * m) / 2);
-  const intrinsic = right === 'C' ? Math.max(spot - strike, 0) : Math.max(strike - spot, 0);
-  return Math.max(0.05, intrinsic + timeValue);
+  return blackScholes(spot, strike, iv, dte, right).price;
 }
 
 function healthFor(spot: number, strike: number, right: OptionRight): number {
@@ -975,7 +983,7 @@ export function resetCompassCache(): void {
 function chainSide(
   ticker: string,
   spot: number,
-  node: { strike: number; callOI: number; putOI: number },
+  node: { strike: number; callOI: OpenInterest; putOI: OpenInterest },
   right: OptionRight,
   iv: number,
   dte: number
@@ -989,7 +997,7 @@ function chainSide(
   const otmDist = Math.abs(strike - spot) / spot;
   const spreadPct = clamp(1.2 + otmDist * 180 + 0.6, 0.8, 12);
   const half = Math.max(0.01, (premium * spreadPct) / 200);
-  const oi = right === 'C' ? node.callOI : node.putOI;
+  const oi = (right === 'C' ? node.callOI : node.putOI).value;
   // Skew: the wings are bid for, so they carry more implied than the money does.
   const sideIv = iv * (1 + otmDist * 1.6);
   return {
@@ -1079,7 +1087,7 @@ function buildImpact(snapshot: MarketSnapshot, expiry: string): ImpactRow[] {
         gamma: Number(((Math.abs(node.netGex) / totalGamma) * 100 * gammaScale).toFixed(1)),
       };
     };
-    return [mk('C', node.callOI, 0.45), mk('P', node.putOI, 0.38)];
+    return [mk('C', node.callOI.value, 0.45), mk('P', node.putOI.value, 0.38)];
   });
   return rows.sort((a, b) => b.gamma - a.gamma).map((r, i) => ({ ...r, rank: i + 1 }));
 }

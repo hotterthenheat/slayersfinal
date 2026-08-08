@@ -4,8 +4,7 @@ import { ROW_INTERACTIVE, interactiveRowProps } from '../../components/ui/intera
 import { ArrowUp, Bookmark, Check, Pause, Play, Plus, Save, Search, SlidersHorizontal, Trash2, X } from 'lucide-react';
 import { DUR, EASE, PILL } from '../../lib/motion';
 import { useMarketData } from '../../context/MarketDataContext';
-import { enrichPrint, sentimentOf, summarizeTape } from '../../data/flowtape';
-import { seedSessionTape } from '../../data/tapeSeed';
+import { TAPE_ID_CEILING, buildSessionTape, enrichPrint, sentimentOf, summarizeTape } from '../../data/flowtape';
 import { fmtUsd } from '../../data/gex';
 import Panel from '../../components/ui/Panel';
 import EmptyState from '../../components/ui/EmptyState';
@@ -16,7 +15,7 @@ import type { Tone } from '../../components/ui/tones';
 import { useToast } from '../../components/ui/Toast';
 import Term from '../../components/ui/Term';
 import type { TermKey } from '../../data/terms';
-import TapeRowDrawer from './TapeRowDrawer';
+import TapeRowModal from './TapeRowModal';
 import type { FlowPrint, PrintSentiment, TapeSummary } from '../../types/flowdesk';
 
 const MAX_ROWS = 400;
@@ -86,8 +85,7 @@ const rowAccent = (premium: number): string =>
  * unread pill both read ids as recency.
  */
 function openingTape(): FlowPrint[] {
-  const seed = seedSessionTape(MAX_ROWS);
-  return seed.map((o, i) => enrichPrint(o, seed.length - i));
+  return buildSessionTape(MAX_ROWS);
 }
 
 /** The terminal's read of the tape — same voice as market notes. */
@@ -95,10 +93,17 @@ function tapeRead(rows: FlowPrint[], summary: TapeSummary): string {
   if (rows.length === 0) return 'Awaiting prints…';
   const zdte = rows.filter(r => r.dte === 0).length;
   const parts = [
+    // netPremium is bull − bear premium over the DIRECTIONAL tape only (P4.2):
+    // the bull cohort is call BUYERS and put SELLERS, the bear cohort put buyers
+    // and call sellers. Name the cohort the number measures — "call buying leads"
+    // pins a single mechanism to a two-mechanism net — and say directional, since
+    // spread legs and delta-hedged prints are excluded from it.
     `${summary.bullish ? 'Bullish' : 'Bearish'} tape: ${
-      summary.bullish ? 'aggressive call buying leads' : 'put premium leads'
-    } by ${fmtUsd(Math.abs(summary.netPremium))}`,
+      summary.bullish ? 'call buyers and put sellers lead' : 'put buyers and call sellers lead'
+    } directional flow by ${fmtUsd(Math.abs(summary.netPremium))}`,
   ];
+  if (summary.structurePremium / (summary.totalPremium || 1) > 0.25)
+    parts.push(`${Math.round((summary.structurePremium / summary.totalPremium) * 100)}% is spreads & hedges`);
   if (summary.largest)
     parts.push(
       `largest print ${summary.largest.ticker} ${summary.largest.strike}${summary.largest.right} at ${fmtUsd(summary.largest.premium)}`
@@ -329,12 +334,12 @@ const ALL_COLS: TapeCol[] = [
     align: 'right',
     cls: 'text-label tnum',
     cell: r =>
-      r.deltaOI === 0 ? (
+      r.deltaOI.value === 0 ? (
         <span className="text-textMuted">—</span>
       ) : (
-        <span className={r.deltaOI > 0 ? 'text-bull' : 'text-bear'}>
-          {r.deltaOI > 0 ? '↑' : '↓'}
-          {Math.abs(r.deltaOI).toLocaleString()}
+        <span className={r.deltaOI.value > 0 ? 'text-bull' : 'text-bear'}>
+          {r.deltaOI.value > 0 ? '↑' : '↓'}
+          {Math.abs(r.deltaOI.value).toLocaleString()}
         </span>
       ),
   },
@@ -601,7 +606,11 @@ const LiveTape = () => {
   });
 
   /** Ids ascend with recency; the opening tape already claims 1…n. */
-  const idRef = useRef(rows.length);
+  // Live prints continue UPWARD from the backfill ceiling, so "higher id =
+  // newer" still holds for the unread pill and the pause-pending count. It is
+  // the ceiling, not rows.length, because the newest backfilled print is now
+  // TAPE_ID_CEILING regardless of how deep the window went.
+  const idRef = useRef(TAPE_ID_CEILING);
   /** Highest id the backfill owns, so a row can be told apart from a live print. */
   const seedMaxId = useRef(rows.length).current;
   const lastReadRef = useRef(0);
@@ -855,10 +864,16 @@ const LiveTape = () => {
         <StatCard
           label="Bullish vs Bearish"
           value={bearPct >= 50 ? `${bearPct}% BEAR` : `${100 - bearPct}% BULL`}
+          sub="of directional flow"
           tone={bearPct >= 50 ? 'bear' : 'bull'}
         >
           <RatioBar left={summary.bullPremium} right={summary.bearPremium} />
         </StatCard>
+        <StatCard
+          label="Structure"
+          value={`${Math.round((summary.structurePremium / (summary.totalPremium || 1)) * 100)}%`}
+          sub={`${fmtUsd(summary.structurePremium)} spreads & hedges`}
+        />
         <StatCard label="Sweeps" value={String(summary.sweeps)} sub="aggressive orders" tone="warn" />
         <StatCard label="Blocks" value={String(summary.blocks)} sub="negotiated size" />
         <StatCard
@@ -1114,7 +1129,7 @@ const LiveTape = () => {
         </div>
       </Panel>
 
-      <TapeRowDrawer
+      <TapeRowModal
         print={selected}
         onClose={() => setSelected(null)}
         isMarked={selected ? marked.has(selected.id) : false}

@@ -48,8 +48,9 @@ const Overview = () => (
           <Link
             key={d.name}
             to={d.to}
-            className="group rounded-lg border border-borderSubtle bg-panel hover:bg-panelRaised hover:border-borderMuted transition-colors p-4 flex flex-col gap-2"
+            className="group relative rounded-lg border border-borderSubtle bg-panel hover:bg-panelRaised hover:border-borderMuted transition-colors p-4 flex flex-col gap-2 overflow-hidden"
           >
+            <span aria-hidden className="holo-bar absolute inset-y-0 left-0 w-[2px]" />
             <div className="flex items-center gap-2">
               <d.icon className="w-4 h-4 text-textSecondary group-hover:text-textPrimary transition-colors" />
               <span className="font-mono text-data font-bold uppercase tracking-wider text-textPrimary">{d.name}</span>

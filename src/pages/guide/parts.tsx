@@ -34,10 +34,17 @@ import { Info } from 'lucide-react';
   spoken lexicon.
 */
 
-/** A titled content block with the standard mono eyebrow heading. */
+/**
+ * A titled content block with the standard mono eyebrow heading.
+ *
+ * The eyebrow carries the interface accent rather than muted grey. It is the
+ * one thing on a prose page that is chrome rather than content, which is
+ * exactly what `select` is for, and it gives a page of text a spine the eye can
+ * skim. Grey-on-grey headings made every guide page read as one undivided wall.
+ */
 export const Section = ({ title, children }: { title: string; children: ReactNode }) => (
   <section className="flex flex-col gap-3">
-    <h2 className="font-mono text-label font-semibold uppercase tracking-widest text-textMuted">{title}</h2>
+    <h2 className="font-mono text-label font-semibold uppercase tracking-widest text-select/80">{title}</h2>
     {children}
   </section>
 );
@@ -61,9 +68,13 @@ export const Callout = ({ children, tone = 'info' }: { children: ReactNode; tone
   </div>
 );
 
-/** Inline keyboard key. */
+/**
+ * Inline keyboard key. Wears the interface accent, because a keycap IS the
+ * interface talking — and because a page whose only visual events are keycaps
+ * needs them to register as something rather than as more grey.
+ */
 export const Kbd = ({ children }: { children: ReactNode }) => (
-  <kbd className="inline-flex items-center justify-center min-w-[20px] h-[20px] px-1.5 rounded border border-borderMuted bg-inset font-mono text-label text-textPrimary align-middle">
+  <kbd className="inline-flex items-center justify-center min-w-[20px] h-[20px] px-1.5 rounded border border-select/30 bg-select/[0.07] font-mono text-label text-select align-middle">
     {children}
   </kbd>
 );

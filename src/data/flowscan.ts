@@ -71,7 +71,7 @@ export function buildScannerRows(snapshot: MarketSnapshot): ScannerRow[] {
   for (const node of nodes) {
     for (const right of ['C', 'P'] as const) {
       const seed = (t: string) => `${ticker}-${day}-scan-${node.strike}-${right}-${t}`;
-      const oi = right === 'C' ? node.callOI : node.putOI;
+      const oi = (right === 'C' ? node.callOI : node.putOI).value;
       if (oi < 50) continue;
       const volOverOi = hRange(seed('voi'), 0.15, 1.9);
       const volume = Math.round(oi * volOverOi);

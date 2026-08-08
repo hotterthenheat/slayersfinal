@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import RGL, { WidthProvider, type Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
@@ -48,6 +48,7 @@ import type { WorkspaceCtx } from '../workspace/registry';
 import { PULSE_ADDABLE_PANELS, PULSE_DATA_CONNECTIONS, pulsePanelByKey } from './pulseRegistry';
 import PanelErrorBoundary from './PanelErrorBoundary';
 import { DUR, EASE } from '../../lib/motion';
+import { isTypingTarget, overlayOwnsKeyboard } from '../../lib/keys';
 import {
   PULSE_PRESETS,
   PULSE_STORAGE_KEY,
@@ -76,6 +77,7 @@ import {
   screenIndexOf,
   tile,
 } from './detach';
+import { nextLayoutId, nextPanelId, slugify } from './ids';
 import { useScreens, type DisplayInfo } from './useScreens';
 import PopoutPanel from './PopoutPanel';
 import { openPanelWindow } from './popoutWindow';
@@ -720,6 +722,7 @@ const MemoPanelBody = memo(({ render, ctx }: { render: (c: WorkspaceCtx) => Reac
 const PulseWorkspace = () => {
   const { activeTicker, marketData, changeTicker } = useMarketData();
   const location = useLocation();
+  const navigate = useNavigate();
   const toast = useToast();
 
   const [ws, setWs] = useState<PulseWorkspaceState>(loadState);
@@ -739,7 +742,6 @@ const PulseWorkspace = () => {
   // A price level to mark on the matching ticker's charts, arriving from a
   // cross-page "view on chart" deep-link (Exposure Profile / Ranked Targets).
   const [focus, setFocus] = useState<{ ticker: string; price: number } | null>(null);
-  const counterRef = useRef(1);
 
   // ---- out-of-grid panels -------------------------------------------------
   /** Live handles on the pop-out windows. Deliberately NOT persisted: a Window
@@ -775,7 +777,14 @@ const PulseWorkspace = () => {
     if (typeof st.focusPrice === 'number') {
       setFocus({ ticker: st.focusTicker ?? activeTicker, price: st.focusPrice });
     }
-    if (st.focusTicker || st.focusPrice != null) window.history.replaceState({}, '');
+    // Consume the deep-link so a reload or a Back-then-Forward doesn't re-apply
+    // it. Through the router, NOT `window.history.replaceState({}, '')`: React
+    // Router keeps its own `key` and `idx` in the same history state object, and
+    // overwriting it with a bare `{}` takes those with it — the router then has
+    // no index to compute a POP delta against.
+    if (st.focusTicker || st.focusPrice != null) {
+      navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -794,8 +803,11 @@ const PulseWorkspace = () => {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
-      const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if (isTypingTarget(e.target)) return;
+      // A dialog owns the keyboard while it is open. Without this, Escape on an
+      // open command palette closed the palette AND cleared the maximized panel
+      // behind it, and `f` put the desk into fullscreen underneath Settings.
+      if (overlayOwnsKeyboard()) return;
       if (e.key === 'Escape') {
         setAddOpen(false);
         setWsMenuOpen(false);
@@ -885,8 +897,8 @@ const PulseWorkspace = () => {
   const addPanel = (key: string) => {
     const def = pulsePanelByKey(key);
     if (!def) return;
-    const id = `${key}-${++counterRef.current}`;
     mutate(l => {
+      const id = nextPanelId(l, key);
       const away = awayIds(l);
       const docked = dockedCells(l, away);
       // Born at the registry's size; free to be dragged anywhere after. It goes
@@ -944,8 +956,8 @@ const PulseWorkspace = () => {
   const duplicatePanel = (id: string) => {
     const panel = active.panels.find(p => p.id === id);
     if (!panel) return;
-    const nid = `${panel.key}-${++counterRef.current}`;
     mutate(l => {
+      const nid = nextPanelId(l, panel.key);
       const geo = l.layout.find(g => g.i === id);
       if (!geo) return l;
       const panels = [...l.panels, { ...panel, id: nid }];
@@ -1285,9 +1297,11 @@ const PulseWorkspace = () => {
     const name = nameEditor.value.trim();
     if (!name) return;
     if (nameEditor.mode === 'saveAs') {
-      const id = `ws-${++counterRef.current}-${name.toLowerCase().replace(/\s+/g, '-')}`;
-      const copy: PulseLayout = { ...clonePreset(active), id, name, preset: false };
-      setWs(prev => ({ ...prev, layouts: [...prev.layouts, copy], activeId: id }));
+      setWs(prev => {
+        const id = nextLayoutId(prev.layouts, `ws-${slugify(name)}`);
+        const copy: PulseLayout = { ...clonePreset(active), id, name, preset: false };
+        return { ...prev, layouts: [...prev.layouts, copy], activeId: id };
+      });
       setWsMenuOpen(false);
     } else {
       mutate(l => ({ ...l, name }));
@@ -1295,8 +1309,11 @@ const PulseWorkspace = () => {
     setNameEditor(null);
   };
   const duplicateLayout = () => {
-    const id = `ws-${++counterRef.current}-dup`;
-    setWs(prev => ({ ...prev, layouts: [...prev.layouts, { ...clonePreset(active), id, name: `${active.name} copy`, preset: false }], activeId: id }));
+    setWs(prev => {
+      const name = `${active.name} copy`;
+      const id = nextLayoutId(prev.layouts, `ws-${slugify(name)}`);
+      return { ...prev, layouts: [...prev.layouts, { ...clonePreset(active), id, name, preset: false }], activeId: id };
+    });
     setWsMenuOpen(false);
   };
   const deleteLayout = () => {
