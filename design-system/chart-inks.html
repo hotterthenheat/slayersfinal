@@ -69,7 +69,7 @@
 </head>
 <body>
   <h1>Chart Inks</h1>
-  <div class="sub">src/components/gex/palette.ts · candleTheme.ts · liquidityField.ts — the named inks JS-API charts consume. Same values as the flip/king/darkpool tokens; change both together.</div>
+  <div class="sub">src/components/gex/palette.ts · candleTheme.ts — the named inks JS-API charts consume. Same values as the flip/king/darkpool tokens; change both together.</div>
 
   <h2>Structure &amp; reference lines (palette.ts)</h2>
   <div class="panel">
@@ -116,10 +116,12 @@
     direction tokens.
   </div>
 
-  <h2>Gold liquidity LUT (liquidityField.ts)</h2>
-  <div class="lut"></div>
-  <div class="lut-scale"><span>open</span><span>thin</span><span>moderate</span><span>deep shelf</span></div>
-  <div class="note">256-entry RGB lookup, gamma-lifted (x^0.72) so mid shelves read. Stops: rgb(16,12,6) → rgb(50,34,10) → rgb(110,74,16) → rgb(176,122,28) → rgb(218,164,46) → rgb(242,196,92) → rgb(255,226,150). Liquidity owns gold — no other surface uses this family. Depth read-out tints: <span style="color:#F0C45C">#F0C45C deep</span> · <span style="color:#C89B3C">#C89B3C moderate</span> · <span style="color:#7d7d7d">#7D7D7D thin</span>.</div>
+  <!-- The "Gold liquidity LUT (liquidityField.ts)" section stood here. The module
+       was deleted in cb38463 ("Delete the liquidity heatmap — NBBO cannot back
+       resting depth"), along with the chart, the primitive and the panel that
+       drew it. This page was the last thing in the repo that still believed the
+       gold ramp shipped: a specimen documenting a colour family the product no
+       longer has, which is worse than documenting nothing. -->
 
   <h2>Dealer positioning (PositioningMap.tsx)</h2>
   <div class="row">

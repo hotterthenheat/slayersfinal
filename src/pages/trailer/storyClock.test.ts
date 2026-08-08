@@ -23,6 +23,7 @@ import { buildTrailerStory, LOTTO_P_GATE, STORY_SECONDS, spotAt } from './traile
 import { expiryFor, fmtMonthDay, isTradingDay } from '../../core/calendar';
 import Simulator from '../../core/simulator';
 import { bsPriceAtT } from '../../components/compass/contractTrackModel';
+import { COMPASS_VIEW_KEYS } from '../compassViews';
 
 describe('story clock', () => {
   it('never runs the session backwards', () => {
@@ -64,18 +65,44 @@ describe('story clock', () => {
   });
 
   it('points every Open desk target at a pane the desk reads', () => {
-    // Renamed. This used to be called "keeps every Open desk target a real
-    // route" while asserting that the string starts with a slash — so `/news`
-    // passed it for as long as `/news` was a dead route, which was the entire
-    // time. Whether the PATH resolves is now checked against App.tsx itself in
-    // src/lib/routes.test.ts. What is left here is the part that file cannot
-    // know: the query string has to name a pane this desk actually reads.
+    /*
+      Whether the PATH resolves is checked against App.tsx in
+      src/lib/routes.test.ts. What is left here is the part that file cannot
+      know: the query string has to name a pane this desk actually reads.
+
+      That claim is now checked against Compass's own vocabulary. It used to be
+      checked against a regex literal typed into this file —
+      /^view=(weigher|lotto|quick-scalp|rebounds|top-setups)$/ — which is the
+      same species of lie as the version before it (that one was called "keeps
+      every Open desk target a real route" and asserted the string starts with a
+      slash). Renaming the Compass mode `lotto` to `lottery` drops the trailer's
+      Lotto button through readView to null and silently opens the default pane;
+      the whole suite stayed green at 1140. Two of those five values were also
+      already used by no scene, so the list had drifted both ways at once.
+    */
     for (const s of SCENES) {
       if (!s.route) continue;
       expect(s.route.startsWith('/')).toBe(true);
       const q = s.route.split('?')[1];
-      if (q) expect(q).toMatch(/^view=(weigher|lotto|quick-scalp|rebounds|top-setups)$/);
+      if (!q) continue;
+      const [key, value] = q.split('=');
+      expect(key, `${s.id}: only ?view= is a pane selector`).toBe('view');
+      expect(
+        COMPASS_VIEW_KEYS.has(value),
+        `${s.id}: "${value}" is not a pane Compass reads — readView would return ` +
+          `null and open the default. Known: ${[...COMPASS_VIEW_KEYS].join(', ')}`,
+      ).toBe(true);
     }
+  });
+
+  it('has no scene pointing at a pane that no longer exists', () => {
+    // The other direction: a ?view= that Compass still accepts but whose scene
+    // was cut leaves the vocabulary looking larger than the film uses. Harmless,
+    // but it is how the old literal list came to carry two dead values.
+    const used = SCENES.map(s => s.route?.split('?')[1])
+      .filter(Boolean)
+      .map(q => q!.split('=')[1]);
+    for (const v of used) expect(COMPASS_VIEW_KEYS.has(v)).toBe(true);
   });
 
   it('runs for the length the copy claims', () => {

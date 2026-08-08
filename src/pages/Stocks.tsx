@@ -554,7 +554,9 @@ const Stocks = () => {
     },
     {
       key: 'sleeves',
-      header: 'Sleeves · Mom / Qual / Flow / News',
+      // Three bars render below; the header named a fourth. The News sleeve
+      // went with the retired News desk.
+      header: 'Sleeves · Mom / Qual / Flow',
       width: '220px',
       render: p => (
         <span className="flex flex-col gap-1 py-0.5">
@@ -594,7 +596,7 @@ const Stocks = () => {
 
       {/*
         This was the one desk of the four here with no provenance line at all.
-        News tags every row MODELED, Earnings says "modeled avg" beside each
+        Earnings says "modeled avg" beside each
         implied move, the Tracker's ledger names its trades as modelled — and
         Stocks printed 192 rows of scores, relative strength and off-exchange
         share with nothing on the page saying where any of it came from. A

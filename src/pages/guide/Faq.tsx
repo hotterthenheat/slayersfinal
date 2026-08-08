@@ -57,7 +57,7 @@ const FAQ: QA[] = [
     q: 'How do I switch tickers quickly?',
     a: (
       <>Use the ticker switcher in the top bar, press <Kbd>]</Kbd> / <Kbd>[</Kbd> to step through the watchlist, or open
-      the command palette with <Kbd>⌘</Kbd><Kbd>K</Kbd> and type a symbol. Pulse, Compass, Pinpoint, Prove It, News
+      the command palette with <Kbd>⌘</Kbd><Kbd>K</Kbd> and type a symbol. Pulse, Compass, Pinpoint, Prove It
       and Tracker rebuild around it, and so do Trace's Dark pool and Scanner. Stocks and Earnings survey the whole
       field rather than one name, and Trace's Live tape and Reconstruction stay on the same prints — the switcher is
       hidden wherever it would not change the page.</>

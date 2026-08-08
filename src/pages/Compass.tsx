@@ -15,6 +15,12 @@ import {
   type Setup,
   type SleeveKey,
 } from '../types/compass';
+import {
+  COMPASS_MODES,
+  MODE_OPTIONS,
+  SCANNER_KEYS,
+  type CompassMode,
+} from './compassViews';
 import PageHeader from '../components/ui/PageHeader';
 import Panel from '../components/ui/Panel';
 import ContractChain, { type ChainSelection } from '../components/compass/ContractChain';
@@ -34,22 +40,14 @@ import SegmentedControl from '../components/ui/SegmentedControl';
 import { SkeletonRows } from '../components/ui/Skeleton';
 import { DUR, EASE, PILL } from '../lib/motion';
 
-type CompassMode = 'setups' | 'weigher' | 'lotto';
 
 const SETUPS_SUBTITLE = 'Setups ranked by trend + dealer-flow conviction. A read, never an order.';
 
-const MODE_OPTIONS = [
-  { value: 'setups', label: 'Setups' },
-  { value: 'weigher', label: 'Weigher' },
-  { value: 'lotto', label: 'Lotto' },
-] as const;
 
 /** The scanner sweeps on its own cadence — the feed must not vibrate with every price tick. */
 const SCAN_INTERVAL_MS = 10_000;
 
 /* One membership test per vocabulary, used by every entry into this page. */
-const SCANNER_KEYS = new Set<string>(SCANNERS.map(s => s.key));
-const COMPASS_MODES = new Set<string>(MODE_OPTIONS.map(o => o.value));
 const SLEEVE_KEYS = new Set<string>(SLEEVES.map(s => s.key));
 
 const isScannerKey = (v: unknown): v is ScannerKey => typeof v === 'string' && SCANNER_KEYS.has(v);
@@ -206,7 +204,7 @@ const Compass = () => {
   }, [params]);
 
   /* Deep links: from Tracker (land in review mode on the tracked setup) or
-     from Earnings/Stocks/News ("weigh this name's contracts"). Router state
+     from Earnings/Stocks ("weigh this name's contracts"). Router state
      still wins over the param — /lotto redirects through it.
 
      Every value is read through the same membership tests the ?view= path

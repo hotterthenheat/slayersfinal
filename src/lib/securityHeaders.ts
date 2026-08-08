@@ -38,10 +38,13 @@
  *   src/pages/pulse/detach.ts  `l.textContent = i.textContent`  (pop-out window)
  *   framer-motion        `V.sheet.insertRule(…)`
  *
- * `npm run audit:csp -- --interact` drives those paths — chart crosshairs, the
- * command palette, and Pulse's workspace drag behind its `E` toggle. Under the
- * real policy: 0 violations, and one <style> element genuinely injected, so the
- * run reaches them. Under `style-src 'self'`: FIVE `style-src-elem | inline`
+ * `npm run audit:csp -- --interact` drives THREE of them — chart crosshairs, the
+ * command palette, and Pulse's workspace drag behind its `E` toggle. It does not
+ * open the pop-out window, so `detach.ts` is reasoned about here rather than
+ * measured; the checker now drains violations from every page in the context, so
+ * a pop-out that is opened will at least be seen. Under the real policy: 0
+ * violations, and one <style> element genuinely injected, so the run does reach
+ * the paths it claims. Under `style-src 'self'`: FIVE `style-src-elem | inline`
  * refusals, on the landing's motion layer and on the Pulse drag.
  *
  * Note what the element count does in that failing run: it still goes up. The
@@ -102,8 +105,31 @@ export const SECURITY_HEADERS: Record<string, string> = {
   'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), interest-cohort=()',
 };
 
-/** Vite fingerprints everything under this prefix, so it can never go stale. */
 export const IMMUTABLE_PREFIX = '/assets/';
 export const IMMUTABLE_CACHE = 'public, max-age=31536000, immutable';
 /** Everything else keeps its name across deploys and must be revalidated. */
 export const REVALIDATE_CACHE = 'no-cache';
+
+/**
+ * A Vite content hash: `[name]-[hash][ext]`, hash being 8 base64url characters.
+ *
+ * This exists because "under /assets/" is NOT the same claim as "fingerprinted",
+ * and the difference was a live bug. Vite copies `public/assets/*` into
+ * `dist/assets/` verbatim, so hand-authored files land in the same directory as
+ * the hashed build output — `og-cover.png` sat next to `charts-CJ9089NK.js`.
+ * A prefix rule therefore promised a year of `immutable` on 20 files whose names
+ * never change, the social preview image among them. Publishing a new
+ * `og-cover.png` would have reached nobody who had already loaded the old one,
+ * and no deploy could fix it, because `immutable` tells the browser not to
+ * revalidate even on reload.
+ *
+ * Immutability is a property of content-addressed NAMES, so it is tested for
+ * directly. Anything else under /assets/ falls back to revalidation, which is
+ * merely slower — the safe direction to be wrong in.
+ */
+export const FINGERPRINTED = /-[A-Za-z0-9_-]{8}\.[a-z0-9]+$/;
+
+/** True when a URL path may be cached forever. */
+export function isImmutable(urlPath: string): boolean {
+  return urlPath.startsWith(IMMUTABLE_PREFIX) && FINGERPRINTED.test(urlPath);
+}

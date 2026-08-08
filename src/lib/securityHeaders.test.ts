@@ -6,6 +6,7 @@ import {
   IMMUTABLE_CACHE,
   IMMUTABLE_PREFIX,
   SECURITY_HEADERS,
+  isImmutable,
 } from './securityHeaders';
 
 /*
@@ -38,9 +39,52 @@ describe('vercel.json header parity', () => {
   });
 
   it('caches the fingerprinted assets and nothing else', () => {
-    const rule = ruleFor(`${IMMUTABLE_PREFIX}(.*)`);
-    expect(rule, `expected a header rule for ${IMMUTABLE_PREFIX}(.*)`).toBeDefined();
+    const rule = vercel.headers.find(h => h.source.startsWith(IMMUTABLE_PREFIX));
+    expect(rule, `expected a header rule under ${IMMUTABLE_PREFIX}`).toBeDefined();
     expect(asMap(rule)['Cache-Control']).toBe(IMMUTABLE_CACHE);
+    // The rule must test for a content hash, not merely the directory — see
+    // the isImmutable cases below for why that distinction is the whole point.
+    expect(rule!.source).toMatch(/A-Za-z0-9/);
+  });
+});
+
+describe('immutable caching applies only to content-addressed names', () => {
+  /*
+    This is the bug it exists to stop, and it shipped: the rule used to be the
+    bare prefix /assets/, and Vite copies public/assets/* into dist/assets/
+    unchanged. So twenty hand-authored files — og-cover.png, the social preview
+    named twice in index.html — were served `immutable` for a year under names
+    that never change. Republishing one would have reached nobody, and no deploy
+    could undo it, because `immutable` suppresses revalidation even on reload.
+  */
+  it('marks Vite output immutable', () => {
+    for (const p of [
+      '/assets/charts-CJ9089NK.js',
+      '/assets/index-CMPFMQfE.js',
+      '/assets/ProveIt-C6bxuxuX.js',
+      '/assets/index-BIotnoFC.css',
+    ]) {
+      expect(isImmutable(p), `${p} is content-addressed and should be immutable`).toBe(true);
+    }
+  });
+
+  it('does NOT mark hand-authored public/assets files immutable', () => {
+    for (const p of [
+      '/assets/og-cover.png',
+      '/assets/auditor-ledger.png',
+      '/assets/gex-profile.png',
+      '/assets/options-tape.png',
+      '/assets/vanna-matrix.png',
+      '/assets/media__1782853419089.png',
+    ]) {
+      expect(isImmutable(p), `${p} has a stable name and must stay revalidated`).toBe(false);
+    }
+  });
+
+  it('never marks anything outside /assets/ immutable', () => {
+    for (const p of ['/', '/index.html', '/favicon.svg', '/robots.txt', '/site.webmanifest']) {
+      expect(isImmutable(p)).toBe(false);
+    }
   });
 
   it('does not rewrite a missing asset to the app shell', () => {

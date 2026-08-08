@@ -58,10 +58,22 @@ describe('design specimens', () => {
     ).toEqual([]);
   });
 
-  it('does not resurrect the dead aliases in prose either', () => {
-    // The swatch check above only sees the grid. These six were also the ones
-    // most likely to be re-typed into a note, so they are matched as words
-    // anywhere in the file.
+  it('does not resurrect the dead camelCase aliases in prose either', () => {
+    /*
+      The swatch check above sees only the grid, and it covers all six retired
+      aliases — primary, secondary, silver, gammaPos, gammaNeg, warning — because
+      a swatch names its token in a known cell.
+
+      This second pass covers prose, and it can only carry the two camelCase
+      names. `primary`, `secondary`, `silver` and `warning` are ordinary English
+      words that these pages use legitimately and often ("holo-silver selection
+      language", "Caution only"), so word-matching them anywhere in the file
+      would fail on correct copy. `gammaPos`/`gammaNeg` cannot occur by accident.
+
+      The comment here used to say "these six" above a list of two, which is the
+      same shape of overclaim this suite exists to catch — a guard describing
+      coverage it does not have.
+    */
     const dead = ['gammaPos', 'gammaNeg'];
     const offenders: string[] = [];
     for (const f of FILES) {

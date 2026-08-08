@@ -4,9 +4,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   IMMUTABLE_CACHE,
-  IMMUTABLE_PREFIX,
   REVALIDATE_CACHE,
   SECURITY_HEADERS,
+  isImmutable,
 } from './src/lib/securityHeaders';
 
 /*
@@ -64,10 +64,12 @@ app.use(
     // from one place rather than two that can drift.
     index: false,
     // Matched on the URL path, not the filesystem path, so this and the
-    // `/assets/(.*)` rule in vercel.json are keyed off the same string.
+    // matching rule in vercel.json are keyed off the same string. `isImmutable`
+    // requires a content hash rather than just the /assets/ prefix — Vite copies
+    // public/assets/* into the same directory, so the prefix alone would promise
+    // a year of immutability to files whose names never change.
     setHeaders(res) {
-      const immutable = res.req.path.startsWith(IMMUTABLE_PREFIX);
-      res.setHeader('Cache-Control', immutable ? IMMUTABLE_CACHE : REVALIDATE_CACHE);
+      res.setHeader('Cache-Control', isImmutable(res.req.path) ? IMMUTABLE_CACHE : REVALIDATE_CACHE);
     },
   }),
 );

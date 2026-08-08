@@ -144,6 +144,25 @@ function linkTargets(text: string): string[] {
     /\broute:\s*["'`](\/[^"'`{}]*)["'`]/g,
     /\bhref=\{?["'`](\/[^"'`{}]*)["'`]/g,
     /\bnavigate\(\s*["'`](\/[^"'`{}]*)["'`]/g,
+    /*
+      `path:` was missing, and its absence exempted 19 of the app's destinations
+      from the only check that looks for dead links — every Pinpoint, Trace,
+      Guide and Community sub-tab. Those registries spell their targets as a
+      PROPERTY (`path: '/trace/scanner'`) and render them through a template
+      (`<NavLink to={item.path}>`), so neither the `to=` literal form nor the
+      `to:` form could see them, and the command palette navigates the same
+      values via `navigate(page.path)`.
+
+      Proven, not inferred: renaming src/pages/flowdesk/subnav.ts's scanner path
+      to `/trace/scannerXX` — which lands the Trace tab bar and its palette entry
+      on NotFound — left the whole suite green at 1140 passing. That is the /news
+      defect this file was written to stop, one registry over.
+
+      App.tsx declares routes as the ATTRIBUTE form (`path="scanner"`), which
+      this property-form pattern cannot match, so the route table itself is not
+      mistaken for a set of links.
+    */
+    /\bpath:\s*["'`](\/[^"'`{}]*)["'`]/g,
   ];
   for (const re of patterns) {
     let m: RegExpExecArray | null;
