@@ -995,7 +995,11 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
               onChange={e => setTickerQuery(e.target.value)}
               aria-label="Search all tickers"
               placeholder="Search all tickers…"
-              className="w-full bg-transparent py-2.5 text-body text-textPrimary placeholder:text-textMuted focus-visible:outline-none"
+              // The house ring, same as the desk's other search box. This one
+              // took `outline-none` and gave nothing back, so the popover
+              // opened with focus already inside a field that showed no sign
+              // of holding it.
+              className="w-full rounded bg-transparent py-2.5 text-body text-textPrimary placeholder:text-textMuted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60"
             />
           </div>
           <div role="listbox" aria-label="Tickers" className="max-h-72 overflow-y-auto py-1">

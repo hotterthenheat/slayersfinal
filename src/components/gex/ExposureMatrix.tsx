@@ -161,7 +161,7 @@ const CellReadout = ({
         <div className="font-mono text-micro uppercase tracking-widest text-textMuted">
           {greek} {leg} · {group.unit}
         </div>
-        <div className="font-mono text-base font-bold tnum text-textPrimary">{fmtUsd(value)}</div>
+        <div className="font-mono text-lead leading-6 font-bold tnum text-textPrimary">{fmtUsd(value)}</div>
         <div className="font-mono text-micro uppercase tracking-wider text-textSecondary tnum">
           {share}% of the largest {greek} value in this window
         </div>

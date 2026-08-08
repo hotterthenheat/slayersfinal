@@ -131,7 +131,7 @@ const ScannerRowModal = ({ row, spot, onClose }: ScannerRowModalProps) => {
             <div className="flex flex-col items-end gap-0.5 shrink-0">
               <span className="font-mono text-label uppercase tracking-widest text-textMuted">Conviction</span>
               <span
-                className={`font-mono text-base font-bold tnum ${
+                className={`font-mono text-lead leading-6 font-bold tnum ${
                   row.bullScore > 15 ? 'text-bull' : row.bullScore < -15 ? 'text-bear' : 'text-textMuted'
                 }`}
               >

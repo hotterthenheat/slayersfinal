@@ -207,11 +207,13 @@ const DemoSetup = ({ setups }: { setups: CompassData }) => {
         <span className="inline-flex items-center rounded px-2 py-0.5 font-mono text-micro font-bold uppercase tracking-wider bg-king/10 text-king">
           Top pick
         </span>
+        {/* `bg-bear`, not `rgba(255,59,48,0.85)`. That literal was a fourth
+            spelling of the bear token, and the 0.85 dropped dark ink on it to
+            4.25:1 — under AA for 10px bold. At full strength it reads 5.6:1. */}
         <span
           className={`ml-auto inline-flex items-center rounded px-2 py-0.5 font-mono text-micro font-bold uppercase tracking-wider text-ink ${
-            bull ? 'holo-bg' : ''
+            bull ? 'holo-bg' : 'bg-bear'
           }`}
-          style={bull ? undefined : { background: 'rgba(255,59,48,0.85)' }}
         >
           {VERDICT_LABEL[setup.verdict]}
         </span>

@@ -169,7 +169,11 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
                 {group}
                 {active && activeItem && (
                   <span className="text-select">
-                    <span className="mx-1 text-textMuted font-normal">·</span>
+                    {/* textSecondary, not textMuted: this dot rides the active
+                        tab's lifted `bg-white/[0.06]`, where muted measures
+                        4.39:1 — under AA. Still quieter than the group name
+                        beside it and the desk name after it. */}
+                    <span aria-hidden className="mx-1 text-textSecondary font-normal">·</span>
                     {activeItem.label}
                   </span>
                 )}

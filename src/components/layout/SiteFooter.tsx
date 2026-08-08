@@ -119,6 +119,16 @@ const Wordmark = ({ caret }: { caret: boolean }) => (
 const COPYRIGHT = '© 2026 Slayer Terminal · Compass · Pinpoint';
 const DISCLAIMER = 'For informational purposes only. Not investment advice.';
 
+/**
+ * A 24px-tall hit box for the footer's small-print links.
+ *
+ * Measured on a phone, these are 15–17px tall — under WCAG 2.2's 24×24 minimum,
+ * and close enough to each other that the spacing exception does not save them.
+ * The column lists are exempt (they are inline links in a block of text); these
+ * are not, because they are flex items, and a flex item is blockified.
+ */
+const TAP_SAFE = 'inline-flex items-center min-h-6';
+
 interface SiteFooterProps {
   /** `compact` drops the sitemap: one bar, wordmark and legal line only. */
   variant?: 'full' | 'compact';
@@ -152,7 +162,7 @@ const SiteFooter = ({ variant = 'full', bleed = false }: SiteFooterProps) => {
               <SmartLink
                 key={l.label}
                 to={l.to}
-                className="font-mono text-micro uppercase tracking-wider text-textMuted hover:text-textSecondary transition-colors"
+                className={`${TAP_SAFE} font-mono text-micro uppercase tracking-wider text-textMuted hover:text-textSecondary transition-colors`}
               >
                 {l.label}
               </SmartLink>
@@ -175,7 +185,7 @@ const SiteFooter = ({ variant = 'full', bleed = false }: SiteFooterProps) => {
             href="https://x.com/JoinSlayer"
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-4 inline-flex items-center gap-2 font-mono text-label text-textSecondary hover:text-textPrimary transition-colors"
+            className={`mt-4 gap-2 font-mono text-label text-textSecondary hover:text-textPrimary transition-colors ${TAP_SAFE}`}
           >
             <svg viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5" aria-hidden="true">
               <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
@@ -208,7 +218,7 @@ const SiteFooter = ({ variant = 'full', bleed = false }: SiteFooterProps) => {
           <span className="font-mono text-micro uppercase tracking-wider text-textMuted">{COPYRIGHT}</span>
           <SmartLink
             to="/legal/disclaimer"
-            className="md:ml-auto font-mono text-micro tracking-wide text-textMuted hover:text-textSecondary transition-colors"
+            className={`md:ml-auto font-mono text-micro tracking-wide text-textMuted hover:text-textSecondary transition-colors ${TAP_SAFE}`}
           >
             {DISCLAIMER}
           </SmartLink>

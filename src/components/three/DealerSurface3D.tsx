@@ -3,7 +3,7 @@ import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Html, Line } from '@react-three/drei';
 import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import * as THREE from 'three';
-import { rampColor } from '../experience/surfaceRamps';
+import { RAMP_CSS, rampColor } from '../experience/surfaceRamps';
 import { fmtUsd } from '../../data/gex';
 
 /*
@@ -170,14 +170,17 @@ const DealerSurface3D = ({ grid, strikes, spotCol, maxAbsUsd }: DealerSurface3DP
     <div className="pointer-events-none absolute top-3 left-3 flex flex-col items-start gap-1">
       <span className="font-mono text-micro uppercase tracking-wide text-textMuted">net gex</span>
       <div className="flex items-center gap-1.5">
+        {/* The bar is RAMP_CSS.gamma, not a second copy of it: this panel had
+            the gradient spelled out again, so the legend and the ramp it
+            describes were two strings that had to be edited together. */}
         <div
           className="w-2 h-24 rounded-sm border border-borderSubtle/60"
-          style={{ background: 'linear-gradient(to top, #d43329, #7a1a15, #0a0a0d, #187a3f, #30d158)' }}
+          style={{ background: RAMP_CSS.gamma }}
         />
         <div className="flex flex-col justify-between h-24 py-0.5">
-          <span className="font-mono text-micro text-[#30d158]">+{fmtUsd(maxAbsUsd)}</span>
+          <span className="font-mono text-micro text-bull">+{fmtUsd(maxAbsUsd)}</span>
           <span className="font-mono text-micro text-textMuted">0</span>
-          <span className="font-mono text-micro text-[#ff3b30]">{fmtUsd(-maxAbsUsd)}</span>
+          <span className="font-mono text-micro text-bear">{fmtUsd(-maxAbsUsd)}</span>
         </div>
       </div>
     </div>

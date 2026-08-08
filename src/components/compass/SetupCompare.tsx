@@ -181,7 +181,7 @@ const SetupCompare = ({ setup, peers, spot, scanner, onSelectPeer, onStudy }: Se
   return (
     <Panel
       title={
-        <span className="inline-flex items-center gap-1.5 font-mono text-base font-bold text-textPrimary tracking-tight">
+        <span className="inline-flex items-center gap-1.5 font-mono text-lead leading-6 font-bold text-textPrimary tracking-tight">
           <Scale className="w-3.5 h-3.5 shrink-0" /> {setup.contract}
         </span>
       }

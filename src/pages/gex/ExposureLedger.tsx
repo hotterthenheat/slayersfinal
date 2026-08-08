@@ -116,11 +116,21 @@ const ExposureLedger = ({
         value={normalize ? 'pct' : 'usd'}
         onChange={v => setNormalize(v === 'pct')}
       />
+      {/* Icon-only on a phone. The header's actions are `shrink-0`, so all
+          three controls together measured 383px inside a 330px panel and
+          pushed the whole page sideways — the shell scrolls on X, so it slid
+          rather than clipping. The label returns at `sm`; `aria-label` carries
+          the name at every width, the same trade the subtitle already makes. */}
       <button
         onClick={exportCsv}
+        aria-label="Export CSV"
+        title="Export CSV"
         className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-borderSubtle bg-white/[0.03] hover:bg-rowHover font-mono text-label font-semibold uppercase tracking-wider text-textPrimary transition-colors"
       >
-        <Download className="w-3.5 h-3.5" /> Export CSV
+        <Download className="w-3.5 h-3.5 shrink-0" />
+        <span className="hidden sm:inline" aria-hidden="true">
+          Export CSV
+        </span>
       </button>
     </>
   );

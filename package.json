@@ -12,7 +12,9 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:dates": "node scripts/date-sweep.mjs"
+    "test:dates": "node scripts/date-sweep.mjs",
+    "audit:ui": "node scripts/ui-audit.mjs",
+    "audit:ui:self-test": "node scripts/ui-audit.mjs --self-test"
   },
   "dependencies": {
     "@react-three/drei": "^9.122.0",

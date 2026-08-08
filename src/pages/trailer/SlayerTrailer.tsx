@@ -11,6 +11,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Play } from 'lucide-react';
+import { FOCUS_RING_ON_HOLO } from '../../components/ui/focusRing';
 import TrailerShell from './TrailerShell';
 import { SCENES, TRAILER_DURATION_MS } from './useTrailerTimeline';
 
@@ -37,7 +38,7 @@ const LaunchCard: React.FC<{ onStart: () => void }> = ({ onStart }) => (
       <button
         type="button"
         onClick={onStart}
-        className="inline-flex items-center gap-2 min-h-[44px] px-5 rounded-md font-mono text-data font-semibold uppercase tracking-wider text-ink holo-bg transition-transform hover:scale-[1.02] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-select/60"
+        className={`inline-flex items-center gap-2 min-h-[44px] px-5 rounded-md font-mono text-data font-semibold uppercase tracking-wider text-ink holo-bg transition-transform hover:scale-[1.02] active:scale-[0.98] ${FOCUS_RING_ON_HOLO}`}
       >
         <Play className="w-4 h-4" /> Play trailer
       </button>

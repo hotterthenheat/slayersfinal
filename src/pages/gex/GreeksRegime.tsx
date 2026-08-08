@@ -8,6 +8,7 @@ import Panel from '../../components/ui/Panel';
 import StatCard from '../../components/ui/StatCard';
 import MetricGrid from '../../components/ui/MetricGrid';
 import SegmentedControl from '../../components/ui/SegmentedControl';
+import SpotRule from '../../components/ui/SpotRule';
 import { ChartTip, TipHead, TipRow, TipNote } from '../../components/charts/ChartTip';
 import { GRID, CURSOR, valueAxis, categoryAxis, axisUsd, zeroAnchoredDomain, niceTicks, REF_LINE } from '../../components/charts/chartTheme';
 import { fmtUsd } from '../../data/gex';
@@ -481,12 +482,10 @@ const RowWithSpot = ({
     {showSpot && (
       <tr>
         <td colSpan={colSpan} className="px-3 py-0.5">
-          <span className="flex items-center gap-2 select-none">
-            <span className="h-px flex-grow bg-gradient-to-r from-textPrimary/10 via-textPrimary/40 to-textPrimary/50" />
-            <span className="font-mono text-micro uppercase tracking-wider text-textSecondary">{ticker}</span>
-            <span className="inline-flex items-center rounded-[3px] bg-textPrimary px-1.5 py-px font-mono text-micro font-bold tnum text-ink">{spot.toFixed(2)}</span>
-            <span className="h-px w-3 shrink-0 bg-textPrimary/50" />
-          </span>
+          {/* The primitive, not a hand-copy of it. The copy that was here had
+              drifted to gap-2 and had lost the aria-label, so the one strike
+              list a screen reader could not place the spot in was this one. */}
+          <SpotRule ticker={ticker} price={spot} />
         </td>
       </tr>
     )}

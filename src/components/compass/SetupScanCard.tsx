@@ -109,6 +109,21 @@ const SetupScanCard = ({ setup, rank, selected, onSelect, onStudy }: SetupScanCa
         <span title={COVERAGE_META[coverage].note}>
           <SignalBadge tone={COVERAGE_TONE[coverage]}>{COVERAGE_META[coverage].label}</SignalBadge>
         </span>
+      </div>
+
+      {/*
+        The standing gets its own row rather than riding the end of the identity
+        line. It used to sit there under `ml-auto`, so whether it wrapped
+        depended on how many characters the contract happened to have: BLK 859P
+        + ARMED fitted on one line, BKNG 3929C + TRIGGERED did not. Two cards
+        side by side in the same grid row then started their metrics a line
+        apart, and Score / Health / Move / Mid stopped lining up across the
+        board — on the one screen whose whole job is comparing setups.
+
+        A fixed row is also the right read: ARMED and TRIGGERED are the card's
+        verdict, not another identity chip.
+      */}
+      <div className="flex items-center gap-2">
         {rank === 1 && <SignalBadge tone="magenta">Top pick</SignalBadge>}
         <span className="ml-auto">
           <StateBadge state={setupState(setup)} />

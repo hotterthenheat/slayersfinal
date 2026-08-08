@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { BEAR, BULL } from '../gex/palette';
 
 /*
   Shared colour ramps for the Quant Lab 3D surface tiles. Each ramp maps a
@@ -59,9 +60,18 @@ export function rampColor(z: number, kind: RampKind, out: THREE.Color): THREE.Co
   return sample(kind === 'magma' ? MAGMA : SPECTRAL, z, out);
 }
 
-/** CSS linear-gradient (left = low) for the colourbar legend beside each surface. */
+/**
+ * CSS linear-gradient (bottom = low) for the colourbar legend beside each
+ * surface.
+ *
+ * The gamma bar's two ends are the direction tokens themselves. They were a
+ * pair of literals, and the pair had already drifted: the top stop was exactly
+ * BULL while the bottom was `#d43329` — a red that is not BEAR, sitting
+ * directly beneath a label printed in BEAR. Same defect class as the candles
+ * drawing a down bar in a colour the panel beside them did not use.
+ */
 export const RAMP_CSS: Record<RampKind, string> = {
   spectral: 'linear-gradient(to top, #082e6b, #1780cc, #29c7a8, #8cd93d, #f7bd21, #ed431f)',
-  gamma: 'linear-gradient(to top, #d43329, #7a1a15, #0a0a0d, #187a3f, #30d158)',
+  gamma: `linear-gradient(to top, ${BEAR}, #7a1a15, #0a0a0d, #187a3f, ${BULL})`,
   magma: 'linear-gradient(to top, #05050f, #38125c, #801f80, #d43d70, #fa8057, #fcc96b)',
 };
