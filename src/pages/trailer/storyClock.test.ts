@@ -63,11 +63,16 @@ describe('story clock', () => {
     expect(frozenSec).toBe(storyUAtSceneStart('tracker') * STORY_SECONDS);
   });
 
-  it('keeps every Open desk target a real route', () => {
+  it('points every Open desk target at a pane the desk reads', () => {
+    // Renamed. This used to be called "keeps every Open desk target a real
+    // route" while asserting that the string starts with a slash — so `/news`
+    // passed it for as long as `/news` was a dead route, which was the entire
+    // time. Whether the PATH resolves is now checked against App.tsx itself in
+    // src/lib/routes.test.ts. What is left here is the part that file cannot
+    // know: the query string has to name a pane this desk actually reads.
     for (const s of SCENES) {
       if (!s.route) continue;
       expect(s.route.startsWith('/')).toBe(true);
-      // A query-string target must name a pane the desk actually reads.
       const q = s.route.split('?')[1];
       if (q) expect(q).toMatch(/^view=(weigher|lotto|quick-scalp|rebounds|top-setups)$/);
     }
