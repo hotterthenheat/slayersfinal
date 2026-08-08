@@ -11,16 +11,25 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   verify:
     name: Typecheck · Lint · Test · Build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      # node-version-file, not a literal. CI was pinned to 20 while every
+      # verification in this repo happens on 22, which is the wrong way round:
+      # a Node 22 feature reaching main passes locally and fails only here,
+      # and the version that decides it lived in a YAML file nobody reads when
+      # they upgrade. .nvmrc is one number, and `nvm use` reads the same one.
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version-file: .nvmrc
           cache: npm
 
       - name: Install dependencies
