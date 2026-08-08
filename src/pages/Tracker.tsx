@@ -19,7 +19,8 @@ import Simulator from '../core/simulator';
 import { makeSetup } from '../data/compass';
 import { SLEEVE_BY_KEY } from '../types/compass';
 import type { Setup } from '../types/compass';
-import type { TrackedSetup } from '../types/tracker';
+import type { TrackedSetup, TrackedFill } from '../types/tracker';
+import { isUsableFill, markPosition, bookTotals, MIN_BOOK_FOR_STATS, type PositionMark } from '../data/positionBook';
 import PageHeader from '../components/ui/PageHeader';
 import SegmentedControl from '../components/ui/SegmentedControl';
 import Panel from '../components/ui/Panel';
@@ -144,8 +145,19 @@ const truncate = (s: string, n: number): string => (s.length > n ? `${s.slice(0,
 interface JournalEntry {
   status: UserStatus | null;
   notes: string;
+  /**
+   * What the operator actually paid, if they recorded it.
+   *
+   * Optional forever, and read through `??` everywhere, so the thousands of
+   * rows already written to this key without it load unchanged — the same
+   * free-migration property `sleeve ?? 'odte'` relies on in TrackerContext.
+   */
+  fill?: TrackedFill;
 }
 type JournalMap = Record<string, JournalEntry>;
+
+/** A journal row for an id that has none yet. Spread, never assigned over. */
+const EMPTY_ENTRY: JournalEntry = { status: null, notes: '' };
 
 const JOURNAL_KEY = 'slayer_tracker_journal';
 
@@ -168,6 +180,10 @@ interface Row {
   override: UserStatus | null;
   status: UserStatus;
   notes: string;
+  /** What the operator paid, if they recorded it. Absent on a plain bookmark. */
+  fill?: TrackedFill;
+  /** The fill marked against the current mid. Absent unless `fill` is usable. */
+  mark?: PositionMark;
   scoreDelta: number;
   attention: string[];
 }
@@ -222,12 +238,187 @@ interface ItemDetailProps {
   row: Row;
   onStatus: (id: string, status: UserStatus | null) => void;
   onNotes: (id: string, notes: string) => void;
+  onFill: (id: string, fill: TrackedFill | undefined) => void;
   onReview: (t: TrackedSetup) => void;
   onUntrack: (id: string) => void;
 }
 
-/** The per-item status + notes editor. Reads live values, writes to the local journal. */
-const ItemDetail = ({ row, onStatus, onNotes, onReview, onUntrack }: ItemDetailProps) => {
+const usd = (v: number) => `${v < 0 ? '−' : ''}$${Math.abs(v).toFixed(2)}`;
+
+/** One labelled number inside the position block. */
+const FillStat = ({ label, value, tone = '' }: { label: string; value: string; tone?: string }) => (
+  <div>
+    <div className="font-mono text-micro uppercase tracking-widest text-textMuted">{label}</div>
+    <div className={`mt-0.5 font-mono text-caption font-semibold tnum ${tone || 'text-textPrimary'}`}>{value}</div>
+  </div>
+);
+
+const fillInputCls =
+  'w-full rounded bg-inset border border-borderSubtle px-2 py-1 font-mono text-caption tnum text-textPrimary ' +
+  'placeholder:text-textMuted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 focus:border-white/20';
+
+/**
+ * Record what the position actually cost, and what it did.
+ *
+ * The Tracker stored a score and a verdict and nothing about the trade, so the
+ * one thing a journal is FOR — what you paid and what came back — had nowhere
+ * to go. Everything here is typed by the operator; nothing is fetched, inferred
+ * or filled in from the desk.
+ */
+const PositionBlock = ({ row, onFill }: { row: Row; onFill: ItemDetailProps['onFill'] }) => {
+  const { tracked, live, fill, mark } = row;
+  const [draft, setDraft] = useState({
+    entryPrice: fill ? String(fill.entryPrice) : '',
+    size: fill ? String(fill.size) : '',
+    exitPrice: fill?.exitPrice != null ? String(fill.exitPrice) : '',
+    fees: fill?.fees != null ? String(fill.fees) : '',
+  });
+  // A different row is a different position — reset the form when it changes.
+  useEffect(() => {
+    setDraft({
+      entryPrice: fill ? String(fill.entryPrice) : '',
+      size: fill ? String(fill.size) : '',
+      exitPrice: fill?.exitPrice != null ? String(fill.exitPrice) : '',
+      fees: fill?.fees != null ? String(fill.fees) : '',
+    });
+  }, [tracked.id, fill]);
+
+  const num = (s: string) => (s.trim() === '' ? undefined : Number(s));
+  const entryPrice = num(draft.entryPrice);
+  const size = num(draft.size);
+  const canSave = entryPrice != null && entryPrice > 0 && size != null && size > 0;
+
+  const save = () => {
+    if (!canSave) return;
+    const exitPrice = num(draft.exitPrice);
+    const fees = num(draft.fees);
+    onFill(tracked.id, {
+      entryPrice: entryPrice!,
+      size: size!,
+      // Recording an entry after the fact is normal; the tracked moment is the
+      // only entry timestamp this app can honestly claim to know.
+      entryAt: fill?.entryAt ?? tracked.trackedAt,
+      ...(exitPrice != null && Number.isFinite(exitPrice) ? { exitPrice, exitAt: fill?.exitAt ?? Date.now() } : {}),
+      ...(fees != null && Number.isFinite(fees) ? { fees } : {}),
+    });
+  };
+
+  return (
+    <div className="border-t border-borderSubtle pt-3">
+      <div className="flex items-baseline gap-2">
+        <span className="font-mono text-label uppercase tracking-widest text-textSecondary">Your position</span>
+        {mark && (
+          <SignalBadge tone={mark.state === 'OPEN' ? 'select' : 'neutral'}>
+            {mark.state === 'OPEN' ? 'Open' : 'Closed'}
+          </SignalBadge>
+        )}
+      </div>
+
+      {mark && (
+        <div className="mt-2 grid grid-cols-3 gap-2 inst-surface rounded px-2.5 py-2">
+          <FillStat label="Cost" value={usd(mark.costBasis)} />
+          {mark.state === 'OPEN' ? (
+            <>
+              <FillStat label="Value now" value={usd(mark.marketValue ?? 0)} />
+              <FillStat
+                label="Open P&L"
+                value={usd(mark.openPnl ?? 0)}
+                tone={(mark.openPnl ?? 0) >= 0 ? 'text-bull' : 'text-bear'}
+              />
+            </>
+          ) : (
+            <>
+              <FillStat
+                label="Realized"
+                value={usd(mark.realizedPnl ?? 0)}
+                tone={(mark.realizedPnl ?? 0) >= 0 ? 'text-bull' : 'text-bear'}
+              />
+              <FillStat
+                label="Return"
+                value={`${(mark.realizedPct ?? 0) >= 0 ? '+' : '−'}${Math.abs((mark.realizedPct ?? 0) * 100).toFixed(0)}%`}
+                tone={(mark.realizedPct ?? 0) >= 0 ? 'text-bull' : 'text-bear'}
+              />
+            </>
+          )}
+        </div>
+      )}
+
+      {/* The absence, stated. See data/positionBook.ts. */}
+      {mark && (
+        <p className="mt-1.5 font-mono text-micro text-textMuted leading-relaxed">
+          Best and worst this position reached are not shown because they are not knowable here — that needs the price
+          path between your entry and your exit, and nothing records it. Cost and P&amp;L are arithmetic on what you
+          typed.
+        </p>
+      )}
+
+      <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <label className="flex flex-col gap-1">
+          <span className="font-mono text-micro uppercase tracking-widest text-textMuted">Entry / contract</span>
+          <input
+            inputMode="decimal"
+            value={draft.entryPrice}
+            onChange={e => setDraft(d => ({ ...d, entryPrice: e.target.value }))}
+            placeholder={live.mid.toFixed(2)}
+            className={fillInputCls}
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="font-mono text-micro uppercase tracking-widest text-textMuted">Contracts</span>
+          <input
+            inputMode="numeric"
+            value={draft.size}
+            onChange={e => setDraft(d => ({ ...d, size: e.target.value }))}
+            placeholder="1"
+            className={fillInputCls}
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="font-mono text-micro uppercase tracking-widest text-textMuted">Exit / contract</span>
+          <input
+            inputMode="decimal"
+            value={draft.exitPrice}
+            onChange={e => setDraft(d => ({ ...d, exitPrice: e.target.value }))}
+            placeholder="still open"
+            className={fillInputCls}
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="font-mono text-micro uppercase tracking-widest text-textMuted">Fees</span>
+          <input
+            inputMode="decimal"
+            value={draft.fees}
+            onChange={e => setDraft(d => ({ ...d, fees: e.target.value }))}
+            placeholder="0.00"
+            className={fillInputCls}
+          />
+        </label>
+      </div>
+
+      <div className="mt-2 flex items-center gap-2">
+        <button
+          onClick={save}
+          disabled={!canSave}
+          className="px-3 py-1.5 rounded-md border border-borderSubtle bg-white/[0.03] hover:bg-rowHover disabled:opacity-40 disabled:hover:bg-white/[0.03] font-mono text-label text-textSecondary hover:text-textPrimary disabled:hover:text-textSecondary uppercase tracking-wider transition-colors"
+        >
+          {fill ? 'Update' : 'Record'} fill
+        </button>
+        {fill && (
+          <button
+            onClick={() => onFill(tracked.id, undefined)}
+            className="px-3 py-1.5 rounded-md border border-borderSubtle font-mono text-label text-textMuted hover:text-textPrimary uppercase tracking-wider transition-colors"
+          >
+            Clear
+          </button>
+        )}
+        <span className="ml-auto font-mono text-micro text-textMuted">Saved in this browser.</span>
+      </div>
+    </div>
+  );
+};
+
+/** The per-item status, position and notes editor. Writes to the local journal. */
+const ItemDetail = ({ row, onStatus, onNotes, onFill, onReview, onUntrack }: ItemDetailProps) => {
   const { tracked, live, expired, scoreDelta } = row;
   const moveUp = live.expectedMovePct >= 0;
   const current: 'auto' | UserStatus = row.override ?? 'auto';
@@ -320,6 +511,9 @@ const ItemDetail = ({ row, onStatus, onNotes, onReview, onUntrack }: ItemDetailP
           view regardless.
         </p>
       </div>
+
+      {/* What it cost and what it did — the half a bookmark never carried. */}
+      <PositionBlock row={row} onFill={onFill} />
 
       {/* Notes */}
       <div>
@@ -485,11 +679,23 @@ const Tracker = () => {
     }
   }, [journal]);
 
+  /*
+    All three setters SPREAD the existing entry rather than rebuilding it.
+
+    They used to name every field they kept — `{ notes: prev[id]?.notes ?? '',
+    status }` — which is correct for exactly as long as the entry has two
+    fields. Adding `fill` to a shape written that way means setting a status
+    silently deletes the fill the operator typed in, and the only symptom is
+    their trade quietly becoming a bookmark again.
+  */
   const setStatus = (id: string, status: UserStatus | null) =>
-    setJournal(prev => ({ ...prev, [id]: { notes: prev[id]?.notes ?? '', status } }));
+    setJournal(prev => ({ ...prev, [id]: { ...EMPTY_ENTRY, ...prev[id], status } }));
 
   const setNotes = (id: string, notes: string) =>
-    setJournal(prev => ({ ...prev, [id]: { status: prev[id]?.status ?? null, notes } }));
+    setJournal(prev => ({ ...prev, [id]: { ...EMPTY_ENTRY, ...prev[id], notes } }));
+
+  const setFill = (id: string, fill: TrackedFill | undefined) =>
+    setJournal(prev => ({ ...prev, [id]: { ...EMPTY_ENTRY, ...prev[id], fill } }));
 
   // Untrack is destructive (it also drops the journal notes) — snapshot both
   // before removal so the toast's Undo can restore them verbatim.
@@ -544,6 +750,11 @@ const Tracker = () => {
         const entry = journal[tracked.id];
         const override = entry?.status ?? null;
         const notes = entry?.notes ?? '';
+        const fill = entry?.fill;
+        // A half-typed fill marks nothing — isUsableFill is the gate, so a row
+        // with an entry price and no size stays a bookmark rather than a
+        // position worth $NaN.
+        const mark = isUsableFill(fill) ? markPosition(fill, live.mid) : undefined;
         const status = override ?? autoStatus(live, expired);
         const scoreDelta = live.score - tracked.scoreAtTrack;
 
@@ -554,9 +765,15 @@ const Tracker = () => {
           if (scoreDelta < 0) attention.push(`Score ${scoreDelta} vs track`);
         }
 
-        return { tracked, live, expired, expiringSoon, override, status, notes, scoreDelta, attention };
+        return { tracked, live, expired, expiringSoon, override, status, notes, fill, mark, scoreDelta, attention };
       }),
     [liveData, journal]
+  );
+
+  /** The operator's own book — only the rows that carry a recorded fill. */
+  const book = useMemo(
+    () => bookTotals(rows.map(r => r.mark).filter((m): m is PositionMark => m != null)),
+    [rows]
   );
 
   const counts = useMemo(() => {
@@ -683,6 +900,38 @@ const Tracker = () => {
             />
           </MetricGrid>
 
+          {/*
+            The real book, and only when there is one.
+
+            It sits apart from the counts above because it is a different kind of
+            number: those are the engine's read on setups, this is the operator's
+            own record. The strip stays hidden until a fill exists rather than
+            showing four zeroes, because an empty P&L reads as a flat book and
+            what it actually means is that nothing has been entered.
+          */}
+          {book.recorded > 0 && (
+            <MetricGrid min="150px">
+              <StatCard label="Positions" value={`${book.recorded}`} sub={`${book.open} open · ${book.closed} closed`} tone="neutral" />
+              <StatCard label="Committed" value={usd(book.committed)} sub="cost of what is open" tone="neutral" />
+              <StatCard
+                label="Open P&L"
+                value={usd(book.openPnl)}
+                sub="marked at the current mid"
+                tone={book.openPnl === 0 ? 'neutral' : book.openPnl > 0 ? 'bull' : 'bear'}
+              />
+              <StatCard
+                label="Realized"
+                value={usd(book.realizedPnl)}
+                sub={
+                  book.statsReady
+                    ? `over ${book.closed} closed`
+                    : `${book.closed} of ${MIN_BOOK_FOR_STATS} closed — no win rate yet`
+                }
+                tone={book.realizedPnl === 0 ? 'neutral' : book.realizedPnl > 0 ? 'bull' : 'bear'}
+              />
+            </MetricGrid>
+          )}
+
           {/* Saved-view tabs */}
           <div className="flex items-center gap-3 flex-wrap">
             <SegmentedControl ariaLabel="Tracker view" options={viewOptions} value={view} onChange={setView} />
@@ -770,6 +1019,7 @@ const Tracker = () => {
                   row={selected}
                   onStatus={setStatus}
                   onNotes={setNotes}
+                  onFill={setFill}
                   onReview={handleReview}
                   onUntrack={handleUntrack}
                 />
