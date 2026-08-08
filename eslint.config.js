@@ -10,7 +10,14 @@ export default tseslint.config(
   // source, they are not built or imported by it, and they are written against
   // their own conventions: linting them put 88 errors in the gate for code
   // nobody here wrote or ships.
-  { ignores: ['dist', 'coverage', 'node_modules', '.agents'] },
+  // The last two mirror .gitignore, and they became necessary the moment the
+  // `**/*.mjs` block below started applying rules. ESLint's flat config does not
+  // read .gitignore, so `eslint .` was reaching the throwaway Playwright probes
+  // that .gitignore documents as the intended workflow ("they drive the preview
+  // server, print a measurement, and get deleted") and failing the gate on them.
+  // Verified: a `.probe.mjs` and a `_scratchtest/x.mjs` each put `no-undef`
+  // errors into `npm run lint` before these entries existed.
+  { ignores: ['dist', 'coverage', 'node_modules', '.agents', '.*.mjs', '_scratch*'] },
   // The .mjs tooling — scripts/ui-audit.mjs and scripts/date-sweep.mjs, about a
   // thousand lines between them — was outside the gate entirely. `npm run lint`
   // runs `eslint .`, which visits these files, but the only config block below

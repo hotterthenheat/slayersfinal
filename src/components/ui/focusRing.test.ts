@@ -80,26 +80,52 @@ describe('focus rings', () => {
   });
 
   it('never drops the browser outline without replacing it', () => {
-    // `outline-none` on its own is the worst of both: the platform indicator is
-    // gone and nothing takes its place.
-    //
-    // One legitimate shape does not put the indicator on the focused element:
-    // a `group` wrapper whose child answers with `group-focus-visible:`. The
-    // trailer's scene scrubber is built that way — the button is a hit box and
-    // the 3px rail inside it lights up. That only counts when the file really
-    // contains the matching utility, so the escape hatch cannot be claimed by
-    // writing the word `group` and nothing else.
+    /*
+      `outline-none` on its own is the worst of both: the platform indicator is
+      gone and nothing takes its place.
+
+      This used to match only `focus-visible:outline-none`, which is one of three
+      spellings that suppress the outline — and the narrowest one. Bare
+      `outline-none` kills it in every state, and `focus:outline-none` kills it
+      for keyboard focus too (`:focus` is a superset of `:focus-visible`). Nine
+      sites in the tree use `focus:outline-none` and not one of them was being
+      looked at, while the comment above spoke of "`outline-none` on its own".
+
+      Two shapes legitimately do not put the indicator on the element itself:
+
+      1. A `group`/`peer` wrapper whose child answers with `group-focus-visible:`.
+         The trailer's scene scrubber is built that way — the button is a hit box
+         and the 3px rail inside it lights up.
+      2. A focus CONTAINER: a `tabIndex={-1}` panel that is focused
+         programmatically when a modal opens, so a screen reader lands inside it.
+         Nothing there was clicked and there is nothing to ring. Every current
+         use of `focus:outline-none` without a replacement is one of these —
+         DetailModal, SettingsPanel, CommandPalette, ShortcutsOverlay,
+         OnboardingOverlay and the AppShell scroll region.
+
+      Both hatches have to be earned by the surrounding source, not by a word in
+      the class list, or the exemption becomes the rule.
+    */
+    const SUPPRESSES = /(?:^|[\s"'`])(?:focus:|focus-visible:)?outline-none(?:$|[\s"'`])/;
     const offenders: string[] = [];
     for (const f of FILES) {
       const delegates = /(?:group|peer)-focus-visible:/.test(f.text);
       for (const attr of classAttributes(f.text)) {
-        if (!attr.includes('focus-visible:outline-none')) continue;
+        if (!SUPPRESSES.test(attr)) continue;
+        // A replacement indicator on the same element.
         if (/focus-visible:(ring|border|bg|text|shadow|outline-\[)/.test(attr)) continue;
         if (delegates && /\b(group|peer)\b/.test(attr)) continue;
+        // Focus container: tabIndex={-1} on the same element.
+        const at = f.text.indexOf(attr);
+        const around = f.text.slice(Math.max(0, at - 400), at + attr.length + 400);
+        if (/tabIndex=\{-1\}/.test(around)) continue;
         offenders.push(`${rel(f.path)}: ${attr.replace(/\s+/g, ' ').slice(0, 110)}`);
       }
     }
-    expect(offenders, offenders.join('\n')).toEqual([]);
+    expect(
+      offenders,
+      `These suppress the focus outline and put nothing in its place:\n${offenders.join('\n')}`
+    ).toEqual([]);
   });
 
   it('keeps the two rings distinguishable from each other', () => {

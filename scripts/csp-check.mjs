@@ -95,6 +95,26 @@ await context.addInitScript(() => {
   });
 });
 
+/**
+ * Violations from every open page. Returns null only when the DRIVEN page never
+ * installed the listener — the "this run observed nothing" signal, which must
+ * stay distinguishable from "observed, saw nothing".
+ */
+async function drainAll() {
+  const pages = context.pages();
+  let sawListener = false;
+  const out = [];
+  for (const p of pages) {
+    const v = await p
+      .evaluate(() => (Array.isArray(window.__cspViolations) ? window.__cspViolations.splice(0) : null))
+      .catch(() => null);
+    if (v === null) continue;
+    sawListener = true;
+    out.push(...v);
+  }
+  return sawListener ? out : null;
+}
+
 const countStyleEls = page => page.evaluate(() => document.querySelectorAll('style').length);
 
 /** Returns how many <style> elements the interactions caused to appear. */
@@ -173,9 +193,15 @@ for (const route of ROUTES) {
     news. Reporting zero violations from a page that never loaded is the exact
     way a checker like this lies.
   */
-  const found = await page.evaluate(() =>
-    Array.isArray(window.__cspViolations) ? window.__cspViolations.splice(0) : null
-  );
+  /*
+    Drained from EVERY page in the context, not just the one being driven.
+    Pulse can pop a panel into its own window, and a window is its own page with
+    its own violation stream — so a refusal in there was invisible twice over:
+    the pop-out is where `detach.ts` clones stylesheets with `textContent`, which
+    is exactly the inline-style path a strict style-src refuses. `addInitScript`
+    is registered on the CONTEXT, so any page that opens carries the listener.
+  */
+  const found = await drainAll();
   if (found === null) {
     unobserved.push(route);
     process.stdout.write(`DEAD ${route}  (no listener — page did not load)\n`);
