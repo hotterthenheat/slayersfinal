@@ -32,10 +32,29 @@
   <meta name="twitter:image" content="https://slayerterminal.com/assets/og-cover.png">
 
   <!-- Google Font — JetBrains Mono carries the full weight range the code-rain
-       hero uses (400→800), matching slayerterminal.com's lockup + rain. -->
+       hero uses (400→800), matching slayerterminal.com's lockup + rain.
+
+       Loaded WITHOUT blocking the first paint. As a plain stylesheet this was a
+       render-blocking request to a third-party host: nothing painted until it
+       answered. Measured in a sandbox that cannot reach fonts.googleapis.com,
+       every navigation stalled ~13.6s before showing anything — the same shape
+       a reader on a slow or filtered network gets, just with the dial turned up.
+
+       `media="print"` makes the browser fetch it at low priority without
+       applying it or blocking; the onload flip promotes it to `all` once it has
+       arrived. The <noscript> copy keeps the fonts for readers without JS, and
+       tailwind.config.ts already carries real fallback stacks with close
+       metrics, so the pre-swap paint is a refinement rather than a reflow. -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap"
+    media="print"
+    onload="this.media='all';this.onload=null">
+  <noscript>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap">
+  </noscript>
 </head>
 <body class="bg-canvas">
   <div id="root"></div>
