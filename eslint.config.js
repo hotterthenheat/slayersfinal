@@ -11,6 +11,31 @@ export default tseslint.config(
   // their own conventions: linting them put 88 errors in the gate for code
   // nobody here wrote or ships.
   { ignores: ['dist', 'coverage', 'node_modules', '.agents'] },
+  // The .mjs tooling — scripts/ui-audit.mjs and scripts/date-sweep.mjs, about a
+  // thousand lines between them — was outside the gate entirely. `npm run lint`
+  // runs `eslint .`, which visits these files, but the only config block below
+  // claims TypeScript, and a flat-config file that no block claims gets NO
+  // RULES: linting scripts/ui-audit.mjs exited 0 on a probe containing an
+  // undefined call, a duplicate object key and a loose equality. Silent, and
+  // indistinguishable from clean.
+  //
+  // That matters more than it would for a throwaway. These two are the UI audit
+  // harness and the date sweep — the things the rest of the gate is checked
+  // WITH — and both had already shipped real bugs of exactly the kind no-undef
+  // and no-unused-vars catch.
+  //
+  // Browser globals sit alongside Node's because the audit runs its probes
+  // inside page.evaluate(...): document, window and getComputedStyle are free
+  // identifiers in a file that Node executes.
+  {
+    files: ['**/*.mjs'],
+    extends: [js.configs.recommended],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'module',
+      globals: { ...globals.node, ...globals.browser },
+    },
+  },
   {
     files: ['**/*.{ts,tsx}'],
     extends: [js.configs.recommended, ...tseslint.configs.recommended],

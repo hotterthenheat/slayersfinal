@@ -41,7 +41,10 @@ const SCENE_SPEC: (Omit<TrailerSceneDefinition, 'enterAtMs' | 'exitAtMs'> & { st
   { storyEnd: 0.84, id: 'scalp', product: 'Compass · Scalp and Rebound', route: '/compass?view=quick-scalp', durationMs: 4600, description: 'Two intraday models side by side: continuation in negative gamma, reversion in positive gamma.' },
   { storyEnd: 0.87, id: 'proveit', product: 'Prove It', route: '/prove-it', durationMs: 5000, description: 'Forecast and risk-neutral distributions, calibration, and a challenger model failing its promotion gate.' },
   { storyEnd: 0.89, id: 'stocks', product: 'Stocks', route: '/stocks', durationMs: 3400, description: 'Ranking across momentum, quality, flow and news, then routing the thesis to an instrument.' },
-  { storyEnd: 0.91, id: 'news', product: 'News', route: '/news', durationMs: 3400, description: 'A catalyst arrives, duplicates cluster, and the forecast distribution repriced rather than a sentiment score.' },
+  // News is a Stocks sleeve, not a desk — `/news` was retired and this link
+  // sat pointing at it, so "Open desk" on this beat landed on the not-found
+  // page. The scene stays; the destination is where its read actually lives.
+  { storyEnd: 0.91, id: 'news', product: 'News', route: '/stocks', durationMs: 3400, description: 'A catalyst arrives, duplicates cluster, and the forecast distribution repriced rather than a sentiment score.' },
   { storyEnd: 0.93, id: 'earnings', product: 'Earnings', route: '/earnings', durationMs: 4000, description: 'Implied against realized against forecast move, with direction and magnitude kept separate.' },
   { storyEnd: 0.97, id: 'tracker', product: 'Tracker', route: '/tracker', durationMs: 5200, description: 'The decision is frozen into an immutable packet, the market advances, and the alternatives are scored against it.' },
   { storyEnd: 1.0, id: 'convergence', product: 'Slayer Terminal', route: '/terminal', durationMs: 4600, description: 'All desks operating on the same event at once.' },

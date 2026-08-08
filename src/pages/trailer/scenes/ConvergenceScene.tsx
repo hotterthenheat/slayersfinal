@@ -42,7 +42,8 @@ const ConvergenceScene: React.FC = () => {
     { product: 'Compass', route: '/compass', label: 'Setup', value: story.packet.setupId, tone: 'text-select' },
     { product: 'Prove It', route: '/prove-it', label: 'Confidence', value: prob(0.63) },
     { product: 'Stocks', route: '/stocks', label: 'Expression', value: 'OPTIONS' },
-    { product: 'News', route: '/news', label: 'Repricing', value: `${(story.news.widthAfter * 100).toFixed(1)}% wide` },
+    // News reads as a Stocks sleeve now; `/news` is a retired route.
+    { product: 'News', route: '/stocks', label: 'Repricing', value: `${(story.news.widthAfter * 100).toFixed(1)}% wide` },
     { product: 'Earnings', route: '/earnings', label: 'Verdict', value: story.earnings.selected },
     { product: 'Tracker', route: '/tracker', label: 'Thesis', value: story.outcome.survived ? 'SURVIVED' : 'BROKEN', tone: 'text-bull' },
   ];

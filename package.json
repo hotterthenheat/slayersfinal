@@ -14,7 +14,8 @@
     "test:watch": "vitest",
     "test:dates": "node scripts/date-sweep.mjs",
     "audit:ui": "node scripts/ui-audit.mjs",
-    "audit:ui:self-test": "node scripts/ui-audit.mjs --self-test"
+    "audit:ui:self-test": "node scripts/ui-audit.mjs --self-test",
+    "audit:csp": "node scripts/csp-check.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^9.122.0",
