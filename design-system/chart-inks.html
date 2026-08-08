@@ -84,26 +84,37 @@
     <div class="ink"><span class="line" style="border-color:#FF3B30"></span><span class="kname" style="color:#FF3B30">BEAR</span><span class="khex">#FF3B30</span><span class="kuse">Generic down ink for non-wall lines.</span></div>
   </div>
 
-  <h2>Candle theme — "slayer" signature (active default)</h2>
+  <h2>Candle theme — the direction tokens, and only those</h2>
   <div class="row">
     <div class="candle-card">
-      <span class="candle"><span class="wick" style="background:#F1F4FF"></span><span class="bodyb" style="background:#DCE3F5"></span></span>
-      <span><div class="clabel">Up</div><div class="chex">#DCE3F5 · wick #F1F4FF</div></span>
+      <span class="candle"><span class="wick" style="background:#30D158"></span><span class="bodyb" style="background:#30D158"></span></span>
+      <span><div class="clabel">Up</div><div class="chex">BULL #30D158 · wick #30D158</div></span>
     </div>
     <div class="candle-card">
-      <span class="candle"><span class="wick" style="background:#C0A2FF"></span><span class="bodyb" style="background:#A47CF2"></span></span>
-      <span><div class="clabel">Down</div><div class="chex">#A47CF2 · wick #C0A2FF</div></span>
+      <span class="candle"><span class="wick" style="background:#FF3B30"></span><span class="bodyb" style="background:#FF3B30"></span></span>
+      <span><div class="clabel">Down</div><div class="chex">BEAR #FF3B30 · wick #FF3B30</div></span>
     </div>
     <div class="candle-card">
-      <span class="gswatch" style="width:16px;height:10px;background:rgba(220,227,245,0.22)"></span>
-      <span><div class="clabel">Vol up</div><div class="chex">rgba(220,227,245,0.22)</div></span>
+      <span class="gswatch" style="width:16px;height:10px;background:rgba(48,209,88,0.28)"></span>
+      <span><div class="clabel">Vol up</div><div class="chex">rgba(48,209,88,0.28)</div></span>
     </div>
     <div class="candle-card">
-      <span class="gswatch" style="width:16px;height:10px;background:rgba(164,124,242,0.26)"></span>
-      <span><div class="clabel">Vol down</div><div class="chex">rgba(164,124,242,0.26)</div></span>
+      <span class="gswatch" style="width:16px;height:10px;background:rgba(255,59,48,0.28)"></span>
+      <span><div class="clabel">Vol down</div><div class="chex">rgba(255,59,48,0.28)</div></span>
     </div>
   </div>
-  <div class="note">Holo-silver up / luminous violet down — the house two-tone, deliberately distinct from the green/red the walls and GEX nodes own. Alternates in candleTheme.ts: mono (#EEF1F5/#565C68), classic (#30D158/#FF3B30), muted (#6FAE94/#C47484).</div>
+  <div class="note">
+    This page used to show a “slayer signature” two-tone here — holo-silver up,
+    luminous violet down — as the active default, with three alternates beside
+    it. That is the defect, not the standard. A reader learns the direction
+    language once: while the candles drew a down bar violet, the cumulative
+    delta, the put wall and the exposure grid ON THE SAME SCREEN drew down red,
+    so one panel was speaking a dialect. <code>candleTheme.ts</code> now derives
+    every value from BULL and BEAR — including the volume tints, so no second
+    literal can drift — and there are no alternates.
+    <code>src/lib/palette.test.ts</code> fails if the candles ever stop being the
+    direction tokens.
+  </div>
 
   <h2>Gold liquidity LUT (liquidityField.ts)</h2>
   <div class="lut"></div>

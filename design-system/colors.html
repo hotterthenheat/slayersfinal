@@ -84,6 +84,17 @@
     <div class="tok"><div class="chip" style="background:#E4E8F4"></div><div class="name">select</div><div class="hex">#E4E8F4</div><div class="use">Holo-silver selection language. Interface only, never data</div></div>
   </div>
 
+  <h2>Dealer gamma sign — the regime, not the direction</h2>
+  <div class="grid">
+    <div class="tok"><div class="chip" style="background:#E0B84E"></div><div class="name">shortGamma</div><div class="hex">#E0B84E</div><div class="use">Gold — dealer hedging AMPLIFIES the move</div></div>
+    <div class="tok"><div class="chip" style="background:#5EA0EF"></div><div class="name">longGamma</div><div class="hex">#5EA0EF</div><div class="use">Blue — dips get absorbed</div></div>
+  </div>
+
+  <h2>Interaction</h2>
+  <div class="grid">
+    <div class="tok"><div class="chip" style="background:rgba(255,255,255,0.055)"></div><div class="name">rowHover</div><div class="hex">rgba(255,255,255,0.055)</div><div class="use">One hover tint for every subtle interactive surface</div></div>
+  </div>
+
   <h2>GEX structural levels</h2>
   <div class="grid">
     <div class="tok"><div class="chip" style="background:#7DD3FC"></div><div class="name">flip</div><div class="hex">#7DD3FC</div><div class="use">Gamma flip — the cool regime border; doubles as info tone</div></div>
@@ -91,14 +102,15 @@
     <div class="tok"><div class="chip" style="background:#2dd4bf"></div><div class="name">darkpool</div><div class="hex">#2DD4BF</div><div class="use">Institutional off-exchange prints</div></div>
   </div>
 
-  <h2>Legacy aliases — pre-redesign pages only</h2>
-  <div class="grid">
-    <div class="tok"><div class="chip" style="background:#ededed"></div><div class="name">primary</div><div class="hex">#EDEDED</div></div>
-    <div class="tok"><div class="chip" style="background:#a3a3a3"></div><div class="name">secondary</div><div class="hex">#A3A3A3</div></div>
-    <div class="tok"><div class="chip" style="background:#a1a1aa"></div><div class="name">silver</div><div class="hex">#A1A1AA</div></div>
-    <div class="tok"><div class="chip" style="background:#C7D3E8"></div><div class="name">gammaPos</div><div class="hex">#C7D3E8</div></div>
-    <div class="tok"><div class="chip" style="background:#FF3B30"></div><div class="name">gammaNeg</div><div class="hex">#FF3B30</div></div>
-    <div class="tok"><div class="chip" style="background:#FF9500"></div><div class="name">warning</div><div class="hex">#FF9500</div></div>
+  <h2>Deleted — do not reintroduce</h2>
+  <div class="sub">
+    This page used to end in a “Legacy aliases” swatch grid for six tokens. All
+    six are gone from <code>tailwind.config.ts</code>: every one had zero call
+    sites, and two of them duplicated <code>bear</code> and <code>warn</code>
+    under a second name — two names for one colour, which is how a palette
+    starts disagreeing with itself. <code>src/lib/palette.test.ts</code> fails if
+    any returns to the config, and <code>src/lib/designSystem.test.ts</code>
+    fails if this page starts advertising them again.
   </div>
 </body>
 </html>
