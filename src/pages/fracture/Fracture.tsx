@@ -10,6 +10,8 @@ import Panel from '../../components/ui/Panel';
 import StatCard from '../../components/ui/StatCard';
 import MetricGrid from '../../components/ui/MetricGrid';
 import SignalBadge from '../../components/ui/SignalBadge';
+import KnowabilityChip from '../../components/ui/KnowabilityChip';
+import { KNOWABILITY, KNOWABILITY_ORDER, type Knowability } from '../../components/ui/knowability';
 import SpotRule from '../../components/ui/SpotRule';
 import type { AbsorptionRegime, ForcedFlowLevel, MoveDecomposition } from '../../types/fracture';
 import type { Tone } from '../../components/ui/tones';
@@ -27,7 +29,11 @@ const regimeTone: Record<AbsorptionRegime, Tone> = {
 // How knowable each participant's forced flow actually is. Purely a framing of
 // provenance — not a computed quantity. Dealer hedging is inferred from the live
 // chain; margin liquidation can only be assumed from thresholds.
-type Tier = 'observed' | 'estimated' | 'assumed';
+//
+// The vocabulary and the chip started here and now live in
+// components/ui/knowability.ts, because this desk's answer was the right one and
+// three other surfaces needed it — see that file's header for what it is not.
+type Tier = Knowability;
 
 // Forced participants — one color each, stable across every view. `tier` records
 // how directly each one is knowable; `basis` says why.
@@ -49,27 +55,9 @@ const AMP_TIER: Record<string, Tier> = {
   'Margin / liquidation': 'assumed',
 };
 
-const TIER_ORDER: Tier[] = ['observed', 'estimated', 'assumed'];
-const TIER_META: Record<Tier, { label: string; dots: number; hint: string; text: string }> = {
-  observed: { label: 'Observed', dots: 3, hint: 'grounded in chain and tape data', text: 'text-textPrimary' },
-  estimated: { label: 'Estimated', dots: 2, hint: 'inferred from proxies', text: 'text-textSecondary' },
-  assumed: { label: 'Assumed', dots: 1, hint: 'inferred from assumptions', text: 'text-textMuted' },
-};
-
-/** A confidence meter (filled dots) + tier label — neutral ink, never directional. */
-const ConfidenceChip = ({ tier, className = '' }: { tier: Tier; className?: string }) => {
-  const m = TIER_META[tier];
-  return (
-    <span className={`inline-flex items-center gap-1.5 shrink-0 ${className}`} title={`${m.label} — ${m.hint}`}>
-      <span className="flex items-center gap-[3px]">
-        {[0, 1, 2].map(i => (
-          <span key={i} className={`w-1 h-1 rounded-full ${i < m.dots ? 'bg-textSecondary' : 'bg-white/15'}`} />
-        ))}
-      </span>
-      <span className={`font-mono text-label uppercase tracking-wider ${m.text}`}>{m.label}</span>
-    </span>
-  );
-};
+const TIER_ORDER = KNOWABILITY_ORDER;
+const TIER_META = KNOWABILITY;
+const ConfidenceChip = KnowabilityChip;
 
 const DECOMP: { key: keyof MoveDecomposition; label: string; color: string }[] = [
   { key: 'informational', label: 'Information', color: '#7DD3FC' },

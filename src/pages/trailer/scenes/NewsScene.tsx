@@ -144,13 +144,20 @@ const NewsScene: React.FC = () => {
 
           <Beat p={p} from={0.56} reduced={reduced}>
             <div className="inst-surface rounded-md p-2.5">
+              {/* The beat read "Confidence 44%". The scene's own point is that
+                  the contradicting check WIDENED the distribution — so it shows
+                  the width, which is the thing that moved and the thing the
+                  copy is about. A distribution has a width whether or not
+                  anyone is sure of anything. */}
               <div className="flex items-baseline justify-between gap-2">
-                <span className="font-mono text-micro uppercase tracking-widest text-textMuted">Confidence</span>
-                <span className="font-mono text-caption tnum text-warn">{prob(n.confidence)}</span>
+                <span className="font-mono text-micro uppercase tracking-widest text-textMuted">Distribution</span>
+                <span className="font-mono text-caption tnum text-warn">
+                  {(n.widthBefore * 100).toFixed(1)}% &rarr; {(n.widthAfter * 100).toFixed(1)}% wide
+                </span>
               </div>
               <p className="mt-1 font-mono text-micro text-textMuted leading-relaxed">
-                Direction and confidence move separately. The contradicting check widened the distribution and lowered
-                confidence; it did not flip the sign.
+                Direction and width move separately. The contradicting check widened the distribution; it did not flip
+                the sign.
               </p>
             </div>
           </Beat>

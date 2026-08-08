@@ -116,7 +116,7 @@ const ScannerRowModal = ({ row, spot, onClose }: ScannerRowModalProps) => {
         row && (
         <div className={`grid grid-cols-1 gap-4 ${expanded ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
           <div className="flex flex-col gap-4 min-w-0">
-          {/* Headline premium + conviction */}
+          {/* Headline premium + lean */}
           <div className="inst-surface rounded-md px-4 py-3 flex items-end justify-between gap-3">
             <div className="flex flex-col gap-0.5 min-w-0">
               <span className="font-mono text-label uppercase tracking-widest text-textMuted">Contract Premium</span>
@@ -129,7 +129,7 @@ const ScannerRowModal = ({ row, spot, onClose }: ScannerRowModalProps) => {
               </span>
             </div>
             <div className="flex flex-col items-end gap-0.5 shrink-0">
-              <span className="font-mono text-label uppercase tracking-widest text-textMuted">Conviction</span>
+              <span className="font-mono text-label uppercase tracking-widest text-textMuted">Lean</span>
               <span
                 className={`font-mono text-lead leading-6 font-bold tnum ${
                   row.bullScore > 15 ? 'text-bull' : row.bullScore < -15 ? 'text-bear' : 'text-textMuted'
@@ -215,9 +215,10 @@ const ScannerRowModal = ({ row, spot, onClose }: ScannerRowModalProps) => {
             />
           </Section>
 
-          {/* Conviction — the split that produces the read, drawn as well as
-              stated so the bar and the badge cannot disagree. */}
-          <Block title="Conviction">
+          {/* Lean — the split that produces the read, drawn as well as stated
+              so the bar and the badge cannot disagree. Named for the signed
+              call-vs-put skew it actually is; see FlowScanner's ScoreBar. */}
+          <Block title="Lean">
             <div className="flex items-baseline justify-between gap-3">
               <span
                 className={`font-mono text-xl font-bold tnum ${

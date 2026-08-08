@@ -29,7 +29,7 @@ export interface TrailerStateThread {
   activeLevel: number;
   setupId?: string;
   contractId?: string;
-  modelConfidence?: number;
+  upProbability?: number;
 }
 
 /** Which fields of the thread a scene is allowed to have acquired by then. */
@@ -198,7 +198,7 @@ export interface SetupCandidate {
   evAfterCosts: number;
   expectedShortfall: number;
   dataQuality: number;
-  modelConfidence: number;
+  upProbability: number;
   invalidation: string;
   verdict: 'SELECTED' | 'ALTERNATIVE' | 'REJECTED';
   rejectReason?: string;

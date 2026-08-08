@@ -142,7 +142,7 @@ const SpreadCell = ({ print }: { print: FlowPrint }) => {
   );
 };
 
-/** Side + conviction score. BUY = hit the ask, SELL = hit the bid. */
+/** Side + signed flow score. BUY = hit the ask, SELL = hit the bid. */
 const FlowCell = ({ print }: { print: FlowPrint }) => {
   const score = print.flowScore;
   const tone = score > 15 ? 'text-bull' : score < -15 ? 'text-bear' : 'text-textMuted';
@@ -201,8 +201,8 @@ const SENT_TEXT: Record<PrintSentiment, string> = {
 };
 
 // ---- column model --------------------------------------------------------------
-type GroupName = 'Contract' | 'Execution' | 'Conviction' | 'Activity';
-const GROUP_ORDER: GroupName[] = ['Contract', 'Execution', 'Conviction', 'Activity'];
+type GroupName = 'Contract' | 'Execution' | 'Lean' | 'Activity';
+const GROUP_ORDER: GroupName[] = ['Contract', 'Execution', 'Lean', 'Activity'];
 
 interface TapeCol {
   id: string;
@@ -297,12 +297,12 @@ const ALL_COLS: TapeCol[] = [
     dyn: r => (r.premium >= 250_000 ? 'font-bold text-textPrimary' : 'text-textSecondary'),
     cell: r => fmtUsd(r.premium),
   },
-  // Conviction
-  { id: 'flow', group: 'Conviction', label: 'Flow', cls: '', cell: r => <FlowCell print={r} /> },
-  { id: 'ratio', group: 'Conviction', label: 'Day Ratio', align: 'right', cls: '', cell: r => <RatioCell print={r} /> },
+  // Lean — which way the print leans and how hard, never how likely it is right.
+  { id: 'flow', group: 'Lean', label: 'Flow', cls: '', cell: r => <FlowCell print={r} /> },
+  { id: 'ratio', group: 'Lean', label: 'Day Ratio', align: 'right', cls: '', cell: r => <RatioCell print={r} /> },
   {
     id: 'sent',
-    group: 'Conviction',
+    group: 'Lean',
     label: 'Sentiment',
     align: 'right',
     cls: 'text-label font-semibold',

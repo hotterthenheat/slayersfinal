@@ -28,6 +28,7 @@ import type { MarketSnapshot } from '../../types/market';
 import type { CommandView, ExposureProfileData, GexMatrixData, GexView } from '../../types/gex';
 import type { Setup, CompassData } from '../../types/compass';
 import { VERDICT_LABEL } from '../../components/compass/verdict';
+import KnowabilityChip from '../../components/ui/KnowabilityChip';
 import { DUR, EASE } from '../../lib/motion';
 
 const SCAN_INTERVAL_MS = 10_000;
@@ -186,7 +187,7 @@ const DemoTape = ({ snapshot }: { snapshot: MarketSnapshot }) => {
   );
 };
 
-/** Compass top pick, confidence bar and all — the real grading, live. */
+/** Compass top pick, health bar and all — the real grading, live. */
 const DemoSetup = ({ setups }: { setups: CompassData }) => {
   const setup = useMemo<Setup | null>(() => {
     const flat = setups.groups.flatMap(g => g.setups);
@@ -238,15 +239,20 @@ const DemoSetup = ({ setups }: { setups: CompassData }) => {
         ))}
       </div>
 
+      {/* This meter read `Confidence {setup.confidence}%`, three tiles below a
+          Score tile — and `confidence` was `(score - 55) * 2.1`, so the card
+          printed one number twice and a visitor read two agreeing opinions.
+          Health comes off moneyness instead, which is why it can disagree with
+          the score sitting above it. */}
       <div>
         <div className="flex items-center justify-between">
-          <span className="font-mono text-micro uppercase tracking-widest text-textMuted">Confidence</span>
-          <span className="font-mono text-label font-semibold text-textPrimary tnum">{setup.confidence}%</span>
+          <span className="font-mono text-micro uppercase tracking-widest text-textMuted">Health</span>
+          <span className="font-mono text-label font-semibold text-textPrimary tnum">{setup.health}/100</span>
         </div>
         <div className="mt-1.5 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
           <motion.div
             className="h-full rounded-full data-bar"
-            animate={{ width: `${setup.confidence}%` }}
+            animate={{ width: `${setup.health}%` }}
             transition={{ duration: DUR.data, ease: EASE }}
           />
         </div>
@@ -263,13 +269,25 @@ const SectionKicker = ({ children }: { children: React.ReactNode }) => (
   <span className="font-mono text-label font-semibold uppercase tracking-[0.25em] text-textSecondary">{children}</span>
 );
 
-/** The landing scan runs the `top-setups` feed, whose score floor sits far above
-    the band that produces an EXIT verdict, so a genuinely faded card can never
-    reach this section. The faded panel is therefore a projection of the live
-    card past its own invalidation, and the copy beside it says so. Reading the
-    engine's confidence curve inside the faded band beats the old inversion,
-    which made the strongest cards read as the hardest fades. */
-const FADED_CONFIDENCE = 31;
+/*
+  The landing scan runs the `top-setups` feed, whose score floor sits far above
+  the band that produces an EXIT verdict, so a genuinely faded card can never
+  reach this section. The faded panel is a PROJECTION of the live card past its
+  own invalidation, and that is the load-bearing fact about it.
+
+  It used to be told with a number: `const FADED_CONFIDENCE = 31`, printed as
+  "Confidence 31%" beside a matching bar. A hardcoded integer, on the public
+  landing page, under a label that claims a measurement — and the ENTER side of
+  the same meter read `setup.confidence`, which was the score with a percent
+  sign. So the section's whole before/after contrast rested on one invented
+  constant and one number said twice.
+
+  What carries the contrast now is what actually differs: the verdict headline,
+  and the invalidation copy naming the level that broke. The card's own health
+  is a fact about the contract, not about which tab you are on, so it does not
+  move between the two — and the projected state says it is projected, using the
+  knowability chip the Fracture desk already reads in.
+*/
 
 /** "Same card, projected forward" — the live read and the downgrade it prints. */
 const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
@@ -291,7 +309,6 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
 
   const entering = mode === 'ENTER';
   const bull = setup.right === 'C';
-  const confidence = entering ? setup.confidence : FADED_CONFIDENCE;
 
   return (
     // `setups` is the Compass tab's target in the landing nav — this is the
@@ -361,19 +378,32 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
                      entry stood on no longer holds, so the engine downgrades the card and tells you to step aside.`}
               </p>
 
+              {/* The bar used to animate between green and red. A verdict is a
+                  process state and may not borrow the market's colours — the
+                  rule compass/setupState.ts states once for the whole app — and
+                  this one painted a PUT green whenever the live read qualified.
+                  It rides the neutral data-bar now, and the state it is in is
+                  said in words beside it. */}
               <div className="mt-4">
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-micro uppercase tracking-widest text-textMuted">Confidence</span>
-                  <span className="font-mono text-label font-semibold text-textPrimary tnum">{confidence}%</span>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-mono text-micro uppercase tracking-widest text-textMuted">Health</span>
+                  <span className="ml-auto">
+                    <KnowabilityChip
+                      tier={entering ? 'observed' : 'assumed'}
+                      basis={
+                        entering
+                          ? 'read off the live scan'
+                          : 'the same card projected past its own invalidation — not a reading the scan has produced'
+                      }
+                    />
+                  </span>
+                  <span className="font-mono text-label font-semibold text-textPrimary tnum">{setup.health}/100</span>
                 </div>
                 <div className="mt-1.5 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
                   <motion.div
-                    className="h-full rounded-full"
+                    className={`h-full rounded-full ${entering ? 'data-bar' : 'bg-textMuted/50'}`}
                     initial={false}
-                    animate={{
-                      width: `${confidence}%`,
-                      background: entering ? 'rgba(48,209,88,0.92)' : 'rgba(255,59,48,0.85)',
-                    }}
+                    animate={{ width: `${setup.health}%` }}
                     transition={{ duration: DUR.data, ease: EASE }}
                   />
                 </div>

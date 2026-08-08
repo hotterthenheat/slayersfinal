@@ -99,7 +99,6 @@ export interface TradePlan {
   ticker: TickerSymbol;
   direction: TradeDirection;
   score: number;
-  confidence: number;
   entry: number;
   stopLoss: number;
   target1: number;

@@ -199,7 +199,20 @@ export interface Setup {
   ask: number;
   mid: number;
   liveMid: number;
-  confidence: number;
+  /*
+    A `confidence` percentage sat here, computed as `clamp((score - 55) * 2.1)` —
+    the score with a percent sign and no second input. Three surfaces had already
+    refused to render it and written down why (compass/contractFacts.ts,
+    compass/SignalMonitor.tsx, compass/SetupScanCard.tsx: "a Conf column is the
+    Score column wearing a percent sign"), but Tracker and the public landing page
+    still printed it, so the desk both featured and excluded one number depending
+    on which pane you stood in. It is deleted rather than left on the type,
+    because a field nothing may honestly render is an invitation.
+
+    `health` is the independent read those three panels name as its replacement:
+    it comes from moneyness (data/compass.ts healthFor), not from the score, so
+    the two can disagree — which is the only reason to show a second number.
+  */
   health: number;
   momentum: Momentum;
   takeProfits: TakeProfit[];

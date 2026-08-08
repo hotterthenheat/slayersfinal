@@ -100,17 +100,25 @@ const VsSpotBar = ({ pct, max }: { pct: number; max: number }) => {
 
 /** Conviction as a bar rather than a bare percentage — the point of the column
     is comparing rows, and a number does that worse than a length. */
-const ConvBar = ({ pct }: { pct: number }) => (
-  <span className="inline-flex items-center gap-1.5 justify-end w-full">
-    <span className={`font-mono text-caption tnum leading-4 ${pct < 55 ? 'text-warn' : 'text-textSecondary'}`}>{pct}</span>
-    <span className="relative h-1 w-10 rounded-full bg-inset overflow-hidden shrink-0" aria-hidden="true">
-      <span
-        className={`absolute inset-y-0 left-0 rounded-full ${pct < 55 ? 'bg-warn/70' : 'bg-textMuted/70'}`}
-        style={{ width: `${Math.max(2, Math.min(100, pct))}%` }}
-      />
+/*
+  The column that used to print the conviction number and a bar proportional to
+  it. Both encoded a precision the value does not have — see matchTier below —
+  and a proportional bar is the strongest possible claim that two rows can be
+  ranked against each other on it. The word alone, right-aligned like the number
+  it replaced.
+*/
+const MatchCell = ({ conviction }: { conviction: number }) => {
+  const { label, tone } = matchTier(conviction);
+  return (
+    <span
+      className={`font-mono text-caption uppercase tracking-wider leading-4 ${
+        tone === 'warn' ? 'text-warn' : 'text-textSecondary'
+      }`}
+    >
+      {label}
     </span>
-  </span>
-);
+  );
+};
 
 const roleTone: Record<DarkPoolLevel['role'], Tone> = {
   SUPPORT: 'bull',
@@ -130,17 +138,30 @@ const ShelfBar = ({ level, max }: { level: DarkPoolLevel; max: number }) => (
   </span>
 );
 
-/**
- * Confidence tier — a plain-language bucket over the classifier's OWN conviction
- * value. It relabels an existing number, it never fabricates one. Low reads amber
- * (caution), the rest stay neutral so confidence never masquerades as bullishness.
- */
-const confidenceTier = (conviction: number): { label: string; tone: Tone } =>
+/*
+  How strongly a print matched the pattern it was filed under.
+
+  This used to render as `Confidence High · 84%`, and the percentage was the
+  problem. `conviction` is drawn by `hRange` from a band that the matched
+  archetype picks (data/darkpool.ts classify: a sized cross below market in an
+  up-tape draws 70-92, routine rotation draws 35-55). So the only real content
+  in the number is WHICH BAND, and the two digits after it are a hash — fake
+  resolution on a quantity nothing measured. Printing 84% invited a reader to
+  compare it against an 81% on the row below, where no such ordering exists.
+
+  The band survives because it is genuine: it separates a cross that met every
+  condition of its archetype from one that merely leaned. It reads as a word
+  now, and the word is MATCH, not confidence — the module is saying how well the
+  print fits a pattern, which is not the same as how likely the pattern is to be
+  right. Weak reads amber (caution); the rest stay neutral so a match strength
+  can never be mistaken for a direction.
+*/
+const matchTier = (conviction: number): { label: string; tone: Tone } =>
   conviction >= 75
-    ? { label: 'High', tone: 'neutral' }
+    ? { label: 'Textbook', tone: 'neutral' }
     : conviction >= 55
-      ? { label: 'Moderate', tone: 'neutral' }
-      : { label: 'Low', tone: 'warn' };
+      ? { label: 'Partial', tone: 'neutral' }
+      : { label: 'Weak', tone: 'warn' };
 
 /** The honest alternative to each inferred read — same tape, a different story. */
 const competingRead: Record<DarkPoolIntent, string> = {
@@ -164,15 +185,13 @@ const competingPosture: Record<string, string> = {
     has to read as "at least", not as an exact count. */
 const retestLabel = (defended: number) => (defended >= 5 ? '5+ retests held' : `${defended} retest${defended > 1 ? 's' : ''} held`);
 
-/** Confidence chip — surfaces the classifier's conviction as a tier plus the raw %. */
-const ConfidenceChip = ({ conviction }: { conviction: number }) => {
-  const { label, tone } = confidenceTier(conviction);
+/** How cleanly this print fits the archetype it was filed under. No percentage. */
+const MatchChip = ({ conviction }: { conviction: number }) => {
+  const { label, tone } = matchTier(conviction);
   return (
     <span className="inline-flex items-center gap-1.5">
-      <span className="font-mono text-label uppercase tracking-wider text-textMuted">Confidence</span>
-      <SignalBadge tone={tone}>
-        {label} · {conviction}%
-      </SignalBadge>
+      <span className="font-mono text-label uppercase tracking-wider text-textMuted">Match</span>
+      <SignalBadge tone={tone}>{label}</SignalBadge>
     </span>
   );
 };
@@ -462,11 +481,11 @@ const DarkPool = () => {
     {
       key: 'conv',
       group: 'Read',
-      header: 'Conf',
+      header: 'Match',
       align: 'right',
       width: '92px',
       sortValue: p => p.conviction,
-      render: p => <ConvBar pct={p.conviction} />,
+      render: p => <MatchCell conviction={p.conviction} />,
     },
   ];
 
@@ -559,7 +578,7 @@ const DarkPool = () => {
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-mono text-label uppercase tracking-wider text-textMuted">Inferred as</span>
               <SignalBadge tone={intentTone[activePrint.intent]}>{activePrint.intent}</SignalBadge>
-              <ConfidenceChip conviction={activePrint.conviction} />
+              <MatchChip conviction={activePrint.conviction} />
               {activePrintShelf && (
                 <span className="inline-flex items-center gap-1 font-mono text-label uppercase tracking-wider text-flip">
                   <ShieldCheck className="w-3.5 h-3.5" />
@@ -647,8 +666,10 @@ const DarkPool = () => {
               <span className="text-textSecondary">{tally.ROTATION} rotation</span>
             </span>
             <span className="text-label leading-relaxed text-textMuted">
-              The skew above weights each block&rsquo;s notional by the classifier&rsquo;s own confidence in it, so one
-              large low-confidence cross cannot carry the verdict on its own.
+              The skew above weights each block&rsquo;s notional by how cleanly it matched its archetype, so one large
+              cross that only leans cannot carry the verdict on its own. That weight is a property of the pattern, not
+              a probability that the read is correct &mdash; nothing here scores whether the print meant what it looked
+              like.
             </span>
           </div>
 

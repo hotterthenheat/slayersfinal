@@ -64,7 +64,7 @@ const StateThread: React.FC = () => {
     volatilityState: thread.volatilityState.split(' · ')[0],
     setupId: thread.setupId ?? '—',
     contractId: thread.contractId ?? '—',
-    modelConfidence: thread.modelConfidence != null ? `${Math.round(thread.modelConfidence * 100)}%` : '—',
+    upProbability: thread.upProbability != null ? `${Math.round(thread.upProbability * 100)}%` : '—',
   };
 
   // A chip that lit up in this scene gets a one-scene ring: the moment a desk

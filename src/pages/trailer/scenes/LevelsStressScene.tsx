@@ -73,7 +73,11 @@ const LevelsStressScene: React.FC = () => {
                   </div>
                   <div className="mt-0.5 grid grid-cols-[1fr_1fr] gap-1.5">
                     <div>
-                      <div className="font-mono text-micro text-textMuted">conf {prob(l.confidence)}</div>
+                      {/* `conf` — a level asserting how sure it was. It sits
+                          beside reaction and sensitivity, which are both facts
+                          about what price DID at the level, and this one now
+                          matches them: how consistently the level has held. */}
+                      <div className="font-mono text-micro text-textMuted">hold {prob(l.confidence)}</div>
                       <Bar value={l.confidence} grow={e} tone="select" height={3} />
                     </div>
                     <div>
