@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useMemo } from 'react';
 import { weighContract, type WeighedContract } from '../../core/contractScore';
 import type { MarketSnapshot } from '../../types/market';
 import SpotRule from '../ui/SpotRule';
@@ -32,7 +32,14 @@ export interface WeigherChainProps {
   /** Currently graded contract, so the chain can mark it. */
   selected: { strike: number; right: 'C' | 'P' } | null;
   onPick: (sel: { strike: number; right: 'C' | 'P' }) => void;
-  /** How far either side of spot to list, as a fraction (0.10 = ±10%). */
+  /**
+   * How far either side of spot to list, as a fraction.
+   *
+   * ±6%, not ±10%. On SPY's $1 grid ±10% is 100 strikes — around 4,600px of
+   * ladder, most of it contracts priced at a cent that nobody is weighing. Six
+   * percent covers everything within reach of a weekly move and keeps the money
+   * a short scroll from the top rather than a expedition.
+   */
   reachPct?: number;
 }
 
@@ -89,7 +96,7 @@ const ChainCell = ({ c, isSelected, onPick, align }: CellProps) => {
   );
 };
 
-const WeigherChain = ({ snapshot, dte, selected, onPick, reachPct = 0.1 }: WeigherChainProps) => {
+const WeigherChain = ({ snapshot, dte, selected, onPick, reachPct = 0.06 }: WeigherChainProps) => {
   const { ticker, spot } = snapshot;
 
   /*
@@ -129,27 +136,18 @@ const WeigherChain = ({ snapshot, dte, selected, onPick, reachPct = 0.1 }: Weigh
   if (spotRowIndex < -1) spotRowIndex = rows.length - 1;
 
   /*
-    Land on the money.
+    NO auto-scroll.
 
-    A full ladder starts at the lowest strike, so without this the chain opens
-    on deep ITM calls and the tradable strikes are a screen down. The page owns
-    the scroll (there is no inner scroller here on purpose), so this moves the
-    WINDOW — and only when the money row is off-screen, so arriving on the desk
-    does not yank a page the reader has not touched.
+    The first cut scrolled the WINDOW so the money row sat mid-viewport, on the
+    theory that a ladder opening on deep ITM calls buries the strikes anyone
+    trades. It did that — and took the page header, the expiry tabs and the
+    whole grade panel off screen with it, on arrival, before the reader had
+    touched anything. A chain that moves the page out from under you is worse
+    than one that starts high.
+
+    The ladder is a tight window around spot instead (see `reachPct`), so the
+    money is a short scroll away and the spot rule marks it when you get there.
   */
-  const listRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    const list = listRef.current;
-    const row = list?.children[Math.max(0, Math.min(spotRowIndex, rows.length - 1))] as HTMLElement | undefined;
-    if (!list || !row) return;
-    const box = row.getBoundingClientRect();
-    const BAR_PX = 56;
-    if (box.top >= BAR_PX && box.bottom <= window.innerHeight) return;
-    window.scrollTo({ top: Math.max(0, window.scrollY + box.top - (window.innerHeight + BAR_PX) / 2), behavior: 'auto' });
-    // Only on a change of name or expiry — re-centring on every repricing tick
-    // would fight the scrollbar under the reader's hand.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ticker, dte, rows.length]);
 
   return (
     <div className="w-full">
@@ -163,7 +161,7 @@ const WeigherChain = ({ snapshot, dte, selected, onPick, reachPct = 0.1 }: Weigh
         </div>
       </div>
 
-      <div ref={listRef}>
+      <div>
         {rows.map((row, i) => {
           const itm = row.strike < spot;
           return (

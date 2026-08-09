@@ -13,6 +13,8 @@
  *   overflow        The document scrolls sideways. Nothing on a page is
  *                   reachable if the viewport cuts it off, and the culprit is
  *                   named so it does not turn into a bisect.
+ *   stringified-object  "[object Object]" on screen — a record rendered where
+ *                   one of its fields was meant.
  *   dead-space      The complement of overflow: a page that does not use the
  *                   column it has — a strip of the page column that no ink
  *                   touches, which is what a max-width cap or a centred narrow
@@ -711,6 +713,35 @@ function collectFindings(opts) {
           });
         }
       }
+    }
+  }
+
+  /*
+    ── stringified-object ──
+
+    "[object Object]" reaching the screen. It is always a bug and never a
+    preference: something rendered a record where it meant to render a field.
+
+    Found on the live tape, where the OI column called `toLocaleString()` on an
+    `OpenInterest` record — { value, asOf, freshness } — instead of on its
+    `.value`, and printed the literal string on all 400 rows. The sibling ΔOI
+    cell in the same file already read `.value`, so nothing about the data was
+    wrong; one call site was simply missed, and no check in the suite was
+    looking for the result.
+
+    Cheap to test and impossible to argue with, so it is an error, not a warn.
+  */
+  for (const el of document.querySelectorAll('*')) {
+    if (!isVisible(el)) continue;
+    const own = [...el.childNodes]
+      .filter(n => n.nodeType === 3)
+      .map(n => n.textContent)
+      .join('');
+    if (own.includes('[object Object]')) {
+      add('stringified-object', 'error', 'renders the literal string "[object Object]"', {
+        element: describe(el),
+        within: trail(el),
+      });
     }
   }
 

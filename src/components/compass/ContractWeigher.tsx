@@ -932,7 +932,15 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: DUR.base, ease: EASE }}
-            className="xl:col-span-7 min-w-0"
+            /* Sticky beside the chain.
+               The chain is tall and the grade panel is short, so in a plain
+               two-column grid the left half of the screen went black the moment
+               you scrolled past the analysis — a 700px empty rail next to a
+               ladder, which is exactly the dead space this desk was supposed to
+               stop having. Sticking it keeps the read on screen for whatever
+               row you are looking at, which is also what you want it for.
+               `top` clears the 56px bar plus the gutter. */
+            className="xl:col-span-7 min-w-0 xl:sticky xl:top-[4.25rem] xl:self-start"
           >
             <Panel
               emphasis
