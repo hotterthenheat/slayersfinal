@@ -9,8 +9,7 @@
   Pipeline: forced-flow balance sheet by price level →
   latent liquidity + absorption ratio → criticality
   (branching ratio) → Monte-Carlo cascade simulation →
-  a single actionable read. Plus the closing-auction
-  (MOC) forced-flow event and a mechanical-vs-
+  a single actionable read, plus a mechanical-vs-
   informational move decomposition.
 
   Grounded in the real option chain + price history;
@@ -31,8 +30,6 @@ import type {
   ForcedParticipant,
   FractureView,
   MoveDecomposition,
-  MocClassification,
-  MocRead,
 } from '../types/fracture';
 
 const LEVELS_PER_SIDE = 10;
@@ -229,83 +226,21 @@ function buildDecomposition(snapshot: MarketSnapshot, p: EngineParams, seed: (t:
   return out;
 }
 
-function buildMoc(snapshot: MarketSnapshot, G: number, seed: (t: string) => number): MocRead {
-  const expectedLiq = G * hRange(`${snapshot.ticker}-moc-liq`, 0.4, 0.9);
-  const biasDir = snapshot.changePercent + (seed('bias') - 0.5) * 1.6 >= 0 ? 1 : -1;
-  const imbalanceUsd = biasDir * expectedLiq * hRange(`${snapshot.ticker}-moc-imb`, 0.3, 1.7);
-  const normalizedZ = imbalanceUsd / Math.max(expectedLiq, 1);
-  const growthZ = hGauss(`${snapshot.ticker}-moc-grow`) * 0.9;
-  const displacementZ = normalizedZ * hRange(`${snapshot.ticker}-moc-disp`, 0.5, 1.2);
-  const absorptionPct = Math.round(Math.max(5, Math.min(95, 42 + seed('abs') * 44 - Math.abs(normalizedZ) * 12)));
-  const confirmation = Math.tanh(snapshot.changePercent * 0.6 + (seed('conf') - 0.5) * 0.9);
-  const isRebalance = seed('reb') > 0.82;
-  const reversalRisk = Math.round(Math.max(8, Math.min(92, 28 + absorptionPct * 0.4 + (isRebalance ? 22 : 0) - Math.abs(growthZ) * 12)));
+/*
+  The closing-auction engine lived here, and it is gone.
 
-  const score = Math.max(
-    -100,
-    Math.min(
-      100,
-      Math.round(
-        normalizedZ * 34 +
-          growthZ * 16 +
-          displacementZ * 22 -
-          ((absorptionPct - 50) / 50) * 18 +
-          confirmation * 14 -
-          (reversalRisk / 100) * 26
-      )
-    )
-  );
+  `buildMoc` published unpaired auction interest in dollars, a normalized
+  imbalance z, indicative-price displacement, how much of the imbalance the
+  paired book was absorbing, a reversal probability and a futures/ETF
+  confirmation term. Every one of those is an exchange auction-feed quantity —
+  Nasdaq NOII, NYSE Order Imbalances — or, for the confirmation term, a futures
+  feed. The product carries options, equities and index quotes and none of the
+  three can produce any of them, so each number was `hRange`/`hGauss` on the
+  ticker with a sigma printed after it.
 
-  const side = normalizedZ > 0.12 ? 'BUY' : normalizedZ < -0.12 ? 'SELL' : 'BALANCED';
-  let classification: MocClassification;
-  let note: string;
-  const sideWord = side === 'BUY' ? 'buy' : 'sell';
-  // The note describes the auction and what the mechanics imply, and stops
-  // there. It renders raw on three surfaces — the Lotto board's header and its
-  // empty state, and a Pulse panel — so an instruction written here becomes an
-  // instruction on all three, and LottoBoard's own read (which already speaks
-  // observationally) would be reasoning off a sentence that overrides it.
-  if (Math.abs(score) >= 45 && absorptionPct < 55 && growthZ * normalizedZ > 0) {
-    classification = 'CONTINUATION';
-    note = `Persistent ${sideWord} imbalance the paired book isn't absorbing, indicative price displaced ${displacementZ.toFixed(1)}σ and still moving — nothing in the auction is leaning against it, so the displacement carries into the cross rather than unwinding before it.`;
-  } else if (Math.abs(normalizedZ) > 0.5 && absorptionPct >= 62) {
-    classification = 'ABSORPTION FADE';
-    note = `Large ${sideWord} imbalance but ${absorptionPct}% is being paired off and displacement is fading — liquidity providers are absorbing it, so the initial reaction is being met rather than followed. The give-back begins where the imbalance measurably weakens.`;
-  } else if (isRebalance && reversalRisk > 60) {
-    classification = 'DISLOCATION REVERSAL';
-    note = `Abnormal ${sideWord}-side auction pressure that looks mechanical (rebalance/flow, not information). Pressure with no information behind it leaves nothing to hold the level once the print is done, so the displacement decays after the cross — not before it — toward the pre-auction fair-price region.`;
-  } else {
-    classification = 'NO TRADE';
-    note = 'Imbalance and indicative displacement disagree, or the imbalance is being absorbed — no clean closing-auction edge. The 3:53–3:57 window is where the imbalance either confirms or decays.';
-  }
-
-  return {
-    imbalanceUsd,
-    side,
-    normalizedZ,
-    growthZ,
-    displacementZ,
-    absorptionPct,
-    confirmation,
-    reversalRisk,
-    score,
-    classification,
-    note,
-  };
-}
-
-/**
- * Closing-auction (MOC) read on its own — the Lotto desk's centerpiece.
- * Same model as the Fracture engine uses, but standalone so a page can price
- * the close without paying for the whole forced-flow ladder + cascade sim.
- */
-export function buildMocRead(snapshot: MarketSnapshot): MocRead {
-  const { ticker, chain, spot } = snapshot;
-  const day = dayKey();
-  const seed = (t: string) => h01(`${ticker}-${day}-frac-${t}`);
-  const G = chain.reduce((a, n) => a + Math.abs(n.netGex), 0) || spot * 1e6;
-  return buildMoc(snapshot, G, seed);
-}
+  `FractureView` no longer carries a `moc` field, and the Lotto desk asks the
+  long-shot question off the chain instead. See `docs/DATA-FEASIBILITY.md`.
+*/
 
 export function buildFractureView(snapshot: MarketSnapshot): FractureView {
   const { ticker, spot, chain } = snapshot;
@@ -419,7 +354,6 @@ export function buildFractureView(snapshot: MarketSnapshot): FractureView {
   const cascade = buildCascade(spot, trigger, params, `${ticker}-${day}-casc`);
 
   const decomposition = buildDecomposition(snapshot, params, seed);
-  const moc = buildMoc(snapshot, params.G, seed);
 
   // ---- instability composite ----
   // Driven by cascade odds, self-excitation, and how close the fracture line sits
@@ -469,6 +403,5 @@ export function buildFractureView(snapshot: MarketSnapshot): FractureView {
     criticality,
     cascade,
     decomposition,
-    moc,
   };
 }

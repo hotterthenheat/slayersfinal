@@ -380,11 +380,20 @@ const HedgeImpact = () => {
         subtitle="how far the book is from a clean, neutral hedge"
         tone={stressTone[view.stressLabel]}
       >
-        <div className="flex items-center gap-4">
+        {/* Wraps, and the bar column may shrink below its content.
+
+            The scale under the bar reads LIGHT / BUILDING / STRETCHED / CRITICAL
+            at justify-between, which gives the column a minimum intrinsic width
+            of about 200px. With `flex-1` and no `min-w-0` that floor is
+            load-bearing, so on a 390px phone the number, the bar and the badge
+            could not all fit and the badge was pushed 6px past the shell —
+            enough to scroll the whole page sideways. It only showed up on the
+            longest label, so the defect came and went with the reading. */}
+        <div className="flex items-center gap-x-4 gap-y-2 flex-wrap">
           <span className={`font-mono text-3xl font-bold tnum ${view.stressLabel === 'CRITICAL' ? 'text-bear' : view.stressLabel === 'STRETCHED' ? 'text-warn' : 'text-textPrimary'}`}>
             {view.inventoryStress}
           </span>
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <div className="relative h-2.5 rounded-full bg-white/[0.06] overflow-hidden">
               <span
                 className={`block h-full rounded-full ${view.stressLabel === 'CRITICAL' ? 'bg-bear' : view.stressLabel === 'STRETCHED' ? 'bg-warn' : view.stressLabel === 'BUILDING' ? 'bg-select' : 'bg-bull'}`}

@@ -542,7 +542,7 @@ const Compass = () => {
     lotto: {
       crumb: 'Lotto',
       title: 'Lotto · 0DTE Desk',
-      subtitle: 'Same-day speculation. 0DTE contracts and the closing-auction (MOC) engine. High variance by design.',
+      subtitle: 'Same-day speculation. Far-OTM contracts graded on whether a one-sigma move covers the breakeven. High variance by design.',
     },
   }[mode];
 

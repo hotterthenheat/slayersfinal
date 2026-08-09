@@ -96,11 +96,12 @@ const DESKS: DeskDoc[] = [
       stamped with. The scanners are a filter <em>inside</em> a horizon, not a horizon of their own, so the same
       scanner produces a different board on each tab.</>,
       <>The <span className="text-textPrimary">Weigher</span>: search any contract you already hold, at any expiry from
-      same-day to LEAPS, and have it graded on its own six-factor composite — the math, theta burden, vol pricing, flow
-      and dark pool, news lean, liquidity — with a better-risk/reward alternative beside it. It speaks the board's
+      same-day to LEAPS, and have it graded on its own five-factor composite — the math, theta burden, vol pricing, flow
+      and dark pool, liquidity — with a better-risk/reward alternative beside it. It speaks the board's
       lexicon but not the board's number: the weights change with the sleeve, so the two scales are not
-      interchangeable. And <span className="text-textPrimary">Lotto</span>, a 0DTE desk with the closing-auction (MOC)
-      engine, high variance by design.</>,
+      interchangeable. And <span className="text-textPrimary">Lotto</span>, a same-session desk that grades far-OTM
+      contracts on both sides by whether a one-sigma move to expiry covers the strike's breakeven. High variance by
+      design.</>,
     ],
     read: [
       <>The board's score has three inputs: how close the strike sits to spot, whether the contract's direction agrees

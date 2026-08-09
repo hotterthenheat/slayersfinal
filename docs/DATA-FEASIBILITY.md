@@ -61,6 +61,7 @@ stated in the UI · **RED** = no data source; remove, or reduce to the part that
 | **Earnings Hub** | Needs an **earnings calendar** (report dates), and its PLAY/FADE grading needs **estimates and revisions**. You have none of it. The *only* backed part is the implied move from the straddle, and the realized move after the fact — but you cannot know *when* a company reports. **This desk cannot exist on these three feeds.** |
 | **`src/data/news.ts`** (desk already retired; `catalystPriors` still feeds `core/quant.ts`) | No news feed. The retired desk was correct. The surviving import means a news-shaped prior is still influencing quant output with nothing behind it. |
 | **Community (ideas / requests / feedback)** | Not a market-data problem at all — needs a database, auth and moderation. Legitimate, but it is a *backend* product, not something these feeds enable. |
+| **Closing-auction (MOC) engine** | Unpaired auction interest, the indicative price and paired-book absorption are published by an exchange **order-imbalance feed** (Nasdaq NOII, NYSE Order Imbalances). Its confirmation term also wanted **futures**. Neither feed is on any tier, and no amount of options or index data reconstructs an auction book. |
 | Anything implying **holdings, short interest, insider or institutional ownership** | No source. |
 
 ---
@@ -86,7 +87,31 @@ Actioned on the owner's instruction. Each line is now a record, not a proposal.
 4. **Sector rotation — REMOVED.** Relative-strength phases per group need a real
    taxonomy. The `sector` LABEL survives everywhere it is only a label a human typed onto
    a universe row — the scope filter, the sortable column, the dark-pool grouping.
-5. **Dark Pool — KEPT.** Verified against the source before touching it: the desk models
+5. **Closing-auction (MOC) engine — DELETED.** Missed on the first pass through this
+   document, which is why it is worth naming plainly: `core/fracture.ts buildMoc`
+   published unpaired auction interest in dollars, a normalized imbalance z, indicative
+   price displacement, a paired-book absorption percentage, a reversal probability and a
+   futures/ETF confirmation term. Every one of those comes from an exchange **order
+   imbalance feed** — Nasdaq NOII or NYSE Order Imbalances — except the confirmation
+   term, which needs **futures**. Neither is on any of the three tiers, so each value was
+   a hash of the ticker printed with a sigma after it.
+
+   The blast radius was the whole **Lotto desk**, because the auction did not decorate
+   that board, it *structured* it: which side got listed, how names ranked across the
+   strip, a ±18-point grade adjustment, a per-strike "auction covers 1.4x" chip, and an
+   evidence panel reporting all six quantities to two decimals.
+
+   The desk was **rebuilt, not deleted**, because its real question is fully backed:
+   given the chain, does the one-sigma move to expiry cover this strike's breakeven, and
+   what does an hour of standing still cost. It now lists both sides, ranks within each
+   side, and says in the panel below the board that it names no direction and why. What
+   went with the engine: the `moc` field on `FractureView`, the Pulse "Closing Auction
+   (MOC)" panel and its workspace preset, and the MOC glossary entry.
+
+   `components/compass/mocClock.ts` **survives** — it is the ET market clock and the
+   last-quarter-hour acceptance gate, both derived from `core/calendar.ts`. What time the
+   bell is, is not an auction-feed question.
+6. **Dark Pool — KEPT.** Verified against the source before touching it: the desk models
    EQUITY off-exchange prints, not options ones. Share-based sizes with no 100-multiplier,
    an ATS venue taxonomy, no options fields on the type, and `darkpool.ts:217` explicitly
    disclaiming the option chain. It is delayed-data-constrained, not conceptually broken,

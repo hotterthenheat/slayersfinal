@@ -264,19 +264,6 @@ export const PULSE_PRESETS: PulseLayout[] = [
     ],
   },
   {
-    id: 'closing-auction',
-    name: 'Closing Auction',
-    preset: true,
-    panels: [
-      { id: 'a-chart', key: 'live-chart' },
-      { id: 'a-moc', key: 'moc-read' },
-    ],
-    layout: [
-      L('a-chart', 0, 0, 7, 8),
-      L('a-moc', 7, 0, 5, 8),
-    ],
-  },
-  {
     id: 'fracture-watch',
     name: 'Fracture Watch',
     preset: true,
