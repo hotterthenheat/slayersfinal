@@ -428,6 +428,52 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
     [zones, bandList]
   );
 
+  /*
+    Which strike labels the gutter can actually FIT.
+
+    The rule was `bandH >= 14 || significant.has(strike) || …`, which reads as a
+    density guard and is not one: a "significant" strike printed regardless of
+    what sat next to it. On a dense ladder the flip and the spot are usually
+    ADJACENT strikes, so 498 and 497 rendered one on top of the other — two
+    numbers in the same twelve pixels, which is worse than printing neither.
+
+    A real collision pass instead. Candidates are ranked — what the reader
+    selected or is hovering first, then the named levels (king, pin, walls),
+    then the plain rungs — and placed greedily, skipping any whose centre falls
+    within LABEL_MIN_PX of one already placed. The order matters: at equal
+    footing the important label takes the slot rather than whichever happened to
+    come first down the ladder.
+
+    The 1σ caption shares this lane but is positioned off `emTop`, which is
+    computed past an early return and so cannot be a dependency here without
+    breaking rules-of-hooks. It is excluded at the render site, where emTop is
+    in scope.
+  */
+  const labelled = useMemo(() => {
+    // 10px type on a 12px line — two labels closer than this touch.
+    const LABEL_MIN_PX = 13;
+    const rank = (strike: number): number => {
+      if (selectedStrike === strike || activeStrike === strike) return 0;
+      if (strike === king || strike === levels.pin) return 1;
+      if (strike === levels.callWall || strike === levels.putWall) return 2;
+      if (significant.has(strike)) return 3;
+      // A plain rung is only a candidate when the ladder is loose enough that
+      // every band could carry one.
+      return bandH >= 14 ? 4 : Infinity;
+    };
+    const taken: number[] = [];
+    const out = new Set<number>();
+    for (const c of bandList
+      .map(b => ({ strike: b.strike, center: b.center, r: rank(b.strike) }))
+      .filter(c => Number.isFinite(c.r))
+      .sort((a, b) => a.r - b.r || a.center - b.center)) {
+      if (taken.some(t => Math.abs(t - c.center) < LABEL_MIN_PX)) continue;
+      taken.push(c.center);
+      out.add(c.strike);
+    }
+    return out;
+  }, [bandList, bandH, significant, selectedStrike, activeStrike, king, levels.pin, levels.callWall, levels.putWall]);
+
   if (strikes.length === 0) {
     return <EmptyState title="NO STRIKES IN WINDOW" size="sm" fill />;
   }
@@ -502,8 +548,18 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
           <div className="relative shrink-0 select-none" style={{ width: GUTTER_W }} aria-hidden="true">
             {bandList.map((b, i) => {
               const row = strikes[i];
+              /* Fits its own slot (see `labelled`) — and is not sitting where the
+                 1σ caption already is. The caption is `-translate-y-full` off
+                 emTop, so it occupies roughly [emTop-13, emTop+1]; a label
+                 centred at c occupies [c-7, c+7]. Written as the real interval
+                 overlap rather than a symmetric window around emTop, which was
+                 the first attempt and left "503" clipping the caption by 7px
+                 because the caption is not centred on its anchor. */
+              const capTop = emTop - 13;
+              const capBottom = emTop + 1;
               const show =
-                bandH >= 14 || significant.has(b.strike) || activeStrike === b.strike || selectedStrike === b.strike;
+                labelled.has(b.strike) &&
+                !(showDerived && b.center - 7 < capBottom && b.center + 7 > capTop);
               const rail =
                 b.strike === king ? 'rail-king' : row.pin ? 'rail-neutral' : '';
               return (
