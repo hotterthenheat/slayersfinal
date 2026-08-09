@@ -948,7 +948,6 @@ const Tracker = () => {
                 rowKey={r => r.tracked.id}
                 onRowClick={r => setSelectedId(r.tracked.id)}
                 selectedKey={selected?.tracked.id ?? null}
-                maxHeight="max(560px, 62vh)"
                 emptyText={`Nothing in ${VIEWS.find(v => v.value === view)?.label}`}
               />
               {/* Book across lanes — anchors the base of the panel and doubles as

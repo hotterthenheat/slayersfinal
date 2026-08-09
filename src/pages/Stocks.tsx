@@ -567,7 +567,6 @@ const Stocks = () => {
           onRowClick={p => setSelectedTicker(prev => (prev === p.ticker ? null : p.ticker))}
           selectedKey={selectedTicker}
           initialSort={{ key: 'composite', dir: 'desc' }}
-          maxHeight="640px"
           emptyText="No names match these filters"
         />
       </Panel>

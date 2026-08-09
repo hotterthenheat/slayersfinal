@@ -187,7 +187,7 @@ const ExposureProfile = () => {
           flush
           focusable
           className="xl:col-span-7 min-w-0"
-          bodyClassName="flex flex-col max-h-[640px]"
+          bodyClassName="flex flex-col"
         >
           <ExposureMatrix
             data={data}
@@ -203,7 +203,7 @@ const ExposureProfile = () => {
           flush
           focusable
           className="xl:col-span-5 min-w-0"
-          bodyClassName="flex flex-col max-h-[640px]"
+          bodyClassName="flex flex-col"
         >
           <PositioningMap
             data={data}

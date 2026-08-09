@@ -630,7 +630,6 @@ const DarkPool = () => {
           onRowClick={p => setSelectedPrint(prev => (prev === p.id ? null : p.id))}
           selectedKey={activePrint ? String(activePrint.id) : null}
           initialSort={{ key: 'notional', dir: 'desc' }}
-          maxHeight="max(560px, 62vh)"
         />
         )}
         {/* What each kind means, once, under the tape that uses them. */}

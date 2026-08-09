@@ -352,7 +352,6 @@ const SetupCompare = ({ setup, peers, spot, scanner, onSelectPeer, onStudy }: Se
                 rowKey={s => s.id}
                 onRowClick={onSelectPeer}
                 selectedKey={setup.id}
-                maxHeight="240px"
               />
             </div>
           </div>

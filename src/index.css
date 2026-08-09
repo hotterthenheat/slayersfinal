@@ -286,10 +286,18 @@
   }
 }
 
-/* The shell's single scroll container. Reserving the gutter unconditionally
-   keeps column widths identical whether or not a desk crosses the fold, so
-   nothing reflows the moment live data pushes the page past one screen. */
-#main-content {
+/* The document is the scroll container — there is no inner one. Reserving the
+   gutter unconditionally keeps column widths identical whether or not a desk
+   crosses the fold, so nothing reflows the moment live data pushes the page
+   past one screen.
+
+   This used to sit on #main-content, back when the shell was h-screen
+   overflow-hidden around an overflow-y-auto <main>. That made the site a
+   fixed-size window with the page sliding behind it: Home and End did nothing
+   unless focus was inside the region, scroll restoration never fired, and
+   mobile browsers never collapsed their URL bar because from their side the
+   page never moved. */
+html {
   scrollbar-gutter: stable;
 }
 

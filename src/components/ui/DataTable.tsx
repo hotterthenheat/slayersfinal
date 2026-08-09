@@ -42,7 +42,6 @@ interface DataTableProps<T> {
   selectedKey?: string | null;
   initialSort?: { key: string; dir: 'asc' | 'desc' };
   /** Scroll container height, e.g. "320px" */
-  maxHeight?: string;
   emptyText?: string;
 }
 
@@ -54,7 +53,6 @@ const DataTable = <T,>({
   onRowClick,
   selectedKey,
   initialSort,
-  maxHeight,
   emptyText = 'No data',
 }: DataTableProps<T>) => {
   const [sort, setSort] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(initialSort ?? null);
@@ -93,8 +91,16 @@ const DataTable = <T,>({
     return out;
   }, [columns]);
 
+  /*
+    Horizontal only. A `maxHeight` prop used to make this a vertical scroller
+    too, and every table in the app passed one — so reading a long board meant
+    scrolling a box inside the page, hitting the bottom of the document with
+    rows still hidden, then hunting for the inner scrollbar. The page scrolls;
+    the table is as tall as its rows. Wide tables still scroll sideways in place
+    rather than pushing the document over.
+  */
   return (
-    <div className="overflow-auto" style={maxHeight ? { maxHeight } : undefined}>
+    <div className="overflow-x-auto">
       <table className="w-full border-collapse">
         <thead className="sticky top-0 z-10">
           {bands.length > 0 && (

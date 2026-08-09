@@ -489,7 +489,6 @@ const GexHistory = () => {
           selectedKey={String(activeIdx)}
           onRowClick={p => scrubTo(p.t)}
           initialSort={{ key: 'time', dir: 'desc' }}
-          maxHeight="300px"
         />
       </Panel>
     </>
