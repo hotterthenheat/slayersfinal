@@ -105,6 +105,10 @@ const SessionRow = ({ s }: { s: SimSession }) => {
 const CalibrationPlot = ({ view }: { view: StateReplayView }) => (
   <div
     style={{ height: 210 }}
+    /* layout-cap-ok: the plot has to be SQUARE. A calibration chart's whole
+       claim is that the diagonal is where predicted equals realized, and a
+       45-degree line stops being 45 degrees the moment the box is stretched.
+       This is an aspect lock on a figure, not a text column parked mid-screen. */
     className="w-full max-w-[360px] mx-auto"
     role="img"
     aria-label={`Probability calibration: predicted target rate against resolved rate across ${view.calibration.length} modeled bands. Mean absolute gap ${view.calibrationErrorPct.toFixed(1)} percentage points.`}

@@ -102,20 +102,51 @@ describe('the page column', () => {
     // were both outside the original alternation.
     const CAPS_WIDTH = /\bmax-w-(?:\d?xl\b|prose\b|screen-\w+\b|\[[^\]]+\])/;
     const CENTRES = /\bmx-auto\b/;
+    /*
+      A declared exemption, not an allowlist in this file.
+
+      One cap in the app is genuinely correct: the calibration plot on Prove It
+      must be SQUARE, because a 45-degree reference line stops being 45 degrees
+      the moment the plot is stretched. Encoding that as a path here would put
+      the reason in the guard instead of at the site, and the next square figure
+      would have to come back and edit the test.
+
+      So a site opts out by saying so on the spot — `layout-cap-ok: <reason>`
+      within the preceding 600 characters. That keeps the rule strict
+      everywhere, keeps each exception's reasoning next to the code it excuses,
+      and makes every exemption greppable.
+    */
+    const EXEMPT = /layout-cap-ok/;
     const setsOwnWidth = (text: string) =>
       [...text.matchAll(CLASS_ATTR)].some(m => {
         const classes = m[1] ?? m[2] ?? m[3] ?? m[4] ?? m[5] ?? '';
-        return CAPS_WIDTH.test(classes) && CENTRES.test(classes);
+        if (!CAPS_WIDTH.test(classes) || !CENTRES.test(classes)) return false;
+        return !EXEMPT.test(text.slice(Math.max(0, (m.index ?? 0) - 600), m.index));
       });
+    /*
+      `pages/` was not enough. The Weigher's root carried
+      `mx-auto w-full max-w-[1180px]` and lives in `components/compass/`, so it
+      parked the whole mode in the middle of a 2560 screen with ~660px of
+      background either side while this suite stayed green. A cap does the same
+      damage wherever it is declared.
+
+      `components/ui/` is exempt: an overlay, a modal, a toast and a dropdown
+      are SUPPOSED to be a bounded box floating over the page, and that is the
+      whole job of the primitives there.
+    */
+    const IN_SCOPE = /^(pages|components)\//;
+    const PRIMITIVES = /^components\/(ui|layout)\//;
     const offenders = FILES.filter(f => {
       const r = rel(f.path);
-      if (!r.startsWith('pages/') || OUTSIDE_SHELL.test(r)) return false;
+      if (!IN_SCOPE.test(r) || OUTSIDE_SHELL.test(r) || PRIMITIVES.test(r)) return false;
       return setsOwnWidth(f.text);
     }).map(f => rel(f.path));
     expect(
       offenders,
-      `These pages cap and centre themselves inside a column that is already centred. ` +
-        `Use PAGE_CONTAINER for the page and PROSE_MEASURE for a reading measure inside it.`
+      `These cap and centre themselves inside a column that already fills the screen, which parks ` +
+        `content in the middle of the monitor. Fill the column, or lay the content out in ` +
+        `columns that consume the width. If a cap is genuinely required (a square plot), say ` +
+        `so with a \`layout-cap-ok: <reason>\` comment at the site.`
     ).toEqual([]);
   });
 
