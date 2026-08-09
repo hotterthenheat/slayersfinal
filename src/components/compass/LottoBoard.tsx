@@ -6,6 +6,7 @@ import { weighContract, type WeighedContract, type ContractVerdict } from '../..
 import { pinStrike } from '../../data/gex';
 import { VERDICT_LABEL, VERDICT_TONE } from './verdict';
 import { computeClock, lottoGateArmed } from './mocClock';
+import useMediaQuery from '../../hooks/useMediaQuery';
 import ContractTrack from './ContractTrack';
 import { weighedToPlan } from './contractTrackModel';
 import type { Verdict } from '../../types/compass';
@@ -101,18 +102,53 @@ function lottoLadder(snapshot: MarketSnapshot, right: 'C' | 'P', dte: number, wa
  */
 const sigmaReach = (c: WeighedContract) => c.expectedMovePct / Math.max(Math.abs(c.breakevenMovePct), 0.05);
 
+/*
+  One grid, declared once, used by the header and every row under it.
+
+  The board used to be a flex row per ticket with `flex-1` on the left, which
+  left roughly 600px of empty track down the middle of a 1440px board, and it
+  carried its own inline labels on every cell — "±1σ", "θ/day", "mid" repeated
+  down all twelve rows. Three columns of label text, twelve times over, for
+  three headings that never change.
+
+  Naming the columns once at the top removes 36 pieces of repeated text and
+  gives the numbers a shared baseline, which is the whole reason a ladder is
+  legible at a glance.
+*/
+const GRID = 'minmax(0,1fr) 62px 60px 56px 62px 60px 46px 92px';
+const GRID_SM = 'minmax(0,1fr) 58px 46px 84px';
+
+const HEAD = ['Contract', 'Reach', 'Needs', '±1σ', 'θ/day', 'Mid', 'Grade', ''];
+const HEAD_SM = ['Contract', 'Reach', 'Grade', ''];
+
+const HeadRow = ({ compact }: { compact: boolean }) => (
+  <div
+    className="grid gap-2 items-center px-3.5 py-1.5 border-b border-borderSubtle"
+    style={{ gridTemplateColumns: compact ? GRID_SM : GRID }}
+  >
+    {(compact ? HEAD_SM : HEAD).map((h, i) => (
+      <span
+        key={h || `sp-${i}`}
+        className={`font-mono text-micro uppercase tracking-widest text-textMuted ${i === 0 ? '' : 'text-right'}`}
+      >
+        {preserveGreek(h)}
+      </span>
+    ))}
+  </div>
+);
+
 /* ---- one lotto ticket row ---- */
 const LottoRow = ({
   c,
   pin,
-  hoursToBell,
+  compact,
   best,
   selected,
   onSelect,
 }: {
   c: WeighedContract;
   pin: number;
-  hoursToBell: number | null;
+  compact: boolean;
   best: boolean;
   selected: boolean;
   onSelect: () => void;
@@ -120,13 +156,7 @@ const LottoRow = ({
   const rightColor = c.right === 'C' ? 'text-bull' : 'text-bear';
   const covers = sigmaReach(c);
   const onPin = c.strike === pin;
-  // Today's countdown only settles a same-session ticket, and only while the
-  // session is running. A next-session board and a board read after the close
-  // both expire at the NEXT bell, so neither the theta line nor the breakeven
-  // sentence may point at today's. They used to disagree: the theta line already
-  // fell back to "next session", while the sentence beside it said "by the bell"
-  // on every row unconditionally.
-  const bellHours = c.dte === 0 ? hoursToBell : null;
+  const num = 'font-mono text-caption tnum text-right leading-4';
 
   return (
     /* A row is the handle on the contract track below the board, so it is a real
@@ -140,61 +170,45 @@ const LottoRow = ({
       aria-pressed={selected}
       aria-label={`${c.ticker} ${c.strike}${c.right === 'C' ? ' call' : ' put'}, ${
         c.dte === 0 ? 'same session' : `${c.dte} day`
-      }, mid $${c.mid.toFixed(2)}, grades ${c.composite}. Chart this ticket.`}
-      className={`w-full text-left px-3.5 py-2.5 flex items-center gap-3 transition-colors ${ROW_INTERACTIVE} ${
-        selected ? 'bg-select/[0.06]' : best ? 'bg-white/[0.02] hover:bg-rowHover' : 'hover:bg-rowHover'
+      }, mid $${c.mid.toFixed(2)}, grades ${c.composite}, a one-sigma move ${
+        covers >= 1 ? 'covers' : 'falls short of'
+      } the breakeven at ${covers.toFixed(1)} times. Chart this ticket.`}
+      className={`w-full text-left grid gap-2 items-center px-3.5 py-2 transition-colors ${ROW_INTERACTIVE} ${
+        selected ? 'bg-select/[0.06]' : 'hover:bg-rowHover'
       }`}
+      style={{ gridTemplateColumns: compact ? GRID_SM : GRID }}
     >
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-mono text-data font-semibold text-textPrimary tnum">
-            {c.ticker} {c.strike}
-            <span className={rightColor}>{c.right}</span>
-          </span>
-          <span className="font-mono text-micro uppercase tracking-wider text-textMuted border border-borderSubtle rounded px-1 py-px">
-            {c.dte === 0 ? '0DTE' : `${c.dte}DTE`}
-          </span>
-          {best && <SignalBadge tone="select">Top ticket</SignalBadge>}
-          {/* The chip a row earns is its own reach, which changes at every strike
-              and is where the board stops being worth taking. Printing a
-              board-level property on every row is what made the old `c.edge`
-              line worthless: the same sentence on six rows carries nothing. */}
-          <SignalBadge tone={covers >= 1 ? 'select' : 'warn'}>
-            {preserveGreek('±1σ')} {covers >= 1 ? 'covers' : 'short'} {covers.toFixed(1)}x
-          </SignalBadge>
-          {onPin && (
-            <SignalBadge tone="warn">
-              <Pin className="w-2.5 h-2.5" aria-hidden /> at the pin
-            </SignalBadge>
-          )}
-        </div>
-        <div className="mt-1 font-mono text-label text-textMuted leading-relaxed">
-          Needs {Math.abs(c.breakevenMovePct).toFixed(2)}% {bellHours === null ? 'by the next bell' : 'by the bell'}, against a
-          one-sigma move of {c.expectedMovePct.toFixed(2)}%.
-          {onPin ? ` Dealers are heaviest on ${c.strike}, so it has to break its own pin.` : ''}
-        </div>
-      </div>
-      <div className="hidden sm:flex flex-col items-end shrink-0 w-14">
-        <span className="font-mono text-micro uppercase tracking-wider text-textMuted">{preserveGreek('±1σ')}</span>
-        <span className="font-mono text-caption text-textSecondary tnum">{c.expectedMovePct.toFixed(1)}%</span>
-      </div>
-      <div className="hidden md:flex flex-col items-end shrink-0 w-[76px]">
-        <span className="font-mono text-micro uppercase tracking-wider text-textMuted">{preserveGreek('θ/day')}</span>
-        <span className="font-mono text-caption text-warn tnum">−{c.thetaPerDayPct.toFixed(0)}%</span>
-        <span className="font-mono text-micro text-textMuted tnum">
-          {bellHours === null ? 'next session' : `${bellHours.toFixed(1)}h to bell`}
+      <span className="min-w-0 flex items-center gap-1.5">
+        {/* The top ticket is marked by a rail, not a badge. A "TOP TICKET" pill
+            on row one of two ladders is two pills making a claim the ordering
+            already makes. */}
+        <span
+          className={`w-0.5 h-4 rounded-full shrink-0 ${best ? 'bg-select' : 'bg-transparent'}`}
+          aria-hidden
+        />
+        <span className="font-mono text-data font-semibold text-textPrimary tnum truncate">
+          {c.strike}
+          <span className={rightColor}>{c.right}</span>
         </span>
-      </div>
-      <div className="flex flex-col items-end shrink-0 w-14">
-        <span className="font-mono text-micro uppercase tracking-wider text-textMuted">mid</span>
-        <span className="font-mono text-caption text-textPrimary tnum">${c.mid.toFixed(2)}</span>
-      </div>
-      <div className="flex items-center gap-2.5 shrink-0 justify-end">
-        <span className="font-mono text-lg font-bold text-textPrimary tnum w-[3ch] text-right">{c.composite}</span>
-        <SignalBadge tone={VERDICT_TONE[GRADE_VERDICT[c.verdict]]} className="min-w-[96px] justify-center">
-          {VERDICT_LABEL[GRADE_VERDICT[c.verdict]]}
-        </SignalBadge>
-      </div>
+        {onPin && (
+          <Pin className="w-3 h-3 text-warn shrink-0" aria-label="dealers are heaviest on this strike" />
+        )}
+      </span>
+
+      {/* The desk's one question, stated once. It used to be said three times on
+          every row — a "±1σ covers 2.3x" chip, a sentence repeating both terms,
+          and a ±1σ column carrying the same figure. */}
+      <span className={`${num} ${covers >= 1 ? 'text-bull' : 'text-textMuted'}`}>{covers.toFixed(1)}x</span>
+
+      {!compact && <span className={`${num} text-textSecondary`}>{Math.abs(c.breakevenMovePct).toFixed(2)}%</span>}
+      {!compact && <span className={`${num} text-textSecondary`}>{c.expectedMovePct.toFixed(2)}%</span>}
+      {!compact && <span className={`${num} text-warn`}>−{c.thetaPerDayPct.toFixed(0)}%</span>}
+      {!compact && <span className={`${num} text-textPrimary`}>${c.mid.toFixed(2)}</span>}
+
+      <span className="font-mono text-body font-bold text-textPrimary tnum text-right leading-4">{c.composite}</span>
+      <SignalBadge tone={VERDICT_TONE[GRADE_VERDICT[c.verdict]]} className="justify-center">
+        {VERDICT_LABEL[GRADE_VERDICT[c.verdict]]}
+      </SignalBadge>
     </motion.button>
   );
 };
@@ -204,19 +218,19 @@ const SideLadder = ({
   right,
   rows,
   pin,
-  hoursToBell,
+  compact,
   trackedId,
   onSelect,
 }: {
   right: 'C' | 'P';
   rows: WeighedContract[];
   pin: number;
-  hoursToBell: number | null;
+  compact: boolean;
   trackedId: string | null;
   onSelect: (id: string) => void;
 }) => (
   <div className="flex flex-col">
-    <div className="px-3.5 py-2 border-b border-borderSubtle flex items-baseline gap-2">
+    <div className="px-3.5 py-1.5 bg-inset border-b border-borderSubtle flex items-baseline gap-2">
       <span className={`font-mono text-label font-semibold uppercase tracking-widest ${right === 'C' ? 'text-bull' : 'text-bear'}`}>
         {sideWord(right)}
       </span>
@@ -237,7 +251,7 @@ const SideLadder = ({
               key={c.id}
               c={c}
               pin={pin}
-              hoursToBell={hoursToBell}
+              compact={compact}
               best={i === 0}
               selected={c.id === trackedId}
               onSelect={() => onSelect(c.id)}
@@ -272,6 +286,9 @@ const LottoBoard = ({ snapshot }: LottoBoardProps) => {
   /** WeighedContract id of the ticket the track below the board is drawing. */
   const [pickedTicket, setPickedTicket] = useState<string | null>(null);
   const [nowTick, setNowTick] = useState(() => Date.now());
+  // Same breakpoint ContractTrack uses one file over, so the board and the
+  // chart under it collapse together rather than at two different widths.
+  const compact = useMediaQuery('(max-width: 639px)');
 
   useEffect(() => {
     const id = setInterval(() => setNowTick(Date.now()), 1000);
@@ -328,16 +345,18 @@ const LottoBoard = ({ snapshot }: LottoBoardProps) => {
     [...rankedCalls, ...rankedPuts].find(c => c.id === pickedTicket) ?? rankedCalls[0] ?? rankedPuts[0] ?? null;
   const trackPlan = trackedTicket ? weighedToPlan(trackedTicket) : null;
 
+  // The per-side qualify count stays on each ladder header, where it sits
+  // beside the rows it counts; only the board-wide reach count needs hoisting.
   const priceable = rankedCalls.length + rankedPuts.length;
-  const qualifies = [...rankedCalls, ...rankedPuts].filter(c => c.verdict === 'BUY').length;
   const reaching = [...rankedCalls, ...rankedPuts].filter(c => sigmaReach(c) >= 1).length;
-  // Rounded to the tenth of an hour it is printed at, so the value handed to the
-  // rows changes every six minutes rather than on every one-second clock tick.
-  const hoursToBell = clock.marketOpen ? Math.round(clock.secsToClose / 360) / 10 : null;
 
   return (
     <div className="flex flex-col gap-4">
-      <MetricGrid min="170px">
+      {/* Three cards, not five. `Priceable` and `Qualify` were both counts of
+          the table directly below them, which a reader can see; only the reach
+          count says something the ladder does not already show at a glance.
+          Plain strings: StatCard runs its own label through preserveGreek. */}
+      <MetricGrid min="200px">
         <StatCard
           label="Time to close"
           value={clock.marketOpen ? clock.toClose : 'closed'}
@@ -351,17 +370,9 @@ const LottoBoard = ({ snapshot }: LottoBoardProps) => {
           sub={clock.marketOpen ? 'same session' : 'next session'}
           tone="select"
         />
-        <StatCard label="Priceable" value={priceable} sub={`${snapshot.ticker} strikes above the $0.02 floor`} />
-        <StatCard
-          label="Qualify"
-          value={qualifies}
-          sub={`of ${priceable} graded`}
-          tone={qualifies > 0 ? 'select' : 'neutral'}
-        />
-        {/* Plain string: StatCard runs the label through preserveGreek itself. */}
         <StatCard
           label="±1σ covers"
-          value={reaching}
+          value={`${reaching} of ${priceable}`}
           sub="strikes a one-sigma move reaches"
           tone={reaching > 0 ? 'bull' : 'neutral'}
         />
@@ -391,7 +402,7 @@ const LottoBoard = ({ snapshot }: LottoBoardProps) => {
           // a stale page and a page about tomorrow.
           clock.marketOpen
             ? `${snapshot.ticker} · both sides, ranked within each side`
-            : `${clock.label} · these price the next session`
+            : `${snapshot.ticker} · ${clock.label}, these price the next session`
         }
         flush
       >
@@ -422,12 +433,13 @@ const LottoBoard = ({ snapshot }: LottoBoardProps) => {
             body={`Every listed strike on this expiry sits at the model's $0.02 floor. There is no grade to give.`}
           />
         ) : (
-          <div className="flex flex-col divide-y divide-borderSubtle">
+          <div className="flex flex-col">
+            <HeadRow compact={compact} />
             <SideLadder
               right="C"
               rows={rankedCalls}
               pin={pin}
-              hoursToBell={hoursToBell}
+              compact={compact}
               trackedId={trackedTicket?.id ?? null}
               onSelect={setPickedTicket}
             />
@@ -435,7 +447,7 @@ const LottoBoard = ({ snapshot }: LottoBoardProps) => {
               right="P"
               rows={rankedPuts}
               pin={pin}
-              hoursToBell={hoursToBell}
+              compact={compact}
               trackedId={trackedTicket?.id ?? null}
               onSelect={setPickedTicket}
             />

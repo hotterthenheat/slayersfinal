@@ -183,10 +183,16 @@ const Figures = ({
 }) => (
   <div className="flex flex-col gap-1.5">
     <span className="font-mono text-micro font-semibold uppercase tracking-widest text-textSecondary">{label}</span>
-    <div className="flex flex-wrap gap-x-6 gap-y-2 border-y border-borderSubtle py-2">
+    {/* A lattice, not a flow. `flex-wrap` sized every cell to its own content,
+        so the eight-item quote strip broke as six-then-two with the last pair
+        orphaned on a short second line, and the one item carrying a `note`
+        ("vol vs name") grew wide enough to shove its neighbours off the row.
+        Fixed columns give the labels a shared left edge and let a note grow
+        downward inside its own cell instead of sideways into the next one. */}
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-3 border-y border-borderSubtle py-2">
       {items.map((f, i) => (
         <div key={i} className="min-w-0">
-          <div className="font-mono text-micro uppercase tracking-widest text-textMuted whitespace-nowrap">{f.k}</div>
+          <div className="font-mono text-micro uppercase tracking-widest text-textMuted">{f.k}</div>
           <div className={`font-mono text-caption font-semibold tnum leading-4 ${f.tone ?? 'text-textPrimary'}`}>{f.v}</div>
           {f.note && <div className="font-mono text-micro text-textMuted leading-snug">{f.note}</div>}
         </div>
@@ -210,10 +216,14 @@ const FactorRow = ({
   contribution: number;
   muted?: boolean;
 }) => (
-  <div className={`flex flex-col gap-1 ${muted ? 'opacity-45' : ''}`}>
+  /* `×0.30` used to sit between the label and the bar on every row. Contribution
+     IS score × weight, so printing the weight, the score and the product put an
+     equation and both of its inputs on one line — three numbers for one fact.
+     The weight moves to the row's title and stays listed in full under "Why
+     these weights", where the whole set can be compared at once. */
+  <div className={`flex flex-col gap-1 ${muted ? 'opacity-45' : ''}`} title={`${label} — weighted ×${weight.toFixed(2)}`}>
     <div className="flex items-center gap-2">
       <span className="w-32 shrink-0 font-mono text-label uppercase tracking-wider text-textSecondary">{label}</span>
-      <span className="font-mono text-micro text-textMuted tnum">×{weight.toFixed(2)}</span>
       <span className="flex-1 h-[4px] rounded-full bg-white/[0.06] overflow-hidden">
         <motion.span
           className={`block h-full rounded-full ${
@@ -224,8 +234,8 @@ const FactorRow = ({
           transition={{ duration: DUR.data, ease: EASE }}
         />
       </span>
-      <span className="w-7 shrink-0 font-mono text-caption font-semibold text-textPrimary tnum text-right">{score}</span>
-      <span className="w-[4ch] shrink-0 font-mono text-caption text-textSecondary tnum text-right">
+      <span className="w-10 shrink-0 font-mono text-caption font-semibold text-textPrimary tnum text-right">{score}</span>
+      <span className="w-[5ch] shrink-0 font-mono text-caption text-textSecondary tnum text-right">
         {muted ? '—' : contribution}
       </span>
     </div>
@@ -1177,9 +1187,17 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
       <div className="border-t border-borderSubtle pt-3 flex flex-col gap-2.5">
         {!priceable && (
           <p className="text-label text-textMuted leading-snug">
-            Two of the six factors are the model&apos;s floor, so the six do not sum to a grade.
+            Two of the {ledgerRows.length} factors are the model&apos;s floor, so they do not sum to a grade.
           </p>
         )}
+        {/* The two numeric columns ran unlabelled, so a row read "98 17" with
+            nothing saying which was the reading and which was the impact. */}
+        <div className="flex items-center gap-2">
+          <span className="w-32 shrink-0" />
+          <span className="flex-1" />
+          <span className="w-10 shrink-0 font-mono text-micro uppercase tracking-widest text-textMuted text-right">Score</span>
+          <span className="w-[5ch] shrink-0 font-mono text-micro uppercase tracking-widest text-textMuted text-right">Adds</span>
+        </div>
         {ledgerRows.map(f => (
           <FactorRow
             key={f.key}
@@ -1193,10 +1211,14 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
         ))}
         {priceable && (
           <div className="flex items-center gap-2 border-t border-borderSubtle pt-2">
-            <span className="w-32 shrink-0 font-mono text-label uppercase tracking-wider text-textMuted">Σ six rows</span>
+            {/* Counted, never spelled. This read "Σ six rows" over five of them
+                from the day the news-lean factor was removed with the wire. */}
+            <span className="w-32 shrink-0 font-mono text-label uppercase tracking-wider text-textMuted">
+              Σ {ledgerRows.length} rows
+            </span>
             <span className="flex-1" />
-            <span className="w-7 shrink-0" />
-            <span className="w-[4ch] shrink-0 font-mono text-caption font-semibold text-textPrimary tnum text-right">
+            <span className="w-10 shrink-0" />
+            <span className="w-[5ch] shrink-0 font-mono text-caption font-semibold text-textPrimary tnum text-right">
               {ledgerRows.reduce((a, f) => a + f.contribution, 0)}
             </span>
           </div>
