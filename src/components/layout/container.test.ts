@@ -46,7 +46,10 @@ const OUTSIDE_SHELL = /^pages\/(landing|trailer)\//;
 
 describe('the page column', () => {
   it('is declared in exactly one place', () => {
-    const declares = FILES.filter(f => f.text.includes('max-w-[1800px]')).map(f => rel(f.path));
+    // The cap moved 1800 -> 1280 when the column was narrowed to read as
+    // centred on a laptop. The rule this guards is 'declared once', not the
+    // number, so the number is the only thing that changes here.
+    const declares = FILES.filter(f => f.text.includes('max-w-[1280px]')).map(f => rel(f.path));
     expect(declares).toEqual(['components/layout/container.ts']);
   });
 

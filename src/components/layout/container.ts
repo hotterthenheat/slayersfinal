@@ -29,7 +29,7 @@
 export const PAGE_GUTTER = 'px-4 lg:px-6 2xl:px-8';
 
 /** The shared column. Apply to a page body, the bar's contents, the footer. */
-export const PAGE_CONTAINER = `mx-auto w-full max-w-[1800px] ${PAGE_GUTTER}`;
+export const PAGE_CONTAINER = `mx-auto w-full max-w-[1280px] ${PAGE_GUTTER}`;
 
 /**
  * A readable prose measure, centred in the container rather than pinned left.

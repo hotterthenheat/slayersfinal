@@ -9,17 +9,18 @@
 */
 
 /**
- * Which footer a route ends on — three answers, not two.
+ * Which footer a route ends on — two answers now, not three.
  *
  * `full` is the real thing: wordmark, sitemap, social, copyright, the
- * not-advice line. Documents get it — the terminal index, the guide, the legal
- * pages, community, Stocks, Tracker — because on a document the
- * footer IS the next thing you want.
+ * not-advice line. EVERY page gets it except Pulse.
  *
- * `compact` is the same footer as one bar. A desk is a working surface that
- * fills the screen with rows, and parking a five-column sitemap under a 240-row
- * tape is furniture in the middle of the work. The desk still closes properly —
- * wordmark, copyright, disclaimer, legal links — just in 53px rather than 503.
+ * There used to be a `compact` variant — the same footer squeezed to one 53px
+ * bar — worn by the four desks on the theory that a five-column sitemap under a
+ * 240-row tape is furniture in the middle of the work. That reasoning is real
+ * but it produced a site where a page's ending depended on which desk you were
+ * standing on, and a reader arriving from anywhere else found the chrome had
+ * quietly changed shape. A site ends the same way on every page; the exception
+ * has to earn itself, and being dense does not.
  *
  * `null` is Pulse, and only Pulse. Pulse is the terminal: a fixed-height
  * workspace whose panels are dragged, resized and snapped against the bottom
@@ -27,7 +28,6 @@
  * the drag surface ends and a page begins, and the panel you are dragging
  * scrolls out from under the cursor. A terminal ends at the glass.
  */
-const DESK_ROUTES = ['/trace', '/pinpoint', '/compass', '/prove-it'];
 const TERMINAL_ROUTES = ['/pulse'];
 
 /**
@@ -40,7 +40,4 @@ const matches = (routes: readonly string[], path: string) =>
 /** Pulse: a fixed workspace that owns the viewport and carries no page chrome. */
 export const isTerminalRoute = (path: string): boolean => matches(TERMINAL_ROUTES, path);
 
-export const footerVariant = (path: string): 'full' | 'compact' | null => {
-  if (isTerminalRoute(path)) return null;
-  return matches(DESK_ROUTES, path) ? 'compact' : 'full';
-};
+export const footerVariant = (path: string): 'full' | null => (isTerminalRoute(path) ? null : 'full');

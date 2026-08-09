@@ -148,7 +148,7 @@ const AppShell = () => {
                 the viewport's bottom edge. */}
             {footer != null && (
               <div className="mt-auto">
-                <SiteFooter variant={footer} bleed />
+                <SiteFooter bleed />
               </div>
             )}
           </motion.div>
