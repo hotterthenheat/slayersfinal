@@ -16,10 +16,9 @@
 ==================================================
 */
 
-import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import * as RadixPopover from '@radix-ui/react-popover';
-import { Search, Scale, Plus, Check, Target, ChevronDown, CornerDownLeft, AlertTriangle } from 'lucide-react';
+import { Scale, Plus, Check, Target, AlertTriangle } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { useTracker } from '../../context/TrackerContext';
 import {
@@ -30,26 +29,25 @@ import {
   type Horizon,
   type WeighedContract,
 } from '../../core/contractScore';
-import { parseContractQuery, expiryLadder, slotValue, type QuerySlot } from '../../core/contractQuery';
+import { parseContractQuery, expiryLadder, slotValue } from '../../core/contractQuery';
 import { expiryFor, type Expiry } from '../../core/calendar';
 import Simulator from '../../core/simulator';
-import { buildCompass, makeSetup } from '../../data/compass';
+import { makeSetup } from '../../data/compass';
 import { VERDICT_LABEL, VERDICT_TONE } from './verdict';
 import { setupState } from './setupState';
 import { StateBadge } from './StateBadge';
+import WeigherChain from './WeigherChain';
 import ContractTrack from './ContractTrack';
 import { buildTrack, weighedToPlan } from './contractTrackModel';
 import { CONTRACT_MULTIPLIER } from './contractFacts';
 import type { Verdict } from '../../types/compass';
 import type { MarketSnapshot } from '../../types/market';
-import { DUR, EASE, PILL } from '../../lib/motion';
+import { DUR, EASE } from '../../lib/motion';
 import Panel from '../ui/Panel';
 import SignalBadge from '../ui/SignalBadge';
 import { preserveGreek } from '../ui/greek';
 import EmptyState from '../ui/EmptyState';
-import SegmentedControl from '../ui/SegmentedControl';
 import AnimatedNumber from '../ui/AnimatedNumber';
-import SpotRule from '../ui/SpotRule';
 import type { Tone } from '../ui/tones';
 
 /**
@@ -77,8 +75,6 @@ const dteForHorizon: Record<Horizon, number> = { LOTTO: 0, WEEKLIES: 5, SWINGS: 
 
 /** Listed strikes either side of spot the neighbour rail reaches for. */
 const RAIL_REACH = 8;
-const RECENT_KEY = 'slayer_weigher_recent';
-const RECENT_MAX = 5;
 
 /**
  * Re-price cadence. The pane owns its own beat rather than re-pricing on
@@ -136,22 +132,7 @@ function canonicalQuery(ticker: string, strike: number | null, right: 'C' | 'P',
   return `${ticker} ${strike == null ? '' : fmtStrike(strike)}${right} ${expiry.label}`.replace(/\s+/g, ' ').trim();
 }
 
-function readRecents(): string[] {
-  try {
-    const raw = localStorage.getItem(RECENT_KEY);
-    return raw ? (JSON.parse(raw) as string[]).slice(0, RECENT_MAX) : [];
-  } catch {
-    return [];
-  }
-}
 
-function writeRecents(list: string[]): void {
-  try {
-    localStorage.setItem(RECENT_KEY, JSON.stringify(list.slice(0, RECENT_MAX)));
-  } catch {
-    // localStorage full or unavailable — the field still works without history
-  }
-}
 
 // ---- shared bits -------------------------------------------------------------
 
@@ -260,34 +241,6 @@ const FactorRow = ({
   border and the motion are unchanged. This is the split the whole dependency
   choice was about — libraries for behaviour, not for looks.
 */
-const PickerPopover = ({
-  open,
-  onOpenChange,
-  label,
-  trigger,
-  children,
-}: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  label: string;
-  trigger: ReactNode;
-  children: ReactNode;
-}) => (
-  <RadixPopover.Root open={open} onOpenChange={onOpenChange}>
-    <RadixPopover.Trigger asChild>{trigger}</RadixPopover.Trigger>
-    <RadixPopover.Portal>
-      <RadixPopover.Content
-        aria-label={label}
-        align="start"
-        sideOffset={6}
-        collisionPadding={12}
-        className="z-40 min-w-[220px] border border-borderMuted bg-panel rounded-lg shadow-overlay overflow-hidden data-[state=open]:animate-soft-in"
-      >
-        {children}
-      </RadixPopover.Content>
-    </RadixPopover.Portal>
-  </RadixPopover.Root>
-);
 
 const CHIP_BASE = '-my-1 py-1 px-2 rounded border font-mono text-label transition-colors';
 const CHIP_TONE: Record<'typed' | 'assumed' | 'warn', string> = {
@@ -296,20 +249,8 @@ const CHIP_TONE: Record<'typed' | 'assumed' | 'warn', string> = {
   warn: 'border-warn/40 bg-warn/10 text-warn',
 };
 
-const toneOfSlot = (s: QuerySlot<unknown>): 'typed' | 'assumed' | 'warn' =>
-  s.state === 'typed' ? 'typed' : s.state === 'assumed' ? 'assumed' : 'warn';
 
 // ---- the neighbour rail ------------------------------------------------------
-
-interface LadderProps {
-  rows: WeighedContract[];
-  spot: number;
-  ticker: string;
-  selectedId: string | null;
-  deskPickId: string | null;
-  onSelect: (c: WeighedContract) => void;
-  outOfRange: { strike: number; pctFromSpot: number; low: number; high: number } | null;
-}
 
 /**
  * Listed strikes on the resolved expiry and side, spot anchored. This is a new,
@@ -318,91 +259,6 @@ interface LadderProps {
  * lists both sides at once where this rail lists the one the query resolved to.
  * Only the SpotRule idiom is reused.
  */
-const ContractLadder = ({ rows, spot, ticker, selectedId, deskPickId, onSelect, outOfRange }: LadderProps) => {
-  const crossing = rows.findIndex(r => r.strike > spot);
-
-  return (
-    <div className="flex flex-col gap-1.5">
-      {outOfRange && (
-        <p className="px-2 py-1.5 rounded border border-warn/40 bg-warn/10 font-mono text-label text-warn leading-snug">
-          {fmtStrike(outOfRange.strike)} sits {outOfRange.pctFromSpot.toFixed(1)}%{' '}
-          {outOfRange.strike > outOfRange.high ? 'above' : 'below'} the listed chain ({fmtStrike(outOfRange.low)} to{' '}
-          {fmtStrike(outOfRange.high)}).
-        </p>
-      )}
-      <div
-        role="listbox"
-        /* Spot rides the list's own name because the rule that draws it inside
-           the list cannot: a listbox may own options and groups and nothing
-           else, so the marker is hidden from the tree and the price it marks
-           is said here instead, once, where it is actually reachable. */
-        aria-label={`Listed strikes on ${ticker}, spot $${spot.toFixed(2)}`}
-        className="flex sm:flex-col overflow-x-auto sm:overflow-x-visible sm:overflow-y-auto sm:max-h-[520px] gap-1 sm:gap-0 no-scrollbar"
-      >
-        {rows.map((r, i) => {
-          const hasPremium = isPriceable(r);
-          const selected = r.id === selectedId;
-          return (
-            /* A Fragment, not a wrapper div. A listbox's children have to BE
-               options — put a generic between the two and the whole rail stops
-               being a listbox, which axe reports as a critical
-               aria-required-children fault. The div was only ever carrying
-               `contents sm:block`, and `contents` already made its children
-               direct flex items, so both layouts survive it going away.
-
-               The spot rule is presentational for the same reason: it is a
-               marker between two options, not a third option. */
-            <Fragment key={r.id}>
-              {i === crossing && (
-                <div aria-hidden className="hidden sm:block py-1">
-                  <SpotRule ticker={ticker} price={spot} />
-                </div>
-              )}
-              <button
-                role="option"
-                aria-selected={selected}
-                onClick={() => onSelect(r)}
-                aria-label={`${fmtStrike(r.strike)} ${r.right === 'C' ? 'call' : 'put'}, mid $${r.mid.toFixed(2)}, ${
-                  hasPremium ? `grades ${r.composite}` : 'not priceable'
-                }`}
-                className="relative shrink-0 w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left hover:bg-rowHover transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60"
-              >
-                {selected && (
-                  <motion.span
-                    layoutId="weigher-rail-pill"
-                    transition={PILL}
-                    className="absolute inset-0 rounded-md bg-white/[0.06]"
-                  />
-                )}
-                <span className="relative z-10 w-[5ch] font-mono text-caption font-semibold text-textPrimary tnum">
-                  {fmtStrike(r.strike)}
-                </span>
-                <span className="relative z-10 w-[5ch] font-mono text-label text-textMuted tnum text-right">
-                  ${r.mid.toFixed(2)}
-                </span>
-                <span className="relative z-10 hidden sm:block flex-1 h-[3px] rounded-full bg-white/[0.05] overflow-hidden">
-                  {hasPremium && <span className="block h-full rounded-full data-bar" style={{ width: `${r.composite}%` }} />}
-                </span>
-                {hasPremium ? (
-                  <span className="relative z-10 w-[3ch] font-mono text-caption font-semibold text-textPrimary tnum text-right">
-                    {r.composite}
-                  </span>
-                ) : (
-                  <span className="relative z-10 font-mono text-micro text-textMuted whitespace-nowrap">not priceable</span>
-                )}
-                {r.id === deskPickId && (
-                  <SignalBadge tone="select" className="relative z-10 hidden sm:inline-flex">
-                    Desk pick
-                  </SignalBadge>
-                )}
-              </button>
-            </Fragment>
-          );
-        })}
-      </div>
-    </div>
-  );
-};
 
 // ---- the pane ----------------------------------------------------------------
 
@@ -422,9 +278,8 @@ interface ContractWeigherProps {
 }
 
 const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange }: ContractWeigherProps) => {
-  const { activeTicker, changeTicker } = useMarketData();
+  const { activeTicker } = useMarketData();
   const { trackContract, untrackSetup, isTracked } = useTracker();
-  const listId = useId();
 
   /*
     What the desk weighs when nothing has been typed.
@@ -438,13 +293,6 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
     Same construction as the sleeve deep-link below it, so the landing contract
     and a linked contract are built one way.
   */
-  const restingQuery = useMemo(
-    () => canonicalQuery(snapshot.ticker, Math.round(snapshot.spot), 'C', expiryFor(dteForHorizon[initialHorizon ?? 'LOTTO'])),
-    // The strike only needs to be sensible, not live: re-deriving it every tick
-    // would retype the user's search box under them.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [snapshot.ticker, initialHorizon]
-  );
 
   const [query, setQuery] = useState(() => {
     if (initialQuery) return initialQuery;
@@ -453,17 +301,8 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
     const atm = Math.round(snapshot.spot);
     return canonicalQuery(snapshot.ticker, atm, 'C', e);
   });
-  const [picker, setPicker] = useState<'ticker' | 'strike' | 'side' | 'expiry' | null>(null);
-  const [tickerQuery, setTickerQuery] = useState('');
-  const [recents, setRecents] = useState<string[]>(readRecents);
   const [budgetInput, setBudgetInput] = useState('');
   const [targetLabel, setTargetLabel] = useState<string | null>(null);
-  const [typeaheadOpen, setTypeaheadOpen] = useState(false);
-  const [highlight, setHighlight] = useState(0);
-  const [debouncedQuery, setDebouncedQuery] = useState(query);
-  const inputRef = useRef<HTMLInputElement | null>(null);
-
-  const committed = query.trim().length > 0;
 
   // ---- the listed universe, lazily. ------------------------------------------
   // Until the listing lands nothing is declared unknown: under-reporting an
@@ -534,11 +373,6 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
     setPaneSnap(Simulator.buildSnapshot(tickerRef.current));
   }, [snapshot]);
 
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedQuery(query), 120);
-    return () => clearTimeout(t);
-  }, [query]);
-
   // Held in a ref on purpose. The caller writes this into the URL, and an inline
   // lambda would otherwise re-fire the effect on every render, which is a
   // setParams loop waiting to happen. The query is the only thing that should
@@ -571,19 +405,7 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
 
   // betterAlternative sweeps the sleeve's own DTE shape, which need not be the
   // expiry on screen, so the badge is only hung on a row the rail actually has.
-  const deskPickId = better && rail.some(r => r.id === better.id) ? better.id : null;
 
-  const chainLow = rail.length ? rail[0].strike : paneSnap.spot;
-  const chainHigh = rail.length ? rail[rail.length - 1].strike : paneSnap.spot;
-  const outOfRange =
-    rStrike != null && (rStrike < chainLow || rStrike > chainHigh)
-      ? {
-          strike: rStrike,
-          pctFromSpot: Math.abs((rStrike - paneSnap.spot) / paneSnap.spot) * 100,
-          low: chainLow,
-          high: chainHigh,
-        }
-      : null;
 
   // Walking back toward spot from a dead strike: the closest listed neighbour
   // that still has a premium to lose.
@@ -622,17 +444,6 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
   }, [ledger, weighed]);
 
   // ---- the setups feed, the only entry point that teaches the grammar --------
-  const feedSeeds = useMemo(() => {
-    if (committed) return [];
-    try {
-      return buildCompass(snapshot, 'top-setups')
-        .groups.flatMap(g => g.setups)
-        .slice(0, 3)
-        .map(s => canonicalQuery(s.ticker, s.strike, s.right, fallbackExpiry));
-    } catch {
-      return [];
-    }
-  }, [snapshot, committed, fallbackExpiry]);
 
   /* ---- the contract's own premium, derived --------------------------------
      The grade answers "is this worth buying". This answers the question the
@@ -681,46 +492,17 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
         over.expiry ?? railExpiry
       );
       setQuery(next);
-      setPicker(null);
-      setTypeaheadOpen(false);
     },
     [snapTicker, rStrike, rRight, railExpiry]
   );
 
-  const commitRecent = useCallback(() => {
-    if (!weighed) return;
-    const entry = canonicalQuery(weighed.ticker, weighed.strike, weighed.right, railExpiry);
-    setRecents(prev => {
-      const next = [entry, ...prev.filter(r => r !== entry)].slice(0, RECENT_MAX);
-      writeRecents(next);
-      return next;
-    });
-  }, [weighed, railExpiry]);
 
-  // ---- typeahead: a strike autocomplete over rows already graded -------------
-  // 120ms after the last keystroke, not during it: a list that re-ranks on every
-  // character is unreadable, and the rows carry grades that cost real work.
-  const settled = debouncedQuery === query;
-  const suggestions = useMemo(() => {
-    if (!settled || !committed || rStrike == null || rTicker == null) return [];
-    const prefix = fmtStrike(rStrike);
-    const rows = rail.filter(r => fmtStrike(r.strike).startsWith(prefix)).slice(0, 8);
-    // Once the typed strike IS a listed strike the rail already shows it.
-    return rows.length === 1 && fmtStrike(rows[0].strike) === prefix ? [] : rows;
-  }, [rail, rStrike, rTicker, committed, settled]);
-
-  useEffect(() => setHighlight(0), [suggestions.length]);
-
-  // ---- keyboard ---------------------------------------------------------------
+  /* ---- keyboard ------------------------------------------------------------
+     `/` used to focus the query box and there is no query box any more, so it
+     is gone with it. Alt+C / Alt+P stay: flipping the side you are weighing is
+     the one move worth a key when your eyes are on the chain. */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const el = e.target as HTMLElement | null;
-      const typing = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
-      if (e.key === '/' && !typing) {
-        e.preventDefault();
-        inputRef.current?.focus();
-        return;
-      }
       if (e.altKey && (e.key === 'c' || e.key === 'C')) {
         e.preventDefault();
         write({ right: 'C' });
@@ -733,48 +515,7 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
     return () => window.removeEventListener('keydown', onKey);
   }, [write]);
 
-  const walkRail = (dir: 1 | -1) => {
-    if (!rail.length) return;
-    const idx = rail.findIndex(r => r.strike === rStrike);
-    const next = rail[Math.max(0, Math.min(rail.length - 1, (idx < 0 ? 0 : idx) + dir))];
-    if (next) write({ strike: next.strike });
-  };
 
-  const onInputKeyDown = (e: React.KeyboardEvent) => {
-    if (typeaheadOpen && suggestions.length) {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setHighlight(h => Math.min(h + 1, suggestions.length - 1));
-        return;
-      }
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setHighlight(h => Math.max(h - 1, 0));
-        return;
-      }
-      if (e.key === 'Enter' && suggestions[highlight]) {
-        e.preventDefault();
-        write({ strike: suggestions[highlight].strike });
-        return;
-      }
-    }
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-      e.preventDefault();
-      walkRail(e.key === 'ArrowDown' ? 1 : -1);
-      return;
-    }
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      setTypeaheadOpen(false);
-      commitRecent();
-      return;
-    }
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      if (typeaheadOpen) setTypeaheadOpen(false);
-      else setQuery('');
-    }
-  };
 
   // ---- plan readouts ----------------------------------------------------------
   const ladder = useMemo(() => expiryLadder(), []);
@@ -821,341 +562,60 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
   };
 
   // ---- side picker grades, one read across both rights -----------------------
-  const sideGrades = useMemo(() => {
-    if (rStrike == null) return null;
-    return {
-      C: weighContract(paneSnap, 'C', rStrike, railExpiry.dte).composite,
-      P: weighContract(paneSnap, 'P', rStrike, railExpiry.dte).composite,
-    };
-  }, [paneSnap, rStrike, railExpiry.dte]);
 
-  const tickerMatches = useMemo(
-    () => (tickerMod ? tickerMod.searchTickers(tickerQuery, 40) : []),
-    [tickerMod, tickerQuery]
-  );
 
   // ==== render ================================================================
 
-  const searchField = (
-    <div className="relative w-full max-w-[620px]">
-      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-textMuted pointer-events-none" />
-      <input
-        ref={inputRef}
-        value={query}
-        onChange={e => {
-          setQuery(e.target.value);
-          setTypeaheadOpen(true);
-        }}
-        onFocus={() => setTypeaheadOpen(true)}
-        onKeyDown={onInputKeyDown}
-        role="combobox"
-        aria-expanded={typeaheadOpen && suggestions.length > 0}
-        aria-controls={listId}
-        aria-autocomplete="list"
-        aria-activedescendant={typeaheadOpen && suggestions[highlight] ? `${listId}-opt-${highlight}` : undefined}
-        aria-label="Search a contract"
-        placeholder="SPY 505C 0DTE"
-        className="w-full bg-inputBg border border-borderSubtle focus:border-borderMuted rounded-md pl-9 pr-9 py-2.5 font-mono text-body text-textPrimary placeholder:text-textMuted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60"
-      />
-      {committed && (
-        <button
-          onClick={() => {
-            // Back to the desk's own contract, not to nothing. Clearing a
-            // search box should hand you the page you started on, and the page
-            // this one starts on is the ticker in the top bar.
-            setQuery(restingQuery);
-            inputRef.current?.focus();
-          }}
-          aria-label="Back to this desk's contract"
-          className="absolute right-2 top-1/2 -translate-y-1/2 -m-1 p-1 text-textMuted hover:text-textPrimary transition-colors"
-        >
-          <CornerDownLeft className="w-3.5 h-3.5 rotate-180" />
-        </button>
-      )}
-      <AnimatePresence>
-        {typeaheadOpen && suggestions.length > 0 && (
-          <motion.div
-            id={listId}
-            role="listbox"
-            aria-label="Matching strikes"
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: DUR.quick, ease: EASE }}
-            className="absolute left-0 right-0 top-full mt-1.5 z-40 border border-borderMuted bg-panel rounded-lg shadow-overlay overflow-hidden py-1"
-          >
-            {suggestions.map((s, i) => (
-              <button
-                key={s.id}
-                id={`${listId}-opt-${i}`}
-                role="option"
-                aria-selected={i === highlight}
-                tabIndex={-1}
-                onMouseEnter={() => setHighlight(i)}
-                onClick={() => write({ strike: s.strike })}
-                className={`w-full flex items-center gap-2 px-3 py-1.5 text-left font-mono text-caption transition-colors ${
-                  i === highlight ? 'bg-white/[0.05]' : ''
-                }`}
-              >
-                <span className="text-textPrimary font-semibold">
-                  {s.ticker} {fmtStrike(s.strike)}
-                  {s.right}
-                </span>
-                <span className="text-textMuted tnum">
-                  · {railExpiry.label} · {railExpiry.dte}d
-                </span>
-                <span className="ml-auto text-textSecondary tnum">
-                  {isPriceable(s) ? `${s.composite} ${VERDICT_LABEL[GRADE_VERDICT[s.verdict]]}` : 'not priceable'}
-                </span>
-              </button>
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-
   /*
-    STATE 0: the box has been emptied by hand.
+    THE INPUT IS THE CHAIN.
 
-    This is now the only way to reach it — the desk lands on restingQuery and
-    the clear button returns to it — and it used to be the Weigher's front page:
-    a search field alone in the middle of half a screen of black, with three
-    example strings under it. Centring one input in a void is what a page does
-    when it has nothing, and this page never had nothing.
+    What stood here: a parsed query string ("SPY 505C 0DTE"), a combobox with
+    typeahead over it, a recents list, and four popovers — ticker, strike, side,
+    expiry — each rendering its own typed/assumed/unknown state as a chip, plus
+    the prose explaining what the parser had assumed on your behalf. Roughly 450
+    lines whose entire job was to let you DESCRIBE a contract.
 
-    So it is top-aligned, panelled like the rest of the desk, and the fastest
-    way out of it is the first thing in it: the contract the desk was weighing
-    before the box was emptied.
+    That is a form standing between a trader and a chain they already know how
+    to read. Every options desk answers "which contract" the same way: here is
+    the ladder, click one. So the expiry is a row of tabs, the chain is the
+    grid, and one click grades the cell you pressed.
+
+    `write` is untouched — it still writes the canonical query, so deep links
+    and `onQueryChange` keep working exactly as they did. Only what drives it
+    changed.
   */
-  if (!committed) {
-    const seedRow = (label: string, items: string[], tone: 'typed' | 'assumed') =>
-      items.length > 0 && (
-        <div className="flex flex-wrap items-baseline gap-2 py-2 first:pt-0">
-          <span className="font-mono text-micro uppercase tracking-widest text-textMuted w-[104px] shrink-0">{label}</span>
-          {items.map(q => (
-            <button key={q} onClick={() => setQuery(q)} className={`${CHIP_BASE} ${CHIP_TONE[tone]}`} aria-label={`Weigh ${q}`}>
-              {q}
-            </button>
-          ))}
-        </div>
-      );
-
-    return (
-      <div className="mx-auto w-full max-w-[1180px]">
-        {/* Not "Contract Weigher" — the page heading two lines above already
-            says that, and a panel repeating its own page is a panel with
-            nothing to add. This one names the action. */}
-        <Panel title="Weigh a contract" subtitle="ticker · strike · call or put · expiry, in any order" className="w-full">
-          <div className="flex flex-col gap-3">
-            {searchField}
-            <div className="flex flex-col divide-y divide-borderSubtle">
-              {seedRow('This desk', [restingQuery], 'typed')}
-              {seedRow('From the feed', feedSeeds, 'typed')}
-              {seedRow('Recent', recents, 'assumed')}
-              {seedRow('Or type', ['07/27 spy 747C', 'SPY 505C 7/31', 'spy 505 call aug 7'], 'assumed')}
-            </div>
-          </div>
-        </Panel>
-      </div>
-    );
-  }
-
-  // ---- resolution strip -------------------------------------------------------
-  const notesFor = (slot: 'ticker' | 'strike' | 'right' | 'expiry') =>
-    parsed.notes.filter(n => n.slot === slot).map(n => n.text);
-
-  const chip = (
-    key: 'ticker' | 'strike' | 'side' | 'expiry',
-    tone: 'typed' | 'assumed' | 'warn',
-    label: ReactNode,
-    ariaLabel: string,
-    notes: string[],
-    body: ReactNode,
-    tail?: ReactNode
-  ) => (
-    <div className="flex flex-col gap-0.5">
-      <PickerPopover
-        open={picker === key}
-        onOpenChange={v => setPicker(v ? key : null)}
-        label={`${key} picker`}
-        trigger={
-          <button
-            aria-label={ariaLabel}
-            className={`${CHIP_BASE} ${CHIP_TONE[tone]} inline-flex items-center gap-1.5`}
-          >
-            {label}
-            {tail}
-            <ChevronDown className="w-3 h-3 opacity-60" />
-          </button>
-        }
-      >
-        {body}
-      </PickerPopover>
-      {notes.map(n => (
-        <span key={n} className="text-micro text-textMuted leading-tight max-w-[240px]">
-          {n}
+  const expiryTabs = (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-baseline gap-2">
+        <span className="font-mono text-micro font-semibold uppercase tracking-widest text-textMuted">Expiry</span>
+        <span aria-hidden className="font-mono text-micro text-textMuted">·</span>
+        <span className="font-mono text-micro uppercase tracking-wider text-textMuted">
+          {rTicker} at ${paneSnap.spot.toFixed(2)}
         </span>
-      ))}
-    </div>
-  );
-
-  const strip = (
-    <div role="status" aria-live="polite" className="flex flex-wrap items-start gap-x-2 gap-y-2">
-      {chip(
-        'ticker',
-        parsed.ticker.state === 'unknown' ? 'warn' : toneOfSlot(parsed.ticker),
-        parsed.ticker.state === 'unknown' ? `No listing for ${parsed.ticker.raw}` : rTicker,
-        parsed.ticker.state === 'unknown'
-          ? `Ticker: ${parsed.ticker.raw}, no listing. Change.`
-          : `Ticker: ${rTicker}${parsed.ticker.state === 'assumed' ? ', assumed' : ''}. Change.`,
-        notesFor('ticker'),
-        <div className="w-72">
-          <div className="flex items-center gap-2 px-3 border-b border-borderSubtle">
-            <Search className="w-3.5 h-3.5 text-textMuted" />
-            <input
-              autoFocus
-              value={tickerQuery}
-              onChange={e => setTickerQuery(e.target.value)}
-              aria-label="Search all tickers"
-              placeholder="Search all tickers…"
-              // The house ring, same as the desk's other search box. This one
-              // took `outline-none` and gave nothing back, so the popover
-              // opened with focus already inside a field that showed no sign
-              // of holding it.
-              className="w-full rounded bg-transparent py-2.5 text-body text-textPrimary placeholder:text-textMuted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60"
-            />
-          </div>
-          <div role="listbox" aria-label="Tickers" className="max-h-72 overflow-y-auto py-1">
-            {tickerMatches.map(t => (
-              <button
-                key={t.symbol}
-                role="option"
-                aria-selected={t.symbol === rTicker}
-                tabIndex={-1}
-                onClick={() => {
-                  setTickerQuery('');
-                  write({ ticker: t.symbol });
-                }}
-                className="w-full flex items-center gap-3 px-3 py-1.5 text-left hover:bg-rowHover transition-colors"
-              >
-                <span className={`font-mono text-caption font-semibold w-16 shrink-0 ${t.symbol === rTicker ? 'text-select' : 'text-textPrimary'}`}>
-                  {t.symbol}
-                </span>
-                <span className="text-label text-textSecondary truncate">{t.name}</span>
-              </button>
-            ))}
-          </div>
-        </div>,
-        parsed.ticker.state === 'assumed' ? <span className="text-micro text-textMuted">assumed</span> : undefined
-      )}
-
-      {chip(
-        'strike',
-        parsed.strike.state === 'missing' ? 'warn' : toneOfSlot(parsed.strike),
-        parsed.strike.state === 'missing' ? 'Add a strike' : fmtStrike(rStrike as number),
-        parsed.strike.state === 'missing'
-          ? 'Strike: none yet. Change.'
-          : `Strike: ${fmtStrike(rStrike as number)}, on the $${paneStep.toFixed(2)} grid. Change.`,
-        notesFor('strike'),
-        <div className="max-h-[320px] overflow-y-auto p-1.5 w-[260px]">
-          <ContractLadder
-            rows={rail}
-            spot={paneSnap.spot}
-            ticker={paneSnap.ticker}
-            selectedId={weighed?.id ?? null}
-            deskPickId={deskPickId}
-            onSelect={c => write({ strike: c.strike })}
-            outOfRange={null}
-          />
-        </div>
-      )}
-
-      {chip(
-        'side',
-        toneOfSlot(parsed.right),
-        rRight === 'C' ? 'Call' : 'Put',
-        `Side: ${rRight === 'C' ? 'Call' : 'Put'}${parsed.right.state === 'assumed' ? ', assumed' : ''}. Change.`,
-        notesFor('right'),
-        <div className="p-2">
-          <SegmentedControl
-            ariaLabel="Contract side"
-            options={[
-              { value: 'C', label: sideGrades ? `Call ${sideGrades.C}` : 'Call' },
-              { value: 'P', label: sideGrades ? `Put ${sideGrades.P}` : 'Put' },
-            ]}
-            value={rRight}
-            onChange={v => write({ right: v as 'C' | 'P' })}
-          />
-        </div>,
-        parsed.right.state === 'assumed' ? <span className="text-micro text-textMuted">assumed</span> : undefined
-      )}
-
-      {chip(
-        'expiry',
-        parsed.expired ? 'warn' : toneOfSlot(parsed.expiry),
-        parsed.expired
-          ? `${parsed.expired.label} expired ${parsed.expired.daysAgo} day${parsed.expired.daysAgo === 1 ? '' : 's'} ago.`
-          : `${railExpiry.label} ${railExpiry.weekday} · ${railExpiry.dte}d · ${railExpiry.sessions} session${
-              railExpiry.sessions === 1 ? '' : 's'
-            } · ${sleeve}`,
-        parsed.expired
-          ? `Expiry: ${parsed.expired.label}, expired ${parsed.expired.daysAgo} days ago. Change.`
-          : `Expiry: ${railExpiry.label}, ${railExpiry.weekday}, ${railExpiry.dte} days, ${railExpiry.sessions} sessions. Change.`,
-        notesFor('expiry'),
-        <div className="max-h-[320px] overflow-y-auto py-1 w-[260px]" role="listbox" aria-label="Listed expiries">
-          {ladder.map(e => (
+      </div>
+      <div role="tablist" aria-label="Listed expiries" className="flex flex-wrap gap-x-4 gap-y-1.5">
+        {ladder.map(e => {
+          const on = e.label === railExpiry.label;
+          return (
             <button
               key={e.label}
-              role="option"
-              aria-selected={e.label === railExpiry.label}
-              tabIndex={-1}
+              role="tab"
+              aria-selected={on}
               onClick={() => write({ expiry: e })}
-              className="w-full flex items-center gap-2 px-3 py-1.5 text-left font-mono text-label hover:bg-rowHover transition-colors"
+              className={`-my-1 py-1 font-mono text-label uppercase tracking-wider transition-colors ${
+                on ? 'text-textPrimary' : 'text-textMuted hover:text-textSecondary'
+              }`}
             >
-              <span className="text-textPrimary tnum w-[8ch]">{e.label}</span>
-              <span className="text-textMuted w-[3ch]">{e.weekday}</span>
-              <span className="text-textSecondary tnum w-[4ch] text-right">{e.dte}d</span>
-              <span className="text-textMuted tnum">{e.sessions} sess</span>
-              <span className="ml-auto text-textMuted">{SLEEVE_LABEL[horizonForDte(e.dte)]}</span>
+              {e.label}
+              <span className={`ml-1.5 tnum ${on ? 'text-select' : 'text-textMuted/70'}`}>{e.dte}d</span>
             </button>
-          ))}
-        </div>,
-        parsed.expiry.state === 'assumed' ? <span className="text-micro text-textMuted">assumed</span> : undefined
-      )}
-
-      {parsed.expired && (
-        <div className="flex items-center gap-2">
-          <button onClick={() => write({ expiry: fallbackExpiry })} className={`${CHIP_BASE} ${CHIP_TONE.typed}`}>
-            {fallbackExpiry.label} (nearest listed)
-          </button>
-        </div>
-      )}
-
-      {parsed.leftovers.length > 0 && (
-        <span className="self-center font-mono text-micro text-textMuted">Ignored: {parsed.leftovers.join(', ')}</span>
-      )}
-
-      {rTicker && rTicker !== activeTicker && (
-        <button
-          onClick={() => changeTicker(rTicker)}
-          aria-label={`Make ${rTicker} the active ticker across the terminal`}
-          className={`${CHIP_BASE} ${CHIP_TONE.assumed} self-center`}
-        >
-          Make {rTicker} the active ticker
-        </button>
-      )}
+          );
+        })}
+      </div>
     </div>
   );
 
-  // ---- the grade panel body ---------------------------------------------------
-  /* The contract is written in the direction's own ink, matching Setups and
-     Lotto. This line used to open as one run of grey monospace, so whether a
-     contract was a call or a put was carried by a single letter; it was then a
-     tinted pill for one commit, which was just a smaller box. Green and red are
-     the market's language and the contract is the one place on this pane
-     entitled to borrow them — the factor bars below deliberately do not,
-     because a quality score is not a direction. */
+
   const identity = weighed ? (
     <div className="flex items-center gap-2 flex-wrap">
       <span
@@ -1286,6 +746,7 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
     Derived once, switched on everywhere. A panel that quotes what a trade costs
     may only render in the one state where a trade exists.
   */
+
   const gradeState: 'expired' | 'unknown-ticker' | 'no-strike' | 'unpriceable' | 'graded' = parsed.expired
     ? 'expired'
     : parsed.ticker.state === 'unknown'
@@ -1451,12 +912,17 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
   // that has passed, a symbol with no listing — there is no contract to draw.
   const showTrack = trackPlan != null && track != null && gradeState !== 'expired' && gradeState !== 'unknown-ticker';
 
+  /*
+    No `mx-auto max-w-[1180px]` here any more.
+
+    That capped the whole desk at 1180px and centred it, which on a 2560 screen
+    parked the Weigher in the middle with ~660px of background either side —
+    the same defect the page column had, one level down and outside the reach
+    of the guard that watches pages. The mode fills the column it is given.
+  */
   return (
-    <div className="mx-auto w-full max-w-[1180px] flex flex-col gap-4">
-      <div className="flex flex-col gap-3">
-        {searchField}
-        {strip}
-      </div>
+    <div className="w-full flex flex-col gap-4">
+      {expiryTabs}
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
         <AnimatePresence mode="wait" initial={false}>
@@ -1466,7 +932,7 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: DUR.base, ease: EASE }}
-            className="xl:col-span-8 min-w-0"
+            className="xl:col-span-7 min-w-0"
           >
             <Panel
               emphasis
@@ -1498,19 +964,21 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
           </motion.div>
         </AnimatePresence>
 
+        {/* The chain, not a neighbours rail. The rail showed eight strikes on
+            ONE side of the contract you had already described; the chain shows
+            both sides of every listed strike and is how you pick in the first
+            place. `flush` because the grid rules its own rows. */}
         <Panel
-          title="Neighbours"
-          subtitle={`${rRight === 'C' ? 'calls' : 'puts'} · ${railExpiry.label}`}
-          className="xl:col-span-4 min-w-0"
+          title="Contract chain"
+          subtitle={`${railExpiry.label} · click a contract to weigh it`}
+          className="xl:col-span-5 min-w-0"
+          flush
         >
-          <ContractLadder
-            rows={rail}
-            spot={paneSnap.spot}
-            ticker={paneSnap.ticker}
-            selectedId={weighed?.id ?? null}
-            deskPickId={deskPickId}
-            onSelect={c => write({ strike: c.strike })}
-            outOfRange={outOfRange}
+          <WeigherChain
+            snapshot={paneSnap}
+            dte={railDte}
+            selected={rStrike == null ? null : { strike: rStrike, right: rRight }}
+            onPick={sel => write({ strike: sel.strike, right: sel.right })}
           />
         </Panel>
       </div>
