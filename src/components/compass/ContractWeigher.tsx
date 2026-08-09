@@ -18,6 +18,7 @@
 
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import * as RadixPopover from '@radix-ui/react-popover';
 import { Search, Scale, Plus, Check, Target, ChevronDown, CornerDownLeft, AlertTriangle } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { useTracker } from '../../context/TrackerContext';
@@ -243,41 +244,50 @@ const FactorRow = ({
   </div>
 );
 
-/** Anchored picker. Closes on outside pointer-down and on Escape. */
-const Popover = ({ open, onClose, label, children }: { open: boolean; onClose: () => void; label: string; children: ReactNode }) => {
-  const ref = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    };
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    window.addEventListener('mousedown', onDown);
-    window.addEventListener('keydown', onKey);
-    return () => {
-      window.removeEventListener('mousedown', onDown);
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [open, onClose]);
+/*
+  The picker popover, on Radix.
 
-  return (
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          ref={ref}
-          aria-label={label}
-          initial={{ opacity: 0, y: -4 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -4 }}
-          transition={{ duration: DUR.quick, ease: EASE }}
-          className="absolute left-0 top-full mt-1.5 z-40 min-w-[220px] border border-borderMuted bg-panel rounded-lg shadow-overlay overflow-hidden"
-        >
-          {children}
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-};
+  This was hand-rolled: a `mousedown` listener on window to detect an outside
+  click, a `keydown` listener for Escape, and an absolutely-positioned div. That
+  is the short list of what a popover needs and nowhere near the full one — it
+  did not trap or restore focus, did not portal out of the panel (so it could be
+  clipped by any ancestor with overflow), had no collision detection against the
+  viewport edge, and left the trigger without the `aria-controls`/`aria-haspopup`
+  pairing a screen reader needs to follow it.
+
+  `@radix-ui/react-popover` brings all of that as behaviour and none of it as
+  appearance: every class name below is still ours, so the surface, the hairline
+  border and the motion are unchanged. This is the split the whole dependency
+  choice was about — libraries for behaviour, not for looks.
+*/
+const PickerPopover = ({
+  open,
+  onOpenChange,
+  label,
+  trigger,
+  children,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  label: string;
+  trigger: ReactNode;
+  children: ReactNode;
+}) => (
+  <RadixPopover.Root open={open} onOpenChange={onOpenChange}>
+    <RadixPopover.Trigger asChild>{trigger}</RadixPopover.Trigger>
+    <RadixPopover.Portal>
+      <RadixPopover.Content
+        aria-label={label}
+        align="start"
+        sideOffset={6}
+        collisionPadding={12}
+        className="z-40 min-w-[220px] border border-borderMuted bg-panel rounded-lg shadow-overlay overflow-hidden data-[state=open]:animate-soft-in"
+      >
+        {children}
+      </RadixPopover.Content>
+    </RadixPopover.Portal>
+  </RadixPopover.Root>
+);
 
 const CHIP_BASE = '-my-1 py-1 px-2 rounded border font-mono text-label transition-colors';
 const CHIP_TONE: Record<'typed' | 'assumed' | 'warn', string> = {
@@ -964,25 +974,29 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
     body: ReactNode,
     tail?: ReactNode
   ) => (
-    <div className="relative flex flex-col gap-0.5">
-      <button
-        onClick={() => setPicker(p => (p === key ? null : key))}
-        aria-label={ariaLabel}
-        aria-expanded={picker === key}
-        className={`${CHIP_BASE} ${CHIP_TONE[tone]} inline-flex items-center gap-1.5`}
+    <div className="flex flex-col gap-0.5">
+      <PickerPopover
+        open={picker === key}
+        onOpenChange={v => setPicker(v ? key : null)}
+        label={`${key} picker`}
+        trigger={
+          <button
+            aria-label={ariaLabel}
+            className={`${CHIP_BASE} ${CHIP_TONE[tone]} inline-flex items-center gap-1.5`}
+          >
+            {label}
+            {tail}
+            <ChevronDown className="w-3 h-3 opacity-60" />
+          </button>
+        }
       >
-        {label}
-        {tail}
-        <ChevronDown className="w-3 h-3 opacity-60" />
-      </button>
+        {body}
+      </PickerPopover>
       {notes.map(n => (
         <span key={n} className="text-micro text-textMuted leading-tight max-w-[240px]">
           {n}
         </span>
       ))}
-      <Popover open={picker === key} onClose={() => setPicker(null)} label={`${key} picker`}>
-        {body}
-      </Popover>
     </div>
   );
 
