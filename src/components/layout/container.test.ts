@@ -45,12 +45,19 @@ const rel = (p: string) => p.slice(SRC.length + 1);
 const OUTSIDE_SHELL = /^pages\/(landing|trailer)\//;
 
 describe('the page column', () => {
-  it('is declared in exactly one place', () => {
-    // The cap moved 1800 -> 1280 when the column was narrowed to read as
-    // centred on a laptop. The rule this guards is 'declared once', not the
-    // number, so the number is the only thing that changes here.
-    const declares = FILES.filter(f => f.text.includes('max-w-[1280px]')).map(f => rel(f.path));
-    expect(declares).toEqual(['components/layout/container.ts']);
+  it('caps nothing — the column is the viewport minus its gutters', () => {
+    /*
+      This test used to assert a cap was declared exactly once, and the cap
+      itself was the bug. 1280px on a 1600px screen paints 310px of pure
+      background and pushes the 13-column dark pool tape into a horizontal
+      scroll while a third of the monitor sits empty next to it.
+
+      So the rule inverted: the shared column must carry NO max-width in any
+      spelling — neither the Tailwind scale (max-w-7xl) nor an arbitrary value
+      (max-w-[1280px]) — because either one reintroduces the dead space.
+    */
+    expect(PAGE_CONTAINER).not.toMatch(/\bmax-w-/);
+    expect(PAGE_CONTAINER).toContain('w-full');
   });
 
   it('is used by the bar, the body and the footer', () => {

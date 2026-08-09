@@ -21,7 +21,7 @@
   one: five sleeves x six styles, rather than six half-answers.
 */
 
-export type SleeveKey = 'odte' | 'weekly' | 'swing' | 'leaps' | 'structures';
+export type SleeveKey = 'odte' | 'weekly' | 'swing' | 'leaps';
 
 export interface SleeveDef {
   key: SleeveKey;
@@ -88,22 +88,16 @@ export const SLEEVES: SleeveDef[] = [
     rungPct: 0.06,
     windowPct: 0.36,
   },
-  {
-    key: 'structures',
-    label: 'Structures',
-    window: 'defined risk',
-    blurb: 'Verticals, condors, butterflies and straddles — the worst case is known before the trade.',
-    dte: 45,
-    rungPct: 0.025,
-    windowPct: 0.15,
-  },
 ];
 
 export const SLEEVE_BY_KEY: Record<SleeveKey, SleeveDef> = Object.fromEntries(
   SLEEVES.map(s => [s.key, s])
 ) as Record<SleeveKey, SleeveDef>;
 
-/** Sleeves whose board is a single contract. Structures builds multi-leg. */
+/* Every sleeve is a single contract now. `CONTRACT_SLEEVES` existed to separate
+   the four contract sleeves from Structures, which built multi-leg spreads; with
+   Structures gone the distinction has one side, so callers can use SLEEVES. It
+   is kept as the named list because several boards read it directly. */
 export const CONTRACT_SLEEVES: SleeveKey[] = ['odte', 'weekly', 'swing', 'leaps'];
 
 export type ScannerKey = 'top-setups' | 'quick-scalp' | 'discounted' | 'rebounds' | 'whale-sweeps' | 'all';

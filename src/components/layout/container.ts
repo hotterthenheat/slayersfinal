@@ -18,10 +18,19 @@
   measure for reading, it centres that measure inside this container rather than
   shrinking the container.
 
-  The cap is deliberately generous. Below it the container is the full viewport
-  minus gutters, which is what a dense desk wants and what every laptop gets; it
-  only bites on very wide monitors, where an unbounded terminal stops being
-  readable and starts being a smear.
+  There is NO max-width. There was one — 1280px — and it was wrong for this
+  product. A cap does not centre a terminal, it parks it: measured at a 1600px
+  viewport the shell rendered 1280 wide at x=155, so 310px of the screen was
+  painted background and nothing else, and the wide tables that are the whole
+  point of a desk (the 13-column dark pool tape) had to scroll horizontally
+  INSIDE that column while a third of the monitor sat empty beside them.
+
+  So the column is the viewport minus the gutters, at every width. `mx-auto` is
+  kept because `w-full` with no cap makes it a no-op today, and it is what makes
+  the rule survive if a cap is ever reintroduced for a specific surface.
+
+  A reading measure is a different problem and has its own answer below: prose
+  DOES need a cap, and PROSE_MEASURE applies it to the text, not to the page.
 ==================================================
 */
 
@@ -29,7 +38,7 @@
 export const PAGE_GUTTER = 'px-4 lg:px-6 2xl:px-8';
 
 /** The shared column. Apply to a page body, the bar's contents, the footer. */
-export const PAGE_CONTAINER = `mx-auto w-full max-w-[1280px] ${PAGE_GUTTER}`;
+export const PAGE_CONTAINER = `mx-auto w-full ${PAGE_GUTTER}`;
 
 /**
  * A readable prose measure, centred in the container rather than pinned left.

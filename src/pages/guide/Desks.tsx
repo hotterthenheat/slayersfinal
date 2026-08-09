@@ -117,15 +117,12 @@ const DESKS: DeskDoc[] = [
     ],
     /* Two of the desk's five control groups used to be documented here — the
        modes and the scanners. A reader looking for the sleeve tabs, the
-       Structures board, the Cards/Table density switch or the leaderboard's
-       rank-by control found nothing, on the one page whose job is to say what
-       the controls do. */
+       Cards/Table density switch or the leaderboard's rank-by control found
+       nothing, on the one page whose job is to say what the controls do. */
     controls: [
       'Three modes: Setups, Weigher and Lotto.',
-      <>Inside Setups, the horizon runs along the top: <span className="text-textPrimary">0DTE</span>, Weekly, Swing,
-      LEAPS — and <span className="text-textPrimary">Structures</span>, which is a different instrument rather than a
-      different horizon: verticals, condors, butterflies and straddles, each with its payoff curve and its
-      defined risk.</>,
+      <>Inside Setups, the horizon runs along the top: <span className="text-textPrimary">0DTE</span>, Weekly, Swing
+      and LEAPS. Every sleeve ranks single contracts; they differ in how far out the expiry sits.</>,
       <>Under the horizon, six scanners: Top Setups, Quick Scalp, Discounted, Rebounds, Whale Sweeps and All — each
       with its own score floor. The count beside a tab is what that floor admitted across the whole field, not what
       fits on screen: the board itself is capped at the top 240 rows. All's floor is the bottom of the scale, so its

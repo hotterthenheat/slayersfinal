@@ -9,7 +9,6 @@ import { buildCompass, makeSetup, scannerFloor, sleeveExpiry } from '../data/com
 import {
   SCANNERS,
   SLEEVES,
-  SLEEVE_BY_KEY,
   type OptionRight,
   type ScannerKey,
   type Setup,
@@ -32,7 +31,6 @@ import SetupScanBoard, { type ScanLayout } from '../components/compass/SetupScan
 import SetupCompare from '../components/compass/SetupCompare';
 import Freshness from '../components/compass/Freshness';
 import { SLEEVE_INK } from '../components/compass/sleeveInk';
-import StructureBoard from '../components/compass/StructureBoard';
 import { sweepClock } from '../components/compass/sweepClock';
 import { expiryRangeLabel, expiryRead } from '../components/compass/setupHorizon';
 import type { Horizon } from '../core/contractScore';
@@ -661,7 +659,7 @@ const Compass = () => {
                   own colour wash measured under 4.5:1, and the expiry is the
                   half of the tab a user actually reads. */}
               <span className="block font-mono text-micro text-textSecondary tnum">
-                {sl.key === 'structures' ? sl.window : expiryRead(sleeveExpiry(sl.key)).chip}
+                {expiryRead(sleeveExpiry(sl.key)).chip}
               </span>
               {isActive && <span className={`absolute left-3 right-3 -bottom-px h-px ${c.rule}`} />}
             </button>
@@ -669,13 +667,6 @@ const Compass = () => {
         })}
       </div>
 
-      {/* Structures is a different instrument, not a longer one: the styles
-          below screen single contracts on a strike ladder, and a condor has no
-          strike. The sleeve strip stays; everything under it is replaced. */}
-      {sleeve === 'structures' ? (
-        <StructureBoard snapshot={marketData} dte={SLEEVE_BY_KEY.structures.dte} />
-      ) : (
-      <>
       {/* Style second — a LENS on the sleeve above, not a horizon of its own.
           Each states what its own bar admits, because six presets printing one
           capped number told a trader nothing about which is worth opening. */}
@@ -908,8 +899,6 @@ const Compass = () => {
           scan, which is how a leaderboard ends up reading as padding under the
           setups rather than as the desk-level context it is. */}
       <ImpactLeaderboard rows={data.impact} />
-      </>
-      )}
         </>
       )}
     </>
