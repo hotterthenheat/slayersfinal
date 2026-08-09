@@ -13,6 +13,14 @@
  *   overflow        The document scrolls sideways. Nothing on a page is
  *                   reachable if the viewport cuts it off, and the culprit is
  *                   named so it does not turn into a bisect.
+ *   dead-space      The complement of overflow: a page that does not use the
+ *                   column it has — a strip of the page column that no ink
+ *                   touches, which is what a max-width cap or a centred narrow
+ *                   column leaves behind.
+ *                   `--canyons` adds a second, noisier lens: the same large gap
+ *                   repeated down a list of rows, which is what justify-between
+ *                   does once a row grows past the width it was designed at. It
+ *                   is opt-in — see the note at the flag for why.
  *   collapsed       A chart painted into a zero-sized box. recharts'
  *                   ResponsiveContainer measures 0 inside an auto-width or
  *                   undeclared-height parent and then renders nothing, silently.
@@ -37,6 +45,7 @@
  *   node scripts/ui-audit.mjs --viewport laptop  # one viewport (repeatable)
  *   node scripts/ui-audit.mjs --base http://localhost:5173   # use a running server
  *   node scripts/ui-audit.mjs --json out.json    # machine-readable findings
+ *   node scripts/ui-audit.mjs --canyons          # + row-canyon lens (noisy)
  *
  * Exits non-zero when anything at severity `error` is found.
  *
@@ -124,6 +133,22 @@ const wantRoutes = flag('--route');
 const wantViewports = flag('--viewport');
 const baseFlag = flag('--base')[0];
 const jsonOut = flag('--json')[0];
+/*
+  Row-canyon detection is opt-in, and deliberately so.
+
+  It finds real defects — it is how the shortcut sheet's 1013px label-to-keycap
+  gap and the dark pool shelf read's 837px were found — but measured against the
+  whole app it also reports 40 findings of which most are correct layouts it
+  cannot distinguish: a chart's axis tick groups are SUPPOSED to spread across
+  the plot, and a caption whose label and value sit at the two ends of the bar
+  directly beneath it is labelling that bar's ends, not leaving a hole.
+
+  A warn-level gate with that ratio gets ignored, or worse, gets someone to
+  "fix" a correct axis. So it stays a lens you point at a page while working on
+  it (`--canyons`), not a check the sweep enforces. The band check below has no
+  such ambiguity and runs always.
+*/
+const wantCanyons = argv.includes('--canyons');
 
 const routes = wantRoutes.length ? wantRoutes : ROUTES;
 const viewports = Object.entries(VIEWPORTS).filter(
@@ -251,7 +276,7 @@ function selfTest() {
  * visibility helpers — two copies of "is this element actually on screen" is
  * exactly how the earlier harnesses drifted.
  */
-function collectFindings() {
+function collectFindings(opts) {
   const out = [];
   const add = (kind, severity, message, extra) =>
     out.push({ kind, severity, message, ...extra });
@@ -689,6 +714,142 @@ function collectFindings() {
     }
   }
 
+  /*
+    ── dead-space ──
+
+    The complement of `overflow`. That check catches a page too WIDE for its
+    column; this one catches a page that does not use the column it has.
+
+    Two different holes, because one measurement cannot see both:
+
+    band     A vertical strip of the page column that no ink touches at all.
+             This is what a max-width cap leaves behind — the shell used to cap
+             at 1280px, so a 1600px screen painted 310px of pure background, and
+             a centred `max-w-3xl` prose column left 760px at 2560.
+
+    canyon   A gap between two things ON THE SAME ROW. A band check cannot see
+             this: in a stack of rows, some sibling row almost always covers the
+             strip even when every individual row has a thousand pixels down its
+             middle. `justify-between` on a row that grew with the viewport is
+             the shape — a shortcut's label 1013px from its key cap.
+
+    Only REPEATED canyons are reported. A one-off is a deliberate composition —
+    a panel header with its title left and its controls right, a card footer
+    with its action in the corner — and those are correct. Three or more
+    identical rows with the same hole is a list the reader has to scan across,
+    which is not.
+  */
+  const pageCol = document.querySelector('[data-page-container="body"]');
+  const pageFooter = document.querySelector('footer');
+  if (pageCol) {
+    const inks = el => {
+      if (pageFooter && pageFooter.contains(el)) return false;
+      if (!isVisible(el)) return false;
+      const s = getComputedStyle(el);
+      if ([...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())) return true;
+      if (['svg', 'canvas', 'img', 'input', 'textarea'].includes(el.tagName.toLowerCase())) return true;
+      if (['Top', 'Right', 'Bottom', 'Left'].some(k => parseFloat(s[`border${k}Width`]) > 0)) return true;
+      return s.backgroundColor !== 'rgba(0, 0, 0, 0)';
+    };
+
+    const cs = getComputedStyle(pageCol);
+    const box = pageCol.getBoundingClientRect();
+
+    /*
+      First: does the column fill the screen at all?
+
+      This has to be asked BEFORE looking inside the column, and the first
+      version of this check did not ask it — it measured bands within the
+      column's own content box, so a column capped at 1280px on a 2560 screen
+      came back perfectly clean while half the monitor was painted background.
+      Caught by putting the old `max-w-[1280px]` back and watching this check
+      stay silent, which is the regression it exists to catch.
+
+      clientWidth, not innerWidth: the latter counts the scrollbar, and the
+      column is not expected to run underneath it.
+    */
+    const screenW = document.documentElement.clientWidth;
+    // Three times the widest gutter (2xl:px-8 → 32px a side). Anything beyond
+    // that is not spacing, it is unused screen.
+    if (screenW - box.width > 96) {
+      add('dead-space', 'warn', `the page column is ${Math.round(box.width)}px on a ${screenW}px screen`, {
+        element: describe(pageCol),
+      });
+    }
+
+    // Then: gutters are padding, not dead space — measure the content box only.
+    const lo = box.left + parseFloat(cs.paddingLeft);
+    const hi = box.right - parseFloat(cs.paddingRight);
+    const BAND = 40;
+    const nBands = Math.max(1, Math.ceil((hi - lo) / BAND));
+    const bands = new Array(nBands).fill(0);
+
+    for (const el of pageCol.querySelectorAll('*')) {
+      if (!inks(el)) continue;
+      const r = el.getBoundingClientRect();
+      const a = Math.max(0, Math.floor((r.left - lo) / BAND));
+      const b = Math.min(nBands, Math.ceil((r.right - lo) / BAND));
+      for (let i = a; i < b; i++) bands[i]++;
+    }
+    let run = 0;
+    let worst = { len: 0, at: 0 };
+    for (let i = 0; i < nBands; i++) {
+      if (bands[i] === 0) {
+        run++;
+        if (run > worst.len) worst = { len: run, at: Math.round(lo + (i - run + 1) * BAND) };
+      } else run = 0;
+    }
+    // 160px is four bands — narrower than that and it is spacing between two
+    // blocks, not a column of the page going unused.
+    if (worst.len * BAND >= 160) {
+      add('dead-space', 'warn', `${worst.len * BAND}px of the page column is empty from x=${worst.at}`, {
+        element: describe(pageCol),
+      });
+    }
+
+    /*
+      A row's child counts as covering its width if IT or anything under it
+      paints — not only if it paints itself.
+
+      `inks` alone was wrong here and reported a hole through solid content. The
+      dark pool shelf row lays out [price, badge, bar+caption, distance, held];
+      the third child is a bare wrapper with no text of its own, no border and
+      no background, so `inks` rejected it, and the gap was then measured from
+      the badge straight across to the distance column — 1113px of "empty" that
+      is in fact a bar chart and a caption. Verified against the live row: the
+      five children are adjacent with 12px between them.
+    */
+    const covers = el => inks(el) || [...el.querySelectorAll('*')].some(inks);
+
+    const canyons = opts && opts.canyons ? new Map() : null;
+    for (const parent of canyons ? pageCol.querySelectorAll('*') : []) {
+      const kids = [...parent.children].filter(covers);
+      if (kids.length < 2) continue;
+      const boxes = kids.map(k => k.getBoundingClientRect()).sort((a, b) => a.left - b.left);
+      for (let i = 1; i < boxes.length; i++) {
+        const a = boxes[i - 1];
+        const b = boxes[i];
+        // Same visual row only.
+        if (Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) <= 2) continue;
+        const gap = b.left - a.right;
+        if (gap < 320) continue;
+        const key = describe(parent);
+        const prev = canyons.get(key);
+        if (prev) {
+          prev.n++;
+          prev.gap = Math.max(prev.gap, gap);
+        } else canyons.set(key, { n: 1, gap, within: trail(parent) });
+      }
+    }
+    for (const [key, c] of canyons || []) {
+      if (c.n < 3) continue;
+      add('dead-space', 'warn', `${Math.round(c.gap)}px gap inside a row, repeated on ${c.n} rows`, {
+        element: key,
+        within: c.within,
+      });
+    }
+  }
+
   return out;
 }
 
@@ -869,7 +1030,7 @@ async function main() {
         // Charts size themselves from a ResizeObserver a frame after mount.
         await page.waitForTimeout(700);
 
-        const found = await page.evaluate(collectFindings);
+        const found = await page.evaluate(collectFindings, { canyons: wantCanyons });
         for (const f of found) findings.push({ route, viewport: vp.label, ...f });
 
         if (FOCUS_VIEWPORTS.has(key)) {

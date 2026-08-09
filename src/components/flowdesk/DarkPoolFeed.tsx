@@ -32,8 +32,15 @@ const DarkPoolFeed = () => {
     >
       {/* Masonry columns, not a grid: sectors vary in row count (Tech 6, Utilities 1),
           so a fixed grid left a ragged half-empty last row. Columns balance by height
-          and fill evenly; gap-px + mb-px keep the fused hairline look. */}
-      <div className="columns-1 md:columns-2 xl:columns-3 gap-px bg-borderSubtle">
+          and fill evenly; gap-px + mb-px keep the fused hairline look.
+
+          The count is set by column WIDTH, not by breakpoint. `xl:columns-3`
+          capped it at three, so past that width the columns grew instead of
+          multiplying: at 2560 each was 804px and every sector header had its
+          name 718px from its notional. A 20rem column width holds the four data
+          columns comfortably and lets the browser fit as many as the monitor
+          affords — two at tablet, four at a laptop, seven at 2560. */}
+      <div className="columns-[20rem] gap-px bg-borderSubtle">
         {sectors.map(sec => (
           <div key={sec.sector} className="bg-panel flex flex-col break-inside-avoid mb-px">
             {/* Sector header */}

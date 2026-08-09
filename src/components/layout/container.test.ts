@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { PAGE_CONTAINER, PAGE_GUTTER, PROSE_MEASURE } from './container';
+import { PAGE_CONTAINER, PAGE_GUTTER } from './container';
 
 /*
 ==================================================
@@ -68,10 +68,16 @@ describe('the page column', () => {
     }
   });
 
-  it('no page inside the shell sets its own width', () => {
+  it('nothing inside the shell caps and centres itself', () => {
     /*
-      The exact shape that caused it: a root element that both caps its width
-      and centres itself, which makes a page a box inside the page.
+      The exact shape that caused it: an element that both caps its width and
+      centres itself, which parks content in the middle of the screen.
+
+      Named for a page's root element, but it reads every className in the file
+      and the nested case is the one that survived longest: after the page cap
+      was removed, the legal pages still centred a `max-w-3xl` prose column
+      inside a full-width page and measured 200px of untouched width at 1440 and
+      760px at 2560.
 
       This had TWO independent holes, and each one on its own made the check
       decorative:
@@ -92,7 +98,9 @@ describe('the page column', () => {
       element and mx-auto on another is not this bug.
     */
     const CLASS_ATTR = /className=(?:"([^"]*)"|'([^']*)'|\{\s*(?:`([^`]*)`|'([^']*)'|"([^"]*)")\s*\})/g;
-    const CAPS_WIDTH = /\bmax-w-(?:\d?xl\b|\[[^\]]+\])/;
+    // `max-w-prose` and `max-w-screen-*` cap just as hard as `max-w-3xl` and
+    // were both outside the original alternation.
+    const CAPS_WIDTH = /\bmax-w-(?:\d?xl\b|prose\b|screen-\w+\b|\[[^\]]+\])/;
     const CENTRES = /\bmx-auto\b/;
     const setsOwnWidth = (text: string) =>
       [...text.matchAll(CLASS_ATTR)].some(m => {
@@ -121,7 +129,4 @@ describe('the page column', () => {
     ]);
   });
 
-  it('centres a reading measure rather than pinning it left', () => {
-    expect(PROSE_MEASURE).toContain('mx-auto');
-  });
 });

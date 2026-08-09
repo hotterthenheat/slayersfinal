@@ -29,8 +29,12 @@
   kept because `w-full` with no cap makes it a no-op today, and it is what makes
   the rule survive if a cap is ever reintroduced for a specific surface.
 
-  A reading measure is a different problem and has its own answer below: prose
-  DOES need a cap, and PROSE_MEASURE applies it to the text, not to the page.
+  Prose is a real exception to "fill the width" — a 2200px line is unreadable —
+  but it is NOT an exception to this rule. There used to be a PROSE_MEASURE
+  export here (`mx-auto w-full max-w-3xl`) that the legal pages centred inside
+  the column, and it measured as 760px of untouched screen at 2560. It is gone.
+  A page that needs short lines gets them by laying its content out in columns
+  that consume the width, not by shrinking to the middle — see legal/LegalLayout.
 ==================================================
 */
 
@@ -39,12 +43,3 @@ export const PAGE_GUTTER = 'px-4 lg:px-6 2xl:px-8';
 
 /** The shared column. Apply to a page body, the bar's contents, the footer. */
 export const PAGE_CONTAINER = `mx-auto w-full ${PAGE_GUTTER}`;
-
-/**
- * A readable prose measure, centred in the container rather than pinned left.
- *
- * The legal pages had `max-w-3xl` inside a grid cell with no centring, which is
- * how their text ended up left of the page's midline while the chrome around it
- * was symmetric.
- */
-export const PROSE_MEASURE = 'mx-auto w-full max-w-3xl';

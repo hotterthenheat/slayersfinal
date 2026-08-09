@@ -46,6 +46,26 @@ interface SetupCompareProps {
  * idiom the Read panel uses, so the desk says this once instead of twice.
  */
 
+/*
+  Rows sit several across, not one per line.
+
+  Stacked, each Row is as wide as the pane, and the pane is seven of twelve
+  columns — 1400px at 2560, which put "Cost" 762px from what it costs on four
+  rows in a row. A label and its figure are one fact; a monitor should not be
+  able to pull them apart.
+
+  `auto-fill` at an 18rem floor keeps one fact per line on a phone and fits
+  three or four across a wide pane, so every label stays against its own number.
+*/
+const RowGrid = ({ children }: { children: ReactNode }) => (
+  <div
+    className="grid gap-x-8 divide-y divide-borderSubtle"
+    style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 18rem), 1fr))' }}
+  >
+    {children}
+  </div>
+);
+
 /** One fact: name on the left, figure on the right, the sentence underneath. */
 const Row = ({
   label,
@@ -67,10 +87,19 @@ const Row = ({
   </div>
 );
 
-/** A block heading that names the block's unit, because two of them differ. */
+/*
+  A block heading that names the block's unit, because two of them differ.
+
+  The unit used to be pushed to the far edge with justify-between, which put it
+  865px from the words it qualifies once the pane grew — "What it costs" at one
+  end of the panel and "per contract" at the other, reading as two unrelated
+  labels. A qualifier belongs against what it qualifies, so it now trails the
+  heading on a middot, which is the separator the rest of Compass already uses.
+*/
 const Head = ({ children, unit }: { children: ReactNode; unit: string }) => (
-  <div className="flex items-baseline justify-between gap-2">
+  <div className="flex items-baseline gap-1.5">
     <span className="font-mono text-micro font-semibold uppercase tracking-widest text-textSecondary">{children}</span>
+    <span aria-hidden className="font-mono text-micro text-textMuted">·</span>
     <span className="font-mono text-micro uppercase tracking-wider text-textMuted">{unit}</span>
   </div>
 );
@@ -223,7 +252,7 @@ const SetupCompare = ({ setup, peers, spot, scanner, onSelectPeer, onStudy }: Se
             the numbers reconcile. */}
         <div className="flex flex-col gap-1 border-t border-borderSubtle pt-2.5">
           <Head unit="per contract">What it costs</Head>
-          <div className="flex flex-col divide-y divide-borderSubtle">
+          <RowGrid>
             <Row
               label="Cost"
               value={`$${(setup.mid * CONTRACT_MULTIPLIER).toFixed(0)}`}
@@ -247,7 +276,7 @@ const SetupCompare = ({ setup, peers, spot, scanner, onSelectPeer, onStudy }: Se
               value={`${setup.health}/100`}
               note="50 is at the money · higher is deeper in the money"
             />
-          </div>
+          </RowGrid>
         </div>
 
         {/* WHAT IT PAYS — premium, and the bars are what the tiles could not

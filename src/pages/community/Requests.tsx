@@ -136,13 +136,27 @@ const Requests = () => {
                 </span>
               </div>
 
+              {/*
+                One request per full-width row put 2065px between a request's
+                badges and its "Back this" control at 2560 — `ml-auto` has
+                nothing to push against but the whole monitor. Fluid columns cap
+                the row near 34rem so the action stays beside what it acts on,
+                and the group gets denser instead of wider.
+
+                The card frame is gone with it; the status rail on the left is
+                the part that carried meaning, so that is what is kept.
+              */}
+              <div
+                className="grid gap-x-8 gap-y-2.5 items-start"
+                style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 34rem), 1fr))' }}
+              >
               {group.items.map(req => {
                 const shipped = isShippedId(req.id);
                 const backed = state.voted.includes(req.id);
                 return (
                   <div
                     key={req.id}
-                    className={`border border-borderSubtle border-l-2 ${STATUS_RAIL[group.status]} bg-panel rounded-md px-4 py-3 flex flex-col gap-1.5`}
+                    className={`border-l-2 ${STATUS_RAIL[group.status]} pl-3 py-1 flex flex-col gap-1.5`}
                   >
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-data font-semibold text-textPrimary">{req.title}</span>
@@ -171,6 +185,7 @@ const Requests = () => {
                   </div>
                 );
               })}
+              </div>
             </section>
           );
         })}

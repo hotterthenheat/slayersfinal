@@ -791,20 +791,30 @@ const DarkPool = () => {
               </span>
             </div>
             <p className="text-caption text-textSecondary leading-relaxed">{selected.usage}</p>
+            {/*
+              A label and its read, side by side.
+
+              These were `justify-between` rows as wide as the panel, and the
+              panel is `lg:col-span-2` — at 2560 that put "Above the shelf"
+              837px from what happens above the shelf, on all three rows. A
+              caption and its answer are one statement; they read as two
+              unrelated columns once a monitor pulls them apart. The label now
+              takes a fixed measure and the read sits against it.
+            */}
             <div className="border-t border-borderSubtle pt-3 flex flex-col gap-2">
-              <div className="flex items-center justify-between font-mono text-caption leading-4">
+              <div className="flex items-baseline gap-3 font-mono text-caption leading-4">
                 <span className="text-textMuted uppercase tracking-wider text-micro">Above the shelf</span>
                 <span className="text-bull">
                   {selected.role === 'RESISTANCE' ? 'breakout confirms, supply cleared' : 'bias long against it'}
                 </span>
               </div>
-              <div className="flex items-center justify-between font-mono text-caption leading-4">
+              <div className="flex items-baseline gap-3 font-mono text-caption leading-4">
                 <span className="text-textMuted uppercase tracking-wider text-micro">Below the shelf</span>
                 <span className="text-bear">
                   {selected.role === 'SUPPORT' ? 'read invalid, step aside' : 'supply in control'}
                 </span>
               </div>
-              <div className="flex items-center justify-between font-mono text-caption leading-4">
+              <div className="flex items-baseline gap-3 font-mono text-caption leading-4">
                 <span className="text-textMuted uppercase tracking-wider text-micro">Next shelf</span>
                 <span className="text-textPrimary tnum">
                   {selected.distPct >= 0
