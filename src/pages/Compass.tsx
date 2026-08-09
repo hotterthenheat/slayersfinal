@@ -102,7 +102,7 @@ interface OpenRow {
  * underneath them, but a held grade must never read as this sweep's.
  */
 const HeldFromSweep = ({ from, now }: { from: number; now: string }) => (
-  <div className="flex items-start gap-2 border border-warn/20 bg-warn/[0.05] rounded-md px-3 py-2">
+  <div className="flex items-start gap-2 border-l-2 border-warn/60 pl-3 py-1">
     <History className="w-3.5 h-3.5 text-warn shrink-0 mt-0.5" />
     <p className="font-mono text-label text-textSecondary leading-relaxed">
       <span className="text-warn font-semibold uppercase tracking-wider">Held </span>

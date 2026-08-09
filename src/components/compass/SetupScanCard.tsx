@@ -48,7 +48,10 @@ const SetupScanCard = ({ setup, rank, selected, onSelect, onStudy }: SetupScanCa
   const isCall = setup.right === 'C';
   // Direction is the market's own language, so it stays green/red. It rides the
   // contract pill only; nothing else on the card borrows it.
-  const pillTone = isCall ? 'border-bull/50 bg-bull/20' : 'border-bear/50 bg-bear/20';
+  // Direction is the ink, not a pill. A tinted rounded background on the
+  // contract was the last small box on the row; green and red type says the
+  // same thing and says it in the same place every other terminal does.
+  const pillTone = isCall ? 'text-bull' : 'text-bear';
   const exp = expiryRead(setup.expiry);
   // How deep the terminal actually goes on this NAME, as opposed to how the
   // contract graded. The field mixes names the simulator models with names it
@@ -83,10 +86,10 @@ const SetupScanCard = ({ setup, rank, selected, onSelect, onStudy }: SetupScanCa
       /* Selection is one signal, not three. This used to carry a 2px near-white
          inset rail on top of the border and the wash, and it fired on mount, so
          a card nobody had clicked wore the brightest marker on the screen. */
-      className={`flex flex-col gap-2.5 rounded-md border px-3 py-2.5 transition-colors ${
-        selected
-          ? 'border-select/40 bg-select/[0.04]'
-          : 'border-borderSubtle bg-panel hover:border-borderMuted hover:bg-rowHover'
+      /* A ruled row, not a card — see LottoBoard for the same change. Selection
+         is the left rail plus a wash rather than a brighter frame. */
+      className={`flex flex-col gap-2.5 px-3 py-2.5 transition-colors ${
+        selected ? 'inst-selected' : 'hover:bg-rowHover'
       }`}
     >
       <div
@@ -97,13 +100,8 @@ const SetupScanCard = ({ setup, rank, selected, onSelect, onStudy }: SetupScanCa
       {/* Identity */}
       <div className="flex items-center gap-2 flex-wrap">
         <span className="font-mono text-micro text-textMuted tnum">#{rank}</span>
-        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-label font-semibold ${pillTone}`}>
-          <span className="text-textPrimary">{setup.contract}</span>
-        </span>
-        <span
-          title={exp.sentence}
-          className="inline-flex items-center rounded border border-borderSubtle bg-inset px-1.5 py-0.5 font-mono text-micro uppercase tracking-wider text-textSecondary tnum"
-        >
+        <span className={`font-mono text-data font-semibold tnum ${pillTone}`}>{setup.contract}</span>
+        <span title={exp.sentence} className="font-mono text-micro uppercase tracking-wider text-textMuted tnum">
           {exp.chip}
         </span>
         <span title={COVERAGE_META[coverage].note}>
@@ -148,13 +146,24 @@ const SetupScanCard = ({ setup, rank, selected, onSelect, onStudy }: SetupScanCa
       </div>
 
       {/* Evidence. Neutral, not directional: a chip says what the engine saw,
-          and the direction is already on the pill above it. */}
+          and the direction is already in the contract's own ink above it.
+
+          Middot-separated, because the pill borders that used to bound these
+          are gone and four uppercase labels in a row read as one string
+          without them. */}
       {setup.whyChips.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {setup.whyChips.map(chip => (
-            <SignalBadge key={chip} tone="neutral">
-              {chip}
-            </SignalBadge>
+        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+          {setup.whyChips.map((chip, i) => (
+            <span key={chip} className="inline-flex items-center gap-1.5">
+              {/* Full-strength muted, not /50: at half opacity this separator
+                  measured 2.03:1, under the 3:1 floor. */}
+              {i > 0 && (
+                <span aria-hidden className="text-textMuted">
+                  ·
+                </span>
+              )}
+              <SignalBadge tone="neutral">{chip}</SignalBadge>
+            </span>
           ))}
         </div>
       )}

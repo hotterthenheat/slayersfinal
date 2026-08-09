@@ -146,7 +146,10 @@ const LottoCard = ({
   const isCall = c.right === 'C';
   // Direction is the market's own language, so it stays green/red, and it rides
   // the contract pill only — exactly as SetupScanCard does it next door.
-  const pillTone = isCall ? 'border-bull/50 bg-bull/20' : 'border-bear/50 bg-bear/20';
+  // Direction is the ink, not a pill. A tinted rounded background on the
+  // contract was the last small box on the row; green and red type says the
+  // same thing and says it in the same place every other terminal does.
+  const pillTone = isCall ? 'text-bull' : 'text-bear';
   const covers = sigmaReach(c);
   const onPin = c.strike === pin;
   const chips = lottoChips(c, spot, onPin);
@@ -155,10 +158,12 @@ const LottoCard = ({
     <div
       role="listitem"
       onClick={onSelect}
-      className={`flex flex-col gap-2.5 rounded-md border px-3 py-2.5 transition-colors ${
-        selected
-          ? 'border-select/40 bg-select/[0.04]'
-          : 'border-borderSubtle bg-panel hover:border-borderMuted hover:bg-rowHover'
+      /* A ruled row, not a card. Six of these in a two-column grid was twelve
+         rounded frames on one screen; the grid's own dividers separate them
+         now, and selection is a left rail plus a wash — the marker the rest of
+         this desk already uses on a picked row. */
+      className={`flex flex-col gap-2.5 px-3 py-2.5 transition-colors ${
+        selected ? 'inst-selected' : 'hover:bg-rowHover'
       }`}
     >
       <div
@@ -169,13 +174,11 @@ const LottoCard = ({
         {/* Identity */}
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-mono text-micro text-textMuted tnum">#{rank}</span>
-          <span className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-label font-semibold ${pillTone}`}>
-            <span className="text-textPrimary">
-              {c.ticker} {c.strike}
-              {c.right}
-            </span>
+          <span className={`font-mono text-data font-semibold tnum ${pillTone}`}>
+            {c.ticker} {c.strike}
+            {c.right}
           </span>
-          <span className="inline-flex items-center rounded border border-borderSubtle bg-inset px-1.5 py-0.5 font-mono text-micro uppercase tracking-wider text-textSecondary tnum">
+          <span className="font-mono text-micro uppercase tracking-wider text-textMuted tnum">
             {c.dte === 0 ? '0DTE' : `${c.dte}DTE`}
           </span>
         </div>
@@ -208,15 +211,23 @@ const LottoCard = ({
           ))}
         </div>
 
-        {/* Evidence. Neutral, not directional — the direction is on the pill. */}
-        <div className="flex flex-wrap gap-1">
-          {chips.map(chip => (
-            /* preserveGreek at the point of render, never in the list: it
-               returns a node array for any string carrying lowercase Greek, and
-               a node array makes a poor React key. */
-            <SignalBadge key={chip} tone="neutral">
-              {preserveGreek(chip)}
-            </SignalBadge>
+        {/* Evidence, separated by middots. Without the pill borders these ran
+            together into one uppercase string — "AT THE MONEY 1σ CLEARS
+            BREAKEVEN TIGHT BOOK ALL TIME VALUE" reads as a sentence, not four
+            facts. A separator is the cheapest thing that restores the boundary
+            and it costs no chrome. */}
+        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+          {chips.map((chip, i) => (
+            <span key={chip} className="inline-flex items-center gap-1.5">
+              {/* Full-strength muted, not /50: at half opacity this separator
+                  measured 2.03:1, under the 3:1 floor. */}
+              {i > 0 && (
+                <span aria-hidden className="text-textMuted">
+                  ·
+                </span>
+              )}
+              <SignalBadge tone="neutral">{preserveGreek(chip)}</SignalBadge>
+            </span>
           ))}
         </div>
       </div>
@@ -270,7 +281,7 @@ const SideBoard = ({
         grade to give.
       </p>
     ) : (
-      <div role="list" className="grid grid-cols-1 xl:grid-cols-2 gap-2">
+      <div role="list" className="grid grid-cols-1 xl:grid-cols-2 border-t border-borderSubtle divide-y xl:divide-y-0 divide-borderSubtle [&>*:nth-child(2n+1)]:xl:border-r [&>*]:xl:border-borderSubtle [&>*:nth-child(-n+2)]:xl:border-t-0">
         {rows.map((c, i) => (
           <LottoCard
             key={c.id}
@@ -419,7 +430,7 @@ const LottoBoard = ({ snapshot }: LottoBoardProps) => {
           /* A bar, not a curtain. This used to be eight rows of centred
              padding around one paragraph, so the panel it gated was a hole in
              the page even in the states where it had no business firing. */
-          <div className="-mx-3.5 -mt-3 mb-3 px-3.5 py-3 flex items-start gap-3 flex-wrap border-b border-warn/20 bg-warn/[0.05]">
+          <div className="mb-3 pb-3 flex items-start gap-3 flex-wrap border-b border-borderSubtle">
             <ShieldAlert className="w-4 h-4 text-warn shrink-0 mt-0.5" aria-hidden />
             <p className="flex-1 min-w-[24ch] text-caption text-textSecondary leading-relaxed">
               The bell is minutes away.{' '}

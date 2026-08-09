@@ -1149,26 +1149,22 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
   );
 
   // ---- the grade panel body ---------------------------------------------------
-  /* The contract wears a direction-tinted pill, exactly as SetupScanCard does
-     on the Setups board next door. This pane used to open the whole identity
-     line as one run of grey monospace, so the single most important fact about
-     a contract — whether it is a call or a put — was carried only by a letter.
-     Green and red are the market's own language and the pill is the one place
-     on this pane entitled to borrow them; the factor bars below deliberately do
-     not, because a quality score is not a direction. */
+  /* The contract is written in the direction's own ink, matching Setups and
+     Lotto. This line used to open as one run of grey monospace, so whether a
+     contract was a call or a put was carried by a single letter; it was then a
+     tinted pill for one commit, which was just a smaller box. Green and red are
+     the market's language and the contract is the one place on this pane
+     entitled to borrow them — the factor bars below deliberately do not,
+     because a quality score is not a direction. */
   const identity = weighed ? (
     <div className="flex items-center gap-2 flex-wrap">
       <span
-        className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-label font-semibold ${
-          weighed.right === 'C' ? 'border-bull/50 bg-bull/20' : 'border-bear/50 bg-bear/20'
-        }`}
+        className={`font-mono text-data font-semibold tnum ${weighed.right === 'C' ? 'text-bull' : 'text-bear'}`}
       >
-        <span className="text-textPrimary">
-          {weighed.ticker} {fmtStrike(weighed.strike)}
-          {weighed.right}
-        </span>
+        {weighed.ticker} {fmtStrike(weighed.strike)}
+        {weighed.right}
       </span>
-      <span className="inline-flex items-center rounded border border-borderSubtle bg-inset px-1.5 py-0.5 font-mono text-micro uppercase tracking-wider text-textSecondary tnum">
+      <span className="font-mono text-micro uppercase tracking-wider text-textMuted tnum">
         {railExpiry.label} {railExpiry.weekday}
       </span>
       <span className="font-mono text-label text-textSecondary tnum">
@@ -1425,7 +1421,7 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
                   "what kills it" box on the Setups detail pane. It was a grey
                   sentence in a stack of grey sentences — the one line on the
                   pane a reader most needs to find, styled to be skipped. */}
-              <p className="flex items-start gap-2 rounded-md border border-warn/25 bg-warn/[0.06] px-3 py-2 text-caption text-textSecondary leading-relaxed">
+              <p className="flex items-start gap-2 border-l-2 border-warn/60 pl-3 py-1 text-caption text-textSecondary leading-relaxed">
                 <AlertTriangle className="w-3.5 h-3.5 text-warn shrink-0 mt-0.5" aria-hidden />
                 <span>
                   <span className="font-mono font-semibold uppercase tracking-wider text-warn mr-1.5">Contradicted</span>

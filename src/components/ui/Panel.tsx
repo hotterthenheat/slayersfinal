@@ -95,7 +95,10 @@ const Panel = ({
 
   return (
     <section
-      className={`relative ${surface} rounded-md flex flex-col min-w-0 ${className}`}
+      /* No radius and no frame: `surface` no longer paints one either. A panel
+         is a section of the page — its header rule separates it from what came
+         before, and the space around it does the rest. */
+      className={`relative ${surface} flex flex-col min-w-0 ${className}`}
     >
       {(title || actions || focusable) && (
         <header

@@ -832,7 +832,7 @@ const Tracker = () => {
                 { k: 'Read', v: 'current', s: 'recomputed on open' },
                 { k: 'Notes', v: 'saved', s: 'in this browser' },
               ].map(x => (
-                <div key={x.k} className="border border-borderSubtle bg-inset rounded-lg px-3 py-2.5 text-center min-w-[92px]">
+                <div key={x.k} className="px-3 py-2.5 text-center min-w-[92px] border-l border-borderSubtle first:border-l-0">
                   <div className="font-mono text-micro uppercase tracking-widest text-textMuted">{x.k}</div>
                   <div className="mt-1 font-mono text-body font-semibold text-textPrimary leading-5">{x.v}</div>
                   <div className="mt-0.5 text-micro text-textMuted">{x.s}</div>

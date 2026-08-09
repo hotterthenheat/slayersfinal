@@ -70,7 +70,7 @@ const LegalLayout = ({ title, intro, sections }: LegalLayoutProps) => (
         {/* The one fact on the page that goes stale. Amber is the house's
             data-freshness colour, and an effective date is exactly that: a
             stamp saying which version of the document you are reading. */}
-        <p className="mt-1 inline-flex items-center gap-1.5 rounded border border-warn/25 bg-warn/[0.06] px-2 py-0.5 font-mono text-label uppercase tracking-widest text-warn">
+        <p className="mt-1 inline-flex items-center gap-1.5 font-mono text-label uppercase tracking-widest text-warn">
           Effective {LEGAL_EFFECTIVE}
         </p>
         <p className="mt-4 text-body leading-relaxed text-textSecondary">{intro}</p>

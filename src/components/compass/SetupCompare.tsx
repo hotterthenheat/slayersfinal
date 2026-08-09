@@ -296,7 +296,7 @@ const SetupCompare = ({ setup, peers, spot, scanner, onSelectPeer, onStudy }: Se
             legible if you already knew which one was the stock. */}
         <div className="flex flex-col gap-1.5 border-t border-borderSubtle pt-2.5">
           <Head unit="underlying">What kills it</Head>
-          <div className="flex items-start gap-2 border border-warn/20 bg-warn/[0.05] rounded-md px-3 py-2.5">
+          <div className="flex items-start gap-2 border-l-2 border-warn/60 pl-3 py-1">
             <AlertTriangle className="w-3.5 h-3.5 text-warn shrink-0 mt-0.5" />
             <p className="font-mono text-label text-textSecondary leading-relaxed">
               <span className="text-warn font-semibold uppercase tracking-wider">Breaks </span>
@@ -316,7 +316,7 @@ const SetupCompare = ({ setup, peers, spot, scanner, onSelectPeer, onStudy }: Se
         {field.length > 1 && (
           <div className="flex flex-col gap-1.5 border-t border-borderSubtle pt-2.5">
             <Head unit={`${field.length} contracts`}>{fieldLabel}</Head>
-            <div className="border border-borderSubtle rounded-md overflow-hidden">
+            <div className="border-t border-borderSubtle overflow-hidden">
               <DataTable
                 columns={columns}
                 rows={field}
