@@ -74,7 +74,7 @@ const Simulator = (() => {
 
   // Configured Tick States — core tickers with hand-set params. Equity base
   // prices are sourced from the shared universe so the live desks and the
-  // research pages (Stocks/News/Earnings/Compass) show the same price for the
+  // research pages (Stocks/Compass) show the same price for the
   // same name; SPY/QQQ are ETFs outside that universe and keep their own refs.
   const aaplPx = universeLookup('AAPL')?.px ?? 232.4;
   const nvdaPx = universeLookup('NVDA')?.px ?? 138.6;

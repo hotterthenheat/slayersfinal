@@ -325,7 +325,13 @@ const ALL_COLS: TapeCol[] = [
     help: 'OI',
     align: 'right',
     cls: 'text-label tnum text-textSecondary',
-    cell: r => r.oi.toLocaleString(),
+    /* `.value`, not the record.
+       `oi` is an OpenInterest — { value, asOf, freshness } — because OI
+       publishes once a day and the tape has to be able to say how stale it is.
+       Calling toLocaleString() on the record printed the string
+       "[object Object]" in this column on all 400 rows. The sibling ΔOI cell
+       three lines down already reads `.value`; this one was simply missed. */
+    cell: r => r.oi.value.toLocaleString(),
   },
   {
     id: 'doi',

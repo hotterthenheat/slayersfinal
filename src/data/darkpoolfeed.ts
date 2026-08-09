@@ -3,7 +3,7 @@
   SLAYER TERMINAL - DARK POOL FEED (darkpoolfeed.ts)
   A market-wide, sector-grouped view of off-exchange
   prints — the same shared equity universe as Stocks,
-  News and Earnings, so cross-module stories line up.
+  and Compass, so cross-module stories line up.
   Deterministic per ticker + session day (same pattern
   as buildStockBoard); swaps for a real consolidated
   dark-pool print feed behind the same shape.

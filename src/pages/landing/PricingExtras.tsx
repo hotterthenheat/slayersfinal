@@ -93,7 +93,7 @@ const ROWS: FeatureRow[] = [
   },
   {
     label: 'Research suite',
-    detail: 'Stocks board, news outcome model & the earnings hub',
+    detail: 'The ranked Stocks board — momentum and options flow, per name',
     tiers: [false, true, true],
   },
   {

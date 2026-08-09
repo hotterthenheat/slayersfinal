@@ -112,7 +112,7 @@ const ImpactLeaderboard = ({ rows }: ImpactLeaderboardProps) => {
         <SegmentedControl ariaLabel="Rank by" options={METRIC_OPTIONS} value={metric} onChange={setMetric} />
       }
     >
-      <DataTable columns={COLUMNS} rows={ranked} rowKey={r => `${r.contract}-${r.rank}`} maxHeight="320px" />
+      <DataTable columns={COLUMNS} rows={ranked} rowKey={r => `${r.contract}-${r.rank}`} />
     </Panel>
   );
 };

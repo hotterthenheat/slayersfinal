@@ -5,7 +5,6 @@ import {
   Radar,
   Sigma,
   BarChart3,
-  CalendarClock,
   Bookmark,
   Users,
   type LucideIcon,
@@ -16,7 +15,10 @@ import {
 // and could have sat on any dashboard: Scan ranks the whole universe, Read goes
 // deep on one name, Yours is the only pair whose contents you write, Models is
 // the math. Order is load-bearing — the terminal index pairs groups 0+2 and 1+3
-// into two columns and relies on 3+2 and 4+1 both being five rows.
+// into two columns, so the two column heights are Scan+Yours and Read+Models.
+// They are 3+2 and 2+1 since the Earnings desk was removed for want of an
+// earnings calendar; TerminalIndex renders a short group without complaint, but
+// a new desk should go to Read or Models before Scan if the balance matters.
 export type NavGroup = 'Scan' | 'Read' | 'Yours' | 'Models';
 
 export interface NavItem {
@@ -43,7 +45,7 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Stocks',
     code: '02',
     icon: BarChart3,
-    description: 'Ranked equity picks and sector rotation',
+    description: 'Ranked equity picks — momentum and options flow, per name',
     group: 'Scan',
   },
   {
@@ -73,19 +75,11 @@ export const NAV_ITEMS: NavItem[] = [
     description: 'GEX, dealer positioning, hedge impact and the fracture line',
     group: 'Read',
   },
-  {
-    path: '/earnings',
-    label: 'Earnings',
-    code: '07',
-    icon: CalendarClock,
-    description: 'Earnings hub: implied against realized, play it or fade it',
-    group: 'Read',
-  },
   // ── Yours: the desks you fill in ──
   {
     path: '/tracker',
     label: 'Tracker',
-    code: '08',
+    code: '06',
     icon: Bookmark,
     description: 'Bookmarked setups, contracts and names, watched in one place',
     group: 'Yours',
@@ -93,7 +87,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     path: '/community',
     label: 'Community',
-    code: '09',
+    code: '07',
     icon: Users,
     description: 'Trade ideas, requests and feedback',
     group: 'Yours',
@@ -102,7 +96,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     path: '/prove-it',
     label: 'Prove It',
-    code: '10',
+    code: '08',
     icon: Sigma,
     description: 'Quantitative modeling and predictive analytics',
     group: 'Models',

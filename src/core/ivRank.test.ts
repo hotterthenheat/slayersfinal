@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { ivRankFor, ivRankFromSeries } from './ivRank';
 import { dayKey } from './rng';
 import { buildVolLab } from '../data/vollab';
-import { buildEarningsCalendar } from '../data/earnings';
+import { buildVolComplex } from '../data/volComplex';
+import Simulator from './simulator';
 
 describe('P2.1 — one IV rank, shared by every desk', () => {
   it('ivRankFor is deterministic per (ticker, day) and stays in range', () => {
@@ -20,13 +21,23 @@ describe('P2.1 — one IV rank, shared by every desk', () => {
     expect(ivRankFromSeries([], 30)).toEqual({ rank: 50, percentile: 50 });
   });
 
-  it('the Vol Lab and the Earnings Hub read the identical rank for a name', () => {
+  it('the Vol Lab and the Vol Complex read the identical rank for a name', () => {
+    /*
+      TWO independent readers, deliberately. The invariant this file names is
+      that ONE rank is shared, and a single witness cannot show sharing — it
+      only shows that one caller agrees with the source.
+
+      The second witness used to be the Earnings Hub, which read the same rank
+      across its whole slate. That desk was removed (no earnings calendar on any
+      feed tier), so the Vol Complex takes its place: it is a separate engine,
+      on a separate desk, resolving the rank through the same ivRankFor.
+    */
     const day = dayKey();
-    // Vol Lab
     expect(buildVolLab('MSFT', 448, 0.2).term.stats.ivRank).toBe(ivRankFor('MSFT', day).rank);
-    // Earnings Hub — every record on the slate equals the shared source
-    for (const e of buildEarningsCalendar()) {
-      expect(e.ivRank).toBe(ivRankFor(e.ticker, day).rank);
-    }
+    Simulator.ensureTicker('MSFT');
+    const cfg = Simulator.TICKERS.MSFT;
+    expect(buildVolComplex('MSFT', cfg.currentPrice, cfg.iv, Simulator.getCandles('MSFT')).ivRank).toBe(
+      ivRankFor('MSFT', day).rank
+    );
   });
 });

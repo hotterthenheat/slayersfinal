@@ -18,10 +18,23 @@
   measure for reading, it centres that measure inside this container rather than
   shrinking the container.
 
-  The cap is deliberately generous. Below it the container is the full viewport
-  minus gutters, which is what a dense desk wants and what every laptop gets; it
-  only bites on very wide monitors, where an unbounded terminal stops being
-  readable and starts being a smear.
+  There is NO max-width. There was one — 1280px — and it was wrong for this
+  product. A cap does not centre a terminal, it parks it: measured at a 1600px
+  viewport the shell rendered 1280 wide at x=155, so 310px of the screen was
+  painted background and nothing else, and the wide tables that are the whole
+  point of a desk (the 13-column dark pool tape) had to scroll horizontally
+  INSIDE that column while a third of the monitor sat empty beside them.
+
+  So the column is the viewport minus the gutters, at every width. `mx-auto` is
+  kept because `w-full` with no cap makes it a no-op today, and it is what makes
+  the rule survive if a cap is ever reintroduced for a specific surface.
+
+  Prose is a real exception to "fill the width" — a 2200px line is unreadable —
+  but it is NOT an exception to this rule. There used to be a PROSE_MEASURE
+  export here (`mx-auto w-full max-w-3xl`) that the legal pages centred inside
+  the column, and it measured as 760px of untouched screen at 2560. It is gone.
+  A page that needs short lines gets them by laying its content out in columns
+  that consume the width, not by shrinking to the middle — see legal/LegalLayout.
 ==================================================
 */
 
@@ -29,13 +42,4 @@
 export const PAGE_GUTTER = 'px-4 lg:px-6 2xl:px-8';
 
 /** The shared column. Apply to a page body, the bar's contents, the footer. */
-export const PAGE_CONTAINER = `mx-auto w-full max-w-[1800px] ${PAGE_GUTTER}`;
-
-/**
- * A readable prose measure, centred in the container rather than pinned left.
- *
- * The legal pages had `max-w-3xl` inside a grid cell with no centring, which is
- * how their text ended up left of the page's midline while the chrome around it
- * was symmetric.
- */
-export const PROSE_MEASURE = 'mx-auto w-full max-w-3xl';
+export const PAGE_CONTAINER = `mx-auto w-full ${PAGE_GUTTER}`;

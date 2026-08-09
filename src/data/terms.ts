@@ -48,7 +48,6 @@ export const TERMS = {
   Cmp: 'Compare — pin this row for side-by-side comparison.',
   '30d RS': 'Relative strength vs sector over 30 days — above the line is outperforming.',
   'Est ΔOI/d': 'Estimated open-interest change per day if the current flow pace holds.',
-  MOC: 'Market-on-close — the imbalance auction in the final minutes of the session.',
   Dist: 'Distance from spot, signed %.',
   Class: 'Hedging class — how dealer hedging at the strike shapes price: cushion, resistance, or magnet.',
 } as const;

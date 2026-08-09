@@ -11,7 +11,7 @@
 
 import { useMemo, useState, useEffect, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bookmark, Trash2, ArrowUpRight, Compass, Scale, Radar, CalendarClock, StickyNote } from 'lucide-react';
+import { Bookmark, Trash2, ArrowUpRight, Compass, Scale, Radar, StickyNote } from 'lucide-react';
 import { useTracker } from '../context/TrackerContext';
 import EdgeLedger from '../components/tracker/EdgeLedger';
 import { useMarketData } from '../context/MarketDataContext';
@@ -832,7 +832,7 @@ const Tracker = () => {
                 { k: 'Read', v: 'current', s: 'recomputed on open' },
                 { k: 'Notes', v: 'saved', s: 'in this browser' },
               ].map(x => (
-                <div key={x.k} className="border border-borderSubtle bg-inset rounded-lg px-3 py-2.5 text-center min-w-[92px]">
+                <div key={x.k} className="px-3 py-2.5 text-center min-w-[92px] border-l border-borderSubtle first:border-l-0">
                   <div className="font-mono text-micro uppercase tracking-widest text-textMuted">{x.k}</div>
                   <div className="mt-1 font-mono text-body font-semibold text-textPrimary leading-5">{x.v}</div>
                   <div className="mt-0.5 text-micro text-textMuted">{x.s}</div>
@@ -841,12 +841,11 @@ const Tracker = () => {
             </div>
           </Panel>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
             {[
               { icon: Compass, title: 'Compass setups', body: 'Graded QUALIFIED / WATCH / FADED setups with a full plan.', to: '/compass', cta: 'Open Compass' },
               { icon: Scale, title: 'Contract Weigher', body: 'Weeklies, swings & LEAPS scored STRONG / WATCH / WEAK.', to: '/compass', cta: 'Weigh contracts' },
               { icon: Radar, title: 'Trace flow', body: 'Notable options prints and dark-pool blocks.', to: '/trace/scanner', cta: 'Open Trace' },
-              { icon: CalendarClock, title: 'Earnings prints', body: 'Implied-vs-realized reads graded QUALIFIED / RICH / NO EDGE.', to: '/earnings', cta: 'Open Earnings' },
             ].map(card => (
               <div key={card.title} className="inst-surface rounded-md p-4 flex flex-col gap-2.5">
                 <span className="inline-flex w-8 h-8 rounded-md border border-borderSubtle bg-inset items-center justify-center">
@@ -949,7 +948,6 @@ const Tracker = () => {
                 rowKey={r => r.tracked.id}
                 onRowClick={r => setSelectedId(r.tracked.id)}
                 selectedKey={selected?.tracked.id ?? null}
-                maxHeight="max(560px, 62vh)"
                 emptyText={`Nothing in ${VIEWS.find(v => v.value === view)?.label}`}
               />
               {/* Book across lanes — anchors the base of the panel and doubles as

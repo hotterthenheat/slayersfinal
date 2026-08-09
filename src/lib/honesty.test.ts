@@ -122,8 +122,8 @@ describe('no fabricated certainty', () => {
 
     Whole words ONLY. The same rule on the four-letter abbreviations flagged
     three internal identifiers that no reader ever sees — `seed('conf')` and
-    `h('conf')` are RNG seed strings (core/fracture.ts, data/news.ts) and
-    `key: 'conv'` is a DataTable column id whose header reads "Match"
+    `h('conf')` were RNG seed strings (core/fracture.ts, and data/news.ts before
+    it was deleted) and `key: 'conv'` is a DataTable column id whose header reads "Match"
     (flowdesk/DarkPool.tsx). Banning those would train the next person to
     rename a seed string to satisfy a test, which is worse than the defect.
     Prose is untouched either way: "rather than fresh conviction buying" is a
@@ -162,6 +162,76 @@ describe('no fabricated certainty', () => {
     const market = FILES.find(f => rel(f.path) === 'types/market.ts')!;
     expect(compass.code, 'Setup.confidence is back on the type').not.toMatch(/^\s*confidence\s*[?]?:/m);
     expect(market.code, 'TradePlan.confidence is back on the type').not.toMatch(/^\s*confidence\s*[?]?:/m);
+  });
+});
+
+/*
+==================================================
+  THE ENTITLEMENT BOUNDARY
+
+  The product is built on three market-data subscriptions: options (OPRA
+  trades, NBBO, vendor greeks), equities, and index quotes. Several engines
+  were built on quantities that none of the three can produce, and every one of
+  them presented a hash of the ticker as a measurement — a report date, an
+  analyst revision, a headline, a sector membership, an unpaired auction
+  imbalance in dollars.
+
+  Deleting a file does not stop the next one. The names below are the exact
+  entry points that were removed, and the module paths are the imports that
+  vanished with them. `docs/DATA-FEASIBILITY.md` holds the per-desk reasoning.
+==================================================
+*/
+describe('no engine without a feed', () => {
+  /** [identifier, what it needed that no entitlement carries] */
+  const NO_SOURCE: [string, string][] = [
+    ['buildMoc', 'the closing-auction engine — unpaired auction interest and the indicative price come from an exchange imbalance feed (Nasdaq NOII / NYSE Order Imbalances)'],
+    ['MocRead', 'the closing-auction read type — same feed'],
+    ['absorptionPct', 'how much of an auction imbalance the paired book soaks up — same feed'],
+    ['buildEarningsCalendar', 'report dates — an earnings calendar'],
+    ['directionVote', 'analyst revisions and estimate flow'],
+    ['buildNewsFeed', 'a news wire'],
+    ['catalystPriors', 'a news wire, laundered into a quant prior'],
+    ['tickerSentiment', 'a news wire'],
+    ['buildSectorBoard', 'a sector taxonomy and constituent membership'],
+    ['RotationPhase', 'a sector taxonomy'],
+  ];
+
+  it('does not rebuild an engine whose primary input has no feed', () => {
+    const found: string[] = [];
+    for (const [needle, why] of NO_SOURCE) {
+      for (const f of FILES) {
+        // Word-boundary, so a longer identifier that merely contains one of
+        // these is not swept up with it.
+        if (new RegExp(`\\b${needle}\\b`).test(f.code)) {
+          found.push(`${rel(f.path)} — \`${needle}\` is back. It needs ${why}, and no entitlement carries it.`);
+        }
+      }
+    }
+    expect(found, found.join('\n')).toEqual([]);
+  });
+
+  /** Modules deleted outright. An import of one cannot resolve, but it can be written. */
+  const GONE = ['data/earnings', 'data/earningsintel', 'data/news', 'pages/EarningsHub', 'components/earnings/'];
+
+  it('imports nothing from a module that was removed for having no feed', () => {
+    const found: string[] = [];
+    for (const f of FILES) {
+      for (const mod of GONE) {
+        // Import and re-export specifiers only — a bare mention in a string is
+        // not a dependency, and the post-mortem comments are stripped already.
+        if (new RegExp(`from\\s+["'][^"']*${mod}["']`).test(f.code)) {
+          found.push(`${rel(f.path)} — imports from the removed module "${mod}"`);
+        }
+      }
+    }
+    expect(found, found.join('\n')).toEqual([]);
+  });
+
+  it('keeps the auction read off the Fracture view', () => {
+    const fracture = FILES.find(f => rel(f.path) === 'types/fracture.ts')!;
+    // FractureView carried `moc: MocRead` — one field putting an unsourceable
+    // engine on a type five surfaces read.
+    expect(fracture.code, 'FractureView.moc is back on the type').not.toMatch(/^\s*moc\s*[?]?:/m);
   });
 });
 

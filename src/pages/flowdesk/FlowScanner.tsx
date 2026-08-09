@@ -297,7 +297,7 @@ const FilterMenu = ({
               <RotateCcw className="w-3 h-3" /> Reset
             </button>
           </div>
-          <div className="max-h-[70vh] overflow-y-auto divide-y divide-borderSubtle/60">
+          <div className="divide-y divide-borderSubtle/60">
             <FilterRow label="DTE" options={DTE_OPTIONS} value={filters.dte} onChange={v => patch({ dte: v })} />
             <FilterRow label="Moneyness" options={MONEY_OPTIONS} value={filters.money} onChange={v => patch({ money: v })} />
             <FilterRow label="Min premium" options={PREM_OPTIONS} value={filters.prem} onChange={v => patch({ prem: v })} />
@@ -709,7 +709,6 @@ const FlowScanner = () => {
           onRowClick={r => setSelectedId(r.id)}
           selectedKey={selectedId}
           initialSort={{ key: 'premium', dir: 'desc' }}
-          maxHeight="max(560px, 62vh)"
           emptyText="No contracts match these filters"
         />
       </Panel>

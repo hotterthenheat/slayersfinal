@@ -106,7 +106,7 @@ describe('story clock', () => {
   });
 
   it('runs for the length the copy claims', () => {
-    expect(Math.round(TRAILER_DURATION_MS / 1000)).toBe(84);
+    expect(Math.round(TRAILER_DURATION_MS / 1000)).toBe(77);
   });
 });
 
@@ -218,25 +218,6 @@ describe('one session', () => {
       expect(e.dte).toBe(dte);
       expect(isTradingDay(e.date)).toBe(true);
     }
-  });
-
-  it('puts earnings after the weeklies it is quoted against', () => {
-    const nearest = Math.min(...story.contracts.map(c => c.dte));
-    expect(story.earnings.daysAway).toBeGreaterThan(nearest);
-    const e = expiryFor(story.earnings.daysAway, new Date(story.sessionStart));
-    expect(fmtMonthDay(e.date).toUpperCase()).toBe(story.earnings.date);
-  });
-
-  it('stamps the news cluster inside the window the scene plays it in', () => {
-    const window = (storyUAtSceneEnd('news') - storyUAtSceneStart('news')) * STORY_SECONDS;
-    for (const item of story.news.items) {
-      expect(item.at).toBeGreaterThanOrEqual(0);
-      expect(item.at).toBeLessThanOrEqual(window);
-    }
-    // And they still arrive in order, spread across it rather than bunched.
-    const ats = story.news.items.map(i => i.at);
-    expect([...ats].sort((a, b) => a - b)).toEqual(ats);
-    expect(ats[ats.length - 1]).toBeGreaterThan(window * 0.5);
   });
 
   it('fits the tape sequence inside the window the scene plays it in', () => {

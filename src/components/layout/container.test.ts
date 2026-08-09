@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { PAGE_CONTAINER, PAGE_GUTTER, PROSE_MEASURE } from './container';
+import { PAGE_CONTAINER, PAGE_GUTTER } from './container';
 
 /*
 ==================================================
@@ -45,9 +45,19 @@ const rel = (p: string) => p.slice(SRC.length + 1);
 const OUTSIDE_SHELL = /^pages\/(landing|trailer)\//;
 
 describe('the page column', () => {
-  it('is declared in exactly one place', () => {
-    const declares = FILES.filter(f => f.text.includes('max-w-[1800px]')).map(f => rel(f.path));
-    expect(declares).toEqual(['components/layout/container.ts']);
+  it('caps nothing — the column is the viewport minus its gutters', () => {
+    /*
+      This test used to assert a cap was declared exactly once, and the cap
+      itself was the bug. 1280px on a 1600px screen paints 310px of pure
+      background and pushes the 13-column dark pool tape into a horizontal
+      scroll while a third of the monitor sits empty next to it.
+
+      So the rule inverted: the shared column must carry NO max-width in any
+      spelling — neither the Tailwind scale (max-w-7xl) nor an arbitrary value
+      (max-w-[1280px]) — because either one reintroduces the dead space.
+    */
+    expect(PAGE_CONTAINER).not.toMatch(/\bmax-w-/);
+    expect(PAGE_CONTAINER).toContain('w-full');
   });
 
   it('is used by the bar, the body and the footer', () => {
@@ -58,10 +68,16 @@ describe('the page column', () => {
     }
   });
 
-  it('no page inside the shell sets its own width', () => {
+  it('nothing inside the shell caps and centres itself', () => {
     /*
-      The exact shape that caused it: a root element that both caps its width
-      and centres itself, which makes a page a box inside the page.
+      The exact shape that caused it: an element that both caps its width and
+      centres itself, which parks content in the middle of the screen.
+
+      Named for a page's root element, but it reads every className in the file
+      and the nested case is the one that survived longest: after the page cap
+      was removed, the legal pages still centred a `max-w-3xl` prose column
+      inside a full-width page and measured 200px of untouched width at 1440 and
+      760px at 2560.
 
       This had TWO independent holes, and each one on its own made the check
       decorative:
@@ -82,22 +98,55 @@ describe('the page column', () => {
       element and mx-auto on another is not this bug.
     */
     const CLASS_ATTR = /className=(?:"([^"]*)"|'([^']*)'|\{\s*(?:`([^`]*)`|'([^']*)'|"([^"]*)")\s*\})/g;
-    const CAPS_WIDTH = /\bmax-w-(?:\d?xl\b|\[[^\]]+\])/;
+    // `max-w-prose` and `max-w-screen-*` cap just as hard as `max-w-3xl` and
+    // were both outside the original alternation.
+    const CAPS_WIDTH = /\bmax-w-(?:\d?xl\b|prose\b|screen-\w+\b|\[[^\]]+\])/;
     const CENTRES = /\bmx-auto\b/;
+    /*
+      A declared exemption, not an allowlist in this file.
+
+      One cap in the app is genuinely correct: the calibration plot on Prove It
+      must be SQUARE, because a 45-degree reference line stops being 45 degrees
+      the moment the plot is stretched. Encoding that as a path here would put
+      the reason in the guard instead of at the site, and the next square figure
+      would have to come back and edit the test.
+
+      So a site opts out by saying so on the spot — `layout-cap-ok: <reason>`
+      within the preceding 600 characters. That keeps the rule strict
+      everywhere, keeps each exception's reasoning next to the code it excuses,
+      and makes every exemption greppable.
+    */
+    const EXEMPT = /layout-cap-ok/;
     const setsOwnWidth = (text: string) =>
       [...text.matchAll(CLASS_ATTR)].some(m => {
         const classes = m[1] ?? m[2] ?? m[3] ?? m[4] ?? m[5] ?? '';
-        return CAPS_WIDTH.test(classes) && CENTRES.test(classes);
+        if (!CAPS_WIDTH.test(classes) || !CENTRES.test(classes)) return false;
+        return !EXEMPT.test(text.slice(Math.max(0, (m.index ?? 0) - 600), m.index));
       });
+    /*
+      `pages/` was not enough. The Weigher's root carried
+      `mx-auto w-full max-w-[1180px]` and lives in `components/compass/`, so it
+      parked the whole mode in the middle of a 2560 screen with ~660px of
+      background either side while this suite stayed green. A cap does the same
+      damage wherever it is declared.
+
+      `components/ui/` is exempt: an overlay, a modal, a toast and a dropdown
+      are SUPPOSED to be a bounded box floating over the page, and that is the
+      whole job of the primitives there.
+    */
+    const IN_SCOPE = /^(pages|components)\//;
+    const PRIMITIVES = /^components\/(ui|layout)\//;
     const offenders = FILES.filter(f => {
       const r = rel(f.path);
-      if (!r.startsWith('pages/') || OUTSIDE_SHELL.test(r)) return false;
+      if (!IN_SCOPE.test(r) || OUTSIDE_SHELL.test(r) || PRIMITIVES.test(r)) return false;
       return setsOwnWidth(f.text);
     }).map(f => rel(f.path));
     expect(
       offenders,
-      `These pages cap and centre themselves inside a column that is already centred. ` +
-        `Use PAGE_CONTAINER for the page and PROSE_MEASURE for a reading measure inside it.`
+      `These cap and centre themselves inside a column that already fills the screen, which parks ` +
+        `content in the middle of the monitor. Fill the column, or lay the content out in ` +
+        `columns that consume the width. If a cap is genuinely required (a square plot), say ` +
+        `so with a \`layout-cap-ok: <reason>\` comment at the site.`
     ).toEqual([]);
   });
 
@@ -111,7 +160,4 @@ describe('the page column', () => {
     ]);
   });
 
-  it('centres a reading measure rather than pinning it left', () => {
-    expect(PROSE_MEASURE).toContain('mx-auto');
-  });
 });

@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import Simulator from './simulator';
 import { histogram, modelScoreboard, type ModelRow } from './quant';
-import { catalystPriors } from '../data/news';
 import { buildFlowSweeps } from '../data/flowSweeps';
 import type { Candle } from '../types/market';
 
@@ -54,7 +53,16 @@ const RETIRED_HIT_RATES = [68, 64, 71, 61, 66];
 const RETIRED_SAMPLES = [412, 286, 530, 348, 124];
 
 /** Engines that were carried on the board with a number nothing could resolve. */
-const UNSCOREABLE_ENGINES = ['Compass Weigher', 'Trace Posture', 'Pinpoint Levels', 'Earnings Engine'];
+const UNSCOREABLE_ENGINES = [
+  'Compass Weigher',
+  'Trace Posture',
+  'Pinpoint Levels',
+  // Both of these went with their data. The earnings calendar and the news wire
+  // are not on any feed tier the product can buy, so neither engine has a real
+  // event to be scored against — see core/quant.ts's header.
+  'Earnings Engine',
+  'News outcome model',
+];
 
 const board = modelScoreboard();
 const row = (name: string): ModelRow => {
@@ -117,36 +125,6 @@ describe('model scoreboard: every row is scored, none is asserted', () => {
       // far outside a percentage; a block hit rate cannot.
       expect(Math.max(...r.trend) - Math.min(...r.trend)).toBeLessThanOrEqual(100);
     }
-  });
-});
-
-describe('news outcome model row re-derives from the catalyst priors', () => {
-  const priors = catalystPriors();
-  const r = row('News outcome model');
-
-  it('counts n off the prior population', () => {
-    const resolved = priors.filter(p => Math.sign(p.expMove1dPct) !== 0 && p.realized1dPct !== 0);
-    expect(r.sample).toBe(resolved.length);
-  });
-
-  it('re-derives the hit rate independently', () => {
-    const pairs = priors.map<[number, number]>(p => [Math.sign(p.expMove1dPct), p.realized1dPct]);
-    expect(r.hitRatePct).toBe(Math.round(rateOf(pairs)));
-  });
-
-  it('re-derives edge as the mean move in the called direction, in bps', () => {
-    const live = priors.filter(p => Math.sign(p.expMove1dPct) !== 0 && p.realized1dPct !== 0);
-    const mean = live.reduce((a, p) => a + Math.sign(p.expMove1dPct) * p.realized1dPct, 0) / live.length;
-    expect(r.edgeBps).toBe(Math.round(mean * 100) || 0);
-  });
-
-  it('blocks the rolling series oldest-first over the same priors', () => {
-    const chron = [...priors]
-      .filter(p => Math.sign(p.expMove1dPct) !== 0 && p.realized1dPct !== 0)
-      .sort((a, b) => b.sessionsBack - a.sessionsBack);
-    const size = Math.floor(chron.length / 12);
-    const first = chron.slice(0, size).map<[number, number]>(p => [Math.sign(p.expMove1dPct), p.realized1dPct]);
-    expect(r.trend[0]).toBeCloseTo(rateOf(first), 6);
   });
 });
 

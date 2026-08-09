@@ -130,11 +130,13 @@
    position:relative and to leave ::before/::after free.
    ============================================================ */
 .inst-surface {
-  background-color: #0a0a0a;
-  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0) 46%);
-  border: 1px solid #1c1c1c;
-  border-top-color: #333333; /* machined bevel — catches the light */
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03); /* crisp top-lit edge */
+  /* Was a box: a fill, a 1px border on all four sides, a bevelled top edge and
+     an inset highlight. Multiply that by every Panel on a desk and the page is
+     a pile of tiles. A section is now marked by a RULE and by space — the
+     header's own bottom hairline does the separating — so nothing here draws a
+     container. Kept as a class rather than deleted because ~40 call sites name
+     it, and one definition is the whole point. */
+  background-color: transparent;
 }
 
 /* ============================================================
@@ -188,11 +190,11 @@
    touch more top-light. No animation, no silver chrome — the hierarchy reads
    from contrast, not ornament. */
 .inst-emphasis {
-  background-color: #0b0b0b;
-  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0) 46%);
-  border: 1px solid #2a2a2a;
-  border-top-color: #3a3a3a;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  /* The hero surface, and the boxiest thing on any page. Hierarchy now reads
+     from the ink and the type scale, which is where it should have read from:
+     a brighter frame is ornament arguing for attention the content should win
+     on its own. */
+  background-color: transparent;
 }
 
 /* Selection rail — the left-edge accent on a selected / active / spotlit row.
@@ -284,10 +286,18 @@
   }
 }
 
-/* The shell's single scroll container. Reserving the gutter unconditionally
-   keeps column widths identical whether or not a desk crosses the fold, so
-   nothing reflows the moment live data pushes the page past one screen. */
-#main-content {
+/* The document is the scroll container — there is no inner one. Reserving the
+   gutter unconditionally keeps column widths identical whether or not a desk
+   crosses the fold, so nothing reflows the moment live data pushes the page
+   past one screen.
+
+   This used to sit on #main-content, back when the shell was h-screen
+   overflow-hidden around an overflow-y-auto <main>. That made the site a
+   fixed-size window with the page sliding behind it: Home and End did nothing
+   unless focus was inside the region, scroll restoration never fired, and
+   mobile browsers never collapsed their URL bar because from their side the
+   page never moved. */
+html {
   scrollbar-gutter: stable;
 }
 

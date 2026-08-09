@@ -1,6 +1,6 @@
 import { WIDGETS, type WidgetDef, type WorkspaceCtx } from '../workspace/registry';
 import DataUnavailablePanel from '../../components/workspace/DataUnavailablePanel';
-import { buildMocRead, buildFractureView } from '../../core/fracture';
+import { buildFractureView } from '../../core/fracture';
 import { dayKey } from '../../core/rng';
 import type { MarketSnapshot } from '../../types/market';
 
@@ -21,33 +21,6 @@ function fractureFor(snapshot: MarketSnapshot) {
 
 /** Analytical Pulse-only panels on top of the shared workspace catalog. */
 const PULSE_EXTRA: WidgetDef[] = [
-  {
-    key: 'moc-read',
-    title: 'Closing Auction (MOC)',
-    description: 'Imbalance, absorption & the closing-auction call',
-    w: 5,
-    h: 6,
-    minW: 3,
-    minH: 4,
-    render: (ctx: WorkspaceCtx) => {
-      const moc = buildMocRead(ctx.snapshot);
-      return (
-        <div className="h-full p-3 flex flex-col gap-2 overflow-auto">
-          <div className="flex items-center gap-2">
-            <span className={`font-mono text-2xl font-bold tnum ${moc.score >= 0 ? 'text-bull' : 'text-bear'}`}>
-              {moc.score >= 0 ? '+' : ''}
-              {moc.score}
-            </span>
-            <span className="font-mono text-micro uppercase tracking-widest text-textSecondary">{moc.classification}</span>
-          </div>
-          <div className="font-mono text-label text-textMuted">
-            {moc.side} imbalance · {moc.absorptionPct}% absorbed · reversal {moc.reversalRisk}%
-          </div>
-          <p className="text-label text-textSecondary leading-relaxed">{moc.note}</p>
-        </div>
-      );
-    },
-  },
   {
     key: 'fracture-snapshot',
     title: 'Fracture Snapshot',

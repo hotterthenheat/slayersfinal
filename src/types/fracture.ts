@@ -61,39 +61,6 @@ export interface CascadeResult {
   paths: number[][];
 }
 
-export interface MoveDecomposition {
-  informational: number;
-  dealerHedging: number;
-  systematic: number;
-  passive: number;
-  shortCovering: number;
-  liquidation: number;
-  unexplained: number;
-}
-
-export type MocClassification = 'CONTINUATION' | 'ABSORPTION FADE' | 'DISLOCATION REVERSAL' | 'NO TRADE';
-
-export interface MocRead {
-  /** Signed unpaired auction interest, dollars (negative = sell imbalance) */
-  imbalanceUsd: number;
-  side: 'BUY' | 'SELL' | 'BALANCED';
-  /** Normalized imbalance z-score vs expected auction liquidity */
-  normalizedZ: number;
-  /** Imbalance growth over the last updates, signed */
-  growthZ: number;
-  /** Indicative-price displacement from mid, in intraday-vol units */
-  displacementZ: number;
-  /** How much of the imbalance the paired book is soaking up, 0–100 */
-  absorptionPct: number;
-  /** Confirmation from futures / ETF / sector, −1…+1 */
-  confirmation: number;
-  /** Odds the imbalance mean-reverts before the cross, 0–100 */
-  reversalRisk: number;
-  /** Composite MOC score, −100…+100 (signed toward the trade) */
-  score: number;
-  classification: MocClassification;
-  note: string;
-}
 
 export interface FractureView {
   ticker: string;
@@ -111,6 +78,4 @@ export interface FractureView {
   levels: ForcedFlowLevel[];
   criticality: CriticalityRead;
   cascade: CascadeResult;
-  decomposition: MoveDecomposition;
-  moc: MocRead;
 }

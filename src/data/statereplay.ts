@@ -6,7 +6,7 @@
 
   It reads today's market state as an 8-factor vector
   (dealer positioning, vol regime, liquidity, breadth,
-  rates, news, options flow, time-of-day), SYNTHESIZES
+  rates, options flow, time-of-day), SYNTHESIZES
   a pool of sessions around it, scores each on
   similarity, and replays the outcome distribution of
   the closest analogs against THIS setup's target and
@@ -39,7 +39,7 @@
       whether the sampler is stationary.
 
   Dealer/vol/flow come off the live chain and tape;
-  breadth, rates, news and time-of-day are modeled
+  breadth, rates and time-of-day are modeled
   macro context and clearly swap for real feeds behind
   the same contract. Deterministic per ticker + day.
 ==================================================
@@ -48,15 +48,27 @@
 import { dayKey, hRange, h01, hGauss } from '../core/rng';
 import type { MarketSnapshot } from '../types/market';
 
-export type FeatureKey = 'dealer' | 'vol' | 'liquidity' | 'breadth' | 'rates' | 'news' | 'flow' | 'tod';
+/*
+  SIX FACTORS, and the two that went are worth naming.
+
+  `news` described "headline pressure on the session". There is no news wire on
+  any feed tier, and data/news.ts — the module that invented the pressure — is
+  deleted, so the factor described a reading nothing could ever produce.
+
+  `liquidity` described "depth available to absorb flow", which is an order
+  book. The app already refuses to draw one: pulse/pulseRegistry.tsx gates the
+  DOM ladder behind DataUnavailablePanel with "a streaming Level-2 order-book
+  feed" as the reason. Refusing depth on one desk while quietly using it as a
+  state axis on another is the same claim made twice, once out loud and once
+  not.
+*/
+export type FeatureKey = 'dealer' | 'vol' | 'breadth' | 'rates' | 'flow' | 'tod';
 
 export const STATE_FEATURES: { key: FeatureKey; label: string; blurb: string }[] = [
   { key: 'dealer', label: 'Dealer positioning', blurb: 'net gamma sign & size dealers must hedge' },
   { key: 'vol', label: 'Vol regime', blurb: 'realized/implied energy in the tape' },
-  { key: 'liquidity', label: 'Liquidity', blurb: 'depth available to absorb flow' },
   { key: 'breadth', label: 'Breadth', blurb: 'how broad the move is' },
   { key: 'rates', label: 'Rates', blurb: 'macro rates backdrop' },
-  { key: 'news', label: 'News', blurb: 'headline pressure on the session' },
   { key: 'flow', label: 'Options flow', blurb: 'aggressive call/put tape imbalance' },
   { key: 'tod', label: 'Time of day', blurb: 'session phase the state sits in' },
 ];
@@ -222,19 +234,15 @@ export function buildStateReplay(snapshot: MarketSnapshot): StateReplayView {
   const slope = ph.length > 1 ? (ph[ph.length - 1] - ph[0]) / (Math.abs(ph[0]) || 1) : 0;
   const breadth = clamp01(0.5 + slope * 2.5);
   // Modeled macro context — clearly swappable for real feeds behind the same contract.
-  const liquidity = clamp01(hRange(fs('liq'), 0.22, 0.86));
   const rates = clamp01(hRange(fs('rates'), 0.2, 0.82));
-  const news = clamp01(hRange(fs('news'), 0.15, 0.85));
   const tod = clamp01(hRange(fs('tod'), 0.12, 0.88));
 
-  const todayVec: Record<FeatureKey, number> = { dealer, vol, liquidity, breadth, rates, news, flow, tod };
+  const todayVec: Record<FeatureKey, number> = { dealer, vol, breadth, rates, flow, tod };
   const live: Record<FeatureKey, boolean> = {
     dealer: true,
     vol: true,
-    liquidity: false,
     breadth: false,
     rates: false,
-    news: false,
     flow: true,
     tod: false,
   };

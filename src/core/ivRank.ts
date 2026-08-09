@@ -3,7 +3,7 @@
   SLAYER TERMINAL - IV RANK (ivRank.ts)  [P2.1]
   ONE source of truth for IV rank and IV percentile, keyed on (ticker, day).
   These two numbers used to be drawn from unrelated hashes on the Vol Lab and the
-  Earnings Hub, so the same name read one rank on one desk and a different one on
+  Vol Complex, so the same name read one rank on one desk and a different one on
   another. Both desks call this now.
 
   The production shape is ivRankFromSeries(series, current): the real feed passes

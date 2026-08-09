@@ -302,7 +302,6 @@ const EdgeLedger = () => {
             rowKey={t => t.id}
             onRowClick={t => setSelectedId(t.id)}
             selectedKey={selected.id}
-            maxHeight="max(520px, 58vh)"
           />
         </Panel>
 

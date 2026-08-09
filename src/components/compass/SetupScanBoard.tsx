@@ -22,10 +22,16 @@ const SCAN_LAYOUT_OPTIONS = [
     couple of hundred a sweep now admits. */
 const CARDS_PER_PAGE = 24;
 
-/* Content height, capped — never a fixed allowance. A box built for fifty rows
-   holding eight is the "so much empty space" the scan pane was accused of; a
-   cap only bites once there is more than a screenful to hold. */
-const SCROLL_CAP = 'max(360px, calc(100vh - 340px))';
+/* No height cap and no scroller of its own.
+
+   There was one — `max(360px, calc(100vh - 340px))` — and it made the board a
+   box inside the page: a reader who scrolled the window hit the bottom of the
+   document with the board's own list still holding rows, then had to find the
+   inner scrollbar and start again. The page paginates at CARDS_PER_PAGE, which
+   is the actual answer to "a couple of hundred rows"; a second, invisible
+   window on top of the pagination was doing nothing the pager did not.
+
+   The table branch drops its cap for the same reason. */
 
 interface SetupScanBoardProps {
   /** Flat and already globally ranked — best in the scan first. */
@@ -227,11 +233,10 @@ const SetupScanBoard = ({
           onRowClick={onSelect}
           selectedKey={selectedId}
           initialSort={{ key: 'score', dir: 'desc' }}
-          maxHeight={SCROLL_CAP}
           emptyText="No setups meet this scanner's threshold right now"
         />
       ) : (
-        <div className="overflow-y-auto p-2.5" style={{ maxHeight: SCROLL_CAP }}>
+        <div className="p-2.5">
           {/* The cards are listitems, so the thing holding them has to be a
               list — an orphaned listitem is dropped from the tree entirely. */}
           <div role="list" aria-label="Ranked contracts" className="grid gap-2 sm:grid-cols-2">

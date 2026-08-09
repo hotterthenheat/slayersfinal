@@ -23,7 +23,7 @@ const BASE = process.env.CSP_BASE ?? 'http://localhost:8099';
 const CHROME = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
 
 const ROUTES = [
-  '/', '/terminal', '/pulse', '/compass', '/stocks', '/earnings', '/prove-it',
+  '/', '/terminal', '/pulse', '/compass', '/stocks', '/prove-it',
   '/tracker', '/trailer',
   '/guide/overview', '/guide/desks', '/guide/concepts', '/guide/faq', '/guide/shortcuts',
   '/pinpoint/gamma', '/pinpoint/levels', '/pinpoint/greeks', '/pinpoint/stress',

@@ -13,9 +13,20 @@ describe('footerVariant', () => {
     expect(isTerminalRoute('/pulse')).toBe(true);
   });
 
-  it('gives the working desks the compact bar', () => {
+  /*
+    The desks used to end on a `compact` one-bar footer, on the reasoning that a
+    five-column sitemap under a 240-row tape is furniture in the middle of the
+    work. The owner overruled it: a site ends the same way on every page, and a
+    reader arriving on a desk from anywhere else should not find the chrome has
+    quietly changed shape. Being dense does not earn an exception; owning the
+    viewport does, which is why Pulse still has one.
+
+    Asserted as an absence rather than deleted, so the third variant cannot
+    reappear one desk at a time.
+  */
+  it('ends every desk on the same footer as every document', () => {
     for (const path of ['/trace', '/trace/live-tape', '/pinpoint', '/pinpoint/gamma', '/compass', '/prove-it']) {
-      expect(footerVariant(path), path).toBe('compact');
+      expect(footerVariant(path), path).toBe('full');
     }
   });
 
@@ -23,7 +34,6 @@ describe('footerVariant', () => {
     for (const path of [
       '/terminal',
       '/stocks',
-      '/earnings',
       '/tracker',
       '/guide/overview',
       '/community/ideas',

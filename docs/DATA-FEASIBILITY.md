@@ -43,6 +43,7 @@ stated in the UI · **RED** = no data source; remove, or reduce to the part that
 | **Volatility: IV, IV rank/percentile, skew, term structure, expected move, realized-vs-implied** | Options IV + 14y history. Fully computable, no third party. |
 | **Pulse chart / any price chart** | Tick→EOD bars, 14y. |
 | **Indices context (SPX / VIX / RUT)** | 1-second CGIF. |
+| **Beta** (`universe.ts`, the Stocks β column and its DEF/CYC lens) | Flagged for removal and it **survives**: beta is `cov(stock, index) / var(index)`, and both series are entitled — 14y UTP equity history against SPX back to 2017. Unlike the quality sleeve it is derived from prices, not sourced from a vendor, so there is a real path to a real number. The values shipping today are hand-typed seed constants exactly like `px` on the same rows, which is a simulator question, not a feed question. |
 
 ### AMBER — keep, but the UI must say what the number actually is
 
@@ -61,23 +62,73 @@ stated in the UI · **RED** = no data source; remove, or reduce to the part that
 | **Earnings Hub** | Needs an **earnings calendar** (report dates), and its PLAY/FADE grading needs **estimates and revisions**. You have none of it. The *only* backed part is the implied move from the straddle, and the realized move after the fact — but you cannot know *when* a company reports. **This desk cannot exist on these three feeds.** |
 | **`src/data/news.ts`** (desk already retired; `catalystPriors` still feeds `core/quant.ts`) | No news feed. The retired desk was correct. The surviving import means a news-shaped prior is still influencing quant output with nothing behind it. |
 | **Community (ideas / requests / feedback)** | Not a market-data problem at all — needs a database, auth and moderation. Legitimate, but it is a *backend* product, not something these feeds enable. |
+| **Closing-auction (MOC) engine** | Unpaired auction interest, the indicative price and paired-book absorption are published by an exchange **order-imbalance feed** (Nasdaq NOII, NYSE Order Imbalances). Its confirmation term also wanted **futures**. Neither feed is on any tier, and no amount of options or index data reconstructs an auction book. |
 | Anything implying **holdings, short interest, insider or institutional ownership** | No source. |
 
 ---
 
-## What to remove, in one line each
+## What was removed — DONE
 
-1. **Earnings Hub** — delete the desk, or reduce it to "expected move vs realized move"
-   driven purely by options, with the user supplying the date. Do not ship PLAY/FADE
-   grading built on estimates you cannot obtain. It is currently sold in a paid tier.
-2. **Stocks quality + news sleeves** — remove the two unbacked sleeves. A two-sleeve
-   composite (momentum + options flow) that is *true* beats a four-sleeve composite that
-   is half invented.
-3. **Sector rotation** — remove until you have a classification source.
-4. **`catalystPriors`** — remove the news-derived prior from `quant.ts`, or replace it
-   with something measurable.
-5. **Dark Pool** — hold pending the TRF answer from your vendor. If it is consolidated
-   only, either keep it and label it 15-MIN DELAYED everywhere, or cut it.
+Actioned on the owner's instruction. Each line is now a record, not a proposal.
+
+1. **Earnings Hub — DELETED.** The desk needed a report calendar and analyst estimates;
+   neither is on any tier. Without knowing *when* a company reports it had no spine, so
+   the whole desk went rather than a trimmed version of it: the page, `data/earnings.ts`,
+   `data/earningsintel.ts`, `EarningsIntel`, the trailer scene, the route, the nav entry,
+   the Pulse preset and widget, the Stocks-drawer tab, and every paid-tier line selling
+   it. An options-only "Event Vol" surface (implied move vs realized, user-supplied date)
+   remains available as future work — it is a new build, not a survivor.
+2. **`data/news.ts` — DELETED,** with `catalystPriors` and the "News outcome model" row it
+   fed on Prove It's scoreboard. The scoreboard's other engine (sweep prints, resolved
+   against the seeded candle series) survives, and `quant.test.ts` now guards the news
+   model as unscoreable so it cannot come back.
+3. **Stocks quality sleeve — REMOVED.** It screened "margins, growth, balance sheet" and
+   there is no fundamentals feed. Momentum and flow renormalised over 0.707 to 0.552 /
+   0.448 so the composite still spans 0-100 and the verdict cuts keep their meaning.
+4. **Sector rotation — REMOVED.** Relative-strength phases per group need a real
+   taxonomy. The `sector` LABEL survives everywhere it is only a label a human typed onto
+   a universe row — the scope filter, the sortable column, the dark-pool grouping.
+5. **Closing-auction (MOC) engine — DELETED.** Missed on the first pass through this
+   document, which is why it is worth naming plainly: `core/fracture.ts buildMoc`
+   published unpaired auction interest in dollars, a normalized imbalance z, indicative
+   price displacement, a paired-book absorption percentage, a reversal probability and a
+   futures/ETF confirmation term. Every one of those comes from an exchange **order
+   imbalance feed** — Nasdaq NOII or NYSE Order Imbalances — except the confirmation
+   term, which needs **futures**. Neither is on any of the three tiers, so each value was
+   a hash of the ticker printed with a sigma after it.
+
+   The blast radius was the whole **Lotto desk**, because the auction did not decorate
+   that board, it *structured* it: which side got listed, how names ranked across the
+   strip, a ±18-point grade adjustment, a per-strike "auction covers 1.4x" chip, and an
+   evidence panel reporting all six quantities to two decimals.
+
+   The desk was **rebuilt, not deleted**, because its real question is fully backed:
+   given the chain, does the one-sigma move to expiry cover this strike's breakeven, and
+   what does an hour of standing still cost. It now lists both sides, ranks within each
+   side, and says in the panel below the board that it names no direction and why. What
+   went with the engine: the `moc` field on `FractureView`, the Pulse "Closing Auction
+   (MOC)" panel and its workspace preset, and the MOC glossary entry.
+
+   `components/compass/mocClock.ts` **survives** — it is the ET market clock and the
+   last-quarter-hour acceptance gate, both derived from `core/calendar.ts`. What time the
+   bell is, is not an auction-feed question.
+6. **Dark Pool inference columns — REGROUPED, not removed.** Kind, Venue and Clips are
+   the classifier's output, but two of them sat under a column group headed **Print** and
+   the third under **Execution**, among arithmetic. The consolidated tape reports an
+   off-exchange trade as price, size, time and condition codes; it does not say which kind
+   of pool crossed it, what sort of order worked it, or which prints share a parent. The
+   three moved into **Read**, beside the column already headed "Inferred". Execution now
+   holds only tape fields and arithmetic on them, including the reporting lag, which the
+   TRF genuinely publishes. Nothing was deleted, because a classifier over a real trade
+   stream is a legitimate product — it just may not wear a fact's heading.
+7. **Beta — KEPT.** See the GREEN table. It is derived from two entitled price series,
+   not sourced from a vendor.
+8. **Dark Pool — KEPT.** Verified against the source before touching it: the desk models
+   EQUITY off-exchange prints, not options ones. Share-based sizes with no 100-multiplier,
+   an ATS venue taxonomy, no options fields on the type, and `darkpool.ts:217` explicitly
+   disclaiming the option chain. It is delayed-data-constrained, not conceptually broken,
+   and `core/contractScore.ts` folds its posture into every Compass grade — deleting it
+   would have silently re-graded the whole Compass desk. Still pending the TRF answer.
 
 ---
 

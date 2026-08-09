@@ -11,9 +11,9 @@
 */
 
 import { useEffect, useState } from 'react';
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronDown, Search, Menu, X, Settings, type LucideIcon } from 'lucide-react';
+import { Search, Menu, X, Settings } from 'lucide-react';
 import { useMarketData, useTicker } from '../../context/MarketDataContext';
 import AnimatedNumber from '../ui/AnimatedNumber';
 import TickerSearch from '../ui/TickerSearch';
@@ -27,8 +27,6 @@ interface TopBarProps {
   onOpenPalette: () => void;
   onOpenSettings: () => void;
 }
-
-type SubLink = { path: string; label: string; icon?: LucideIcon };
 
 const Wordmark = ({ onClick, size = 'sm' }: { onClick: (e: React.MouseEvent) => void; size?: 'sm' | 'md' }) => (
   <a
@@ -90,7 +88,6 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [clock, setClock] = useState(marketClock);
-  const [dropdown, setDropdown] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
@@ -114,7 +111,6 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
     navigate('/terminal');
   };
   const section = `/${location.pathname.split('/')[1] ?? ''}`;
-  const activeItem = NAV_ITEMS.find(i => i.path === section);
 
   return (
     <>
@@ -142,63 +138,44 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
         <Wordmark onClick={goHome} />
       </div>
 
-      {/* Center nav — one dropdown per group. Allowed to shrink rather than
-          overflow the side zones. */}
+      {/*
+        Centre nav — one tab per desk, flat.
+
+        This was four dropdown groups (Scan / Read / Yours / Models), each
+        hiding two or three desks behind a hover menu, with the active desk's
+        name trailing its group as "SCAN · COMPASS". Two problems with that. A
+        reader could not see where they could go without opening something, and
+        the group names were an invention of this app: nobody arrives looking
+        for "Yours", they arrive looking for Tracker. The grouping was carrying
+        the taxonomy rather than the navigation.
+
+        Eight desks fit on one row at lg and up, so they are simply listed.
+        `NAV_GROUPS` and `itemsByGroup` still exist and are still used by the
+        terminal index and the mobile drawer, where grouping is a genuine
+        affordance for a long vertical list.
+      */}
       <nav className="hidden lg:flex items-center self-stretch min-w-0 mx-auto">
-        {NAV_GROUPS.map(group => {
-          const items = itemsByGroup(group);
-          const active = items.some(i => i.path === section);
+        {NAV_ITEMS.map(item => {
+          const active = item.path === section;
           return (
-            <div
-              key={group}
-              className="relative self-stretch flex items-center"
-              onMouseEnter={() => setDropdown(group)}
-              onMouseLeave={() => setDropdown(null)}
+            <Link
+              key={item.path}
+              to={item.path}
+              aria-current={active ? 'page' : undefined}
+              title={item.description}
+              className={`relative self-stretch flex items-center px-2.5 my-2 rounded-md font-mono text-label font-semibold uppercase tracking-wider transition-colors ${
+                active ? 'text-textPrimary bg-white/[0.06]' : 'text-textMuted hover:text-textPrimary hover:bg-rowHover'
+              }`}
             >
-              <button
-                type="button"
-                aria-haspopup="true"
-                aria-expanded={dropdown === group}
-                onClick={() => setDropdown(prev => (prev === group ? null : group))}
-                onFocus={() => setDropdown(group)}
-                className={`relative self-stretch flex items-center gap-1 px-3 my-2 rounded-md font-mono text-label font-semibold uppercase tracking-wider transition-colors ${
-                  active
-                    ? 'text-textPrimary bg-white/[0.06]'
-                    : 'text-textMuted hover:text-textPrimary hover:bg-rowHover'
-                }`}
-              >
-                {group}
-                {active && activeItem && (
-                  <span className="text-select">
-                    {/* textSecondary, not textMuted: this dot rides the active
-                        tab's lifted `bg-white/[0.06]`, where muted measures
-                        4.39:1 — under AA. Still quieter than the group name
-                        beside it and the desk name after it. */}
-                    <span aria-hidden className="mx-1 text-textSecondary font-normal">·</span>
-                    {activeItem.label}
-                  </span>
-                )}
-                <ChevronDown className={`w-3 h-3 ${active ? 'text-textSecondary' : 'text-textMuted'}`} />
-                {active && (
-                  <motion.span
-                    layoutId="topnav-underline"
-                    className="absolute left-2.5 right-2.5 -bottom-2 h-[2px] rounded-full holo-bar"
-                    transition={PILL}
-                  />
-                )}
-              </button>
-              <AnimatePresence>
-                {dropdown === group && (
-                  <DropMenu
-                    title={group}
-                    items={items.map(i => ({ path: i.path, label: i.label, icon: i.icon }))}
-                    descriptions={Object.fromEntries(items.map(i => [i.path, i.description]))}
-                    section={section}
-                    onPick={() => setDropdown(null)}
-                  />
-                )}
-              </AnimatePresence>
-            </div>
+              {item.label}
+              {active && (
+                <motion.span
+                  layoutId="topnav-underline"
+                  className="absolute left-2 right-2 -bottom-2 h-[2px] rounded-full holo-bar"
+                  transition={PILL}
+                />
+              )}
+            </Link>
           );
         })}
       </nav>
@@ -302,66 +279,6 @@ const LivePrice = () => {
   );
 };
 
-/** Shared hover dropdown — lists the desks inside a group with a one-line
-    description each. `section` marks the active desk (matches on the first path
-    segment so a desk's subpages still highlight it). */
-const DropMenu = ({
-  title,
-  items,
-  descriptions,
-  section,
-  onPick,
-}: {
-  title: string;
-  items: SubLink[];
-  descriptions?: Record<string, string>;
-  section?: string;
-  onPick: () => void;
-}) => (
-  <motion.div
-    className="absolute left-0 top-full z-50"
-    initial={{ opacity: 0, y: -6 }}
-    animate={{ opacity: 1, y: 0 }}
-    exit={{ opacity: 0, y: -6 }}
-    transition={{ duration: DUR.quick, ease: EASE }}
-  >
-    <div className="relative mt-1 min-w-[248px] border border-borderMuted bg-panel rounded-md shadow-overlay overflow-hidden">
-      <span aria-hidden className="holo-bar absolute inset-y-0 left-0 w-[2px] z-10" />
-      <div className="flex items-center justify-between gap-3 px-3 py-2 border-b border-borderSubtle">
-        <span className="font-mono text-micro font-semibold uppercase tracking-widest whitespace-nowrap text-textPrimary">
-          {title}
-        </span>
-      </div>
-      <div className="p-1.5 flex flex-col gap-0.5">
-        {items.map(sub => {
-          const isActive = section ? sub.path === section : false;
-          return (
-            <NavLink
-              key={sub.path}
-              to={sub.path}
-              onClick={onPick}
-              className={`flex items-center gap-2 px-2.5 py-1.5 rounded font-mono text-caption whitespace-nowrap transition-colors ${
-                isActive
-                  ? 'bg-white/[0.06] text-textPrimary'
-                  : 'text-textSecondary hover:text-textPrimary hover:bg-rowHover'
-              }`}
-            >
-              {sub.icon && <sub.icon className="w-3.5 h-3.5 text-textMuted" />}
-              <span className="flex flex-col">
-                {sub.label}
-                {descriptions?.[sub.path] && (
-                  <span className="font-sans text-label text-textMuted normal-case tracking-normal leading-tight">
-                    {descriptions[sub.path]}
-                  </span>
-                )}
-              </span>
-            </NavLink>
-          );
-        })}
-      </div>
-    </div>
-  </motion.div>
-);
 
 /** Full grouped nav list for the mobile drawer. */
 const MobileNav = ({ section, onPick }: { section: string; onPick: () => void }) => (

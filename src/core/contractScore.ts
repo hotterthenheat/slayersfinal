@@ -5,7 +5,7 @@
   prices real candidates (Black-Scholes), then weighs
   the math (breakeven vs expected move, theta burden),
   the tape (flow + dark-pool posture), and the story
-  (news lean) into one composite: what's worth buying
+  into one composite: what's worth buying
   and what isn't — with the reason attached.
 ==================================================
 */
@@ -15,7 +15,7 @@
   them: its only two hashed quantities were the base IV and the IV rank, and
   both were numbers the reader was told were measurements. Nothing else on the
   Weigher is drawn — every factor comes off the chain, the tape, the dark-pool
-  view or the news lean.
+  view.
 */
 import Simulator from './simulator';
 import { expiryFor } from './calendar';

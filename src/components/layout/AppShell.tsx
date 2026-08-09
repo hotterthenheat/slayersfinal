@@ -33,40 +33,54 @@ const AppShell = () => {
   const tickerRef = useRef(activeTicker);
   tickerRef.current = activeTicker;
 
-  // The app scrolls inside <main>, not the window, so the browser's own scroll
-  // restoration never sees it: leaving the Guide 3,000px down and opening
-  // Compass used to land 3,000px into Compass. Reset on every route change —
-  // except when the URL carries a hash, where the target section is the
-  // requested position and jumping to the top would fight the anchor.
-  const scrollRef = useRef<HTMLElement | null>(null);
+  /*
+    The DOCUMENT scrolls. It used to be <main>, and that was the wrong shape for
+    this product.
+
+    The shell was `h-screen overflow-hidden` wrapping a `h-full overflow-y-auto`
+    <main>, which is a fixed-size window with the site sliding around behind it.
+    Every consequence of that had to be re-implemented by hand because the
+    browser could no longer see the scroll: `Home` and `End` did nothing unless
+    focus happened to be inside the region, the scrollbar belonged to the shell
+    rather than the page, scroll restoration never fired, and mobile browsers
+    never collapsed their URL bar because from their side the page never moved.
+
+    It also forced the boards inside it into their own scrollers, so reading a
+    long list meant scrolling a box inside a box.
+
+    Now: nothing owns the scroll but the document. Route changes reset the
+    window — the one behaviour genuinely worth keeping, since react-router does
+    not do it — and skip when the URL carries a hash, where the target section
+    IS the requested position and jumping to the top would fight the anchor.
+  */
   useEffect(() => {
     if (location.hash) return;
-    scrollRef.current?.scrollTo({ top: 0, behavior: 'auto' });
+    window.scrollTo({ top: 0, behavior: 'auto' });
   }, [location.pathname, location.hash]);
 
   /**
    * Publish the scrollbar's width so the top bar can reserve the same gutter.
    *
-   * The bar is fixed to the VIEWPORT and the page scrolls inside <main>, which
-   * takes a scrollbar out of its own width. Both centre a 1800px column, but in
-   * boxes that differ by the scrollbar — so the wordmark sat 5px right of the
-   * first column of the page under it, at every width above the cap. Measured,
-   * not assumed: the gutter is 0 on overlay-scrollbar platforms and ~15px on
-   * Windows, and hard-coding either is wrong on the other.
+   * The bar is `position: fixed`, so it spans the viewport INCLUDING the space
+   * a classic scrollbar occupies; the page below it is laid out in the document
+   * width, which excludes it. Left alone the wordmark sits a scrollbar's width
+   * right of the first column of the page under it.
    *
-   * `scrollbar-gutter: stable` on <main> makes it a constant, which also fixes
-   * a second shift nobody had named: a short desk and a long one reserved
-   * different widths, so navigating between them nudged the whole layout.
+   * Measured, not assumed: the gutter is 0 on overlay-scrollbar platforms and
+   * ~15px on Windows, and hard-coding either is wrong on the other.
+   * `scrollbar-gutter: stable` on <html> (see index.css) makes it a constant, so
+   * a short page and a long one no longer reserve different widths — which used
+   * to nudge the whole layout on every navigation between them.
    */
   useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
     const publish = () =>
-      document.documentElement.style.setProperty('--scrollbar-gutter', `${el.offsetWidth - el.clientWidth}px`);
+      document.documentElement.style.setProperty(
+        '--scrollbar-gutter',
+        `${window.innerWidth - document.documentElement.clientWidth}px`
+      );
     publish();
-    const ro = new ResizeObserver(publish);
-    ro.observe(el);
-    return () => ro.disconnect();
+    window.addEventListener('resize', publish);
+    return () => window.removeEventListener('resize', publish);
   }, []);
 
   useEffect(() => {
@@ -102,7 +116,7 @@ const AppShell = () => {
   }, [changeTicker]);
 
   return (
-    <div className="h-screen relative bg-canvas text-textPrimary overflow-hidden">
+    <div className="min-h-screen relative bg-canvas text-textPrimary">
       {/* Keyboard/screen-reader escape hatch past the nav straight to the desk. */}
       <a
         href="#main-content"
@@ -113,12 +127,8 @@ const AppShell = () => {
       <TopBar onOpenPalette={openPalette} onOpenSettings={openSettings} />
       {/* pt-14 clears the overlaid glass bar; content scrolls under it so the
           blur has the live desk behind it to refract. */}
-      <main
-        id="main-content"
-        ref={scrollRef}
-        tabIndex={-1}
-        className="h-full overflow-y-auto [scrollbar-gutter:stable] pt-14 focus:outline-none"
-      >
+      {/* No scroller and no height of its own — the document handles both. */}
+      <main id="main-content" tabIndex={-1} className="pt-14 focus:outline-none">
         {/* Keyed by top-level section only — subpage changes animate inside
             their section layout so the header/tabs never remount */}
         {/* Opacity-only crossfade — no vertical translate (which nudged the whole
@@ -130,7 +140,12 @@ const AppShell = () => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: DUR.fast, ease: 'easeOut' }}
-            className="w-full min-h-full flex flex-col"
+            /* Was min-h-full, which resolved against <main>'s fixed height.
+               With the document scrolling there is no such height, so the
+               viewport minus the bar is stated directly — it is what keeps the
+               footer on the bottom edge of a short page rather than floating
+               it mid-screen. */
+            className="w-full min-h-[calc(100vh-3.5rem)] flex flex-col"
           >
             {/* One broken desk should never blank the whole terminal; the key
                 resets the boundary whenever the route changes. */}
@@ -148,7 +163,7 @@ const AppShell = () => {
                 the viewport's bottom edge. */}
             {footer != null && (
               <div className="mt-auto">
-                <SiteFooter variant={footer} bleed />
+                <SiteFooter bleed />
               </div>
             )}
           </motion.div>
@@ -158,7 +173,7 @@ const AppShell = () => {
           corner, and a floating control over the bottom-right one is furniture
           in the middle of the work. Everywhere else it self-gates on scroll
           depth, so short pages never show it. */}
-      {!isTerminalRoute(location.pathname) && <BackToTop scrollRef={scrollRef} />}
+      {!isTerminalRoute(location.pathname) && <BackToTop />}
       <CommandPalette
         open={paletteOpen}
         onClose={closePalette}

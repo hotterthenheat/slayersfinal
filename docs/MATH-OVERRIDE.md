@@ -61,7 +61,7 @@ Registering a provider restates all of this at once:
 - the contract track's forward curve
 - trade-stamped greeks on the Trace tape → the **Gamma Tape** dealer book
 - the structures board (verticals, condors, butterflies, straddles)
-- IV rank on the Vol Lab, the Earnings Hub and the Vol Complex
+- IV rank on the Vol Lab and the Vol Complex
 - realized vol and the vol risk premium
 - the surface-QC arbitrage checks
 

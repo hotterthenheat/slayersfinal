@@ -1,7 +1,7 @@
 /*
   Scene 17 — convergence.
 
-  Pull back. Nine desks on one event at once, each showing the one number it
+  Pull back. Seven desks on one event at once, each showing the one number it
   owns, connected by the thread that carried the state between them. It is not a
   static frame: the clock runs, the path extends, the scan re-ranks and the
   tracked setup keeps moving, because the last thing a viewer should see is the
@@ -44,9 +44,6 @@ const ConvergenceScene: React.FC = () => {
     // probability the sampler produces — name that, not a certainty about it.
     { product: 'Prove It', route: '/prove-it', label: 'P(up)', value: prob(0.63) },
     { product: 'Stocks', route: '/stocks', label: 'Expression', value: 'OPTIONS' },
-    // News reads as a Stocks sleeve now; `/news` is a retired route.
-    { product: 'News', route: '/stocks', label: 'Repricing', value: `${(story.news.widthAfter * 100).toFixed(1)}% wide` },
-    { product: 'Earnings', route: '/earnings', label: 'Verdict', value: story.earnings.selected },
     { product: 'Tracker', route: '/tracker', label: 'Thesis', value: story.outcome.survived ? 'SURVIVED' : 'BROKEN', tone: 'text-bull' },
   ];
 
@@ -54,7 +51,7 @@ const ConvergenceScene: React.FC = () => {
     <div className="h-full flex flex-col gap-3 min-h-0">
       <SceneHead
         product="Slayer Terminal"
-        line="One event, nine desks, one state."
+        line="One event, seven desks, one state."
         p={p}
         reduced={reduced}
       />
@@ -95,9 +92,9 @@ const ConvergenceScene: React.FC = () => {
                 key={t.product}
                 to={t.route}
                 state={{ focusTicker: story.ticker }}
-                /* Same handoff as the transport's Open desk. Twelve tiles that
+                /* Same handoff as the transport's Open desk. Ten tiles that
                    each summarise the NVDA event but open a desk still showing
-                   SPY is the same broken promise, twelve times over. */
+                   SPY is the same broken promise, ten times over. */
                 onClick={() => changeTicker(story.ticker)}
                 style={{ opacity: e, transform: reduced ? undefined : `translate3d(0, ${(1 - e) * 6}px, 0)` }}
                 className="inst-surface rounded px-2 py-1.5 min-w-0 hover:bg-rowHover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-select/60 transition-colors"

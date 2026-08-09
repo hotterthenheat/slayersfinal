@@ -30,7 +30,6 @@ import MetaorderReconstruction from './components/flowdesk/MetaorderReconstructi
 import DarkPool from './pages/flowdesk/DarkPool';
 import Stocks from './pages/Stocks';
 import NotFound from './pages/NotFound';
-import EarningsHub from './pages/EarningsHub';
 import Landing from './pages/landing/Landing';
 import TerminalIndex from './pages/terminal/TerminalIndex';
 import { writeLastDesk } from './pages/terminal/lastDesk';
@@ -125,7 +124,6 @@ const App = () => {
             <Route path="/workspace" element={<Navigate to="/pulse" replace />} />
             <Route path="/compass" element={<Compass />} />
             <Route path="/stocks" element={<Stocks />} />
-            <Route path="/earnings" element={<EarningsHub />} />
             <Route path="/prove-it" element={<Suspense fallback={<RouteFallback />}><ProveIt /></Suspense>} />
             {/* Fracture folded into Pinpoint Stress; Lotto folded into Compass */}
             <Route path="/fracture" element={<Navigate to="/pinpoint/stress?view=fracture" replace />} />

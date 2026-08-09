@@ -22,10 +22,10 @@ const STEPS = [
   // "Every desk follows the active ticker" is not true and the top bar already
   // knows it — `TICKER_SCOPED` in TopBar.tsx lists the routes the symbol
   // actually drives, and the control is hidden everywhere else. Stocks and
-  // Earnings survey a field; Trace splits per tab. Saying "every desk" sent a
+  // Stocks surveys a field; Trace splits per tab. Saying "every desk" sent a
   // reader looking for a connection that was deliberately not built.
-  <>Pick a ticker from the top bar — or press <Kbd>]</Kbd> / <Kbd>[</Kbd> to step through the watchlist. Pulse, Compass, Pinpoint, Prove It and Tracker rebuild around it, and so do Trace's Dark pool and Scanner. Stocks and Earnings survey the whole field rather than one name, and Trace's Live tape and Reconstruction stay on the same prints — the top bar hides the switcher wherever it would not change the page.</>,
-  <>Open <Link to="/pulse" className="text-textPrimary underline underline-offset-2 decoration-white/40 hover:decoration-white/80">Pulse</Link> and load a view from the <span className="text-textPrimary">Views</span> menu (Scalper, Swing, Macro and Earnings among fourteen) — a ready workspace for how you trade.</>,
+  <>Pick a ticker from the top bar — or press <Kbd>]</Kbd> / <Kbd>[</Kbd> to step through the watchlist. Pulse, Compass, Pinpoint, Prove It and Tracker rebuild around it, and so do Trace's Dark pool and Scanner. Stocks surveys the whole field rather than one name, and Trace's Live tape and Reconstruction stay on the same prints — the top bar hides the switcher wherever it would not change the page.</>,
+  <>Open <Link to="/pulse" className="text-textPrimary underline underline-offset-2 decoration-white/40 hover:decoration-white/80">Pulse</Link> and load a view from the <span className="text-textPrimary">Views</span> menu (Scalper, Swing and Macro among thirteen) — a ready workspace for how you trade.</>,
   <>Head to <Link to="/pinpoint" className="text-textPrimary underline underline-offset-2 decoration-white/40 hover:decoration-white/80">Pinpoint</Link> to see the dealer positioning: the GEX heatmap, the call/put walls, and the gamma flip.</>,
   <>Cross-check the tape in <Link to="/trace" className="text-textPrimary underline underline-offset-2 decoration-white/40 hover:decoration-white/80">Trace</Link> — is real size printing where the positioning says it should?</>,
   <>Press <Kbd>⌘</Kbd><Kbd>K</Kbd> any time to jump between desks, tickers and actions without leaving the keyboard.</>,

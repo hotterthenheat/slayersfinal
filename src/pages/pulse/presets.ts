@@ -264,19 +264,6 @@ export const PULSE_PRESETS: PulseLayout[] = [
     ],
   },
   {
-    id: 'closing-auction',
-    name: 'Closing Auction',
-    preset: true,
-    panels: [
-      { id: 'a-chart', key: 'live-chart' },
-      { id: 'a-moc', key: 'moc-read' },
-    ],
-    layout: [
-      L('a-chart', 0, 0, 7, 8),
-      L('a-moc', 7, 0, 5, 8),
-    ],
-  },
-  {
     id: 'fracture-watch',
     name: 'Fracture Watch',
     preset: true,
@@ -334,25 +321,6 @@ export const PULSE_PRESETS: PulseLayout[] = [
       L('mc-stocks', 0, 0, 12, 6),
       L('mc-chart', 0, 6, 8, 5),
       L('mc-heat', 8, 6, 4, 5),
-    ],
-  },
-  {
-    id: 'desk-earnings',
-    name: 'Earnings',
-    preset: true,
-    panels: [
-      { id: 'ea-cal', key: 'earnings-calendar' },
-      { id: 'ea-vol', key: 'vol-state' },
-      { id: 'ea-setups', key: 'top-setups' },
-      { id: 'ea-chart', key: 'live-chart' },
-    ],
-    layout: [
-      // Right column is 3 + 4 tall (Top Setups is a six-column board and will
-      // not read at h=3), so the calendar beside it matches at 7.
-      L('ea-cal', 0, 0, 7, 7),
-      L('ea-vol', 7, 0, 5, 3),
-      L('ea-setups', 7, 3, 5, 4),
-      L('ea-chart', 0, 7, 12, 5),
     ],
   },
   {

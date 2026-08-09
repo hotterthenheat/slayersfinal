@@ -6,7 +6,6 @@ import {
   Crosshair,
   Sigma,
   BarChart3,
-  CalendarClock,
   BookMarked,
   type LucideIcon,
 } from 'lucide-react';
@@ -69,8 +68,8 @@ const DESKS: DeskDoc[] = [
       where, brings it all back in one press, and — in browsers that allow it — picks which display new pop-outs open on.
       Window positions are saved with the layout; after a reload the menu offers to reopen them, since a browser will not
       let a page open windows without a click.</>,
-      <>The <span className="text-textPrimary">Views</span> menu carries fourteen ready workspaces, Scalper, Swing,
-      Macro and Earnings among them. Presets stay restorable however you edit them.</>,
+      <>The <span className="text-textPrimary">Views</span> menu carries thirteen ready workspaces, Scalper, Swing
+      and Macro among them. Presets stay restorable however you edit them.</>,
       <>Each panel has its own ticker field, so you can watch SPY and NVDA side by side.</>,
     ],
     example: (
@@ -97,11 +96,12 @@ const DESKS: DeskDoc[] = [
       stamped with. The scanners are a filter <em>inside</em> a horizon, not a horizon of their own, so the same
       scanner produces a different board on each tab.</>,
       <>The <span className="text-textPrimary">Weigher</span>: search any contract you already hold, at any expiry from
-      same-day to LEAPS, and have it graded on its own six-factor composite — the math, theta burden, vol pricing, flow
-      and dark pool, news lean, liquidity — with a better-risk/reward alternative beside it. It speaks the board's
+      same-day to LEAPS, and have it graded on its own five-factor composite — the math, theta burden, vol pricing, flow
+      and dark pool, liquidity — with a better-risk/reward alternative beside it. It speaks the board's
       lexicon but not the board's number: the weights change with the sleeve, so the two scales are not
-      interchangeable. And <span className="text-textPrimary">Lotto</span>, a 0DTE desk with the closing-auction (MOC)
-      engine, high variance by design.</>,
+      interchangeable. And <span className="text-textPrimary">Lotto</span>, a same-session desk that grades far-OTM
+      contracts on both sides by whether a one-sigma move to expiry covers the strike's breakeven. High variance by
+      design.</>,
     ],
     read: [
       <>The board's score has three inputs: how close the strike sits to spot, whether the contract's direction agrees
@@ -117,15 +117,12 @@ const DESKS: DeskDoc[] = [
     ],
     /* Two of the desk's five control groups used to be documented here — the
        modes and the scanners. A reader looking for the sleeve tabs, the
-       Structures board, the Cards/Table density switch or the leaderboard's
-       rank-by control found nothing, on the one page whose job is to say what
-       the controls do. */
+       Cards/Table density switch or the leaderboard's rank-by control found
+       nothing, on the one page whose job is to say what the controls do. */
     controls: [
       'Three modes: Setups, Weigher and Lotto.',
-      <>Inside Setups, the horizon runs along the top: <span className="text-textPrimary">0DTE</span>, Weekly, Swing,
-      LEAPS — and <span className="text-textPrimary">Structures</span>, which is a different instrument rather than a
-      different horizon: verticals, condors, butterflies and straddles, each with its payoff curve and its
-      defined risk.</>,
+      <>Inside Setups, the horizon runs along the top: <span className="text-textPrimary">0DTE</span>, Weekly, Swing
+      and LEAPS. Every sleeve ranks single contracts; they differ in how far out the expiry sits.</>,
       <>Under the horizon, six scanners: Top Setups, Quick Scalp, Discounted, Rebounds, Whale Sweeps and All — each
       with its own score floor. The count beside a tab is what that floor admitted across the whole field, not what
       fits on screen: the board itself is capped at the top 240 rows. All's floor is the bottom of the scale, so its
@@ -234,7 +231,6 @@ const DESKS: DeskDoc[] = [
 
 const RESEARCH: { icon: LucideIcon; name: string; to: string; blurb: string }[] = [
   { icon: BarChart3, name: 'Stocks', to: '/stocks', blurb: 'Equity picks and sector rotation — which groups are leading or lagging.' },
-  { icon: CalendarClock, name: 'Earnings', to: '/earnings', blurb: 'The slate ahead, each print read QUALIFIED / RICH / NO EDGE against its implied move.' },
   { icon: BookMarked, name: 'Tracker', to: '/tracker', blurb: 'Your tracked setups and trade journal, saved in your browser.' },
 ];
 

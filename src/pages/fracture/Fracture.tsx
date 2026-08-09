@@ -13,7 +13,7 @@ import SignalBadge from '../../components/ui/SignalBadge';
 import KnowabilityChip from '../../components/ui/KnowabilityChip';
 import { KNOWABILITY, KNOWABILITY_ORDER, type Knowability } from '../../components/ui/knowability';
 import SpotRule from '../../components/ui/SpotRule';
-import type { AbsorptionRegime, ForcedFlowLevel, MoveDecomposition } from '../../types/fracture';
+import type { AbsorptionRegime, ForcedFlowLevel } from '../../types/fracture';
 import type { Tone } from '../../components/ui/tones';
 import { fmtUsd } from '../../data/gex';
 
@@ -59,15 +59,6 @@ const TIER_ORDER = KNOWABILITY_ORDER;
 const TIER_META = KNOWABILITY;
 const ConfidenceChip = KnowabilityChip;
 
-const DECOMP: { key: keyof MoveDecomposition; label: string; color: string }[] = [
-  { key: 'informational', label: 'Information', color: '#7DD3FC' },
-  { key: 'dealerHedging', label: 'Dealer hedge', color: '#C7D3E8' },
-  { key: 'systematic', label: 'Systematic', color: '#FF9500' },
-  { key: 'shortCovering', label: 'Short cover', color: '#7fe7c4' },
-  { key: 'passive', label: 'Passive', color: '#a1a1aa' },
-  { key: 'liquidation', label: 'Liquidation', color: '#FF3B30' },
-  { key: 'unexplained', label: 'Noise', color: '#3f3f46' },
-];
 
 /** One row of the forced-flow balance sheet. */
 const FlowRow = ({ level, maxForced }: { level: ForcedFlowLevel; maxForced: number }) => {
@@ -453,14 +444,14 @@ const Fracture = () => {
       </Panel>
 
       <div className="grid grid-cols-1 gap-4 items-start">
-        {/* Criticality + move decomposition */}
+        {/* Criticality */}
         <Panel
           title={
             <span className="inline-flex items-center gap-1.5">
-              <Zap className="w-3.5 h-3.5" /> Criticality & move source
+              <Zap className="w-3.5 h-3.5" /> Criticality
             </span>
           }
-          subtitle="is the market reacting to news, or to itself?"
+          subtitle="how close the tape is to feeding on itself"
           tone={critTone}
         >
           <div className="flex flex-col gap-4">
@@ -481,29 +472,6 @@ const Fracture = () => {
               <p className="mt-2 text-label text-textSecondary leading-relaxed">{crit.note}</p>
             </div>
 
-            <div className="border-t border-borderSubtle pt-3">
-              <div className="font-mono text-label uppercase tracking-widest text-textMuted mb-2">
-                What's driving the current move
-              </div>
-              <div className="flex h-3 rounded-sm overflow-hidden bg-white/[0.04]">
-                {DECOMP.map(d => (
-                  <span key={d.key} style={{ width: `${view.decomposition[d.key]}%`, background: d.color }} title={`${d.label} ${view.decomposition[d.key]}%`} />
-                ))}
-              </div>
-              <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-1">
-                {DECOMP.filter(d => view.decomposition[d.key] >= 4).map(d => (
-                  <span key={d.key} className="inline-flex items-center gap-1.5 font-mono text-label text-textSecondary">
-                    <span className="w-2 h-2 rounded-sm inline-block" style={{ background: d.color }} />
-                    {d.label} <span className="text-textMuted tnum ml-auto">{view.decomposition[d.key]}%</span>
-                  </span>
-                ))}
-              </div>
-              <p className="mt-2.5 text-label text-textMuted leading-relaxed">
-                {view.decomposition.dealerHedging + view.decomposition.systematic + view.decomposition.liquidation >= 55
-                  ? 'Mechanically driven — this move can reverse hard once the forced flow behind it is done.'
-                  : 'Information leads — the move has a fundamental driver and is more likely to persist.'}
-              </p>
-            </div>
           </div>
         </Panel>
       </div>

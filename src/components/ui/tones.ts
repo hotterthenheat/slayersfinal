@@ -30,15 +30,23 @@ export const toneDot: Record<Tone, string> = {
   neutral: 'bg-textMuted',
 };
 
+/*
+  A badge is ink, not a pill.
+
+  These carried a tint, a border and a radius, which made every verdict, every
+  evidence chip and every status marker a small rounded box — a dozen of them
+  on a single card. The label is already uppercase mono at micro size against a
+  near-black page; the tone alone separates it from body text, and the optional
+  dot carries the state for anyone who cannot use colour.
+*/
 export const toneBadge: Record<Tone, string> = {
-  bull: 'bg-bull/10 text-bull border-bull/20',
-  bear: 'bg-bear/10 text-bear border-bear/20',
-  warn: 'bg-warn/10 text-warn border-warn/20',
-  info: 'bg-flip/10 text-flip border-flip/20',
-  select: 'bg-select/10 text-select border-select/20',
-  // Borderless by request — magenta rides the tint + ink alone
-  magenta: 'bg-king/10 text-king border-transparent',
-  neutral: 'bg-white/[0.04] text-textSecondary border-borderSubtle',
+  bull: 'text-bull',
+  bear: 'text-bear',
+  warn: 'text-warn',
+  info: 'text-flip',
+  select: 'text-select',
+  magenta: 'text-king',
+  neutral: 'text-textSecondary',
 };
 
 export const toneBar: Record<Tone, string> = {

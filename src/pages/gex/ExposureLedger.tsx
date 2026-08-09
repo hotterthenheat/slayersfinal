@@ -142,7 +142,7 @@ const ExposureLedger = ({
       actions={actions}
       flush
       className="min-w-0"
-      bodyClassName="flex flex-col max-h-[max(560px,62vh)]"
+      bodyClassName="flex flex-col"
     >
       <div tabIndex={0} role="group" aria-label="Exposure ledger — scrollable" className="overflow-auto h-full min-h-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60">
         {/* Sticky legend — stays pinned while the rows scroll */}

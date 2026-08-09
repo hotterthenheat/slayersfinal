@@ -40,12 +40,9 @@ const SCENE_SPEC: (Omit<TrailerSceneDefinition, 'enterAtMs' | 'exitAtMs'> & { st
   { storyEnd: 0.81, id: 'lotto', product: 'Compass · Lotto', route: '/compass?view=lotto', durationMs: 4800, description: 'Terminal-outcome check on far out-of-the-money contracts; the cheapest is a no trade.' },
   { storyEnd: 0.84, id: 'scalp', product: 'Compass · Scalp and Rebound', route: '/compass?view=quick-scalp', durationMs: 4600, description: 'Two intraday models side by side: continuation in negative gamma, reversion in positive gamma.' },
   { storyEnd: 0.87, id: 'proveit', product: 'Prove It', route: '/prove-it', durationMs: 5000, description: 'Forecast and risk-neutral distributions, calibration, and a challenger model failing its promotion gate.' },
-  { storyEnd: 0.89, id: 'stocks', product: 'Stocks', route: '/stocks', durationMs: 3400, description: 'Ranking across momentum, quality, flow and news, then routing the thesis to an instrument.' },
-  // News is a Stocks sleeve, not a desk — `/news` was retired and this link
-  // sat pointing at it, so "Open desk" on this beat landed on the not-found
-  // page. The scene stays; the destination is where its read actually lives.
-  { storyEnd: 0.91, id: 'news', product: 'News', route: '/stocks', durationMs: 3400, description: 'A catalyst arrives, duplicates cluster, and the forecast distribution repriced rather than a sentiment score.' },
-  { storyEnd: 0.93, id: 'earnings', product: 'Earnings', route: '/earnings', durationMs: 4000, description: 'Implied against realized against forecast move, with direction and magnitude kept separate.' },
+  // Two factors, not four. This read "momentum, quality, flow and news" after
+  // both of those sleeves had gone from `data/stocks.ts` for want of a feed.
+  { storyEnd: 0.89, id: 'stocks', product: 'Stocks', route: '/stocks', durationMs: 3400, description: 'Ranking across momentum and options flow, then routing the thesis to an instrument.' },
   { storyEnd: 0.97, id: 'tracker', product: 'Tracker', route: '/tracker', durationMs: 5200, description: 'The decision is frozen into an immutable packet, the market advances, and the alternatives are scored against it.' },
   { storyEnd: 1.0, id: 'convergence', product: 'Slayer Terminal', route: '/terminal', durationMs: 4600, description: 'All desks operating on the same event at once.' },
 ];
@@ -72,8 +69,6 @@ export const SCENE_SHORT: Record<string, string> = {
   scalp: 'SCALP',
   proveit: 'PROVE IT',
   stocks: 'STOCKS',
-  news: 'NEWS',
-  earnings: 'EARNINGS',
   tracker: 'TRACKER',
   convergence: 'SYSTEM',
 };

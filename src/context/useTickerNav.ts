@@ -4,7 +4,7 @@
   One place that ties "I found a name here" to "show
   it to me over there." Sets the global active ticker
   and routes, so a Stocks pick, a News headline or an
-  Earnings play can jump straight into Pulse or the
+  a Stocks pick can jump straight into Pulse or the
   Compass Weigher on the same symbol.
 ==================================================
 */

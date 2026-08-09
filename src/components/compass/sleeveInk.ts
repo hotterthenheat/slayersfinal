@@ -9,9 +9,8 @@ import type { SleeveKey } from '../../types/compass';
   palette does not grow, it just gets used.
 
   The assignment is the clock, hot to cool: orange for the session that is
-  burning down, gold for the week, teal for six weeks, sky for a year.
-  Structures is magenta because it is the one tab that is not a point on that
-  line — it is a different instrument, not a longer one.
+  burning down, gold for the week, teal for six weeks, sky for a year. A fifth
+  entry, magenta, belonged to Structures and went with that sleeve.
 
   These may not be borrowed for anything directional. Green and red stay the
   market's own language (a call, a put, a price that moved), and a horizon is
@@ -59,12 +58,5 @@ export const SLEEVE_INK: Record<SleeveKey, SleeveInk> = {
     rule: 'bg-flip',
     wash: 'bg-flip/[0.04]',
     hex: '#7DD3FC',
-  },
-  structures: {
-    text: 'text-king',
-    activeBg: 'bg-king/[0.14]',
-    rule: 'bg-king',
-    wash: 'bg-king/[0.04]',
-    hex: '#EA00FF',
   },
 };

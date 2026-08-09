@@ -103,7 +103,7 @@ export const PrimaryButton = ({
     type="button"
     onClick={onClick}
     disabled={disabled}
-    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-select/40 bg-select/[0.06] hover:bg-select/[0.12] font-mono text-label font-semibold uppercase tracking-wider text-select transition-colors disabled:opacity-40 disabled:pointer-events-none ${FOCUS}`}
+    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-select/40 bg-select/[0.06] hover:bg-select/[0.12] font-mono text-label font-semibold uppercase tracking-wider text-select transition-colors disabled:opacity-60 disabled:pointer-events-none ${FOCUS}`}
   >
     <Icon className="w-3.5 h-3.5" aria-hidden="true" />
     {children}

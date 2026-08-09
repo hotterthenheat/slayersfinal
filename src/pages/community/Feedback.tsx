@@ -61,7 +61,7 @@ const ReadOnlyField = ({ label, value, title }: { label: string; value: string; 
  * board speak two languages about the same four things.
  */
 const Tally = ({ label, value, tone }: { label: string; value: number; tone?: Tone }) => (
-  <div className="flex items-baseline justify-between gap-3 px-4 py-2 border-b border-borderSubtle/40 last:border-0">
+  <div className="flex items-baseline justify-between gap-3 px-4 py-2 border-b border-borderSubtle/40">
     <span className="flex items-center gap-2 min-w-0">
       {tone && <span aria-hidden className={`h-1.5 w-1.5 rounded-full shrink-0 ${toneDot[tone]}`} />}
       <span className={`font-mono text-label uppercase tracking-wider truncate ${tone ? toneText[tone] : 'text-textMuted'}`}>
@@ -69,6 +69,22 @@ const Tally = ({ label, value, tone }: { label: string; value: number; tone?: To
       </span>
     </span>
     <span className="font-mono text-data text-textPrimary tnum">{value}</span>
+  </div>
+);
+
+/*
+  Tallies sit side by side, not stacked.
+
+  Stacked, each one is a `justify-between` row as wide as its panel — and the
+  panel is 1027px at 2560, so "Theses" and its count ended up 951px apart with
+  nothing between them. Four counts do not need a thousand pixels each.
+
+  `auto-fill` at a 13rem floor gives one column on a phone and four across on a
+  wide panel, which puts every label back beside its own number.
+*/
+const TallyRow = ({ children }: { children: React.ReactNode }) => (
+  <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 13rem), 1fr))' }}>
+    {children}
   </div>
 );
 
@@ -238,10 +254,12 @@ const Feedback = () => {
         </Panel>
 
         <Panel title="Your record" subtitle="everything this browser is holding" flush className="w-full">
-          <Tally label="Theses" value={state.ideas.length} />
-          <Tally label="Requests" value={state.requests.length} />
-          <Tally label="Notes" value={state.feedback.length} />
-          <Tally label="Roadmap items backed" value={state.voted.length} />
+          <TallyRow>
+            <Tally label="Theses" value={state.ideas.length} />
+            <Tally label="Requests" value={state.requests.length} />
+            <Tally label="Notes" value={state.feedback.length} />
+            <Tally label="Roadmap items backed" value={state.voted.length} />
+          </TallyRow>
           <div className="px-4 py-2.5 flex items-center gap-3 flex-wrap">
             {confirmClear ? (
               <>
@@ -261,9 +279,11 @@ const Feedback = () => {
         </Panel>
 
         <Panel title="Roadmap at a glance" subtitle="one board, on the Roadmap tab" flush className="w-full">
-          {roadmapCounts.map(r => (
-            <Tally key={r.status} label={r.status} value={r.n} tone={STATUS_TONE[r.status]} />
-          ))}
+          <TallyRow>
+            {roadmapCounts.map(r => (
+              <Tally key={r.status} label={r.status} value={r.n} tone={STATUS_TONE[r.status]} />
+            ))}
+          </TallyRow>
           <div className="px-4 py-2.5">
             <Link
               to="/community/requests"

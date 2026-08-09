@@ -322,9 +322,12 @@ export interface ProveItRead {
 export interface StockRow {
   ticker: string;
   momentum: number;
-  quality: number;
+  /* Two sleeves, matching data/stocks.ts. A `quality` field lived here and was
+     populated on all five rows after the live engine had already dropped the
+     quality sleeve for want of a fundamentals feed — dead data describing a
+     factor the product does not compute. `composite` is the momentum/flow
+     blend at the live weights, so the trailer's ranking is the app's ranking. */
   flow: number;
-  news: number;
   composite: number;
   sector: string;
   relStrength: number;
@@ -333,40 +336,8 @@ export interface StockRow {
   ours: boolean;
 }
 
-export interface NewsItem {
-  at: number;
-  source: string;
-  headline: string;
-  catalyst: string;
-  novelty: number;
-  duplicates: number;
-  contradiction: boolean;
-}
 
-export interface NewsRead {
-  items: NewsItem[];
-  driftBefore: number;
-  driftAfter: number;
-  widthBefore: number;
-  widthAfter: number;
-  confidence: number;
-}
 
-export interface EarningsRead {
-  date: string;
-  daysAway: number;
-  timeConfirmed: boolean;
-  session: string;
-  straddleCost: number;
-  impliedMovePct: number;
-  realizedMedianPct: number;
-  forecastMovePct: number;
-  ivCrush: number;
-  pDirection: number;
-  pMagnitude: number;
-  structures: { label: string; verdict: 'FAVOURED' | 'NEUTRAL' | 'AGAINST'; note: string }[];
-  selected: string;
-}
 
 export interface TrackerPacket {
   id: string;
@@ -422,8 +393,6 @@ export interface TrailerStory {
   rebound: ReboundRead;
   proveIt: ProveItRead;
   stocks: StockRow[];
-  news: NewsRead;
-  earnings: EarningsRead;
   packet: TrackerPacket;
   outcome: TrackerOutcome;
 }

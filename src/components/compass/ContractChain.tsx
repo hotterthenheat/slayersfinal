@@ -105,17 +105,29 @@ const ContractChain = ({ data, selected, onSelect, freshness }: ContractChainPro
     in-the-money calls and the reader had a thousand pixels of scrolling before
     reaching anything anyone trades.
 
-    Centred by arithmetic on the scroller rather than by scrollIntoView, which
-    would also scroll the page the panel sits in. Only on a change of name or
-    expiry: re-centring on every 1.5s repricing tick would fight the scrollbar
-    under the user's hand.
+    The chain no longer scrolls inside itself — the page does — so "open on the
+    money" now means putting the money-row under the reader's eye in the
+    DOCUMENT. Same arithmetic, different scrollport.
+
+    Only on a change of name or expiry: re-centring on every 1.5s repricing
+    tick would fight the scrollbar under the user's hand. And only when the row
+    is actually off-screen, so landing on the desk does not yank a page the
+    reader has not touched yet.
   */
-  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
-    const scroller = scrollerRef.current;
-    const row = scroller?.children[Math.max(0, Math.min(atmIndex, rows.length - 1))] as HTMLElement | undefined;
-    if (!scroller || !row) return;
-    scroller.scrollTop = Math.max(0, row.offsetTop - scroller.clientHeight / 2 + row.offsetHeight / 2);
+    const list = listRef.current;
+    const row = list?.children[Math.max(0, Math.min(atmIndex, rows.length - 1))] as HTMLElement | undefined;
+    if (!list || !row) return;
+    const box = row.getBoundingClientRect();
+    // BAR_PX is the fixed top bar; below it is the first pixel a reader sees.
+    const BAR_PX = 56;
+    const onScreen = box.top >= BAR_PX && box.bottom <= window.innerHeight;
+    if (onScreen) return;
+    window.scrollTo({
+      top: Math.max(0, window.scrollY + box.top - (window.innerHeight + BAR_PX) / 2),
+      behavior: 'auto',
+    });
     // rows.length guards the case where a name's ladder changes shape.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticker, expiry, rows.length]);
@@ -141,11 +153,13 @@ const ContractChain = ({ data, selected, onSelect, freshness }: ContractChainPro
         <div className="px-3 py-1.5 font-mono text-micro font-semibold uppercase tracking-widest text-bear">Puts</div>
       </div>
 
-      {/* Capped at every width now. `xl:max-h-none` was fine over a twelve-row
-          window and is not over a full chain: it laid 31 strikes out as one
-          2,141px column, so the money sat a thousand pixels down the page and
-          the panel had no viewport to centre it in. */}
-      <div ref={scrollerRef} className="overflow-y-auto flex-1 min-h-0 max-h-[max(560px,62vh)]">
+      {/* Every strike, in page flow. This used to cap at max(560px, 62vh) and
+          scroll inside itself, which is the "box inside a box" a full chain is
+          worst at: the reader hits the bottom of the document with half the
+          ladder still hidden behind an inner scrollbar. The centring effect
+          above is what solves the real problem the cap was aimed at — landing
+          on the money instead of on 31 rows of deep ITM calls. */}
+      <div ref={listRef}>
         {rows.map((row, i) => (
           <div key={row.strike}>
             <div className="grid grid-cols-2 border-b border-borderSubtle/50 divide-x divide-borderSubtle">
