@@ -1,23 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
-import { Ticket, AlertTriangle, Clock, ShieldAlert, Pin } from 'lucide-react';
+import { AlertTriangle, ArrowUpRight, Ticket, Clock, ShieldAlert, Pin } from 'lucide-react';
 import { preserveGreek } from '../ui/greek';
 import { weighContract, type WeighedContract, type ContractVerdict } from '../../core/contractScore';
 import { pinStrike } from '../../data/gex';
 import { VERDICT_LABEL, VERDICT_TONE } from './verdict';
 import { computeClock, lottoGateArmed } from './mocClock';
-import useMediaQuery from '../../hooks/useMediaQuery';
 import ContractTrack from './ContractTrack';
 import { weighedToPlan } from './contractTrackModel';
 import type { Verdict } from '../../types/compass';
 import type { MarketSnapshot } from '../../types/market';
-import { DUR, EASE } from '../../lib/motion';
 import Panel from '../ui/Panel';
 import EmptyState from '../ui/EmptyState';
 import StatCard from '../ui/StatCard';
 import MetricGrid from '../ui/MetricGrid';
 import SignalBadge from '../ui/SignalBadge';
-import { ROW_INTERACTIVE } from '../ui/interactiveRow';
+import { interactiveRowProps, ROW_INTERACTIVE } from '../ui/interactiveRow';
 
 /**
  * One grade lexicon across the terminal. The engine keeps BUY/WATCH/FADE; every
@@ -31,27 +28,32 @@ const sideWord = (s: 'C' | 'P') => (s === 'C' ? 'Calls' : 'Puts');
 
 /*
   ================================================================
-  What this board used to be, and why it is not that any more.
+  Two rewrites are recorded here, because both were the same mistake in
+  different clothes: showing something the desk could not know, and then
+  showing what it did know badly.
 
-  Every structural decision here was a function of a modelled closing-auction
-  imbalance: which side got listed, how the names were ranked across the strip,
-  a ±18-point grade adjustment, a per-strike "auction covers 1.4x" chip, and a
-  whole evidence panel reporting normalized imbalance, indicative displacement,
-  absorption and reversal risk to two decimals.
+  1. The closing-auction engine. Every structural decision on this board was a
+     function of a modelled auction imbalance — which side got listed, how names
+     ranked, a ±18-point grade adjustment, a per-strike "auction covers 1.4x"
+     chip and an evidence panel reporting absorption and reversal risk to two
+     decimals. Unpaired auction interest and the indicative price come from an
+     exchange imbalance feed (Nasdaq NOII, NYSE Order Imbalances) and the
+     confirmation term wanted futures. The product carries options, equities and
+     index quotes, so every one of those numbers was a hash of the ticker
+     wearing a sigma. It is gone.
 
-  None of that is sourceable. Unpaired auction interest and the indicative
-  price come from an exchange imbalance feed — Nasdaq NOII, NYSE Order
-  Imbalances — and the confirmation term claimed corroboration from futures.
-  The product carries options, equities and index quotes. It carries no
-  auction feed and no futures feed, so not one of those numbers had a path to
-  a real value; each was a hash of the ticker wearing a σ suffix.
+  2. The grey table that replaced it. Cutting the auction left a correct board
+     that read as a spreadsheet: eight columns of monochrome digits, no
+     direction colour, no evidence, nothing a reader could scan. That was
+     subtraction, not design.
 
-  What was always backed is the long-shot question itself: given the chain,
-  does the one-sigma move to expiry cover this strike's breakeven, and what
-  does an hour of standing still cost while you wait. Strike grid, mid, IV,
-  greeks, theta and open interest are all first-party. That question is what
-  the board asks now, on both sides, with no claim about which way the close
-  is going to break.
+  The board is now built in the same language as the Setups board next door —
+  cards, a direction-tinted contract pill, a four-metric row, evidence chips and
+  an amber invalidation line — because they answer the same shape of question
+  and a reader should not have to learn two dialects inside one desk.
+
+  Every number on it comes off `weighContract`: strike grid, mid, IV, greeks,
+  theta and open interest are all first-party option data.
   ================================================================
 */
 
@@ -97,141 +99,165 @@ function lottoLadder(snapshot: MarketSnapshot, right: 'C' | 'P', dte: number, wa
  *
  * Both terms come off the scorer that graded the row — `expectedMovePct` is the
  * one-sigma move to this expiry, `breakevenMovePct` is what the strike needs.
- * The ratio is division, not a model. It replaced an "auction covers 1.4x" chip
- * that multiplied the breakeven against a fabricated auction displacement.
+ * The ratio is division, not a model.
  */
 const sigmaReach = (c: WeighedContract) => c.expectedMovePct / Math.max(Math.abs(c.breakevenMovePct), 0.05);
 
-/*
-  One grid, declared once, used by the header and every row under it.
+/**
+ * The card's evidence chips, in the vocabulary `data/compass.ts` already uses
+ * for the Setups board — same strings, same order of appearance, so a reader
+ * moving between the two panes is reading one language.
+ *
+ * Every one is a fact about the contract the scorer already carries. Nothing
+ * here is a new measurement.
+ */
+function lottoChips(c: WeighedContract, spot: number, onPin: boolean): string[] {
+  const moneyPct = ((c.right === 'C' ? spot - c.strike : c.strike - spot) / spot) * 100;
+  const chips = [
+    moneyPct > 0.15 ? `ITM ${moneyPct.toFixed(1)}%` : moneyPct < -0.15 ? `OTM ${(-moneyPct).toFixed(1)}%` : 'AT THE MONEY',
+  ];
+  if (sigmaReach(c) >= 1) chips.push('1σ CLEARS BREAKEVEN');
+  if (c.spreadPct <= 2) chips.push('TIGHT BOOK');
+  else if (c.spreadPct >= 5) chips.push('WIDE BOOK');
+  // A far-OTM lotto is all time value by construction, but not every strike on
+  // the ladder is far out, so it is tested rather than assumed.
+  const intrinsic = Math.max(0, c.right === 'C' ? spot - c.strike : c.strike - spot);
+  if (intrinsic <= 0) chips.push('ALL TIME VALUE');
+  if (onPin) chips.push('AT THE PIN');
+  return chips;
+}
 
-  The board used to be a flex row per ticket with `flex-1` on the left, which
-  left roughly 600px of empty track down the middle of a 1440px board, and it
-  carried its own inline labels on every cell — "±1σ", "θ/day", "mid" repeated
-  down all twelve rows. Three columns of label text, twelve times over, for
-  three headings that never change.
-
-  Naming the columns once at the top removes 36 pieces of repeated text and
-  gives the numbers a shared baseline, which is the whole reason a ladder is
-  legible at a glance.
-*/
-const GRID = 'minmax(0,1fr) 62px 60px 56px 62px 60px 46px 92px';
-const GRID_SM = 'minmax(0,1fr) 58px 46px 84px';
-
-const HEAD = ['Contract', 'Reach', 'Needs', '±1σ', 'θ/day', 'Mid', 'Grade', ''];
-const HEAD_SM = ['Contract', 'Reach', 'Grade', ''];
-
-const HeadRow = ({ compact }: { compact: boolean }) => (
-  <div
-    className="grid gap-2 items-center px-3.5 py-1.5 border-b border-borderSubtle"
-    style={{ gridTemplateColumns: compact ? GRID_SM : GRID }}
-  >
-    {(compact ? HEAD_SM : HEAD).map((h, i) => (
-      <span
-        key={h || `sp-${i}`}
-        className={`font-mono text-micro uppercase tracking-widest text-textMuted ${i === 0 ? '' : 'text-right'}`}
-      >
-        {preserveGreek(h)}
-      </span>
-    ))}
-  </div>
-);
-
-/* ---- one lotto ticket row ---- */
-const LottoRow = ({
+/* ---- one lotto ticket, as a card ---- */
+const LottoCard = ({
   c,
+  rank,
+  spot,
   pin,
-  compact,
-  best,
   selected,
   onSelect,
 }: {
   c: WeighedContract;
+  rank: number;
+  spot: number;
   pin: number;
-  compact: boolean;
-  best: boolean;
   selected: boolean;
   onSelect: () => void;
 }) => {
-  const rightColor = c.right === 'C' ? 'text-bull' : 'text-bear';
+  const isCall = c.right === 'C';
+  // Direction is the market's own language, so it stays green/red, and it rides
+  // the contract pill only — exactly as SetupScanCard does it next door.
+  const pillTone = isCall ? 'border-bull/50 bg-bull/20' : 'border-bear/50 bg-bear/20';
   const covers = sigmaReach(c);
   const onPin = c.strike === pin;
-  const num = 'font-mono text-caption tnum text-right leading-4';
+  const chips = lottoChips(c, spot, onPin);
 
   return (
-    /* A row is the handle on the contract track below the board, so it is a real
-       control rather than a div with a cursor. No selection rail: the wash is the
-       marker the rest of this desk uses on a picked card. */
-    <motion.button
-      type="button"
-      layout="position"
-      transition={{ duration: DUR.reflow, ease: EASE }}
+    <div
+      role="listitem"
       onClick={onSelect}
-      aria-pressed={selected}
-      aria-label={`${c.ticker} ${c.strike}${c.right === 'C' ? ' call' : ' put'}, ${
-        c.dte === 0 ? 'same session' : `${c.dte} day`
-      }, mid $${c.mid.toFixed(2)}, grades ${c.composite}, a one-sigma move ${
-        covers >= 1 ? 'covers' : 'falls short of'
-      } the breakeven at ${covers.toFixed(1)} times. Chart this ticket.`}
-      className={`w-full text-left grid gap-2 items-center px-3.5 py-2 transition-colors ${ROW_INTERACTIVE} ${
-        selected ? 'bg-select/[0.06]' : 'hover:bg-rowHover'
+      className={`flex flex-col gap-2.5 rounded-md border px-3 py-2.5 transition-colors ${
+        selected
+          ? 'border-select/40 bg-select/[0.04]'
+          : 'border-borderSubtle bg-panel hover:border-borderMuted hover:bg-rowHover'
       }`}
-      style={{ gridTemplateColumns: compact ? GRID_SM : GRID }}
     >
-      <span className="min-w-0 flex items-center gap-1.5">
-        {/* The top ticket is marked by a rail, not a badge. A "TOP TICKET" pill
-            on row one of two ladders is two pills making a claim the ordering
-            already makes. */}
-        <span
-          className={`w-0.5 h-4 rounded-full shrink-0 ${best ? 'bg-select' : 'bg-transparent'}`}
-          aria-hidden
-        />
-        <span className="font-mono text-data font-semibold text-textPrimary tnum truncate">
-          {c.strike}
-          <span className={rightColor}>{c.right}</span>
+      <div
+        {...interactiveRowProps(onSelect, selected, 'button')}
+        aria-label={`Chart ${c.ticker} ${c.strike} ${isCall ? 'call' : 'put'}, rank ${rank}, grades ${c.composite}`}
+        className={`${ROW_INTERACTIVE} flex flex-col gap-2.5 rounded-sm`}
+      >
+        {/* Identity */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-mono text-micro text-textMuted tnum">#{rank}</span>
+          <span className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-label font-semibold ${pillTone}`}>
+            <span className="text-textPrimary">
+              {c.ticker} {c.strike}
+              {c.right}
+            </span>
+          </span>
+          <span className="inline-flex items-center rounded border border-borderSubtle bg-inset px-1.5 py-0.5 font-mono text-micro uppercase tracking-wider text-textSecondary tnum">
+            {c.dte === 0 ? '0DTE' : `${c.dte}DTE`}
+          </span>
+        </div>
+
+        {/* Standing. A fixed row rather than `ml-auto` on the identity line, so
+            the metric grids of two cards side by side start on the same line
+            however many characters the contract happens to have. */}
+        <div className="flex items-center gap-2">
+          {rank === 1 && <SignalBadge tone="magenta">Top ticket</SignalBadge>}
+          <span className="ml-auto">
+            <SignalBadge tone={VERDICT_TONE[GRADE_VERDICT[c.verdict]]} dot>
+              {VERDICT_LABEL[GRADE_VERDICT[c.verdict]]}
+            </SignalBadge>
+          </span>
+        </div>
+
+        {/* The four this desk is read on. Reach leads, because it is the only
+            one that answers the long-shot question; the rest price it. */}
+        <div className="grid grid-cols-4 gap-2">
+          {[
+            { k: preserveGreek('±1σ reach'), v: `${covers.toFixed(1)}x`, tone: covers >= 1 ? 'text-bull' : 'text-warn' },
+            { k: 'Needs', v: `${Math.abs(c.breakevenMovePct).toFixed(2)}%`, tone: 'text-textPrimary' },
+            { k: preserveGreek('θ/day'), v: `−${c.thetaPerDayPct.toFixed(0)}%`, tone: 'text-warn' },
+            { k: 'Mid', v: `$${c.mid.toFixed(2)}`, tone: 'text-textPrimary' },
+          ].map((m, i) => (
+            <div key={i} className="min-w-0">
+              <div className="font-mono text-micro uppercase tracking-widest text-textMuted truncate">{m.k}</div>
+              <div className={`font-mono text-caption font-semibold tnum leading-4 ${m.tone}`}>{m.v}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Evidence. Neutral, not directional — the direction is on the pill. */}
+        <div className="flex flex-wrap gap-1">
+          {chips.map(chip => (
+            /* preserveGreek at the point of render, never in the list: it
+               returns a node array for any string carrying lowercase Greek, and
+               a node array makes a poor React key. */
+            <SignalBadge key={chip} tone="neutral">
+              {preserveGreek(chip)}
+            </SignalBadge>
+          ))}
+        </div>
+      </div>
+
+      {/* What kills it. Not a model: a call is worth nothing below its strike at
+          expiry and a put nothing above it, which on a same-session ticket is
+          hours away. That is the desk's whole risk, stated per card. */}
+      <div className="flex items-center gap-2 border-t border-borderSubtle pt-2">
+        <span className="inline-flex items-center gap-1.5 font-mono text-label text-warn tnum min-w-0 truncate">
+          {onPin ? <Pin className="w-3 h-3 shrink-0" /> : <AlertTriangle className="w-3 h-3 shrink-0" />}
+          Worthless {isCall ? 'below' : 'above'} ${c.strike} at expiry
         </span>
-        {onPin && (
-          <Pin className="w-3 h-3 text-warn shrink-0" aria-label="dealers are heaviest on this strike" />
-        )}
-      </span>
-
-      {/* The desk's one question, stated once. It used to be said three times on
-          every row — a "±1σ covers 2.3x" chip, a sentence repeating both terms,
-          and a ±1σ column carrying the same figure. */}
-      <span className={`${num} ${covers >= 1 ? 'text-bull' : 'text-textMuted'}`}>{covers.toFixed(1)}x</span>
-
-      {!compact && <span className={`${num} text-textSecondary`}>{Math.abs(c.breakevenMovePct).toFixed(2)}%</span>}
-      {!compact && <span className={`${num} text-textSecondary`}>{c.expectedMovePct.toFixed(2)}%</span>}
-      {!compact && <span className={`${num} text-warn`}>−{c.thetaPerDayPct.toFixed(0)}%</span>}
-      {!compact && <span className={`${num} text-textPrimary`}>${c.mid.toFixed(2)}</span>}
-
-      <span className="font-mono text-body font-bold text-textPrimary tnum text-right leading-4">{c.composite}</span>
-      <SignalBadge tone={VERDICT_TONE[GRADE_VERDICT[c.verdict]]} className="justify-center">
-        {VERDICT_LABEL[GRADE_VERDICT[c.verdict]]}
-      </SignalBadge>
-    </motion.button>
+        <span className="ml-auto inline-flex items-center gap-1 font-mono text-label font-semibold uppercase tracking-wider text-textSecondary">
+          Chart <ArrowUpRight className="w-3 h-3" />
+        </span>
+      </div>
+    </div>
   );
 };
 
 /* ---- one side of the board ---- */
-const SideLadder = ({
+const SideBoard = ({
   right,
   rows,
+  spot,
   pin,
-  compact,
   trackedId,
   onSelect,
 }: {
   right: 'C' | 'P';
   rows: WeighedContract[];
+  spot: number;
   pin: number;
-  compact: boolean;
   trackedId: string | null;
   onSelect: (id: string) => void;
 }) => (
-  <div className="flex flex-col">
-    <div className="px-3.5 py-1.5 bg-inset border-b border-borderSubtle flex items-baseline gap-2">
-      <span className={`font-mono text-label font-semibold uppercase tracking-widest ${right === 'C' ? 'text-bull' : 'text-bear'}`}>
+  <div className="flex flex-col gap-2">
+    <div className="flex items-baseline gap-2">
+      <span
+        className={`font-mono text-label font-semibold uppercase tracking-widest ${right === 'C' ? 'text-bull' : 'text-bear'}`}
+      >
         {sideWord(right)}
       </span>
       <span className="font-mono text-micro text-textMuted">
@@ -239,25 +265,23 @@ const SideLadder = ({
       </span>
     </div>
     {rows.length === 0 ? (
-      <p className="px-3.5 py-3 font-mono text-label text-textMuted leading-relaxed">
+      <p className="font-mono text-label text-textMuted leading-relaxed">
         Every listed {sideWord(right).toLowerCase().slice(0, -1)} on this expiry sits at the model&apos;s $0.02 floor. There is no
         grade to give.
       </p>
     ) : (
-      <div className="flex flex-col divide-y divide-borderSubtle">
-        <AnimatePresence initial={false}>
-          {rows.map((c, i) => (
-            <LottoRow
-              key={c.id}
-              c={c}
-              pin={pin}
-              compact={compact}
-              best={i === 0}
-              selected={c.id === trackedId}
-              onSelect={() => onSelect(c.id)}
-            />
-          ))}
-        </AnimatePresence>
+      <div role="list" className="grid grid-cols-1 xl:grid-cols-2 gap-2">
+        {rows.map((c, i) => (
+          <LottoCard
+            key={c.id}
+            c={c}
+            rank={i + 1}
+            spot={spot}
+            pin={pin}
+            selected={c.id === trackedId}
+            onSelect={() => onSelect(c.id)}
+          />
+        ))}
       </div>
     )}
   </div>
@@ -286,9 +310,6 @@ const LottoBoard = ({ snapshot }: LottoBoardProps) => {
   /** WeighedContract id of the ticket the track below the board is drawing. */
   const [pickedTicket, setPickedTicket] = useState<string | null>(null);
   const [nowTick, setNowTick] = useState(() => Date.now());
-  // Same breakpoint ContractTrack uses one file over, so the board and the
-  // chart under it collapse together rather than at two different widths.
-  const compact = useMediaQuery('(max-width: 639px)');
 
   useEffect(() => {
     const id = setInterval(() => setNowTick(Date.now()), 1000);
@@ -301,9 +322,8 @@ const LottoBoard = ({ snapshot }: LottoBoardProps) => {
 
     A 0DTE ladder on a closed market is a ladder of contracts that have already
     settled, so with the bell gone the board prices the next session. This used
-    to fall out of the auction classification — DISLOCATION REVERSAL meant "the
-    trade is after the cross", so it meant 1DTE — which put a modelled imbalance
-    in charge of which expiry a reader was looking at.
+    to fall out of the auction classification, which put a modelled imbalance in
+    charge of which expiry a reader was looking at.
   */
   const boardDte: 0 | 1 = clock.marketOpen ? 0 : 1;
 
@@ -320,12 +340,8 @@ const LottoBoard = ({ snapshot }: LottoBoardProps) => {
 
     So it fires in the window where it bites: the last quarter hour, when a
     same-session ticket is minutes from being worth its intrinsic or nothing.
-    Outside it the board shows and the risk paragraph stays pinned above it,
-    unchanged and unweakened — relocated, not softened.
   */
   const gateArmed = lottoGateArmed(clock);
-  // Rolling from a same-session board to a next-session one re-arms the gate:
-  // the paragraph the user accepted no longer describes the board behind it.
   const acked = !gateArmed || ackedDte === boardDte;
   const pin = useMemo(() => pinStrike(snapshot, 6), [snapshot]);
 
@@ -345,16 +361,14 @@ const LottoBoard = ({ snapshot }: LottoBoardProps) => {
     [...rankedCalls, ...rankedPuts].find(c => c.id === pickedTicket) ?? rankedCalls[0] ?? rankedPuts[0] ?? null;
   const trackPlan = trackedTicket ? weighedToPlan(trackedTicket) : null;
 
-  // The per-side qualify count stays on each ladder header, where it sits
-  // beside the rows it counts; only the board-wide reach count needs hoisting.
   const priceable = rankedCalls.length + rankedPuts.length;
   const reaching = [...rankedCalls, ...rankedPuts].filter(c => sigmaReach(c) >= 1).length;
 
   return (
     <div className="flex flex-col gap-4">
       {/* Three cards, not five. `Priceable` and `Qualify` were both counts of
-          the table directly below them, which a reader can see; only the reach
-          count says something the ladder does not already show at a glance.
+          the board directly below them, which a reader can see; only the reach
+          count says something the cards do not already show at a glance.
           Plain strings: StatCard runs its own label through preserveGreek. */}
       <MetricGrid min="200px">
         <StatCard
@@ -396,21 +410,16 @@ const LottoBoard = ({ snapshot }: LottoBoardProps) => {
           </span>
         }
         subtitle={
-          // Computed, never hardcoded. The old title read "0DTE lotto board" over
-          // a 0-and-1DTE mix. With the market shut the board is a read on a
-          // session that has not opened, and saying so is the difference between
-          // a stale page and a page about tomorrow.
           clock.marketOpen
             ? `${snapshot.ticker} · both sides, ranked within each side`
             : `${snapshot.ticker} · ${clock.label}, these price the next session`
         }
-        flush
       >
         {!acked ? (
           /* A bar, not a curtain. This used to be eight rows of centred
              padding around one paragraph, so the panel it gated was a hole in
              the page even in the states where it had no business firing. */
-          <div className="px-3.5 py-3 flex items-start gap-3 flex-wrap border-b border-warn/20 bg-warn/[0.05]">
+          <div className="-mx-3.5 -mt-3 mb-3 px-3.5 py-3 flex items-start gap-3 flex-wrap border-b border-warn/20 bg-warn/[0.05]">
             <ShieldAlert className="w-4 h-4 text-warn shrink-0 mt-0.5" aria-hidden />
             <p className="flex-1 min-w-[24ch] text-caption text-textSecondary leading-relaxed">
               The bell is minutes away.{' '}
@@ -433,21 +442,20 @@ const LottoBoard = ({ snapshot }: LottoBoardProps) => {
             body={`Every listed strike on this expiry sits at the model's $0.02 floor. There is no grade to give.`}
           />
         ) : (
-          <div className="flex flex-col">
-            <HeadRow compact={compact} />
-            <SideLadder
+          <div className="flex flex-col gap-4">
+            <SideBoard
               right="C"
               rows={rankedCalls}
+              spot={snapshot.spot}
               pin={pin}
-              compact={compact}
               trackedId={trackedTicket?.id ?? null}
               onSelect={setPickedTicket}
             />
-            <SideLadder
+            <SideBoard
               right="P"
               rows={rankedPuts}
+              spot={snapshot.spot}
               pin={pin}
-              compact={compact}
               trackedId={trackedTicket?.id ?? null}
               onSelect={setPickedTicket}
             />
@@ -458,13 +466,7 @@ const LottoBoard = ({ snapshot }: LottoBoardProps) => {
       {/* What the ticket has been doing, and what an hour of standing still costs
           it. On a same-session lotto that second half IS the trade: the forward
           curve holds spot at the last close and lets only time run, which is the
-          honest picture of a contract whose theta is measured per hour.
-
-          Priced by the same Black-Scholes that graded the row (weighedToPlan
-          pins the model), so the line ends on the mid printed beside it. No
-          take-profit ladder is drawn, because this desk has none to draw: the
-          empty ladder is a first-class state on the plan, and the strike and the
-          breakeven are what lane B marks instead. */}
+          honest picture of a contract whose theta is measured per hour. */}
       {acked && trackPlan && <ContractTrack key={trackPlan.key} plan={trackPlan} className="animate-soft-in" />}
 
       <Panel bodyClassName="py-3">

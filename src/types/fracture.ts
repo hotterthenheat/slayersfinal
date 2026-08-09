@@ -61,15 +61,6 @@ export interface CascadeResult {
   paths: number[][];
 }
 
-export interface MoveDecomposition {
-  informational: number;
-  dealerHedging: number;
-  systematic: number;
-  passive: number;
-  shortCovering: number;
-  liquidation: number;
-  unexplained: number;
-}
 
 export interface FractureView {
   ticker: string;
@@ -87,5 +78,4 @@ export interface FractureView {
   levels: ForcedFlowLevel[];
   criticality: CriticalityRead;
   cascade: CascadeResult;
-  decomposition: MoveDecomposition;
 }

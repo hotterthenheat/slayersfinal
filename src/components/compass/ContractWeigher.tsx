@@ -18,7 +18,7 @@
 
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Search, Scale, Plus, Check, Target, ChevronDown, CornerDownLeft } from 'lucide-react';
+import { Search, Scale, Plus, Check, Target, ChevronDown, CornerDownLeft, AlertTriangle } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { useTracker } from '../../context/TrackerContext';
 import {
@@ -1135,12 +1135,33 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
   );
 
   // ---- the grade panel body ---------------------------------------------------
+  /* The contract wears a direction-tinted pill, exactly as SetupScanCard does
+     on the Setups board next door. This pane used to open the whole identity
+     line as one run of grey monospace, so the single most important fact about
+     a contract — whether it is a call or a put — was carried only by a letter.
+     Green and red are the market's own language and the pill is the one place
+     on this pane entitled to borrow them; the factor bars below deliberately do
+     not, because a quality score is not a direction. */
   const identity = weighed ? (
-    <p className="font-mono text-label text-textSecondary tnum">
-      {weighed.ticker} {fmtStrike(weighed.strike)}
-      {weighed.right} · {railExpiry.label} {railExpiry.weekday} · {railExpiry.dte} day
-      {railExpiry.dte === 1 ? '' : 's'} · {railExpiry.sessions} session{railExpiry.sessions === 1 ? '' : 's'} · {sleeve} sleeve
-    </p>
+    <div className="flex items-center gap-2 flex-wrap">
+      <span
+        className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-label font-semibold ${
+          weighed.right === 'C' ? 'border-bull/50 bg-bull/20' : 'border-bear/50 bg-bear/20'
+        }`}
+      >
+        <span className="text-textPrimary">
+          {weighed.ticker} {fmtStrike(weighed.strike)}
+          {weighed.right}
+        </span>
+      </span>
+      <span className="inline-flex items-center rounded border border-borderSubtle bg-inset px-1.5 py-0.5 font-mono text-micro uppercase tracking-wider text-textSecondary tnum">
+        {railExpiry.label} {railExpiry.weekday}
+      </span>
+      <span className="font-mono text-label text-textSecondary tnum">
+        {railExpiry.dte} day{railExpiry.dte === 1 ? '' : 's'} · {railExpiry.sessions} session
+        {railExpiry.sessions === 1 ? '' : 's'} · {sleeve} sleeve
+      </span>
+    </div>
   ) : null;
 
   const statGrid = weighed ? (
@@ -1386,8 +1407,17 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
                   </SignalBadge>
                 ))}
               </div>
-              <p className="text-caption text-textSecondary leading-relaxed">
-                Contradicted below ${evidence.invalidationPrice.toFixed(2)}. {evidence.invalidationReason}
+              {/* The price that kills the read gets a callout, matching the
+                  "what kills it" box on the Setups detail pane. It was a grey
+                  sentence in a stack of grey sentences — the one line on the
+                  pane a reader most needs to find, styled to be skipped. */}
+              <p className="flex items-start gap-2 rounded-md border border-warn/25 bg-warn/[0.06] px-3 py-2 text-caption text-textSecondary leading-relaxed">
+                <AlertTriangle className="w-3.5 h-3.5 text-warn shrink-0 mt-0.5" aria-hidden />
+                <span>
+                  <span className="font-mono font-semibold uppercase tracking-wider text-warn mr-1.5">Contradicted</span>
+                  below <span className="text-warn tnum font-semibold">${evidence.invalidationPrice.toFixed(2)}</span>.{' '}
+                  {evidence.invalidationReason}
+                </span>
               </p>
               <div className="flex flex-wrap gap-2">
                 {evidence.takeProfits.map(tp => (

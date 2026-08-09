@@ -9,8 +9,7 @@
   Pipeline: forced-flow balance sheet by price level →
   latent liquidity + absorption ratio → criticality
   (branching ratio) → Monte-Carlo cascade simulation →
-  a single actionable read, plus a mechanical-vs-
-  informational move decomposition.
+  a single actionable read.
 
   Grounded in the real option chain + price history;
   the stochastic layer is deterministic per ticker +
@@ -19,7 +18,7 @@
 ==================================================
 */
 
-import { dayKey, hGauss, h01, hRange } from './rng';
+import { dayKey, hGauss, hRange } from './rng';
 import { buildLevels } from '../data/gex';
 import type { MarketSnapshot } from '../types/market';
 import type {
@@ -29,7 +28,6 @@ import type {
   ForcedFlowLevel,
   ForcedParticipant,
   FractureView,
-  MoveDecomposition,
 } from '../types/fracture';
 
 const LEVELS_PER_SIDE = 10;
@@ -208,23 +206,22 @@ function buildCascade(spot: number, trigger: number, p: EngineParams, seedBase: 
   };
 }
 
-function buildDecomposition(snapshot: MarketSnapshot, p: EngineParams, seed: (t: string) => number): MoveDecomposition {
-  const up = snapshot.changePercent >= 0;
-  const rsi = snapshot.indicators.rsi;
-  const raw: Record<keyof MoveDecomposition, number> = {
-    dealerHedging: (p.amp ? 42 : 20) + seed('dh') * 10,
-    systematic: 14 + p.crowding * 12,
-    passive: 9 + seed('pa') * 6,
-    shortCovering: up && rsi < 42 ? 16 + seed('sc') * 12 : 3 + seed('sc') * 4,
-    liquidation: !up && p.branching > 0.7 ? 14 + seed('lq') * 12 : 2 + seed('lq') * 4,
-    informational: 12 + seed('in') * 14,
-    unexplained: 3 + seed('un') * 4,
-  };
-  const total = Object.values(raw).reduce((a, x) => a + x, 0);
-  const out = {} as MoveDecomposition;
-  (Object.keys(raw) as (keyof MoveDecomposition)[]).forEach(k => (out[k] = Math.round((raw[k] / total) * 100)));
-  return out;
-}
+/*
+  The move decomposition lived here, and it is gone.
+
+  `buildDecomposition` split a price move across seven participant types —
+  dealer hedging, systematic funds, passive flow, short covering, margin
+  liquidation, information and noise — and printed each as a percentage of the
+  move. Nobody sells participant attribution of volume. Not OPRA, not the
+  consolidated equity tape, not an index feed; the exchanges do not tag a print
+  with who was behind it and FINRA does not publish it after the fact. Every
+  share of that bar was `seed('dh') * 10` on the ticker.
+
+  It survived three passes of this same audit, including the one that removed
+  the closing-auction engine for exactly this reason, because it was reached
+  through `FractureView` rather than imported by name anywhere.
+*/
+
 
 /*
   The closing-auction engine lived here, and it is gone.
@@ -245,7 +242,6 @@ function buildDecomposition(snapshot: MarketSnapshot, p: EngineParams, seed: (t:
 export function buildFractureView(snapshot: MarketSnapshot): FractureView {
   const { ticker, spot, chain } = snapshot;
   const day = dayKey();
-  const seed = (t: string) => h01(`${ticker}-${day}-frac-${t}`);
 
   const G = chain.reduce((a, n) => a + Math.abs(n.netGex), 0) || spot * 1e6;
   const netGexTotal = chain.reduce((a, n) => a + n.netGex, 0);
@@ -353,7 +349,6 @@ export function buildFractureView(snapshot: MarketSnapshot): FractureView {
     belowLevels[belowLevels.length - 1].price;
   const cascade = buildCascade(spot, trigger, params, `${ticker}-${day}-casc`);
 
-  const decomposition = buildDecomposition(snapshot, params, seed);
 
   // ---- instability composite ----
   // Driven by cascade odds, self-excitation, and how close the fracture line sits
@@ -402,6 +397,5 @@ export function buildFractureView(snapshot: MarketSnapshot): FractureView {
     levels,
     criticality,
     cascade,
-    decomposition,
   };
 }
