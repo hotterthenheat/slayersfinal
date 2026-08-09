@@ -43,6 +43,7 @@ stated in the UI · **RED** = no data source; remove, or reduce to the part that
 | **Volatility: IV, IV rank/percentile, skew, term structure, expected move, realized-vs-implied** | Options IV + 14y history. Fully computable, no third party. |
 | **Pulse chart / any price chart** | Tick→EOD bars, 14y. |
 | **Indices context (SPX / VIX / RUT)** | 1-second CGIF. |
+| **Beta** (`universe.ts`, the Stocks β column and its DEF/CYC lens) | Flagged for removal and it **survives**: beta is `cov(stock, index) / var(index)`, and both series are entitled — 14y UTP equity history against SPX back to 2017. Unlike the quality sleeve it is derived from prices, not sourced from a vendor, so there is a real path to a real number. The values shipping today are hand-typed seed constants exactly like `px` on the same rows, which is a simulator question, not a feed question. |
 
 ### AMBER — keep, but the UI must say what the number actually is
 
@@ -111,7 +112,18 @@ Actioned on the owner's instruction. Each line is now a record, not a proposal.
    `components/compass/mocClock.ts` **survives** — it is the ET market clock and the
    last-quarter-hour acceptance gate, both derived from `core/calendar.ts`. What time the
    bell is, is not an auction-feed question.
-6. **Dark Pool — KEPT.** Verified against the source before touching it: the desk models
+6. **Dark Pool inference columns — REGROUPED, not removed.** Kind, Venue and Clips are
+   the classifier's output, but two of them sat under a column group headed **Print** and
+   the third under **Execution**, among arithmetic. The consolidated tape reports an
+   off-exchange trade as price, size, time and condition codes; it does not say which kind
+   of pool crossed it, what sort of order worked it, or which prints share a parent. The
+   three moved into **Read**, beside the column already headed "Inferred". Execution now
+   holds only tape fields and arithmetic on them, including the reporting lag, which the
+   TRF genuinely publishes. Nothing was deleted, because a classifier over a real trade
+   stream is a legitimate product — it just may not wear a fact's heading.
+7. **Beta — KEPT.** See the GREEN table. It is derived from two entitled price series,
+   not sourced from a vendor.
+8. **Dark Pool — KEPT.** Verified against the source before touching it: the desk models
    EQUITY off-exchange prints, not options ones. Share-based sizes with no 100-multiplier,
    an ATS venue taxonomy, no options fields on the type, and `darkpool.ts:217` explicitly
    disclaiming the option chain. It is delayed-data-constrained, not conceptually broken,

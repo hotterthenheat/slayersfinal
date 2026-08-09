@@ -307,39 +307,34 @@ const DarkPool = () => {
   const maxSize = Math.max(...rows.map(p => p.size), 1);
   const maxVs = Math.max(...rows.map(p => Math.abs(p.vsSpotPct)), 0.01);
 
+  /*
+    Two groups, split by provenance rather than by subject.
+
+    The table used to run Print / Execution / Read, and the split did not survive
+    reading: Kind and Venue sat under **Print**, the heading that means "what the
+    tape carried", and Clips sat under Execution among pure arithmetic. All three
+    are the classifier's output. The consolidated tape reports an off-exchange
+    trade as price, size, time and condition codes — it does not say which kind
+    of pool crossed it, what sort of order worked it, or which prints belong to
+    one parent. Those are inferences, and they were wearing a fact's heading.
+
+    So Kind, Venue and Clips now sit in **Read**, beside the column already
+    headed "Inferred", and Execution holds only what the tape reports or what is
+    arithmetic on it — time, price, distance from spot, size, notional, session
+    share, and the reporting lag the TRF publishes.
+
+    Venue was already de-branded to an ARCHETYPE, never a venue name, for a
+    separate reason recorded in data/darkpool.ts: hanging invented crosses on
+    regulated venues real firms operate reads as a citation of those firms.
+  */
   const columns: Column<DarkPoolPrint>[] = [
     {
       key: 'time',
-      group: 'Print',
+      group: 'Execution',
       header: 'Time',
       width: '62px',
       sortValue: p => p.time,
       render: p => <span className="font-mono text-caption text-textSecondary tnum leading-4">{p.time}</span>,
-    },
-    {
-      key: 'exec',
-      group: 'Print',
-      header: 'Kind',
-      sortValue: p => p.execution,
-      render: p => (
-        <span className="inline-flex items-center gap-1.5" title={EXECUTION_NOTE[p.execution]}>
-          <SignalBadge tone={execTone[p.execution]}>{p.execution}</SignalBadge>
-          {p.atMid && (
-            <span className="font-mono text-micro uppercase tracking-wider text-bull" title="Crossed inside the spread">
-              MID
-            </span>
-          )}
-        </span>
-      ),
-    },
-    {
-      key: 'venue',
-      group: 'Print',
-      header: 'Venue',
-      help: 'ATS',
-      width: '128px',
-      sortValue: p => p.venue,
-      render: p => <span className="font-mono text-caption text-textMuted leading-4">{p.venue}</span>,
     },
     {
       key: 'price',
@@ -410,22 +405,6 @@ const DarkPool = () => {
       },
     },
     {
-      key: 'clips',
-      group: 'Execution',
-      header: 'Clips',
-      align: 'right',
-      width: '62px',
-      sortValue: p => p.clips,
-      render: p => (
-        <span
-          className="font-mono text-caption text-textMuted tnum leading-4"
-          title={p.clips === 1 ? 'A single fill' : `${p.clips} child fills behind this print`}
-        >
-          {p.clips === 1 ? '1' : `${p.clips}×`}
-        </span>
-      ),
-    },
-    {
       key: 'lag',
       group: 'Execution',
       header: 'Lag',
@@ -438,6 +417,47 @@ const DarkPool = () => {
           title="Time between the trade and its appearance on the tape"
         >
           {p.reportLagSec >= 60 ? `${Math.round(p.reportLagSec / 60)}m` : `${p.reportLagSec}s`}
+        </span>
+      ),
+    },
+    {
+      key: 'exec',
+      group: 'Read',
+      header: 'Kind',
+      sortValue: p => p.execution,
+      render: p => (
+        <span className="inline-flex items-center gap-1.5" title={EXECUTION_NOTE[p.execution]}>
+          <SignalBadge tone={execTone[p.execution]}>{p.execution}</SignalBadge>
+          {p.atMid && (
+            <span className="font-mono text-micro uppercase tracking-wider text-bull" title="Crossed inside the spread">
+              MID
+            </span>
+          )}
+        </span>
+      ),
+    },
+    {
+      key: 'venue',
+      group: 'Read',
+      header: 'Venue',
+      help: 'ATS',
+      width: '128px',
+      sortValue: p => p.venue,
+      render: p => <span className="font-mono text-caption text-textMuted leading-4">{p.venue}</span>,
+    },
+    {
+      key: 'clips',
+      group: 'Read',
+      header: 'Clips',
+      align: 'right',
+      width: '62px',
+      sortValue: p => p.clips,
+      render: p => (
+        <span
+          className="font-mono text-caption text-textMuted tnum leading-4"
+          title={p.clips === 1 ? 'A single fill' : `${p.clips} child fills behind this print`}
+        >
+          {p.clips === 1 ? '1' : `${p.clips}×`}
         </span>
       ),
     },
