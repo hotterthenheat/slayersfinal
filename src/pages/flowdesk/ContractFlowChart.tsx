@@ -13,6 +13,7 @@ import {
   ReferenceLine,
   ResponsiveContainer,
 } from 'recharts';
+import ChartWatermark from '../../components/ui/ChartWatermark';
 import { buildContractFlow, flowClock, type ContractRef } from '../../data/contractflow';
 import { fmtUsd } from '../../data/gex';
 import { ChartTip, TipHead, TipRow, TipSeries, TipNote } from '../../components/charts/ChartTip';
@@ -121,7 +122,8 @@ const ContractFlowChart = ({ contract }: { contract: ContractRef }) => {
             <span className="w-3 h-[2px] rounded-full" style={{ background: showAvg ? PRICE_LINE : '#555' }} /> Avg
           </button>
         </div>
-        <div className="inst-surface rounded-md p-1.5">
+        <div className="inst-surface rounded-md p-1.5 relative">
+          <ChartWatermark desk="Trace" />
           <ResponsiveContainer width="100%" height={168}>
             <ScatterChart margin={{ top: 6, right: 6, bottom: 2, left: 0 }}>
               <CartesianGrid stroke={GRID} />
@@ -216,7 +218,8 @@ const ContractFlowChart = ({ contract }: { contract: ContractRef }) => {
             <span className="w-3 h-[2px] rounded-full" style={{ background: showPrice ? PRICE_LINE : '#555' }} /> Price
           </button>
         </div>
-        <div className="inst-surface rounded-md p-1.5">
+        <div className="inst-surface rounded-md p-1.5 relative">
+          <ChartWatermark desk="Trace" />
           <ResponsiveContainer width="100%" height={168}>
             <ComposedChart data={cf.net.series} margin={{ top: 6, right: 4, bottom: 2, left: 0 }}>
               <CartesianGrid stroke={GRID} />

@@ -5,6 +5,7 @@ import { BEAR, BULL, FOCUS, MUTED_INK, SPOT } from '../../components/gex/palette
 import ChartLegend from '../../components/ui/ChartLegend';
 import HoverReadout from '../../components/ui/HoverReadout';
 import { svgHoverIndex } from '../../components/ui/svgHover';
+import ChartWatermark from '../../components/ui/ChartWatermark';
 import type { FlowPrint } from '../../types/flowdesk';
 
 /*
@@ -141,6 +142,7 @@ const PrintSessionChart = ({ print }: { print: FlowPrint }) => {
           onKeyDown={onKeyDown}
           className="relative flex-1 min-w-0 h-[196px] cursor-crosshair focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60"
         >
+          <ChartWatermark desk="Trace" />
           <svg viewBox="0 0 100 100" width="100%" height="100%" preserveAspectRatio="none" aria-hidden="true">
             {[8, 50, 92].map(y => (
               <line
