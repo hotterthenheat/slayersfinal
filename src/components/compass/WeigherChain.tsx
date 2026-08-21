@@ -76,7 +76,7 @@ const ChainCell = ({ c, isSelected, onPick, align }: CellProps) => {
       type="button"
       onClick={onPick}
       aria-pressed={isSelected}
-      aria-label={`${c.ticker} ${fmtStrike(c.strike)} ${c.right === 'C' ? 'call' : 'put'}, mid $${c.mid.toFixed(2)}, grade ${c.composite}`}
+      aria-label={`${c.ticker} ${fmtStrike(c.strike)} ${c.right === 'C' ? 'call' : 'put'}, mid $${c.mid.toFixed(2)}, reads ${c.verdict}`}
       // min-h-11 is the 44px touch floor; the two lines of content nearly fill
       // it anyway, so it costs a couple of pixels a row and buys a tappable chain.
       className={`min-h-11 w-full px-3 py-1.5 transition-colors ${right ? 'text-right' : 'text-left'} ${
@@ -85,7 +85,6 @@ const ChainCell = ({ c, isSelected, onPick, align }: CellProps) => {
     >
       <div className={`flex items-baseline gap-2 ${right ? 'justify-end' : ''}`}>
         <span className={`font-mono text-caption font-semibold tnum ${premiumInk(c)}`}>${c.mid.toFixed(2)}</span>
-        <span className="font-mono text-micro tnum text-textMuted">{c.composite}</span>
       </div>
       <div className={`mt-0.5 flex items-center gap-2 font-mono text-micro tnum text-textMuted ${right ? 'justify-end' : ''}`}>
         <span>Δ {Math.abs(c.delta).toFixed(2)}</span>

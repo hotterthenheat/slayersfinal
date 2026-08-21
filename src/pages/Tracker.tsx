@@ -18,7 +18,7 @@ import { useMarketData } from '../context/MarketDataContext';
 import Simulator from '../core/simulator';
 import { makeSetup } from '../data/compass';
 import { SLEEVE_BY_KEY } from '../types/compass';
-import type { Setup } from '../types/compass';
+import type { Setup, Verdict } from '../types/compass';
 import type { TrackedSetup, TrackedFill } from '../types/tracker';
 import { isUsableFill, markPosition, bookTotals, MIN_BOOK_FOR_STATS, type PositionMark } from '../data/positionBook';
 import PageHeader from '../components/ui/PageHeader';
@@ -184,7 +184,23 @@ interface Row {
   fill?: TrackedFill;
   /** The fill marked against the current mid. Absent unless `fill` is usable. */
   mark?: PositionMark;
-  scoreDelta: number;
+  /**
+   * How the engine's READ has moved since the row was tracked, as a tag
+   * transition — not as a number.
+   *
+   * This was `scoreDelta`, `live.score - tracked.scoreAtTrack`: the difference
+   * between two 0-100 composites, printed in bull green or bear red next to the
+   * score itself. Both halves of that were wrong. The composite was a weighted
+   * guess with nothing measured behind it, so its delta inherited the same
+   * unfalsifiability at twice the confidence; and a MAGNITUDE was wearing a
+   * DIRECTION hue, which the house rule forbids and which `Stocks.tsx:58` had
+   * already been through once.
+   *
+   * `verdictAtTrack` was being persisted the whole time and read by nothing.
+   * BUY → WATCH is a claim three coarse bands can carry, it is the tag the
+   * directive keeps, and it needs no new storage.
+   */
+  verdictShift: { from: Verdict; to: Verdict } | null;
   attention: string[];
 }
 
@@ -419,7 +435,7 @@ const PositionBlock = ({ row, onFill }: { row: Row; onFill: ItemDetailProps['onF
 
 /** The per-item status, position and notes editor. Writes to the local journal. */
 const ItemDetail = ({ row, onStatus, onNotes, onFill, onReview, onUntrack }: ItemDetailProps) => {
-  const { tracked, live, expired, scoreDelta } = row;
+  const { tracked, live, expired, verdictShift } = row;
   const moveUp = live.expectedMovePct >= 0;
   const current: 'auto' | UserStatus = row.override ?? 'auto';
 
@@ -437,14 +453,11 @@ const ItemDetail = ({ row, onStatus, onNotes, onFill, onReview, onUntrack }: Ite
 
       {/* Live read */}
       <div className="grid grid-cols-2 gap-2">
-        <MiniStat label="Score">
+        <MiniStat label="Read">
           <span className="flex items-baseline gap-1.5">
-            {live.score}
-            {scoreDelta !== 0 && (
-              <span className={`text-label ${scoreDelta > 0 ? 'text-bull' : 'text-bear'}`}>
-                {scoreDelta > 0 ? '+' : ''}
-                {scoreDelta}
-              </span>
+            <span className="text-textPrimary">{live.verdict}</span>
+            {verdictShift && (
+              <span className="text-label text-textMuted">from {verdictShift.from}</span>
             )}
           </span>
         </MiniStat>
@@ -583,17 +596,18 @@ const COLUMNS: Column<Row>[] = [
   },
   {
     key: 'score',
-    header: 'Score',
+    header: 'Read',
     align: 'right',
+    /* Sorted by the engine's own ordering key, which is not rendered. Sorting a
+       board by a tag alone would collapse every BUY into one indistinguishable
+       block; the order still has to come from somewhere, and a hidden sort key
+       is a much weaker claim than a printed grade. */
     sortValue: r => r.live.score,
     render: r => (
       <span className="flex items-center justify-end gap-1.5">
-        <span className="text-textPrimary tnum">{r.live.score}</span>
-        {r.scoreDelta !== 0 && (
-          <span className={`text-micro tnum ${r.scoreDelta > 0 ? 'text-bull' : 'text-bear'}`}>
-            {r.scoreDelta > 0 ? '+' : ''}
-            {r.scoreDelta}
-          </span>
+        <span className="text-textPrimary">{r.live.verdict}</span>
+        {r.verdictShift && (
+          <span className="text-micro text-textMuted">from {r.verdictShift.from}</span>
         )}
       </span>
     ),
@@ -756,16 +770,19 @@ const Tracker = () => {
         // position worth $NaN.
         const mark = isUsableFill(fill) ? markPosition(fill, live.mid) : undefined;
         const status = override ?? autoStatus(live, expired);
-        const scoreDelta = live.score - tracked.scoreAtTrack;
+        const verdictShift =
+          live.verdict !== tracked.verdictAtTrack
+            ? { from: tracked.verdictAtTrack, to: live.verdict }
+            : null;
 
         const attention: string[] = [];
         if (status !== 'closed') {
           if (live.verdict === 'EXIT') attention.push('Engine reads FADED');
           if (expiringSoon) attention.push('Expires within a day');
-          if (scoreDelta < 0) attention.push(`Score ${scoreDelta} vs track`);
+          if (verdictShift) attention.push(`Read moved ${verdictShift.from} to ${verdictShift.to}`);
         }
 
-        return { tracked, live, expired, expiringSoon, override, status, notes, fill, mark, scoreDelta, attention };
+        return { tracked, live, expired, expiringSoon, override, status, notes, fill, mark, verdictShift, attention };
       }),
     [liveData, journal]
   );

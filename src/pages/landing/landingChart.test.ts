@@ -58,10 +58,12 @@ const read = (p: string) => readFileSync(join(SRC, p), 'utf8');
  * every assertion below reads code and nothing else.
  */
 const code = (text: string): string =>
-  text
-    .replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, ' ') // {/* jsx */}
-    .replace(/\/\*[\s\S]*?\*\//g, ' ') // /* block */
-    .replace(/^\s*\/\/.*$/gm, ' '); // // line
+  // Tempered token, not a lazy wildcard. `[\s\S]*?` between `{` and `*&#47;`
+  // backtracks past the comment's end hunting for a closing brace and deletes
+  // every line it crosses — measured swallowing the middle of a 1,100-line
+  // component. `[^*]|\*(?!\/)` cannot cross a terminator. Stripping the block
+  // comment leaves a bare `{ }`, which matches nothing that matters here.
+  text.replace(/\/\*(?:[^*]|\*(?!\/))*\*\//g, ' ').replace(/^\s*\/\/.*$/gm, ' ');
 
 const CHART = code(read('components/gex/StrikeChart.tsx'));
 const LANDING = code(read('pages/landing/LiveSections.tsx'));

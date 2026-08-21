@@ -71,7 +71,30 @@ export interface WeighedContract {
   /** One-sigma move to expiry, % */
   expectedMovePct: number;
   factors: FactorScore[];
-  composite: number;
+  /**
+   * ORDERING ONLY. Never rendered.
+   *
+   * This was `composite` — a 0-100 grade, printed at 36px on the Weigher, in
+   * every chain cell, and in the prose comparing one contract to another. It was
+   * a weighted mean of five hand-chosen factor scores at hand-chosen weights,
+   * and nothing behind those weights was measured: no forward log, no hit rate,
+   * no interval. A number on a 0-100 scale claims a precision that a weighted
+   * guess does not have, and putting it in the largest type on the pane made the
+   * claim the loudest thing on the desk.
+   *
+   * The number itself still has one honest job. Three call sites need a total
+   * order over candidate contracts — `weighContracts` sorts the chain, Lotto
+   * ranks each side, and `betterAlternative` picks a challenger — and a ranking
+   * is a weaker claim than a grade: it says "this one before that one", not
+   * "this one is 94 out of 100". So the quantity survives as a sort key with a
+   * name that cannot be mistaken for a verdict, and the type stops it reaching a
+   * pane: see `weighedGrade.test.ts`, which fails the build if any component
+   * renders it.
+   *
+   * `verdict` below is still derived from it and still ships. That is the tag,
+   * and a tag drawn from three coarse bands is a claim the arithmetic can carry.
+   */
+  rankKey: number;
   verdict: ContractVerdict;
   edge: string;
   risk: string;
@@ -329,8 +352,17 @@ function scoreCandidate(
     { key: 'liq', label: 'Liquidity', score: liqScore, weight: weights.liq, detail: liqDetail },
   ];
 
-  const composite = Math.round(factors.reduce((a, f) => a + f.score * f.weight, 0));
-  const verdict: ContractVerdict = composite >= 70 ? 'BUY' : composite >= 52 ? 'WATCH' : 'FADE';
+  /*
+    The one line the owner's math files replace.
+
+    Kept as a local, not deleted, because `verdict` is derived from it and the
+    directive that removed the grade also said to keep the tag. Deleting the
+    arithmetic would have taken the tag with it, and re-deriving the same
+    weighted sum at each of the three sort sites would have cloned this line
+    into three seams instead of one.
+  */
+  const rankKey = Math.round(factors.reduce((a, f) => a + f.score * f.weight, 0));
+  const verdict: ContractVerdict = rankKey >= 70 ? 'BUY' : rankKey >= 52 ? 'WATCH' : 'FADE';
   const ranked = [...factors].sort((a, b) => b.score - a.score);
 
   return {
@@ -350,7 +382,7 @@ function scoreCandidate(
     breakevenMovePct: Number(breakevenMovePct.toFixed(2)),
     expectedMovePct: Number(expectedMovePct.toFixed(2)),
     factors,
-    composite,
+    rankKey,
     verdict,
     edge: ranked[0].detail,
     risk: ranked[ranked.length - 1].detail,
@@ -375,7 +407,7 @@ export function weighContracts(snapshot: MarketSnapshot, horizon: Horizon): Weig
   const seen = new Set<string>();
   return out
     .filter(c => (seen.has(c.id) ? false : (seen.add(c.id), true)))
-    .sort((a, b) => b.composite - a.composite);
+    .sort((a, b) => b.rankKey - a.rankKey);
 }
 
 /** Weigh a single contract the user searched — same engine as the setups scan. */
@@ -403,8 +435,8 @@ export function betterAlternative(
   const targetRr = rr(target);
   const candidate = weighContracts(snapshot, horizon)
     .filter(c => c.right === target.right && c.id !== target.id)
-    .sort((a, b) => b.composite - a.composite)[0];
+    .sort((a, b) => b.rankKey - a.rankKey)[0];
   if (!candidate) return null;
-  const better = candidate.composite >= target.composite + 5 && rr(candidate) >= targetRr;
+  const better = candidate.rankKey >= target.rankKey + 5 && rr(candidate) >= targetRr;
   return better ? candidate : null;
 }

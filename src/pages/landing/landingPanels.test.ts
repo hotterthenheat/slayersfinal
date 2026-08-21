@@ -36,10 +36,14 @@ const SRC = join(process.cwd(), 'src');
 const LANDING = readFileSync(join(SRC, 'pages/landing/LiveSections.tsx'), 'utf8');
 const REGISTRY = readFileSync(join(SRC, 'pages/workspace/registry.tsx'), 'utf8');
 
-/** Comments stripped — a claim quoted in prose must not satisfy a check on code. */
-const code = LANDING.replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, ' ')
-  .replace(/\/\*[\s\S]*?\*\//g, ' ')
-  .replace(/^\s*\/\/.*$/gm, ' ');
+/*
+  Comments stripped — a claim quoted in prose must not satisfy a check on code.
+
+  Tempered token rather than a lazy wildcard: `[\s\S]*?` between `{` and a block
+  comment backtracks past the comment's end looking for a closing brace and
+  deletes every line it crosses. `[^*]|\*(?!\/)` cannot cross a terminator.
+*/
+const code = LANDING.replace(/\/\*(?:[^*]|\*(?!\/))*\*\//g, ' ').replace(/^\s*\/\/.*$/gm, ' ');
 
 /** Components declared inside the landing file itself. */
 const localComponents = new Set(
