@@ -59,4 +59,18 @@ export const DEALER_BOOK: DealerBookConvention = {
  * dealer's book. Two honest products can disagree here and both be right,
  * because the disagreement is in the assumption, not the arithmetic.
  */
-export const OI_PROXY_NOTE = `OI-proxy positioning · assumes ${DEALER_BOOK.label.toLowerCase()}`;
+export const oiProxyNote = (book: DealerBookConvention = DEALER_BOOK): string =>
+  `OI-proxy positioning · assumes ${book.label.toLowerCase()}`;
+
+/**
+ * The note for the DEFAULT book.
+ *
+ * Kept for surfaces that cannot be re-conventioned, and deliberately NOT used by
+ * ones that can. It shipped as a bare constant first and the Levels desk read it
+ * while offering a convention toggle, so flipping to the short-calls book left
+ * the positioning panel still saying "assumes dealers long calls, short puts"
+ * over a surface drawn the other way. Caught by driving the toggle in a browser
+ * and reading the panel back. A disclosure that describes the wrong assumption
+ * is worse than none: it converts an honest caveat into a false statement.
+ */
+export const OI_PROXY_NOTE = oiProxyNote();

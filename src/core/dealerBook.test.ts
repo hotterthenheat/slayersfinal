@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { DEALER_BOOK, OI_PROXY_NOTE } from './dealerBook';
+import { DEALER_BOOK, OI_PROXY_NOTE, oiProxyNote } from './dealerBook';
 
 /*
 ==================================================
@@ -57,10 +57,27 @@ describe('the dealer-book convention', () => {
 
   it('is what the exposure surface claims, instead of an observation', () => {
     const page = code(read('pages/gex/ExposureProfile.tsx'));
-    expect(page, 'the positioning panel must wear the proxy note').toMatch(/subtitle=\{OI_PROXY_NOTE\}/);
+    expect(page, 'the positioning panel must wear the proxy note').toMatch(/subtitle=\{oiProxyNote\(book\)\}/);
     expect(
       page,
       'the panel is back to asserting "net dealer pressure" as something measured'
     ).not.toMatch(/subtitle="net dealer pressure by strike"/);
+  });
+
+  it('names whichever book is actually selected', () => {
+    /*
+      The note shipped as a bare constant on a desk that offers a convention
+      toggle, so flipping to the short-calls book left the positioning panel
+      still reading "assumes dealers long calls, short puts" over a surface drawn
+      the other way. Caught by driving the toggle in a browser and reading the
+      panel back. A caveat that describes the wrong assumption is not a weaker
+      disclosure — it is a false statement.
+    */
+    const other = { call: -DEALER_BOOK.call, put: -DEALER_BOOK.put, label: 'Dealers short calls, long puts' };
+    expect(oiProxyNote(DEALER_BOOK)).toContain(DEALER_BOOK.label.toLowerCase());
+    expect(oiProxyNote(other)).toContain(other.label.toLowerCase());
+    expect(oiProxyNote(other), 'the note is stuck on the default book').not.toContain(
+      DEALER_BOOK.label.toLowerCase()
+    );
   });
 });
