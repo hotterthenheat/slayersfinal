@@ -36,7 +36,25 @@ import { readExpandPref, writeExpandPref } from '../../hooks/useExpandPreference
 ==================================================
 */
 
-/** One labelled value inside a drilldown section grid. */
+/*
+  One labelled value in a drilldown section.
+
+  This was a filled tile — `bg-inset`, its own padding box — sitting in a
+  `gap-px` grid over a border-coloured background, which paints a hairline
+  LATTICE: every figure in its own little cell, three across and two down, three
+  blocks of them down the pane. It is the single most recognisable shape in
+  generated UI and it was the loudest thing in every drilldown in the terminal.
+
+  `ui/StatCard` went through exactly this and its comment is the argument:
+  "This used to be a card, and the card was the problem… The metric is now a
+  cell on a ruled strip — no surface, no radius, no padding box. That is what
+  the header of a terminal actually looks like, and it is the same information
+  in roughly a third of the vertical space."
+
+  Same move here. The cell keeps its own left rule so the columns stay readable
+  as columns, the row keeps a rule under it, and nothing is filled. Denser,
+  quieter, and the numbers are what carries — which is the point of a drilldown.
+*/
 export const Field = ({
   label,
   value,
@@ -48,10 +66,10 @@ export const Field = ({
   tone?: string;
   sub?: ReactNode;
 }) => (
-  <div className="bg-inset px-3 py-2 flex flex-col gap-0.5 min-w-0">
-    <span className="font-mono text-label uppercase tracking-widest text-textMuted truncate">{label}</span>
+  <div className="px-3 py-2 flex flex-col gap-0.5 min-w-0 border-l border-borderSubtle first:border-l-0">
+    <span className="font-mono text-micro uppercase tracking-widest text-textMuted truncate">{label}</span>
     <span className={`font-mono text-data font-semibold tnum ${tone} truncate`}>{value}</span>
-    {sub != null && <span className="font-mono text-label text-textSecondary truncate">{sub}</span>}
+    {sub != null && <span className="font-mono text-micro text-textSecondary truncate">{sub}</span>}
   </div>
 );
 
@@ -70,8 +88,12 @@ export const Section = ({
 }) => (
   <div className="flex flex-col gap-1.5">
     <span className="font-mono text-label uppercase tracking-widest text-textSecondary">{title}</span>
+    {/* Ruled, not tiled. `gap-px` over `bg-borderSubtle` drew a full lattice —
+        a border on all four sides of every figure. A rule above and below the
+        strip, and one between the columns, separates them just as well and
+        stops the drilldown reading as a grid of cards. */}
     <div
-      className={`grid gap-px bg-borderSubtle rounded-md overflow-hidden ${
+      className={`grid border-y border-borderSubtle ${
         cols === 2 ? 'grid-cols-2' : cols === 4 ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-3'
       }`}
     >
@@ -84,7 +106,10 @@ export const Section = ({
 export const Block = ({ title, children, className = '' }: { title: string; children: ReactNode; className?: string }) => (
   <div className={`flex flex-col gap-1.5 ${className}`}>
     <span className="font-mono text-label uppercase tracking-widest text-textSecondary">{title}</span>
-    <div className="inst-surface rounded-md px-4 py-3 flex flex-col gap-2">{children}</div>
+    {/* Matches Section: ruled top and bottom, no surface and no radius, so a
+        block of prose sits in the same rhythm as the figures above it instead of
+        floating on a second card. */}
+    <div className="border-y border-borderSubtle px-1 py-3 flex flex-col gap-2">{children}</div>
   </div>
 );
 

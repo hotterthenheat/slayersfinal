@@ -28,8 +28,14 @@ import { scoreBandFill, scoreBandText } from './tones';
 ==================================================
 */
 
-/** The market's own language for a sign. A magnitude may not borrow it. */
-const DIRECTION = /\b(?:text|bg|border|from|to|via)-(?:bull|bear)\b/;
+/**
+ * The market's own language for a sign. A magnitude may not borrow it.
+ *
+ * Both spellings: the class (`text-bull`) and the bare tone name (`'bull'`)
+ * that a component maps to one. The bare form is how the live bug reached the
+ * screen — `tone={score >= 68 ? 'bull' : …}` has no `text-` prefix anywhere.
+ */
+const DIRECTION = /\b(?:text|bg|border|from|to|via)-(?:bull|bear)\b|'(?:bull|bear)'/;
 
 describe('score-band ink', () => {
   it('carries no direction hue', () => {
@@ -91,9 +97,26 @@ describe('score-band ink', () => {
       const text = readFileSync(p, 'utf8')
         .replace(/\/\*(?:[^*]|\*(?!\/))*\*\//g, ' ')
         .replace(/^\s*\/\/.*$/gm, ' ');
-      // Every `${ … }` interpolation, which is where a conditional class lives.
-      for (const m of text.matchAll(/\$\{([^{}]*)\}/g)) {
-        const expr = m[1];
+      /*
+        TWO shapes, because reading only one left a live bug on screen.
+
+        The first version scanned `${ … }` interpolations, which is where a
+        conditional CLASS lives. It missed the Stocks drawer entirely, because
+        that site inked its score through a prop instead:
+
+            tone={pick.composite >= 68 ? 'bull' : pick.composite <= 46 ? 'bear' …}
+
+        No template literal, no `text-` prefix — a bare tone name handed to a
+        component that resolves it to a class somewhere else. The guard passed
+        and the number sat there in green. So a `prop={ … }` expression counts
+        too, and the direction pattern accepts the bare tone words as well as the
+        class spellings.
+      */
+      const exprs = [
+        ...[...text.matchAll(/\$\{([^{}]*)\}/g)].map(m => m[1]),
+        ...[...text.matchAll(/\b(?:tone|className|color|fill|ink)=\{([^{}]*)\}/g)].map(m => m[1]),
+      ];
+      for (const expr of exprs) {
         if (!DIRECTION.test(expr) || !SCORE_ISH.test(expr)) continue;
         if (SIGNED.test(expr) || !COMPARES.test(expr)) continue;
         offenders.push(`${rel} — ${expr.trim().slice(0, 90)}`);
