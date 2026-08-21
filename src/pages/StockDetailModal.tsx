@@ -1,5 +1,6 @@
 import { useMemo, type ReactNode } from 'react';
 import { Star, GitCompare, Info, Waves, Ruler } from 'lucide-react';
+import CompanyLogo from '../components/ui/CompanyLogo';
 import DetailModal from '../components/ui/DetailModal';
 import { useExpandPreference } from '../hooks/useExpandPreference';
 import SignalBadge from '../components/ui/SignalBadge';
@@ -172,6 +173,7 @@ const StockDetailModal = ({
         pick && (
           <>
             <div className="flex items-center gap-2">
+              <CompanyLogo ticker={pick.ticker} size={24} />
               <span className="font-mono text-lead leading-6 font-bold text-textPrimary">{pick.ticker}</span>
               <SignalBadge tone={VERDICT_TONE[pick.verdict]}>{VERDICT_LABEL[pick.verdict]}</SignalBadge>
             </div>

@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Search } from 'lucide-react';
+import CompanyLogo from './CompanyLogo';
 import EmptyState from './EmptyState';
 import type { TickerListing } from '../../data/tickers';
 
@@ -83,7 +84,13 @@ const TickerSearch = ({ value, onChange }: TickerSearchProps) => {
         onClick={() => setOpen(o => !o)}
         className="flex items-center gap-2 border border-borderSubtle hover:border-borderMuted bg-panel rounded-md pl-2.5 pr-2 py-1.5 font-mono text-caption transition-colors min-w-[104px] leading-4"
       >
-        <Search className="w-3.5 h-3.5 text-textMuted" />
+        {/* The mark stands in for the magnifier on the trigger. The button
+            already says what it is by carrying a symbol and a chevron, and the
+            search affordance is repeated inside the popover on the input that
+            actually searches — so this slot is better spent saying WHICH name
+            the desk is on. Single-name surface: exactly where a brand mark
+            belongs (see ui/CompanyLogo.tsx). */}
+        <CompanyLogo ticker={value} size={16} />
         <span className="font-semibold text-textPrimary">{value}</span>
         <ChevronDown className={`w-3.5 h-3.5 text-textMuted ml-auto transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
