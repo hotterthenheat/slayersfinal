@@ -5,6 +5,8 @@
 ==================================================
 */
 
+import type { ChainExpiry } from '../core/expiryCalendar';
+
 /** Any listed symbol. Core sim tickers are seeded; others are synthesized on demand. */
 export type TickerSymbol = string;
 
@@ -121,12 +123,28 @@ export interface TapeOrder {
   conditions?: number[];
 }
 
+/**
+ * One expiry's own book — the strikes it lists, priced at ITS time to expiry.
+ *
+ * This is the primary object now. `MarketSnapshot.chain` is the fold of these
+ * (see core/chainAggregate.ts), not the other way round, so a figure that asks
+ * what one expiry contributes can be answered by leaving it out and summing
+ * again rather than by scaling the aggregate and calling the scale an answer.
+ */
+export interface ExpiryBook {
+  expiry: ChainExpiry;
+  nodes: StrikeNode[];
+}
+
 export interface MarketSnapshot {
   ticker: TickerSymbol;
   spot: number;
   changePercent: number;
   priceHistory: number[];
+  /** The fold of `chainByExpiry`. Never built independently of it. */
   chain: StrikeNode[];
+  /** Nearest expiry first. */
+  chainByExpiry: ExpiryBook[];
   indicators: Indicators;
   plan: TradePlan;
   tape: TapeOrder[];
