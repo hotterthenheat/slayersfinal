@@ -277,8 +277,6 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
     const atm = Math.round(snapshot.spot);
     return canonicalQuery(snapshot.ticker, atm, 'C', e);
   });
-  const [budgetInput, setBudgetInput] = useState('');
-  const [targetLabel, setTargetLabel] = useState<string | null>(null);
 
   // ---- the listed universe, lazily. ------------------------------------------
   // Until the listing lands nothing is declared unknown: under-reporting an
@@ -500,21 +498,11 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
 
   // ---- plan readouts ----------------------------------------------------------
   const ladder = useMemo(() => expiryLadder(), []);
-  const targetExpiry = useMemo(
-    () => ladder.find(e => e.label === targetLabel) ?? railExpiry,
-    [ladder, targetLabel, railExpiry]
-  );
-  const daysToTarget = Math.max(0, Math.min(railExpiry.dte, targetExpiry.dte));
-  const runway = railExpiry.dte - daysToTarget;
 
   const coverage = weighed ? weighed.expectedMovePct / Math.max(weighed.breakevenMovePct, 0.05) : 0;
   const effExpMove = weighed?.expectedMovePct ?? 0;
   const clearsBreakeven = weighed ? effExpMove >= weighed.breakevenMovePct : false;
   const costPerContract = (weighed?.mid ?? 0) * CONTRACT_MULTIPLIER;
-  const parsedBudget = parseFloat(budgetInput);
-  const budget = Number.isFinite(parsedBudget) && parsedBudget > 0 ? parsedBudget : null;
-  const contractsInBudget = budget != null && costPerContract > 0 ? Math.floor(budget / costPerContract) : null;
-  const outlay = contractsInBudget != null ? contractsInBudget * costPerContract : null;
   const halfSpread = (weighed?.spreadPct ?? 0) / 2;
   const expFill = (weighed?.mid ?? 0) * (1 + halfSpread / 100);
   const flowScore = weighed?.factors.find(f => f.key === 'flow')?.score ?? 50;
@@ -713,7 +701,7 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
     priceable` guard on "If you take it" — and they drifted, which is how a
     symbol with no listing ended up with a full cost breakdown under it. Typing
     `ZZZZ 505C` printed NO LISTING FOR ZZZZ in the grade panel and then, directly
-    beneath, days to expiry, cost per contract, contracts in budget, expected
+    beneath, days to expiry, cost per contract, expected
     fill, spread round-trip and theta drag — sizing economics for a ticker the
     page had just said it could not find.
 
@@ -841,7 +829,7 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
               {weighed.expectedMovePct.toFixed(2)}%).
             </>
           ) : (
-            `Nothing in the ${sleeve} sleeve beats this on both grade and reward to risk.`
+            `Nothing in the ${sleeve} sleeve reads better than this and clears its breakeven with more room.`
           )}
         </p>
 
@@ -998,37 +986,18 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
                 </SignalBadge>
               )}
 
-              <label className="ml-auto inline-flex items-center gap-1.5 font-mono text-label text-textMuted">
-                Risk budget
-                <span className="relative">
-                  <span className="absolute left-2 top-1/2 -translate-y-1/2 font-mono text-label text-textMuted">$</span>
-                  <input
-                    type="number"
-                    value={budgetInput}
-                    placeholder="0"
-                    aria-label="Risk budget in dollars"
-                    onChange={e => setBudgetInput(e.target.value)}
-                    className="w-24 bg-inputBg border border-borderSubtle focus:border-borderMuted rounded-md pl-5 pr-2 py-1 font-mono text-caption text-textPrimary tnum focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60"
-                  />
-                </span>
-              </label>
-              <label className="inline-flex items-center gap-1.5 font-mono text-label text-textMuted">
-                Target date
-                <select
-                  value={targetExpiry.label}
-                  aria-label="Target date"
-                  onChange={e => setTargetLabel(e.target.value)}
-                  className="bg-inputBg border border-borderSubtle focus:border-borderMuted rounded-md px-2 py-1 font-mono text-caption text-textPrimary tnum focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60"
-                >
-                  {ladder
-                    .filter(e => e.dte <= railExpiry.dte)
-                    .map(e => (
-                      <option key={e.label} value={e.label}>
-                        {e.label} · {e.weekday}
-                      </option>
-                    ))}
-                </select>
-              </label>
+              {/* No inputs.
+
+                  Two controls stood here — a Risk budget number field and a
+                  Target date select — and between them they were the whole of
+                  "test your thesis" on this desk. The desk's job is to say what
+                  it thinks of a contract. Asking the reader to type their account
+                  size and pick a horizon so the pane can divide by one and count
+                  days to the other is work handed back to them, and the two
+                  figures it bought were the two least load-bearing on the panel.
+
+                  Everything the pane says now is a property of the contract and
+                  the chain, not of the reader. */}
             </div>
 
             {/* Three readouts, not twelve tiles. The twelve were one grid with
@@ -1040,26 +1009,19 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
               label="How long"
               items={[
                 { k: 'Days to expiry', v: `${railExpiry.dte}d`, note: `${railExpiry.sessions} sessions` },
-                { k: 'Hold to target', v: `${daysToTarget}d` },
-                { k: 'Runway to expiry', v: `${runway}d`, tone: runway <= 0 ? 'text-warn' : undefined },
                 { k: preserveGreek('1σ move'), v: `${effExpMove.toFixed(1)}%` },
-              ]}
-            />
-            <Figures
-              label="How much"
-              items={[
-                { k: 'Cost / contract', v: `$${costPerContract.toFixed(0)}` },
-                {
-                  k: 'Contracts in budget',
-                  v: contractsInBudget != null ? `${contractsInBudget}` : '—',
-                  tone: contractsInBudget === 0 ? 'text-warn' : undefined,
-                },
-                { k: 'Est. outlay', v: outlay != null ? `$${outlay.toFixed(0)}` : '—' },
               ]}
             />
             <Figures
               label="What the round trip costs"
               items={[
+                /* "How much" used to be its own group and this was its only
+                   survivor: the other two rows — contracts in budget, estimated
+                   outlay — were arithmetic on a number the reader typed in. A
+                   heading over one figure is a heading with nothing to organise,
+                   and cost per contract belongs beside the fill and the spread
+                   anyway. */
+                { k: 'Cost / contract', v: `$${costPerContract.toFixed(0)}` },
                 { k: 'Expected fill', v: `$${expFill.toFixed(2)}`, note: `~${halfSpread.toFixed(1)}% exit slippage` },
                 {
                   k: 'Spread round-trip',
@@ -1084,10 +1046,6 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
               {costEatsEdge
                 ? `Spread round-trip plus a day of theta (${friction.toFixed(1)}%) is wider than the 1σ move (${weighed.expectedMovePct.toFixed(1)}%), so you would need a fast, above-expected move just to clear the toll.`
                 : `The 1σ move (${weighed.expectedMovePct.toFixed(1)}%) clears the friction (${friction.toFixed(1)}%). The edge is capturable if you work a limit near $${expFill.toFixed(2)} instead of paying the offer.`}
-              {budget != null &&
-                (contractsInBudget && contractsInBudget > 0
-                  ? ` Your $${budget.toFixed(0)} budget clears ${contractsInBudget} contract${contractsInBudget > 1 ? 's' : ''} at the $${costPerContract.toFixed(0)} mid.`
-                  : ` Your $${budget.toFixed(0)} budget is under the $${costPerContract.toFixed(0)} single-contract mid.`)}
             </p>
             <p className="font-mono text-micro text-textMuted leading-relaxed border-t border-borderSubtle pt-2.5">
               Sizing off the mid × {CONTRACT_MULTIPLIER}-share multiplier. Fills and slippage read from the modelled spread and

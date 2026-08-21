@@ -495,7 +495,14 @@ const ContractTrack = ({ plan, bars, track, className = '' }: ContractTrackProps
                 opacity: l.docked ? 0.7 : 1,
               }}
             >
+              {/* The tag carries what the UNDERLYING has to reach, because the
+                  plot behind it is a premium chart and cannot say it. That fact
+                  used to live in a four-column table under the chart whose other
+                  three columns were the label and the premium — both already on
+                  this tag — and a percentage the reader can take off the axis.
+                  The table is gone; the one thing only it could say is here. */}
               {l.label} ${l.premium.toFixed(2)}
+              {l.needs != null && <span className="font-normal opacity-70"> · {plan.ticker} {l.needs.toFixed(2)}</span>}
               {l.docked && ' ↑'}
             </span>
           ))}
@@ -528,48 +535,17 @@ const ContractTrack = ({ plan, bars, track, className = '' }: ContractTrackProps
         {readout ? `${readout.px}, ${readout.delta}, ${readout.when}, ${readout.spot}` : ''}
       </p>
 
-      {/*
-        The levels as a table.
+      {/* No level table.
 
-        A tag on the axis can carry a price and nothing else. What a holder needs
-        beside it is how far the level is from where they started and what the
-        UNDERLYING has to do to get there — the second one being the question the
-        old lane B existed to answer, asked in words instead of a second chart.
-      */}
-      <div className="border-t border-borderSubtle pt-2">
-        <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 gap-y-1 font-mono text-micro tnum">
-          <span className="uppercase tracking-widest text-textMuted">Level</span>
-          <span className="uppercase tracking-widest text-textMuted text-right">Premium</span>
-          <span className="uppercase tracking-widest text-textMuted text-right">From {plan.entryLabel.toLowerCase()}</span>
-          <span className="uppercase tracking-widest text-textMuted text-right">{plan.ticker} needs</span>
-          {levels.map(l => (
-            <Row key={l.key} level={l} entry={t.entry} />
-          ))}
-        </div>
-      </div>
+          Four columns sat here — Level, Premium, From reference, and what the
+          ticker needs — under a chart that already draws every one of those
+          levels as a labelled line at its own premium. Two of the four restated
+          the tag verbatim, the third is the distance between two numbers already
+          on screen, and the fourth is now on the tag itself. Restating a chart in
+          a table beneath it is not a second read; it is the same read, twice. */}
 
       <p className="font-mono text-micro text-textMuted leading-relaxed">{plan.modelNote}</p>
     </div>
-  );
-};
-
-/** One level. Split out so the grid stays four columns of one row each. */
-const Row = ({ level, entry }: { level: LevelMark; entry: number }) => {
-  const pct = pctFrom(entry, level.premium);
-  return (
-    <>
-      <span className="truncate" style={{ color: level.ink }}>
-        {level.label}
-        {level.hit && <span className="ml-1.5 text-textMuted uppercase tracking-wider">reached</span>}
-        {level.docked && <span className="ml-1.5 text-textMuted uppercase tracking-wider">off scale</span>}
-      </span>
-      <span className="text-right text-textPrimary">${level.premium.toFixed(2)}</span>
-      <span className="text-right text-textSecondary">{level.key === 'ref' ? '—' : signedPct(pct, 0)}</span>
-      <span className="text-right text-textSecondary">{level.needs != null ? level.needs.toFixed(2) : '—'}</span>
-      {level.note && (
-        <span className="col-span-4 -mt-0.5 text-textMuted leading-snug">{level.note}</span>
-      )}
-    </>
   );
 };
 

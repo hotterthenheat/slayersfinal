@@ -128,12 +128,18 @@ const SetupScanCard = ({ setup, rank, selected, onSelect, onStudy }: SetupScanCa
         </span>
       </div>
 
-      {/* The four a scan is read on. Confidence is not among them: the engine
-          derives it linearly from the score, so a Conf column is the Score
-          column wearing a percent sign. Health is the independent read. */}
-      <div className="grid grid-cols-4 gap-2">
+      {/* Three, not four. Confidence was never among them — the engine derives
+          it linearly from the score, so a Conf column is the Score column
+          wearing a percent sign — and Score itself is gone now for the reason
+          the Weigher's grade went: a 0-100 figure with nothing measured behind
+          its weights. The verdict already leads the card.
+
+          Health stays. Unlike the score it is not a blend: `healthFor` is a
+          function of moneyness alone, and the panel states what it means — 50 is
+          at the money, higher is deeper in. One measured relationship with a
+          stated meaning is a different object from a weighted guess. */}
+      <div className="grid grid-cols-3 gap-2">
         {[
-          { k: 'Score', v: String(setup.score) },
           { k: 'Health', v: `${setup.health}/100` },
           { k: preserveGreek('1σ Move'), v: `±${setup.expectedMovePct}%` },
           { k: 'Mid', v: `$${setup.mid.toFixed(2)}` },

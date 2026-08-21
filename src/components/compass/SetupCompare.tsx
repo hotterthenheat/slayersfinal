@@ -1,13 +1,11 @@
 import { useMemo, type ReactNode } from 'react';
-import { AlertTriangle, ArrowUpRight, Bookmark, BookmarkCheck, Scale } from 'lucide-react';
+import { ArrowUpRight, Bookmark, BookmarkCheck, Scale } from 'lucide-react';
 import Panel from '../ui/Panel';
 import SignalBadge from '../ui/SignalBadge';
-import AnimatedNumber from '../ui/AnimatedNumber';
 import DataTable, { type Column } from '../ui/DataTable';
 import VerdictBadge from './VerdictBadge';
 import { useTracker } from '../../context/TrackerContext';
-import { expiryRead, horizonCopy } from './setupHorizon';
-import { CONTRACT_MULTIPLIER } from './contractFacts';
+import { expiryRead } from './setupHorizon';
 import type { ScannerKey, Setup } from '../../types/compass';
 
 interface SetupCompareProps {
@@ -19,7 +17,6 @@ interface SetupCompareProps {
    * which is the same `name.spot` makeSetup priced and invalidated against. Zero
    * when the sweep has no row for the name, and then no distance is claimed.
    */
-  spot: number;
   scanner: ScannerKey;
   onSelectPeer: (setup: Setup) => void;
   onStudy: () => void;
@@ -56,36 +53,6 @@ interface SetupCompareProps {
 
   `auto-fill` at an 18rem floor keeps one fact per line on a phone and fits
   three or four across a wide pane, so every label stays against its own number.
-*/
-const RowGrid = ({ children }: { children: ReactNode }) => (
-  <div
-    className="grid gap-x-8 divide-y divide-borderSubtle"
-    style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 18rem), 1fr))' }}
-  >
-    {children}
-  </div>
-);
-
-/** One fact: name on the left, figure on the right, the sentence underneath. */
-const Row = ({
-  label,
-  value,
-  note,
-  tone = 'text-textPrimary',
-}: {
-  label: string;
-  value: ReactNode;
-  note?: ReactNode;
-  tone?: string;
-}) => (
-  <div className="flex items-baseline justify-between gap-3 py-2 first:pt-0">
-    <span className="font-mono text-micro uppercase tracking-widest text-textMuted shrink-0">{label}</span>
-    <span className="min-w-0 text-right">
-      <span className={`block font-mono text-caption font-semibold tnum leading-4 ${tone}`}>{value}</span>
-      {note && <span className="block font-mono text-micro text-textMuted leading-snug">{note}</span>}
-    </span>
-  </div>
-);
 
 /*
   A block heading that names the block's unit, because two of them differ.
@@ -104,13 +71,10 @@ const Head = ({ children, unit }: { children: ReactNode; unit: string }) => (
   </div>
 );
 
-const SetupCompare = ({ setup, peers, spot, scanner, onSelectPeer, onStudy }: SetupCompareProps) => {
+const SetupCompare = ({ setup, peers, scanner, onSelectPeer, onStudy }: SetupCompareProps) => {
   const { trackSetup, untrackSetup, isTracked } = useTracker();
   const tracked = isTracked(setup.id);
   const exp = expiryRead(setup.expiry);
-  const horizon = horizonCopy(exp.bucketDte, exp.sessions);
-  const spreadPct = setup.mid > 0 ? ((setup.ask - setup.bid) / setup.mid) * 100 : 0;
-  const crossCost = (setup.ask - setup.bid) * CONTRACT_MULTIPLIER;
 
   /* The invalidation is a price on the UNDERLYING, so it only means anything
      next to where the underlying is — and it has to be the SAME spot the engine
@@ -128,20 +92,10 @@ const SetupCompare = ({ setup, peers, spot, scanner, onSelectPeer, onStudy }: Se
      returns the simulator's price instead of the synthetic walk it returned a
      moment earlier. Measured on REGN inside one sweep: 1073.50, then 1041.52.
      A pane that changes the scanner's own inputs by rendering is not a pane. */
-  const invalidationGapPct = spot > 0 ? ((setup.invalidationPrice - spot) / spot) * 100 : null;
 
   /* The two exit rungs, tallest first, drawn against the mid they are measured
      from. The tiles gave both the same width and so hid the one thing the pair
      is for: how much further the target is than the exit. */
-  const rungs = useMemo(
-    () =>
-      [
-        { label: horizon.target, level: setup.swingTarget },
-        { label: horizon.exit, level: setup.scalpExit },
-      ].sort((a, b) => b.level.pct - a.level.pct),
-    [horizon.target, horizon.exit, setup.swingTarget, setup.scalpExit]
-  );
-  const topPct = Math.max(...rungs.map(r => r.level.pct), 1);
 
   /* The pick sits inside its own comparison rather than above it — a rank means
      nothing until you can see the row it beat. Same underlying first, because
@@ -183,11 +137,17 @@ const SetupCompare = ({ setup, peers, spot, scanner, onSelectPeer, onStudy }: Se
         render: s => <span className="text-textSecondary">{expiryRead(s.expiry).chip}</span>,
       },
       {
+        /* The read, not the grade. `setup.score` is a 0-100 figure with nothing
+           measured behind its weights; the verdict is the same read at a
+           precision three coarse bands can carry. The sort still runs on the
+           number, because a board ordered by a tag alone collapses every
+           QUALIFIED into one indistinguishable block — and a hidden ordering key
+           is a far weaker claim than a printed grade. */
         key: 'score',
-        header: 'Score',
+        header: 'Read',
         align: 'right',
         sortValue: s => s.score,
-        render: s => <span className="text-textPrimary font-semibold">{s.score}</span>,
+        render: s => <VerdictBadge verdict={s.verdict} />,
       },
       {
         key: 'mid',
@@ -232,115 +192,26 @@ const SetupCompare = ({ setup, peers, spot, scanner, onSelectPeer, onStudy }: Se
       }
     >
       <div key={setup.id} className="flex flex-col gap-3.5 animate-soft-in">
+        {/* The verdict leads, and there is no number beside it — the same cut
+            the Weigher's grade got, for the same reason. `setup.score` was a
+            0-100 figure at 36px with nothing measured behind its weights. */}
         <div className="flex items-center gap-3 flex-wrap">
-          <span className="font-mono text-4xl font-bold text-textPrimary tnum leading-none">
-            <AnimatedNumber value={setup.score} format={v => Math.round(v).toString()} />
-          </span>
           <VerdictBadge verdict={setup.verdict} dot />
           <span className="ml-auto font-mono text-label text-textMuted tnum">
             IV {setup.greeks.iv}% · Δ {setup.greeks.delta.toFixed(2)}
           </span>
         </div>
 
-        {/* WHAT IT COSTS.
+        {/* The dossier moved to Analysis.
 
-            There is no "Live mid" here. `Setup.liveMid` is `mid * (0.9 + rng()
-            * 0.2)` — one seeded draw, fixed per contract, so it never moves and
-            was never a second quote; printing it beside the real mid put a
-            made-up price where a trader reads the market. The bid and ask that
-            replace it are the book this pane's own spread is computed from, so
-            the numbers reconcile. */}
-        <div className="flex flex-col gap-1 border-t border-borderSubtle pt-2.5">
-          <Head unit="per contract">What it costs</Head>
-          <RowGrid>
-            <Row
-              label="Cost"
-              value={`$${(setup.mid * CONTRACT_MULTIPLIER).toFixed(0)}`}
-              note={`${CONTRACT_MULTIPLIER} shares' worth at the $${setup.mid.toFixed(2)} mid`}
-            />
-            <Row
-              label="Book"
-              value={`$${setup.bid.toFixed(2)} / $${setup.ask.toFixed(2)}`}
-              note={`${spreadPct.toFixed(1)}% wide · $${crossCost.toFixed(0)} to cross · ${setup.liquidityLabel.toLowerCase()} book`}
-            />
-            <Row
-              label="1σ move"
-              value={`±${setup.expectedMovePct}%`}
-              note={`what the option market prices ${setup.ticker} to travel by expiry`}
-            />
-            {/* Health is moneyness on a 0-100 scale — data/compass.ts healthFor
-                reads nothing but the strike against spot. Saying so is the
-                difference between a number and a mystery. */}
-            <Row
-              label="Health"
-              value={`${setup.health}/100`}
-              note="50 is at the money · higher is deeper in the money"
-            />
-          </RowGrid>
-        </div>
+            Three blocks stood here — what it costs, what it pays, what kills it
+            — a full read of one contract on a page whose job is to rank a field
+            of them. Every figure in them is already on the analysis view, which
+            is one click away through the button at the bottom of this pane and
+            through the Analysis control on every card in the list beside it.
 
-        {/* WHAT IT PAYS — premium, and the bars are what the tiles could not
-            say: the target is not a little further than the exit, it is twice
-            as far. Green because this is money made, which is the one thing
-            bull ink is for. */}
-        <div className="flex flex-col gap-2 border-t border-borderSubtle pt-2.5">
-          <Head unit="premium">What it pays</Head>
-          <div className="flex flex-col gap-1.5">
-            {rungs.map((r, i) => (
-              <div key={r.label} className="flex items-center gap-2.5">
-                <span className="font-mono text-micro uppercase tracking-widest text-textMuted min-w-0 flex-1 truncate">
-                  {r.label}
-                </span>
-                {/* A fixed track, not a full-bleed bar. Stretched to the row the
-                    longer rung always filled it edge to edge and read as a rule
-                    under the text; against a track with a visible remainder the
-                    shorter rung can be seen to be half the distance, which is
-                    the only thing the pair is worth drawing for. */}
-                <span
-                  /* Narrower track below sm so the label keeps its width:
-                     "SESSION TARGET" is 14 uppercase characters at
-                     tracking-widest and was clipping by 4px at 390. */
-                  className="block h-1 w-14 sm:w-24 shrink-0 rounded-full bg-white/[0.06] overflow-hidden"
-                  title={`${r.level.pct}% of the ${topPct}% furthest rung`}
-                >
-                  <span
-                    className="block h-full rounded-full bg-bull"
-                    style={{ width: `${(r.level.pct / topPct) * 100}%`, opacity: i === 0 ? 0.85 : 0.55 }}
-                  />
-                </span>
-                <span className="shrink-0 w-[104px] text-right font-mono text-caption font-semibold text-textPrimary tnum leading-4">
-                  ${r.level.price.toFixed(2)}
-                  <span className="ml-2 text-bull">+{r.level.pct}%</span>
-                </span>
-              </div>
-            ))}
-          </div>
-          <span className="font-mono text-micro text-textMuted leading-snug">
-            Both measured from the ${setup.mid.toFixed(2)} mid · {horizon.hold.toLowerCase()}
-          </span>
-        </div>
-
-        {/* WHAT KILLS IT — the underlying. Different scale, different block, and
-            the gap spelled out, because $807.91 beside a $6.22 premium is only
-            legible if you already knew which one was the stock. */}
-        <div className="flex flex-col gap-1.5 border-t border-borderSubtle pt-2.5">
-          <Head unit="underlying">What kills it</Head>
-          <div className="flex items-start gap-2 border-l-2 border-warn/60 pl-3 py-1">
-            <AlertTriangle className="w-3.5 h-3.5 text-warn shrink-0 mt-0.5" />
-            <p className="font-mono text-label text-textSecondary leading-relaxed">
-              <span className="text-warn font-semibold uppercase tracking-wider">Breaks </span>
-              {setup.right === 'C' ? 'below' : 'above'}{' '}
-              <span className="text-warn font-semibold tnum">${setup.invalidationPrice.toFixed(2)}</span>
-              {invalidationGapPct !== null && (
-                <>
-                  , {Math.abs(invalidationGapPct).toFixed(1)}% {invalidationGapPct >= 0 ? 'above' : 'below'} the{' '}
-                  <span className="tnum">${spot.toFixed(2)}</span> spot
-                </>
-              )}
-              , at the {setup.invalidationReason.toLowerCase()}
-            </p>
-          </div>
-        </div>
+            What is left is what a list page is for: which contract this is, how
+            it reads, and the others in the scan to weigh it against. */}
 
         {field.length > 1 && (
           <div className="flex flex-col gap-1.5 border-t border-borderSubtle pt-2.5">

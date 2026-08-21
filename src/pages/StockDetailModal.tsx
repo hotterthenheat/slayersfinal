@@ -13,15 +13,13 @@ import { buildDarkPoolFeed } from '../data/darkpoolfeed';
 import { FACTOR_GUIDE } from '../data/factorGuide';
 import { fmtUsd } from '../data/gex';
 import { buildFlowAlerts, buildPulseFlow } from '../data/pulseflow';
-import { VERDICT_LABEL, VERDICT_TONE, scoreBand, type ScoreBand, type StockPick } from '../data/stocks';
+import { VERDICT_LABEL, VERDICT_TONE, scoreBand, type StockPick } from '../data/stocks';
 import { buildSwingModel } from '../data/swingModel';
-import { toneText, type Tone } from '../components/ui/tones';
+import { toneText, type Tone, scoreBandFill, scoreBandText } from '../components/ui/tones';
 
 // A sleeve score is a magnitude, so the fill is `data-bar`; only the weak band
 // takes a tone, because a sub-40 sleeve is the one reading that argues against
 // the trade. Bands come from the engine so the board cannot disagree with this.
-const BAND_FILL: Record<ScoreBand, string> = { strong: 'data-bar', mid: 'bg-white/30', weak: 'bg-bear/70' };
-const BAND_TEXT: Record<ScoreBand, string> = { strong: 'text-textPrimary', mid: 'text-textSecondary', weak: 'text-bear' };
 
 const signed = (v: number, dp = 1) => `${v >= 0 ? '+' : ''}${v.toFixed(dp)}%`;
 /** −1…+1 engine leans, restated on a −100…+100 index. Never a percent: nothing
@@ -59,10 +57,10 @@ const FactorRow = ({ v, name, desc }: { v: number; name: string; desc: string })
     <div className="flex flex-col gap-1">
       <div className="flex items-baseline justify-between gap-2">
         <span className="font-mono text-caption font-semibold text-textPrimary">{name}</span>
-        <span className={`font-mono text-caption font-semibold tnum ${BAND_TEXT[band]}`}>{v}</span>
+        <span className={`font-mono text-caption font-semibold tnum ${scoreBandText[band]}`}>{v}</span>
       </div>
       <span className="h-[5px] rounded-full bg-white/[0.06] overflow-hidden">
-        <span className={`block h-full rounded-full ${BAND_FILL[band]}`} style={{ width: `${v}%` }} />
+        <span className={`block h-full rounded-full ${scoreBandFill[band]}`} style={{ width: `${v}%` }} />
       </span>
       <span className="text-label text-textMuted leading-snug">{desc}</span>
     </div>
