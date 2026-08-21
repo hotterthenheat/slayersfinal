@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ReferenceDot, ResponsiveContainer } from 'recharts';
 import { ChartTip, TipHead, TipRow, TipNote } from '../../components/charts/ChartTip';
-import { GRID, CURSOR, chartMargin, valueAxis, categoryAxis, axisVol, paddedDomain, niceTicks, REF_LINE } from '../../components/charts/chartTheme';
+import { CHART_FONT, CURSOR, GRID, REF_LINE, axisVol, categoryAxis, chartMargin, niceTicks, paddedDomain, valueAxis } from '../../components/charts/chartTheme';
 import { FOCUS, MUTED_INK, SPOT } from '../../components/gex/palette';
 
 export interface SlicePoint {
@@ -124,7 +124,7 @@ const VolSliceChart = ({ points, xCaption, xTitle, refIndex, refLabel }: VolSlic
               stroke={MUTED_INK}
               strokeOpacity={0.6}
               strokeDasharray="2 2"
-              label={{ value: refLabel, position: 'top', fill: MUTED_INK, fontSize: 10, fontFamily: 'JetBrains Mono, monospace' }}
+              label={{ value: refLabel, position: 'top', fill: MUTED_INK, fontSize: 10, fontFamily: CHART_FONT }}
             />
             {/* The pinned point stays marked while the cursor scans elsewhere. */}
             <ReferenceLine x={points[Math.min(pinIdx, points.length - 1)].label} stroke={REF_LINE} />

@@ -16,6 +16,7 @@ import SpotRule from '../../components/ui/SpotRule';
 import type { AbsorptionRegime, ForcedFlowLevel } from '../../types/fracture';
 import type { Tone } from '../../components/ui/tones';
 import { fmtUsd } from '../../data/gex';
+import { CHART_FONT } from '../../components/charts/chartTheme';
 
 
 // Severity ramp: absorbed (calm) green → neutral → amber → red (never brand silver).
@@ -165,10 +166,10 @@ const CascadeFan = ({ paths, spot, trigger }: { paths: number[][]; spot: number;
           strokeWidth={1}
         />
       ))}
-      <text x={4} y={Y(spot) - 4} fontSize={10} fill={SPOT} fillOpacity={0.6} fontFamily="monospace">
+      <text x={4} y={Y(spot) - 4} fontSize={10} fill={SPOT} fillOpacity={0.6} fontFamily={CHART_FONT}>
         spot ${spot.toFixed(0)}
       </text>
-      <text x={4} y={Y(trigger) + 11} fontSize={10} fill={BEAR} fontFamily="monospace">
+      <text x={4} y={Y(trigger) + 11} fontSize={10} fill={BEAR} fontFamily={CHART_FONT}>
         trigger ${trigger.toFixed(0)}
       </text>
       {hover && (

@@ -9,7 +9,7 @@ import MetricGrid from '../../components/ui/MetricGrid';
 import EmptyState from '../../components/ui/EmptyState';
 import ChartFrame, { Swatch } from '../../components/charts/ChartFrame';
 import { ChartTip, TipHead, TipRow, TipNote } from '../../components/charts/ChartTip';
-import { GRID, BAR_CURSOR, chartMargin, valueAxisLeft, categoryAxis, axisUsd, axisPct, REF_LINE } from '../../components/charts/chartTheme';
+import { BAR_CURSOR, CHART_FONT, GRID, REF_LINE, axisPct, axisUsd, categoryAxis, chartMargin, valueAxisLeft } from '../../components/charts/chartTheme';
 import { FOCUS } from '../../components/gex/palette';
 
 /*
@@ -120,7 +120,7 @@ const GammaRolloff = () => {
                 domain={[0, 100]}
                 ticks={[0, 50, 100]}
                 tickFormatter={axisPct}
-                tick={{ fill: CUM_INK, fontSize: 10, fontFamily: 'JetBrains Mono, monospace' }}
+                tick={{ fill: CUM_INK, fontSize: 10, fontFamily: CHART_FONT }}
                 tickLine={false}
                 axisLine={false}
                 width={38}

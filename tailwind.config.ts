@@ -1,5 +1,22 @@
 import type { Config } from 'tailwindcss';
 
+/**
+ * The one family, plus the closest metric match on each platform for the short
+ * window before the self-hosted file lands. Declared once so `sans` and `mono`
+ * cannot drift apart — the point of the token pair is the tabular-figures
+ * switch in index.css, not a second typeface.
+ */
+const SYSTEM_SANS = [
+  'SF Pro',
+  '-apple-system',
+  'BlinkMacSystemFont',
+  'Segoe UI',
+  'Roboto',
+  'Helvetica Neue',
+  'Arial',
+  'sans-serif',
+];
+
 export default {
   content: [
     "./index.html",
@@ -95,37 +112,30 @@ export default {
         lead: '16px', // largest inline copy
       },
       /*
-        Real fallback stacks, not a bare generic.
-        Both families load from Google Fonts with `display=swap`, so the first
-        paint of every session — and the whole session if that host is blocked or
-        slow — renders in whatever `sans-serif`/`monospace` resolves to. On Linux
-        that is often DejaVu, which is markedly wider than Inter and JetBrains
-        Mono: dense uppercase labels and fixed-width table columns reflow when
-        the real face lands. These stacks keep the metrics close enough that the
-        swap is a refinement rather than a re-layout.
+        ONE family, two tokens.
+
+        `sans` and `mono` both resolve to SF Pro (self-hosted variable, see the
+        @font-face block in index.css). Two typefaces over a surface this dense
+        read as "all over the place", and the terminal was overwhelmingly one of
+        them anyway: 1,331 `font-mono` call sites against 1 `font-sans`.
+
+        `mono` SURVIVES AS A TOKEN ON PURPOSE. It marks the data voice, and
+        index.css gives every `.font-mono` element `tabular-nums`, so it still
+        does real work — it is the switch that keeps a numeric column aligned in
+        a proportional face. Deleting it would mean touching 1,331 call sites to
+        remove a class that is still meaningful; keeping it means the intent is
+        recorded where the number is written.
+
+        The fallbacks stay real rather than a bare generic. SF Pro is a local
+        file now, so the fallback window is short, but the system stack is the
+        closest metric match available while it opens — `-apple-system` IS this
+        face on Apple platforms, and Segoe UI / Roboto are the nearest
+        equivalents elsewhere.
       */
       fontFamily: {
-        sans: [
-          'Inter',
-          'ui-sans-serif',
-          'system-ui',
-          '-apple-system',
-          'Segoe UI',
-          'Roboto',
-          'Helvetica Neue',
-          'Arial',
-          'sans-serif',
-        ],
-        mono: [
-          'JetBrains Mono',
-          'ui-monospace',
-          'SFMono-Regular',
-          'Menlo',
-          'Consolas',
-          'Liberation Mono',
-          'monospace',
-        ],
-      }
+        sans: SYSTEM_SANS,
+        mono: SYSTEM_SANS,
+      },
     },
   },
   plugins: [],

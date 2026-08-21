@@ -16,18 +16,42 @@
 
 import { MUTED_INK } from '../gex/palette';
 
+/*
+  THE FAMILY, FOR SURFACES TAILWIND CANNOT REACH.
+
+  Charts label themselves through a canvas `ctx.font` string or an SVG
+  `font-family` attribute, so `font-mono` never applies to them — the family has
+  to be written out. It was written out twenty-four times, in seventeen files,
+  as the literal `'JetBrains Mono, monospace'`.
+
+  That was survivable while JetBrains Mono was actually loaded. It stopped being
+  survivable when the terminal moved to one self-hosted family: every one of
+  those strings would have fallen through to the platform's generic `monospace`,
+  which is a DIFFERENT TYPEFACE from the rest of the page — so the axis ticks on
+  a chart would have quietly disagreed with the label sitting directly above it.
+
+  One token, imported everywhere, and the failure mode is gone: changing the
+  family is one edit, and a chart cannot drift from the page by accident.
+
+  Quoted, because `SF Pro` has a space in it and an unquoted multi-word family
+  name is not valid in a canvas `ctx.font` shorthand — the whole declaration is
+  dropped, silently, back to the 10px sans default.
+*/
+export const CHART_FONT =
+  '"SF Pro", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+
 /** Axis tick label. 10px is the terminal's readability floor for mono. */
 export const axisTick = {
   fill: MUTED_INK,
   fontSize: 10,
-  fontFamily: 'JetBrains Mono, monospace',
+  fontFamily: CHART_FONT,
 } as const;
 
 /** Same as axisTick but for the emphasised axis (the one carrying the subject). */
 export const axisTickBright = {
   fill: '#9aa0aa',
   fontSize: 10,
-  fontFamily: 'JetBrains Mono, monospace',
+  fontFamily: CHART_FONT,
 } as const;
 
 /** Grid lines sit at the edge of visibility — present when looked for, invisible otherwise. */

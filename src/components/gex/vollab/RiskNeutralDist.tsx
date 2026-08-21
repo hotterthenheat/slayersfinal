@@ -3,7 +3,7 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, R
 import type { RndData } from '../../../types/gex';
 import { preserveGreek } from '../../ui/greek';
 import { ChartTip, TipHead, TipRow, TipNote } from '../../charts/ChartTip';
-import { GRID, CURSOR, chartMargin, categoryAxis, axisTick } from '../../charts/chartTheme';
+import { CHART_FONT, CURSOR, GRID, axisTick, categoryAxis, chartMargin } from '../../charts/chartTheme';
 import { FOCUS, BULL, BEAR, SPOT, MUTED_INK } from '../palette';
 
 interface RiskNeutralDistProps {
@@ -108,7 +108,7 @@ const RiskNeutralDist = ({ data }: RiskNeutralDistProps) => {
                   position: 'top',
                   fill: m.label === 'Fwd' ? SPOT : MUTED_INK,
                   fontSize: 10,
-                  fontFamily: 'JetBrains Mono, monospace',
+                  fontFamily: CHART_FONT,
                 }}
               />
             ))}

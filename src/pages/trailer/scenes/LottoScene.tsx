@@ -13,6 +13,7 @@ import { useTrailer, at, ease } from '../useTrailerState';
 import { Beat, Caveat, HeadRow, SceneHead, SceneStatement, Verdict } from '../parts';
 import { prob } from '../format';
 import { LOTTO_P_GATE } from '../trailerStory';
+import { CHART_FONT } from '../../../components/charts/chartTheme';
 
 const GRID = '76px 62px 74px 74px 78px 74px 96px';
 const GRID_SM = '70px 74px 96px';
@@ -43,7 +44,7 @@ const PathMass: React.FC<{ rows: { requiredMove: number; verdict: string }[]; gr
         return (
           <g key={r.requiredMove}>
             <line x1={x} x2={x} y1={0} y2={H} stroke={no ? '#FF9500' : '#30D158'} strokeWidth={1} strokeDasharray={no ? '4 4' : undefined} opacity={0.9} />
-            <text x={x + 4} y={11} fill={no ? '#FF9500' : '#30D158'} fontSize={10} fontFamily="ui-monospace, monospace">
+            <text x={x + 4} y={11} fill={no ? '#FF9500' : '#30D158'} fontSize={10} fontFamily={CHART_FONT}>
               +{r.requiredMove.toFixed(1)}%
             </text>
           </g>

@@ -1,6 +1,7 @@
 import type { ISeriesPrimitive, SeriesAttachedParameter, Time, IChartApi, ISeriesApi } from 'lightweight-charts';
 import type { SwingModel } from '../../data/swingModel';
 import { FLIP, SHORT_GAMMA } from '../gex/palette';
+import { CHART_FONT } from '../charts/chartTheme';
 
 /*
   Custom series primitive for the Swing Map: draws the swing read a trader marks
@@ -133,7 +134,7 @@ class OverlayRenderer {
         // percent pill at the arrow midpoint
         const label = `${fmtPct(m.projection.pct)}`;
         const fontPx = Math.round(10 * vr);
-        ctx.font = `600 ${fontPx}px "JetBrains Mono", monospace`;
+        ctx.font = `600 ${fontPx}px ${CHART_FONT}`;
         ctx.textBaseline = 'middle';
         const tw = ctx.measureText(label).width;
         const padX = 6 * s;
@@ -155,7 +156,7 @@ class OverlayRenderer {
 
       // ---- zone percent pills, pinned at the left edge ----
       const fontPx = Math.round(10 * vr);
-      ctx.font = `600 ${fontPx}px "JetBrains Mono", monospace`;
+      ctx.font = `600 ${fontPx}px ${CHART_FONT}`;
       ctx.textBaseline = 'middle';
       ctx.textAlign = 'left';
       for (const z of [m.support, m.resistance]) {

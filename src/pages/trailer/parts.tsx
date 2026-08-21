@@ -11,6 +11,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { Tone } from '../../components/ui/tones';
 import { toneBar, toneText } from '../../components/ui/tones';
 import { at, clamp01, ease } from './useTrailerState';
+import { CHART_FONT } from '../../components/charts/chartTheme';
 
 // ---- fill ------------------------------------------------------------------
 /**
@@ -333,7 +334,7 @@ export const PriceField: React.FC<{
             y={labelY}
             fill={LEVEL_STROKE[l.kind]}
             fontSize={11}
-            fontFamily="ui-monospace, monospace"
+            fontFamily={CHART_FONT}
             opacity={0.85}
           >
             {l.label}

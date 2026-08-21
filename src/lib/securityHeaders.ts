@@ -22,8 +22,11 @@
  * `style-src` keeps 'unsafe-inline'. Removing it was tried, measured, and would
  * break the app.
  *
- * Loading all 32 routes under `style-src 'self'` reports only the Google Fonts
- * stylesheet — not one `style-src-attr` — and that clean result is a trap. CSP
+ * Loading all 32 routes under `style-src 'self'` reported only the Google Fonts
+ * stylesheet — not one `style-src-attr` — and that clean result is a trap. (The
+ * font is self-hosted now, so that one reported violation is gone too, and a
+ * load-only sweep under `style-src 'self'` would come back completely silent —
+ * which makes the trap below sharper, not weaker.) CSP
  * governs style ATTRIBUTES parsed from markup or set with
  * `setAttribute('style')`; it does not govern CSSOM, and React, framer-motion
  * and recharts all animate through `element.style.property = …`. Nothing in the
@@ -58,15 +61,16 @@
  * both charts pass `attributionLogo: false` — but the other two are live.)
  *
  * `script-src` is the directive that stops injected script, and that one IS
- * clean — no 'unsafe-inline', no 'unsafe-eval', no wildcard. That is why the
- * font stylesheet's `onload` attribute moved into main.tsx: an inline event
- * handler is inline script, and keeping it would have cost exactly this.
+ * clean — no 'unsafe-inline', no 'unsafe-eval', no wildcard.
  */
 const CSP_DIRECTIVES: Record<string, string[]> = {
   'default-src': ["'self'"],
   'script-src': ["'self'"],
-  'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
-  'font-src': ["'self'", 'https://fonts.gstatic.com'],
+  'style-src': ["'self'", "'unsafe-inline'"],
+  // Self alone. The two Google Fonts hosts were here for a two-family webfont
+  // stylesheet; the family is one self-hosted file now (public/fonts), so the
+  // page reaches no third party for type at all and the allowance goes with it.
+  'font-src': ["'self'"],
   // data: for inline SVG and the favicon; blob: for the canvas and CSV exports
   // the ledger and the community board hand to a download link.
   'img-src': ["'self'", 'data:', 'blob:'],

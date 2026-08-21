@@ -8,7 +8,7 @@ import StatCard from '../../components/ui/StatCard';
 import MetricGrid from '../../components/ui/MetricGrid';
 import ChartFrame, { Swatch } from '../../components/charts/ChartFrame';
 import { ChartTip, TipHead, TipRow, TipNote, TipSeries } from '../../components/charts/ChartTip';
-import { GRID, CURSOR, chartMargin, valueAxis, categoryAxis, axisVol, paddedDomain, niceTicks, REF_LINE } from '../../components/charts/chartTheme';
+import { CHART_FONT, CURSOR, GRID, REF_LINE, axisVol, categoryAxis, chartMargin, niceTicks, paddedDomain, valueAxis } from '../../components/charts/chartTheme';
 import type { Tone } from '../../components/ui/tones';
 import { FOCUS, MUTED_INK, SPOT } from '../../components/gex/palette';
 
@@ -130,7 +130,7 @@ const VolComplex = () => {
                 y={realizedVol}
                 stroke={REF_LINE}
                 strokeDasharray="4 4"
-                label={{ value: 'realized', position: 'insideBottomLeft', fill: MUTED_INK, fontSize: 10, fontFamily: 'JetBrains Mono, monospace' }}
+                label={{ value: 'realized', position: 'insideBottomLeft', fill: MUTED_INK, fontSize: 10, fontFamily: CHART_FONT }}
               />
               <Tooltip
                 cursor={CURSOR}
@@ -184,7 +184,7 @@ const VolComplex = () => {
                 r={3.2}
                 fill={FOCUS}
                 stroke="none"
-                label={{ value: '30d', position: 'top', fill: MUTED_INK, fontSize: 10, fontFamily: 'JetBrains Mono, monospace' }}
+                label={{ value: '30d', position: 'top', fill: MUTED_INK, fontSize: 10, fontFamily: CHART_FONT }}
               />
               <ReferenceDot
                 x={back.dte}
@@ -192,7 +192,7 @@ const VolComplex = () => {
                 r={3.2}
                 fill={MUTED_INK}
                 stroke="none"
-                label={{ value: '90d', position: 'bottom', fill: MUTED_INK, fontSize: 10, fontFamily: 'JetBrains Mono, monospace' }}
+                label={{ value: '90d', position: 'bottom', fill: MUTED_INK, fontSize: 10, fontFamily: CHART_FONT }}
               />
             </LineChart>
           </ChartFrame>

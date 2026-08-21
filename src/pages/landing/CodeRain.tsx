@@ -181,7 +181,14 @@ const CodeRain = ({ className = '' }: { className?: string }) => {
               flexDirection: 'column',
               gap: '16px',
               whiteSpace: 'nowrap',
-              fontFamily: '"JetBrains Mono", ui-monospace, monospace',
+              /* No family of its own — it inherits the page's. This used to
+                 name JetBrains Mono explicitly, which was the only monospace
+                 left once the terminal moved to one family, so the hero would
+                 have been the single surface running a different typeface (and
+                 on a generic `monospace` fallback, a different one per
+                 machine). The rain is decorative text, not a grid: each column
+                 is its own flex stack with `nowrap`, so nothing here needs
+                 characters to line up across columns. */
               fontSize: '12px',
               fontWeight: 500,
               lineHeight: 1.85,

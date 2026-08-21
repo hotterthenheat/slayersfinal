@@ -14,6 +14,7 @@ import React from 'react';
 import { useTrailer, at, clamp01, ease } from '../useTrailerState';
 import { Beat, Caveat, SceneHead, SceneStatement, Verdict } from '../parts';
 import { prob, px } from '../format';
+import { CHART_FONT } from '../../../components/charts/chartTheme';
 
 const Distributions: React.FC<{ bins: { px: number; physical: number; riskNeutral: number }[]; grow: number; height: number; spot: number; lo: number; hi: number }> = ({
   bins,
@@ -38,7 +39,7 @@ const Distributions: React.FC<{ bins: { px: number; physical: number; riskNeutra
       <path d={`${pathOf('riskNeutral')} L${W},${H} L0,${H} Z`} fill="rgba(125,211,252,0.10)" stroke="#7DD3FC" strokeWidth={1} strokeOpacity={0.7} vectorEffect="non-scaling-stroke" />
       <path d={pathOf('physical')} fill="none" stroke="#E4E8F4" strokeWidth={1.6} vectorEffect="non-scaling-stroke" />
       <line x1={xOfPx(spot)} x2={xOfPx(spot)} y1={0} y2={H} stroke="#E4E8F4" strokeWidth={0.75} strokeDasharray="3 4" opacity={0.5} />
-      <text x={xOfPx(spot) + 4} y={11} fill="#7d7d7d" fontSize={10} fontFamily="ui-monospace, monospace">
+      <text x={xOfPx(spot) + 4} y={11} fill="#7d7d7d" fontSize={10} fontFamily={CHART_FONT}>
         SPOT
       </text>
     </svg>

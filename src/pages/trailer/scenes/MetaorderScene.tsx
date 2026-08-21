@@ -12,6 +12,7 @@ import React from 'react';
 import { useTrailer, at, clamp01, ease } from '../useTrailerState';
 import { Beat, Caveat, KeyValue, SceneHead, SceneStatement } from '../parts';
 import { prob } from '../format';
+import { CHART_FONT } from '../../../components/charts/chartTheme';
 
 const MetaorderScene: React.FC = () => {
   const { story, progress: p, reduced, compact } = useTrailer();
@@ -105,10 +106,10 @@ const MetaorderScene: React.FC = () => {
                 opacity={0.9}
               />
             ))}
-            <text x={30} y={H - 2} fill="#7d7d7d" fontSize={10} fontFamily="ui-monospace, monospace">
+            <text x={30} y={H - 2} fill="#7d7d7d" fontSize={10} fontFamily={CHART_FONT}>
               0s
             </text>
-            <text x={W - 62} y={H - 2} fill="#7d7d7d" fontSize={10} fontFamily="ui-monospace, monospace">
+            <text x={W - 62} y={H - 2} fill="#7d7d7d" fontSize={10} fontFamily={CHART_FONT}>
               {Math.round(span)}s
             </text>
           </svg>

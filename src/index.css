@@ -2,13 +2,53 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================
+   ONE FAMILY — SF Pro, self-hosted variable.
+
+   The terminal used to run two faces: Inter for prose and JetBrains Mono for
+   the 1,331 `font-mono` call sites that carry every label, column and readout.
+   Two families over a surface this dense read as "all over the place", and the
+   fix that holds is one family with one weight axis rather than a rule about
+   when to reach for which.
+
+   `wght 100 900` is a single axis, so every Tailwind weight resolves out of
+   this one file — no separate cuts to request, and no missing weight silently
+   falling back to a synthesised bold.
+
+   WHAT THE MONO TOKEN MEANS NOW. `font-mono` is kept as a token, and it still
+   means something: it marks the DATA voice. What it no longer means is a second
+   typeface. SF Pro is proportional, so the alignment JetBrains Mono gave for
+   free has to be asked for — `font-variant-numeric: tabular-nums` below does
+   that for every `.font-mono` element, which is exactly the set of places that
+   holds a number in a column. Rolling digits (AnimatedNumber) and ledger
+   columns keep their alignment without hunting down each `.tnum`.
+
+   `font-display: swap` still applies, but it has much less to do here than it
+   did with the Google Fonts link: the file is same-origin and preloaded from
+   index.html, so the fallback window is a local round trip rather than a
+   third-party one.
+   ============================================================ */
+@font-face {
+  font-family: 'SF Pro';
+  src: url('/fonts/SF-Pro.var.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+
 @layer base {
   html {
     color-scheme: dark;
   }
   body {
     @apply bg-canvas text-textPrimary antialiased;
-    font-feature-settings: 'cv11', 'ss01';
+  }
+  /* SF Pro is proportional; the data voice asks for its own column alignment.
+     See the @font-face block above — this is the half of the one-family move
+     that keeps every numeric column straight. */
+  .font-mono {
+    font-variant-numeric: tabular-nums;
   }
   ::selection {
     background: rgba(200, 212, 235, 0.3);

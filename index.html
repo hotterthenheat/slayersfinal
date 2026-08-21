@@ -31,42 +31,27 @@
   <meta name="twitter:description" content="Order flow, market-maker hedging dynamics, and institutional liquidity tracking. Compass finds the setup, Pinpoint reads the flow.">
   <meta name="twitter:image" content="https://slayerterminal.com/assets/og-cover.png">
 
-  <!-- Google Font — JetBrains Mono carries the full weight range the code-rain
-       hero uses (400→800), matching slayerterminal.com's lockup + rain.
+  <!-- SF Pro — self-hosted variable font, the site's ONE family.
 
-       Loaded WITHOUT blocking the first paint. As a plain stylesheet this was a
-       render-blocking request to a third-party host: nothing painted until it
-       answered. Measured in a sandbox that cannot reach fonts.googleapis.com,
-       every navigation stalled ~13.6s before showing anything — the same shape
-       a reader on a slow or filtered network gets, just with the dial turned up.
+       Replaces a two-family Google Fonts stylesheet (Inter + JetBrains Mono).
+       That link was a render-blocking request to a third party: measured in a
+       sandbox that cannot reach fonts.googleapis.com, every navigation stalled
+       ~13.6s before painting anything. The workaround was to load it as
+       `media="print"` and promote it to `all` from the bundle — which worked,
+       but left the first paint in a fallback face and the swap-in reflow with
+       it, and kept two third-party hosts in the CSP.
 
-       `media="print"` makes the browser fetch it without applying it or
-       blocking. The promotion to `all` happens in src/main.tsx rather than in an
-       `onload` attribute here, and that is a CSP decision: an inline event
-       handler is inline script, so keeping it would have forced
-       `script-src 'unsafe-inline'` — surrendering the directive that does the
-       most work, to save one line. Doing it from the bundle costs nothing in
-       practice, because this is a SPA whose first paint already waits on that
-       same bundle.
+       Self-hosting deletes the whole problem instead of managing it. The file
+       ships from our own origin, so it is subject to the same cache rules as
+       the bundle, there is no third-party round trip to stall on, and
+       `style-src`/`font-src` in lib/securityHeaders.ts are now `'self'` alone.
 
-       The <noscript> copy keeps the fonts for readers without JS.
-       tailwind.config.ts declares full fallback stacks (system-ui, then the
-       platform sans), so the first paint is real text in a system face rather
-       than nothing — but `display=swap` does mean the webfont replaces it when
-       it lands, and how much that reflows depends on metric differences that
-       have NOT been measured here. It is a deliberate trade: a possible late
-       reflow, against a first paint that used to wait on a third-party host and
-       stalled ~13.6s when that host could not be reached. -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link
-    id="webfonts"
-    rel="stylesheet"
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap"
-    media="print">
-  <noscript>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap">
-  </noscript>
+       One file covers the whole range: wght is a 100-900 axis, so every
+       Tailwind weight comes out of the same 256KB download rather than the
+       eleven static cuts the two-family stylesheet was requesting. `preload`
+       because it is needed for the first paint and is discoverable here rather
+       than one hop deeper inside the CSS. -->
+  <link rel="preload" href="/fonts/SF-Pro.var.woff2" as="font" type="font/woff2" crossorigin>
 </head>
 <body class="bg-canvas">
   <div id="root"></div>

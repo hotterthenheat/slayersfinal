@@ -8,5 +8,13 @@
 #
 # The asset rule carries no `!` force flag, so it never shadows a file that exists —
 # it only fires on a miss, which is precisely when a 404 is the honest answer.
+#
+# fonts/ and logos/ get the same treatment as assets/ for the same reason. They
+# hold real files (the one self-hosted family, and the brand marks CompanyLogo
+# asks for by ticker), so a request that misses is a MISS — a deploy that lost
+# them should say 404, not hand back the SPA shell with a 200 and let the
+# browser fail on it later.
 /assets/*    /assets/:splat   404
+/fonts/*     /fonts/:splat    404
+/logos/*     /logos/:splat    404
 /*           /index.html      200

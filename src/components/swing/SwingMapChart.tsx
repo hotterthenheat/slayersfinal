@@ -16,6 +16,7 @@ import { CALL_WALL, PUT_WALL, FLIP, FOCUS, MUTED_INK, SHORT_GAMMA } from '../gex
 import { SwingPrimitive } from './swingPrimitive';
 import { buildSwingModel, type SwingModel } from '../../data/swingModel';
 import type { Candle } from '../../types/market';
+import { CHART_FONT } from '../charts/chartTheme';
 
 interface SwingMapChartProps {
   ticker: string;
@@ -93,7 +94,7 @@ const SwingMapChart = ({ ticker, spot, revision = 0, height = 300, focusPrice = 
       layout: {
         background: { color: 'transparent' },
         textColor: MUTED_INK,
-        fontFamily: 'JetBrains Mono, monospace',
+        fontFamily: CHART_FONT,
         fontSize: 10,
         attributionLogo: false,
       },

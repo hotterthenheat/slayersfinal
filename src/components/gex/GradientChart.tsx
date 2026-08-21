@@ -6,6 +6,7 @@ import { buildGradientField, type GradientField, type GradientMetric } from '../
 import { fmtUsd } from '../../data/gex';
 import { CALL_WALL, PUT_WALL, FLIP, MUTED_INK, SHORT_GAMMA, LONG_GAMMA, CHARM_POS, CHARM_NEG } from './palette';
 import type { KeyLevels } from '../../types/gex';
+import { CHART_FONT } from '../charts/chartTheme';
 
 /*
   VS3D-style gradient chart: the dealer gamma (or charm) field across the live
@@ -27,7 +28,7 @@ interface GradientChartProps {
 
 const AXIS_W = 54;
 const AXIS_H = 18;
-const FONT = '10px "JetBrains Mono", monospace';
+const FONT = `10px ${CHART_FONT}`;
 
 /** Posterized diverging colormaps — [r,g,b] at |t| in 0..1, by sign. Both ramps
     interpolate from the palette so the chart cannot drift off the token. */

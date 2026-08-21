@@ -59,6 +59,7 @@ interface StrikeChartProps {
 
 // Wall / flip / king overlay colors (independent of candle theme)
 import { CALL_WALL, PUT_WALL, FLIP, KING, FOCUS, MUTED_INK } from './palette';
+import { CHART_FONT } from '../charts/chartTheme';
 
 // Level lines are created once per overlay/ticker, then their prices are
 // TWEENED (rAF + easeOutCubic) so scan-tier level moves glide instead of jumping.
@@ -182,7 +183,7 @@ const StrikeChart = ({
       layout: {
         background: { color: 'transparent' },
         textColor: MUTED_INK,
-        fontFamily: 'JetBrains Mono, monospace',
+        fontFamily: CHART_FONT,
         fontSize: 10,
         attributionLogo: false,
       },

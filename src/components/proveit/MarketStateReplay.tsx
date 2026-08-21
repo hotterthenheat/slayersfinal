@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { ScatterChart, Scatter, LineChart, Line, XAxis, YAxis, ZAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer } from 'recharts';
 import { History, Target, Activity, TrendingDown, Layers } from 'lucide-react';
 import { ChartTip, TipHead, TipRow, TipSeries, TipNote } from '../charts/ChartTip';
-import { GRID, CURSOR, valueAxis, categoryAxis, axisPct, niceTicks } from '../charts/chartTheme';
+import { CHART_FONT, CURSOR, GRID, axisPct, categoryAxis, niceTicks, valueAxis } from '../charts/chartTheme';
 import {
   buildStateReplay,
   type StateReplayView,
@@ -127,7 +127,7 @@ const CalibrationPlot = ({ view }: { view: StateReplayView }) => (
           stroke={MUTED}
           strokeOpacity={0.5}
           strokeDasharray="3 3"
-          label={{ value: 'ideal', position: 'insideTopRight', fill: MUTED, fontSize: 10, fontFamily: 'JetBrains Mono, monospace' }}
+          label={{ value: 'ideal', position: 'insideTopRight', fill: MUTED, fontSize: 10, fontFamily: CHART_FONT }}
         />
         <Tooltip
           cursor={{ stroke: 'rgba(255,255,255,0.18)' }}
@@ -193,7 +193,7 @@ const EdgeDecayChart = ({ view }: { view: StateReplayView }) => {
             type="number"
             dataKey="bar"
             domain={[0, view.horizonBars]}
-            label={{ value: 'bars held', position: 'insideBottom', offset: -8, fill: MUTED, fontSize: 10, fontFamily: 'JetBrains Mono, monospace' }}
+            label={{ value: 'bars held', position: 'insideBottom', offset: -8, fill: MUTED, fontSize: 10, fontFamily: CHART_FONT }}
           />
           <YAxis {...valueAxis} domain={[0, maxEdge]} ticks={niceTicks(0, maxEdge)} tickFormatter={axisPct} width={42} />
           <Tooltip
