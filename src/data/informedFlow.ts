@@ -6,7 +6,7 @@
   but only one of them is a bet somebody made because they think they know
   something. This scores each print's information content from the exchange
   facts we already carry — the aggressor (P0.2/P3.1), sweep and block tags, size,
-  whether it is opening or closing risk, odd-lot retail proxies, and whether it
+  odd-lot retail proxies, and whether it
   is even directional (P4.2) — and reads the tape's SMART-MONEY tilt off the
   informed slice alone.
 
@@ -15,7 +15,6 @@
     + a sweep (paid across venues for immediacy — the signature of urgency)
     + block premium (institutional — the $150k exchange block threshold)
     + size percentile within the tape
-    + opening risk (volume > open interest — a new position, not a close)
     − a retail-size lot (a retail-participation proxy)
     − structure (a spread leg or delta-hedged print takes no directional view)
 
@@ -146,12 +145,26 @@ export function scorePrint(p: FlowPrint, sizePctile: number): ClassifiedPrint {
   const sizeAdj = (sizePctile - 0.5) * 30;
   s += sizeAdj;
   if (sizePctile >= 0.8) reasons.push('large for the tape');
-  if (p.volOverOI > 1) {
-    s += 12;
-    reasons.push('opening risk (vol > OI)');
-  } else {
-    s -= 6;
-  }
+  /*
+    NO opening/closing term.
+
+    This read `if (p.volOverOI > 1) { s += 12; reasons.push('opening risk (vol >
+    OI)') }` — twelve points, and a tag on the print, for "a new position, not a
+    close". OPRA carries no open/close flag. Only CBOE's Open-Close Volume
+    Summary and ISE's Open/Close Trade Profile do, and neither is on any tier
+    here.
+
+    It is not a matter of a weak proxy, either. Open and close are properties of
+    a POSITION, and the two counterparties to one print can be on opposite sides
+    of that: the same execution opens for the buyer and closes for the seller.
+    There is no fact of the matter encoded in the print for a heuristic to
+    approximate. End-of-day OI change recovers the NET only, never signed opening
+    volume.
+
+    `volOverOI` itself stays — volume over open interest is arithmetic on two
+    observed quantities and the tape still shows it. What is gone is the claim
+    about what it means.
+  */
   if (p.size <= RETAIL_LOT) {
     s -= 20;
     reasons.push('retail-size lot');

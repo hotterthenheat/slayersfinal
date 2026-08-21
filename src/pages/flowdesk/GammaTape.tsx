@@ -104,6 +104,31 @@ const GammaTape = () => {
             {read} {hedgeRead}
           </p>
 
+          {/* The unclassified share, next to the numbers it qualifies.
+
+              Every figure in this grid is built from prints that carried an
+              exchange aggressor. A print that crossed at the midpoint has no
+              initiator, so `dealerSignOf` returns 0 and it contributes nothing —
+              correct, and abstaining beats guessing. What was missing is that the
+              reader could not see how much of the session that silence covered:
+              the count sat once, in small type, under a chart further down.
+
+              It matters because midpoint prints are not a random sample. They are
+              where worked and negotiated flow lives, so the book below is not
+              "the dealer's position" — it is the dealer's position as seen
+              through aggressive flow only, and that sentence belongs beside the
+              total rather than in a footnote. */}
+          <div className="flex items-center gap-2 flex-wrap font-mono text-label text-textMuted">
+            <span className="uppercase tracking-widest">Coverage</span>
+            <span className="tnum text-textSecondary">
+              {n > 0 ? Math.round((directed / n) * 100) : 0}% of prints carried an aggressor
+            </span>
+            <span className="text-textMuted">·</span>
+            <span className="tnum">
+              {n - directed} of {n} unclassified — crossed at the mid, no initiator, excluded below
+            </span>
+          </div>
+
           <MetricGrid min="170px">
             <StatCard
               label="Net dealer gamma"

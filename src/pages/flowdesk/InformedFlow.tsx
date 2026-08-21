@@ -163,7 +163,7 @@ const InformedFlow = () => {
                         />
                         <TipNote>
                           {b.klass === 'INFORMED'
-                            ? 'Prints here cleared the informed bar: a paid spread, urgency, size or opening risk stacked up. Only these feed the smart-money tilt.'
+                            ? 'Prints here cleared the informed bar: a paid spread, urgency and size stacked up. Only these feed the smart-money tilt.'
                             : b.klass === 'UNINFORMED'
                               ? 'Prints here are noise: crossed at the mid, small, closing risk, or a structure leg with no directional view.'
                               : 'Prints here carry some information but not enough to lean on — they sit between the two cut-points and feed neither the tilt nor the noise bucket.'}
