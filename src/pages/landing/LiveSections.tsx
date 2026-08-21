@@ -13,21 +13,21 @@ import { Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
-import { buildGexView, fmtUsd, pulseMatrix } from '../../data/gex';
+import { buildGexView, pulseMatrix } from '../../data/gex';
 import { buildExposureProfile } from '../../data/exposure';
 import { buildCommandView } from '../../data/command';
 import { buildCompass } from '../../data/compass';
-import { enrichPrint } from '../../data/flowtape';
 import GexMatrix from '../../components/gex/GexMatrix';
 import PositioningMap from '../../components/gex/PositioningMap';
-import KeyLevelsRail from '../../components/gex/KeyLevelsRail';
+import PressureMatrix from '../../components/gex/PressureMatrix';
+import PulseFlowTape from '../../components/flowdesk/PulseFlowTape';
+import SetupScanCard from '../../components/compass/SetupScanCard';
 import StrikeChart from '../../components/gex/StrikeChart';
 import TiltBox from './TiltBox';
 import WorkspaceLoop, { type WorkspaceTile } from './WorkspaceLoop';
 import type { MarketSnapshot } from '../../types/market';
 import type { CommandView, ExposureProfileData, GexMatrixData, GexView } from '../../types/gex';
 import type { Setup, CompassData } from '../../types/compass';
-import { VERDICT_LABEL } from '../../components/compass/verdict';
 import KnowabilityChip from '../../components/ui/KnowabilityChip';
 import { DUR, EASE } from '../../lib/motion';
 
@@ -133,134 +133,22 @@ const EngineBox = ({ name, line, accent, to, children }: EngineBoxProps) => (
 
 // ---- box demos ---------------------------------------------------------------
 
-/** Mini tape driven by the live 1.5s tick — rows slide in as prints land. */
-const DemoTape = ({ snapshot }: { snapshot: MarketSnapshot }) => {
-  const prints = useMemo(
-    () => snapshot.tape.slice(0, 7).map((o, i) => enrichPrint(o, i)),
-    [snapshot.tape]
-  );
-  return (
-    <div className="h-full overflow-hidden select-none">
-      <AnimatePresence initial={false} mode="popLayout">
-        {prints.map(p => (
-          <motion.div
-            key={`${p.time}-${p.ticker}-${p.strike}${p.right}-${p.size}`}
-            layout
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: DUR.reflow, ease: EASE }}
-            className="flex items-center gap-2.5 px-4 h-[38px] border-b border-borderSubtle/40"
-          >
-            <span className="font-mono text-micro text-textMuted tnum shrink-0">{p.time}</span>
-            <span
-              className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-micro font-semibold shrink-0 ${
-                p.right === 'C' ? 'border-bull/30 bg-bull/10 text-bull' : 'border-bear/30 bg-bear/10 text-bear'
-              }`}
-            >
-              {p.ticker} {p.strike}{p.right}
-            </span>
-            <span className="hidden sm:inline font-mono text-label text-textPrimary tnum shrink-0">
-              {p.size} <span className="text-textMuted">@</span> {p.fill.toFixed(2)}
-            </span>
-            <span className="ml-auto font-mono text-label font-semibold text-textPrimary tnum shrink-0">
-              {fmtUsd(p.premium)}
-            </span>
-            {p.sweep && (
-              <span className="hidden sm:inline font-mono text-micro font-bold uppercase tracking-wider text-warn shrink-0">Sweep</span>
-            )}
-            <span
-              className={`inline-flex items-center rounded px-1.5 py-0.5 font-mono text-micro font-bold shrink-0 ${
-                p.side === 'ASK'
-                  ? 'bg-bull/90 text-ink'
-                  : p.side === 'BID'
-                    ? 'bg-bear/80 text-white'
-                    : 'bg-white/10 text-textSecondary'
-              }`}
-            >
-              {p.side === 'ASK' ? 'BUY' : p.side === 'BID' ? 'SELL' : 'MID'}
-            </span>
-          </motion.div>
-        ))}
-      </AnimatePresence>
-    </div>
-  );
-};
-
 /** Compass top pick, health bar and all — the real grading, live. */
-const DemoSetup = ({ setups }: { setups: CompassData }) => {
+/**
+ * The scan's top contract, rendered by the desk's own card.
+ *
+ * This is an adapter, not a component: it picks the Setup and hands it to
+ * `SetupScanCard` unchanged. The card is interactive on the desk, so the
+ * callbacks are inert here and the wrapper above kills pointer events — a
+ * preview of the read, not a desk to operate.
+ */
+const DemoSetupCard = ({ setups }: { setups: CompassData }) => {
   const setup = useMemo<Setup | null>(() => {
     const flat = setups.groups.flatMap(g => g.setups);
     return flat.find(s => s.topRated) ?? flat[0] ?? null;
   }, [setups]);
   if (!setup) return null;
-  const bull = setup.right === 'C';
-  return (
-    <div className="h-full p-4 flex flex-col gap-3 select-none">
-      <div className="flex items-center gap-2">
-        <span
-          className={`inline-flex items-center rounded-full border px-2.5 py-1 font-mono text-label font-semibold ${
-            bull ? 'border-bull/30 bg-bull/10 text-bull' : 'border-bear/30 bg-bear/10 text-bear'
-          }`}
-        >
-          {setup.contract}
-        </span>
-        <span className="inline-flex items-center rounded px-2 py-0.5 font-mono text-micro font-bold uppercase tracking-wider bg-king/10 text-king">
-          Top pick
-        </span>
-        {/* `bg-bear`, not `rgba(255,59,48,0.85)`. That literal was a fourth
-            spelling of the bear token, and the 0.85 dropped dark ink on it to
-            4.25:1 — under AA for 10px bold. At full strength it reads 5.6:1. */}
-        <span
-          className={`ml-auto inline-flex items-center rounded px-2 py-0.5 font-mono text-micro font-bold uppercase tracking-wider text-ink ${
-            bull ? 'holo-bg' : 'bg-bear'
-          }`}
-        >
-          {VERDICT_LABEL[setup.verdict]}
-        </span>
-      </div>
-
-      <div className="grid grid-cols-3 gap-2">
-        {[
-          { label: 'Score', value: String(setup.score) },
-          { label: 'Premium', value: `$${setup.mid.toFixed(2)}` },
-          {
-            label: 'Exp. move',
-            value: `${setup.expectedMovePct >= 0 ? '+' : ''}${setup.expectedMovePct}%`,
-            tone: setup.expectedMovePct >= 0 ? 'text-bull' : 'text-bear',
-          },
-        ].map(cell => (
-          <div key={cell.label} className="border border-borderSubtle rounded-md px-2.5 py-2">
-            <span className="block font-mono text-micro uppercase tracking-widest text-textMuted">{cell.label}</span>
-            <span className={`block mt-0.5 font-mono text-read font-bold tnum ${cell.tone ?? 'text-textPrimary'}`}>
-              {cell.value}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      {/* This meter read `Confidence {setup.confidence}%`, three tiles below a
-          Score tile — and `confidence` was `(score - 55) * 2.1`, so the card
-          printed one number twice and a visitor read two agreeing opinions.
-          Health comes off moneyness instead, which is why it can disagree with
-          the score sitting above it. */}
-      <div>
-        <div className="flex items-center justify-between">
-          <span className="font-mono text-micro uppercase tracking-widest text-textMuted">Health</span>
-          <span className="font-mono text-label font-semibold text-textPrimary tnum">{setup.health}/100</span>
-        </div>
-        <div className="mt-1.5 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
-          <motion.div
-            className="h-full rounded-full data-bar"
-            animate={{ width: `${setup.health}%` }}
-            transition={{ duration: DUR.data, ease: EASE }}
-          />
-        </div>
-      </div>
-
-      <p className="text-label text-textSecondary leading-relaxed line-clamp-3">{setup.whyText}</p>
-    </div>
-  );
+  return <SetupScanCard setup={setup} rank={1} selected={false} onSelect={() => {}} onStudy={() => {}} />;
 };
 
 // ---- the sections ------------------------------------------------------------
@@ -494,8 +382,13 @@ const ChartShowcase = ({ ctx }: { ctx: LandingCtx | null }) => (
               levels={ctx.gex.levels}
               overlay="BOTH"
               timeframe="1m"
-              /* Landing hero — a preview of the read, not a desk to operate. */
+              /* Landing hero — a preview of the read, not a desk to operate.
+                 `interactive={false}` is the other half of that sentence: the
+                 picker was already hidden here, but the candles underneath
+                 stayed fully pannable and zoomable, so a visitor could drag the
+                 hero off into blank space on the first surface they ever see. */
               showTimeframePicker={false}
+              interactive={false}
               height={400}
             />
           </TiltBox>
@@ -602,11 +495,19 @@ const LiveSections = () => {
               <div className="h-[340px]">
                 <EngineBox
                   name="Compass"
-                  line="Setups graded 0–100, in plain English"
+                  line="The scan's top contract, exactly as the desk lists it"
                   accent="bg-king"
                   to="/compass"
                 >
-                  <DemoSetup setups={ctx.setups} />
+                  {/* The desk's own scan card, on the Setup the scan already
+                      produced. `DemoSetup` was a landing-local rebuild of it that
+                      had drifted: it still framed the contract in a tinted pill
+                      and led with a 0–100 Score, both of which the real card
+                      dropped — its own comment records the pill removal as "the
+                      last small box on the row". */}
+                  <div className="h-full overflow-hidden select-none pointer-events-none p-1">
+                    <DemoSetupCard setups={ctx.setups} />
+                  </div>
                 </EngineBox>
               </div>
               <div className="h-[340px]">
@@ -616,20 +517,34 @@ const LiveSections = () => {
                   accent="bg-darkpool"
                   to="/trace/live-tape"
                 >
-                  <DemoTape snapshot={ctx.snapshot} />
+                  {/* The desk's own flow tape — the same component the Pulse
+                      workspace mounts for its "Options Flow" panel, on the same
+                      two props. What stood here was `DemoTape`, seven rows of
+                      landing-local markup. */}
+                  <div className="h-full overflow-hidden select-none pointer-events-none">
+                    <PulseFlowTape ticker={ctx.ticker} revision={ctx.revision} />
+                  </div>
                 </EngineBox>
               </div>
               <div className="h-[340px]">
                 <EngineBox
                   name="Pulse"
-                  line="Walls, pin, flip & king · with distance"
+                  line="Dealer Pressure — one of the panels you can drop on the grid"
                   accent="bg-flip"
                   to="/pulse"
                 >
-                  <div className="h-full overflow-hidden select-none">
-                    <KeyLevelsRail
-                      rows={ctx.cmd.keyLevels}
-                      maxPressure={ctx.cmd.keyLevels.reduce((a, l) => Math.max(a, l.pressure), 1)}
+                  {/* This card used to render `KeyLevelsRail`, which is a
+                      PINPOINT component and is not in `workspace/registry.tsx`
+                      at all — so the panel the landing showed under Pulse's name
+                      was one the Pulse workspace cannot mount. It renders the
+                      registry's `pressure-matrix` widget now, on the same two
+                      ctx fields that widget reads, so what a visitor sees here
+                      is a panel they can actually add to their own grid. */}
+                  <div className="h-full overflow-hidden select-none pointer-events-none">
+                    <PressureMatrix
+                      rows={ctx.cmd.pressure}
+                      maxAbs={ctx.cmd.pressureMaxAbs}
+                      spot={ctx.snapshot.spot}
                     />
                   </div>
                 </EngineBox>
@@ -690,18 +605,40 @@ const LiveSections = () => {
                     </div>
                   ),
                 },
+                /* `key` is a LAYOUT SLOT in WorkspaceLoop's PRESETS, not a panel
+                   identity — the names are historical and the presets place by
+                   them, so they stay put while what fills them changes.
+                   Titles are the registry's own, verbatim, so the claim above —
+                   "these are the real panels" — is checkable against
+                   `workspace/registry.tsx` rather than taken on trust. Three of
+                   these four used to be landing-local rebuilds, and one of them
+                   (`KeyLevelsRail`) is not in the registry at all, so the
+                   workspace could never have held it. */
                 {
                   key: 'levels',
-                  title: 'Key levels',
+                  title: 'Dealer Pressure',
                   node: (
-                    <KeyLevelsRail
-                      rows={ctx.cmd.keyLevels}
-                      maxPressure={ctx.cmd.keyLevels.reduce((a, l) => Math.max(a, l.pressure), 1)}
+                    <PressureMatrix
+                      rows={ctx.cmd.pressure}
+                      maxAbs={ctx.cmd.pressureMaxAbs}
+                      spot={ctx.snapshot.spot}
                     />
                   ),
                 },
-                { key: 'tape', title: 'Options tape', node: <DemoTape snapshot={ctx.snapshot} /> },
-                { key: 'setup', title: 'Top setup', node: <DemoSetup setups={ctx.setups} /> },
+                {
+                  key: 'tape',
+                  title: 'Options Flow',
+                  node: <PulseFlowTape ticker={ctx.ticker} revision={ctx.revision} />,
+                },
+                {
+                  key: 'setup',
+                  title: 'Dealer Positioning',
+                  node: (
+                    <div className="h-full p-2">
+                      <PositioningMap data={ctx.exposure} />
+                    </div>
+                  ),
+                },
               ] satisfies WorkspaceTile[]
             }
           />
