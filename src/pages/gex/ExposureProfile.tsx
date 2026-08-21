@@ -20,6 +20,7 @@ import ExposureInsight from '../../components/gex/ExposureInsight';
 import ExposureLedger from './ExposureLedger';
 import { DUR, EASE } from '../../lib/motion';
 import { etTime } from '../../core/calendar';
+import { OI_PROXY_NOTE } from '../../core/dealerBook';
 
 /** Exposure sweeps on its own cadence — bars must not vibrate with every tick. */
 const SCAN_INTERVAL_MS = 10_000;
@@ -199,7 +200,14 @@ const ExposureProfile = () => {
         </Panel>
         <Panel
           title="Dealer Positioning Map"
-          subtitle="net dealer pressure by strike"
+          /* The subtitle read "net dealer pressure by strike", which states an
+             observation this data cannot make. Open interest is a count of
+             contracts outstanding with nobody's name on it, published once a day
+             for the prior close; who is long which side is an ASSUMPTION, and
+             flipping it inverts every regime below while leaving every magnitude
+             looking identical. The convention it assumes is named here so the
+             reader can see what they are being shown. */
+          subtitle={OI_PROXY_NOTE}
           flush
           focusable
           className="xl:col-span-5 min-w-0"

@@ -5,6 +5,7 @@
 ==================================================
 */
 
+import { DEALER_BOOK } from './dealerBook';
 import type {
   Candle,
   GexSnapshot,
@@ -416,15 +417,12 @@ const Simulator = (() => {
 
       const greeks = calculateGreeks(spot, strike, t, iv);
 
-      // Dealer book, standard convention: net LONG calls (customers overwrite
-      // calls, dealers absorb them) and net SHORT puts (customers buy downside
-      // hedges). Long-call gamma supports price (positive GEX); short-put gamma
-      // amplifies it (negative GEX). Both legs' vega follow the same book.
-      // Weights balanced so the BOOK TOTAL's sign follows the daily regime:
-      // pivot below spot → call-supported book, net positive; pivot above →
-      // put-dominated, net negative. Neither sign is structurally locked in.
-      const dealerCallDirection = 0.5; // Net long calls
-      const dealerPutDirection = -0.6; // Net short puts
+      // The dealer-book convention. See DEALER_BOOK in core/dealerBook.ts for
+      // why these two numbers are an ASSUMPTION about inventory and not a
+      // property of the greek, and why flipping them inverts every regime this
+      // desk reports while leaving every magnitude on screen unchanged.
+      const dealerCallDirection = DEALER_BOOK.call;
+      const dealerPutDirection = DEALER_BOOK.put;
 
       const callGex = callOI * 100 * greeks.gamma * spot * spot * 0.01 * dealerCallDirection;
       const putGex = putOI * 100 * greeks.gamma * spot * spot * 0.01 * dealerPutDirection;
