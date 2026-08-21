@@ -5,7 +5,7 @@ import { useMarketData } from '../../context/MarketDataContext';
 import { BEAR, SPOT } from '../../components/gex/palette';
 import { buildHedgeImpact, type HedgeImpactView, type StressLabel } from '../../data/hedgeimpact';
 import { ChartTip, TipHead, TipRow, TipNote } from '../../components/charts/ChartTip';
-import { GRID, CURSOR, valueAxis, categoryAxis, niceTicks } from '../../components/charts/chartTheme';
+import { CHART_FONT, CURSOR, GRID, categoryAxis, niceTicks, valueAxis } from '../../components/charts/chartTheme';
 import Panel from '../../components/ui/Panel';
 import StatCard from '../../components/ui/StatCard';
 import MetricGrid from '../../components/ui/MetricGrid';
@@ -87,7 +87,7 @@ const HexCurve = ({ view }: { view: HedgeImpactView }) => {
               position: 'insideTopLeft',
               fill: BEAR,
               fontSize: 10,
-              fontFamily: 'JetBrains Mono, monospace',
+              fontFamily: CHART_FONT,
             }}
           />
           {withinBoundary && (
@@ -100,7 +100,7 @@ const HexCurve = ({ view }: { view: HedgeImpactView }) => {
                 position: 'insideBottomRight',
                 fill: '#FF9500',
                 fontSize: 10,
-                fontFamily: 'JetBrains Mono, monospace',
+                fontFamily: CHART_FONT,
               }}
             />
           )}

@@ -20,6 +20,9 @@ import ExposureInsight from '../../components/gex/ExposureInsight';
 import ExposureLedger from './ExposureLedger';
 import { DUR, EASE } from '../../lib/motion';
 import { etTime } from '../../core/calendar';
+import { DEALER_BOOK, oiProxyNote } from '../../core/dealerBook';
+import { INVERTED_BOOK, netGammaOf, withConvention } from '../../core/exposureConvention';
+import KnowabilityChip from '../../components/ui/KnowabilityChip';
 
 /** Exposure sweeps on its own cadence — bars must not vibrate with every tick. */
 const SCAN_INTERVAL_MS = 10_000;
@@ -43,6 +46,18 @@ const ExposureProfile = () => {
   const navigate = useNavigate();
   const [expiry, setExpiry] = useState<ExposureExpiry>('0DTE');
   const [windowHalf, setWindowHalf] = useState<'10' | '15'>('10');
+  /*
+    Which dealer book the surface is drawn under.
+
+    Not a display preference. Gamma is identical and positive for a call and a
+    put at the same strike, so the call-versus-put sign here is an assumption
+    about who holds which side — and nothing in the entitled data names a holder.
+    A reader cannot see that in the output, because flipping it inverts the whole
+    regime while every magnitude stays exactly where it was. Letting them flip it
+    and watch the conclusion turn over is the only version of that sentence
+    anybody believes.
+  */
+  const [inverted, setInverted] = useState(false);
 
   // Strike sync across matrix + map: hover mirrors, click pins (silver)
   const [hoverStrike, setHoverStrike] = useState<number | null>(null);
@@ -70,9 +85,29 @@ const ExposureProfile = () => {
     }
   }, [marketData]);
 
+  /* Re-convention the CHAIN, then hand it to the same builder. Everything
+     downstream — the map, the levels, the bias, the king strike — restates
+     itself coherently, and there is no second copy of the arithmetic. */
+  const book = inverted ? INVERTED_BOOK : DEALER_BOOK;
+  const conventioned = useMemo(
+    () => (scanSnapshot ? withConvention(scanSnapshot, book) : null),
+    [scanSnapshot, book]
+  );
+
   const data = useMemo(
-    () => (scanSnapshot ? buildExposureProfile(scanSnapshot, expiry, Number(windowHalf) as 10 | 15) : null),
-    [scanSnapshot, expiry, windowHalf]
+    () => (conventioned ? buildExposureProfile(conventioned, expiry, Number(windowHalf) as 10 | 15) : null),
+    [conventioned, expiry, windowHalf]
+  );
+
+  /* Both readings of the same book, so the pane can state the inversion as a
+     fact rather than asking the reader to compare two screens from memory. */
+  const netUnderBook = useMemo(
+    () => (scanSnapshot ? netGammaOf(withConvention(scanSnapshot, book).chain) : 0),
+    [scanSnapshot, book]
+  );
+  const netUnderOther = useMemo(
+    () => (scanSnapshot ? netGammaOf(withConvention(scanSnapshot, inverted ? DEALER_BOOK : INVERTED_BOOK).chain) : 0),
+    [scanSnapshot, inverted]
   );
 
   if (!data) {
@@ -107,8 +142,44 @@ const ExposureProfile = () => {
           value={windowHalf}
           onChange={v => setWindowHalf(v as '10' | '15')}
         />
+        <SegmentedControl
+          ariaLabel="Dealer book convention"
+          options={[
+            { value: 'std', label: 'Long calls' },
+            { value: 'inv', label: 'Short calls' },
+          ]}
+          value={inverted ? 'inv' : 'std'}
+          onChange={v => setInverted(v === 'inv')}
+        />
         <span className="ml-auto font-mono text-micro text-textMuted uppercase tracking-widest tnum">
           scan {lastScanAt} · 10s
+        </span>
+      </div>
+
+      {/* The assumption, stated as an assumption, with what it costs.
+
+          Every figure below is built on the book selected above. This says which
+          one, what the other one would read, and — the part that matters — that
+          the strikes did not move between them. A reader who sees the same
+          magnitudes carry opposite conclusions understands the epistemic status
+          of this desk in a way no disclaimer achieves. */}
+      <div className="flex items-center gap-x-4 gap-y-1.5 flex-wrap border border-borderSubtle rounded-md px-3 py-2">
+        <KnowabilityChip
+          tier="assumed"
+          basis="open interest names no holder — the call/put sign is a convention, not an observation"
+        />
+        <span className="font-mono text-label text-textSecondary">{book.label}</span>
+        <span className="font-mono text-label text-textMuted tnum">
+          net {netUnderBook >= 0 ? '+' : ''}
+          {fmtUsd(netUnderBook)} · {netUnderBook >= 0 ? 'long gamma' : 'short gamma'}
+        </span>
+        <span className="font-mono text-label text-textMuted">
+          the other book reads{' '}
+          <span className="text-textSecondary tnum">
+            {netUnderOther >= 0 ? '+' : ''}
+            {fmtUsd(netUnderOther)}
+          </span>{' '}
+          — same strikes, same open interest, opposite regime
         </span>
       </div>
 
@@ -199,7 +270,14 @@ const ExposureProfile = () => {
         </Panel>
         <Panel
           title="Dealer Positioning Map"
-          subtitle="net dealer pressure by strike"
+          /* The subtitle read "net dealer pressure by strike", which states an
+             observation this data cannot make. Open interest is a count of
+             contracts outstanding with nobody's name on it, published once a day
+             for the prior close; who is long which side is an ASSUMPTION, and
+             flipping it inverts every regime below while leaving every magnitude
+             looking identical. The convention it assumes is named here so the
+             reader can see what they are being shown. */
+          subtitle={oiProxyNote(book)}
           flush
           focusable
           className="xl:col-span-5 min-w-0"

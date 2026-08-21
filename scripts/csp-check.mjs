@@ -36,15 +36,6 @@ const ROUTES = [
 ];
 
 /*
-  The sandbox cannot reach Google's font hosts, so the requests are answered
-  locally rather than aborted. That distinction matters: CSP is evaluated when
-  the fetch is initiated, before interception, so a blocked font stylesheet
-  still fires a violation — but an aborted one produces a request failure that
-  looks identical to a CSP block in the report. Fulfilling keeps the two apart.
-*/
-const FONT_CSS = `@font-face{font-family:Inter;src:local("Inter");font-display:swap}`;
-
-/*
   --interact additionally drives the paths that inject a <style> element at
   RUNTIME, which a load-only sweep never reaches.
 
@@ -72,12 +63,14 @@ let interactionsRun = 0;
 const browser = await chromium.launch({ executablePath: CHROME });
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
 
-await context.route('**://fonts.googleapis.com/**', r =>
-  r.fulfill({ status: 200, contentType: 'text/css', body: FONT_CSS })
-);
-await context.route('**://fonts.gstatic.com/**', r =>
-  r.fulfill({ status: 200, contentType: 'font/woff2', body: '' })
-);
+/*
+  There used to be two route stubs here answering Google's font hosts locally,
+  because the sandbox cannot reach them and an ABORTED request reports as a
+  request failure that looks identical to a CSP block. The page requests no
+  third-party font now — one self-hosted file under public/fonts — so there is
+  nothing to intercept, and a request to either host turning up in the report
+  would be a real finding rather than sandbox noise.
+*/
 
 // Seeded before any document script runs, so the onboarding overlay and the
 // boot animation do not sit on top of the routes being measured.

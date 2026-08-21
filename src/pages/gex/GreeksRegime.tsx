@@ -10,7 +10,7 @@ import MetricGrid from '../../components/ui/MetricGrid';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import SpotRule from '../../components/ui/SpotRule';
 import { ChartTip, TipHead, TipRow, TipNote } from '../../components/charts/ChartTip';
-import { GRID, CURSOR, valueAxis, categoryAxis, axisUsd, zeroAnchoredDomain, niceTicks, REF_LINE } from '../../components/charts/chartTheme';
+import { CHART_FONT, CURSOR, GRID, REF_LINE, axisUsd, categoryAxis, niceTicks, valueAxis, zeroAnchoredDomain } from '../../components/charts/chartTheme';
 import { fmtUsd } from '../../data/gex';
 import type { Tone } from '../../components/ui/tones';
 
@@ -105,7 +105,7 @@ const CharmChart = ({ points }: { points: { time: string; deltaShift: number }[]
             x2={n - 1}
             fill="#FF9500"
             fillOpacity={0.06}
-            label={{ value: 'POWER HOUR', position: 'insideTopLeft', fill: '#FF9500', fontSize: 10, fontFamily: 'JetBrains Mono, monospace' }}
+            label={{ value: 'POWER HOUR', position: 'insideTopLeft', fill: '#FF9500', fontSize: 10, fontFamily: CHART_FONT }}
           />
           <ReferenceLine y={0} stroke={REF_LINE} />
           <Tooltip

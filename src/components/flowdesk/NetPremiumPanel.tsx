@@ -3,7 +3,7 @@ import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLin
 import { buildNetPremium } from '../../data/netpremium';
 import { fmtUsd } from '../../data/gex';
 import { ChartTip, TipHead, TipSeries, TipRow, TipNote } from '../charts/ChartTip';
-import { GRID, CURSOR, chartMargin, valueAxisLeft, categoryAxis, axisUsd, REF_LINE } from '../charts/chartTheme';
+import { CHART_FONT, CURSOR, GRID, REF_LINE, axisUsd, categoryAxis, chartMargin, valueAxisLeft } from '../charts/chartTheme';
 import { BULL, BEAR, SHORT_GAMMA } from '../gex/palette';
 
 /*
@@ -140,7 +140,7 @@ const NetPremiumPanel = ({ ticker, revision }: NetPremiumPanelProps) => {
               orientation="right"
               domain={[pLo, pHi]}
               tickFormatter={(v: number) => v.toFixed(0)}
-              tick={{ fill: SHORT_GAMMA, fontSize: 10, fontFamily: 'JetBrains Mono, monospace' }}
+              tick={{ fill: SHORT_GAMMA, fontSize: 10, fontFamily: CHART_FONT }}
               tickLine={false}
               axisLine={false}
               width={42}

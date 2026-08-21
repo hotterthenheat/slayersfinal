@@ -3,7 +3,7 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import SignalBadge from '../../ui/SignalBadge';
 import ChartLegend from '../../ui/ChartLegend';
 import { ChartTip, TipHead, TipSeries, TipNote } from '../../charts/ChartTip';
-import { GRID, CURSOR, chartMargin, categoryAxis, axisPct } from '../../charts/chartTheme';
+import { CHART_FONT, CURSOR, GRID, axisPct, categoryAxis, chartMargin } from '../../charts/chartTheme';
 import type { RegimeData, VolRegime } from '../../../types/gex';
 import type { Tone } from '../../ui/tones';
 
@@ -89,7 +89,7 @@ const RegimePanel = ({ data }: RegimePanelProps) => {
               domain={[0, 1]}
               ticks={[0, 0.5, 1]}
               tickFormatter={(v: number) => axisPct(v * 100)}
-              tick={{ fill: '#7d7d7d', fontSize: 10, fontFamily: 'JetBrains Mono, monospace' }}
+              tick={{ fill: '#7d7d7d', fontSize: 10, fontFamily: CHART_FONT }}
               tickLine={false}
               axisLine={false}
               width={38}

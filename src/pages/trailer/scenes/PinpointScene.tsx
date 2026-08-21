@@ -16,6 +16,7 @@ import React from 'react';
 import { useTrailer, at, clamp01, ease } from '../useTrailerState';
 import { Beat, Caveat, FillBox, KeyValue, SceneHead, SceneStatement } from '../parts';
 import { prob, px, usd } from '../format';
+import { CHART_FONT } from '../../../components/charts/chartTheme';
 
 const PinpointScene: React.FC = () => {
   const { story, thread, progress: p, reduced, compact } = useTrailer();
@@ -103,7 +104,7 @@ const PinpointScene: React.FC = () => {
                 textAnchor="middle"
                 fill="#7d7d7d"
                 fontSize={10}
-                fontFamily="ui-monospace, monospace"
+                fontFamily={CHART_FONT}
               >
                 {e}
               </text>
@@ -144,7 +145,7 @@ const PinpointScene: React.FC = () => {
                   textAnchor="end"
                   fill="#7d7d7d"
                   fontSize={10}
-                  fontFamily="ui-monospace, monospace"
+                  fontFamily={CHART_FONT}
                 >
                   {s}
                 </text>
@@ -153,7 +154,7 @@ const PinpointScene: React.FC = () => {
 
             {/* the flip manifold — a transition, not a line on a chart */}
             <line x1={left - 4} x2={W - right} y1={flipY} y2={flipY - shear * (cols - 1)} stroke="#7DD3FC" strokeWidth={1.2} strokeDasharray="7 5" opacity={0.85} />
-            <text x={left + 4} y={flipY - shear * (cols - 1) - 5} fill="#7DD3FC" fontSize={10} fontFamily="ui-monospace, monospace">
+            <text x={left + 4} y={flipY - shear * (cols - 1) - 5} fill="#7DD3FC" fontSize={10} fontFamily={CHART_FONT}>
               FLIP {px(g.flip)}
             </text>
 
@@ -168,7 +169,7 @@ const PinpointScene: React.FC = () => {
               opacity={0.92}
             />
             <circle cx={left - 10 + (W - left - right + 10) * sweep} cy={spotY} r={3.4} fill="#E4E8F4" />
-            <text x={left + 4} y={spotY + 13} fill="#E4E8F4" fontSize={10} fontFamily="ui-monospace, monospace">
+            <text x={left + 4} y={spotY + 13} fill="#E4E8F4" fontSize={10} fontFamily={CHART_FONT}>
               SPOT {px(thread.spot)}
             </text>
           </svg>

@@ -111,10 +111,13 @@ const InformedFlow = () => {
                 <span className="h-full" style={{ width: `${(uninformedPremium / total) * 100}%`, background: MUTED_INK }} />
               </span>
             </StatCard>
+            {/* The contract, not its score. This card led with the raw number —
+                the same hand-weighted 0-100 the modal and Compass both dropped —
+                and buried the one fact a reader wants, which is WHICH print. */}
             <StatCard
               label="Top informed print"
-              value={topInformed ? `${topInformed.score}` : '—'}
-              sub={topInformed ? `${topInformed.print.strike}${topInformed.print.right} · ${fmtUsd(topInformed.print.premium)}` : 'awaiting tape'}
+              value={topInformed ? `${topInformed.print.strike}${topInformed.print.right}` : '—'}
+              sub={topInformed ? `${fmtUsd(topInformed.print.premium)} · ${topInformed.reasons[0] ?? ''}` : 'awaiting tape'}
             />
           </MetricGrid>
 
@@ -163,7 +166,7 @@ const InformedFlow = () => {
                         />
                         <TipNote>
                           {b.klass === 'INFORMED'
-                            ? 'Prints here cleared the informed bar: a paid spread, urgency, size or opening risk stacked up. Only these feed the smart-money tilt.'
+                            ? 'Prints here cleared the informed bar: a paid spread, urgency and size stacked up. Only these feed the smart-money tilt.'
                             : b.klass === 'UNINFORMED'
                               ? 'Prints here are noise: crossed at the mid, small, closing risk, or a structure leg with no directional view.'
                               : 'Prints here carry some information but not enough to lean on — they sit between the two cut-points and feed neither the tilt nor the noise bucket.'}
@@ -268,7 +271,6 @@ const InformedFlow = () => {
                 <th className="px-2 py-2 text-left font-mono text-label font-semibold uppercase tracking-wider">Time</th>
                 <th className="px-2 py-2 text-left font-mono text-label font-semibold uppercase tracking-wider">Contract</th>
                 <th className="px-2 py-2 text-center font-mono text-label font-semibold uppercase tracking-wider">Class</th>
-                <th className="px-2 py-2 text-right font-mono text-label font-semibold uppercase tracking-wider">Score</th>
                 <th className="px-2 py-2 text-right font-mono text-label font-semibold uppercase tracking-wider">Premium</th>
                 <th className="px-2 py-2 text-left font-mono text-label font-semibold uppercase tracking-wider">Why</th>
               </tr>
@@ -281,7 +283,6 @@ const InformedFlow = () => {
                   <td className="px-2 py-1.5 text-center font-mono text-micro font-bold uppercase tracking-wider" style={{ color: classInk[r.klass] }}>
                     {classLabel[r.klass]}
                   </td>
-                  <td className="px-2 py-1.5 text-right font-mono text-caption font-semibold tnum" style={{ color: classInk[r.klass] }}>{r.score}</td>
                   <td className="px-2 py-1.5 text-right font-mono text-caption tnum" style={{ color: r.sentiment === 'BULLISH' ? BULL : r.sentiment === 'BEARISH' ? BEAR : MUTED_INK }}>
                     {fmtUsd(r.print.premium)}
                   </td>

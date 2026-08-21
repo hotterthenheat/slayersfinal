@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { MUTED_INK } from '../../components/gex/palette';
 import { histogram, type MonteCarloResult } from '../../core/quant';
 import HoverReadout from '../../components/ui/HoverReadout';
+import { CHART_FONT } from '../../components/charts/chartTheme';
 
 /*
   The fan chart: sampled GBM paths in faint chrome, the percentile cone in
@@ -58,7 +59,7 @@ const MonteCarloPanel = ({ mc, spot, height = 260 }: MonteCarloPanelProps) => {
       const X = (d: number) => (d / mc.days) * (w - 8) + 4;
       const Y = (px: number) => (h - padB) - ((px - lo) / (hi - lo)) * (h - padB - 8) - 4;
 
-      ctx.font = '9px "JetBrains Mono", monospace';
+      ctx.font = `9px ${CHART_FONT}`;
 
       // price (y) gridlines + right-edge labels
       ctx.textAlign = 'right';

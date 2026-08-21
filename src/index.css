@@ -2,13 +2,53 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================
+   ONE FAMILY — SF Pro, self-hosted variable.
+
+   The terminal used to run two faces: Inter for prose and JetBrains Mono for
+   the 1,331 `font-mono` call sites that carry every label, column and readout.
+   Two families over a surface this dense read as "all over the place", and the
+   fix that holds is one family with one weight axis rather than a rule about
+   when to reach for which.
+
+   `wght 100 900` is a single axis, so every Tailwind weight resolves out of
+   this one file — no separate cuts to request, and no missing weight silently
+   falling back to a synthesised bold.
+
+   WHAT THE MONO TOKEN MEANS NOW. `font-mono` is kept as a token, and it still
+   means something: it marks the DATA voice. What it no longer means is a second
+   typeface. SF Pro is proportional, so the alignment JetBrains Mono gave for
+   free has to be asked for — `font-variant-numeric: tabular-nums` below does
+   that for every `.font-mono` element, which is exactly the set of places that
+   holds a number in a column. Rolling digits (AnimatedNumber) and ledger
+   columns keep their alignment without hunting down each `.tnum`.
+
+   `font-display: swap` still applies, but it has much less to do here than it
+   did with the Google Fonts link: the file is same-origin and preloaded from
+   index.html, so the fallback window is a local round trip rather than a
+   third-party one.
+   ============================================================ */
+@font-face {
+  font-family: 'SF Pro';
+  src: url('/fonts/SF-Pro.var.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+
 @layer base {
   html {
     color-scheme: dark;
   }
   body {
     @apply bg-canvas text-textPrimary antialiased;
-    font-feature-settings: 'cv11', 'ss01';
+  }
+  /* SF Pro is proportional; the data voice asks for its own column alignment.
+     See the @font-face block above — this is the half of the one-family move
+     that keeps every numeric column straight. */
+  .font-mono {
+    font-variant-numeric: tabular-nums;
   }
   ::selection {
     background: rgba(200, 212, 235, 0.3);
@@ -147,13 +187,29 @@
    to near-opaque when the OS asks to reduce transparency.
    ============================================================ */
 .glass {
-  background-color: rgba(9, 9, 11, 0.55);
+  /* One knob, not a second glass.
+     Four surfaces wear this class — the app's TopBar, its mobile overlay, SubNav
+     and the landing header — and they do not all want the same tint. The landing
+     bar floats over the hero animation and should let it through; SubNav sits
+     directly on top of data and must not. Forking a `.glass-hero` would put a
+     parallel primitive next to this one and guarantee the two drift, so the
+     variance lives in a variable a call site can set and nothing else changes. */
+  /* The default lives in the var() fallback, NOT in a declaration here.
+     `.glass` is defined after `@tailwind utilities` in this file, so a
+     `--glass-tint` declared on this rule would out-cascade the utility class a
+     call site uses to override it — same specificity, later in the sheet, so
+     the default silently wins and the override does nothing. Measured: the
+     landing bar still computed rgba(9,9,11,0.55) with [--glass-tint:0.3] on it. */
+  background-color: rgba(9, 9, 11, var(--glass-tint, 0.55));
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
 }
 @media (prefers-reduced-transparency: reduce) {
   .glass {
+    /* Deliberately ignores --glass-tint. A reader who has asked the OS to reduce
+       transparency is asking for legibility, and honouring a call site's request
+       for MORE transparency here would invert the setting. */
     background-color: rgba(9, 9, 11, 0.94);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;

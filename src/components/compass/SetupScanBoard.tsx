@@ -3,6 +3,7 @@ import { AlertTriangle, ChevronLeft, ChevronRight, SearchX } from 'lucide-react'
 import Panel from '../ui/Panel';
 import SegmentedControl from '../ui/SegmentedControl';
 import EmptyState from '../ui/EmptyState';
+import VerdictBadge from './VerdictBadge';
 import DataTable, { type Column } from '../ui/DataTable';
 import { StateBadge } from './StateBadge';
 import { setupState, STATE_META } from './setupState';
@@ -129,11 +130,17 @@ const SetupScanBoard = ({
         render: s => <StateBadge state={setupState(s)} />,
       },
       {
+        /* The read, not the grade. `setup.score` is a 0-100 figure with nothing
+           measured behind its weights; the verdict is the same read at a
+           precision three coarse bands can carry. The sort still runs on the
+           number, because a board ordered by a tag alone collapses every
+           QUALIFIED into one indistinguishable block — and a hidden ordering key
+           is a far weaker claim than a printed grade. */
         key: 'score',
-        header: 'Score',
+        header: 'Read',
         align: 'right',
         sortValue: s => s.score,
-        render: s => <span className="text-textPrimary font-semibold">{s.score}</span>,
+        render: s => <VerdictBadge verdict={s.verdict} />,
       },
       {
         key: 'move',

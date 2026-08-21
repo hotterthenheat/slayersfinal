@@ -15,10 +15,10 @@ import {
   VERDICT_TONE,
   buildStockBoard,
   scoreBand,
-  type ScoreBand,
   type StockPick,
 } from '../data/stocks';
 import { lookup } from '../data/universe';
+import { scoreBandFill, scoreBandText } from '../components/ui/tones';
 
 type ViewFilter = 'ALL' | 'ACCUMULATE' | 'AVOID';
 type PriceBand = 'ALL' | 'LOW' | 'MID' | 'HIGH';
@@ -59,14 +59,13 @@ const betaOf = (ticker: string) => lookup(ticker)?.beta ?? null;
 // anything, and dressing it in bull green had the densest column on the board
 // arguing a direction the number never claimed. Direction stays where it
 // belongs, on changePct and the two RS windows.
-const BAND_FILL: Record<ScoreBand, string> = { strong: 'data-bar', mid: 'bg-white/30', weak: 'bg-bear/70' };
 
 /** Sleeve meter — one thin bar per scoring sleeve; the composite's anatomy. */
 const SleeveBar = ({ label, value, title }: { label: string; value: number; title?: string }) => (
   <div className="flex items-center gap-2 min-w-0" title={title}>
     <span className="w-9 shrink-0 font-mono text-label uppercase tracking-wider text-textSecondary">{label}</span>
     <span className="flex-1 h-[3px] rounded-full bg-white/[0.06] overflow-hidden">
-      <span className={`block h-full rounded-full ${BAND_FILL[scoreBand(value)]}`} style={{ width: `${value}%` }} />
+      <span className={`block h-full rounded-full ${scoreBandFill[scoreBand(value)]}`} style={{ width: `${value}%` }} />
     </span>
     <span className="w-6 shrink-0 font-mono text-label text-textSecondary tnum text-right">{value}</span>
   </div>
@@ -378,7 +377,7 @@ const Stocks = () => {
       align: 'right',
       sortValue: p => p.composite,
       render: p => (
-        <span className={`font-mono text-body font-bold tnum ${p.composite >= 68 ? 'text-bull' : p.composite <= 46 ? 'text-bear' : 'text-textPrimary'} leading-5`}>
+        <span className={`font-mono text-body font-bold tnum ${scoreBandText[scoreBand(p.composite)]} leading-5`}>
           {p.composite}
         </span>
       ),
@@ -466,7 +465,7 @@ const Stocks = () => {
                   <SignalBadge tone={VERDICT_TONE[p.verdict]}>{VERDICT_LABEL[p.verdict]}</SignalBadge>
                 </div>
                 <div className="flex items-baseline gap-2">
-                  <span className={`font-mono text-lg font-bold tnum ${p.composite >= 68 ? 'text-bull' : p.composite <= 46 ? 'text-bear' : 'text-textPrimary'}`}>
+                  <span className={`font-mono text-lg font-bold tnum ${scoreBandText[scoreBand(p.composite)]}`}>
                     {p.composite}
                   </span>
                   <span className="font-mono text-micro uppercase tracking-wider text-textMuted">score</span>

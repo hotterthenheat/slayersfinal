@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Copy, Lightbulb, LineChart, RefreshCw, Send, SquarePen, Trash2 } from 'lucide-react';
+import { Copy, Lightbulb, LineChart, RefreshCw, Send, SquarePen, Trash2, X } from 'lucide-react';
 import Panel from '../../components/ui/Panel';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import SignalBadge from '../../components/ui/SignalBadge';
@@ -128,6 +128,21 @@ const Ideas = () => {
   const toast = useToast();
   const { state, addIdea, removeIdea } = useCommunity();
   const composerRef = useRef<HTMLDivElement>(null);
+  /*
+    The composer starts CLOSED.
+
+    Nine controls — ticker, direction, horizon, entry, invalidation, targets,
+    risk, position, thesis — used to be the first thing on this page, above an
+    empty board, above the examples. A reader with nothing posted yet landed on a
+    form and had to scroll past it to find anything to read. Every page people
+    actually use for this opens on the posts and keeps composing to one line
+    until you engage with it.
+
+    The fields are unchanged; only when you meet them is. `loadTemplate` opens it
+    on the reader's behalf, because there is no point loading an example into a
+    composer they cannot see.
+  */
+  const [composerOpen, setComposerOpen] = useState(false);
 
   const [dirFilter, setDirFilter] = useState<DirectionFilter>('ALL');
   const [sort, setSort] = useState<SortKey>('NEW');
@@ -195,6 +210,7 @@ const Ideas = () => {
     setTicker(idea.ticker);
     setDirection(idea.direction);
     setThesis(unpackMeta(idea.thesis).text);
+    setComposerOpen(true);
     composerRef.current?.scrollIntoView({ block: 'start' });
     toast.info('Example loaded into the composer');
   };
@@ -238,9 +254,30 @@ const Ideas = () => {
 
   return (
     <>
-      {/* Composer, wired to the book for the symbol being typed */}
+      {/* Composer, wired to the book for the symbol being typed. One line until
+          you engage with it — see `composerOpen`. */}
       <div ref={composerRef}>
-        <Panel title="Write a thesis" subtitle="the levels it is called against, while you write it" className="w-full">
+        {!composerOpen ? (
+          <button
+            type="button"
+            onClick={() => setComposerOpen(true)}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-md border border-borderSubtle bg-panel hover:bg-panelHover hover:border-borderMuted transition-colors text-left"
+          >
+            <SquarePen className="w-4 h-4 shrink-0 text-textMuted" />
+            <span className="text-body text-textSecondary">Share a thesis</span>
+            <span className="ml-auto font-mono text-label uppercase tracking-widest text-textMuted">
+              Ticker · levels · reasoning
+            </span>
+          </button>
+        ) : (
+        <Panel
+          title="Write a thesis"
+          subtitle="the levels it is called against, while you write it"
+          className="w-full"
+          actions={
+            <RowAction icon={X} label="Close composer" onClick={() => setComposerOpen(false)} />
+          }
+        >
           <div className="flex flex-col gap-4">
             <div className="flex flex-wrap items-end gap-x-5 gap-y-3">
               <Field
@@ -320,6 +357,7 @@ const Ideas = () => {
             </div>
           </div>
         </Panel>
+        )}
       </div>
 
       {/* Your board */}
@@ -420,16 +458,19 @@ const Ideas = () => {
           );
         })}
 
-        {shown.length === 0 && (
+        {/* Only when a FILTER emptied the board.
+            An empty board on a first visit used to render "No theses yet — write
+            one above, or start from an example below", which put a panel saying
+            there is nothing here between the reader and the four worked examples
+            immediately below it. Those examples are the only thing on this page
+            to read before you have written anything, so on a first visit they
+            are the content and nothing needs to announce their absence. */}
+        {shown.length === 0 && state.ideas.length > 0 && (
           <Panel>
             <EmptyState
               icon={Lightbulb}
-              title={state.ideas.length ? 'Nothing matches this filter' : 'No theses yet'}
-              body={
-                state.ideas.length
-                  ? 'Clear the direction or ticker filter to see the rest.'
-                  : 'Write one above, or start from an example below.'
-              }
+              title="Nothing matches this filter"
+              body="Clear the direction or ticker filter to see the rest."
             />
           </Panel>
         )}
@@ -439,7 +480,16 @@ const Ideas = () => {
           handle and a vote tally would be decoration, so neither is rendered. */}
       <Panel
         title="Worked examples"
-        subtitle="four theses that ship with the terminal, to copy the shape of"
+        /* Named as shipped examples in both states. They read as the page's
+           content on a first visit, and that is the point — but they are not
+           anybody's posts, there are no accounts behind this yet, and a subtitle
+           that let them pass for community activity would be the one thing this
+           app does not do. */
+        subtitle={
+          state.ideas.length
+            ? 'four theses that ship with the terminal, to copy the shape of'
+            : 'four theses that ship with the terminal — open one as a template to start'
+        }
         flush
         className="w-full"
       >

@@ -9,7 +9,7 @@ import StatCard from '../ui/StatCard';
 import MetricGrid from '../ui/MetricGrid';
 import { BULL, BEAR, SPOT, MUTED_INK, FOCUS } from './palette';
 import { ChartTip, TipHead, TipRow, TipSeries, TipNote } from '../charts/ChartTip';
-import { GRID, CURSOR, valueAxis, categoryAxis, axisVol, paddedDomain, niceTicks } from '../charts/chartTheme';
+import { CHART_FONT, CURSOR, GRID, axisVol, categoryAxis, niceTicks, paddedDomain, valueAxis } from '../charts/chartTheme';
 import SignalBadge from '../ui/SignalBadge';
 import PriceThresholdOdds from './PriceThresholdOdds';
 import type { Tone } from '../ui/tones';
@@ -85,14 +85,14 @@ const DensityChart = ({ view }: { view: StateDensityView }) => {
             stroke={MUTED_INK}
             strokeOpacity={0.7}
             strokeDasharray="3 3"
-            label={{ value: `FWD ${forward.toFixed(0)}`, position: 'insideTopLeft', fill: MUTED_INK, fontSize: 10, fontFamily: 'JetBrains Mono, monospace' }}
+            label={{ value: `FWD ${forward.toFixed(0)}`, position: 'insideTopLeft', fill: MUTED_INK, fontSize: 10, fontFamily: CHART_FONT }}
           />
           <ReferenceLine
             x={spot}
             stroke={SPOT}
             strokeOpacity={0.85}
             strokeWidth={1.25}
-            label={{ value: `SPOT ${spot.toFixed(2)}`, position: 'insideBottomRight', fill: SPOT, fontSize: 10, fontFamily: 'JetBrains Mono, monospace' }}
+            label={{ value: `SPOT ${spot.toFixed(2)}`, position: 'insideBottomRight', fill: SPOT, fontSize: 10, fontFamily: CHART_FONT }}
           />
           <Tooltip
             cursor={CURSOR}

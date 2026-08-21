@@ -124,11 +124,14 @@ const TapeRowModal = ({ print, onClose, isMarked, onToggleMark }: TapeRowModalPr
         print && (
           <>
             <div className="flex items-center gap-2 flex-wrap">
+              {/* Direction is the ink, not a pill. A tinted rounded capsule around
+                  the contract was the last small box on this row, and the scan
+                  card dropped the identical shape for the identical reason —
+                  green and red type says the same thing, in the same place every
+                  other terminal says it. */}
               <span
-                className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-data font-semibold ${
-                  print.right === 'C'
-                    ? 'border-bull/30 bg-bull/10 text-bull'
-                    : 'border-bear/30 bg-bear/10 text-bear'
+                className={`font-mono text-data font-semibold ${
+                  print.right === 'C' ? 'text-bull' : 'text-bear'
                 }`}
               >
                 {print.ticker} {print.strike}
@@ -138,7 +141,7 @@ const TapeRowModal = ({ print, onClose, isMarked, onToggleMark }: TapeRowModalPr
               <SignalBadge tone={SENT_TONE[sent]}>{sent}</SignalBadge>
               {info && (
                 <SignalBadge tone={info.klass === 'INFORMED' ? 'select' : info.klass === 'UNINFORMED' ? 'neutral' : 'neutral'}>
-                  {info.klass === 'UNINFORMED' ? 'NOISE' : info.klass} {info.score}
+                  {info.klass === 'UNINFORMED' ? 'NOISE' : info.klass}
                 </SignalBadge>
               )}
             </div>
@@ -337,20 +340,27 @@ const TapeRowModal = ({ print, onClose, isMarked, onToggleMark }: TapeRowModalPr
             {/* The score, and the factors behind it — the same scorer the
                 Informed Flow desk runs, so the two desks cannot disagree. */}
             {info && (
-              <Block title="Information score">
+              <Block title="Information read">
+                {/* The class, not the number.
+
+                    `scorePrint` starts at 50 and adds 12 for an aggressor, 18
+                    for a sweep, 14 for block premium, and subtracts 20 for a
+                    retail lot — hand-chosen weights with no forward log behind
+                    any of them. Printing the total at 20px claimed a resolution
+                    the arithmetic cannot supply, and the same figure had already
+                    been cut from Compass for the same reason.
+
+                    INFORMED / MIXED / UNINFORMED is the same read at a precision
+                    three coarse bands can carry, and the reasons below it are the
+                    anatomy — each one a named fact about the print rather than a
+                    share of a total. */}
                 <div className="flex items-center gap-3">
                   <span
-                    className={`font-mono text-xl font-bold tnum ${
+                    className={`font-mono text-read font-bold uppercase tracking-wider ${
                       info.klass === 'INFORMED' ? 'text-select' : info.klass === 'UNINFORMED' ? 'text-textMuted' : 'text-textSecondary'
                     }`}
                   >
-                    {info.score}
-                  </span>
-                  <span className="relative h-[5px] flex-1 rounded-full bg-white/[0.06] overflow-hidden">
-                    <span
-                      className="absolute inset-y-0 left-0 rounded-full bg-select/70"
-                      style={{ width: `${info.score}%` }}
-                    />
+                    {info.klass}
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
@@ -364,8 +374,8 @@ const TapeRowModal = ({ print, onClose, isMarked, onToggleMark }: TapeRowModalPr
                   ))}
                 </div>
                 <p className="text-micro leading-relaxed text-textMuted">
-                  Scored on this print alone, against a neutral size rank — the Informed Flow desk ranks it against the
-                  whole tape, so its score there can differ by the size term.
+                  Read on this print alone, against a neutral size rank — the Informed Flow desk ranks it against the
+                  whole tape, so a print near a boundary can land either side of it there.
                 </p>
               </Block>
             )}

@@ -59,3 +59,37 @@ export const toneBar: Record<Tone, string> = {
   magenta: 'bg-king/70',
   neutral: 'bg-white/20',
 };
+
+/*
+  Score-band ink — the magnitude ramp, kept apart from the direction maps above.
+
+  A sleeve score is a MAGNITUDE. 74 on momentum is not a bullish reading of
+  anything, and 31 is not a bearish one; the number says how much, never which
+  way. Direction lives on `changePct` and the RS windows, where a sign exists.
+
+  This lived as two identical maps in two files — Stocks.tsx and
+  StockDetailModal.tsx — and that is how it came to be half-fixed. The board's
+  copy carries a comment saying that dressing a score in bull green "had the
+  densest column on the board arguing a direction the number never claimed", and
+  the fix was applied to the green end only: `weak` stayed `bg-bear/70` and
+  `text-bear`, which is the identical mistake inverted. A low score arguing
+  bearishness is exactly as wrong as a high one arguing bullishness.
+
+  Both ends are neutral now, and there is one map, so the next fix cannot land on
+  half of it. The ramp still reads — a strong band fills bright, a weak one
+  barely fills at all — because on a bar it is the WIDTH that carries the value,
+  not the hue.
+*/
+export type ScoreBandKey = 'strong' | 'mid' | 'weak';
+
+export const scoreBandFill: Record<ScoreBandKey, string> = {
+  strong: 'data-bar',
+  mid: 'bg-white/30',
+  weak: 'bg-white/12',
+};
+
+export const scoreBandText: Record<ScoreBandKey, string> = {
+  strong: 'text-textPrimary',
+  mid: 'text-textSecondary',
+  weak: 'text-textMuted',
+};

@@ -47,7 +47,6 @@ import Panel from '../ui/Panel';
 import SignalBadge from '../ui/SignalBadge';
 import { preserveGreek } from '../ui/greek';
 import EmptyState from '../ui/EmptyState';
-import AnimatedNumber from '../ui/AnimatedNumber';
 import type { Tone } from '../ui/tones';
 
 /**
@@ -103,27 +102,6 @@ function isPriceable(c: WeighedContract): boolean {
 
 function fmtStrike(v: number): string {
   return v % 1 === 0 ? String(v) : String(Number(v.toFixed(2)));
-}
-
-/**
- * The six contributions have to add to the headline, or the ledger is another
- * assertion rather than the arithmetic it claims to be.
- *
- * Rounding each `score × weight` on its own drifts: measured on SPY 505C at the
- * 08/03 expiry, the six rounded shares foot to 68 against a composite of 67,
- * because the engine rounds the SUM and this would round the PARTS. Largest
- * remainder settles it: floor every share, then hand the leftover points to the
- * biggest fractions. Total is exact by construction, and the point always lands
- * on the row with the strongest claim to it.
- */
-function apportion(exact: number[], total: number): number[] {
-  const out = exact.map(Math.floor);
-  let left = total - out.reduce((a, b) => a + b, 0);
-  const byFraction = exact
-    .map((v, i) => ({ i, frac: v - Math.floor(v) }))
-    .sort((a, b) => b.frac - a.frac);
-  for (let k = 0; left > 0 && k < byFraction.length; k++, left--) out[byFraction[k].i] += 1;
-  return out;
 }
 
 /** The canonical form of a resolution. Every picker writes one of these back
@@ -188,14 +166,12 @@ const FactorRow = ({
   weight,
   score,
   detail,
-  contribution,
   muted = false,
 }: {
   label: string;
   weight: number;
   score: number;
   detail: string;
-  contribution: number;
   muted?: boolean;
 }) => (
   /* `×0.30` used to sit between the label and the bar on every row. Contribution
@@ -218,7 +194,7 @@ const FactorRow = ({
       </span>
       <span className="w-10 shrink-0 font-mono text-caption font-semibold text-textPrimary tnum text-right">{score}</span>
       <span className="w-[5ch] shrink-0 font-mono text-caption text-textSecondary tnum text-right">
-        {muted ? '—' : contribution}
+        ×{weight.toFixed(2)}
       </span>
     </div>
     <p className="pl-32 text-label text-textMuted leading-snug">{detail}</p>
@@ -301,8 +277,6 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
     const atm = Math.round(snapshot.spot);
     return canonicalQuery(snapshot.ticker, atm, 'C', e);
   });
-  const [budgetInput, setBudgetInput] = useState('');
-  const [targetLabel, setTargetLabel] = useState<string | null>(null);
 
   // ---- the listed universe, lazily. ------------------------------------------
   // Until the listing lands nothing is declared unknown: under-reporting an
@@ -438,8 +412,13 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
   }, [weighed?.id]);
   const ledgerRows = useMemo(() => {
     if (!weighed) return [];
-    const shares = apportion(weighed.factors.map(f => f.score * f.weight), weighed.composite);
-    const byKey = new Map(weighed.factors.map((f, i) => [f.key, { ...f, contribution: shares[i] }]));
+    /* Each factor stands on its own score and its own weight.
+       This used to `apportion` the six `score × weight` products across the
+       composite so the parts footed to the headline exactly. With no headline
+       there is nothing to foot to, and the honest shape was underneath all
+       along: five separately-named 0-100 quantities and the weight each carries,
+       which is the component vector the grade was compressing. */
+    const byKey = new Map(weighed.factors.map(f => [f.key, f]));
     return ledger.map(f => byKey.get(f.key)).filter((f): f is NonNullable<typeof f> => f != null);
   }, [ledger, weighed]);
 
@@ -519,21 +498,11 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
 
   // ---- plan readouts ----------------------------------------------------------
   const ladder = useMemo(() => expiryLadder(), []);
-  const targetExpiry = useMemo(
-    () => ladder.find(e => e.label === targetLabel) ?? railExpiry,
-    [ladder, targetLabel, railExpiry]
-  );
-  const daysToTarget = Math.max(0, Math.min(railExpiry.dte, targetExpiry.dte));
-  const runway = railExpiry.dte - daysToTarget;
 
   const coverage = weighed ? weighed.expectedMovePct / Math.max(weighed.breakevenMovePct, 0.05) : 0;
   const effExpMove = weighed?.expectedMovePct ?? 0;
   const clearsBreakeven = weighed ? effExpMove >= weighed.breakevenMovePct : false;
   const costPerContract = (weighed?.mid ?? 0) * CONTRACT_MULTIPLIER;
-  const parsedBudget = parseFloat(budgetInput);
-  const budget = Number.isFinite(parsedBudget) && parsedBudget > 0 ? parsedBudget : null;
-  const contractsInBudget = budget != null && costPerContract > 0 ? Math.floor(budget / costPerContract) : null;
-  const outlay = contractsInBudget != null ? contractsInBudget * costPerContract : null;
   const halfSpread = (weighed?.spreadPct ?? 0) / 2;
   const expFill = (weighed?.mid ?? 0) * (1 + halfSpread / 100);
   const flowScore = weighed?.factors.find(f => f.key === 'flow')?.score ?? 50;
@@ -556,7 +525,11 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
         ticker: weighed.ticker,
         strike: weighed.strike,
         right: weighed.right,
-        score: weighed.composite,
+        /* Persisted, never rendered. `TrackedSetup.score` is a required field
+           on rows already in localStorage, so the field stays; what changed is
+           that the Tracker now shows the VERDICT transition rather than the
+           delta between two of these. */
+        score: weighed.rankKey,
         verdict: GRADE_VERDICT[weighed.verdict],
       });
   };
@@ -687,7 +660,7 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
           <span className="w-32 shrink-0" />
           <span className="flex-1" />
           <span className="w-10 shrink-0 font-mono text-micro uppercase tracking-widest text-textMuted text-right">Score</span>
-          <span className="w-[5ch] shrink-0 font-mono text-micro uppercase tracking-widest text-textMuted text-right">Adds</span>
+          <span className="w-[5ch] shrink-0 font-mono text-micro uppercase tracking-widest text-textMuted text-right">Weight</span>
         </div>
         {ledgerRows.map(f => (
           <FactorRow
@@ -696,24 +669,13 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
             weight={f.weight}
             score={f.score}
             detail={f.detail}
-            contribution={f.contribution}
             muted={!priceable && (f.key === 'decay' || f.key === 'liq')}
           />
         ))}
-        {priceable && (
-          <div className="flex items-center gap-2 border-t border-borderSubtle pt-2">
-            {/* Counted, never spelled. This read "Σ six rows" over five of them
-                from the day the news-lean factor was removed with the wire. */}
-            <span className="w-32 shrink-0 font-mono text-label uppercase tracking-wider text-textMuted">
-              Σ {ledgerRows.length} rows
-            </span>
-            <span className="flex-1" />
-            <span className="w-10 shrink-0" />
-            <span className="w-[5ch] shrink-0 font-mono text-caption font-semibold text-textPrimary tnum text-right">
-              {ledgerRows.reduce((a, f) => a + f.contribution, 0)}
-            </span>
-          </div>
-        )}
+        {/* No Σ row. It summed the six contributions to prove they footed to
+            the composite; with the composite gone it would be printing the
+            hidden ordering key under a total's heading, which is the same claim
+            wearing a different label. */}
         <details className="mt-1">
           <summary className="cursor-pointer font-mono text-label uppercase tracking-wider text-textMuted hover:text-textSecondary">
             Why these weights
@@ -739,7 +701,7 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
     priceable` guard on "If you take it" — and they drifted, which is how a
     symbol with no listing ended up with a full cost breakdown under it. Typing
     `ZZZZ 505C` printed NO LISTING FOR ZZZZ in the grade panel and then, directly
-    beneath, days to expiry, cost per contract, contracts in budget, expected
+    beneath, days to expiry, cost per contract, expected
     fill, spread round-trip and theta drag — sizing economics for a ticker the
     page had just said it could not find.
 
@@ -814,7 +776,7 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
             {nearestPriceable && (
               <button onClick={() => write({ strike: nearestPriceable.strike })} className={`${CHIP_BASE} ${CHIP_TONE.typed}`}>
                 Nearest priceable {weighed.right === 'C' ? 'call' : 'put'} on this expiry: {fmtStrike(nearestPriceable.strike)}
-                {nearestPriceable.right}, grades {nearestPriceable.composite}
+                {nearestPriceable.right}, reads {VERDICT_LABEL[GRADE_VERDICT[nearestPriceable.verdict]]}
               </button>
             )}
             {nearestListed != null && nearestListed !== weighed.strike && (
@@ -832,14 +794,19 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
     return (
       <div className="flex flex-col gap-4">
         {identity}
+        {/* The verdict leads, and there is no number beside it.
+            A 36px `composite` used to sit here — the biggest thing on the pane,
+            a weighted mean of five hand-chosen factor scores at hand-chosen
+            weights with no forward log, no hit rate and no interval behind any
+            of them. A 0-100 figure claims a resolution that arithmetic cannot
+            supply, and rendering it at 36px made the claim the loudest thing on
+            the desk. The tag is the same read at a precision three coarse bands
+            can actually carry. */}
         <div className="flex items-center gap-3 flex-wrap">
-          <AnimatedNumber
-            value={weighed.composite}
-            format={v => String(Math.round(v))}
-            flash={false}
-            className="font-mono text-4xl font-bold text-textPrimary w-[3ch] text-right"
-          />
-          <SignalBadge tone={VERDICT_TONE[GRADE_VERDICT[weighed.verdict]]} className="min-w-[96px] justify-center">
+          <SignalBadge
+            tone={VERDICT_TONE[GRADE_VERDICT[weighed.verdict]]}
+            className="min-w-[112px] justify-center text-read font-bold"
+          >
             {VERDICT_LABEL[GRADE_VERDICT[weighed.verdict]]}
           </SignalBadge>
           <span className="ml-auto font-mono text-label text-textMuted tnum">
@@ -854,13 +821,15 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
                 {better.ticker} {fmtStrike(better.strike)}
                 {better.right}
               </span>{' '}
-              grades <span className="text-textPrimary font-semibold tnum">{better.composite}</span> against your{' '}
-              <span className="text-textPrimary font-semibold tnum">{weighed.composite}</span>, and clears its breakeven with
-              more room ({better.breakevenMovePct.toFixed(2)}% of {better.expectedMovePct.toFixed(2)}% against{' '}
-              {weighed.breakevenMovePct.toFixed(2)}% of {weighed.expectedMovePct.toFixed(2)}%).
+              reads <span className="text-textPrimary font-semibold">{VERDICT_LABEL[GRADE_VERDICT[better.verdict]]}</span>{' '}
+              where yours reads{' '}
+              <span className="text-textPrimary font-semibold">{VERDICT_LABEL[GRADE_VERDICT[weighed.verdict]]}</span>, and
+              clears its breakeven with more room ({better.breakevenMovePct.toFixed(2)}% of{' '}
+              {better.expectedMovePct.toFixed(2)}% against {weighed.breakevenMovePct.toFixed(2)}% of{' '}
+              {weighed.expectedMovePct.toFixed(2)}%).
             </>
           ) : (
-            `Nothing in the ${sleeve} sleeve beats this on both grade and reward to risk.`
+            `Nothing in the ${sleeve} sleeve reads better than this and clears its breakeven with more room.`
           )}
         </p>
 
@@ -1017,37 +986,18 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
                 </SignalBadge>
               )}
 
-              <label className="ml-auto inline-flex items-center gap-1.5 font-mono text-label text-textMuted">
-                Risk budget
-                <span className="relative">
-                  <span className="absolute left-2 top-1/2 -translate-y-1/2 font-mono text-label text-textMuted">$</span>
-                  <input
-                    type="number"
-                    value={budgetInput}
-                    placeholder="0"
-                    aria-label="Risk budget in dollars"
-                    onChange={e => setBudgetInput(e.target.value)}
-                    className="w-24 bg-inputBg border border-borderSubtle focus:border-borderMuted rounded-md pl-5 pr-2 py-1 font-mono text-caption text-textPrimary tnum focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60"
-                  />
-                </span>
-              </label>
-              <label className="inline-flex items-center gap-1.5 font-mono text-label text-textMuted">
-                Target date
-                <select
-                  value={targetExpiry.label}
-                  aria-label="Target date"
-                  onChange={e => setTargetLabel(e.target.value)}
-                  className="bg-inputBg border border-borderSubtle focus:border-borderMuted rounded-md px-2 py-1 font-mono text-caption text-textPrimary tnum focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60"
-                >
-                  {ladder
-                    .filter(e => e.dte <= railExpiry.dte)
-                    .map(e => (
-                      <option key={e.label} value={e.label}>
-                        {e.label} · {e.weekday}
-                      </option>
-                    ))}
-                </select>
-              </label>
+              {/* No inputs.
+
+                  Two controls stood here — a Risk budget number field and a
+                  Target date select — and between them they were the whole of
+                  "test your thesis" on this desk. The desk's job is to say what
+                  it thinks of a contract. Asking the reader to type their account
+                  size and pick a horizon so the pane can divide by one and count
+                  days to the other is work handed back to them, and the two
+                  figures it bought were the two least load-bearing on the panel.
+
+                  Everything the pane says now is a property of the contract and
+                  the chain, not of the reader. */}
             </div>
 
             {/* Three readouts, not twelve tiles. The twelve were one grid with
@@ -1059,26 +1009,19 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
               label="How long"
               items={[
                 { k: 'Days to expiry', v: `${railExpiry.dte}d`, note: `${railExpiry.sessions} sessions` },
-                { k: 'Hold to target', v: `${daysToTarget}d` },
-                { k: 'Runway to expiry', v: `${runway}d`, tone: runway <= 0 ? 'text-warn' : undefined },
                 { k: preserveGreek('1σ move'), v: `${effExpMove.toFixed(1)}%` },
-              ]}
-            />
-            <Figures
-              label="How much"
-              items={[
-                { k: 'Cost / contract', v: `$${costPerContract.toFixed(0)}` },
-                {
-                  k: 'Contracts in budget',
-                  v: contractsInBudget != null ? `${contractsInBudget}` : '—',
-                  tone: contractsInBudget === 0 ? 'text-warn' : undefined,
-                },
-                { k: 'Est. outlay', v: outlay != null ? `$${outlay.toFixed(0)}` : '—' },
               ]}
             />
             <Figures
               label="What the round trip costs"
               items={[
+                /* "How much" used to be its own group and this was its only
+                   survivor: the other two rows — contracts in budget, estimated
+                   outlay — were arithmetic on a number the reader typed in. A
+                   heading over one figure is a heading with nothing to organise,
+                   and cost per contract belongs beside the fill and the spread
+                   anyway. */
+                { k: 'Cost / contract', v: `$${costPerContract.toFixed(0)}` },
                 { k: 'Expected fill', v: `$${expFill.toFixed(2)}`, note: `~${halfSpread.toFixed(1)}% exit slippage` },
                 {
                   k: 'Spread round-trip',
@@ -1103,10 +1046,6 @@ const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange
               {costEatsEdge
                 ? `Spread round-trip plus a day of theta (${friction.toFixed(1)}%) is wider than the 1σ move (${weighed.expectedMovePct.toFixed(1)}%), so you would need a fast, above-expected move just to clear the toll.`
                 : `The 1σ move (${weighed.expectedMovePct.toFixed(1)}%) clears the friction (${friction.toFixed(1)}%). The edge is capturable if you work a limit near $${expFill.toFixed(2)} instead of paying the offer.`}
-              {budget != null &&
-                (contractsInBudget && contractsInBudget > 0
-                  ? ` Your $${budget.toFixed(0)} budget clears ${contractsInBudget} contract${contractsInBudget > 1 ? 's' : ''} at the $${costPerContract.toFixed(0)} mid.`
-                  : ` Your $${budget.toFixed(0)} budget is under the $${costPerContract.toFixed(0)} single-contract mid.`)}
             </p>
             <p className="font-mono text-micro text-textMuted leading-relaxed border-t border-borderSubtle pt-2.5">
               Sizing off the mid × {CONTRACT_MULTIPLIER}-share multiplier. Fills and slippage read from the modelled spread and

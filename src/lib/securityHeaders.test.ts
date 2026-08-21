@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
@@ -87,12 +87,46 @@ describe('immutable caching applies only to content-addressed names', () => {
     }
   });
 
-  it('does not rewrite a missing asset to the app shell', () => {
-    // The defect this guards: a deploy that shipped without its JS answered
-    // /assets/index-a1b2.js with 200 and index.html, and the browser failed on
-    // "Unexpected token '<'" — a parse error naming a file that parses fine.
+  it('does not rewrite a missing static file to the app shell', () => {
+    /*
+      The defect this guards: a deploy that shipped without its JS answered
+      /assets/index-a1b2.js with 200 and index.html, and the browser failed on
+      "Unexpected token '<'" — a parse error naming a file that parses fine.
+
+      Read off `public/` rather than pinned to a literal, because the literal
+      was the actual failure mode. It said `/((?!assets/).*)` and passed for
+      months; then `public/fonts/` and `public/logos/` were added — the one
+      self-hosted family, and the brand marks CompanyLogo asks for by ticker —
+      and a pinned string has nothing to say about a directory that did not
+      exist when it was written. A missing font would have come back 200 with
+      the HTML shell, which is the same silent-wrong-content bug in a new
+      folder.
+
+      So: every directory that actually ships under public/ must be excluded.
+      Adding one and forgetting the rewrite fails here.
+    */
+    const shipped = readdirSync(join(process.cwd(), 'public'), { withFileTypes: true })
+      .filter(e => e.isDirectory())
+      .map(e => e.name);
+    expect(shipped.length, 'public/ has no directories — re-point this test').toBeGreaterThan(0);
+
     const rewrite = vercel.rewrites.find(r => r.destination === '/index.html');
-    expect(rewrite?.source).toBe('/((?!assets/).*)');
+    expect(rewrite, 'the SPA rewrite is gone').toBeTruthy();
+
+    // The rewrite is what SENDS the shell. A path it still matches is a path
+    // that gets HTML instead of a 404, so this asks the pattern itself rather
+    // than reading its source text.
+    const source = new RegExp(`^${rewrite!.source}$`);
+    for (const dir of shipped) {
+      expect(
+        source.test(`/${dir}/missing-file.xyz`),
+        `a miss under public/${dir}/ is rewritten to the app shell — it must 404`
+      ).toBe(false);
+    }
+    // ...and a real client route still reaches the shell, or the exclusion has
+    // swallowed the app.
+    expect(source.test('/compass')).toBe(true);
+    expect(source.test('/pinpoint/gamma')).toBe(true);
   });
 });
 
@@ -121,14 +155,19 @@ describe('the content security policy', () => {
     expect(directive('object-src')).toEqual(["'none'"]);
   });
 
-  it('names one third party and no wildcards', () => {
-    // Every allowed origin, spelled out. A `https:` anywhere in here would mean
-    // any host on the internet, which is most of the way back to no policy.
+  it('names no third party at all, and no wildcards', () => {
+    /*
+      Every allowed origin, spelled out. A `https:` anywhere in here would mean
+      any host on the internet, which is most of the way back to no policy.
+
+      The list is EMPTY now. It used to carry fonts.googleapis.com and
+      fonts.gstatic.com for a two-family webfont stylesheet; the family is one
+      self-hosted file under public/fonts, so the page reaches no third party for
+      anything. Anything that turns up here is a new third-party dependency and wants a
+      deliberate decision, not a passing edit.
+    */
     const origins = CSP.match(/https?:\/\/[^\s;]+/g) ?? [];
-    expect([...new Set(origins)].sort()).toEqual([
-      'https://fonts.googleapis.com',
-      'https://fonts.gstatic.com',
-    ]);
+    expect([...new Set(origins)].sort()).toEqual([]);
     expect(CSP).not.toMatch(/(^|[\s;])https:([\s;]|$)/);
     expect(CSP).not.toContain("'unsafe-eval'");
     expect(CSP).not.toContain('*');

@@ -13,6 +13,7 @@ import {
   ReferenceLine,
   ResponsiveContainer,
 } from 'recharts';
+import ChartWatermark from '../../components/ui/ChartWatermark';
 import { buildContractFlow, flowClock, type ContractRef } from '../../data/contractflow';
 import { fmtUsd } from '../../data/gex';
 import { ChartTip, TipHead, TipRow, TipSeries, TipNote } from '../../components/charts/ChartTip';
@@ -65,12 +66,31 @@ interface NetPoint {
   price: number;
 }
 
+/*
+  A tape mark, not a bubble.
+
+  Recharts draws a `<Scatter>` as circles by default, and three overlaid series
+  of translucent discs is the single most recognisable shape in generated
+  dashboards — and the one thing a print tape does not look like anywhere a
+  print is actually read.
+
+  Same data, same positions, different mark: a 7x3 rule centred on the fill. A
+  print is an event at a price, and a short horizontal rule AT that price is what
+  a ladder uses. It also stops the field from swallowing the average path behind
+  it, which a disc field does as soon as the fills cluster.
+*/
+const TapeMark = (props: { cx?: number; cy?: number; fill?: string; fillOpacity?: number }) => {
+  const { cx, cy, fill, fillOpacity } = props;
+  if (cx == null || cy == null) return null;
+  return <rect x={cx - 3.5} y={cy - 1.5} width={7} height={3} rx={0.5} fill={fill} fillOpacity={fillOpacity} />;
+};
+
 const ContractFlowChart = ({ contract }: { contract: ContractRef }) => {
   const cf = useMemo(() => buildContractFlow(contract), [contract]);
   const [showAvg, setShowAvg] = useState(true);
   const [showPrice, setShowPrice] = useState(true);
 
-  const askPts = useMemo(() => cf.points.filter(p => p.side === 'ASK'), [cf]);
+const askPts = useMemo(() => cf.points.filter(p => p.side === 'ASK'), [cf]);
   const midPts = useMemo(() => cf.points.filter(p => p.side === 'MID'), [cf]);
   const bidPts = useMemo(() => cf.points.filter(p => p.side === 'BID'), [cf]);
 
@@ -121,7 +141,8 @@ const ContractFlowChart = ({ contract }: { contract: ContractRef }) => {
             <span className="w-3 h-[2px] rounded-full" style={{ background: showAvg ? PRICE_LINE : '#555' }} /> Avg
           </button>
         </div>
-        <div className="inst-surface rounded-md p-1.5">
+        <div className="inst-surface rounded-md p-1.5 relative">
+          <ChartWatermark desk="Trace" />
           <ResponsiveContainer width="100%" height={168}>
             <ScatterChart margin={{ top: 6, right: 6, bottom: 2, left: 0 }}>
               <CartesianGrid stroke={GRID} />
@@ -175,9 +196,9 @@ const ContractFlowChart = ({ contract }: { contract: ContractRef }) => {
               {showAvg && (
                 <Scatter data={cf.avg} line={{ stroke: PRICE_LINE, strokeWidth: 1.5 }} lineType="joint" shape={() => <g />} legendType="none" />
               )}
-              <Scatter data={bidPts} fill={BID} fillOpacity={0.85} />
-              <Scatter data={midPts} fill={MID} fillOpacity={0.8} />
-              <Scatter data={askPts} fill={ASK} fillOpacity={0.85} />
+              <Scatter data={bidPts} fill={BID} fillOpacity={0.85} shape={<TapeMark />} />
+              <Scatter data={midPts} fill={MID} fillOpacity={0.8} shape={<TapeMark />} />
+              <Scatter data={askPts} fill={ASK} fillOpacity={0.85} shape={<TapeMark />} />
             </ScatterChart>
           </ResponsiveContainer>
         </div>
@@ -216,7 +237,8 @@ const ContractFlowChart = ({ contract }: { contract: ContractRef }) => {
             <span className="w-3 h-[2px] rounded-full" style={{ background: showPrice ? PRICE_LINE : '#555' }} /> Price
           </button>
         </div>
-        <div className="inst-surface rounded-md p-1.5">
+        <div className="inst-surface rounded-md p-1.5 relative">
+          <ChartWatermark desk="Trace" />
           <ResponsiveContainer width="100%" height={168}>
             <ComposedChart data={cf.net.series} margin={{ top: 6, right: 4, bottom: 2, left: 0 }}>
               <CartesianGrid stroke={GRID} />

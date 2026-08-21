@@ -89,10 +89,8 @@ const ScannerRowModal = ({ row, spot, onClose }: ScannerRowModalProps) => {
           <>
             <div className="flex items-center gap-2 flex-wrap">
               <span
-                className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-data font-semibold ${
-                  row.right === 'C'
-                    ? 'border-bull/30 bg-bull/10 text-bull'
-                    : 'border-bear/30 bg-bear/10 text-bear'
+                className={`font-mono text-data font-semibold ${
+                  row.right === 'C' ? 'text-bull' : 'text-bear'
                 }`}
               >
                 {row.ticker} {row.strike}

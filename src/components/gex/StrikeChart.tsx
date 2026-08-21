@@ -39,6 +39,19 @@ interface StrikeChartProps {
   timeframe: Timeframe;
   /** Hide the interval picker where the chart is decoration, not an instrument. */
   showTimeframePicker?: boolean;
+  /**
+   * Whether the reader may pan and zoom the chart.
+   *
+   * lightweight-charts enables scroll AND scale by default — drag, wheel, pinch,
+   * and press-drag on either axis — and nothing in this file ever turned them
+   * off. On a desk that is right: a trader reframing a chart is the point. On the
+   * landing page it is not, and the landing already knew that. Its call site
+   * carries the comment "a preview of the read, not a desk to operate" and passes
+   * `showTimeframePicker={false}`, but the intent stopped at the picker: the chart
+   * underneath was still fully draggable, so a visitor could shove the hero
+   * candles off into blank space on the first surface they ever see.
+   */
+  interactive?: boolean;
   height?: number;
   /** Transient user-focused price — renders a cyan FOCUS line while set */
   focusPrice?: number | null;
@@ -46,6 +59,7 @@ interface StrikeChartProps {
 
 // Wall / flip / king overlay colors (independent of candle theme)
 import { CALL_WALL, PUT_WALL, FLIP, KING, FOCUS, MUTED_INK } from './palette';
+import { CHART_FONT } from '../charts/chartTheme';
 
 // Level lines are created once per overlay/ticker, then their prices are
 // TWEENED (rAF + easeOutCubic) so scan-tier level moves glide instead of jumping.
@@ -105,6 +119,7 @@ const StrikeChart = ({
   overlay,
   timeframe: initialTimeframe,
   showTimeframePicker = true,
+  interactive = true,
   height = 460,
   focusPrice = null,
 }: StrikeChartProps) => {
@@ -168,7 +183,7 @@ const StrikeChart = ({
       layout: {
         background: { color: 'transparent' },
         textColor: MUTED_INK,
-        fontFamily: 'JetBrains Mono, monospace',
+        fontFamily: CHART_FONT,
         fontSize: 10,
         attributionLogo: false,
       },
@@ -182,6 +197,12 @@ const StrikeChart = ({
         vertLine: { color: 'rgba(255,255,255,0.3)', labelBackgroundColor: '#262626' },
         horzLine: { color: 'rgba(255,255,255,0.3)', labelBackgroundColor: '#262626' },
       },
+      // Both default to true. Locked together on purpose: leaving scale on while
+      // scroll is off still lets a wheel stretch the axes until the candles are a
+      // smear, which is the same defect with a different gesture. The crosshair is
+      // untouched either way, so a locked chart still answers a hover.
+      handleScroll: interactive,
+      handleScale: interactive,
     });
 
     const candles = chart.addSeries(CandlestickSeries, {
@@ -273,7 +294,20 @@ const StrikeChart = ({
       cancelAnimationFrame(levelRafRef.current);
       loadedRef.current = { ticker: '', timeframe: '1m' };
     };
+    // Mount-once. `interactive` is read here so the chart is locked on its very
+    // first frame rather than for one paint; the effect below keeps it honest if
+    // a caller ever makes the prop dynamic.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /* Keep the lock in step with the prop.
+     The mount effect above never re-runs, so without this a call site that
+     toggled `interactive` would be silently ignored — the chart would keep
+     whatever it was built with. Cheap, and it means the prop means what it says
+     rather than meaning "whatever it was at mount". */
+  useEffect(() => {
+    chartRef.current?.applyOptions({ handleScroll: interactive, handleScale: interactive });
+  }, [interactive]);
 
   // Candle data + node overlay: full load on ticker/timeframe change, incremental per tick
   useEffect(() => {

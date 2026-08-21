@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { Star, GitCompare, Info, Waves, Ruler } from 'lucide-react';
+import CompanyLogo from '../components/ui/CompanyLogo';
 import DetailModal from '../components/ui/DetailModal';
 import { useExpandPreference } from '../hooks/useExpandPreference';
 import SignalBadge from '../components/ui/SignalBadge';
-import SegmentedControl from '../components/ui/SegmentedControl';
 import EmptyState from '../components/ui/EmptyState';
 import Stat from '../components/ui/Stat';
 import TickerJump from '../components/ui/TickerJump';
@@ -13,26 +13,18 @@ import { buildDarkPoolFeed } from '../data/darkpoolfeed';
 import { FACTOR_GUIDE } from '../data/factorGuide';
 import { fmtUsd } from '../data/gex';
 import { buildFlowAlerts, buildPulseFlow } from '../data/pulseflow';
-import { VERDICT_LABEL, VERDICT_TONE, scoreBand, type ScoreBand, type StockPick } from '../data/stocks';
+import { VERDICT_LABEL, VERDICT_TONE, scoreBand, type StockPick } from '../data/stocks';
 import { buildSwingModel } from '../data/swingModel';
-import { toneText, type Tone } from '../components/ui/tones';
+import { toneText, type Tone, scoreBandFill, scoreBandText } from '../components/ui/tones';
 
 // A sleeve score is a magnitude, so the fill is `data-bar`; only the weak band
 // takes a tone, because a sub-40 sleeve is the one reading that argues against
 // the trade. Bands come from the engine so the board cannot disagree with this.
-const BAND_FILL: Record<ScoreBand, string> = { strong: 'data-bar', mid: 'bg-white/30', weak: 'bg-bear/70' };
-const BAND_TEXT: Record<ScoreBand, string> = { strong: 'text-textPrimary', mid: 'text-textSecondary', weak: 'text-bear' };
 
 const signed = (v: number, dp = 1) => `${v >= 0 ? '+' : ''}${v.toFixed(dp)}%`;
 /** −1…+1 engine leans, restated on a −100…+100 index. Never a percent: nothing
     about a revision or flow lean is a fraction of anything. */
 const moveTone = (v: number): Tone => (v > 0 ? 'bull' : v < 0 ? 'bear' : 'neutral');
-const TABS = [
-  { value: 'READ', label: 'Read' },
-  { value: 'FLOW', label: 'Flow' },
-  { value: 'LEVELS', label: 'Levels' },
-] as const;
-type DrawerTab = (typeof TABS)[number]['value'];
 
 /** Section heading with an optional right-hand count/unit. */
 const Section = ({ title, sub, children }: { title: string; sub?: ReactNode; children: ReactNode }) => (
@@ -59,10 +51,10 @@ const FactorRow = ({ v, name, desc }: { v: number; name: string; desc: string })
     <div className="flex flex-col gap-1">
       <div className="flex items-baseline justify-between gap-2">
         <span className="font-mono text-caption font-semibold text-textPrimary">{name}</span>
-        <span className={`font-mono text-caption font-semibold tnum ${BAND_TEXT[band]}`}>{v}</span>
+        <span className={`font-mono text-caption font-semibold tnum ${scoreBandText[band]}`}>{v}</span>
       </div>
       <span className="h-[5px] rounded-full bg-white/[0.06] overflow-hidden">
-        <span className={`block h-full rounded-full ${BAND_FILL[band]}`} style={{ width: `${v}%` }} />
+        <span className={`block h-full rounded-full ${scoreBandFill[band]}`} style={{ width: `${v}%` }} />
       </span>
       <span className="text-label text-textMuted leading-snug">{desc}</span>
     </div>
@@ -110,17 +102,12 @@ const StockDetailModal = ({
   beta,
   sectorRank = null,
 }: StockDetailModalProps) => {
-  const [tab, setTab] = useState<DrawerTab>('READ');
   // Held here rather than inside the modal because expanding this drilldown
   // means BUILDING more — the dark-pool read, the options book and the swing
   // model are memos below, above the point a render prop could reach.
   const [expanded, toggleExpanded] = useExpandPreference();
   const ticker = pick?.ticker ?? null;
   const price = pick?.price ?? 0;
-
-  useEffect(() => {
-    setTab('READ');
-  }, [ticker]);
 
   // Both are whole-board builds. They stay eager because they are cheap and the
   // empty states quote their own sizes, so the copy can never state a count the
@@ -129,8 +116,23 @@ const StockDetailModal = ({
   // Expanded is the whole record at once, so everything is wanted. Collapsed
   // still builds only what the open tab needs — the dark-pool sweep and the
   // options book are not free.
-  const wantsFlow = tab === 'FLOW' || expanded;
-  const wantsBook = tab === 'FLOW' || tab === 'LEVELS' || expanded;
+  /*
+    Everything, on open. There is no tab to gate on any more.
+
+    The drawer used to land on a READ tab carrying six figures — last, composite,
+    beta, a sparkline, one sentence and two factor bars — with the off-exchange
+    tape, the session option prints, the dealer book and the swing zones behind
+    two more tabs. A reader clicking a row saw the six and concluded the page had
+    nothing; that was the complaint, and it was a fair reading of what was on
+    screen.
+
+    The cost is real and worth stating: the first `buildSnapshot` for a name
+    seeds a month of candles, about 90ms. That is a one-time cost per ticker on a
+    click, it is what the expand control already paid, and it buys a drawer whose
+    contents are not hidden behind furniture.
+  */
+  const wantsFlow = true;
+  const wantsBook = true;
 
   // The feed is sector-grouped and ordered by notional, so the row's position
   // in its group IS its off-exchange rank — no second ranking pass.
@@ -154,8 +156,8 @@ const StockDetailModal = ({
   }, [snapshot]);
 
   const swing = useMemo(
-    () => (ticker && (tab === 'LEVELS' || expanded) ? buildSwingModel(ticker, price, Math.floor(Date.now() / 1000)) : null),
-    [ticker, price, tab, expanded]
+    () => (ticker ? buildSwingModel(ticker, price, Math.floor(Date.now() / 1000)) : null),
+    [ticker, price]
   );
 
   const topPrints = pulse ? [...pulse.prints].sort((a, b) => b.value - a.value).slice(0, 4) : [];
@@ -171,6 +173,7 @@ const StockDetailModal = ({
         pick && (
           <>
             <div className="flex items-center gap-2">
+              <CompanyLogo ticker={pick.ticker} size={24} />
               <span className="font-mono text-lead leading-6 font-bold text-textPrimary">{pick.ticker}</span>
               <SignalBadge tone={VERDICT_TONE[pick.verdict]}>{VERDICT_LABEL[pick.verdict]}</SignalBadge>
             </div>
@@ -183,7 +186,6 @@ const StockDetailModal = ({
                 choosing between things that are all already on screen. */}
             {!expanded && (
               <div className="mt-2">
-                <SegmentedControl ariaLabel="Detail section" options={TABS} value={tab} onChange={setTab} />
               </div>
             )}
           </>
@@ -233,12 +235,14 @@ const StockDetailModal = ({
                   sub={signed(pick.changePct, 2)}
                   tone={moveTone(pick.changePct)}
                 />
-                <Stat
-                  label="Composite"
-                  value={pick.composite}
-                  sub={VERDICT_LABEL[pick.verdict].toLowerCase()}
-                  tone={pick.composite >= 68 ? 'bull' : pick.composite <= 46 ? 'bear' : 'neutral'}
-                />
+                {/* The read, not the figure — and not in a direction hue.
+                    `composite` was rendered here as a 0-100 number toned
+                    bull/bear, which is both of the things this PR has been
+                    removing everywhere else: a hand-weighted score printed as a
+                    grade, and a magnitude wearing the market's language for a
+                    sign. The verdict was already sitting underneath it as the
+                    sub-line; it is the value now. */}
+                <Stat label="Read" value={VERDICT_LABEL[pick.verdict]} sub="momentum + flow" />
                 <Stat
                   label="Beta"
                   value={beta != null ? beta.toFixed(2) : '—'}
@@ -246,7 +250,7 @@ const StockDetailModal = ({
                 />
               </div>
 
-              {(tab === 'READ' || expanded) && (
+              {(
 
                 <>
                   <Section title="30d relative strength">
@@ -270,7 +274,7 @@ const StockDetailModal = ({
                     title="Factor breakdown"
                     sub={
                       <span className="inline-flex items-center gap-1">
-                        <Info className="w-3 h-3" /> composite {pick.composite}
+                        <Info className="w-3 h-3" /> two sleeves, renormalised
                       </span>
                     }
                   >
@@ -284,7 +288,7 @@ const StockDetailModal = ({
                 </>
               )}
 
-              {(tab === 'FLOW' || expanded) && (
+              {(
 
                 <>
                   <Section title="Off-exchange tape" sub={darkPool ? `#${darkPool.rank} of ${darkPool.of} by notional` : undefined}>
@@ -373,7 +377,7 @@ const StockDetailModal = ({
                 </>
               )}
 
-              {(tab === 'LEVELS' || expanded) && (
+              {(
 
                 <>
                   {swing && (

@@ -38,7 +38,7 @@ function mkPrint(o: Partial<FlowPrint>): FlowPrint {
     deltaOI: settledOI(0),
     spot: 500,
     iv: 15,
-    volOverOI: 2, // opening
+    volOverOI: 2,
     strat: '—',
     sweep: false,
     conditions: [TRADE_CONDITION.ASK_AGGRESSOR],
@@ -48,11 +48,10 @@ function mkPrint(o: Partial<FlowPrint>): FlowPrint {
 }
 
 describe('What-Else — information score', () => {
-  it('scores a swept, block-premium, large, opening aggressor as INFORMED', () => {
+  it('scores a swept, block-premium, large aggressor as INFORMED', () => {
     const p = mkPrint({
       side: 'ASK',
       sweep: true,
-      volOverOI: 2,
       premium: 200_000, // clears the $150k exchange block threshold
       conditions: [TRADE_CONDITION.ASK_AGGRESSOR, TRADE_CONDITION.INTERMARKET_SWEEP],
     });
@@ -63,11 +62,10 @@ describe('What-Else — information score', () => {
     expect(c.reasons).toContain('block premium');
   });
 
-  it('scores a mid, retail-size, small, closing print as UNINFORMED', () => {
+  it('scores a mid, retail-size, small print as UNINFORMED', () => {
     const p = mkPrint({
       side: 'MID',
       sweep: false,
-      volOverOI: 0.3, // closing
       size: 5, // retail-scale lot
       conditions: [],
     });
@@ -197,6 +195,43 @@ describe('What-Else — the session read', () => {
     for (let i = 0; i < chrono.length; i++) {
       const step = view.tilt[i].net - (i === 0 ? 0 : view.tilt[i - 1].net);
       if (chrono[i].klass !== 'INFORMED') expect(step).toBe(0);
+    }
+  });
+});
+
+/*
+  The open/close term is gone and must stay gone.
+
+  `scorePrint` used to add 12 points and tag a print "opening risk (vol > OI)",
+  and subtract 6 when the ratio was under 1. OPRA carries no open/close flag —
+  only CBOE's Open-Close Volume Summary and ISE's Open/Close Trade Profile do,
+  and neither is on any tier here. The deeper problem is that open and close are
+  properties of a POSITION and the two counterparties to one print can be on
+  opposite sides of it, so there is no fact in the print for a heuristic to
+  approximate.
+
+  Worth writing down how this was missed: the test above was called "scores a
+  swept, block-premium, large, OPENING aggressor as INFORMED" and its fixture
+  carried `volOverOI: 2, // opening`. It asserted nothing about either. Removing
+  the twelve points left it green, because the other factors cleared its
+  threshold on their own. A name is not a check.
+*/
+describe('open/close inference', () => {
+  it('does not move the score', () => {
+    // Same print twice, differing only in volume/OI. Any gap is an open/close
+    // claim by another name.
+    const base = { side: 'ASK' as const, sweep: true, premium: 200_000 };
+    const high = scorePrint(mkPrint({ ...base, volOverOI: 9 }), 0.9);
+    const low = scorePrint(mkPrint({ ...base, volOverOI: 0.1 }), 0.9);
+    expect(high.score, 'volume over open interest is shifting the information score').toBe(low.score);
+  });
+
+  it('tags no print as opening or closing', () => {
+    for (const v of [0.1, 0.9, 1.1, 5, 20]) {
+      const c = scorePrint(mkPrint({ side: 'ASK', sweep: true, volOverOI: v }), 0.9);
+      for (const r of c.reasons) {
+        expect(r.toLowerCase(), `a print was tagged "${r}"`).not.toMatch(/opening|closing/);
+      }
     }
   });
 });

@@ -168,7 +168,7 @@ const LottoCard = ({
     >
       <div
         {...interactiveRowProps(onSelect, selected, 'button')}
-        aria-label={`Chart ${c.ticker} ${c.strike} ${isCall ? 'call' : 'put'}, rank ${rank}, grades ${c.composite}`}
+        aria-label={`Chart ${c.ticker} ${c.strike} ${isCall ? 'call' : 'put'}, rank ${rank}, reads ${c.verdict}`}
         className={`${ROW_INTERACTIVE} flex flex-col gap-2.5 rounded-sm`}
       >
         {/* Identity */}
@@ -361,7 +361,7 @@ const LottoBoard = ({ snapshot }: LottoBoardProps) => {
 
   // Ranking and filtering happen here, never inside weighContracts, which the
   // Weigher shares.
-  const rank = (rows: WeighedContract[]) => [...rows].sort((a, b) => b.composite - a.composite);
+  const rank = (rows: WeighedContract[]) => [...rows].sort((a, b) => b.rankKey - a.rankKey);
   const rankedCalls = rank(calls);
   const rankedPuts = rank(puts);
 

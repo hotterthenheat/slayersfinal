@@ -535,7 +535,7 @@ const Compass = () => {
     weigher: {
       crumb: 'Weigher',
       title: 'Contract Weigher',
-      subtitle: 'Search any contract you have. Weighed on the same scale as the top setups, with a better-R/R suggestion.',
+      subtitle: 'Pick a contract off the chain. Read the same way the top setups are, with a better-R/R suggestion.',
     },
     lotto: {
       crumb: 'Lotto',
@@ -874,9 +874,6 @@ const Compass = () => {
                   <SetupCompare
                     setup={effectiveSelected.setup}
                     peers={rankedSetups}
-                    /* The sweep's own spot for this name, not a fresher one:
-                       it is what the setup beside it was priced against. */
-                    spot={data?.groups.find(g => g.ticker === effectiveSelected.setup.ticker)?.spot ?? 0}
                     scanner={scanner}
                     onSelectPeer={handleSelectSetup}
                     onStudy={() => handleReviewSetup(effectiveSelected.setup)}
