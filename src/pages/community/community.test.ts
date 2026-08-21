@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   communityMarkdown,
@@ -129,5 +131,45 @@ describe('placing a thesis in the book', () => {
     expect(pctFromSpot(505, 500)).toBeCloseTo(1);
     expect(pctFromSpot(495, 500)).toBeCloseTo(-1);
     expect(pctFromSpot(505, 0)).toBe(0);
+  });
+});
+
+/*
+  The Ideas page opens on something to READ, not on a form.
+
+  Nine controls used to be the first thing on it — ticker, direction, horizon,
+  entry, invalidation, targets, risk, position, thesis — sitting above an empty
+  board, above a panel announcing the board was empty, above the four worked
+  examples that were the only readable thing on the page. Measured on a fresh
+  browser: nine form controls before any prose. It is zero now, and the examples
+  are what a first visit lands on.
+
+  Source-level because the composer's collapsed state is a render branch, and the
+  property worth keeping is structural: the fields live behind `composerOpen`,
+  and nothing forces it true on mount.
+*/
+describe('the Ideas composer', () => {
+  const IDEAS = readFileSync(join(process.cwd(), 'src/pages/community/Ideas.tsx'), 'utf8');
+  const code = IDEAS.replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, ' ')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/^\s*\/\/.*$/gm, ' ');
+
+  it('starts closed', () => {
+    expect(code, 'composerOpen must default to false — the page opens on the board').toMatch(
+      /useState\(false\);?\s*$/m
+    );
+    const decl = code.match(/const \[composerOpen, setComposerOpen\] = useState\((\w+)\)/);
+    expect(decl, 'composerOpen state is gone — re-point this test').not.toBeNull();
+    expect(decl![1], 'the composer must start closed').toBe('false');
+  });
+
+  it('keeps every field behind that branch', () => {
+    // A field left outside the branch is a field on screen at arrival, which is
+    // the whole defect. The fields sit inside the `composerOpen ? …` arm, so the
+    // closed arm must not contain one.
+    const openIdx = code.indexOf('!composerOpen ?');
+    expect(openIdx, 'the collapsed branch is gone — re-point this test').toBeGreaterThan(-1);
+    const closedArm = code.slice(openIdx, code.indexOf(') : (', openIdx));
+    expect(closedArm, 'the collapsed composer renders an input').not.toMatch(/<(Field|TextArea|input|textarea|select)\b/);
   });
 });
