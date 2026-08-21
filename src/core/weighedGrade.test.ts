@@ -144,3 +144,50 @@ describe('the contract grade', () => {
     expect(tracker!.text, 'the Tracker must read the verdict it already stores').toMatch(/verdictAtTrack/);
   });
 });
+
+/*
+  The same rule, applied to the OTHER hand-weighted 0-100 in the app.
+
+  `informedFlow.scorePrint` starts at 50 and adds 12 for an aggressor, 18 for a
+  sweep, 14 for block premium, and subtracts 20 for a retail lot. Same shape as
+  the contract grade: hand-chosen weights, nothing measured behind any of them.
+  It was printed at 20px in the tape modal, in the modal's header badge, as a
+  StatCard value, and as a table column sitting next to the class column that
+  already carried the read.
+
+  It survives for exactly the reasons `rankKey` does — the desk ranks by it and
+  the distribution chart needs it — so the rule is the same: sort on it, chart
+  the RULE with its cut-points, never print it as a grade on one print.
+*/
+describe('the information score', () => {
+  const TRACE = /^(pages\/flowdesk|components\/flowdesk)\//;
+
+  it('is not printed as a figure on a print', () => {
+    const offenders: string[] = [];
+    for (const f of FILES.filter(x => TRACE.test(x.file))) {
+      // `{r.score}`, `{info.score}`, `${topInformed.score}` — an interpolation
+      // whose whole content is a score read. The distribution chart passes
+      // `score` as data to a chart builder, which is not a render of a grade.
+      for (const m of f.text.matchAll(/\{\s*([\w.]*\.score)\s*\}/g)) {
+        offenders.push(`${f.file} — {${m[1]}}`);
+      }
+      for (const m of f.text.matchAll(/\$\{\s*([\w.]*\.score)\s*\}/g)) {
+        offenders.push(`${f.file} — \${${m[1]}}`);
+      }
+    }
+    expect(
+      offenders,
+      'A hand-weighted 0-100 information score is being printed on a print. Render `klass` ' +
+        'for the read and `reasons` for the anatomy; the score may sort and may feed the ' +
+        'distribution chart, which shows the RULE rather than asserting a grade.'
+    ).toEqual([]);
+  });
+
+  it('still classifies, so removing the number did not remove the read', () => {
+    const engine = FILES.find(f => f.file === 'data/informedFlow.ts');
+    expect(engine, 'data/informedFlow.ts is gone — re-point this test').toBeDefined();
+    expect(engine!.text, 'the class must still be derived from the score').toMatch(
+      /klass: FlowClass = score >= INFORMED_AT/
+    );
+  });
+});

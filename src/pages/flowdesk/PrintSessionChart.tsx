@@ -25,10 +25,10 @@ import type { FlowPrint } from '../../types/flowdesk';
   wall-clock axis would date a 10:52 print to 4:00 PM. Order is true, and it is
   all three of those readings need.
 
-  Hand-rolled: recharts lives in one file repo-wide, and a bubble field under a
-  stretched viewBox would render every circle as an ellipse anyway. Marks are
-  HTML positioned in percent over the plot, so they stay round and land in the
-  accessibility tree; only the rules and the average path are SVG.
+  Hand-rolled: recharts lives in one file repo-wide, and marks under a stretched
+  viewBox would shear. They are HTML positioned in percent over the plot, so they
+  keep their proportions and land in the accessibility tree; only the rules and
+  the average path are SVG.
 */
 
 /** A mid-market fill has no direction, so it takes the palette's muted ink —
@@ -53,9 +53,23 @@ const PrintSessionChart = ({ print }: { print: FlowPrint }) => {
   const span = cf.priceMax - cf.priceMin || 1;
   const yPct = (price: number) => 92 - ((price - lo) / span) * 84;
 
-  // Area-proportional, so a 420-lot clip reads as roughly ten times a 40-lot one
-  // instead of ten times its width.
-  const dia = (size: number) => 6 + 12 * Math.sqrt(size / (cf.volMax || 1));
+  /*
+    A tape mark, not a bubble.
+
+    This was a disc: `dia = 6 + 12·√(size/volMax)`, area-proportional so a
+    420-lot clip read as ten times a 40-lot one. The arithmetic was right and the
+    shape was wrong — a field of soft translucent circles is the most
+    recognisable form in generated dashboards, and it is the one thing a tape
+    does not look like anywhere a print is actually read.
+
+    Width still carries the lots on the same square-root law, so the encoding is
+    unchanged and a block still reads as a block. Height is fixed at 3px, which
+    turns each print into a horizontal rule AT ITS FILL PRICE — the shape a
+    ladder uses, and one that reads against the average path behind it rather
+    than swallowing it.
+  */
+  const MARK_H = 3;
+  const markW = (size: number) => 5 + 22 * Math.sqrt(size / (cf.volMax || 1));
 
   const avgNow = cf.avg[cf.avg.length - 1]?.price ?? print.fill;
   const avgPath = cf.avg.map((a, i) => `${i === 0 ? 'M' : 'L'}${xPct(i, n).toFixed(2)},${yPct(a.price).toFixed(2)}`).join(' ');
@@ -180,7 +194,7 @@ const PrintSessionChart = ({ print }: { print: FlowPrint }) => {
 
           {order.map(i => {
             const p = pts[i];
-            const d = dia(p.size);
+            const w = markW(p.size);
             const last = i === n - 1;
             return (
               <span
@@ -190,7 +204,7 @@ const PrintSessionChart = ({ print }: { print: FlowPrint }) => {
                 // clicked print needs a knockout gap so its ring reads over the
                 // marks it overlaps, and `ring-offset-panel` sources that gap
                 // from the surface token instead of a fourth hand-mixed black.
-                className={`pointer-events-none absolute rounded-full ${
+                className={`pointer-events-none absolute rounded-[1px] ${
                   last
                     ? 'ring-2 ring-select ring-offset-2 ring-offset-panel'
                     : cursor?.i === i
@@ -200,10 +214,10 @@ const PrintSessionChart = ({ print }: { print: FlowPrint }) => {
                 style={{
                   left: `${xPct(i, n)}%`,
                   top: `${yPct(p.price)}%`,
-                  width: d,
-                  height: d,
-                  marginLeft: -d / 2,
-                  marginTop: -d / 2,
+                  width: w,
+                  height: MARK_H,
+                  marginLeft: -w / 2,
+                  marginTop: -MARK_H / 2,
                   background: inkOf(p.side),
                   opacity: last ? 1 : 0.75,
                 }}
