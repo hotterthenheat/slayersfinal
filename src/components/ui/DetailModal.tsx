@@ -1,9 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
-import { AnimatePresence, motion } from 'framer-motion';
 import { Maximize2, Minimize2, X } from 'lucide-react';
-import { DUR, EASE } from '../../lib/motion';
-import { useFocusTrap } from '../../hooks/useFocusTrap';
+import Overlay from './Overlay';
 import { readExpandPref, writeExpandPref } from '../../hooks/useExpandPreference';
 
 /*
@@ -158,7 +155,6 @@ const DetailModal = ({
   footer,
   children,
 }: DetailModalProps) => {
-  const trapRef = useFocusTrap<HTMLDivElement>(open);
   const [ownExpanded, setOwnExpanded] = useState(readExpandPref);
   const controlled = expandedProp != null;
 
@@ -179,60 +175,24 @@ const DetailModal = ({
   const toggleExpanded = controlled ? (onToggleExpanded ?? (() => {})) : toggleOwn;
   const isFull = expandable && expanded;
 
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+  /* Escape, the scroll lock, the portal and the focus trap are Radix's now —
+     see ui/Overlay.tsx for what each hand-rolled copy was getting wrong. */
 
-  // A modal that scrolls the page behind it reads as broken: the backdrop moves
-  // under a fixed card. Lock the document while one is open, and restore the
-  // exact value rather than assuming it was ''.
-  useEffect(() => {
-    if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [open]);
-
-  return createPortal(
-    <AnimatePresence>
-      {open && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-6">
-          <motion.div
-            className="absolute inset-0 bg-black/70 backdrop-blur-[3px]"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: DUR.fast }}
-            onClick={onClose}
-          />
-          <motion.div
-            ref={trapRef}
-            tabIndex={-1}
-            role="dialog"
-            aria-modal="true"
-            aria-label={ariaLabel}
-            className={`relative flex w-full flex-col overflow-hidden rounded-lg border border-borderMuted bg-panel shadow-overlay focus:outline-none ${
-              isFull
-                // Fills what the padding leaves, rather than growing to fit its
-                // content — the expanded view is a page, and a page has a
-                // bottom edge the reader can rely on.
-                ? 'max-w-[110rem] h-[calc(100vh-1.5rem)] sm:h-[calc(100vh-3rem)]'
-                : `max-h-[calc(100vh-1.5rem)] sm:max-h-[88vh] ${size === 'wide' ? 'max-w-5xl' : 'max-w-2xl'}`
-            }`}
-            // Rises into the middle of the screen rather than sliding in from an
-            // edge — the drilldown is the thing you asked for, not a side tab.
-            initial={{ opacity: 0, scale: 0.97, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.97, y: 10 }}
-            transition={{ duration: DUR.quick, ease: EASE }}
-          >
+  return (
+    <Overlay
+      open={open}
+      onClose={onClose}
+      label={ariaLabel}
+      className={
+        isFull
+          ? // Fills what the padding leaves, rather than growing to fit its
+            // content — the expanded view is a page, and a page has a bottom
+            // edge the reader can rely on.
+            'max-w-[110rem] h-[calc(100vh-1.5rem)] sm:h-[calc(100vh-3rem)]'
+          : `max-h-[calc(100vh-1.5rem)] sm:max-h-[88vh] ${size === 'wide' ? 'max-w-5xl' : 'max-w-2xl'}`
+      }
+    >
+      <>
             <header className="flex shrink-0 items-start justify-between gap-3 border-b border-borderSubtle bg-panelRaised px-4 py-3 sm:px-5">
               <div className="min-w-0">{header}</div>
               <div className="flex shrink-0 items-center gap-1.5">
@@ -268,11 +228,8 @@ const DetailModal = ({
                 {footer}
               </div>
             )}
-          </motion.div>
-        </div>
-      )}
-    </AnimatePresence>,
-    document.body
+      </>
+    </Overlay>
   );
 };
 

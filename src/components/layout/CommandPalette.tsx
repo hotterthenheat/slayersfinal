@@ -8,7 +8,7 @@ import { COMMUNITY_SUBPAGES } from '../../pages/community/subnav';
 import { GUIDE_SUBPAGES } from '../../pages/guide/subnav';
 import { useMarketData } from '../../context/MarketDataContext';
 import Simulator from '../../core/simulator';
-import { useFocusTrap } from '../../hooks/useFocusTrap';
+import Overlay from '../ui/Overlay';
 
 interface CommandPaletteProps {
   open: boolean;
@@ -33,7 +33,6 @@ const CommandPalette = ({ open, onClose, onOpenSettings, onOpenShortcuts }: Comm
   const [highlight, setHighlight] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
-  const trapRef = useFocusTrap<HTMLDivElement>(open);
 
   const actions = useMemo<PaletteAction[]>(() => {
     const commands: PaletteAction[] = [
@@ -148,18 +147,23 @@ const CommandPalette = ({ open, onClose, onOpenSettings, onOpenShortcuts }: Comm
     } else if (e.key === 'Enter') {
       e.preventDefault();
       runAction(filtered[highlight]);
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      onClose();
     }
+    /* Escape is Radix's — it also handles the case this never did, where focus
+       has moved into a nested popper that should close first. */
   };
 
   let lastGroup: string | null = null;
 
   return (
-    <div ref={trapRef} tabIndex={-1} className="fixed inset-0 z-50 flex items-start justify-center pt-[18vh] px-4 focus:outline-none" onKeyDown={onKeyDown}>
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" onClick={onClose} />
-      <div role="dialog" aria-modal="true" aria-label="Command palette" className="relative w-full max-w-lg border border-borderMuted bg-panel rounded-lg shadow-overlay overflow-hidden animate-slide-in">
+    <Overlay
+      open={open}
+      onClose={onClose}
+      label="Command palette"
+      align="top"
+      className="max-w-lg"
+      onKeyDown={onKeyDown}
+    >
+      <>
         <input
           ref={inputRef}
           value={query}
@@ -204,8 +208,8 @@ const CommandPalette = ({ open, onClose, onOpenSettings, onOpenShortcuts }: Comm
           </span>
           <span className="ml-auto">esc close</span>
         </div>
-      </div>
-    </div>
+      </>
+    </Overlay>
   );
 };
 

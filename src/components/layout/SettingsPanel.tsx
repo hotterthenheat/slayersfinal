@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
-import { AnimatePresence, motion } from 'framer-motion';
 import { X, Trash2, Database, ShieldCheck } from 'lucide-react';
+import Overlay from '../ui/Overlay';
 import { useToast } from '../ui/Toast';
 import { LOCAL_DATA_GROUPS, clearGroup, clearAllLocalData, groupStoredCount } from '../../core/localData';
-import { useFocusTrap } from '../../hooks/useFocusTrap';
-import { DUR, EASE } from '../../lib/motion';
 
 interface SettingsPanelProps {
   open: boolean;
@@ -17,7 +14,6 @@ interface SettingsPanelProps {
     this browser only; this panel lists it and lets you clear it. */
 const SettingsPanel = ({ open, onClose }: SettingsPanelProps) => {
   const toast = useToast();
-  const trapRef = useFocusTrap<HTMLElement>(open);
   // bump to re-read stored counts after a clear
   const [, setTick] = useState(0);
   const refresh = useCallback(() => setTick(t => t + 1), []);
@@ -29,12 +25,7 @@ const SettingsPanel = ({ open, onClose }: SettingsPanelProps) => {
     if (!open) return;
     setConfirmAll(false);
     setConfirmGroupId(null);
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+  }, [open]);
 
   const onClearGroup = (id: string) => {
     const group = LOCAL_DATA_GROUPS.find(g => g.id === id);
@@ -63,34 +54,18 @@ const SettingsPanel = ({ open, onClose }: SettingsPanelProps) => {
 
   const totalStored = LOCAL_DATA_GROUPS.reduce((sum, g) => sum + groupStoredCount(g), 0);
 
-  return createPortal(
-    <AnimatePresence>
-      {open && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-6">
-          <motion.div
-            className="absolute inset-0 bg-black/70 backdrop-blur-[3px]"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: DUR.fast }}
-            onClick={onClose}
-          />
-          {/* Centred like every other overlay in the terminal. Settings was the
-              last right-hand slide-in; a panel that arrives from the edge reads
-              as a side tab you have to go and find, and the shortcuts sheet and
-              the command palette already open in the middle. */}
-          <motion.aside
-            ref={trapRef}
-            tabIndex={-1}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Settings"
-            className="relative flex w-full max-w-xl flex-col overflow-hidden rounded-lg border border-borderMuted bg-panel shadow-overlay focus:outline-none max-h-[calc(100vh-1.5rem)] sm:max-h-[85vh]"
-            initial={{ opacity: 0, scale: 0.97, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.97, y: 10 }}
-            transition={{ duration: DUR.quick, ease: EASE }}
-          >
+  return (
+    /* Centred like every other overlay in the terminal. Settings was the last
+       right-hand slide-in; a panel that arrives from the edge reads as a side
+       tab you have to go and find, and the shortcuts sheet and the command
+       palette already open in the middle. */
+    <Overlay
+      open={open}
+      onClose={onClose}
+      label="Settings"
+      className="max-w-xl max-h-[calc(100vh-1.5rem)] sm:max-h-[85vh]"
+    >
+      <>
             <header className="flex shrink-0 items-center justify-between gap-3 px-4 py-3 border-b border-borderSubtle bg-panelRaised">
               <span className="font-mono text-caption font-semibold uppercase tracking-widest text-textPrimary">Settings</span>
               <button
@@ -210,11 +185,8 @@ const SettingsPanel = ({ open, onClose }: SettingsPanelProps) => {
                 </nav>
               </div>
             </div>
-          </motion.aside>
-        </div>
-      )}
-    </AnimatePresence>,
-    document.body
+      </>
+    </Overlay>
   );
 };
 

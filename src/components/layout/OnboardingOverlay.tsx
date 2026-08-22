@@ -1,9 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { AnimatePresence, motion } from 'framer-motion';
 import { LayoutDashboard, Compass, Radio, Crosshair, Sigma, ArrowRight } from 'lucide-react';
-import { EASE, DUR } from '../../lib/motion';
-import { useFocusTrap } from '../../hooks/useFocusTrap';
+import Overlay from '../ui/Overlay';
 
 const STORAGE_KEY = 'slayer_onboarded_v1';
 
@@ -34,7 +32,6 @@ const OnboardingOverlay = () => {
   // them. It stays armed until dismissed, so it still fires on the first desk
   // they actually open, which is where it was always meant to land.
   const suppressed = /^\/(legal|guide|terminal)/.test(pathname);
-  const trapRef = useFocusTrap<HTMLDivElement>(open && !suppressed);
 
   const dismiss = () => {
     try {
@@ -45,38 +42,14 @@ const OnboardingOverlay = () => {
     setOpen(false);
   };
 
-  useEffect(() => {
-    if (!open || suppressed) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') dismiss();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, suppressed]);
-
   return (
-    <AnimatePresence>
-      {open && !suppressed && (
-        <motion.div
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: DUR.base }}
-        >
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={dismiss} aria-hidden />
-          <motion.div
-            ref={trapRef}
-            tabIndex={-1}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Welcome to Slayer Terminal"
-            className="relative w-full max-w-lg rounded-xl border border-borderMuted bg-panelRaised shadow-overlay overflow-hidden focus:outline-none"
-            initial={{ opacity: 0, y: 14, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 10, scale: 0.98 }}
-            transition={{ duration: DUR.slow, ease: EASE }}
-          >
+    <Overlay
+      open={open && !suppressed}
+      onClose={dismiss}
+      label="Welcome to Slayer Terminal"
+      className="max-w-lg rounded-xl bg-panelRaised"
+    >
+      <>
             <div className="px-6 pt-6 pb-4 border-b border-borderSubtle">
               <span className="font-mono text-label uppercase tracking-widest text-textMuted">
                 <span className="text-textMuted">&gt; </span>slayer_terminal
@@ -126,10 +99,8 @@ const OnboardingOverlay = () => {
                 </button>
               </div>
             </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+      </>
+    </Overlay>
   );
 };
 

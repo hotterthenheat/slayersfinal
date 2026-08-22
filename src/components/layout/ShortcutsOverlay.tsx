@@ -1,10 +1,6 @@
-import { useEffect } from 'react';
-import { createPortal } from 'react-dom';
-import { AnimatePresence, motion } from 'framer-motion';
 import { X } from 'lucide-react';
-import { DUR, EASE } from '../../lib/motion';
+import Overlay from '../ui/Overlay';
 import { SHORTCUT_GROUPS as GROUPS } from '../../lib/shortcuts';
-import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 interface ShortcutsOverlayProps {
   open: boolean;
@@ -19,39 +15,9 @@ const Key = ({ children }: { children: string }) => (
 
 /** Keyboard-shortcut cheat sheet, opened with `?`. */
 const ShortcutsOverlay = ({ open, onClose }: ShortcutsOverlayProps) => {
-  const trapRef = useFocusTrap<HTMLDivElement>(open);
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
-
-  return createPortal(
-    <AnimatePresence>
-      {open && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center px-4">
-          <motion.div
-            className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={onClose}
-          />
-          <motion.div
-            ref={trapRef}
-            tabIndex={-1}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Keyboard shortcuts"
-            className="relative w-full max-w-lg border border-borderMuted bg-panel rounded-lg shadow-overlay overflow-hidden focus:outline-none"
-            initial={{ opacity: 0, scale: 0.97, y: 8 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.97, y: 8 }}
-            transition={{ duration: DUR.quick, ease: EASE }}
-          >
+  return (
+    <Overlay open={open} onClose={onClose} label="Keyboard shortcuts" className="max-w-lg">
+      <>
             <header className="flex items-center justify-between px-4 py-3 border-b border-borderSubtle">
               <span className="font-mono text-label uppercase tracking-widest text-textSecondary">Keyboard shortcuts</span>
               <button
@@ -81,11 +47,8 @@ const ShortcutsOverlay = ({ open, onClose }: ShortcutsOverlayProps) => {
                 </div>
               ))}
             </div>
-          </motion.div>
-        </div>
-      )}
-    </AnimatePresence>,
-    document.body
+      </>
+    </Overlay>
   );
 };
 
