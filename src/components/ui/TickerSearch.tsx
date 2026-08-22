@@ -1,3 +1,4 @@
+import * as Popover from '@radix-ui/react-popover';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Search } from 'lucide-react';
 import CompanyLogo from './CompanyLogo';
@@ -17,7 +18,6 @@ const TickerSearch = ({ value, onChange }: TickerSearchProps) => {
   const [query, setQuery] = useState('');
   const [highlight, setHighlight] = useState(0);
   const [mod, setMod] = useState<TickerModule | null>(null);
-  const wrapRef = useRef<HTMLDivElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const listId = useId();
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -46,14 +46,9 @@ const TickerSearch = ({ value, onChange }: TickerSearchProps) => {
     listRef.current?.querySelector<HTMLElement>(`[data-idx="${highlight}"]`)?.scrollIntoView({ block: 'nearest' });
   }, [highlight, open]);
 
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    window.addEventListener('mousedown', onDown);
-    return () => window.removeEventListener('mousedown', onDown);
-  }, [open]);
+  /* No outside-click listener: Popover dismisses on pointer-down outside, on
+     Escape, and on focus leaving — and it returns focus to the trigger, which
+     the hand-rolled version never did. */
 
   const optionId = (i: number) => `${listId}-opt-${i}`;
 
@@ -72,16 +67,14 @@ const TickerSearch = ({ value, onChange }: TickerSearchProps) => {
     } else if (e.key === 'Enter') {
       e.preventDefault();
       if (results[highlight]) pick(results[highlight].symbol);
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      setOpen(false);
     }
+    /* Escape is Popover's — it also restores focus to the trigger, which the
+       manual branch did not. */
   };
 
   return (
-    <div ref={wrapRef} className="relative">
-      <button
-        onClick={() => setOpen(o => !o)}
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      <Popover.Trigger
         className="flex items-center gap-2 border border-borderSubtle hover:border-borderMuted bg-panel rounded-md pl-2.5 pr-2 py-1.5 font-mono text-caption transition-colors min-w-[104px] leading-4"
       >
         {/* The mark stands in for the magnifier on the trigger. The button
@@ -93,11 +86,22 @@ const TickerSearch = ({ value, onChange }: TickerSearchProps) => {
         <CompanyLogo ticker={value} size={16} />
         <span className="font-semibold text-textPrimary">{value}</span>
         <ChevronDown className={`w-3.5 h-3.5 text-textMuted ml-auto transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
+      </Popover.Trigger>
 
-      {open && (
-        <div
-          className="absolute right-0 top-full mt-1.5 z-40 w-72 border border-borderMuted bg-panel rounded-lg shadow-overlay overflow-hidden animate-slide-in"
+      <Popover.Portal>
+        <Popover.Content
+          align="end"
+          sideOffset={6}
+          collisionPadding={8}
+          /* The list owns its own arrow keys, so Radix must not also move focus
+             between items — the input keeps focus and `highlight` drives the
+             listbox, which is the combobox pattern this control has always
+             used. */
+          onOpenAutoFocus={e => {
+            e.preventDefault();
+            inputRef.current?.focus();
+          }}
+          className="z-40 w-72 border border-borderMuted bg-panel rounded-lg shadow-overlay overflow-hidden animate-slide-in"
           onKeyDown={onKeyDown}
         >
           <div className="flex items-center gap-2 px-3 border-b border-borderSubtle">
@@ -150,9 +154,9 @@ const TickerSearch = ({ value, onChange }: TickerSearchProps) => {
               ))
             )}
           </div>
-        </div>
-      )}
-    </div>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
   );
 };
 

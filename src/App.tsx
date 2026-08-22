@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { SkeletonRows } from './components/ui/Skeleton';
 import { Routes, Route, Navigate, useLocation, useSearchParams } from 'react-router-dom';
+import * as Tooltip from '@radix-ui/react-tooltip';
 import { MotionConfig } from 'framer-motion';
 import { MarketDataProvider } from './context/MarketDataContext';
 import { TrackerProvider } from './context/TrackerContext';
@@ -85,6 +86,11 @@ const LastDeskRecorder = () => {
 const App = () => {
   return (
     <MotionConfig reducedMotion="user">
+      {/* One provider for every Tip on the terminal. `skipDelayDuration` is what
+          makes a row of explained labels usable: once a reader has opened one
+          tooltip, moving along the row shows the next immediately instead of
+          re-serving the 200ms delay at every step. */}
+      <Tooltip.Provider delayDuration={200} skipDelayDuration={300}>
       <ToastProvider>
       <MarketDataProvider>
         <TrackerProvider>
@@ -207,6 +213,7 @@ const App = () => {
         </TrackerProvider>
       </MarketDataProvider>
       </ToastProvider>
+      </Tooltip.Provider>
     </MotionConfig>
   );
 };
