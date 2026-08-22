@@ -258,8 +258,24 @@ function perceivedLuminance([r, g, b]: RGB): number {
 // leaves weak cells hovering around flat NEUTRAL gray (a weak + reads the same
 // as a weak −). A gamma < 1 pushes small values toward their hue sooner while
 // leaving the poles (t=1) untouched, so the ordering never inverts.
+/*
+  Where a cell sits on its ramp, 0 (neutral) to 1 (pole).
+
+  THE EXPONENT USED TO BE 0.7, and that one number was most of why the grid read
+  as a quilt. An exponent BELOW one pushes middling cells toward the pole: a
+  strike carrying 30% of the board's largest exposure rendered at 0.30^0.7 = 0.43
+  of full saturation, so a hundred-odd ordinary cells all arrived at roughly the
+  same loud colour and the two that actually mattered had nothing left to stand
+  out with. Contrast was being spent on noise.
+
+  Above one, the ramp does what a heat scale is for. The same 30% cell now lands
+  at 0.30^1.5 = 0.16 and recedes into the panel, while the walls keep the top of
+  the range to themselves. Nothing is hidden — every cell still carries its own
+  colour, and the exact figure is one hover away — but the eye is pointed at the
+  extremes instead of at all of it at once.
+*/
 const heatT = (value: number, maxAbs: number): number =>
-  Math.pow(Math.min(1, Math.abs(value) / (maxAbs || 1)), 0.7);
+  Math.pow(Math.min(1, Math.abs(value) / (maxAbs || 1)), 1.5);
 
 /** Raw ramp color for a signed value — used by the on-chart node overlay. */
 export function heatRgb(value: number, maxAbs: number): RGB {

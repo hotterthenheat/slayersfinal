@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Activity, Grid3x3, Info } from 'lucide-react';
+import { Activity, Info } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
-import { useFocus } from '../../context/FocusContext';
 import { buildExposureProfile } from '../../data/exposure';
 import { buildGexView, fmtUsd, pulseMatrix } from '../../data/gex';
 import { buildCommandView } from '../../data/command';
@@ -9,7 +8,6 @@ import type { MarketSnapshot } from '../../types/market';
 import Panel from '../../components/ui/Panel';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import { SkeletonRows } from '../../components/ui/Skeleton';
-import GexMatrix from '../../components/gex/GexMatrix';
 import PositioningMap from '../../components/gex/PositioningMap';
 import type { ExposureExpiry } from '../../types/gex';
 
@@ -19,7 +17,6 @@ const SCAN_INTERVAL_MS = 10_000;
 
 // Stable focus id so we can tell when this heatmap is expanded and, only then,
 // build the full strike range instead of the spot-centred window.
-const HEATMAP_FOCUS_ID = 'pinpoint-gamma-heatmap';
 
 /*
   A level, and how far away it is.
@@ -64,16 +61,8 @@ const PROFILE_EXPIRIES: readonly { value: ExposureExpiry; label: string }[] = [
 ];
 
 const GammaChart = () => {
-  const { activeTicker, marketData } = useMarketData();
-  const { focusedId } = useFocus();
-  // Expanded (Focus Mode) shows the full chain — every strike; the inline view
-  // stays a tighter window centred on spot so it reads without scrolling.
-  const fullChain = focusedId === HEATMAP_FOCUS_ID;
-  // Expiry spotlight — null = all columns even; else the highlighted column index.
-  const [highlightCol, setHighlightCol] = useState<number | null>(null);
-  // The hero profile's own horizon. The heatmap's rail highlights a DATE column;
-  // this scopes an aggregate window, so they are deliberately separate controls
-  // rather than one pretending to drive both.
+  const { marketData } = useMarketData();
+  /* The hero profile's own horizon. */
   const [profileExpiry, setProfileExpiry] = useState<ExposureExpiry>('0DTE');
   // Strike the reader is pointing at / has pinned in the map.
   const [hoverStrike, setHoverStrike] = useState<number | null>(null);
@@ -101,7 +90,9 @@ const GammaChart = () => {
     () => (scan ? buildExposureProfile(scan, profileExpiry, 10) : null),
     [scan, profileExpiry]
   );
-  const gexView = useMemo(() => (scan ? buildGexView(scan, 'GEX', fullChain ? 20 : 10) : null), [scan, fullChain]);
+  /* The window the LEVELS are derived over. Fixed at ±10 now that the desk has
+     no Focus-Mode grid to expand — the level rail is the same rail either way. */
+  const gexView = useMemo(() => (scan ? buildGexView(scan, 'GEX', 10) : null), [scan]);
   const gexLevels = gexView?.levels ?? null;
   // Pulse the matrix glyphs each tick for a live read (geometry stays fixed).
   const matrix = useMemo(() => (gexView ? pulseMatrix(gexView.matrix, revision) : null), [gexView, revision]);
@@ -209,71 +200,37 @@ const GammaChart = () => {
         />
       </Panel>
 
-      {/* GEX heatmap — the same book, resolved by expiry. Detail under the hero. */}
-      <Panel
-        title={
-          <span className="inline-flex items-center gap-1.5">
-            <Grid3x3 className="w-3.5 h-3.5 text-select" /> Gamma Heatmap
-            <span className="rounded border border-borderMuted px-1.5 py-px text-micro tracking-normal text-textSecondary">
-              {activeTicker}
-            </span>
-          </span>
-        }
-        subtitle={
-          fullChain
-            ? 'full chain · every strike × expiry'
-            : 'the same book resolved by expiry · expand for the full chain'
-        }
-        flush
-        focusable
-        focusId={HEATMAP_FOCUS_ID}
-        actions={
-          /* `max-w-full` was inert here: the Panel header's actions wrapper is
-             `shrink-0`, so it sizes to its content and a percentage max-width
-             against it resolves to no constraint at all. Seven expiries then
-             measured 396px inside a 358px phone column and pushed the whole
-             desk sideways. A concrete cap leaves the panel title its room and
-             lets the rail scroll — the same treatment the desk subnav uses when
-             its tabs outrun the screen. */
-          <div className="inline-flex items-center gap-0.5 rounded-md border border-borderSubtle bg-panel p-0.5 max-w-[10rem] sm:max-w-none overflow-x-auto no-scrollbar">
-            {['All', ...matrix.expiries].map((label, i) => {
-              const col = i === 0 ? null : i - 1;
-              const on = highlightCol === col;
-              return (
-                <button
-                  key={label}
-                  onClick={() => setHighlightCol(col)}
-                  aria-pressed={on}
-                  className={`shrink-0 inline-flex items-center min-h-6 rounded px-2 py-1 font-mono text-micro font-semibold uppercase tracking-wide transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 ${
-                    on ? 'bg-select/15 text-select' : 'text-textMuted hover:text-textPrimary'
-                  }`}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-        }
-        // Capped inline; uncapped when expanded so the overlay shows every strike.
-        /* Shorter than it was. It led the desk when it was the only visual and
-           took most of the viewport for it; under the profile it is the detail
-           read, and a detail read that pushes the hero off screen is not one. */
-        bodyClassName={fullChain ? 'p-2' : 'h-[26rem] min-h-[260px] p-2'}
-      >
-        <GexMatrix data={matrix} spot={scan.spot} highlightCol={highlightCol} />
-      </Panel>
+      {/*
+        THE HEATMAP IS NOT HERE ANY MORE.
+
+        This desk carried four reads of one book at once: the regime banner, the
+        strike profile, a strike x expiry grid, and a paragraph explaining the
+        grid. Three of them answered the same question and the grid answered it
+        worst — a full-bleed wall of ~120 saturated cells, each printing a dollar
+        figure to one decimal, which is the densest surface in the product and the
+        one nobody reads a number off.
+
+        The expiry dimension it existed for is answered twice already, on this
+        same desk, by views built for it: `?view=rolloff` schedules when gamma
+        leaves the book, and `?view=dependency` says which expiry the structure is
+        resting on. Keeping a third, uglier answer on the default view is not
+        extra information, it is the same information taxing every visit.
+
+        The component itself is unchanged and still mounts where a reader ASKS for
+        a grid — the Pulse workspace widget and the landing panel loop. What
+        changed is that the flagship desk no longer opens with it.
+      */}
 
       {/* Read */}
       <p className="flex items-start gap-2 text-caption text-textSecondary leading-relaxed px-1">
         <Info className="w-3.5 h-3.5 text-textMuted mt-px shrink-0" />
         <span>
           <span className="font-mono font-semibold uppercase tracking-wider mr-1.5 text-textSecondary">Reading the gamma</span>
-          The profile above is net dealer gamma by strike against the price axis; the grid resolves the same book by
-          expiry. <span className="text-longGamma">Blue</span> is long gamma — dealers absorb, so dips get bought toward
-          the walls and the tape pins. <span className="text-shortGamma">Gold</span> is short gamma — hedging amplifies
-          whichever way price goes. The sign is a REGIME, not a direction: neither colour says up or down. The nearest
-          expiries carry the most gamma, and the flip is the price where the sign turns. Candlesticks live on Pulse —
-          this is the positioning read.
+          Net dealer gamma by strike, against the price axis. <span className="text-longGamma">Blue</span> is long
+          gamma — dealers absorb, so dips get bought toward the walls and the tape pins.{' '}
+          <span className="text-shortGamma">Gold</span> is short gamma — hedging amplifies whichever way price goes. The
+          sign is a REGIME, not a direction: neither colour says up or down, and the flip is the price where it turns.
+          For the same book by expiry, use Roll-off and Dependency above.
         </span>
       </p>
     </div>

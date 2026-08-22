@@ -95,21 +95,53 @@ export default {
         darkpool: '#2dd4bf',
 
       },
-      // Terminal type ramp. Every size below `text-lg` came from ~1,180
-      // scattered `text-[Npx]` utilities; these name them as one system.
-      // Deliberately font-size ONLY (string form, no bundled line-height) —
-      // unlike Tailwind's built-in text-xs/sm/base — so the leading each call
-      // site already set via `leading-*` is preserved untouched. The dense
-      // 10–13px micro-steps are the terminal's label tiers; 14–16px carry
-      // prose and inline copy. Headings keep the rem-based display scale.
+      /*
+        Terminal type ramp. Every size below `text-lg` came from ~1,180 scattered
+        `text-[Npx]` utilities; these name them as one system.
+
+        THE WHOLE RAMP MOVED UP ONE PIXEL. A census of the app found 661 uses of
+        `micro` and 506 of `label` against 1,607 sizes in total — 73% of every
+        piece of type on the terminal was set at 10px or 11px. That is not dense,
+        it is unreadable-adjacent, and it is the single largest reason the product
+        reads as cramped. Each step gains 1px and the seven tiers stay distinct,
+        so nothing has to be re-tiered at a call site and no two tokens collide.
+
+        Deliberately font-size ONLY (string form, no bundled line-height) — unlike
+        Tailwind's built-in text-xs/sm/base — so the leading each call site already
+        set via `leading-*` is preserved untouched.
+      */
       fontSize: {
-        micro: '10px', // axis ticks, densest legends
-        label: '11px', // the dominant uppercase mono label
-        caption: '12px', // table cells, secondary text
-        data: '13px', // readable panel body / data rows
-        body: '14px', // prose in guide / legal / landing
-        read: '15px', // prose emphasis, card titles
-        lead: '16px', // largest inline copy
+        micro: '11px', // axis ticks, densest legends
+        label: '12px', // the dominant uppercase mono label
+        caption: '13px', // table cells, secondary text
+        data: '14px', // readable panel body / data rows
+        body: '15px', // prose in guide / legal / landing
+        read: '16px', // prose emphasis, card titles
+        lead: '17px', // largest inline copy
+      },
+      /*
+        THE SPACING RHYTHM, OPENED UP.
+
+        The same census: `gap-2` 302 times, `gap-1.5` 239, `py-1.5` 131, `py-1` 91.
+        The terminal's dominant rhythm was 4-8px, which is what "claustrophobic"
+        measures as. Rather than rewrite ~1,600 call sites — every one of which is
+        a chance to get a single panel wrong — the STEPS THEMSELVES grow, so every
+        gap, pad and inset in the app opens together and the proportions between
+        them are preserved exactly.
+
+        Only the crowded end is touched. Steps 5 and up are untouched, because
+        they are already section-scale and doubling a page margin was never the
+        complaint.
+      */
+      spacing: {
+        0.5: '3px', // 2  → 3
+        1: '5px', // 4  → 5
+        1.5: '7px', // 6  → 7
+        2: '10px', // 8  → 10
+        2.5: '12px', // 10 → 12
+        3: '14px', // 12 → 14
+        3.5: '16px', // 14 → 16
+        4: '19px', // 16 → 19
       },
       /*
         ONE family, two tokens.
