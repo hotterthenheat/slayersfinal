@@ -106,9 +106,22 @@ const Panel = ({
     >
       {(title || actions || focusable) && (
         <header
-          className={`relative flex items-center justify-between gap-3 px-3.5 h-10 border-b ${toneDivider[tone]} ${toneHeaderTint[tone]} shrink-0`}
+          /*
+            `min-h-10`, not `h-10`. A fixed 40px row has nowhere to put a title
+            that does not fit, so the only outcome available to it was clipping —
+            and on Pinpoint > Stress the h2 rendered a hard mid-glyph cut
+            ("HEDGE FAILURE BOUNDAR") with no ellipsis glyph at all, because its
+            only child is an inline-flex span and `text-overflow` has no direct
+            text run to work on. A header that can grow answers the same
+            situation by taking the space it needs.
+
+            The wrap is on the title/subtitle group below rather than here, so
+            the actions cluster stays on the first line where the reader expects
+            the controls.
+          */
+          className={`relative flex items-center justify-between gap-3 px-3.5 min-h-10 py-1 border-b ${toneDivider[tone]} ${toneHeaderTint[tone]} shrink-0`}
         >
-          <div className="flex items-baseline gap-2 min-w-0">
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 min-w-0">
             {title && (
               // h2 by default: on all 13 routes that mount panels they are direct
               // children of the page H1, so h3 skipped a level. `headingLevel`

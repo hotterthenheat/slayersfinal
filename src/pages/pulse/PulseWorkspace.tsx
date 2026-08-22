@@ -606,8 +606,18 @@ const PanelChrome = ({
       )}
       {/* h2, matching Panel's level. These were spans carrying Panel's exact
           class string, which left /pulse — the flagship desk — with zero
-          headings of any level. */}
-      <h2 className="font-mono text-label font-semibold uppercase tracking-widest text-textPrimary truncate">
+          headings of any level.
+
+          `title` because this header is a workspace widget bar packing seven
+          items into 334px, so the name is the first thing to be squeezed: at
+          1180 the right column reads "GEX HEA…", "ORDER F…", "NET PRE…",
+          "FLOW AL…" and the title is the ONLY thing identifying the panel. It
+          carried no tooltip, so a clipped name could not be recovered at all.
+          Panel does the same for its own headers. */}
+      <h2
+        title={def?.title ?? panelKey}
+        className="font-mono text-label font-semibold uppercase tracking-widest text-textPrimary truncate"
+      >
         {def?.title ?? panelKey}
       </h2>
       {showTicker && <PanelTicker value={ticker} onChange={t => h.onTicker(panelId, t)} />}

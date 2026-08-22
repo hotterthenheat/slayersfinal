@@ -154,7 +154,27 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
         terminal index and the mobile drawer, where grouping is a genuine
         affordance for a long vertical list.
       */}
-      <nav className="hidden lg:flex items-center self-stretch min-w-0 mx-auto">
+      {/*
+        `overflow-x-auto` is the load-bearing class, not a nicety.
+
+        This nav is a shrinkable flex child between two `shrink-0` zones, and it
+        used to be `overflow-x: visible`. When the eight items stopped fitting,
+        nothing clipped and nothing scrolled — the last two links simply PAINTED
+        OVER the ⌘K search button, and because the links are positioned and the
+        right cluster is not, they won the stacking order. Measured: at 1180 the
+        nav wanted 663px and had 554, `document.elementFromPoint` at the centre
+        of the search button returned the "Prove It" anchor, and Playwright
+        refused the click outright — "Prove It from <nav> subtree intercepts
+        pointer events". Search was unreachable on every route carrying the
+        ticker cluster, across a whole band of laptop widths.
+
+        Overflow that scrolls can be recovered by the reader; overflow that
+        paints on top of a control cannot. The trims below (tighter padding and
+        tracking between lg and 2xl) mean it should not come to that in practice,
+        but the scroll is what makes the failure mode survivable rather than
+        silent.
+      */}
+      <nav className="hidden lg:flex items-center self-stretch min-w-0 mx-auto overflow-x-auto no-scrollbar">
         {NAV_ITEMS.map(item => {
           const active = item.path === section;
           return (
@@ -163,7 +183,11 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
               to={item.path}
               aria-current={active ? 'page' : undefined}
               title={item.description}
-              className={`relative self-stretch flex items-center px-2.5 my-2 rounded-md font-mono text-label font-semibold uppercase tracking-wider transition-colors ${
+              /* Padding and tracking tighten in the band where the bar is
+                 squeezed and relax again once there is room. `whitespace-nowrap`
+                 stops "PROVE IT" wrapping to two lines inside a 35px row, which
+                 is what made the collision unreadable as well as unclickable. */
+              className={`relative self-stretch flex items-center whitespace-nowrap px-1.5 xl:px-2 2xl:px-2.5 my-2 rounded-md font-mono text-label font-semibold uppercase tracking-wide 2xl:tracking-wider transition-colors ${
                 active ? 'text-textPrimary bg-white/[0.06]' : 'text-textMuted hover:text-textPrimary hover:bg-rowHover'
               }`}
             >
@@ -219,7 +243,12 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
             The phase survives as the hover, where it explains the clock instead
             of arguing with the page. */}
         <span
-          className="hidden xl:flex items-center gap-1.5 font-mono text-caption text-textSecondary tnum select-none leading-4"
+          /* 2xl, not xl. The right cluster is `shrink-0`, so anything that
+             appears in it comes straight out of the nav's width — and the clock
+             arriving at 1280 was measurably worse for the nav than 1180 was
+             (54px of hidden nav against 13px). It shows up once there is room
+             for it rather than taking room from the navigation. */
+          className="hidden 2xl:flex items-center gap-1.5 font-mono text-caption text-textSecondary tnum select-none leading-4"
           title={`New York time — market ${clock.label.toLowerCase()}`}
         >
           <span>{clock.time}</span>

@@ -120,6 +120,31 @@ export default {
         lead: '17px', // largest inline copy
       },
       /*
+        THE NUMERIC LEADING SCALE, MOVED WITH THE TYPE.
+
+        The type-ramp note above says the leading each call site set is
+        "preserved untouched". That was wrong, and it was wrong in the direction
+        that matters: `leading-4` is a FIXED 16px, not a multiple, so growing
+        `text-caption` from 12px to 13px did not preserve anything — it tightened
+        the ratio from 1.33 to 1.23. Across 59 uses of `leading-4` and 24 of
+        `leading-5`, a change made to give the terminal air made its prose DENSER.
+
+        Only the numeric steps need this. `leading-none/tight/snug/relaxed/loose`
+        are unitless multipliers and already track font-size on their own; it is
+        exactly the fixed-pixel ones that fell behind, and they move by the same
+        one-to-two pixels the type did.
+
+            caption 13px on leading-4 18px  ->  1.38   (was 12px on 16px = 1.33)
+            label   12px on leading-4 18px  ->  1.50
+            micro   11px on leading-4 18px  ->  1.64
+      */
+      lineHeight: {
+        3: '14px', // 12 → 14
+        4: '18px', // 16 → 18
+        5: '22px', // 20 → 22
+        6: '26px', // 24 → 26
+      },
+      /*
         THE SPACING RHYTHM, OPENED UP.
 
         The same census: `gap-2` 302 times, `gap-1.5` 239, `py-1.5` 131, `py-1` 91.
