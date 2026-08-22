@@ -52,6 +52,8 @@ interface PanelProps {
 const toneHeaderTint: Record<Tone, string> = {
   bull: 'bg-bull/[0.05]',
   bear: 'bg-bear/[0.05]',
+  longGamma: 'bg-longGamma/[0.05]',
+  shortGamma: 'bg-shortGamma/[0.05]',
   warn: 'bg-warn/[0.05]',
   info: 'bg-flip/[0.05]',
   select: 'bg-select/[0.05]',
@@ -62,6 +64,8 @@ const toneHeaderTint: Record<Tone, string> = {
 const toneDivider: Record<Tone, string> = {
   bull: 'border-bull/15',
   bear: 'border-bear/15',
+  longGamma: 'border-longGamma/15',
+  shortGamma: 'border-shortGamma/15',
   warn: 'border-warn/15',
   info: 'border-flip/15',
   select: 'border-select/15',

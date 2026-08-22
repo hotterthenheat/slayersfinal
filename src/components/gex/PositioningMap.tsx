@@ -11,7 +11,7 @@ import { LONG_GAMMA, SHORT_GAMMA } from './palette';
 import TrendLine from './TrendLine';
 import Simulator from '../../core/simulator';
 import { fmtUsd } from '../../data/gex';
-import type { ExposureProfileData, StrikeExposure, ZoneBand, ZoneKind } from '../../types/gex';
+import { DEALER_BIAS_LABEL, type ExposureProfileData, type StrikeExposure, type ZoneBand, type ZoneKind } from '../../types/gex';
 import type { Tone } from '../ui/tones';
 import { DUR, EASE } from '../../lib/motion';
 import {
@@ -76,10 +76,13 @@ const LABEL_PAD_OFF = 6;
 
 const fmtStrike = (v: number) => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
 
+/* Regime tokens. This badge sits three lines under the desk's own net-gamma
+   read, and until now the two disagreed: the banner said SHORT GAMMA in gold and
+   this said BEARISH in red, about one number. See DealerBias in types/gex.ts. */
 const BIAS_TONE: Record<ExposureProfileData['bias'], Tone> = {
-  BULLISH: 'bull',
-  BEARISH: 'bear',
-  NEUTRAL: 'neutral',
+  LONG_GAMMA: 'longGamma',
+  SHORT_GAMMA: 'shortGamma',
+  BALANCED: 'neutral',
 };
 
 /** exposure.ts:140/143's own participles — no second lexicon for one quantity. */
@@ -521,7 +524,7 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
         className="shrink-0 flex items-center gap-2 px-2 border-b border-borderSubtle select-none"
         style={{ height: headerH }}
       >
-        <SignalBadge tone={BIAS_TONE[bias]}>{bias}</SignalBadge>
+        <SignalBadge tone={BIAS_TONE[bias]}>{DEALER_BIAS_LABEL[bias]}</SignalBadge>
         <span className="font-mono text-micro font-semibold uppercase tracking-wider text-textMuted tnum whitespace-nowrap">
           NET{' '}
           <span style={{ color: netGex < 0 ? SHORT_GAMMA : LONG_GAMMA }}>

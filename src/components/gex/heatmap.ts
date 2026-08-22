@@ -26,14 +26,39 @@ export type HeatMode =
   | 'thermal'
   | 'teal-violet'
   | 'gold-slate'
+  | 'gamma-regime'
   | 'hybrid'
   | 'mono'
   | 'diverging';
 
-// `as HeatMode` stops TS from narrowing to the literal so the other branches stay legal.
-// green-red: positive GEX = green (stabilizing), negative = red — the house grammar,
-// keeping flip (baby-blue) and king (magenta) unambiguous on the chart.
-export const HEAT_MODE = 'green-red' as HeatMode;
+/*
+  `as HeatMode` stops TS from narrowing to the literal so the other branches stay legal.
+
+  WHY THIS IS NO LONGER 'green-red'. The cells hold NET DEALER GAMMA, and the sign
+  of that number is a REGIME, not a direction. Positive does not mean bullish; it
+  means dealers absorb, so dips get bought toward the walls and the tape pins.
+  Negative does not mean bearish; it means hedging amplifies whichever way price
+  goes. The desk's own reading note says exactly that — "dealer support" and
+  "hedging amplifies the move" — while the cells underneath it were painted in
+  the market's language for up and down.
+
+  The house already had the right pair for this and was already using it. Nine
+  hundred lines away, `components/gex/palette.ts` defines
+
+      SHORT_GAMMA #E0B84E  gold — amplifying regime
+      LONG_GAMMA  #5EA0EF  blue — absorbing regime
+
+  and the positioning map on Pinpoint > Levels draws the SAME QUANTITY in them.
+  So one desk was calling net gamma green-and-red and its neighbour was calling
+  it blue-and-gold, and a reader moving between them had to know that the two
+  palettes meant the same thing. `heatmapRegime.test.ts` now fails if they ever
+  diverge again.
+
+  It also gives the terminal back its own face: a full-bleed grid of saturated
+  green and red is the loudest surface in an app whose accent is holographic
+  silver, and it read as a different product.
+*/
+export const HEAT_MODE = 'gamma-regime' as HeatMode;
 
 type RGB = [number, number, number];
 type Stops = [number, RGB][];
@@ -47,7 +72,10 @@ interface RampPalette {
 }
 
 // Ramps run from neutral (t=0) → extreme (t=1)
-const RAMPS: Record<'green-red' | 'pastel' | 'spectrum' | 'amber' | 'redwood' | 'thermal' | 'teal-violet' | 'gold-slate', RampPalette> = {
+const RAMPS: Record<
+  'green-red' | 'gamma-regime' | 'pastel' | 'spectrum' | 'amber' | 'redwood' | 'thermal' | 'teal-violet' | 'gold-slate',
+  RampPalette
+> = {
   // House diverging: green (+, stabilizing) ↔ red (−, accelerating). Neutral stays
   // dark so near-zero cells recede; poles are the bull/bear tokens.
   'green-red': {
@@ -62,6 +90,29 @@ const RAMPS: Record<'green-red' | 'pastel' | 'spectrum' | 'amber' | 'redwood' | 
       [1.0, [255, 59, 48]], // bear #FF3B30
     ],
     gradient: 'linear-gradient(to bottom, #30D158 0%, #1E783F 32%, #2a2a2a 50%, #7A201E 68%, #FF3B30 100%)',
+  },
+  /*
+    THE HOUSE RAMP. Blue (+, dealers absorb) <-> gold (−, hedging amplifies) —
+    the same two tokens the positioning map draws this quantity in, so the two
+    Pinpoint desks stop describing one number in two colour languages.
+
+    Poles are LONG_GAMMA #5EA0EF and SHORT_GAMMA #E0B84E exactly; the mid stops
+    are those hues carried down toward the neutral so a mid-strength cell still
+    reads as its own regime rather than as grey. Neutral stays dark so near-zero
+    cells recede into the panel instead of competing with the walls.
+  */
+  'gamma-regime': {
+    pos: [
+      [0.0, NEUTRAL],
+      [0.5, [44, 88, 140]],
+      [1.0, [94, 160, 239]], // LONG_GAMMA #5EA0EF
+    ],
+    neg: [
+      [0.0, NEUTRAL],
+      [0.5, [124, 100, 42]],
+      [1.0, [224, 184, 78]], // SHORT_GAMMA #E0B84E
+    ],
+    gradient: 'linear-gradient(to bottom, #5EA0EF 0%, #2C588C 32%, #2a2a2a 50%, #7C642A 68%, #E0B84E 100%)',
   },
   // Requested pastel scheme — cool blues (+, stabilizing) ↔ warm lavender/cream
   // (−, accelerating). Softer than the punchy schemes; neutral stays dark so
@@ -353,6 +404,8 @@ export const heatScaleGradient: string = ramp
 
 /** Scale end-label classes (sign already carried by the printed values). */
 export const heatScaleLabels =
-  HEAT_MODE === 'diverging' || HEAT_MODE === 'green-red'
-    ? { pos: 'text-bull', neg: 'text-bear' }
-    : { pos: 'text-textPrimary', neg: 'text-textSecondary' };
+  HEAT_MODE === 'gamma-regime'
+    ? { pos: 'text-longGamma', neg: 'text-shortGamma' }
+    : HEAT_MODE === 'diverging' || HEAT_MODE === 'green-red'
+      ? { pos: 'text-bull', neg: 'text-bear' }
+      : { pos: 'text-textPrimary', neg: 'text-textSecondary' };

@@ -4,7 +4,24 @@
   Rule: a tone is never the only signal — always paired with a label or icon.
 */
 
-export type Tone = 'bull' | 'bear' | 'warn' | 'info' | 'select' | 'magenta' | 'neutral';
+/*
+  `longGamma` / `shortGamma` are the DEALER-REGIME pair, and they are a separate
+  axis from bull/bear on purpose. The sign of net dealer gamma says whether
+  hedging absorbs moves or amplifies them — it says nothing about which way price
+  goes, and a short-gamma tape can rip upward violently. Every surface that draws
+  that quantity (the heatmap, the positioning map, the regime badge) speaks this
+  pair; anything that draws a DIRECTION still speaks bull/bear.
+*/
+export type Tone =
+  | 'bull'
+  | 'bear'
+  | 'longGamma'
+  | 'shortGamma'
+  | 'warn'
+  | 'info'
+  | 'select'
+  | 'magenta'
+  | 'neutral';
 
 // Bull direction is GREEN (#30D158, Apple system green — pairs with the
 // existing Apple red #FF3B30 / orange #FF9500). Holographic silver stays
@@ -12,6 +29,8 @@ export type Tone = 'bull' | 'bear' | 'warn' | 'info' | 'select' | 'magenta' | 'n
 export const toneText: Record<Tone, string> = {
   bull: 'text-bull',
   bear: 'text-bear',
+  longGamma: 'text-longGamma',
+  shortGamma: 'text-shortGamma',
   warn: 'text-warn',
   // Informational / in-flight (not directional) — sky-blue flip token
   info: 'text-flip',
@@ -23,6 +42,8 @@ export const toneText: Record<Tone, string> = {
 export const toneDot: Record<Tone, string> = {
   bull: 'bg-bull',
   bear: 'bg-bear',
+  longGamma: 'bg-longGamma',
+  shortGamma: 'bg-shortGamma',
   warn: 'bg-warn',
   info: 'bg-flip',
   select: 'bg-select',
@@ -42,6 +63,8 @@ export const toneDot: Record<Tone, string> = {
 export const toneBadge: Record<Tone, string> = {
   bull: 'text-bull',
   bear: 'text-bear',
+  longGamma: 'text-longGamma',
+  shortGamma: 'text-shortGamma',
   warn: 'text-warn',
   info: 'text-flip',
   select: 'text-select',
@@ -53,6 +76,8 @@ export const toneBar: Record<Tone, string> = {
   // Element-level chrome keeps its luminance — never below /70
   bull: 'bg-bull/90',
   bear: 'bg-bear/80',
+  longGamma: 'bg-longGamma/85',
+  shortGamma: 'bg-shortGamma/85',
   warn: 'bg-warn/70',
   info: 'bg-flip/80',
   select: 'bg-select/70',
