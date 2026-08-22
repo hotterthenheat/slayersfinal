@@ -19,10 +19,23 @@ interface HoverCell {
 }
 
 /**
- * Strike × expiry exposure heatmap. Cell palette comes from heatmap.ts
- * (mono or diverging mode); values are always printed and the digit color
- * flips by cell luminance, so color is never the only channel. Hovering a
- * cell floats a read-out — strike, expiry, net GEX and what the sign means.
+ * Fraction of the board's largest exposure a cell must carry before it prints
+ * its figure.
+ *
+ * Every cell used to print one, which on a full board is ~120 dollar amounts to
+ * one decimal place, none of which anyone reads — a grid of numbers is not
+ * information, it is the shape of information with the reading left as an
+ * exercise. The cells that matter are the walls, and they are exactly the cells
+ * this lets through. The rest keep their colour, which is what a heat scale is
+ * for, and their exact figure is one hover away.
+ */
+const PRINT_AT = 0.32;
+
+/**
+ * Strike × expiry exposure heatmap. Cell palette comes from heatmap.ts; the
+ * digit color flips by cell luminance, so color is never the only channel for a
+ * printed value. Hovering any cell — printed or not — floats a read-out with the
+ * strike, the expiry, the net GEX and what the sign means.
  */
 const GexMatrix = ({ data, highlightCol = null }: GexMatrixProps) => {
   const { expiries, strikes, cells, maxAbs, spotRowIndex, callWallIndex, putWallIndex } = data;
@@ -125,14 +138,16 @@ const GexMatrix = ({ data, highlightCol = null }: GexMatrixProps) => {
                       onMouseEnter={e => setHover({ r, c, x: e.clientX, y: e.clientY })}
                       onMouseMove={e => setHover({ r, c, x: e.clientX, y: e.clientY })}
                       onMouseLeave={() => setHover(h => (h && h.r === r && h.c === c ? null : h))}
-                      className={`px-2 py-1 text-right font-mono text-label tnum whitespace-nowrap cursor-crosshair transition-all duration-300 ${
+                      className={`px-2 py-1.5 text-right font-mono text-label tnum whitespace-nowrap cursor-crosshair transition-all duration-300 ${
                         cell.king ? 'ring-1 ring-inset ring-king' : ''
                       } ${hover && hover.r === r && hover.c === c ? 'brightness-125' : ''} ${
                         highlightCol != null && c !== highlightCol ? 'opacity-35' : ''
                       }`}
                     >
                       {cell.king && <span className="mr-1 inline-block w-1.5 h-1.5 rounded-full bg-king" />}
-                      {fmtUsd(cell.value)}
+                      {/* The king strike always speaks, whatever its magnitude —
+                          it is the one cell the board is named for. */}
+                      {cell.king || Math.abs(cell.value) >= maxAbs * PRINT_AT ? fmtUsd(cell.value) : '\u00A0'}
                     </td>
                   ))}
                 </tr>

@@ -6,7 +6,7 @@ import { useMarketData } from '../../context/MarketDataContext';
 import { buildExposureProfile } from '../../data/exposure';
 import { fmtUsd } from '../../data/gex';
 import type { MarketSnapshot } from '../../types/market';
-import type { ExposureExpiry } from '../../types/gex';
+import { DEALER_BIAS_LABEL, type ExposureExpiry } from '../../types/gex';
 import Panel from '../../components/ui/Panel';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import { SkeletonRows } from '../../components/ui/Skeleton';
@@ -119,7 +119,8 @@ const ExposureProfile = () => {
   }
 
   const selectedRow = selectedStrike != null ? data.strikes.find(s => s.strike === selectedStrike) : undefined;
-  const biasTok: Tone = data.bias === 'BULLISH' ? 'bull' : data.bias === 'BEARISH' ? 'bear' : 'neutral';
+  const biasTok: Tone =
+    data.bias === 'LONG_GAMMA' ? 'longGamma' : data.bias === 'SHORT_GAMMA' ? 'shortGamma' : 'neutral';
   // The three nets are sums over the RENDERED window at the SELECTED expiry, and
   // the bias is the whole chain (exposure.ts:86-92 vs :105-108). Two different
   // Net GEX figures print on this desk — the rail's and the insight panel's — so
@@ -205,7 +206,12 @@ const ExposureProfile = () => {
         />
         <StatCard label="Net DEX" value={<AnimatedNumber value={data.netDex} format={fmtUsd} />} sub={scope} />
         <StatCard label="Net VEX" value={<AnimatedNumber value={data.netVex} format={fmtUsd} />} sub={scope} />
-        <StatCard label="Dealer Bias" value={data.bias} tone={biasTok} sub="full chain, all expiries" />
+        <StatCard
+          label="Dealer regime"
+          value={DEALER_BIAS_LABEL[data.bias]}
+          tone={biasTok}
+          sub="full chain, all expiries"
+        />
       </MetricGrid>
 
       {/* Selected-strike detail bar */}

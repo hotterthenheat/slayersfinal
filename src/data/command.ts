@@ -264,9 +264,9 @@ export function makeAutoNote(snapshot: MarketSnapshot, levels: KeyLevels, bias: 
     return `Price is at the ${fmt(levels.flip)} gamma flip; dealer hedging switches direction here.`;
   // Regime notes defer to the book-derived bias (the badge next to this note),
   // so the note can never claim short gamma while the badge reads supportive.
-  if (spot < levels.flip && bias !== 'BULLISH')
+  if (spot < levels.flip && bias !== 'LONG_GAMMA')
     return `Trading below the ${fmt(levels.flip)} flip; dealers short gamma, so expect amplified moves.`;
-  if (spot > levels.flip && bias === 'BULLISH')
+  if (spot > levels.flip && bias === 'LONG_GAMMA')
     return `Supportive positioning above ${fmt(levels.flip)}; dips into ${fmt(levels.putWall)} likely absorbed.`;
   return null;
 }
@@ -288,13 +288,13 @@ export function buildCommandView(snapshot: MarketSnapshot): CommandView {
   const netGex = chain.reduce((a, n) => a + n.netGex, 0);
   const kingAbs = Math.abs(chain.find(n => n.strike === levels.king)?.netGex ?? 0);
   const threshold = kingAbs * 0.8;
-  let bias: DealerBias = 'NEUTRAL';
+  let bias: DealerBias = 'BALANCED';
   let biasNote = 'Balanced positioning';
   if (netGex < -threshold) {
-    bias = 'BEARISH';
+    bias = 'SHORT_GAMMA';
     biasNote = 'Net negative gamma';
   } else if (netGex > threshold) {
-    bias = 'BULLISH';
+    bias = 'LONG_GAMMA';
     biasNote = 'Net supportive gamma';
   }
 

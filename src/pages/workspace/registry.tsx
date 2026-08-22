@@ -36,6 +36,7 @@ import { buildStockBoard, VERDICT_LABEL as STOCK_VERDICT_LABEL, VERDICT_TONE as 
 import { runMonteCarlo } from '../../core/quant';
 import { fmtUsd } from '../../data/gex';
 import type { MarketSnapshot } from '../../types/market';
+import { DEALER_BIAS_LABEL } from '../../types/gex';
 import type {
   CommandView,
   DealerBias,
@@ -83,7 +84,11 @@ export interface WidgetDef {
   render: (ctx: WorkspaceCtx) => ReactNode;
 }
 
-const biasTone: Record<DealerBias, Tone> = { BULLISH: 'bull', BEARISH: 'bear', NEUTRAL: 'neutral' };
+const biasTone: Record<DealerBias, Tone> = {
+  LONG_GAMMA: 'longGamma',
+  SHORT_GAMMA: 'shortGamma',
+  BALANCED: 'neutral',
+};
 
 export const WIDGETS: WidgetDef[] = [
   {
@@ -254,7 +259,7 @@ export const WIDGETS: WidgetDef[] = [
       <div className="h-full min-h-0 overflow-y-auto p-3 flex flex-col gap-2.5">
         <span>
           <SignalBadge tone={biasTone[ctx.exposure.bias]} dot>
-            {ctx.exposure.bias}
+            {DEALER_BIAS_LABEL[ctx.exposure.bias]}
           </SignalBadge>
         </span>
         <ul className="flex flex-col gap-2">

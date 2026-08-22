@@ -111,7 +111,28 @@ export interface ZoneBand {
   label: string;
 }
 
-export type DealerBias = 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+/*
+  The dealer-gamma REGIME. Not a direction, which is what it used to be called.
+
+  It is derived from net gamma (`data/exposure.ts`), and it was typed
+  `'BULLISH' | 'BEARISH' | 'NEUTRAL'` while the note generated beside it said
+  "moves amplified" and "dips absorbed". Those notes are right and the labels
+  were wrong: negative net gamma does not mean the market goes down, it means
+  hedging amplifies whichever way it goes — a short-gamma tape can rip upward
+  violently, and calling that BEARISH is a false claim about the market rather
+  than a stylistic slip.
+
+  The names now match what the number is, and they match the palette that has
+  always drawn it (LONG_GAMMA blue / SHORT_GAMMA gold in components/gex/palette).
+*/
+export type DealerBias = 'LONG_GAMMA' | 'SHORT_GAMMA' | 'BALANCED';
+
+/** How the regime is written on screen. `γ` is the desk's own shorthand. */
+export const DEALER_BIAS_LABEL: Record<DealerBias, string> = {
+  LONG_GAMMA: 'LONG γ',
+  SHORT_GAMMA: 'SHORT γ',
+  BALANCED: 'BALANCED',
+};
 
 export interface ExposureLevels {
   spot: number;

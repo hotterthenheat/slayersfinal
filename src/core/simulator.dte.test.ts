@@ -18,18 +18,53 @@ describe('P3.4 — real DTE and a ticker-dependent ladder', () => {
     expect(g0 / g30).toBeGreaterThan(2);
   });
 
-  it('the chain prices at its real front expiry, not the old 0.003 hardcode', () => {
+  it('each book prices at ITS OWN expiry, not the old 0.003 hardcode', () => {
+    /*
+      This assertion used to live on `snap.chain`, and it had to move rather than
+      be relaxed. The chain is the FOLD of the per-expiry books now
+      (core/chainAggregate.ts), so its ATM gamma is an open-interest-weighted
+      blend across the calendar and equals no single expiry's greek by
+      construction. Asserting it against the front month would have been asking
+      the aggregate to be the front book — the exact conflation the fold exists
+      to end.
+
+      The original claim — time comes from the calendar, not from a constant —
+      is unchanged and now checked where it is actually true: on every book.
+    */
     const snap = Simulator.buildSnapshot('IBM'); // a monthlies-only name
     const spot = snap.spot;
     const iv = Simulator.TICKERS['IBM'].iv;
-    const atm = snap.chain.reduce((best, n) =>
-      Math.abs(n.strike - spot) < Math.abs(best.strike - spot) ? n : best
-    );
-    const frontT = expiryCalendar('IBM')[0].t;
-    const gammaAtFront = Simulator.getGreeks(spot, atm.strike, frontT, iv).gamma;
-    // The chain's greek equals the pricer at the front expiry's t — proof the
-    // time came from the calendar, not from a constant.
-    expect(atm.gamma).toBeCloseTo(gammaAtFront, 8);
+    const nearestTo = (nodes: typeof snap.chain) =>
+      nodes.reduce((best, n) => (Math.abs(n.strike - spot) < Math.abs(best.strike - spot) ? n : best));
+
+    expect(snap.chainByExpiry.length).toBe(expiryCalendar('IBM').length);
+    for (const book of snap.chainByExpiry) {
+      const atm = nearestTo(book.nodes);
+      expect(
+        atm.gamma,
+        `the ${book.expiry.dte}DTE book is not priced at its own t`
+      ).toBeCloseTo(Simulator.getGreeks(spot, atm.strike, book.expiry.t, iv).gamma, 8);
+    }
+  });
+
+  it('the aggregate is a real blend — strictly inside the range of its books', () => {
+    /*
+      The property that proves the fold happened. A blend of gammas cannot exceed
+      the largest or fall below the smallest, and — because more than one expiry
+      carries open interest — it must not EQUAL either end either. If the chain
+      were still one book restated, ATM gamma would sit exactly on the front
+      month's and this fails.
+    */
+    const snap = Simulator.buildSnapshot('IBM');
+    const spot = snap.spot;
+    const nearestTo = (nodes: typeof snap.chain) =>
+      nodes.reduce((best, n) => (Math.abs(n.strike - spot) < Math.abs(best.strike - spot) ? n : best));
+
+    const perBook = snap.chainByExpiry.map(b => nearestTo(b.nodes).gamma);
+    const blended = nearestTo(snap.chain).gamma;
+
+    expect(blended).toBeLessThan(Math.max(...perBook));
+    expect(blended).toBeGreaterThan(Math.min(...perBook));
   });
 
   it('an index/large-ETF root lists a deeper ladder than a monthly name', () => {

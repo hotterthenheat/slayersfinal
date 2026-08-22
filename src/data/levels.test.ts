@@ -157,8 +157,8 @@ describe('cross-engine agreement: cockpit ↔ exposure map', () => {
     const exposure = buildExposureProfile(snap, '0DTE', HALF);
     const chainNet = snap.chain.reduce((a, n) => a + n.netGex, 0);
 
-    if (exposure.bias === 'BULLISH') expect(chainNet).toBeGreaterThan(0);
-    if (exposure.bias === 'BEARISH') expect(chainNet).toBeLessThan(0);
+    if (exposure.bias === 'LONG_GAMMA') expect(chainNet).toBeGreaterThan(0);
+    if (exposure.bias === 'SHORT_GAMMA') expect(chainNet).toBeLessThan(0);
   });
 });
 

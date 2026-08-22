@@ -122,13 +122,13 @@ export function buildExposureProfile(
   // scale so the threshold means the same thing on SPY as on a $40 name.
   const chainScale = chain.reduce((a, n) => Math.max(a, Math.abs(n.netGex)), 1);
   const biasThreshold = chainScale * 0.6;
-  let bias: DealerBias = 'NEUTRAL';
+  let bias: DealerBias = 'BALANCED';
   let biasNote = 'Balanced positioning';
   if (chainNetGex < -biasThreshold) {
-    bias = 'BEARISH';
+    bias = 'SHORT_GAMMA';
     biasNote = 'Net negative gamma, moves amplified';
   } else if (chainNetGex > biasThreshold) {
-    bias = 'BULLISH';
+    bias = 'LONG_GAMMA';
     biasNote = 'Net supportive gamma, dips absorbed';
   }
 

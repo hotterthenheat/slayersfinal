@@ -7,6 +7,7 @@
 
 import { DEALER_BOOK } from './dealerBook';
 import type {
+  ExpiryBook,
   Candle,
   GexSnapshot,
   Greeks,
@@ -26,7 +27,9 @@ import { lookup as universeLookup } from '../data/universe';
 // the cycle surfaces as `undefined` at module init rather than as a type error.)
 import { dayKey } from './rng';
 import { etTime } from './calendar';
-import { expiryCalendar, listingConvention } from './expiryCalendar';
+import { expiryCalendar, isMonthlyExpiry, listingConvention, type ChainExpiry } from './expiryCalendar';
+import { aggregateChain } from './chainAggregate';
+import { readStructure } from './chainStructure';
 
 /*
   OI freshness lives in core/openInterest.ts, not here.
@@ -362,13 +365,76 @@ const Simulator = (() => {
     return out;
   }
 
-  // Generate Strike-by-Strike Chain
-  function generateOptionsChain(tickerKey: TickerSymbol, spotOverride?: number, regimeDayOverride?: number): StrikeNode[] {
+  /**
+   * How a strike's open interest divides across the expiries that list it.
+   *
+   * Returns one weight per expiry, SUMMING TO ONE. That is the load-bearing
+   * property: the per-strike OI shape below is unchanged, so building six books
+   * instead of one distributes the same open interest rather than multiplying it
+   * by the number of columns the calendar happens to return.
+   *
+   * Two effects, both real and both visible in any live chain:
+   *   - front-loading, because open interest decays with time to expiry
+   *   - the OPEX bump, because the standard monthly carries far more than the
+   *     weeklies either side of it
+   *
+   * This is simulator SHAPING — the same class of placeholder as the gaussian
+   * that spreads OI across strikes. A real feed publishes open interest per
+   * expiry directly and this function goes away; what does not go away is the
+   * books being primary, which is the part the dependency arithmetic needs.
+   */
+  function expiryOiWeights(expiries: ChainExpiry[]): number[] {
+    const TAU_DAYS = 20;
+    const raw = expiries.map(e => {
+      const decay = Math.exp(-e.dte / TAU_DAYS);
+      return decay * (isMonthlyExpiry(e.date) ? 2.2 : 1);
+    });
+    const total = raw.reduce((a, b) => a + b, 0);
+    // A calendar that somehow returned nothing weightable must not divide by
+    // zero and publish NaN open interest across the whole board.
+    return total > 0 ? raw.map(w => w / total) : expiries.map(() => 1 / expiries.length);
+  }
+
+  /**
+   * Every expiry's own book, nearest first.
+   *
+   * Each book is priced at ITS OWN time to expiry, which is the change that makes
+   * the fold worth doing: the front book is spiked at the money and the back
+   * books are spread, so the aggregate has the shape a real chain has instead of
+   * one expiry's shape restated. See core/chainAggregate.ts.
+   */
+  function generateExpiryBooks(
+    tickerKey: TickerSymbol,
+    spotOverride?: number,
+    regimeDayOverride?: number
+  ): ExpiryBook[] {
     const config = TICKERS[tickerKey];
     const spot = spotOverride ?? config.currentPrice;
     const step = config.step;
     const iv = config.iv;
 
+    const expiries = expiryCalendar(tickerKey);
+    const weights = expiryOiWeights(expiries);
+    return expiries.map((expiry, ei) =>
+      buildExpiryBook(tickerKey, expiry, weights[ei], spot, step, iv, regimeDayOverride)
+    );
+  }
+
+  /** The aggregate chain — the fold of every book. Kept as the name every desk
+      already calls so nothing downstream had to learn a new one. */
+  function generateOptionsChain(tickerKey: TickerSymbol, spotOverride?: number, regimeDayOverride?: number): StrikeNode[] {
+    return aggregateChain(generateExpiryBooks(tickerKey, spotOverride, regimeDayOverride));
+  }
+
+  function buildExpiryBook(
+    tickerKey: TickerSymbol,
+    expiry: ChainExpiry,
+    oiShare: number,
+    spot: number,
+    step: number,
+    iv: number,
+    regimeDayOverride?: number
+  ): ExpiryBook {
     const strikes: StrikeNode[] = [];
     const baseStrike = Math.round(spot / step) * step;
     // Chain-realistic, ticker-dependent width: an index or large ETF lists a
@@ -377,11 +443,11 @@ const Simulator = (() => {
     // matrix window around spot regardless of how many strikes exist.
     const conv = listingConvention(tickerKey);
     const strikeRange = conv === 'daily' ? 30 : conv === 'weekly' ? 22 : 16;
-    // Time from the ticker's actual FRONT expiry, not a hardcoded 0DTE. A daily
-    // root's front is ~0DTE; a monthlies-only name's is weeks out, so its gamma
-    // is spread across strikes instead of spiked at the money. Every greek in
-    // the chain is priced at this t.
-    const t = expiryCalendar(tickerKey)[0].t;
+    // THIS book's own time to expiry. Every greek below is priced at it, which
+    // is what makes the fold worth doing: a 0DTE book is spiked at the money and
+    // a two-month book is spread flat, and the aggregate carries both shapes at
+    // once instead of restating the front month's.
+    const t = expiry.t;
 
     // Daily positioning regime: the price where customer call-overwriting supply
     // gives way to put-hedging demand. It pivots the OI skew — and therefore the
@@ -407,8 +473,13 @@ const Simulator = (() => {
       const noiseC = 0.75 + ((sh % 1000) / 1000) * 0.5;
       const noiseP = 0.75 + (((sh >>> 10) % 1000) / 1000) * 0.5;
 
-      let callOI = Math.round(baseOI * (strike > pivot ? 1.5 : 0.8) * noiseC);
-      let putOI = Math.round(baseOI * (strike < pivot ? 1.5 : 0.7) * noiseP);
+      // `oiShare` is this expiry's slice of the strike's open interest, and the
+      // shares across the calendar sum to one — so the strike's TOTAL is the same
+      // as it was when the chain was a single book. Rounding is applied after the
+      // share so a far-dated book with a small slice still lands on whole
+      // contracts rather than a fraction of one.
+      let callOI = Math.round(baseOI * (strike > pivot ? 1.5 : 0.8) * noiseC * oiShare);
+      let putOI = Math.round(baseOI * (strike < pivot ? 1.5 : 0.7) * noiseP * oiShare);
 
       if (strike % (step * 5) === 0) {
         callOI = Math.round(callOI * 2.2);
@@ -459,45 +530,24 @@ const Simulator = (() => {
       });
     }
 
-    return strikes;
+    return { expiry, nodes: strikes };
   }
 
   // Generate Compass Plan
   function generateTradePlan(tickerKey: TickerSymbol, spot: number, chain: StrikeNode[], indicators: Indicators): TradePlan {
     const config = TICKERS[tickerKey];
 
-    let supportWall = spot - config.step * 4;
-    let resistanceWall = spot + config.step * 4;
-    let maxPutGex = 0;
-    let maxCallGex = 0;
-
-    chain.forEach(node => {
-      if (node.strike < spot && Math.abs(node.netGex) > maxPutGex) {
-        maxPutGex = Math.abs(node.netGex);
-        supportWall = node.strike;
-      }
-      if (node.strike > spot && Math.abs(node.netGex) > maxCallGex) {
-        maxCallGex = Math.abs(node.netGex);
-        resistanceWall = node.strike;
-      }
-    });
-
-    // Gamma flip: first upward zero-crossing of the (3-strike smoothed) net-GEX
-    // profile — put-dominated (negative) below, call-supported (positive) above.
-    // Smoothing keeps a single noisy strike from faking the crossover.
-    let flipStrike = spot;
-    const smoothGex = (i: number) => {
-      const a = chain[Math.max(0, i - 1)].netGex;
-      const b = chain[i].netGex;
-      const c = chain[Math.min(chain.length - 1, i + 1)].netGex;
-      return (a + b + c) / 3;
-    };
-    for (let i = 1; i < chain.length; i++) {
-      if (smoothGex(i - 1) < 0 && smoothGex(i) >= 0) {
-        flipStrike = (chain[i - 1].strike + chain[i].strike) / 2;
-        break;
-      }
-    }
+    /*
+      Walls, flip and net gamma come from core/chainStructure.ts rather than from
+      a loop here, because the expiry-dependency engine reads the SAME structure
+      off a chain with an expiry removed. Two copies of this arithmetic would
+      make the difference between those two readings a fact about the code
+      instead of a fact about the book.
+    */
+    const structure = readStructure(chain, spot, config.step);
+    const supportWall = structure.putWall;
+    const resistanceWall = structure.callWall;
+    const flipStrike = structure.flip;
 
     let score = 50;
     const isEmaAligned = (indicators.ema9 > indicators.ema21) && (indicators.ema21 > indicators.ema50);
@@ -580,7 +630,8 @@ const Simulator = (() => {
     });
 
     const activeConfig = TICKERS[activeTicker];
-    const chain = generateOptionsChain(activeTicker);
+    const chainByExpiry = generateExpiryBooks(activeTicker);
+    const chain = aggregateChain(chainByExpiry);
     const indicators = getIndicators(priceHistory[activeTicker]);
     const plan = generateTradePlan(activeTicker, activeConfig.currentPrice, chain, indicators);
 
@@ -617,6 +668,7 @@ const Simulator = (() => {
         changePercent: ((activeConfig.currentPrice - activeConfig.basePrice) / activeConfig.basePrice) * 100,
         priceHistory: priceHistory[activeTicker],
         chain,
+        chainByExpiry,
         indicators,
         plan,
         tape
@@ -657,7 +709,8 @@ const Simulator = (() => {
     buildSnapshot: (sym: string): MarketSnapshot => {
       const key = ensureTicker(sym);
       const cfg = TICKERS[key];
-      const chain = generateOptionsChain(key);
+      const chainByExpiry = generateExpiryBooks(key);
+      const chain = aggregateChain(chainByExpiry);
       const indicators = getIndicators(priceHistory[key]);
       const plan = generateTradePlan(key, cfg.currentPrice, chain, indicators);
       const tape: TapeOrder[] = [];
@@ -681,6 +734,7 @@ const Simulator = (() => {
         changePercent: ((cfg.currentPrice - cfg.basePrice) / cfg.basePrice) * 100,
         priceHistory: priceHistory[key],
         chain,
+        chainByExpiry,
         indicators,
         plan,
         tape,
@@ -712,7 +766,8 @@ const Simulator = (() => {
       const key = ensureTicker(sym);
       const cfg = TICKERS[key];
       const day = regimeDay ?? Math.floor(Date.now() / 86400000);
-      const chain = generateOptionsChain(key, spot, day);
+      const chainByExpiry = generateExpiryBooks(key, spot, day);
+      const chain = aggregateChain(chainByExpiry);
       const history = pinnedHistory(key, spot, day);
       const indicators = getIndicators(history);
       return {
@@ -721,6 +776,7 @@ const Simulator = (() => {
         changePercent: ((spot - cfg.basePrice) / cfg.basePrice) * 100,
         priceHistory: history,
         chain,
+        chainByExpiry,
         indicators,
         plan: generateTradePlan(key, spot, chain, indicators),
         tape: [],
