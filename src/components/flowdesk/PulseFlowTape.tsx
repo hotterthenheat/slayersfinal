@@ -8,20 +8,32 @@ import { fmtUsd } from '../../data/gex';
 import Term from '../ui/Term';
 import type { TermKey } from '../../data/terms';
 
-// Jargon columns carry an in-place explainer (hover/focus) — the tape is the
-// first place a new reader meets X-count, OTM% and SigScore.
-const HEADERS: { label: string; term?: TermKey }[] = [
+/*
+  Jargon columns carry an in-place explainer (hover/focus) — the tape is the
+  first place a new reader meets X-count, OTM% and SigScore.
+
+  `secondary` marks the three that describe the print rather than identify it.
+  Six columns carry WHAT TRADED — time, premium, spot, strike, side, expiry —
+  and X (aggressor), OTM% and Sig are the reads on top. In a narrow mount the
+  three secondary ones are precisely what the width sacrifices anyway: measured
+  on the landing card, the table wanted 670px inside 524px, so OTM% and Sig sat
+  entirely off the card and Size was cut mid-column, behind a horizontal scroll
+  that the card's own `pointer-events-none` ancestor made unusable. Dropping
+  them removes 168px and the table fits with room to spare — a column nobody can
+  reach is not information, it is the appearance of it.
+*/
+const HEADERS: { label: string; term?: TermKey; secondary?: boolean }[] = [
   { label: 'Time' },
   { label: 'Value' },
   { label: 'Spot' },
   { label: 'Strike' },
   { label: 'PC', term: 'P/C' },
   { label: 'Exp' },
-  { label: 'X', term: 'X' },
+  { label: 'X', term: 'X', secondary: true },
   { label: 'Type', term: 'Type' },
   { label: 'Size' },
-  { label: 'OTM%', term: 'OTM%' },
-  { label: 'Sig', term: 'Sig' },
+  { label: 'OTM%', term: 'OTM%', secondary: true },
+  { label: 'Sig', term: 'Sig', secondary: true },
 ];
 
 /*
@@ -35,6 +47,12 @@ const HEADERS: { label: string; term?: TermKey }[] = [
 interface PulseFlowTapeProps {
   ticker: string;
   revision: number;
+  /**
+   * Drop the three secondary columns for a narrow mount. The full tape lives on
+   * Trace; this is the preview, and a preview that scrolls sideways to nothing
+   * is worse than a shorter one that reads.
+   */
+  compact?: boolean;
 }
 
 const SigBar = ({ v }: { v: number }) => (
@@ -49,7 +67,7 @@ const SigBar = ({ v }: { v: number }) => (
   </span>
 );
 
-const PulseFlowTape = ({ ticker, revision }: PulseFlowTapeProps) => {
+const PulseFlowTape = ({ ticker, revision, compact = false }: PulseFlowTapeProps) => {
   const view = useMemo(
     () => buildPulseFlow(ticker),
     // the stream extends as the session advances
@@ -129,7 +147,7 @@ const PulseFlowTape = ({ ticker, revision }: PulseFlowTapeProps) => {
         <table className="w-full border-collapse">
           <thead className="sticky top-0 bg-panel z-10">
             <tr className="border-b border-borderSubtle">
-              {HEADERS.map(h => (
+              {HEADERS.filter(h => !(compact && h.secondary)).map(h => (
                 <th key={h.label} className="px-2 py-1 text-left font-mono text-micro uppercase tracking-wider text-textMuted whitespace-nowrap">
                   {h.term ? <Term k={h.term}>{h.label}</Term> : h.label}
                 </th>
@@ -165,15 +183,19 @@ const PulseFlowTape = ({ ticker, revision }: PulseFlowTapeProps) => {
                   {p.pc === 'C' ? 'Call' : 'Put'}
                 </td>
                 <td className="px-2 py-[5px] font-mono text-label text-textMuted tnum whitespace-nowrap">{p.exp}</td>
-                <td className="px-2 py-[5px] font-mono text-label text-textSecondary">{p.x}</td>
+                {!compact && <td className="px-2 py-[5px] font-mono text-label text-textSecondary">{p.x}</td>}
                 <td className={`px-2 py-[5px] font-mono text-label font-semibold ${p.type === 'SWEEP' ? 'text-shortGamma' : 'text-longGamma'}`}>
                   {p.type === 'SWEEP' ? 'Sweep' : 'Block'}
                 </td>
                 <td className="px-2 py-[5px] font-mono text-label text-textSecondary tnum">{p.size.toLocaleString()}</td>
-                <td className="px-2 py-[5px] font-mono text-label text-textMuted tnum">{p.otmPct.toFixed(1)}</td>
-                <td className="px-2 py-[5px]">
-                  <SigBar v={p.sigScore} />
-                </td>
+                {!compact && (
+                  <td className="px-2 py-[5px] font-mono text-label text-textMuted tnum">{p.otmPct.toFixed(1)}</td>
+                )}
+                {!compact && (
+                  <td className="px-2 py-[5px]">
+                    <SigBar v={p.sigScore} />
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

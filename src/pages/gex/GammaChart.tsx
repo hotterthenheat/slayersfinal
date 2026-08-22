@@ -2,8 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, Info } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildExposureProfile } from '../../data/exposure';
-import { buildGexView, fmtUsd, pulseMatrix } from '../../data/gex';
-import { buildCommandView } from '../../data/command';
+import { buildGexView, fmtUsd } from '../../data/gex';
 import type { MarketSnapshot } from '../../types/market';
 import Panel from '../../components/ui/Panel';
 import SegmentedControl from '../../components/ui/SegmentedControl';
@@ -12,7 +11,8 @@ import PositioningMap from '../../components/gex/PositioningMap';
 import type { ExposureExpiry } from '../../types/gex';
 
 /** The heatmap sweeps on its own cadence (10s) so cells don't vibrate every
-    tick; the live glyph pulse still folds in per tick via `revision`. */
+    tick. The per-tick glyph pulse went with the heatmap — the profile reads the
+    scan, and the scan is what paces this desk. */
 const SCAN_INTERVAL_MS = 10_000;
 
 // Stable focus id so we can tell when this heatmap is expanded and, only then,
@@ -67,8 +67,6 @@ const GammaChart = () => {
   // Strike the reader is pointing at / has pinned in the map.
   const [hoverStrike, setHoverStrike] = useState<number | null>(null);
   const [selectedStrike, setSelectedStrike] = useState<number | null>(null);
-  const [revision, setRevision] = useState(0);
-  useEffect(() => setRevision(r => r + 1), [marketData]);
 
   // Scan-tier snapshot (10s; ticker switch is immediate).
   const [scan, setScan] = useState<MarketSnapshot | null>(null);
@@ -94,11 +92,12 @@ const GammaChart = () => {
      no Focus-Mode grid to expand — the level rail is the same rail either way. */
   const gexView = useMemo(() => (scan ? buildGexView(scan, 'GEX', 10) : null), [scan]);
   const gexLevels = gexView?.levels ?? null;
-  // Pulse the matrix glyphs each tick for a live read (geometry stays fixed).
-  const matrix = useMemo(() => (gexView ? pulseMatrix(gexView.matrix, revision) : null), [gexView, revision]);
-  const vwap = useMemo(() => (scan ? buildCommandView(scan).orderFlow.vwap : null), [scan]);
+  /* The pulsed matrix and the session VWAP left with the panels that read them
+     — the grid and the six-card level strip. Both were still being rebuilt on
+     every tick to feed nothing: `pulseMatrix` re-glyphs a whole strike x expiry
+     grid, and `buildCommandView` builds the entire cockpit to reach one number. */
 
-  if (!scan || !exposure || !gexLevels || !matrix) {
+  if (!scan || !exposure || !gexLevels) {
     return (
       <Panel>
         <div className="h-64 overflow-hidden">
@@ -150,12 +149,29 @@ const GammaChart = () => {
             </div>
           </div>
           <div className="flex items-center gap-x-4 gap-y-2 flex-wrap ml-auto">
+            {/*
+              FOUR LEVELS, NOT SIX.
+
+              KING and PIN · MAX OI resolved to the same strike in the measured
+              state ($495.00 on both), which is not a coincidence — the king is
+              the max-exposure strike and the pin is the max-open-interest one,
+              and on a book where exposure follows open interest they land
+              together most days. Two cards for one number is worse than one,
+              because a reader has to check whether they agree before they can
+              ignore one.
+
+              VWAP is not a dealer level at all. It is where the session has
+              traded, which belongs on a chart, not in a strip of positioning
+              levels — and the profile below already draws spot.
+
+              The four that stay are the four the map's own right-hand rail
+              labels: the two walls, the flip, and the king. The pin survives as
+              a marker inside the profile, where it sits on its own strike.
+            */}
             <LevelChip spot={scan.spot} label="Call Wall" value={gexLevels.callWall} tone="text-bull" />
             <LevelChip spot={scan.spot} label="Flip" value={gexLevels.flip} tone="text-flip" />
             <LevelChip spot={scan.spot} label="Put Wall" value={gexLevels.putWall} tone="text-bear" />
             <LevelChip spot={scan.spot} label="King" value={gexLevels.king} tone="text-king" />
-            <LevelChip spot={scan.spot} label="Pin · Max OI" value={exposure.levels.pin} tone="text-textSecondary" />
-            {vwap != null && <LevelChip spot={scan.spot} label="VWAP" value={vwap} tone="text-textSecondary" />}
           </div>
         </div>
       </Panel>

@@ -148,7 +148,11 @@ const WatchStar = ({ on, onClick }: { on: boolean; onClick: () => void }) => (
     aria-pressed={on}
     aria-label={on ? 'Remove from watchlist' : 'Add to watchlist'}
     title={on ? 'Remove from watchlist' : 'Add to watchlist'}
-    className={`inline-flex items-center justify-center w-6 h-6 rounded transition-colors ${
+    /* 32px, the interactive floor. It was 24 — 192 of them measured at exactly
+       24x24 inside 64px rows, so the row had the space and the button was not
+       taking it. The star does not need to LOOK bigger, so the icon inside is
+       unchanged; the hit box grew around it. */
+    className={`inline-flex items-center justify-center w-8 h-8 rounded transition-colors ${
       on ? 'text-select' : 'text-textMuted hover:text-textSecondary'
     }`}
   >
@@ -382,12 +386,21 @@ const Stocks = () => {
         </span>
       ),
     },
-    {
-      key: 'verdict',
-      header: 'Verdict',
-      sortValue: p => p.verdict,
-      render: p => <SignalBadge tone={VERDICT_TONE[p.verdict]}>{VERDICT_LABEL[p.verdict]}</SignalBadge>,
-    },
+    /*
+      NO VERDICT COLUMN.
+
+      `verdict` is `scoreBand(composite)` — it is the Score column put through a
+      threshold, so it adds no ordering and no fact. The first three rows of the
+      board read 91 STRONG, 89 STRONG, 88 STRONG: three different numbers, one
+      word, a whole column spent saying nothing the number beside it had not
+      already said. And the band is not lost with it — `Score` is already inked
+      through `scoreBandText`, so the same three tiers are on screen in the same
+      place they always were.
+
+      The verdict FILTER above the board stays. Narrowing 192 names to the strong
+      ones is a real thing to ask for; printing the answer next to every row it
+      already sorted is not.
+    */
   ];
 
   return (

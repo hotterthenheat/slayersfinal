@@ -101,6 +101,30 @@ const SetupScanBoard = ({
   const pageStart = safePage * CARDS_PER_PAGE;
   const cardPage = setups.slice(pageStart, pageStart + CARDS_PER_PAGE);
 
+  /*
+    Chips every card on THIS PAGE is wearing.
+
+    Measured on a normal scan: all four visible cards came back
+    TREND ALIGNED · AT THE MONEY · 1σ CLEARS BREAKEVEN · TIGHT BOOK, 4 of 4
+    identical. The chips are computed per contract and each one is true — but a
+    label that is on every card separates none of them, and repeating it down
+    the page is the decoration this field was cleaned up for once already.
+
+    Scoped to the PAGE rather than the whole scan, because the page is what a
+    reader is comparing. Two cards is not a pattern, so the rule only applies
+    once there are enough cards for "they all say this" to mean anything.
+  */
+  const commonChips = useMemo(() => {
+    if (cardPage.length < 3) return undefined;
+    const [first, ...rest] = cardPage;
+    const shared = new Set(first.whyChips);
+    for (const s of rest) {
+      const own = new Set(s.whyChips);
+      for (const c of [...shared]) if (!own.has(c)) shared.delete(c);
+    }
+    return shared.size ? shared : undefined;
+  }, [cardPage]);
+
   const columns: Column<Setup>[] = useMemo(
     () => [
       {
@@ -244,6 +268,14 @@ const SetupScanBoard = ({
         />
       ) : (
         <div className="p-2.5">
+          {/* Said once, where a fact about the whole board belongs, so removing
+              it from every card hides nothing. */}
+          {commonChips && (
+            <p className="mb-2.5 font-mono text-micro uppercase tracking-wider text-textMuted">
+              Every contract on this page:{' '}
+              <span className="text-textSecondary">{[...commonChips].join(' · ')}</span>
+            </p>
+          )}
           {/* The cards are listitems, so the thing holding them has to be a
               list — an orphaned listitem is dropped from the tree entirely. */}
           <div role="list" aria-label="Ranked contracts" className="grid gap-2 sm:grid-cols-2">
@@ -255,6 +287,7 @@ const SetupScanBoard = ({
                 selected={selectedId === setup.id}
                 onSelect={() => onSelect(setup)}
                 onStudy={() => onStudy(setup)}
+                commonChips={commonChips}
               />
             ))}
           </div>

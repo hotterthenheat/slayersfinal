@@ -378,6 +378,25 @@ const ALL_COLS: TapeCol[] = [
   },
 ];
 
+/**
+ * What the tape shows before anyone touches the COLUMNS chooser.
+ *
+ * Every column in `ALL_COLS` stays available; these are the ones that are ON to
+ * begin with. The three left out are the ones that restate a column already
+ * present:
+ *
+ *   doi   ΔOI       — arithmetic on Vol and OI, both of which are shown
+ *   voi   V/OI      — the same two figures, divided
+ *   ratio Day Ratio — the Lean group already carries the direction of the print
+ *
+ * Dropping them takes the header from 17 sub-columns to 14 and the first screen
+ * from 89 numbers to something a reader can actually sweep, without removing a
+ * single question the desk can answer.
+ */
+const OFF_BY_DEFAULT = new Set(['doi', 'voi', 'ratio']);
+const DEFAULT_COL_IDS = ALL_COLS.filter(c => !OFF_BY_DEFAULT.has(c.id)).map(c => c.id);
+
+
 // ---- shared dismiss hook -------------------------------------------------------
 function useDismiss<T extends HTMLElement>(open: boolean, onClose: () => void) {
   const ref = useRef<T>(null);
@@ -587,6 +606,22 @@ const LiveTape = () => {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<FlowPrint | null>(null);
 
+  /*
+    THE DEFAULT COLUMN SET, NOT EVERY COLUMN.
+
+    The tape opened with all 17 sub-columns on, over 22 live-ticking rows — 89
+    numbers inside the first screen, more than twice what a reader can hold. Four
+    of the 17 were the same fact restated:
+
+      Vol and OI are the two facts.       ΔOI and V/OI are arithmetic ON them.
+      Lean already owns the direction.    Day Ratio encodes it a second time.
+
+    So three columns come OFF BY DEFAULT rather than out of the code. Nothing is
+    lost and nothing is decided for anyone: the COLUMNS chooser still lists all
+    seventeen, the choice persists per reader, and Reset brings them all back.
+    A default is the one setting most people never change, which is exactly why
+    it should be the readable one.
+  */
   const [visibleCols, setVisibleCols] = useState<Set<string>>(() => {
     try {
       const raw = localStorage.getItem(COLS_KEY);
@@ -597,7 +632,7 @@ const LiveTape = () => {
     } catch {
       /* ignore */
     }
-    return new Set(ALL_COLS.map(c => c.id));
+    return new Set(DEFAULT_COL_IDS);
   });
   const [views, setViews] = useState<SavedView[]>(() => {
     try {
@@ -721,6 +756,9 @@ const LiveTape = () => {
       else next.add(id);
       return next;
     });
+  /* Reset returns EVERY column, not the default set — a reader who opens the
+     chooser and hits Reset is asking to see what exists, not to go back to the
+     opinionated view they were already looking at. */
   const resetCols = () => setVisibleCols(new Set(ALL_COLS.map(c => c.id)));
 
   const applyView = (v: SavedView) => {

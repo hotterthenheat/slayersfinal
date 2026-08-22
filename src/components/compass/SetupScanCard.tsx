@@ -33,6 +33,22 @@ interface SetupScanCardProps {
   selected: boolean;
   onSelect: () => void;
   onStudy: () => void;
+  /**
+   * Chips every card on this board is wearing.
+   *
+   * The chips are computed per contract and they are honest, but that is not
+   * the same as being informative: on a typical scan all four visible cards
+   * come back TREND ALIGNED · AT THE MONEY · 1σ CLEARS BREAKEVEN · TIGHT BOOK,
+   * measured 4-of-4 identical. A chip that is on every card discriminates
+   * between none of them — it is the board's condition, not the row's, and
+   * printing it once per card is the same decoration this field was already
+   * cleaned up once for.
+   *
+   * The board hands down what it found in common and the card leaves it out.
+   * Nothing is hidden: what is common to all of them is stated once above the
+   * board, where a fact about the whole board belongs.
+   */
+  commonChips?: ReadonlySet<string>;
 }
 
 /**
@@ -44,8 +60,10 @@ interface SetupScanCardProps {
  * why-prose, bid/ask — belongs to the compare pane beside it or to full
  * analysis, so the row is no longer a worse copy of the card next to it.
  */
-const SetupScanCard = ({ setup, rank, selected, onSelect, onStudy }: SetupScanCardProps) => {
+const SetupScanCard = ({ setup, rank, selected, onSelect, onStudy, commonChips }: SetupScanCardProps) => {
   const isCall = setup.right === 'C';
+  /* What this contract says that its neighbours do not. */
+  const ownChips = commonChips ? setup.whyChips.filter(c => !commonChips.has(c)) : setup.whyChips;
   // Direction is the market's own language, so it stays green/red. It rides the
   // contract pill only; nothing else on the card borrows it.
   // Direction is the ink, not a pill. A tinted rounded background on the
@@ -157,9 +175,9 @@ const SetupScanCard = ({ setup, rank, selected, onSelect, onStudy }: SetupScanCa
           Middot-separated, because the pill borders that used to bound these
           are gone and four uppercase labels in a row read as one string
           without them. */}
-      {setup.whyChips.length > 0 && (
+      {ownChips.length > 0 && (
         <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-          {setup.whyChips.map((chip, i) => (
+          {ownChips.map((chip, i) => (
             <span key={chip} className="inline-flex items-center gap-1.5">
               {/* Full-strength muted, not /50: at half opacity this separator
                   measured 2.03:1, under the 3:1 floor. */}

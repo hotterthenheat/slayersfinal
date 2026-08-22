@@ -196,6 +196,9 @@ const MatchChip = ({ conviction }: { conviction: number }) => {
   );
 };
 
+/** Block prints rendered per page. See the `shownCount` note below. */
+const PAGE = 60;
+
 const DarkPool = () => {
   const { marketData } = useMarketData();
   const view = useMemo(() => (marketData ? buildDarkPoolView(marketData) : null), [marketData]);
@@ -207,6 +210,19 @@ const DarkPool = () => {
   const [execFilter, setExecFilter] = useState<(typeof EXEC_OPTIONS)[number]['value']>('ALL');
   const [intentFilter, setIntentFilter] = useState<(typeof INTENT_OPTIONS)[number]['value']>('ALL');
   const [minNotional, setMinNotional] = useState<(typeof SIZE_OPTIONS)[number]['value']>('0');
+  /*
+    Mount a page, not the whole session.
+
+    All 240 block prints were rendered at once, which put 11,499 DOM nodes on
+    this route — 7.4x the next-densest Trace desk (live-tape at 1,263) — and made
+    the page 13,324px tall at 1500 and 20,899px at 390. Nobody reads 240 rows;
+    they read the top of a sorted list and then narrow it.
+
+    The filters above still run over the FULL set, so nothing is ever hidden
+    behind the cap — only the RENDERING is paged, and the desk says how many it
+    is holding back.
+  */
+  const [shownCount, setShownCount] = useState(PAGE);
   const [query, setQuery] = useState('');
 
   // Universe scan read. buildDarkPoolFeed already returns its sectors ordered by
@@ -304,6 +320,11 @@ const DarkPool = () => {
   // day's outliers left every remaining bar normalised against something
   // hidden — a column of identical stubs, which is the one thing a meter must
   // not be.
+  /* Narrowing the filters shrinks `rows`; the page resets with it so a reader
+     never lands mid-way down a list they just re-cut. Derived, not stateful —
+     `Math.min` needs no effect and cannot fall out of step. */
+  const shown = rows.slice(0, Math.min(shownCount, Math.max(rows.length, PAGE)));
+
   const maxSize = Math.max(...rows.map(p => p.size), 1);
   const maxVs = Math.max(...rows.map(p => Math.abs(p.vsSpotPct)), 0.01);
 
@@ -374,17 +395,14 @@ const DarkPool = () => {
         </span>
       ),
     },
-    {
-      key: 'notional',
-      group: 'Execution',
-      header: 'Notional',
-      align: 'right',
-      width: '104px',
-      sortValue: p => p.notional,
-      render: p => (
-        <span className="font-mono text-caption font-semibold text-textPrimary tnum leading-4">{fmtUsd(p.notional)}</span>
-      ),
-    },
+    /*
+      NO NOTIONAL COLUMN. Notional is Size x Price, and Size and Price are each
+      already their own column — the table was doing one multiplication in public
+      and charging a column for it. The `Session` column beside it carries the
+      same quantity in the form that answers a question: notional as a share of
+      the session's off-exchange dollars, which is what says whether a print
+      mattered. The raw figure is still in the row's read-out.
+    */
     {
       key: 'share',
       group: 'Execution',
@@ -625,12 +643,29 @@ const DarkPool = () => {
         ) : (
         <DataTable
           columns={columns}
-          rows={rows}
+          rows={shown}
           rowKey={p => String(p.id)}
           onRowClick={p => setSelectedPrint(prev => (prev === p.id ? null : p.id))}
           selectedKey={activePrint ? String(activePrint.id) : null}
-          initialSort={{ key: 'notional', dir: 'desc' }}
+          /* `share`, not `notional` — the notional column is gone, and a sort
+             pointed at a key no column carries silently sorts by nothing. Share
+             is notional over the session total, so the ordering is identical. */
+          initialSort={{ key: 'share', dir: 'desc' }}
         />
+        )}
+        {shown.length < rows.length && (
+          <div className="flex items-center justify-center gap-3 px-4 py-3 border-t border-borderSubtle">
+            <span className="font-mono text-micro uppercase tracking-wider text-textMuted tnum">
+              Showing {shown.length} of {rows.length} prints
+            </span>
+            <button
+              type="button"
+              onClick={() => setShownCount(c => c + PAGE)}
+              className="inline-flex items-center min-h-8 rounded-md border border-borderSubtle bg-panel px-3 py-1.5 font-mono text-label uppercase tracking-wider text-textSecondary transition-colors hover:border-borderMuted hover:text-textPrimary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-select/60"
+            >
+              Show more
+            </button>
+          </div>
         )}
         {/* What each kind means, once, under the tape that uses them. */}
         <dl className="px-4 py-3 grid gap-x-6 gap-y-1.5 sm:grid-cols-2 xl:grid-cols-3 border-t border-borderSubtle">

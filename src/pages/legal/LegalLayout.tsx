@@ -85,12 +85,16 @@ const LegalLayout = ({ title, intro, sections }: LegalLayoutProps) => (
     {/* Contents — a horizontal jump strip rather than a left rail. A rail would
         reintroduce a fixed-width column beside a capped one, which is the shape
         that left the band in the first place. */}
-    <nav aria-label="Contents" className="flex flex-wrap gap-x-5 gap-y-2 pb-1">
+    {/* `-my-1` cancels the padding's effect on the row rhythm, so the links get
+        a real hit box without the strip growing: nine of these measured 18px
+        tall with zero vertical padding, barely half the 32px floor, wrapped onto
+        five rows on a phone where they read as one solid block of text. */}
+    <nav aria-label="Contents" className="flex flex-wrap gap-x-5 gap-y-2 pb-1 -my-1">
       {sections.map((s, i) => (
         <a
           key={s.heading}
           href={`#${slug(i)}`}
-          className="group inline-flex gap-2 font-mono text-label text-textMuted hover:text-textPrimary transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 focus-visible:text-textPrimary"
+          className="group inline-flex items-center min-h-8 py-1 gap-2 font-mono text-label text-textMuted hover:text-textPrimary transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 focus-visible:text-textPrimary"
         >
           <span className="tnum text-select/70 group-hover:text-select">{String(i + 1).padStart(2, '0')}</span>
           <span className="capitalize leading-snug">{s.heading}</span>

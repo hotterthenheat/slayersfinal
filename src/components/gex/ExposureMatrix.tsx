@@ -70,7 +70,7 @@ const Cell = ({
 
 const SpotRow = ({ ticker, spot }: { ticker: string; spot: number }) => (
   <tr>
-    <td colSpan={10} className="px-2 py-1">
+    <td colSpan={1 + GROUPS.length * LEGS.length} className="px-2 py-1">
       <SpotRule ticker={ticker} price={spot} />
     </td>
   </tr>
@@ -121,6 +121,22 @@ const rowLabel = (row: StrikeExposure, levels: ExposureLevels): string => {
 
 /** The floating per-cell read-out: which strike, which greek, which leg, and
     what the strike's net does to the book. Every figure is the cell's own. */
+/**
+ * The legs this table puts in COLUMNS.
+ *
+ * It used to render put · call · net for each of GEX, DEX and VEX — ten columns
+ * of signed dollars under a two-row grouped header, 90 numbers in the first
+ * screen, and nothing telling the eye where to land.
+ *
+ * Put and call are the DECOMPOSITION; net is the read. A dealer-positioning
+ * table is asked "which way is this strike pushing", and net is the answer —
+ * the two legs matter when a reader is already interrogating one strike, which
+ * is exactly when `CellReadout` is open, and it has always printed P, C and Net
+ * together on its bottom row. So the decomposition was never only in these
+ * columns, and dropping them removes 6 columns without removing a fact.
+ */
+const LEGS: Leg[] = ['net'];
+
 const CellReadout = ({
   row,
   group,
@@ -219,7 +235,7 @@ const ExposureMatrix = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
           The capture-phase clear runs before any cell's own handler, so crossing
           the sticky header or a spot rule drops the read-out instead of leaving
           the last cell's numbers floating over a row they do not belong to. */}
-      <table className="w-full min-w-[560px] border-collapse" onMouseMoveCapture={() => setHover(null)}>
+      <table className="w-full min-w-[320px] border-collapse" onMouseMoveCapture={() => setHover(null)}>
         <thead className="sticky top-0 z-10">
           <tr className="bg-panelRaised">
             <th className="px-2 py-1.5 text-left font-mono text-micro font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle">
@@ -228,33 +244,40 @@ const ExposureMatrix = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
             {GROUPS.map(g => (
               <th
                 key={g.key}
-                colSpan={3}
+                colSpan={LEGS.length}
                 className="px-2 py-1.5 text-center font-mono text-micro font-bold uppercase tracking-widest text-textPrimary border-b border-l border-borderSubtle"
               >
                 {g.label} <span className="text-textSecondary font-medium normal-case">· {g.unit}</span>
               </th>
             ))}
           </tr>
-          <tr className="bg-panelRaised">
-            {/* The strike column's second header cell. It reads empty on
-                screen because "Strike" is already spanned above it, but a
-                header with no name at all is a column with no name. */}
-            <th className="border-b border-borderSubtle">
-              <span className="sr-only">Strike</span>
-            </th>
-            {GROUPS.map(g =>
-              (['put', 'call', 'net'] as Leg[]).map(leg => (
-                <th
-                  key={`${g.key}-${leg}`}
-                  className={`px-2 py-1 text-right font-mono text-micro font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle ${
-                    leg === 'put' ? 'border-l' : ''
-                  }`}
-                >
-                  {leg}
-                </th>
-              ))
-            )}
-          </tr>
+          {/* The per-leg header row only exists to tell put from call from net.
+              With one leg it would print "net" three times under three group
+              headers that already say GEX, DEX and VEX — a whole header row
+              spent restating the row above it. It comes back on its own if a
+              second leg is ever added to LEGS. */}
+          {LEGS.length > 1 && (
+            <tr className="bg-panelRaised">
+              {/* The strike column's second header cell. It reads empty on
+                  screen because "Strike" is already spanned above it, but a
+                  header with no name at all is a column with no name. */}
+              <th className="border-b border-borderSubtle">
+                <span className="sr-only">Strike</span>
+              </th>
+              {GROUPS.map(g =>
+                LEGS.map(leg => (
+                  <th
+                    key={`${g.key}-${leg}`}
+                    className={`px-2 py-1 text-right font-mono text-micro font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle ${
+                      leg === 'put' ? 'border-l' : ''
+                    }`}
+                  >
+                    {leg}
+                  </th>
+                ))
+              )}
+            </tr>
+          )}
         </thead>
         <tbody>
           {spotAfterIndex === -0.5 && <SpotRow ticker={ticker} spot={levels.spot} />}
@@ -292,7 +315,7 @@ const ExposureMatrix = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
                   )}
                 </td>
                 {GROUPS.map(g =>
-                  (['put', 'call', 'net'] as Leg[]).map(leg => (
+                  LEGS.map(leg => (
                     <Cell
                       key={`${g.key}-${leg}`}
                       split={row[g.key]}

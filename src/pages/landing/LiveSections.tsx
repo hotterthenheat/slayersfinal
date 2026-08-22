@@ -122,7 +122,11 @@ const EngineBox = ({ name, line, accent, to, children }: EngineBoxProps) => (
       <span className="hidden sm:block text-label text-textSecondary truncate">{line}</span>
       <Link
         to={to}
-        className="ml-auto inline-flex items-center gap-1 font-mono text-micro uppercase tracking-wider text-textSecondary hover:text-select transition-colors"
+        /* `min-h-8` with matching negative margin: the link measured 16.5px
+           tall — half the 32px floor — next to panels 340-440px high, while the
+           nav links on the same page measure 32. The padding buys the hit box;
+           the -my-1 keeps the card header's height where it was. */
+        className="ml-auto inline-flex items-center min-h-8 -my-1 py-1 gap-1 font-mono text-micro uppercase tracking-wider text-textSecondary hover:text-select transition-colors"
       >
         Open <ArrowRight className="w-3 h-3" />
       </Link>
@@ -522,7 +526,7 @@ const LiveSections = () => {
                       two props. What stood here was `DemoTape`, seven rows of
                       landing-local markup. */}
                   <div className="h-full overflow-hidden select-none pointer-events-none">
-                    <PulseFlowTape ticker={ctx.ticker} revision={ctx.revision} />
+                    <PulseFlowTape ticker={ctx.ticker} revision={ctx.revision} compact />
                   </div>
                 </EngineBox>
               </div>
@@ -628,7 +632,7 @@ const LiveSections = () => {
                 {
                   key: 'tape',
                   title: 'Options Flow',
-                  node: <PulseFlowTape ticker={ctx.ticker} revision={ctx.revision} />,
+                  node: <PulseFlowTape ticker={ctx.ticker} revision={ctx.revision} compact />,
                 },
                 {
                   key: 'setup',

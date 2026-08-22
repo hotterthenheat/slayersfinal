@@ -485,6 +485,7 @@ const PanelChrome = ({
   panelId,
   panelKey,
   ticker,
+  deskTicker,
   price,
   changePct,
   maximizedView,
@@ -495,6 +496,8 @@ const PanelChrome = ({
   panelId: string;
   panelKey: string;
   ticker: string;
+  /** The desk's ticker. A panel pinned to the same one has nothing to add. */
+  deskTicker: string;
   price?: number;
   changePct?: number;
   maximizedView?: boolean;
@@ -566,7 +569,22 @@ const PanelChrome = ({
   const showPlacement = !maximizedView && placement !== 'popped' && afford(2 * BTN);
   const showSecondary = draggable && afford(2 * BTN);
   const showTicker = afford(34);
-  const showQuote = afford(96);
+  /*
+    The quote prints only when this panel is pinned somewhere ELSE.
+
+    A 40px header was packing seven items into 334px of content — title, ticker
+    chip, price, change and three buttons — which is what starved the h2 down to
+    79px when it needed 101px and ellipsised four panel names on one screen. The
+    price was the cheapest of the seven to lose, because on a panel following the
+    desk it is the SAME NUMBER the top bar prints twenty pixels above: eight
+    panels plus the top bar was nine renderings of one price on one screen.
+
+    It is not simply deleted, because a panel CAN be pinned to another name, and
+    then its price is genuinely its own and the top bar does not carry it. So the
+    rule is difference, not absence — the quote appears exactly when it is
+    saying something the desk is not.
+  */
+  const showQuote = ticker !== deskTicker && afford(96);
   const up = (changePct ?? 0) >= 0;
   return (
     <div ref={headRef} className={`${draggable ? 'widget-drag cursor-grab active:cursor-grabbing' : ''} flex items-center gap-2 px-3.5 h-10 border-b border-borderSubtle bg-white/[0.015] shrink-0 select-none overflow-hidden`}>
@@ -1806,6 +1824,7 @@ const PulseWorkspace = () => {
             panelId={maximized.id}
             panelKey={maximized.key}
             ticker={maximized.ticker ?? activeTicker}
+            deskTicker={activeTicker}
             price={snapFor(maximized.ticker ?? activeTicker)?.spot}
             changePct={snapFor(maximized.ticker ?? activeTicker)?.changePercent}
             maximizedView
@@ -1840,7 +1859,7 @@ const PulseWorkspace = () => {
                   className="inst-surface rounded-md overflow-hidden flex flex-col"
                   style={{ height: p.minimized ? undefined : h }}
                 >
-                  <PanelChrome panelId={p.id} panelKey={p.key} ticker={ticker} price={snapFor(ticker)?.spot} changePct={snapFor(ticker)?.changePercent} minimized={p.minimized} h={chromeHandlers} />
+                  <PanelChrome panelId={p.id} panelKey={p.key} ticker={ticker} deskTicker={activeTicker} price={snapFor(ticker)?.spot} changePct={snapFor(ticker)?.changePercent} minimized={p.minimized} h={chromeHandlers} />
                   {!p.minimized && (
                     <div className="flex-grow min-h-0 overflow-hidden">{renderPanelBody(p.key, ticker)}</div>
                   )}
@@ -1898,7 +1917,7 @@ const PulseWorkspace = () => {
                 const minimized = p.minimized;
                 return (
                   <div key={p.id} className="inst-surface rounded-md overflow-hidden flex flex-col">
-                    <PanelChrome panelId={p.id} panelKey={p.key} ticker={ticker} price={snapFor(ticker)?.spot} changePct={snapFor(ticker)?.changePercent} minimized={minimized} h={chromeHandlers} />
+                    <PanelChrome panelId={p.id} panelKey={p.key} ticker={ticker} deskTicker={activeTicker} price={snapFor(ticker)?.spot} changePct={snapFor(ticker)?.changePercent} minimized={minimized} h={chromeHandlers} />
                     {!minimized && <div className="flex-grow min-h-0 overflow-hidden">{renderPanelBody(p.key, ticker)}</div>}
                   </div>
                 );
@@ -1930,6 +1949,7 @@ const PulseWorkspace = () => {
                 panelId={p.id}
                 panelKey={p.key}
                 ticker={ticker}
+                deskTicker={activeTicker}
                 price={snapFor(ticker)?.spot}
                 changePct={snapFor(ticker)?.changePercent}
                 placement="detached"
@@ -1955,6 +1975,10 @@ const PulseWorkspace = () => {
               panelId={id}
               panelKey={p.key}
               ticker={ticker}
+              /* A popped-out window has no top bar of its own, so its quote is
+                 never a duplicate — pass a sentinel that can never equal the
+                 ticker so the price always shows here. */
+              deskTicker=""
               price={snapFor(ticker)?.spot}
               changePct={snapFor(ticker)?.changePercent}
               placement="popped"
