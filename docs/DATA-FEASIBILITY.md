@@ -34,7 +34,8 @@ stated in the UI · **RED** = no data source; remove, or reduce to the part that
 | Desk / surface | Why it is backed |
 | --- | --- |
 | **Trace › Live Tape** | Full OPRA trade stream. Every print, every exchange, real time. |
-| **Trace › Flow Scanner** | Same stream, aggregated. Volume, premium, repeat activity. |
+| **Trace › Flow Scanner** | Same stream, aggregated. Volume, premium, repeat activity. It rolls the tape up per contract now rather than hashing beside it. |
+| **Trace › Execution** | Effective vs quoted spread, price improvement, spread cost. Needs the trade AND the NBBO at the same instant, which is the one combination this entitlement uniquely has. |
 | **Trace › Reconstruction** (metaorder) | Child prints → parent order is exactly a trade-stream problem. Sweep detection needs *all* options exchanges at once, which OPRA gives you. |
 | **Trace › Informed Flow** | Aggressor side needs the trade **and** the NBBO at that instant. You have both. This is the single hardest input to obtain and you have it. |
 | **Pinpoint › Greeks** | Greeks are **delivered**, including 2nd and 3rd order. You do not compute them. |
@@ -50,7 +51,7 @@ stated in the UI · **RED** = no data source; remove, or reduce to the part that
 | Surface | Caveat |
 | --- | --- |
 | **Pinpoint › Gamma / Levels / GEX, gamma walls, flip** | GEX needs **open interest**, and OI is published **once a day for the prior close**. `src/core/openInterest.ts` already models this correctly and stamps the session — that is a genuinely good existing decision. Intraday, the honest move is OI(T-1) + signed volume since the open as an estimated ΔOI, labelled as an estimate. Never draw an intraday gamma wall as if it were measured. |
-| **Trace › Dark Pool** | Off-exchange prints reach you through the **consolidated tape, which is 15-min delayed**. Nasdaq Basic covers Nasdaq-executed volume and (subject to your exact contract) the Nasdaq TRF — a large share of off-exchange volume, but not all of it, and not the NYSE TRF. **Verify with the vendor which TRFs are in your real-time entitlement before building this as real-time.** If the answer is "consolidated only", this becomes a *delayed* desk and must be labelled 15-MIN DELAYED, permanently. |
+| **Trace › Dark Pool** | Kept and rebuilt around a price profile (the desk leads with where the size crossed, not with a table). The data caveat is unchanged: off-exchange prints reach you through the **consolidated tape, which is 15-min delayed**. Nasdaq Basic covers Nasdaq-executed volume and (subject to your exact contract) the Nasdaq TRF — a large share of off-exchange volume, but not all of it, and not the NYSE TRF. **Verify with the vendor which TRFs are in your real-time entitlement before building this as real-time.** If the answer is "consolidated only", this becomes a *delayed* desk and must be labelled 15-MIN DELAYED, permanently. |
 | **Stocks board** | Of the four sleeves — momentum, quality, flow, news — you can back **momentum** (price) and **flow** (options). **Quality needs fundamentals. News needs a news feed.** You have neither. Half this desk has no source. |
 | **Stocks › sector rotation** | Requires a sector taxonomy you do not have. SIC codes from a ticker-details endpoint are a poor substitute for GICS. |
 | **Prove It (Monte Carlo, model scoreboard, surfaces)** | Computed from your own data, so backed — but it is only as honest as its inputs, and it must never present a simulated path as an observation. |
@@ -132,52 +133,56 @@ Actioned on the owner's instruction. Each line is now a record, not a proposal.
 
 ---
 
-## What you can build that you are not building
+## The build list, re-audited
 
-These are all fully backed by the three feeds, and most are rare in retail products.
+Re-read against the code rather than against the last version of this document.
+Status is what a route actually renders today, not what a type declares.
 
-### P0 — the strongest thing you own
+| # | Surface | Status | Where it stands |
+| --- | --- | --- | --- |
+| **P0-1** | **Historical replay** | **NOT BUILT** | The strongest thing the entitlement owns and still the largest single build. `proveit/MarketStateReplay` is *analogue matching* — find historically similar states, show what happened next — which is a different product. A replay needs a session clock every desk reads, a transport, and a date picker; nothing in the app has a clock it does not own. |
+| **P0-2** | **Execution quality / NBBO analytics** | **BUILT** | `Trace › Execution`. Effective vs quoted spread, E/Q per print, price improvement against the half-spread, spread cost in dollars and basis points, the distribution of where fills land, cuts by expiry and by aggressor side. Arithmetic on bid/ask/fill/size — no model. `data/executionQuality.ts`. |
+| **P0-3** | **Honest per-contract liquidity** | **PARTIAL** | On the same desk, from prints rather than from depth: the quote that stood around each fill, how often the contract traded, and the largest single print that got done — a measured lower bound on what the book absorbed. **Displayed size and quote-update frequency are still missing**: `OptionQuote` carries `bidSize`/`askSize` and nothing produces one. A quote-stream feed adds depth beside what is there; it does not replace it. |
+| **P1-4** | **Intraday ΔOI estimation** | **BUILT** | `core/openInterest.ts:estimatedOI`, surfaced on `Trace › Scanner`. Buyer-initiated minus seller-initiated volume, stamped `ESTIMATED` and dated today, painted amber by `OiFreshness`. The assumption — that the tape never says which side was opening — is stated at the function and on the desk. **Nothing that draws a gamma wall reads it**, per the AMBER note above. |
+| **P1-5** | **Own term structure** | **BUILT** | `Prove It › Volatility` (`data/vollab.ts`, `vollab/TermStructure.tsx`). The curve is synthesized like everything else pre-feed, but the surface exists and the shape is right. |
+| **P1-6** | **3rd-order greek surfaces** | **BUILT** | `Pinpoint › Greeks` — speed, zomma, color and ultima are on the exposure matrix and the regime read (`data/greeksmatrix.ts`). Almost nobody surfaces these. |
+| **P1-7** | **Sweep taxonomy across venues** | **NOT BUILT** | `data/flowSweeps.ts` detects sweeps from CANDLES, which is a price pattern, not the multi-venue definition. `FlowPrint.conditions` already carries OPRA code 95 and the tape reads it; what is missing is `exchange` (declared, never populated) and therefore any classification by venue count. |
+| **P2-8** | **Cross-expiry positioning migration** | **PARTIAL** | `MarketSnapshot.chainByExpiry` and `data/expiryDependency.ts` make the expiry dimension real and answer "what does this expiry carry, and what happens without it". Day-over-day migration needs a stored prior session, which nothing keeps. |
+| **P2-9** | **Quote-stuffing / liquidity withdrawal** | **NOT BUILT** | Needs NBBO update RATES. Nothing in the app reads a quote stream. |
+| **P2-10** | **Realized vol cone** | **NOT BUILT** | `volComplex.ts:realizedVolFromCandles` computes one realized vol; a cone is that figure at several tenors against its own history. The simulator seeds 22 sessions, so a cone today would have three or four tenors and no percentile bands worth drawing. Real value arrives with real history. |
 
-**1. Historical replay.** You have 14 years of tick data. A "pick any date, replay the
-session at 1×/10×/max" mode makes every desk usable *today*, with real data, before a
-single real-time socket exists. It is also the best options-education product on the
-market and almost nobody has one. This should be the next thing built.
+### What that leaves, in order
 
-**2. Execution-quality / NBBO analytics.** You have every quote. Effective spread, quoted
-spread, price improvement vs NBBO, where in the spread each print landed, spread cost by
-strike and expiry. Retail platforms never show this because they don't want you to see it.
+1. **Historical replay** — still the largest and still the most valuable. It is
+   the only item on this list that makes every OTHER desk better rather than
+   adding one.
+2. **A quote stream** — one input unlocks two entries (P0-3's depth half and
+   P2-9 entirely) and improves a third: with real NBBO updates, `Trace ›
+   Execution` measures against the quote at the instant of the print rather
+   than the quote the print carries.
+3. **`exchange` on the print** — the smallest of these by an order of magnitude,
+   and it completes P1-7.
 
-**3. Honest per-contract liquidity.** The liquidity heatmap was deleted because NBBO
-cannot back *resting depth* — that was the right call. But NBBO **can** back displayed
-size at the top of book per contract, quote-update frequency, and time-weighted spread.
-That is a real, defensible liquidity product: "can I actually get filled on this contract,
-and what will it cost me in spread."
+### What was found while building the above
 
-### P1 — differentiated, fully backed
+Worth recording, because each was invisible until something read two fields
+together that had never been read together:
 
-**4. Intraday ΔOI estimation.** OI is T+1, so professionals estimate today's position
-change from signed volume and print classification. Surfacing "estimated OI change since
-the open, by strike" — clearly marked as an estimate — is the honest, professional answer
-to a limitation everyone else either ignores or lies about.
-
-**5. Your own VIX term structure.** You cannot get VIX futures, but you have SPX options
-and 1-second VIX. Build the term structure from SPX IV directly; it is more precise than
-the futures curve for most purposes and it is entirely yours.
-
-**6. 3rd-order Greek surfaces.** You are paying for speed, color, zomma, ultima. Nobody
-surfaces them. There is a real product in "what happens to my gamma when vol moves."
-
-**7. Sweep taxonomy across all options exchanges.** A sweep is defined by simultaneous
-execution across venues. Only a full OPRA feed can see it. Classify by venue count,
-aggression, and NBBO position.
-
-### P2
-
-**8. Cross-expiry positioning migration** — where did OI move, expiry to expiry, day over day.
-**9. Quote-stuffing / liquidity-withdrawal detection** — NBBO update rate collapse before a move.
-**10. Realized vol cone** — 14y history, by tenor, vs current IV.
-
----
+- **147 of 147 prints filled outside their own NBBO.** `bid`, `ask` and
+  `fillPos` describe one fact and disagreed, because `mid` measured the fill
+  position from the midpoint across the full spread while `fillPos` is
+  documented as measuring it from the bid. The Live Tape had been drawing a
+  marker inside a spread the numbers said the fill was outside of.
+- **A print reported as a midpoint cross was priced at the touch.** `side` is
+  read off the OPRA condition codes and is MID when no aggressor code is
+  present; the fill was placed from the simulator's own ASK/BID, which is never
+  "neither".
+- **The Scanner was a hash drawn beside the tape.** Volume, the bid/ask split
+  behind every BULLISH/BEARISH verdict, the sweep count and the ΔOI column were
+  all `hRange`/`h01`, for the same contracts the tape holds real prints for.
+- **190 of 194 scanned names printed a different price on the board than on the
+  desk the board opened.** Two unrelated price generators for one name;
+  `core/priceWalk.ts` is now the single one.
 
 ## Where this leaves the redesign
 
@@ -189,11 +194,12 @@ is what you actually own.
 Sequence I would run:
 
 1. **This document → your decisions on the RED list.** Deleting a paid tier's contents is
-   your call, not mine.
+   your call, not mine. (Done — see "What was removed".)
 2. **Mock-data architecture** (brief PART 11) — every desk moves behind a typed provider
-   interface shaped like the *real* endpoints, so the swap is one adapter per feed. This is
-   the highest-leverage work that needs no decisions from you and I can start immediately.
+   interface shaped like the *real* endpoints, so the swap is one adapter per feed.
 3. **UI state completeness** (PART 10) — loading / empty / error / stale / delayed /
-   market-closed. Right now the app only has the happy path, and a 15-min-delayed tape and
-   a T+1 OI field make "stale" and "delayed" *first-class product states*, not edge cases.
-4. **The audit proper** (PARTS 3–8, 12–20) and the redesign that follows it.
+   market-closed. A 15-min-delayed tape and a T+1 OI field make "stale" and "delayed"
+   *first-class product states*, not edge cases. `OiFreshness` is the pattern; it now has
+   an `ESTIMATED` state that something actually produces.
+4. **The three items at the top of "What that leaves"**, in that order. Historical replay
+   is the only one that makes every other desk better rather than adding one.
