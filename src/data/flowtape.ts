@@ -103,14 +103,50 @@ export function enrichPrint(order: TapeOrder, id: number): FlowPrint {
     spot * baseIv * 0.08 * Math.exp(-Math.pow(money * 18, 2) / 2) * (0.5 + Math.sqrt((dte + 1) / 30));
   const fill = Number(Math.max(0.05, intrinsic * 0.98 + timeValue).toFixed(2));
 
-  // Fill position within the spread follows the aggressor side
+  /*
+    Fill position within the spread follows the aggressor side, and the QUOTE IS
+    BUILT BACKWARDS FROM IT so the three fields agree by construction.
+
+    They did not. `fillPos` is documented on FlowPrint as "0 = at bid, 1 = at
+    ask", and LiveTape draws a marker at exactly that fraction along a bid→ask
+    bar. But `mid` was derived as `fill − spreadW × fillPos`, which measures
+    fillPos from the MIDPOINT across the FULL spread rather than from the bid.
+    The half-spread is spreadW/2, so any fillPos above 0.5 put the fill outside
+    the very quote the next two lines derived from that mid. Measured on the
+    session tape: 147 of 147 prints filled outside their own NBBO — e.g.
+    `bid 6.61 / fill 7.03 / ask 6.92`, eleven cents through the offer, with the
+    tape's own marker drawn at 84% of the way from bid to ask.
+
+    Nothing crashed and nothing looked wrong, because no desk compared the three
+    fields until one was built that does. The correct inversion of "fill sits at
+    `fillPos` of the way from bid to ask" is:
+
+        fill = bid + spreadW × fillPos          and  mid = bid + spreadW / 2
+        ⟹  mid = fill + spreadW × (0.5 − fillPos)
+
+    one expression for both sides, with the fill inside [bid, ask] for every
+    fillPos in [0, 1].
+  */
+  /*
+    `isMid` is drawn here rather than thirty lines down because the QUOTE depends
+    on it. It is the same draw — `h` is keyed by tag, not by call order — but it
+    used to be read only by flowScore, and the fill was placed from
+    `order.side`, which is always ASK or BID. So a print the tape then REPORTED
+    as a midpoint cross was priced at the touch: `side: 'MID'` sat beside a
+    fillPos of 0.09, and Trace › Execution scored it as having paid the full
+    spread. Three fields, one fact, and the third one disagreed too.
+  */
+  const isMid = h('mid') > 0.82;
   const spreadW = Math.max(0.02, fill * 0.03 * (0.6 + h('spr')));
-  const fillPos = order.side === 'ASK' ? 0.72 + h('pos') * 0.28 : h('pos') * 0.28;
-  const mid = order.side === 'ASK' ? fill - spreadW * fillPos : fill + spreadW * (1 - fillPos);
+  const fillPos = isMid
+    ? 0.46 + h('pos') * 0.08
+    : order.side === 'ASK'
+      ? 0.72 + h('pos') * 0.28
+      : h('pos') * 0.28;
+  const mid = fill + spreadW * (0.5 - fillPos);
   const bid = Number((mid - spreadW / 2).toFixed(2));
   const ask = Number((mid + spreadW / 2).toFixed(2));
 
-  const isMid = h('mid') > 0.82;
   const legs = h('legs') > 0.78 ? 2 + Math.floor(h('legs2') * 3) : 1;
   const strat: StratTag = legs > 1 ? STRATS[Math.floor(h('strat') * STRATS.length)] : h('strat') > 0.9 ? 'Custom' : '—';
 

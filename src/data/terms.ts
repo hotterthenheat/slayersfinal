@@ -50,6 +50,12 @@ export const TERMS = {
   'Est ΔOI/d': 'Estimated open-interest change per day if the current flow pace holds.',
   Dist: 'Distance from spot, signed %.',
   Class: 'Hedging class — how dealer hedging at the strike shapes price: cushion, resistance, or magnet.',
+  NBBO: 'National best bid and offer — the best quote across every options exchange at that instant.',
+  'E/Q': 'Effective over quoted spread. Effective spread is 2 x |fill − mid|; dividing by the quoted spread says what fraction of the available spread the print gave up. 0 = crossed at the midpoint, 1 = took the quote, above 1 = filled outside the NBBO.',
+  EFFECTIVE_SPREAD:
+    'Effective spread — 2 x the distance from the fill to the NBBO midpoint. The measured cost of crossing, as opposed to the quoted spread, which is only what was on offer.',
+  'Paid to cross':
+    'Dollars this print gave up to the spread: |fill − mid| x contracts x 100. Half the effective spread, on every contract.',
 } as const;
 
 export type TermKey = keyof typeof TERMS;

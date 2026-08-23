@@ -29,6 +29,7 @@ import InformedFlow from './pages/flowdesk/InformedFlow';
 import FlowScanner from './pages/flowdesk/FlowScanner';
 import MetaorderReconstruction from './components/flowdesk/MetaorderReconstruction';
 import DarkPool from './pages/flowdesk/DarkPool';
+import ExecutionQuality from './pages/flowdesk/ExecutionQuality';
 import Stocks from './pages/Stocks';
 import NotFound from './pages/NotFound';
 import Landing from './pages/landing/Landing';
@@ -176,6 +177,7 @@ const App = () => {
               <Route path="gamma-tape" element={<GammaTape />} />
               <Route path="informed-flow" element={<InformedFlow />} />
               <Route path="dark-pool" element={<DarkPool />} />
+              <Route path="execution" element={<ExecutionQuality />} />
               {/* Liquidity Map moved to Pulse — it's an order-flow overlay surface, not a Trace desk */}
               <Route path="liquidity" element={<Navigate to="/pulse" replace />} />
               <Route path="dark-feed" element={<Navigate to="/trace/dark-pool" replace />} />

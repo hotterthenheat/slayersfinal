@@ -145,3 +145,74 @@ describe('P4.2 — directional vs structure premium', () => {
     expect(summary.bullPremium + summary.bearPremium).toBeLessThanOrEqual(summary.directionalPremium + 1e-6);
   });
 });
+
+describe('the quote a print is scored against', () => {
+  /*
+    THE THREE FIELDS MUST AGREE. `bid`, `ask` and `fillPos` describe one fact —
+    where in the NBBO this trade printed — and FlowPrint documents fillPos as
+    "0 = at bid, 1 = at ask". LiveTape draws a marker at exactly that fraction
+    along a bid→ask bar, and Trace › Execution measures the fill against the
+    midpoint derived from those same two numbers.
+
+    They disagreed for as long as nothing compared them. `mid` was derived as
+    `fill − spreadW × fillPos`, measuring the position from the MIDPOINT across
+    the FULL spread instead of from the bid, so every fillPos above 0.5 put the
+    fill beyond the quote the next two lines derived. 147 of 147 prints on the
+    session tape filled outside their own NBBO, with the marker still drawn
+    inside the bar.
+
+    Nothing threw. That is the whole reason this is a test and not a comment.
+  */
+  const tape = buildSessionTape(400);
+
+  it('prices every fill inside its own quote', () => {
+    const outside = tape.filter(p => p.fill > p.ask + 1e-9 || p.fill < p.bid - 1e-9);
+    expect(
+      outside.slice(0, 5).map(p => `${p.ticker} ${p.side} bid=${p.bid} fill=${p.fill} ask=${p.ask}`),
+      'a print cannot fill outside the quote it is reported against'
+    ).toEqual([]);
+    expect(tape.length).toBeGreaterThan(50);
+  });
+
+  it('puts the fill exactly where fillPos says it is', () => {
+    /*
+      Compared in PRICE space, not as a fraction of the spread. The fraction is
+      the wrong side of a division by a quantity that can be two cents wide, so a
+      half-cent of rounding on the bid becomes a quarter of the answer and any
+      tolerance loose enough to pass is too loose to catch the defect this exists
+      for. In dollars the error budget is exactly the rounding that produced it:
+      half a cent on the bid, half a cent on the width, and fillPos's own two
+      decimals scaled by how wide the spread is.
+    */
+    for (const p of tape) {
+      const width = p.ask - p.bid;
+      if (width <= 0) continue;
+      const expected = p.bid + p.fillPos * width;
+      expect(Math.abs(p.fill - expected)).toBeLessThanOrEqual(0.015 + 0.01 * width);
+    }
+  });
+
+  it('keeps the aggressor on the side the order says', () => {
+    // An ASK-side print lifted the offer, so it sits in the top of the spread;
+    // a BID-side print hit the bid and sits in the bottom.
+    for (const p of tape) {
+      if (p.side === 'ASK') expect(p.fillPos).toBeGreaterThan(0.5);
+      if (p.side === 'BID') expect(p.fillPos).toBeLessThan(0.5);
+    }
+  });
+
+  it('prices a reported midpoint cross AT the midpoint', () => {
+    /*
+      The third field in the same disagreement. `side` is read off the OPRA
+      condition codes, and a print with no aggressor code is reported MID — but
+      the fill was placed from the simulator's own ASK/BID, which is never
+      "neither". A print the tape called a midpoint cross carried a fillPos of
+      0.09 and was scored by Trace › Execution as having paid the full spread.
+    */
+    const mids = tape.filter(p => p.side === 'MID');
+    expect(mids.length).toBeGreaterThan(5);
+    for (const p of mids) {
+      expect(Math.abs(p.fillPos - 0.5)).toBeLessThanOrEqual(0.06);
+    }
+  });
+});
