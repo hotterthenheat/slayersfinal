@@ -43,3 +43,19 @@ export const PAGE_GUTTER = 'px-4 lg:px-6 2xl:px-8';
 
 /** The shared column. Apply to a page body, the bar's contents, the footer. */
 export const PAGE_CONTAINER = `mx-auto w-full ${PAGE_GUTTER}`;
+
+/*
+  THE VERTICAL RHYTHM, SPELLED ONCE — for the same reason the gutter is.
+
+  The gap between a page's top-level blocks was written out at each surface
+  that needed it, and the surfaces disagreed the moment the header collapsed
+  into a single strip: AppShell's body said `gap-4`, PageHeader's own body said
+  nothing at all, and GuideLayout said `mt-5`. So the boundary between a
+  section's toolbar and its first panel measured 0px on Pinpoint, Trace and
+  Community, 20px on Guide, and 16px on every page that self-closes the header
+  and lets the container space it — three readings of one idea.
+
+  A bare `gap-*` and nothing else, so it composes into any flex column. Change
+  the air on the whole terminal here.
+*/
+export const PAGE_STACK = 'gap-5';

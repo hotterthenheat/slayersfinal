@@ -2,7 +2,6 @@ import { useLocation, useOutlet } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { HardDrive } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
-import SubNav from '../../components/ui/SubNav';
 import { COMMUNITY_SUBPAGES } from './subnav';
 import { DUR, EASE } from '../../lib/motion';
 
@@ -21,14 +20,12 @@ const CommunityLayout = () => {
   const active = COMMUNITY_SUBPAGES.find(page => location.pathname.startsWith(page.path)) ?? COMMUNITY_SUBPAGES[0];
 
   return (
-    <>
-      <PageHeader
-        breadcrumb={['Terminal', 'Community', active.label]}
-        title="Community"
-        subtitle={active.subtitle}
-      />
-      <SubNav ariaLabel="Community subpages" items={COMMUNITY_SUBPAGES} />
-
+    <PageHeader
+      title="Community"
+      subtitle={active.subtitle}
+      items={COMMUNITY_SUBPAGES}
+      itemsLabel="Community subpages"
+    >
       <p className="flex items-start gap-2 rounded-md border border-borderSubtle bg-inset px-3 py-2 text-label text-textSecondary leading-relaxed">
         <HardDrive className="w-3.5 h-3.5 shrink-0 mt-0.5 text-textMuted" aria-hidden="true" />
         <span>
@@ -51,7 +48,7 @@ const CommunityLayout = () => {
           {outlet}
         </motion.div>
       </AnimatePresence>
-    </>
+    </PageHeader>
   );
 };
 

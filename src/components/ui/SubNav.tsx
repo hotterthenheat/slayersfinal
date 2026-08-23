@@ -98,7 +98,14 @@ const ScrollRail = ({ children }: { children: React.ReactNode }) => {
           : undefined;
 
   return (
-    <div className="glass border border-white/[0.08] rounded-md p-0.5 max-w-full">
+    /*
+      NO BOX. This was `glass border border-white/[0.08] rounded-md p-0.5` — a
+      framed pill holding the tabs — and it sits on the same strip as a desk's
+      own SegmentedControl, which has no frame. Two control families on one
+      toolbar, and a reader has to work out whether the box means something. It
+      does not: the active tab already wears the holo pill, which is the signal.
+    */
+    <div className="min-w-0 max-w-full">
       <div
         ref={ref}
         className="flex items-center gap-0.5 overflow-x-auto no-scrollbar"
@@ -131,7 +138,13 @@ const SubNav = ({ items, ariaLabel }: SubNavProps) => {
 
   if (!grouped) {
     return (
-      <nav ref={navRef} aria-label={ariaLabel} className="flex max-w-full">
+      /* `min-w-0` is load-bearing on the desk strip. A flex child defaults to
+         `min-width: auto`, which means "no smaller than my content" — so the
+         tab rail refused to shrink beside the section name and pushed the strip
+         past the viewport. Fifteen of twenty-one routes had a horizontal
+         scrollbar at 390 the moment the header collapsed to one row. The rail
+         scrolls internally; it just has to be allowed to. */
+      <nav ref={navRef} aria-label={ariaLabel} className="flex min-w-0 max-w-full">
         <ScrollRail>
           {items.map(item => (
             <Tab key={item.path} item={item} pillId={pillId} />

@@ -1,7 +1,6 @@
 import { useLocation, useOutlet } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import PageHeader from '../../components/ui/PageHeader';
-import SubNav from '../../components/ui/SubNav';
 import { FLOWDESK_SUBPAGES } from './subnav';
 import { DUR, EASE } from '../../lib/motion';
 
@@ -14,13 +13,12 @@ const FlowDeskLayout = () => {
   const active = FLOWDESK_SUBPAGES.find(page => location.pathname.startsWith(page.path)) ?? FLOWDESK_SUBPAGES[0];
 
   return (
-    <>
-      <PageHeader
-        breadcrumb={['Terminal', 'Trace', active.label]}
-        title="Trace"
-        subtitle={active.subtitle}
-      />
-      <SubNav ariaLabel="Trace subpages" items={FLOWDESK_SUBPAGES} />
+    <PageHeader
+      title="Trace"
+      subtitle={active.subtitle}
+      items={FLOWDESK_SUBPAGES}
+      itemsLabel="Trace subpages"
+    >
       <AnimatePresence mode="wait" initial={false}>
         <motion.div
           key={location.pathname}
@@ -33,7 +31,7 @@ const FlowDeskLayout = () => {
           {outlet}
         </motion.div>
       </AnimatePresence>
-    </>
+    </PageHeader>
   );
 };
 

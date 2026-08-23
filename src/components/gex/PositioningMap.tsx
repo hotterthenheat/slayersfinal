@@ -533,7 +533,12 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
           </span>
         </span>
         {showDerived && (
-          <span className="ml-auto font-mono text-micro uppercase tracking-widest text-textMuted tnum whitespace-nowrap">
+          /* `truncate` and `min-w-0`, not `whitespace-nowrap` alone. On a phone
+             this label plus the NET read beside it measured 398px against a
+             390px viewport and put a horizontal scrollbar on the whole page —
+             a caption for the ghost line, costing the desk its layout. It gives
+             way now; the ghost is still in the legend below. */
+          <span className="ml-auto min-w-0 truncate font-mono text-micro uppercase tracking-widest text-textMuted tnum">
             {anchorLabel}
             {!railLabelled && ` ±${fmtUsd(cumHalf)}`}
           </span>

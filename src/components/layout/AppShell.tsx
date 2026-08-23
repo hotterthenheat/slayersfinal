@@ -10,7 +10,7 @@ import RouteErrorBoundary from './RouteErrorBoundary';
 import SiteFooter from './SiteFooter';
 import BackToTop from './BackToTop';
 import { footerVariant, isTerminalRoute } from './chromeRoutes';
-import { PAGE_CONTAINER } from './container';
+import { PAGE_CONTAINER, PAGE_STACK } from './container';
 import { useTicker } from '../../context/MarketDataContext';
 import Simulator from '../../core/simulator';
 import { DUR } from '../../lib/motion';
@@ -149,7 +149,7 @@ const AppShell = () => {
           >
             {/* One broken desk should never blank the whole terminal; the key
                 resets the boundary whenever the route changes. */}
-            <div data-page-container="body" className={`${PAGE_CONTAINER} flex flex-1 flex-col gap-4 py-5`}>
+            <div data-page-container="body" className={`${PAGE_CONTAINER} ${PAGE_STACK} flex flex-1 flex-col py-5`}>
               <RouteErrorBoundary resetKey={location.pathname}>
                 <Outlet />
               </RouteErrorBoundary>

@@ -602,6 +602,7 @@ const DarkPool = () => {
           title="Where the size crossed"
           subtitle={`${view.ticker} · off-exchange dollars by price · ${fmtUsd(view.totalNotional)} across ${view.prints.length} prints`}
           flush
+          hero
           className="lg:col-span-3"
         >
           <div className="py-2">

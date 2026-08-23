@@ -1,7 +1,6 @@
 import { useLocation, useOutlet } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import PageHeader from '../../components/ui/PageHeader';
-import SubNav from '../../components/ui/SubNav';
 import { GEX_SUBPAGES } from './subnav';
 import { DUR, EASE } from '../../lib/motion';
 
@@ -14,13 +13,12 @@ const GexLayout = () => {
   const active = GEX_SUBPAGES.find(page => location.pathname.startsWith(page.path)) ?? GEX_SUBPAGES[0];
 
   return (
-    <>
-      <PageHeader
-        breadcrumb={['Terminal', 'Pinpoint', active.label]}
-        title="Pinpoint"
-        subtitle={active.subtitle}
-      />
-      <SubNav ariaLabel="Pinpoint subpages" items={GEX_SUBPAGES} />
+    <PageHeader
+      title="Pinpoint"
+      subtitle={active.subtitle}
+      items={GEX_SUBPAGES}
+      itemsLabel="Pinpoint subpages"
+    >
       <AnimatePresence mode="wait" initial={false}>
         <motion.div
           key={location.pathname}
@@ -33,7 +31,7 @@ const GexLayout = () => {
           {outlet}
         </motion.div>
       </AnimatePresence>
-    </>
+    </PageHeader>
   );
 };
 

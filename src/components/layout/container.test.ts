@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { PAGE_CONTAINER, PAGE_GUTTER } from './container';
+import { PAGE_CONTAINER, PAGE_GUTTER, PAGE_STACK } from './container';
 
 /*
 ==================================================
@@ -148,6 +148,47 @@ describe('the page column', () => {
         `columns that consume the width. If a cap is genuinely required (a square plot), say ` +
         `so with a \`layout-cap-ok: <reason>\` comment at the site.`
     ).toEqual([]);
+  });
+
+  it('states the vertical rhythm once, and composes it', () => {
+    /*
+      Same failure mode as the gutter, one axis over. The gap between a page's
+      top-level blocks was written at each surface that needed it, and when the
+      page header collapsed into a single strip the surfaces disagreed: the
+      shell body said `gap-4`, the header's own body said nothing, and the Guide
+      said `mt-5`. The boundary under a section's toolbar measured 0px on three
+      sections, 20px on a fourth and 16px on every page that self-closes the
+      header — three readings of one idea.
+
+      PAGE_STACK has to stay a BARE gap class. The moment it carries a `flex` or
+      a margin of its own it stops composing into the columns that use it, and
+      the next surface writes its own spacing again rather than fight it.
+    */
+    expect(PAGE_STACK).toMatch(/^gap-[\w.[\]]+$/);
+  });
+
+  it('is the only spelling of that rhythm on the surfaces that set it', () => {
+    /*
+      Reads the two elements that establish the page's vertical rhythm — the
+      shell's body column and the page header's own column — and requires both
+      to compose PAGE_STACK rather than name a gap. A literal `gap-N` on either
+      is the drift this exists to stop; `gap-3` on a toolbar's inline controls
+      is not, which is why this reads those two elements and not every class in
+      the file.
+    */
+    const surfaces: Array<[string, RegExp]> = [
+      ['components/layout/AppShell.tsx', /data-page-container="body" className=\{`([^`]*)`\}/],
+      ['components/ui/PageHeader.tsx', /className=\{`flex flex-col ([^`]*)`\}/],
+    ];
+    for (const [path, shape] of surfaces) {
+      const f = FILES.find(x => rel(x.path) === path);
+      expect(f, `${path} is missing`).toBeDefined();
+      const m = shape.exec(f!.text);
+      expect(m, `${path} no longer declares the page column this guard reads`).not.toBeNull();
+      const classes = m![1];
+      expect(classes, `${path} must compose PAGE_STACK`).toContain('PAGE_STACK');
+      expect(classes, `${path} spells a literal gap instead of PAGE_STACK`).not.toMatch(/\bgap-\d/);
+    }
   });
 
   it('keeps the gutters identical everywhere they are spelled out', () => {

@@ -194,6 +194,7 @@ const GammaChart = () => {
         title="Dealer gamma by strike"
         subtitle="Net GEX against the price axis · spot, walls and the flip drawn where they sit"
         flush
+        hero
         actions={
           <SegmentedControl
             ariaLabel="Profile horizon"

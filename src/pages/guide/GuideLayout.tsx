@@ -1,7 +1,6 @@
 import { useLocation, useOutlet } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import PageHeader from '../../components/ui/PageHeader';
-import SubNav from '../../components/ui/SubNav';
 import { GUIDE_SUBPAGES } from './subnav';
 import { DUR, EASE } from '../../lib/motion';
 
@@ -15,22 +14,25 @@ const GuideLayout = () => {
 
   return (
     <div className="w-full">
-      <PageHeader breadcrumb={['Terminal', 'Guide', active.label]} title="Guide & Help" subtitle={active.subtitle} />
-      <div className="mt-4">
-        <SubNav ariaLabel="Guide subpages" items={GUIDE_SUBPAGES} />
-      </div>
-      <AnimatePresence mode="wait" initial={false}>
-        <motion.div
-          key={location.pathname}
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -4 }}
-          transition={{ duration: DUR.base, ease: EASE }}
-          className="mt-5 flex flex-col gap-7"
-        >
-          {outlet}
-        </motion.div>
-      </AnimatePresence>
+      <PageHeader
+        title="Guide & Help"
+        subtitle={active.subtitle}
+        items={GUIDE_SUBPAGES}
+        itemsLabel="Guide subpages"
+      >
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={location.pathname}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: DUR.base, ease: EASE }}
+            className="flex flex-col gap-7"
+          >
+            {outlet}
+          </motion.div>
+        </AnimatePresence>
+      </PageHeader>
     </div>
   );
 };

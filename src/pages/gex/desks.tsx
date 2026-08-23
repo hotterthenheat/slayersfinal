@@ -1,6 +1,7 @@
 import { type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import SegmentedControl from '../../components/ui/SegmentedControl';
+import DeskBarSlot from '../../components/ui/DeskBarSlot';
 import GammaChart from './GammaChart';
 import ComplexBoard from './ComplexBoard';
 import GammaRolloff from './GammaRolloff';
@@ -30,13 +31,22 @@ const SubtabDesk = ({ views, ariaLabel }: { views: SubView[]; ariaLabel: string 
   const current = views.find(v => v.key === params.get('view')) ?? views[0];
   return (
     <div className="flex flex-col gap-4">
-      {/* A within-desk view switch — the leading eyebrow keeps it visibly
-          subordinate to the Pinpoint desk tabs above (which own the holo pill),
-          so the two nav levels never read as one ambiguous double tab bar. */}
-      <div className="flex items-center gap-2.5">
-        <span className="font-mono text-micro font-medium uppercase tracking-[0.18em] text-textMuted select-none">
-          View
-        </span>
+      {/*
+        The within-desk view switch rides the DESK STRIP, beside the Pinpoint
+        tabs, rather than opening a second control row under it.
+
+        It used to sit here with a `VIEW` eyebrow in front of it, sixty pixels
+        below a bar that already said `PINPOINT | Gamma Levels Greeks Stress
+        History` — two toolbars, both changing what you are looking at, and the
+        reader left to work out which level of nav is which. On the strip the
+        two levels read as one toolbar: section and desk on the left, this
+        desk's own views on the right. See ui/deskBar.ts for how a routed desk
+        reaches a bar its section layout renders.
+
+        The eyebrow is gone with the row. On the strip the position IS the
+        label — nothing else sits to the right of the tabs.
+      */}
+      <DeskBarSlot>
         <SegmentedControl
           ariaLabel={ariaLabel}
           options={views.map(v => ({ value: v.key, label: v.label }))}
@@ -47,7 +57,7 @@ const SubtabDesk = ({ views, ariaLabel }: { views: SubView[]; ariaLabel: string 
             setParams(next, { replace: true });
           }}
         />
-      </div>
+      </DeskBarSlot>
       {current.node}
     </div>
   );

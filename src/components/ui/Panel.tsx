@@ -35,6 +35,17 @@ interface PanelProps {
   tone?: Tone;
   /** The one hero surface on a page — living holo frame + halo */
   emphasis?: boolean;
+  /**
+   * The panel this page exists for. Its body takes 60% of the viewport instead
+   * of whatever its content happens to measure.
+   *
+   * A chart in a content-sized box gets the height its fallback constant
+   * chose — `PositioningMap` falls back to 320px — so the desk's whole point
+   * rendered at a third of the screen while the rows of chrome above it kept
+   * their full size. A picture that answers the desk's question should be the
+   * biggest thing on the desk. ONE per page: two heroes is no hero.
+   */
+  hero?: boolean;
   /** Opt in to Focus Mode — a header control blooms this panel full-bleed */
   focusable?: boolean;
   /** Stable focus id so a page can detect its own panel's focus state (e.g. to
@@ -81,6 +92,7 @@ const Panel = ({
   flush = false,
   tone = 'neutral',
   emphasis = false,
+  hero = false,
   focusable = false,
   focusId,
   headingLevel = 2,
@@ -96,6 +108,18 @@ const Panel = ({
   const { focusedId, overlayEl, focus, close } = useFocus();
   const isFocused = focusable && focusedId === uid;
   const bodyPad = flush ? '' : 'p-4';
+  /*
+    60vh, not `calc(100vh - …)`: the chrome above a hero differs by route and a
+    subtraction that guesses it is wrong on the routes it did not measure.
+
+    The flex pair is the half that actually does the work. `min-height` on this
+    box makes the BOX tall and leaves the child content-sized, so the first
+    attempt produced a 60vh panel with a 450px chart in it and 200px of void
+    underneath — worse than the short chart it replaced. The body becomes a flex
+    column and its direct child is told to fill it, which is what gives a chart
+    measuring its container something definite to measure.
+  */
+  const bodyMin = hero ? 'min-h-[60vh] flex flex-col [&>*]:flex-1 [&>*]:min-h-0' : '';
 
   return (
     <section
@@ -178,7 +202,7 @@ const Panel = ({
           {createPortal(<div className={`h-full min-h-0 ${bodyClassName}`}>{children}</div>, overlayEl)}
         </>
       ) : (
-        <div className={`${bodyPad} flex-grow min-h-0 ${bodyClassName}`}>{children}</div>
+        <div className={`${bodyPad} ${bodyMin} flex-grow min-h-0 ${bodyClassName}`}>{children}</div>
       )}
     </section>
   );
