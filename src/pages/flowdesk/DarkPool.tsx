@@ -11,8 +11,7 @@ import SignalBadge from '../../components/ui/SignalBadge';
 import DataTable, { type Column } from '../../components/ui/DataTable';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import EmptyState from '../../components/ui/EmptyState';
-import DarkPoolFeed from '../../components/flowdesk/DarkPoolFeed';
-import SpotRule from '../../components/ui/SpotRule';
+import DarkPoolLadder from '../../components/flowdesk/DarkPoolLadder';
 import type { DarkPoolExecution, DarkPoolIntent, DarkPoolLevel, DarkPoolPrint } from '../../types/darkpool';
 import type { Tone } from '../../components/ui/tones';
 
@@ -63,24 +62,22 @@ const SIZE_OPTIONS = [
 ] as const;
 
 
-/**
- * Inline meters.
- *
- * The lit tape carries a spread bar, a flow bar and a ratio bar on every row,
- * and that is most of why it reads as a tape rather than a spreadsheet — the
- * eye finds the outlier without reading a single number. This page had twelve
- * columns of plain text and looked half empty at the same information density.
- */
-const SizeBar = ({ pct }: { pct: number }) => (
-  <span className="inline-flex items-center gap-1.5 w-full justify-end">
-    <span className="relative h-1 w-14 rounded-full bg-inset overflow-hidden shrink-0" aria-hidden="true">
-      <span
-        className="absolute inset-y-0 left-0 rounded-full bg-textMuted/70"
-        style={{ width: `${Math.max(2, Math.min(100, pct))}%` }}
-      />
-    </span>
-  </span>
-);
+/*
+  THE SIZE METER IS GONE, and the reason is worth keeping because it is the
+  argument for every inline bar on this page.
+
+  A meter earns its column by making an outlier findable without reading a
+  number. This one could not: block sizes on a liquid name cluster hard, so
+  every bar in view rendered within a few pixels of every other and the column
+  was sixty identical stubs. A bar that never varies is not a weak signal, it is
+  a decoration that costs a column and teaches the eye to ignore the next one.
+
+  The vs-spot meter below SURVIVES the same test — it is signed and diverging,
+  so it draws a distribution around spot that a column of percentages does not.
+
+  Where the sizes DO vary is across price, and that is now the desk's headline
+  picture rather than a column: components/flowdesk/DarkPoolLadder.tsx.
+*/
 
 /** Where the print sits against spot. Centre is spot; the fill runs out to
     whichever side it printed on, so a column of these reads as a distribution. */
@@ -125,18 +122,6 @@ const roleTone: Record<DarkPoolLevel['role'], Tone> = {
   RESISTANCE: 'bear',
   PIVOT: 'neutral',
 };
-
-/** Notional meter for a shelf — support reads green, supply reads red. */
-const ShelfBar = ({ level, max }: { level: DarkPoolLevel; max: number }) => (
-  <span className="flex w-full h-[5px] rounded-full overflow-hidden bg-white/[0.05]">
-    <span
-      className={`h-full rounded-full ${
-        level.role === 'SUPPORT' ? 'bg-bull/80' : level.role === 'RESISTANCE' ? 'bg-bear/80' : 'bg-white/25'
-      }`}
-      style={{ width: `${Math.max(6, (level.notional / max) * 100)}%` }}
-    />
-  </span>
-);
 
 /*
   How strongly a print matched the pattern it was filed under.
@@ -232,6 +217,20 @@ const DarkPool = () => {
     if (!sectors.length) return null;
     const total = sectors.reduce((a, s) => a + s.notional, 0);
     return {
+      /*
+        The SECTORS, not their constituents.
+
+        This used to render every tracked name under every sector: ten sector
+        cards, ~150 ticker rows, four numeric columns each, filling 4,400px
+        below a desk about ONE ticker. It answered "where else did the size go"
+        at a resolution nobody asked the question at, and it did it after the
+        page had already answered that question in the sentence above.
+
+        Ten rows is the distribution. A reader who wants the names has a desk
+        for that — Stocks — and the sector detail is still one click away in the
+        stock drawer, which reads the same feed.
+      */
+      list: sectors,
       lead: sectors[0],
       total,
       sectors: sectors.length,
@@ -248,7 +247,6 @@ const DarkPool = () => {
     );
   }
 
-  const maxNotional = Math.max(...view.levels.map(l => l.notional));
   const selected = view.levels.find(l => l.price === selectedPrice) ?? [...view.levels].sort((a, b) => b.notional - a.notional)[0];
   const postureTone: Tone = view.posture === 'ACCUMULATING' ? 'bull' : view.posture === 'DISTRIBUTING' ? 'bear' : 'neutral';
   const PostureIcon = view.posture === 'ACCUMULATING' ? ArrowDownToLine : view.posture === 'DISTRIBUTING' ? ArrowUpFromLine : Scale;
@@ -325,7 +323,6 @@ const DarkPool = () => {
      `Math.min` needs no effect and cannot fall out of step. */
   const shown = rows.slice(0, Math.min(shownCount, Math.max(rows.length, PAGE)));
 
-  const maxSize = Math.max(...rows.map(p => p.size), 1);
   const maxVs = Math.max(...rows.map(p => Math.abs(p.vsSpotPct)), 0.01);
 
   /*
@@ -389,10 +386,7 @@ const DarkPool = () => {
       align: 'right',
       sortValue: p => p.size,
       render: p => (
-        <span className="inline-flex items-center gap-2 justify-end w-full">
-          <span className="font-mono text-caption text-textSecondary tnum leading-4">{p.size.toLocaleString()}</span>
-          <SizeBar pct={(p.size / maxSize) * 100} />
-        </span>
+        <span className="font-mono text-caption text-textSecondary tnum leading-4">{p.size.toLocaleString()}</span>
       ),
     },
     /*
@@ -567,6 +561,171 @@ const DarkPool = () => {
         />
       </MetricGrid>
 
+      {/*
+        THE PICTURE FIRST.
+
+        This desk used to open on 240 rows of prints and put the shelf ladder
+        four screens below them, which asked the reader to hold thirty prices in
+        their head to see a cluster the eye finds in one look. Off-exchange
+        dollars against the price axis IS the dark-pool question; the tape is the
+        evidence for it, so the tape moved below.
+
+        The ladder and the read are one statement, so they sit in one row: click
+        a shelf on the left and the right says what to do about it.
+      */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 items-start">
+        <Panel
+          title="Where the size crossed"
+          subtitle={`${view.ticker} · off-exchange dollars by price · ${fmtUsd(view.totalNotional)} across ${view.prints.length} prints`}
+          flush
+          className="lg:col-span-3"
+        >
+          <div className="py-2">
+            <DarkPoolLadder
+              ticker={view.ticker}
+              spot={view.spot}
+              prints={view.prints}
+              levels={view.levels}
+              selectedPrice={selected.price}
+              onSelectShelf={setSelectedPrice}
+            />
+          </div>
+          <p className="px-4 py-2.5 border-t border-borderSubtle text-label leading-relaxed text-textMuted">
+            <span className="font-mono uppercase tracking-wider text-textSecondary mr-2">Reading it</span>
+            Bar length is dollars that crossed in that price band — price and size are what the consolidated
+            tape reports for an off-exchange trade, so the shape is measured. SUPPORT, RESISTANCE and PIVOT
+            are the engine&rsquo;s judgement about which of those peaks matter, which is why they label a bar
+            instead of sizing one.
+          </p>
+        </Panel>
+
+        {/*
+          THE RIGHT COLUMN IS THE READ.
+
+          Left is the picture and nothing else; right is what it means, at two
+          scales — the shelf under the cursor, then the session as a whole. The
+          posture verdict used to sit in a full-width panel of its own between
+          the ladder and the tape, which put a five-line paragraph across 1,500px
+          and left this column empty beside a twenty-row chart. One statement per
+          column reads; two columns each half-used does not.
+        */}
+        <div className="lg:col-span-2 flex flex-col gap-4">
+        {/* Usage — what to actually do with the selected shelf */}
+        <Panel
+          title="How to use it"
+          subtitle={`$${selected.price.toFixed(2)} shelf`}
+          tone={roleTone[selected.role]}
+        >
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-2 flex-wrap">
+              <SignalBadge tone={roleTone[selected.role]} dot>
+                {selected.role}
+              </SignalBadge>
+              <span className="font-mono text-label uppercase tracking-wider text-textMuted">
+                {selected.sharePct.toFixed(0)}% of session blocks ·{' '}
+                {selected.defended > 0 ? retestLabel(selected.defended) : 'untested'}
+              </span>
+            </div>
+            <p className="text-caption text-textSecondary leading-relaxed">{selected.usage}</p>
+            {/*
+              A label and its read, side by side.
+
+              These were `justify-between` rows as wide as the panel, and the
+              panel is `lg:col-span-2` — at 2560 that put "Above the shelf"
+              837px from what happens above the shelf, on all three rows. A
+              caption and its answer are one statement; they read as two
+              unrelated columns once a monitor pulls them apart. The label now
+              takes a fixed measure and the read sits against it.
+            */}
+            <div className="border-t border-borderSubtle pt-3 flex flex-col gap-2">
+              <div className="flex items-baseline gap-3 font-mono text-caption leading-4">
+                <span className="text-textMuted uppercase tracking-wider text-micro">Above the shelf</span>
+                <span className="text-bull">
+                  {selected.role === 'RESISTANCE' ? 'breakout confirms, supply cleared' : 'bias long against it'}
+                </span>
+              </div>
+              <div className="flex items-baseline gap-3 font-mono text-caption leading-4">
+                <span className="text-textMuted uppercase tracking-wider text-micro">Below the shelf</span>
+                <span className="text-bear">
+                  {selected.role === 'SUPPORT' ? 'read invalid, step aside' : 'supply in control'}
+                </span>
+              </div>
+              <div className="flex items-baseline gap-3 font-mono text-caption leading-4">
+                <span className="text-textMuted uppercase tracking-wider text-micro">Next shelf</span>
+                <span className="text-textPrimary tnum">
+                  {selected.distPct >= 0
+                    ? nextUp && nextUp.price !== selected.price
+                      ? `$${nextUp.price.toFixed(2)}`
+                      : nextDown
+                        ? `$${nextDown.price.toFixed(2)}`
+                        : '--'
+                    : nextDown && nextDown.price !== selected.price
+                      ? `$${nextDown.price.toFixed(2)}`
+                      : nextUp
+                        ? `$${nextUp.price.toFixed(2)}`
+                        : '--'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </Panel>
+
+        <Panel
+          title="What the blocks say"
+          subtitle={`${view.ticker} · session`}
+          tone={postureTone}
+          emphasis
+        >
+          <div className="flex flex-col gap-3">
+            <p className="text-caption leading-relaxed text-textMuted">
+              Dark pool prints are blocks crossed away from the lit exchanges. The only question they answer is
+              whether size is being built or unloaded, and at what price.
+            </p>
+
+            <div className="flex items-center gap-3 flex-wrap">
+              <span
+                className={`inline-flex items-center gap-2 font-mono text-lg font-bold uppercase tracking-wide ${
+                  postureTone === 'bull' ? 'text-bull' : postureTone === 'bear' ? 'text-bear' : 'text-textPrimary'
+                }`}
+              >
+                <PostureIcon className="w-5 h-5" />
+                {view.posture}
+              </span>
+              <SignalBadge tone={postureTone} dot>
+                {view.netPosturePct >= 0 ? '+' : ''}
+                {view.netPosturePct.toFixed(0)} skew
+              </SignalBadge>
+            </div>
+
+            <p className="text-caption leading-relaxed text-textSecondary">{view.postureNote}</p>
+
+            <div className="flex flex-col gap-1 border-t border-borderSubtle pt-3">
+              <span className="font-mono text-label text-textMuted tnum">
+                Across {view.prints.length} prints:{' '}
+                <span className="text-bull">{tally.ACCUMULATION} accumulation</span>,{' '}
+                <span className="text-bear">{tally.DISTRIBUTION} distribution</span>,{' '}
+                <span className="text-warn">{tally['HEDGE FLOW']} hedge</span>,{' '}
+                <span className="text-textSecondary">{tally.ROTATION} rotation</span>
+              </span>
+              <span className="text-label leading-relaxed text-textMuted">
+                The skew above weights each block&rsquo;s notional by how cleanly it matched its archetype, so one large
+                cross that only leans cannot carry the verdict on its own. That weight is a property of the pattern, not
+                a probability that the read is correct &mdash; nothing here scores whether the print meant what it looked
+                like.
+              </span>
+            </div>
+
+            <div className="flex items-start gap-2 border-t border-borderSubtle pt-3">
+              <span className="font-mono text-label uppercase tracking-wider text-textMuted whitespace-nowrap mt-px">
+                Competing read
+              </span>
+              <p className="text-label leading-relaxed text-textMuted">{competingPosture[view.posture]}</p>
+            </div>
+          </div>
+        </Panel>
+        </div>
+      </div>
+
       <Panel
         title="Dark tape"
         subtitle={`${view.ticker} · off-exchange prints, newest first`}
@@ -682,208 +841,57 @@ const DarkPool = () => {
         </dl>
       </Panel>
 
-      <Panel
-        title="What the blocks say"
-        subtitle={`${view.ticker} · session`}
-        tone={postureTone}
-        emphasis
-      >
-        <div className="flex flex-col gap-3">
-          <p className="text-caption leading-relaxed text-textMuted">
-            Dark pool prints are blocks crossed away from the lit exchanges. The only question they answer is
-            whether size is being built or unloaded, and at what price.
-          </p>
-
-          <div className="flex items-center gap-3 flex-wrap">
-            <span
-              className={`inline-flex items-center gap-2 font-mono text-lg font-bold uppercase tracking-wide ${
-                postureTone === 'bull' ? 'text-bull' : postureTone === 'bear' ? 'text-bear' : 'text-textPrimary'
-              }`}
-            >
-              <PostureIcon className="w-5 h-5" />
-              {view.posture}
-            </span>
-            <SignalBadge tone={postureTone} dot>
-              {view.netPosturePct >= 0 ? '+' : ''}
-              {view.netPosturePct.toFixed(0)} skew
-            </SignalBadge>
-          </div>
-
-          <p className="text-caption leading-relaxed text-textSecondary">{view.postureNote}</p>
-
-          <div className="flex flex-col gap-1 border-t border-borderSubtle pt-3">
-            <span className="font-mono text-label text-textMuted tnum">
-              Across {view.prints.length} prints:{' '}
-              <span className="text-bull">{tally.ACCUMULATION} accumulation</span>,{' '}
-              <span className="text-bear">{tally.DISTRIBUTION} distribution</span>,{' '}
-              <span className="text-warn">{tally['HEDGE FLOW']} hedge</span>,{' '}
-              <span className="text-textSecondary">{tally.ROTATION} rotation</span>
-            </span>
-            <span className="text-label leading-relaxed text-textMuted">
-              The skew above weights each block&rsquo;s notional by how cleanly it matched its archetype, so one large
-              cross that only leans cannot carry the verdict on its own. That weight is a property of the pattern, not
-              a probability that the read is correct &mdash; nothing here scores whether the print meant what it looked
-              like.
-            </span>
-          </div>
-
-          <div className="flex items-start gap-2 border-t border-borderSubtle pt-3">
-            <span className="font-mono text-label uppercase tracking-wider text-textMuted whitespace-nowrap mt-px">
-              Competing read
-            </span>
-            <p className="text-label leading-relaxed text-textMuted">{competingPosture[view.posture]}</p>
-          </div>
-        </div>
-      </Panel>
-
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 items-start">
-        {/* Shelf ladder */}
-        <Panel
-          title="Liquidity shelves"
-          subtitle="prices the blocks keep crossing at"
-          flush
-          className="lg:col-span-3"
-        >
-          {/* Five columns — price, role, shelf bar, distance, defends — need
-              396px of fixed track before the bar gets a pixel, which no phone
-              has. Scroll the ladder instead of dropping a column: the desk's
-              other dense tables already do exactly this, and losing "3× held"
-              on a phone would make two devices disagree about the same shelf.
-              Focusable with a name, so the scroll region is reachable without a
-              pointer. */}
-          <div
-            tabIndex={0}
-            role="group"
-            aria-label="Liquidity shelves — scrollable"
-            className="overflow-x-auto focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60"
-          >
-          <div className="flex flex-col min-w-[520px]">
-            {view.levels.map((level, i) => {
-              const spotBetween =
-                i < view.levels.length - 1 && view.spot <= level.price && view.spot > view.levels[i + 1].price;
-              const isSelected = level.price === selected.price;
-              return (
-                <div key={level.price}>
-                  <button
-                    onClick={() => setSelectedPrice(level.price)}
-                    aria-pressed={isSelected}
-                    aria-label={`Shelf at $${level.price.toFixed(2)}, ${level.role.toLowerCase()}`}
-                    className={`w-full text-left px-4 py-2.5 grid grid-cols-[88px_92px_1fr_72px_64px] items-center gap-3 transition-colors ${
-                      isSelected ? 'bg-select/[0.05] rail-select' : 'hover:bg-rowHover'
-                    }`}
-                  >
-                    <span className="font-mono text-body font-semibold text-textPrimary tnum leading-5">${level.price.toFixed(2)}</span>
-                    <SignalBadge tone={roleTone[level.role]}>{level.role}</SignalBadge>
-                    <span className="min-w-0">
-                      <ShelfBar level={level} max={maxNotional} />
-                      <span className="mt-1 block font-mono text-micro text-textMuted tnum">
-                        {fmtUsd(level.notional)} · {level.prints} prints · {level.sharePct.toFixed(0)}% of the session
-                      </span>
-                    </span>
-                    <span
-                      className={`font-mono text-caption tnum text-right leading-4 ${
-                        // A shelf sitting on spot rounds to zero; signing it there
-                        // printed "-0.00%", which reads as a rendering fault.
-                        Math.abs(level.distPct) < 0.005 ? 'text-textMuted' : level.distPct > 0 ? 'text-bull' : 'text-bear'
-                      }`}
-                    >
-                      {Math.abs(level.distPct) < 0.005
-                        ? 'at spot'
-                        : `${level.distPct > 0 ? '+' : ''}${level.distPct.toFixed(2)}%`}
-                    </span>
-                    <span className="font-mono text-label text-textMuted text-right">
-                      {level.defended > 0 ? (level.defended >= 5 ? '5+ held' : `${level.defended}× held`) : 'untested'}
-                    </span>
-                  </button>
-                  {spotBetween && (
-                    <div className="px-4 py-1">
-                      <SpotRule ticker={view.ticker} price={view.spot} />
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          </div>
-        </Panel>
-
-        {/* Usage — what to actually do with the selected shelf */}
-        <Panel
-          title="How to use it"
-          subtitle={`$${selected.price.toFixed(2)} shelf`}
-          tone={roleTone[selected.role]}
-          className="lg:col-span-2"
-        >
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center gap-2 flex-wrap">
-              <SignalBadge tone={roleTone[selected.role]} dot>
-                {selected.role}
-              </SignalBadge>
-              <span className="font-mono text-label uppercase tracking-wider text-textMuted">
-                {selected.sharePct.toFixed(0)}% of session blocks ·{' '}
-                {selected.defended > 0 ? retestLabel(selected.defended) : 'untested'}
-              </span>
-            </div>
-            <p className="text-caption text-textSecondary leading-relaxed">{selected.usage}</p>
-            {/*
-              A label and its read, side by side.
-
-              These were `justify-between` rows as wide as the panel, and the
-              panel is `lg:col-span-2` — at 2560 that put "Above the shelf"
-              837px from what happens above the shelf, on all three rows. A
-              caption and its answer are one statement; they read as two
-              unrelated columns once a monitor pulls them apart. The label now
-              takes a fixed measure and the read sits against it.
-            */}
-            <div className="border-t border-borderSubtle pt-3 flex flex-col gap-2">
-              <div className="flex items-baseline gap-3 font-mono text-caption leading-4">
-                <span className="text-textMuted uppercase tracking-wider text-micro">Above the shelf</span>
-                <span className="text-bull">
-                  {selected.role === 'RESISTANCE' ? 'breakout confirms, supply cleared' : 'bias long against it'}
-                </span>
-              </div>
-              <div className="flex items-baseline gap-3 font-mono text-caption leading-4">
-                <span className="text-textMuted uppercase tracking-wider text-micro">Below the shelf</span>
-                <span className="text-bear">
-                  {selected.role === 'SUPPORT' ? 'read invalid, step aside' : 'supply in control'}
-                </span>
-              </div>
-              <div className="flex items-baseline gap-3 font-mono text-caption leading-4">
-                <span className="text-textMuted uppercase tracking-wider text-micro">Next shelf</span>
-                <span className="text-textPrimary tnum">
-                  {selected.distPct >= 0
-                    ? nextUp && nextUp.price !== selected.price
-                      ? `$${nextUp.price.toFixed(2)}`
-                      : nextDown
-                        ? `$${nextDown.price.toFixed(2)}`
-                        : '--'
-                    : nextDown && nextDown.price !== selected.price
-                      ? `$${nextDown.price.toFixed(2)}`
-                      : nextUp
-                        ? `$${nextUp.price.toFixed(2)}`
-                        : '--'}
-                </span>
-              </div>
-            </div>
-          </div>
-        </Panel>
-      </div>
-
       {/* Classified prints */}
 
       {/* Appendix: the same question asked of the whole tracked list. It answers
           "where else is the size going", which is a different question to the one
           the panels above answer, so it is labelled as such and sits last. */}
       {universe && (
-        <p className="text-caption leading-relaxed text-textMuted">
-          <span className="font-mono font-semibold uppercase tracking-wider text-textSecondary mr-2">Universe scan</span>
-          {universe.names} tracked names crossed {fmtUsd(universe.total)} off-exchange across {universe.sectors} sectors
-          this session. {universe.lead.sector} leads on {fmtUsd(universe.lead.notional)}, {universe.sharePct.toFixed(0)}%
-          of the scanned total. None of it is tied to {view.ticker}: it is the session&rsquo;s shape across the list, not
-          a running count, and it is here to answer where else the size went.
-        </p>
+        <Panel title="Where else the size went" subtitle="off-exchange dollars across the tracked list, by sector" flush>
+          <p className="px-4 py-2.5 border-b border-borderSubtle text-caption leading-relaxed text-textMuted">
+            {universe.names} tracked names crossed {fmtUsd(universe.total)} off-exchange across {universe.sectors}{' '}
+            sectors this session. {universe.lead.sector} leads on {fmtUsd(universe.lead.notional)},{' '}
+            {universe.sharePct.toFixed(0)}% of the scanned total. None of it is tied to {view.ticker}: it is the
+            session&rsquo;s shape across the list, not a running count.
+          </p>
+          <ul className="px-4 py-2 grid gap-x-8 gap-y-1.5 sm:grid-cols-2">
+            {universe.list.map(sec => (
+              <li key={sec.sector} className="flex items-center gap-3">
+                {/* 190px, MEASURED in the browser rather than estimated twice.
+                    "Consumer Discretionary" is the longest name the universe
+                    carries and renders 182px at text-label with the house
+                    uppercase tracking — 124 and then 164 were both guesses and
+                    both clipped it. Two columns rather than three at xl for the
+                    same reason: ten sectors fit five rows comfortably, and a
+                    third column would have taken the width straight back off the
+                    bar. `truncate` + `title` remain the backstop for a longer
+                    name added later. */}
+                <span
+                  title={sec.sector}
+                  className="min-w-0 flex-1 sm:flex-none sm:w-[190px] shrink truncate font-mono text-label uppercase tracking-wider text-textSecondary"
+                >
+                  {sec.sector}
+                </span>
+                <span className="relative hidden sm:block flex-1 h-[6px] rounded-full bg-white/[0.04] overflow-hidden">
+                  <span
+                    className="absolute inset-y-0 left-0 rounded-full bg-darkpool/60"
+                    style={{ width: `${Math.max(2, (sec.notional / universe.lead.notional) * 100)}%` }}
+                  />
+                </span>
+                <span className="w-[62px] shrink-0 text-right font-mono text-label tnum text-textPrimary">
+                  {fmtUsd(sec.notional)}
+                </span>
+                {/* The print count is the first thing to go on a phone: four
+                    fixed tracks plus a bar do not fit 390, and of the four this
+                    is the one the sentence above already summarises. */}
+                <span className="hidden sm:block w-[64px] shrink-0 text-right font-mono text-micro tnum text-textMuted">
+                  {sec.prints} prints
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Panel>
       )}
-      <DarkPoolFeed />
     </>
   );
 };
