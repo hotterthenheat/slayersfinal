@@ -14,12 +14,11 @@ import type { MarketSnapshot } from '../types/market';
 import type {
   CommandView,
   DealerBias,
-  DeltaByPrice,
   DeltaEquivFlow,
-  DeltaPoint,
   KeyLevelRow,
   KeyLevels,
-  OrderFlowData,
+  SessionProfileData,
+  VolumeAtPrice,
   PressureRow,
 } from '../types/gex';
 
@@ -153,20 +152,26 @@ function buildDeltaEquiv(snapshot: MarketSnapshot): DeltaEquivFlow {
   };
 }
 
-function buildOrderFlow(snapshot: MarketSnapshot): OrderFlowData {
+/*
+  The session as its bars actually describe it: where volume traded, the price
+  it concentrated at, and the volume-weighted average.
+
+  See `SessionProfileData` in types/gex.ts for what was removed and why — in
+  short, every signed-flow field here was the bar BODY standing in for an
+  aggressor split this product has no data for, and two of them added dollars
+  to a body×volume quantity.
+*/
+function buildSessionProfile(snapshot: MarketSnapshot): SessionProfileData {
   const { ticker, spot } = snapshot;
   if (Simulator.isIndex(ticker)) {
-    // A cash index has no share volume, so cumulative delta, delta-by-price,
-    // VWAP and POC cannot exist. Share flow stays unavailable, but the options
-    // book does exist — deltaEquiv carries its delta-equivalent flow (P4.4), and
-    // the panel renders that instead of a bare unavailable state.
+    // A cash index has no share volume, so volume-at-price, VWAP and POC cannot
+    // exist. Share volume stays unavailable, but the options book does exist —
+    // deltaEquiv carries its delta-equivalent flow (P4.4), and the panel renders
+    // that instead of a bare unavailable state.
     return {
       available: false,
-      cumulativeDelta: [],
-      deltaByPrice: [],
-      buyVolume: 0,
-      sellVolume: 0,
-      netDelta: 0,
+      volumeByPrice: [],
+      sessionVolume: 0,
       vwap: spot,
       poc: spot,
       deltaEquiv: buildDeltaEquiv(snapshot),
@@ -179,28 +184,12 @@ function buildOrderFlow(snapshot: MarketSnapshot): OrderFlowData {
   const bars = all.slice(-SESSION_BARS);
 
   if (!bars.length) {
-    return { available: true, cumulativeDelta: [], deltaByPrice: [], buyVolume: 0, sellVolume: 0, netDelta: 0, vwap: spot, poc: spot, deltaEquiv: null };
+    return { available: true, volumeByPrice: [], sessionVolume: 0, vwap: spot, poc: spot, deltaEquiv: null };
   }
 
-  // One signed dollar-delta per bar — bar body × traded shares (× a flow
-  // multiplier standing in for the unobserved aggressor split), plus
-  // deterministic microstructure noise on the body.
   const totalVol = bars.reduce((a, b) => a + b.volume, 0) || 1;
-  const notional = totalVol * spot; // session $ traded
-  const barDelta = bars.map((b, i) => {
-    const noise = (h01(`${ticker}-cd-${i}`) - 0.5) * 0.0004 * spot;
-    return (b.close - b.open + noise) * b.volume * 1000;
-  });
 
-  const cumulativeDelta: DeltaPoint[] = [];
-  let cum = 0;
-  for (let i = 0; i < bars.length; i++) {
-    cum += barDelta[i];
-    cumulativeDelta.push({ minute: i, value: cum });
-  }
-  const netDelta = cum;
-
-  // Volume-at-price + delta-by-price over the same bars and buckets
+  // Volume-at-price over the session's own high-low range
   let lo = Infinity;
   let hi = -Infinity;
   for (const b of bars) {
@@ -209,14 +198,12 @@ function buildOrderFlow(snapshot: MarketSnapshot): OrderFlowData {
   }
   const BUCKETS = 12;
   const width = (hi - lo) / BUCKETS || 1;
-  const bucketDelta = new Array<number>(BUCKETS).fill(0);
   const bucketVol = new Array<number>(BUCKETS).fill(0);
-  for (let i = 0; i < bars.length; i++) {
-    const b = Math.min(BUCKETS - 1, Math.max(0, Math.floor((bars[i].close - lo) / width)));
-    bucketDelta[b] += barDelta[i];
-    bucketVol[b] += bars[i].volume;
+  for (const bar of bars) {
+    const b = Math.min(BUCKETS - 1, Math.max(0, Math.floor((bar.close - lo) / width)));
+    bucketVol[b] += bar.volume;
   }
-  const deltaByPrice: DeltaByPrice[] = [];
+  const volumeByPrice: VolumeAtPrice[] = [];
   let poc = spot;
   let pocVol = -1;
   for (let b = 0; b < BUCKETS; b++) {
@@ -225,24 +212,20 @@ function buildOrderFlow(snapshot: MarketSnapshot): OrderFlowData {
       pocVol = bucketVol[b];
       poc = price;
     }
-    deltaByPrice.push({ price: Number(price.toFixed(2)), value: bucketDelta[b] });
+    volumeByPrice.push({ price: Number(price.toFixed(2)), volume: bucketVol[b] });
   }
+  // High price first, so the panel reads top-down like a price axis.
+  volumeByPrice.reverse();
 
   // True session VWAP: typical price weighted by bar volume
   let pv = 0;
   for (const b of bars) pv += ((b.high + b.low + b.close) / 3) * b.volume;
   const vwap = pv / totalVol;
 
-  const buyVolume = (notional + netDelta) / 2;
-  const sellVolume = (notional - netDelta) / 2;
-
   return {
     available: true,
-    cumulativeDelta,
-    deltaByPrice,
-    buyVolume,
-    sellVolume,
-    netDelta,
+    volumeByPrice,
+    sessionVolume: totalVol,
     vwap: Number(vwap.toFixed(2)),
     poc: Number(poc.toFixed(2)),
     deltaEquiv: null,
@@ -302,7 +285,7 @@ export function buildCommandView(snapshot: MarketSnapshot): CommandView {
     pressure: rows,
     pressureMaxAbs: maxAbs,
     keyLevels: buildKeyLevels(snapshot, levels, pin),
-    orderFlow: buildOrderFlow(snapshot),
+    sessionProfile: buildSessionProfile(snapshot),
     bias,
     biasNote,
   };

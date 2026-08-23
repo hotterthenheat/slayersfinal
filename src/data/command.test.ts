@@ -4,10 +4,10 @@ import { buildCommandView } from './command';
 
 /**
  * P3.3 — a cash index has no share volume by definition, so the volume-derived
- * order-flow block must report unavailable rather than fabricate one. An ETF
+ * session profile must report unavailable rather than fabricate one. An ETF
  * keeps a populated block.
  */
-describe('P3.3 — cash indices emit no order flow', () => {
+describe('P3.3 — cash indices emit no share volume', () => {
   it('classifies index symbols and ETFs correctly', () => {
     expect(Simulator.isIndex('SPX')).toBe(true);
     expect(Simulator.isIndex('vix')).toBe(true); // case-insensitive
@@ -15,18 +15,46 @@ describe('P3.3 — cash indices emit no order flow', () => {
     expect(Simulator.isIndex('AAPL')).toBe(false);
   });
 
-  it('an index order-flow block is unavailable and empty', () => {
+  it('an index session profile is unavailable and empty', () => {
     const view = buildCommandView(Simulator.buildSnapshot('SPX'));
-    expect(view.orderFlow.available).toBe(false);
-    expect(view.orderFlow.cumulativeDelta).toHaveLength(0);
-    expect(view.orderFlow.deltaByPrice).toHaveLength(0);
-    expect(view.orderFlow.buyVolume).toBe(0);
-    expect(view.orderFlow.sellVolume).toBe(0);
+    expect(view.sessionProfile.available).toBe(false);
+    expect(view.sessionProfile.volumeByPrice).toHaveLength(0);
+    expect(view.sessionProfile.sessionVolume).toBe(0);
   });
 
-  it('an ETF order-flow block stays available', () => {
+  it('an ETF session profile stays available and measures its own bars', () => {
     const view = buildCommandView(Simulator.buildSnapshot('SPY'));
-    expect(view.orderFlow.available).toBe(true);
+    const p = view.sessionProfile;
+    expect(p.available).toBe(true);
+    expect(p.volumeByPrice.length).toBeGreaterThan(0);
+    expect(p.sessionVolume).toBeGreaterThan(0);
+    // The profile's buckets ARE the session volume: a bucket set that does not
+    // sum to the total means volume was dropped or double-counted on the way in.
+    const summed = p.volumeByPrice.reduce((a, r) => a + r.volume, 0);
+    expect(summed).toBeCloseTo(p.sessionVolume, 6);
+    // High price first, so the panel reads top-down like a price axis.
+    for (let i = 1; i < p.volumeByPrice.length; i++) {
+      expect(p.volumeByPrice[i].price).toBeLessThan(p.volumeByPrice[i - 1].price);
+    }
+    // The point of control is the bucket that actually carried the most.
+    const heaviest = p.volumeByPrice.reduce((a, r) => (r.volume > a.volume ? r : a));
+    expect(p.poc).toBeCloseTo(heaviest.price, 6);
+  });
+
+  /*
+    The panel no longer carries a signed-flow field, and must not grow one back.
+
+    Cumulative delta, delta-by-price and buy/sell volume all required the
+    aggressor side of each trade, which needs tick-level trade-and-quote data
+    this product does not receive. They were derived from the bar BODY instead.
+    Nothing about the plumbing stops someone reintroducing the same proxy, so
+    the absence is asserted rather than assumed.
+  */
+  it('carries no signed-flow field, because no bar knows its aggressor', () => {
+    const p = buildCommandView(Simulator.buildSnapshot('SPY')).sessionProfile as unknown as Record<string, unknown>;
+    for (const banned of ['cumulativeDelta', 'deltaByPrice', 'buyVolume', 'sellVolume', 'netDelta']) {
+      expect(p[banned], `${banned} is back — see SessionProfileData`).toBeUndefined();
+    }
   });
 });
 
@@ -38,7 +66,7 @@ describe('P3.3 — cash indices emit no order flow', () => {
 describe('P4.4 — cash indices carry delta-equivalent flow', () => {
   it('provides options delta-equivalent flow that reconciles across strikes', () => {
     const snap = Simulator.buildSnapshot('SPX');
-    const de = buildCommandView(snap).orderFlow.deltaEquiv;
+    const de = buildCommandView(snap).sessionProfile.deltaEquiv;
     expect(de).toBeTruthy();
     /*
       net = call + put, and the per-strike profile sums to the net — both to a
@@ -68,7 +96,7 @@ describe('P4.4 — cash indices carry delta-equivalent flow', () => {
 
   it('an ETF reports real share flow and no delta-equivalent stand-in', () => {
     const view = buildCommandView(Simulator.buildSnapshot('SPY'));
-    expect(view.orderFlow.available).toBe(true);
-    expect(view.orderFlow.deltaEquiv ?? null).toBeNull();
+    expect(view.sessionProfile.available).toBe(true);
+    expect(view.sessionProfile.deltaEquiv ?? null).toBeNull();
   });
 });

@@ -206,18 +206,6 @@ export interface KeyLevelRow {
   pressure: number;
 }
 
-export interface DeltaPoint {
-  /** Minutes into the session */
-  minute: number;
-  value: number;
-}
-
-export interface DeltaByPrice {
-  price: number;
-  /** Signed delta traded at this price bucket, dollars */
-  value: number;
-}
-
 /**
  * Options delta-equivalent flow — the index stand-in for share volume (P4.4). A
  * cash index has no shares to measure, but its options do, and Σ(delta × OI ×
@@ -236,22 +224,54 @@ export interface DeltaEquivFlow {
   byStrike: { strike: number; value: number }[];
 }
 
-export interface OrderFlowData {
-  /** False when the symbol has no share volume (a cash index): the share-flow
+/** Traded volume in one price bucket of the session. */
+export interface VolumeAtPrice {
+  price: number;
+  volume: number;
+}
+
+/*
+  WHAT THIS USED TO BE, AND WHY IT IS NOT THAT ANY MORE.
+
+  This was `OrderFlowData`, and it carried `cumulativeDelta`, `deltaByPrice`,
+  `buyVolume`, `sellVolume` and `netDelta`. None of those could be computed from
+  what this product receives.
+
+  Cumulative delta is the running imbalance between trades that LIFTED THE OFFER
+  and trades that HIT THE BID. Deciding which a trade was needs the trade and
+  the quote that stood at that instant — tick data. Our entitlements carry
+  Nasdaq Basic and 15-minute-delayed CTA/UTP, and the simulator behind them
+  emits OHLCV bars. So the number was derived as
+
+      (close - open + noise) * volume * 1000
+
+  the bar BODY as a stand-in for aggressor imbalance, which the code said out
+  loud: "a flow multiplier standing in for the unobserved aggressor split". A
+  panel labelled "Cumulative Delta" was showing a different quantity.
+
+  `buyVolume` and `sellVolume` were worse than a proxy. They were
+  `(notional ± netDelta) / 2`, where `notional` is dollars (`volume × spot`) and
+  `netDelta` is `body × volume × 1000` — two different units, added.
+
+  What survives is what the bars genuinely contain: where the volume traded, the
+  price it concentrated at, and the volume-weighted average. Those are real
+  measurements of a real series, and they are the questions this panel was
+  mostly being read for anyway.
+*/
+export interface SessionProfileData {
+  /** False when the symbol has no share volume (a cash index): the volume
       fields below are placeholders. Indices carry `deltaEquiv` instead, the
       options delta-equivalent stand-in; equities/ETFs leave it null. */
   available: boolean;
-  cumulativeDelta: DeltaPoint[];
-  deltaByPrice: DeltaByPrice[];
-  buyVolume: number;
-  sellVolume: number;
-  /** Net delta over the session, dollars */
-  netDelta: number;
+  /** Traded volume by price bucket, high price first. */
+  volumeByPrice: VolumeAtPrice[];
+  /** Total shares traded across the session window. */
+  sessionVolume: number;
   vwap: number;
   /** Point of control — price bucket with the most traded volume */
   poc: number;
   /** Cash-index delta-equivalent flow (P4.4). Present when `available` is false
-      for an index; null for equities/ETFs, which report real share flow. */
+      for an index; null for equities/ETFs, which report real share volume. */
   deltaEquiv?: DeltaEquivFlow | null;
 }
 
@@ -268,7 +288,7 @@ export interface CommandView {
   /** Max |pressure| across rows for bar scaling */
   pressureMaxAbs: number;
   keyLevels: KeyLevelRow[];
-  orderFlow: OrderFlowData;
+  sessionProfile: SessionProfileData;
   bias: DealerBias;
   biasNote: string;
 }

@@ -11,7 +11,7 @@ import StrikeChart from '../../components/gex/StrikeChart';
 import PositioningMap from '../../components/gex/PositioningMap';
 import ExposureMatrix from '../../components/gex/ExposureMatrix';
 import GexMatrix from '../../components/gex/GexMatrix';
-import OrderFlowPanel from '../../components/gex/OrderFlowPanel';
+import SessionProfilePanel from '../../components/gex/SessionProfilePanel';
 import WallDrift from '../../components/gex/vannacharm/WallDrift';
 import RegimePanel from '../../components/gex/vollab/RegimePanel';
 import MonteCarloPanel from '../proveit/MonteCarloPanel';
@@ -234,16 +234,20 @@ export const WIDGETS: WidgetDef[] = [
     ),
   },
   {
+    /* The KEY stays `order-flow`: it is the id saved workspace layouts are
+       keyed by, and renaming it would silently drop the tile from every layout
+       that already has one. The title is what a reader sees, and that is what
+       had to stop saying order flow — see gex/SessionProfilePanel.tsx. */
     key: 'order-flow',
-    title: 'Order Flow',
-    description: 'Cumulative delta & delta by price',
+    title: 'Session Profile',
+    description: 'Volume by price, point of control and VWAP',
     w: 4,
     h: 5,
     minW: 3,
     minH: 4,
     render: ctx => (
       <div className="h-full min-h-0 p-3">
-        <OrderFlowPanel data={ctx.cmd.orderFlow} />
+        <SessionProfilePanel data={ctx.cmd.sessionProfile} />
       </div>
     ),
   },
