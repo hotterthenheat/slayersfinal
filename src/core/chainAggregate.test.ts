@@ -161,15 +161,42 @@ describe('the live chain satisfies the fold', () => {
     const untouched = chainWithout(snap.chainByExpiry, () => false);
     expect(gexOf(untouched)).toBeCloseTo(gexOf(snap.chain), 6);
 
-    const front = snap.chainByExpiry[0].expiry.dte;
-    const withoutFront = chainWithout(snap.chainByExpiry, b => b.expiry.dte === front);
+    const front = snap.chainByExpiry[0];
+    const withoutFront = chainWithout(snap.chainByExpiry, b => b.expiry.dte === front.expiry.dte);
+
     /*
       This is the assertion the whole refactor was for. When the per-expiry
       matrix was a PROJECTION of the aggregate, removing an expiry returned a
       rescaled copy of the same curve. Now the books are primary, so what comes
-      back is genuinely lighter by that expiry's own exposure.
+      back is the whole book MINUS that expiry's own exposure — exactly.
+
+      IT USED TO ASSERT |WITHOUT| < |FULL|, WHICH IS NOT TRUE AND NOT WHAT THE
+      PARAGRAPH ABOVE CLAIMS. Net gamma is a SIGNED sum, and the near expiries
+      routinely oppose the far ones: measured on SPY, the 1DTE book carried
+      +$84.9M against −$60.5M across every other expiry, for a whole-chain net
+      of +$24.4M. Removing the front leaves −$60.5M, whose magnitude is larger
+      than the full chain's, and the guard failed on arithmetic that was
+      working correctly. It passed for as long as it did only because the front
+      book usually dominates AND shares the rest's sign; the day it did not,
+      the test called the engine broken.
+
+      AND IT DID NOT EVEN GUARD ITS OWN CLAIM. Reintroducing the projection —
+      `aggregateChain(books)` rescaled by the share of books kept — leaves the
+      old assertion GREEN, because a scale below 1 shrinks |sum| and shrinking
+      |sum| was the whole test. It failed on correct arithmetic and passed on
+      the exact regression it was written for.
+
+      The identity below is the real invariant. It holds whatever the signs, it
+      is what "the books are primary" actually means, and it fails on that
+      projection — checked, along with dropping the wrong expiry and dropping
+      none at all.
     */
-    expect(Math.abs(gexOf(withoutFront))).toBeLessThan(Math.abs(gexOf(snap.chain)));
+    expect(gexOf(withoutFront)).toBeCloseTo(gexOf(snap.chain) - gexOf(front.nodes), 6);
+
+    // And the removal genuinely moved the book: a projection would hand back
+    // the same curve at a different scale, which for a front book this size
+    // cannot land on the full chain's own total.
+    expect(gexOf(withoutFront)).not.toBeCloseTo(gexOf(snap.chain), 6);
     expect(withoutFront.length).toBeGreaterThan(0);
   });
 });
