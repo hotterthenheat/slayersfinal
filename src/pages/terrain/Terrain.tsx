@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Columns3, Layers, RotateCcw, Ruler, Waves } from 'lucide-react';
+import { Columns3, Layers, Plus, RotateCcw, Ruler, Waves } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildGexView } from '../../data/gex';
 import { buildExposureProfile } from '../../data/exposure';
@@ -84,6 +84,21 @@ type LayerState = Record<LayerKey, boolean>;
 */
 const PARAM = 'off';
 
+/*
+  Which tickers the ladder rail is showing, also in the URL.
+
+  It used to be the first four of `Simulator.WATCHLIST`, which is the list that
+  decides what the opportunity feed scans — a different question from "what do I
+  want beside this chart". Reusing it made the rail look configurable and behave
+  like a constant.
+
+  `MAX_COLUMNS` is four because four 178px columns plus the chart is the widest
+  arrangement that leaves the candles a readable lane at 1280, the narrowest
+  desktop this rail renders on at all.
+*/
+const COLS_PARAM = 'cols';
+const MAX_COLUMNS = 4;
+
 function readLayers(raw: string | null): LayerState {
   const off = new Set((raw ?? '').split(',').filter(Boolean));
   return {
@@ -106,6 +121,17 @@ function overlayFor(layers: LayerState): OverlayMode {
   if (layers.positioning) return 'NODES';
   if (layers.levels) return 'LEVELS';
   return 'NONE';
+}
+
+/**
+ * The symbol a freshly added column opens on.
+ *
+ * The first watchlist name not already in the rail, so clicking `+` four times
+ * gives four different books rather than four copies of SPY that each have to
+ * be repointed. Falls back to SPY only when the rail already holds everything.
+ */
+function nextColumn(current: readonly string[]): string {
+  return Simulator.WATCHLIST.find(t => !current.includes(t)) ?? 'SPY';
 }
 
 const Terrain = () => {
@@ -178,10 +204,31 @@ const Terrain = () => {
     `useMarketData` republishes, so keying on the scan's identity is what ties
     them to the same instant.
   */
+  /*
+    The rail's tickers: the URL's list when there is one, otherwise the active
+    symbol plus the watchlist as a starting point. Deduped and capped, because a
+    hand-edited URL is user input like any other.
+  */
+  const cols = useMemo(() => {
+    const raw = params.get(COLS_PARAM);
+    const wanted = raw
+      ? raw.split(',').map(t => t.trim().toUpperCase()).filter(Boolean)
+      : [marketData?.ticker ?? 'SPY', ...Simulator.WATCHLIST];
+    return [...new Set(wanted)].slice(0, MAX_COLUMNS);
+  }, [params, marketData?.ticker]);
+
+  const setCols = (next: string[]) => {
+    const p = new URLSearchParams(params);
+    const value = [...new Set(next.map(t => t.toUpperCase()))].slice(0, MAX_COLUMNS);
+    if (value.length) p.set(COLS_PARAM, value.join(','));
+    else p.delete(COLS_PARAM);
+    setParams(p, { replace: true });
+  };
+
   const scanKey = scan ? `${scan.ticker}:${lastRef.current}` : '';
   const columns = useMemo(() => {
     if (!scan || !layers.ladder) return [];
-    const symbols = [scan.ticker, ...Simulator.WATCHLIST.filter(t => t !== scan.ticker)].slice(0, 4);
+    const symbols = cols;
     return symbols.map(sym => {
       const snap = sym === scan.ticker ? scan : Simulator.buildSnapshot(sym);
       const profile = buildExposureProfile(snap, '0DTE', 15);
@@ -193,10 +240,9 @@ const Terrain = () => {
         : '0DTE';
       return { sym, profile, label, spot: snap.spot };
     });
-    // `scanKey` is the dependency that matters; `scan` and `layers.ladder` are
-    // read through it.
+    // `scanKey` is the dependency that matters; `scan` is read through it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scanKey, layers.ladder]);
+  }, [scanKey, layers.ladder, cols]);
 
   /*
     EACH COLUMN IS PAINTED AGAINST ITS OWN BOOK.
@@ -348,8 +394,24 @@ const Terrain = () => {
               strikes={c.profile.strikes}
               spot={c.spot}
               maxAbs={ladderMax(c.profile.strikes)}
+              onTickerChange={sym => setCols(cols.map(t => (t === c.sym ? sym : t)))}
+              /* The last column keeps its close button off: a rail with no
+                 columns and no visible way to get one back is a dead end, and
+                 the layer switch is the control for "none of them". */
+              onClose={cols.length > 1 ? () => setCols(cols.filter(t => t !== c.sym)) : undefined}
             />
           ))}
+          {cols.length < MAX_COLUMNS && (
+            <button
+              type="button"
+              onClick={() => setCols([...cols, nextColumn(cols)])}
+              aria-label="Add a ladder column"
+              title="Add a ladder column"
+              className={`flex w-9 shrink-0 items-start justify-center border-l border-borderSubtle pt-2 text-textMuted transition-colors hover:text-textPrimary ${FOCUS_RING}`}
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
       )}
       </div>

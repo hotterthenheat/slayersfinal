@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import { fmtUsd } from '../../data/gex';
 import { heatCellStyle } from '../gex/heatmap';
 import { FOCUS_RING } from '../ui/focusRing';
+import TickerSearch from '../ui/TickerSearch';
 import type { StrikeExposure } from '../../types/gex';
 
 /*
@@ -57,6 +58,8 @@ export interface StrikeLadderProps {
   maxAbs: number;
   /** Rendered when the column can be dismissed. */
   onClose?: () => void;
+  /** When given, the header ticker becomes a picker that repoints this column. */
+  onTickerChange?: (symbol: string) => void;
   /** Fires with the strike under the pointer, for a host wiring the chart to it. */
   onHoverStrike?: (strike: number | null) => void;
 }
@@ -71,6 +74,7 @@ const StrikeLadder = ({
   spot,
   maxAbs,
   onClose,
+  onTickerChange,
   onHoverStrike,
 }: StrikeLadderProps) => {
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -102,27 +106,44 @@ const StrikeLadder = ({
 
   return (
     <section
-      className="flex min-h-0 w-[168px] shrink-0 flex-col border-l border-borderSubtle"
+      className="flex min-h-0 w-[178px] shrink-0 flex-col border-l border-borderSubtle"
       aria-label={`${ticker} dealer gamma by strike, ${expiryLabel}`}
     >
       <header className="flex shrink-0 items-center gap-1.5 px-1.5 py-1">
-        <span className="rounded border border-borderSubtle bg-inset px-1.5 py-0.5 font-mono text-micro font-semibold uppercase tracking-wider text-textPrimary">
-          {ticker}
-        </span>
-        <span className="ml-auto truncate font-mono text-micro uppercase tracking-wider text-textMuted">
-          {expiryLabel}
-        </span>
+        {/* The symbol IS the picker when the host offers one — same control the
+            top bar uses, so there is one way to change which name a surface is
+            looking at rather than a second one invented for this rail. */}
+        {onTickerChange ? (
+          <TickerSearch compact value={ticker} onChange={onTickerChange} />
+        ) : (
+          <span className="rounded border border-borderSubtle bg-inset px-1.5 py-0.5 font-mono text-micro font-semibold uppercase tracking-wider text-textPrimary">
+            {ticker}
+          </span>
+        )}
         {onClose && (
           <button
             type="button"
             onClick={onClose}
             aria-label={`Close ${ticker} ladder`}
-            className={`-m-1 shrink-0 p-1 text-textMuted transition-colors hover:text-textPrimary ${FOCUS_RING}`}
+            className={`-m-1 ml-auto shrink-0 p-1 text-textMuted transition-colors hover:text-textPrimary ${FOCUS_RING}`}
           >
             <X className="h-3 w-3" />
           </button>
         )}
       </header>
+
+      {/*
+        The expiry gets its own line.
+
+        It shared the header row with the ticker picker and the close button,
+        and at 178px there was not enough left for it: `AUG 24 (1DTE)` rendered
+        as `AUG 24 (1…` in every column, which names a date and then hides the
+        one part that says how far out the book is. A 16px row costs 2% of the
+        lane and buys the whole label.
+      */}
+      <div className="shrink-0 truncate border-b border-borderSubtle px-1.5 pb-1 text-center font-mono text-micro uppercase tracking-wider text-textSecondary">
+        {expiryLabel}
+      </div>
 
       <div
         ref={scrollRef}

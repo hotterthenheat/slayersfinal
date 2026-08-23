@@ -159,7 +159,9 @@ class ShelfRenderer {
           ctx.font = `${10 * vr}px ${CHART_FONT}`;
           ctx.textBaseline = 'bottom';
           ctx.fillStyle = `rgba(${SHELF_INK},0.9)`;
-          ctx.fillText(`${shelf.role} ${shelf.price.toFixed(2)}`, 6 * hr, yPx - 3 * vr);
+          // 12px in, not 6: at 6 the glyphs sat on the pane's own left border
+          // and the first letter read as clipped.
+          ctx.fillText(`${shelf.role} ${shelf.price.toFixed(2)}`, 12 * hr, yPx - 3 * vr);
           ctx.setLineDash([3 * hr, 5 * hr]);
         }
       }

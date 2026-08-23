@@ -23,6 +23,7 @@ import { GexNodesPrimitive } from './gexNodesPrimitive';
 import { DarkPoolShelfPrimitive } from '../terrain/darkPoolShelfPrimitive';
 import { heatPoles } from './heatmap';
 import { candleTheme } from './candleTheme';
+import { frameRange } from './priceFrame';
 import { fmtUsd } from '../../data/gex';
 import ChartLegend from '../ui/ChartLegend';
 import TimeframePicker from '../ui/TimeframePicker';
@@ -265,20 +266,27 @@ const StrikeChart = ({
       priceLineVisible: true,
       priceLineColor: 'rgba(237,237,237,0.4)',
       priceLineStyle: LineStyle.Dotted,
-      // Widen the visible price range to always include the walls/king so several
-      // strike-node bands are on screen, not just the couple around spot.
+      /*
+        Reach for the walls, the king and spot — but NOT at any cost.
+
+        This used to take the union of the candle range and every level
+        unconditionally, which is unbounded: a $1.30 session with a put wall
+        $5.30 away framed 11 dollars, so the candles got 12% of the pane and
+        rendered as a flat scribble. `frameRange` admits levels nearest-first
+        while the candles keep a majority of the pane; the ones that do not fit
+        keep their price line and their axis pill and are simply a zoom away.
+        See gex/priceFrame.ts.
+      */
       autoscaleInfoProvider: (original: () => { priceRange: { minValue: number; maxValue: number } } | null) => {
-        const base = original();
         const lv = levelsRef.current;
-        const extras = [lv.putWall, lv.callWall, lv.king, lv.spot].filter(v => Number.isFinite(v));
-        let min = base?.priceRange.minValue ?? Math.min(...extras);
-        let max = base?.priceRange.maxValue ?? Math.max(...extras);
-        for (const v of extras) {
-          if (v < min) min = v;
-          if (v > max) max = v;
-        }
-        const pad = Math.max((max - min) * 0.08, 0.01);
-        return { priceRange: { minValue: min - pad, maxValue: max + pad } };
+        return {
+          priceRange: frameRange(original()?.priceRange ?? null, [
+            lv.putWall,
+            lv.callWall,
+            lv.king,
+            lv.spot,
+          ]),
+        };
       },
     });
 

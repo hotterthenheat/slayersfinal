@@ -10,10 +10,20 @@ type TickerModule = typeof import('../../data/tickers');
 interface TickerSearchProps {
   value: string;
   onChange: (symbol: string) => void;
+  /**
+   * Drop the brand mark and tighten the trigger, for a header too narrow to
+   * spend 16px on a logo — a ladder column is 178px wide and already carries
+   * an expiry and a close button.
+   *
+   * The mark earns its space on a single-name surface like the top bar, where
+   * it is the one place the desk says which company it is on. In a rail of
+   * four columns the SYMBOL is doing that job four times over.
+   */
+  compact?: boolean;
 }
 
 /** Compact searchable ticker menu — filters the full NASDAQ universe (lazy-loaded). */
-const TickerSearch = ({ value, onChange }: TickerSearchProps) => {
+const TickerSearch = ({ value, onChange, compact = false }: TickerSearchProps) => {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [highlight, setHighlight] = useState(0);
@@ -75,7 +85,11 @@ const TickerSearch = ({ value, onChange }: TickerSearchProps) => {
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger
-        className="flex items-center gap-2 border border-borderSubtle hover:border-borderMuted bg-panel rounded-md pl-2.5 pr-2 py-1.5 font-mono text-caption transition-colors min-w-[104px] leading-4"
+        className={
+          compact
+            ? 'flex items-center gap-1 rounded border border-borderSubtle bg-inset px-1.5 py-0.5 font-mono text-micro font-semibold uppercase tracking-wider leading-4 text-textPrimary transition-colors hover:border-borderMuted'
+            : 'flex items-center gap-2 border border-borderSubtle hover:border-borderMuted bg-panel rounded-md pl-2.5 pr-2 py-1.5 font-mono text-caption transition-colors min-w-[104px] leading-4'
+        }
       >
         {/* The mark stands in for the magnifier on the trigger. The button
             already says what it is by carrying a symbol and a chevron, and the
@@ -83,9 +97,11 @@ const TickerSearch = ({ value, onChange }: TickerSearchProps) => {
             actually searches — so this slot is better spent saying WHICH name
             the desk is on. Single-name surface: exactly where a brand mark
             belongs (see ui/CompanyLogo.tsx). */}
-        <CompanyLogo ticker={value} size={16} />
-        <span className="font-semibold text-textPrimary">{value}</span>
-        <ChevronDown className={`w-3.5 h-3.5 text-textMuted ml-auto transition-transform ${open ? 'rotate-180' : ''}`} />
+        {!compact && <CompanyLogo ticker={value} size={16} />}
+        <span className={compact ? '' : 'font-semibold text-textPrimary'}>{value}</span>
+        <ChevronDown
+          className={`${compact ? 'w-3 h-3' : 'w-3.5 h-3.5 ml-auto'} text-textMuted transition-transform ${open ? 'rotate-180' : ''}`}
+        />
       </Popover.Trigger>
 
       <Popover.Portal>
