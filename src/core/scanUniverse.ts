@@ -41,7 +41,23 @@
 
 import Simulator from './simulator';
 import { hash } from './rng';
-import { UNIVERSE, lookup as universeLookup } from '../data/universe';
+import { UNIVERSE } from '../data/universe';
+import {
+  HOUR_EPOCHS,
+  SCAN_EPOCH_MS,
+  SESSION_EPOCHS,
+  scanEpoch,
+  sessionPrice,
+  walkPct,
+  walkPhases,
+  type WalkPhases,
+} from './priceWalk';
+
+// The walk moved to core/priceWalk.ts so simulator.ts could tie its seeded
+// history down onto the same curve without importing this file (that direction
+// is a cycle — see the header). Re-exported because the clock is part of this
+// module's published surface and a dozen callers import it from here.
+export { SCAN_EPOCH_MS, scanEpoch };
 
 // ---- coverage ----------------------------------------------------------------
 
@@ -107,20 +123,6 @@ export function scanCoverage(ticker: string): ScanCoverage {
   return Simulator.TICKERS[ticker] ? 'modeled' : 'covered';
 }
 
-// ---- clock -------------------------------------------------------------------
-
-/**
- * The scanner sweeps on a fixed cadence rather than every price tick, so the
- * universe is quantised to the same clock. Compass's own SCAN_INTERVAL_MS is
- * 10s; matching it means a sweep reuses one universe across all six scanner
- * builds instead of rebuilding the field six times.
- */
-export const SCAN_EPOCH_MS = 10_000;
-
-export function scanEpoch(now: number = Date.now()): number {
-  return Math.floor(now / SCAN_EPOCH_MS);
-}
-
 // ---- name pool ---------------------------------------------------------------
 
 /**
@@ -166,14 +168,10 @@ function namePool(): string[] {
 
 // ---- per-name statics --------------------------------------------------------
 
-interface NameStatics {
+interface NameStatics extends WalkPhases {
   base: number;
   iv: number;
   step: number;
-  /** Phase offsets so two names never trace the same path */
-  p1: number;
-  p2: number;
-  amp: number;
 }
 
 const staticsCache = new Map<string, NameStatics>();
@@ -194,38 +192,14 @@ function staticsFor(ticker: string): NameStatics {
   if (hit) return hit;
 
   const live = Simulator.TICKERS[ticker];
-  const h = hash(ticker);
-  const base = live?.basePrice ?? universeLookup(ticker)?.px ?? Number((15 + (h % 58500) / 100).toFixed(2));
-  const iv = live?.iv ?? 0.15 + ((h >>> 5) % 45) / 100;
+  const base = live?.basePrice ?? Simulator.syntheticBase(ticker);
+  const iv = live?.iv ?? Simulator.syntheticIv(ticker);
   const step = live?.step ?? (base >= 100 ? 1 : 0.5);
 
-  const s: NameStatics = {
-    base,
-    iv,
-    step,
-    p1: ((h % 1000) / 1000) * Math.PI * 2,
-    p2: (((h >>> 11) % 1000) / 1000) * Math.PI * 2,
-    // Higher-vol names swing wider, same as the simulator's tick sizing
-    amp: iv * 5.5,
-  };
+  const s: NameStatics = { base, iv, step, ...walkPhases(ticker, iv) };
   staticsCache.set(ticker, s);
   return s;
 }
-
-/**
- * Session path, % from base. Two cosine terms with hashed phases: a slow one on
- * roughly an hour and a fast one on roughly six minutes. Closed form, so any
- * epoch — past or future — costs the same and lands on the same number, which
- * is what lets the lean read momentum without replaying a candle buffer.
- */
-function walkPct(s: NameStatics, epoch: number): number {
-  const slow = Math.cos(epoch / 57.3 + s.p1);
-  const fast = Math.cos(epoch / 9.7 + s.p2);
-  return (slow * 0.72 + fast * 0.28) * s.amp;
-}
-
-const HOUR_EPOCHS = 360; // 3600s / SCAN_EPOCH_MS
-const SESSION_EPOCHS = 2340; // 6.5h
 
 // ---- one name ----------------------------------------------------------------
 
@@ -263,13 +237,32 @@ function makeScanName(ticker: string, epoch: number): ScanName {
   const now = walkPct(s, epoch);
 
   // A live name's price is the simulator's, full stop — one ticker never prints
-  // two prices across the terminal.
-  const changePct = live ? ((live.currentPrice - s.base) / s.base) * 100 : now;
+  // two prices across the terminal. And because seedHistory ties the simulator's
+  // seeded walk down onto sessionPrice (core/priceWalk.ts), the two branches
+  // agree to the cent at the moment of promotion instead of merely landing near
+  // each other.
+  const spot = live ? live.currentPrice : sessionPrice(s.base, ticker, s.iv, epoch);
+
+  /*
+    ONE DERIVATION, FROM THE PUBLISHED PRICE. The branches used to compute the
+    change two ways: a live name divided the rounded currentPrice by base, an
+    un-held one took the raw walk percentage. Those are not the same number.
+    Rounding the price to the cent quantises what changes are reachable, so a
+    walk of -0.165% published a spot whose own arithmetic reads -0.16 beside an
+    arrow reading -0.17. Small, and exactly the kind of small that means the two
+    figures on the row do not reconcile with each other — which the reader can
+    check with a calculator and the desk cannot explain.
+
+    Deriving from `spot` costs nothing and makes the row internally consistent
+    in both states: the change is always what you get by subtracting the two
+    prices printed next to it.
+  */
+  const changePct = ((spot - s.base) / s.base) * 100;
 
   return {
     ticker,
     base: s.base,
-    spot: live ? live.currentPrice : Number((s.base * (1 + now / 100)).toFixed(2)),
+    spot,
     iv: s.iv,
     step: s.step,
     // `+ 0` for the same reason as compass.ts:664 — this is the other half of
@@ -331,7 +324,7 @@ export function scanSparkline(ticker: string, spot: number, epoch: number = scan
   const stride = Math.round(SESSION_EPOCHS / points);
   for (let i = 0; i < points; i++) {
     const e = epoch - (points - i) * stride;
-    out[i] = Number((s.base * (1 + walkPct(s, e) / 100)).toFixed(2));
+    out[i] = sessionPrice(s.base, ticker, s.iv, e);
   }
   out[points] = spot;
   return out;

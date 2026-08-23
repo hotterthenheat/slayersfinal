@@ -26,6 +26,11 @@ import { lookup as universeLookup } from '../data/universe';
 // module this file must never import: that dependency runs the other way, and
 // the cycle surfaces as `undefined` at module init rather than as a type error.)
 import { dayKey } from './rng';
+// priceWalk.ts imports rng.ts and nothing else, so this cannot cycle either. It
+// is the ONE definition of where a name is trading at a given epoch; seedHistory
+// ties its random walk down onto it so opening a name off the scan board does
+// not move the price that was on the board.
+import { scanEpoch, sessionPrice } from './priceWalk';
 import { etTime } from './calendar';
 import { expiryCalendar, isMonthlyExpiry, listingConvention, type ChainExpiry } from './expiryCalendar';
 import { aggregateChain } from './chainAggregate';
@@ -157,16 +162,43 @@ const Simulator = (() => {
     return s();
   }
 
-  // Seed a historical price buffer with realistic values
+  /*
+    Seed a historical price buffer with realistic values, ENDING ON THE PRICE THE
+    REST OF THE TERMINAL ALREADY PUBLISHES FOR THIS NAME.
+
+    The random walk below is unchanged — same stream, same draws, same texture.
+    What changed is where it is allowed to finish. It used to start at basePrice
+    and keep wherever 100 coin flips left it, which is a second, unrelated answer
+    to a question core/priceWalk.ts already answers in closed form. Every name the
+    scan board lists but this module is not holding is priced by that walk, so
+    clicking one ran ensureTicker, seeded a fresh random tail, and the price under
+    the cursor moved for no reason the user could see.
+
+    So the path is tied down: the increments are kept and a linear correction is
+    spread across them (a Brownian bridge) until the last point lands exactly on
+    sessionPrice(). Point 0 keeps its basePrice anchor, the interior keeps its
+    shape, and the terminus is the number the scan row was already showing.
+    Promotion to live is now a no-op on the price.
+
+    Only the TERMINUS is pinned. From here the tick loop owns the number, and the
+    scan field reads it straight off this module for any name it is holding — so
+    the two cannot drift apart afterwards either.
+  */
   function seedHistory(sym: string): void {
     const cfg = TICKERS[sym];
+    const buf: number[] = new Array(historyLimit);
     let p = cfg.basePrice;
-    priceHistory[sym] = [];
     for (let i = 0; i < historyLimit; i++) {
       p += (rand(sym) - 0.5) * cfg.step * 0.5;
-      priceHistory[sym].push(p);
+      buf[i] = p;
     }
-    cfg.currentPrice = Number(p.toFixed(2));
+
+    const target = sessionPrice(cfg.basePrice, sym, cfg.iv, scanEpoch());
+    const drift = target - buf[historyLimit - 1];
+    for (let i = 0; i < historyLimit; i++) buf[i] += (drift * (i + 1)) / historyLimit;
+
+    priceHistory[sym] = buf;
+    cfg.currentPrice = target;
     seedCandles(sym);
   }
 
@@ -269,16 +301,36 @@ const Simulator = (() => {
     }
   }
 
+  /**
+   * The reference price for a name this module is not already holding.
+   *
+   * Prefer the shared universe's number so a name shown on the research desks
+   * reads the same here; fall back to a hash of the symbol for the long tail of
+   * searchable tickers the universe doesn't list.
+   *
+   * PUBLISHED because scanUniverse.ts needs the identical number to price the
+   * ~190 names that never enter the tick loop, and it used to carry its own copy
+   * of these two expressions. Two copies of a formula is two formulas: the day
+   * one of them gains a rule the other doesn't, the scan board and the desk it
+   * opens quietly stop describing the same instrument. The import direction only
+   * permits one of them to own it, and that is this file.
+   */
+  function syntheticBase(symbolRaw: string): number {
+    const sym = symbolRaw.toUpperCase();
+    return universeLookup(sym)?.px ?? Number((15 + (symbolHash(sym) % 58500) / 100).toFixed(2)); // ~15..600
+  }
+
+  /** Implied vol for a name with no hand-written config. ~0.15..0.60. */
+  function syntheticIv(symbolRaw: string): number {
+    return 0.15 + ((symbolHash(symbolRaw.toUpperCase()) >>> 5) % 45) / 100;
+  }
+
   /** Register a config for any symbol on demand (synthesized for non-core tickers). */
   function ensureTicker(symbolRaw: string): string {
     const sym = symbolRaw.toUpperCase();
     if (!TICKERS[sym]) {
-      const h = symbolHash(sym);
-      // Prefer the shared universe's reference price so a name shown on the
-      // research desks reads the same here; fall back to a hashed price for the
-      // long tail of searchable tickers the universe doesn't list.
-      const basePrice = universeLookup(sym)?.px ?? Number((15 + (h % 58500) / 100).toFixed(2)); // ~15..600
-      const iv = 0.15 + ((h >>> 5) % 45) / 100; // ~0.15..0.60
+      const basePrice = syntheticBase(sym);
+      const iv = syntheticIv(sym);
       const step = basePrice >= 100 ? 1 : 0.5;
       TICKERS[sym] = { basePrice, currentPrice: basePrice, iv, step };
     }
@@ -678,6 +730,8 @@ const Simulator = (() => {
 
   return {
     TICKERS,
+    syntheticBase,
+    syntheticIv,
     WATCHLIST,
     ensureTicker,
     setActiveTicker: (t: string): string => {

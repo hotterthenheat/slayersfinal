@@ -7,6 +7,15 @@ import { lookup } from '../data/universe';
   the research universe must agree on a ticker's reference price. Before the fix
   the simulator hard-coded AAPL=190 / NVDA=120 while the research desks read
   AAPL=232.4 / NVDA=138.6 from universe.ts, so the same name showed two prices.
+
+  READ THIS BEFORE TRUSTING THE FILENAME. Everything below is about `basePrice`,
+  the REFERENCE. It is not about `currentPrice`, which is the number actually on
+  the screen — and for a long time those two coherences were not the same fact.
+  Reference prices agreed here while the scan board and the desk it opened showed
+  different SPOTS, because the board walked the reference forward with a cosine
+  and the simulator walked it forward with a hundred coin flips. This suite was
+  green throughout. `core/priceWalk.test.ts` is the guard for the visible number;
+  a change to how prices move belongs there, not here.
 */
 describe('price coherence: simulator ↔ research universe', () => {
   it('core equity base prices are sourced from the shared universe', () => {
