@@ -11,7 +11,22 @@ export type StratTag = '—' | 'Vertical' | 'Butterfly' | 'Ratio' | 'Custom';
 
 export interface FlowPrint {
   id: number;
+  /**
+   * The clock string the tape renders. `toLocaleTimeString()` output, so it has
+   * no date on it — see `at` below before sorting or comparing on this.
+   */
   time: string;
+  /**
+   * Epoch ms the print crossed. THE FIELD TO ORDER BY.
+   *
+   * `time` is a rendered clock with no date, so two prints either side of local
+   * midnight compare out of order as strings while the tape itself is in order.
+   * data/tapeSeed.ts said exactly that about its own `at` field and then
+   * `enrichPrint` dropped it, which left every consumer with a string as the
+   * only handle on when a print happened — and at least one of them was
+   * comparing on it.
+   */
+  at: number;
   ticker: string;
   /** 1 = single leg; >1 renders the ×N multi-leg marker */
   legs: number;

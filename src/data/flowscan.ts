@@ -201,8 +201,9 @@ export function buildScannerRows(snapshot: MarketSnapshot, prints: FlowPrint[]):
     const signedVolume = a.askVol - a.bidVol;
     const est = estimatedOI(settled, signedVolume);
 
-    // Newest print on the contract, by the tape's own HH:MM:SS strings.
-    const last = a.prints.reduce((best, p) => (p.time > best.time ? p : best), a.prints[0]);
+    // Newest print on the contract, by EPOCH — `time` is a rendered clock with
+    // no date, so a string compare puts a 23:58 print after a 00:02 one.
+    const last = a.prints.reduce((best, p) => (p.at > best.at ? p : best), a.prints[0]);
 
     rows.push({
       id: `${ticker}-${first.strike}-${first.right}-${first.dte}`,

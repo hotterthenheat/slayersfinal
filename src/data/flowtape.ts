@@ -79,10 +79,13 @@ export const TAPE_ID_CEILING = 100_000;
  * prepends live prints in.
  */
 export function buildSessionTape(want: number): FlowPrint[] {
-  return seedSessionTape(want).map((o, i) => enrichPrint(o, TAPE_ID_CEILING - i));
+  // `o.at` is the instant the seeder walked back to; passing it through is what
+  // gives a backfilled print an orderable timestamp rather than only a clock
+  // string. A live print has no `at` of its own — it is crossing now.
+  return seedSessionTape(want).map((o, i) => enrichPrint(o, TAPE_ID_CEILING - i, o.at));
 }
 
-export function enrichPrint(order: TapeOrder, id: number): FlowPrint {
+export function enrichPrint(order: TapeOrder, id: number, at: number = Date.now()): FlowPrint {
   const seed = `${order.ticker}-${order.strike}-${order.side}-${order.size}-${id}`;
   const h = (tag: string) => h01(`${seed}-${tag}`);
 
@@ -198,6 +201,7 @@ export function enrichPrint(order: TapeOrder, id: number): FlowPrint {
   return {
     id,
     time: order.time,
+    at,
     ticker: order.ticker,
     legs,
     strike,

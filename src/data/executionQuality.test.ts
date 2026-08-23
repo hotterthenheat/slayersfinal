@@ -30,6 +30,7 @@ import type { FlowPrint } from '../types/flowdesk';
 const print = (over: Partial<FlowPrint>): FlowPrint => ({
   id: 1,
   time: '09:30',
+  at: 1_700_000_000_000,
   ticker: 'SPY',
   legs: 1,
   strike: 500,

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { TAPE_ID_CEILING, buildSessionTape, enrichPrint, sentimentOf, summarizeTape } from './flowtape';
+import { etTime } from '../core/calendar';
 import type { TapeOrder } from '../types/market';
 import { aggressorSide, isSweep, isMultiLeg, isDeltaHedged, isDirectional } from '../types/conditions';
 
@@ -213,6 +214,40 @@ describe('the quote a print is scored against', () => {
     expect(mids.length).toBeGreaterThan(5);
     for (const p of mids) {
       expect(Math.abs(p.fillPos - 0.5)).toBeLessThanOrEqual(0.06);
+    }
+  });
+});
+
+describe('when a print happened', () => {
+  /*
+    `time` is `toLocaleTimeString()` output — a clock with no date on it. Two
+    prints either side of local midnight compare out of order as STRINGS while
+    the tape itself is in order. data/tapeSeed.ts documented exactly that about
+    its own `at` field, and `enrichPrint` then dropped it, leaving every
+    downstream consumer with the string as its only handle on when a print
+    happened. At least one of them was comparing on it.
+  */
+  const tape = buildSessionTape(200);
+
+  it('carries an epoch on every print', () => {
+    expect(tape.length).toBeGreaterThan(20);
+    for (const p of tape) {
+      expect(Number.isFinite(p.at)).toBe(true);
+      expect(p.at).toBeGreaterThan(0);
+    }
+  });
+
+  it('is newest first by epoch, not merely by the clock string', () => {
+    for (let i = 1; i < tape.length; i++) {
+      expect(tape[i - 1].at).toBeGreaterThanOrEqual(tape[i].at);
+    }
+  });
+
+  it('renders the epoch it carries', () => {
+    // The two fields describe one instant; if they can drift, the string is a
+    // second source of truth about the same fact.
+    for (const p of tape.slice(0, 40)) {
+      expect(etTime(p.at)).toBe(p.time);
     }
   });
 });
