@@ -356,6 +356,7 @@ const Terrain = () => {
             timeframe={timeframe}
             onTimeframeChange={setTimeframe}
             showChrome={false}
+            bare
             resetSignal={resetSignal}
             /* A floor, not a height: the chart is `flex-grow` with `autoSize`,
                so on any real screen it takes the whole lane. The floor only

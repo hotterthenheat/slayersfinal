@@ -22,7 +22,7 @@ import {
 import { GexNodesPrimitive } from './gexNodesPrimitive';
 import { DarkPoolShelfPrimitive } from '../terrain/darkPoolShelfPrimitive';
 import { heatPoles } from './heatmap';
-import { candleTheme } from './candleTheme';
+import { candleTheme, candleThemeMono, MONO_BORDER } from './candleTheme';
 import { frameRange } from './priceFrame';
 import { fmtUsd } from '../../data/gex';
 import ChartLegend from '../ui/ChartLegend';
@@ -79,6 +79,17 @@ interface StrikeChartProps {
   height?: number;
   /** Transient user-focused price — renders a cyan FOCUS line while set */
   focusPrice?: number | null;
+  /**
+   * Strip the chart back to price and the overlays: monochrome hollow candles,
+   * no grid, no volume pane.
+   *
+   * For a surface where the colour belongs to something else. On Terrain the
+   * read is the dealer's book in the ladder and the gamma nodes, and a
+   * green-and-red candle chart under it competes with the only thing the desk
+   * exists to show — while adding a second directional language to a picture
+   * whose subject is a regime.
+   */
+  bare?: boolean;
   /**
    * Off-exchange shelves drawn behind the candles at the price the size
    * crossed. Omitted by default: most hosts of this chart have no dark-pool
@@ -164,6 +175,7 @@ const StrikeChart = ({
   focusPrice = null,
   shelves,
   poolPrints,
+  bare = false,
 }: StrikeChartProps) => {
   /*
     Uncontrolled by default, controlled when a host asks for it.
@@ -184,6 +196,11 @@ const StrikeChart = ({
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
   const nodesRef = useRef<GexNodesPrimitive | null>(null);
   const shelvesRef = useRef<DarkPoolShelfPrimitive | null>(null);
+  /* Read inside the mount-once effect, so it needs a ref rather than the prop
+     — same reason `interactive` is read that way. A host does not switch a
+     chart between bare and full at runtime; it decides once. */
+  const bareRef = useRef(bare);
+  bareRef.current = bare;
   const levelLinesRef = useRef<Partial<Record<'callWall' | 'putWall' | 'flip' | 'king', IPriceLine>>>({});
   const shownLevelsRef = useRef<KeyLevels | null>(null);
   const levelRafRef = useRef(0);
@@ -238,10 +255,16 @@ const StrikeChart = ({
         fontSize: 10,
         attributionLogo: false,
       },
-      grid: {
-        vertLines: { color: 'rgba(255,255,255,0.03)' },
-        horzLines: { color: 'rgba(255,255,255,0.03)' },
-      },
+      /* No grid in bare mode. At 3% white it is barely a line, and against a
+         canvas already carrying gamma-node bands and off-exchange rails it is
+         one more set of horizontals competing with the ones that mean
+         something. */
+      grid: bareRef.current
+        ? { vertLines: { visible: false }, horzLines: { visible: false } }
+        : {
+            vertLines: { color: 'rgba(255,255,255,0.03)' },
+            horzLines: { color: 'rgba(255,255,255,0.03)' },
+          },
       rightPriceScale: { borderColor: '#1c1c1c' },
       timeScale: { borderColor: '#1c1c1c', timeVisible: true, secondsVisible: false, rightOffset: 4, barSpacing: 3 },
       crosshair: {
@@ -256,13 +279,14 @@ const StrikeChart = ({
       handleScale: interactive,
     });
 
+    const ink = bareRef.current ? candleThemeMono : candleTheme;
     const candles = chart.addSeries(CandlestickSeries, {
-      upColor: candleTheme.up,
-      downColor: candleTheme.down,
-      borderUpColor: candleTheme.up,
-      borderDownColor: candleTheme.down,
-      wickUpColor: candleTheme.wickUp,
-      wickDownColor: candleTheme.wickDown,
+      upColor: ink.up,
+      downColor: ink.down,
+      borderUpColor: bareRef.current ? MONO_BORDER.up : ink.up,
+      borderDownColor: bareRef.current ? MONO_BORDER.down : ink.down,
+      wickUpColor: ink.wickUp,
+      wickDownColor: ink.wickDown,
       priceLineVisible: true,
       priceLineColor: 'rgba(237,237,237,0.4)',
       priceLineStyle: LineStyle.Dotted,
@@ -290,13 +314,18 @@ const StrikeChart = ({
       },
     });
 
-    const volume = chart.addSeries(HistogramSeries, {
-      priceScaleId: 'vol',
-      priceFormat: { type: 'volume' },
-      lastValueVisible: false,
-      priceLineVisible: false,
-    });
-    chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.84, bottom: 0 } });
+    /* No volume pane in bare mode. It takes the bottom 16% of the chart, and on
+       a desk whose promise is that the whole book is on one screen that is 16%
+       spent on the one series the ladder beside it does not need. */
+    const volume = bareRef.current
+      ? null
+      : chart.addSeries(HistogramSeries, {
+          priceScaleId: 'vol',
+          priceFormat: { type: 'volume' },
+          lastValueVisible: false,
+          priceLineVisible: false,
+        });
+    if (volume) chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.84, bottom: 0 } });
 
     const nodes = new GexNodesPrimitive();
     candles.attachPrimitive(nodes);
@@ -383,7 +412,16 @@ const StrikeChart = ({
     const candleSeries = candleSeriesRef.current;
     const volumeSeries = volumeSeriesRef.current;
     const nodes = nodesRef.current;
-    if (!chart || !candleSeries || !volumeSeries || !nodes) return;
+    /*
+      `volumeSeries` is NOT in this guard.
+
+      In bare mode there is no volume pane, so it is legitimately null — and
+      with it in the guard the loader returned early and never called
+      `setData` on the candles either. The chart rendered completely empty:
+      no bars, no overlays, no error. The two series are independent and the
+      optional one must not be able to veto the required one.
+    */
+    if (!chart || !candleSeries || !nodes) return;
 
     const base = Simulator.getCandles(ticker);
     const baseGex = Simulator.getGexHistory(ticker);
@@ -400,7 +438,7 @@ const StrikeChart = ({
 
     if (changed) {
       candleSeries.setData(bars.map(toCandle));
-      volumeSeries.setData(bars.map(toVolume));
+      volumeSeries?.setData(bars.map(toVolume));
       showRecent();
       // On a 0-width mount the range doesn't stick; re-apply once laid out so the
       // compact tile opens on the recent session, not zoomed out to the month.
@@ -409,7 +447,7 @@ const StrikeChart = ({
     } else {
       const last = bars[bars.length - 1];
       candleSeries.update(toCandle(last));
-      volumeSeries.update(toVolume(last));
+      volumeSeries?.update(toVolume(last));
     }
 
     // Node overlay is intraday-only

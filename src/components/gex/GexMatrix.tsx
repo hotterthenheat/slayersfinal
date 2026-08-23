@@ -52,6 +52,28 @@ const GexMatrix = ({ data, highlightCol = null }: GexMatrixProps) => {
     });
   }, [highlightCol]);
 
+  /*
+    OPEN ON THE MONEY, not on the top of the window.
+
+    The grid is 31 strikes tall in a tile that shows about ten, and it opened at
+    row 0 — the far out-of-the-money wing. Those strikes carry almost no book, so
+    under `PRINT_AT` none of them prints a figure and their heat is near-black:
+    the panel rendered as an empty grid on every load and read as broken. The
+    rows worth looking at were always there, ten scroll-clicks down.
+
+    `block: 'center'` rather than `'nearest'` — 'nearest' does nothing when the
+    row is already technically in the scroll box's overflow, which is exactly
+    the case here.
+  */
+  useEffect(() => {
+    const box = scrollRef.current;
+    const row = box?.querySelector(`tr[data-row="${spotRowIndex}"]`);
+    if (!box || !row) return;
+    const r = row.getBoundingClientRect();
+    const b = box.getBoundingClientRect();
+    box.scrollTop += r.top - b.top - b.height / 2 + r.height / 2;
+  }, [spotRowIndex, strikes.length]);
+
   const marker = (r: number): string | null => {
     if (r === spotRowIndex) return 'Spot';
     if (r === callWallIndex) return 'Call wall';
@@ -103,6 +125,7 @@ const GexMatrix = ({ data, highlightCol = null }: GexMatrixProps) => {
               return (
                 <tr
                   key={strike}
+                  data-row={r}
                   className={`border-b last:border-0 ${
                     isKeyRow ? 'border-shortGamma/25 border-t border-t-shortGamma/25' : 'border-borderSubtle/40'
                   } ${isSpot ? 'rail-neutral' : ''}`}
