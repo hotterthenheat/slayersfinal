@@ -32,7 +32,9 @@ import { PAGE_STACK } from '../layout/container';
   So: one strip. The section icon, the section name, the
   tabs, and whatever the page puts on the right. The
   breadcrumb is gone because the strip IS the breadcrumb —
-  section on the left, active tab beside it.
+  section on the left, active tab beside it. The prop went
+  with it rather than lingering as a value six pages
+  computed and nothing read.
 
   THE SUBTITLE IS NOT DELETED, IT IS RELOCATED. It stays in
   the accessibility tree next to the heading (`sr-only`), it
@@ -51,12 +53,6 @@ import { PAGE_STACK } from '../layout/container';
 */
 
 interface PageHeaderProps {
-  /**
-   * Kept for the call sites that pass it and IGNORED for layout: the strip
-   * shows the section and the active tab, which is the same fact in less space.
-   * Still read for the accessible description when there is no subtitle.
-   */
-  breadcrumb?: string[];
   title: string;
   subtitle?: string;
   actions?: React.ReactNode;
@@ -74,13 +70,12 @@ interface PageHeaderProps {
   children?: React.ReactNode;
 }
 
-const PageHeader = ({ breadcrumb, title, subtitle, actions, ribbon, items, itemsLabel, children }: PageHeaderProps) => {
+const PageHeader = ({ title, subtitle, actions, ribbon, items, itemsLabel, children }: PageHeaderProps) => {
   const { pathname } = useLocation();
   // Every page carries its section icon — resolved from the nav registry, so
   // no page has to pass one and nav/page identity can never drift apart.
   const section = `/${pathname.split('/')[1] ?? ''}`;
   const Icon = NAV_ITEMS.find(i => i.path === section)?.icon;
-  const described = subtitle ?? breadcrumb?.join(' / ');
   const [slot, setSlot] = useDeskBarSlot();
 
   return (
@@ -102,7 +97,7 @@ const PageHeader = ({ breadcrumb, title, subtitle, actions, ribbon, items, items
             {title}
             {/* The description a screen reader would have got from the subtitle
                 row. Sighted readers get it on the tab it belongs to. */}
-            {described && <span className="sr-only"> — {described}</span>}
+            {subtitle && <span className="sr-only"> — {subtitle}</span>}
           </h1>
         </div>
 

@@ -269,26 +269,35 @@ const ProveIt = () => {
   return (
     <>
       <PageHeader
-        breadcrumb={['Terminal', 'Prove It', active.label]}
         title="Prove It"
         subtitle="Quantitative modeling & predictive analytics: the receipts behind the calls this desk can grade"
         actions={
-          // The window sets the Monte Carlo horizon and nothing else, so it is
-          // not offered on the two reads it cannot move.
-          view === 'models' && (
-            <SegmentedControl
-              ariaLabel="Forecast window"
-              options={WINDOW_OPTIONS}
-              value={window_}
-              onChange={v => setWindow(v as Window)}
-            />
-          )
+          /*
+            BOTH switches ride the strip. The view switch used to sit on its own
+            row under the header — a second toolbar changing what you look at,
+            directly beneath the one that names the desk, which is the exact
+            shape the Pinpoint `VIEW` row had before it moved onto the strip.
+            This desk renders its own header rather than sitting in a section
+            layout, so it says so here instead of reaching for the deskBar slot.
+
+            Order matters: which read you are on comes first, then the knob that
+            tunes it, so the pair reads left to right in the order you use them.
+          */
+          <>
+            <SegmentedControl ariaLabel="Prove It view" options={VIEW_OPTIONS} value={view} onChange={selectView} />
+            {/* The window sets the Monte Carlo horizon and nothing else, so it
+                is not offered on the reads it cannot move. */}
+            {view === 'models' && (
+              <SegmentedControl
+                ariaLabel="Forecast window"
+                options={WINDOW_OPTIONS}
+                value={window_}
+                onChange={v => setWindow(v as Window)}
+              />
+            )}
+          </>
         }
       />
-
-      <div className="flex max-w-full">
-        <SegmentedControl ariaLabel="Prove It view" options={VIEW_OPTIONS} value={view} onChange={selectView} />
-      </div>
 
       {view === 'models' && <ModelsView window_={window_} />}
       {view === 'volatility' && <VolLab />}

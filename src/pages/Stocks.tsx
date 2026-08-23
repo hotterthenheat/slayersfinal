@@ -406,7 +406,6 @@ const Stocks = () => {
   return (
     <>
       <PageHeader
-        breadcrumb={['Terminal', 'Stocks']}
         title="Stocks"
         subtitle="Common-stock board: what screens as ownable, and which groups deserve the exposure"
         actions={<SegmentedControl ariaLabel="Verdict filter" options={VIEW_OPTIONS} value={view} onChange={setView} />}

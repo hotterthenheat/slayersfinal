@@ -823,7 +823,6 @@ const Tracker = () => {
   return (
     <>
       <PageHeader
-        breadcrumb={['Terminal', 'Tracker']}
         title="Setup Tracker"
         subtitle="Every tracked setup in one table — set a status, keep notes, and read each one's current signal. Saved in this browser."
       />

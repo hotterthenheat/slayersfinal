@@ -547,7 +547,6 @@ const Compass = () => {
   // Browse mode header — setups needs no ticker search; weigher & lotto do
   const browseHeader = (
     <PageHeader
-      breadcrumb={['Terminal', 'Compass', modeMeta.crumb]}
       title={modeMeta.title}
       subtitle={modeMeta.subtitle}
       actions={modeSwitch}
@@ -558,15 +557,14 @@ const Compass = () => {
     Review mode header — mode switch top-right (ticker lives in the top bar).
 
     This existed as its own code path and then rendered the browse header
-    verbatim: breadcrumb "… / Setups", title "Trade Setups", the browse
-    subtitle. So arriving here from "Monitor strike" on the Trace drawer, or
-    from Review in the Tracker, put the signal monitor on screen under a header
-    still claiming you were browsing the setups feed. The destination was right
-    and the wayfinding was wrong. It now names the contract being watched.
+    verbatim — title "Trade Setups" and the browse subtitle. So arriving here
+    from "Monitor strike" on the Trace drawer, or from Review in the Tracker,
+    put the signal monitor on screen under a header still claiming you were
+    browsing the setups feed. The destination was right and the wayfinding was
+    wrong. It now names the contract being watched.
   */
   const reviewHeader = (
     <PageHeader
-      breadcrumb={['Terminal', 'Compass', 'Monitor']}
       title={
         monitorTarget
           ? `Monitoring ${monitorTarget.ticker} ${monitorTarget.strike}${monitorTarget.right}`

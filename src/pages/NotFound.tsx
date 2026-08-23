@@ -34,7 +34,7 @@ const NotFound = () => {
 
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader breadcrumb={['Terminal', 'Not found']} title="No desk at that address" />
+      <PageHeader title="No desk at that address" />
 
       <div className="inst-surface rounded-lg px-5 py-6 flex flex-col gap-4">
         <div className="flex flex-col gap-1.5">

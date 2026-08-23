@@ -242,7 +242,6 @@ const TerminalIndex = () => {
   return (
     <>
       <PageHeader
-        breadcrumb={['Terminal', 'Index']}
         title="Terminal index"
         subtitle="Every desk, and what each one is for. Pick one to open it."
       />
