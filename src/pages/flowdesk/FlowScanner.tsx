@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Bookmark, Check, Grid3x3, Plus, RotateCcw, ScanLine, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildScannerRows, summarizeScanner, type FlowSentiment, type ScannerRow } from '../../data/flowscan';
+import { buildSessionTape } from '../../data/flowtape';
 import { fmtUsd } from '../../data/gex';
 import type { MarketSnapshot } from '../../types/market';
 import Panel from '../../components/ui/Panel';
@@ -14,6 +15,10 @@ import DataTable, { type Column } from '../../components/ui/DataTable';
 import ScannerRowModal from './ScannerRowModal';
 import { useToast } from '../../components/ui/Toast';
 import type { Tone } from '../../components/ui/tones';
+
+/** How much session tape the rollup reads. Matches the other Trace desks so a
+    contract's volume here and its prints on the Tape describe one window. */
+const TAPE_WINDOW = 400;
 
 const COLS_KEY = 'slayer.flowscanner.cols.v1';
 const TPL_KEY = 'slayer.flowscanner.templates.v1';
@@ -164,7 +169,7 @@ const COL_META: { key: string; label: string; locked?: boolean }[] = [
   { key: 'last', label: 'Last time' },
   { key: 'volume', label: 'Volume' },
   { key: 'oi', label: 'Open interest' },
-  { key: 'doi', label: 'Est ΔOI / day' },
+  { key: 'doi', label: 'Est ΔOI' },
   { key: 'voi', label: 'Vol / OI' },
   { key: 'premium', label: 'Premium' },
   { key: 'iv', label: 'IV' },
@@ -195,8 +200,8 @@ const ALL_COLUMNS: Column<ScannerRow>[] = [
   { key: 'oi', header: 'OI', help: 'OI', align: 'right', sortValue: r => r.oi, render: r => <span className="font-mono text-caption text-textSecondary tnum leading-4">{r.oi.toLocaleString()}</span> },
   {
     key: 'doi',
-    header: 'Est ΔOI/d',
-    help: 'Est ΔOI/d',
+    header: 'Est ΔOI',
+    help: 'Est ΔOI',
     align: 'right',
     sortValue: r => r.deltaOi,
     render: r => (
@@ -520,7 +525,14 @@ const FlowScanner = () => {
     }
   }, [marketData]);
 
-  const rows = useMemo(() => (scanSnapshot ? buildScannerRows(scanSnapshot) : []), [scanSnapshot]);
+  /* The scan and the tape it summarises are frozen together. Reading the tape
+     inside the memo rather than on every render is what keeps the premium-sorted
+     rows from reshuffling under the reader between scans — the same reason
+     `scanSnapshot` exists. */
+  const rows = useMemo(
+    () => (scanSnapshot ? buildScannerRows(scanSnapshot, buildSessionTape(TAPE_WINDOW)) : []),
+    [scanSnapshot]
+  );
   const summary = useMemo(() => summarizeScanner(rows), [rows]);
   const [filters, setFilters] = useState<ScanFilters>(DEFAULTS);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -699,7 +711,7 @@ const FlowScanner = () => {
             <ScanLine className="w-3.5 h-3.5" /> Contract aggregation
           </span>
         }
-        subtitle="volume · estimated daily ΔOI · premium · bull/bear lean"
+        subtitle="the session tape rolled up per contract — volume, aggressor split, sweeps and an OI estimate"
         flush
       >
         <DataTable
@@ -711,6 +723,15 @@ const FlowScanner = () => {
           initialSort={{ key: 'premium', dir: 'desc' }}
           emptyText="No contracts match these filters"
         />
+        <p className="px-4 py-2.5 border-t border-borderSubtle text-label leading-relaxed text-textMuted">
+          <span className="font-mono uppercase tracking-wider text-textSecondary mr-2">Where these come from</span>
+          Every column is the session tape rolled up: volume is the sum of the contract&rsquo;s print sizes, the
+          lean is counted off the aggressor side the exchange stamped on each one, and sweeps are the prints it
+          flagged as sweeps. A contract with no prints is not listed &mdash; that is the chain, not flow.{' '}
+          <span className="text-warn">Est ΔOI is the one estimate.</span> Buyer-initiated volume tends to open
+          interest and seller-initiated tends to close it, but the tape never says which side was opening, so a
+          buy can be a short being covered. OPRA publishes the real figure once a day, for the prior close.
+        </p>
       </Panel>
 
       <ScannerRowModal row={selected} spot={marketData?.spot ?? 0} onClose={() => setSelectedId(null)} />

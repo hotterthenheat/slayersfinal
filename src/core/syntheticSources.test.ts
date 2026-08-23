@@ -121,6 +121,12 @@ const SYNTHETIC_OK = [
  * shrinks: each entry leaves by moving its randomness behind the simulator seam
  * or by rendering `workspace/DataUnavailablePanel` until a feed exists.
  *
+ * `data/flowscan.ts` has left, and it is the shape the rest should follow. It
+ * did not gain a data source — the source was already in the building. The
+ * Scanner's volume, bid/ask split, sweep count and ΔOI were hashes drawn beside
+ * Trace › Tape, which holds the SAME contracts' actual prints. It now rolls that
+ * tape up. Two desks, one set of contracts, one answer.
+ *
  * Deleting an entry without fixing the file fails this test, and so does fixing
  * a file without deleting its entry — the list cannot drift out of step with the
  * code in either direction.
@@ -144,7 +150,6 @@ const LEGACY = [
   'data/edgeledger.ts',
   'data/exposure.ts',
   'data/flowSweeps.ts',
-  'data/flowscan.ts',
   'data/flowtape.ts',
   'data/gex.ts',
   'data/hedgeimpact.ts',

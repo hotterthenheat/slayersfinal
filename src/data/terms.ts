@@ -47,7 +47,7 @@ export const TERMS = {
   β: 'Beta — how hard the stock moves per 1% of index move.',
   Cmp: 'Compare — pin this row for side-by-side comparison.',
   '30d RS': 'Relative strength vs sector over 30 days — above the line is outperforming.',
-  'Est ΔOI/d': 'Estimated open-interest change per day if the current flow pace holds.',
+  'Est ΔOI': 'Estimated change in open interest since the open: buyer-initiated volume minus seller-initiated volume. An ESTIMATE, not a measurement — the tape reports the trade and the aggressor but never says whether either side was opening or closing, so a buy can be a short being covered. OPRA publishes the real figure once a day for the prior close.',
   Dist: 'Distance from spot, signed %.',
   Class: 'Hedging class — how dealer hedging at the strike shapes price: cushion, resistance, or magnet.',
   NBBO: 'National best bid and offer — the best quote across every options exchange at that instant.',
