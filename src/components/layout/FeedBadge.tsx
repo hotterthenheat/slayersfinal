@@ -1,3 +1,4 @@
+import { InlineLoader } from 'generative-loaders';
 import { feedSource } from '../../core/feedSource';
 import { isSnapshotMath, mathSourceId } from '../../core/mathProvider';
 
@@ -34,10 +35,20 @@ const FeedBadge = () => {
       className="flex items-center gap-1.5 font-mono text-caption text-textSecondary select-none leading-4"
       title={`${feed.detail}${mathLine}`}
     >
-      <span
-        className="w-1.5 h-1.5 rounded-full bg-textMuted"
-        aria-hidden="true"
-      />
+      {/*
+        The dot was static. This badge is the one piece of chrome that says what
+        the reader is looking at, and it sat beside a feed that ticks every 1.5s
+        showing nothing moving — a still dot on a live terminal reads as a
+        status LED that is off.
+
+        `signal` at muted ink, and no `label`: the badge's own text names the
+        condition and a second accessible name would make a screen reader read
+        the same fact twice. The variant is the quietest in the set, which is
+        the whole point — the comment above says this is a standing condition
+        and not an alert, and a loader that pulses for attention would be
+        arguing with it.
+      */}
+      <InlineLoader variant="signal" size={10} color="#7d7d7d" />
       <span className="text-micro font-semibold uppercase tracking-wider text-textMuted">{feed.label}</span>
     </span>
   );

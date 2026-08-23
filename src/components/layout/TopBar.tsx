@@ -14,6 +14,7 @@ import { useEffect, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Search, Menu, X, Settings } from 'lucide-react';
+import AnimatedIcon from '../ui/AnimatedIcon';
 import { useMarketData, useTicker } from '../../context/MarketDataContext';
 import AnimatedNumber from '../ui/AnimatedNumber';
 import TickerSearch from '../ui/TickerSearch';
@@ -211,7 +212,7 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
           aria-label="Search or jump to…"
           className="flex items-center gap-2 border border-borderSubtle bg-panel hover:border-borderMuted rounded-md px-2.5 py-1.5 text-caption text-textMuted transition-colors leading-4"
         >
-          <Search className="w-3.5 h-3.5" />
+          <AnimatedIcon name="SearchIcon" still={Search} size={14} className="w-3.5 h-3.5" />
           <kbd className="hidden sm:inline font-mono text-micro border border-borderSubtle rounded px-1 py-0.5 text-textMuted bg-inset">
             ⌘K
           </kbd>
@@ -221,7 +222,7 @@ const TopBar = ({ onOpenPalette, onOpenSettings }: TopBarProps) => {
           aria-label="Settings"
           className="inline-flex items-center justify-center w-8 h-8 border border-borderSubtle bg-panel hover:border-borderMuted rounded-md text-textMuted hover:text-textPrimary transition-colors"
         >
-          <Settings className="w-3.5 h-3.5" />
+          <AnimatedIcon name="SettingsIcon" still={Settings} size={14} className="w-3.5 h-3.5" />
         </button>
         {/* Ticker switcher — click the symbol to change what the desk is looking
             at. Only on the desks that are actually looking at one thing. */}
