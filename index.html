@@ -31,27 +31,31 @@
   <meta name="twitter:description" content="Order flow, market-maker hedging dynamics, and institutional liquidity tracking. Compass finds the setup, Pinpoint reads the flow.">
   <meta name="twitter:image" content="https://slayerterminal.com/assets/og-cover.png">
 
-  <!-- SF Pro — self-hosted variable font, the site's ONE family.
+  <!-- Inter — self-hosted variable font, subset in-repo, the site's ONE family.
 
-       Replaces a two-family Google Fonts stylesheet (Inter + JetBrains Mono).
-       That link was a render-blocking request to a third party: measured in a
-       sandbox that cannot reach fonts.googleapis.com, every navigation stalled
-       ~13.6s before painting anything. The workaround was to load it as
-       `media="print"` and promote it to `all` from the bundle — which worked,
-       but left the first paint in a fallback face and the swap-in reflow with
-       it, and kept two third-party hosts in the CSP.
+       Replaces Apple's SF Pro, which replaced a two-family Google Fonts
+       stylesheet. The Google link was a render-blocking request to a third
+       party: measured in a sandbox that cannot reach fonts.googleapis.com,
+       every navigation stalled ~13.6s before painting anything. Self-hosting
+       deleted that whole class of problem — the file ships from our own origin,
+       there is no third-party round trip to stall on, and `style-src`/`font-src`
+       in lib/securityHeaders.ts are `'self'` alone.
 
-       Self-hosting deletes the whole problem instead of managing it. The file
-       ships from our own origin, so it is subject to the same cache rules as
-       the bundle, there is no third-party round trip to stall on, and
-       `style-src`/`font-src` in lib/securityHeaders.ts are now `'self'` alone.
+       SF Pro then had to go for a licence reason rather than a technical one:
+       Apple grants it for interface design and for apps on Apple platforms, not
+       for webfont embedding on a commercial site. Inter is SIL OFL 1.1, which
+       grants embedding, subsetting and commercial use outright. See the
+       @font-face block in src/index.css for the measurements behind picking
+       Inter over Geist and Onest, and public/fonts/OFL.txt for the licence the
+       font is required to travel with.
 
-       One file covers the whole range: wght is a 100-900 axis, so every
-       Tailwind weight comes out of the same 256KB download rather than the
-       eleven static cuts the two-family stylesheet was requesting. `preload`
+       One file covers the whole range: `wght` is a 100-900 axis and `opsz` a
+       14-32 optical-size axis, so every Tailwind weight AND both optical cuts
+       come out of the same 225KB download — smaller than the 256KB file it
+       replaces, despite covering 1,101 codepoints against 748. `preload`
        because it is needed for the first paint and is discoverable here rather
        than one hop deeper inside the CSS. -->
-  <link rel="preload" href="/fonts/SF-Pro.var.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/fonts/Inter.var.woff2" as="font" type="font/woff2" crossorigin>
 </head>
 <body class="bg-canvas">
   <div id="root"></div>

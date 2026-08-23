@@ -7,7 +7,7 @@ import type { Config } from 'tailwindcss';
  * switch in index.css, not a second typeface.
  */
 const SYSTEM_SANS = [
-  'SF Pro',
+  'Inter Variable',
   '-apple-system',
   'BlinkMacSystemFont',
   'Segoe UI',
@@ -171,8 +171,9 @@ export default {
       /*
         ONE family, two tokens.
 
-        `sans` and `mono` both resolve to SF Pro (self-hosted variable, see the
-        @font-face block in index.css). Two typefaces over a surface this dense
+        `sans` and `mono` both resolve to Inter (self-hosted variable, subset in
+        repo — see the @font-face block in index.css, which also records why the
+        face is Inter and not SF Pro). Two typefaces over a surface this dense
         read as "all over the place", and the terminal was overwhelmingly one of
         them anyway: 1,331 `font-mono` call sites against 1 `font-sans`.
 
@@ -183,11 +184,13 @@ export default {
         remove a class that is still meaningful; keeping it means the intent is
         recorded where the number is written.
 
-        The fallbacks stay real rather than a bare generic. SF Pro is a local
-        file now, so the fallback window is short, but the system stack is the
-        closest metric match available while it opens — `-apple-system` IS this
-        face on Apple platforms, and Segoe UI / Roboto are the nearest
-        equivalents elsewhere.
+        The fallbacks stay real rather than a bare generic. Inter is a local
+        file, so the fallback window is one same-origin round trip, but the
+        system stack is still the closest metric match available while it opens
+        — `-apple-system` resolves to SF on Apple platforms and Segoe UI /
+        Roboto are the nearest equivalents elsewhere, all three within a few per
+        cent of Inter's x-height. A bare `sans-serif` would swap in something
+        materially wider and reflow the densest tables mid-load.
       */
       fontFamily: {
         sans: SYSTEM_SANS,

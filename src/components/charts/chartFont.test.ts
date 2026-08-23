@@ -46,7 +46,7 @@ describe('chart typography', () => {
       drops an invalid `font` silently, back to its 10px sans default. There is
       no error and no visual clue beyond slightly wrong labels.
     */
-    expect(CHART_FONT).toContain('"SF Pro"');
+    expect(CHART_FONT).toContain('"Inter Variable"');
     expect(CHART_FONT).toMatch(/sans-serif$/);
     // Balanced quotes — an odd count means a family name is half-quoted, which
     // is the same silent-drop bug with a harder-to-see cause.

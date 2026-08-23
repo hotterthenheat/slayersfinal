@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 /* ============================================================
-   ONE FAMILY — SF Pro, self-hosted variable.
+   ONE FAMILY — Inter, self-hosted variable, subset in-repo.
 
    The terminal used to run two faces: Inter for prose and JetBrains Mono for
    the 1,331 `font-mono` call sites that carry every label, column and readout.
@@ -11,13 +11,46 @@
    fix that holds is one family with one weight axis rather than a rule about
    when to reach for which.
 
-   `wght 100 900` is a single axis, so every Tailwind weight resolves out of
-   this one file — no separate cuts to request, and no missing weight silently
-   falling back to a synthesised bold.
+   WHY NOT SF PRO, WHICH THIS REPLACES. Apple's licence covers SF Pro for
+   interface design and for apps on Apple platforms. It does NOT grant the right
+   to embed the file as a webfont on a commercial site, which is exactly what
+   `@font-face` here does. That is a licence fact, not a taste one, and no amount
+   of liking the face changes it. Inter is SIL Open Font License 1.1 — embedding,
+   subsetting and commercial use are all explicitly granted (public/fonts/OFL.txt
+   travels with the file, as the licence requires).
+
+   WHY INTER AND NOT SOMETHING ELSE. Measured, not chosen by feel. Inter, Geist
+   and Onest were rendered against the outgoing file at the terminal's own sizes
+   and measured in the browser:
+
+       delta vs SF Pro     Inter    Geist    Onest
+       string advance      +2.9%    +6.9%    +6.5%
+       x-height             0.0%    +3.8%    +1.9%
+       cap height          +2.8%    +1.4%    +1.4%
+       descent              0.0%   +25.0%   +29.2%
+
+   x-height and descent are the two that decide whether a swap is invisible:
+   x-height sets apparent size at 11-14px, descent sets the line box. Inter
+   matches both exactly. Geist and Onest change the line box by a quarter,
+   which would have re-opened the density work that took three commits to land.
+
+   `wght 100 900` is a single axis, so every Tailwind weight resolves out of this
+   one file. `opsz 14 32` is Inter's optical size, and it is the reason one file
+   can stand in for the Text/Display pair SF Pro was: `font-optical-sizing: auto`
+   below lets the browser pick the optical cut per size, tighter for headings and
+   more open for 11px labels — the same thing SF Pro did behind the scenes.
+
+   COVERAGE IS GUARDED, not hoped for. The file is subset (scripts/build-inter-
+   subset.py) and a subset can silently drop a glyph, which renders in a system
+   fallback face beside Inter and looks like nothing at all went wrong.
+   core/fontCoverage.test.ts reads every non-ASCII codepoint out of src/ and
+   fails on any that the shipped font cannot draw and that is not on an explicit
+   list of known fallbacks. The outgoing SF Pro file had no such guard and was
+   quietly falling back on ─ ⇄ ⇔ ⇒ ↵ ⧉ ␞.
 
    WHAT THE MONO TOKEN MEANS NOW. `font-mono` is kept as a token, and it still
    means something: it marks the DATA voice. What it no longer means is a second
-   typeface. SF Pro is proportional, so the alignment JetBrains Mono gave for
+   typeface. Inter is proportional, so the alignment JetBrains Mono gave for
    free has to be asked for — `font-variant-numeric: tabular-nums` below does
    that for every `.font-mono` element, which is exactly the set of places that
    holds a number in a column. Rolling digits (AnimatedNumber) and ledger
@@ -29,8 +62,8 @@
    third-party one.
    ============================================================ */
 @font-face {
-  font-family: 'SF Pro';
-  src: url('/fonts/SF-Pro.var.woff2') format('woff2');
+  font-family: 'Inter Variable';
+  src: url('/fonts/Inter.var.woff2') format('woff2');
   font-weight: 100 900;
   font-style: normal;
   font-display: swap;
@@ -40,11 +73,16 @@
 @layer base {
   html {
     color-scheme: dark;
+    /* Engage Inter's opsz axis. Without this the browser pins the default (14),
+       so 34px headings render in the small-text optical cut — looser and slightly
+       wide, which is the thing that reads as "not quite right" without being
+       nameable. */
+    font-optical-sizing: auto;
   }
   body {
     @apply bg-canvas text-textPrimary antialiased;
   }
-  /* SF Pro is proportional; the data voice asks for its own column alignment.
+  /* Inter is proportional; the data voice asks for its own column alignment.
      See the @font-face block above — this is the half of the one-family move
      that keeps every numeric column straight. */
   .font-mono {

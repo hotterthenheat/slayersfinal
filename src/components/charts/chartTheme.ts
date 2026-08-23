@@ -33,12 +33,12 @@ import { MUTED_INK } from '../gex/palette';
   One token, imported everywhere, and the failure mode is gone: changing the
   family is one edit, and a chart cannot drift from the page by accident.
 
-  Quoted, because `SF Pro` has a space in it and an unquoted multi-word family
+  Quoted, because `Inter Variable` has a space in it and an unquoted multi-word family
   name is not valid in a canvas `ctx.font` shorthand — the whole declaration is
   dropped, silently, back to the 10px sans default.
 */
 export const CHART_FONT =
-  '"SF Pro", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  '"Inter Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
 
 /** Axis tick label. 10px is the terminal's readability floor for mono. */
 export const axisTick = {

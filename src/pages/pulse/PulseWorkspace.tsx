@@ -1795,7 +1795,14 @@ const PulseWorkspace = () => {
                     )}
                     {outCount === 0 && reopenable.length === 0 && displays.length <= 1 && supportsDisplays && (
                       <p className="px-2 py-1.5 text-micro text-textMuted leading-relaxed">
-                        One display detected. Pop a panel out with the ⧉ button in its header.
+                        {/* Was "the ⧉ button". Two things wrong with that: U+29C9 is not in the
+                            shipped face (nor was it in the SF Pro it replaced), so it rendered in
+                            whatever the browser substituted; and it is not the button's icon
+                            either — the header draws lucide's ExternalLink. Pointing at the real
+                            icon costs one import and describes something the reader can find. */}
+                        One display detected. Pop a panel out with the{' '}
+                        <ExternalLink className="inline w-3 h-3 align-[-0.15em]" aria-label="pop out" /> button in its
+                        header.
                       </p>
                     )}
                   </div>
