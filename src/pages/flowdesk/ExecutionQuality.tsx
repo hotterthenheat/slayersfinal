@@ -6,6 +6,7 @@ import {
   EXECUTION_GRADE,
   buildExecutionQuality,
   gradeOf,
+  type ContractLiquidity,
   type ExecutionCut,
   type PrintExecution,
 } from '../../data/executionQuality';
@@ -48,6 +49,9 @@ const HOW_FAR_BACK = 400;
 
 /** Rows in the worst-fills table. It is a top list, not a tape. */
 const WORST_ROWS = 12;
+
+/** Contracts in the liquidity table. Same reason. */
+const CONTRACT_ROWS = 14;
 
 const gradeTone: Record<ReturnType<typeof gradeOf>, Tone> = {
   MID_OR_BETTER: 'select',
@@ -112,6 +116,14 @@ const ExecutionQuality = () => {
     [view.rows]
   );
 
+  /* Most-traded first. The question this table answers is "which of these can I
+     actually get done", and the contracts that traded most are the ones with an
+     answer — a single print says almost nothing about a book. */
+  const liquid = useMemo(
+    () => [...view.byContract].sort((a, b) => b.volume - a.volume).slice(0, CONTRACT_ROWS),
+    [view.byContract]
+  );
+
   if (view.prints === 0) {
     return (
       <Panel title="Execution quality" subtitle={`${activeTicker} · session`}>
@@ -138,6 +150,7 @@ const ExecutionQuality = () => {
       key: 'contract',
       group: 'Print',
       header: 'Contract',
+      width: '132px',
       sortValue: r => r.print.strike,
       render: r => (
         <span className="font-mono text-caption text-textPrimary tnum leading-4">
@@ -198,16 +211,30 @@ const ExecutionQuality = () => {
       ),
     },
     {
+      /* The flexible column, same argument as the liquidity table's Spread: the
+         slack goes to the thing being compared across rows. The track runs from
+         the midpoint to the touch, so the marker's position IS the E/Q beside
+         it — and a fill outside the quote pushes past the end of the track,
+         which is the one state a number alone reads past. */
       key: 'grade',
       group: 'Cost',
       header: 'Landed',
-      width: '104px',
       sortValue: r => r.effectiveOverQuoted,
       render: r => {
         const g = gradeOf(r.effectiveOverQuoted);
         return (
-          <span title={EXECUTION_GRADE[g].note}>
-            <SignalBadge tone={gradeTone[g]}>{EXECUTION_GRADE[g].label}</SignalBadge>
+          <span className="flex items-center gap-2.5" title={EXECUTION_GRADE[g].note}>
+            <span className="relative flex-1 min-w-[36px] h-[3px] rounded-full bg-white/[0.07]">
+              <span
+                className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-[6px] h-[6px] rounded-full ${
+                  g === 'OUTSIDE' ? 'bg-warn' : g === 'MID_OR_BETTER' ? 'bg-select' : 'bg-white/60'
+                }`}
+                style={{ left: `${Math.min(100, r.effectiveOverQuoted * 100)}%` }}
+              />
+            </span>
+            <span className="w-[62px] shrink-0">
+              <SignalBadge tone={gradeTone[g]}>{EXECUTION_GRADE[g].label}</SignalBadge>
+            </span>
           </span>
         );
       },
@@ -221,6 +248,111 @@ const ExecutionQuality = () => {
       sortValue: r => r.spreadCost,
       render: r => (
         <span className="font-mono text-caption tnum leading-4 text-warn">{fmtUsd(r.spreadCost)}</span>
+      ),
+    },
+  ];
+
+  const maxSpreadPct = Math.max(...liquid.map(c => c.spreadPct), 0.01);
+
+  const liquidityColumns: Column<ContractLiquidity>[] = [
+    {
+      key: 'contract',
+      header: 'Contract',
+      width: '118px',
+      sortValue: c => c.strike,
+      render: c => <span className="font-mono text-caption text-textPrimary tnum leading-4">{c.key}</span>,
+    },
+    {
+      key: 'volume',
+      header: 'Volume',
+      align: 'right',
+      width: '84px',
+      sortValue: c => c.volume,
+      render: c => (
+        <span className="font-mono text-caption text-textSecondary tnum leading-4">
+          {c.volume.toLocaleString()}
+        </span>
+      ),
+    },
+    {
+      key: 'prints',
+      header: 'Prints',
+      align: 'right',
+      width: '68px',
+      sortValue: c => c.prints,
+      render: c => <span className="font-mono text-caption text-textMuted tnum leading-4">{c.prints}</span>,
+    },
+    {
+      /*
+        THE FLEXIBLE COLUMN, and deliberately this one.
+
+        Every other column here is a fixed width, so whichever is left to grow
+        takes all the slack — and a `Contract` column stretched to a thousand
+        pixels beside seven crammed numeric ones is what the first pass shipped.
+        The slack belongs to the column a reader scans FOR: how expensive this
+        contract is to get into, drawn against the widest on screen so the
+        comparison is made by the eye rather than by reading eight percentages.
+      */
+      key: 'spread',
+      header: 'Spread',
+      sortValue: c => c.spreadPct,
+      render: c => (
+        <span className="flex items-center gap-2.5">
+          <span className="relative flex-1 min-w-[40px] h-[6px] rounded-full bg-white/[0.04] overflow-hidden">
+            <span
+              className={`absolute inset-y-0 left-0 rounded-full ${costFill(c.spreadPct / maxSpreadPct)}`}
+              style={{ width: `${Math.max(2, (c.spreadPct / maxSpreadPct) * 100)}%` }}
+            />
+          </span>
+          <span className="w-[46px] shrink-0 text-right font-mono text-caption text-textPrimary tnum leading-4">
+            {c.spreadPct.toFixed(1)}%
+          </span>
+        </span>
+      ),
+    },
+    {
+      key: 'range',
+      header: 'Quote range',
+      align: 'right',
+      width: '112px',
+      sortValue: c => c.spreadMax - c.spreadMin,
+      render: c => (
+        <span
+          className="font-mono text-caption text-textMuted tnum leading-4"
+          title="Narrowest and widest quote observed around this contract today"
+        >
+          {c.spreadMin.toFixed(2)}–{c.spreadMax.toFixed(2)}
+        </span>
+      ),
+    },
+    {
+      key: 'largest',
+      header: 'Largest fill',
+      align: 'right',
+      width: '98px',
+      sortValue: c => c.largestFill,
+      render: c => (
+        <span
+          className="font-mono text-caption text-textSecondary tnum leading-4"
+          title="The biggest single print that got done — observed, not displayed"
+        >
+          {c.largestFill.toLocaleString()}
+        </span>
+      ),
+    },
+    {
+      key: 'ten',
+      header: '10 lots',
+      align: 'right',
+      width: '86px',
+      sortValue: c => c.costPerTen,
+      render: c => (
+        <span
+          className="font-mono text-caption tnum leading-4 text-warn"
+          title="What ten contracts cost to cross at this contract's observed spread"
+        >
+          {fmtUsd(c.costPerTen)}
+        </span>
       ),
     },
   ];
@@ -337,6 +469,26 @@ const ExecutionQuality = () => {
           </Panel>
         </div>
       </div>
+
+      <Panel
+        title="Can you get filled"
+        subtitle={`${view.ticker} · per contract, from prints that actually happened`}
+        flush
+      >
+        <DataTable
+          columns={liquidityColumns}
+          rows={liquid}
+          rowKey={c => c.key}
+          initialSort={{ key: 'volume', dir: 'desc' }}
+        />
+        <p className="px-4 py-2.5 border-t border-borderSubtle text-label leading-relaxed text-textMuted">
+          <span className="font-mono uppercase tracking-wider text-textSecondary mr-2">What this does not say</span>
+          It does not say how many contracts are DISPLAYED at the touch. That needs the quote stream, and
+          nothing here reads one. Every column above is measured from prints that filled: the quote that stood
+          around them, how often they traded, and the largest single print that got done — which is a lower
+          bound on what the book absorbed, and one that cannot be pulled the way a displayed size can.
+        </p>
+      </Panel>
 
       <Panel
         title="Most expensive fills"

@@ -128,6 +128,48 @@ export interface ExecutionCut {
   bps: number;
 }
 
+/**
+ * One contract's tradability, measured only from prints that actually happened.
+ *
+ * WHAT THIS DELIBERATELY IS NOT. docs/DATA-FEASIBILITY.md's P0 #3 asks for
+ * per-contract liquidity from "displayed size at the top of book, quote-update
+ * frequency, and time-weighted spread" — all of which the NBBO stream can back,
+ * and none of which the app receives today: `OptionQuote` carries `bidSize` and
+ * `askSize` and nothing produces one. So this does not claim depth.
+ *
+ * It answers the same question from the other side, with evidence rather than a
+ * model: what the quote around this contract actually was when it traded, how
+ * often it traded, and THE LARGEST PRINT THAT GOT DONE. That last figure is a
+ * measured lower bound on what the book will absorb, and it is arguably the
+ * better number — displayed size can be pulled, an executed size cannot be
+ * un-executed. A quote-stream feed adds depth beside it; it does not replace it.
+ */
+export interface ContractLiquidity {
+  key: string;
+  strike: number;
+  right: 'C' | 'P';
+  dte: number;
+  prints: number;
+  /** Contracts traded across those prints. */
+  volume: number;
+  premium: number;
+  /** Volume-weighted quoted spread, dollars per contract. */
+  spread: number;
+  /** The same as a percentage of mid — the form that compares across strikes. */
+  spreadPct: number;
+  /** Narrowest and widest quote observed on this contract today. */
+  spreadMin: number;
+  spreadMax: number;
+  /** Largest single print that filled. Observed, not displayed. */
+  largestFill: number;
+  /** Premium-weighted E/Q for this contract. */
+  eq: number;
+  /** Dollars this contract's prints paid to cross, summed. */
+  cost: number;
+  /** What ten contracts would cost to cross at the observed spread. */
+  costPerTen: number;
+}
+
 export interface ExecutionQualityView {
   ticker: string;
   rows: PrintExecution[];
@@ -150,6 +192,7 @@ export interface ExecutionQualityView {
   improvementDollars: number;
   buckets: SpreadBucket[];
   byExpiry: ExecutionCut[];
+  byContract: ContractLiquidity[];
   bySide: ExecutionCut[];
   /** The single worst print by dollars paid to cross. */
   worst: PrintExecution | null;
@@ -305,9 +348,69 @@ export function buildExecutionQuality(prints: FlowPrint[], ticker: string): Exec
     )
   ).filter(c => c.prints > 0);
 
+  /*
+    Per contract, keyed by the instrument rather than the strike: a 500 call and
+    a 500 put share a strike and are not the same thing to trade, and the same
+    strike at two expiries is two books.
+  */
+  const byKey = new Map<string, PrintExecution[]>();
+  for (const r of rows) {
+    const k = `${r.print.strike}${r.print.right} ${r.print.dte}d`;
+    const list = byKey.get(k);
+    if (list) list.push(r);
+    else byKey.set(k, [r]);
+  }
+
+  const byContract: ContractLiquidity[] = [...byKey.entries()].map(([key, list]) => {
+    let volume = 0;
+    let prem = 0;
+    let spreadWeighted = 0;
+    let pctWeighted = 0;
+    let eqWeighted = 0;
+    let cost = 0;
+    let largestFill = 0;
+    let spreadMin = Infinity;
+    let spreadMax = 0;
+    for (const r of list) {
+      volume += r.print.size;
+      prem += r.print.premium;
+      // Spread is weighted by CONTRACTS, not by premium: it is a per-contract
+      // price, and a hundred lots of a cheap strike is a hundred chances to
+      // observe that strike's quote, not a hundredth of one.
+      spreadWeighted += r.quotedSpread * r.print.size;
+      pctWeighted += r.quotedSpreadPct * r.print.size;
+      eqWeighted += r.effectiveOverQuoted * r.print.premium;
+      cost += r.spreadCost;
+      if (r.print.size > largestFill) largestFill = r.print.size;
+      if (r.quotedSpread < spreadMin) spreadMin = r.quotedSpread;
+      if (r.quotedSpread > spreadMax) spreadMax = r.quotedSpread;
+    }
+    const spread = volume > 0 ? spreadWeighted / volume : 0;
+    return {
+      key,
+      strike: list[0].print.strike,
+      right: list[0].print.right,
+      dte: list[0].print.dte,
+      prints: list.length,
+      volume,
+      premium: prem,
+      spread,
+      spreadPct: volume > 0 ? pctWeighted / volume : 0,
+      spreadMin: spreadMin === Infinity ? 0 : spreadMin,
+      spreadMax,
+      largestFill,
+      eq: prem > 0 ? eqWeighted / prem : 0,
+      cost,
+      // Half the spread on each of ten contracts, x100 multiplier — what it
+      // costs to take the offer rather than wait at the mid.
+      costPerTen: (spread / 2) * 10 * 100,
+    };
+  });
+
   return {
     ticker,
     rows,
+    byContract,
     prints: rows.length,
     premium,
     spreadCost,

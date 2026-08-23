@@ -203,6 +203,55 @@ describe('the session', () => {
     expect(v.effectiveOverQuoted).toBeCloseTo(1, 8);
   });
 
+  it('groups liquidity by INSTRUMENT, not by strike', () => {
+    /*
+      A 500 call and a 500 put share a strike and are not the same thing to
+      trade; the same strike at two expiries is two books. Keying on the strike
+      alone would fold three instruments into one row and report the union's
+      spread as if a trader could get all of it in one place.
+    */
+    const prints = [
+      print({ id: 1, strike: 500, right: 'C', dte: 7, size: 10 }),
+      print({ id: 2, strike: 500, right: 'C', dte: 7, size: 30 }),
+      print({ id: 3, strike: 500, right: 'P', dte: 7, size: 5 }),
+      print({ id: 4, strike: 500, right: 'C', dte: 30, size: 8 }),
+    ];
+    const v = buildExecutionQuality(prints, 'SPY');
+    expect(v.byContract).toHaveLength(3);
+    const front = v.byContract.find(c => c.key === '500C 7d')!;
+    expect(front.prints).toBe(2);
+    expect(front.volume).toBe(40);
+    // The measured lower bound on what the book absorbed — the biggest print
+    // that actually filled, not a displayed size nobody can verify.
+    expect(front.largestFill).toBe(30);
+  });
+
+  it('weights a contract spread by CONTRACTS, not by premium', () => {
+    /*
+      The spread is a per-contract price. A hundred lots of a strike is a hundred
+      observations of that strike's quote, not a hundredth of one — so the weight
+      is size. Premium-weighting here would let one expensive lot outvote a
+      hundred cheap ones about a quantity that has nothing to do with cost.
+    */
+    const wide = print({ id: 1, bid: 1.0, ask: 2.0, fill: 1.5, size: 1, premium: 150 });
+    const tight = print({ id: 2, bid: 1.49, ask: 1.51, fill: 1.5, size: 99, premium: 14_850 });
+    const c = buildExecutionQuality([wide, tight], 'SPY').byContract[0];
+    expect(c.volume).toBe(100);
+    // (1.00 x 1 + 0.02 x 99) / 100 = 0.0298
+    expect(c.spread).toBeCloseTo(0.0298, 6);
+    expect(c.spreadMin).toBeCloseTo(0.02, 6);
+    expect(c.spreadMax).toBeCloseTo(1.0, 6);
+  });
+
+  it('prices ten lots at the observed half-spread', () => {
+    const c = buildExecutionQuality(
+      [print({ bid: 0.9, ask: 1.1, fill: 1.0, size: 10, premium: 1_000 })],
+      'SPY'
+    ).byContract[0];
+    expect(c.spread).toBeCloseTo(0.2, 8);
+    expect(c.costPerTen).toBeCloseTo(0.1 * 10 * 100, 6); // $100 to take the offer
+  });
+
   it('survives a tape with nothing scoreable', () => {
     const v = buildExecutionQuality([print({ bid: 0, ask: 0 })], 'SPY');
     expect(v.prints).toBe(0);
@@ -211,5 +260,6 @@ describe('the session', () => {
     expect(Number.isFinite(v.effectiveOverQuoted)).toBe(true);
     expect(v.worst).toBeNull();
     expect(v.byExpiry).toEqual([]);
+    expect(v.byContract).toEqual([]);
   });
 });
