@@ -73,6 +73,36 @@ const W_LEGEND_LONG = 560;
 /** Reserved so a tip label can never clip and never lands on a coloured fill. */
 const LABEL_PAD_ON = 64;
 const LABEL_PAD_OFF = 6;
+/* Half the inked height of an 11px mono label — the vertical reach a value has
+   either side of its band's centre line, used to decide whether a marker that
+   straddles two bands lands on either one's text. */
+const LABEL_HALF_H = 7;
+/* The widest a value label gets: `-$254.2M` is 8 glyphs of 11px mono at ~6.6px
+   plus the 6px inset. Used to decide whether a placement has room BEFORE it is
+   rendered, which is the only point at which the choice can still be made. */
+const LABEL_W = 60;
+
+/** The two opaque markers' edges, in plot-local pixels. */
+interface MarkerBox {
+  spotLeft: number;
+  spotTop: number;
+  spotBottom: number;
+  flipRight: number;
+  flipTop: number;
+  flipBottom: number;
+}
+/* Out of everyone's way until measured: nothing to the right of `Infinity`,
+   nothing to the left of 0, and a vertical span no band can intersect. */
+const NO_MARKERS: MarkerBox = {
+  spotLeft: Infinity,
+  spotTop: Infinity,
+  spotBottom: -Infinity,
+  flipRight: 0,
+  flipTop: Infinity,
+  flipBottom: -Infinity,
+};
+const sameBox = (a: MarkerBox, b: MarkerBox) =>
+  (Object.keys(a) as (keyof MarkerBox)[]).every(k => a[k] === b[k]);
 
 const fmtStrike = (v: number) => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
 
@@ -204,6 +234,9 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
 
   const rootRef = useRef<HTMLDivElement | null>(null);
   const bandRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const plotRef = useRef<HTMLDivElement | null>(null);
+  const spotTagRef = useRef<HTMLSpanElement | null>(null);
+  const flipTagRef = useRef<HTMLSpanElement | null>(null);
 
   const [root, setRoot] = useState({ w: 0, h: 0 });
   const [tier, setTier] = useState<Tier>('FULL');
@@ -302,6 +335,95 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
   // never changes sign. Two coincident rules is worse than one honest one.
   const flipDegenerate = Math.abs(levels.flip - levels.spot) < scale.step / 4;
   const flipPct = ((levels.flip - levels.spot) / levels.spot) * 100;
+
+  /*
+    WHERE THE TWO OPAQUE MARKERS SIT, IN PLOT-LOCAL X.
+
+    A bar's value label is drawn in the gutter past its own end, and both
+    gutters already hold something: the right one carries the spot marker's
+    ticker and price pill, the left one the FLIP badge. On the band each marker
+    crosses, the label and the marker were laid out independently and printed on
+    top of each other — `$205.6M` under `SPY 502.19` on the right, `-$134.6M`
+    under `FLIP 498.50 · 0.70% BELOW SPOT` on the left. Both are the strikes
+    nearest the money, which carry the ladder's widest bars, so the collision
+    lands on the two rows a reader is most likely to be reading.
+
+    Neither edge can be reserved by a constant. The spot pill's left edge moves
+    with the ticker's glyph count and the price's digit count; the flip badge's
+    right edge moves with whether the percentage is shown. So they are measured,
+    once per layout, and the label for those two bands is clamped to what is
+    left. Nothing is hidden and nothing moves on any other row.
+  */
+  const [markers, setMarkers] = useState<MarkerBox>(NO_MARKERS);
+  useLayoutEffect(() => {
+    const plotEl = plotRef.current;
+    if (!plotEl) return;
+    const measure = () => {
+      const box = plotEl.getBoundingClientRect();
+      const spot = spotTagRef.current?.getBoundingClientRect();
+      const flip = flipTagRef.current?.getBoundingClientRect();
+      const next: MarkerBox = {
+        spotLeft: spot ? spot.left - box.left : Infinity,
+        spotTop: spot ? spot.top - box.top : Infinity,
+        spotBottom: spot ? spot.bottom - box.top : -Infinity,
+        flipRight: flip ? flip.right - box.left : 0,
+        flipTop: flip ? flip.top - box.top : Infinity,
+        flipBottom: flip ? flip.bottom - box.top : -Infinity,
+      };
+      setMarkers(prev => (sameBox(prev, next) ? prev : next));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(plotEl);
+    if (spotTagRef.current) ro.observe(spotTagRef.current);
+    if (flipTagRef.current) ro.observe(flipTagRef.current);
+    return () => ro.disconnect();
+    /*
+      The deps are everything that can move a marker, measured synchronously
+      BEFORE paint so a label is never placed against last render's geometry: the
+      plot box, the tier that decides what renders, and the marker content
+      itself — a longer ticker or a fourth price digit shifts the pill's left
+      edge, and the percentage suffix changes the badge's right edge.
+
+      Deliberately NOT an empty dep list and NOT dep-less. Dep-less would re-run
+      on every `setCursor` from a mousemove, which is three forced layouts per
+      pointer event on a 21-band chart for no new information. The observer is
+      the backstop for a resize this list cannot see.
+    */
+  }, [plot.w, plot.h, showDerived, flipDegenerate, tier, ticker, levels.spot, levels.flip]);
+
+  /*
+    EVERY band a marker's text can land on, not the one band its centre line
+    falls in.
+
+    The first cut used `findIndex` on the marker's y, and a sweep of 8 tickers x
+    6 horizons x 3 widths still found 37 collisions in 144 cases. A marker is
+    17-19px tall against ~20px bands, so it routinely straddles two rows, and on
+    the row it merely clips the label was still drawn in the gutter under it.
+    The test is an intersection between the marker's own vertical extent and
+    where a band's text is inked, which is what the eye is actually judging.
+  */
+  const bandsUnder = useCallback(
+    (top: number, bottom: number) => {
+      const hit = new Set<number>();
+      bandList.forEach((b, i) => {
+        const mid = b.top + b.height / 2;
+        if (top < mid + LABEL_HALF_H && bottom > mid - LABEL_HALF_H) hit.add(i);
+      });
+      return hit;
+    },
+    [bandList]
+  );
+  const spotBands = useMemo(
+    () => bandsUnder(markers.spotTop, markers.spotBottom),
+    [bandsUnder, markers.spotTop, markers.spotBottom]
+  );
+  // Empty when the flip is degenerate: no badge is rendered, so the left gutter
+  // is clear and every negative label keeps its normal placement.
+  const flipBands = useMemo(
+    () => (flipDegenerate ? new Set<number>() : bandsUnder(markers.flipTop, markers.flipBottom)),
+    [bandsUnder, markers.flipTop, markers.flipBottom, flipDegenerate]
+  );
 
   const activeStrike = hoverStrike ?? hoverRow?.strike ?? focusStrike ?? null;
   const activeBand = bandList.find(b => b.strike === activeStrike);
@@ -483,6 +605,76 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
 
   const anchorWord = anchor === levels.spot ? 'spot' : fmtStrike(anchor);
   const anchorLabel = `CUM FROM ${anchorWord === 'spot' ? 'SPOT' : anchorWord}`;
+
+  /*
+    A BAR'S VALUE, PLACED SO IT NEVER PRINTS ON A MARKER.
+
+    Default is the gutter past the bar's own end, which is where 19 of the 21
+    rows put it and where it has always gone. The two exceptions are the bands
+    the opaque markers cross: there the label moves INSIDE its own bar and is
+    clamped to stop at the marker's edge, so the number keeps its row, keeps its
+    side of the spine, and stops at the pill instead of running under it.
+
+    `text-ink` on a filled band — #0a0a0a over longGamma at 0.88 opacity
+    measures 5.7:1 and over shortGamma 10.6:1, both past AA for this size.
+
+    A bar too thin to hold the text keeps the outside placement: a thin bar's
+    label lands far from the plot edge on the right, and far from left:0 on the
+    left, so it is clear of both markers by construction.
+  */
+  const insideLabel = (v: number, left: number, width: number, align: 'left' | 'right') => (
+    <span
+      className={`absolute top-1/2 -translate-y-1/2 font-mono text-micro font-semibold tnum text-ink pointer-events-none whitespace-nowrap ${
+        align === 'right' ? 'pr-1.5 text-right' : 'pl-1.5'
+      }`}
+      style={{ left, width }}
+    >
+      {fmtUsd(v)}
+    </span>
+  );
+
+  const posLabel = (i: number, v: number, w: number) => {
+    // A positive bar spans [spine, spine + w]; its label goes in the gutter past
+    // the end. The spot marker's ticker + pill own [spotLeft, the plot's right].
+    const outerLeft = spine + w + 4;
+    if (!spotBands.has(i) || outerLeft + LABEL_W <= markers.spotLeft) {
+      return (
+        <span
+          className="absolute top-1/2 -translate-y-1/2 pl-1 font-mono text-micro tnum text-textSecondary pointer-events-none whitespace-nowrap"
+          style={{ left: outerLeft }}
+        >
+          {fmtUsd(v)}
+        </span>
+      );
+    }
+    // Right-aligned inside the bar so the digits END at the pill, never under
+    // it. If the clear part of the bar cannot hold them, the row prints no
+    // value: the marker is what that row is for, and the number is still in the
+    // band's own aria-label and in the hover card.
+    const room = Math.min(w, markers.spotLeft - spine);
+    return room >= LABEL_W ? insideLabel(v, spine, room, 'right') : null;
+  };
+
+  const negLabel = (i: number, v: number, w: number) => {
+    // A negative bar spans [spine - w, spine]; its label is right-aligned in the
+    // gutter [0, spine - w]. The FLIP badge owns [0, flipRight].
+    const outerRight = spine - w - 4;
+    if (!flipBands.has(i) || outerRight - LABEL_W >= markers.flipRight) {
+      return (
+        <span
+          className="absolute top-1/2 -translate-y-1/2 text-right pr-1 font-mono text-micro tnum text-textSecondary pointer-events-none"
+          style={{ left: 0, width: Math.max(0, outerRight) }}
+        >
+          {fmtUsd(v)}
+        </span>
+      );
+    }
+    // Left-aligned inside the bar, starting past the badge. Same fallback.
+    const start = Math.max(spine - w, markers.flipRight);
+    const room = spine - start;
+    return room >= LABEL_W ? insideLabel(v, start, room, 'left') : null;
+  };
+
   const railLabelled = railW >= RAIL_W;
   const emTop = scale.yOf(levels.spot + em);
   const emBottom = scale.yOf(levels.spot - em);
@@ -611,6 +803,7 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
 
           {/* Lane B — the plot */}
           <div
+            ref={plotRef}
             className="relative flex-1 min-w-0 overflow-hidden"
             role={interactive ? 'group' : 'img'}
             aria-label={interactive ? 'Dealer positioning by strike' : readOnlyLabel}
@@ -690,22 +883,7 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
                     transition={{ duration: DUR.data, ease: EASE }}
                     style={{ background: v < 0 ? SHORT_GAMMA : LONG_GAMMA, opacity: 0.88 }}
                   />
-                  {labelsOn &&
-                    (v < 0 ? (
-                      <span
-                        className="absolute top-1/2 -translate-y-1/2 text-right pr-1 font-mono text-micro tnum text-textSecondary pointer-events-none"
-                        style={{ left: 0, width: Math.max(0, spine - w - 4) }}
-                      >
-                        {fmtUsd(v)}
-                      </span>
-                    ) : (
-                      <span
-                        className="absolute top-1/2 -translate-y-1/2 pl-1 font-mono text-micro tnum text-textSecondary pointer-events-none whitespace-nowrap"
-                        style={{ left: spine + w + 4 }}
-                      >
-                        {fmtUsd(v)}
-                      </span>
-                    ))}
+                  {labelsOn && (v < 0 ? negLabel(i, v, w) : posLabel(i, v, w))}
                 </div>
               );
             })}
@@ -770,6 +948,7 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
                   style={{ top: scale.yOf(levels.flip) }}
                 />
                 <span
+                  ref={flipTagRef}
                   className="absolute left-0 -translate-y-1/2 inline-flex items-center rounded-[3px] border border-flip/60 bg-canvas px-1.5 py-px font-mono text-micro font-bold uppercase tracking-wider text-flip whitespace-nowrap pointer-events-none"
                   style={{ top: scale.yOf(levels.flip) }}
                 >
@@ -787,7 +966,7 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
               {/* SpotRule's own root is the flex container, so it needs a block
                   parent to stretch into. */}
               <div className="flex-1 min-w-0">
-                <SpotRule ticker={ticker} price={levels.spot} />
+                <SpotRule ticker={ticker} price={levels.spot} contentRef={spotTagRef} />
               </div>
               {flipDegenerate && (
                 <span className="shrink-0 font-mono text-micro font-bold uppercase tracking-wider text-flip whitespace-nowrap">
