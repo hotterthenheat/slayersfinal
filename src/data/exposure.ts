@@ -45,6 +45,25 @@ const EXPIRY_DECAY: Record<ExposureExpiry, number> = {
   ALL: 1 + 0.52 + 0.38 + 0.22 + 0.16,
 };
 
+/**
+ * The horizons a profile can be built for, ready for a SegmentedControl.
+ *
+ * It lives HERE, next to the decay map, because the decay map is what decides
+ * which horizons exist: an option the map has no factor for cannot be built,
+ * and a factor with no option cannot be reached. Two files were each spelling
+ * their own copy of this list — a third was about to — and the failure mode is
+ * silent, because a stale copy offers a horizon that renders an empty profile
+ * rather than throwing.
+ */
+export const EXPOSURE_EXPIRIES: readonly { value: ExposureExpiry; label: string }[] = [
+  { value: '0DTE', label: '0DTE' },
+  { value: '1D', label: '1D' },
+  { value: '2D', label: '2D' },
+  { value: '5D', label: '5D' },
+  { value: '7D', label: '7D' },
+  { value: 'ALL', label: 'All' },
+];
+
 function scaleSplit(put: number, call: number, factor: number, jitter: number): GreekSplit {
   const p = put * factor * (0.82 + jitter * 0.36);
   const c = call * factor * (0.82 + (1 - jitter) * 0.36);

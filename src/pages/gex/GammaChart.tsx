@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, Info } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
-import { buildExposureProfile } from '../../data/exposure';
+import { buildExposureProfile, EXPOSURE_EXPIRIES } from '../../data/exposure';
 import { buildGexView, fmtUsd } from '../../data/gex';
 import type { MarketSnapshot } from '../../types/market';
 import Panel from '../../components/ui/Panel';
@@ -47,15 +47,6 @@ const LevelChip = ({
     </span>
   );
 };
-
-const PROFILE_EXPIRIES: readonly { value: ExposureExpiry; label: string }[] = [
-  { value: '0DTE', label: '0DTE' },
-  { value: '1D', label: '1D' },
-  { value: '2D', label: '2D' },
-  { value: '5D', label: '5D' },
-  { value: '7D', label: '7D' },
-  { value: 'ALL', label: 'All' },
-];
 
 const GammaChart = () => {
   const { marketData } = useMarketData();
@@ -198,7 +189,7 @@ const GammaChart = () => {
         actions={
           <SegmentedControl
             ariaLabel="Profile horizon"
-            options={PROFILE_EXPIRIES}
+            options={EXPOSURE_EXPIRIES}
             value={profileExpiry}
             onChange={setProfileExpiry}
           />

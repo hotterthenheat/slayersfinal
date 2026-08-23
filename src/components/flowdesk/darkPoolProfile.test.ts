@@ -24,6 +24,9 @@ import type { DarkPoolLevel, DarkPoolPrint } from '../../types/darkpool';
 
 const print = (id: number, price: number, notional: number): DarkPoolPrint => ({
   id,
+  // A fixed instant: this suite bins by PRICE and never reads the clock, so a
+  // real timestamp would only make the fixture look time-dependent.
+  at: Date.UTC(2026, 0, 2, 14, 30) + id * 1000,
   time: '09:30',
   ticker: 'SPY',
   price,

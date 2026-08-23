@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowUpRight, X } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
-import { buildExposureProfile } from '../../data/exposure';
+import { buildExposureProfile, EXPOSURE_EXPIRIES } from '../../data/exposure';
 import { fmtUsd } from '../../data/gex';
 import type { MarketSnapshot } from '../../types/market';
 import { DEALER_BIAS_LABEL, type ExposureExpiry } from '../../types/gex';
@@ -26,15 +26,6 @@ import KnowabilityChip from '../../components/ui/KnowabilityChip';
 
 /** Exposure sweeps on its own cadence — bars must not vibrate with every tick. */
 const SCAN_INTERVAL_MS = 10_000;
-
-const EXPIRY_OPTIONS = [
-  { value: '0DTE', label: '0DTE' },
-  { value: '1D', label: '1D' },
-  { value: '2D', label: '2D' },
-  { value: '5D', label: '5D' },
-  { value: '7D', label: '7D' },
-  { value: 'ALL', label: 'All' },
-] as const;
 
 const WINDOW_OPTIONS = [
   { value: '10', label: '±10' },
@@ -133,7 +124,7 @@ const ExposureProfile = () => {
       <div className="flex items-center gap-3 flex-wrap">
         <SegmentedControl
           ariaLabel="Expiry"
-          options={EXPIRY_OPTIONS}
+          options={EXPOSURE_EXPIRIES}
           value={expiry}
           onChange={v => setExpiry(v as ExposureExpiry)}
         />

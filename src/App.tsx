@@ -31,6 +31,7 @@ import MetaorderReconstruction from './components/flowdesk/MetaorderReconstructi
 import DarkPool from './pages/flowdesk/DarkPool';
 import ExecutionQuality from './pages/flowdesk/ExecutionQuality';
 import Stocks from './pages/Stocks';
+import Terrain from './pages/terrain/Terrain';
 import NotFound from './pages/NotFound';
 import Landing from './pages/landing/Landing';
 import TerminalIndex from './pages/terminal/TerminalIndex';
@@ -131,6 +132,7 @@ const App = () => {
             <Route path="/workspace" element={<Navigate to="/pulse" replace />} />
             <Route path="/compass" element={<Compass />} />
             <Route path="/stocks" element={<Stocks />} />
+            <Route path="/terrain" element={<Terrain />} />
             <Route path="/prove-it" element={<Suspense fallback={<RouteFallback />}><ProveIt /></Suspense>} />
             {/* Fracture folded into Pinpoint Stress; Lotto folded into Compass */}
             <Route path="/fracture" element={<Navigate to="/pinpoint/stress?view=fracture" replace />} />

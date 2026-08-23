@@ -20,12 +20,14 @@ import {
   type Timeframe,
 } from '../../data/timeframe';
 import { GexNodesPrimitive } from './gexNodesPrimitive';
+import { DarkPoolShelfPrimitive } from '../terrain/darkPoolShelfPrimitive';
 import { heatPoles } from './heatmap';
 import { candleTheme } from './candleTheme';
 import { fmtUsd } from '../../data/gex';
 import ChartLegend from '../ui/ChartLegend';
 import TimeframePicker from '../ui/TimeframePicker';
 import type { Candle, GexSnapshot } from '../../types/market';
+import type { DarkPoolLevel, DarkPoolPrint } from '../../types/darkpool';
 import type { KeyLevels, OverlayMode } from '../../types/gex';
 
 interface StrikeChartProps {
@@ -39,6 +41,27 @@ interface StrikeChartProps {
   timeframe: Timeframe;
   /** Hide the interval picker where the chart is decoration, not an instrument. */
   showTimeframePicker?: boolean;
+  /**
+   * Hide the chart's own toolbar row — legend, pan/zoom hint, picker, reset.
+   *
+   * For a host that has already put those controls somewhere else. Terrain is
+   * the case: it gives this chart the whole viewport under a desk strip that
+   * already carries the layer switches, and a second toolbar directly beneath
+   * the first is the thing that desk exists to stop. The host takes on the
+   * interval and the reset when it takes the row — see `onTimeframeChange` and
+   * `resetSignal`.
+   */
+  showChrome?: boolean;
+  /**
+   * Lifts the interval out of this component. When passed, `timeframe` becomes
+   * the live value rather than the seed, and the chart stops owning it.
+   */
+  onTimeframeChange?: (tf: Timeframe) => void;
+  /**
+   * Bump to reset pan/zoom from outside. The chart still resets on its own
+   * double-click; this is for a host that took the Reset button with the row.
+   */
+  resetSignal?: number;
   /**
    * Whether the reader may pan and zoom the chart.
    *
@@ -55,6 +78,19 @@ interface StrikeChartProps {
   height?: number;
   /** Transient user-focused price — renders a cyan FOCUS line while set */
   focusPrice?: number | null;
+  /**
+   * Off-exchange shelves drawn behind the candles at the price the size
+   * crossed. Omitted by default: most hosts of this chart have no dark-pool
+   * view to hand, and a layer nobody asked for is a layer nobody can read.
+   */
+  shelves?: DarkPoolLevel[];
+  /**
+   * The off-exchange prints themselves, marked at the time and price each one
+   * crossed. Where `shelves` states the session's conclusion, these are the
+   * evidence it was drawn from: dense runs where size kept coming back to a
+   * price, gaps where it stopped.
+   */
+  poolPrints?: DarkPoolPrint[];
 }
 
 // Wall / flip / king overlay colors (independent of candle theme)
@@ -119,20 +155,34 @@ const StrikeChart = ({
   overlay,
   timeframe: initialTimeframe,
   showTimeframePicker = true,
+  showChrome = true,
+  onTimeframeChange,
+  resetSignal = 0,
   interactive = true,
   height = 460,
   focusPrice = null,
+  shelves,
+  poolPrints,
 }: StrikeChartProps) => {
-  // The chart owns the live interval; the prop only seeds it. Re-seeding on a
-  // prop change keeps a controlled caller working if one ever appears.
-  const [timeframe, setTimeframe] = useState<Timeframe>(initialTimeframe);
-  useEffect(() => setTimeframe(initialTimeframe), [initialTimeframe]);
+  /*
+    Uncontrolled by default, controlled when a host asks for it.
+
+    The chart owns the live interval and the prop only seeds it — which is what
+    lets two instances sit side by side on different intervals. A host that
+    passes `onTimeframeChange` is saying it owns the control now, so the prop
+    becomes the live value and the internal state follows it.
+  */
+  const [ownTimeframe, setOwnTimeframe] = useState<Timeframe>(initialTimeframe);
+  useEffect(() => setOwnTimeframe(initialTimeframe), [initialTimeframe]);
+  const timeframe = onTimeframeChange ? initialTimeframe : ownTimeframe;
+  const setTimeframe = onTimeframeChange ?? setOwnTimeframe;
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
   const nodesRef = useRef<GexNodesPrimitive | null>(null);
+  const shelvesRef = useRef<DarkPoolShelfPrimitive | null>(null);
   const levelLinesRef = useRef<Partial<Record<'callWall' | 'putWall' | 'flip' | 'king', IPriceLine>>>({});
   const shownLevelsRef = useRef<KeyLevels | null>(null);
   const levelRafRef = useRef(0);
@@ -243,6 +293,14 @@ const StrikeChart = ({
     const nodes = new GexNodesPrimitive();
     candles.attachPrimitive(nodes);
 
+    /* Attached unconditionally and fed nothing until a host supplies shelves.
+       Attaching on demand would mean tearing a primitive on and off the series
+       every time the layer is toggled, and lightweight-charts re-runs its
+       autoscale on each attach — the chart visibly re-frames when you flip a
+       switch that should only change what is painted. */
+    const shelfLayer = new DarkPoolShelfPrimitive();
+    candles.attachPrimitive(shelfLayer);
+
     // Node-under-cursor read-out: resolve the hovered bar's snapshot, then the
     // strike band nearest the cursor price — using the same visibility threshold
     // the renderer paints with, so the chip only speaks for nodes you can see.
@@ -282,6 +340,7 @@ const StrikeChart = ({
     candleSeriesRef.current = candles;
     volumeSeriesRef.current = volume;
     nodesRef.current = nodes;
+    shelvesRef.current = shelfLayer;
 
     return () => {
       chart.remove();
@@ -289,6 +348,7 @@ const StrikeChart = ({
       candleSeriesRef.current = null;
       volumeSeriesRef.current = null;
       nodesRef.current = null;
+      shelvesRef.current = null;
       levelLinesRef.current = {};
       shownLevelsRef.current = null;
       cancelAnimationFrame(levelRafRef.current);
@@ -358,6 +418,15 @@ const StrikeChart = ({
     strikeStepRef.current = Number.isFinite(step) ? step : 1;
     if (!showNodes && nodeChipRef.current) nodeChipRef.current.style.opacity = '0';
   }, [ticker, revision, timeframe, overlay, showRecent]);
+
+  // Off-exchange shelves. Its own effect rather than a branch inside the candle
+  // loader: shelves come from a different builder on a different cadence, and
+  // folding them into the loader would re-send 340 bars every time a shelf
+  // moved by a dollar.
+  useEffect(() => {
+    const on = (shelves?.length ?? 0) > 0 || (poolPrints?.length ?? 0) > 0;
+    shelvesRef.current?.setData(shelves ?? [], poolPrints ?? [], on);
+  }, [shelves, poolPrints]);
 
   // Key-level price lines — create/destroy only when overlay or ticker changes
   useEffect(() => {
@@ -430,6 +499,13 @@ const StrikeChart = ({
     return () => cancelAnimationFrame(levelRafRef.current);
   }, [levels, overlay, ticker]);
 
+  // An external Reset, for a host that took the button with the toolbar row.
+  // `resetSignal` starts at 0 and the guard skips that value, so mounting does
+  // not re-frame a chart that has just framed itself.
+  useEffect(() => {
+    if (resetSignal > 0) resetView();
+  }, [resetSignal, resetView]);
+
   // Transient FOCUS line — "what you clicked", drawn via the chart's native API
   useEffect(() => {
     const candleSeries = candleSeriesRef.current;
@@ -451,7 +527,23 @@ const StrikeChart = ({
   }, [focusPrice]);
 
   return (
-    <div className="flex flex-col gap-2 h-full">
+    /*
+      `flex-1 min-h-0` ALONGSIDE `h-full`, not instead of it.
+
+      `h-full` is a percentage, and a percentage height resolves against the
+      parent's own height. Two of this chart's three hosts give it one: the
+      workspace tile and the landing hero both declare a height above it. The
+      third does not — Terrain hands it a lane sized by flex, where `h-full`
+      computed to 0 and the chart collapsed onto its `minHeight` floor, so a
+      full-screen desk rendered a 280px chart with 460px of empty page under it.
+
+      Growing into a flex parent needs no declared height at either end. Where
+      flex does not apply (the landing hero's TiltBox is not a flex container)
+      these two properties are simply ignored and `h-full` keeps doing the job
+      it already did.
+    */
+    <div className="flex min-h-0 flex-1 flex-col gap-2 h-full">
+      {showChrome && (
       <div className="flex items-center gap-3.5 px-1 flex-wrap select-none">
         <ChartLegend
           variant="line"
@@ -491,6 +583,7 @@ const StrikeChart = ({
           <RotateCcw className="w-3 h-3" /> Reset
         </button>
       </div>
+      )}
       <div
         className="relative flex-grow border border-borderSubtle bg-inset rounded-md overflow-hidden"
         style={{ minHeight: height }}

@@ -8,9 +8,11 @@ import { GUIDE_SUBPAGES } from '../../pages/guide/subnav';
 import { COMMUNITY_SUBPAGES } from '../../pages/community/subnav';
 
 describe('footerVariant', () => {
-  it('gives Pulse no footer at all', () => {
-    expect(footerVariant('/pulse')).toBeNull();
-    expect(isTerminalRoute('/pulse')).toBe(true);
+  it('gives the viewport-owning workspaces no footer at all', () => {
+    for (const path of ['/pulse', '/terrain']) {
+      expect(footerVariant(path), path).toBeNull();
+      expect(isTerminalRoute(path), path).toBe(true);
+    }
   });
 
   /*

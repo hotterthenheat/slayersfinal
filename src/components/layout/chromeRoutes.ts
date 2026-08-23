@@ -22,13 +22,25 @@
  * quietly changed shape. A site ends the same way on every page; the exception
  * has to earn itself, and being dense does not.
  *
- * `null` is Pulse, and only Pulse. Pulse is the terminal: a fixed-height
- * workspace whose panels are dragged, resized and snapped against the bottom
- * edge of the viewport. Any footer at all turns that edge into a scroll seam —
+ * `null` is for a surface that OWNS THE VIEWPORT — a workspace measured against
+ * the bottom edge of the glass rather than a document that ends somewhere.
+ *
+ * Pulse is one: a fixed-height workspace whose panels are dragged, resized and
+ * snapped against that edge. Any footer at all turns it into a scroll seam —
  * the drag surface ends and a page begins, and the panel you are dragging
- * scrolls out from under the cursor. A terminal ends at the glass.
+ * scrolls out from under the cursor.
+ *
+ * Terrain is the other, and it earns it on the same argument rather than on
+ * being dense. Its canvas measures itself and draws to the pixels it is given,
+ * so with a footer below it the two sizes become circular: the canvas fills the
+ * space left over, the leftover depends on how tall the page is, and the page
+ * is as tall as its content. Measured before the exception was made, that loop
+ * settled with the canvas at 0px and the whole desk collapsed to its toolbar.
+ *
+ * The bar is the same for the next one: a fixed workspace that owns the
+ * viewport, not a long page that would rather not be interrupted.
  */
-const TERMINAL_ROUTES = ['/pulse'];
+const TERMINAL_ROUTES = ['/pulse', '/terrain'];
 
 /**
  * A route matches a section when it IS that section or sits under it. The

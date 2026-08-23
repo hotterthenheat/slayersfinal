@@ -38,6 +38,16 @@ export type DarkPoolExecution =
 
 export interface DarkPoolPrint {
   id: number;
+  /**
+   * When the print crossed, as epoch milliseconds.
+   *
+   * `time` below is a display string and is a LOSSY derivative of this: it is
+   * HH:MM, so it cannot be placed on a time axis, cannot be compared across a
+   * date boundary, and rounds sixty seconds of prints onto one label. Anything
+   * that plots or orders a print reads `at`; anything that shows one to a
+   * person reads `time`.
+   */
+  at: number;
   time: string;
   ticker: string;
   price: number;

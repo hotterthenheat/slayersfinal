@@ -1,6 +1,7 @@
 import {
   Activity,
   Crosshair,
+  Mountain,
   Compass,
   Radar,
   Sigma,
@@ -73,6 +74,14 @@ export const NAV_ITEMS: NavItem[] = [
     code: '05',
     icon: Crosshair,
     description: 'GEX, dealer positioning, hedge impact and the fracture line',
+    group: 'Read',
+  },
+  {
+    path: '/terrain',
+    label: 'Terrain',
+    code: '09',
+    icon: Mountain,
+    description: "The dealer's book, price and the off-exchange shelves on one price axis",
     group: 'Read',
   },
   // ── Yours: the desks you fill in ──

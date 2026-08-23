@@ -8,7 +8,15 @@
 
 export type GexMetric = 'GEX' | 'VEX' | 'GEX+VEX';
 
-export type OverlayMode = 'NODES' | 'LEVELS' | 'BOTH';
+/**
+ * Which structural layers the strike chart paints.
+ *
+ * `NONE` exists because the other three cannot say it. Two independent
+ * switches encoded as a three-value enum has no "neither" — Terrain gives the
+ * reader a switch per layer, and turning both off has to mean both off rather
+ * than silently falling back to one of them.
+ */
+export type OverlayMode = 'NODES' | 'LEVELS' | 'BOTH' | 'NONE';
 
 export type StrikeRange = 10 | 20;
 

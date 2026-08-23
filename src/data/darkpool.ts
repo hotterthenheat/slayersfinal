@@ -304,6 +304,7 @@ export function buildDarkPoolView(snapshot: MarketSnapshot): DarkPoolView {
     const ts = new Date(now - minutesAgo * 60000);
     return {
       id: i,
+      at: ts.getTime(),
       time: `${String(ts.getHours()).padStart(2, '0')}:${String(ts.getMinutes()).padStart(2, '0')}`,
       ticker,
       price: Number(price.toFixed(2)),
