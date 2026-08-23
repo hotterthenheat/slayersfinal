@@ -44,8 +44,8 @@
   negative when it did not, and the session total is the sum
   of what every print saved or paid.
 
-  WEIGHTING. Read the note on `sessionRates` before changing
-  an aggregate. Dollars sum; RATES DO NOT. A plain mean of
+  WEIGHTING. Read the note on `cutOf` before changing an
+  aggregate. Dollars sum; RATES DO NOT. A plain mean of
   spread-percent across prints is dominated by five-cent
   contracts whose spread is a third of their price, and
   describes no trade anyone did.

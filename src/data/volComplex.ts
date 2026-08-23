@@ -9,7 +9,7 @@
   different screens.
 
   Reuses the Vol Lab's term structure and risk-neutral density (data/vollab.ts)
-  and the one shared IV rank (data/ivRank.ts via the term stats, P2.1), and adds
+  and the one shared IV rank (core/ivRank.ts via the term stats, P2.1), and adds
   realized volatility measured straight off the candle series so the vol risk
   premium is implied-minus-REALIZED, not implied-minus-a-guess.
 ==================================================

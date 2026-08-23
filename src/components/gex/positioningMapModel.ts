@@ -153,9 +153,9 @@ export function cumHalfOf(strikes: StrikeExposure[]): number {
 }
 
 /**
- * Contiguous runs only. `priorScaled` skips strikes whose raw current value is
- * zero, and a single path across a hole would draw a straight line through
- * prices it has no reading for.
+ * Contiguous runs only. The `prior` map — built in PositioningMap — skips any
+ * strike whose raw current value is zero, and a single path across a hole would
+ * draw a straight line through prices it has no reading for.
  */
 export function ghostRuns(bandList: BandGeom[], prior: Map<number, number>): BandGeom[][] {
   const runs: BandGeom[][] = [];

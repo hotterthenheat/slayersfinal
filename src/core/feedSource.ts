@@ -34,8 +34,8 @@
       setFeedSource({ kind: 'live', label: 'OPRA', detail: '…' });
 
   A provider that implements core/marketDataProvider and registers itself here
-  changes every honesty surface in the app at once. Until one does, `SIMULATED`
-  is the truth and the chrome states it.
+  changes every honesty surface in the app at once. Until one does,
+  `SIMULATED_FEED` is the truth and the chrome states it.
 
   This module holds no market data and no math. It imports nothing.
 ==================================================
