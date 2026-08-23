@@ -115,15 +115,25 @@ const SetupScanBoard = ({
     once there are enough cards for "they all say this" to mean anything.
   */
   const commonChips = useMemo(() => {
-    if (cardPage.length < 3) return undefined;
-    const [first, ...rest] = cardPage;
+    /*
+      The slice is taken INSIDE the memo, and that is the fix rather than a
+      tidy-up. `cardPage` is a `.slice()` — a new array object every render — so
+      a memo depending on it can never hit: the intersection re-ran on every
+      render and handed every card a fresh `Set` identity, defeating the memo it
+      was written to be. Depending on `[setups, safePage]` while READING
+      `cardPage` would compute the right answer and lie to the linter about it;
+      recomputing the slice here makes the dependencies honest and complete.
+    */
+    const page = setups.slice(safePage * CARDS_PER_PAGE, safePage * CARDS_PER_PAGE + CARDS_PER_PAGE);
+    if (page.length < 3) return undefined;
+    const [first, ...rest] = page;
     const shared = new Set(first.whyChips);
     for (const s of rest) {
       const own = new Set(s.whyChips);
       for (const c of [...shared]) if (!own.has(c)) shared.delete(c);
     }
     return shared.size ? shared : undefined;
-  }, [cardPage]);
+  }, [setups, safePage]);
 
   const columns: Column<Setup>[] = useMemo(
     () => [

@@ -209,6 +209,8 @@ const DarkPool = () => {
   */
   const [shownCount, setShownCount] = useState(PAGE);
   const [query, setQuery] = useState('');
+  /** Which filter combination `shownCount` was expanded for. See the reset below. */
+  const [pagedFor, setPagedFor] = useState('');
 
   // Universe scan read. buildDarkPoolFeed already returns its sectors ordered by
   // notional, so the leader is index 0 rather than a second ranking of its output.
@@ -318,10 +320,32 @@ const DarkPool = () => {
   // day's outliers left every remaining bar normalised against something
   // hidden — a column of identical stubs, which is the one thing a meter must
   // not be.
-  /* Narrowing the filters shrinks `rows`; the page resets with it so a reader
-     never lands mid-way down a list they just re-cut. Derived, not stateful —
-     `Math.min` needs no effect and cannot fall out of step. */
-  const shown = rows.slice(0, Math.min(shownCount, Math.max(rows.length, PAGE)));
+  /*
+    Narrowing the filters resets the page, so a reader never lands mid-way down
+    a list they just re-cut.
+
+    THIS USED TO BE A CLAMP THAT DID NOTHING. `rows.slice(0, Math.min(shownCount,
+    Math.max(rows.length, PAGE)))` is algebraically `rows.slice(0, shownCount)`
+    for every reachable state — `shownCount` starts at PAGE and only grows, so
+    the inner expression is either `rows.length` or `PAGE`, and `slice` already
+    clamps to both. The comment above it claimed a reset that never happened:
+    Show more twice, narrow the filter, clear it, and 180 rows came back.
+
+    The reset is real now and it is derived rather than an effect — a key on the
+    filter tuple. `useState` with the filters in its initializer would need an
+    effect to notice them change, and an effect that resets a page is a render
+    the reader can see.
+  */
+  const filterKey = `${execFilter}|${intentFilter}|${minNotional}|${query.trim()}`;
+  const effectiveCount = pagedFor === filterKey ? shownCount : PAGE;
+  if (pagedFor !== filterKey) {
+    // Render-phase reset of state derived from props/state — the pattern React
+    // documents for exactly this, and cheaper than an effect because it lands in
+    // the same render rather than a second one.
+    setPagedFor(filterKey);
+    setShownCount(PAGE);
+  }
+  const shown = rows.slice(0, effectiveCount);
 
   const maxVs = Math.max(...rows.map(p => Math.abs(p.vsSpotPct)), 0.01);
 

@@ -49,6 +49,20 @@ const Term = ({ k, children, className = '' }: TermProps) => (
     <Tooltip.Trigger asChild>
       <span
         tabIndex={0}
+        /*
+          THE GUARD IS BACK, and the comment that said it was unnecessary was
+          wrong. DataTable gives every sortable column a `<th tabIndex={0}>`
+          whose `onKeyDown` re-sorts on Enter or Space, and a Term renders
+          INSIDE that header. Radix's tooltip trigger adds `onPointerDown` and
+          `onClick` and no key handling at all, so Tab onto a column's
+          definition, press Enter to read it, and the table re-sorts under you.
+          The tooltip already opens on focus; the key press has nothing left to
+          do here, so it stops rather than bubbling to a control the reader was
+          not aiming at.
+        */
+        onKeyDown={e => {
+          if (e.key === 'Enter' || e.key === ' ') e.stopPropagation();
+        }}
         className={cn(
           'cursor-help underline decoration-dotted decoration-textMuted/60 underline-offset-2',
           'outline-none focus-visible:rounded-sm focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60',
@@ -63,10 +77,6 @@ const Term = ({ k, children, className = '' }: TermProps) => (
         side="top"
         sideOffset={6}
         collisionPadding={12}
-        /* A term is often inside a sortable table header, and Enter on the
-           definition used to re-sort the table. Radix keeps the trigger's own
-           key handling, so the guard that used to be here is unnecessary — but
-           the tooltip must not steal the pointer from the header either. */
         className="z-[60] w-56 rounded-md border border-borderMuted bg-panelRaised px-3 py-2 shadow-overlay normal-case tracking-normal"
       >
         <span className="font-mono text-label font-semibold uppercase tracking-wider text-textPrimary">{k}</span>

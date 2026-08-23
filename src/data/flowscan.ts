@@ -41,7 +41,7 @@
 ==================================================
 */
 
-import { estimatedOI } from '../core/openInterest';
+import { OI_SETTLED_ASOF, estimatedOI } from '../core/openInterest';
 import { expiryFor, fmtExpiryShort } from '../core/calendar';
 import type { MarketSnapshot, OpenInterest } from '../types/market';
 import type { FlowPrint } from '../types/flowdesk';
@@ -60,8 +60,12 @@ export interface ScannerRow {
   last: string;
   /** Contracts traded today, summed off the prints. */
   volume: number;
-  /** Settled open interest — the prior session's published close. */
-  oi: number;
+  /**
+   * Settled open interest for THIS contract — the prior session's published
+   * close for this strike, right and expiry. `null` when the chain does not
+   * model that expiry, which is not zero and must not render as one.
+   */
+  oi: number | null;
   /**
    * ESTIMATED position change since the open: buyer-initiated volume minus
    * seller-initiated volume. An estimate, not a measurement — the tape does not
@@ -115,16 +119,34 @@ export interface ScannerSummary {
  * summarises can never be looking at different windows.
  */
 export function buildScannerRows(snapshot: MarketSnapshot, prints: FlowPrint[]): ScannerRow[] {
-  const { ticker, spot, chain } = snapshot;
+  const { ticker, spot, chainByExpiry } = snapshot;
 
-  /* Settled OI per strike and right, off the chain. The prints carry their own
-     settled figure too, but the chain is the book every other Pinpoint desk
-     reads, and one desk quoting a different OI for a strike than its neighbour
-     is the disagreement this file was rebuilt to end. */
+  /*
+    Settled OI PER CONTRACT, which means per expiry — not off `snapshot.chain`.
+
+    `chain` is the FOLD of `chainByExpiry` (core/chainAggregate.ts), so
+    `chain[i].callOI` is the sum of that strike's call open interest across every
+    expiry the calendar lists. Reading it here attributed the whole strike's
+    interest to one dated contract: measured on SPY, 7,911 against the front
+    book's 1,547, a five-fold overstatement that then propagated into Vol/OI,
+    ΔOI% and the OI estimate. The per-expiry books are the point of the fold and
+    they were sitting right there.
+
+    AND THE TWO CALENDARS DO NOT AGREE, which this makes visible instead of
+    hiding. The chain lists six expiries (SPY: 1, 2, 3, 4, 5, 12 DTE) while the
+    tape prints across eleven (0, 1, 2, 5, 9, 16, 30, 44, 72, 102, 254) — a
+    hardcoded pool in data/flowtape.ts against core/expiryCalendar. A contract
+    at a DTE the chain does not model has NO open interest to report, and the
+    honest answer is the one `OpenInterestFreshness` already has a state for:
+    UNAVAILABLE, which `OiFreshness` paints "OI n/a". Inventing a number for
+    those rows is what the fold was fixed to stop.
+  */
   const settledFor = new Map<string, number>();
-  for (const node of chain) {
-    settledFor.set(`${node.strike}-C`, node.callOI.value);
-    settledFor.set(`${node.strike}-P`, node.putOI.value);
+  for (const book of chainByExpiry) {
+    for (const node of book.nodes) {
+      settledFor.set(`${book.expiry.dte}-${node.strike}-C`, node.callOI.value);
+      settledFor.set(`${book.expiry.dte}-${node.strike}-P`, node.putOI.value);
+    }
   }
 
   interface Acc {
@@ -195,11 +217,14 @@ export function buildScannerRows(snapshot: MarketSnapshot, prints: FlowPrint[]):
        and core/scanUniverse.ts, which carry the other two. */
     const bullScore = Math.max(-100, Math.min(100, Math.round(raw * directionalShare * evidence))) + 0;
 
-    const settled = settledFor.get(`${first.strike}-${first.right}`) ?? first.oi.value;
+    const settled = settledFor.get(`${first.dte}-${first.strike}-${first.right}`) ?? null;
     // Buyer-initiated volume opens, seller-initiated closes. The standard
     // convention, and an estimate — see core/openInterest.ts:estimatedOI.
     const signedVolume = a.askVol - a.bidVol;
-    const est = estimatedOI(settled, signedVolume);
+    const est: OpenInterest =
+      settled === null
+        ? { value: 0, asOf: OI_SETTLED_ASOF, freshness: 'UNAVAILABLE' }
+        : estimatedOI(settled, signedVolume);
 
     // Newest print on the contract, by EPOCH — `time` is a rendered clock with
     // no date, so a string compare puts a 23:58 print after a 00:02 one.
@@ -217,7 +242,7 @@ export function buildScannerRows(snapshot: MarketSnapshot, prints: FlowPrint[]):
       volume: a.volume,
       oi: settled,
       deltaOi: signedVolume,
-      deltaOiPct: settled > 0 ? (signedVolume / settled) * 100 : 0,
+      deltaOiPct: settled != null && settled > 0 ? (signedVolume / settled) * 100 : 0,
       estOi: est,
       premium: a.premium,
       // Premium over contracts x 100 — the volume-weighted average fill, which
@@ -230,7 +255,7 @@ export function buildScannerRows(snapshot: MarketSnapshot, prints: FlowPrint[]):
       sentiment: bullScore > 22 ? 'BULLISH' : bullScore < -22 ? 'BEARISH' : 'NEUTRAL',
       sweeps: a.sweeps,
       prints: a.prints.length,
-      volOverOi: settled > 0 ? a.volume / settled : 0,
+      volOverOi: settled != null && settled > 0 ? a.volume / settled : 0,
     });
   }
 

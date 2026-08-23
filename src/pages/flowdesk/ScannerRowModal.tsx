@@ -36,7 +36,7 @@ function scannerToRef(r: ScannerRow, spot: number): ContractRef {
     side: r.bidPct >= 55 ? 'BID' : r.bidPct <= 45 ? 'ASK' : 'MID',
     size: 0,
     volume: r.volume,
-    oi: r.oi,
+    oi: r.oi ?? 0,
     premium: r.premium,
     otmPct: r.otmPct,
     volOverOI: r.volOverOi,
@@ -71,7 +71,7 @@ const ScannerRowModal = ({ row, spot, onClose }: ScannerRowModalProps) => {
   const beMovePct = row ? ((breakeven - spot) / spot) * 100 : 0;
   // What one lot costs, and what the open interest is worth at that fill.
   const perLot = row ? row.avgFill * 100 : 0;
-  const oiNotional = row ? row.oi * perLot : 0;
+  const oiNotional = row?.oi != null ? row.oi * perLot : 0;
   const askPct = row ? 100 - row.bidPct : 0;
   // Definitional split of the day's average fill: what the contract is already
   // worth against what is being paid for time and vol.
@@ -194,7 +194,7 @@ const ScannerRowModal = ({ row, spot, onClose }: ScannerRowModalProps) => {
           {/* Activity */}
           <Section title="Activity" cols={3}>
             <Field label="Volume" value={row.volume.toLocaleString()} />
-            <Field label="Open Int." value={row.oi.toLocaleString()} />
+            <Field label="Open Int." value={row.oi === null ? 'n/a' : row.oi.toLocaleString()} />
             <Field
               label="Est ΔOI/d"
               value={`${row.deltaOi >= 0 ? '+' : ''}${row.deltaOi.toLocaleString()}`}
@@ -290,7 +290,7 @@ const ScannerRowModal = ({ row, spot, onClose }: ScannerRowModalProps) => {
                   <span className="flex flex-col">
                     <span className="font-mono text-label uppercase tracking-widest text-textMuted">Open interest</span>
                     <span className="font-mono text-data font-bold tnum text-textSecondary">
-                      {row.oi.toLocaleString()} lots
+                      {row.oi === null ? 'n/a' : `${row.oi.toLocaleString()} lots`}
                     </span>
                   </span>
                   <span className="flex flex-col">

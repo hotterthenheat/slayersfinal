@@ -132,7 +132,8 @@ describe('expiry dependency', () => {
     */
     const view = buildExpiryDependency(Simulator.buildSnapshot('SPY'));
     const maxShare = Math.max(...view.contributions.map(c => c.grossShare));
-    expect(view.heaviest.grossShare).toBe(maxShare);
+    expect(view.heaviest).not.toBeNull();
+    expect(view.heaviest!.grossShare).toBe(maxShare);
   });
 
   it('publishes no 0-100 score', () => {
@@ -152,5 +153,24 @@ describe('expiry dependency', () => {
       suspicious,
       'a score-shaped field appeared on ExpiryContribution — publish the quantity, not a grade'
     ).toEqual([]);
+  });
+});
+
+describe('an empty calendar', () => {
+  it('reports no heaviest expiry rather than throwing', () => {
+    /*
+      `contributions.reduce((a, b) => …)` carried no initial value. A root with
+      no listed expiries — or a snapshot read before the chain populates — made
+      it throw "Reduce of empty array with no initial value", which is not a
+      degraded desk, it is the whole Dependency route gone. Every other
+      degenerate path in this file's neighbourhood returns a fallback
+      (`readStructure` has `degenerate()`, `buildDarkPoolProfile` returns empty
+      bins); this one now does too.
+    */
+    const snap = Simulator.buildSnapshot('SPY');
+    const view = buildExpiryDependency({ ...snap, chainByExpiry: [] });
+    expect(view.contributions).toEqual([]);
+    expect(view.heaviest).toBeNull();
+    expect(view.loadBearing).toBeNull();
   });
 });

@@ -56,7 +56,16 @@ interface AnimatedIconProps {
   name: string;
   /** The plain lucide twin — what renders until (or instead of) the pack. */
   still: LucideIcon;
-  /** Pixel size. The animated component sizes by number, not by class. */
+  /**
+   * Pixel size, and it MUST MATCH what `className` resolves to.
+   *
+   * The still icon is sized by Tailwind class and the animated one by number,
+   * so the two can disagree — and did: `size={14}` beside `w-3.5 h-3.5` looked
+   * right until the density pass redefined `spacing[3.5]` as 16px, after which
+   * the glyph shrank two pixels the moment the pack arrived. Nothing failed;
+   * the button just reflowed a few seconds into every session, under a comment
+   * claiming the swap moves nothing.
+   */
   size?: number;
   /** Classes for the still icon, sized the Tailwind way like every other icon. */
   className?: string;
@@ -69,7 +78,7 @@ interface AnimatedIconProps {
  */
 const CONTROL = 'button, a[href], [role="button"], label';
 
-const AnimatedIcon = ({ name, still: Still, size = 14, className = '' }: AnimatedIconProps) => {
+const AnimatedIcon = ({ name, still: Still, size = 16, className = '' }: AnimatedIconProps) => {
   const reduced = useReducedMotion();
   const host = useRef<HTMLSpanElement>(null);
   const icon = useRef<AnimatedIconHandle>(null);

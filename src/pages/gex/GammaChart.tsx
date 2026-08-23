@@ -15,9 +15,6 @@ import type { ExposureExpiry } from '../../types/gex';
     scan, and the scan is what paces this desk. */
 const SCAN_INTERVAL_MS = 10_000;
 
-// Stable focus id so we can tell when this heatmap is expanded and, only then,
-// build the full strike range instead of the spot-centred window.
-
 /*
   A level, and how far away it is.
 

@@ -88,7 +88,14 @@ export interface ExpiryDependencyView {
    */
   loadBearing: ExpiryContribution | null;
   /** The largest share of gross gamma. A different claim — size, not dependency. */
-  heaviest: ExpiryContribution;
+  /**
+   * The expiry carrying the largest share of gross gamma. NULL on an empty
+   * calendar — a root with no listed expiries has no heaviest one, and saying
+   * so is cheaper than the alternative, which was a `reduce` with no seed
+   * throwing "Reduce of empty array with no initial value" and taking the whole
+   * Dependency route down with it.
+   */
+  heaviest: ExpiryContribution | null;
   /** Gross gamma across the whole chain — the denominator for every share. */
   grossGex: number;
 }
@@ -148,7 +155,9 @@ export function buildExpiryDependency(snapshot: MarketSnapshot): ExpiryDependenc
     and no tiebreak rule to get wrong.
   */
   const loadBearing = contributions.find(c => c.regimeCritical) ?? null;
-  const heaviest = contributions.reduce((a, b) => (b.grossShare > a.grossShare ? b : a));
+  const heaviest = contributions.length
+    ? contributions.reduce((a, b) => (b.grossShare > a.grossShare ? b : a))
+    : null;
 
   return { full, contributions, loadBearing, heaviest, grossGex };
 }

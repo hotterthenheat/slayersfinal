@@ -197,7 +197,27 @@ const ALL_COLUMNS: Column<ScannerRow>[] = [
   },
   { key: 'last', header: 'Last', render: r => <span className="font-mono text-caption text-textSecondary tnum leading-4">{r.last}</span> },
   { key: 'volume', header: 'Vol', align: 'right', sortValue: r => r.volume, render: r => <span className="font-mono text-caption text-textPrimary tnum leading-4">{r.volume.toLocaleString()}</span> },
-  { key: 'oi', header: 'OI', help: 'OI', align: 'right', sortValue: r => r.oi, render: r => <span className="font-mono text-caption text-textSecondary tnum leading-4">{r.oi.toLocaleString()}</span> },
+  {
+    key: 'oi',
+    header: 'OI',
+    help: 'OI',
+    align: 'right',
+    /* `-1` sorts the unknowns to one end rather than mixing them among real
+       counts as zeros — a contract whose expiry the chain does not model has no
+       open interest to rank, and ranking it as "none" is a claim. */
+    sortValue: r => r.oi ?? -1,
+    render: r =>
+      r.oi === null ? (
+        <span
+          className="font-mono text-caption text-textMuted tnum leading-4"
+          title="The chain does not model this expiry, so there is no settled open interest for this contract."
+        >
+          —
+        </span>
+      ) : (
+        <span className="font-mono text-caption text-textSecondary tnum leading-4">{r.oi.toLocaleString()}</span>
+      ),
+  },
   {
     key: 'doi',
     header: 'Est ΔOI',
@@ -612,7 +632,9 @@ const FlowScanner = () => {
         }
       }
       if (r.premium < minPrem) return false;
-      if (r.oi < minOi) return false;
+      // An unknown OI cannot clear a floor. Treating `null` as 0 would silently
+      // drop every long-dated contract the moment the filter leaves its default.
+      if (minOi > 0 && (r.oi === null || r.oi < minOi)) return false;
       if (filters.sweepsOnly && r.sweeps <= 0) return false;
       if (r.volOverOi < unusualCut) return false;
       return true;

@@ -106,8 +106,12 @@ const ExpiryDependency = () => {
         />
         <StatCard
           label="Heaviest expiry"
-          value={heaviest.label}
-          sub={`${pct(heaviest.grossShare)} of gross gamma · ${heaviest.openInterest.toLocaleString()} contracts`}
+          value={heaviest ? heaviest.label : '—'}
+          sub={
+            heaviest
+              ? `${pct(heaviest.grossShare)} of gross gamma · ${heaviest.openInterest.toLocaleString()} contracts`
+              : 'no expiries listed for this root'
+          }
         />
       </MetricGrid>
 

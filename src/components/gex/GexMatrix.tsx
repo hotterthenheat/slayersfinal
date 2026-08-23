@@ -138,6 +138,7 @@ const GexMatrix = ({ data, highlightCol = null }: GexMatrixProps) => {
                       onMouseEnter={e => setHover({ r, c, x: e.clientX, y: e.clientY })}
                       onMouseMove={e => setHover({ r, c, x: e.clientX, y: e.clientY })}
                       onMouseLeave={() => setHover(h => (h && h.r === r && h.c === c ? null : h))}
+                      title={`${fmtUsd(cell.value)} net gamma`}
                       className={`px-2 py-1.5 text-right font-mono text-label tnum whitespace-nowrap cursor-crosshair transition-all duration-300 ${
                         cell.king ? 'ring-1 ring-inset ring-king' : ''
                       } ${hover && hover.r === r && hover.c === c ? 'brightness-125' : ''} ${
@@ -146,7 +147,14 @@ const GexMatrix = ({ data, highlightCol = null }: GexMatrixProps) => {
                     >
                       {cell.king && <span className="mr-1 inline-block w-1.5 h-1.5 rounded-full bg-king" />}
                       {/* The king strike always speaks, whatever its magnitude —
-                          it is the one cell the board is named for. */}
+                          it is the one cell the board is named for.
+
+                          Below the print threshold the cell carries colour and
+                          nothing else, so the figure would exist only behind a
+                          pointer. `title` on the cell puts it back within reach
+                          of a screen reader and of a reader who cannot use a
+                          hover — the value is the point of the board, and a
+                          saturation is not a number. */}
                       {cell.king || Math.abs(cell.value) >= maxAbs * PRINT_AT ? fmtUsd(cell.value) : '\u00A0'}
                     </td>
                   ))}

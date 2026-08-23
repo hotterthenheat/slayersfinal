@@ -1,6 +1,6 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import { AnimatePresence, motion } from 'framer-motion';
-import type { KeyboardEvent, ReactNode } from 'react';
+import { useEffect, useRef, type KeyboardEvent, type ReactNode } from 'react';
 import { cn } from '../../lib/cn';
 import { DUR, EASE } from '../../lib/motion';
 
@@ -77,7 +77,35 @@ const Overlay = ({
   align = 'center',
   onKeyDown,
   children,
-}: OverlayProps) => (
+}: OverlayProps) => {
+  /*
+    FOCUS GOES BACK WHERE IT CAME FROM.
+
+    Radix returns focus to its own `Dialog.Trigger` on close — and none of these
+    overlays uses one. Every caller drives `open` from its own state (⌘K from a
+    key handler, Settings from a gear button, the drilldown from a table row),
+    so Radix has no trigger to hand focus back to and drops it on `<body>`.
+    Measured: open Settings from the keyboard, press Escape, and
+    `document.activeElement` is BODY — a keyboard reader is returned to the top
+    of the document and has to tab back through the whole header.
+
+    So the element that was focused when the overlay opened is remembered and
+    refocused on close, guarded on still being in the document: a row drilldown
+    can outlive the row that opened it when the table re-sorts underneath.
+  */
+  const opener = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      return;
+    }
+    const el = opener.current;
+    opener.current = null;
+    if (el && el.isConnected) el.focus({ preventScroll: true });
+  }, [open]);
+
+  return (
   <Dialog.Root open={open} onOpenChange={next => !next && onClose()}>
     <AnimatePresence>
       {open && (
@@ -94,6 +122,41 @@ const Overlay = ({
               transition={{ duration: DUR.fast }}
             />
           </Dialog.Overlay>
+          {/*
+            CENTRED BY LAYOUT, NOT BY TRANSFORM, and the difference is not
+            stylistic — the transform version was broken and shipped.
+
+            The panel used to be `fixed left-1/2 -translate-x-1/2 top-1/2
+            -translate-y-1/2`, and Tailwind's translate utilities work by
+            writing the `transform` PROPERTY. The same element is a
+            `motion.div` animating `scale` and `y`, and motion writes
+            `style.transform` unconditionally — `translateY(10px) scale(0.97)`
+            while animating and the literal string `none` once it settles.
+            Inline style beats a class, so every modal in the terminal came to
+            rest with its LEFT EDGE at 50vw instead of its centre. Measured:
+            the command palette at 1500px sat at x=745 with width 512, where
+            centred is x=494. A wide drilldown ran off the right of the screen
+            and a phone got the whole panel pushed off-canvas.
+
+            A flex container cannot be overridden by the child's transform, so
+            centring moves here and the panel keeps its animation. The padding
+            comes back with it: every hand-rolled overlay this component
+            replaced had a viewport gutter (`p-3 sm:p-6`, `px-4`, `p-4`) and
+            the rewrite dropped it, which made `w-full` on a fixed element
+            resolve to 100vw and put every modal edge-to-edge on a phone.
+            Inside a padded flex container it resolves against the content box,
+            which is what the callers' `max-h-[calc(100vh-1.5rem)]` was written
+            against.
+
+            `pointer-events-none` on the container so the gutter is not a
+            hit-target that swallows backdrop clicks; the panel takes them back.
+          */}
+          <div
+            className={cn(
+              'pointer-events-none fixed inset-0 z-[71] flex justify-center p-3 sm:p-6',
+              align === 'top' ? 'items-start pt-[14vh] sm:pt-[16vh]' : 'items-center'
+            )}
+          >
           <Dialog.Content
             asChild
             forceMount
@@ -103,8 +166,7 @@ const Overlay = ({
             <motion.div
               onKeyDown={onKeyDown}
               className={cn(
-                'fixed left-1/2 z-[71] flex w-full -translate-x-1/2 flex-col',
-                align === 'top' ? 'top-[18vh]' : 'top-1/2 -translate-y-1/2',
+                'pointer-events-auto flex w-full flex-col',
                 'overflow-hidden rounded-lg border border-borderMuted bg-panel shadow-overlay',
                 /* Radix moves focus to this panel on open when nothing inside
                    claims it, so it IS a focus target and must show that it is.
@@ -127,10 +189,12 @@ const Overlay = ({
               {children}
             </motion.div>
           </Dialog.Content>
+          </div>
         </Dialog.Portal>
       )}
     </AnimatePresence>
   </Dialog.Root>
-);
+  );
+};
 
 export default Overlay;

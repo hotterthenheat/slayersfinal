@@ -93,9 +93,16 @@ describe('the scanner rolls up the tape', () => {
       because it is a claim about a session OPRA has not published yet.
     */
     for (const row of ROWS) {
-      expect(row.estOi.freshness).toBe('ESTIMATED');
       expect(row.estOi.value).toBeGreaterThanOrEqual(0);
-      expect(row.estOi.value).toBe(Math.max(0, Math.round(row.oi + row.deltaOi)));
+      if (row.oi === null) {
+        // The chain lists six expiries and the tape prints across eleven. A
+        // contract at a DTE the chain does not model has no settled figure, and
+        // UNAVAILABLE is the state that says so rather than a fabricated zero.
+        expect(row.estOi.freshness).toBe('UNAVAILABLE');
+      } else {
+        expect(row.estOi.freshness).toBe('ESTIMATED');
+        expect(row.estOi.value).toBe(Math.max(0, Math.round(row.oi + row.deltaOi)));
+      }
     }
   });
 
@@ -172,5 +179,78 @@ describe('the scanner rolls up the tape', () => {
     expect(buildScannerRows(SNAP, [])).toEqual([]);
     const other = TAPE.filter(p => p.ticker !== 'SPY');
     expect(buildScannerRows(SNAP, other)).toEqual([]);
+  });
+});
+
+describe('open interest is per contract, not per strike', () => {
+  /*
+    `snapshot.chain` is the FOLD of `chainByExpiry`, so its `callOI` at a strike
+    is the sum across every listed expiry. Reading it per contract attributed
+    the whole strike's interest to one dated instrument — measured on SPY,
+    7,911 against the front book's 1,547 — and the error propagated into Vol/OI,
+    ΔOI% and the estimate stamped on top of it.
+  */
+  it('never reports a strike total as one contract', () => {
+    const foldedC = new Map(SNAP.chain.map(n => [n.strike, n.callOI.value]));
+    const foldedP = new Map(SNAP.chain.map(n => [n.strike, n.putOI.value]));
+    for (const row of ROWS) {
+      if (row.oi === null) continue;
+      const folded = (row.right === 'C' ? foldedC : foldedP).get(row.strike);
+      if (folded === undefined) continue;
+      expect(row.oi).toBeLessThanOrEqual(folded);
+    }
+  });
+
+  it('reads the figure straight off the book that lists the expiry', () => {
+    for (const row of ROWS) {
+      const book = SNAP.chainByExpiry.find(b => b.expiry.dte === row.dte);
+      if (!book) {
+        expect(row.oi, `${row.id} has no book and must report no OI`).toBeNull();
+        continue;
+      }
+      const node = book.nodes.find(n => n.strike === row.strike);
+      expect(row.oi).toBe(node ? (row.right === 'C' ? node.callOI.value : node.putOI.value) : null);
+    }
+  });
+
+  it('leaves the derived columns empty rather than dividing by a number it does not have', () => {
+    for (const row of ROWS) {
+      if (row.oi !== null) continue;
+      expect(row.volOverOi).toBe(0);
+      expect(row.deltaOiPct).toBe(0);
+      expect(Number.isFinite(row.volOverOi)).toBe(true);
+    }
+  });
+});
+
+describe('one calendar', () => {
+  /*
+    The tape used to draw its expiries from a hardcoded pool
+    ([0, 1, 2, 5, 9, 16, 30, 44, 72, 102, 254]) while the chain is built from
+    `expiryCalendar(ticker)` (SPY: 1, 2, 3, 4, 5, 12). Two calendars for one
+    instrument, overlapping on three days out of eleven.
+
+    It stayed invisible until the Scanner started reading open interest per
+    CONTRACT: 31 of 40 rows had no book to read from. A print at a DTE the chain
+    does not list is a contract no desk in the terminal can say anything about —
+    not its open interest, not its greeks, not its wall.
+  */
+  it('prints only at expiries the chain lists', () => {
+    const listed = new Set(SNAP.chainByExpiry.map(b => b.expiry.dte));
+    expect(listed.size).toBeGreaterThan(1);
+    const stray = [...new Set(TAPE.filter(p => p.ticker === 'SPY').map(p => p.dte))]
+      .filter(d => !listed.has(d))
+      .sort((a, b) => a - b);
+    expect(
+      stray,
+      'the tape printed at expiries the chain does not model — those contracts have ' +
+        'no open interest, no greeks and no wall on any desk'
+    ).toEqual([]);
+  });
+
+  it('so every scanned contract has an open interest to report', () => {
+    const missing = ROWS.filter(r => r.oi === null).map(r => r.id);
+    expect(missing).toEqual([]);
+    for (const row of ROWS) expect(row.estOi.freshness).toBe('ESTIMATED');
   });
 });

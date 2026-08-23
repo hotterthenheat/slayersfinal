@@ -10,6 +10,8 @@
 import Simulator from '../core/simulator';
 import { settledOI } from '../core/openInterest';
 import { expiryFor, fmtExpiryLong } from '../core/calendar';
+import { expiryCalendar } from '../core/expiryCalendar';
+import { dayKey } from '../core/rng';
 import { math } from '../core/mathProvider';
 import { seedSessionTape } from './tapeSeed';
 import type { ContractGreeks, TapeOrder } from '../types/market';
@@ -38,7 +40,43 @@ function h01(seed: string): number {
   return (hash(seed) % 1000) / 1000;
 }
 
-const DTE_POOL = [0, 1, 2, 5, 9, 16, 30, 44, 72, 102, 254];
+/*
+  THE TAPE'S EXPIRIES ARE THE CHAIN'S EXPIRIES.
+
+  This was a hardcoded pool — [0, 1, 2, 5, 9, 16, 30, 44, 72, 102, 254] — while
+  the chain is built from `expiryCalendar(ticker)`, which for SPY lists
+  1, 2, 3, 4, 5 and 12 DTE. Two calendars for one instrument, and the overlap
+  was three days out of eleven.
+
+  It surfaced on Trace › Scanner the moment that desk started reading open
+  interest per CONTRACT rather than per strike: 31 of 40 rows had no book to
+  read from and reported OI as unavailable, correctly and uselessly. A print at
+  a DTE the chain does not list is a contract no desk in the terminal can say
+  anything about — not its open interest, not its greeks, not its wall.
+
+  Same defect as the two price walks (core/priceWalk.ts) and the two Scanner
+  sources: one fact, two generators. The generator that has a reason to be
+  right — the one that knows the root's listing convention and skips holidays —
+  wins, and the tape reads it.
+
+  It is a FUNCTION rather than a constant because the calendar is per-ticker:
+  SPY lists dailies, a monthly-only name does not, and a shared array cannot be
+  both. Memoised per ticker per day, because `enrichPrint` runs 400 times a
+  session build.
+*/
+const dtePoolCache = new Map<string, number[]>();
+
+function dtePool(ticker: string): number[] {
+  const key = `${ticker}-${dayKey()}`;
+  const hit = dtePoolCache.get(key);
+  if (hit) return hit;
+  const pool = expiryCalendar(ticker).map(e => e.dte);
+  // A root with no listed expiries cannot be given one; 0DTE is the only honest
+  // floor and it keeps the pricer's `t` clamp doing the work it already does.
+  const out = pool.length ? pool : [0];
+  dtePoolCache.set(key, out);
+  return out;
+}
 const STRATS: StratTag[] = ['Vertical', 'Butterfly', 'Ratio', 'Custom'];
 
 /**
@@ -96,7 +134,10 @@ export function enrichPrint(order: TapeOrder, id: number, at: number = Date.now(
   const right = order.type;
 
   // Short-dated skew on expiry selection
-  const dte = DTE_POOL[Math.floor(Math.pow(h('dte'), 1.6) * DTE_POOL.length)];
+  const pool = dtePool(order.ticker);
+  // Still weighted to the front — the tape is dominated by short-dated flow —
+  // but over the expiries this root actually lists.
+  const dte = pool[Math.min(pool.length - 1, Math.floor(Math.pow(h('dte'), 1.6) * pool.length))];
   const expiry = fmtExpiryLong(expiryFor(dte).date);
 
   // Premium estimate: intrinsic + gaussian time value scaled by DTE
