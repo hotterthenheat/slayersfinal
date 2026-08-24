@@ -5,7 +5,7 @@ import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 import { Check, GripHorizontal, Plus, RotateCcw, Save, Trash2, X } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
-import Simulator from '../../core/simulator';
+import Feed from '../../core/feed';
 import { buildGexView, pulseMatrix } from '../../data/gex';
 import { buildExposureProfile } from '../../data/exposure';
 import { buildPulseView } from '../../data/pulse';
@@ -244,7 +244,7 @@ const Pulse = () => {
       exposure: buildExposureProfile(snapshot, '0DTE', 10),
       pulse: buildPulseView(snapshot),
       vanna: buildVannaCharm(snapshot, 'CHARM', -1),
-      setups: buildCompassView(snapshot, 'top-setups', Simulator.universeQuotes(snapshot.ticker)),
+      setups: buildCompassView(snapshot, 'top-setups', Feed.universeQuotes(snapshot.ticker)),
     };
   };
 
@@ -265,7 +265,7 @@ const Pulse = () => {
     if (!scanSnapshot) return map;
     for (const t of usedTickers) {
       try {
-        map.set(t, buildCtxFor(t === scanSnapshot.ticker ? scanSnapshot : Simulator.snapshotFor(t)));
+        map.set(t, buildCtxFor(t === scanSnapshot.ticker ? scanSnapshot : Feed.snapshotFor(t)));
       } catch {
         /* a name the sim can't build is simply skipped — the panel says so */
       }

@@ -10,7 +10,7 @@ import {
   type IPriceLine,
   type UTCTimestamp,
 } from 'lightweight-charts';
-import Simulator from '../../core/simulator';
+import Feed from '../../core/feed';
 import {
   aggregateCandles,
   aggregateSnapshots,
@@ -308,7 +308,7 @@ const StrikeChart = ({
     const trails = trailsRef.current;
     if (!chart || !candleSeries || !volumeSeries || !trails) return;
 
-    const base = Simulator.getCandles(ticker);
+    const base = Feed.getCandles(ticker);
     if (!base || base.length === 0) return;
 
     const theme = getCandleTheme();
@@ -359,7 +359,7 @@ const StrikeChart = ({
     // per 30m/1h bar was a row of pearls): every 5 minutes of real history
     // is a bead, tiled across its bar by its time — six to a 30m bar, twelve
     // to an hour. More beads, same data.
-    const baseGex = Simulator.getGexHistory(ticker);
+    const baseGex = Feed.getGexHistory(ticker);
     const snaps = aggregateSnapshots(baseGex ?? [], Math.min(mins, TRAIL_TEXTURE_MINUTES));
     const showTrails = overlays.trails && mins <= INTRADAY_MAX_MINUTES;
     trails.setData(snaps, snapshotsMaxAbs(snaps), showTrails, mins * 60);
@@ -512,8 +512,8 @@ const StrikeChart = ({
 
     if (replay) {
       const mins = tfMinutes(timeframe);
-      const bars = aggregateCandles(Simulator.getCandles(ticker) ?? [], mins);
-      const snaps = aggregateSnapshots(Simulator.getGexHistory(ticker) ?? [], Math.min(mins, TRAIL_TEXTURE_MINUTES));
+      const bars = aggregateCandles(Feed.getCandles(ticker) ?? [], mins);
+      const snaps = aggregateSnapshots(Feed.getGexHistory(ticker) ?? [], Math.min(mins, TRAIL_TEXTURE_MINUTES));
       if (bars.length < 40) return;
       replayDataRef.current = { bars, snaps, maxAbs: snapshotsMaxAbs(snaps) };
       const startIdx = Math.max(30, bars.length - 180);

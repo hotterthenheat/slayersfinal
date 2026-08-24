@@ -16,7 +16,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Minimize2 } from 'lucide-react';
-import Simulator from '../core/simulator';
+import Feed from '../core/feed';
 import { useMarketData } from '../context/MarketDataContext';
 import { buildLevelsFor, buildPrints } from '../data/gex';
 import StrikeChart, { DEFAULT_OVERLAYS, type ChartOverlays } from '../components/gex/StrikeChart';
@@ -37,7 +37,7 @@ const TF_VALUES = new Set<string>(TIMEFRAMES.map(t => t.value));
 
 /** Self-healing load — anything malformed falls back to the default slot. */
 function loadCells(): BoardCellCfg[] {
-  const defaults: BoardCellCfg[] = Simulator.WATCHLIST.slice(0, 4).map(ticker => ({
+  const defaults: BoardCellCfg[] = Feed.WATCHLIST.slice(0, 4).map(ticker => ({
     ticker,
     timeframe: '1m',
     overlays: { ...DEFAULT_OVERLAYS },

@@ -13,7 +13,7 @@ import { Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
-import Simulator from '../../core/simulator';
+import Feed from '../../core/feed';
 import { buildGexView, fmtUsd, pulseMatrix } from '../../data/gex';
 import { buildExposureProfile } from '../../data/exposure';
 import { buildPulseView } from '../../data/pulse';
@@ -127,7 +127,7 @@ function useLandingScan(enabled: boolean): LandingCtx | null {
       gex,
       exposure: buildExposureProfile(scan, '0DTE', 10),
       pulse: buildPulseView(scan),
-      setups: buildCompassView(scan, 'top-setups', Simulator.universeQuotes(scan.ticker)),
+      setups: buildCompassView(scan, 'top-setups', Feed.universeQuotes(scan.ticker)),
     };
   }, [scan]);
 

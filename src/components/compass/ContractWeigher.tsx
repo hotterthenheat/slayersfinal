@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, useAnimationControls, useReducedMotion } from 'framer-motion';
 import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, Scale } from 'lucide-react';
-import Simulator from '../../core/simulator';
+import Feed from '../../core/feed';
 import {
   weighContract,
   weighContracts,
@@ -315,7 +315,7 @@ const ContractWeigher = ({ snapshot }: ContractWeigherProps) => {
 
 
   // ---- the chain + the analysis --------------------------------------------
-  const tickerIv = Simulator.TICKERS[snapshot.ticker]?.iv ?? 0.2;
+  const tickerIv = Feed.TICKERS[snapshot.ticker]?.iv ?? 0.2;
 
   /* The rail's real expiries, clock-aware — the listed-calendar ladder,
      already deduped by the builder. */

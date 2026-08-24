@@ -26,7 +26,7 @@ import {
   type UTCTimestamp,
 } from 'lightweight-charts';
 import { AlertTriangle, ArrowLeft, Bookmark, Check, Droplets, Info, LayoutGrid, ShieldAlert } from 'lucide-react';
-import Simulator from '../../core/simulator';
+import Feed from '../../core/feed';
 import { getCandleTheme, useCandleThemeKey, candleSeriesOptions, chartSurface } from '../gex/candleTheme';
 import ChartToolbar from '../gex/ChartToolbar';
 import type { ChartOverlays } from '../gex/StrikeChart';
@@ -247,7 +247,7 @@ const CampaignChart = ({ setup, revision, entry, hits, brk, timeframe, overlays 
       layout: { background: { color: s.bg } },
       grid: { horzLines: { color: s.grid } },
     });
-    const bars = aggregateCandles(Simulator.getCandles(setup.ticker) ?? [], tfMinutes(timeframe));
+    const bars = aggregateCandles(Feed.getCandles(setup.ticker) ?? [], tfMinutes(timeframe));
     if (bars.length > 0 && volumeRef.current) {
       volumeRef.current.setData(
         bars.map(b => ({
@@ -303,7 +303,7 @@ const CampaignChart = ({ setup, revision, entry, hits, brk, timeframe, overlays 
     const volumeSeries = volumeRef.current;
     if (!chart || !candleSeries || !volumeSeries) return;
 
-    const raw = Simulator.getCandles(setup.ticker);
+    const raw = Feed.getCandles(setup.ticker);
     if (!raw || raw.length === 0) return;
     const bars = aggregateCandles(raw, tfMinutes(timeframe));
     if (bars.length === 0) return;
@@ -499,7 +499,7 @@ const CampaignAnalysis = ({
     | null
   >(null);
   {
-    const bars = Simulator.getCandles(setup.ticker);
+    const bars = Feed.getCandles(setup.ticker);
     if (entryRef.current?.id !== setup.id && bars && bars.length > 0) {
       entryRef.current = {
         id: setup.id,
@@ -550,7 +550,7 @@ const CampaignAnalysis = ({
     }
     const st = tapeRef.current;
     if (!st.brk) {
-      const bars = Simulator.getCandles(setup.ticker) ?? [];
+      const bars = Feed.getCandles(setup.ticker) ?? [];
       for (const b of bars) {
         if (b.time <= st.scanned) continue;
         st.scanned = b.time;
@@ -586,7 +586,7 @@ const CampaignAnalysis = ({
       st.key = key;
       st.at = now;
       try {
-        st.rows = buildSetupDrivers(Simulator.snapshotFor(setup.ticker), c, sleeve);
+        st.rows = buildSetupDrivers(Feed.snapshotFor(setup.ticker), c, sleeve);
       } catch {
         st.rows = [];
       }

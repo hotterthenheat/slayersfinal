@@ -8,7 +8,7 @@
 ==================================================
 */
 
-import Simulator from '../core/simulator';
+import Feed from '../core/feed';
 import type { MarketSnapshot, StrikeNode } from '../types/market';
 import type {
   IvShift,
@@ -105,8 +105,8 @@ const DRIFT_BARS = 390; // one session of 1-min bars
 const DRIFT_STEP = 3; // sample every 3rd bar
 
 function buildDrift(ticker: string): WallDriftPoint[] {
-  const candles = Simulator.getCandles(ticker);
-  const snaps = Simulator.getGexHistory(ticker);
+  const candles = Feed.getCandles(ticker);
+  const snaps = Feed.getGexHistory(ticker);
   if (!candles?.length || !snaps?.length) return [];
 
   const n = Math.min(DRIFT_BARS, snaps.length, candles.length);
@@ -186,7 +186,7 @@ export function buildVannaCharm(
   // Largest per-strike net-gex change vs the previous scan (the 10s tier —
   // history snaps are ~1/sec, so ten back ≈ one scan ago)
   let delta: MigrationRead['delta'] = null;
-  const snaps = Simulator.getGexHistory(ticker);
+  const snaps = Feed.getGexHistory(ticker);
   if (snaps && snaps.length >= 2) {
     const nowSnap = snaps[snaps.length - 1];
     const prevSnap = snaps[Math.max(0, snaps.length - 1 - 10)];

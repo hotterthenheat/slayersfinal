@@ -8,7 +8,7 @@
 ==================================================
 */
 
-import Simulator from '../core/simulator';
+import Feed from '../core/feed';
 import { expiryFor } from '../core/calendar';
 import type { MarketSnapshot, StrikeNode } from '../types/market';
 import type {
@@ -269,10 +269,10 @@ export function buildPrints(ticker: string, spot: number): DarkPoolPrint[] {
 function buildBoard(tickers?: string[]): BoardTicker[] {
   const list =
     tickers && tickers.length > 0
-      ? tickers.map(t => Simulator.ensureTicker(t))
-      : Simulator.WATCHLIST;
+      ? tickers.map(t => Feed.ensureTicker(t))
+      : Feed.WATCHLIST;
   return list.map(ticker => {
-    const cfg = Simulator.TICKERS[ticker];
+    const cfg = Feed.TICKERS[ticker];
     const { ladder, maxAbs } = buildLadder(ticker, cfg.currentPrice, cfg.step);
     return {
       ticker,
@@ -288,9 +288,9 @@ function buildBoard(tickers?: string[]): BoardTicker[] {
 /** Key levels for ANY ticker, derived from its latest GEX snapshot — the same
     book the trails draw, so an expanded board chart agrees with its heatmap. */
 export function buildLevelsFor(ticker: string): KeyLevels {
-  const sym = Simulator.ensureTicker(ticker);
-  const spot = Simulator.TICKERS[sym].currentPrice;
-  const snaps = Simulator.getGexHistory(sym);
+  const sym = Feed.ensureTicker(ticker);
+  const spot = Feed.TICKERS[sym].currentPrice;
+  const snaps = Feed.getGexHistory(sym);
   const latest = snaps?.[snaps.length - 1];
   if (!latest) return { spot, callWall: spot, putWall: spot, flip: spot, king: spot };
 

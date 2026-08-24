@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import Simulator from '../core/simulator';
+import Feed from '../core/feed';
 import Ledger from '../core/ledger';
 import type { ExecuteResult, LedgerStats, MarketSnapshot, TickerSymbol, TradeRecord } from '../types/market';
 
@@ -21,7 +21,7 @@ interface MarketDataContextValue {
 const MarketDataContext = createContext<MarketDataContextValue | null>(null);
 
 export const MarketDataProvider = ({ children }: { children: React.ReactNode }) => {
-  const [activeTicker, setActiveTickerState] = useState<TickerSymbol>(Simulator.getActiveTicker());
+  const [activeTicker, setActiveTickerState] = useState<TickerSymbol>(Feed.getActiveTicker());
   const [marketData, setMarketData] = useState<MarketSnapshot | null>(null);
   const [ledgerState, setLedgerState] = useState<LedgerState>({
     activeTrades: [],
@@ -53,12 +53,12 @@ export const MarketDataProvider = ({ children }: { children: React.ReactNode }) 
   };
 
   const processTick = () => {
-    Simulator.tick((data) => {
+    Feed.tick((data) => {
       // 1. Update market state
       setMarketData(data);
 
       // 2. Evaluate open trades
-      const currentActiveTicker = Simulator.getActiveTicker();
+      const currentActiveTicker = Feed.getActiveTicker();
       Ledger.updateOpenTrades(currentActiveTicker, data.spot);
 
       // 3. Keep ledger stats in sync
@@ -80,11 +80,11 @@ export const MarketDataProvider = ({ children }: { children: React.ReactNode }) 
   };
 
   const changeTicker = (ticker: string) => {
-    const sym = Simulator.setActiveTicker(ticker);
+    const sym = Feed.setActiveTicker(ticker);
     setActiveTickerState(sym);
 
     // Trigger instant tick for snappy UI transition
-    Simulator.tick((data) => {
+    Feed.tick((data) => {
       setMarketData(data);
       updateLedgerState();
     });

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Boxes, FlaskConical, Trophy } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
-import Simulator from '../../core/simulator';
+import Feed from '../../core/feed';
 import { modelScoreboard, runMonteCarlo } from '../../core/quant';
 import PageHeader from '../../components/ui/PageHeader';
 import TickerSearch from '../../components/ui/TickerSearch';
@@ -25,7 +25,7 @@ const ProveIt = () => {
   const { activeTicker, marketData, changeTicker } = useMarketData();
   const [window_, setWindow] = useState<Window>('30');
 
-  const iv = Simulator.TICKERS[activeTicker]?.iv ?? 0.25;
+  const iv = Feed.TICKERS[activeTicker]?.iv ?? 0.25;
 
   const mc = useMemo(
     () => (marketData ? runMonteCarlo(marketData, iv, Number(window_)) : null),

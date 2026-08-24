@@ -10,7 +10,7 @@ import {
   type IPriceLine,
   type UTCTimestamp,
 } from 'lightweight-charts';
-import Simulator from '../../core/simulator';
+import Feed from '../../core/feed';
 import { DARK_POOL } from './palette';
 import { getCandleTheme, useCandleThemeKey, candleSeriesOptions, chartSurface } from './candleTheme';
 import TickerQuickPick from './TickerQuickPick';
@@ -105,7 +105,7 @@ const MiniPane = ({ ticker, spot, changePercent, prints, revision, onChangeTicke
       layout: { background: { color: s.bg } },
       grid: { horzLines: { color: s.grid } },
     });
-    const bars = Simulator.getCandles(ticker);
+    const bars = Feed.getCandles(ticker);
     if (bars && bars.length > 0 && volumeRef.current) {
       volumeRef.current.setData(
         bars.map(b => ({
@@ -124,7 +124,7 @@ const MiniPane = ({ ticker, spot, changePercent, prints, revision, onChangeTicke
     const volumeSeries = volumeRef.current;
     if (!chart || !candleSeries || !volumeSeries) return;
 
-    const bars = Simulator.getCandles(ticker);
+    const bars = Feed.getCandles(ticker);
     if (!bars || bars.length === 0) return;
 
     const theme = getCandleTheme();

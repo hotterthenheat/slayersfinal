@@ -31,7 +31,7 @@ import {
 } from 'recharts';
 import Panel from '../ui/Panel';
 import type { Setup } from '../../types/compass';
-import Simulator from '../../core/simulator';
+import Feed from '../../core/feed';
 import { buildSetupTrack, barsToSpan, barsToOffset, type TrackLevel } from './trackModel';
 import { BULL, PUT_WALL } from '../gex/palette';
 
@@ -99,7 +99,7 @@ interface ContractTrackProps {
 const ContractTrack = ({ setup, revision, retired = false, actions }: ContractTrackProps) => {
   const track = useMemo(() => {
     void revision;
-    const bars = Simulator.getCandles(setup.ticker) ?? [];
+    const bars = Feed.getCandles(setup.ticker) ?? [];
     return buildSetupTrack(setup, bars);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setup.id, setup.mid, revision]);

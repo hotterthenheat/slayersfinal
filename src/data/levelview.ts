@@ -14,7 +14,7 @@
 ==================================================
 */
 
-import Simulator from '../core/simulator';
+import Feed from '../core/feed';
 
 export type GexTrend = 'BUILDING' | 'BLEEDING' | 'FLAT' | 'NEW';
 
@@ -41,7 +41,7 @@ const fmtTime = (t: number) =>
 
 /** Today's session: the trailing run of bars with no overnight gap. */
 function sessionBars(ticker: string) {
-  const bars = Simulator.peekCandles(ticker);
+  const bars = Feed.peekCandles(ticker);
   if (!bars || bars.length === 0) return null;
   let start = bars.length - 1;
   while (start > 0 && bars[start].time - bars[start - 1].time <= SESSION_GAP_S) start--;
@@ -59,7 +59,7 @@ function sessionBars(ticker: string) {
 export function netSinceOpenRatio(ticker: string): Map<number, number> | null {
   const session = sessionBars(ticker);
   if (!session) return null;
-  const snaps = Simulator.getGexHistory(ticker) ?? [];
+  const snaps = Feed.getGexHistory(ticker) ?? [];
   const first = snaps.find(s => s.time >= session[0].time);
   const last = snaps[snaps.length - 1];
   if (!first || !last || first === last) return null;
@@ -87,10 +87,10 @@ export function buildLevelRead(ticker: string, strike: number): LevelRead | null
     inTouch = hit;
   }
 
-  const spot = Simulator.TICKERS[ticker]?.currentPrice ?? session[session.length - 1].close;
+  const spot = Feed.TICKERS[ticker]?.currentPrice ?? session[session.length - 1].close;
   const distPct = ((strike - spot) / spot) * 100;
 
-  const snaps = Simulator.getGexHistory(ticker) ?? [];
+  const snaps = Feed.getGexHistory(ticker) ?? [];
   const at = (s: { levels: { strike: number; value: number }[] }) => s.levels.find(l => l.strike === strike)?.value ?? null;
   const first = snaps.find(s => s.time >= session[0].time);
   const last = snaps[snaps.length - 1];

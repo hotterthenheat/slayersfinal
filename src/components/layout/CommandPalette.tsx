@@ -6,7 +6,7 @@ import { GEX_SUBPAGES } from '../../pages/pinpoint/subnav';
 import { TRACE_SUBPAGES } from '../../pages/trace/subnav';
 import { COMMUNITY_SUBPAGES } from '../../pages/community/subnav';
 import { useMarketData } from '../../context/MarketDataContext';
-import Simulator from '../../core/simulator';
+import Feed from '../../core/feed';
 
 type TickerModule = typeof import('../../data/tickers');
 
@@ -90,7 +90,7 @@ const CommandPalette = ({ open, onClose }: CommandPaletteProps) => {
         run: () => changeTicker(t.symbol),
       }));
     }
-    return Object.keys(Simulator.TICKERS).map(tk => ({
+    return Object.keys(Feed.TICKERS).map(tk => ({
       id: `ticker-${tk}`,
       group: 'Ticker' as const,
       label: `Set ticker → ${tk}`,

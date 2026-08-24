@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { Filter } from 'lucide-react';
 import { useMarketData } from '../context/MarketDataContext';
 import type { MarketSnapshot } from '../types/market';
-import Simulator from '../core/simulator';
+import Feed from '../core/feed';
 import { buildCompassView, buildImpact, makeSetup } from '../data/compass';
 import {
   SCANNERS,
@@ -209,7 +209,7 @@ const Compass = () => {
   // as an argument (never reads the simulator itself), so replay and live run
   // identical code. Scan-tier cadence: quotes refresh with the sweep.
   const universe = useMemo(
-    () => (scanSnapshot ? Simulator.universeQuotes(scanSnapshot.ticker) : []),
+    () => (scanSnapshot ? Feed.universeQuotes(scanSnapshot.ticker) : []),
     [scanSnapshot]
   );
 
@@ -223,15 +223,15 @@ const Compass = () => {
   // marketData is the tick dependency — without it the "LIVE" readouts freeze at click-time.
   const monitoredSetup = useMemo(() => {
     if (!monitorTarget) return null;
-    Simulator.ensureTicker(monitorTarget.ticker);
-    const cfg = Simulator.TICKERS[monitorTarget.ticker];
+    Feed.ensureTicker(monitorTarget.ticker);
+    const cfg = Feed.TICKERS[monitorTarget.ticker];
     return makeSetup(monitorTarget.ticker, cfg.currentPrice, monitorTarget.strike, monitorTarget.right, scanner, cfg.iv, sleeve);
   }, [monitorTarget, scanner, sleeve, marketData]);
 
   // The monitored underlying's live spot — the facts strip speaks in it
   const monitorSpot = useMemo(() => {
     if (!monitorTarget) return 0;
-    return Simulator.TICKERS[monitorTarget.ticker]?.currentPrice ?? 0;
+    return Feed.TICKERS[monitorTarget.ticker]?.currentPrice ?? 0;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [monitorTarget, marketData]);
 
@@ -310,7 +310,7 @@ const Compass = () => {
     if (!scanSnapshot || !railTicker) return null;
     if (railTicker === scanSnapshot.ticker) return scanSnapshot;
     try {
-      return Simulator.snapshotFor(railTicker);
+      return Feed.snapshotFor(railTicker);
     } catch {
       return scanSnapshot;
     }

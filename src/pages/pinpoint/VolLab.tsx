@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMarketData } from '../../context/MarketDataContext';
-import Simulator from '../../core/simulator';
+import Feed from '../../core/feed';
 import { buildVolLab } from '../../data/vollab';
 import Panel from '../../components/ui/Panel';
 import IvSurface from '../../components/gex/vollab/IvSurface';
@@ -35,7 +35,7 @@ const VolLab = () => {
 
   const data = useMemo(() => {
     if (!scanKey) return null;
-    const iv = Simulator.TICKERS[scanKey.ticker]?.iv ?? 0.2;
+    const iv = Feed.TICKERS[scanKey.ticker]?.iv ?? 0.2;
     return buildVolLab(scanKey.ticker, scanKey.spot, iv);
   }, [scanKey]);
 

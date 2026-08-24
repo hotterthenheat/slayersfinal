@@ -8,7 +8,7 @@ import SpotRule from '../ui/SpotRule';
 import { ROW_INTERACTIVE, interactiveRowProps, rowKeyDown } from '../ui/interactiveRow';
 import { LONG_GAMMA, SHORT_GAMMA } from './palette';
 import TrendLine from './TrendLine';
-import Simulator from '../../core/simulator';
+import Feed from '../../core/feed';
 import { fmtUsd } from '../../data/gex';
 import type { ExposureProfileData, StrikeExposure, ZoneBand, ZoneKind } from '../../types/gex';
 import type { Tone } from '../ui/tones';
@@ -132,7 +132,7 @@ const StrikeReadout = ({
   anchorWord: string;
 }) => {
   const series = useMemo(() => {
-    const snaps = Simulator.getGexHistory(ticker) ?? [];
+    const snaps = Feed.getGexHistory(ticker) ?? [];
     const out: number[] = [];
     for (let i = Math.max(0, snaps.length - 391); i < snaps.length; i++) {
       const lvl = snaps[i].levels.find(l => l.strike === row.strike);
@@ -292,7 +292,7 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
   // effective multiplier this view applied to the live value — so the ghost and
   // the band are always on one scale, never a raw-vs-scaled mismatch.
   const prior = useMemo(() => {
-    const snaps = Simulator.getGexHistory(ticker) ?? [];
+    const snaps = Feed.getGexHistory(ticker) ?? [];
     if (snaps.length < 2) return new Map<number, number>();
     const nowMap = new Map(snaps[snaps.length - 1].levels.map(l => [l.strike, l.value]));
     const pastMap = new Map(snaps[Math.max(0, snaps.length - 16)].levels.map(l => [l.strike, l.value]));
@@ -307,7 +307,7 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
   }, [ticker, strikes]);
 
   // ±1σ expected move off the symbol's IV — the straddle-implied daily range
-  const iv = Simulator.TICKERS[ticker]?.iv ?? 0.2;
+  const iv = Feed.TICKERS[ticker]?.iv ?? 0.2;
   const em = levels.spot * iv * Math.sqrt(1 / 252);
 
   const bandH = strikes.length ? plot.h / strikes.length : 0;

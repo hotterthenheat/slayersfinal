@@ -12,7 +12,7 @@ import { useNavigate } from 'react-router-dom';
 import { Bookmark, Trash2, ArrowUpRight } from 'lucide-react';
 import { useTracker } from '../context/TrackerContext';
 import { useMarketData } from '../context/MarketDataContext';
-import Simulator from '../core/simulator';
+import Feed from '../core/feed';
 import { makeSetup } from '../data/compass';
 import type { Setup, SleeveKey } from '../types/compass';
 import type { TrackedSetup } from '../types/tracker';
@@ -54,8 +54,8 @@ function isExpired(tracked: TrackedSetup): boolean {
 
 /** Rebuild a tracked setup's live data from the simulator. */
 function rebuildLive(tracked: TrackedSetup): Setup {
-  Simulator.ensureTicker(tracked.ticker);
-  const cfg = Simulator.TICKERS[tracked.ticker];
+  Feed.ensureTicker(tracked.ticker);
+  const cfg = Feed.TICKERS[tracked.ticker];
   return makeSetup(
     tracked.ticker,
     cfg.currentPrice,

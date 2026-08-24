@@ -1,6 +1,6 @@
 import { Fragment, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import Simulator from '../../../core/simulator';
+import Feed from '../../../core/feed';
 import { fmtUsd } from '../../../data/gex';
 import { heatRgb } from '../heatmap';
 import SignalBadge from '../../ui/SignalBadge';
@@ -41,7 +41,7 @@ const ShiftHoverCard = ({
   y: number;
 }) => {
   const series = useMemo(() => {
-    const snaps = Simulator.getGexHistory(data.ticker) ?? [];
+    const snaps = Feed.getGexHistory(data.ticker) ?? [];
     const out: number[] = [];
     for (let i = Math.max(0, snaps.length - 16); i < snaps.length; i++) {
       const lvl = snaps[i].levels.find(l => l.strike === row.strike);

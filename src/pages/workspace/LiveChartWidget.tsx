@@ -15,7 +15,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
-import Simulator from '../../core/simulator';
+import Feed from '../../core/feed';
 import ChartToolbar from '../../components/gex/ChartToolbar';
 import StrikeChart, { DEFAULT_OVERLAYS, type ChartOverlays } from '../../components/gex/StrikeChart';
 import { FOCUS, KING } from '../../components/gex/palette';
@@ -114,7 +114,7 @@ const LiveChartWidget = ({ ctx }: { ctx: WorkspaceCtx }) => {
                   (Noah, 2026-08-18). The widget re-renders per revision (1s),
                   so a direct sim read stays on the candle's clock. */}
               <SpotPrice
-                value={Simulator.TICKERS[ctx.ticker]?.currentPrice ?? ctx.gex.levels.spot}
+                value={Feed.TICKERS[ctx.ticker]?.currentPrice ?? ctx.gex.levels.spot}
                 className="font-mono text-[12px] font-semibold tnum text-textPrimary"
               />
               {/* The price twins on index names (Noah, 2026-08-18) — the
@@ -123,7 +123,7 @@ const LiveChartWidget = ({ ctx }: { ctx: WorkspaceCtx }) => {
               {(() => {
                 const fam = twinFamilyFor(ctx.ticker);
                 if (!fam) return null;
-                const s = Simulator.TICKERS[ctx.ticker]?.currentPrice ?? ctx.gex.levels.spot;
+                const s = Feed.TICKERS[ctx.ticker]?.currentPrice ?? ctx.gex.levels.spot;
                 return (
                   <span className="font-mono text-[10px] text-textMuted tnum">
                     {fam.index} {fmtTwin(twinPrice(fam, 'index', s, s))} · {fam.futures}{' '}

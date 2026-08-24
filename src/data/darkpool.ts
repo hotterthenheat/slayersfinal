@@ -9,7 +9,7 @@
 ==================================================
 */
 
-import Simulator from '../core/simulator';
+import Feed from '../core/feed';
 import { dayKey, h01, hPick, hRange } from '../core/rng';
 import type { MarketSnapshot } from '../types/market';
 import type {
@@ -48,7 +48,7 @@ const SECTOR_UNIVERSE: { sector: string; color: string; weight: number; tickers:
 /** Stable per-ticker price: live sim price when the sim tracks it, otherwise a
     hash-derived quote that never jumps between renders. */
 function leaderPrice(sym: string): number {
-  const live = Simulator.TICKERS[sym];
+  const live = Feed.TICKERS[sym];
   if (live) return live.currentPrice;
   return Number((12 + Math.pow(h01(`dpl-px-${sym}`), 1.6) * 950).toFixed(2));
 }
