@@ -1,116 +1,60 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import Feed from '../core/feed';
-import Ledger from '../core/ledger';
-import type { ExecuteResult, LedgerStats, MarketSnapshot, TickerSymbol, TradeRecord } from '../types/market';
+import type { MarketSnapshot, TickerSymbol } from '../types/market';
 
-interface LedgerState {
-  activeTrades: TradeRecord[];
-  closedTrades: TradeRecord[];
-  stats: LedgerStats;
-}
+/*
+==================================================
+  SLAYER TERMINAL - MARKET CONTEXT (MarketDataContext.tsx)
+
+  Holds the active name and the latest snapshot, and
+  owns the one clock that advances playback.
+==================================================
+*/
 
 interface MarketDataContextValue {
   activeTicker: TickerSymbol;
   marketData: MarketSnapshot | null;
-  ledgerState: LedgerState;
   changeTicker: (ticker: string) => void;
-  executeTrade: () => ExecuteResult;
-  clearLedger: () => void;
 }
 
 const MarketDataContext = createContext<MarketDataContextValue | null>(null);
 
+/** How often playback advances one recorded bar. */
+const TICK_MS = 1500;
+
 export const MarketDataProvider = ({ children }: { children: React.ReactNode }) => {
   const [activeTicker, setActiveTickerState] = useState<TickerSymbol>(Feed.getActiveTicker());
   const [marketData, setMarketData] = useState<MarketSnapshot | null>(null);
-  const [ledgerState, setLedgerState] = useState<LedgerState>({
-    activeTrades: [],
-    closedTrades: [],
-    stats: { winRate: 0, profitFactor: 0, avgAccuracy: 0, totalPnL: 0, count: 0 }
-  });
-
   const tickIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Initialize Ledger on Mount
   useEffect(() => {
-    Ledger.loadFromStorage();
-    updateLedgerState();
-
-    // Start Ticking
-    startSimulator();
-
+    const advance = () => Feed.tick(setMarketData);
+    advance();
+    tickIntervalRef.current = setInterval(advance, TICK_MS);
     return () => {
-      stopSimulator();
+      if (tickIntervalRef.current) clearInterval(tickIntervalRef.current);
+      tickIntervalRef.current = null;
     };
   }, []);
 
-  const updateLedgerState = () => {
-    setLedgerState({
-      activeTrades: [...Ledger.getActiveTrades()],
-      closedTrades: [...Ledger.getClosedTrades()],
-      stats: Ledger.getStats()
-    });
-  };
+  /*
+    Switching name reads the CURRENT instant — it does not advance the clock.
 
-  const processTick = () => {
-    Feed.tick((data) => {
-      // 1. Update market state
-      setMarketData(data);
-
-      // 2. Evaluate open trades
-      const currentActiveTicker = Feed.getActiveTicker();
-      Ledger.updateOpenTrades(currentActiveTicker, data.spot);
-
-      // 3. Keep ledger stats in sync
-      updateLedgerState();
-    });
-  };
-
-  const startSimulator = () => {
-    if (tickIntervalRef.current) clearInterval(tickIntervalRef.current);
-    processTick();
-    tickIntervalRef.current = setInterval(processTick, 1500);
-  };
-
-  const stopSimulator = () => {
-    if (tickIntervalRef.current) {
-      clearInterval(tickIntervalRef.current);
-      tickIntervalRef.current = null;
-    }
-  };
-
+    This used to call `Feed.tick()` for a snappy transition, which moved the
+    playhead a bar and consumed four tape prints every time you changed ticker.
+    Looking at a different instrument is not time passing: clicking through six
+    names in the picker would have jumped playback six bars ahead of the
+    interval that is supposed to own it, and silently eaten 24 prints the tape
+    would then never show.
+  */
   const changeTicker = (ticker: string) => {
     const sym = Feed.setActiveTicker(ticker);
     setActiveTickerState(sym);
-
-    // Trigger instant tick for snappy UI transition
-    Feed.tick((data) => {
-      setMarketData(data);
-      updateLedgerState();
-    });
-  };
-
-  const executeTrade = (): ExecuteResult => {
-    if (!marketData || !marketData.plan) return { success: false, message: 'No active plan' };
-    const res = Ledger.executePlan(marketData.plan);
-    updateLedgerState();
-    return res;
-  };
-
-  const clearLedger = () => {
-    Ledger.clearHistory();
-    updateLedgerState();
+    setMarketData(Feed.snapshotFor(sym));
   };
 
   return (
-    <MarketDataContext.Provider value={{
-      activeTicker,
-      marketData,
-      ledgerState,
-      changeTicker,
-      executeTrade,
-      clearLedger
-    }}>
+    <MarketDataContext.Provider value={{ activeTicker, marketData, changeTicker }}>
       {children}
     </MarketDataContext.Provider>
   );

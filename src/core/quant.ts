@@ -2,14 +2,16 @@
 ==================================================
   SLAYER TERMINAL - QUANT ENGINE (quant.ts)
   Prove It's machinery: a deterministic Monte Carlo
-  over the active name, forecast stats derived from
-  the simulated distribution, and the scoreboard
-  that tracks how the terminal's own engines have
-  been grading out.
+  over the active name and the forecast stats derived
+  from the simulated distribution.
+
+  The scoreboard that used to live here reported
+  hash-generated hit rates as measured track record
+  and has been deleted — see the note in ProveIt.tsx.
 ==================================================
 */
 
-import { dayKey, hGauss, hRange } from './rng';
+import { dayKey, hGauss } from './rng';
 import type { MarketSnapshot } from '../types/market';
 
 // ---- Monte Carlo ---------------------------------------------------------------
@@ -119,47 +121,4 @@ export function histogram(terminal: number[], spot: number, bins: number): HistB
     out[i].count++;
   }
   return out;
-}
-
-// ---- model scoreboard --------------------------------------------------------------
-
-export interface ModelRow {
-  model: string;
-  scope: string;
-  hitRatePct: number;
-  sample: number;
-  edgeBps: number;
-  trend: number[];
-  note: string;
-}
-
-/** How the terminal's own engines have graded out — the "prove it" ledger. */
-export function modelScoreboard(): ModelRow[] {
-  const day = dayKey();
-  const mk = (model: string, scope: string, base: number, sample: number, note: string): ModelRow => {
-    const hit = Math.round(base + hRange(`${day}-sb-${model}`, -3, 3));
-    const trend: number[] = [];
-    let level = hit - hRange(`${day}-sb-t0-${model}`, 2, 6);
-    for (let i = 0; i < 24; i++) {
-      level += hGauss(`${day}-sb-${model}-${i}`) * 1.1 + 0.12;
-      trend.push(level);
-    }
-    return {
-      model,
-      scope,
-      hitRatePct: hit,
-      sample,
-      edgeBps: Math.round((hit - 50) * hRange(`${day}-sb-e-${model}`, 4, 7)),
-      trend,
-      note,
-    };
-  };
-
-  return [
-    mk('Compass Weigher', 'BUY calls vs expiry P/L', 68, 412, 'Buy-rated contracts that finished profitable, last 90 sessions.'),
-    mk('Trace Posture', 'DP posture vs 3-day drift', 64, 286, 'Accumulation/distribution reads confirmed by forward price drift.'),
-    mk('Pinpoint Levels', 'wall touch → reversal', 71, 530, 'Call/put wall touches that produced the mapped reaction.'),
-    mk('News Model', 'headline direction calls', 61, 348, 'Predicted next-session direction on scored headlines.'),
-    mk('Earnings Engine', 'play/fade vs realized move', 66, 124, 'FADE prints that stayed inside the implied move + PLAYs that paid.'),
-  ];
 }
