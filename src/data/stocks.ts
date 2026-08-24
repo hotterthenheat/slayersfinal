@@ -1,8 +1,8 @@
 /*
 ==================================================
   SLAYER TERMINAL - COMMON STOCKS ENGINE (stocks.ts)
-  Ranks the shared universe on four sleeves —
-  momentum, quality, flow and news — then rolls the
+  Ranks the shared universe on three sleeves —
+  momentum, quality and flow — then rolls the
   same sleeves up into a sector rotation board, so
   "what to buy" and "which sectors are worth being
   in" come from one composite, not two opinions.
@@ -10,7 +10,6 @@
 */
 
 import { dayKey, hGauss, hRange } from '../core/rng';
-import { tickerSentiment } from './news';
 import { SECTORS, UNIVERSE, type Sector } from './universe';
 
 export type StockVerdict = 'ACCUMULATE' | 'HOLD' | 'AVOID';
@@ -22,7 +21,6 @@ export interface StockSleeves {
   momentum: number;
   quality: number;
   flow: number;
-  news: number;
 }
 
 export interface StockPick {
@@ -57,7 +55,15 @@ export interface SectorRow {
 
 // ---- sleeves ------------------------------------------------------------------
 
-const SLEEVE_WEIGHTS = { momentum: 0.32, quality: 0.24, flow: 0.26, news: 0.18 } as const;
+/*
+  THREE SLEEVES. The news sleeve is gone — it was `tickerSentiment()` over
+  invented headlines, and it was 18% of every composite on this board.
+
+  The survivors are re-normalised (old weights / 0.82), not left to sum to
+  0.82, because a composite that quietly rescales is a ranking change wearing
+  a data change's clothes. Sums to 1.00; the guard asserts it.
+*/
+const SLEEVE_WEIGHTS = { momentum: 0.39, quality: 0.29, flow: 0.32 } as const;
 
 function sleevesFor(ticker: string, day: string): StockSleeves {
   const s = (tag: string) => `${ticker}-${day}-stk-${tag}`;
@@ -65,7 +71,6 @@ function sleevesFor(ticker: string, day: string): StockSleeves {
     momentum: Math.round(hRange(s('mom'), 18, 96)),
     quality: Math.round(hRange(s('qual'), 25, 94)),
     flow: Math.round(hRange(s('flow'), 15, 95)),
-    news: Math.round(50 + tickerSentiment(ticker) * 48),
   };
 }
 
@@ -73,8 +78,7 @@ function composite(sl: StockSleeves): number {
   return Math.round(
     sl.momentum * SLEEVE_WEIGHTS.momentum +
       sl.quality * SLEEVE_WEIGHTS.quality +
-      sl.flow * SLEEVE_WEIGHTS.flow +
-      sl.news * SLEEVE_WEIGHTS.news
+      sl.flow * SLEEVE_WEIGHTS.flow
   );
 }
 
@@ -83,14 +87,13 @@ function thesisFor(name: string, sl: StockSleeves, verdict: StockVerdict): strin
     { k: 'momentum', v: sl.momentum, good: 'trend and RSI both constructive', bad: 'trend broken — momentum works against you' },
     { k: 'quality', v: sl.quality, good: 'fundamentals screen clean (margins, growth, balance sheet)', bad: 'fundamental screen flags deterioration' },
     { k: 'flow', v: sl.flow, good: 'options flow and dark pool lean accumulative', bad: 'smart-money flow is distributive' },
-    { k: 'news', v: sl.news, good: 'news tape is a tailwind', bad: 'headline risk is live' },
   ].sort((a, b) => b.v - a.v);
   const best = ranked[0];
   const worst = ranked[ranked.length - 1];
   // States, not orders: the thesis describes what the screen SAYS, never what
   // to do about it — same doctrine as Compass verdicts.
   if (verdict === 'ACCUMULATE') {
-    return `${name}: ${best.good}; ${worst.v < 45 ? `the one soft spot is ${worst.k} (${worst.v})` : 'no sleeve is fighting it'}. All four sleeves point the same way.`;
+    return `${name}: ${best.good}; ${worst.v < 45 ? `the one soft spot is ${worst.k} (${worst.v})` : 'no sleeve is fighting it'}. All three sleeves point the same way.`;
   }
   if (verdict === 'AVOID') {
     return `${name}: ${worst.bad} (${worst.v}); ${best.v > 65 ? `${best.k} alone isn't enough to carry it` : 'nothing on the board screens in its favor'}.`;

@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   verify:
-    name: Typecheck · Build
+    name: Typecheck · Test · Build
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -35,17 +35,22 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      # NO LINT AND NO TEST STEP, deliberately, because there is nothing to run:
-      # this codebase ships no ESLint config and no test files, so `npm run lint`
-      # and `npm test` are both "Missing script" and would fail the job on every
-      # push without telling anyone anything about the code.
+      # There is still NO LINT STEP: this codebase ships no ESLint config, so
+      # `npm run lint` is "Missing script" and would fail every push without
+      # saying anything about the code.
       #
-      # That makes this gate typecheck + build and nothing else. It cannot catch
-      # a wrong number, a mislabelled figure, or a regression in behaviour — only
-      # code that does not compile. The three scripts under scripts/ are real
-      # assertions (fixture arithmetic, replay determinism, the query parser) and
-      # are NOT wired in here because they are not npm scripts; wiring them up is
-      # the cheapest way to get this gate back to meaning something.
+      # There IS a test step now. `npm test` runs the four assertion scripts
+      # under scripts/ — 43 assertions covering the partner spec's worked
+      # fixtures, replay determinism under a pinned clock, the Weigher query
+      # parser, and the scoring-weight tables. They existed before and nothing
+      # ran them.
+      #
+      # Every one of the weights-proof assertions is mutation-verified: dropping
+      # a factor without re-normalising fails it, restoring the news sleeve
+      # fails it, and re-importing the news generator anywhere in src fails it.
+
+      - name: Test
+        run: npm test
 
       - name: Build
         run: npm run build

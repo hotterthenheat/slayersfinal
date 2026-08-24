@@ -160,14 +160,13 @@ const Stocks = () => {
     },
     {
       key: 'sleeves',
-      header: 'Sleeves · Mom / Qual / Flow / News',
+      header: 'Sleeves · Mom / Qual / Flow',
       width: '220px',
       render: p => (
         <span className="flex flex-col gap-1 py-0.5">
           <SleeveBar label="Mom" value={p.sleeves.momentum} />
           <SleeveBar label="Qual" value={p.sleeves.quality} />
           <SleeveBar label="Flow" value={p.sleeves.flow} />
-          <SleeveBar label="News" value={p.sleeves.news} />
         </span>
       ),
     },

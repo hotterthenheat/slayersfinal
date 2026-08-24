@@ -6,7 +6,7 @@
   candidates (Black-Scholes), then weighs
   the math (breakeven vs expected move, theta burden),
   the tape (flow + dark-pool posture), and the story
-  (news lean) into one composite: what's worth buying
+  into one composite: what's worth buying
   and what isn't — with the reason attached.
 
   ONE scorer, two callers: weighContracts() grades the
@@ -19,7 +19,6 @@
 import { expiryFor } from './calendar';
 import { dayKey, hRange } from './rng';
 import { buildDarkPoolView } from '../data/darkpool';
-import { tickerSentiment } from '../data/news';
 import type { MarketSnapshot, StrikeNode } from '../types/market';
 
 export type Horizon = 'SAMEDAY' | 'WEEKLIES' | 'SWINGS' | 'LEAPS';
@@ -82,7 +81,7 @@ export const HORIZONS: { key: Horizon; label: string; blurb: string }[] = [
   {
     key: 'SWINGS',
     label: 'Swings',
-    blurb: '2–6 week holds — the balanced sleeve: math, flow and news all get a vote.',
+    blurb: '2–6 week holds — the balanced sleeve: math, flow and vol all get a vote.',
   },
   {
     key: 'LEAPS',
@@ -154,11 +153,30 @@ const HORIZON_SHAPE: Record<Horizon, { dtes: number[]; otm: number[] }> = {
 // Same-day deliberately leans on FLOW over arithmetic: inside a session the
 // breakeven math is close to a coin flip, so who is actually pushing the tape
 // decides more than the numbers do. Tuned against our own factor scales.
+/*
+  FIVE FACTORS, NOT SIX. The news lean is gone.
+
+  It was `tickerSentiment()`, which scored a name off invented headlines —
+  including rating actions attributed to named banks — and no data product this
+  desk holds carries news text. A factor with no possible source is not a
+  factor, and it was carrying up to 0.22 of a LEAPS verdict.
+
+  The remaining five are RE-NORMALISED, not left short. Dropping a 0.14 weight
+  and letting the rest stand would have quietly rescaled every composite by
+  0.86 and moved contracts across the BUY / WATCH / FADE thresholds for a
+  reason that has nothing to do with the contract. Each row below is the old
+  row without news, divided by its own surviving sum:
+
+      SAMEDAY  /0.86    WEEKLIES /0.92    SWINGS /0.84    LEAPS /0.78
+
+  Every row sums to 1.00. A guard asserts that, because a weight table that
+  stops summing to one is a scale change disguised as a tweak.
+*/
 const WEIGHTS: Record<Horizon, Record<string, number>> = {
-  SAMEDAY: { math: 0.12, decay: 0.2, vol: 0.06, flow: 0.38, news: 0.14, liq: 0.1 },
-  WEEKLIES: { math: 0.24, decay: 0.26, vol: 0.08, flow: 0.22, news: 0.08, liq: 0.12 },
-  SWINGS: { math: 0.22, decay: 0.14, vol: 0.14, flow: 0.2, news: 0.16, liq: 0.14 },
-  LEAPS: { math: 0.18, decay: 0.04, vol: 0.28, flow: 0.12, news: 0.22, liq: 0.16 },
+  SAMEDAY: { math: 0.14, decay: 0.23, vol: 0.07, flow: 0.44, liq: 0.12 },
+  WEEKLIES: { math: 0.26, decay: 0.28, vol: 0.09, flow: 0.24, liq: 0.13 },
+  SWINGS: { math: 0.26, decay: 0.17, vol: 0.17, flow: 0.24, liq: 0.16 },
+  LEAPS: { math: 0.23, decay: 0.05, vol: 0.36, flow: 0.15, liq: 0.21 },
 };
 
 // expiryLabel() used to be Date.now() + dte*86400000 with no calendar at all,
@@ -179,13 +197,12 @@ export function horizonForDte(dte: number): Horizon {
 }
 
 /** Everything read once per snapshot and shared by every candidate — the tape,
-    the news lean, the IV regime, the strike grid. Built once by both callers. */
+    the IV regime, the strike grid. Built once by both callers. */
 export interface ScoreCtx {
   ticker: string;
   spot: number;
   chain: StrikeNode[];
   dp: ReturnType<typeof buildDarkPoolView>;
-  news: number;
   ivRank: number;
   baseIv: number;
   trendUp: boolean;
@@ -198,7 +215,6 @@ function buildScoreCtx(snapshot: MarketSnapshot): ScoreCtx {
   const { ticker, spot, chain, indicators } = snapshot;
   const day = dayKey();
   const dp = buildDarkPoolView(snapshot);
-  const news = tickerSentiment(ticker);
   const ivRank = Math.round(hRange(`${ticker}-${day}-ivr`, 12, 92));
   const baseIv = Math.max(
     0.12,
@@ -208,7 +224,7 @@ function buildScoreCtx(snapshot: MarketSnapshot): ScoreCtx {
   const rsi = indicators.rsi;
   const sorted = [...chain].sort((a, b) => a.strike - b.strike);
   const step = sorted.length > 1 ? Math.abs(sorted[1].strike - sorted[0].strike) : Math.max(spot * 0.005, 0.5);
-  return { ticker, spot, chain, dp, news, ivRank, baseIv, trendUp, rsi, step };
+  return { ticker, spot, chain, dp, ivRank, baseIv, trendUp, rsi, step };
 }
 
 /** Score ONE contract on the shared 6-factor scale. strike + dte + right are
@@ -221,7 +237,7 @@ export function scoreCandidate(
   requestedDte: number,
   horizon: Horizon
 ): WeighedContract {
-  const { ticker, spot, chain, dp, news, ivRank, baseIv, trendUp, rsi } = ctx;
+  const { ticker, spot, chain, dp, ivRank, baseIv, trendUp, rsi } = ctx;
   const weights = WEIGHTS[horizon];
 
   // Resolve the requested horizon to a REAL expiry first, then price against
@@ -293,14 +309,6 @@ export function scoreCandidate(
         ? `Smart-money flow leans against ${right === 'C' ? 'calls' : 'puts'} here — you'd be fading the desks.`
         : 'Flow is mixed — no institutional wind either way.';
 
-  const newsScore = Math.round(clamp(50 + news * 48 * dirSign, 4, 96));
-  const newsDetail =
-    Math.abs(news) < 0.12
-      ? 'Quiet tape on the name — news is a non-factor.'
-      : newsScore >= 55
-        ? 'The headline tape supports the direction.'
-        : 'Headline risk points the other way.';
-
   const liqScore = Math.round(clamp(100 - spreadPct * 13 + Math.log10(Math.max(oiCount, 10)) * 6, 4, 98));
   const liqDetail =
     liqScore >= 55
@@ -315,7 +323,6 @@ export function scoreCandidate(
     { key: 'decay', label: 'Theta burden', score: decayScore, weight: weights.decay, detail: decayDetail },
     { key: 'vol', label: 'Vol pricing', score: volScore, weight: weights.vol, detail: volDetail },
     { key: 'flow', label: 'Flow & dark pool', score: flowScore, weight: weights.flow, detail: flowDetail },
-    { key: 'news', label: 'News lean', score: newsScore, weight: weights.news, detail: newsDetail },
     { key: 'liq', label: 'Liquidity', score: liqScore, weight: weights.liq, detail: liqDetail },
   ];
 

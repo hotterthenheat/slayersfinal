@@ -9,6 +9,7 @@ import type {
 } from '../types/market';
 import type { UniverseQuote } from '../types/compass';
 import RECORDED_TAPE from '../data/recorded/tape.json';
+import { RECORDED } from '../data/recorded/manifest';
 
 /*
 ==================================================
@@ -81,28 +82,28 @@ interface Recording {
   state into all 74 call sites to save bundle bytes on scaffolding that is
   deleted the moment a real feed exists. So the whole recording (~1.17 MB across
   22 names) ships in the bundle, deliberately, and goes away with this file.
+
+  Imported through a hand-written manifest rather than `import.meta.glob`: the
+  glob is a Vite transform and does not exist under plain Node, so every
+  headless script that reached the feed died on module init before its first
+  assertion.
 */
-const FILES = import.meta.glob<{ default: Recording }>('../data/recorded/*.json', {
-  eager: true,
-});
 
 /*
-  Selected by SHAPE, not by filename.
+  Validated by SHAPE, not trusted by name.
 
-  The glob above matches every .json in the directory, which includes
-  `index.json` (the capture manifest) and `tape.json` (a flat array of prints).
-  Neither is a Recording, and an exclude-list of names is the kind of guard that
-  silently stops covering the next file somebody drops in the folder — the tape
-  file was added after this loop was written and would have been picked up as a
-  ticker called "tape", crashed on `rec.bars[...]` during module init, and taken
-  the whole app down before first paint. TypeScript cannot catch it: the glob's
-  type is an assertion, not a check.
+  The manifest is hand-maintained, so the thing that goes wrong is somebody
+  adding an entry that is not a per-name recording. That already nearly
+  happened: an earlier version globbed the directory, which swept up
+  `tape.json` (a flat array of prints) as a ticker called "tape" and would have
+  thrown on `rec.bars[...]` during module init — before first paint, taking the
+  whole app down. TypeScript cannot catch it; the JSON import's type is an
+  assertion, not a check. So every entry proves it has bars before it is used.
 */
 const RECORDINGS: Record<string, Recording> = {};
-for (const path in FILES) {
-  const name = path.split('/').pop()?.replace('.json', '') ?? '';
-  const rec = FILES[path].default;
-  if (name && Array.isArray(rec?.bars) && rec.bars.length > 0) RECORDINGS[name] = rec;
+for (const [name, value] of Object.entries(RECORDED)) {
+  const rec = value as Recording;
+  if (Array.isArray(rec?.bars) && rec.bars.length > 0) RECORDINGS[name] = rec;
 }
 
 /** The four the charts open on — the recording's long series. */

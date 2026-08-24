@@ -10,7 +10,6 @@
 */
 
 import { dayKey, hGauss, h01, hRange } from '../core/rng';
-import { tickerSentiment } from './news';
 import { UNIVERSE } from './universe';
 import type { Sector } from './universe';
 
@@ -405,7 +404,11 @@ export function buildEarningsCalendar(): EarningsEvent[] {
         pastMoves: pastMovesFor(s, histAvgMovePct),
         richness,
         beatRate8q: Math.round(hRange(s('beat'), 25, 95) / 12.5) * 12.5,
-        revisionTrend: Math.max(-1, Math.min(1, hGauss(s('rev')) * 0.45 + tickerSentiment(u.ticker) * 0.4)),
+        /* The news term is gone with the News desk — it had no source. What is
+           left is still unsourced: estimate revisions need an analyst-estimates
+           product, which is the same missing purchase as beatRate8q. Flagged
+           for the Earnings re-scope rather than widened here. */
+        revisionTrend: Math.max(-1, Math.min(1, hGauss(s('rev')) * 0.45)),
         ivRank: Math.round(hRange(s('ivr'), 35, 96)),
         technicalScore: Math.round(hRange(s('tech'), 22, 92)),
         flowLean: Math.max(-1, Math.min(1, hGauss(s('flow')) * 0.5)),

@@ -16,7 +16,6 @@ import TraceLayout from './pages/trace/TraceLayout';
 import LiveTape from './pages/trace/LiveTape';
 import FlowTracker from './pages/trace/FlowTracker';
 import Stocks from './pages/Stocks';
-import News from './pages/News';
 import EarningsHub from './pages/EarningsHub';
 import EarningsDossier from './pages/EarningsDossier';
 import ProveIt from './pages/proveit/ProveIt';
@@ -47,7 +46,12 @@ const App = () => {
             <Route path="/compass" element={<Compass />} />
             <Route path="/skys-vision" element={<Navigate to="/compass" replace />} />
             <Route path="/stocks" element={<Stocks />} />
-            <Route path="/news" element={<News />} />
+            {/* News unrouted (2026-08-24): nothing in the data entitlements
+                carries headline text, and the generator attributed invented
+                headlines — including rating actions with price targets — to
+                real mastheads and real banks. Page kept on disk for the day a
+                wire is licensed, same treatment as Vol Lab and Dark Pool. */}
+            <Route path="/news" element={<Navigate to="/pulse" replace />} />
             <Route path="/earnings" element={<EarningsHub />} />
             <Route path="/earnings/:ticker" element={<EarningsDossier />} />
             <Route path="/prove-it" element={<ProveIt />} />
