@@ -1,0 +1,31 @@
+{
+  "captured": "2026-08-24T16:52:25.798Z",
+  "native": [
+    "SPY",
+    "QQQ",
+    "AAPL",
+    "NVDA"
+  ],
+  "roster": [
+    "TSLA",
+    "META",
+    "MSFT",
+    "AMZN",
+    "GOOGL",
+    "AMD",
+    "NFLX",
+    "AVGO",
+    "COIN",
+    "PLTR",
+    "JPM",
+    "ORCL",
+    "CRM",
+    "UBER",
+    "MU",
+    "BA",
+    "DIS",
+    "INTC"
+  ],
+  "barsPerNative": 1950,
+  "barsPerRoster": 390
+}
