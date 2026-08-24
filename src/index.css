@@ -60,20 +60,31 @@
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
 }
 
-/* Custom Scrollbar */
+/* Custom Scrollbar
+   The thumb was #2a2a2a on the #0c0c0c panels — 1.36:1, which is invisible.
+   On a terminal this dense that is not a cosmetic problem: a panel that has
+   scrolled content and no visible scrollbar reads as a panel that is missing
+   data, and several of them clip a column or a row at the edge. 8px at #4a4f5a
+   clears 3:1 against every panel ground in the palette, which is the threshold
+   for a non-text UI element you are expected to see. */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #2a2a2a;
-  border-radius: 3px;
+  background: #4a4f5a;
+  border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #444444;
+  background: #6b7280;
+}
+/* Firefox has no ::-webkit pseudo-elements and was getting the OS default. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #4a4f5a transparent;
 }
 
 /* Tabular figures for aligned numeric columns */

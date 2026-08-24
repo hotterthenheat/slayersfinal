@@ -1096,13 +1096,36 @@ const LiveTape = () => {
   // eight more seconds would be the same lie the beam just stopped telling.
   const scopeKey = `${searchQuery}|${flowFilter}|${sentFilter}|${minPremKey}`;
   const lastScopeRef = useRef(scopeKey);
+  const emptyReadRef = useRef(true);
   useEffect(() => {
     const now = Date.now();
     const scopeChanged = scopeKey !== lastScopeRef.current;
-    if (!scopeChanged && now - lastReadRef.current < READ_INTERVAL_MS && beamRows.length > 3) return;
+
+    /*
+      A STALE EMPTY-STATE MUST NOT OUTLIVE THE ARRIVAL OF PRINTS.
+
+      The desk mounts before the first tick delivers anything, so the read is
+      set to "No prints in this view." with nothing on screen — correct at that
+      instant — and the throttle is stamped. The old guard then held that
+      sentence for the next eight seconds, and its `beamRows.length > 3` clause
+      made it worse rather than better: the early return only engaged ONCE
+      prints existed, so the throttle protected the empty message precisely
+      when it had become false. Every visit to /trace/live-tape opened with
+      "No prints in this view." sitting directly above a full, streaming table
+      and a counter reading "17 OF 17 PRINTS".
+
+      So the throttle is bypassed whenever the standing read is the empty one
+      and rows now exist. It still throttles the expensive part — re-narrating
+      a tape that is merely growing.
+    */
+    const staleEmpty = emptyReadRef.current && beamRows.length > 0;
+    if (!scopeChanged && !staleEmpty && now - lastReadRef.current < READ_INTERVAL_MS) return;
+
     lastScopeRef.current = scopeKey;
     lastReadRef.current = now;
-    setRead(beamRows.length === 0 ? 'No prints in this view.' : tapeRead(beamRows, beamSummary));
+    const empty = beamRows.length === 0;
+    emptyReadRef.current = empty;
+    setRead(empty ? 'No prints in this view.' : tapeRead(beamRows, beamSummary));
   }, [beamRows, beamSummary, scopeKey]);
 
   // Stable identity — TapeRow is memoized, and a fresh callback per render

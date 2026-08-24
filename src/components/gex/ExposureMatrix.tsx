@@ -66,8 +66,24 @@ const ExposureMatrix = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
   ];
 
   return (
-    <div className="overflow-auto h-full min-h-0">
-      <table className="w-full border-collapse">
+    /*
+      THE TABLE MAY NOT SQUEEZE BELOW LEGIBILITY.
+
+      `overflow-auto` was already here and never fired, because `w-full` pinned
+      the table to the container and the ten columns absorbed the shortfall by
+      clipping their own contents instead. On a rail-width panel that ate the
+      third greek entirely: the VEX header rendered cut mid-word and its NET
+      column — the summary figure of the group — sat off the right edge with no
+      scrollbar, no fade and nothing on screen suggesting a column existed.
+      A silently truncated greek is worse than a scrollbar.
+
+      `min-w-max` lets the table take the width its columns actually need, which
+      is what finally gives `overflow-auto` something to scroll. It stays
+      `w-full` so that on a wide desk the table still fills the panel rather
+      than leaving a gutter.
+    */
+    <div className="overflow-x-auto overflow-y-auto h-full min-h-0">
+      <table className="w-full min-w-max border-collapse">
         <thead className="sticky top-0 z-10">
           <tr className="bg-[#0c0c0c]">
             <th className="px-2 py-1.5 text-left font-mono text-[10px] font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle">

@@ -260,12 +260,25 @@ const Tracker = () => {
         </span>
       </div>
 
-      {/* Empty state */}
+      {/*
+        THE EMPTY STATE NAMES THE CONTROL THAT EXISTS.
+
+        It used to say "click Track Setup +". Grepping the repo for that string
+        returned exactly one hit: this sentence. The real control is "Track
+        campaign", and it is not on the card — it is inside a setup's Analysis
+        (CampaignAnalysis.tsx:1167). So the instruction sent people looking for
+        a button that has never existed, on a screen it would not have been on.
+
+        And it is per TAB now. This branch ran before the tab check, so the
+        Contracts tab rendered the Setups empty state — clicking "Tracked
+        Contracts" changed nothing on screen, which reads as a broken tab
+        rather than an empty one.
+      */}
       {trackedSetups.length === 0 ? (
         <Panel className="w-full" bodyClassName="flex flex-col items-center justify-center py-16 gap-4">
           <Bookmark className="w-10 h-10 text-textMuted/40" />
           <span className="font-mono text-[11px] text-textMuted uppercase tracking-widest">
-            No tracked setups yet
+            {tab === 'setups' ? 'No tracked setups yet' : 'No tracked contracts yet'}
           </span>
           <p className="text-[12px] text-textSecondary text-center max-w-sm leading-relaxed">
             Go to{' '}
@@ -275,7 +288,9 @@ const Tracker = () => {
             >
               Compass
             </button>
-            , pick a setup, and click <strong className="text-textPrimary">Track Setup +</strong> to bookmark it here.
+            , open a setup&rsquo;s <strong className="text-textPrimary">Analysis</strong>, and click{' '}
+            <strong className="text-textPrimary">Track campaign</strong>.
+            {tab === 'contracts' && ' Tracked setups appear here as a sortable contract table.'}
           </p>
         </Panel>
       ) : tab === 'setups' ? (

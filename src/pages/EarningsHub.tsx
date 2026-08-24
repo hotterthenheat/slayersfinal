@@ -34,9 +34,21 @@ const WEEK_OPTIONS = [
 
 const WEEKDAYS = [1, 2, 3, 4, 5] as const;
 
-/** Implied vs realized, drawn against each other — the whole edge in one glance. */
-const MoveCompare = ({ implied, hist }: { implied: number; hist: number }) => {
-  const max = Math.max(implied, hist, 1);
+/*
+  Implied vs realized, drawn against each other — the whole edge in one glance.
+
+  `scale` IS THE COLUMN'S SCALE, NOT THE ROW'S. It used to be
+  `Math.max(implied, hist, 1)` computed inside this component, so every row was
+  normalised to itself: the longer of the two bars was 100% width in every row
+  of the table. A name pricing a 16.3% move and a name pricing 3.2% drew the
+  identical bar, one above the other, and the column that exists to let you
+  compare names across the week was the one column that could not.
+
+  A bar drawn at the wrong length is a wrong number. It is read faster than the
+  figure beside it and trusted more.
+*/
+const MoveCompare = ({ implied, hist, scale }: { implied: number; hist: number; scale: number }) => {
+  const max = Math.max(scale, 1);
   return (
     <span className="flex flex-col gap-1 w-full py-0.5">
       <span className="flex items-center gap-1.5">
@@ -109,6 +121,15 @@ const EarningsHub = () => {
 
   const rows = useMemo(() => (filter === 'ALL' ? events : events.filter(e => stateOf(e) === filter)), [events, filter]);
 
+  /* One scale for the whole Implied-vs-realized column, taken from the rows
+     currently on screen so the longest bar always reaches the end and the rest
+     are honestly shorter. Recomputed with the filter, because a filtered board
+     is a different comparison. */
+  const moveScale = useMemo(
+    () => rows.reduce((m, e) => Math.max(m, e.impliedMovePct, e.histAvgMovePct), 0),
+    [rows]
+  );
+
   const rich = events.filter(e => stateOf(e) === 'RICH');
   const cheap = events.filter(e => stateOf(e) === 'CHEAP');
   const biggest = [...events].sort((a, b) => b.impliedMovePct - a.impliedMovePct)[0];
@@ -170,10 +191,17 @@ const EarningsHub = () => {
     },
     {
       key: 'move',
-      header: <Term k="Implied vs realized" />,
+      header: (
+        <span className="inline-flex items-baseline gap-1.5">
+          <Term k="Implied vs realized" />
+          <span className="font-mono text-[9px] normal-case tracking-normal text-textMuted tnum">
+            full = {moveScale.toFixed(1)}%
+          </span>
+        </span>
+      ),
       width: '190px',
       sortValue: e => e.richness,
-      render: e => <MoveCompare implied={e.impliedMovePct} hist={e.histAvgMovePct} />,
+      render: e => <MoveCompare implied={e.impliedMovePct} hist={e.histAvgMovePct} scale={moveScale} />,
     },
     {
       key: 'rich',
