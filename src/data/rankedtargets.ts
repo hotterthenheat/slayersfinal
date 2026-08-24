@@ -9,20 +9,89 @@
 ==================================================
 */
 
-import { buildLevels, pinStrike } from './gex';
 import type { MarketSnapshot } from '../types/market';
-import type { HedgingClass, RankedTarget, RankedTargetsView, TargetTag } from '../types/gex';
+import type {
+  FactorShare,
+  HedgingClass,
+  RankFactor,
+  RankLens,
+  RankedTarget,
+  RankedTargetsView,
+  TargetTag,
+} from '../types/gex';
 
-/**
- * Window the cockpit's key-levels rail and the positioning map both use.
- *
- * The pin is the one structural level that legitimately depends on how many
- * strikes are in view (gex.ts `pinStrike`), so this table names the strike the
- * rail names rather than the book-wide heaviest-OI strike it used to scan for
- * itself. Those were $10 apart on AAPL — a PIN badge here contradicting a PIN
- * price two screens over is worse than no badge.
- */
-const PIN_HALF = 10;
+/** The composite's weights — gamma leads, then OI and isolation, then volume
+    and proximity. Volume joined the composite 2026-08-19 (Mo's five). Sum = 1. */
+export const RANK_WEIGHTS: Record<RankFactor, number> = {
+  gex: 0.34,
+  oi: 0.2,
+  volume: 0.12,
+  nbr: 0.2,
+  proximity: 0.14,
+};
+
+/** Bar order — fixed, so a segment's position alone says which reason it is. */
+export const RANK_FACTORS: RankFactor[] = ['gex', 'oi', 'volume', 'nbr', 'proximity'];
+
+export const FACTOR_LABEL: Record<RankFactor, string> = {
+  gex: 'net GEX',
+  oi: 'open interest',
+  volume: 'volume',
+  nbr: 'neighbor ratio',
+  proximity: 'distance from spot',
+};
+
+export const RANK_LENSES: { value: RankLens; label: string }[] = [
+  { value: 'priority', label: 'Priority' },
+  { value: 'gex', label: 'Net GEX' },
+  { value: 'oi', label: 'Open int' },
+  { value: 'volume', label: 'Volume' },
+  { value: 'nbr', label: 'NBR' },
+  { value: 'proximity', label: 'Near spot' },
+];
+
+/** A target's standing under a lens — higher ranks first (proximity inverts:
+    nearer is higher). */
+export function lensValue(t: RankedTarget, lens: RankLens): number {
+  switch (lens) {
+    case 'priority':
+      return t.score;
+    case 'gex':
+      return Math.abs(t.netGex);
+    case 'oi':
+      return t.openInterest;
+    case 'volume':
+      return t.volume;
+    case 'nbr':
+      return t.nbr;
+    case 'proximity':
+      return -Math.abs(t.bps);
+  }
+}
+
+/** The ladder re-ranked through a lens (Mo, 2026-08-19: the tabs must
+    "actually change the ranking instead of just being visual"). Rank numbers
+    follow the lens; the priority bar stays the composite, so a strike that is
+    #1 by NBR can honestly wear a short bar. */
+export function rankBy(targets: RankedTarget[], lens: RankLens): RankedTarget[] {
+  return [...targets].sort((a, b) => lensValue(b, lens) - lensValue(a, lens)).map((t, i) => ({ ...t, rank: i + 1 }));
+}
+
+/** Why `a` sits above `b` on the composite — the factors it leads on and the
+    ones it trails on, largest margin first. Margins under a point are noise. */
+export function explainEdge(a: RankedTarget, b: RankedTarget): { leads: RankFactor[]; trails: RankFactor[] } {
+  const leads: [RankFactor, number][] = [];
+  const trails: [RankFactor, number][] = [];
+  for (const fa of a.factors) {
+    const fb = b.factors.find(f => f.key === fa.key);
+    if (!fb) continue;
+    const d = fa.points - fb.points;
+    if (d > 1) leads.push([fa.key, d]);
+    else if (d < -1) trails.push([fa.key, -d]);
+  }
+  const byMargin = (x: [RankFactor, number], y: [RankFactor, number]) => y[1] - x[1];
+  return { leads: leads.sort(byMargin).map(x => x[0]), trails: trails.sort(byMargin).map(x => x[0]) };
+}
 
 // ---- deterministic RNG ------------------------------------------------------
 function hash(seed: string): number {
@@ -45,29 +114,42 @@ export function buildRankedTargets(snapshot: MarketSnapshot): RankedTargetsView 
   // Synthesized session volume per strike (deterministic, OI-anchored)
   const volumes = nodes.map(n => {
     const j = h01(`${ticker}-${n.strike}-tvol`);
-    return Math.round((n.callOI.value + n.putOI.value) * (0.2 + j * 0.7));
+    return Math.round((n.callOI + n.putOI) * (0.2 + j * 0.7));
   });
 
-  // Structural landmarks for tagging. Read from the single derivation, not
-  // re-scanned here: this table's WALL / KING / PIN badges name the same strikes
-  // the levels rail, the strike chart and the positioning map name, so a reader
-  // moving between them is never told the king is in two places at once.
-  const { callWall, putWall, king } = buildLevels(snapshot);
-  const pin = pinStrike(snapshot, PIN_HALF);
-
-  // Scales, not levels — these normalize the score's terms and set the "strong
-  // gamma" cut. Book-wide because the table ranks the whole chain.
+  // Structural landmarks for tagging
+  let callWall = spot;
+  let putWall = spot;
+  let king = spot;
+  let pin = spot;
+  let maxAbove = 0;
+  let maxBelow = 0;
   let maxAll = 0;
   let maxOI = 0;
   for (const n of nodes) {
-    maxAll = Math.max(maxAll, Math.abs(n.netGex));
-    maxOI = Math.max(maxOI, n.callOI.value + n.putOI.value);
+    const mag = Math.abs(n.netGex);
+    if (n.strike > spot && mag > maxAbove) {
+      maxAbove = mag;
+      callWall = n.strike;
+    }
+    if (n.strike < spot && mag > maxBelow) {
+      maxBelow = mag;
+      putWall = n.strike;
+    }
+    if (mag > maxAll) {
+      maxAll = mag;
+      king = n.strike;
+    }
+    if (n.callOI + n.putOI > maxOI) {
+      maxOI = n.callOI + n.putOI;
+      pin = n.strike;
+    }
   }
 
   const maxVolume = Math.max(...volumes, 1);
   const maxTotalOI = maxOI || 1;
-  const maxAbsGex = Math.max(1, maxAll);
 
+  let maxAbsGex = 1;
   const targets: RankedTarget[] = nodes.map((n, i) => {
     const volume = volumes[i];
 
@@ -83,12 +165,28 @@ export function buildRankedTargets(snapshot: MarketSnapshot): RankedTargetsView 
     }
     const nbr = neighborCount > 0 ? volume / (neighborSum / neighborCount || 1) : 1;
 
-    // Composite priority: gamma weight leads, then OI, isolation, proximity
-    const gexN = Math.abs(n.netGex) / (maxAll || 1);
-    const oiN = (n.callOI.value + n.putOI.value) / maxTotalOI;
-    const nbrN = Math.min(nbr / 3, 1);
-    const proxN = Math.max(0, 1 - Math.abs(n.strike - spot) / (spot * 0.02));
-    const score = Math.round(100 * (0.4 * gexN + 0.22 * oiN + 0.22 * nbrN + 0.16 * proxN));
+    // Composite priority, split by what earned it — each factor normalized
+    // against the book's best, weighted, and kept as its own slice so the
+    // bar can show the reason and two strikes can be compared factor by
+    // factor (Mo, 2026-08-19).
+    const norm: Record<RankFactor, number> = {
+      gex: Math.abs(n.netGex) / (maxAll || 1),
+      oi: (n.callOI + n.putOI) / maxTotalOI,
+      volume: volume / maxVolume,
+      nbr: Math.min(nbr / 3, 1),
+      proximity: Math.max(0, 1 - Math.abs(n.strike - spot) / (spot * 0.02)),
+    };
+    const factors: FactorShare[] = RANK_FACTORS.map(key => ({
+      key,
+      norm: norm[key],
+      points: 100 * RANK_WEIGHTS[key] * norm[key],
+    }));
+    const score = Math.round(factors.reduce((a, f) => a + f.points, 0));
+    const led = [...factors].sort((a, b) => b.points - a.points);
+    const reason =
+      led[0].points >= 0.6 * Math.max(score, 1)
+        ? `Mostly ${FACTOR_LABEL[led[0].key]}`
+        : `Led by ${FACTOR_LABEL[led[0].key]} · then ${FACTOR_LABEL[led[1].key]}`;
 
     const bps = ((n.strike - spot) / spot) * 10000;
 
@@ -108,17 +206,21 @@ export function buildRankedTargets(snapshot: MarketSnapshot): RankedTargetsView 
             : 'UPSIDE RESISTANCE'
           : 'NEUTRAL';
 
+    maxAbsGex = Math.max(maxAbsGex, Math.abs(n.netGex));
+
     return {
       rank: 0, // assigned after sort
       strike: n.strike,
       score,
+      factors,
+      reason,
       bps: Math.round(bps),
       volume,
       nbr: Number(nbr.toFixed(2)),
       netGex: n.netGex,
-      openInterest: n.callOI.value + n.putOI.value,
-      callVol: Math.round(volume * (n.callOI.value / (n.callOI.value + n.putOI.value || 1))),
-      putVol: Math.round(volume * (n.putOI.value / (n.callOI.value + n.putOI.value || 1))),
+      openInterest: n.callOI + n.putOI,
+      callVol: Math.round(volume * (n.callOI / (n.callOI + n.putOI || 1))),
+      putVol: Math.round(volume * (n.putOI / (n.callOI + n.putOI || 1))),
       pressure: n.strike >= spot ? 'RESISTANCE' : 'SUPPORT',
       hedgingClass,
       tags,

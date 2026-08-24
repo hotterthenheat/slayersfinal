@@ -52,20 +52,34 @@ export function aggregateCandles(base: Candle[], minutes: number): Candle[] {
 
 /** One snapshot per bucket — the last (most recent) GEX in each, re-stamped to the bucket start. */
 export function aggregateSnapshots(base: GexSnapshot[], minutes: number): GexSnapshot[] {
-  if (base.length === 0) return base;
+  if (base.length === 0 || minutes <= 1) return base;
   const bucketSec = minutes * 60;
   const out: GexSnapshot[] = [];
+  /* The bucket's node is its PEAK minute, per strike — the way a candle
+     keeps its high and low, not its average. A mean flattened the ribbon's
+     envelope into a smooth band; the jagged amplitude IS the texture
+     (Noah, 2026-08-22, against Sovereign's close-ups). The last-minute
+     sample before that was worse: a 30-minute node was whatever the strike
+     happened to be at minute 30. Signed by the peak's own side. */
   let curBucket = -1;
-
+  let peaks = new Map<number, number>();
+  const flush = () => {
+    if (curBucket < 0) return;
+    out.push({ time: curBucket, levels: [...peaks.entries()].map(([strike, value]) => ({ strike, value })) });
+  };
   for (const snap of base) {
-    const bucket = minutes <= 1 ? snap.time : Math.floor(snap.time / bucketSec) * bucketSec;
+    const bucket = Math.floor(snap.time / bucketSec) * bucketSec;
     if (bucket !== curBucket) {
-      out.push({ time: bucket, levels: snap.levels });
+      flush();
       curBucket = bucket;
-    } else {
-      out[out.length - 1] = { time: bucket, levels: snap.levels };
+      peaks = new Map();
+    }
+    for (const l of snap.levels) {
+      const p = peaks.get(l.strike);
+      if (p === undefined || Math.abs(l.value) > Math.abs(p)) peaks.set(l.strike, l.value);
     }
   }
+  flush();
   return out;
 }
 

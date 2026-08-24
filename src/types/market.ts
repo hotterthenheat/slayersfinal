@@ -5,8 +5,6 @@
 ==================================================
 */
 
-import type { ChainExpiry } from '../core/expiryCalendar';
-
 /** Any listed symbol. Core sim tickers are seeded; others are synthesized on demand. */
 export type TickerSymbol = string;
 
@@ -57,30 +55,10 @@ export interface Indicators {
   squeeze: boolean;
 }
 
-/** Whether an open-interest figure is the settled prior-close value, an intraday
-    estimate, or simply unavailable for the instrument. */
-export type OpenInterestFreshness = 'SETTLED' | 'ESTIMATED' | 'UNAVAILABLE';
-
-/**
- * Open interest with its own staleness. OI publishes once per day at ~06:30 ET
- * for the PRIOR session's close, so every figure carries the session date it
- * represents and an explicit freshness state — a bare number cannot tell a panel
- * whether it is looking at today's positioning or a day-and-a-half-old snapshot.
- * The simulator emits SETTLED for now; ESTIMATED is reserved for a future
- * intraday estimator (none exists yet). Source: ThetaData daily `open_interest`.
- */
-export interface OpenInterest {
-  /** Contracts outstanding (or, for a delta, the change vs the prior session). */
-  value: number;
-  /** Session date this figure represents, ISO `YYYY-MM-DD` (the prior close). */
-  asOf: string;
-  freshness: OpenInterestFreshness;
-}
-
 export interface StrikeNode {
   strike: number;
-  callOI: OpenInterest;
-  putOI: OpenInterest;
+  callOI: number;
+  putOI: number;
   gamma: number;
   callGex: number;
   putGex: number;
@@ -101,6 +79,7 @@ export interface TradePlan {
   ticker: TickerSymbol;
   direction: TradeDirection;
   score: number;
+  confidence: number;
   entry: number;
   stopLoss: number;
   target1: number;
@@ -118,22 +97,6 @@ export interface TapeOrder {
   size: number;
   orderType: 'SWEEP' | 'BLOCK';
   side: 'ASK' | 'BID';
-  /** Raw OPRA/CTA trade condition codes for this print. Semantic predicates
-      live in src/types/conditions.ts (P0.2). Source: ThetaData `trade`. */
-  conditions?: number[];
-}
-
-/**
- * One expiry's own book — the strikes it lists, priced at ITS time to expiry.
- *
- * This is the primary object now. `MarketSnapshot.chain` is the fold of these
- * (see core/chainAggregate.ts), not the other way round, so a figure that asks
- * what one expiry contributes can be answered by leaving it out and summing
- * again rather than by scaling the aggregate and calling the scale an answer.
- */
-export interface ExpiryBook {
-  expiry: ChainExpiry;
-  nodes: StrikeNode[];
 }
 
 export interface MarketSnapshot {
@@ -141,10 +104,7 @@ export interface MarketSnapshot {
   spot: number;
   changePercent: number;
   priceHistory: number[];
-  /** The fold of `chainByExpiry`. Never built independently of it. */
   chain: StrikeNode[];
-  /** Nearest expiry first. */
-  chainByExpiry: ExpiryBook[];
   indicators: Indicators;
   plan: TradePlan;
   tape: TapeOrder[];
@@ -178,84 +138,4 @@ export interface ExecuteResult {
   success: boolean;
   message?: string;
   trade?: TradeRecord;
-}
-
-/*
-==================================================
-  THETADATA VENDOR CONTRACT PRIMITIVES (P0.1)
-  Additive homes for per-contract fields the live
-  OPRA/CTA feed delivers that the simulator does not
-  yet fill. Every new field is optional at the call
-  site until the provider (or an honest simulator
-  pass) supplies it, so nothing that constructs these
-  objects today is forced to change.
-==================================================
-*/
-
-/**
- * Top-of-book NBBO for a single option contract.
- * ThetaData delivers a *pair* of implied vols — one implied from the bid and
- * one from the ask — not a single mid IV. The gap between them is the
- * volatility bid/ask spread, a direct read on per-contract vol uncertainty
- * that the current single-`iv` model discards.
- * Source: ThetaData `option` bulk `quote` (and the NBBO leg of `trade_quote`).
- */
-export interface OptionQuote {
-  bid: number;
-  bidSize: number;
-  ask: number;
-  askSize: number;
-  /** IV implied from the bid — low leg of the vol pair. Source: ThetaData `quote`. */
-  bidIv?: number;
-  /** IV implied from the ask — high leg of the vol pair. Source: ThetaData `quote`. */
-  askIv?: number;
-}
-
-/**
- * Full vendor greek vector for one contract, computed under Black-Scholes.
- * ThetaData supplies 1st, 2nd and 3rd order. Orders beyond the 1st are
- * optional until the provider fills them; `veta` and `zomma` in particular
- * are not modelled anywhere today.
- * Source: ThetaData `greeks`, `greeks_second_order`, `greeks_third_order`
- * (and `trade_greeks` / `all_trade_greeks` when stamped at a trade).
- */
-export interface ContractGreeks {
-  // 1st order — Source: ThetaData `greeks`
-  delta: number;
-  gamma: number;
-  theta: number;
-  vega: number;
-  rho: number;
-  // 2nd order — Source: ThetaData `greeks_second_order`
-  /** dΔ/dσ */
-  vanna?: number;
-  /** dΔ/dt */
-  charm?: number;
-  /** dVega/dσ */
-  vomma?: number;
-  /** dVega/dt — vega decay. Not modelled today. */
-  veta?: number;
-  // 3rd order — Source: ThetaData `greeks_third_order`
-  /** dΓ/dS */
-  speed?: number;
-  /** dΓ/dσ — gamma sensitivity to vol. Not modelled today. */
-  zomma?: number;
-  /** dΓ/dt */
-  color?: number;
-  /** dVomma/dσ */
-  ultima?: number;
-}
-
-/**
- * The NBBO prevailing at an execution plus the two post-trade quote updates
- * ThetaData returns alongside every trade. The post-trade quotes are what
- * make realised market impact — how far the quote moved after the print —
- * measurable per trade.
- * Source: ThetaData `trade_quote` (24 fields).
- */
-export interface TradeQuoteContext {
-  /** NBBO at the instant of execution. */
-  nbboAtTrade: OptionQuote;
-  /** The two quote updates published immediately after the trade. */
-  postTrade: OptionQuote[];
 }

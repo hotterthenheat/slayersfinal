@@ -2,103 +2,166 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ============================================================
-   ONE FAMILY — Inter, self-hosted variable, subset in-repo.
-
-   The terminal used to run two faces: Inter for prose and JetBrains Mono for
-   the 1,331 `font-mono` call sites that carry every label, column and readout.
-   Two families over a surface this dense read as "all over the place", and the
-   fix that holds is one family with one weight axis rather than a rule about
-   when to reach for which.
-
-   WHY NOT SF PRO, WHICH THIS REPLACES. Apple's licence covers SF Pro for
-   interface design and for apps on Apple platforms. It does NOT grant the right
-   to embed the file as a webfont on a commercial site, which is exactly what
-   `@font-face` here does. That is a licence fact, not a taste one, and no amount
-   of liking the face changes it. Inter is SIL Open Font License 1.1 — embedding,
-   subsetting and commercial use are all explicitly granted (public/fonts/OFL.txt
-   travels with the file, as the licence requires).
-
-   WHY INTER AND NOT SOMETHING ELSE. Measured, not chosen by feel. Inter, Geist
-   and Onest were rendered against the outgoing file at the terminal's own sizes
-   and measured in the browser:
-
-       delta vs SF Pro     Inter    Geist    Onest
-       string advance      +2.9%    +6.9%    +6.5%
-       x-height             0.0%    +3.8%    +1.9%
-       cap height          +2.8%    +1.4%    +1.4%
-       descent              0.0%   +25.0%   +29.2%
-
-   x-height and descent are the two that decide whether a swap is invisible:
-   x-height sets apparent size at 11-14px, descent sets the line box. Inter
-   matches both exactly. Geist and Onest change the line box by a quarter,
-   which would have re-opened the density work that took three commits to land.
-
-   `wght 100 900` is a single axis, so every Tailwind weight resolves out of this
-   one file. `opsz 14 32` is Inter's optical size, and it is the reason one file
-   can stand in for the Text/Display pair SF Pro was: `font-optical-sizing: auto`
-   below lets the browser pick the optical cut per size, tighter for headings and
-   more open for 11px labels — the same thing SF Pro did behind the scenes.
-
-   COVERAGE IS GUARDED, not hoped for. The file is subset (scripts/build-inter-
-   subset.py) and a subset can silently drop a glyph, which renders in a system
-   fallback face beside Inter and looks like nothing at all went wrong.
-   core/fontCoverage.test.ts reads every non-ASCII codepoint out of src/ and
-   fails on any that the shipped font cannot draw and that is not on an explicit
-   list of known fallbacks. The outgoing SF Pro file had no such guard and was
-   quietly falling back on ─ ⇄ ⇔ ⇒ ↵ ⧉ ␞.
-
-   WHAT THE MONO TOKEN MEANS NOW. `font-mono` is kept as a token, and it still
-   means something: it marks the DATA voice. What it no longer means is a second
-   typeface. Inter is proportional, so the alignment JetBrains Mono gave for
-   free has to be asked for — `font-variant-numeric: tabular-nums` below does
-   that for every `.font-mono` element, which is exactly the set of places that
-   holds a number in a column. Rolling digits (AnimatedNumber) and ledger
-   columns keep their alignment without hunting down each `.tnum`.
-
-   `font-display: swap` still applies, but it has much less to do here than it
-   did with the Google Fonts link: the file is same-origin and preloaded from
-   index.html, so the fallback window is a local round trip rather than a
-   third-party one.
-   ============================================================ */
+/* ONE FAMILY (Noah, 2026-08-16 — "many font changes and it just looks all
+   over the place"): SF Pro variable, subset + woff2'd from Apple's installer.
+   wght 100-900 covers every Tailwind weight; the opsz axis swaps the Text and
+   Display cuts automatically as sizes grow. Both `font-sans` and `font-mono`
+   resolve here — the mono token survives as the DATA voice (tabular figures
+   below), not a second family. */
 @font-face {
-  font-family: 'Inter Variable';
-  src: url('/fonts/Inter.var.woff2') format('woff2');
+  font-family: 'SF Pro';
+  src: url('/fonts/SF-Pro.var.woff2') format('woff2');
   font-weight: 100 900;
   font-style: normal;
   font-display: swap;
 }
 
-
 @layer base {
   html {
     color-scheme: dark;
-    /* Engage Inter's opsz axis. Without this the browser pins the default (14),
-       so 34px headings render in the small-text optical cut — looser and slightly
-       wide, which is the thing that reads as "not quite right" without being
-       nameable. */
-    font-optical-sizing: auto;
   }
   body {
     @apply bg-canvas text-textPrimary antialiased;
   }
-  /* Inter is proportional; the data voice asks for its own column alignment.
-     See the @font-face block above — this is the half of the one-family move
-     that keeps every numeric column straight. */
+  /* The old JetBrains Mono gave every digit equal width for free; SF Pro is
+     proportional, so the mono token carries tabular figures itself — rolling
+     numbers (AnimatedNumber) and ledger columns keep their alignment without
+     hunting down each .tnum. */
   .font-mono {
     font-variant-numeric: tabular-nums;
   }
   ::selection {
-    background: rgba(200, 212, 235, 0.3);
+    background: rgba(210, 255, 0, 0.25);
   }
   :focus-visible {
-    outline: 1px solid rgba(228, 232, 244, 0.6);
+    outline: 1px solid rgba(210, 255, 0, 0.6);
     outline-offset: 1px;
   }
 }
 
+/* Pulse desk grid (react-grid-layout) — house skin */
+.react-grid-item.react-grid-placeholder {
+  background: rgba(210, 255, 0, 0.06) !important;
+  border: 1px dashed rgba(210, 255, 0, 0.35);
+  border-radius: 6px;
+  opacity: 1 !important;
+}
+.react-grid-item > .react-resizable-handle {
+  opacity: 0.35;
+}
+.react-grid-item > .react-resizable-handle:hover {
+  opacity: 0.9;
+}
+.react-grid-item > .react-resizable-handle::after {
+  border-color: rgba(163, 163, 163, 0.8) !important;
+}
+.react-grid-item.react-draggable-dragging {
+  z-index: 30;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #2a2a2a;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #444444;
+}
+
+/* Tabular figures for aligned numeric columns */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Custom micro-animation for live ticks */
+@keyframes pulse-animation {
+  0% { transform: scale(0.95); opacity: 0.6; }
+  50% { transform: scale(1.05); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.6; }
+}
+
+.custom-pulse {
+  animation: pulse-animation 1.5s infinite;
+}
+
+/* Slide in animation for lists */
+@keyframes slide-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-slide-in {
+  animation: slide-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* View transition — used when swapping sections/routes so changes fade in */
+@keyframes view-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-view-in {
+  animation: view-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Terminal caret — hard on/off blink (no easing; real cursors don't fade) */
+@keyframes cursor-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+.animate-cursor-blink {
+  animation: cursor-blink 1.1s steps(1) infinite;
+}
+
+/* Border beam — a dash segment traveling the true perimeter of an SVG rect
+   (pathLength=100 normalizes any size; -100 offset = one full lap). */
+@keyframes border-trace {
+  to { stroke-dashoffset: -100; }
+}
+
+.animate-border-trace {
+  animation: border-trace 3.2s linear infinite;
+}
+
+/* Soft content swap — used when the same panel's data changes (e.g. selecting
+   a different contract). Shell stays put; only the body cross-fades.
+   NO `to` keyframe and fill-mode BACKWARDS ON PURPOSE: the animation lands on
+   the element's natural state and retains NOTHING afterwards. A forwards/both
+   fill holds even an IDENTITY transform (measured: matrix(1,0,0,1,0,0)), and
+   any transformed ancestor becomes the containing block for every
+   `position: fixed` descendant — it trapped the campaign chart's fullscreen
+   takeover inside the content column (Noah's screenshot, 2026-08-09). Same
+   rule for every entrance animation in this file. */
+@keyframes soft-in {
+  from { opacity: 0; transform: translateY(3px); }
+}
+
+.animate-soft-in {
+  animation: soft-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+/* The slower sibling — view-level swaps (scanner/sleeve boards) where 0.2s
+   reads as a snap (Noah, 2026-08-10: "too quick, make it slower and
+   smoother"). Longer travel + longer clock; same house ease. */
+@keyframes soft-in-slow {
+  from { opacity: 0; transform: translateY(8px); }
+}
+.animate-soft-in-slow {
+  animation: soft-in-slow 0.5s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
 /* ============================================================
-   Holographic silver — the house accent.
+   Holographic silver — the engine-standout accent (replaces the
+   old magenta/king family; lime remains the interface accent).
    One shared gradient (chrome → ice blue → pale violet → white)
    panned back and forth so every accented element carries the
    same living-foil sheen. First/last stops match the flat token
@@ -159,17 +222,7 @@
   animation: holo-pan 4.5s ease-in-out infinite alternate;
 }
 
-/* Data-magnitude fill. Holo-silver is SELECTION language, so using it for score
-   and probability bars meant a desk at rest had six to nine gradients panning
-   continuously, and a strong score wore the same treatment as the active nav
-   tab. Magnitude reads from length; tone, where it matters, lives in the number
-   beside the bar — never in the chrome. */
-.data-bar {
-  background-color: rgba(237, 237, 237, 0.45);
-}
-
-/* Meter fills & thin rails — same foil, denser pan so short bars still shift.
-   Reserved for selection: the active-workflow underline and the launch gate. */
+/* Meter fills & thin rails — same foil, denser pan so short bars still shift. */
 .holo-bar {
   background-image: var(--holo-gradient);
   background-size: 350% 350%;
@@ -192,287 +245,13 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .holo-bg, .holo-text, .holo-bar, .holo-border, .holo-glow {
+  .holo-bg,
+  .holo-text,
+  .holo-bar,
+  .holo-border,
+  .holo-glow {
     animation: none;
   }
-}
-
-/* ============================================================
-   Instrument surface — the house "box".
-   A machined panel instead of a flat 1px-outline card: a faint
-   top-lit wash and a bevelled top edge (light from above) give
-   every surface physical depth, and hairline corner registration
-   ticks read as a designed instrument, not a default frame.
-   Paint-only — never changes box size, so it's layout-safe on
-   every existing Panel/StatCard. Corner ticks need the host to be
-   position:relative and to leave ::before/::after free.
-   ============================================================ */
-.inst-surface {
-  /* Was a box: a fill, a 1px border on all four sides, a bevelled top edge and
-     an inset highlight. Multiply that by every Panel on a desk and the page is
-     a pile of tiles. A section is now marked by a RULE and by space — the
-     header's own bottom hairline does the separating — so nothing here draws a
-     container. Kept as a class rather than deleted because ~40 call sites name
-     it, and one definition is the whole point. */
-  background-color: transparent;
-}
-
-/* ============================================================
-   Liquid glass — the nav chrome. Translucent near-black over a
-   heavy blur + saturation so the desk content behind it reads
-   through, softened, with a faint specular top edge (iOS-26 feel).
-   Reserved for navigation surfaces, never data panels. Falls back
-   to near-opaque when the OS asks to reduce transparency.
-   ============================================================ */
-.glass {
-  /* One knob, not a second glass.
-     Four surfaces wear this class — the app's TopBar, its mobile overlay, SubNav
-     and the landing header — and they do not all want the same tint. The landing
-     bar floats over the hero animation and should let it through; SubNav sits
-     directly on top of data and must not. Forking a `.glass-hero` would put a
-     parallel primitive next to this one and guarantee the two drift, so the
-     variance lives in a variable a call site can set and nothing else changes. */
-  /* The default lives in the var() fallback, NOT in a declaration here.
-     `.glass` is defined after `@tailwind utilities` in this file, so a
-     `--glass-tint` declared on this rule would out-cascade the utility class a
-     call site uses to override it — same specificity, later in the sheet, so
-     the default silently wins and the override does nothing. Measured: the
-     landing bar still computed rgba(9,9,11,0.55) with [--glass-tint:0.3] on it. */
-  background-color: rgba(9, 9, 11, var(--glass-tint, 0.55));
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
-}
-@media (prefers-reduced-transparency: reduce) {
-  .glass {
-    /* Deliberately ignores --glass-tint. A reader who has asked the OS to reduce
-       transparency is asking for legibility, and honouring a call site's request
-       for MORE transparency here would invert the setting. */
-    background-color: rgba(9, 9, 11, 0.94);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-  }
-}
-
-/* Registration ticks — a scope-reticle bracket on two opposed corners.
-   Diagonal (not all four) reads as intentional framing, not decoration. */
-.inst-ticks::before,
-.inst-ticks::after {
-  content: '';
-  position: absolute;
-  width: 7px;
-  height: 7px;
-  pointer-events: none;
-  z-index: 1;
-  opacity: 0.55;
-}
-.inst-ticks::before {
-  top: 6px;
-  left: 6px;
-  border-top: 1px solid #c7d3e8;
-  border-left: 1px solid #c7d3e8;
-}
-.inst-ticks::after {
-  bottom: 6px;
-  right: 6px;
-  border-bottom: 1px solid #c7d3e8;
-  border-right: 1px solid #c7d3e8;
-}
-
-/* Emphasis surface — the hero panel/metric on a page. A quiet static lift:
-   a slightly brighter hairline (borderMuted over the #1c1c1c default) and a
-   touch more top-light. No animation, no silver chrome — the hierarchy reads
-   from contrast, not ornament. */
-.inst-emphasis {
-  /* The hero surface, and the boxiest thing on any page. Hierarchy now reads
-     from the ink and the type scale, which is where it should have read from:
-     a brighter frame is ornament arguing for attention the content should win
-     on its own. */
-  background-color: transparent;
-}
-
-/* Selection rail — the left-edge accent on a selected / active / spotlit row.
-   One shape (a 2px inset bar), five tones, instead of the same inset box-shadow
-   re-spelled as raw rgba in a dozen places. Pair with a faint bg tint (e.g.
-   bg-select/[0.06]) at the call site. */
-.rail-select { box-shadow: inset 2px 0 0 0 rgba(228, 232, 244, 0.7); }
-.rail-silver { box-shadow: inset 2px 0 0 0 rgba(199, 211, 232, 0.7); }
-.rail-neutral { box-shadow: inset 2px 0 0 0 rgba(237, 237, 237, 0.6); }
-.rail-king { box-shadow: inset 2px 0 0 0 rgba(234, 0, 255, 0.75); }
-.rail-warn { box-shadow: inset 2px 0 0 0 rgba(255, 149, 0, 0.5); }
-
-/* Selected-row treatment in one class — the silver rail plus the faint select
-   wash that tables/lists were otherwise spelling out inline as
-   `rail-select bg-select/[0.05]`. */
-.inst-selected {
-  box-shadow: inset 2px 0 0 0 rgba(228, 232, 244, 0.7);
-  background-color: rgba(228, 232, 244, 0.05);
-}
-
-/* Loading placeholder — a faint block with a slow sheen sweep. Reduced-motion
-   collapses it to a static block (see the media query below). */
-@keyframes skeleton-sweep {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
-.skeleton {
-  background-color: rgba(255, 255, 255, 0.04);
-  background-image: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.06) 50%, transparent 100%);
-  background-size: 200% 100%;
-  border-radius: 4px;
-  animation: skeleton-sweep 1.6s ease-in-out infinite;
-}
-
-/* Eyebrow tick — the 3px vertical mark that leads a label. Shape only;
-   the component supplies the fill (tone color, holo-bar, or dim). */
-.inst-eyebrow {
-  display: inline-block;
-  width: 3px;
-  height: 9px;
-  border-radius: 1px;
-  flex: none;
-}
-
-/* Workspace grid (react-grid-layout) — house skin */
-.react-grid-item.react-grid-placeholder {
-  background: rgba(228, 232, 244, 0.06) !important;
-  border: 1px dashed rgba(228, 232, 244, 0.35);
-  border-radius: 6px;
-  opacity: 1 !important;
-}
-.react-grid-item > .react-resizable-handle {
-  opacity: 0.35;
-}
-.react-grid-item > .react-resizable-handle:hover {
-  opacity: 0.9;
-}
-.react-grid-item > .react-resizable-handle::after {
-  border-color: rgba(163, 163, 163, 0.8) !important;
-}
-.react-grid-item.react-draggable-dragging {
-  z-index: 30;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
-}
-
-/* Custom Scrollbar — the shell hides the native page scrollbar, so this thumb
-   is the only length-of-page cue the terminal has. At #2a2a2a on #0a0a0a it
-   read as nothing and every desk felt like it ended at the fold. */
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: rgba(237, 237, 237, 0.18);
-  border-radius: 5px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(237, 237, 237, 0.34);
-}
-/* Firefox has no thumb pseudo-element, so it needs the standard property — but
-   declaring that unguarded makes Chromium drop the ::-webkit rules above and
-   fall back to a 15px system bar. Gated to engines without the pseudo-element. */
-@supports (scrollbar-width: thin) and (not selector(::-webkit-scrollbar)) {
-  :root {
-    scrollbar-color: rgba(237, 237, 237, 0.18) transparent;
-  }
-}
-
-/* The document is the scroll container — there is no inner one. Reserving the
-   gutter unconditionally keeps column widths identical whether or not a desk
-   crosses the fold, so nothing reflows the moment live data pushes the page
-   past one screen.
-
-   This used to sit on #main-content, back when the shell was h-screen
-   overflow-hidden around an overflow-y-auto <main>. That made the site a
-   fixed-size window with the page sliding behind it: Home and End did nothing
-   unless focus was inside the region, scroll restoration never fired, and
-   mobile browsers never collapsed their URL bar because from their side the
-   page never moved. */
-html {
-  scrollbar-gutter: stable;
-}
-
-/* Tabular figures for aligned numeric columns */
-.tnum {
-  font-variant-numeric: tabular-nums;
-}
-
-/* Scrollable stat ribbons stay one clean line — hide the bar, keep the scroll */
-.no-scrollbar {
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-
-/* Custom micro-animation for live ticks */
-@keyframes pulse-animation {
-  0% { transform: scale(0.95); opacity: 0.6; }
-  50% { transform: scale(1.05); opacity: 1; }
-  100% { transform: scale(0.95); opacity: 0.6; }
-}
-
-.custom-pulse {
-  animation: pulse-animation 1.5s infinite;
-}
-
-/* Slide in animation for lists */
-@keyframes slide-in {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.animate-slide-in {
-  animation: slide-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-/* View transition — used when swapping sections/routes so changes fade in */
-@keyframes view-in {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.animate-view-in {
-  animation: view-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-/* Terminal caret — hard on/off blink (no easing; real cursors don't fade) */
-@keyframes cursor-blink {
-  0%, 49% { opacity: 1; }
-  50%, 100% { opacity: 0; }
-}
-
-.animate-cursor-blink {
-  animation: cursor-blink 1.1s steps(1) infinite;
-}
-
-/* Tick flash — a brief cell tint behind a number when it changes: green when
-   it ticked up, red when down (the tape feeling alive). Tint only, never a
-   text-color override, so it can't fight a value's own sign color. */
-@keyframes tick-up {
-  from { background-color: rgba(48, 209, 88, 0.26); }
-  to { background-color: transparent; }
-}
-@keyframes tick-down {
-  from { background-color: rgba(255, 59, 48, 0.26); }
-  to { background-color: transparent; }
-}
-.animate-tick-up { animation: tick-up 0.55s ease-out forwards; }
-.animate-tick-down { animation: tick-down 0.55s ease-out forwards; }
-
-/* Soft content swap — used when the same panel's data changes (e.g. selecting
-   a different contract). Shell stays put; only the body cross-fades. */
-@keyframes soft-in {
-  from { opacity: 0; transform: translateY(3px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.animate-soft-in {
-  animation: soft-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 /* Landing marquee divider — two identical halves, -50% = seamless loop. */
@@ -485,27 +264,18 @@ html {
   animation: marquee 46s linear infinite;
 }
 
-/* Code-rain columns — each column holds its lines twice; translating by −50%
-   (or back) loops seamlessly. Direction + duration are set per column inline. */
-@keyframes rain-up {
-  from { transform: translateY(0); }
-  to { transform: translateY(-50%); }
+/* Launch-gate progress fill — CSS transform so it runs on the compositor and
+   stays smooth even while the main thread is busy loading chunks on slow
+   connections. Duration mirrors HOLD_MS + REVEAL_MS in LaunchTransition.tsx.
+   Under reduced motion the bar rests at its base state: full. */
+@keyframes gate-fill {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
 }
-@keyframes rain-down {
-  from { transform: translateY(-50%); }
-  to { transform: translateY(0); }
-}
-/* Twinkle — the near-invisible baseline shimmers like distant stars; the cursor
-   mask decides where any of it is actually legible. Two ranges keep the steel/
-   amber desk lines a touch more present than the dim ones. Duration + delay are
-   set per glyph-line inline. */
-@keyframes rain-twinkle {
-  0%, 100% { opacity: 0.24; }
-  50% { opacity: 0.78; }
-}
-@keyframes rain-twinkle-hi {
-  0%, 100% { opacity: 0.48; }
-  50% { opacity: 1; }
+
+.animate-gate-fill {
+  transform-origin: left center;
+  animation: gate-fill 1350ms cubic-bezier(0.3, 0.1, 0.3, 1) forwards;
 }
 
 /* Landing anchor targets stop short of the fixed glass nav */
@@ -520,23 +290,78 @@ html {
   .animate-view-in,
   .animate-slide-in,
   .animate-soft-in,
+  .animate-soft-in-slow,
+  .animate-border-trace,
   .animate-cursor-blink,
   .animate-marquee,
-  .animate-tick-up,
-  .animate-tick-down,
-  .skeleton,
-  .custom-pulse {
+  .animate-gate-fill {
     animation: none;
   }
-  /* Tailwind's own two. This block only ever listed the house animations, so
-     the stock utilities kept running under `reduce` — a bouncing scroll chevron
-     and four looping skeleton placeholders on the landing page. They come from
-     the utilities layer, so they need !important to beat it. */
-  .animate-pulse,
-  .animate-bounce,
+}
+
+/* Modal — enter only. Deliberately CSS, not an AnimatePresence exit: a wedged
+   exit animation leaves the overlay mounted and the app unusable, and this
+   codebase has hit that before. Closing unmounts immediately. */
+@keyframes modal-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modal-card-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.animate-modal-backdrop {
+  animation: modal-backdrop-in 140ms ease-out both;
+}
+
+.animate-modal-card {
+  animation: modal-card-in 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-modal-backdrop,
+  .animate-modal-card {
+    animation: none;
+  }
+}
+
+/* Code rain (landing hero) — columns rendered twice, so a half-height shift
+   loops seamlessly in either direction. Twinkle is per-line opacity breathing;
+   -hi is the tinted lines, allowed a brighter peak. */
+@keyframes rain-up {
+  from { transform: translateY(0); }
+  to { transform: translateY(-50%); }
+}
+
+@keyframes rain-down {
+  from { transform: translateY(-50%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes rain-twinkle {
+  0%, 100% { opacity: 0.24; }
+  50% { opacity: 0.78; }
+}
+
+@keyframes rain-twinkle-hi {
+  0%, 100% { opacity: 0.48; }
+  50% { opacity: 1; }
+}
+
+.rain-tw {
+  animation-name: rain-twinkle;
+}
+
+.rain-tw-hi {
+  animation-name: rain-twinkle-hi;
+}
+
+@media (prefers-reduced-motion: reduce) {
   .rain-col,
   .rain-tw,
   .rain-tw-hi {
-    animation: none !important;
+    animation: none;
   }
 }

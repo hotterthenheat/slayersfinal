@@ -7,6 +7,8 @@
 ==================================================
 */
 
+import { now } from './clock';
+
 export function hash(seed: string): number {
   let h = 2166136261;
   for (let i = 0; i < seed.length; i++) {
@@ -37,8 +39,10 @@ export function hGauss(seed: string): number {
   return (s - 2) * Math.sqrt(3);
 }
 
-/** Session day key — research data re-rolls once per calendar day, not per tick. */
+/** Session day key — research data re-rolls once per calendar day, not per
+    tick. Reads the ENGINE clock, not the wall clock, so a replay pinned to a
+    historical date re-rolls exactly what that day rolled. */
 export function dayKey(): string {
-  const d = new Date();
+  const d = now();
   return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 }

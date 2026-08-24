@@ -1,1058 +1,642 @@
-/*
-==================================================
-  SLAYER TERMINAL - WEIGH YOUR OWN (Compass pane)
-
-  The page is a search bar. Type a contract the way
-  you say it out loud and it comes back graded, with
-  the arithmetic that produced the grade laid out so
-  you can add it up yourself.
-
-  What this replaced: a seven-field data-entry form
-  with the search hidden inside a collapse labelled
-  "Command shortcut", a strike stepper, a free
-  <input type="date"> that accepted Saturdays, and two
-  paragraphs that were verbatim reprints of two factor
-  rows already on screen.
-==================================================
-*/
-
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
-import { Scale, Plus, Check, Target, AlertTriangle } from 'lucide-react';
-import { useMarketData } from '../../context/MarketDataContext';
-import { useTracker } from '../../context/TrackerContext';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { motion, useAnimationControls, useReducedMotion } from 'framer-motion';
+import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, Scale } from 'lucide-react';
+import Simulator from '../../core/simulator';
 import {
   weighContract,
+  weighContracts,
   betterAlternative,
   horizonForDte,
   type ContractVerdict,
-  type Horizon,
-  type WeighedContract,
 } from '../../core/contractScore';
-import { parseContractQuery, expiryLadder, slotValue } from '../../core/contractQuery';
-import { expiryFor, type Expiry } from '../../core/calendar';
-import Simulator from '../../core/simulator';
-import { makeSetup } from '../../data/compass';
-import { VERDICT_LABEL, VERDICT_TONE } from './verdict';
-import { setupState } from './setupState';
-import { StateBadge } from './StateBadge';
-import WeigherChain from './WeigherChain';
-import ContractTrack from './ContractTrack';
-import { buildTrack, weighedToPlan } from './contractTrackModel';
-import { CONTRACT_MULTIPLIER } from './contractFacts';
-import type { Verdict } from '../../types/compass';
+import { expiryFor } from '../../core/calendar';
+import { buildChain, makeSetup } from '../../data/compass';
 import type { MarketSnapshot } from '../../types/market';
-import { DUR, EASE } from '../../lib/motion';
+import type { SleeveKey } from '../../types/compass';
+import AnimatedNumber from '../ui/AnimatedNumber';
 import Panel from '../ui/Panel';
+import RichRead from '../ui/RichRead';
 import SignalBadge from '../ui/SignalBadge';
-import { preserveGreek } from '../ui/greek';
-import EmptyState from '../ui/EmptyState';
 import type { Tone } from '../ui/tones';
+import ContractChainView, { type ChainSelection } from './ContractChain';
+import ContractFacts from './ContractFacts';
 
-/**
- * One grade lexicon across the terminal. The engine keeps BUY/WATCH/FADE as
- * identifiers; every screen renders QUALIFIED / WATCH / FADED through
- * compass/verdict.ts. This replaced a third local map that spoke
- * STRONG/WATCH/WEAK, so one idea had three vocabularies.
- */
-const GRADE_VERDICT: Record<ContractVerdict, Verdict> = { BUY: 'ENTER', WATCH: 'WATCH', FADE: 'EXIT' };
-
-/** Why each sleeve weighs what it weighs. The weights change under the user at
-    1, 10 and 90 days, and nothing on screen used to say so. */
-const HORIZON_NOTE: Record<Horizon, string> = {
-  LOTTO: 'On a same-day ticket the arithmetic is close to a coin flip, so the tape and the cost of getting out carry the vote.',
-  WEEKLIES: 'Days, not weeks. Theta is the landlord, so decay and the math split most of the weight.',
-  SWINGS: 'Two to six weeks. Math, flow and the story all get a real vote.',
-  LEAPS: 'A year out. Vol pricing and the story decide it, and decay barely votes.',
+/* States, not orders — same doctrine as Compass setups. The engine's
+   BUY/WATCH/FADE verdicts are INTERNAL loop-scoring vocabulary (it chose
+   that contract); users only ever see the state. */
+const VERDICT_LABEL: Record<ContractVerdict, string> = {
+  BUY: 'ACTIVE',
+  WATCH: 'WATCH',
+  FADE: 'FADING',
 };
 
-const SLEEVE_LABEL: Record<Horizon, string> = {
-  LOTTO: 'Lotto', WEEKLIES: 'Weeklies', SWINGS: 'Swings', LEAPS: 'LEAPS',
+const verdictTone: Record<ContractVerdict, Tone> = {
+  BUY: 'bull',
+  WATCH: 'warn',
+  FADE: 'bear',
 };
 
-const dteForHorizon: Record<Horizon, number> = { LOTTO: 0, WEEKLIES: 5, SWINGS: 30, LEAPS: 365 };
+/* Focus changes re-feed these rows in place (they're keyed by factor name, so
+   the DOM persists) — the meter glides instead of snapping. House ease, same
+   700ms as every other live meter. */
+const METER_GLIDE = 'transition-[width,background-color] duration-700 ease-[cubic-bezier(0.16,1,0.3,1)]';
 
-/** Listed strikes either side of spot the neighbour rail reaches for. */
-const RAIL_REACH = 8;
-
-/**
- * Re-price cadence. The pane owns its own beat rather than re-pricing on
- * whatever it is handed: the market snapshot republishes every 1500ms, and a
- * grade card that re-prices four hundred times a minute is the jitter the whole
- * surface was rated on. The scan tier is the honest rate for a graded contract.
- */
-const REPRICE_MS = 10_000;
-
-/**
- * Black-Scholes floors its price at $0.02 (core/contractScore.ts). Past that
- * floor the number stops being a price and starts being the floor, and
- * everything derived from it goes with it: theta over premium collapses toward
- * zero, so the decay factor reads "carryable" precisely because there is nothing
- * left to burn, and a dead strike outscores a live one. Measured on SPY at 502.80
- * today: 505C grades 73, 510C grades 59, and 520C grades 79 with a mid of $0.02
- * and a delta of 0.00.
- *
- * So the screen refuses to print a grade it cannot justify. This predicate
- * belongs on the engine as a `priceable` field, and reads only fields
- * WeighedContract already returns so it can move there without changing meaning.
- */
-function isPriceable(c: WeighedContract): boolean {
-  return c.mid > 0.02 && Math.abs(c.delta) >= 0.01;
-}
-
-function fmtStrike(v: number): string {
-  return v % 1 === 0 ? String(v) : String(Number(v.toFixed(2)));
-}
-
-/** The canonical form of a resolution. Every picker writes one of these back
-    into the field, so the text is always the address of what is on screen. */
-function canonicalQuery(ticker: string, strike: number | null, right: 'C' | 'P', expiry: Expiry): string {
-  return `${ticker} ${strike == null ? '' : fmtStrike(strike)}${right} ${expiry.label}`.replace(/\s+/g, ' ').trim();
-}
-
-
-
-// ---- shared bits -------------------------------------------------------------
-
-/**
- * One factor of the composite: label, weight, meter, score, and the number it
- * actually contributed. The contribution column is the point. Six rows that each
- * print `score × weight` and foot to the headline turn an asserted grade into
- * arithmetic the user can add up.
- */
-
-/**
- * A readout: a named group of small figures on one hairline-bounded strip.
- *
- * What it replaces is twenty bordered tiles — an eight-cell grid under the
- * grade and a twelve-cell grid under the plan — in which every figure had the
- * same border, the same padding and the same weight as every other. A tile
- * grid says "these are peers"; twelve peers is a list nobody reads, and the
- * two most important numbers on it were indistinguishable from the two least.
- *
- * The strip flows instead of gridding, so a group is as wide as its contents
- * and the eye can tell four figures from twelve without counting, and the
- * group carries a name, so what each answers is stated rather than implied.
- */
-const Figures = ({
-  label,
-  items,
-}: {
-  label: string;
-  items: { k: ReactNode; v: ReactNode; note?: string; tone?: string }[];
-}) => (
-  <div className="flex flex-col gap-1.5">
-    <span className="font-mono text-micro font-semibold uppercase tracking-widest text-textSecondary">{label}</span>
-    {/* A lattice, not a flow. `flex-wrap` sized every cell to its own content,
-        so the eight-item quote strip broke as six-then-two with the last pair
-        orphaned on a short second line, and the one item carrying a `note`
-        ("vol vs name") grew wide enough to shove its neighbours off the row.
-        Fixed columns give the labels a shared left edge and let a note grow
-        downward inside its own cell instead of sideways into the next one. */}
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-3 border-y border-borderSubtle py-2">
-      {items.map((f, i) => (
-        <div key={i} className="min-w-0">
-          <div className="font-mono text-micro uppercase tracking-widest text-textMuted">{f.k}</div>
-          <div className={`font-mono text-caption font-semibold tnum leading-4 ${f.tone ?? 'text-textPrimary'}`}>{f.v}</div>
-          {f.note && <div className="font-mono text-micro text-textMuted leading-snug">{f.note}</div>}
-        </div>
-      ))}
-    </div>
-  </div>
-);
-
+/** One factor of the composite — label, meter, prose. No numbers and no
+    formula weights: the grade machinery is engine-internal (Noah, 2026-08-16);
+    the meter's length and color carry each factor's pull, the prose says why.
+    The row's DOM PERSISTS across contract switches (meters-glide doctrine):
+    the meter glides; only the PROSE crossfades, keyed by `fadeKey` (the
+    contract id — never the text, which drifts every tick). */
 const FactorRow = ({
   label,
-  weight,
   score,
   detail,
-  muted = false,
+  fadeKey,
 }: {
   label: string;
-  weight: number;
   score: number;
   detail: string;
-  muted?: boolean;
+  fadeKey?: string;
 }) => (
-  /* `×0.30` used to sit between the label and the bar on every row. Contribution
-     IS score × weight, so printing the weight, the score and the product put an
-     equation and both of its inputs on one line — three numbers for one fact.
-     The weight moves to the row's title and stays listed in full under "Why
-     these weights", where the whole set can be compared at once. */
-  <div className={`flex flex-col gap-1 ${muted ? 'opacity-45' : ''}`} title={`${label} — weighted ×${weight.toFixed(2)}`}>
+  <div className="flex flex-col gap-1">
     <div className="flex items-center gap-2">
-      <span className="w-32 shrink-0 font-mono text-label uppercase tracking-wider text-textSecondary">{label}</span>
+      <span className="w-32 shrink-0 font-mono text-[10px] uppercase tracking-wider text-textSecondary">{label}</span>
       <span className="flex-1 h-[4px] rounded-full bg-white/[0.06] overflow-hidden">
-        <motion.span
-          className={`block h-full rounded-full ${
-            muted ? 'bg-white/10' : score >= 60 ? 'data-bar' : score >= 40 ? 'bg-white/30' : 'bg-white/12'
-          }`}
-          initial={false}
-          animate={{ width: `${score}%` }}
-          transition={{ duration: DUR.data, ease: EASE }}
+        <span
+          className={`block h-full rounded-full ${METER_GLIDE} ${score >= 60 ? 'bg-bull/85' : score >= 40 ? 'bg-white/30' : 'bg-bear/75'}`}
+          style={{ width: `${score}%` }}
         />
       </span>
-      <span className="w-10 shrink-0 font-mono text-caption font-semibold text-textPrimary tnum text-right">{score}</span>
-      <span className="w-[5ch] shrink-0 font-mono text-caption text-textSecondary tnum text-right">
-        ×{weight.toFixed(2)}
-      </span>
     </div>
-    <p className="pl-32 text-label text-textMuted leading-snug">{detail}</p>
+    <p key={fadeKey} className={`pl-32 text-xs text-textPrimary leading-snug ${fadeKey ? 'animate-soft-in' : ''}`}>
+      <RichRead text={detail} />
+    </p>
   </div>
 );
 
-/*
-  The picker popover, on Radix.
+/** Borderless figure — label over value, GreeksRow idiom (not a stat card). */
+const Fig = ({ label, value, tone = 'text-textPrimary' }: { label: string; value: string; tone?: string }) => (
+  <span className="flex flex-col gap-0.5 min-w-0">
+    <span className="font-mono text-[9px] uppercase tracking-wider text-textMuted">{label}</span>
+    <span className={`font-mono text-[12px] font-semibold tnum ${tone}`}>{value}</span>
+  </span>
+);
 
-  This was hand-rolled: a `mousedown` listener on window to detect an outside
-  click, a `keydown` listener for Escape, and an absolutely-positioned div. That
-  is the short list of what a popover needs and nowhere near the full one — it
-  did not trap or restore focus, did not portal out of the panel (so it could be
-  clipped by any ancestor with overflow), had no collision detection against the
-  viewport edge, and left the trigger without the `aria-controls`/`aria-haspopup`
-  pairing a screen reader needs to follow it.
+/** A titled instrument in the work-the-contract matrix. h-full: cells in the
+    same grid row stretch to ONE height — uneven cards read as vibe-coded
+    spacing (Noah, 2026-08-09). */
+const Instrument = ({ title, badge, children }: { title: string; badge?: React.ReactNode; children: React.ReactNode }) => (
+  <div className="h-full border border-borderSubtle bg-inset rounded-md px-3.5 py-3 flex flex-col gap-2 min-w-0">
+    <div className="flex items-center justify-between gap-2">
+      <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-textMuted">{title}</span>
+      {badge}
+    </div>
+    {children}
+  </div>
+);
 
-  `@radix-ui/react-popover` brings all of that as behaviour and none of it as
-  appearance: every class name below is still ours, so the surface, the hairline
-  border and the motion are unchanged. This is the split the whole dependency
-  choice was about — libraries for behaviour, not for looks.
-*/
-
-const CHIP_BASE = '-my-1 py-1 px-2 rounded border font-mono text-label transition-colors';
-const CHIP_TONE: Record<'typed' | 'assumed' | 'warn', string> = {
-  typed: 'border-borderMuted bg-white/[0.04] text-textPrimary hover:border-borderMuted',
-  assumed: 'border-dashed border-borderSubtle text-textSecondary hover:text-textPrimary',
-  warn: 'border-warn/40 bg-warn/10 text-warn',
+/* The rail's expiry ladder — the REAL listed shape (Noah, 2026-08-09: 15
+   chips on a full-width rail read sparse; Robinhood shows double): every
+   session for the next two weeks, every Friday out to a quarter, one Friday
+   a month out to a year, then the LEAPS calendar. ~35 chips; the wheel glide
+   and edge arrows carry the overflow. */
+const buildRailDtes = (): number[] => {
+  const seen = new Set<string>();
+  const out: number[] = [];
+  const push = (d: number) => {
+    const e = expiryFor(d);
+    if (seen.has(e.label)) return;
+    seen.add(e.label);
+    out.push(d);
+  };
+  // Dailies — every session for ~two weeks
+  for (let d = 0; d <= 10; d++) push(d);
+  // Weeklies — every Friday out to ~a quarter
+  for (let d = 11; d <= 95; d++) {
+    if (expiryFor(d).weekday === 'Fri') push(d);
+  }
+  // Monthlies — one Friday per calendar month out to ~a year
+  let lastMonth = -1;
+  for (let d = 96; d <= 400; d++) {
+    const e = expiryFor(d);
+    if (e.weekday !== 'Fri') continue;
+    const m = e.date.getFullYear() * 12 + e.date.getMonth();
+    if (m === lastMonth) continue;
+    lastMonth = m;
+    push(d);
+  }
+  // LEAPS — the far calendar
+  push(550);
+  push(730);
+  return out;
 };
 
+/** The analysis sleeve follows the CONTRACT's clock — a 3-day pick reads as a
+    weekly, a 90-day pick as a swing. Pricing uses the exact DTE either way. */
+const sleeveForDte = (dte: number): SleeveKey =>
+  dte <= 1 ? 'odte' : dte <= 7 ? 'weekly' : dte <= 60 ? 'swing' : 'leaps';
 
-// ---- the neighbour rail ------------------------------------------------------
-
-/**
- * Listed strikes on the resolved expiry and side, spot anchored. This is a new,
- * smaller component rather than a lift of ContractChain: that one takes
- * ContractChainData from buildCompass rather than a MarketSnapshot, and it
- * lists both sides at once where this rail lists the one the query resolved to.
- * Only the SpotRule idiom is reused.
- */
-
-// ---- the pane ----------------------------------------------------------------
-
-interface ContractWeigherProps {
-  /**
-   * Cadence source only. The pane re-prices off its own scan-tier beat and
-   * builds its own snapshot for the resolved ticker, so whatever rate this
-   * arrives at, the grade card does not move at it.
-   */
-  snapshot: MarketSnapshot;
-  /** Deep-link entry point — seeds the sleeve (e.g. from Stocks). */
-  initialHorizon?: Horizon;
-  /** Deep-link seed, e.g. "SPY 505C 08/07". */
-  initialQuery?: string;
-  /** Written back on every resolve so a searched contract has an address. */
-  onQueryChange?: (q: string) => void;
+interface RailChip {
+  d: number;
+  weekday: string;
+  short: string;
+  sessions: number;
 }
 
-const ContractWeigher = ({ snapshot, initialHorizon, initialQuery, onQueryChange }: ContractWeigherProps) => {
-  const { activeTicker } = useMarketData();
-  const { trackContract, untrackSetup, isTracked } = useTracker();
+/** The Robinhood move (Noah, 2026-08-09): expiries ride a horizontal rail on
+    the chain itself — click one and the chain below re-prices for it. Tenor
+    is terminal hardware, so the active chip wears the flat holo silver —
+    except TODAY, which speaks in the terminal's own lime. The rail slides on
+    the mouse WHEEL (up = later dates, down = earlier) with the scrollbar
+    hidden, and each END grows an INVISIBLE ARROW: hover the edge and a
+    chevron fades in, click to glide a page, leave and it fades out. An arrow
+    only exists while there is rail left in that direction. */
+const ExpiryRail = ({ chips, value, onChange }: { chips: RailChip[]; value: number; onChange: (d: number) => void }) => {
+  const railRef = useRef<HTMLDivElement | null>(null);
+  const targetRef = useRef(0);
+  const rafRef = useRef(0);
+  const [can, setCan] = useState({ left: false, right: false });
 
-  /*
-    What the desk weighs when nothing has been typed.
-
-    It used to weigh nothing: the panel was a search field centred in half a
-    screen of black, and the first thing the Weigher told anyone was that it had
-    nothing to say. It always had something to say — the ticker in the top bar
-    is a real name with a real ladder, and grading its at-the-money call is the
-    same work the desk does for a typed one.
-
-    Same construction as the sleeve deep-link below it, so the landing contract
-    and a linked contract are built one way.
-  */
-
-  const [query, setQuery] = useState(() => {
-    if (initialQuery) return initialQuery;
-    // A sleeve deep-link is a request to see that sleeve graded, so it commits.
-    const e = expiryFor(dteForHorizon[initialHorizon ?? 'LOTTO']);
-    const atm = Math.round(snapshot.spot);
-    return canonicalQuery(snapshot.ticker, atm, 'C', e);
-  });
-
-  // ---- the listed universe, lazily. ------------------------------------------
-  // Until the listing lands nothing is declared unknown: under-reporting an
-  // unknown symbol beats telling a user their ticker does not exist because a
-  // 6,300-row JSON had not finished loading.
-  const [tickerMod, setTickerMod] = useState<typeof import('../../data/tickers') | null>(null);
-  useEffect(() => {
-    let alive = true;
-    import('../../data/tickers').then(m => alive && setTickerMod(m));
-    return () => {
-      alive = false;
-    };
+  const updateCan = useCallback(() => {
+    const el = railRef.current;
+    if (!el) return;
+    const max = el.scrollWidth - el.clientWidth;
+    setCan(prev => {
+      const next = { left: el.scrollLeft > 2, right: el.scrollLeft < max - 2 };
+      return prev.left === next.left && prev.right === next.right ? prev : next;
+    });
   }, []);
-  const knownSet = useMemo(
-    () => (tickerMod ? new Set(tickerMod.NASDAQ_TICKERS.map(t => t.symbol)) : null),
-    [tickerMod]
-  );
-  const knownTicker = useCallback((s: string) => (knownSet ? knownSet.has(s) : true), [knownSet]);
-  const suggest = useCallback(
-    (s: string) => (tickerMod ? tickerMod.searchTickers(s, 3).map(t => t.symbol) : []),
-    [tickerMod]
-  );
 
-  // ---- the pane's own snapshot ------------------------------------------------
-  const [paneSnap, setPaneSnap] = useState<MarketSnapshot>(snapshot);
-  const paneStep = useMemo(() => {
-    const s = [...paneSnap.chain].sort((a, b) => a.strike - b.strike);
-    return s.length > 1 ? Number(Math.abs(s[1].strike - s[0].strike).toFixed(4)) : Math.max(paneSnap.spot * 0.005, 0.5);
-  }, [paneSnap.chain, paneSnap.spot]);
-
-  const parsed = useMemo(() => {
-    const base = { defaultTicker: activeTicker, knownTicker, suggest };
-    const first = parseContractQuery(query, { ...base, strikeStep: paneStep });
-    // The grid belongs to the ticker that was typed, not to whatever the pane
-    // last priced. Re-read once when they disagree so the very first render
-    // after a name switch still snaps to the right increment.
-    const sym = slotValue(first.ticker);
-    const step = sym ? Simulator.TICKERS[sym]?.step ?? paneStep : paneStep;
-    return step === paneStep ? first : parseContractQuery(query, { ...base, strikeStep: step });
-  }, [query, activeTicker, knownTicker, suggest, paneStep]);
-
-  const rTicker = slotValue(parsed.ticker);
-  const rStrike = slotValue(parsed.strike);
-  const rRight = slotValue(parsed.right) ?? 'C';
-  const rExpiry = slotValue(parsed.expiry);
-  // The rail still renders while a date is being argued over. Identity is held
-  // stable so it cannot re-key anything downstream on every render.
-  const fallbackExpiry = useMemo(() => expiryFor(0), []);
-  const railExpiry = rExpiry ?? fallbackExpiry;
-  const snapTicker = rTicker ?? activeTicker;
-
-  const tickerRef = useRef(snapTicker);
-  tickerRef.current = snapTicker;
-  const lastPriced = useRef(Date.now());
-
-  // A resolution change re-prices immediately. Throttling without this is what
-  // makes a search box feel dead under the fingers.
-  useEffect(() => {
-    lastPriced.current = Date.now();
-    setPaneSnap(Simulator.buildSnapshot(snapTicker));
-  }, [snapTicker]);
-
-  // The cadence beat, held to the scan tier no matter how fast it arrives.
-  useEffect(() => {
-    const now = Date.now();
-    if (now - lastPriced.current < REPRICE_MS) return;
-    lastPriced.current = now;
-    setPaneSnap(Simulator.buildSnapshot(tickerRef.current));
-  }, [snapshot]);
-
-  // Held in a ref on purpose. The caller writes this into the URL, and an inline
-  // lambda would otherwise re-fire the effect on every render, which is a
-  // setParams loop waiting to happen. The query is the only thing that should
-  // publish an address.
-  const publishRef = useRef(onQueryChange);
-  publishRef.current = onQueryChange;
-  useEffect(() => {
-    publishRef.current?.(query);
-  }, [query]);
-
-  // ---- grading ----------------------------------------------------------------
-  const railDte = railExpiry.dte;
-  const rail = useMemo(() => {
-    const listed = [...paneSnap.chain].map(n => n.strike).sort((a, b) => a - b);
-    if (!listed.length) return [];
-    const atmIdx = listed.reduce((best, s, i) => (Math.abs(s - paneSnap.spot) < Math.abs(listed[best] - paneSnap.spot) ? i : best), 0);
-    return listed
-      .slice(Math.max(0, atmIdx - RAIL_REACH), atmIdx + RAIL_REACH + 1)
-      .map(k => weighContract(paneSnap, rRight, k, railDte));
-  }, [paneSnap, rRight, railDte]);
-
-  const weighed = useMemo(
-    () => (rStrike == null || !rExpiry ? null : weighContract(paneSnap, rRight, rStrike, rExpiry.dte)),
-    [paneSnap, rRight, rStrike, rExpiry]
-  );
-  const better = useMemo(
-    () => (weighed && isPriceable(weighed) ? betterAlternative(paneSnap, weighed) : null),
-    [paneSnap, weighed]
-  );
-
-  // betterAlternative sweeps the sleeve's own DTE shape, which need not be the
-  // expiry on screen, so the badge is only hung on a row the rail actually has.
-
-
-  // Walking back toward spot from a dead strike: the closest listed neighbour
-  // that still has a premium to lose.
-  const nearestPriceable = useMemo(() => {
-    if (rStrike == null) return null;
-    return rail
-      .filter(isPriceable)
-      .sort((a, b) => Math.abs(a.strike - rStrike) - Math.abs(b.strike - rStrike))[0] ?? null;
-  }, [rail, rStrike]);
-
-  const nearestListed = useMemo(() => {
-    if (rStrike == null || !paneSnap.chain.length) return null;
-    return paneSnap.chain.reduce(
-      (best, n) => (Math.abs(n.strike - rStrike) < Math.abs(best - rStrike) ? n.strike : best),
-      paneSnap.chain[0].strike
-    );
-  }, [paneSnap.chain, rStrike]);
-
-  const priceable = weighed ? isPriceable(weighed) : false;
-  const horizon = horizonForDte(railExpiry.dte);
-  const sleeve = SLEEVE_LABEL[horizon];
-
-  // The ledger order is established per contract, not per re-price. Sorting six
-  // rows live means they trade places under the cursor every beat, which is the
-  // churn this pane was rated on; the scores inside them stay current.
-  const ledger = useMemo(() => {
-    if (!weighed) return [];
-    return [...weighed.factors].sort((a, b) => Math.abs(b.score - 50) * b.weight - Math.abs(a.score - 50) * a.weight);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [weighed?.id]);
-  const ledgerRows = useMemo(() => {
-    if (!weighed) return [];
-    /* Each factor stands on its own score and its own weight.
-       This used to `apportion` the six `score × weight` products across the
-       composite so the parts footed to the headline exactly. With no headline
-       there is nothing to foot to, and the honest shape was underneath all
-       along: five separately-named 0-100 quantities and the weight each carries,
-       which is the component vector the grade was compressing. */
-    const byKey = new Map(weighed.factors.map(f => [f.key, f]));
-    return ledger.map(f => byKey.get(f.key)).filter((f): f is NonNullable<typeof f> => f != null);
-  }, [ledger, weighed]);
-
-  // ---- the setups feed, the only entry point that teaches the grammar --------
-
-  /* ---- the contract's own premium, derived --------------------------------
-     The grade answers "is this worth buying". This answers the question the
-     ledger cannot: what the contract has been doing, and what holding it costs
-     if the underlying does nothing at all. Both halves are the SAME
-     Black-Scholes that produced the mid above (weighedToPlan pins the model), so
-     the line lands on the printed number rather than near it.
-
-     The weigher genuinely has no take-profit ladder and no invalidation level,
-     and none is synthesised: an empty ladder is a first-class state on the plan.
-     Breakeven and the strike are what lane B marks instead, which is the
-     pre-trade question this pane is actually asking.
-
-     Built here rather than inside the chart so it moves on the pane's 10s beat.
-     ContractTrack otherwise reads the candle buffer itself, which would put the
-     chart back on the 1.5s tick the rest of this pane deliberately sits out. The
-     cost of that choice is a seam of at most one beat's drift between the mid the
-     card printed and the close the forward curve runs from; buildTrack pins the
-     series to the printed mid at NOW either way, so the number and the line
-     cannot disagree. */
-  const trackPlan = useMemo(() => (weighed && isPriceable(weighed) ? weighedToPlan(weighed) : null), [weighed]);
-  const trackBars = trackPlan ? Simulator.getCandles(trackPlan.ticker) ?? [] : [];
-  const track = useMemo(
-    () => (trackPlan && trackBars.length ? buildTrack(trackPlan, trackBars) : null),
-    // The buffer is mutated in place, so its identity never changes; the plan is
-    // what moves, and it moves on the beat.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [trackPlan, trackBars.length]
-  );
-
-  // ---- Compass evidence, only where the horizons genuinely match -------------
-  const evidence = useMemo(() => {
-    if (!weighed || railExpiry.dte > 1) return null;
-    const cfg = Simulator.TICKERS[weighed.ticker];
-    if (!cfg) return null;
-    return makeSetup(weighed.ticker, paneSnap.spot, weighed.strike, weighed.right, 'top-setups', cfg.iv);
-  }, [weighed, railExpiry.dte, paneSnap.spot]);
-
-  // ---- writing back -----------------------------------------------------------
-  const write = useCallback(
-    (over: { ticker?: string; strike?: number | null; right?: 'C' | 'P'; expiry?: Expiry }) => {
-      const next = canonicalQuery(
-        over.ticker ?? snapTicker,
-        over.strike !== undefined ? over.strike : rStrike,
-        over.right ?? rRight,
-        over.expiry ?? railExpiry
-      );
-      setQuery(next);
-    },
-    [snapTicker, rStrike, rRight, railExpiry]
-  );
-
-
-  /* ---- keyboard ------------------------------------------------------------
-     `/` used to focus the query box and there is no query box any more, so it
-     is gone with it. Alt+C / Alt+P stay: flipping the side you are weighing is
-     the one move worth a key when your eyes are on the chain. */
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.altKey && (e.key === 'c' || e.key === 'C')) {
-        e.preventDefault();
-        write({ right: 'C' });
-      } else if (e.altKey && (e.key === 'p' || e.key === 'P')) {
-        e.preventDefault();
-        write({ right: 'P' });
+  /* Eased glide, not raw scrollLeft jumps — a wheel notch is ±120px and
+     assigning it directly teleports the rail (Noah: "glitchy"). Deltas
+     accumulate into a TARGET; a rAF loop approaches it exponentially, so
+     rapid notches (or arrow clicks) chain into one continuous slide. Shared
+     by the wheel and both arrows. */
+  const glideBy = useCallback((dx: number) => {
+    const el = railRef.current;
+    if (!el) return;
+    const step = () => {
+      const diff = targetRef.current - el.scrollLeft;
+      if (Math.abs(diff) < 0.5) {
+        el.scrollLeft = targetRef.current;
+        rafRef.current = 0;
+        return;
       }
+      el.scrollLeft += diff * 0.16;
+      rafRef.current = requestAnimationFrame(step);
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [write]);
+    // Idle means the user may have dragged the bar themselves — re-sync
+    // before applying the delta, or the rail lurches to a stale target.
+    if (!rafRef.current) targetRef.current = el.scrollLeft;
+    const max = el.scrollWidth - el.clientWidth;
+    targetRef.current = Math.max(0, Math.min(max, targetRef.current + dx));
+    if (!rafRef.current) rafRef.current = requestAnimationFrame(step);
+  }, []);
 
+  useEffect(() => {
+    const el = railRef.current;
+    if (!el) return;
+    // Native non-passive listener: React's synthetic onWheel is passive and
+    // cannot preventDefault the page scroll underneath.
+    const onWheel = (e: WheelEvent) => {
+      if (e.deltaY === 0) return;
+      e.preventDefault();
+      // Wheel up (deltaY < 0) slides the rail RIGHT toward later expiries
+      glideBy(-e.deltaY);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = 0;
+    };
+  }, [glideBy]);
 
+  // Arrows need a first read after mount (and when the chips change)
+  useEffect(() => {
+    updateCan();
+  }, [chips, updateCan]);
 
-  // ---- plan readouts ----------------------------------------------------------
-  const ladder = useMemo(() => expiryLadder(), []);
+  const pageStep = () => (railRef.current?.clientWidth ?? 300) * 0.6;
 
-  const coverage = weighed ? weighed.expectedMovePct / Math.max(weighed.breakevenMovePct, 0.05) : 0;
-  const effExpMove = weighed?.expectedMovePct ?? 0;
-  const clearsBreakeven = weighed ? effExpMove >= weighed.breakevenMovePct : false;
-  const costPerContract = (weighed?.mid ?? 0) * CONTRACT_MULTIPLIER;
-  const halfSpread = (weighed?.spreadPct ?? 0) / 2;
-  const expFill = (weighed?.mid ?? 0) * (1 + halfSpread / 100);
-  const flowScore = weighed?.factors.find(f => f.key === 'flow')?.score ?? 50;
-  const fillProb = Math.max(20, Math.min(96, Math.round(62 + Math.log10(Math.max(weighed?.oi ?? 10, 10)) * 9 - (weighed?.spreadPct ?? 0) * 6)));
-  const adverse = (weighed?.spreadPct ?? 0) > 4 || flowScore < 42;
-  const friction = (weighed?.spreadPct ?? 0) + (weighed?.thetaPerDayPct ?? 0);
-  const costEatsEdge = weighed ? friction >= weighed.expectedMovePct : false;
-  // Grade and process are chrome, never direction. Silver, amber, grey.
-  const evTone: Tone = !costEatsEdge && coverage >= 1 ? 'select' : costEatsEdge ? 'warn' : 'neutral';
-  const evVerdict = !costEatsEdge && coverage >= 1 ? 'EDGE SURVIVES COSTS' : costEatsEdge ? 'COSTS EAT THE EDGE' : 'THIN AFTER COSTS';
-
-  const tracked = weighed ? isTracked(weighed.id) : false;
-  const toggleTrack = () => {
-    if (!weighed) return;
-    if (tracked) untrackSetup(weighed.id);
-    else
-      trackContract({
-        id: weighed.id,
-        contract: `${weighed.ticker} ${fmtStrike(weighed.strike)}${weighed.right}`,
-        ticker: weighed.ticker,
-        strike: weighed.strike,
-        right: weighed.right,
-        /* Persisted, never rendered. `TrackedSetup.score` is a required field
-           on rows already in localStorage, so the field stays; what changed is
-           that the Tracker now shows the VERDICT transition rather than the
-           delta between two of these. */
-        score: weighed.rankKey,
-        verdict: GRADE_VERDICT[weighed.verdict],
-      });
-  };
-
-  // ---- side picker grades, one read across both rights -----------------------
-
-
-  // ==== render ================================================================
-
-  /*
-    THE INPUT IS THE CHAIN.
-
-    What stood here: a parsed query string ("SPY 505C 0DTE"), a combobox with
-    typeahead over it, a recents list, and four popovers — ticker, strike, side,
-    expiry — each rendering its own typed/assumed/unknown state as a chip, plus
-    the prose explaining what the parser had assumed on your behalf. Roughly 450
-    lines whose entire job was to let you DESCRIBE a contract.
-
-    That is a form standing between a trader and a chain they already know how
-    to read. Every options desk answers "which contract" the same way: here is
-    the ladder, click one. So the expiry is a row of tabs, the chain is the
-    grid, and one click grades the cell you pressed.
-
-    `write` is untouched — it still writes the canonical query, so deep links
-    and `onQueryChange` keep working exactly as they did. Only what drives it
-    changed.
-  */
-  const expiryTabs = (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-baseline gap-2">
-        <span className="font-mono text-micro font-semibold uppercase tracking-widest text-textMuted">Expiry</span>
-        <span aria-hidden className="font-mono text-micro text-textMuted">·</span>
-        <span className="font-mono text-micro uppercase tracking-wider text-textMuted">
-          {rTicker} at ${paneSnap.spot.toFixed(2)}
-        </span>
-      </div>
-      <div role="tablist" aria-label="Listed expiries" className="flex flex-wrap gap-x-4 gap-y-1.5">
-        {ladder.map(e => {
-          const on = e.label === railExpiry.label;
+  return (
+    <div className="relative">
+      <div
+        ref={railRef}
+        onScroll={updateCan}
+        role="tablist"
+        aria-label="Chain expiry"
+        /* px-px/py-1: an overflow-x container clips BOTH axes, and the active
+           chip's ring is drawn 1px OUTSIDE its button — flush chips got their
+           outline sliced at the rail's top and left edges (Noah's screenshot:
+           "the boxes are bleeding out"). */
+        className="flex items-center gap-1 overflow-x-auto px-px py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {chips.map(chip => {
+          const on = value === chip.d;
+          const today = chip.sessions === 0;
           return (
             <button
-              key={e.label}
+              key={chip.d}
               role="tab"
               aria-selected={on}
-              onClick={() => write({ expiry: e })}
-              className={`-my-1 py-1 font-mono text-label uppercase tracking-wider transition-colors ${
-                on ? 'text-textPrimary' : 'text-textMuted hover:text-textSecondary'
+              onClick={() => onChange(chip.d)}
+              className={`shrink-0 px-2.5 py-1 rounded font-mono text-[11px] leading-tight text-center transition-colors ${
+                today
+                  ? on
+                    ? 'holo-bg text-[#0a0a0a] font-semibold'
+                    : 'text-[#C7D3E8] hover:bg-[#C7D3E8]/[0.08]'
+                  : on
+                    ? 'bg-[#C7D3E8]/[0.08] ring-1 ring-[#C7D3E8]/40 text-textPrimary font-semibold'
+                    : 'text-textSecondary hover:text-textPrimary hover:bg-white/[0.03]'
               }`}
             >
-              {e.label}
-              <span className={`ml-1.5 tnum ${on ? 'text-select' : 'text-textMuted/70'}`}>{e.dte}d</span>
+              <span className="block tnum">{today ? 'Today' : `${chip.weekday} ${chip.short}`}</span>
+              <span className={`block text-[9px] tnum ${today ? (on ? 'text-[#0a0a0a]/70' : 'text-[#C7D3E8]/70') : on ? 'text-textSecondary' : 'text-textMuted'}`}>
+                {chip.sessions} session{chip.sessions === 1 ? '' : 's'}
+              </span>
             </button>
           );
         })}
       </div>
+
+      {/* Edge arrows — QUIETLY VISIBLE whenever that direction has rail left
+          (Noah: fully hidden was too hidden), full-bright on hover, gone
+          entirely at a hard end. The gradient keeps the chevron legible over
+          half-scrolled chips. */}
+      {can.left && (
+        <button
+          aria-label="Earlier expiries"
+          onClick={() => glideBy(-pageStep())}
+          className="absolute inset-y-0 left-0 z-10 flex w-9 items-center justify-start pl-0.5 bg-gradient-to-r from-[#0a0a0a] via-[#0a0a0a]/70 to-transparent opacity-45 hover:opacity-100 focus-visible:opacity-100 transition-opacity duration-200"
+        >
+          <ChevronLeft className="w-4 h-4 text-textPrimary" />
+        </button>
+      )}
+      {can.right && (
+        <button
+          aria-label="Later expiries"
+          onClick={() => glideBy(pageStep())}
+          className="absolute inset-y-0 right-0 z-10 flex w-9 items-center justify-end pr-0.5 bg-gradient-to-l from-[#0a0a0a] via-[#0a0a0a]/70 to-transparent opacity-45 hover:opacity-100 focus-visible:opacity-100 transition-opacity duration-200"
+        >
+          <ChevronRight className="w-4 h-4 text-textPrimary" />
+        </button>
+      )}
     </div>
   );
+};
+
+interface ContractWeigherProps {
+  snapshot: MarketSnapshot;
+}
+
+/** Compass's second mode: the scale. Browse the chain at any expiry, click a
+    contract, and the desk weighs it — 6-factor composite, dollarized facts,
+    and the working tools. The chain IS the picker: ticker via the page
+    header's search, expiry via the rail, strike and right off the rows
+    (Noah, 2026-08-09 — the old type-a-contract line duplicated all four). */
+const ContractWeigher = ({ snapshot }: ContractWeigherProps) => {
+  // The chain's tenor — which expiry the rail has selected
+  const [railDte, setRailDte] = useState(0);
+  // The open full analysis — a contract named by the chain or the search line.
+  // gradedAt freezes which sweep first weighed it (provenance).
+  const [analysis, setAnalysis] = useState<{
+    strike: number;
+    right: 'C' | 'P';
+    dte: number;
+    gradedAt: string;
+  } | null>(null);
 
 
-  const identity = weighed ? (
-    <div className="flex items-center gap-2 flex-wrap">
-      <span
-        className={`font-mono text-data font-semibold tnum ${weighed.right === 'C' ? 'text-bull' : 'text-bear'}`}
-      >
-        {weighed.ticker} {fmtStrike(weighed.strike)}
-        {weighed.right}
-      </span>
-      <span className="font-mono text-micro uppercase tracking-wider text-textMuted tnum">
-        {railExpiry.label} {railExpiry.weekday}
-      </span>
-      <span className="font-mono text-label text-textSecondary tnum">
-        {railExpiry.dte} day{railExpiry.dte === 1 ? '' : 's'} · {railExpiry.sessions} session
-        {railExpiry.sessions === 1 ? '' : 's'} · {sleeve} sleeve
-      </span>
-    </div>
-  ) : null;
+  // A new name is a fresh slate for the open analysis
+  useEffect(() => {
+    setAnalysis(null);
+  }, [snapshot.ticker]);
 
-  const statGrid = weighed ? (
-    <Figures
-      label="The quote"
-      items={[
-        { k: 'Mid', v: `$${weighed.mid.toFixed(2)}` },
-        { k: preserveGreek('Δ delta'), v: weighed.delta.toFixed(2) },
-        // At the premium floor these two are model output, not readings, so
-        // they say so in the strip rather than in a tooltip nobody hovers.
-        {
-          k: preserveGreek('θ / day'),
-          v: priceable ? `−${weighed.thetaPerDayPct.toFixed(1)}%` : '—',
-          note: priceable ? undefined : 'not a reading at the floor',
-          tone: priceable && weighed.thetaPerDayPct > 5 ? 'text-bear' : undefined,
-        },
-        {
-          k: 'Spread',
-          v: priceable ? `${weighed.spreadPct.toFixed(1)}%` : '—',
-          note: priceable ? undefined : 'not a reading at the floor',
-        },
-        {
-          /* Was "IV rank", and the number under it was a daily hash unrelated
-             to the IV in the header two rows up. This is the same IV measured
-             against the name's own — one quantity, one source, and it moves
-             when the header moves. */
-          k: 'Vol vs name',
-          v: `${weighed.ivPremiumPct > 0 ? '+' : ''}${weighed.ivPremiumPct}%`,
-          note: `this strike at ${weighed.ivPct}% IV against what ${weighed.ticker} normally carries`,
-        },
-        { k: 'Open int', v: weighed.oi.toLocaleString() },
-        { k: preserveGreek('1σ move'), v: `${weighed.expectedMovePct.toFixed(1)}%` },
-        {
-          k: 'Breakeven',
-          v: `${weighed.breakevenMovePct.toFixed(1)}%`,
-          tone: coverage >= 1 ? 'text-select' : 'text-warn',
-        },
-      ]}
-    />
-  ) : null;
 
-  const factorLedger =
-    weighed && ledgerRows.length ? (
-      <div className="border-t border-borderSubtle pt-3 flex flex-col gap-2.5">
-        {!priceable && (
-          <p className="text-label text-textMuted leading-snug">
-            Two of the {ledgerRows.length} factors are the model&apos;s floor, so they do not sum to a grade.
-          </p>
-        )}
-        {/* The two numeric columns ran unlabelled, so a row read "98 17" with
-            nothing saying which was the reading and which was the impact. */}
-        <div className="flex items-center gap-2">
-          <span className="w-32 shrink-0" />
-          <span className="flex-1" />
-          <span className="w-10 shrink-0 font-mono text-micro uppercase tracking-widest text-textMuted text-right">Score</span>
-          <span className="w-[5ch] shrink-0 font-mono text-micro uppercase tracking-widest text-textMuted text-right">Weight</span>
-        </div>
-        {ledgerRows.map(f => (
-          <FactorRow
-            key={f.key}
-            label={f.label}
-            weight={f.weight}
-            score={f.score}
-            detail={f.detail}
-            muted={!priceable && (f.key === 'decay' || f.key === 'liq')}
-          />
-        ))}
-        {/* No Σ row. It summed the six contributions to prove they footed to
-            the composite; with the composite gone it would be printing the
-            hidden ordering key under a total's heading, which is the same claim
-            wearing a different label. */}
-        <details className="mt-1">
-          <summary className="cursor-pointer font-mono text-label uppercase tracking-wider text-textMuted hover:text-textSecondary">
-            Why these weights
-          </summary>
-          <div className="mt-2 flex flex-col gap-1.5">
-            <p className="font-mono text-micro text-textMuted tnum">
-              {weighed.factors.map(f => `${f.label.toLowerCase()} ×${f.weight.toFixed(2)}`).join(' · ')}
-            </p>
-            <p className="text-label text-textMuted leading-snug">{HORIZON_NOTE[horizon]}</p>
-            <p className="text-label text-textMuted leading-snug">
-              The weights change at 1, 10 and 90 days. A 30 day contract is graded with a different set.
-            </p>
-          </div>
-        </details>
-      </div>
-    ) : null;
+  // ---- the chain + the analysis --------------------------------------------
+  const tickerIv = Simulator.TICKERS[snapshot.ticker]?.iv ?? 0.2;
 
-  /*
-    ONE discriminant for what the pane is currently showing.
+  /* The rail's real expiries, clock-aware — the listed-calendar ladder,
+     already deduped by the builder. */
+  const railChips = useMemo(() => {
+    const thisYear = new Date().getFullYear();
+    return buildRailDtes().map(d => {
+      const e = expiryFor(d);
+      return { d, ...e, short: e.date.getFullYear() === thisYear ? e.label.slice(0, 5) : e.label };
+    });
+  }, []);
 
-    The same question was being answered in three places with three hand-rolled
-    predicates — the grade body's if-ladder, `showTrack`, and the `weighed &&
-    priceable` guard on "If you take it" — and they drifted, which is how a
-    symbol with no listing ended up with a full cost breakdown under it. Typing
-    `ZZZZ 505C` printed NO LISTING FOR ZZZZ in the grade panel and then, directly
-    beneath, days to expiry, cost per contract, expected
-    fill, spread round-trip and theta drag — sizing economics for a ticker the
-    page had just said it could not find.
+  /* The chain, priced at the rail's tenor — same builder the scanner view
+     uses, so the Weigher's chain and the board's chain can never disagree. */
+  const chain = useMemo(() => {
+    const sessions = Math.max(expiryFor(railDte).sessions, 0.5);
+    return buildChain(snapshot, tickerIv, sessions / 252);
+  }, [snapshot, tickerIv, railDte]);
 
-    Derived once, switched on everywhere. A panel that quotes what a trade costs
-    may only render in the one state where a trade exists.
-  */
+  /* The open analysis, WEIGHED live each tick on the weigher's OWN scale —
+     the 6-factor composite, not the scanner's setup score. The scanner
+     grades its proposals; this page grades YOURS. */
+  const weighResult = useMemo(
+    () => (analysis ? weighContract(snapshot, analysis.right, analysis.strike, analysis.dte) : null),
+    [analysis, snapshot]
+  );
+  const focusC = weighResult?.contract ?? null;
 
-  const gradeState: 'expired' | 'unknown-ticker' | 'no-strike' | 'unpriceable' | 'graded' = parsed.expired
-    ? 'expired'
-    : parsed.ticker.state === 'unknown'
-      ? 'unknown-ticker'
-      : parsed.strike.state === 'missing' || !weighed
-        ? 'no-strike'
-        : !priceable
-          ? 'unpriceable'
-          : 'graded';
-
-  const gradePanelBody = () => {
-    if (parsed.expired) {
-      return (
-        <EmptyState
-          size="lg"
-          title="THAT DATE HAS PASSED"
-          body={`${parsed.expired.label} was ${parsed.expired.daysAgo} days ago. Pick a listed expiry above.`}
-        />
-      );
-    }
-    if (parsed.ticker.state === 'unknown') {
-      return (
-        <EmptyState size="lg" title={`NO LISTING FOR ${parsed.ticker.raw}`} body="Every other part of your text still binds.">
-          <div className="flex flex-wrap items-center justify-center gap-2">
-            {parsed.ticker.suggestions.map(s => (
-              <button key={s} onClick={() => write({ ticker: s })} className={`${CHIP_BASE} ${CHIP_TONE.typed}`} aria-label={`Use ${s} instead`}>
-                {s}
-              </button>
-            ))}
-          </div>
-        </EmptyState>
-      );
-    }
-    if (parsed.strike.state === 'missing' || !weighed) {
-      return <EmptyState size="lg" title="ADD A STRIKE" body="Type a number, or pick one from the rail." />;
-    }
-
-    if (!priceable) {
-      return (
-        <div className="flex flex-col gap-4">
-          {identity}
-          <div className="flex items-center gap-3 flex-wrap">
-            <SignalBadge tone="warn" className="min-w-[96px] justify-center">
-              NOT PRICEABLE
-            </SignalBadge>
-            <span className="ml-auto font-mono text-label text-textMuted tnum">
-              ${weighed.mid.toFixed(2)} mid · Δ{weighed.delta.toFixed(2)} · IV {weighed.ivPct.toFixed(0)}%
-            </span>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <p className="text-caption text-textSecondary leading-relaxed">
-              {weighed.ticker} {fmtStrike(weighed.strike)}
-              {weighed.right} expiring {railExpiry.label} prices at the model&apos;s $0.02 floor with a delta of{' '}
-              {weighed.delta.toFixed(2)}.
-            </p>
-            <p className="text-caption text-textSecondary leading-relaxed">
-              It needs a {weighed.breakevenMovePct.toFixed(1)}% move by the bell. The 1σ move is{' '}
-              {weighed.expectedMovePct.toFixed(1)}%.
-            </p>
-            <p className="text-caption text-textSecondary leading-relaxed">
-              There is no grade here: theta and liquidity at the floor are model output, not a reading.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {nearestPriceable && (
-              <button onClick={() => write({ strike: nearestPriceable.strike })} className={`${CHIP_BASE} ${CHIP_TONE.typed}`}>
-                Nearest priceable {weighed.right === 'C' ? 'call' : 'put'} on this expiry: {fmtStrike(nearestPriceable.strike)}
-                {nearestPriceable.right}, reads {VERDICT_LABEL[GRADE_VERDICT[nearestPriceable.verdict]]}
-              </button>
-            )}
-            {nearestListed != null && nearestListed !== weighed.strike && (
-              <button onClick={() => write({ strike: nearestListed })} className={`${CHIP_BASE} ${CHIP_TONE.assumed}`}>
-                Nearest listed strike: {fmtStrike(nearestListed)}
-              </button>
-            )}
-          </div>
-          {statGrid}
-          {factorLedger}
-        </div>
-      );
-    }
-
-    return (
-      <div className="flex flex-col gap-4">
-        {identity}
-        {/* The verdict leads, and there is no number beside it.
-            A 36px `composite` used to sit here — the biggest thing on the pane,
-            a weighted mean of five hand-chosen factor scores at hand-chosen
-            weights with no forward log, no hit rate and no interval behind any
-            of them. A 0-100 figure claims a resolution that arithmetic cannot
-            supply, and rendering it at 36px made the claim the loudest thing on
-            the desk. The tag is the same read at a precision three coarse bands
-            can actually carry. */}
-        <div className="flex items-center gap-3 flex-wrap">
-          <SignalBadge
-            tone={VERDICT_TONE[GRADE_VERDICT[weighed.verdict]]}
-            className="min-w-[112px] justify-center text-read font-bold"
-          >
-            {VERDICT_LABEL[GRADE_VERDICT[weighed.verdict]]}
-          </SignalBadge>
-          <span className="ml-auto font-mono text-label text-textMuted tnum">
-            ${weighed.mid.toFixed(2)} mid · Δ{weighed.delta.toFixed(2)} · IV {weighed.ivPct.toFixed(0)}%
-          </span>
-        </div>
-
-        <p className="text-caption text-textSecondary leading-relaxed">
-          {better ? (
-            <>
-              <span className="text-textPrimary font-semibold">
-                {better.ticker} {fmtStrike(better.strike)}
-                {better.right}
-              </span>{' '}
-              reads <span className="text-textPrimary font-semibold">{VERDICT_LABEL[GRADE_VERDICT[better.verdict]]}</span>{' '}
-              where yours reads{' '}
-              <span className="text-textPrimary font-semibold">{VERDICT_LABEL[GRADE_VERDICT[weighed.verdict]]}</span>, and
-              clears its breakeven with more room ({better.breakevenMovePct.toFixed(2)}% of{' '}
-              {better.expectedMovePct.toFixed(2)}% against {weighed.breakevenMovePct.toFixed(2)}% of{' '}
-              {weighed.expectedMovePct.toFixed(2)}%).
-            </>
-          ) : (
-            `Nothing in the ${sleeve} sleeve reads better than this and clears its breakeven with more room.`
-          )}
-        </p>
-
-        {factorLedger}
-        {statGrid}
-
-        <div className="border-t border-borderSubtle pt-3 flex flex-col gap-2">
-          {evidence ? (
-            <>
-              <div className="flex items-center gap-2 flex-wrap">
-                <StateBadge state={setupState(evidence)} />
-                {evidence.whyChips.map(c => (
-                  <SignalBadge key={c} tone="neutral">
-                    {c}
-                  </SignalBadge>
-                ))}
-              </div>
-              {/* The price that kills the read gets a callout, matching the
-                  "what kills it" box on the Setups detail pane. It was a grey
-                  sentence in a stack of grey sentences — the one line on the
-                  pane a reader most needs to find, styled to be skipped. */}
-              <p className="flex items-start gap-2 border-l-2 border-warn/60 pl-3 py-1 text-caption text-textSecondary leading-relaxed">
-                <AlertTriangle className="w-3.5 h-3.5 text-warn shrink-0 mt-0.5" aria-hidden />
-                <span>
-                  <span className="font-mono font-semibold uppercase tracking-wider text-warn mr-1.5">Contradicted</span>
-                  below <span className="text-warn tnum font-semibold">${evidence.invalidationPrice.toFixed(2)}</span>.{' '}
-                  {evidence.invalidationReason}
-                </span>
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {evidence.takeProfits.map(tp => (
-                  <span key={tp.level} className="font-mono text-micro text-textMuted tnum">
-                    TP{tp.level} ${tp.target.toFixed(2)} · {tp.status}
-                  </span>
-                ))}
-              </div>
-            </>
-          ) : (
-            <p className="text-caption text-textSecondary leading-relaxed">
-              Compass grades same-session setups. This one has {railExpiry.dte} days, so it carries the sleeve grade only.
-            </p>
-          )}
-        </div>
-      </div>
+  /* The dollarized facts come from the same pricer the rest of Compass uses —
+     makeSetup at the EXACT dte the user named (never a sleeve's canonical
+     tenor). Used ONLY for the facts strip; every judgment is the weigher's. */
+  const analysisSetup = useMemo(() => {
+    if (!analysis) return null;
+    return makeSetup(
+      snapshot.ticker,
+      snapshot.spot,
+      analysis.strike,
+      analysis.right,
+      'all',
+      tickerIv,
+      sleeveForDte(analysis.dte),
+      analysis.dte
     );
+  }, [analysis, snapshot, tickerIv]);
+
+  /* "Stronger option?" compares within the contract's OWN sleeve — always
+     apples-to-apples because the candidates are generated at its horizon. */
+  const alt = useMemo(() => {
+    if (!analysis || !focusC) return null;
+    const candidates = weighContracts(snapshot, horizonForDte(analysis.dte));
+    return betterAlternative(candidates, focusC);
+  }, [analysis, focusC, snapshot]);
+
+  /** Open the full weigh on a named contract, freezing the composite that
+      earned the click (the provenance rule). */
+  const openAnalysis = (strike: number, right: 'C' | 'P', dte: number) => {
+    const graded = weighContract(snapshot, right, strike, dte);
+    setAnalysis({ strike, right, dte, gradedAt: new Date().toLocaleTimeString('en-GB') });
   };
 
-  // The chart follows the grade. Where the panel above is an empty state — a date
-  // that has passed, a symbol with no listing — there is no contract to draw.
-  const showTrack = trackPlan != null && track != null && gradeState !== 'expired' && gradeState !== 'unknown-ticker';
+  const handleChainSelect = (sel: ChainSelection) => openAnalysis(sel.strike, sel.right, railDte);
 
-  /*
-    No `mx-auto max-w-[1180px]` here any more.
+  /* Contract switches BREATHE, never remount (the SamplePreview lesson): the
+     analysis DOM persists so the composite rolls, the meters glide and the
+     mid flashes — a keyed wrapper restarted every one of them from zero,
+     which read as a glitchy pop. The dip announces "new contract" instead. */
+  const weighBreath = useAnimationControls();
+  const reducedMotion = useReducedMotion();
+  useEffect(() => {
+    if (reducedMotion || !focusC) return;
+    weighBreath.set({ opacity: 0.45, y: 4 });
+    weighBreath.start({ opacity: 1, y: 0, transition: { duration: 0.45, ease: [0.16, 1, 0.3, 1] } });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusC?.id]);
 
-    That capped the whole desk at 1180px and centred it, which on a 2560 screen
-    parked the Weigher in the middle with ~660px of background either side —
-    the same defect the page column had, one level down and outside the reach
-    of the guard that watches pages. The mode fills the column it is given.
-  */
+  /* ---- the desk's reads ----------------------------------------------------
+     NO INPUTS on this page (Noah, 2026-08-09: "users only see what we have
+     available for them and what we think") — the what-if/size/hold dials are
+     gone. What remains are the ENGINE's own judgments: what friction eats,
+     and whether the expected move covers the breakeven. */
+  const cost = focusC
+    ? (() => {
+        const expFill = focusC.mid + (focusC.mid * focusC.spreadPct) / 200;
+        const frictionPct = focusC.spreadPct + focusC.thetaPerDayPct; // round-trip spread + one day theta, % of premium
+        const tone: Tone = frictionPct < 8 ? 'bull' : frictionPct <= 16 ? 'warn' : 'bear';
+        const state = frictionPct < 8 ? 'Edge survives costs' : frictionPct <= 16 ? 'Costs are a real drag' : 'Costs dominate the edge';
+        const sentence = `A round trip plus a day of theta runs about ${frictionPct.toFixed(1)}% of the premium — a limit near $${focusC.mid.toFixed(2)} keeps the spread off your entry.`;
+        return { expFill, frictionPct, tone, state, sentence };
+      })()
+    : null;
+
+  /* The engine's verdict at ITS OWN number — the 1σ expected move vs the
+     breakeven move. This was the old scale's "Needs / expected" column. */
+  const covers = focusC
+    ? (() => {
+        const needs = focusC.breakevenMovePct;
+        const expected = focusC.expectedMovePct;
+        const clears = expected >= needs;
+        const gap = Math.abs(expected - needs);
+        // 50% mark = parity (expected == needs); full = 2x coverage
+        const pct = Math.min(100, (expected / Math.max(needs, 0.05)) * 50);
+        const sentence = clears
+          ? `The 1σ expected move of ±${expected.toFixed(1)}% clears the ±${needs.toFixed(1)}% breakeven with ${gap.toFixed(1)}% to spare — the math works without a tail.`
+          : `The 1σ expected move of ±${expected.toFixed(1)}% falls ${gap.toFixed(1)}% short of the ±${needs.toFixed(1)}% breakeven — this pays only on a tail.`;
+        return { needs, expected, clears, gap, pct, sentence };
+      })()
+    : null;
+
+
+
   return (
-    <div className="w-full flex flex-col gap-4">
-      {expiryTabs}
-
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.div
-            key={weighed?.id ?? 'empty'}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: DUR.base, ease: EASE }}
-            /* Sticky beside the chain.
-               The chain is tall and the grade panel is short, so in a plain
-               two-column grid the left half of the screen went black the moment
-               you scrolled past the analysis — a 700px empty rail next to a
-               ladder, which is exactly the dead space this desk was supposed to
-               stop having. Sticking it keeps the read on screen for whatever
-               row you are looking at, which is also what you want it for.
-               `top` clears the 56px bar plus the gutter. */
-            className="xl:col-span-7 min-w-0 xl:sticky xl:top-[4.25rem] xl:self-start"
-          >
-            <Panel
-              emphasis
-              title={
-                <span className="inline-flex items-center gap-1.5">
-                  <Scale className="w-3.5 h-3.5" /> Weigh your own
-                </span>
-              }
-              subtitle={weighed ? `${weighed.ticker} ${fmtStrike(weighed.strike)}${weighed.right}` : 'nothing graded yet'}
-              tone={weighed && priceable ? VERDICT_TONE[GRADE_VERDICT[weighed.verdict]] : 'neutral'}
-              actions={
-                weighed && priceable ? (
-                  <button
-                    onClick={toggleTrack}
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border font-mono text-label font-semibold uppercase tracking-wider transition-colors ${
-                      tracked
-                        ? 'border-select/40 bg-select/[0.08] text-select'
-                        : 'border-borderSubtle text-textSecondary hover:text-textPrimary hover:border-borderMuted'
-                    }`}
-                  >
-                    {tracked ? <Check className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
-                    {tracked ? 'Tracked' : 'Add to Tracker'}
-                  </button>
-                ) : undefined
-              }
+    <div className="flex flex-col gap-4">
+      {/* The chain, or the read — ONE surface below the search line
+          (Noah, 2026-08-09: "the options chain suits the weigher more...
+          users cannot go directly to the options chain and see the contract
+          they want with a full analysis on it"). Browse: the expiry rail +
+          the chain, full width. Named a contract (chain click or the search
+          line): the prev full-analysis layout — SignalMonitor left, the
+          chain kept at hand on the right. */}
+      {analysis && focusC && analysisSetup ? (
+        /* NO contract key here — switching contracts must breathe, not
+           remount (remount restarted every meter and number from zero: the
+           glitch Noah flagged). The slow soft-in covers only the browse→
+           analysis MOUNT; contract changes dip-and-settle via weighBreath. */
+        <motion.div animate={weighBreath} className="flex flex-col gap-4 animate-soft-in-slow">
+          {/* Weigh header — verdict badge, contract name, and the composite
+              as a bar-only meter (the grade number is engine-internal). */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <button
+              onClick={() => setAnalysis(null)}
+              className="group inline-flex items-center gap-1.5 border border-borderSubtle hover:border-borderMuted rounded-md px-2.5 py-1.5 font-mono text-[11px] text-textSecondary hover:text-textPrimary transition-colors"
             >
-              {gradePanelBody()}
-            </Panel>
-          </motion.div>
-        </AnimatePresence>
-
-        {/* The chain, not a neighbours rail. The rail showed eight strikes on
-            ONE side of the contract you had already described; the chain shows
-            both sides of every listed strike and is how you pick in the first
-            place. `flush` because the grid rules its own rows. */}
-        <Panel
-          title="Contract chain"
-          subtitle={`${railExpiry.label} · click a contract to weigh it`}
-          className="xl:col-span-5 min-w-0"
-          flush
-        >
-          <WeigherChain
-            snapshot={paneSnap}
-            dte={railDte}
-            selected={rStrike == null ? null : { strike: rStrike, right: rRight }}
-            onPick={sel => write({ strike: sel.strike, right: sel.right })}
-          />
-        </Panel>
-      </div>
-
-      {showTrack && <ContractTrack key={trackPlan.key} plan={trackPlan} bars={trackBars} track={track} className="animate-soft-in" />}
-
-      {gradeState === 'graded' && weighed && (
-        <Panel
-          title={
-            <span className="inline-flex items-center gap-1.5">
-              <Target className="w-3.5 h-3.5" /> If you take it
+              <ArrowLeft className="w-3.5 h-3.5 transition-transform duration-200 ease-out group-hover:-translate-x-0.5" /> Back
+            </button>
+            <SignalBadge tone={verdictTone[focusC.verdict]} dot>
+              {VERDICT_LABEL[focusC.verdict]}
+            </SignalBadge>
+            {/* Prose can't glide — the name and calendar crossfade, keyed by
+                the contract; everything numeric around them rolls. */}
+            <span key={focusC.id} className="font-mono text-sm font-bold text-textPrimary animate-soft-in">
+              {focusC.ticker} {focusC.strike} {focusC.right}
             </span>
-          }
-          subtitle="timing, sizing and what the costs leave behind"
-          tone={evTone}
-        >
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-2 flex-wrap">
-              <SignalBadge tone={evTone} className="min-w-[96px] justify-center">
-                {evVerdict}
-              </SignalBadge>
-              <SignalBadge tone={clearsBreakeven ? 'select' : 'warn'} dot>
-                {clearsBreakeven ? 'Clears breakeven' : 'Short of breakeven'}
-              </SignalBadge>
-              {adverse && (
-                <SignalBadge tone="warn" dot>
-                  Adverse selection
-                </SignalBadge>
+            <span key={`cal-${focusC.id}`} className="font-mono text-[10px] text-textMuted tnum animate-soft-in">
+              {focusC.expiryWeekday} {focusC.expiryLabel} · {focusC.sessionsLeft} session{focusC.sessionsLeft === 1 ? '' : 's'}
+            </span>
+            {/* The composite as a METER — bar only, in the verdict's color.
+                The figure itself is engine-internal (Noah, 2026-08-16): the
+                bar's reach and the verdict badge are the whole read. */}
+            <span className="ml-auto inline-flex items-center gap-2">
+              <span className="inline-flex items-center gap-2.5 border border-borderSubtle bg-panel rounded-md px-3 py-1.5">
+                <span className="font-mono text-[9px] uppercase tracking-widest text-textSecondary">Weighs</span>
+                <span className="w-24 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+                  <span
+                    className={`block h-full rounded-full transition-[width,background-color] duration-700 ease-out ${
+                      focusC.verdict === 'BUY' ? 'bg-bull/90' : focusC.verdict === 'WATCH' ? 'bg-warn/80' : 'bg-bear/75'
+                    }`}
+                    style={{ width: `${focusC.composite}%` }}
+                  />
+                </span>
+              </span>
+              <span className="inline-flex items-center gap-2 border border-borderSubtle bg-panel rounded-md px-3 py-1.5">
+                <span className="font-mono text-[9px] uppercase tracking-widest text-textSecondary">Premium</span>
+                <span className="font-mono text-[13px] font-bold tnum text-textPrimary">
+                  <AnimatedNumber value={focusC.mid} format={v => `$${v.toFixed(2)}`} flash />
+                </span>
+              </span>
+            </span>
+          </div>
+
+          {/* Provenance — when the desk first weighed this contract. The
+              composite itself is engine-internal (Noah, 2026-08-16). */}
+          <p className="-mt-1 font-mono text-[11px] text-textSecondary">
+            Weighed on the <span className="text-textPrimary tnum">{analysis.gradedAt}</span> sweep · reading live since
+          </p>
+
+          {/* items-STRETCH: both columns run to one bottom line — the tools
+              absorb the left column's slack the way the chain fills the right
+              (Noah, 2026-08-09: the void under the strip read as dead space). */}
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-stretch">
+            <div className="xl:col-span-7 min-w-0 flex flex-col gap-4">
+              <Panel
+                title={
+                  <span className="inline-flex items-center gap-1.5">
+                    <Scale className="w-3.5 h-3.5" /> Why it weighs what it weighs
+                  </span>
+                }
+                subtitle="six reads, one verdict — each bar is one factor's pull"
+                tone={verdictTone[focusC.verdict]}
+              >
+                <div className="flex flex-col gap-4">
+                  <div className="flex flex-col gap-2.5">
+                    {focusC.factors.map(f => (
+                      <FactorRow key={f.key} label={f.label} score={f.score} detail={f.detail} fadeKey={focusC.id} />
+                    ))}
+                  </div>
+                  <div className="border-t border-borderSubtle pt-3 flex flex-col gap-2">
+                    <p key={`edge-${focusC.id}`} className="text-[13px] leading-relaxed animate-soft-in">
+                      <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-bull mr-2">Edge</span>
+                      <span className="text-textPrimary">
+                        <RichRead text={focusC.edge} />
+                      </span>
+                    </p>
+                    <p key={`risk-${focusC.id}`} className="text-[13px] leading-relaxed animate-soft-in">
+                      <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-bear mr-2">Risk</span>
+                      <span className="text-textPrimary">
+                        <RichRead text={focusC.risk} />
+                      </span>
+                    </p>
+                  </div>
+                </div>
+              </Panel>
+
+              <Panel title="The contract" subtitle="what it costs to hold and what has to happen">
+                <ContractFacts setup={analysisSetup} spot={snapshot.spot} className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-4" />
+              </Panel>
+
+              {/* WORK THE CONTRACT — the desk's own reads, NO INPUTS (Noah,
+                  2026-08-09: users see what's available and what we think —
+                  the what-if/size/hold dials are gone). Two judgments remain:
+                  what friction eats, and whether the expected move covers the
+                  breakeven. Rows share one height via Instrument h-full. */}
+              <div className="flex-1 min-h-0 flex flex-col gap-2">
+                <div className="flex items-baseline gap-2.5 flex-wrap">
+                  <span className="font-mono text-[10px] uppercase tracking-widest text-textSecondary">Work the contract</span>
+                  <span className="font-mono text-[10px] text-textMuted tnum">
+                    {focusC.ticker} {focusC.strike} {focusC.right} · {focusC.expiryWeekday} {focusC.expiryLabel}
+                  </span>
+                </div>
+                {/* flex-1 + grid's default align-content:stretch — the card
+                    row grows to eat the slack, so the cards and the stronger-
+                    option strip land on the chain's bottom line. */}
+                <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {cost && (
+                    <Instrument title="Cost to capture" badge={<SignalBadge tone={cost.tone}>{cost.state}</SignalBadge>}>
+                      <div className="grid grid-cols-3 gap-x-3">
+                        <Fig label="Fill at ask" value={`$${cost.expFill.toFixed(2)}`} />
+                        <Fig label="Spread r/t" value={`${focusC.spreadPct.toFixed(1)}%`} tone={focusC.spreadPct >= 4 ? 'text-warn' : 'text-textPrimary'} />
+                        <Fig label="Theta / day" value={`${focusC.thetaPerDayPct.toFixed(1)}%`} tone={focusC.thetaPerDayPct >= 4 ? 'text-warn' : 'text-textPrimary'} />
+                      </div>
+                      <p className="text-[12px] text-textPrimary leading-snug">
+                        <RichRead text={cost.sentence} />
+                      </p>
+                    </Instrument>
+                  )}
+
+                  {covers && (
+                    <Instrument
+                      title="Expected vs breakeven"
+                      badge={
+                        <SignalBadge tone={covers.clears ? 'bull' : 'bear'}>
+                          {covers.clears ? 'Expected move covers it' : 'Needs a tail'}
+                        </SignalBadge>
+                      }
+                    >
+                      <div className="grid grid-cols-2 gap-x-3">
+                        <Fig label="Needs" value={`±${covers.needs.toFixed(1)}%`} tone="text-warn" />
+                        <Fig label="Expected (1σ)" value={`±${covers.expected.toFixed(1)}%`} tone={covers.clears ? 'text-bull' : 'text-bear'} />
+                      </div>
+                      {/* The old scale's covers-bar: the white tick is parity
+                          (expected == needs); a bar past it clears breakeven
+                          inside one expected move. */}
+                      <span className="relative w-full h-[4px] rounded-full bg-white/[0.07] overflow-hidden">
+                        <span
+                          className={`block h-full rounded-full ${METER_GLIDE} ${covers.clears ? 'bg-bull/80' : 'bg-bear/70'}`}
+                          style={{ width: `${covers.pct}%` }}
+                        />
+                        <span className="absolute inset-y-0 left-1/2 w-px bg-white/40" />
+                      </span>
+                      <p className="text-[12px] text-textPrimary leading-snug">
+                        <RichRead text={covers.sentence} />
+                      </p>
+                    </Instrument>
+                  )}
+                </div>
+            {/* Stronger option in the same direction — same sleeve, same clock */}
+            <div className="border border-borderSubtle bg-inset rounded-md px-3.5 py-3 flex items-center gap-3 flex-wrap">
+              <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-textMuted shrink-0">Stronger option?</span>
+              {alt ? (
+                <button
+                  onClick={() => openAnalysis(alt.strike, alt.right, alt.dte)}
+                  className="flex items-center gap-2 rounded-md border border-bull/40 bg-bull/[0.07] px-3 py-2 text-left hover:bg-bull/[0.12] transition-colors"
+                >
+                  <span className="font-mono text-[12px] font-bold text-bull">
+                    {alt.strike} {alt.right}
+                  </span>
+                  <span className="text-[11px] text-textPrimary leading-snug">
+                    Stronger expression in this direction — clears its breakeven with more room.
+                  </span>
+                  <ArrowRight className="w-3.5 h-3.5 text-bull shrink-0" />
+                </button>
+              ) : (
+                <p className="text-[12px] text-textMuted leading-snug">Nothing on the scale outweighs the one you're looking at.</p>
               )}
-
-              {/* No inputs.
-
-                  Two controls stood here — a Risk budget number field and a
-                  Target date select — and between them they were the whole of
-                  "test your thesis" on this desk. The desk's job is to say what
-                  it thinks of a contract. Asking the reader to type their account
-                  size and pick a horizon so the pane can divide by one and count
-                  days to the other is work handed back to them, and the two
-                  figures it bought were the two least load-bearing on the panel.
-
-                  Everything the pane says now is a property of the contract and
-                  the chain, not of the reader. */}
+            </div>
+              </div>
             </div>
 
-            {/* Three readouts, not twelve tiles. The twelve were one grid with
-                no grouping, so "runway to expiry" and "fill probability" — a
-                clock and an execution guess — carried identical weight and sat
-                three cells apart. Split by what each answers: how long, how
-                much, and what it costs to get in and out. */}
-            <Figures
-              label="How long"
-              items={[
-                { k: 'Days to expiry', v: `${railExpiry.dte}d`, note: `${railExpiry.sessions} sessions` },
-                { k: preserveGreek('1σ move'), v: `${effExpMove.toFixed(1)}%` },
-              ]}
-            />
-            <Figures
-              label="What the round trip costs"
-              items={[
-                /* "How much" used to be its own group and this was its only
-                   survivor: the other two rows — contracts in budget, estimated
-                   outlay — were arithmetic on a number the reader typed in. A
-                   heading over one figure is a heading with nothing to organise,
-                   and cost per contract belongs beside the fill and the spread
-                   anyway. */
-                { k: 'Cost / contract', v: `$${costPerContract.toFixed(0)}` },
-                { k: 'Expected fill', v: `$${expFill.toFixed(2)}`, note: `~${halfSpread.toFixed(1)}% exit slippage` },
-                {
-                  k: 'Spread round-trip',
-                  v: `${weighed.spreadPct.toFixed(1)}%`,
-                  tone: weighed.spreadPct > 4 ? 'text-warn' : undefined,
-                },
-                {
-                  k: 'Fill probability',
-                  v: `${fillProb}%`,
-                  tone: fillProb >= 70 ? 'text-select' : fillProb < 45 ? 'text-warn' : undefined,
-                },
-                {
-                  k: 'Theta drag',
-                  v: `−${weighed.thetaPerDayPct.toFixed(1)}%/d`,
-                  tone: weighed.thetaPerDayPct > 5 ? 'text-bear' : undefined,
-                },
-                { k: 'Total friction', v: `${friction.toFixed(1)}%`, tone: costEatsEdge ? 'text-warn' : undefined },
-              ]}
-            />
-
-            <p className="text-caption text-textSecondary leading-relaxed">
-              {costEatsEdge
-                ? `Spread round-trip plus a day of theta (${friction.toFixed(1)}%) is wider than the 1σ move (${weighed.expectedMovePct.toFixed(1)}%), so you would need a fast, above-expected move just to clear the toll.`
-                : `The 1σ move (${weighed.expectedMovePct.toFixed(1)}%) clears the friction (${friction.toFixed(1)}%). The edge is capturable if you work a limit near $${expFill.toFixed(2)} instead of paying the offer.`}
-            </p>
-            <p className="font-mono text-micro text-textMuted leading-relaxed border-t border-borderSubtle pt-2.5">
-              Sizing off the mid × {CONTRACT_MULTIPLIER}-share multiplier. Fills and slippage read from the modelled spread and
-              open interest.
-            </p>
+            <div className="xl:col-span-5 min-w-0 flex flex-col gap-2">
+              <ExpiryRail chips={railChips} value={railDte} onChange={setRailDte} />
+              {/* Same fast fade as the browse chain on expiry changes; flex-1
+                  so the chain stretches when the LEFT column runs taller. */}
+              <div key={`chain-${railDte}`} className="flex-1 min-h-0 flex flex-col animate-soft-in">
+                <ContractChainView
+                  data={chain}
+                  selected={{ ticker: snapshot.ticker, strike: analysis.strike, right: analysis.right }}
+                  onSelect={handleChainSelect}
+                />
+              </div>
+            </div>
           </div>
-        </Panel>
+        </motion.div>
+      ) : (
+        /* Two clocks, two keys (Noah, 2026-08-09 — both changes hard-cut and
+           read as buffering): a TICKER change swaps the whole view on the
+           slow soft-in; an EXPIRY change re-fades only the CHAIN on the fast
+           one — the rail must never blink under the cursor that clicked it. */
+        <div key={`browse-${snapshot.ticker}`} className="flex flex-col gap-2 animate-soft-in-slow">
+          <ExpiryRail chips={railChips} value={railDte} onChange={setRailDte} />
+          <div key={`chain-${railDte}`} className="animate-soft-in">
+            <ContractChainView data={chain} selected={null} onSelect={handleChainSelect} />
+          </div>
+        </div>
       )}
     </div>
   );

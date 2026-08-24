@@ -1,58 +1,45 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Activity, ArrowRightLeft, BookOpen, CornerDownLeft, Crosshair, Keyboard, Settings, Users } from 'lucide-react';
+import { Activity, ArrowRightLeft, CornerDownLeft, Crosshair, Users } from 'lucide-react';
 import { NAV_ITEMS } from './nav';
-import { GEX_SUBPAGES } from '../../pages/gex/subnav';
-import { FLOWDESK_SUBPAGES } from '../../pages/flowdesk/subnav';
+import { GEX_SUBPAGES } from '../../pages/pinpoint/subnav';
+import { TRACE_SUBPAGES } from '../../pages/trace/subnav';
 import { COMMUNITY_SUBPAGES } from '../../pages/community/subnav';
-import { GUIDE_SUBPAGES } from '../../pages/guide/subnav';
 import { useMarketData } from '../../context/MarketDataContext';
 import Simulator from '../../core/simulator';
-import Overlay from '../ui/Overlay';
+
+type TickerModule = typeof import('../../data/tickers');
 
 interface CommandPaletteProps {
   open: boolean;
   onClose: () => void;
-  onOpenSettings: () => void;
-  onOpenShortcuts: () => void;
 }
 
 interface PaletteAction {
   id: string;
-  group: 'Action' | 'Navigate' | 'Ticker';
+  group: 'Navigate' | 'Ticker';
   label: string;
   hint: string;
   run: () => void;
   icon?: React.ReactNode;
 }
 
-const CommandPalette = ({ open, onClose, onOpenSettings, onOpenShortcuts }: CommandPaletteProps) => {
+const CommandPalette = ({ open, onClose }: CommandPaletteProps) => {
   const navigate = useNavigate();
   const { changeTicker, activeTicker } = useMarketData();
   const [query, setQuery] = useState('');
   const [highlight, setHighlight] = useState(0);
+  const [tickMod, setTickMod] = useState<TickerModule | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const listRef = useRef<HTMLDivElement | null>(null);
+
+  // The full ticker universe (S&P 500 + NASDAQ listings) — lazy, its chunk is
+  // ~300KB and ⌘K is the desk's only terminal-ticker control (Noah,
+  // 2026-08-18: four names was the whole reachable market).
+  useEffect(() => {
+    if (open && !tickMod) import('../../data/tickers').then(setTickMod);
+  }, [open, tickMod]);
 
   const actions = useMemo<PaletteAction[]>(() => {
-    const commands: PaletteAction[] = [
-      {
-        id: 'action-settings',
-        group: 'Action',
-        label: 'Open settings',
-        hint: 'preferences & local data',
-        icon: <Settings className="w-3.5 h-3.5" />,
-        run: onOpenSettings,
-      },
-      {
-        id: 'action-shortcuts',
-        group: 'Action',
-        label: 'Keyboard shortcuts',
-        hint: 'press ?',
-        icon: <Keyboard className="w-3.5 h-3.5" />,
-        run: onOpenShortcuts,
-      },
-    ];
     const nav: PaletteAction[] = NAV_ITEMS.map(item => ({
       id: `nav-${item.path}`,
       group: 'Navigate',
@@ -69,7 +56,7 @@ const CommandPalette = ({ open, onClose, onOpenSettings, onOpenShortcuts }: Comm
       icon: <Crosshair className="w-3.5 h-3.5" />,
       run: () => navigate(page.path),
     }));
-    const flowSubs: PaletteAction[] = FLOWDESK_SUBPAGES.map(page => ({
+    const flowSubs: PaletteAction[] = TRACE_SUBPAGES.map(page => ({
       id: `nav-${page.path}`,
       group: 'Navigate',
       label: `Trace → ${page.label}`,
@@ -85,30 +72,42 @@ const CommandPalette = ({ open, onClose, onOpenSettings, onOpenShortcuts }: Comm
       icon: <Users className="w-3.5 h-3.5" />,
       run: () => navigate(page.path),
     }));
-    const guideSubs: PaletteAction[] = GUIDE_SUBPAGES.map(page => ({
-      id: `nav-${page.path}`,
-      group: 'Navigate',
-      label: `Guide → ${page.label}`,
-      hint: page.subtitle,
-      icon: <BookOpen className="w-3.5 h-3.5" />,
-      run: () => navigate(page.path),
-    }));
-    const tickers: PaletteAction[] = Object.keys(Simulator.TICKERS).map(tk => ({
+    return [...nav, ...gexSubs, ...flowSubs, ...communitySubs];
+  }, [navigate]);
+
+  // Ticker actions live outside the label filter: with a query they ARE the
+  // search (symbol/name matched by searchTickers), resting they list the
+  // names the sim already runs.
+  const tickerActions = useMemo<PaletteAction[]>(() => {
+    const q = query.trim();
+    if (q && tickMod) {
+      return tickMod.searchTickers(q, 8).map(t => ({
+        id: `ticker-${t.symbol}`,
+        group: 'Ticker' as const,
+        label: `Set ticker → ${t.symbol}`,
+        hint: t.symbol === activeTicker ? 'active' : t.name === t.symbol ? 'switch simulation feed' : t.name,
+        icon: <ArrowRightLeft className="w-3.5 h-3.5" />,
+        run: () => changeTicker(t.symbol),
+      }));
+    }
+    return Object.keys(Simulator.TICKERS).map(tk => ({
       id: `ticker-${tk}`,
-      group: 'Ticker',
+      group: 'Ticker' as const,
       label: `Set ticker → ${tk}`,
-      hint: tk === activeTicker ? 'active' : 'load symbol',
+      hint: tk === activeTicker ? 'active' : 'switch simulation feed',
       icon: <ArrowRightLeft className="w-3.5 h-3.5" />,
       run: () => changeTicker(tk),
     }));
-    return [...commands, ...nav, ...gexSubs, ...flowSubs, ...communitySubs, ...guideSubs, ...tickers];
-  }, [navigate, changeTicker, activeTicker, onOpenSettings, onOpenShortcuts]);
+  }, [query, tickMod, changeTicker, activeTicker]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return actions;
-    return actions.filter(a => a.label.toLowerCase().includes(q) || a.hint.toLowerCase().includes(q));
-  }, [actions, query]);
+    if (!q) return [...actions, ...tickerActions];
+    return [
+      ...actions.filter(a => a.label.toLowerCase().includes(q) || a.hint.toLowerCase().includes(q)),
+      ...tickerActions,
+    ];
+  }, [actions, tickerActions, query]);
 
   useEffect(() => {
     if (open) {
@@ -122,12 +121,6 @@ const CommandPalette = ({ open, onClose, onOpenSettings, onOpenShortcuts }: Comm
   useEffect(() => {
     setHighlight(0);
   }, [query]);
-
-  // Keep the highlighted row in view as the selection walks past the fold.
-  useEffect(() => {
-    const el = listRef.current?.querySelector<HTMLElement>(`[data-index="${highlight}"]`);
-    el?.scrollIntoView({ block: 'nearest' });
-  }, [highlight]);
 
   if (!open) return null;
 
@@ -147,33 +140,28 @@ const CommandPalette = ({ open, onClose, onOpenSettings, onOpenShortcuts }: Comm
     } else if (e.key === 'Enter') {
       e.preventDefault();
       runAction(filtered[highlight]);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      onClose();
     }
-    /* Escape is Radix's — it also handles the case this never did, where focus
-       has moved into a nested popper that should close first. */
   };
 
   let lastGroup: string | null = null;
 
   return (
-    <Overlay
-      open={open}
-      onClose={onClose}
-      label="Command palette"
-      align="top"
-      className="max-w-lg"
-      onKeyDown={onKeyDown}
-    >
-      <>
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-[18vh] px-4" onKeyDown={onKeyDown}>
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" onClick={onClose} />
+      <div className="relative w-full max-w-lg border border-borderMuted bg-panel rounded-lg shadow-2xl shadow-black overflow-hidden animate-slide-in">
         <input
           ref={inputRef}
           value={query}
           onChange={e => setQuery(e.target.value)}
           placeholder="Type a command or destination…"
-          className="w-full bg-transparent px-4 py-3 text-body text-textPrimary placeholder:text-textMuted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 border-b border-borderSubtle leading-5"
+          className="w-full bg-transparent px-4 py-3 text-sm text-textPrimary placeholder:text-textMuted focus:outline-none border-b border-borderSubtle"
         />
-        <div ref={listRef} className="max-h-72 overflow-y-auto py-1.5">
+        <div className="max-h-72 overflow-y-auto py-1.5">
           {filtered.length === 0 && (
-            <div className="px-4 py-6 text-center font-mono text-label text-textMuted">No matches</div>
+            <div className="px-4 py-6 text-center font-mono text-[11px] text-textMuted">No matches</div>
           )}
           {filtered.map((action, i) => {
             const showGroup = action.group !== lastGroup;
@@ -181,12 +169,11 @@ const CommandPalette = ({ open, onClose, onOpenSettings, onOpenShortcuts }: Comm
             return (
               <div key={action.id}>
                 {showGroup && (
-                  <div className="px-4 pt-2 pb-1 font-mono text-micro uppercase tracking-widest text-textMuted select-none">
+                  <div className="px-4 pt-2 pb-1 font-mono text-[10px] uppercase tracking-widest text-textMuted select-none">
                     {action.group}
                   </div>
                 )}
                 <button
-                  data-index={i}
                   onClick={() => runAction(action)}
                   onMouseEnter={() => setHighlight(i)}
                   className={`w-full flex items-center gap-3 px-4 py-2 text-left transition-colors ${
@@ -194,22 +181,22 @@ const CommandPalette = ({ open, onClose, onOpenSettings, onOpenShortcuts }: Comm
                   }`}
                 >
                   <span className={i === highlight ? 'text-select' : 'text-textMuted'}>{action.icon}</span>
-                  <span className="text-data text-textPrimary">{action.label}</span>
-                  <span className="ml-auto text-micro font-mono text-textMuted truncate max-w-[45%]">{action.hint}</span>
+                  <span className="text-[13px] text-textPrimary">{action.label}</span>
+                  <span className="ml-auto text-[10px] font-mono text-textMuted truncate max-w-[45%]">{action.hint}</span>
                 </button>
               </div>
             );
           })}
         </div>
-        <div className="flex items-center gap-4 px-4 py-2 border-t border-borderSubtle font-mono text-micro text-textMuted select-none">
+        <div className="flex items-center gap-4 px-4 py-2 border-t border-borderSubtle font-mono text-[10px] text-textMuted select-none">
           <span>↑↓ navigate</span>
           <span className="flex items-center gap-1">
             <CornerDownLeft className="w-3 h-3" /> select
           </span>
           <span className="ml-auto">esc close</span>
         </div>
-      </>
-    </Overlay>
+      </div>
+    </div>
   );
 };
 

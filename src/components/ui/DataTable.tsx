@@ -1,32 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import EmptyState from './EmptyState';
-import Term from './Term';
-import { preserveGreek } from './greek';
-import type { TermKey } from '../../data/terms';
 
 export interface Column<T> {
   key: string;
-  header: string;
-  /**
-   * Optional band this column sits under, rendered as a spanning header row
-   * above the column names. A dense table with a dozen columns reads as a wall
-   * of abbreviations without it — the band is what tells you that `Clips` and
-   * `Report lag` are both describing the execution and not the instrument.
-   * Adjacent columns sharing a name form one band; leave it off entirely and
-   * the extra row is not rendered at all.
-   */
-  group?: string;
-  /** Dictionary key — wraps the header in a <Term> jargon explainer */
-  help?: TermKey;
-  /**
-   * Keep the header out of the layout but not out of the table. A column of
-   * watchlist stars needs no visible caption above 34px of icon, but a header
-   * cell with nothing in it is a column nobody can name — which is what a
-   * screen reader gets when it reads the cell and finds the row's star has no
-   * column to belong to.
-   */
-  headerHidden?: boolean;
+  /** ReactNode so a header can wrap itself in a Term explainer */
+  header: React.ReactNode;
   align?: 'left' | 'right';
   width?: string;
   /** Provide to make the column sortable */
@@ -42,6 +20,7 @@ interface DataTableProps<T> {
   selectedKey?: string | null;
   initialSort?: { key: string; dir: 'asc' | 'desc' };
   /** Scroll container height, e.g. "320px" */
+  maxHeight?: string;
   emptyText?: string;
 }
 
@@ -53,6 +32,7 @@ const DataTable = <T,>({
   onRowClick,
   selectedKey,
   initialSort,
+  maxHeight,
   emptyText = 'No data',
 }: DataTableProps<T>) => {
   const [sort, setSort] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(initialSort ?? null);
@@ -77,83 +57,25 @@ const DataTable = <T,>({
     );
   };
 
-  // Runs of adjacent columns that share a group name. A column with no group
-  // still occupies a cell in the band row, or the colSpans stop lining up.
-  const bands = useMemo(() => {
-    if (!columns.some(c => c.group)) return [];
-    const out: { name: string; span: number }[] = [];
-    for (const col of columns) {
-      const name = col.group ?? '';
-      const last = out[out.length - 1];
-      if (last && last.name === name) last.span += 1;
-      else out.push({ name, span: 1 });
-    }
-    return out;
-  }, [columns]);
-
-  /*
-    Horizontal only. A `maxHeight` prop used to make this a vertical scroller
-    too, and every table in the app passed one — so reading a long board meant
-    scrolling a box inside the page, hitting the bottom of the document with
-    rows still hidden, then hunting for the inner scrollbar. The page scrolls;
-    the table is as tall as its rows. Wide tables still scroll sideways in place
-    rather than pushing the document over.
-  */
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-auto" style={maxHeight ? { maxHeight } : undefined}>
       <table className="w-full border-collapse">
         <thead className="sticky top-0 z-10">
-          {bands.length > 0 && (
-            <tr className="bg-panelRaised border-b border-borderSubtle/60">
-              {bands.map((b, i) => (
-                <th
-                  key={`${b.name}-${i}`}
-                  colSpan={b.span}
-                  scope="colgroup"
-                  className={`px-3 pt-2 pb-1 font-mono text-micro font-semibold uppercase tracking-widest text-textMuted whitespace-nowrap text-left ${
-                    i > 0 ? 'border-l border-borderSubtle/60' : ''
-                  }`}
-                >
-                  {b.name}
-                </th>
-              ))}
-            </tr>
-          )}
-          <tr className="bg-panelRaised border-b border-borderSubtle">
+          <tr className="bg-[#0c0c0c] border-b border-borderSubtle">
             {columns.map(col => (
               <th
                 key={col.key}
                 style={col.width ? { width: col.width } : undefined}
-                aria-sort={
-                  col.sortValue
-                    ? sort?.key === col.key
-                      ? sort.dir === 'asc'
-                        ? 'ascending'
-                        : 'descending'
-                      : 'none'
-                    : undefined
-                }
-                tabIndex={col.sortValue ? 0 : undefined}
-                onKeyDown={
-                  col.sortValue
-                    ? e => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          toggleSort(col);
-                        }
-                      }
-                    : undefined
-                }
-                className={`px-3 py-2 font-mono text-label font-semibold uppercase tracking-wider text-textSecondary whitespace-nowrap ${
+                className={`px-3 py-2 font-mono text-[10px] font-semibold uppercase tracking-wider text-textMuted whitespace-nowrap ${
                   col.align === 'right' ? 'text-right' : 'text-left'
-                } ${col.sortValue ? 'cursor-pointer select-none hover:text-textPrimary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60' : ''}`}
+                } ${col.sortValue ? 'cursor-pointer select-none hover:text-textSecondary' : ''}`}
                 onClick={() => toggleSort(col)}
               >
-                <span className={`inline-flex items-center gap-1 ${col.headerHidden ? 'sr-only' : ''}`}>
+                <span className="inline-flex items-center gap-1">
                   {col.align === 'right' && sort?.key === col.key && (
                     sort.dir === 'desc' ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />
                   )}
-                  {col.help ? <Term k={col.help}>{preserveGreek(col.header)}</Term> : preserveGreek(col.header)}
+                  {col.header}
                   {col.align !== 'right' && sort?.key === col.key && (
                     sort.dir === 'desc' ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />
                   )}
@@ -165,49 +87,32 @@ const DataTable = <T,>({
         <tbody>
           {sortedRows.length === 0 ? (
             <tr>
-              <td colSpan={columns.length}>
-                <EmptyState size="sm" title={emptyText} />
+              <td colSpan={columns.length} className="px-3 py-8 text-center font-mono text-[11px] text-textMuted">
+                {emptyText}
               </td>
             </tr>
           ) : (
             sortedRows.map(row => {
               const key = rowKey(row);
               const selected = selectedKey === key;
-              // aria-current, not aria-selected: a `row` only supports selection
-              // inside a grid, and this is a table. ui/interactiveRow.ts states
-              // the rule once for every clickable row in the app.
               return (
                 <tr
                   key={key}
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
-                  tabIndex={onRowClick ? 0 : undefined}
-                  aria-current={onRowClick && selected ? true : undefined}
-                  onKeyDown={
-                    onRowClick
-                      ? e => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            onRowClick(row);
-                          }
-                        }
-                      : undefined
-                  }
                   className={`border-b border-borderSubtle/60 last:border-0 transition-colors ${
-                    onRowClick
-                      ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60'
-                      : ''
+                    onRowClick ? 'cursor-pointer' : ''
                   } ${
                     selected
-                      ? 'inst-selected'
-                      : 'hover:bg-rowHover'
+                      ? 'bg-select/[0.06] shadow-[inset_2px_0_0_0_rgba(210,255,0,0.7)]'
+                      : 'hover:bg-white/[0.02]'
                   }`}
                 >
                   {columns.map(col => (
                     <td
                       key={col.key}
-                      className={`px-3 py-2 font-mono text-caption tnum whitespace-nowrap ${
+                      className={`px-3 py-2 font-mono text-xs tnum whitespace-nowrap ${
                         col.align === 'right' ? 'text-right' : 'text-left'
-                      } leading-4`}
+                      }`}
                     >
                       {col.render(row)}
                     </td>

@@ -1,67 +1,56 @@
-import { useState, type ReactNode } from 'react';
-import Stat from '../ui/Stat';
-import HoverReadout from '../ui/HoverReadout';
+import AnimatedNumber from '../ui/AnimatedNumber';
 import Term from '../ui/Term';
+import { TERMS, type TermKey } from '../../data/terms';
 import type { SetupGreeks } from '../../types/compass';
 
 interface GreeksRowProps {
   greeks: SetupGreeks;
   /** show vega (monitor) vs iv (compact card) in the 4th slot */
   fourth?: 'vega' | 'iv';
+  /** Robinhood change stamp on value swaps (browse card wants it; monitor doesn't) */
+  flash?: boolean;
 }
 
-/** Prefix a directional arrow onto a value — ▲ bull / ▼ bear, colour independent of the value's tone. */
-const withArrow = (value: string, arrow?: 'up' | 'down'): ReactNode =>
-  arrow ? (
-    <span className="flex items-center gap-1">
-      <span className={arrow === 'up' ? 'text-bull' : 'text-bear'}>{arrow === 'up' ? '▲' : '▼'}</span>
-      {value}
-    </span>
-  ) : (
-    value
-  );
+interface RowProps {
+  label: string;
+  value: number;
+  format: (v: number) => string;
+  arrow?: 'up' | 'down' | null;
+  tone?: string;
+  flash?: boolean;
+}
 
-const GreeksRow = ({ greeks, fourth = 'vega' }: GreeksRowProps) => {
-  const [hover, setHover] = useState<{ x: number; y: number } | null>(null);
+/* A LEDGER, not a tile strip (Noah, 2026-08-09 — the boxed 4-cell greek grid
+   is "the first AI-generated thing I always see"): full-width rows, label
+   left in muted caps, value right in bright tabular figures, hairlines the
+   only chrome. AnimatedNumber, not toFixed strings — this ledger lives on
+   persistent cards (the meters-glide doctrine: values ROLL, never snap). */
+const Row = ({ label, value, format, arrow = null, tone = 'text-textPrimary', flash = false }: RowProps) => (
+  <div className="flex items-center justify-between gap-3 py-1.5 first:pt-0 last:pb-0">
+    <span className="font-mono text-[9px] uppercase tracking-widest text-textMuted">
+      {label in TERMS ? <Term k={label as TermKey} /> : label}
+    </span>
+    <span className={`font-mono text-[12px] font-semibold tnum inline-flex items-center gap-1 ${tone}`}>
+      {arrow === 'up' && <span className="text-bull text-[9px]">▲</span>}
+      {arrow === 'down' && <span className="text-bear text-[9px]">▼</span>}
+      <AnimatedNumber value={value} format={format} flash={flash} />
+    </span>
+  </div>
+);
+
+const GreeksRow = ({ greeks, fourth = 'vega', flash = false }: GreeksRowProps) => {
   return (
-    <div
-      onMouseEnter={e => setHover({ x: e.clientX, y: e.clientY })}
-      onMouseMove={e => setHover({ x: e.clientX, y: e.clientY })}
-      onMouseLeave={() => setHover(null)}
-      className="grid grid-cols-4 gap-2 cursor-crosshair rounded-md hover:bg-rowHover"
-    >
-      {/* Every label carries its own explainer — this row is the first place a
-          new reader meets the greeks, and the dictionary already defined all
-          four. `Stat.label` takes a node, so <Term> drops straight in. */}
-      <Stat label={<Term k="Delta">Delta</Term>} value={withArrow(greeks.delta.toFixed(2), greeks.delta >= 0 ? 'up' : 'down')} />
-      <Stat label={<Term k="Gamma">Gamma</Term>} value={greeks.gamma.toFixed(4)} />
-      <Stat label={<Term k="Theta">Theta</Term>} value={greeks.theta.toFixed(2)} tone="warn" />
+    <div className="divide-y divide-borderSubtle">
+      <Row label="Delta" value={greeks.delta} format={v => v.toFixed(2)} arrow={greeks.delta >= 0 ? 'up' : 'down'} flash={flash} />
+      <Row label="Gamma" value={greeks.gamma} format={v => v.toFixed(4)} flash={flash} />
+      <Row label="Theta" value={greeks.theta} format={v => v.toFixed(2)} tone="text-warn" flash={flash} />
       {fourth === 'vega' ? (
-        <Stat label={<Term k="Vega">Vega</Term>} value={withArrow(greeks.vega.toFixed(2), 'up')} tone="select" />
+        // No arrow, no lime: vega is a magnitude, not a direction — the old
+        // hardcoded bull-green ▲ beside a neon-lime number was two greens
+        // saying nothing (lime is the interface's voice, never data).
+        <Row label="Vega" value={greeks.vega} format={v => v.toFixed(2)} flash={flash} />
       ) : (
-        <Stat label={<Term k="IV">IV</Term>} value={`${greeks.iv.toFixed(1)}%`} />
-      )}
-      {/* Full set on hover — the visible row only fits four, so vega/iv never both show */}
-      {hover && (
-        <HoverReadout x={hover.x} y={hover.y}>
-          <div className="font-mono text-micro uppercase tracking-wider text-textMuted">Greeks · full set</div>
-          <div className="mt-1 flex flex-col gap-0.5">
-            {(
-              [
-                ['Delta', greeks.delta.toFixed(2), greeks.delta >= 0 ? 'text-bull' : 'text-bear'],
-                ['Gamma', greeks.gamma.toFixed(4), 'text-textPrimary'],
-                ['Theta', greeks.theta.toFixed(2), 'text-warn'],
-                ['Vega', greeks.vega.toFixed(2), 'text-textPrimary'],
-                ['IV', `${greeks.iv.toFixed(1)}%`, 'text-textPrimary'],
-              ] as const
-            ).map(([label, value, cls]) => (
-              <div key={label} className="flex items-baseline justify-between gap-4 font-mono">
-                <span className="text-micro uppercase tracking-wider text-textMuted">{label}</span>
-                <span className={`text-caption font-bold tnum ${cls}`}>{value}</span>
-              </div>
-            ))}
-          </div>
-        </HoverReadout>
+        <Row label="IV" value={greeks.iv} format={v => `${v.toFixed(1)}%`} flash={flash} />
       )}
     </div>
   );

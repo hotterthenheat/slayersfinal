@@ -8,15 +8,7 @@
 
 export type GexMetric = 'GEX' | 'VEX' | 'GEX+VEX';
 
-/**
- * Which structural layers the strike chart paints.
- *
- * `NONE` exists because the other three cannot say it. Two independent
- * switches encoded as a three-value enum has no "neither" — Terrain gives the
- * reader a switch per layer, and turning both off has to mean both off rather
- * than silently falling back to one of them.
- */
-export type OverlayMode = 'NODES' | 'LEVELS' | 'BOTH' | 'NONE';
+export type OverlayMode = 'NODES' | 'LEVELS' | 'BOTH';
 
 export type StrikeRange = 10 | 20;
 
@@ -28,6 +20,16 @@ export interface KeyLevels {
   flip: number;
   /** Strike holding the largest absolute exposure */
   king: number;
+}
+
+/** The heat field read as ONE regime — the engine names the configuration
+    (our vocabulary, not the street's): where spot sits against the flip and
+    how close the absorbing walls are decides what the map is saying. */
+export type HeatPatternKey = 'SPRINGBOARD' | 'TRAPDOOR' | 'PINNED' | 'WHIPSAW';
+export interface HeatPatternRead {
+  key: HeatPatternKey;
+  direction: 'BULLISH' | 'BEARISH' | 'RANGE' | 'VOLATILE';
+  read: string;
 }
 
 /** One horizontal exposure node on the price axis. */
@@ -57,7 +59,7 @@ export interface GexMatrixData {
 
 export interface DarkPoolPrint {
   price: number;
-  /** Notional in $ (shares x price) */
+  /** Notional in $B */
   notional: number;
   date: string;
   /** Shares crossed */
@@ -91,7 +93,7 @@ export interface GexView {
 
 // ---- Exposure Profile (GEX / DEX / VEX by strike + dealer positioning) ------
 
-export type ExposureExpiry = '0DTE' | '1D' | '2D' | '5D' | '7D' | 'ALL';
+export type ExposureExpiry = '0DTE' | '1D' | '2D' | '5D' | '7D' | 'OPEX' | 'ALL';
 
 /** Put / call legs and their net, signed dollars. */
 export interface GreekSplit {
@@ -107,6 +109,10 @@ export interface StrikeExposure {
   gex: GreekSplit;
   dex: GreekSplit;
   vex: GreekSplit;
+  /** Contracts outstanding at the strike, both sides */
+  oi: number;
+  /** Session volume at the strike — the same figure Ranked Targets ranks by */
+  volume: number;
 }
 
 export type ZoneKind = 'call-wall' | 'put-wall' | 'friction';
@@ -119,28 +125,7 @@ export interface ZoneBand {
   label: string;
 }
 
-/*
-  The dealer-gamma REGIME. Not a direction, which is what it used to be called.
-
-  It is derived from net gamma (`data/exposure.ts`), and it was typed
-  `'BULLISH' | 'BEARISH' | 'NEUTRAL'` while the note generated beside it said
-  "moves amplified" and "dips absorbed". Those notes are right and the labels
-  were wrong: negative net gamma does not mean the market goes down, it means
-  hedging amplifies whichever way it goes — a short-gamma tape can rip upward
-  violently, and calling that BEARISH is a false claim about the market rather
-  than a stylistic slip.
-
-  The names now match what the number is, and they match the palette that has
-  always drawn it (LONG_GAMMA blue / SHORT_GAMMA gold in components/gex/palette).
-*/
-export type DealerBias = 'LONG_GAMMA' | 'SHORT_GAMMA' | 'BALANCED';
-
-/** How the regime is written on screen. `γ` is the desk's own shorthand. */
-export const DEALER_BIAS_LABEL: Record<DealerBias, string> = {
-  LONG_GAMMA: 'LONG γ',
-  SHORT_GAMMA: 'SHORT γ',
-  BALANCED: 'BALANCED',
-};
+export type DealerBias = 'BULLISH' | 'BEARISH' | 'NEUTRAL';
 
 export interface ExposureLevels {
   spot: number;
@@ -148,9 +133,9 @@ export interface ExposureLevels {
   putWall: number;
   pin: number;
   flip: number;
-  /** Heaviest |net GEX| strike in the whole book. Carried here so a panel marks
-      the book's king rather than crowning the biggest bar it happens to be
-      drawing, which made two panels on one screen name different kings. */
+  /** Largest |net gamma| strike on the FULL book — may sit outside the
+      rendered window, in which case the map crowns nothing rather than
+      promoting a runner-up. */
   king: number;
 }
 
@@ -206,73 +191,28 @@ export interface KeyLevelRow {
   pressure: number;
 }
 
-/**
- * Options delta-equivalent flow — the index stand-in for share volume (P4.4). A
- * cash index has no shares to measure, but its options do, and Σ(delta × OI ×
- * 100) expresses that book as an underlying-equivalent delta exposure.
- */
-export interface DeltaEquivFlow {
-  /** $ delta-equivalent from the call book — long-delta side (positive). */
-  callDollars: number;
-  /** $ delta-equivalent from the put book — short-delta side (negative). */
-  putDollars: number;
-  /** Net options-implied delta, dollars (callDollars + putDollars). */
-  netDollars: number;
-  /** Net underlying-equivalent shares = netDollars / spot. */
-  netShares: number;
-  /** Per-strike net $ delta-equivalent, price-descending like the ladder. */
-  byStrike: { strike: number; value: number }[];
+export interface DeltaPoint {
+  /** Minutes into the session */
+  minute: number;
+  value: number;
 }
 
-/** Traded volume in one price bucket of the session. */
-export interface VolumeAtPrice {
+export interface DeltaByPrice {
   price: number;
-  volume: number;
+  /** Signed delta traded at this price bucket, dollars */
+  value: number;
 }
 
-/*
-  WHAT THIS USED TO BE, AND WHY IT IS NOT THAT ANY MORE.
-
-  This was `OrderFlowData`, and it carried `cumulativeDelta`, `deltaByPrice`,
-  `buyVolume`, `sellVolume` and `netDelta`. None of those could be computed from
-  what this product receives.
-
-  Cumulative delta is the running imbalance between trades that LIFTED THE OFFER
-  and trades that HIT THE BID. Deciding which a trade was needs the trade and
-  the quote that stood at that instant — tick data. Our entitlements carry
-  Nasdaq Basic and 15-minute-delayed CTA/UTP, and the simulator behind them
-  emits OHLCV bars. So the number was derived as
-
-      (close - open + noise) * volume * 1000
-
-  the bar BODY as a stand-in for aggressor imbalance, which the code said out
-  loud: "a flow multiplier standing in for the unobserved aggressor split". A
-  panel labelled "Cumulative Delta" was showing a different quantity.
-
-  `buyVolume` and `sellVolume` were worse than a proxy. They were
-  `(notional ± netDelta) / 2`, where `notional` is dollars (`volume × spot`) and
-  `netDelta` is `body × volume × 1000` — two different units, added.
-
-  What survives is what the bars genuinely contain: where the volume traded, the
-  price it concentrated at, and the volume-weighted average. Those are real
-  measurements of a real series, and they are the questions this panel was
-  mostly being read for anyway.
-*/
-export interface SessionProfileData {
-  /** False when the symbol has no share volume (a cash index): the volume
-      fields below are placeholders. Indices carry `deltaEquiv` instead, the
-      options delta-equivalent stand-in; equities/ETFs leave it null. */
-  available: boolean;
-  /** Traded volume by price bucket, high price first. */
-  volumeByPrice: VolumeAtPrice[];
-  /** Total shares traded across the session window. */
-  sessionVolume: number;
+export interface OrderFlowData {
+  cumulativeDelta: DeltaPoint[];
+  deltaByPrice: DeltaByPrice[];
+  buyVolume: number;
+  sellVolume: number;
+  /** Net delta over the session, dollars */
+  netDelta: number;
   vwap: number;
   /** Point of control — price bucket with the most traded volume */
   poc: number;
-  /** Cash-index delta-equivalent flow (P4.4). Present when `available` is false
-      for an index; null for equities/ETFs, which report real share volume. */
-  deltaEquiv?: DeltaEquivFlow | null;
 }
 
 export interface MarketNote {
@@ -283,12 +223,12 @@ export interface MarketNote {
   manual?: boolean;
 }
 
-export interface CommandView {
+export interface PulseView {
   pressure: PressureRow[];
   /** Max |pressure| across rows for bar scaling */
   pressureMaxAbs: number;
   keyLevels: KeyLevelRow[];
-  sessionProfile: SessionProfileData;
+  orderFlow: OrderFlowData;
   bias: DealerBias;
   biasNote: string;
 }
@@ -423,11 +363,32 @@ export type HedgingClass = 'DOWNSIDE CUSHION' | 'UPSIDE RESISTANCE' | 'MAGNET' |
 
 export type TargetTag = 'WALL' | 'PIN' | 'KING' | 'SPOT TARGET';
 
+/** What earns a strike its priority — the five reasons, in bar order (Mo,
+    2026-08-19: "I want to know exactly why #1 beat #2 — NBR + OI + volume +
+    net GEX + distance from spot"). */
+export type RankFactor = 'gex' | 'oi' | 'volume' | 'nbr' | 'proximity';
+
+export interface FactorShare {
+  key: RankFactor;
+  /** 0–1 against the book's best on this factor */
+  norm: number;
+  /** The slice of the priority bar this factor earned. Engine-internal scale —
+      rendered as LENGTH only, never as a digit. */
+  points: number;
+}
+
+/** The lens the ladder is ranked through — the composite, or one reason alone. */
+export type RankLens = 'priority' | RankFactor;
+
 export interface RankedTarget {
   rank: number;
   strike: number;
   /** 0–100 composite priority score */
   score: number;
+  /** The priority, split by what earned it — sums to `score` */
+  factors: FactorShare[];
+  /** The reason in words: which factors led */
+  reason: string;
   /** Signed basis points from spot */
   bps: number;
   volume: number;
@@ -453,6 +414,28 @@ export interface RankedTargetsView {
 
 // ---- Vanna & Charm view -------------------------------------------------------------
 
+/** One measured level in the migration read — price + signed distance from spot */
+export interface ReadLevel {
+  price: number;
+  distPct: number;
+}
+
+/** The migration read, as MEASUREMENTS (Mo, 2026-08-19: "walls hold — expect
+    the morning structure to govern the close" reads as a prediction). Facts
+    plus ONE short computation-statement line. */
+export interface MigrationRead {
+  flip: ReadLevel;
+  callWall: ReadLevel;
+  putWall: ReadLevel;
+  /** The strike where charm (decay repositioning) concentrates */
+  charm: ReadLevel;
+  /** Largest per-strike net-gex change vs the previous scan, if history allows */
+  delta: { strike: number; changeUsd: number; distPct: number } | null;
+  /** One short sentence — states what THIS SCENARIO computes, never what the
+      market will do */
+  line: string;
+}
+
 export interface VannaCharmView {
   ticker: string;
   spot: number;
@@ -466,5 +449,5 @@ export interface VannaCharmView {
   flipProjected: number;
   shifts: LevelShift[];
   drift: WallDriftPoint[];
-  insights: string[];
+  read: MigrationRead;
 }

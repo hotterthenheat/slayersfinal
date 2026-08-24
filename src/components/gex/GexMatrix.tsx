@@ -1,112 +1,49 @@
-import { useEffect, useRef, useState } from 'react';
 import { fmtUsd } from '../../data/gex';
-import HoverReadout from '../ui/HoverReadout';
-import { heatCellStyle, heatScaleGradient, heatScaleLabels } from './heatmap';
+import { heatCellStyle, heatPoles, heatScaleGradient, heatScaleLabels } from './heatmap';
 import type { GexMatrixData } from '../../types/gex';
 
 interface GexMatrixProps {
   data: GexMatrixData;
   spot: number;
-  /** Column index to spotlight (expiry picker) — dims the rest, scrolls it in. */
-  highlightCol?: number | null;
-}
-
-interface HoverCell {
-  r: number;
-  c: number;
-  x: number;
-  y: number;
+  /** Stretch to the container: rows share the extra height natively (the
+      premium-ladder trick). The fullscreen takeover uses this — without it
+      the grid hugged ~600px and left the viewport empty underneath (Noah,
+      2026-08-18). Off by default so small tiles keep hugging their content. */
+  fill?: boolean;
+  /** Re-denominate the strike column (the instrument lens) — default prints
+      the native strike. */
+  strikeFormat?: (strike: number) => string;
 }
 
 /**
- * Fraction of the board's largest exposure a cell must carry before it prints
- * its figure.
- *
- * Every cell used to print one, which on a full board is ~120 dollar amounts to
- * one decimal place, none of which anyone reads — a grid of numbers is not
- * information, it is the shape of information with the reading left as an
- * exercise. The cells that matter are the walls, and they are exactly the cells
- * this lets through. The rest keep their colour, which is what a heat scale is
- * for, and their exact figure is one hover away.
+ * Strike × expiry exposure heatmap. Cell palette comes from heatmap.ts
+ * (mono or diverging mode); values are always printed and the digit color
+ * flips by cell luminance, so color is never the only channel.
  */
-const PRINT_AT = 0.32;
-
-/**
- * Strike × expiry exposure heatmap. Cell palette comes from heatmap.ts; the
- * digit color flips by cell luminance, so color is never the only channel for a
- * printed value. Hovering any cell — printed or not — floats a read-out with the
- * strike, the expiry, the net GEX and what the sign means.
- */
-const GexMatrix = ({ data, highlightCol = null }: GexMatrixProps) => {
+const GexMatrix = ({ data, fill = false, strikeFormat }: GexMatrixProps) => {
   const { expiries, strikes, cells, maxAbs, spotRowIndex, callWallIndex, putWallIndex } = data;
-  const [hover, setHover] = useState<HoverCell | null>(null);
-
-  // Bring the spotlit expiry into view (matters on a phone, where the grid
-  // scrolls horizontally and the picked column may be off-screen).
-  const scrollRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (highlightCol == null) return;
-    scrollRef.current?.querySelector(`th[data-col="${highlightCol}"]`)?.scrollIntoView({
-      inline: 'center',
-      block: 'nearest',
-    });
-  }, [highlightCol]);
-
-  /*
-    OPEN ON THE MONEY, not on the top of the window.
-
-    The grid is 31 strikes tall in a tile that shows about ten, and it opened at
-    row 0 — the far out-of-the-money wing. Those strikes carry almost no book, so
-    under `PRINT_AT` none of them prints a figure and their heat is near-black:
-    the panel rendered as an empty grid on every load and read as broken. The
-    rows worth looking at were always there, ten scroll-clicks down.
-
-    `block: 'center'` rather than `'nearest'` — 'nearest' does nothing when the
-    row is already technically in the scroll box's overflow, which is exactly
-    the case here.
-  */
-  useEffect(() => {
-    const box = scrollRef.current;
-    const row = box?.querySelector(`tr[data-row="${spotRowIndex}"]`);
-    if (!box || !row) return;
-    const r = row.getBoundingClientRect();
-    const b = box.getBoundingClientRect();
-    box.scrollTop += r.top - b.top - b.height / 2 + r.height / 2;
-  }, [spotRowIndex, strikes.length]);
-
-  const marker = (r: number): string | null => {
-    if (r === spotRowIndex) return 'Spot';
-    if (r === callWallIndex) return 'Call wall';
-    if (r === putWallIndex) return 'Put wall';
-    return null;
-  };
-
-  const hovered = hover ? cells[hover.r]?.[hover.c] : null;
 
   return (
-    <div className="relative flex gap-2 h-full min-h-0">
-      <div ref={scrollRef} tabIndex={0} role="group" aria-label="Gamma heatmap — scrollable" className="flex-grow overflow-auto min-w-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60">
-        {/* table-fixed: geometry is tick-independent, so the pulse only swaps glyphs
-            (fmtUsd char-count changes each second) instead of reflowing columns */}
-        {/* min-width keeps the dense grid legible on a phone: the overflow-auto
-            wrapper scrolls it horizontally instead of fusing the mono values */}
-        <table className="w-full min-w-[460px] table-fixed border-collapse">
+    // Default max-h-full, not h-full: when the grid is shorter than its
+    // container the block hugs the table, so the scale bar stops running past
+    // the last row into empty space. Taller than the container and it still
+    // scrolls. `fill` flips both: the table stretches to the box instead.
+    <div className={`flex gap-2 min-h-0 ${fill ? 'h-full' : 'max-h-full'}`}>
+      <div className="flex-grow overflow-auto min-w-0">
+        <table className={`w-full border-collapse ${fill ? 'h-full' : ''}`}>
           <thead className="sticky top-0 z-10">
-            <tr className="bg-panelRaised">
-              {/* Fixed (not 30%) so the strike column stays tight on a desktop
-                  width instead of ballooning into a ~400px black gutter; the
-                  heat-filled expiry columns absorb the remaining width. */}
-              <th className="px-2 py-1.5 text-left font-mono text-micro font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle" style={{ width: 112 }}>
+            <tr className="bg-[#0c0c0c]">
+              {/* w-px + whitespace-nowrap = shrink to content. Without it the
+                  auto table layout hands this column a share of the leftover
+                  width, which at fullscreen left a ~320px gap before the data. */}
+              <th className="w-px px-2 py-1.5 text-left font-mono text-[9px] font-semibold uppercase tracking-widest text-textMuted border-b border-borderSubtle whitespace-nowrap">
                 Strike
               </th>
               {expiries.map((exp, i) => (
                 <th
                   key={exp}
-                  data-col={i}
-                  className={`px-2 py-1.5 text-right font-mono text-micro font-semibold uppercase tracking-wide border-b transition-colors ${
-                    i === highlightCol
-                      ? 'text-select border-select/50'
-                      : `border-borderSubtle ${i === 0 ? 'text-textSecondary' : 'text-textMuted'}`
+                  className={`px-2 py-1.5 text-right font-mono text-[9px] font-semibold uppercase tracking-widest border-b border-borderSubtle ${
+                    i === 0 ? 'text-warn' : 'text-textMuted'
                   }`}
                 >
                   {exp}
@@ -119,37 +56,34 @@ const GexMatrix = ({ data, highlightCol = null }: GexMatrixProps) => {
               const isSpot = r === spotRowIndex;
               const isCallWall = r === callWallIndex;
               const isPutWall = r === putWallIndex;
-              // round-number strikes are the OI magnets — gold-ringed key rows
-              const step = strikes.length > 1 ? Math.abs(strikes[0] - strikes[1]) : 1;
-              const isKeyRow = Math.abs(strike % (step * 5)) < step * 0.01;
               return (
                 <tr
                   key={strike}
-                  data-row={r}
-                  className={`border-b last:border-0 ${
-                    isKeyRow ? 'border-shortGamma/25 border-t border-t-shortGamma/25' : 'border-borderSubtle/40'
-                  } ${isSpot ? 'rail-neutral' : ''}`}
+                  className={`border-b border-borderSubtle/40 last:border-0 ${
+                    isSpot ? 'shadow-[inset_2px_0_0_0_rgba(237,237,237,0.6)]' : ''
+                  }`}
                 >
-                  <td className="px-2 py-1 font-mono text-label whitespace-nowrap">
-                    <span
-                      className={`${isSpot ? 'text-textPrimary font-bold' : 'text-textPrimary font-semibold'} ${
-                        isKeyRow && !isSpot ? 'text-shortGamma' : ''
-                      }`}
-                    >
-                      {strike % 1 === 0 ? strike.toFixed(0) : strike.toFixed(2)}
+                  <td className="w-px px-2 py-1 font-mono text-[11px] whitespace-nowrap">
+                    <span className={isSpot ? 'text-textPrimary font-bold' : 'text-textPrimary font-semibold'}>
+                      {strikeFormat ? strikeFormat(strike) : strike % 1 === 0 ? strike.toFixed(0) : strike.toFixed(2)}
                     </span>
                     {isSpot && (
-                      <span title="Spot" className="ml-1.5 font-mono text-micro font-bold uppercase tracking-wider text-textMuted">
+                      <span className="ml-1.5 font-mono text-[8px] font-bold uppercase tracking-wider text-textMuted">
                         spot
                       </span>
                     )}
+                    {/* Wall chips wear the FIELD's poles, not bull/bear — a
+                        green chip beside a steel row read as two unrelated
+                        colors (steel = absorb side = call-dominant, gold =
+                        amplify side = put-dominant). Poles come from
+                        heatPoles so a mode switch re-inks them. */}
                     {isCallWall && !isSpot && (
-                      <span title="Call wall" className="ml-1.5 font-mono text-micro font-bold uppercase tracking-wider text-bull">
+                      <span className="ml-1.5 font-mono text-[8px] font-bold uppercase tracking-wider" style={{ color: heatPoles.neg }}>
                         cw
                       </span>
                     )}
                     {isPutWall && !isSpot && (
-                      <span title="Put wall" className="ml-1.5 font-mono text-micro font-bold uppercase tracking-wider text-bear">
+                      <span className="ml-1.5 font-mono text-[8px] font-bold uppercase tracking-wider" style={{ color: heatPoles.pos }}>
                         pw
                       </span>
                     )}
@@ -158,27 +92,24 @@ const GexMatrix = ({ data, highlightCol = null }: GexMatrixProps) => {
                     <td
                       key={c}
                       style={heatCellStyle(cell.value, maxAbs)}
-                      onMouseEnter={e => setHover({ r, c, x: e.clientX, y: e.clientY })}
-                      onMouseMove={e => setHover({ r, c, x: e.clientX, y: e.clientY })}
-                      onMouseLeave={() => setHover(h => (h && h.r === r && h.c === c ? null : h))}
-                      title={`${fmtUsd(cell.value)} net gamma`}
-                      className={`px-2 py-1.5 text-right font-mono text-label tnum whitespace-nowrap cursor-crosshair transition-all duration-300 ${
-                        cell.king ? 'ring-1 ring-inset ring-king' : ''
-                      } ${hover && hover.r === r && hover.c === c ? 'brightness-125' : ''} ${
-                        highlightCol != null && c !== highlightCol ? 'opacity-35' : ''
+                      className={`px-2 py-1 text-right font-mono text-[11px] tnum whitespace-nowrap transition-colors duration-700 ${
+                        // Magenta, matching the king LINE on the chart
+                        // (palette.KING) — silver stopped standing out once the
+                        // steel ramp's platinum pole arrived, and Noah retired
+                        // it (2026-08-18). Magenta is chromatic against both
+                        // the steel and gold poles.
+                        // A single 1px line vanished on a bright pole — the
+                        // dark outer ring is what makes it findable on both
+                        // ends of the ramp, not the accent alone.
+                        cell.king
+                          ? 'shadow-[inset_0_0_0_2px_#EA00FF,inset_0_0_0_3px_rgba(10,10,10,0.85)]'
+                          : ''
                       }`}
                     >
-                      {cell.king && <span className="mr-1 inline-block w-1.5 h-1.5 rounded-full bg-king" />}
-                      {/* The king strike always speaks, whatever its magnitude —
-                          it is the one cell the board is named for.
-
-                          Below the print threshold the cell carries colour and
-                          nothing else, so the figure would exist only behind a
-                          pointer. `title` on the cell puts it back within reach
-                          of a screen reader and of a reader who cannot use a
-                          hover — the value is the point of the board, and a
-                          saturation is not a number. */}
-                      {cell.king || Math.abs(cell.value) >= maxAbs * PRINT_AT ? fmtUsd(cell.value) : '\u00A0'}
+                      {cell.king && (
+                        <span className="mr-1.5 inline-block w-2 h-2 rounded-full bg-[#EA00FF] ring-1 ring-[#0a0a0a]/70 align-middle" />
+                      )}
+                      {fmtUsd(cell.value)}
                     </td>
                   ))}
                 </tr>
@@ -188,41 +119,16 @@ const GexMatrix = ({ data, highlightCol = null }: GexMatrixProps) => {
         </table>
       </div>
 
-      {/* Diverging color scale — hidden on phones, where every cell already
-          prints its signed, colour-coded value and the 36px rail would only
-          squeeze the grid into a harder horizontal scroll. */}
-      <div className="shrink-0 w-9 hidden sm:flex flex-col items-center py-1 select-none">
-        <span className={`font-mono text-micro tnum ${heatScaleLabels.pos}`}>+{fmtUsd(maxAbs).replace('$', '')}</span>
+      {/* Diverging color scale */}
+      <div className="shrink-0 w-9 flex flex-col items-center py-1 select-none">
+        <span className={`font-mono text-[9px] tnum ${heatScaleLabels.pos}`}>+{fmtUsd(maxAbs).replace('$', '')}</span>
         <div
           className="flex-grow w-2.5 my-1.5 rounded-full border border-borderSubtle"
           style={{ background: heatScaleGradient }}
         />
-        <span className={`font-mono text-micro tnum ${heatScaleLabels.neg}`}>−{fmtUsd(maxAbs).replace('$', '')}</span>
-        <span className="mt-1 font-mono text-micro text-textMuted uppercase">gex</span>
+        <span className={`font-mono text-[9px] tnum ${heatScaleLabels.neg}`}>−{fmtUsd(maxAbs).replace('$', '')}</span>
+        <span className="mt-1 font-mono text-[8px] text-textMuted uppercase">gex</span>
       </div>
-
-      {/* Hover read-out — strike × expiry detail on the cell under the cursor */}
-      {hover && hovered && (
-        <HoverReadout x={hover.x} y={hover.y}>
-          <div className="flex items-baseline gap-2">
-            <span className="font-mono text-caption font-bold text-textPrimary tnum">
-              {strikes[hover.r] % 1 === 0 ? strikes[hover.r].toFixed(0) : strikes[hover.r].toFixed(2)}
-            </span>
-            <span className="font-mono text-micro uppercase tracking-widest text-textMuted">{expiries[hover.c]}</span>
-            {hovered.king && (
-              <span className="font-mono text-micro font-bold uppercase tracking-wider text-king">king</span>
-            )}
-          </div>
-          <div className={`mt-0.5 font-mono text-data font-bold tnum ${hovered.value >= 0 ? 'text-bull' : 'text-bear'}`}>
-            {hovered.value >= 0 ? '+' : '−'}
-            {fmtUsd(Math.abs(hovered.value))}
-          </div>
-          <div className="mt-0.5 font-mono text-micro text-textSecondary">
-            {hovered.value >= 0 ? 'dealer support · long γ' : 'negative gamma · short γ'}
-            {marker(hover.r) && <span className="text-textMuted"> · {marker(hover.r)}</span>}
-          </div>
-        </HoverReadout>
-      )}
     </div>
   );
 };

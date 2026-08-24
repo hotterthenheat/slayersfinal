@@ -1,28 +1,13 @@
-import { useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Copy, Lightbulb, LineChart, RefreshCw, Send, SquarePen, Trash2, X } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { ChevronUp, Send } from 'lucide-react';
 import Panel from '../../components/ui/Panel';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import SignalBadge from '../../components/ui/SignalBadge';
-import EmptyState from '../../components/ui/EmptyState';
-import TickerTag from '../../components/ui/TickerTag';
-import { useToast } from '../../components/ui/Toast';
-import type { Tone } from '../../components/ui/tones';
-import Simulator from '../../core/simulator';
-import { lookup as universeLookup } from '../../data/universe';
-import { EXAMPLE_IDEAS, timeAgo } from '../../data/community';
+import { loadCommunity, saveCommunity, timeAgo } from '../../data/community';
 import type { CommunityIdea, IdeaDirection } from '../../types/community';
-import type { KeyLevels } from '../../types/gex';
-import { packMeta, unpackMeta } from './localMeta';
-import { useCommunity } from './store';
-import { clockOf, firstNumber, fmtLevel, fmtPct, isThrough, pctFromSpot, useBooks, zoneOf } from './book';
-import { Field, PrimaryButton, RowAction, TextArea } from './controls';
-import { copyText } from './share';
 
 type DirectionFilter = 'ALL' | IdeaDirection;
-type SortKey = 'NEW' | 'TICKER';
-type Horizon = 'INTRADAY' | 'SWING' | 'POSITION';
-type PositionSide = 'FLAT' | 'LONG' | 'SHORT';
+type SortKey = 'NEW' | 'TOP';
 
 const DIR_OPTIONS = [
   { value: 'ALL', label: 'All' },
@@ -32,7 +17,7 @@ const DIR_OPTIONS = [
 
 const SORT_OPTIONS = [
   { value: 'NEW', label: 'Newest' },
-  { value: 'TICKER', label: 'By ticker' },
+  { value: 'TOP', label: 'Top voted' },
 ] as const;
 
 const POST_DIR_OPTIONS = [
@@ -40,475 +25,140 @@ const POST_DIR_OPTIONS = [
   { value: 'BEARISH', label: 'Bearish' },
 ] as const;
 
-const HORIZON_OPTIONS = [
-  { value: 'INTRADAY', label: 'Intraday' },
-  { value: 'SWING', label: 'Swing' },
-  { value: 'POSITION', label: 'Position' },
-] as const;
-
-const POSITION_OPTIONS = [
-  { value: 'FLAT', label: 'No position' },
-  { value: 'LONG', label: 'Long' },
-  { value: 'SHORT', label: 'Short' },
-] as const;
-
-/** Order + labels for the structured thesis read-out on each card. */
-const META_FIELDS: { key: string; label: string; tone?: Tone }[] = [
-  { key: 'horizon', label: 'Horizon' },
-  { key: 'entry', label: 'Entry' },
-  { key: 'invalidation', label: 'Invalidation', tone: 'warn' },
-  { key: 'targets', label: 'Targets' },
-  { key: 'risk', label: 'Risk' },
-];
-
-const positionTone = (v: string): Tone => (v === 'LONG' ? 'bull' : v === 'SHORT' ? 'bear' : 'neutral');
-
-/**
- * A symbol the terminal has a real reference price for: the curated universe
- * plus the core watchlist ETFs. Anything else would still build a chain (the
- * simulator invents a config for any string), and a wall drawn for a symbol
- * nobody priced is exactly the kind of plausible-looking number this desk is
- * not allowed to show.
- */
-const isKnownSymbol = (t: string): boolean => !!universeLookup(t) || Simulator.WATCHLIST.includes(t);
-
-/** Caption over a control that carries its own accessible name (a segmented
-    control is a radiogroup, not something a <label> may wrap). */
-const Captioned = ({ caption, children }: { caption: string; children: React.ReactNode }) => (
-  <div className="flex flex-col gap-1">
-    <span className="font-mono text-label uppercase tracking-wider text-textMuted">{caption}</span>
-    <div>{children}</div>
-  </div>
-);
-
-/** The engine's levels for one symbol, laid out as a strip. */
-const BookStrip = ({ levels, note }: { levels: KeyLevels; note: React.ReactNode }) => (
-  <div className="rounded-md border border-borderSubtle/70 bg-inset px-3 py-2 flex flex-col gap-1.5">
-    <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1.5">
-      {[
-        { label: 'Spot', value: levels.spot },
-        { label: 'Flip', value: levels.flip },
-        { label: 'Call wall', value: levels.callWall },
-        { label: 'Put wall', value: levels.putWall },
-        { label: 'King', value: levels.king },
-      ].map(l => (
-        <span key={l.label} className="flex items-baseline gap-1.5">
-          <span className="font-mono text-label uppercase tracking-wider text-textMuted">{l.label}</span>
-          <span className="font-mono text-caption text-textPrimary tnum">{fmtLevel(l.value)}</span>
-        </span>
-      ))}
-    </div>
-    <span className="font-mono text-micro text-textMuted">{note}</span>
-  </div>
-);
-
-/** One derived line: where a number the author typed sits in the book. */
-const Placement = ({
-  label,
-  price,
-  levels,
-  tone = 'neutral',
-}: {
-  label: string;
-  price: number;
-  levels: KeyLevels;
-  tone?: Tone;
-}) => (
-  <div className="flex flex-col gap-0.5 min-w-0">
-    <span className="font-mono text-label uppercase tracking-wider text-textMuted">{label}</span>
-    <span className={`font-mono text-caption tnum ${tone === 'warn' ? 'text-warn' : 'text-textPrimary'}`}>
-      {fmtLevel(price)} <span className="text-textMuted">{fmtPct(pctFromSpot(price, levels.spot))}</span>
-    </span>
-    <span className="font-mono text-micro text-textMuted leading-tight">{zoneOf(price, levels)}</span>
-  </div>
-);
-
 const Ideas = () => {
-  const navigate = useNavigate();
-  const toast = useToast();
-  const { state, addIdea, removeIdea } = useCommunity();
-  const composerRef = useRef<HTMLDivElement>(null);
-  /*
-    The composer starts CLOSED.
-
-    Nine controls — ticker, direction, horizon, entry, invalidation, targets,
-    risk, position, thesis — used to be the first thing on this page, above an
-    empty board, above the examples. A reader with nothing posted yet landed on a
-    form and had to scroll past it to find anything to read. Every page people
-    actually use for this opens on the posts and keeps composing to one line
-    until you engage with it.
-
-    The fields are unchanged; only when you meet them is. `loadTemplate` opens it
-    on the reader's behalf, because there is no point loading an example into a
-    composer they cannot see.
-  */
-  const [composerOpen, setComposerOpen] = useState(false);
-
+  const [state, setState] = useState(loadCommunity);
   const [dirFilter, setDirFilter] = useState<DirectionFilter>('ALL');
   const [sort, setSort] = useState<SortKey>('NEW');
-  const [tickerFilter, setTickerFilter] = useState('ALL');
 
-  // Structured thesis composer
+  // Composer
   const [ticker, setTicker] = useState('');
   const [direction, setDirection] = useState<IdeaDirection>('BULLISH');
-  const [horizon, setHorizon] = useState<Horizon>('SWING');
-  const [entry, setEntry] = useState('');
-  const [invalidation, setInvalidation] = useState('');
-  const [targets, setTargets] = useState('');
-  const [risk, setRisk] = useState('');
-  const [position, setPosition] = useState<PositionSide>('FLAT');
   const [thesis, setThesis] = useState('');
 
-  const composerSymbol = isKnownSymbol(ticker) ? ticker : null;
-
-  // Every symbol on screen that the book can speak for: yours, plus whatever is
-  // being typed into the composer right now.
-  const bookTickers = useMemo(() => {
-    const set = new Set(state.ideas.map(i => i.ticker).filter(isKnownSymbol));
-    if (composerSymbol) set.add(composerSymbol);
-    return Array.from(set);
-  }, [state.ideas, composerSymbol]);
-
-  const books = useBooks(bookTickers);
-  const composerBook = composerSymbol ? books.byTicker[composerSymbol] : undefined;
-
-  const canPost = ticker.trim().length > 0 && thesis.trim().length >= 10;
-
-  // Parsed once: a field only earns a read-out when a number can be read out of
-  // it and the symbol has a book to place it in.
-  const draftEntry = composerBook ? firstNumber(entry) : null;
-  const draftInvalidation = composerBook ? firstNumber(invalidation) : null;
-  const draftTarget = composerBook ? firstNumber(targets) : null;
+  const update = (next: typeof state) => {
+    setState(next);
+    saveCommunity(next);
+  };
 
   const post = () => {
     const t = ticker.trim().toUpperCase();
     const body = thesis.trim();
     if (!t || body.length < 10) return;
-    // Structured fields ride alongside the narrative in the existing thesis field.
-    const packed = packMeta(body, { horizon, entry, invalidation, targets, risk, position });
-    addIdea({
+    const idea: CommunityIdea = {
       id: `you-${Date.now()}`,
       author: 'you',
       ticker: t,
       direction,
-      thesis: packed,
-      votes: 0,
+      thesis: body,
+      votes: 1,
       createdAt: new Date().toISOString(),
-    });
+    };
+    update({ ...state, ideas: [idea, ...state.ideas], voted: [...state.voted, idea.id] });
     setTicker('');
     setThesis('');
-    setEntry('');
-    setInvalidation('');
-    setTargets('');
-    setRisk('');
-    setHorizon('SWING');
-    setPosition('FLAT');
-    toast.success(`${t} thesis saved to this browser`);
   };
 
-  const loadTemplate = (idea: CommunityIdea) => {
-    setTicker(idea.ticker);
-    setDirection(idea.direction);
-    setThesis(unpackMeta(idea.thesis).text);
-    setComposerOpen(true);
-    composerRef.current?.scrollIntoView({ block: 'start' });
-    toast.info('Example loaded into the composer');
-  };
-
-  const copyIdea = async (idea: CommunityIdea) => {
-    const { text, meta } = unpackMeta(idea.thesis);
-    const lines = [`${idea.ticker} ${idea.direction}`, text];
-    for (const f of META_FIELDS) if (meta[f.key]) lines.push(`${f.label}: ${meta[f.key]}`);
-    if (await copyText(lines.join('\n'))) toast.success('Thesis copied');
-    else toast.error('Clipboard unavailable');
-  };
-
-  const openOnPulse = (idea: CommunityIdea) => {
-    const entryPrice = firstNumber(unpackMeta(idea.thesis).meta.entry ?? '');
-    // The documented cross-page contract (PulseWorkspace consumes focusTicker /
-    // focusPrice from router state).
-    navigate('/pulse', {
-      state: { focusTicker: idea.ticker, ...(entryPrice != null ? { focusPrice: entryPrice } : {}) },
+  const toggleVote = (id: string) => {
+    const has = state.voted.includes(id);
+    update({
+      ...state,
+      voted: has ? state.voted.filter(v => v !== id) : [...state.voted, id],
+      ideas: state.ideas.map(i => (i.id === id ? { ...i, votes: i.votes + (has ? -1 : 1) } : i)),
     });
   };
 
-  const tickerOptions = useMemo(() => {
-    const seen = Array.from(new Set(state.ideas.map(i => i.ticker)));
-    return [{ value: 'ALL', label: 'All' }, ...seen.slice(0, 8).map(t => ({ value: t, label: t }))];
-  }, [state.ideas]);
-
-  // Deleting the last idea for a symbol must not leave the board filtered to a
-  // symbol that no longer has a chip.
-  const activeTickerFilter = tickerOptions.some(o => o.value === tickerFilter) ? tickerFilter : 'ALL';
-
   const shown = useMemo(() => {
-    const filtered = state.ideas.filter(
-      i =>
-        (dirFilter === 'ALL' || i.direction === dirFilter) &&
-        (activeTickerFilter === 'ALL' || i.ticker === activeTickerFilter)
-    );
-    return sort === 'TICKER'
-      ? [...filtered].sort((a, b) => a.ticker.localeCompare(b.ticker) || b.createdAt.localeCompare(a.createdAt))
+    const filtered = state.ideas.filter(i => dirFilter === 'ALL' || i.direction === dirFilter);
+    return sort === 'TOP'
+      ? [...filtered].sort((a, b) => b.votes - a.votes)
       : [...filtered].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  }, [state.ideas, dirFilter, activeTickerFilter, sort]);
+  }, [state.ideas, dirFilter, sort]);
 
   return (
     <>
-      {/* Composer, wired to the book for the symbol being typed. One line until
-          you engage with it — see `composerOpen`. */}
-      <div ref={composerRef}>
-        {!composerOpen ? (
-          <button
-            type="button"
-            onClick={() => setComposerOpen(true)}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-md border border-borderSubtle bg-panel hover:bg-panelHover hover:border-borderMuted transition-colors text-left"
-          >
-            <SquarePen className="w-4 h-4 shrink-0 text-textMuted" />
-            <span className="text-body text-textSecondary">Share a thesis</span>
-            <span className="ml-auto font-mono text-label uppercase tracking-widest text-textMuted">
-              Ticker · levels · reasoning
-            </span>
-          </button>
-        ) : (
-        <Panel
-          title="Write a thesis"
-          subtitle="the levels it is called against, while you write it"
-          className="w-full"
-          actions={
-            <RowAction icon={X} label="Close composer" onClick={() => setComposerOpen(false)} />
-          }
-        >
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-wrap items-end gap-x-5 gap-y-3">
-              <Field
-                label="Ticker"
-                value={ticker}
-                onChange={v => setTicker(v.toUpperCase())}
-                placeholder="SPY"
-                className="w-32"
-              />
-              <Captioned caption="Direction">
-                <SegmentedControl ariaLabel="Direction" options={POST_DIR_OPTIONS} value={direction} onChange={setDirection} />
-              </Captioned>
-              <Captioned caption="Horizon">
-                <SegmentedControl ariaLabel="Horizon" options={HORIZON_OPTIONS} value={horizon} onChange={setHorizon} />
-              </Captioned>
-            </div>
-
-            {composerBook ? (
-              <BookStrip
-                levels={composerBook}
-                note={`${composerSymbol} key levels from the dealer model, read at ${clockOf(books.checkedAt)}`}
-              />
-            ) : (
-              ticker.trim().length > 0 && (
-                <span className="font-mono text-micro text-textMuted">
-                  No reference book for {ticker.trim()}. You can still write the thesis; the levels read-out only
-                  appears for names the terminal prices.
-                </span>
-              )
-            )}
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <Field
-                label="Entry"
-                value={entry}
-                onChange={setEntry}
-                placeholder="500.20"
-                hint={composerBook && draftEntry != null ? zoneOf(draftEntry, composerBook) : undefined}
-              />
-              <Field
-                label="Invalidation"
-                value={invalidation}
-                onChange={setInvalidation}
-                placeholder="below 498"
-                hint={composerBook && draftInvalidation != null ? zoneOf(draftInvalidation, composerBook) : undefined}
-              />
-              <Field
-                label="Targets"
-                value={targets}
-                onChange={setTargets}
-                placeholder="505, 508"
-                hint={
-                  composerBook && draftTarget != null ? fmtPct(pctFromSpot(draftTarget, composerBook.spot)) : undefined
-                }
-              />
-              <Field label="Risk" value={risk} onChange={setRisk} placeholder="1R / 0.5% acct" />
-            </div>
-
-            <Captioned caption="Your position">
-              <SegmentedControl ariaLabel="Your position" options={POSITION_OPTIONS} value={position} onChange={setPosition} />
-            </Captioned>
-
-            <TextArea
-              label="Thesis"
-              value={thesis}
-              onChange={setThesis}
-              placeholder="What is the setup? Levels, flow, reasoning, in your own words."
+      {/* Composer */}
+      <Panel title="Share an idea" subtitle="ticker · direction · your thesis" className="w-full">
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <input
+              value={ticker}
+              onChange={e => setTicker(e.target.value)}
+              placeholder="Ticker (e.g. SPY)"
+              maxLength={6}
+              className="w-36 bg-inputBg border border-borderSubtle rounded-md px-2.5 py-1.5 font-mono text-[12px] uppercase text-textPrimary placeholder:text-textMuted placeholder:normal-case focus:border-borderMuted outline-none transition-colors"
             />
-
-            <div className="flex items-center gap-3 flex-wrap">
-              <PrimaryButton icon={Send} onClick={post} disabled={!canPost}>
-                Post thesis
-              </PrimaryButton>
-              <span className="font-mono text-label text-textMuted">
-                Ticker and thesis required. Levels optional.
-              </span>
-            </div>
+            <SegmentedControl ariaLabel="Direction" options={POST_DIR_OPTIONS} value={direction} onChange={setDirection} />
           </div>
-        </Panel>
-        )}
-      </div>
+          <textarea
+            value={thesis}
+            onChange={e => setThesis(e.target.value)}
+            placeholder="What's the setup? Levels, flow, reasoning — in your own words…"
+            rows={2}
+            className="w-full bg-inputBg border border-borderSubtle rounded-md px-2.5 py-2 text-[12px] text-textPrimary placeholder:text-textMuted focus:border-borderMuted outline-none transition-colors resize-y"
+          />
+          <div className="flex items-center gap-3">
+            <button
+              onClick={post}
+              disabled={!ticker.trim() || thesis.trim().length < 10}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-select/40 bg-select/[0.06] hover:bg-select/[0.12] font-mono text-[11px] font-semibold uppercase tracking-wider text-select transition-colors disabled:opacity-40 disabled:pointer-events-none"
+            >
+              <Send className="w-3.5 h-3.5" /> Share idea
+            </button>
+            <span className="font-mono text-[10px] text-textMuted">
+              Posts live in this browser until accounts launch
+            </span>
+          </div>
+        </div>
+      </Panel>
 
-      {/* Your board */}
+      {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">
         <SegmentedControl ariaLabel="Direction filter" options={DIR_OPTIONS} value={dirFilter} onChange={setDirFilter} />
         <SegmentedControl ariaLabel="Sort" options={SORT_OPTIONS} value={sort} onChange={setSort} />
-        {tickerOptions.length > 1 && (
-          <SegmentedControl
-            ariaLabel="Ticker filter"
-            options={tickerOptions}
-            value={activeTickerFilter}
-            onChange={setTickerFilter}
-          />
-        )}
-        <span className="ml-auto flex items-center gap-3">
-          <span className="font-mono text-label text-textMuted uppercase tracking-widest tnum">
-            {shown.length} of yours
-          </span>
-          {bookTickers.length > 0 && (
-            <RowAction icon={RefreshCw} label="Re-read levels" onClick={books.recheck} labelAlways />
-          )}
+        <span className="ml-auto font-mono text-[10px] text-textMuted uppercase tracking-widest tnum">
+          {shown.length} ideas
         </span>
       </div>
 
+      {/* Feed */}
       <div className="flex flex-col gap-3">
         {shown.map(idea => {
-          const { text, meta } = unpackMeta(idea.thesis);
-          const fields = META_FIELDS.filter(f => meta[f.key]);
-          const levels = books.byTicker[idea.ticker];
-          const entryPrice = firstNumber(meta.entry ?? '');
-          const invalPrice = firstNumber(meta.invalidation ?? '');
-          const targetPrice = firstNumber(meta.targets ?? '');
-          const through = levels && invalPrice != null && isThrough(idea.direction, levels.spot, invalPrice);
-          const hasPlacement = !!levels && (entryPrice != null || invalPrice != null || targetPrice != null);
-
+          const voted = state.voted.includes(idea.id);
           return (
-            <div key={idea.id} className="border border-borderSubtle bg-panel rounded-md px-4 py-3 flex flex-col gap-2.5">
-              <div className="flex items-center gap-2 flex-wrap">
-                <TickerTag symbol={idea.ticker} className="font-mono text-caption font-bold text-textPrimary" />
-                <SignalBadge tone={idea.direction === 'BULLISH' ? 'bull' : 'bear'}>{idea.direction}</SignalBadge>
-                {meta.horizon && <SignalBadge tone="neutral">{meta.horizon}</SignalBadge>}
-                {through && <SignalBadge tone="warn" dot>Spot through invalidation</SignalBadge>}
-                <span className="ml-auto flex items-center gap-1">
-                  <RowAction icon={LineChart} label="Open on Pulse" onClick={() => openOnPulse(idea)} />
-                  <RowAction icon={Copy} label="Copy" onClick={() => void copyIdea(idea)} />
-                  <RowAction icon={Trash2} label="Delete" danger onClick={() => removeIdea(idea.id)} />
-                </span>
-              </div>
-
-              <p className="text-caption text-textSecondary leading-relaxed">{text}</p>
-
-              {(fields.length > 0 || meta.position) && (
-                <div className="flex flex-wrap gap-x-5 gap-y-2 border-t border-borderSubtle/40 pt-2.5">
-                  {fields.map(f => (
-                    <div key={f.key} className="flex flex-col gap-0.5">
-                      <span className="font-mono text-label uppercase tracking-wider text-textMuted">{f.label}</span>
-                      <span className={`font-mono text-caption tnum ${f.tone === 'warn' ? 'text-warn' : 'text-textPrimary'}`}>
-                        {meta[f.key]}
-                      </span>
-                    </div>
-                  ))}
-                  {meta.position && (
-                    <div className="flex flex-col gap-0.5">
-                      <span className="font-mono text-label uppercase tracking-wider text-textMuted">Position</span>
-                      <span className="inline-flex">
-                        <SignalBadge tone={positionTone(meta.position)}>
-                          {meta.position === 'FLAT' ? 'No position' : meta.position}
-                        </SignalBadge>
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {hasPlacement && levels && (
-                <div className="rounded-md border border-borderSubtle/70 bg-inset px-3 py-2 flex flex-col gap-2">
-                  <div className="flex flex-wrap items-start gap-x-6 gap-y-2">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="font-mono text-label uppercase tracking-wider text-textMuted">Spot</span>
-                      <span className="font-mono text-caption text-textPrimary tnum">{fmtLevel(levels.spot)}</span>
-                      <span className="font-mono text-micro text-textMuted leading-tight">{zoneOf(levels.spot, levels)}</span>
-                    </div>
-                    {entryPrice != null && <Placement label="Entry" price={entryPrice} levels={levels} />}
-                    {invalPrice != null && (
-                      <Placement label="Invalidation" price={invalPrice} levels={levels} tone={through ? 'warn' : 'neutral'} />
-                    )}
-                    {targetPrice != null && <Placement label="First target" price={targetPrice} levels={levels} />}
-                  </div>
-                  <span className="font-mono text-micro text-textMuted">
-                    Flip {fmtLevel(levels.flip)} · Call wall {fmtLevel(levels.callWall)} · Put wall{' '}
-                    {fmtLevel(levels.putWall)} · read at {clockOf(books.checkedAt)}
+            <div key={idea.id} className="border border-borderSubtle bg-panel rounded-md px-4 py-3 flex gap-4">
+              <button
+                onClick={() => toggleVote(idea.id)}
+                className={`shrink-0 self-start flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-md border transition-colors ${
+                  voted
+                    ? 'border-select/50 bg-select/[0.08] text-select'
+                    : 'border-borderSubtle text-textSecondary hover:text-textPrimary hover:bg-white/[0.03]'
+                }`}
+                aria-label="Vote"
+              >
+                <ChevronUp className="w-4 h-4" />
+                <span className="font-mono text-[11px] font-bold tnum">{idea.votes}</span>
+              </button>
+              <div className="min-w-0 flex-grow">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-mono text-[12px] font-bold text-textPrimary">{idea.ticker}</span>
+                  <SignalBadge tone={idea.direction === 'BULLISH' ? 'bull' : 'bear'}>{idea.direction}</SignalBadge>
+                  <span className="ml-auto font-mono text-[10px] text-textMuted tnum">
+                    {idea.author === 'you' ? <span className="text-select">you</span> : idea.author} · {timeAgo(idea.createdAt)}
                   </span>
                 </div>
-              )}
-
-              <span className="font-mono text-micro text-textMuted tnum">Written {timeAgo(idea.createdAt)}</span>
+                <p className="mt-1.5 text-[12px] text-textSecondary leading-relaxed">“{idea.thesis}”</p>
+              </div>
             </div>
           );
         })}
-
-        {/* Only when a FILTER emptied the board.
-            An empty board on a first visit used to render "No theses yet — write
-            one above, or start from an example below", which put a panel saying
-            there is nothing here between the reader and the four worked examples
-            immediately below it. Those examples are the only thing on this page
-            to read before you have written anything, so on a first visit they
-            are the content and nothing needs to announce their absence. */}
-        {shown.length === 0 && state.ideas.length > 0 && (
-          <Panel>
-            <EmptyState
-              icon={Lightbulb}
-              title="Nothing matches this filter"
-              body="Clear the direction or ticker filter to see the rest."
-            />
+        {shown.length === 0 && (
+          <Panel className="h-40" bodyClassName="flex items-center justify-center">
+            <span className="font-mono text-[11px] text-textMuted uppercase tracking-widest">
+              No ideas match this filter
+            </span>
           </Panel>
         )}
       </div>
-
-      {/* Shipped examples. Read-only on purpose: with no accounts behind them a
-          handle and a vote tally would be decoration, so neither is rendered. */}
-      <Panel
-        title="Worked examples"
-        /* Named as shipped examples in both states. They read as the page's
-           content on a first visit, and that is the point — but they are not
-           anybody's posts, there are no accounts behind this yet, and a subtitle
-           that let them pass for community activity would be the one thing this
-           app does not do. */
-        subtitle={
-          state.ideas.length
-            ? 'four theses that ship with the terminal, to copy the shape of'
-            : 'four theses that ship with the terminal — open one as a template to start'
-        }
-        flush
-        className="w-full"
-      >
-        {EXAMPLE_IDEAS.map(example => (
-          <div
-            key={example.id}
-            className="px-4 py-3 border-b border-borderSubtle/40 last:border-0 flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4"
-          >
-            <span className="flex items-center gap-2 shrink-0">
-              <TickerTag symbol={example.ticker} className="font-mono text-caption font-bold text-textPrimary" />
-              <SignalBadge tone={example.direction === 'BULLISH' ? 'bull' : 'bear'}>{example.direction}</SignalBadge>
-            </span>
-            <p className="min-w-0 flex-1 text-caption text-textSecondary leading-relaxed">{example.thesis}</p>
-            <span className="shrink-0 sm:ml-auto">
-              <RowAction icon={SquarePen} label="Use as template" onClick={() => loadTemplate(example)} labelAlways />
-            </span>
-          </div>
-        ))}
-      </Panel>
     </>
   );
 };

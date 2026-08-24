@@ -9,8 +9,7 @@
 */
 
 import Simulator from '../core/simulator';
-import { fmtMonthDay } from '../core/calendar';
-import { expiryCalendar, type ChainExpiry } from '../core/expiryCalendar';
+import { expiryFor } from '../core/calendar';
 import type { MarketSnapshot, StrikeNode } from '../types/market';
 import type {
   BoardTicker,
@@ -18,6 +17,7 @@ import type {
   GexMatrixData,
   GexMetric,
   GexView,
+  HeatPatternRead,
   KeyLevels,
   LadderRow,
   MatrixCell,
@@ -41,7 +41,7 @@ function h01(seed: string): number {
 
 // ---- formatting -------------------------------------------------------------
 export function fmtUsd(v: number): string {
-  const sign = v < 0 ? '−' : '';
+  const sign = v < 0 ? '-' : '';
   const a = Math.abs(v);
   if (a >= 1e9) return `${sign}$${(a / 1e9).toFixed(1)}B`;
   if (a >= 1e6) return `${sign}$${(a / 1e6).toFixed(1)}M`;
@@ -55,31 +55,14 @@ function metricValue(node: StrikeNode, metric: GexMetric): number {
     case 'GEX':
       return node.netGex;
     case 'VEX':
-      return node.netVex; // true $ per 1% vol — each metric view scales to its own max
+      return node.netVex * 40; // scale VEX into a comparable dollar magnitude
     case 'GEX+VEX':
       return node.netGex * 0.7 + node.netVex * 28;
   }
 }
 
 // ---- levels & nodes ---------------------------------------------------------
-/**
- * The structural levels, derived once. Anything that names a wall, a flip or a
- * king reads this — a panel that re-derives its own answers the same question
- * with a different number, and two panels on one screen then contradict each
- * other about where the regime turns.
- *
- * Walls and flip come off `plan`, which the simulator computes from the raw book
- * (simulator.ts:422-453). The flip in particular is the first UPWARD zero
- * crossing of the 3-strike-smoothed net-GEX profile: smoothed so one noisy
- * strike cannot fake a crossover, and upward because short-gamma-below /
- * long-gamma-above is what a desk means by the gamma flip. A first-sign-change
- * scan over a rescaled per-strike copy of the chain satisfies neither and lands
- * a strike away often enough to be seen.
- *
- * King is argmax |netGex| over the WHOLE chain, not a window: the largest
- * exposure in the book does not move because a panel is showing fewer strikes.
- */
-export function buildLevels(snapshot: MarketSnapshot): KeyLevels {
+function buildLevels(snapshot: MarketSnapshot): KeyLevels {
   const { chain, spot, plan } = snapshot;
   let king = spot;
   let maxAbs = 0;
@@ -96,32 +79,6 @@ export function buildLevels(snapshot: MarketSnapshot): KeyLevels {
     flip: plan.flipZone,
     king,
   };
-}
-
-/**
- * Pin: the heaviest total-OI strike in the `half`-wide window around spot.
- *
- * Off `KeyLevels` because it is the one level that legitimately depends on how
- * many strikes a panel is showing, so it takes the window as an argument instead
- * of pretending to be window-free. Open interest is raw — no view rescales it —
- * so two panels on the same window always land on the same strike.
- */
-export function pinStrike(snapshot: MarketSnapshot, half: number): number {
-  const { chain, spot } = snapshot;
-  const desc = [...chain].sort((a, b) => b.strike - a.strike);
-  const spotIdx = Math.max(0, desc.findIndex(n => n.strike <= spot));
-  const start = Math.max(0, spotIdx - half);
-  const window = desc.slice(start, start + half * 2 + 1);
-
-  let pin = window[0]?.strike ?? spot;
-  let heaviest = 0;
-  for (const n of window) {
-    if (n.callOI.value + n.putOI.value > heaviest) {
-      heaviest = n.callOI.value + n.putOI.value;
-      pin = n.strike;
-    }
-  }
-  return pin;
 }
 
 function buildNodes(snapshot: MarketSnapshot, metric: GexMetric, range: StrikeRange): { nodes: NodeLevel[]; maxAbs: number } {
@@ -142,25 +99,70 @@ function buildNodes(snapshot: MarketSnapshot, metric: GexMetric, range: StrikeRa
 }
 
 // ---- strike × expiry matrix ---------------------------------------------------
-// The columns are the expiries the ticker ACTUALLY lists — dailies for an index
-// or large ETF, weeklies for a liquid single name, monthlies for the rest —
-// resolved through the shared, holiday-aware expiry calendar. The header shows
-// the real date; nobody converts a day-count to a date in their head at the tape.
+// Four expiries, not five — the chart owns the page; the matrix stays narrow.
+// (7D dropped: least signal for a 0DTE-first product, and it bought the chart
+// a whole extra grid column.)
+const MATRIX_EXPIRIES = [
+  { label: '0DTE', dte: 0, t: 0.003, decay: 1 },
+  { label: '1D', dte: 1, t: 0.008, decay: 0.52 },
+  { label: '2D', dte: 2, t: 0.012, decay: 0.38 },
+  { label: '5D', dte: 5, t: 0.024, decay: 0.22 },
+];
 
-/**
- * Column labels for the expiry matrix. A same-day expiry keeps "0DTE" (traders
- * read it instantly); every later column shows its actual date (e.g. "Jul 24").
- * The calendar returns strictly-increasing, holiday-correct expiries, so no two
- * columns can share a header.
- */
-function matrixExpiryLabels(expiries: ChainExpiry[]): string[] {
-  return expiries.map(e => (e.dte === 0 ? '0DTE' : fmtMonthDay(e.date)));
+/** Column headers carry the REAL resolved session date beside the tenor
+    (Noah, 2026-08-18 — "real dates instead of 0DTE/1D/2D/5D"; the calendar
+    resolves weekends/holidays so a 1D on Friday reads Monday's date). */
+const matrixExpiryLabels = (): string[] =>
+  MATRIX_EXPIRIES.map(e => `${e.label} · ${expiryFor(e.dte).label.slice(0, 5)}`);
+
+// ---- heat pattern read ------------------------------------------------------
+/** Name the field's configuration in the engine's own vocabulary (Noah,
+    2026-08-18 — the map should say what it means; nobody else's map names
+    the pattern). Deliberately levels-derived, NOT per-cell sign sums: sim
+    cells encode option-side dominance, so raw sign sums would print the
+    same pattern on every book — the flip/wall geometry is the engine's real
+    regime read and it genuinely moves with the tape. Vocabulary is OURS
+    (extract information, never grammar). */
+export function readHeatPattern(levels: KeyLevels): HeatPatternRead {
+  const { spot, flip, callWall, putWall } = levels;
+  const px = (v: number) => v.toFixed(2);
+  const aboveFlip = spot >= flip;
+  const cwPct = ((callWall - spot) / Math.max(spot, 1)) * 100;
+  const pwPct = ((spot - putWall) / Math.max(spot, 1)) * 100;
+  /** Walls this close (%) box price in; a floor past GONE might as well not exist. */
+  const TIGHT = 1.2;
+  const GONE = 2.6;
+
+  if (aboveFlip && cwPct <= TIGHT && pwPct <= TIGHT) {
+    return {
+      key: 'PINNED',
+      direction: 'RANGE',
+      read: `Absorbing walls at ${px(putWall)} and ${px(callWall)} box price in above the ${px(flip)} flip — dips get bought, rallies get sold, and drift beats trend until one side gives.`,
+    };
+  }
+  if (aboveFlip) {
+    return {
+      key: 'SPRINGBOARD',
+      direction: 'BULLISH',
+      read: `Supportive field above the ${px(flip)} flip — dips into ${px(putWall)} get absorbed and the bounce carries; ${px(callWall)} overhead is the lid to beat.`,
+    };
+  }
+  if (pwPct >= GONE) {
+    return {
+      key: 'WHIPSAW',
+      direction: 'VOLATILE',
+      read: `Below the ${px(flip)} flip with no floor in reach — hedging accelerates whichever way price moves, and the nearest shelf sits all the way down at ${px(putWall)}.`,
+    };
+  }
+  return {
+    key: 'TRAPDOOR',
+    direction: 'BEARISH',
+    read: `Below the ${px(flip)} flip the hedging amplifies moves — rallies get sold back under the ${px(callWall)} lid, and ${px(putWall)} is the only structure holding under price.`,
+  };
 }
 
-function buildMatrix(snapshot: MarketSnapshot, metric: GexMetric, range: StrikeRange, levels: KeyLevels): GexMatrixData {
-  const { ticker, chain, spot } = snapshot;
-  const expiries = expiryCalendar(ticker); // the expiries this root actually lists
-  const tFront = expiries[0].t; // nearest expiry — the decay anchor
+function buildMatrix(snapshot: MarketSnapshot, metric: GexMetric, range: StrikeRange, kingStrike: number): GexMatrixData {
+  const { ticker, chain, spot, plan } = snapshot;
   const sorted = [...chain].sort((a, b) => b.strike - a.strike); // descending
   const spotIdx = Math.max(0, sorted.findIndex(n => n.strike <= spot));
   const half = range === 10 ? 10 : 15; // strikes per side (chain carries 15 max)
@@ -171,24 +173,15 @@ function buildMatrix(snapshot: MarketSnapshot, metric: GexMetric, range: StrikeR
 
   const cells: MatrixCell[][] = window.map(node => {
     const base = metricValue(node, metric);
-    return expiries.map((exp, c) => {
-      const noise = h01(`${ticker}-${node.strike}-${exp.dte}`);
-      // 0DTE is not a projection — the chain IS today's book at that expiry, so
-      // that column prints the strike's own exposure untouched. GexMatrix puts
-      // `fmtUsd(cell.value)` inside the cell and repeats it in the hover
-      // read-out, and the exposure profile quotes the same strike a panel away;
-      // a per-strike jitter here had one book quoting two dollar figures, and
-      // could hand the crown to a cell that was no longer the column's largest.
-      // Farther expiries decay and occasionally flip sign (charm/vanna migration).
+    return MATRIX_EXPIRIES.map((exp, c) => {
+      const noise = h01(`${ticker}-${node.strike}-${exp.label}`);
+      // Farther expiries decay and occasionally flip sign (charm/vanna migration)
       const flip = c > 0 && noise > 0.86 ? -1 : 1;
-      // Decay derives from the real year-fraction: gamma scales ~1/sqrt(t), so a
-      // farther expiry projects less exposure than the front. tFront anchors it.
-      const decay = c === 0 ? 1 : Math.sqrt(tFront / exp.t);
-      const value = c === 0 ? base : base * decay * (0.55 + noise * 0.9) * flip;
+      const value = base * exp.decay * (0.55 + noise * 0.9) * flip;
       const abs = Math.abs(value);
       if (abs > maxAbs) maxAbs = abs;
       // King crowns the 0DTE cell at the book's max-exposure strike (matches the chart level)
-      return { value, king: c === 0 && node.strike === levels.king };
+      return { value, king: c === 0 && node.strike === kingStrike };
     });
   });
 
@@ -207,13 +200,13 @@ function buildMatrix(snapshot: MarketSnapshot, metric: GexMetric, range: StrikeR
   };
 
   return {
-    expiries: matrixExpiryLabels(expiries),
+    expiries: matrixExpiryLabels(),
     strikes,
     cells,
     maxAbs,
-    spotRowIndex: nearest(levels.spot),
-    callWallIndex: nearest(levels.callWall),
-    putWallIndex: nearest(levels.putWall),
+    spotRowIndex: nearest(spot) ?? -1,
+    callWallIndex: nearest(plan.resistanceWall),
+    putWallIndex: nearest(plan.supportWall),
   };
 }
 
@@ -246,7 +239,9 @@ function buildLadder(ticker: string, spot: number, step: number): { ladder: Ladd
   return { ladder: rows, maxAbs };
 }
 
-function buildPrints(ticker: string, spot: number): DarkPoolPrint[] {
+/** Deterministic dark-pool prints for a ticker — exported for the 4-way board,
+    which charts tickers outside the flow board's scan. */
+export function buildPrints(ticker: string, spot: number): DarkPoolPrint[] {
   const count = 2 + (hash(`${ticker}-dp-count`) % 2);
   const prints: DarkPoolPrint[] = [];
   const now = new Date();
@@ -256,10 +251,7 @@ function buildPrints(ticker: string, spot: number): DarkPoolPrint[] {
     const daysAgo = 1 + (hash(`${ticker}-dp-${i}-d`) % 12);
     const when = new Date(now.getTime() - daysAgo * 86400000);
     const price = Number((spot * (0.995 + n1 * 0.01)).toFixed(2));
-    // Shares-first like the Dark Pool desk (5K–255K shares, small-skewed tail),
-    // so the same cross prints the same size on both surfaces.
-    const shares = Math.round(5000 + Math.pow(n2, 2.5) * 250000);
-    const notional = shares * price;
+    const notional = Number((0.8 + n2 * 3.4).toFixed(2));
     const hh = 9 + (hash(`${ticker}-dp-${i}-h`) % 7);
     const mm = hash(`${ticker}-dp-${i}-m`) % 60;
     const ss = hash(`${ticker}-dp-${i}-s`) % 60;
@@ -267,15 +259,19 @@ function buildPrints(ticker: string, spot: number): DarkPoolPrint[] {
       price,
       notional,
       date: `${when.getMonth() + 1}/${when.getDate()}`,
-      size: Math.round(shares / 100) * 100,
+      size: Math.round((notional * 1e9) / price / 100) * 100,
       time: `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`,
     });
   }
   return prints;
 }
 
-function buildBoard(): BoardTicker[] {
-  return Simulator.WATCHLIST.map(ticker => {
+function buildBoard(tickers?: string[]): BoardTicker[] {
+  const list =
+    tickers && tickers.length > 0
+      ? tickers.map(t => Simulator.ensureTicker(t))
+      : Simulator.WATCHLIST;
+  return list.map(ticker => {
     const cfg = Simulator.TICKERS[ticker];
     const { ladder, maxAbs } = buildLadder(ticker, cfg.currentPrice, cfg.step);
     return {
@@ -289,46 +285,90 @@ function buildBoard(): BoardTicker[] {
   });
 }
 
-// ---- retired: matrix pulse -------------------------------------------------------
+/** Key levels for ANY ticker, derived from its latest GEX snapshot — the same
+    book the trails draw, so an expanded board chart agrees with its heatmap. */
+export function buildLevelsFor(ticker: string): KeyLevels {
+  const sym = Simulator.ensureTicker(ticker);
+  const spot = Simulator.TICKERS[sym].currentPrice;
+  const snaps = Simulator.getGexHistory(sym);
+  const latest = snaps?.[snaps.length - 1];
+  if (!latest) return { spot, callWall: spot, putWall: spot, flip: spot, king: spot };
+
+  let king = spot;
+  let kingAbs = 0;
+  let callWall = spot;
+  let cwAbs = 0;
+  let putWall = spot;
+  let pwAbs = 0;
+  for (const l of latest.levels) {
+    const a = Math.abs(l.value);
+    if (a > kingAbs) {
+      kingAbs = a;
+      king = l.strike;
+    }
+    if (l.strike > spot && a > cwAbs) {
+      cwAbs = a;
+      callWall = l.strike;
+    }
+    if (l.strike < spot && a > pwAbs) {
+      pwAbs = a;
+      putWall = l.strike;
+    }
+  }
+
+  let flip = spot;
+  let flipDist = Infinity;
+  const sorted = [...latest.levels].sort((a, b) => a.strike - b.strike);
+  for (let i = 1; i < sorted.length; i++) {
+    if (Math.sign(sorted[i - 1].value) !== Math.sign(sorted[i].value)) {
+      const mid = (sorted[i - 1].strike + sorted[i].strike) / 2;
+      const d = Math.abs(mid - spot);
+      if (d < flipDist) {
+        flipDist = d;
+        flip = mid;
+      }
+    }
+  }
+
+  return { spot, callWall, putWall, flip, king };
+}
+
+// ---- live pulse ------------------------------------------------------------------
 /**
- * @deprecated Returns the matrix untouched. It survives only so the call sites
- * that still wrap it type-check; each should read the view's `matrix` directly
- * and delete its import, at which point this goes.
- *
- * The pulse multiplied every cell by a two-term sine once a second so the
- * heatmap "breathed" between scans. A liveness cue is a fair design choice —
- * this one moved the DATA, not the presentation. GexMatrix prints
- * `fmtUsd(cell.value)` inside every cell and the hover read-out repeats it,
- * signed and labelled ("dealer support · long γ"), so the dollar figure a reader
- * took off the grid swung across 31% of its own magnitude while the book had not
- * moved; the 1/1.19 normalisation meant a cell peaked at 99.6% of its true value
- * and spent the rest of the cycle understating it — down to 68% — so the ±maxAbs
- * the colour rail advertises was a number no cell could reach. Nothing in the
- * dealer book produces that wobble; it was there to look alive.
- *
- * A cue no read-out reports would be legitimate — a per-cell `pulse` weight
- * carried alongside `value` and spent on opacity or glow in GexMatrix. That
- * needs a field on MatrixCell and a change in the component, so it is not
- * smuggled back in here on the value.
- *
- * The tick argument is declared on the signature and absent from the body: the
- * shim accepts what call sites still pass and ignores it, without a lint escape
- * hatch parked over a parameter nothing reads.
+ * Per-second modulation of the matrix cells — a looping (self-recycling)
+ * wave per cell so the heatmap breathes in real time between scans. Sign is
+ * preserved and maxAbs is untouched, so colors morph without the scale or
+ * the strike window moving.
  */
-export function pulseMatrix(matrix: GexMatrixData, tick?: number): GexMatrixData;
-export function pulseMatrix(matrix: GexMatrixData): GexMatrixData {
-  return matrix;
+const PULSE_PERIOD_S = 24;
+
+export function pulseMatrix(matrix: GexMatrixData, tick: number): GexMatrixData {
+  const phase01 = (tick % PULSE_PERIOD_S) / PULSE_PERIOD_S;
+  const cells = matrix.cells.map((row, r) =>
+    row.map((cell, c) => {
+      const p = h01(`${matrix.strikes[r]}-${c}-pulse`);
+      const slow = Math.sin(2 * Math.PI * (phase01 + p));
+      const fast = Math.sin(2 * Math.PI * (phase01 * 3 + p * 7));
+      return { ...cell, value: cell.value * (1 + 0.14 * slow + 0.05 * fast) };
+    })
+  );
+  return { ...matrix, cells };
 }
 
 // ---- top-level assembly --------------------------------------------------------
-export function buildGexView(snapshot: MarketSnapshot, metric: GexMetric, range: StrikeRange): GexView {
+export function buildGexView(
+  snapshot: MarketSnapshot,
+  metric: GexMetric,
+  range: StrikeRange,
+  boardTickers?: string[]
+): GexView {
   const levels = buildLevels(snapshot);
   const { nodes, maxAbs } = buildNodes(snapshot, metric, range);
   return {
     levels,
     nodes,
     nodesMaxAbs: maxAbs,
-    matrix: buildMatrix(snapshot, metric, range, levels),
-    board: buildBoard(),
+    matrix: buildMatrix(snapshot, metric, range, levels.king),
+    board: buildBoard(boardTickers),
   };
 }

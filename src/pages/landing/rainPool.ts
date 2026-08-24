@@ -1,329 +1,96 @@
 /*
-==================================================
-  SLAYER TERMINAL - CODE-RAIN POOL
-  The scrolling terminal lines behind the hero — the
-  same grammar as the real slayerterminal.com rain:
-  short machine output, tinted by desk.
-    steel = Compass (setup scan / rank / score)
-    amber = Pinpoint AI (dealer flow / GEX / walls)
-    dim   = everything else
-  GENERATED_POOL is appended by the line-generation
-  pass; keeping it a separate array makes refreshes a
-  one-constant swap.
-==================================================
+  Content pool for the hero CodeRain — fake Slayer terminal output. OUR
+  vocabulary: the engines, the states, the structure levels. Two quiet tints
+  keyed by subject (struct = dealer/structure words, engine = engine/verdict
+  words); everything else sits in neutral grays. Decoration-tier color — the
+  semantic tokens (mint/lime/magenta) are deliberately NOT used here so the
+  rain never impersonates live data.
 */
 
-export type RainTint = 'steel' | 'amber' | 'bright' | '';
+export type RainTint = 'struct' | 'engine' | 'bright' | '';
 
-/** Hand-authored base — ported from the live site, then broadened. */
 const BASE_POOL: string[] = [
-  // Compass — setup scanner
-  'chain = spx.chain(dte=0)',
-  'setups = compass.scan(chain)',
-  'top = setups.rank().head(5)',
-  'compass.scan() -> 4 setups',
-  'setup.score   # 91',
-  'setup.ev      # +0.44R',
-  'score = kelly(edge, win_rate)',
-  'ev = sum(p(x) * payoff(x))',
-  'upper = ema + k * atr',
-  'reprice(S, vol - 0.012 * dPct)',
-  'P_touch = 0.67',
-  'if px >= upper: return HOLDING',
-  'if px <= lower: return FAILING',
-  'return TESTING',
-  "chain('SPX', 0DTE).rank()",
-  'setups = rank(chain, strat)',
-  'edge = win*payoff - loss',
-  'setup.grade   # A-',
-  // Pinpoint AI — dealer flow
-  'flow = pinpoint.read(chain)',
-  'flow.gex_net   # -1.84bn',
-  'flow.flip      # 5,938',
-  'flow.vanna     # bearish < 5940',
-  'flow.charm     # sell accel',
-  'pinpoint.dealers() -> -1.84bn',
-  'dealers.hedge -> accel down',
-  'NET GEX  +1.42bn   FLIP  5,931',
-  'DEX +0.39   VEX 0.72',
-  'CALL WALL 6050   +1.9bn',
-  'PUT  WALL 5900   -2.4bn',
-  'vanna: bearish below 5,940',
-  'charm: sell accel into close',
-  'regime: pos gamma',
-  'gamma flip crossed @ 5,938',
-  'dealers long gamma -> fade moves',
-  // Contract scores
-  'SPX  5938P  0DTE   91',
-  'SPX  5985C  0DTE   88',
-  'QQQ   495P  0DTE   82',
-  'RUT 2280P  1DTE   76',
-  'IWM   225C  0DTE   69',
-  'NVDA  128C  0DTE   84',
-  'TSLA  250P  1DTE   73',
-  'AAPL  230C  wkly   66',
-  // Live terminal output
-  'SLAYER/LIVE  09:41:22 ET',
-  '0DTE  filled  5938P  +31%',
-  'P_cal 0.64   EV +0.41R',
-  'ack  order 8842  working',
-  'slayer:~ $',
+  '> pulse --live SPY',
+  'NET GEX +1.42bn · FLIP 498.50',
+  'CALL WALL 505 · held 3x',
+  'PUT WALL 490 · defended',
+  'KING 500 · 37% of book',
+  'dealer hedge -212M/1%',
+  'gamma regime: dampening',
+  'vanna +86M per 1% IV',
+  'charm drift into close',
+  '> trace --tape',
+  'SWEEP SPY 505C x1,240 ASK',
+  'BLOCK QQQ 440P $2.1M MID',
+  'DP $4.06B · 737.38',
+  'dark pool: accumulating',
+  'metaorder 62% complete',
+  'fill @ ask · conviction 81',
+  '> compass --scan weeklies',
+  'SCREENS STRONG · conf 84%',
+  'QUALIFIES · breakeven ±1.8%',
+  'CONDITIONAL · theta 9.4%/day',
+  'REJECTED · crush -44% overnight',
+  'ACTIVE · TP1 hit +38%',
+  'WATCH · testing floor 471.63',
+  'FADING · structure broken',
+  '> earnings GS',
+  'expected ±15.2% · typical ±10.8%',
+  'OVERPRICED 1.41x history',
+  'beat rate 75% · 6 of 8',
+  'IV crush -47% by open',
+  'P(inside band) 66%',
+  '> pinpoint --exposure',
+  'GEX/DEX/VEX by strike',
+  'positioning: calls stacked 505',
+  'flip cross 2x today',
+  'absorption 0.84 · PRESSURE',
+  'replay 09:30 -> 16:00 · 4x',
+  'wall drift: tightening',
+  'p_touch 0.62 · edge +0.4R',
+  'expectancy +0.31R · n=48',
+  'RISK-ON · 11 up / 7 down',
+  'half-life 6.5h · priced-in 58%',
+  'book fades the headline',
+  'sim -> live: same contract',
 ];
 
-/** Filled in by the generation pass — kept separate so a refresh is one swap. */
-export const GENERATED_POOL: string[] = [
-  "slayer:~ $",
-  "chain = spx.chain(dte=0)",
-  "setups = compass.scan(chain)",
-  "NET GEX  -1.84bn   FLIP  5,938",
-  "setup.score   # 91",
-  "SPX  5938P  0DTE   91",
-  "P_touch = 0.67",
-  "flow = pinpoint.read(chain)",
-  "CALL WALL 6050   +1.9bn",
-  "TESTING  5938P  edge 0.12R",
-  "vanna: bearish below 5,940",
-  "kelly = edge / odds   # 0.18",
-  "top = setups.rank().head(5)",
-  "QQQ   495P  0DTE   82",
-  "charm: sell accel into close",
-  "flow.gex_net   # -1.84bn",
-  "regime: pos gamma  dips absorbed",
-  "FAILING  495P   ev -0.08R",
-  "entry 5938  target 5910  stop 5952",
-  "setup.reprice()  # p_touch 0.71",
-  "gamma flip 5,931  spot 5,944",
-  "NVDA  118C  0DTE   77",
-  "if px >= upper: return HOLDING",
-  "flow.dex_net   # +0.92bn",
-  "SLAYER/LIVE  09:41:22 ET",
-  "dealer accel down < flip",
-  "PUT  WALL 5900   -2.4bn",
-  "flow.vex_net   # -0.58bn",
-  "pinpoint: dealers pinned @ 5,938",
-  "ev = sum(p(x) * payoff(x))",
-  "0DTE  filled  5938P  +31%",
-  "skew_25d  # +4.2   term  contango",
-  "dealer short gamma hedge w/ trend",
-  "net_gex = sum(g_i * oi_i)",
-  "TSLA  242C  0DTE   84",
-  "vanna tilt: -0.31 per vol pt",
-  "if spot < flip: regime = \"neg\"",
-  "dealer.hedge   # accel_down",
-  "charm bleed  -0.12/day into exp",
-  "edge: long below flip  ev +0.5R",
-  "RUT flip 2,290  gex +0.74bn",
-  "compass.tag  # pos gamma zone",
-  "gamma pin -> 5,940",
-  "SPY  591P  0DTE   88",
-  "wall migrate 6050 -> 6025",
-  "charm_decay = -0.18/hr",
-  "PUT WALL 5850  -3.1bn new",
-  "p_touch 5,940 pin  # 0.71",
-  "setup.reprice(flip)  # 5,938",
-  "dealer short gamma < flip",
-  "CALL WALL 6100  +1.2bn",
-  "edge: fade calls at wall",
-  "RUT  2265C  0DTE   90",
-  "vanna flips + above 5,960",
-  "SLAYER/LIVE  15:41:22 ET",
-  "reprice: score 84 -> 88",
-  "top = compass.rank(chain).head(5)",
-  "META  598P  0DTE   79",
-  "p_touch = 0.67   # holding",
-  "scan: 42 chains  12 setups",
-  "AMZN  198P  0DTE   77",
-  "flip = pinpoint.flip(chain)  # 5,938",
-  "kelly = edge/odds   # 0.21",
-  "SPX  5900P  0DTE   94",
-  "09:41:23 ET  scan spx.chain(dte=0)",
-  "setup.testing  # upper 5,940",
-  "edge: +0.31R  p_cal 0.71",
-  "reprice 5938P  ask 6.20",
-  "09:43:51 ET  5942P failing edge",
-  "vex.net   # -0.41bn",
-  "09:44:07 ET  ack ord#7731 5938P",
-  "bs = black_scholes(S, K, t, r, vol)",
-  "px = reprice(S=5938, vol=0.14)",
-  "delta   0.52   gamma  0.041",
-  "theta  -18.4   vega   12.7",
-  "setup.iv   # 14.2%",
-  "breakeven = K + premium",
-  "extrinsic  5938P  # 2.10",
-  "put_call_parity: ok",
-  "iv_rank = 0.38   iv_pct = 0.61",
-  "vanna  0.083  charm -0.021",
-  "gamma flip @ 5,938",
-  "reprice: S+10 -> +0.28 delta",
-  "compass.score  # 91",
-  "p_touch = 0.67  edge +0.12",
-  "dealer gamma  +1.42bn",
-  "N(d2) = 0.61  prob_itm",
-  "vega_exp NVDA  +8.3k /vol pt",
-  "skew: 25d put 16.2 call 12.8",
-  "TSLA 250C iv 58  be 254.1",
-  "reprice(vol=0.18) # +0.31",
-  "holding: px>=be  extrinsic 0",
-  "tape = pinpoint.read(chain)",
-  "SWEEP  SPX 5938P  x420  ASK",
-  "09:41:22 ET  BLOCK  NVDA 2000c",
-  "flow.aggressor  # BUY",
-  "dark.print  QQQ 495  x18k",
-  "LIT/DARK  0.62 / 0.38",
-  "bid_sz = 340  ask_sz = 1200",
-  "sweep.side   # ASK  aggressor",
-  "NVDA  850C  SWEEP  x1.2k  91",
-  "unusual: TSLA 250P  vol 40x",
-  "dealer: short 5,938 puts",
-  "CALL WALL 6050  block absorb",
-  "compass.scan(tape)",
-  "setup.ev      # +0.38R",
-  "p_touch = 0.71  reprice",
-  "0DTE  SWEEP  filled  +27%",
-  "AAPL 230C  DARK  x9k  ASK",
-  "SPY  600P  BLOCK  x5k  84",
-  "agg_ratio.buy   # 0.68",
-  "vanna flip near 5,940",
-  "regime: pos gamma  dark bid",
-  "tape: 4,812 prints  1.9m contracts",
-  "edge = compass.rank(sweeps)",
-  "AMZN 190P  SWEEP BID  x2k  79",
-  "risk = 1.0R  stop 17pts  5938->5921",
-  "size = kelly(edge=0.44, odds=1.9)",
-  "contracts = floor(risk_$ / stop_$)",
-  "max_loss = 1R  = -$420/clip",
-  "slippage: 3.2bps entry  4.1bps exit",
-  "spread rt: 0.05 x2 = 0.10 debit",
-  "fill_prob = 0.86 @ mid+0.02",
-  "exposure: 4 clips  2.0R open",
-  "theta_drag = -0.18R / hr  0DTE",
-  "p_touch = 0.67  stop @ 1R",
-  "ev = 0.86*1.9R - 0.14*1.0R",
-  "compass.size(setup, risk=1R)",
-  "SLAYER/RISK  09:41:22 ET",
-  "SPX  5938P  0DTE  stop 1R  91",
-  "regime: neg gamma  size down 30%",
-  "pinpoint: below flip  cut risk",
-  "gex flip 5938  stop under wall",
-  "theta bleed -31% if pinned",
-  "reprice: stop 5921 -> 5925",
-  "holding: px>=upper  trail 0.5R",
-  "dealer accel  widen stop 2pts",
-  "vanna risk: bearish below 5940",
-  "slayer:~ $ risk --check",
-  "edge=0.44R  size=2 clips",
-  "NET GEX -1.84bn  cut to 0.5R",
-  "charm drag into close  -0.2R",
-  "fill @ 5938P  slip 2.1bps",
-  "RR = 1.9  breakeven p=0.34",
-  "VIX  14.82   -0.63",
-  "OPRA  4,812 prints  last 60s",
-  "sweeps  118   multi-venue",
-  "spx.iv.term  # backwardation",
-  "pc_ratio = 0.71",
-  "SPX  5,942.10  cash",
-  "SPX cash  5,938.42",
-  "flow.regime   # pos gamma",
-  "pinpoint.read(chain)",
-  "09:41:22 ET  sweep 2,400x  ask",
-  "premium: calls 62%  puts 38%",
-  "vanna: bid into 5,950",
-  "compass.scan(chain)",
-  "edge: sweep lean + neg gamma",
-  "put/call  0.61   call-heavy",
-  "gex.flip   # 5,938",
-  "iv = spx.surface(dte=0)",
-  "skew = iv.rr(25d)   # -3.2",
-  "rv20=9.1  iv30=14.6",
-  "vrp = iv30 - rv20  # +5.5",
-  "em = px * iv * sqrt(t/252)",
-  "compass.scan(surface)",
-  "setup.edge  # +4.1 vrp",
-  "flow = pinpoint.read(surf)",
-  "flow.vanna  # bearish skew",
-  "charm: front vol bleed",
-  "SPY  25d rr  -4.0  put skew",
-  "atm_iv = 15.3  wing = 22.1",
-  "vrp_rank  # 88 pctile",
-  "rv_cone: iv rich vs 63d",
-  "QQQ  vega -1.2m  short vol",
-  "setups = compass.rank(vrp)",
-  "p_touch upper band  # 0.41",
-  "mc = montecarlo(setup, n=1e4)",
-  "flow.vex       # -430mm",
-  "snap = snapshot('TSLA')",
-  "P_touch = mc.p_touch(5938, dte=0)",
-  "paths = draw(iv=0.14, n=1e5)",
-  "edge = win*payoff - loss",
-  "q05, q95 = quantile(paths, [.05,.95])",
-  "q50 = median(paths)   # 5,941",
-  "expectancy   # +0.51R",
-  "hit = (paths >= 5938).mean()",
-  "gex tilts P_touch lower",
-  "RUT  0DTE  P_touch 0.71",
-  "09:41:22 ET  mc converged  se<1e-3",
-  "f = kelly_frac(P_touch, payoff)",
-  "reprice at 5,940  ev -> +0.39R",
-  "SLAYER/MC  09:41:22 ET",
-  "ema9 = ema(px, 9)",
-  "cross = ema9 > ema21",
-  "09:41:22 ET  EMA9 X UP  5938",
-  "squeeze = ttm.fire(chain)",
-  "TTM SQUEEZE FIRED  5,938",
-  "upper = ema + k*atr",
-  "lower = ema - k*atr",
-  "orb.high  # 5,942",
-  "orb.low   # 5,928",
-  "if px <= lower: return FAILING",
-  "reprice: TP 5944  SL 5926",
-  "edge = ev / risk  # 0.24",
-  "TP1 5942  SL 5928  R 1.8",
-  "flip crossing 5,938 -> neg",
-  "gex flips neg at 5,938",
-  "dealer must sell into weakness",
-  "accel: vol expands under flip",
-  "flow.charm     # sell",
-  "vex spikes as flip breaks",
-  "dealer hedge: buy 6050 calls",
-  "neg gamma: moves amplify",
-  "pos gamma above 5,960 wall",
-  "if px < flip: return NEG_GAMMA",
-  "pin: SPX magnet 5,938 into exp",
-  "pinning 5,938 as charm decays",
-  "09:41:22 ET  regime flip neg",
-  "dealer buys dips in pos gamma",
-];
+// Generated number-heavy lines — strikes, scores, prints — built once at load.
+const TICKS = ['SPY', 'QQQ', 'NVDA', 'AAPL', 'TSLA', 'META', 'AMZN', 'GS', 'MSFT', 'AMD'];
+const GENERATED_POOL: string[] = [];
+for (let i = 0; i < 70; i++) {
+  const t = TICKS[i % TICKS.length];
+  const kind = i % 7;
+  const px = 90 + ((i * 53) % 820);
+  const pct = ((i * 37) % 190) / 10;
+  const score = 40 + ((i * 29) % 59);
+  if (kind === 0) GENERATED_POOL.push(`${t} ${px}C ${i % 3 === 0 ? '0DTE' : `${(i % 5) + 1}D`} · ${score}`);
+  else if (kind === 1) GENERATED_POOL.push(`${t} ${px}P · ±${pct.toFixed(1)}% exp`);
+  else if (kind === 2) GENERATED_POOL.push(`gex ${t} ${(i % 2 ? '+' : '-')}${(pct / 4).toFixed(2)}bn @ ${px}`);
+  else if (kind === 3) GENERATED_POOL.push(`print ${t} $${(pct / 3).toFixed(1)}M ${i % 2 ? 'ASK' : 'BID'}`);
+  else if (kind === 4) GENERATED_POOL.push(`oi ${px} · ${(1000 + i * 731) % 90000}`);
+  else if (kind === 5) GENERATED_POOL.push(`iv ${t} ${(18 + (i % 40)).toFixed(0)}% · rank ${score}`);
+  else GENERATED_POOL.push(`SCREENS ${score >= 68 ? 'STRONG' : score <= 46 ? 'WEAK' : 'MIXED'} · conf ${score}%`);
+}
 
-/** Deduped union, base first. */
-export const RAIN_POOL: string[] = (() => {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const line of [...BASE_POOL, ...GENERATED_POOL]) {
-    const k = line.toLowerCase().replace(/\s+/g, ' ').trim();
-    if (!line || seen.has(k)) continue;
-    seen.add(k);
-    out.push(line);
-  }
-  return out;
-})();
+// Dedupe (case/space-insensitive) into the export
+const seen = new Set<string>();
+export const RAIN_POOL: string[] = [...BASE_POOL, ...GENERATED_POOL].filter(l => {
+  const k = l.toLowerCase().replace(/\s+/g, ' ');
+  if (seen.has(k)) return false;
+  seen.add(k);
+  return true;
+});
 
-/** Desk tint — steel for Compass, amber for Pinpoint/dealer-flow. */
-export function tintFor(s: string): RainTint {
-  const l = s.toLowerCase();
-  if (
-    l.includes('compass') || l.includes('setup') || l.includes('scan') ||
-    l.includes('rank') || l.includes('score') || l.includes('kelly') ||
-    l.includes('reprice') || l.includes('p_touch') || l.includes('holding') ||
-    l.includes('testing') || l.includes('failing') || l.includes('grade') ||
-    l.includes('edge') || l.includes('ev ') || l.includes('ev\t')
-  )
-    return 'steel';
-  if (
-    l.includes('pinpoint') || l.includes('gex') || l.includes('dex') ||
-    l.includes('vex') || l.includes('flip') || l.includes('dealer') ||
-    l.includes('wall') || l.includes('vanna') || l.includes('charm') ||
-    l.includes('accel') || l.includes('regime') || l.includes('gamma')
-  )
-    return 'amber';
-  return 'bright';
+// Deliberately narrow — the field should be mostly quiet gray, with tinted
+// lines landing like the occasional meaningful print, not a highlighter pass.
+const STRUCT_RE = /\bgex\b|wall|flip|king|dealer|vanna|charm|gamma/i;
+const ENGINE_RE = /compass|pulse|trace|pinpoint|screens|qualifies|rejected|expectancy|overpriced/i;
+const BRIGHT_RE = /^>|sweep|block|dp \$|dark pool|metaorder/i;
+
+export function tintFor(line: string): RainTint {
+  if (BRIGHT_RE.test(line)) return 'bright'; // prompt lines stay prompt-colored
+  if (STRUCT_RE.test(line)) return 'struct';
+  if (ENGINE_RE.test(line)) return 'engine';
+  return '';
 }

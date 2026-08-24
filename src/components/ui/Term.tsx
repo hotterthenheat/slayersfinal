@@ -1,92 +1,111 @@
-import * as Tooltip from '@radix-ui/react-tooltip';
-import type { ReactNode } from 'react';
-import { cn } from '../../lib/cn';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { TERMS, type TermKey } from '../../data/terms';
 
 interface TermProps {
+  /** Dictionary key — the definition shown in the card */
   k: TermKey;
+  /** Visible text; defaults to the key itself */
   children?: ReactNode;
   className?: string;
 }
 
-/*
-==================================================
-  SLAYER TERMINAL - JARGON, EXPLAINED IN PLACE (ui/Term.tsx)
+/**
+ * Inline jargon explainer — wraps a label with a dotted underline and reveals
+ * its one-line definition in a floating card on hover OR keyboard focus.
+ * Fixed-position so it never clips inside scroll containers; any scroll
+ * dismisses it (a fixed card would detach from its anchor otherwise). The
+ * card itself stays hoverable; a short close delay bridges the anchor→card
+ * gap.
+ */
+const Term = ({ k, children, className = '' }: TermProps) => {
+  const anchorRef = useRef<HTMLSpanElement | null>(null);
+  const closeTimer = useRef(0);
+  const tipId = useId();
+  const [pos, setPos] = useState<{ x: number; y: number; up: boolean } | null>(null);
 
-  A dotted-underlined term that reveals its definition on hover or keyboard
-  focus.
+  const show = () => {
+    window.clearTimeout(closeTimer.current);
+    const el = anchorRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    // Open upward when the anchor sits in the lower half of the viewport.
+    const up = r.top > (window.innerHeight || 900) * 0.5;
+    setPos({ x: r.left + r.width / 2, y: up ? r.top - 6 : r.bottom + 6, up });
+  };
+  const hide = () => {
+    window.clearTimeout(closeTimer.current);
+    closeTimer.current = window.setTimeout(() => setPos(null), 140);
+  };
 
-  WHAT THE HAND-ROLLED VERSION WAS DOING, AND WHY RADIX DOES IT BETTER. The
-  previous implementation was 121 lines carrying its own portal, its own close
-  timer, its own scroll-dismiss listener, its own Escape and Enter handling, and
-  its own positioning:
+  useEffect(() => {
+    if (!pos) return;
+    const dismiss = () => setPos(null);
+    window.addEventListener('scroll', dismiss, true);
+    return () => {
+      window.removeEventListener('scroll', dismiss, true);
+      window.clearTimeout(closeTimer.current);
+    };
+  }, [pos]);
 
-      const up = r.top > (window.innerHeight || 900) * 0.5;
-      left: Math.min(Math.max(pos.x, 120), (window.innerWidth || 1440) - 120)
-
-  That flips the card upward based on which HALF OF THE VIEWPORT the anchor sits
-  in, rather than on whether the card actually fits — so a term near the top with
-  a tall card still opened downward off-screen, and one just past the midpoint
-  flipped up even with room below. The horizontal clamp is a fixed 120px guess at
-  half the card's width, which stops matching the moment the card's content
-  changes. Radix measures the card and the viewport and places it where it fits,
-  on both axes, and re-places it on scroll.
-
-  `Popover` is deliberately not used here: it opens on CLICK, and this has to
-  answer a reader who paused on a word. `HoverCard` would be the exact fit but is
-  not a dependency, and the tooltip's own hover-bridge already keeps the card open
-  while the pointer travels to it.
-
-  THE GLOSSARY LINK IS GONE, on purpose. It sat inside the card, and a Radix
-  tooltip closes on blur — so a link in there is reachable by mouse and by nothing
-  else. A control no keyboard user can reach is worse than one that is not
-  offered, and /guide/concepts is one click away in the nav. The card's job is
-  the definition.
-==================================================
-*/
-const Term = ({ k, children, className = '' }: TermProps) => (
-  <Tooltip.Root>
-    <Tooltip.Trigger asChild>
-      <span
-        tabIndex={0}
-        /*
-          THE GUARD IS BACK, and the comment that said it was unnecessary was
-          wrong. DataTable gives every sortable column a `<th tabIndex={0}>`
-          whose `onKeyDown` re-sorts on Enter or Space, and a Term renders
-          INSIDE that header. Radix's tooltip trigger adds `onPointerDown` and
-          `onClick` and no key handling at all, so Tab onto a column's
-          definition, press Enter to read it, and the table re-sorts under you.
-          The tooltip already opens on focus; the key press has nothing left to
-          do here, so it stops rather than bubbling to a control the reader was
-          not aiming at.
-        */
-        onKeyDown={e => {
-          if (e.key === 'Enter' || e.key === ' ') e.stopPropagation();
-        }}
-        className={cn(
-          'cursor-help underline decoration-dotted decoration-textMuted/60 underline-offset-2',
-          'outline-none focus-visible:rounded-sm focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60',
-          className
+  return (
+    <span
+      ref={anchorRef}
+      tabIndex={0}
+      role="button"
+      aria-expanded={pos != null}
+      aria-describedby={pos ? tipId : undefined}
+      onMouseEnter={show}
+      onMouseLeave={hide}
+      onFocus={show}
+      onBlur={hide}
+      onKeyDown={e => {
+        if (e.key === 'Escape' && pos) {
+          // Escape closes the card without moving focus, per APG.
+          e.stopPropagation();
+          window.clearTimeout(closeTimer.current);
+          setPos(null);
+          return;
+        }
+        if (e.key === 'Enter' || e.key === ' ') {
+          // A Term can sit inside a sortable table header. Left to bubble,
+          // Enter on the definition would re-sort the table instead of
+          // toggling the explainer.
+          e.preventDefault();
+          e.stopPropagation();
+          if (pos) setPos(null);
+          else show();
+        }
+      }}
+      className={`cursor-help underline decoration-dotted decoration-textMuted/60 underline-offset-2 outline-none focus-visible:rounded-sm focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 ${className}`}
+    >
+      {children ?? k}
+      {pos &&
+        // Portaled to <body> — inside transformed containers (Pulse grid
+        // tiles) `fixed` would anchor to the tile and clip.
+        createPortal(
+          <span
+            id={tipId}
+            role="tooltip"
+            onMouseEnter={show}
+            onMouseLeave={hide}
+            onClick={e => e.stopPropagation()}
+            className="fixed z-[60] block w-56 rounded-md border border-borderMuted bg-[#0c0c0c] px-3 py-2 shadow-[0_12px_32px_-12px_rgba(0,0,0,0.75),0_4px_10px_-6px_rgba(0,0,0,0.55)] normal-case tracking-normal"
+            style={{
+              left: Math.min(Math.max(pos.x, 120), (window.innerWidth || 1440) - 120),
+              top: pos.y,
+              transform: `translate(-50%, ${pos.up ? '-100%' : '0'})`,
+            }}
+          >
+            <span className="block font-mono text-[11px] font-semibold uppercase tracking-wider text-textPrimary">{k}</span>
+            <span className="mt-0.5 block font-sans text-[11px] font-normal leading-relaxed text-textSecondary">
+              {TERMS[k]}
+            </span>
+          </span>,
+          document.body
         )}
-      >
-        {children ?? k}
-      </span>
-    </Tooltip.Trigger>
-    <Tooltip.Portal>
-      <Tooltip.Content
-        side="top"
-        sideOffset={6}
-        collisionPadding={12}
-        className="z-[60] w-56 rounded-md border border-borderMuted bg-panelRaised px-3 py-2 shadow-overlay normal-case tracking-normal"
-      >
-        <span className="font-mono text-label font-semibold uppercase tracking-wider text-textPrimary">{k}</span>
-        <span className="mt-0.5 block font-sans text-label font-normal leading-relaxed text-textSecondary">
-          {TERMS[k]}
-        </span>
-        <Tooltip.Arrow className="fill-borderMuted" />
-      </Tooltip.Content>
-    </Tooltip.Portal>
-  </Tooltip.Root>
-);
+    </span>
+  );
+};
 
 export default Term;

@@ -8,28 +8,27 @@
 ==================================================
 */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
-import { buildGexView, pulseMatrix } from '../../data/gex';
+import Simulator from '../../core/simulator';
+import { buildGexView, fmtUsd, pulseMatrix } from '../../data/gex';
 import { buildExposureProfile } from '../../data/exposure';
-import { buildCommandView } from '../../data/command';
-import { buildCompass } from '../../data/compass';
+import { buildPulseView } from '../../data/pulse';
+import { buildCompassView } from '../../data/compass';
+import { enrichPrint } from '../../data/tape';
 import GexMatrix from '../../components/gex/GexMatrix';
 import PositioningMap from '../../components/gex/PositioningMap';
-import PressureMatrix from '../../components/gex/PressureMatrix';
-import PulseFlowTape from '../../components/flowdesk/PulseFlowTape';
-import SetupScanCard from '../../components/compass/SetupScanCard';
+import KeyLevelsRail from '../../components/gex/KeyLevelsRail';
 import StrikeChart from '../../components/gex/StrikeChart';
 import TiltBox from './TiltBox';
+import Reveal from './Reveal';
 import WorkspaceLoop, { type WorkspaceTile } from './WorkspaceLoop';
 import type { MarketSnapshot } from '../../types/market';
-import type { CommandView, ExposureProfileData, GexMatrixData, GexView } from '../../types/gex';
-import type { Setup, CompassData } from '../../types/compass';
-import KnowabilityChip from '../../components/ui/KnowabilityChip';
-import { DUR, EASE } from '../../lib/motion';
+import type { PulseView, ExposureProfileData, GexMatrixData, GexView } from '../../types/gex';
+import { VERDICT_LABEL, type Setup, type CompassView } from '../../types/compass';
 
 const SCAN_INTERVAL_MS = 10_000;
 
@@ -43,19 +42,58 @@ interface LandingCtx {
   /** Strike × expiry heat with the 1s live pulse applied */
   matrix: GexMatrixData;
   exposure: ExposureProfileData;
-  cmd: CommandView;
-  setups: CompassData;
+  pulse: PulseView;
+  setups: CompassView;
+}
+
+/** True once the live block is near the viewport. A reader parked on the hero
+    pays nothing: the demos' 1s pulse + market ticks re-render every section
+    ~2x/sec (100ms+ of main-thread work each) — that was the periodic jolt on
+    the hero. Real browsers get an IO callback immediately with the initial
+    state, so the fallback timer only fires in embedded webviews where IO is
+    dead (the preview pane) — there the demos run unconditionally, as before.
+    Latches on: once awake, stays awake. */
+function useNearViewport(ref: RefObject<HTMLDivElement | null>): boolean {
+  const [near, setNear] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === 'undefined') {
+      setNear(true);
+      return;
+    }
+    let sawCallback = false;
+    const io = new IntersectionObserver(
+      entries => {
+        sawCallback = true;
+        // Wake when the sentinel enters the upper 85% of the viewport, or is
+        // already above it (mid-page refresh with scroll restoration).
+        if (entries.some(e => e.isIntersecting || e.boundingClientRect.top < 0)) {
+          setNear(true);
+          io.disconnect();
+        }
+      },
+      // Ignore the sliver of this block that peeks above the fold at rest.
+      { rootMargin: '0px 0px -15% 0px' }
+    );
+    io.observe(el);
+    const fallback = window.setTimeout(() => {
+      if (!sawCallback) setNear(true);
+    }, 1600);
+    return () => {
+      io.disconnect();
+      clearTimeout(fallback);
+    };
+  }, [ref]);
+  return near;
 }
 
 /** Same two-tier cadence as the terminal: 10s scan structure, 1s heat pulse.
-    Runs unconditionally, like Workspace — the whole block sits just below the
-    hero, and observer-gating proved flaky in embedded webviews. */
-function useLandingScan(): LandingCtx | null {
-  const enabled = true;
+    Idle until `enabled` — see useNearViewport. */
+function useLandingScan(enabled: boolean): LandingCtx | null {
   const { marketData } = useMarketData();
 
-  const [revision, setRevision] = useState(0);
-  useEffect(() => setRevision(r => r + 1), [marketData]);
+  const revRef = useRef(0);
+  const revision = useMemo(() => ++revRef.current, [marketData]);
 
   const [scan, setScan] = useState<MarketSnapshot | null>(null);
   const scanRef = useRef<MarketSnapshot | null>(null);
@@ -88,8 +126,8 @@ function useLandingScan(): LandingCtx | null {
       ticker: scan.ticker,
       gex,
       exposure: buildExposureProfile(scan, '0DTE', 10),
-      cmd: buildCommandView(scan),
-      setups: buildCompass(scan, 'top-setups'),
+      pulse: buildPulseView(scan),
+      setups: buildCompassView(scan, 'top-setups', Simulator.universeQuotes(scan.ticker)),
     };
   }, [scan]);
 
@@ -104,7 +142,22 @@ function useLandingScan(): LandingCtx | null {
   }, [base, marketData, revision, pulseTick]);
 }
 
+/** Demo-only hotter color scale: the real page normalizes against the single
+    largest cell, which leaves most of the matrix gray. Compressing maxAbs
+    saturates the pastel ramp so the identity reads at marketing distance. */
+const hotMatrix = (matrix: GexMatrixData): GexMatrixData => ({
+  ...matrix,
+  maxAbs: matrix.maxAbs * 0.32,
+});
+
 // ---- shared chrome ----------------------------------------------------------
+
+const LivePill = () => (
+  <span className="inline-flex items-center gap-1.5 font-mono text-[9px] font-bold uppercase tracking-widest text-select">
+    <span className="w-1.5 h-1.5 rounded-full bg-select animate-pulse" />
+    Live
+  </span>
+);
 
 interface EngineBoxProps {
   name: string;
@@ -118,15 +171,11 @@ const EngineBox = ({ name, line, accent, to, children }: EngineBoxProps) => (
   <TiltBox className="flex flex-col">
     <div className="flex items-center gap-2.5 px-4 h-11 border-b border-borderSubtle shrink-0">
       <span className={`w-1.5 h-1.5 rounded-full ${accent}`} />
-      <span className="font-mono text-label font-bold uppercase tracking-widest text-textPrimary">{name}</span>
-      <span className="hidden sm:block text-label text-textSecondary truncate">{line}</span>
+      <span className="font-mono text-[11px] font-bold uppercase tracking-widest text-textPrimary">{name}</span>
+      <span className="hidden sm:block text-[11px] text-textSecondary truncate">{line}</span>
       <Link
         to={to}
-        /* `min-h-8` with matching negative margin: the link measured 16.5px
-           tall — half the 32px floor — next to panels 340-440px high, while the
-           nav links on the same page measure 32. The padding buys the hit box;
-           the -my-1 keeps the card header's height where it was. */
-        className="ml-auto inline-flex items-center min-h-8 -my-1 py-1 gap-1 font-mono text-micro uppercase tracking-wider text-textSecondary hover:text-select transition-colors"
+        className="ml-auto inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-textSecondary hover:text-select transition-colors"
       >
         Open <ArrowRight className="w-3 h-3" />
       </Link>
@@ -137,58 +186,142 @@ const EngineBox = ({ name, line, accent, to, children }: EngineBoxProps) => (
 
 // ---- box demos ---------------------------------------------------------------
 
-/** Compass top pick, health bar and all — the real grading, live. */
-/**
- * The scan's top contract, rendered by the desk's own card.
- *
- * This is an adapter, not a component: it picks the Setup and hands it to
- * `SetupScanCard` unchanged. The card is interactive on the desk, so the
- * callbacks are inert here and the wrapper above kills pointer events — a
- * preview of the read, not a desk to operate.
- */
-const DemoSetupCard = ({ setups }: { setups: CompassData }) => {
+/** Mini tape driven by the live 1.5s tick — rows slide in as prints land. */
+const DemoTape = ({ snapshot }: { snapshot: MarketSnapshot }) => {
+  const prints = useMemo(
+    () => snapshot.tape.slice(0, 7).map((o, i) => enrichPrint(o, i)),
+    [snapshot.tape]
+  );
+  return (
+    <div className="h-full overflow-hidden select-none">
+      <AnimatePresence initial={false} mode="popLayout">
+        {prints.map(p => (
+          <motion.div
+            key={`${p.time}-${p.ticker}-${p.strike}${p.right}-${p.size}`}
+            layout
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+            className="flex items-center gap-2.5 px-4 h-[38px] border-b border-borderSubtle/40"
+          >
+            <span className="font-mono text-[10px] text-textMuted tnum shrink-0">{p.time}</span>
+            <span
+              className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[10px] font-semibold shrink-0 ${
+                p.right === 'C' ? 'border-bull/30 bg-bull/10 text-bull' : 'border-bear/30 bg-bear/10 text-bear'
+              }`}
+            >
+              {p.ticker} {p.strike}{p.right}
+            </span>
+            <span className="font-mono text-[11px] text-textPrimary tnum shrink-0">
+              {p.size} <span className="text-textMuted">@</span> {p.fill.toFixed(2)}
+            </span>
+            <span className="ml-auto font-mono text-[11px] font-semibold text-textPrimary tnum shrink-0">
+              {fmtUsd(p.premium)}
+            </span>
+            {p.sweep && (
+              <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-warn shrink-0">Sweep</span>
+            )}
+            <span
+              className={`inline-flex items-center rounded px-1.5 py-0.5 font-mono text-[9px] font-bold shrink-0 ${
+                p.side === 'ASK'
+                  ? 'bg-bull/90 text-[#0a0a0a]'
+                  : p.side === 'BID'
+                    ? 'bg-bear/80 text-[#0a0a0a]'
+                    : 'bg-white/10 text-textSecondary'
+              }`}
+            >
+              {p.side === 'ASK' ? 'BUY' : p.side === 'BID' ? 'SELL' : 'MID'}
+            </span>
+          </motion.div>
+        ))}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+/** Compass top pick, confidence bar and all — the real grading, live. */
+const DemoSetup = ({ setups }: { setups: CompassView }) => {
   const setup = useMemo<Setup | null>(() => {
     const flat = setups.groups.flatMap(g => g.setups);
     return flat.find(s => s.topRated) ?? flat[0] ?? null;
   }, [setups]);
   if (!setup) return null;
-  return <SetupScanCard setup={setup} rank={1} selected={false} onSelect={() => {}} onStudy={() => {}} />;
+  const bull = setup.right === 'C';
+  return (
+    <div className="h-full p-4 flex flex-col gap-3 select-none">
+      <div className="flex items-center gap-2">
+        <span
+          className={`inline-flex items-center rounded-full border px-2.5 py-1 font-mono text-[11px] font-semibold ${
+            bull ? 'border-bull/30 bg-bull/10 text-bull' : 'border-bear/30 bg-bear/10 text-bear'
+          }`}
+        >
+          {setup.contract}
+        </span>
+        <span className="inline-flex items-center rounded px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider bg-[#EA00FF]/10 text-[#EA00FF]">
+          Top pick
+        </span>
+        <span
+          className="ml-auto inline-flex items-center rounded px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-[#0a0a0a]"
+          style={{ background: bull ? 'rgba(48,209,88,0.92)' : 'rgba(255,59,48,0.85)' }}
+        >
+          {VERDICT_LABEL[setup.verdict]}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2">
+        {[
+          { label: 'Confidence', value: `${setup.confidence}%` },
+          { label: 'Premium', value: `$${setup.mid.toFixed(2)}` },
+          {
+            label: 'Exp. move',
+            value: `${setup.expectedMovePct >= 0 ? '+' : ''}${setup.expectedMovePct}%`,
+            tone: setup.expectedMovePct >= 0 ? 'text-bull' : 'text-bear',
+          },
+        ].map(cell => (
+          <div key={cell.label} className="border border-borderSubtle rounded-md px-2.5 py-2">
+            <span className="block font-mono text-[9px] uppercase tracking-widest text-textMuted">{cell.label}</span>
+            <span className={`block mt-0.5 font-mono text-[15px] font-bold tnum ${cell.tone ?? 'text-textPrimary'}`}>
+              {cell.value}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between">
+          <span className="font-mono text-[9px] uppercase tracking-widest text-textMuted">Confidence</span>
+          <span className="font-mono text-[11px] font-semibold text-textPrimary tnum">{setup.confidence}%</span>
+        </div>
+        <div className="mt-1.5 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+          <motion.div
+            className="h-full rounded-full"
+            style={{ background: 'rgba(48,209,88,0.92)' }}
+            animate={{ width: `${setup.confidence}%` }}
+            transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
+          />
+        </div>
+      </div>
+
+      <p className="text-[11px] text-textSecondary leading-relaxed line-clamp-3">{setup.whyText}</p>
+    </div>
+  );
 };
 
 // ---- the sections ------------------------------------------------------------
 
 const SectionKicker = ({ children }: { children: React.ReactNode }) => (
-  <span className="font-mono text-label font-semibold uppercase tracking-[0.25em] text-textSecondary">{children}</span>
+  <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.25em] text-textSecondary">{children}</span>
 );
 
-/*
-  The landing scan runs the `top-setups` feed, whose score floor sits far above
-  the band that produces an EXIT verdict, so a genuinely faded card can never
-  reach this section. The faded panel is a PROJECTION of the live card past its
-  own invalidation, and that is the load-bearing fact about it.
-
-  It used to be told with a number: `const FADED_CONFIDENCE = 31`, printed as
-  "Confidence 31%" beside a matching bar. A hardcoded integer, on the public
-  landing page, under a label that claims a measurement — and the ENTER side of
-  the same meter read `setup.confidence`, which was the score with a percent
-  sign. So the section's whole before/after contrast rested on one invented
-  constant and one number said twice.
-
-  What carries the contrast now is what actually differs: the verdict headline,
-  and the invalidation copy naming the level that broke. The card's own health
-  is a fact about the contract, not about which tab you are on, so it does not
-  move between the two — and the projected state says it is projected, using the
-  knowability chip the Fracture desk already reads in.
-*/
-
-/** "Same card, projected forward" — the live read and the downgrade it prints. */
+/** "Same card, opposite call" — one real setup shown in both of its states. */
 const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
-  const [mode, setMode] = useState<'ENTER' | 'EXIT'>('ENTER');
+  const [mode, setMode] = useState<'ACTIVE' | 'FADING'>('ACTIVE');
   const lockedRef = useRef(false);
 
   useEffect(() => {
     const id = setInterval(() => {
-      if (!lockedRef.current) setMode(m => (m === 'ENTER' ? 'EXIT' : 'ENTER'));
+      if (!lockedRef.current) setMode(m => (m === 'ACTIVE' ? 'FADING' : 'ACTIVE'));
     }, 4500);
     return () => clearInterval(id);
   }, []);
@@ -199,51 +332,51 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
   }, [ctx.setups]);
   if (!setup) return null;
 
-  const entering = mode === 'ENTER';
+  const entering = mode === 'ACTIVE';
   const bull = setup.right === 'C';
+  const confidence = entering ? setup.confidence : Math.max(4, 100 - setup.confidence);
 
   return (
-    // `setups` is the Compass tab's target in the landing nav — this is the
-    // section that shows a setup card in both of its states.
-    <section id="setups" className="px-6 md:px-10 py-20 max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
-      <div>
-        <SectionKicker>Entries are easy</SectionKicker>
-        <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">It calls the exit, too.</h2>
-        <p className="mt-4 text-body text-textSecondary leading-relaxed max-w-md">
-          Most tools flag a setup and go quiet. Here, the same card that read QUALIFIED keeps watching its
-          own setup, and when the structure under it breaks it downgrades and says so. The QUALIFIED read is
-          the live one. FADED shows that same card projected past its invalidation, so you can see the call
-          it makes before it has to make it.
+    <section className="px-6 md:px-10 py-20 max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
+      <Reveal>
+        <SectionKicker>Finding trades is easy</SectionKicker>
+        <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">It calls the fade, too.</h2>
+        <p className="mt-4 text-[14px] text-textSecondary leading-relaxed max-w-md">
+          Most tools flag a setup and go quiet. Here, the card that went ACTIVE keeps watching its own
+          thesis — and when the structure under it breaks, it turns red and says FADING. This is one real
+          card from the terminal, shown in both of its states.
         </p>
         <div className="mt-6 inline-flex rounded-md border border-borderSubtle overflow-hidden">
-          {(['ENTER', 'EXIT'] as const).map(m => (
+          {(['ACTIVE', 'FADING'] as const).map(m => (
             <button
               key={m}
               onClick={() => {
                 lockedRef.current = true;
                 setMode(m);
               }}
-              className={`px-4 py-1.5 font-mono text-label font-bold uppercase tracking-wider transition-colors ${
-                mode === m
-                  ? m === 'ENTER'
-                    ? 'text-ink holo-bg'
-                    : 'text-ink'
-                  : 'text-textSecondary hover:text-textPrimary'
+              className={`px-4 py-1.5 font-mono text-[11px] font-bold uppercase tracking-wider transition-colors ${
+                mode === m ? 'text-[#0a0a0a]' : 'text-textSecondary hover:text-textPrimary'
               }`}
               style={
-                mode === m && m === 'EXIT' ? { background: 'rgba(255,59,48,0.85)' } : undefined
+                mode === m
+                  ? { background: m === 'ACTIVE' ? 'rgba(48,209,88,0.92)' : 'rgba(255,59,48,0.85)' }
+                  : undefined
               }
             >
-              {m === 'ENTER' ? 'QUALIFIED' : 'FADED'}
+              {m}
             </button>
           ))}
         </div>
-      </div>
+      </Reveal>
 
+      <Reveal delay={0.12}>
       <TiltBox maxTilt={5} className="p-0">
         <div className="flex items-center gap-2.5 px-4 h-11 border-b border-borderSubtle">
-          <span className="font-mono text-micro font-bold uppercase tracking-widest text-textMuted">The setup</span>
-          <span className="font-mono text-label font-semibold text-textPrimary">{setup.contract}</span>
+          <span className="font-mono text-[10px] font-bold uppercase tracking-widest text-textMuted">The setup</span>
+          <span className="font-mono text-[11px] font-semibold text-textPrimary">{setup.contract}</span>
+          <span className="ml-auto">
+            <LivePill />
+          </span>
         </div>
         <div className="p-5 min-h-[290px]">
           <AnimatePresence mode="wait" initial={false}>
@@ -252,51 +385,35 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: DUR.slow, ease: EASE }}
+              transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
             >
-              {/* A verdict is a process state, so it takes the chrome tones, not
-                  direction: green here painted a PUT the colour of a rally. */}
               <h3
-                className={`font-mono text-lead font-bold tracking-tight ${
-                  entering ? 'text-select' : 'text-textMuted'
-                }`}
+                className="font-mono text-[17px] font-bold tracking-tight"
+                style={{ color: entering ? '#30D158' : '#FF3B30' }}
               >
-                {entering ? `STRONG ${bull ? 'CALL' : 'PUT'}: CONDITIONS ALIGNED` : 'FADING: LOW CONVICTION'}
+                {entering ? `ACTIVE — STRONG ${bull ? 'CALL' : 'PUT'} STRUCTURE` : 'FADING — THESIS DEGRADING'}
               </h3>
-              <p className="mt-3 text-caption text-textSecondary leading-relaxed">
+              <p className="mt-3 text-[12px] text-textSecondary leading-relaxed">
                 {entering
                   ? setup.whyText
-                  : `${setup.invalidationReason} is gone below $${setup.invalidationPrice.toFixed(2)}. The floor this
-                     entry stood on no longer holds, so the engine downgrades the card and tells you to step aside.`}
+                  : `${setup.invalidationReason} is gone below $${setup.invalidationPrice.toFixed(2)} — the floor this
+                     entry stood on no longer holds. The engine downgrades the card and tells you to step aside.`}
               </p>
 
-              {/* The bar used to animate between green and red. A verdict is a
-                  process state and may not borrow the market's colours — the
-                  rule compass/setupState.ts states once for the whole app — and
-                  this one painted a PUT green whenever the live read qualified.
-                  It rides the neutral data-bar now, and the state it is in is
-                  said in words beside it. */}
               <div className="mt-4">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="font-mono text-micro uppercase tracking-widest text-textMuted">Health</span>
-                  <span className="ml-auto">
-                    <KnowabilityChip
-                      tier={entering ? 'observed' : 'assumed'}
-                      basis={
-                        entering
-                          ? 'read off the live scan'
-                          : 'the same card projected past its own invalidation — not a reading the scan has produced'
-                      }
-                    />
-                  </span>
-                  <span className="font-mono text-label font-semibold text-textPrimary tnum">{setup.health}/100</span>
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-[9px] uppercase tracking-widest text-textMuted">Confidence</span>
+                  <span className="font-mono text-[11px] font-semibold text-textPrimary tnum">{confidence}%</span>
                 </div>
                 <div className="mt-1.5 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
                   <motion.div
-                    className={`h-full rounded-full ${entering ? 'data-bar' : 'bg-textMuted/50'}`}
+                    className="h-full rounded-full"
                     initial={false}
-                    animate={{ width: `${setup.health}%` }}
-                    transition={{ duration: DUR.data, ease: EASE }}
+                    animate={{
+                      width: `${confidence}%`,
+                      background: entering ? 'rgba(48,209,88,0.92)' : 'rgba(255,59,48,0.85)',
+                    }}
+                    transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
                   />
                 </div>
               </div>
@@ -309,74 +426,69 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
                   { label: 'IV', value: `${setup.greeks.iv.toFixed(1)}%` },
                 ].map(g => (
                   <div key={g.label} className="border border-borderSubtle rounded-md px-2 py-1.5">
-                    <span className="block font-mono text-micro uppercase tracking-widest text-textMuted">{g.label}</span>
-                    <span className={`block mt-0.5 font-mono text-caption font-semibold tnum ${g.tone ?? 'text-textPrimary'}`}>
+                    <span className="block font-mono text-[8px] uppercase tracking-widest text-textMuted">{g.label}</span>
+                    <span className={`block mt-0.5 font-mono text-[12px] font-semibold tnum ${g.tone ?? 'text-textPrimary'}`}>
                       {g.value}
                     </span>
                   </div>
                 ))}
               </div>
 
-              <div className="mt-4 flex gap-2 flex-wrap">
-                {setup.whyChips.map(chip => (
-                  <span
-                    key={chip}
-                    className="inline-flex items-center rounded border border-borderSubtle px-2 py-0.5 font-mono text-micro font-semibold uppercase tracking-wider text-textSecondary"
-                  >
-                    {chip}
-                  </span>
-                ))}
-              </div>
+              {/* Thesis chips removed (Noah, 2026-08-17) — the landing demo
+                  mirrors the real card, which no longer carries them. */}
             </motion.div>
           </AnimatePresence>
         </div>
       </TiltBox>
+      </Reveal>
     </section>
   );
 };
 
 // ---- chart showcase (the "first product hit" right after the hero) ---------
 
-/** A static annotation tag pinned over the showcase frame — a legend teaching
-    the level colors (walls / flip / king), not a floating marketing pill. */
+/** Floating callout chip pinned over the showcase frame. */
 const FloatChip = ({
   label,
   dot,
   className,
+  delay = 0,
 }: {
   label: string;
   dot: string;
   className: string;
   delay?: number;
 }) => (
-  <span
-    className={`absolute z-20 inline-flex items-center gap-2 rounded border border-borderMuted bg-panelRaised/95 px-2.5 py-1 font-mono text-micro font-semibold uppercase tracking-wider text-textPrimary pointer-events-none ${className}`}
+  <motion.span
+    animate={{ y: [0, -6, 0] }}
+    transition={{ duration: 4.2, repeat: Infinity, ease: 'easeInOut', delay }}
+    className={`absolute z-20 inline-flex items-center gap-2 rounded-full border border-borderMuted bg-[#0c0c0c]/90 px-3 py-1.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-textPrimary shadow-lg shadow-black/50 pointer-events-none ${className}`}
   >
     <span className="w-1.5 h-1.5 rounded-full" style={{ background: dot }} />
     {label}
-  </span>
+  </motion.span>
 );
 
-/** A big framed chart, done live — the terminal's own chart actually running, not a screenshot. */
+/** Skylit's "Atlas" pattern, done live: a big framed chart — actually running. */
 const ChartShowcase = ({ ctx }: { ctx: LandingCtx | null }) => (
   <section id="showcase" className="px-6 md:px-10 pt-24 pb-20 max-w-6xl mx-auto">
-    <div>
+    <Reveal className="text-center">
       <SectionKicker>Charting</SectionKicker>
       <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">
         The chart that knows where dealers stand.
       </h2>
-      <p className="mt-4 text-body text-textSecondary leading-relaxed max-w-xl">
-        Walls, the gamma flip and the king strike, drawn straight on the candles and repriced as the
-        session moves. This isn't a screenshot; it's the terminal's own chart.
+      <p className="mt-4 text-[14px] text-textSecondary leading-relaxed max-w-xl mx-auto">
+        Walls, the gamma flip, the king strike — drawn straight on the candles and repriced as the
+        session moves. This isn't a screenshot; it's the terminal's chart, running on the live feed.
       </p>
-    </div>
+    </Reveal>
 
-    <div className="relative mt-10">
+    <Reveal delay={0.1} className="relative mt-10">
       {!ctx ? (
         <div className="h-[430px] border border-borderSubtle bg-panel rounded-lg animate-pulse" />
       ) : (
         <>
-          <FloatChip label="Dealer walls" dot="#C7D3E8" className="top-5 right-6" />
+          <FloatChip label="Dealer walls" dot="#30D158" className="top-5 right-6" />
           <FloatChip label="Gamma flip" dot="#7DD3FC" className="top-1/2 -left-2 md:left-4" delay={1.4} />
           <FloatChip label="King strike" dot="#EA00FF" className="bottom-8 right-10" delay={2.6} />
           <TiltBox maxTilt={2} glare={false} className="p-3">
@@ -384,34 +496,67 @@ const ChartShowcase = ({ ctx }: { ctx: LandingCtx | null }) => (
               ticker={ctx.ticker}
               revision={ctx.revision}
               levels={ctx.gex.levels}
-              overlay="BOTH"
               timeframe="1m"
-              /* Landing hero — a preview of the read, not a desk to operate.
-                 `interactive={false}` is the other half of that sentence: the
-                 picker was already hidden here, but the candles underneath
-                 stayed fully pannable and zoomable, so a visitor could drag the
-                 hero off into blank space on the first surface they ever see. */
-              showTimeframePicker={false}
-              interactive={false}
               height={400}
             />
           </TiltBox>
         </>
       )}
-    </div>
-    <p className="mt-4 text-center font-mono text-micro uppercase tracking-widest text-textMuted">
-      tick feed · levels on a 10s scan
-    </p>
+      <p className="mt-4 text-center font-mono text-[10px] uppercase tracking-widest text-textMuted">
+        live tick feed · levels on a 10s scan
+      </p>
+    </Reveal>
   </section>
 );
 
+// ---- marquee + pillars -------------------------------------------------------
+
+const TERMS = [
+  'Call wall',
+  'Put wall',
+  'Gamma flip',
+  'King strike',
+  'Net GEX',
+  'DEX',
+  'VEX',
+  'Pin zones',
+  'Dark pool',
+  '0DTE levels',
+  'Ranked strikes',
+  'Expected move',
+  'Whale sweeps',
+  'Options tape',
+];
+
+const MarqueeHalf = () => (
+  <div className="flex shrink-0">
+    {TERMS.map(t => (
+      <span
+        key={t}
+        className="flex items-center font-mono text-[10px] font-semibold uppercase tracking-[0.22em] text-textMuted whitespace-nowrap"
+      >
+        <span className="px-6">{t}</span>
+        <span className="text-borderMuted select-none">·</span>
+      </span>
+    ))}
+  </div>
+);
+
+const Marquee = () => (
+  <div className="border-y border-borderSubtle py-3.5 overflow-hidden" aria-hidden>
+    <div className="flex w-max animate-marquee">
+      <MarqueeHalf />
+      <MarqueeHalf />
+    </div>
+  </div>
+);
 
 const PILLARS = [
   {
     n: '01',
     tone: 'text-select',
     title: 'The walls',
-    body: 'Dealer hedging piles up at a handful of strikes: the call and put walls that cap and floor the move.',
+    body: 'Dealer hedging piles up at a handful of strikes — the call and put walls that cap and floor the move.',
   },
   {
     n: '02',
@@ -421,30 +566,32 @@ const PILLARS = [
   },
   {
     n: '03',
-    tone: 'text-darkpool',
+    tone: 'text-bear',
     title: 'The flow',
-    body: 'Sweeps, blocks and dark-pool prints. Positioning that shows up on the tape before it shows up in price.',
+    body: 'Sweeps, blocks and dark-pool prints — positioning that shows up on the tape before it shows up in price.',
   },
 ];
 
 const Pillars = () => (
   <section className="px-6 md:px-10 py-20 max-w-6xl mx-auto">
-    <SectionKicker>What the terminal reads</SectionKicker>
-    <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">Price doesn't move randomly.</h2>
-    <p className="mt-4 text-body text-textSecondary leading-relaxed max-w-2xl">
-      That hedging leaves fingerprints. The same three keep showing up on every chain: where the
-      move gets capped, where dealers flip from calming price to chasing it, and where the size hits
-      the tape before it hits the print.
-    </p>
+    <Reveal>
+      <SectionKicker>What the terminal reads</SectionKicker>
+      <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">Price doesn't move randomly.</h2>
+      <p className="mt-4 text-[14px] text-textSecondary leading-relaxed max-w-2xl">
+        Options dealers have to hedge, and their hedging concentrates around a few price levels every
+        session — mechanically. That structure is what actually pushes and pins price. Slayer maps it
+        live, then grades the contracts that trade it.
+      </p>
+    </Reveal>
     <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-8">
-      {PILLARS.map(p => (
-        <div key={p.n} className="border-l border-borderSubtle pl-5">
+      {PILLARS.map((p, i) => (
+        <Reveal key={p.n} delay={0.08 + i * 0.08} className="border-l border-borderSubtle pl-5">
           <div className="flex items-baseline gap-2.5">
-            <span className={`font-mono text-label font-bold ${p.tone}`}>{p.n}</span>
-            <h3 className="text-read font-bold text-textPrimary tracking-tight">{p.title}</h3>
+            <span className={`font-mono text-[11px] font-bold ${p.tone}`}>{p.n}</span>
+            <h3 className="text-[15px] font-bold text-textPrimary tracking-tight">{p.title}</h3>
           </div>
-          <p className="mt-2.5 text-caption text-textSecondary leading-relaxed">{p.body}</p>
-        </div>
+          <p className="mt-2.5 text-[12px] text-textSecondary leading-relaxed">{p.body}</p>
+        </Reveal>
       ))}
     </div>
   </section>
@@ -452,66 +599,60 @@ const Pillars = () => (
 
 /** The whole live block: one scan context feeds every demo below the hero. */
 const LiveSections = () => {
-  const ctx = useLandingScan();
+  const wakeRef = useRef<HTMLDivElement | null>(null);
+  const enabled = useNearViewport(wakeRef);
+  const ctx = useLandingScan(enabled);
 
   return (
-    <div>
+    <div className="relative">
+      {/* Wake sentinel — the demos start ticking once the reader scrolls here */}
+      <div ref={wakeRef} className="absolute top-0 h-px w-px" aria-hidden />
       <ChartShowcase ctx={ctx} />
+      <Marquee />
       <Pillars />
 
       <section id="live" className="px-6 md:px-10 py-20 max-w-6xl mx-auto">
-        <div className="flex items-baseline gap-3 flex-wrap">
-          <SectionKicker>The terminal itself</SectionKicker>
-          <span className="font-mono text-micro uppercase tracking-wider text-textMuted">
-            the same components the desks render
-          </span>
-        </div>
-        <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight max-w-2xl">
-          Not screenshots. The actual panels.
-        </h2>
+        <Reveal>
+          <div className="flex items-baseline gap-3 flex-wrap">
+            <SectionKicker>The terminal, live</SectionKicker>
+            <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted">
+              these panels are running right now · live feed
+            </span>
+          </div>
+          <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight max-w-2xl">
+            Not screenshots. The actual panels, printing.
+          </h2>
+        </Reveal>
 
         {!ctx ? (
-          <>
-            <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-5">
-              {Array.from({ length: 4 }, (_, i) => (
-                <div key={i} className="h-[340px] border border-borderSubtle bg-panel rounded-lg animate-pulse" />
-              ))}
-            </div>
-            {/* Reserve the positioning-map row so the sections below don't jump
-                when the live context resolves (matches the loaded branch). */}
-            <div className="mt-5 h-[440px] border border-borderSubtle bg-panel rounded-lg animate-pulse" />
-          </>
+          <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {Array.from({ length: 4 }, (_, i) => (
+              <div key={i} className="h-[340px] border border-borderSubtle bg-panel rounded-lg animate-pulse" />
+            ))}
+          </div>
         ) : (
           <>
-            <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <Reveal delay={0.1} className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-5">
               <div className="h-[340px]">
                 <EngineBox
                   name="Pinpoint"
-                  line="Strike × expiry heat · repriced every second"
+                  line="Strike × expiry heat — repriced every second"
                   accent="bg-select"
-                  to="/pinpoint/levels"
+                  to="/pinpoint/exposure-profile"
                 >
                   <div className="h-full p-2 pointer-events-none select-none">
-                    <GexMatrix data={ctx.matrix} spot={ctx.gex.levels.spot} />
+                    <GexMatrix data={hotMatrix(ctx.matrix)} spot={ctx.gex.levels.spot} />
                   </div>
                 </EngineBox>
               </div>
               <div className="h-[340px]">
                 <EngineBox
                   name="Compass"
-                  line="The scan's top contract, exactly as the desk lists it"
-                  accent="bg-king"
+                  line="Setups graded 0–100, in plain English"
+                  accent="bg-[#EA00FF]"
                   to="/compass"
                 >
-                  {/* The desk's own scan card, on the Setup the scan already
-                      produced. `DemoSetup` was a landing-local rebuild of it that
-                      had drifted: it still framed the contract in a tinted pill
-                      and led with a 0–100 Score, both of which the real card
-                      dropped — its own comment records the pill removal as "the
-                      last small box on the row". */}
-                  <div className="h-full overflow-hidden select-none pointer-events-none p-1">
-                    <DemoSetupCard setups={ctx.setups} />
-                  </div>
+                  <DemoSetup setups={ctx.setups} />
                 </EngineBox>
               </div>
               <div className="h-[340px]">
@@ -521,82 +662,73 @@ const LiveSections = () => {
                   accent="bg-darkpool"
                   to="/trace/live-tape"
                 >
-                  {/* The desk's own flow tape — the same component the Pulse
-                      workspace mounts for its "Options Flow" panel, on the same
-                      two props. What stood here was `DemoTape`, seven rows of
-                      landing-local markup. */}
-                  <div className="h-full overflow-hidden select-none pointer-events-none">
-                    <PulseFlowTape ticker={ctx.ticker} revision={ctx.revision} compact />
-                  </div>
+                  <DemoTape snapshot={ctx.snapshot} />
                 </EngineBox>
               </div>
               <div className="h-[340px]">
                 <EngineBox
                   name="Pulse"
-                  line="Dealer Pressure — one of the panels you can drop on the grid"
+                  line="Walls, pin, flip & king — with distance"
                   accent="bg-flip"
                   to="/pulse"
                 >
-                  {/* This card used to render `KeyLevelsRail`, which is a
-                      PINPOINT component and is not in `workspace/registry.tsx`
-                      at all — so the panel the landing showed under Pulse's name
-                      was one the Pulse workspace cannot mount. It renders the
-                      registry's `pressure-matrix` widget now, on the same two
-                      ctx fields that widget reads, so what a visitor sees here
-                      is a panel they can actually add to their own grid. */}
-                  <div className="h-full overflow-hidden select-none pointer-events-none">
-                    <PressureMatrix
-                      rows={ctx.cmd.pressure}
-                      maxAbs={ctx.cmd.pressureMaxAbs}
-                      spot={ctx.snapshot.spot}
+                  <div className="h-full overflow-hidden select-none">
+                    <KeyLevelsRail
+                      rows={ctx.pulse.keyLevels}
+                      maxPressure={ctx.pulse.keyLevels.reduce((a, l) => Math.max(a, l.pressure), 1)}
                     />
                   </div>
                 </EngineBox>
               </div>
-            </div>
+            </Reveal>
 
             {/* Full-width dealer positioning map — hover it, every strike answers */}
-            <div className="mt-5 h-[440px]">
+            <Reveal delay={0.05} className="mt-5 h-[440px]">
               <TiltBox maxTilt={2.5} glare={false} className="flex flex-col">
                 <div className="flex items-center gap-2.5 px-4 h-11 border-b border-borderSubtle shrink-0">
-                  <span className="font-mono text-label font-bold uppercase tracking-widest text-textPrimary">
+                  <span className="font-mono text-[11px] font-bold uppercase tracking-widest text-textPrimary">
                     Dealer positioning map
                   </span>
-                  <span className="hidden sm:block text-label text-textSecondary">
-                    net dealer pressure by strike, hover a bar and it answers
+                  <span className="hidden sm:block text-[11px] text-textSecondary">
+                    net dealer pressure by strike — hover a bar, it answers
+                  </span>
+                  <span className="ml-auto">
+                    <LivePill />
                   </span>
                 </div>
                 <div className="flex-grow min-h-0 p-2">
                   <PositioningMap data={ctx.exposure} />
                 </div>
               </TiltBox>
-            </div>
+            </Reveal>
           </>
         )}
       </section>
 
       {ctx && <EnterExitStory ctx={ctx} />}
 
-      {/* ── Workspace — the real panels rearranging themselves ── */}
+      {/* ── Pulse — the real panels rearranging themselves (the Workspace
+          merged into Pulse, 2026-08-17) ── */}
       {ctx && (
-        <section id="workspace" className="px-6 md:px-10 py-20 max-w-6xl mx-auto">
-          <div className="flex flex-col md:flex-row md:items-end gap-4 mb-8">
+        <section id="pulse" className="px-6 md:px-10 py-20 max-w-6xl mx-auto">
+          <Reveal className="flex flex-col md:flex-row md:items-end gap-4 mb-8">
             <div>
-              <SectionKicker>Workspace</SectionKicker>
+              <SectionKicker>Pulse</SectionKicker>
               <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">Your desk, your layout.</h2>
-              <p className="mt-4 text-body text-textSecondary leading-relaxed max-w-xl">
-                Every panel in the terminal pulls into a workspace: drag, resize, duplicate. It saves
-                the moment you touch it. These are the real panels, rearranging themselves so you don't
-                have to imagine it.
+              <p className="mt-4 text-[14px] text-textSecondary leading-relaxed max-w-xl">
+                Pulse is the live market desk — every panel in the terminal pulls into it. Drag,
+                resize, duplicate; it saves the moment you touch it. These are the real panels,
+                rearranging themselves so you don't have to imagine it.
               </p>
             </div>
             <Link
               to="/pulse"
-              className="md:ml-auto shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-md border border-borderMuted font-mono text-caption uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-rowHover transition-colors"
+              className="md:ml-auto shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-md border border-borderMuted font-mono text-[12px] uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-white/[0.03] transition-colors"
             >
-              Try the workspace <ArrowRight className="w-3.5 h-3.5" />
+              Open Pulse <ArrowRight className="w-3.5 h-3.5" />
             </Link>
-          </div>
+          </Reveal>
+          <Reveal delay={0.1}>
           <WorkspaceLoop
             tiles={
               [
@@ -605,47 +737,26 @@ const LiveSections = () => {
                   title: 'GEX heatmap',
                   node: (
                     <div className="h-full p-2">
-                      <GexMatrix data={ctx.matrix} spot={ctx.gex.levels.spot} />
+                      <GexMatrix data={hotMatrix(ctx.matrix)} spot={ctx.gex.levels.spot} />
                     </div>
                   ),
                 },
-                /* `key` is a LAYOUT SLOT in WorkspaceLoop's PRESETS, not a panel
-                   identity — the names are historical and the presets place by
-                   them, so they stay put while what fills them changes.
-                   Titles are the registry's own, verbatim, so the claim above —
-                   "these are the real panels" — is checkable against
-                   `workspace/registry.tsx` rather than taken on trust. Three of
-                   these four used to be landing-local rebuilds, and one of them
-                   (`KeyLevelsRail`) is not in the registry at all, so the
-                   workspace could never have held it. */
                 {
                   key: 'levels',
-                  title: 'Dealer Pressure',
+                  title: 'Key levels',
                   node: (
-                    <PressureMatrix
-                      rows={ctx.cmd.pressure}
-                      maxAbs={ctx.cmd.pressureMaxAbs}
-                      spot={ctx.snapshot.spot}
+                    <KeyLevelsRail
+                      rows={ctx.pulse.keyLevels}
+                      maxPressure={ctx.pulse.keyLevels.reduce((a, l) => Math.max(a, l.pressure), 1)}
                     />
                   ),
                 },
-                {
-                  key: 'tape',
-                  title: 'Options Flow',
-                  node: <PulseFlowTape ticker={ctx.ticker} revision={ctx.revision} compact />,
-                },
-                {
-                  key: 'setup',
-                  title: 'Dealer Positioning',
-                  node: (
-                    <div className="h-full p-2">
-                      <PositioningMap data={ctx.exposure} />
-                    </div>
-                  ),
-                },
+                { key: 'tape', title: 'Options tape', node: <DemoTape snapshot={ctx.snapshot} /> },
+                { key: 'setup', title: 'Top setup', node: <DemoSetup setups={ctx.setups} /> },
               ] satisfies WorkspaceTile[]
             }
           />
+          </Reveal>
         </section>
       )}
     </div>

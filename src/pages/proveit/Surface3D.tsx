@@ -1,78 +1,58 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type { MarketSnapshot } from '../../types/market';
-import DealerSurface3D from '../../components/three/DealerSurface3D';
-import SegmentedControl from '../../components/ui/SegmentedControl';
-import HoverReadout from '../../components/ui/HoverReadout';
-import { fmtUsd } from '../../data/gex';
 
 /*
-  Dealer-positioning surface: strikes across, expiries deep, net GEX tall.
-  The default is a precise 2D heatmap — every strike × expiry cell is readable
-  and hoverable, so exact levels don't hide inside a rotating solid. A toggle
-  swaps in the WebGL 3D view for the shape-at-a-glance read. Positive structure
-  reads green; negative gamma burns red — the same grammar as
-  every 2D exposure view.
+  Dealer-positioning surface, rendered honest-to-goodness 3D on a canvas:
+  strikes across, expiries deep, net GEX tall. Slow auto-orbit, drag to spin.
+  Positive structure wears the holo silver run; negative gamma burns red —
+  the same grammar as every 2D exposure view in the terminal.
 */
 
-const EXPIRY_ROWS = 11;
+const EXPIRY_ROWS = 9;
+const PITCH = 1.05; // radians — fixed camera tilt
+const AUTO_SPIN = 0.0035; // radians per frame while idle
 
-type View = '2d' | '3d';
-
-const VIEW_OPTIONS = [
-  { value: '2d', label: '2D' },
-  { value: '3d', label: '3D' },
-] as const;
-
-interface SurfaceData {
-  /** Row-major grid of normalized exposure heights (−1…1): rows = expiries, cols = strikes. */
-  grid: number[][];
-  strikes: number[];
-  spotCol: number;
-  /** max |net GEX| in the window, dollars — the surface's real scale */
-  maxAbsUsd: number;
+interface SurfacePoint {
+  x: number;
+  y: number;
+  z: number; // −1…1 normalized exposure
 }
 
-function buildSurface(snapshot: MarketSnapshot): SurfaceData {
+function buildSurface(snapshot: MarketSnapshot): { grid: SurfacePoint[][]; strikes: number[] } {
   const { chain, spot } = snapshot;
   const nodes = [...chain].sort((a, b) => a.strike - b.strike);
   const idx = nodes.findIndex(n => n.strike >= spot);
-  const from = Math.max(0, idx - 12);
-  const window = nodes.slice(from, from + 24);
+  const from = Math.max(0, idx - 11);
+  const window = nodes.slice(from, from + 22);
   const maxAbs = Math.max(...window.map(n => Math.abs(n.netGex)), 1);
-  const strikes = window.map(n => n.strike);
-  const spotFound = window.findIndex(n => n.strike >= spot);
-  const spotCol = spotFound < 0 ? Math.max(0, window.length - 1) : spotFound;
 
-  const grid: number[][] = [];
+  const grid: SurfacePoint[][] = [];
   for (let e = 0; e < EXPIRY_ROWS; e++) {
     // Near expiries carry the gamma; far rows decay toward vanna-shaped remnants
-    const decay = Math.exp(-e * 0.32);
-    grid.push(
-      window.map(n => {
-        const z = (n.netGex / maxAbs) * decay + (n.vanna / maxAbs) * (1 - decay) * 0.35;
-        return Math.max(-1, Math.min(1, z));
-      })
-    );
+    const decay = Math.exp(-e * 0.38);
+    const row: SurfacePoint[] = window.map((n, s) => ({
+      x: s / (window.length - 1) - 0.5,
+      y: e / (EXPIRY_ROWS - 1) - 0.5,
+      z: (n.netGex / maxAbs) * decay + (n.vanna / maxAbs) * (1 - decay) * 0.35,
+    }));
+    grid.push(row);
   }
-  return { grid, strikes, spotCol, maxAbsUsd: maxAbs };
+  return { grid, strikes: window.map(n => n.strike) };
 }
 
-/** −1…1 normalized exposure → house-grammar heatmap fill. Green = support (+), red = negative gamma (−). */
-function cellColor(z: number): string {
-  const t = Math.min(Math.abs(z) * 1.3, 1);
-  const alpha = 0.05 + t * 0.9;
+/** Holo silver for structure that supports, red for structure that chases. */
+function strokeFor(z: number, alpha: number): string {
   if (z >= 0) {
-    const r = Math.round(130 - t * 82);
-    const g = 210;
-    const b = Math.round(160 - t * 72);
+    // interpolate chrome → ice blue → white along |z|
+    const t = Math.min(Math.abs(z) * 1.4, 1);
+    const r = Math.round(174 + t * 70);
+    const g = Math.round(185 + t * 60);
+    const b = Math.round(207 + t * 45);
     return `rgba(${r},${g},${b},${alpha})`;
   }
-  const g = Math.round(80 - t * 34);
-  const b = Math.round(64 - t * 24);
-  return `rgba(255,${g},${b},${alpha})`;
+  const t = Math.min(Math.abs(z) * 1.4, 1);
+  return `rgba(255,${Math.round(80 - t * 30)},${Math.round(64 - t * 20)},${alpha})`;
 }
-
-const fmtStrike = (s: number) => s.toLocaleString(undefined, { maximumFractionDigits: 1 });
 
 interface Surface3DProps {
   snapshot: MarketSnapshot;
@@ -80,120 +60,115 @@ interface Surface3DProps {
 }
 
 const Surface3D = ({ snapshot, height = 340 }: Surface3DProps) => {
-  const [view, setView] = useState<View>('2d');
-  const [hover, setHover] = useState<{ r: number; c: number; z: number; x: number; y: number } | null>(null);
-  const { grid, strikes, spotCol, maxAbsUsd } = useMemo(() => buildSurface(snapshot), [snapshot]);
-  const cols = strikes.length;
-  const rows = grid.length;
-  const spotLeft = cols > 0 ? ((spotCol + 0.5) / cols) * 100 : 50;
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const yawRef = useRef(0.7);
+  const draggingRef = useRef<{ x: number; yaw: number } | null>(null);
+  const surface = useMemo(() => buildSurface(snapshot), [snapshot]);
+  const surfaceRef = useRef(surface);
+  surfaceRef.current = surface;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    let raf = 0;
+
+    const draw = () => {
+      const dpr = window.devicePixelRatio || 1;
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
+        canvas.width = w * dpr;
+        canvas.height = h * dpr;
+      }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, w, h);
+
+      if (!draggingRef.current) yawRef.current += AUTO_SPIN;
+      const yaw = yawRef.current;
+      const { grid } = surfaceRef.current;
+
+      const cosY = Math.cos(yaw);
+      const sinY = Math.sin(yaw);
+      const cosP = Math.cos(PITCH);
+      const sinP = Math.sin(PITCH);
+      const scale = Math.min(w, h * 1.5) * 0.62;
+      const cx = w / 2;
+      const cy = h / 2 + h * 0.06;
+
+      const project = (p: SurfacePoint): [number, number, number] => {
+        const rx = p.x * cosY - p.y * sinY;
+        const ry = p.x * sinY + p.y * cosY;
+        const sx = cx + rx * scale;
+        const sy = cy + ry * cosP * scale * 0.9 - p.z * sinP * (scale * 0.28);
+        return [sx, sy, ry]; // ry = depth for alpha
+      };
+
+      const alphaFor = (depth: number) => 0.28 + (0.5 - depth) * 0.5;
+
+      // rows (strike lines per expiry)
+      for (const row of grid) {
+        for (let i = 0; i < row.length - 1; i++) {
+          const a = project(row[i]);
+          const b = project(row[i + 1]);
+          const z = (row[i].z + row[i + 1].z) / 2;
+          ctx.strokeStyle = strokeFor(z, Math.max(0.12, Math.min(0.9, alphaFor((a[2] + b[2]) / 2))));
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(a[0], a[1]);
+          ctx.lineTo(b[0], b[1]);
+          ctx.stroke();
+        }
+      }
+      // columns (term structure per strike)
+      for (let s = 0; s < grid[0].length; s++) {
+        for (let e = 0; e < grid.length - 1; e++) {
+          const a = project(grid[e][s]);
+          const b = project(grid[e + 1][s]);
+          const z = (grid[e][s].z + grid[e + 1][s].z) / 2;
+          ctx.strokeStyle = strokeFor(z, Math.max(0.08, Math.min(0.7, alphaFor((a[2] + b[2]) / 2) * 0.7)));
+          ctx.lineWidth = 0.75;
+          ctx.beginPath();
+          ctx.moveTo(a[0], a[1]);
+          ctx.lineTo(b[0], b[1]);
+          ctx.stroke();
+        }
+      }
+
+      raf = requestAnimationFrame(draw);
+    };
+
+    raf = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(raf);
+  }, []);
 
   return (
-    <div className="relative flex flex-col select-none" style={{ height }}>
-      {/* view header */}
-      <div className="flex items-center justify-between gap-2 px-3.5 pt-3 pb-2">
-        <span className="font-mono text-label uppercase tracking-widest text-textMuted truncate">
-          strikes × expiries × net GEX
+    <div className="relative select-none" style={{ height }}>
+      <canvas
+        ref={canvasRef}
+        className="w-full h-full cursor-grab active:cursor-grabbing"
+        onPointerDown={e => {
+          (e.target as HTMLElement).setPointerCapture(e.pointerId);
+          draggingRef.current = { x: e.clientX, yaw: yawRef.current };
+        }}
+        onPointerMove={e => {
+          if (draggingRef.current) {
+            yawRef.current = draggingRef.current.yaw + (e.clientX - draggingRef.current.x) * 0.008;
+          }
+        }}
+        onPointerUp={() => (draggingRef.current = null)}
+        onPointerLeave={() => (draggingRef.current = null)}
+      />
+      <div className="absolute bottom-2 left-3 flex items-center gap-3 font-mono text-[9px] uppercase tracking-widest text-textMuted pointer-events-none">
+        <span className="inline-flex items-center gap-1">
+          <span className="w-2 h-[2px] holo-bar inline-block" /> dealer support
         </span>
-        <SegmentedControl ariaLabel="Surface view" options={VIEW_OPTIONS} value={view} onChange={setView} />
+        <span className="inline-flex items-center gap-1">
+          <span className="w-2 h-[2px] bg-bear/80 inline-block" /> negative gamma
+        </span>
+        <span>drag to orbit</span>
       </div>
-
-      {view === '3d' ? (
-        <div className="relative flex-1 min-h-0">
-          <DealerSurface3D grid={grid} strikes={strikes} spotCol={spotCol} maxAbsUsd={maxAbsUsd} />
-          <div className="absolute bottom-2 right-3 font-mono text-micro uppercase tracking-widest text-textMuted pointer-events-none">
-            drag · scroll to zoom
-          </div>
-        </div>
-      ) : (
-        <div className="flex-1 min-h-0 flex flex-col px-3.5 pb-2.5">
-          <div className="flex-1 min-h-0 flex">
-            {/* expiry (y) axis gutter */}
-            <div className="flex flex-col justify-between items-center pr-2 py-0.5 shrink-0">
-              <span className="font-mono text-micro uppercase tracking-widest text-textMuted">near</span>
-              <span className="font-mono text-micro uppercase tracking-widest text-textMuted [writing-mode:vertical-rl] rotate-180">
-                expiry
-              </span>
-              <span className="font-mono text-micro uppercase tracking-widest text-textMuted">far</span>
-            </div>
-
-            <div className="flex-1 min-w-0 flex flex-col">
-              {/* heatmap */}
-              <div className="relative flex-1 min-h-0 rounded-sm overflow-hidden bg-borderSubtle">
-                <div
-                  className="absolute inset-0 grid gap-px"
-                  style={{
-                    gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
-                    gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
-                  }}
-                >
-                  {grid.map((row, r) =>
-                    row.map((z, c) => (
-                      <div
-                        key={`${r}-${c}`}
-                        onMouseEnter={e => setHover({ r, c, z, x: e.clientX, y: e.clientY })}
-                        onMouseMove={e => setHover({ r, c, z, x: e.clientX, y: e.clientY })}
-                        onMouseLeave={() => setHover(h => (h && h.r === r && h.c === c ? null : h))}
-                        className="transition-[filter] hover:brightness-125 cursor-crosshair"
-                        style={{ background: cellColor(z) }}
-                      />
-                    ))
-                  )}
-                </div>
-                {/* spot column guide */}
-                <div
-                  className="absolute top-0 bottom-0 w-px bg-white/45 pointer-events-none"
-                  style={{ left: `${spotLeft}%` }}
-                />
-              </div>
-
-              {/* strike (x) axis */}
-              <div className="relative h-4 mt-1.5">
-                <span className="absolute left-0 font-mono text-label text-textMuted tnum">
-                  ${fmtStrike(strikes[0])}
-                </span>
-                <span
-                  className="absolute -translate-x-1/2 font-mono text-label text-textSecondary tnum whitespace-nowrap"
-                  style={{ left: `${spotLeft}%` }}
-                >
-                  ${fmtStrike(strikes[spotCol])} spot
-                </span>
-                <span className="absolute right-0 font-mono text-label text-textMuted tnum">
-                  ${fmtStrike(strikes[cols - 1])}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* legend */}
-          <div className="flex items-center gap-3 pt-2 font-mono text-label uppercase tracking-wider text-textMuted">
-            <span className="inline-flex items-center gap-1.5">
-              <span className="w-2.5 h-[3px] bg-bull/90 inline-block rounded-full" /> dealer support
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="w-2.5 h-[3px] bg-bear/80 inline-block rounded-full" /> negative gamma
-            </span>
-            <span className="ml-auto text-micro tracking-widest">hover a cell for the read</span>
-          </div>
-
-          {hover && (
-            <HoverReadout x={hover.x} y={hover.y}>
-              <div className="flex items-baseline gap-2">
-                <span className="font-mono text-caption font-bold text-textPrimary tnum">${fmtStrike(strikes[hover.c])}</span>
-                <span className="font-mono text-micro uppercase tracking-widest text-textMuted">
-                  {hover.r < rows / 3 ? 'near' : hover.r < (2 * rows) / 3 ? 'mid' : 'far'} exp
-                </span>
-              </div>
-              <div className={`mt-0.5 font-mono text-data font-bold tnum ${hover.z >= 0 ? 'text-bull' : 'text-bear'}`}>
-                {hover.z >= 0 ? '+' : '−'}
-                {fmtUsd(Math.abs(hover.z * maxAbsUsd))}
-              </div>
-              <div className="mt-0.5 font-mono text-micro text-textSecondary">
-                {hover.z >= 0 ? 'dealer support · long γ' : 'negative gamma · short γ'}
-              </div>
-            </HoverReadout>
-          )}
-        </div>
-      )}
     </div>
   );
 };

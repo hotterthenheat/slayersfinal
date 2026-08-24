@@ -1,6 +1,7 @@
 import Panel from '../ui/Panel';
+import RichRead from '../ui/RichRead';
 import SignalBadge from '../ui/SignalBadge';
-import { DEALER_BIAS_LABEL, type DealerBias } from '../../types/gex';
+import type { DealerBias } from '../../types/gex';
 import type { Tone } from '../ui/tones';
 
 interface ExposureInsightProps {
@@ -9,28 +10,28 @@ interface ExposureInsightProps {
   insights: string[];
 }
 
-/* Regime tokens, not direction tokens — the same pair the map and the heatmap
-   draw this quantity in. See DealerBias in types/gex.ts. */
 const biasTone: Record<DealerBias, Tone> = {
-  LONG_GAMMA: 'longGamma',
-  SHORT_GAMMA: 'shortGamma',
-  BALANCED: 'neutral',
+  BULLISH: 'bull',
+  BEARISH: 'bear',
+  NEUTRAL: 'neutral',
 };
 
 /** Positioning narrative — the engine's levels translated into English. */
 const ExposureInsight = ({ bias, biasNote, insights }: ExposureInsightProps) => (
   <Panel
     title="Positioning Insight"
-    actions={<SignalBadge tone={biasTone[bias]} dot>{DEALER_BIAS_LABEL[bias]}</SignalBadge>}
+    actions={<SignalBadge tone={biasTone[bias]} dot>{bias}</SignalBadge>}
     className="w-full h-full"
   >
     <div className="flex flex-col gap-2.5">
-      <span className="font-mono text-micro uppercase tracking-wider text-textMuted">{biasNote}</span>
+      <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted">{biasNote}</span>
       <ul className="flex flex-col gap-2">
         {insights.map((line, i) => (
-          <li key={i} className="flex items-start gap-2 text-label text-textSecondary leading-relaxed">
+          <li key={i} className="flex items-start gap-2 text-[11px] text-textSecondary leading-relaxed">
             <span className="text-textMuted mt-px select-none">›</span>
-            <span className="tnum">{line}</span>
+            <span className="tnum">
+              <RichRead text={line} />
+            </span>
           </li>
         ))}
       </ul>

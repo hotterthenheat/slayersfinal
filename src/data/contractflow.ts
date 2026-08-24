@@ -1,71 +1,168 @@
 /*
 ==================================================
-  SLAYER TERMINAL - CONTRACT FLOW (drilldown data)
-  The intraday flow of a SINGLE options contract, plus
-  the underlying's net-premium tape — the two series
-  behind the print-detail drilldown. Deterministic per
-  contract (same hash family as the rest of the tape),
-  so a contract always paints the same drilldown.
+  SLAYER TERMINAL - CONTRACT FLOW (contractflow.ts)
+  Everything behind one print, across whatever
+  window the user asks for.
+
+    • the CONTRACT's own prints — time x price, sized
+      by contracts, tagged by who paid
+    • the UNDERLYING's cumulative net call vs put
+      premium, with its price over the top
+    • the raw order list, and the volume / open-
+      interest history per session
+
+  The window is a parameter: range (1D / 5D / 1M),
+  bar interval, and how many sessions back — so the
+  same builder answers "what happened today" and
+  "what has this contract been doing all month".
+
+  Deterministic per contract + session. On the live
+  session the final print is PINNED to the real one
+  the user clicked, so the series always ends where
+  the tape says it does.
 ==================================================
 */
 
-import { hRange, hGauss, hash } from '../core/rng';
+import { dayKey, h01, hGauss, hRange } from '../core/rng';
 
 export type FlowSide = 'BID' | 'MID' | 'ASK';
+export type FlowRange = '1D' | '5D' | '1M';
 
-/**
- * Minimal contract identity the drilldown needs — the shared shape every desk
- * that shows a single contract (the tape print, a scanner row, …) can satisfy.
- * `FlowPrint` already carries every field, so it is assignable as-is; other
- * desks map their row onto this before opening the drilldown.
- */
+/** What the drilldown needs to know about the print it was opened from. */
 export interface ContractRef {
   ticker: string;
   strike: number;
   right: 'C' | 'P';
-  /** MM/DD/YYYY — seeds the deterministic drilldown alongside ticker+strike+right */
-  expiry: string;
-  /** representative contract premium ($ per contract) */
   fill: number;
-  /** bid-side share of the contract's day, 0–100 */
-  ratioBidPct: number;
-  /** underlying spot */
   spot: number;
-  /** dominant aggressor side */
-  side: FlowSide;
-  /** representative print size (0 when the row is an aggregate) */
   size: number;
+  side: FlowSide;
   volume: number;
   oi: number;
-  premium: number;
-  otmPct: number;
-  volOverOI: number;
-  /** leg count — 1 for a single contract */
-  legs: number;
+  iv: number;
+  /** Minutes since the open, 0–390 — where this print landed in the session */
+  atMinute: number;
 }
 
+export interface FlowOptions {
+  range: FlowRange;
+  /** Bar interval in minutes — how coarsely prints are bucketed */
+  intervalMin: number;
+  /** Sessions back from today; 0 = the live session */
+  dayOffset: number;
+  /** Drop multi-leg prints, leaving only outright single-leg risk */
+  singleLegOnly: boolean;
+}
+
+export const DEFAULT_FLOW_OPTIONS: FlowOptions = {
+  range: '1D',
+  intervalMin: 5,
+  dayOffset: 0,
+  singleLegOnly: false,
+};
+
 export interface ContractPrintPoint {
-  min: number; // minutes since the 09:30 open (0…390)
-  price: number; // contract premium at the print
-  size: number; // contracts
-  side: FlowSide; // aggressor
+  /** Minutes from the start of the window */
+  min: number;
+  price: number;
+  size: number;
+  side: FlowSide;
+  premium: number;
+  /** Implied vol at the print, % */
+  iv: number;
+  /** Volume in this bar vs the window's average — 1.0 = typical */
+  relVol: number;
+  multiLeg: boolean;
+  /** Session index within the window (0 = earliest) */
+  session: number;
 }
 
 export interface NetPremiumPoint {
   min: number;
-  netCall: number; // cumulative net call premium ($, ≥0 side)
-  netPut: number; // cumulative net put premium ($, ≤0 side)
-  price: number; // underlying
+  /** Cumulative net CALL premium, >= 0 side */
+  netCall: number;
+  /** Cumulative net PUT premium, <= 0 side */
+  netPut: number;
+  price: number;
+}
+
+export interface VolOiDay {
+  date: string;
+  vol: number;
+  oi: number;
+  oiChangePct: number;
+  close: number;
+  avg: number;
+  /** Share of the day's volume that hit the bid, 0–100 */
+  bidPct: number;
+  iv: number;
+  sweepPct: number;
+  multiPct: number;
+  totalPrem: number;
+  /** Share of the window's total premium, % */
+  shareOfTotalPct: number;
+  /** Intraday volume shape — the sparkline */
+  intraday: number[];
+}
+
+export interface FlowOrder {
+  id: string;
+  time: string;
+  session: number;
+  price: number;
+  size: number;
+  side: FlowSide;
+  premium: number;
+  sweep: boolean;
+  multiLeg: boolean;
+  iv: number;
+}
+
+/** One bucket of the UNDERLYING's option activity — calls vs puts. */
+export interface UnderlyingBar {
+  min: number;
+  callVol: number;
+  /** Negative so puts stack below the axis */
+  putVol: number;
+  callPrem: number;
+  putPrem: number;
+  price: number;
+}
+
+/** Where the day's activity sat on the chain. */
+export interface StrikeBucket {
+  strike: number;
+  callVol: number;
+  putVol: number;
+  callPrem: number;
+  putPrem: number;
+  /** True for the strike this drilldown was opened on */
+  isFocus: boolean;
 }
 
 export interface ContractFlow {
   points: ContractPrintPoint[];
-  avg: { min: number; price: number }[];
-  ratio: { bid: number; mid: number; ask: number }; // shares 0…1 by size
-  count: { bid: number; mid: number; ask: number }; // print counts
-  priceMin: number;
-  priceMax: number;
+  avg: { min: number; price: number; iv: number; relVol: number }[];
+  orders: FlowOrder[];
   volMax: number;
+  /** Minutes spanned by the window */
+  windowMin: number;
+  sessions: number;
+  /** The contract's own tape, summarised */
+  stats: {
+    vol: number;
+    oi: number;
+    avgPrice: number;
+    premium: number;
+    otmPct: number;
+    volOverOi: number;
+    multiPct: number;
+    bidCount: number;
+    midCount: number;
+    askCount: number;
+    /** 0–100 share of contracts that lifted the offer */
+    askSharePct: number;
+  };
   net: {
     series: NetPremiumPoint[];
     callBought: number;
@@ -73,136 +170,327 @@ export interface ContractFlow {
     putBought: number;
     putSold: number;
     netPrem: number;
-    ncp: number;
-    npp: number;
-    uMin: number;
-    uMax: number;
+    netCallPrem: number;
+    netPutPrem: number;
+    underlyingVol: number;
+    underlyingPrem: number;
     premAbs: number;
-    bullishPct: number; // 0…100
+    /** 0–100 share of premium leaning bullish */
+    bullishPct: number;
   };
+  /** The underlying's whole option tape, bucketed — calls vs puts */
+  underlying: {
+    bars: UnderlyingBar[];
+    callVol: number;
+    putVol: number;
+    callPrem: number;
+    putPrem: number;
+    /** 0–100 share of contracts that were puts */
+    putSharePct: number;
+    /** 0–100 share of premium that was puts */
+    putPremSharePct: number;
+  };
+  /** Activity by strike across the chain */
+  strikes: StrikeBucket[];
+  history: VolOiDay[];
 }
 
-const SESSION_MIN = 390; // 09:30 → 16:00
+export const SESSION_MIN = 390; // 09:30 -> 16:00
+const SESSIONS_FOR: Record<FlowRange, number> = { '1D': 1, '5D': 5, '1M': 21 };
 
-/** Format minutes-since-open as an ET clock label. */
+/** Minutes-since-open -> "HH:MM" wall clock (within one session). */
 export function flowClock(min: number): string {
-  const total = 9 * 60 + 30 + min;
-  const h = Math.floor(total / 60);
+  const inSession = ((min % SESSION_MIN) + SESSION_MIN) % SESSION_MIN;
+  const total = 9 * 60 + 30 + Math.round(inSession);
+  const h = Math.floor(total / 60) % 24;
   const m = total % 60;
-  const hh = h > 12 ? h - 12 : h;
-  return `${hh}:${String(m).padStart(2, '0')}`;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
-export function buildContractFlow(p: ContractRef): ContractFlow {
-  const key = `${p.ticker}-${p.strike}${p.right}-${p.expiry}`;
+/** Axis label for a window position — clock intraday, date across sessions. */
+export function flowAxisLabel(min: number, sessions: number, endDate: Date): string {
+  if (sessions <= 1) return flowClock(min);
+  const sessionIdx = Math.floor(min / SESSION_MIN);
+  const back = sessions - 1 - sessionIdx;
+  const d = new Date(endDate.getTime() - back * 86400000);
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}
 
-  // ---- contract flow: this contract's intraday prints ----
-  const N = 34;
-  const askShare = Math.max(0.12, Math.min(0.9, 1 - p.ratioBidPct / 100)); // ask-weighted when bullish
+/** The session a window position falls in, as a date. */
+export function sessionDate(dayOffset: number): Date {
+  return new Date(Date.now() - dayOffset * 86400000);
+}
+
+const sideFor = (n: number): FlowSide => (n > 0.62 ? 'ASK' : n < 0.3 ? 'BID' : 'MID');
+const pad = (n: number) => String(n).padStart(2, '0');
+
+export function buildContractFlow(c: ContractRef, opts: FlowOptions = DEFAULT_FLOW_OPTIONS): ContractFlow {
+  const sessions = SESSIONS_FOR[opts.range];
+  const windowMin = sessions * SESSION_MIN;
+  const live = opts.dayOffset === 0;
+  const day = dayKey();
+  const key = `${c.ticker}-${c.strike}${c.right}-${day}-o${opts.dayOffset}-${opts.range}-cf`;
+  const s = (tag: string) => `${key}-${tag}`;
+  const endDate = sessionDate(opts.dayOffset);
+
+  // ---- the contract's own prints -------------------------------------------------
+  // Denser windows get more prints, and a finer interval resolves more of them.
+  const perSession = 14 + Math.floor(h01(s('n')) * 16);
+  const intervalScale = Math.max(0.45, Math.min(2, 5 / Math.max(opts.intervalMin, 1)));
+  const count = Math.max(6, Math.round(perSession * sessions * intervalScale));
+
   const points: ContractPrintPoint[] = [];
-  let price = Math.max(0.05, p.fill * (1 + hRange(`${key}-p0`, -0.26, -0.04)));
-  const drift = (p.fill - price) / (N - 1);
-  let priceMin = price;
-  let priceMax = price;
-  for (let i = 0; i < N; i++) {
-    const t = Math.round((i / (N - 1)) * SESSION_MIN);
-    price = Math.max(0.05, price + drift + hGauss(`${key}-w${i}`) * p.fill * 0.028);
-    if (i === N - 1) price = p.fill;
-    priceMin = Math.min(priceMin, price);
-    priceMax = Math.max(priceMax, price);
-    const r = (hash(`${key}-s${i}`) % 1000) / 1000;
-    let side: FlowSide = r < askShare * 0.85 ? 'ASK' : r < askShare * 0.85 + 0.15 ? 'MID' : 'BID';
-    let size = Math.round(hRange(`${key}-z${i}`, 1, 55));
-    if (hash(`${key}-big${i}`) % 9 === 0) size = Math.round(hRange(`${key}-zb${i}`, 90, 420));
-    if (i === N - 1) {
-      size = Math.max(size, p.size);
-      side = p.side === 'ASK' ? 'ASK' : p.side === 'BID' ? 'BID' : 'MID';
-    }
-    points.push({ min: t, price, size, side });
+  const orders: FlowOrder[] = [];
+  let price = Math.max(0.02, c.fill * (0.72 + h01(s('open')) * 0.4));
+  const drift = (c.fill - price) / Math.max(count - 1, 1);
+
+  for (let i = 0; i < count; i++) {
+    const frac = count > 1 ? i / (count - 1) : 1;
+    const rawMin = frac * (live && sessions === 1 ? Math.min(c.atMinute || SESSION_MIN, SESSION_MIN) : windowMin);
+    // Snap onto the chosen bar interval so the interval control actually reads
+    const min = Math.round(rawMin / opts.intervalMin) * opts.intervalMin;
+    price = Math.max(0.02, price + drift + hGauss(s(`p${i}`)) * c.fill * 0.06);
+    const size = Math.max(1, Math.round(hRange(s(`z${i}`), 1, Math.max(2, c.size * 0.9))));
+    const side = sideFor(h01(s(`s${i}`)));
+    const multiLeg = h01(s(`m${i}`)) > 0.72;
+    const iv = Math.max(1, c.iv * (0.88 + h01(s(`iv${i}`)) * 0.26));
+    const relVol = Number(hRange(s(`rv${i}`), 0.25, 2.6).toFixed(2));
+    const session = Math.min(sessions - 1, Math.floor(min / SESSION_MIN));
+
+    if (opts.singleLegOnly && multiLeg) continue;
+
+    points.push({
+      min,
+      price: Number(price.toFixed(2)),
+      size,
+      side,
+      premium: price * size * 100,
+      iv: Number(iv.toFixed(1)),
+      relVol,
+      multiLeg,
+      session,
+    });
+    orders.push({
+      id: `${i}`,
+      time: flowClock(min),
+      session,
+      price: Number(price.toFixed(2)),
+      size,
+      side,
+      premium: price * size * 100,
+      sweep: h01(s(`sw${i}`)) > 0.78,
+      multiLeg,
+      iv: Number(iv.toFixed(1)),
+    });
   }
 
-  let cumV = 0;
-  let cumPV = 0;
-  const avg = points.map(pt => {
-    cumV += pt.size;
-    cumPV += pt.size * pt.price;
-    return { min: pt.min, price: cumPV / (cumV || 1) };
+  // On the LIVE session the series must end on the print the user clicked, so
+  // the chart can never contradict the row above it.
+  if (live && points.length && !(opts.singleLegOnly && false)) {
+    const lastMin = sessions === 1 ? Math.min(c.atMinute || SESSION_MIN, SESSION_MIN) : windowMin;
+    points[points.length - 1] = {
+      ...points[points.length - 1],
+      min: lastMin,
+      price: Number(c.fill.toFixed(2)),
+      size: c.size,
+      side: c.side,
+      premium: c.fill * c.size * 100,
+      session: sessions - 1,
+    };
+    if (orders.length) {
+      orders[orders.length - 1] = {
+        ...orders[orders.length - 1],
+        time: flowClock(lastMin),
+        price: Number(c.fill.toFixed(2)),
+        size: c.size,
+        side: c.side,
+        premium: c.fill * c.size * 100,
+      };
+    }
+  }
+
+  // Running average paid, plus the IV and relative-volume tracks the chart can overlay
+  const avg: { min: number; price: number; iv: number; relVol: number }[] = [];
+  let cum = 0;
+  let cumSize = 0;
+  points.forEach((pt, i) => {
+    cum += pt.price * pt.size;
+    cumSize += pt.size;
+    const windowPts = points.slice(Math.max(0, i - 4), i + 1);
+    avg.push({
+      min: pt.min,
+      price: Number((cum / Math.max(cumSize, 1)).toFixed(2)),
+      iv: pt.iv,
+      relVol: Number((windowPts.reduce((a, p) => a + p.relVol, 0) / windowPts.length).toFixed(2)),
+    });
   });
 
-  let bid = 0;
-  let mid = 0;
-  let ask = 0;
-  let cbid = 0;
-  let cmid = 0;
-  let cask = 0;
-  for (const pt of points) {
-    if (pt.side === 'BID') {
-      bid += pt.size;
-      cbid++;
-    } else if (pt.side === 'MID') {
-      mid += pt.size;
-      cmid++;
-    } else {
-      ask += pt.size;
-      cask++;
-    }
-  }
-  const tot = bid + mid + ask || 1;
-  const volMax = Math.max(...points.map(pt => pt.size), 1);
-  const pad = (priceMax - priceMin) * 0.16 || p.fill * 0.1;
-  priceMin = Math.max(0, priceMin - pad);
-  priceMax = priceMax + pad;
+  const volMax = Math.max(...points.map(p => p.size), 1);
+  const totalContracts = points.reduce((a, p) => a + p.size, 0);
+  const bidCount = points.filter(p => p.side === 'BID').reduce((a, p) => a + p.size, 0);
+  const midCount = points.filter(p => p.side === 'MID').reduce((a, p) => a + p.size, 0);
+  const askCount = points.filter(p => p.side === 'ASK').reduce((a, p) => a + p.size, 0);
+  const multiContracts = points.filter(p => p.multiLeg).reduce((a, p) => a + p.size, 0);
+  const premiumTotal = points.reduce((a, p) => a + p.premium, 0);
 
-  // ---- net premium: underlying-level cumulative tape ----
-  const M = 60;
-  const tilt = p.right === 'C' ? (p.side === 'ASK' ? 1 : -0.35) : p.side === 'BID' ? 0.55 : -0.75;
+  const stats = {
+    vol: totalContracts,
+    oi: c.oi,
+    avgPrice: Number((cum / Math.max(cumSize, 1)).toFixed(2)),
+    premium: premiumTotal,
+    otmPct: Number((((c.right === 'C' ? c.strike - c.spot : c.spot - c.strike) / c.spot) * 100).toFixed(1)),
+    volOverOi: Number((totalContracts / Math.max(c.oi, 1)).toFixed(2)),
+    multiPct: Math.round((multiContracts / Math.max(totalContracts, 1)) * 100),
+    bidCount,
+    midCount,
+    askCount,
+    askSharePct: Math.round((askCount / Math.max(bidCount + midCount + askCount, 1)) * 100),
+  };
+
+  // ---- the underlying's cumulative net premium ------------------------------------
   const series: NetPremiumPoint[] = [];
-  let cb = 0;
-  let cs = 0;
-  let pb = 0;
-  let ps = 0;
-  let u = p.spot * (1 + hRange(`${key}-u0`, -0.028, 0.006));
-  const uDrift = (p.spot - u) / (M - 1);
-  let uMin = u;
-  let uMax = u;
-  for (let i = 0; i < M; i++) {
-    const t = Math.round((i / (M - 1)) * SESSION_MIN);
-    cb += hRange(`${key}-cb${i}`, 0, 6e6) * (tilt > 0 ? 1.35 : 0.7);
-    cs += hRange(`${key}-cs${i}`, 0, 5e6);
-    pb += hRange(`${key}-pb${i}`, 0, 4e6) * (tilt < 0 ? 1.35 : 0.7);
-    ps += hRange(`${key}-ps${i}`, 0, 4e6);
-    u = u + uDrift + hGauss(`${key}-uw${i}`) * p.spot * 0.004;
-    if (i === M - 1) u = p.spot;
-    uMin = Math.min(uMin, u);
-    uMax = Math.max(uMax, u);
-    series.push({ min: t, netCall: cb - cs, netPut: -(pb - ps), price: u });
+  let callBought = 0;
+  let callSold = 0;
+  let putBought = 0;
+  let putSold = 0;
+  let under = c.spot * (0.994 + h01(s('u0')) * 0.012);
+  const scale = Math.max(c.spot * 4_000, 250_000);
+  const step = Math.max(opts.intervalMin, Math.round(windowMin / 130));
+  const tilt = hGauss(s('tilt')) * 0.5;
+
+  for (let m = 0; m <= windowMin; m += step) {
+    under = under * (1 + hGauss(s(`u${m}`)) * 0.0016);
+    callBought += hRange(s(`cb${m}`), 0, 1) * scale * (1 + tilt);
+    callSold += hRange(s(`cs${m}`), 0, 1) * scale;
+    putBought += hRange(s(`pb${m}`), 0, 1) * scale * (1 - tilt);
+    putSold += hRange(s(`ps${m}`), 0, 1) * scale;
+    series.push({
+      min: m,
+      netCall: callBought - callSold,
+      netPut: -(putBought - putSold),
+      price: Number(under.toFixed(2)),
+    });
   }
-  const netPrem = cb - cs - (pb - ps);
+
+  const netCallPrem = callBought - callSold;
+  const netPutPrem = putBought - putSold;
+  const netPrem = netCallPrem - netPutPrem;
   const premAbs = Math.max(...series.map(n => Math.max(Math.abs(n.netCall), Math.abs(n.netPut))), 1);
-  const uPad = (uMax - uMin) * 0.15 || p.spot * 0.01;
-  const bullishPct = Math.round(50 + Math.max(-42, Math.min(42, (netPrem / premAbs) * 42)));
+  const bullTotal = Math.abs(netCallPrem);
+  const bearTotal = Math.abs(netPutPrem);
+  const bullishPct = Math.round((bullTotal / Math.max(bullTotal + bearTotal, 1)) * 100);
+
+  // ---- the underlying's whole option tape, bucketed --------------------------------
+  // Same window, but every contract on the name rather than just this one: how
+  // much of the tape was calls, how much puts, and what price did while it printed.
+  const bars: UnderlyingBar[] = [];
+  let uCallVol = 0;
+  let uPutVol = 0;
+  let uCallPrem = 0;
+  let uPutPrem = 0;
+  const barStep = Math.max(opts.intervalMin, Math.round(windowMin / 78));
+  let barPrice = c.spot * (0.995 + h01(s('b0')) * 0.01);
+  const putBias = 0.5 + hGauss(s('putbias')) * 0.16;
+
+  for (let m = 0; m <= windowMin; m += barStep) {
+    barPrice = barPrice * (1 + hGauss(s(`bp${m}`)) * 0.0016);
+    const total = hRange(s(`bv${m}`), 400, 17_000);
+    const putShare = Math.min(0.85, Math.max(0.15, putBias + hGauss(s(`bs${m}`)) * 0.18));
+    const putVol = Math.round(total * putShare);
+    const callVol = Math.round(total * (1 - putShare));
+    const callPrem = callVol * barPrice * 0.011;
+    const putPrem = putVol * barPrice * 0.011;
+    uCallVol += callVol;
+    uPutVol += putVol;
+    uCallPrem += callPrem;
+    uPutPrem += putPrem;
+    bars.push({ min: m, callVol, putVol: -putVol, callPrem, putPrem: -putPrem, price: Number(barPrice.toFixed(2)) });
+  }
+
+  // ---- activity by strike ----------------------------------------------------------
+  // Where on the chain the money actually went, with this contract's strike flagged.
+  const strikes: StrikeBucket[] = [];
+  const gridStep = Math.max(c.spot * 0.005, 0.5);
+  const rounded = Math.round(c.spot / gridStep) * gridStep;
+  for (let i = -10; i <= 10; i++) {
+    const strike = Number((rounded + i * gridStep).toFixed(2));
+    // Activity clusters at the money and thins into the wings
+    const distance = Math.abs(strike - c.spot) / c.spot;
+    const decay = Math.exp(-distance * 42);
+    const cVol = Math.round(hRange(s(`kc${i}`), 200, 9_000) * decay + 40);
+    const pVol = Math.round(hRange(s(`kp${i}`), 200, 9_000) * decay + 40);
+    strikes.push({
+      strike,
+      callVol: cVol,
+      putVol: -pVol,
+      callPrem: cVol * c.spot * 0.011,
+      putPrem: -pVol * c.spot * 0.011,
+      isFocus: Math.abs(strike - c.strike) < gridStep / 2,
+    });
+  }
+
+  // ---- volume / open-interest history ---------------------------------------------
+  const history: VolOiDay[] = [];
+  const histDays = Math.max(6, sessions);
+  let oi = c.oi;
+  const rows: Omit<VolOiDay, 'shareOfTotalPct'>[] = [];
+  for (let d = 0; d < histDays; d++) {
+    const when = new Date(endDate.getTime() - d * 86400000);
+    const prevOi = d === 0 ? c.oi : oi;
+    const vol = d === 0 && live ? c.volume : Math.round(hRange(s(`hv${d}`), 2, Math.max(4, c.volume * 1.4)));
+    const nextOi = Math.max(1, Math.round(prevOi * (1 + hGauss(s(`ho${d}`)) * 0.12)));
+    const close = Number((c.fill * (0.7 + h01(s(`hc${d}`)) * 0.7)).toFixed(2));
+    rows.push({
+      date: `${pad(when.getMonth() + 1)}/${pad(when.getDate())}`,
+      vol,
+      oi: prevOi,
+      oiChangePct: Number((((prevOi - nextOi) / Math.max(nextOi, 1)) * 100).toFixed(1)),
+      close,
+      avg: Number((close * (0.94 + h01(s(`ha${d}`)) * 0.12)).toFixed(2)),
+      bidPct: Math.round(hRange(s(`hb${d}`), 0, 100)),
+      iv: Number((c.iv * (0.9 + h01(s(`hi${d}`)) * 0.2)).toFixed(1)),
+      sweepPct: Math.round(hRange(s(`hs${d}`), 0, 100)),
+      multiPct: Math.round(hRange(s(`hm${d}`), 0, 100)),
+      totalPrem: Math.round(vol * close * 100),
+      intraday: Array.from({ length: 13 }, (_, k) => hRange(s(`hd${d}-${k}`), 0.05, 1)),
+    });
+    oi = nextOi;
+  }
+  const premSum = rows.reduce((a, r) => a + r.totalPrem, 0) || 1;
+  rows.forEach(r => history.push({ ...r, shareOfTotalPct: Number(((r.totalPrem / premSum) * 100).toFixed(1)) }));
 
   return {
     points,
     avg,
-    ratio: { bid: bid / tot, mid: mid / tot, ask: ask / tot },
-    count: { bid: cbid, mid: cmid, ask: cask },
-    priceMin,
-    priceMax,
+    orders: orders.slice().reverse(),
     volMax,
+    windowMin,
+    sessions,
+    stats,
     net: {
       series,
-      callBought: cb,
-      callSold: cs,
-      putBought: pb,
-      putSold: ps,
+      callBought,
+      callSold,
+      putBought,
+      putSold,
       netPrem,
-      ncp: cb - cs,
-      npp: -(pb - ps),
-      uMin: uMin - uPad,
-      uMax: uMax + uPad,
+      netCallPrem,
+      netPutPrem,
+      underlyingVol: Math.round(hRange(s('uvol'), 120_000, 900_000)),
+      underlyingPrem: (callBought + callSold + putBought + putSold) * 1.8,
       premAbs,
       bullishPct,
     },
+    underlying: {
+      bars,
+      callVol: uCallVol,
+      putVol: uPutVol,
+      callPrem: uCallPrem,
+      putPrem: uPutPrem,
+      putSharePct: Math.round((uPutVol / Math.max(uCallVol + uPutVol, 1)) * 100),
+      putPremSharePct: Math.round((uPutPrem / Math.max(uCallPrem + uPutPrem, 1)) * 100),
+    },
+    strikes,
+    history,
   };
 }
