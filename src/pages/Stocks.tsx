@@ -50,7 +50,11 @@ const StateTag = ({ verdict }: { verdict: StockVerdict }) => (
    than ladder position — named so it can't be read as rank. A mid-table
    sector can be RISING; the ladder says where it sits, the phase says
    which way it's moving. LEADING is reserved for the ladder's absolute
-   top (silver/holo — the king family), never used as a phase word. */
+   top and wears `king` — the same token the king strike wears, one colour
+   for "the single one that matters most" wherever a board has one. (It read
+   silver when this was written; king moved to magenta 2026-08-18 and the
+   token followed, so the comment is caught up with the pixels.) Never used
+   as a phase word. */
 const PHASE_LABEL: Record<SectorRow['phase'], string> = {
   LEADING: 'RISING',
   IMPROVING: 'TURNING UP',

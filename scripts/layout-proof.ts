@@ -482,5 +482,73 @@ check(
   readsAsWindow ? 'snapshot.tape.slice(...) is back — that is a 4-print batch, not a window' : 'no slice of snapshot.tape'
 );
 
+/*
+  Nothing paints a second label at a strike the chart already badges.
+
+  MEASURED on /pulse/board at 1440x900. lightweight-charts draws a price
+  line's axis badge on a layer ABOVE the series pane, so a canvas label at the
+  same price loses whatever it paints behind itself:
+
+      AAPL   "187.50 · 18%"  bottom half under PUT WALL · KING
+      QQQ    "420 · 14%"     bottom half under CALL WALL · KING
+
+  Two labels for one strike. The badge already names the level, so the
+  strength label stands down and keeps its ink for the heavy strikes nothing
+  else is naming. Both sides are asserted: the primitive has to consult the
+  set, and StrikeChart has to fill it.
+
+  The same label's dark backing pad was also mis-centred — the rect ran from
+  yPix - padY to yPix + 12*vr because a `- 6*vr + 6*vr` in it cancelled, so
+  the glyphs' top half sat on bare canvas while textBaseline was 'middle'.
+  Pinned here as a symmetric rect around yPix.
+*/
+const prim = read('src/components/gex/gexNodesPrimitive.ts');
+const chart = read('src/components/gex/StrikeChart.tsx');
+const standsDown = /if \(lineKeys\.has\(lvl\.strike\.toFixed\(2\)\)\) return;/.test(prim);
+check(
+  'the trails label skips a strike that already carries a price line',
+  standsDown,
+  standsDown ? 'drawLabel returns early on a badged strike' : 'the label draws under the axis badge again'
+);
+const fed = /trailsRef\.current\?\.setPriceLines\(\[\.\.\.groups\.keys\(\)\]\.map\(Number\)\)/.test(chart);
+const cleared = /trailsRef\.current\?\.setPriceLines\(\[\]\)/.test(chart);
+check(
+  'StrikeChart tells the trails which strikes it badged',
+  fed && cleared,
+  fed
+    ? cleared
+      ? 'set on every rebuild, cleared before it'
+      : 'never cleared — turning levels off would keep the labels suppressed'
+    : 'the set is never filled, so the primitive skips nothing'
+);
+const centred = /const halfH = 6 \* vr \+ padY;[\s\S]{0,220}?fillRect\(xRight - w - padX, yPix - halfH, w \+ padX \* 2, halfH \* 2\)/.test(prim);
+check(
+  "the label's backing pad is centred on the text it backs",
+  centred,
+  centred ? 'symmetric halfH either side of yPix' : 'the pad is offset from its glyphs again'
+);
+
+/*
+  The spot marker's ticker carries its own plate.
+
+  SpotRule is the shared "where the market is" rule — ten call sites across
+  seven components — and it crosses the dealer-pressure fills. Its price is an
+  inverted pill so it reads on anything; its ticker was plain textSecondary.
+  Measured from rendered pixels on /pinpoint/exposure-profile at 390px:
+
+      before   fg rgb(163,163,163) on the gold bar rgb(216,174,59)   1.21:1
+      after    same fg on the plated rgb(36,30,12)                   6.58:1
+      (over plain panel, unchanged in feel: 8.08:1)
+
+  1.21:1 is not "hard to read". It is gone.
+*/
+const spotRule = read('src/components/ui/SpotRule.tsx');
+const plated = /bg-canvas\/85[^"]*text-textSecondary|text-textSecondary[^"]*bg-canvas\/85/.test(spotRule);
+check(
+  'the spot rule plates its ticker so a coloured fill cannot eat it',
+  plated,
+  plated ? 'bg-canvas/85 behind the textSecondary ticker' : 'the ticker is unplated — it vanishes where the rule crosses a fill'
+);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

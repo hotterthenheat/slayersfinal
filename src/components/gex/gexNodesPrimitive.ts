@@ -96,6 +96,7 @@ class TrailsPaneRenderer {
     const A_MAX = Math.max(3, Math.min(barSpacing * 0.6, 9));
     const focus = src.focusStrike;
     const king = src.kingStrike;
+    const lineKeys = src.priceLineKeys;
     const ink = INK_RGB[src.focusInk];
     const inkCss = `rgba(${ink[0]},${ink[1]},${ink[2]},0.95)`;
 
@@ -225,6 +226,8 @@ class TrailsPaneRenderer {
       const xRight = (wCss - 8) * hr;
 
       const drawLabel = (lvl: { strike: number; value: number }, color: string) => {
+        // A price line already names this strike on a layer above this one.
+        if (lineKeys.has(lvl.strike.toFixed(2))) return;
         const y = series.priceToCoordinate(lvl.strike);
         if (y === null) return;
         const pct = Math.round((Math.abs(lvl.value) / total) * 100);
@@ -232,12 +235,18 @@ class TrailsPaneRenderer {
         const text = `${strikeLabel} · ${pct}%`;
         const yPix = y * vr;
 
-        // Dark backing pad so the label survives whatever sits behind it
+        /* Dark backing pad so the label survives whatever sits behind it.
+           CENTRED on yPix, because the text is: textBaseline is 'middle'.
+           The old rect ran from yPix - padY to yPix + 12*vr — the `- 6*vr
+           + 6*vr` in it cancelled — so the glyphs' top half sat on bare
+           canvas and only their bottom half was backed. Visible in the
+           /pulse/board capture as half-plated numbers. */
         const w = ctx.measureText(text).width;
         const padX = 4 * hr;
         const padY = 2.5 * vr;
+        const halfH = 6 * vr + padY;
         ctx.fillStyle = 'rgba(5,5,5,0.72)';
-        ctx.fillRect(xRight - w - padX, yPix - 6 * vr - padY + 6 * vr, w + padX * 2, 12 * vr + padY);
+        ctx.fillRect(xRight - w - padX, yPix - halfH, w + padX * 2, halfH * 2);
         ctx.fillStyle = color;
         ctx.fillText(text, xRight, yPix);
       };
@@ -293,6 +302,15 @@ export class GexTrailsPrimitive implements ISeriesPrimitive<Time> {
   focusInk: FocusInk = 'focus';
   /** The book's king strike — its band wears magenta (re-read every scan) */
   kingStrike: number | null = null;
+  /** Prices that already carry a chart price line, as toFixed(2) keys.
+
+      The library draws those axis badges on a layer ABOVE this pane, so a
+      strength label at the same strike loses every time no matter what it
+      paints behind itself — measured on /pulse/board: "187.50 · 18%" with
+      its bottom half under PUT WALL · KING, and "420 · 14%" under
+      CALL WALL · KING. Two labels for one strike was the defect; the badge
+      already names the level, so the label stands down. */
+  priceLineKeys: ReadonlySet<string> = new Set();
   private _paneViews: TrailsPaneView[];
 
   constructor() {
@@ -302,6 +320,14 @@ export class GexTrailsPrimitive implements ISeriesPrimitive<Time> {
   setKing(strike: number | null): void {
     if (this.kingStrike === strike) return;
     this.kingStrike = strike;
+    this.requestUpdate?.();
+  }
+
+  /** Prices the chart drew a price line at — those strikes skip their label. */
+  setPriceLines(prices: number[]): void {
+    const next = new Set(prices.filter(Number.isFinite).map(p => p.toFixed(2)));
+    if (next.size === this.priceLineKeys.size && [...next].every(k => this.priceLineKeys.has(k))) return;
+    this.priceLineKeys = next;
     this.requestUpdate?.();
   }
 

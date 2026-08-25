@@ -428,6 +428,8 @@ const StrikeChart = ({
       delete levelLinesRef.current[spec.key];
     }
     shownLevelsRef.current = null;
+    // No lines, nothing for the trails' labels to stand down from.
+    trailsRef.current?.setPriceLines([]);
 
     // Levels are LIVE values — hidden during replay so history isn't lied about
     if (!overlays.levels || replay) return;
@@ -477,6 +479,13 @@ const StrikeChart = ({
       // one to flash. The teardown above de-duplicates by line object.
       for (const s of specs) levelLinesRef.current[s.key] = line;
     }
+    /* Tell the trails which strikes now carry an axis badge. Those badges are
+       drawn on a layer above the trails' pane, so a strength label at the same
+       price is buried under one — measured on /pulse/board, "187.50 · 18%"
+       with its bottom half beneath PUT WALL · KING. The badge already names
+       the level; the label stands down and keeps its ink for the heavy strikes
+       nothing else is naming. */
+    trailsRef.current?.setPriceLines([...groups.keys()].map(Number));
     shownLevelsRef.current = { ...L };
     levelTickerRef.current = ticker;
   }, [ticker, overlays.levels, replay, levelGroupKey]);
