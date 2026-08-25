@@ -50,3 +50,20 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      # The browser sweep drives the built desk in a real Chromium: geometry at
+      # eight widths x four layouts, the strike rail against the chart's own
+      # price scale, the crosshair crossing panes, and the two storage
+      # migrations. ~2 minutes.
+      #
+      # `chromium` and NOT `chromium-headless-shell`: under the shell,
+      # lightweight-charts never sizes its canvas bitmaps, so every geometry
+      # assertion passes and the "nothing in the price gutter" assertion passes
+      # BECAUSE THE GUTTER IS EMPTY. The sweep refuses to run rather than
+      # report green for that reason, so installing the wrong build fails the
+      # job loudly instead of quietly.
+      - name: Install Chromium for the sweep
+        run: npx playwright install --with-deps chromium
+
+      - name: UI sweep
+        run: npm run test:ui

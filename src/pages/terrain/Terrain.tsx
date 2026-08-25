@@ -302,11 +302,16 @@ const ROWS: Record<TerrainLayout, string> = {
 const TIME_AXIS_PX = 26;
 
 /*
-  Width of the price gutter lightweight-charts draws down the right of the
-  plot, in px. MEASURED like TIME_AXIS_PX, and used the same way: floating
-  chrome has to stop short of it, or it lands on the price ticks. The sweep
-  asserts it, so a library change that moves it fails loudly instead of
-  quietly parking a button on top of a price.
+  CLEARANCE for the price gutter lightweight-charts draws down the right of
+  the plot, in px. Floating chrome has to stop short of that gutter or it
+  lands on the price ticks.
+
+  It is deliberately a hair MORE than the gutter itself, which measures 54 at
+  every price magnitude tested (three digits to six). The sweep asserts the
+  relationship rather than the number — clearance at least as wide as the
+  gutter, and not so much wider that it is throwing away chart — so a library
+  change that widens the gutter fails loudly instead of quietly parking a
+  button on top of a price.
 */
 const PRICE_GUTTER_PX = 56;
 
