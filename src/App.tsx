@@ -9,6 +9,7 @@ import Tracker from './pages/Tracker';
 import PinpointLayout from './pages/pinpoint/PinpointLayout';
 import Pulse from './pages/workspace/Pulse';
 import PulseBoard from './pages/PulseBoard';
+import Terrain from './pages/terrain/Terrain';
 import ExposureProfile from './pages/pinpoint/ExposureProfile';
 import RankedTargets from './pages/pinpoint/RankedTargets';
 import VannaCharm from './pages/pinpoint/VannaCharm';
@@ -41,6 +42,7 @@ const App = () => {
             <Route path="/home" element={<Navigate to="/pulse" replace />} />
             <Route path="/pulse" element={<Pulse />} />
             <Route path="/pulse/board" element={<PulseBoard />} />
+            <Route path="/terrain" element={<Terrain />} />
             <Route path="/live-terminal" element={<Navigate to="/pulse" replace />} />
             {/* Workspace merged INTO Pulse (2026-08-17) — old links land there */}
             <Route path="/workspace" element={<Navigate to="/pulse" replace />} />

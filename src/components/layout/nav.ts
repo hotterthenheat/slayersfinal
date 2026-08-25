@@ -10,6 +10,7 @@ import {
   Bookmark,
   Users,
   Telescope,
+  CandlestickChart,
   Microscope,
   FolderKanban,
   ClipboardCheck,
@@ -68,9 +69,17 @@ export const NAV_ITEMS: NavItem[] = [
     group: 'Analyze',
   },
   {
+    path: '/terrain',
+    label: 'Terrain',
+    code: '05',
+    icon: CandlestickChart,
+    description: 'Charts only — one to four books side by side, one set of controls',
+    group: 'Analyze',
+  },
+  {
     path: '/pinpoint',
     label: 'Pinpoint',
-    code: '05',
+    code: '06',
     icon: Crosshair,
     description: 'GEX & dealer-positioning system',
     group: 'Analyze',
@@ -78,7 +87,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     path: '/news',
     label: 'News',
-    code: '06',
+    code: '07',
     icon: Newspaper,
     description: 'Stock news + predicted outcomes per headline',
     group: 'Analyze',
@@ -86,7 +95,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     path: '/earnings',
     label: 'Earnings',
-    code: '07',
+    code: '08',
     icon: CalendarClock,
     description: 'Earnings hub — implied vs. realized, play it or fade it',
     group: 'Analyze',
@@ -95,7 +104,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     path: '/tracker',
     label: 'Tracker',
-    code: '08',
+    code: '09',
     icon: Bookmark,
     description: 'Bookmarked setups — live monitoring',
     group: 'Manage',
@@ -103,7 +112,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     path: '/community',
     label: 'Community',
-    code: '09',
+    code: '10',
     icon: Users,
     description: 'Trade ideas, requests & feedback',
     group: 'Manage',
@@ -112,7 +121,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     path: '/prove-it',
     label: 'Prove It',
-    code: '10',
+    code: '11',
     icon: Sigma,
     description: 'Quantitative modeling & predictive analytics',
     group: 'Review',

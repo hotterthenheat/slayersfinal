@@ -104,7 +104,12 @@ const TimeframeStrip = ({
     <div
       role="group"
       aria-label="Timeframe"
-      className={`inline-flex gap-0.5 ${vertical ? 'flex-col items-stretch' : 'items-center'}`}
+      /* flex-wrap: a flex ITEM wider than its line does not split, it SPILLS,
+         and the page starts scrolling sideways. Seven timeframes need 251px
+         and a 390px screen gives the rail 213 once Terrain's layout picker is
+         beside it. Wrapping changes nothing at any width where they already
+         fit. */
+      className={`inline-flex gap-0.5 ${vertical ? 'flex-col items-stretch' : 'flex-wrap items-center'}`}
     >
       {TIMEFRAME_OPTIONS.map(opt => {
         const active = opt.value === value;
@@ -318,7 +323,7 @@ const ChartToolbar = ({
           (bars/line/area…), not the color theme; Alerts is an empty shell
           he's cooking on. The host only wires these in FULLSCREEN. */}
       {(onToggleReplay || onIndicators || alerts || onChartStyle) && (
-        <span className={`flex gap-1 ${vertical ? 'flex-col items-stretch' : 'items-center'}`}>
+        <span className={`flex gap-1 ${vertical ? 'flex-col items-stretch' : 'flex-wrap items-center justify-end'}`}>
           {onToggleReplay && (
             <button
               onClick={onToggleReplay}
