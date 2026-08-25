@@ -222,6 +222,27 @@ const COLS: Record<TerrainLayout, string> = {
 };
 
 /*
+  ROWS HAVE TO FOLLOW COLUMNS, at every breakpoint, or a pane falls out of the
+  grid's height.
+
+  Three panes in two columns need TWO rows. Layout 3 declared one, so the
+  third pane landed in an IMPLICIT row — and an implicit row is sized to its
+  content, not to a share of the container, while the single explicit row took
+  the whole height. Measured at 1024 and at 1440: two panes full height and a
+  third at 174px.
+
+  It hid because layout 3 is three columns from `2xl` up, and every screenshot
+  of it was taken at 1760. The band it was broken in — 1024 to 1535 — is most
+  laptops, and layout 3 is the default.
+*/
+const ROWS: Record<TerrainLayout, string> = {
+  1: 'lg:grid-rows-1',
+  2: 'lg:grid-rows-1',
+  3: 'lg:grid-rows-2 2xl:grid-rows-1',
+  4: 'lg:grid-rows-2',
+};
+
+/*
   Height of the time axis lightweight-charts draws under the plot, in px.
 
   MEASURED, not chosen: with `timeVisible: true` and this font the axis canvas
@@ -737,7 +758,7 @@ const Terrain = () => {
       <div
         /* The stacked-phone minimum lives on the PANE, not here — see the
            note on Pane's own wrapper for why a rule here does nothing. */
-        className={`grid ${COLS[cfg.layout]} ${cfg.layout === 4 ? 'lg:grid-rows-2' : 'lg:grid-rows-1'} gap-1.5 flex-1 min-h-0`}
+        className={`grid ${COLS[cfg.layout]} ${ROWS[cfg.layout]} gap-1.5 flex-1 min-h-0`}
       >
         {panes.map((pane, i) => (
           <Pane
