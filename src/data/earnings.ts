@@ -31,13 +31,29 @@ export interface EarningsEvent {
   /** true = company has officially set the date; false = still an analyst estimate */
   confirmed: boolean;
   slot: ReportSlot;
-  /** Straddle-implied move for the print, % */
+  /** Expected move for the print, %.
+
+      NOT straddle-implied, whatever this comment said before. It is
+      `histAvgMovePct * richness` (line ~388), and `richness` is drawn from a
+      hash BEFORE it — so the implied move is derived from the realized one,
+      not measured against it. */
   impliedMovePct: number;
   /** Average absolute move over the last 8 prints, % */
   histAvgMovePct: number;
   /** The last 8 earnings-day moves, signed %, oldest first — the receipts */
   pastMoves: { label: string; movePct: number }[];
-  /** implied ÷ realized — the mispricing everything hangs on */
+  /** The richness factor, 0.7-1.75.
+
+      Reads as `implied ÷ realized` on screen and that arithmetic holds, but
+      the causality runs the other way: this is the INPUT, drawn first, and
+      the implied move is realized × this. The ratio the board prints as
+      PRICED is therefore this number returned to itself, not two independent
+      measurements that happen to disagree.
+
+      That is a property of the generator, not of the shape. Both fields
+      survive a real feed unchanged: implied comes off the straddle, realized
+      off the last 8 prints, and the ratio becomes a comparison. Until then
+      the panel should not be read as evidence of anything. */
   richness: number;
   /** % of the last 8 quarters beaten */
   beatRate8q: number;

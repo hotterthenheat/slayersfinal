@@ -21,6 +21,7 @@ import type { Tone } from '../ui/tones';
 import ContractChainView, { type ChainSelection } from './ContractChain';
 import ContractFacts from './ContractFacts';
 import { preserveGreek } from '../ui/greek';
+import { etClock } from '../../core/etFormat';
 
 /* States, not orders — same doctrine as Compass setups. The engine's
    BUY/WATCH/FADE verdicts are INTERNAL loop-scoring vocabulary (it chose
@@ -381,7 +382,7 @@ const ContractWeigher = ({ snapshot }: ContractWeigherProps) => {
       earned the click (the provenance rule). */
   const openAnalysis = (strike: number, right: 'C' | 'P', dte: number) => {
     const graded = weighContract(snapshot, right, strike, dte);
-    setAnalysis({ strike, right, dte, gradedAt: new Date().toLocaleTimeString('en-GB') });
+    setAnalysis({ strike, right, dte, gradedAt: etClock() });
   };
 
   const handleChainSelect = (sel: ChainSelection) => openAnalysis(sel.strike, sel.right, railDte);

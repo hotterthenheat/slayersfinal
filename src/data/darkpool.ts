@@ -23,6 +23,7 @@ import type {
   LevelRole,
   Posture,
 } from '../types/darkpool';
+import { etClock } from '../core/etFormat';
 
 const VENUES = ['UBS ATS', 'MS Pool', 'JPM-X', 'Sigma X', 'CrossFinder', 'IEX-D', 'Level ATS'];
 
@@ -98,7 +99,7 @@ export function buildDarkPoolLeaders(): DarkLeadersView {
   return {
     totalNotional,
     totalPrints: sectors.reduce((a, s) => a + s.prints, 0),
-    updated: new Date().toLocaleTimeString('en-GB'),
+    updated: etClock(),
     sectors,
   };
 }

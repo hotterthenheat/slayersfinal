@@ -22,6 +22,7 @@ import Panel from '../components/ui/Panel';
 import SignalBadge from '../components/ui/SignalBadge';
 import VerdictBadge from '../components/compass/VerdictBadge';
 import DataTable, { type Column } from '../components/ui/DataTable';
+import { etMonthDay } from '../core/etFormat';
 
 const TAB_OPTIONS = [
   { value: 'setups', label: 'Tracked Setups' },
@@ -87,7 +88,7 @@ const TrackedCard = ({ tracked, live, expired, onUntrack, onReview }: TrackedCar
         <span className="font-mono text-sm font-bold text-textPrimary tracking-tight">{live.contract}</span>
         {expired ? <SignalBadge tone="bear">EXPIRED</SignalBadge> : <VerdictBadge verdict={live.verdict} dot />}
         <span className="ml-auto font-mono text-[9px] text-textMuted uppercase tracking-wider">
-          Tracked {new Date(tracked.trackedAt).toLocaleDateString()}
+          Tracked {etMonthDay(new Date(tracked.trackedAt))}
         </span>
       </div>
 
@@ -110,7 +111,7 @@ const TrackedCard = ({ tracked, live, expired, onUntrack, onReview }: TrackedCar
       {expired ? (
         <div className="px-4 py-2.5">
           <span className="font-mono text-[10px] text-textSecondary">
-            This contract expired {new Date(tracked.trackedAt).toLocaleDateString()} — tracking ended.
+            This contract expired {etMonthDay(new Date(tracked.trackedAt))} — tracking ended.
           </span>
         </div>
       ) : (
@@ -201,7 +202,7 @@ const TABLE_COLUMNS: Column<{ tracked: TrackedSetup; live: Setup; expired: boole
     header: 'Tracked',
     render: r => (
       <span className="text-textMuted">
-        {new Date(r.tracked.trackedAt).toLocaleDateString()}
+        {etMonthDay(new Date(r.tracked.trackedAt))}
       </span>
     ),
   },

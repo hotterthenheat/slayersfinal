@@ -55,6 +55,7 @@ import {
   type SleeveKey,
 } from '../../types/compass';
 import { FONT_FAMILY } from '../ui/typeface';
+import { etHm } from '../../core/etFormat';
 
 interface CampaignAnalysisProps {
   setup: Setup;
@@ -597,7 +598,7 @@ const CampaignAnalysis = ({
   }, [setup.ticker, setup.strike, setup.right, sleeve, revision]);
 
   const breakTimeLabel = floorBreak
-    ? new Date(floorBreak.time * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+    ? etHm(floorBreak.time)
     : '';
 
   const bankedLevels = useMemo(() => new Set(tpHits.map(h => h.level)), [tpHits]);

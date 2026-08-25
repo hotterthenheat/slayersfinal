@@ -15,6 +15,7 @@
 */
 
 import Feed from '../core/feed';
+import { etHm } from '../core/etFormat';
 
 export type GexTrend = 'BUILDING' | 'BLEEDING' | 'FLAT' | 'NEW';
 
@@ -37,7 +38,7 @@ const SESSION_GAP_S = 90;
 const TREND_THRESHOLD = 15;
 
 const fmtTime = (t: number) =>
-  new Date(t * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  etHm(t);
 
 /** Today's session: the trailing run of bars with no overnight gap. */
 function sessionBars(ticker: string) {

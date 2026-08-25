@@ -26,6 +26,7 @@ import ImpactLeaderboard from '../components/compass/ImpactLeaderboard';
 import ContractWeigher from '../components/compass/ContractWeigher';
 import SetupScanBoard from '../components/compass/SetupScanBoard';
 import SegmentedControl from '../components/ui/SegmentedControl';
+import { etClock } from '../core/etFormat';
 
 type CompassMode = 'setups' | 'weigher';
 
@@ -201,7 +202,7 @@ const Compass = () => {
       scanRef.current = marketData;
       lastScanTimeRef.current = now;
       setScanSnapshot(marketData);
-      setLastScanAt(new Date(now).toLocaleTimeString('en-GB'));
+      setLastScanAt(etClock(new Date(now)));
     }
   }, [marketData]);
 

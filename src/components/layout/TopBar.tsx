@@ -18,6 +18,7 @@ import { useMarketData } from '../../context/MarketDataContext';
 import { useLaunch } from './LaunchTransition';
 import SignalBadge from '../ui/SignalBadge';
 import { NAV_GROUPS, NAV_GROUP_META, NAV_ITEMS, itemsByGroup } from './nav';
+import { etClock } from '../../core/etFormat';
 
 interface TopBarProps {
   onOpenPalette: () => void;
@@ -28,14 +29,23 @@ const TopBar = ({ onOpenPalette }: TopBarProps) => {
   const { launch } = useLaunch();
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const [clock, setClock] = useState(() => new Date().toLocaleTimeString('en-US', { hour12: false }));
+  /*
+    The header clock is Eastern, and says so.
+
+    It rendered in the VIEWER's timezone, unlabelled, on a terminal where
+    every other time — session, expiry, scan stamp, chart axis — is a US
+    market time. So it agreed with the desk only for readers sitting in New
+    York and quietly disagreed with everyone else, which is worse than being
+    wrong everywhere: nothing on screen said which clock it was.
+  */
+  const [clock, setClock] = useState(() => etClock());
   const [dropdown, setDropdown] = useState<string | null>(null);
 
   // Which workflow the current route lives in — drives the underline.
   const activeGroup = NAV_ITEMS.find(i => pathname.startsWith(i.path))?.group ?? null;
 
   useEffect(() => {
-    const id = setInterval(() => setClock(new Date().toLocaleTimeString('en-US', { hour12: false })), 1000);
+    const id = setInterval(() => setClock(etClock()), 1000);
     return () => clearInterval(id);
   }, []);
 
@@ -184,7 +194,10 @@ const TopBar = ({ onOpenPalette }: TopBarProps) => {
           )}
         </div>
         <SignalBadge tone="warn">Sim</SignalBadge>
-        <span className="hidden md:block font-mono text-xs text-textSecondary tnum select-none">{clock}</span>
+        <span className="hidden md:flex items-baseline gap-1 font-mono text-xs text-textSecondary tnum select-none">
+          {clock}
+          <span className="text-[9px] uppercase tracking-widest text-textMuted">ET</span>
+        </span>
       </div>
     </header>
   );

@@ -21,7 +21,15 @@ import {
 } from '../../data/timeframe';
 import { GexTrailsPrimitive } from './gexNodesPrimitive';
 import { DrawingsPrimitive, loadDrawings, saveDrawings, type Drawing, type DrawingKind } from './drawingsPrimitive';
-import { getCandleTheme, useCandleThemeKey, candleSeriesOptions, chartSurface, type CandleTheme } from './candleTheme';
+import {
+  getCandleTheme,
+  useCandleThemeKey,
+  candleSeriesOptions,
+  chartSurface,
+  etTime,
+  etTickMark,
+  type CandleTheme,
+} from './candleTheme';
 import type { Candle } from '../../types/market';
 import type { DarkPoolPrint, KeyLevels } from '../../types/gex';
 
@@ -239,7 +247,17 @@ const StrikeChart = ({
         horzLines: { visible: false },
       },
       rightPriceScale: { borderColor: '#1c1c1c' },
-      timeScale: { borderColor: '#1c1c1c', timeVisible: true, secondsVisible: false, rightOffset: 6, barSpacing: 7 },
+      // The recordings carry true ET session epochs; without these the axis and
+      // the crosshair render them in UTC and every session reads 13:30-20:00.
+      localization: { timeFormatter: (t: number) => etTime(t) },
+      timeScale: {
+        borderColor: '#1c1c1c',
+        timeVisible: true,
+        secondsVisible: false,
+        rightOffset: 6,
+        barSpacing: 7,
+        tickMarkFormatter: (t: number, tickMarkType: number) => etTickMark(t, tickMarkType),
+      },
       crosshair: {
         vertLine: { color: 'rgba(255,255,255,0.3)', labelBackgroundColor: '#262626' },
         horzLine: { color: 'rgba(255,255,255,0.3)', labelBackgroundColor: '#262626' },

@@ -37,6 +37,7 @@ import { expiryFor } from '../../core/calendar';
 import { buildCompassView, makeSetup } from '../../data/compass';
 import Feed from '../../core/feed';
 import type { WorkspaceCtx } from './registry';
+import { etClock } from '../../core/etFormat';
 
 /** What a card click opens — enough to rebuild the campaign live. */
 interface CampaignTarget {
@@ -274,7 +275,7 @@ const CompassSetupsWidget = ({ ctx }: { ctx: WorkspaceCtx }) => {
         right: setup.right,
         scanner,
         sleeve,
-        gradedAt: new Date().toLocaleTimeString('en-GB'),
+        gradedAt: etClock(),
       }),
     [scanner, sleeve]
   );

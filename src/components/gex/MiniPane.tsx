@@ -12,7 +12,14 @@ import {
 } from 'lightweight-charts';
 import Feed from '../../core/feed';
 import { DARK_POOL } from './palette';
-import { getCandleTheme, useCandleThemeKey, candleSeriesOptions, chartSurface } from './candleTheme';
+import {
+  getCandleTheme,
+  useCandleThemeKey,
+  candleSeriesOptions,
+  chartSurface,
+  etTime,
+  etTickMark,
+} from './candleTheme';
 import TickerQuickPick from './TickerQuickPick';
 import type { DarkPoolPrint } from '../../types/gex';
 import { FONT_FAMILY } from '../ui/typeface';
@@ -63,7 +70,16 @@ const MiniPane = ({ ticker, spot, changePercent, prints, revision, onChangeTicke
       },
       grid: { vertLines: { visible: false }, horzLines: { color: s0.grid } },
       rightPriceScale: { borderColor: '#1c1c1c' },
-      timeScale: { borderColor: '#1c1c1c', timeVisible: true, secondsVisible: false, rightOffset: 3, barSpacing: 4 },
+      // Same Eastern clock as the full chart — see candleTheme.ts.
+      localization: { timeFormatter: (t: number) => etTime(t) },
+      timeScale: {
+        borderColor: '#1c1c1c',
+        timeVisible: true,
+        secondsVisible: false,
+        rightOffset: 3,
+        barSpacing: 4,
+        tickMarkFormatter: (t: number, tickMarkType: number) => etTickMark(t, tickMarkType),
+      },
       crosshair: {
         vertLine: { color: 'rgba(255,255,255,0.25)', labelBackgroundColor: '#262626' },
         horzLine: { color: 'rgba(255,255,255,0.25)', labelBackgroundColor: '#262626' },

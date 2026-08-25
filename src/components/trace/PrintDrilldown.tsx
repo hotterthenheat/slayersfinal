@@ -43,6 +43,7 @@ import { useMarketData } from '../../context/MarketDataContext';
 import type { FlowPrint, PrintSentiment } from '../../types/trace';
 import type { MarketSnapshot } from '../../types/market';
 import { toneBar, type Tone } from '../ui/tones';
+import { etMonthDay } from '../../core/etFormat';
 
 // recharts is heavy — it only loads when a print is actually opened
 const FlowPanels = lazy(() => import('./ContractFlowChart').then(m => ({ default: m.FlowPanel })));
@@ -361,7 +362,7 @@ const PrintDrilldown = ({ print, snapshot, onClose, isMarked, onToggleMark, onSt
   const linkBtn =
     'inline-flex items-center justify-center gap-1.5 px-2.5 py-2 rounded border border-borderSubtle bg-white/[0.02] font-mono text-[10px] uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:border-borderMuted transition-colors';
 
-  const dateLabel = sessionDate(dayOffset).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const dateLabel = etMonthDay(sessionDate(dayOffset));
 
   return (
     <Modal

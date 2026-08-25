@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { BULL, PUT_WALL, FLIP, SPOT } from '../palette';
 import type { WallDriftPoint } from '../../../types/gex';
+import { etHm } from '../../../core/etFormat';
 
 interface WallDriftProps {
   drift: WallDriftPoint[];
@@ -89,7 +90,7 @@ const WallDrift = ({ drift }: WallDriftProps) => {
   const span = max - min;
 
   const timeLabel = (t: number) =>
-    new Date(t * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    etHm(t);
   const ticks = [0, 0.25, 0.5, 0.75, 1].map(f => drift[Math.min(drift.length - 1, Math.round(f * (drift.length - 1)))]);
 
   return (

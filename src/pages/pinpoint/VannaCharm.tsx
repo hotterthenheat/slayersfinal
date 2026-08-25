@@ -11,6 +11,7 @@ import LevelShiftList from '../../components/gex/vannacharm/LevelShiftList';
 import WallDrift from '../../components/gex/vannacharm/WallDrift';
 import type { MarketSnapshot } from '../../types/market';
 import type { IvShift, ShiftMode } from '../../types/gex';
+import { etClock } from '../../core/etFormat';
 
 /** Migration projections sweep on the scan tier. */
 const SCAN_INTERVAL_MS = 10_000;
@@ -48,7 +49,7 @@ const VannaCharm = () => {
       scanRef.current = marketData;
       lastScanTimeRef.current = now;
       setScanSnapshot(marketData);
-      setLastScanAt(new Date(now).toLocaleTimeString('en-GB'));
+      setLastScanAt(etClock(new Date(now)));
     }
   }, [marketData]);
 
