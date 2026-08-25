@@ -62,11 +62,19 @@ const Modal = ({ open, onClose, ariaLabel, header, children, headerActions, head
         className={`relative w-full ${widthClass} max-h-[86vh] flex flex-col border border-borderMuted bg-panel rounded-lg shadow-2xl shadow-black/70 overflow-hidden animate-modal-card`}
       >
         {/* Three tracks so the centre stays centred no matter how long the
-            identity on the left runs — an absolute overlay would collide. */}
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 py-3 border-b border-borderSubtle shrink-0">
-          <div className="min-w-0">{header}</div>
+            identity on the left runs — an absolute overlay would collide.
+
+            THREE TRACKS NEED THREE TRACKS' WORTH OF ROOM. Held at every width,
+            the identity was squeezed into roughly 100px on a 390px screen and
+            wrapped to seven lines, with the stepper and the close button
+            floating vertically centred in the MIDDLE of that stack — measured
+            on the print drilldown, a 250px header on an 844px phone. Below
+            `sm` the header wraps instead: identity across the top, controls on
+            the row beneath. The grid returns the moment there is room for it. */}
+        <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-borderSubtle shrink-0 sm:grid sm:grid-cols-[1fr_auto_1fr] sm:gap-3">
+          <div className="w-full min-w-0 sm:w-auto">{header}</div>
           <div className="flex items-center justify-center">{headerCenter}</div>
-          <div className="flex items-center justify-end gap-2">
+          <div className="ml-auto flex items-center justify-end gap-2 sm:ml-0">
             {headerActions}
             <button
               onClick={onClose}

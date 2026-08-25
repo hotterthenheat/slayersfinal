@@ -550,5 +550,52 @@ check(
   plated ? 'bg-canvas/85 behind the textSecondary ticker' : 'the ticker is unplated — it vanishes where the rule crosses a fill'
 );
 
+/*
+  Two surfaces that only exist after a click, and were therefore in no sweep
+  until now. Every measurement before this one — spill, unreachable content,
+  contrast, panel fill — ran against pages in their default state. A drawer or
+  a click-gated view could have been broken end to end and nothing would have
+  said so. Both of these were.
+
+  THE TIMEFRAME STRIP DID NOT WRAP. Seven buttons run 252px. The toolbar row
+  holding them IS `flex-wrap`, but a flex ITEM wider than its line does not
+  split — it spills. Measured on the Campaign Analysis chart at 390px:
+
+      strip 163→416 inside a 198px lane; "1W" at 382–416
+
+  on a 390px viewport, with every ancestor at overflow:visible. Not clipped,
+  not scrollable — off the screen, unreachable, and the only way back to a
+  weekly chart. Wrapping the strip itself puts 1D and 1W on a second line.
+
+  THE MODAL HEADER HELD THREE TRACKS AT EVERY WIDTH. grid-cols-[1fr_auto_1fr]
+  needs three tracks' worth of room. On the print drilldown at 390px the
+  identity track was squeezed to about 100px and wrapped to seven lines, with
+  the stepper and close button floating vertically centred in the middle of
+  that stack. Measured header height, same print, same viewport:
+
+      before   268px — 32% of an 844px phone
+      after    110px — 13%
+      768px     84px, 1440px 51px — both unchanged, the grid returns at sm
+*/
+const toolbar = read('src/components/gex/ChartToolbar.tsx');
+const stripWraps = /role="group" aria-label="Timeframe" className="inline-flex flex-wrap items-center/.test(toolbar);
+check(
+  'the timeframe strip wraps instead of spilling off the screen',
+  stripWraps,
+  stripWraps ? 'inline-flex flex-wrap' : 'the strip is nowrap again — 1W leaves the viewport at 390px'
+);
+const modal = read('src/components/ui/Modal.tsx');
+const headerStacks = /flex flex-wrap items-center[^"]*sm:grid sm:grid-cols-\[1fr_auto_1fr\]/.test(modal);
+const identityFull = /className="w-full min-w-0 sm:w-auto">\{header\}/.test(modal);
+check(
+  'the modal header stacks below sm instead of squeezing three tracks',
+  headerStacks && identityFull,
+  headerStacks
+    ? identityFull
+      ? 'wraps under sm, grid at sm and up'
+      : 'the identity no longer takes the full first row, so it squeezes again'
+    : 'the header is back to a fixed three-track grid at every width'
+);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

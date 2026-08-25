@@ -212,9 +212,12 @@ the defect was put back and the detector caught it.
 | Unreachable content | 15 routes × 3 viewports, text below the fold on a non-scrolling page | zero |
 | Header fit | 768px, every route | fits at exactly 768 after the labels-only ladder |
 | Chart label collisions | /pulse/board, four charts | two found and fixed: the trails' strength labels drew under the axis badges at the same strike, and their own backing pad was mis-centred |
+| Click-gated surfaces | the command palette, the print drilldown, Campaign Analysis — at 390 / 768 / 1440 | two found and fixed: the timeframe strip put `1W` off the screen with nothing to scroll, and the modal header spent 32% of a phone on itself |
 
 Two notes on method, because a measurement is only worth what its failure
 modes are worth:
 
 - **An earlier contrast detector reported 47 failures. All 47 were false.** It walked up the DOM for a background colour, which finds nothing on a gradient and finds the wrong thing when the coloured element is a `layoutId` sibling rather than a parent. Sampling the rendered pixels instead is what turned 47 noisy failures into 1 real one.
+- **Every sweep before this one ran against pages in their default state.** A drawer, a modal, or a view behind a button was in none of them — and two of the three carried a defect. Anything measured route-by-route is measuring the front door only.
+- **A viewport-relative measurement is not a reachability measurement.** Three separate times a control looked unreachable and was not: content below the fold on `/pulse/board` at 390px scrolls fine, because the scroll container is `main`, not the document. Walk the ancestors for an `overflow-y: auto` that actually has somewhere to go; `document.documentElement.scrollHeight` answers a different question.
 - **The pixel sampler still reported one false failure**, and it is worth naming: `textMuted` on a Pulse expiry tab, 4.18:1. Screenshotting that exact button by element handle put it on `bg-panel` at **4.81:1** — it passes. The full-page sampler had collected the rect and the pixels a fraction apart on a desk that was still settling, so it compared a colour against pixels the active chip had moved into. I filtered for rects that were identical before and after the capture, which was not enough: a rect can hold still while what is painted in it changes. Anything that sampler flags is worth re-shooting by element handle before it is believed.

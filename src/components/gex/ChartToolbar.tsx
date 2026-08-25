@@ -50,9 +50,16 @@ interface ChartToolbarProps {
 const TIMEFRAME_OPTIONS = TIMEFRAMES.map(t => ({ value: t.value, label: t.label }));
 
 /** Bare timeframe strip — floating labels, no box, no dividers. The active
-    one earns a soft chip (white = where you are); the rest are ghost text. */
+    one earns a soft chip (white = where you are); the rest are ghost text.
+
+    IT WRAPS. Seven buttons run 252px; the toolbar row that holds them is
+    `flex-wrap`, but a flex ITEM wider than its line does not split — it
+    spills. Measured on the Campaign Analysis chart at 390px: the strip ran
+    163→416 inside a 198px lane, so `1W` sat at 382–416 with every ancestor
+    on overflow:visible. Not clipped, not scrollable — off the screen and
+    unreachable. The strip wraps to its own second line instead. */
 const TimeframeStrip = ({ value, onChange }: { value: Timeframe; onChange: (tf: Timeframe) => void }) => (
-  <div role="group" aria-label="Timeframe" className="inline-flex items-center gap-0.5">
+  <div role="group" aria-label="Timeframe" className="inline-flex flex-wrap items-center gap-0.5">
     {TIMEFRAME_OPTIONS.map(opt => {
       const active = opt.value === value;
       return (
