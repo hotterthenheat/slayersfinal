@@ -1,6 +1,6 @@
 # Open decisions
 
-Nine things this pass found, measured, and then stopped at — because
+Ten things this pass found, measured, and then stopped at — because
 finishing them is your call, not mine. Each one names the file, the number
 that was measured, the options, and what I would do.
 
@@ -282,6 +282,60 @@ its own, because a build-tool major moves the output.
 
 ---
 
+## 10. The host sends 2.9MB uncompressed, and the landing page takes 15 seconds on a phone
+
+**Where:** `server.ts` (the host), `vite.config.ts` (the bundle)
+**Scope:** depends on where this deploys — which is the actual question.
+
+`vite build` has been warning about a chunk over 500kB on every build.
+Measured what that costs, cold cache, Chrome's own Slow 4G profile
+(~1.6 Mbps, 150ms RTT):
+
+```
+                            wire      first contentful paint
+committed host (no gzip)   2.92MB              15,312 ms
+same bundle, gzipped       1.01MB               5,696 ms
+```
+
+Nine and a half seconds, for one middleware. The bundle is unchanged —
+that is purely the bytes on the wire. `gzip -9` on the main chunk alone
+takes it from 2.7MB to 838K.
+
+Warm figures are fine either way and worth stating so this is not
+mistaken for a general performance problem: an in-app route change is
+**69–91ms** and touches no network at all, and a cached reload is
+**61–230ms**. It is *only* the first visit by a stranger.
+
+**Why this is not simply fixed and pushed.** `vercel.json` did not
+configure compression — Vercel just does it, as do Netlify, CloudFront
+and every other static host. So unlike the security headers, this was
+never in a file that got deleted; it is missing only if `server.ts` is
+what actually serves production. I do not know that, and the answer
+changes whether this is a nine-second win or a no-op.
+
+**Three options:**
+
+1. **If a platform serves it** (Vercel and friends) — do nothing. You
+   already have this, and `server.ts` is a local convenience.
+2. **If `server.ts` serves it** — `npm i compression` and two lines. It
+   is the standard express middleware and there is no cleverness in it.
+   Verified in a throwaway host on port 8082: all 16 routes render, 0 CSP
+   violations, 0 console errors.
+3. **Split the bundle as well.** 2.67MB of JS is a lot even compressed,
+   and the composition says why: recharts, framer-motion, lightweight-charts,
+   react-grid-layout and lucide all load on the landing page, which uses
+   almost none of them. Route-level `React.lazy` would defer them. The
+   pattern already exists here — the ticker universe (327KB) and
+   ContractFlowChart are both lazy already. This is real work and touches
+   how every route mounts.
+
+**Recommendation:** answer the deploy question first, since (1) may make
+this moot. If `server.ts` ships, take (2) immediately — it is nine
+seconds for two lines. Take (3) only if the first-visit number still
+matters after compression, and as its own pass.
+
+---
+
 ## What was checked and found clean
 
 Recorded so it is not paid for twice.
@@ -325,6 +379,7 @@ the detector and stronger for the fix.
 | Deployed security headers | the five headers the old `vercel.json` carried, checked against the express host that replaced it; then the policy served to a real browser on all 16 routes | **a real regression, fixed.** `f7be84a` replaced the tracked tree and took `vercel.json` with it — the content-security policy, the clickjacking refusal, the MIME-sniffing refusal, the referrer policy and the permissions policy all went with it, in a commit about something else, and nothing failed for fifty commits. Restored verbatim onto `server.ts`. Swept: **0 CSP violations, 0 console errors, 0 blank pages.** The sweep is not taken on trust — tightening `style-src` made it report 5, so it can see one |
 | Dependency advisories | `npm audit`, production and dev trees, each advisory read against the code that would have to reach it | 6 found. **4 closed** by in-range patches — postcss 8.5.16 → 8.5.26 and nanoid 3.3.17 → 3.3.18, both HIGH, both build-time only. 2 remain and need majors; neither is reachable in this build (no route target comes from user input; `createRoot`, not `hydrateRoot`) and the four vite/esbuild ones are dev-server only. See #9 |
 | Resize while mounted | 13 routes mounted at 1440, then dragged 1440 → 390 → 768 → 1440 — 39 resizes. Every previous sweep loaded fresh at each width, which proves nothing about a window being dragged | **one real find, fixed.** The Monte Carlo canvas on /prove-it sized its backing store inside an effect keyed on the market data alone, so its pixels were resized by a PRICE TICK and by nothing else — stretched for 950–1507ms, the length of one feed tick. Worse once a recording pins: with AMD played out, it stayed at 771px backing for a 734px box at t+500ms, 1.5s, 3s, 6s and 10s. Permanently. Now observes its own width. Twelve of thirteen routes were clean through all three resizes; the thirteenth is /pulse at 390px, which is #6, already open |
+| First load, cold, throttled | the landing page over Chrome's Slow 4G and Fast 4G profiles with an empty cache, wire bytes read from CDP rather than from headers | 2.92MB, **first contentful paint at 15.3s** on Slow 4G. The same bundle gzipped is 1.01MB and paints at **5.7s**. Warm is fine and always was — an in-app route change is 69–91ms with no network, a cached reload 61–230ms. See #10; not fixed here because it depends on where this deploys |
 | Chart label collisions | /pulse/board, four charts | two found and fixed: the trails' strength labels drew under the axis badges at the same strike, and their own backing pad was mis-centred |
 | Click-gated surfaces | the command palette, the print drilldown, Campaign Analysis — at 390 / 768 / 1440 | two found and fixed: the timeframe strip put `1W` off the screen with nothing to scroll, and the modal header spent 32% of a phone on itself |
 
@@ -341,4 +396,5 @@ before the product was:
 - **`atEnd()` was the obvious caller to add and the wrong one.** It is true only once *every* recording has finished — tick 389. A short name pins at tick 78. Wiring the header to it would have left AMD's price frozen and unremarked for 7m47s because SPY was still playing, which is the same shape of defect as the thing it was fixing. The header reads `priceHistory.length` per name instead, from the snapshot the UI already holds, and `playback-proof.ts` asserts the gap so that re-cutting the recordings to one length fails the check rather than passing it silently. My first pass at this got the arithmetic wrong in the other direction too — I put "48.7 minutes" in a code comment, having forgotten `START_SHARE` moves the playhead 80% in before the first tick. Ticking the real feed is what corrected it.
 - **`style-src 'unsafe-inline'` is load-bearing, and not for the reason it looks like.** Serving the real bundle under `style-src 'self'` refused exactly 5 things: 1 on /pulse, 4 on /pulse/board, nothing on the other fourteen routes. One per chart — `lightweight-charts` calls `document.createElement('style')` per instance to style its TradingView attribution logo, the same third-party markup that puts the two duplicate ids on /pulse/board. The violated directive is `style-src-elem`, which governs `<style>` **elements**; it is not `style-src-attr`, because React and framer-motion set styles through the CSSOM, which CSP does not govern at all. So the app's own animation would survive a fully strict style policy untouched, and a dependency's logo is the only thing standing in the way. I had written the opposite into a comment before measuring it.
 - **A `truncate` is not a spill, and the first resize detector could not tell.** It reported 18 failures; 14 were Panel titles and subtitles wearing Tailwind's `truncate` — `overflow:hidden`, `nowrap`, `text-overflow:ellipsis`. `Range.getBoundingClientRect()` returns the **unclipped** width of a text node, so a title rendering correctly as `Strike Press…` measures 121px past its box. Skipping any element that has asked to be ellipsised took it to 4, and the one that mattered was not text at all. The general lesson is the one that keeps recurring here: a measurement that cannot distinguish a deliberate design from a defect will hand you a list where most entries are the design.
+- **A throttle does not apply to the first document a browser context ever requests, and that made compression look worthless.** Measured with and without gzip and got first contentful paint of 15,300ms **both times**, to the millisecond — which would mean compression buys nothing, against the plain physics of 2.92MB versus 1.01MB on a 1.6 Mbps link. The throttle was set on a fresh page and then the navigation was issued; it did not take. Landing on a trivial document first, so the emulation is provably live, gives 15,312ms against 5,696ms. The tell was that the two numbers were identical rather than merely close: real measurements of two different things are not equal to the millisecond, and that should have been read as an instrument fault immediately rather than as a result.
 - **The pixel sampler still reported one false failure**, and it is worth naming: `textMuted` on a Pulse expiry tab, 4.18:1. Screenshotting that exact button by element handle put it on `bg-panel` at **4.81:1** — it passes. The full-page sampler had collected the rect and the pixels a fraction apart on a desk that was still settling, so it compared a colour against pixels the active chip had moved into. I filtered for rects that were identical before and after the capture, which was not enough: a rect can hold still while what is painted in it changes. Anything that sampler flags is worth re-shooting by element handle before it is believed.
