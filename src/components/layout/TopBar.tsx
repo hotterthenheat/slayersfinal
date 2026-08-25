@@ -90,13 +90,27 @@ const TopBar = ({ onOpenPalette }: TopBarProps) => {
                   navigate(items[0].path);
                   setDropdown(null);
                 }}
-                className={`relative self-stretch flex items-center gap-1.5 px-3 font-mono text-[11px] font-semibold uppercase tracking-wider transition-colors ${
+                className={`relative self-stretch flex items-center gap-1.5 px-2 lg:px-3 font-mono text-[11px] font-semibold uppercase tracking-wider transition-colors ${
                   isActive ? 'text-textPrimary' : 'text-textSecondary hover:text-textPrimary'
                 }`}
               >
-                <GroupIcon className={`w-3.5 h-3.5 ${isActive ? 'text-textPrimary' : 'text-textMuted'}`} />
+                {/*
+                  BELOW lg THE TABS ARE LABELS ONLY.
+
+                  The nav switches on at md (768px) and wants 462px there; the
+                  right cluster wants another 355. With 32px of padding and two
+                  16px gaps that is 881px of content in a 768px bar, and the
+                  bar does not scroll — it clips. The casualty was the whole
+                  right end (price, change, clock) AND the brand mark, which
+                  flex-1 squeezed to exactly 0px wide.
+
+                  The icon and the chevron are decoration next to a word that
+                  already says what the tab is, so they are the first things to
+                  go and the last things anyone misses.
+                */}
+                <GroupIcon className={`hidden lg:block w-3.5 h-3.5 ${isActive ? 'text-textPrimary' : 'text-textMuted'}`} />
                 {group}
-                <ChevronDown className="w-3 h-3 text-textMuted" />
+                <ChevronDown className="hidden lg:block w-3 h-3 text-textMuted" />
                 {isActive && (
                   <motion.span
                     layoutId="topnav-underline"
@@ -194,7 +208,10 @@ const TopBar = ({ onOpenPalette }: TopBarProps) => {
           )}
         </div>
         <SignalBadge tone="warn">Sim</SignalBadge>
-        <span className="hidden md:flex items-baseline gap-1 font-mono text-xs text-textSecondary tnum select-none">
+        {/* lg, not md: between the two the bar has no room for it — see the
+            nav comment above. The ticker, price and change stay, because they
+            are the market context; a clock is not. */}
+        <span className="hidden lg:flex items-baseline gap-1 font-mono text-xs text-textSecondary tnum select-none">
           {clock}
           <span className="text-[9px] uppercase tracking-widest text-textMuted">ET</span>
         </span>
