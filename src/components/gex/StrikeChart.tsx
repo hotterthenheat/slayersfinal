@@ -34,6 +34,7 @@ import {
 import { GexTrailsPrimitive } from './gexNodesPrimitive';
 import { DrawingsPrimitive, loadDrawings, saveDrawings, type Drawing, type DrawingKind } from './drawingsPrimitive';
 import { getCandleTheme, useCandleThemeKey, candleSeriesOptions, chartSurface, type CandleTheme } from './candleTheme';
+import { markFired, useAlerts } from './alertStore';
 import type { Candle } from '../../types/market';
 import type { DarkPoolPrint, KeyLevels } from '../../types/gex';
 
@@ -177,7 +178,7 @@ interface StrikeChartProps {
 export type CrosshairSync = (time: UTCTimestamp | null) => void;
 
 // Wall / flip / king overlay colors (independent of candle theme)
-import { CALL_WALL, PUT_WALL, FLIP, KING, FOCUS, DARK_POOL } from './palette';
+import { CALL_WALL, PUT_WALL, FLIP, KING, FOCUS, DARK_POOL, ALERT as ALERT_INK } from './palette';
 
 // Level lines are created once per overlay/ticker, then their prices are
 // TWEENED (rAF + easeOutCubic) so scan-tier level moves glide instead of jumping.
@@ -265,6 +266,10 @@ const StrikeChart = ({
   projectionRef,
 }: StrikeChartProps) => {
   const themeKey = useCandleThemeKey();
+  /* Read straight from the store rather than taken as a prop: alerts belong to
+     the SYMBOL, and two panes showing the same symbol must draw the same set.
+     The drawings store is read the same way, from this same component. */
+  const alerts = useAlerts(ticker);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
@@ -319,6 +324,8 @@ const StrikeChart = ({
   const bucketSecRef = useRef(60);
   const levelTickerRef = useRef('');
   const focusLineRef = useRef<IPriceLine | null>(null);
+  /** One price line per alert, by alert id. */
+  const alertLinesRef = useRef<Map<string, IPriceLine>>(new Map());
   /** The focus price, readable from the autoscale provider (a closure built
       once at chart creation) — a focused strike must never sit off-screen. */
   const focusPriceRef = useRef<number | null>(focusPrice);
@@ -1250,6 +1257,77 @@ const StrikeChart = ({
     // the new focus and brings the line into frame immediately.
     candleSeries.priceScale().applyOptions({ autoScale: true });
   }, [focusPrice, overlays.trails, timeframe, mainNonce]);
+
+  /*
+    ALERT LINES.
+
+    Rehung whole whenever the set changes or the main series is replaced — a
+    style swap destroys the old series and every price line hanging off it, and
+    `mainNonce` is how the rest of this file already hears about that.
+
+    An alert that has fired is drawn solid and named; one still waiting is
+    dashed and quiet. The state lives HERE and not on the toolbar's bell,
+    because the toolbar is hidden until the cursor is over its own pane — a
+    badge there would be invisible almost all the time, which would make
+    "you'll see it fire" untrue.
+  */
+  useEffect(() => {
+    const series = candleSeriesRef.current;
+    if (!series) return;
+    const live = alertLinesRef.current;
+    for (const line of live.values()) {
+      try {
+        series.removePriceLine(line);
+      } catch {
+        /* series already gone with the old style */
+      }
+    }
+    live.clear();
+    for (const a of alerts) {
+      live.set(
+        a.id,
+        series.createPriceLine({
+          price: a.price,
+          color: ALERT_INK,
+          title: a.firedAt ? 'ALERT' : '',
+          lineStyle: a.firedAt ? LineStyle.Solid : LineStyle.Dashed,
+          lineWidth: 1,
+          axisLabelVisible: true,
+        })
+      );
+    }
+    return () => {
+      for (const line of live.values()) {
+        try {
+          series.removePriceLine(line);
+        } catch {
+          /* chart already torn down */
+        }
+      }
+      live.clear();
+    };
+  }, [alerts, mainNonce]);
+
+  /*
+    FIRING.
+
+    Driven by the tape rather than by a timer: `revision` bumps on every tick
+    and this runs with the close that tick produced. Replay is excluded — a
+    price from history reaching a level the reader set today has not happened.
+
+    `markFired` is idempotent, so a close that sits past an alert for the rest
+    of the session does not repaint every pane on every tick.
+  */
+  useEffect(() => {
+    if (replay) return;
+    const close = lastCloseRef.current;
+    if (close == null) return;
+    const now = Date.now();
+    for (const a of alerts) {
+      if (a.firedAt) continue;
+      if (a.above ? close >= a.price : close <= a.price) markFired(ticker, a.id, now);
+    }
+  }, [alerts, ticker, revision, replay]);
 
   /* The focus INK follows the strike's standing, re-read every scan: magenta
      while the focused strike is the king, lime otherwise. The focus itself

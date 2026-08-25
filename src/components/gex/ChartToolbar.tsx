@@ -37,6 +37,7 @@ import {
   type CandleThemeKey,
 } from './candleTheme';
 import { CHART_STYLES, INDICATOR_INKS, type ChartIndicators, type ChartOverlays, type ChartStyle } from './StrikeChart';
+import AlertsMenu from './AlertsMenu';
 
 interface ChartToolbarProps {
   timeframe: Timeframe;
@@ -73,9 +74,11 @@ interface ChartToolbarProps {
   /** Indicator overlays — EMAs, VWAP */
   indicators?: ChartIndicators;
   onIndicators?: (next: ChartIndicators) => void;
-  /** Shows the Alerts button — the menu is an empty shell for now (Noah:
-      "i have something cooking up for that") */
-  alerts?: boolean;
+  /* Shows the Alerts menu. Both are needed: the symbol the alerts belong to,
+     and where the market is — which fixes the side a new alert has to be
+     crossed from, and seeds the box near the price rather than at zero. */
+  alertTicker?: string;
+  alertSpot?: number;
   /** Mode 3 (Noah, 2026-08-23): TOTAL fullscreen — the taskbar itself goes
       away and only Esc brings it back. TradingView's corner-bracket icon. */
   onTotalFullscreen?: () => void;
@@ -277,7 +280,8 @@ const ChartToolbar = ({
   onChartStyle,
   indicators,
   onIndicators,
-  alerts = false,
+  alertTicker,
+  alertSpot = 0,
   onTotalFullscreen,
   onOpenQuad,
 }: ChartToolbarProps) => {
@@ -322,7 +326,7 @@ const ChartToolbar = ({
           from the timeframes. Candles here is the tape's SHAPE
           (bars/line/area…), not the color theme; Alerts is an empty shell
           he's cooking on. The host only wires these in FULLSCREEN. */}
-      {(onToggleReplay || onIndicators || alerts || onChartStyle) && (
+      {(onToggleReplay || onIndicators || alertTicker || onChartStyle) && (
         <span className={`flex gap-1 ${vertical ? 'flex-col items-stretch' : 'flex-wrap items-center justify-end'}`}>
           {onToggleReplay && (
             <button
@@ -383,7 +387,7 @@ const ChartToolbar = ({
               </div>
             </Dropdown>
           )}
-          {alerts && (
+          {alertTicker && (
             <Dropdown
               label={vertical ? '' : 'Alerts'}
               icon={<Bell className="w-3 h-3 text-[#FF9500]" />}
@@ -392,8 +396,7 @@ const ChartToolbar = ({
               onToggle={() => setOpenMenu(m => (m === 'alerts' ? null : 'alerts'))}
               menuSide={menuSide}
             >
-              {/* Deliberately empty — Noah has something cooking here */}
-              <div className="px-3 py-6 text-center font-mono text-[10px] text-textMuted">Nothing here yet</div>
+              <AlertsMenu ticker={alertTicker} spot={alertSpot} />
             </Dropdown>
           )}
           {onChartStyle && (
@@ -434,7 +437,7 @@ const ChartToolbar = ({
       )}
 
       {/* A hairline between the quartet and the standing controls */}
-      {(onToggleReplay || onIndicators || alerts || onChartStyle) && (
+      {(onToggleReplay || onIndicators || alertTicker || onChartStyle) && (
         <span className={vertical ? 'h-px w-4 self-center bg-borderSubtle' : 'w-px h-4 bg-borderSubtle'} aria-hidden />
       )}
 

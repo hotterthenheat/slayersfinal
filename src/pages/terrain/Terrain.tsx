@@ -635,7 +635,8 @@ const Pane = ({
                 <ChartToolbar
                   minimal
                   candles
-                  alerts
+                  alertTicker={ticker}
+                  alertSpot={levels.spot}
                   timeframe={timeframe}
                   onTimeframe={tf => onCfg({ timeframe: tf })}
                   overlays={overlays}

@@ -226,7 +226,8 @@ const LiveChartWidget = ({ ctx }: { ctx: WorkspaceCtx }) => {
             onChartStyle={full ? setChartStyle : undefined}
             indicators={indicators}
             onIndicators={full ? setIndicators : undefined}
-            alerts={full}
+            alertTicker={full ? ctx.ticker : undefined}
+            alertSpot={ctx.gex.levels.spot}
             onTotalFullscreen={full ? () => setSuperFull(true) : undefined}
             onOpenQuad={() => setQuad(true)}
             fullscreen={full}

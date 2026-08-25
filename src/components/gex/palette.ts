@@ -28,6 +28,12 @@ export const KING = '#EA00FF';
 export const DARK_POOL = '#2dd4bf'; // teal — institutional reference prints
 export const SPOT = '#ededed'; // white — where the market is
 export const FOCUS = LIME; // neon lime — what the user clicked (selection language)
+/* Amber — a price the reader ASKED to be told about. Deliberately not FOCUS:
+   lime already means "what you just clicked", which is transient and goes away,
+   while an alert is standing and outlives the click. Amber is the ink the
+   Alerts bell in the toolbar already wears, so the line and the control that
+   made it match. It carries no market meaning and never marks one. */
+export const ALERT = '#FF9500';
 
 // Dealer-gamma sign, for the positioning map. The partner's redesign wears
 // gold = SHORT gamma / blue = LONG gamma; Noah's call (2026-08-18) keeps his
