@@ -378,10 +378,14 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
             <LivePill />
           </span>
         </div>
-        <div className="p-5 min-h-[290px]">
-          <AnimatePresence mode="wait" initial={false}>
+        {/* Grid, not a plain block: both states share one cell so the swap crossfades
+            instead of leaving the card blank between exit and enter. This one flips
+            itself on a timer, so a gap here is a hole the reader never asked for. */}
+        <div className="p-5 min-h-[290px] grid grid-cols-1">
+          <AnimatePresence initial={false}>
             <motion.div
               key={mode}
+              className="col-start-1 row-start-1"
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
@@ -488,7 +492,13 @@ const ChartShowcase = ({ ctx }: { ctx: LandingCtx | null }) => (
         <div className="h-[430px] border border-borderSubtle bg-panel rounded-lg animate-pulse" />
       ) : (
         <>
-          <FloatChip label="Dealer walls" dot="#30D158" className="top-5 right-6" />
+          {/* Below the chart's own toolbar and inside of its price scale: at top-5
+              this chip sat squarely on the zoom/pan hint and the Reset button at
+              every width. A decorative label does not get to bury a control.
+              Hidden under lg because that is where the toolbar wraps to two and
+              three rows — no fixed offset clears a row count that moves, and a
+              122px pill over a 342px chart was never worth the collision. */}
+          <FloatChip label="Dealer walls" dot="#30D158" className="hidden lg:inline-flex top-12 right-32" />
           <FloatChip label="Gamma flip" dot="#7DD3FC" className="top-1/2 -left-2 md:left-4" delay={1.4} />
           <FloatChip label="King strike" dot="#EA00FF" className="bottom-8 right-10" delay={2.6} />
           <TiltBox maxTilt={2} glare={false} className="p-3">

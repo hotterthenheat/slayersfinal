@@ -393,5 +393,56 @@ check(
   widgetResets ? 'keyed on instance + ticker' : 'no resetKey — a faulted widget would stay stuck'
 );
 
+/*
+  A panel that flips its own content on a timer must not use AnimatePresence
+  mode="wait".
+
+  MEASURED, on the landing page's "It calls the fade, too." card: 160 samples
+  at 100ms over the card body, reading the MAX opacity across whatever states
+  were mounted — the reader's question is "is anything legible right now", not
+  "is the first child visible".
+
+    mode="wait"  →  12 frames under 0.35 opacity, 9 of them at exactly 0
+    crossfade    →   0 frames under 0.35, floor 0.7
+
+  mode="wait" serialises exit-then-enter, so for the length of the exit there
+  is nothing mounted at all. On a card that flips itself every 4.5s forever,
+  that is a 290px hole roughly one frame in eighteen — which is how a landing
+  screenshot caught it as a blank box. Fixed by stacking both states in one
+  grid cell so they overlap and crossfade.
+
+  The four other mode="wait" sites are route transitions: the reader pressed
+  something, and a beat of blank between two pages is the transition. None of
+  them holds a timer, which is exactly what this checks — a file that swaps on
+  its own clock AND serialises the swap is the combination that blanks.
+
+  The scan is file-level, not call-level: it cannot tell TopBar's clock timer
+  from a timer that drives its dropdown. That direction is safe — it only ever
+  widens the net, and a wider net on "never blank a panel the reader did not
+  touch" costs nothing.
+*/
+const TIMER = /\bsetInterval\s*\(/;
+const WAIT = /<AnimatePresence[^>]*\bmode=["']wait["']/;
+const selfAdvancing = walkTsx(path.join(ROOT, 'src'))
+  .map(f => ({ f: path.relative(ROOT, f).split(path.sep).join('/'), src: readFileSync(f, 'utf8') }))
+  .filter(({ src }) => TIMER.test(src) && /<AnimatePresence/.test(src));
+const blanking = selfAdvancing.filter(({ src }) => WAIT.test(src));
+check(
+  'nothing that swaps on its own timer serialises the swap',
+  blanking.length === 0,
+  blanking.length
+    ? `${blanking.map(b => b.f).join(', ')} — mode="wait" leaves the panel empty between states`
+    : `${selfAdvancing.length} file(s) hold both a timer and an AnimatePresence; none serialises`
+);
+const live = read('src/pages/landing/LiveSections.tsx');
+const stacked = /min-h-\[290px\] grid grid-cols-1/.test(live) && /key=\{mode\}\s*\n\s*className="col-start-1 row-start-1"/.test(live);
+check(
+  'the fade card stacks its two states in one grid cell',
+  stacked,
+  stacked
+    ? 'both states share col-start-1/row-start-1 — they overlap, so the height never jumps either'
+    : 'the states no longer share a cell; a crossfade would stack them vertically or blank the card'
+);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
