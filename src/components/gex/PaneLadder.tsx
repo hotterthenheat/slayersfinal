@@ -65,6 +65,9 @@ interface PaneLadderProps {
       turn on from a toolbar and not off from itself is a panel that feels
       stuck to the page. */
   onClose?: () => void;
+  /** Extra classes from the host — used to hold the rail back at narrow
+      widths, where it would take a third of the screen. */
+  className?: string;
 }
 
 /*
@@ -159,6 +162,7 @@ const PaneLadder = ({
   onSelect,
   axisInset = 0,
   onClose,
+  className = '',
 }: PaneLadderProps) => {
   if (rows.length === 0) return null;
   const items = interleave(rows, levels);
@@ -187,7 +191,7 @@ const PaneLadder = ({
   return (
     <div
       style={{ width: LADDER_WIDTH_PX }}
-      className="shrink-0 flex flex-col min-h-0 border-l border-borderSubtle/70"
+      className={`shrink-0 flex flex-col min-h-0 border-l border-borderSubtle/70 ${className}`}
       aria-label={`${ticker} exposure by strike`}
     >
       <div className="shrink-0 flex items-center gap-1 pl-2 pr-1 py-0.5 border-b border-borderSubtle/70 select-none">

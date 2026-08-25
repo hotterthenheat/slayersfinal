@@ -489,7 +489,7 @@ const Pane = ({ cfg, onCfg, revision, expanded, onToggleExpand, index, tall, hea
                 toolbar, there is room for every entry whole.
               */}
               {heavy.length > 0 && (
-                <div className="chrome-hover pointer-events-none w-fit max-w-full rounded-md bg-canvas/25 backdrop-blur-[3px] px-2 py-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
+                <div className="chrome-hover pointer-events-none hidden sm:block w-fit max-w-full rounded-md bg-canvas/25 backdrop-blur-[3px] px-2 py-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
                   <span className="flex items-center gap-2.5 whitespace-nowrap">
                     <span className="shrink-0 font-mono text-[9px] uppercase tracking-widest text-textMuted">Heaviest</span>
                     {heavy.map(row => (
@@ -557,6 +557,18 @@ const Pane = ({ cfg, onCfg, revision, expanded, onToggleExpand, index, tall, hea
             )}
           </div>
 
+          {/*
+            NOT ON A PHONE. The rail is 132px, which is a THIRD of a 390px
+            screen — with it up, the chart column is 250px and the price
+            gutter takes 56 of those, leaving under 200px of plot beside a
+            full-height ladder. Worse, the pane's own floating chrome is wider
+            than 250px, so it spilled out of the column and over the ladder.
+
+            Hidden by breakpoint, not by config: the reader's `ladder` choice
+            is left exactly as they set it and comes back the moment the
+            window is wide enough. Turning it off in storage would silently
+            rewrite a preference because they picked up their phone.
+          */}
           {ladder && rail.rows.length > 0 && (
             <PaneLadder
               ticker={ticker}
@@ -567,6 +579,7 @@ const Pane = ({ cfg, onCfg, revision, expanded, onToggleExpand, index, tall, hea
               axisInset={TIME_AXIS_PX}
               onClose={() => onCfg({ ladder: false })}
               onSelect={price => setFocus(cur => (cur != null && Math.abs(cur - price) < 1e-9 ? null : price))}
+              className="hidden lg:flex"
             />
           )}
         </div>
