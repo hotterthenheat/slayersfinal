@@ -10,7 +10,7 @@
 import { useState, type MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowRight, Check, ChevronDown } from 'lucide-react';
+import { ArrowRight, Check, ChevronDown, Clock } from 'lucide-react';
 import { SEED_IDEAS } from '../../data/community';
 import { useLaunch } from '../../components/layout/LaunchTransition';
 import { ComparePlans, Faq } from './PricingExtras';
@@ -26,19 +26,34 @@ const NAV_LINKS = [
   { label: 'Pricing', href: '#pricing' },
 ];
 
-const TIERS = [
+interface TierFeature {
+  text: string;
+  /** Not built. Wears the same Soon chip as the ladder rather than a check. */
+  soon?: boolean;
+}
+
+const TIERS: {
+  name: string;
+  kicker: string;
+  price: string;
+  period: string;
+  features: TierFeature[];
+  cta: string;
+  to: string;
+  featured: boolean;
+}[] = [
   {
     name: 'Pinpoint',
     kicker: 'The dealer-GEX terminal',
     price: '$125',
     period: '/mo',
     features: [
-      'Live dealer positioning — GEX · DEX · VEX',
-      'Gamma exposure by strike',
-      '0DTE levels & dealer dynamics',
-      'Trace + Pulse',
-      'Tracker — setups & trade history',
-      'Real-time Discord chat & alerts',
+      { text: 'Dealer positioning — GEX · DEX · VEX' },
+      { text: 'Gamma exposure by strike' },
+      { text: '0DTE levels & dealer dynamics' },
+      { text: 'Trace + Pulse' },
+      { text: 'Tracker — bookmarked setups, monitored live' },
+      { text: 'Discord chat & setup alerts', soon: true },
     ],
     cta: 'Select plan',
     to: '/pulse',
@@ -50,11 +65,11 @@ const TIERS = [
     price: '$275',
     period: '/mo',
     features: [
-      'Everything in Pinpoint',
-      'Compass — graded setups with live states',
-      'Stocks, News & Earnings research desks',
-      'Chain momentum, live',
-      'Quant Lab — backtester, order flow & momentum',
+      { text: 'Everything in Pinpoint' },
+      { text: 'Compass — graded setups with live states' },
+      { text: 'Stocks & Earnings research desks' },
+      { text: 'Chain momentum across the whole chain', soon: true },
+      { text: 'Quant Lab — backtester, order flow & momentum', soon: true },
     ],
     cta: 'Select plan',
     to: '/pulse',
@@ -66,10 +81,10 @@ const TIERS = [
     price: 'Custom',
     period: 'talk to us',
     features: [
-      'Everything in Compass — forever',
-      'One payment, no recurring billing',
-      'Private 1-on-1 onboarding',
-      'Early beta access to new tools',
+      { text: 'Everything in Compass — forever' },
+      { text: 'One payment, no recurring billing' },
+      { text: 'Private 1-on-1 onboarding' },
+      { text: 'Early beta access to new tools' },
     ],
     cta: 'Contact us',
     to: 'mailto:info@slayerterminal.com',
@@ -86,7 +101,7 @@ const FOOTER_COLS = [
       { label: 'Trace', to: '/trace' },
       { label: 'Pinpoint', to: '/pinpoint' },
       { label: 'Prove It', to: '/prove-it' },
-      { label: 'Stocks · News · Earnings', to: '/stocks' },
+      { label: 'Stocks · Earnings', to: '/stocks' },
       { label: 'Tracker', to: '/tracker' },
     ],
   },
@@ -343,11 +358,22 @@ const Landing = () => (
               </div>
               <ul className="flex flex-col gap-2.5">
                 {tier.features.map(f => (
-                  <li key={f} className="flex items-start gap-2 text-[12px] text-textSecondary leading-snug">
-                    <Check
-                      className={`w-3.5 h-3.5 shrink-0 mt-px ${tier.featured ? 'text-[#C7D3E8]' : 'text-textMuted'}`}
-                    />
-                    {f}
+                  <li key={f.text} className="flex items-start gap-2 text-[12px] text-textSecondary leading-snug">
+                    {f.soon ? (
+                      <Clock className="w-3.5 h-3.5 shrink-0 mt-px text-warn" />
+                    ) : (
+                      <Check
+                        className={`w-3.5 h-3.5 shrink-0 mt-px ${tier.featured ? 'text-[#C7D3E8]' : 'text-textMuted'}`}
+                      />
+                    )}
+                    <span className="min-w-0">
+                      {f.text}
+                      {f.soon && (
+                        <span className="ml-1.5 inline-flex items-center rounded border border-warn/30 bg-warn/10 px-1.5 py-0.5 align-[1px] font-mono text-[8px] font-bold uppercase tracking-widest text-warn">
+                          Soon
+                        </span>
+                      )}
+                    </span>
                   </li>
                 ))}
               </ul>

@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "serve": "tsx server.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
-    "test": "tsx scripts/fixture-proof.ts && tsx scripts/replay-proof.ts && tsx scripts/weigher-query-proof.ts && tsx scripts/weights-proof.ts"
+    "test": "tsx scripts/fixture-proof.ts && tsx scripts/replay-proof.ts && tsx scripts/weigher-query-proof.ts && tsx scripts/weights-proof.ts && tsx scripts/sales-proof.ts"
   },
   "dependencies": {
     "@types/react-grid-layout": "^1.3.6",

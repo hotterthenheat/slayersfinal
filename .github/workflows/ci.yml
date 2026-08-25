@@ -39,15 +39,20 @@ jobs:
       # `npm run lint` is "Missing script" and would fail every push without
       # saying anything about the code.
       #
-      # There IS a test step now. `npm test` runs the four assertion scripts
-      # under scripts/ — 43 assertions covering the partner spec's worked
-      # fixtures, replay determinism under a pinned clock, the Weigher query
-      # parser, and the scoring-weight tables. They existed before and nothing
-      # ran them.
+      # There IS a test step now. `npm test` runs the five assertion scripts
+      # under scripts/ — covering the partner spec's worked fixtures, replay
+      # determinism under a pinned clock, the Weigher query parser, the
+      # scoring-weight tables, and the landing page's claims against the code
+      # that backs them.
       #
-      # Every one of the weights-proof assertions is mutation-verified: dropping
-      # a factor without re-normalising fails it, restoring the news sleeve
-      # fails it, and re-importing the news generator anywhere in src fails it.
+      # Every assertion in weights-proof and sales-proof is mutation-verified.
+      # Dropping a factor without re-normalising fails it; restoring the news
+      # sleeve fails it; re-importing the news generator anywhere in src fails
+      # it. So does selling an unbuilt feature without the Soon chip, linking
+      # the footer at a route that only redirects, or letting the pricing page
+      # claim a live feed while TopBar still renders the Sim badge — and, in
+      # the other direction, shipping one of those features and forgetting to
+      # take the Soon chip off.
 
       - name: Test
         run: npm test
