@@ -1,8 +1,6 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment } from 'react';
 import { fmtUsd } from '../../data/gex';
 import SpotRule from '../ui/SpotRule';
-import { DEALER_CALL, DEALER_PUT } from './palette';
-import { ROW_INTERACTIVE, interactiveRowProps } from '../ui/interactiveRow';
 import type { ExposureProfileData, GreekSplit } from '../../types/gex';
 
 interface ExposureMatrixProps {
@@ -17,38 +15,13 @@ interface ExposureMatrixProps {
 
 type Leg = 'put' | 'call' | 'net';
 
-/*
-  THE THREE PANELS ON THIS PAGE HAVE TO AGREE ON THE SAME DAY.
-
-  The ladder and the positioning map moved to gold/steel for dealer side; this
-  table did not, so a reader looking at one screen saw the same put/call split
-  painted red/green here and gold/steel two panels to the left. Adjacent
-  disagreement is worse than either scheme on its own — it reads as two
-  different facts.
-
-  Red and green now mean price direction only. Gold is put-dominant (hedging
-  amplifies), steel is call-dominant (dips absorbed), and they separate by
-  luminance as well as hue, so the split survives red/green colour blindness.
-  Spec: docs/dealer-ink-pass.md, step 2.
-
-  NET keeps its magenta: it is not a side, it is the summary figure the eye
-  should land on, and it is the only column that carries the king's colour.
-
-  The walls are NOT touched here — docs/dealer-ink-pass.md lists CW-green /
-  PW-red as an open decision, and palette.ts records Noah reversing the call
-  wall to green on 2026-08-18. That one is not mine to make.
-*/
+// Puts/calls carry side tints; NET wears its own magenta identity so the
+// column the eye should land on is unmistakable at speed.
 const NET_BAR = 'rgba(234,0,255,0.8)';
 
-/** Hex token + alpha, so the bar tints stay tied to the one palette entry. */
-const tint = (hex: string, alpha: number): string => {
-  const n = parseInt(hex.slice(1), 16);
-  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
-};
-
 const legBar = (leg: Leg): string => {
-  if (leg === 'put') return tint(DEALER_PUT, 0.8);
-  if (leg === 'call') return tint(DEALER_CALL, 0.8);
+  if (leg === 'put') return 'rgba(255,59,48,0.7)';
+  if (leg === 'call') return 'rgba(48,209,88,0.85)';
   return NET_BAR;
 };
 
@@ -86,34 +59,6 @@ const SpotRow = ({ ticker, spot }: { ticker: string; spot: number }) => (
 const ExposureMatrix = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSelectStrike }: ExposureMatrixProps) => {
   const { ticker, strikes, maxAbs, spotAfterIndex, levels } = data;
 
-  /*
-    A SCROLLBAR THE READER NEVER SEES IS NOT AN AFFORDANCE.
-
-    Making the table scrollable stops it truncating a greek, but on its own it
-    swaps a silently-clipped column for a silently-scrollable one: the bar is
-    an overlay, it appears only while scrolling, and a VEX header cut mid-word
-    still reads as a rendering fault rather than an invitation. So the right
-    edge fades while there is more table to the right, and the fade clears when
-    you reach the end — which also tells you when you have seen everything.
-  */
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  const [more, setMore] = useState(false);
-  const syncMore = useCallback(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    // 2px of slack: sub-pixel layout leaves a permanent 0.5px "overflow" that
-    // would otherwise pin the fade on for a table that is fully visible.
-    setMore(el.scrollWidth - el.clientWidth - el.scrollLeft > 2);
-  }, []);
-  useEffect(() => {
-    syncMore();
-    const el = scrollRef.current;
-    if (!el || typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(syncMore);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [syncMore, strikes.length]);
-
   const GROUPS: { key: 'gex' | 'dex' | 'vex'; label: string; unit: string }[] = [
     { key: 'gex', label: 'GEX', unit: '1% move' },
     { key: 'dex', label: 'DEX', unit: '1σ move' },
@@ -121,29 +66,8 @@ const ExposureMatrix = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
   ];
 
   return (
-    /*
-      THE TABLE MAY NOT SQUEEZE BELOW LEGIBILITY.
-
-      `overflow-auto` was already here and never fired, because `w-full` pinned
-      the table to the container and the ten columns absorbed the shortfall by
-      clipping their own contents instead. On a rail-width panel that ate the
-      third greek entirely: the VEX header rendered cut mid-word and its NET
-      column — the summary figure of the group — sat off the right edge with no
-      scrollbar, no fade and nothing on screen suggesting a column existed.
-      A silently truncated greek is worse than a scrollbar.
-
-      `min-w-max` lets the table take the width its columns actually need, which
-      is what finally gives `overflow-auto` something to scroll. It stays
-      `w-full` so that on a wide desk the table still fills the panel rather
-      than leaving a gutter.
-    */
-    <div className="relative h-full min-h-0">
-      <div
-        ref={scrollRef}
-        onScroll={syncMore}
-        className="overflow-x-auto overflow-y-auto h-full min-h-0"
-      >
-      <table className="w-full min-w-max border-collapse">
+    <div className="overflow-auto h-full min-h-0">
+      <table className="w-full border-collapse">
         <thead className="sticky top-0 z-10">
           <tr className="bg-[#0c0c0c]">
             <th className="px-2 py-1.5 text-left font-mono text-[10px] font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle">
@@ -183,15 +107,8 @@ const ExposureMatrix = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
                 onMouseEnter={onHoverStrike ? () => onHoverStrike(row.strike) : undefined}
                 onMouseLeave={onHoverStrike ? () => onHoverStrike(null) : undefined}
                 onClick={onSelectStrike ? () => onSelectStrike(row.strike) : undefined}
-                {...(onSelectStrike
-                  ? interactiveRowProps(
-                      () => onSelectStrike(row.strike),
-                      selectedStrike === row.strike,
-                      'native'
-                    )
-                  : {})}
                 className={`border-b border-borderSubtle/30 transition-colors ${row.pin ? 'bg-white/[0.03]' : ''} ${
-                  onSelectStrike ? ROW_INTERACTIVE : ''
+                  onSelectStrike ? 'cursor-pointer' : ''
                 } ${
                   selectedStrike === row.strike
                     ? 'bg-white/[0.05] shadow-[inset_2px_0_0_0_rgba(237,237,237,0.7)]'
@@ -219,13 +136,6 @@ const ExposureMatrix = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
           ))}
         </tbody>
       </table>
-      </div>
-      {more && (
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-[#0c0c0c] to-transparent"
-        />
-      )}
     </div>
   );
 };

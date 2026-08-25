@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { Filter } from 'lucide-react';
 import { useMarketData } from '../context/MarketDataContext';
 import type { MarketSnapshot } from '../types/market';
-import Feed from '../core/feed';
+import Simulator from '../core/simulator';
 import { buildCompassView, buildImpact, makeSetup } from '../data/compass';
 import {
   SCANNERS,
@@ -26,7 +26,6 @@ import ImpactLeaderboard from '../components/compass/ImpactLeaderboard';
 import ContractWeigher from '../components/compass/ContractWeigher';
 import SetupScanBoard from '../components/compass/SetupScanBoard';
 import SegmentedControl from '../components/ui/SegmentedControl';
-import { etClock } from '../core/etFormat';
 
 type CompassMode = 'setups' | 'weigher';
 
@@ -202,7 +201,7 @@ const Compass = () => {
       scanRef.current = marketData;
       lastScanTimeRef.current = now;
       setScanSnapshot(marketData);
-      setLastScanAt(etClock(new Date(now)));
+      setLastScanAt(new Date(now).toLocaleTimeString('en-GB'));
     }
   }, [marketData]);
 
@@ -210,7 +209,7 @@ const Compass = () => {
   // as an argument (never reads the simulator itself), so replay and live run
   // identical code. Scan-tier cadence: quotes refresh with the sweep.
   const universe = useMemo(
-    () => (scanSnapshot ? Feed.universeQuotes(scanSnapshot.ticker) : []),
+    () => (scanSnapshot ? Simulator.universeQuotes(scanSnapshot.ticker) : []),
     [scanSnapshot]
   );
 
@@ -224,15 +223,15 @@ const Compass = () => {
   // marketData is the tick dependency — without it the "LIVE" readouts freeze at click-time.
   const monitoredSetup = useMemo(() => {
     if (!monitorTarget) return null;
-    Feed.ensureTicker(monitorTarget.ticker);
-    const cfg = Feed.TICKERS[monitorTarget.ticker];
+    Simulator.ensureTicker(monitorTarget.ticker);
+    const cfg = Simulator.TICKERS[monitorTarget.ticker];
     return makeSetup(monitorTarget.ticker, cfg.currentPrice, monitorTarget.strike, monitorTarget.right, scanner, cfg.iv, sleeve);
   }, [monitorTarget, scanner, sleeve, marketData]);
 
   // The monitored underlying's live spot — the facts strip speaks in it
   const monitorSpot = useMemo(() => {
     if (!monitorTarget) return 0;
-    return Feed.TICKERS[monitorTarget.ticker]?.currentPrice ?? 0;
+    return Simulator.TICKERS[monitorTarget.ticker]?.currentPrice ?? 0;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [monitorTarget, marketData]);
 
@@ -311,7 +310,7 @@ const Compass = () => {
     if (!scanSnapshot || !railTicker) return null;
     if (railTicker === scanSnapshot.ticker) return scanSnapshot;
     try {
-      return Feed.snapshotFor(railTicker);
+      return Simulator.snapshotFor(railTicker);
     } catch {
       return scanSnapshot;
     }

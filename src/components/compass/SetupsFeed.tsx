@@ -4,7 +4,6 @@ import SignalBadge from '../ui/SignalBadge';
 import Sparkline from './Sparkline';
 import SetupCard from './SetupCard';
 import type { Setup, SetupGroup } from '../../types/compass';
-import { fmtNum } from '../../core/numFormat';
 
 // Shared FLIP transition — groups/cards glide to their new rank on each scan
 const flip = {
@@ -46,7 +45,7 @@ const SetupsFeed = ({ groups, selectedSetupId, onSelectSetup, onOpenAnalysis }: 
               <SignalBadge tone="holo">{group.found} found</SignalBadge>
               <Sparkline data={group.sparkline} up={up} />
               <span className="font-mono text-xs font-semibold text-textPrimary tnum">
-                ${fmtNum(group.spot, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                ${group.spot.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
               <span className="ml-auto font-mono text-[9px] uppercase tracking-widest">
                 <span className="text-bull">Strongest</span>

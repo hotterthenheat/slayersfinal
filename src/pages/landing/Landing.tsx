@@ -10,9 +10,10 @@
 import { useState, type MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowRight, Check, ChevronDown, Clock } from 'lucide-react';
+import { ArrowRight, Check, ChevronDown } from 'lucide-react';
 import { SEED_IDEAS } from '../../data/community';
 import { useLaunch } from '../../components/layout/LaunchTransition';
+import SiteFooter from '../../components/layout/SiteFooter';
 import { ComparePlans, Faq } from './PricingExtras';
 import CodeRain from './CodeRain';
 import LiveSections from './LiveSections';
@@ -26,34 +27,19 @@ const NAV_LINKS = [
   { label: 'Pricing', href: '#pricing' },
 ];
 
-interface TierFeature {
-  text: string;
-  /** Not built. Wears the same Soon chip as the ladder rather than a check. */
-  soon?: boolean;
-}
-
-const TIERS: {
-  name: string;
-  kicker: string;
-  price: string;
-  period: string;
-  features: TierFeature[];
-  cta: string;
-  to: string;
-  featured: boolean;
-}[] = [
+const TIERS = [
   {
     name: 'Pinpoint',
     kicker: 'The dealer-GEX terminal',
     price: '$125',
     period: '/mo',
     features: [
-      { text: 'Dealer positioning — GEX · DEX · VEX' },
-      { text: 'Gamma exposure by strike' },
-      { text: '0DTE levels & dealer dynamics' },
-      { text: 'Trace + Pulse' },
-      { text: 'Tracker — bookmarked setups, monitored live' },
-      { text: 'Discord chat & setup alerts', soon: true },
+      'Live dealer positioning — GEX · DEX · VEX',
+      'Gamma exposure by strike',
+      '0DTE levels & dealer dynamics',
+      'Trace + Pulse',
+      'Tracker — setups & trade history',
+      'Real-time Discord chat & alerts',
     ],
     cta: 'Select plan',
     to: '/pulse',
@@ -65,11 +51,11 @@ const TIERS: {
     price: '$275',
     period: '/mo',
     features: [
-      { text: 'Everything in Pinpoint' },
-      { text: 'Compass — graded setups with live states' },
-      { text: 'Stocks & Earnings research desks' },
-      { text: 'Chain momentum across the whole chain', soon: true },
-      { text: 'Quant Lab — backtester, order flow & momentum', soon: true },
+      'Everything in Pinpoint',
+      'Compass — graded setups with live states',
+      'Stocks, News & Earnings research desks',
+      'Chain momentum, live',
+      'Quant Lab — backtester, order flow & momentum',
     ],
     cta: 'Select plan',
     to: '/pulse',
@@ -81,54 +67,14 @@ const TIERS: {
     price: 'Custom',
     period: 'talk to us',
     features: [
-      { text: 'Everything in Compass — forever' },
-      { text: 'One payment, no recurring billing' },
-      { text: 'Private 1-on-1 onboarding' },
-      { text: 'Early beta access to new tools' },
+      'Everything in Compass — forever',
+      'One payment, no recurring billing',
+      'Private 1-on-1 onboarding',
+      'Early beta access to new tools',
     ],
     cta: 'Contact us',
     to: 'mailto:info@slayerterminal.com',
     featured: false,
-  },
-];
-
-const FOOTER_COLS = [
-  {
-    title: 'Products',
-    links: [
-      { label: 'Pulse', to: '/pulse' },
-      { label: 'Compass', to: '/compass' },
-      { label: 'Trace', to: '/trace' },
-      { label: 'Pinpoint', to: '/pinpoint' },
-      { label: 'Prove It', to: '/prove-it' },
-      { label: 'Stocks · Earnings', to: '/stocks' },
-      { label: 'Tracker', to: '/tracker' },
-    ],
-  },
-  {
-    title: 'Company',
-    links: [
-      { label: 'Pricing', to: '#pricing' },
-      { label: 'FAQ', to: '#faq' },
-      { label: 'Community', to: '/community' },
-      { label: 'Feedback', to: '/community/feedback' },
-      { label: 'Contact', to: 'mailto:info@slayerterminal.com' },
-    ],
-  },
-  {
-    title: 'Access',
-    links: [
-      /* /pulse, not '/'. Every other Launch Terminal on this page opens the
-         desk; this one sent the reader back to the marketing page they were
-         already standing on. */
-      { label: 'Launch Terminal', to: '/pulse' },
-      /* "Log in / Sign up" pointed at '/' because there is nowhere for it to
-         point: there is no auth in this tree — no sign-in, no sign-up, no
-         session, nothing. A nav row for a door that does not exist is the
-         same defect as a star labelled "Track print". The community boards
-         already tell the reader accounts come later, in words. */
-      { label: 'Pulse', to: '/pulse' },
-    ],
   },
 ];
 
@@ -294,19 +240,21 @@ const Landing = () => (
           Community
         </span>
         <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">Built in the open.</h2>
-        <p className="mt-4 max-w-xl text-[14px] leading-relaxed text-textSecondary">
-          Trade ideas, feature requests and feedback are boards inside the terminal, not a forum bolted on
-          beside it. They open to everyone when accounts land — until then what you post stays on your own
-          machine. The rows below ship with the app to show the shape of one.
+        <p className="mt-4 text-[14px] text-textSecondary leading-relaxed max-w-xl">
+          Trade ideas, feature requests, feedback — posted inside the terminal, voted on by the people
+          trading with it. What ships next is decided out loud.
         </p>
       </Reveal>
       <Reveal delay={0.1} className="mt-8 border border-borderSubtle bg-panel rounded-lg overflow-hidden">
         {SEED_IDEAS.slice(0, 3).map(idea => (
           <div
             key={idea.id}
-            className="flex items-center gap-4 border-b border-borderSubtle/50 px-5 py-4 last:border-0"
+            className="flex items-center gap-4 px-5 py-4 border-b border-borderSubtle/50 last:border-0"
           >
-            <span className="shrink-0 font-mono text-[12px] font-bold text-textPrimary">{idea.ticker}</span>
+            <span className="flex flex-col items-center w-9 shrink-0 border border-borderSubtle rounded-md py-1.5">
+              <span className="font-mono text-[12px] font-bold text-textPrimary tnum">{idea.votes}</span>
+            </span>
+            <span className="font-mono text-[12px] font-bold text-textPrimary shrink-0">{idea.ticker}</span>
             <span
               className={`inline-flex items-center rounded px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider shrink-0 ${
                 idea.direction === 'BULLISH' ? 'bg-bull/10 text-bull' : 'bg-bear/10 text-bear'
@@ -315,8 +263,8 @@ const Landing = () => (
               {idea.direction}
             </span>
             <span className="text-[12px] text-textSecondary truncate">"{idea.thesis}"</span>
-            <span className="ml-auto hidden shrink-0 items-center rounded border border-borderMuted px-1.5 py-0.5 font-mono text-[8px] font-bold uppercase tracking-widest text-textMuted md:inline-flex">
-              Example
+            <span className="ml-auto hidden md:block font-mono text-[10px] text-textMuted shrink-0">
+              {idea.author}
             </span>
           </div>
         ))}
@@ -363,22 +311,11 @@ const Landing = () => (
               </div>
               <ul className="flex flex-col gap-2.5">
                 {tier.features.map(f => (
-                  <li key={f.text} className="flex items-start gap-2 text-[12px] text-textSecondary leading-snug">
-                    {f.soon ? (
-                      <Clock className="w-3.5 h-3.5 shrink-0 mt-px text-warn" />
-                    ) : (
-                      <Check
-                        className={`w-3.5 h-3.5 shrink-0 mt-px ${tier.featured ? 'text-[#C7D3E8]' : 'text-textMuted'}`}
-                      />
-                    )}
-                    <span className="min-w-0">
-                      {f.text}
-                      {f.soon && (
-                        <span className="ml-1.5 inline-flex items-center rounded border border-warn/30 bg-warn/10 px-1.5 py-0.5 align-[1px] font-mono text-[8px] font-bold uppercase tracking-widest text-warn">
-                          Soon
-                        </span>
-                      )}
-                    </span>
+                  <li key={f} className="flex items-start gap-2 text-[12px] text-textSecondary leading-snug">
+                    <Check
+                      className={`w-3.5 h-3.5 shrink-0 mt-px ${tier.featured ? 'text-[#C7D3E8]' : 'text-textMuted'}`}
+                    />
+                    {f}
                   </li>
                 ))}
               </ul>
@@ -397,8 +334,7 @@ const Landing = () => (
         ))}
       </Reveal>
       <p className="mt-6 text-center font-mono text-[10px] uppercase tracking-wider text-textMuted">
-        Prices in USD · month to month, cancel anytime · billing is not live yet — Select plan opens the
-        terminal on the recorded session
+        Prices in USD · sign in to check out — access is granted at payment · cancel anytime
       </p>
 
       <ComparePlans />
@@ -432,61 +368,9 @@ const Landing = () => (
       </Reveal>
     </section>
 
-    {/* ── Footer ── */}
-    <footer className="border-t border-borderSubtle">
-      <div className="px-6 md:px-10 py-14 max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-5 gap-10">
-        <div className="col-span-2">
-          <span className="font-mono text-[13px] font-bold">
-            <span className="text-textMuted">&gt; </span>
-            <span className="text-textPrimary">slayer_terminal</span>
-            <span className="inline-block w-[6px] h-[12px] ml-1 bg-textPrimary align-middle animate-cursor-blink" />
-          </span>
-          <p className="mt-3 text-[12px] text-textSecondary leading-relaxed max-w-[36ch]">
-            The options terminal. Compass finds the setup, Pinpoint reads the flow.
-          </p>
-          <a
-            href="https://x.com/JoinSlayer"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-4 inline-flex items-center gap-2 font-mono text-[11px] text-textSecondary hover:text-textPrimary transition-colors"
-          >
-            <svg viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5">
-              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-            </svg>
-            @JoinSlayer
-          </a>
-        </div>
-        {FOOTER_COLS.map(col => (
-          <div key={col.title}>
-            <span className="font-mono text-[10px] font-bold uppercase tracking-widest text-textMuted">
-              {col.title}
-            </span>
-            <ul className="mt-3.5 flex flex-col gap-2.5">
-              {col.links.map(l => (
-                <li key={l.label}>
-                  <SmartLink
-                    to={l.to}
-                    className="text-[12px] text-textSecondary hover:text-textPrimary transition-colors"
-                  >
-                    {l.label}
-                  </SmartLink>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
-      </div>
-      <div className="border-t border-borderSubtle/60">
-        <div className="px-6 md:px-10 py-5 max-w-6xl mx-auto flex flex-col md:flex-row gap-2 md:items-center">
-          <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted">
-            © 2026 Slayer Terminal · Compass · Pinpoint
-          </span>
-          <span className="md:ml-auto font-mono text-[10px] tracking-wide text-textMuted">
-            For informational purposes only. Not investment advice. Preview data is simulated.
-          </span>
-        </div>
-      </div>
-    </footer>
+    {/* ── Footer ── shared with every terminal page (SiteFooter); `home`
+        keeps the landing's anchor + launch-gate behavior */}
+    <SiteFooter home />
   </div>
 );
 

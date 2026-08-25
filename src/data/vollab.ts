@@ -17,7 +17,6 @@ import type {
   VolLabData,
   VolRegime,
 } from '../types/gex';
-import { etMonthYear } from '../core/etFormat';
 
 // ---- deterministic RNG ------------------------------------------------------
 function hash(seed: string): number {
@@ -161,7 +160,7 @@ function buildRegime(ticker: string): RegimeData {
 
   for (let i = MONTHS - 1; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const month = etMonthYear(d);
+    const month = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }).replace(' ', ' ');
     const idx = MONTHS - 1 - i;
     // Three slow deterministic signals → softmax-ish probabilities
     const sLow = Math.sin(idx * 0.42 + h01(`${ticker}-rlow`) * 6) * 0.9 + 0.1;

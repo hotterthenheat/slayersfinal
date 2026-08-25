@@ -14,8 +14,7 @@
 ==================================================
 */
 
-import Feed from '../core/feed';
-import { etHm } from '../core/etFormat';
+import Simulator from '../core/simulator';
 
 export type GexTrend = 'BUILDING' | 'BLEEDING' | 'FLAT' | 'NEW';
 
@@ -38,11 +37,11 @@ const SESSION_GAP_S = 90;
 const TREND_THRESHOLD = 15;
 
 const fmtTime = (t: number) =>
-  etHm(t);
+  new Date(t * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
 /** Today's session: the trailing run of bars with no overnight gap. */
 function sessionBars(ticker: string) {
-  const bars = Feed.peekCandles(ticker);
+  const bars = Simulator.peekCandles(ticker);
   if (!bars || bars.length === 0) return null;
   let start = bars.length - 1;
   while (start > 0 && bars[start].time - bars[start - 1].time <= SESSION_GAP_S) start--;
@@ -60,7 +59,7 @@ function sessionBars(ticker: string) {
 export function netSinceOpenRatio(ticker: string): Map<number, number> | null {
   const session = sessionBars(ticker);
   if (!session) return null;
-  const snaps = Feed.getGexHistory(ticker) ?? [];
+  const snaps = Simulator.getGexHistory(ticker) ?? [];
   const first = snaps.find(s => s.time >= session[0].time);
   const last = snaps[snaps.length - 1];
   if (!first || !last || first === last) return null;
@@ -88,10 +87,10 @@ export function buildLevelRead(ticker: string, strike: number): LevelRead | null
     inTouch = hit;
   }
 
-  const spot = Feed.TICKERS[ticker]?.currentPrice ?? session[session.length - 1].close;
+  const spot = Simulator.TICKERS[ticker]?.currentPrice ?? session[session.length - 1].close;
   const distPct = ((strike - spot) / spot) * 100;
 
-  const snaps = Feed.getGexHistory(ticker) ?? [];
+  const snaps = Simulator.getGexHistory(ticker) ?? [];
   const at = (s: { levels: { strike: number; value: number }[] }) => s.levels.find(l => l.strike === strike)?.value ?? null;
   const first = snaps.find(s => s.time >= session[0].time);
   const last = snaps[snaps.length - 1];

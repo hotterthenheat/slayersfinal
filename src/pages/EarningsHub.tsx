@@ -34,21 +34,9 @@ const WEEK_OPTIONS = [
 
 const WEEKDAYS = [1, 2, 3, 4, 5] as const;
 
-/*
-  Implied vs realized, drawn against each other — the whole edge in one glance.
-
-  `scale` IS THE COLUMN'S SCALE, NOT THE ROW'S. It used to be
-  `Math.max(implied, hist, 1)` computed inside this component, so every row was
-  normalised to itself: the longer of the two bars was 100% width in every row
-  of the table. A name pricing a 16.3% move and a name pricing 3.2% drew the
-  identical bar, one above the other, and the column that exists to let you
-  compare names across the week was the one column that could not.
-
-  A bar drawn at the wrong length is a wrong number. It is read faster than the
-  figure beside it and trusted more.
-*/
-const MoveCompare = ({ implied, hist, scale }: { implied: number; hist: number; scale: number }) => {
-  const max = Math.max(scale, 1);
+/** Implied vs realized, drawn against each other — the whole edge in one glance. */
+const MoveCompare = ({ implied, hist }: { implied: number; hist: number }) => {
+  const max = Math.max(implied, hist, 1);
   return (
     <span className="flex flex-col gap-1 w-full py-0.5">
       <span className="flex items-center gap-1.5">
@@ -113,19 +101,6 @@ const Shelf = ({
     </div>
   );
 
-/*
-  A one-glyph explainer still has to be hittable.
-
-  The dotted "?" beside a sortable header is 6x15 CSS pixels of glyph, which
-  is a fine thing to look at and a poor thing to hit — WCAG 2.5.8 asks for
-  24x24, and it sits right next to the sort button so the spacing exception
-  does not rescue it either. Padding gives it a 26x25 hit area; the negative
-  vertical margin hands the row back the height, so nothing moves. Underline
-  decoration applies to the text and not to padding, so the mark itself looks
-  exactly the same.
-*/
-const EXPLAIN_HIT = 'inline-block px-2.5 py-[5px] -my-[5px]';
-
 const EarningsHub = () => {
   const navigate = useNavigate();
   const events = useMemo(() => buildEarningsCalendar(), []);
@@ -133,15 +108,6 @@ const EarningsHub = () => {
   const [filter, setFilter] = useState<StateFilter>('ALL');
 
   const rows = useMemo(() => (filter === 'ALL' ? events : events.filter(e => stateOf(e) === filter)), [events, filter]);
-
-  /* One scale for the whole Implied-vs-realized column, taken from the rows
-     currently on screen so the longest bar always reaches the end and the rest
-     are honestly shorter. Recomputed with the filter, because a filtered board
-     is a different comparison. */
-  const moveScale = useMemo(
-    () => rows.reduce((m, e) => Math.max(m, e.impliedMovePct, e.histAvgMovePct), 0),
-    [rows]
-  );
 
   const rich = events.filter(e => stateOf(e) === 'RICH');
   const cheap = events.filter(e => stateOf(e) === 'CHEAP');
@@ -204,23 +170,14 @@ const EarningsHub = () => {
     },
     {
       key: 'move',
-      header: (
-        <span className="inline-flex items-baseline gap-1.5">
-          Implied vs realized
-          <span className="font-mono text-[9px] normal-case tracking-normal text-textMuted tnum">
-            full = {moveScale.toFixed(1)}%
-          </span>
-        </span>
-      ),
-      headerAside: <Term k="Implied vs realized" className={EXPLAIN_HIT}>?</Term>,
+      header: <Term k="Implied vs realized" />,
       width: '190px',
       sortValue: e => e.richness,
-      render: e => <MoveCompare implied={e.impliedMovePct} hist={e.histAvgMovePct} scale={moveScale} />,
+      render: e => <MoveCompare implied={e.impliedMovePct} hist={e.histAvgMovePct} />,
     },
     {
       key: 'rich',
-      header: 'Priced',
-      headerAside: <Term k="Priced vs typical" className={EXPLAIN_HIT}>?</Term>,
+      header: <Term k="Priced vs typical">Priced</Term>,
       align: 'right',
       sortValue: e => e.richness,
       render: e => (
@@ -231,16 +188,14 @@ const EarningsHub = () => {
     },
     {
       key: 'beat',
-      header: 'Beat rate',
-      headerAside: <Term k="Beat rate" className={EXPLAIN_HIT}>?</Term>,
+      header: <Term k="Beat rate" />,
       align: 'right',
       sortValue: e => e.beatRate8q,
       render: e => <span className="font-mono text-xs text-textPrimary tnum">{e.beatRate8q}%</span>,
     },
     {
       key: 'rev',
-      header: 'Revisions',
-      headerAside: <Term k="Revisions" className={EXPLAIN_HIT}>?</Term>,
+      header: <Term k="Revisions" />,
       align: 'right',
       sortValue: e => e.revisionTrend,
       render: e => (
@@ -251,16 +206,14 @@ const EarningsHub = () => {
     },
     {
       key: 'ivr',
-      header: 'IV rank',
-      headerAside: <Term k="IV rank" className={EXPLAIN_HIT}>?</Term>,
+      header: <Term k="IV rank" />,
       align: 'right',
       sortValue: e => e.ivRank,
       render: e => <span className="font-mono text-xs text-textPrimary tnum">{e.ivRank}</span>,
     },
     {
       key: 'state',
-      header: 'Pricing',
-      headerAside: <Term k="Pricing" className={EXPLAIN_HIT}>?</Term>,
+      header: <Term k="Pricing" />,
       sortValue: e => stateOf(e),
       render: e => <StateTag state={stateOf(e)} />,
     },

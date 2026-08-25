@@ -100,18 +100,11 @@ const Requests = () => {
               <Send className="w-3.5 h-3.5" /> Submit request
             </button>
             <span className="font-mono text-[10px] text-textMuted">
-              Requests and votes stay on this browser until accounts land
+              Vote for anything below — the most-wanted items get built first
             </span>
           </div>
         </div>
       </Panel>
-
-      <p className="text-[12px] leading-relaxed text-textSecondary">
-        The rows marked{' '}
-        <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">example</span> ship with the
-        app to show the format and the statuses a request moves through. Yours sits alongside them, on this browser,
-        until accounts land.
-      </p>
 
       {/* Board */}
       <div className="flex flex-col gap-3">
@@ -133,21 +126,14 @@ const Requests = () => {
               </button>
               <div className="min-w-0 flex-grow">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[13px] font-semibold text-textPrimary break-words">{req.title}</span>
+                  <span className="text-[13px] font-semibold text-textPrimary">{req.title}</span>
                   <SignalBadge tone={STATUS_TONE[req.status]}>{req.status}</SignalBadge>
                   <SignalBadge tone="neutral">{req.kind}</SignalBadge>
-                  {req.example ? (
-                    <span className="ml-auto inline-flex items-center rounded border border-borderMuted px-1.5 py-0.5 font-mono text-[8px] font-bold uppercase tracking-widest text-textMuted">
-                      Example
-                    </span>
-                  ) : (
-                    <span className="ml-auto font-mono text-[10px] text-textMuted tnum">
-                      {req.author === 'you' ? <span className="text-select">you</span> : req.author} ·{' '}
-                      {timeAgo(req.createdAt)}
-                    </span>
-                  )}
+                  <span className="ml-auto font-mono text-[10px] text-textMuted tnum">
+                    {req.author === 'you' ? <span className="text-select">you</span> : req.author} · {timeAgo(req.createdAt)}
+                  </span>
                 </div>
-                {req.detail && <p className="mt-1.5 text-[12px] text-textSecondary leading-relaxed break-words">{req.detail}</p>}
+                {req.detail && <p className="mt-1.5 text-[12px] text-textSecondary leading-relaxed">{req.detail}</p>}
               </div>
             </div>
           );

@@ -7,7 +7,7 @@
 ==================================================
 */
 
-import Feed from '../core/feed';
+import Simulator from '../core/simulator';
 import type { TapeOrder } from '../types/market';
 import type { FlowPrint, PrintSentiment, StratTag, TapeSummary } from '../types/trace';
 
@@ -32,7 +32,7 @@ export function enrichPrint(order: TapeOrder, id: number): FlowPrint {
   const seed = `${order.ticker}-${order.strike}-${order.side}-${order.size}-${id}`;
   const h = (tag: string) => h01(`${seed}-${tag}`);
 
-  const cfg = Feed.TICKERS[order.ticker];
+  const cfg = Simulator.TICKERS[order.ticker];
   const spot = cfg?.currentPrice ?? 100;
   const baseIv = cfg?.iv ?? 0.2;
   const strike = Number(order.strike);

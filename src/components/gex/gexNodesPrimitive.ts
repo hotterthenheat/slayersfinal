@@ -1,6 +1,5 @@
 import type { ISeriesPrimitive, SeriesAttachedParameter, Time, IChartApi, ISeriesApi } from 'lightweight-charts';
 import type { GexSnapshot } from '../../types/market';
-import { canvasFont } from '../ui/typeface';
 
 /*
   Exposure nodes — the ORIGINAL trail form, back by request (Noah,
@@ -31,6 +30,28 @@ import { canvasFont } from '../ui/typeface';
 const PUT_RGB: readonly [number, number, number] = [245, 197, 66]; // honey gold
 const CALL_RGB: readonly [number, number, number] = [226, 234, 244]; // platinum steel
 const KING_RGB: readonly [number, number, number] = [234, 0, 255];
+/* THE WALLS LIVE HERE (Noah, 2026-08-22: "I hate how they look on the side
+   line"): each moment's call wall beads ink green, its put wall red, and the
+   flip runs as a blue tick trail — the levels ON the tape, history included,
+   instead of static lines at today's values. Same level rules as the chips
+   used (buildLevelsFor): wall = heaviest |gamma| above/below that moment's
+   close, flip = the sign-change midpoint nearest it. */
+const CW_RGB: readonly [number, number, number] = [48, 209, 88]; // bull green
+const PW_RGB: readonly [number, number, number] = [255, 59, 48]; // bear red
+const FLIP_RGBA = 'rgba(125,211,252,0.55)'; // baby blue — the regime border
+
+/* WHEN TWO IDENTITIES SHARE A STRIKE, THE INKS MIX (Noah, 2026-08-22, with
+   the paint chart): a put wall that IS the king paints wine (red+magenta),
+   a call wall that is the king a violet, a flip on the king purple — both
+   facts visible in one band, neither swallowed. 50/50 blends. */
+const mix = (a: readonly [number, number, number], b: readonly [number, number, number]): [number, number, number] => [
+  Math.round((a[0] + b[0]) / 2),
+  Math.round((a[1] + b[1]) / 2),
+  Math.round((a[2] + b[2]) / 2),
+];
+const PWK_RGB = mix(PW_RGB, KING_RGB); // wine  (245, 30, 152)
+const CWK_RGB = mix(CW_RGB, KING_RGB); // violet (141, 105, 172)
+const FLIPK_RGBA = 'rgba(180,106,254,0.7)'; // purple — flip on the king
 
 /* A dozen strikes per column, steep falloff; below the floor, nothing. The
    ranking happens ONCE, when the data arrives — a frame must never sort. */
@@ -96,7 +117,6 @@ class TrailsPaneRenderer {
     const A_MAX = Math.max(3, Math.min(barSpacing * 0.6, 9));
     const focus = src.focusStrike;
     const king = src.kingStrike;
-    const lineKeys = src.priceLineKeys;
     const ink = INK_RGB[src.focusInk];
     const inkCss = `rgba(${ink[0]},${ink[1]},${ink[2]},0.95)`;
 
@@ -124,6 +144,8 @@ class TrailsPaneRenderer {
          a few dozen — the difference between a frame and a stutter. */
       const cores = new Map<string, Path2D>();
       const halos = new Map<string, Path2D>();
+      const flipPath = new Path2D();
+      let flipDrawn = false;
       const pathFor = (map: Map<string, Path2D>, key: string) => {
         let p = map.get(key);
         if (!p) map.set(key, (p = new Path2D()));
@@ -150,6 +172,17 @@ class TrailsPaneRenderer {
         const x = slots > 1 ? xBar - halfW + ((slot / stride + 0.5) / drawnSlots) * barSpacing : xBar;
         const cx = x * hr;
 
+        // The flip: ONE dotted blue line at TODAY'S flip — a tick per column
+        // in the field's grammar, never a solid side line
+        if (src.flipPrice != null) {
+          const fy = series.priceToCoordinate(src.flipPrice);
+          if (fy !== null) {
+            const w = (barSpacing / drawnSlots) * 0.62 * hr;
+            flipPath.rect(cx - w / 2, fy * vr - 0.8 * vr, w, 1.6 * vr);
+            flipDrawn = true;
+          }
+        }
+
         // This moment's field, ranked at load — plus the focused strike at
         // EVERY moment, however faint (its history must have no gaps)
         let beads = col.top;
@@ -175,9 +208,27 @@ class TrailsPaneRenderer {
             core *= 0.3; // the field steps back
             halo *= 0.3;
           }
-          // The king's band is magenta, as the king is everywhere; a focused
-          // strike's own ink wins (it is magenta too while it IS the king)
-          const inkKey = isFocus ? 'f' : king != null && bead.strike === king ? 'k' : bead.put ? 'p' : 'c';
+          /* Ink precedence: the focus wins, then TODAY'S walls — ABOVE the
+             king, because the put wall often IS the king and magenta was
+             swallowing the red entirely (Noah, 2026-08-22: "I don't even see
+             any put wall"); the king keeps its chip, axis line and label —
+             then the king's magenta, then the side. */
+          const isKing = king != null && bead.strike === king;
+          const inkKey = isFocus
+            ? 'f'
+            : bead.strike === src.cwStrike
+              ? isKing
+                ? 'cwk' // call wall AND king — violet
+                : 'cw'
+              : bead.strike === src.pwStrike
+                ? isKing
+                  ? 'pwk' // put wall AND king — wine
+                  : 'pw'
+                : isKing
+                  ? 'k'
+                  : bead.put
+                    ? 'p'
+                    : 'c';
 
           /* Each bead is its OWN subpath: ellipse() draws a line from the
              path's current point to the ellipse's start, so without the
@@ -197,14 +248,30 @@ class TrailsPaneRenderer {
         }
       }
 
+      const INKS: Record<string, readonly [number, number, number]> = {
+        f: ink,
+        k: KING_RGB,
+        cw: CW_RGB,
+        pw: PW_RGB,
+        cwk: CWK_RGB,
+        pwk: PWK_RGB,
+        p: PUT_RGB,
+        c: CALL_RGB,
+      };
       const paint = (map: Map<string, Path2D>, step: number) => {
         for (const [key, path] of map) {
           const [inkKey, q] = key.split('|');
-          const rgb = inkKey === 'f' ? ink : inkKey === 'k' ? KING_RGB : inkKey === 'p' ? PUT_RGB : CALL_RGB;
+          const rgb = INKS[inkKey] ?? CALL_RGB;
           ctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${(Number(q) / step).toFixed(3)})`;
           ctx.fill(path);
         }
       };
+      if (flipDrawn) {
+        // Flip sitting ON the king → purple, both facts in one line
+        const flipOnKing = king != null && src.flipPrice != null && Math.abs(src.flipPrice - king) < 1e-6;
+        ctx.fillStyle = flipOnKing ? FLIPK_RGBA : FLIP_RGBA;
+        ctx.fill(flipPath);
+      }
       paint(halos, 40);
       paint(cores, 20);
 
@@ -220,14 +287,12 @@ class TrailsPaneRenderer {
         .slice(0, 4)
         .filter(l => Math.abs(l.value) / total >= 0.08);
 
-      ctx.font = canvasFont(Math.round(9.5 * vr));
+      ctx.font = `${Math.round(9.5 * vr)}px "SF Pro", sans-serif`;
       ctx.textAlign = 'right';
       ctx.textBaseline = 'middle';
       const xRight = (wCss - 8) * hr;
 
       const drawLabel = (lvl: { strike: number; value: number }, color: string) => {
-        // A price line already names this strike on a layer above this one.
-        if (lineKeys.has(lvl.strike.toFixed(2))) return;
         const y = series.priceToCoordinate(lvl.strike);
         if (y === null) return;
         const pct = Math.round((Math.abs(lvl.value) / total) * 100);
@@ -235,18 +300,12 @@ class TrailsPaneRenderer {
         const text = `${strikeLabel} · ${pct}%`;
         const yPix = y * vr;
 
-        /* Dark backing pad so the label survives whatever sits behind it.
-           CENTRED on yPix, because the text is: textBaseline is 'middle'.
-           The old rect ran from yPix - padY to yPix + 12*vr — the `- 6*vr
-           + 6*vr` in it cancelled — so the glyphs' top half sat on bare
-           canvas and only their bottom half was backed. Visible in the
-           /pulse/board capture as half-plated numbers. */
+        // Dark backing pad so the label survives whatever sits behind it
         const w = ctx.measureText(text).width;
         const padX = 4 * hr;
         const padY = 2.5 * vr;
-        const halfH = 6 * vr + padY;
         ctx.fillStyle = 'rgba(5,5,5,0.72)';
-        ctx.fillRect(xRight - w - padX, yPix - halfH, w + padX * 2, halfH * 2);
+        ctx.fillRect(xRight - w - padX, yPix - 6 * vr - padY + 6 * vr, w + padX * 2, 12 * vr + padY);
         ctx.fillStyle = color;
         ctx.fillText(text, xRight, yPix);
       };
@@ -302,15 +361,11 @@ export class GexTrailsPrimitive implements ISeriesPrimitive<Time> {
   focusInk: FocusInk = 'focus';
   /** The book's king strike — its band wears magenta (re-read every scan) */
   kingStrike: number | null = null;
-  /** Prices that already carry a chart price line, as toFixed(2) keys.
-
-      The library draws those axis badges on a layer ABOVE this pane, so a
-      strength label at the same strike loses every time no matter what it
-      paints behind itself — measured on /pulse/board: "187.50 · 18%" with
-      its bottom half under PUT WALL · KING, and "420 · 14%" under
-      CALL WALL · KING. Two labels for one strike was the defect; the badge
-      already names the level, so the label stands down. */
-  priceLineKeys: ReadonlySet<string> = new Set();
+  /** TODAY'S levels — ONE green band, ONE red band, ONE blue flip line, all
+      re-read every scan so they move with the math (Noah, 2026-08-22) */
+  cwStrike: number | null = null;
+  pwStrike: number | null = null;
+  flipPrice: number | null = null;
   private _paneViews: TrailsPaneView[];
 
   constructor() {
@@ -323,11 +378,11 @@ export class GexTrailsPrimitive implements ISeriesPrimitive<Time> {
     this.requestUpdate?.();
   }
 
-  /** Prices the chart drew a price line at — those strikes skip their label. */
-  setPriceLines(prices: number[]): void {
-    const next = new Set(prices.filter(Number.isFinite).map(p => p.toFixed(2)));
-    if (next.size === this.priceLineKeys.size && [...next].every(k => this.priceLineKeys.has(k))) return;
-    this.priceLineKeys = next;
+  setWalls(cw: number | null, pw: number | null, flip: number | null): void {
+    if (this.cwStrike === cw && this.pwStrike === pw && this.flipPrice === flip) return;
+    this.cwStrike = cw;
+    this.pwStrike = pw;
+    this.flipPrice = flip;
     this.requestUpdate?.();
   }
 

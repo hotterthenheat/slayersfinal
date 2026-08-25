@@ -11,7 +11,6 @@ import DataTable, { type Column } from '../../components/ui/DataTable';
 import SpotRule from '../../components/ui/SpotRule';
 import type { DarkLeaderRow, DarkLeadersView, DarkPoolIntent, DarkPoolLevel, DarkPoolPrint } from '../../types/darkpool';
 import type { Tone } from '../../components/ui/tones';
-import { fmtNum } from '../../core/numFormat';
 
 /*
   Two surfaces, one grammar:
@@ -154,7 +153,7 @@ const LeadersView = ({
             Where today's dark tape printed
           </span>
           <span className="font-mono text-[11px] text-textSecondary tnum">
-            {fmtUsd(leaders.totalNotional)} · {fmtNum(leaders.totalPrints)} prints
+            {fmtUsd(leaders.totalNotional)} · {leaders.totalPrints.toLocaleString()} prints
           </span>
         </div>
         <div className="flex h-2.5 rounded-sm overflow-hidden gap-px">
@@ -209,7 +208,7 @@ const LeadersView = ({
                   <span className="text-right shrink-0">
                     <span className="block font-mono text-[13px] font-semibold text-textPrimary tnum">{fmtUsd(s.notional)}</span>
                     <span className="block font-mono text-[11px] text-textSecondary tnum">
-                      {s.sharePct.toFixed(1)}% · {fmtNum(s.prints)} prints
+                      {s.sharePct.toFixed(1)}% · {s.prints.toLocaleString()} prints
                     </span>
                   </span>
                 </button>
@@ -307,7 +306,7 @@ const DarkPool = () => {
       header: 'Size',
       align: 'right',
       sortValue: p => p.size,
-      render: p => <span className="font-mono text-xs text-textPrimary tnum">{fmtNum(p.size)}</span>,
+      render: p => <span className="font-mono text-xs text-textPrimary tnum">{p.size.toLocaleString()}</span>,
     },
     {
       key: 'notional',
@@ -365,7 +364,7 @@ const DarkPool = () => {
         {/* Single Ticker follows the page-level ticker search in the header */}
         {tab === 'leaders' && (
           <span className="ml-auto font-mono text-[11px] text-textSecondary uppercase tracking-wider tnum">
-            {fmtUsd(leaders.totalNotional)} dark · {fmtNum(leaders.totalPrints)} prints · updated {leaders.updated}
+            {fmtUsd(leaders.totalNotional)} dark · {leaders.totalPrints.toLocaleString()} prints · updated {leaders.updated}
           </span>
         )}
       </div>

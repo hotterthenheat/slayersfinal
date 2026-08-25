@@ -12,7 +12,7 @@ import { useNavigate } from 'react-router-dom';
 import { Bookmark, Trash2, ArrowUpRight } from 'lucide-react';
 import { useTracker } from '../context/TrackerContext';
 import { useMarketData } from '../context/MarketDataContext';
-import Feed from '../core/feed';
+import Simulator from '../core/simulator';
 import { makeSetup } from '../data/compass';
 import type { Setup, SleeveKey } from '../types/compass';
 import type { TrackedSetup } from '../types/tracker';
@@ -22,7 +22,6 @@ import Panel from '../components/ui/Panel';
 import SignalBadge from '../components/ui/SignalBadge';
 import VerdictBadge from '../components/compass/VerdictBadge';
 import DataTable, { type Column } from '../components/ui/DataTable';
-import { etMonthDay } from '../core/etFormat';
 
 const TAB_OPTIONS = [
   { value: 'setups', label: 'Tracked Setups' },
@@ -55,8 +54,8 @@ function isExpired(tracked: TrackedSetup): boolean {
 
 /** Rebuild a tracked setup's live data from the simulator. */
 function rebuildLive(tracked: TrackedSetup): Setup {
-  Feed.ensureTicker(tracked.ticker);
-  const cfg = Feed.TICKERS[tracked.ticker];
+  Simulator.ensureTicker(tracked.ticker);
+  const cfg = Simulator.TICKERS[tracked.ticker];
   return makeSetup(
     tracked.ticker,
     cfg.currentPrice,
@@ -88,7 +87,7 @@ const TrackedCard = ({ tracked, live, expired, onUntrack, onReview }: TrackedCar
         <span className="font-mono text-sm font-bold text-textPrimary tracking-tight">{live.contract}</span>
         {expired ? <SignalBadge tone="bear">EXPIRED</SignalBadge> : <VerdictBadge verdict={live.verdict} dot />}
         <span className="ml-auto font-mono text-[9px] text-textMuted uppercase tracking-wider">
-          Tracked {etMonthDay(new Date(tracked.trackedAt))}
+          Tracked {new Date(tracked.trackedAt).toLocaleDateString()}
         </span>
       </div>
 
@@ -111,7 +110,7 @@ const TrackedCard = ({ tracked, live, expired, onUntrack, onReview }: TrackedCar
       {expired ? (
         <div className="px-4 py-2.5">
           <span className="font-mono text-[10px] text-textSecondary">
-            This contract expired {etMonthDay(new Date(tracked.trackedAt))} — tracking ended.
+            This contract expired {new Date(tracked.trackedAt).toLocaleDateString()} — tracking ended.
           </span>
         </div>
       ) : (
@@ -202,26 +201,10 @@ const TABLE_COLUMNS: Column<{ tracked: TrackedSetup; live: Setup; expired: boole
     header: 'Tracked',
     render: r => (
       <span className="text-textMuted">
-        {etMonthDay(new Date(r.tracked.trackedAt))}
+        {new Date(r.tracked.trackedAt).toLocaleDateString()}
       </span>
     ),
   },
-];
-
-/*
-  WHAT THE EMPTY STATE PROMISES IS WHAT THE TABLE ABOVE DELIVERS.
-
-  A panel holding one icon and one sentence over 58vh is not a filled page —
-  it is the same void with a border drawn round it, which reads worse because
-  the frame draws the eye to the emptiness. So the empty state carries the
-  three things tracking actually does, each one traceable to code on this
-  page: liveData recomputes from the feed on every marketData change, and
-  Premium / Exp. Move / the contracts tab are TABLE_COLUMNS above.
-*/
-const WHAT_TRACKING_GIVES: { label: string; detail: string }[] = [
-  { label: 'Stays live', detail: 'Verdict and confidence recompute as price moves — not a snapshot of the moment you tracked it.' },
-  { label: 'Keeps the entry', detail: 'Premium and expected move stay pinned to the level the setup was tracked at.' },
-  { label: 'Two views', detail: 'Cards here, and the same setups as a sortable contract table under the second tab.' },
 ];
 
 // ---- Main Page Component ---------------------------------------------------
@@ -277,45 +260,23 @@ const Tracker = () => {
         </span>
       </div>
 
-      {/*
-        THE EMPTY STATE NAMES THE CONTROL THAT EXISTS.
-
-        It used to say "click Track Setup +". Grepping the repo for that string
-        returned exactly one hit: this sentence. The real control is "Track
-        campaign", and it is not on the card — it is inside a setup's Analysis
-        (CampaignAnalysis.tsx:1167). So the instruction sent people looking for
-        a button that has never existed, on a screen it would not have been on.
-
-        And it is per TAB now. This branch ran before the tab check, so the
-        Contracts tab rendered the Setups empty state — clicking "Tracked
-        Contracts" changed nothing on screen, which reads as a broken tab
-        rather than an empty one.
-      */}
+      {/* Empty state */}
       {trackedSetups.length === 0 ? (
-        <Panel className="w-full" bodyClassName="flex flex-col items-center gap-5 py-12">
-          <Bookmark className="w-9 h-9 text-textMuted/40" />
+        <Panel className="w-full" bodyClassName="flex flex-col items-center justify-center py-16 gap-4">
+          <Bookmark className="w-10 h-10 text-textMuted/40" />
           <span className="font-mono text-[11px] text-textMuted uppercase tracking-widest">
-            {tab === 'setups' ? 'No tracked setups yet' : 'No tracked contracts yet'}
+            No tracked setups yet
           </span>
-          <p className="max-w-sm text-center text-[12px] leading-relaxed text-textSecondary">
-            Open a setup&rsquo;s <strong className="text-textPrimary">Analysis</strong> in Compass and click{' '}
-            <strong className="text-textPrimary">Track campaign</strong>. It lands here.
+          <p className="text-[12px] text-textSecondary text-center max-w-sm leading-relaxed">
+            Go to{' '}
+            <button
+              onClick={() => navigate('/compass')}
+              className="text-select hover:underline"
+            >
+              Compass
+            </button>
+            , pick a setup, and click <strong className="text-textPrimary">Track Setup +</strong> to bookmark it here.
           </p>
-          <button
-            onClick={() => navigate('/compass')}
-            className="inline-flex items-center gap-1.5 rounded-md border border-select/40 bg-select/[0.06] px-3 py-1.5 font-mono text-[11px] font-semibold uppercase tracking-wider text-select transition-colors hover:bg-select/[0.12]"
-          >
-            Go to Compass <ArrowUpRight className="h-3.5 w-3.5" />
-          </button>
-
-          <div className="mt-2 grid w-full max-w-3xl grid-cols-1 gap-3 border-t border-borderSubtle pt-6 sm:grid-cols-3">
-            {WHAT_TRACKING_GIVES.map(item => (
-              <div key={item.label} className="flex flex-col gap-1 px-2 text-center">
-                <span className="font-mono text-[9px] uppercase tracking-widest text-textMuted">{item.label}</span>
-                <span className="text-[12px] leading-snug text-textSecondary">{item.detail}</span>
-              </div>
-            ))}
-          </div>
         </Panel>
       ) : tab === 'setups' ? (
         /* ---- Grid of tracked setup cards ---- */

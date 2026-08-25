@@ -12,6 +12,7 @@ import StrikeLadderWidget from './StrikeLadderWidget';
 import CompassSetupsWidget from './CompassSetupsWidget';
 import RankedTargetsWidget from './RankedTargetsWidget';
 import EarningsWidget from './EarningsWidget';
+import NewsWidget from './NewsWidget';
 import ContractWeigher from '../../components/compass/ContractWeigher';
 
 /* The Weigher re-renders on its snapshot prop only — the desk's 1s heat
@@ -213,6 +214,17 @@ export const WIDGETS: WidgetDef[] = [
     minH: 3,
     maxH: 8,
     render: () => <EarningsWidget />,
+  },
+  {
+    key: 'news',
+    title: 'News',
+    description: "The wire by beat, each headline with the model's next-session read — click one to open it",
+    w: 4,
+    h: 5,
+    minW: 3,
+    minH: 3,
+    maxH: 9,
+    render: () => <NewsWidget />,
   },
   {
     key: 'compass-weigher',

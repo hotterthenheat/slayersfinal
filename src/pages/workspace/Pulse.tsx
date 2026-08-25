@@ -5,7 +5,7 @@ import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 import { Check, GripHorizontal, Plus, RotateCcw, Save, Trash2, X } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
-import Feed from '../../core/feed';
+import Simulator from '../../core/simulator';
 import { buildGexView, pulseMatrix } from '../../data/gex';
 import { buildExposureProfile } from '../../data/exposure';
 import { buildPulseView } from '../../data/pulse';
@@ -31,7 +31,6 @@ import {
   type WidgetInstance,
 } from './desks';
 import type { MarketSnapshot } from '../../types/market';
-import ErrorBoundary from '../../components/ui/ErrorBoundary';
 
 const Grid = WidthProvider(RGL);
 
@@ -245,7 +244,7 @@ const Pulse = () => {
       exposure: buildExposureProfile(snapshot, '0DTE', 10),
       pulse: buildPulseView(snapshot),
       vanna: buildVannaCharm(snapshot, 'CHARM', -1),
-      setups: buildCompassView(snapshot, 'top-setups', Feed.universeQuotes(snapshot.ticker)),
+      setups: buildCompassView(snapshot, 'top-setups', Simulator.universeQuotes(snapshot.ticker)),
     };
   };
 
@@ -266,7 +265,7 @@ const Pulse = () => {
     if (!scanSnapshot) return map;
     for (const t of usedTickers) {
       try {
-        map.set(t, buildCtxFor(t === scanSnapshot.ticker ? scanSnapshot : Feed.snapshotFor(t)));
+        map.set(t, buildCtxFor(t === scanSnapshot.ticker ? scanSnapshot : Simulator.snapshotFor(t)));
       } catch {
         /* a name the sim can't build is simply skipped — the panel says so */
       }
@@ -624,24 +623,7 @@ const Pulse = () => {
                       </button>
                     </span>
                   </div>
-                  {/*
-                    ONE BAD WIDGET MUST NOT COST YOU THE DESK.
-
-                    AppShell's RouteBoundary already catches anything a page
-                    throws, so nothing here could white-screen the terminal —
-                    but it catches at the ROUTE, which means a fault in one
-                    panel replaces the whole desk with a page-fault card and
-                    the reader loses a layout they arranged by hand.
-
-                    ErrorBoundary was written for exactly this and names it in
-                    its own header: "for surfaces that read live feed data and
-                    must fail small — a drilldown, a widget, a chart". One
-                    file had adopted it. The resetKey is the instance and its
-                    ticker, so re-pointing a faulted widget at another name
-                    gives it a clean try rather than leaving it stuck.
-                  */}
                   <div className="flex-grow min-h-0 overflow-hidden">
-                    <ErrorBoundary label={def.title} resetKey={`${inst.id}-${inst.ticker}`}>
                     {(() => {
                       const wctx = ctxFor(inst.ticker);
                       return wctx ? (
@@ -658,7 +640,6 @@ const Pulse = () => {
                         </span>
                       );
                     })()}
-                    </ErrorBoundary>
                   </div>
                 </div>
               );

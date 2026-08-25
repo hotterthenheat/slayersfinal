@@ -1,16 +1,23 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { Check, Eraser, Minus, Pause, Play, RotateCcw, StepBack, StepForward, TrendingUp, X } from 'lucide-react';
+import { Check, Eraser, Minus, Pause, Play, StepBack, StepForward, TrendingUp, X } from 'lucide-react';
 import {
   createChart,
+  AreaSeries,
+  BarSeries,
+  BaselineSeries,
   CandlestickSeries,
   HistogramSeries,
+  LineSeries,
   LineStyle,
+  LineType,
+  PriceScaleMode,
   type IChartApi,
   type ISeriesApi,
   type IPriceLine,
+  type SeriesType,
   type UTCTimestamp,
 } from 'lightweight-charts';
-import Feed from '../../core/feed';
+import Simulator from '../../core/simulator';
 import {
   aggregateCandles,
   aggregateSnapshots,
@@ -21,15 +28,7 @@ import {
 } from '../../data/timeframe';
 import { GexTrailsPrimitive } from './gexNodesPrimitive';
 import { DrawingsPrimitive, loadDrawings, saveDrawings, type Drawing, type DrawingKind } from './drawingsPrimitive';
-import {
-  getCandleTheme,
-  useCandleThemeKey,
-  candleSeriesOptions,
-  chartSurface,
-  etTime,
-  etTickMark,
-  type CandleTheme,
-} from './candleTheme';
+import { getCandleTheme, useCandleThemeKey, candleSeriesOptions, chartSurface, type CandleTheme } from './candleTheme';
 import type { Candle } from '../../types/market';
 import type { DarkPoolPrint, KeyLevels } from '../../types/gex';
 
@@ -39,6 +38,53 @@ export interface ChartOverlays {
   levels: boolean;
   darkpool: boolean;
   volume: boolean;
+}
+
+/* Chart styles, TradingView's picker (Noah, 2026-08-23: "notice how candles
+   is different from the themes") — the SHAPE of the tape, orthogonal to the
+   candle color theme. Every style draws from the same bars. */
+export type ChartStyle = 'candles' | 'hollow' | 'bars' | 'line' | 'step' | 'area' | 'baseline';
+
+export const CHART_STYLES: { value: ChartStyle; label: string }[] = [
+  { value: 'candles', label: 'Candles' },
+  { value: 'hollow', label: 'Hollow candles' },
+  { value: 'bars', label: 'Bars' },
+  { value: 'line', label: 'Line' },
+  { value: 'step', label: 'Step line' },
+  { value: 'area', label: 'Area' },
+  { value: 'baseline', label: 'Baseline' },
+];
+
+/* Indicator overlays — computed chart-side from the same aggregated bars the
+   tape draws, so they agree with it on every timeframe. */
+export interface ChartIndicators {
+  ema9: boolean;
+  ema21: boolean;
+  ema50: boolean;
+  vwap: boolean;
+}
+
+export const DEFAULT_INDICATORS: ChartIndicators = { ema9: false, ema21: false, ema50: false, vwap: false };
+
+/* One categorical ink family for auxiliary lines (indicators here, compare
+   lines in the widget) — hues that carry no house meaning. */
+export const INDICATOR_INKS: Record<keyof ChartIndicators, string> = {
+  ema9: '#5B9CF6',
+  ema21: '#BBB2E8',
+  ema50: '#EDE4CD',
+  vwap: '#6BD3C7',
+};
+
+/* Compare symbols, TradingView's three flavors (Noah, 2026-08-23):
+   percent = ride the SAME pane with the whole right scale in % change;
+   scale   = same pane, its own LEFT price scale;
+   pane    = its own pane below the tape, own scale. */
+export type CompareMode = 'percent' | 'scale' | 'pane';
+export interface CompareEntry {
+  ticker: string;
+  mode: CompareMode;
+  /** Line + legend ink — assigned by the host so both stay in agreement */
+  ink: string;
 }
 
 export const DEFAULT_OVERLAYS: ChartOverlays = {
@@ -55,11 +101,21 @@ interface StrikeChartProps {
   levels: KeyLevels;
   timeframe: Timeframe;
   height?: number;
+  /** Drop the container's own border/fill/rounding — the host supplies ONE
+      surface and the tape bleeds to its edges (Noah, 2026-08-23: "i notice
+      different layers of black"). */
+  frameless?: boolean;
   /** Transient user-focused price — renders a cyan FOCUS line while set */
   focusPrice?: number | null;
   overlays?: ChartOverlays;
   /** Dark-pool prints for the DP overlay (whisper lines, MiniPane grammar) */
   prints?: DarkPoolPrint[];
+  /** Comparison symbols drawn as lines over/under the tape */
+  compares?: CompareEntry[];
+  /** The tape's shape — candles, bars, line, area… (theme-independent) */
+  chartStyle?: ChartStyle;
+  /** Indicator overlays computed from the same bars */
+  indicators?: ChartIndicators;
   /** Draw mode — pointer sketches trendlines/levels instead of panning */
   drawing?: boolean;
   onExitDraw?: () => void;
@@ -69,8 +125,7 @@ interface StrikeChartProps {
 }
 
 // Wall / flip / king overlay colors (independent of candle theme)
-import { CALL_WALL, PUT_WALL, FLIP, KING, FOCUS, DARK_POOL, DEALER_PUT, DEALER_CALL } from './palette';
-import { FONT_FAMILY } from '../ui/typeface';
+import { CALL_WALL, PUT_WALL, FLIP, KING, FOCUS, DARK_POOL } from './palette';
 
 // Level lines are created once per overlay/ticker, then their prices are
 // TWEENED (rAF + easeOutCubic) so scan-tier level moves glide instead of jumping.
@@ -86,6 +141,12 @@ const LEVEL_SPEC: {
   { key: 'flip', color: FLIP, title: 'FLIP', style: LineStyle.Dashed, width: 1 },
   { key: 'king', color: KING, title: 'KING', style: LineStyle.Solid, width: 2 },
 ];
+/* NO axis chips at all now — the king's capsule left the right pane too
+   (Noah, 2026-08-23: "we will have a separate section of the website where
+   we explain everything"). The field alone carries every identity: magenta
+   band = king, green/red beads = walls, blue ticks = flip. LEVEL_SPEC stays
+   for the tween plumbing and any future re-enable. */
+const LINE_LEVELS: typeof LEVEL_SPEC = [];
 
 const toCandle = (b: Candle) => ({
   time: b.time as UTCTimestamp,
@@ -94,6 +155,9 @@ const toCandle = (b: Candle) => ({
   low: b.low,
   close: b.close,
 });
+
+/** Styles that eat whole bars; the rest eat closes. */
+const OHLC_STYLES: ReadonlySet<ChartStyle> = new Set(['candles', 'hollow', 'bars']);
 const toVolume = (b: Candle, t: CandleTheme) => ({
   time: b.time as UTCTimestamp,
   value: b.volume,
@@ -116,9 +180,13 @@ const StrikeChart = ({
   levels,
   timeframe,
   height = 460,
+  frameless = false,
   focusPrice = null,
   overlays = DEFAULT_OVERLAYS,
   prints = [],
+  compares = [],
+  chartStyle = 'candles',
+  indicators = DEFAULT_INDICATORS,
   drawing = false,
   onExitDraw,
   replay = false,
@@ -130,6 +198,17 @@ const StrikeChart = ({
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
   const trailsRef = useRef<GexTrailsPrimitive | null>(null);
+  const compareSeriesRef = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
+  const compareLoadedRef = useRef('');
+  const indicatorSeriesRef = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
+  const indicatorLoadedRef = useRef('');
+  /* The main series' style — a ref for the one-time creation effect, a
+     nonce so every effect that hangs price lines off the main series knows
+     to re-hang them after a style swap replaces it. */
+  const styleRef = useRef<ChartStyle>(chartStyle);
+  styleRef.current = chartStyle;
+  const styleBuiltRef = useRef<ChartStyle | null>(null);
+  const [mainNonce, setMainNonce] = useState(0);
   const printLinesRef = useRef<IPriceLine[]>([]);
   const levelLinesRef = useRef<Partial<Record<'callWall' | 'putWall' | 'flip' | 'king', IPriceLine>>>({});
   const shownLevelsRef = useRef<KeyLevels | null>(null);
@@ -164,29 +243,6 @@ const StrikeChart = ({
 
   // Keep the autoscale provider reading the freshest levels without re-mounting
   levelsRef.current = levels;
-
-  /*
-    WHICH levels currently share a price, as a stable string.
-
-    Levels at one price share one axis chip (see the merge below), and the tween
-    writes prices per KEY — so if a merged pair later DIVERGES, the shared line
-    would be yanked between two prices every frame and settle on whichever key
-    LEVEL_SPEC lists last, silently swallowing the other level's chip. Feeding
-    this signature into the create-effect rebuilds the chips whenever the
-    grouping changes, so a tween only ever runs while the grouping is stable —
-    and while it is stable, members share a price and writing twice is a no-op.
-  */
-  const levelGroupKey = (() => {
-    // Group INDEX per level, not the price. Keying on the prices themselves
-    // would rebuild the chips on every scan and destroy the tween this file
-    // exists to provide — the lines are supposed to glide, not be replaced.
-    const seen = new Map<string, number>();
-    return LEVEL_SPEC.map(spec => {
-      const at = levels[spec.key].toFixed(2);
-      if (!seen.has(at)) seen.set(at, seen.size);
-      return seen.get(at);
-    }).join(',');
-  })();
 
   /* The default view on a new world (ticker or timeframe): as many bars as
      the chart can hold at a DENSE pitch, not a fixed 130 (Noah, 2026-08-22:
@@ -225,6 +281,106 @@ const StrikeChart = ({
     showRecent();
   }, [showRecent]);
 
+  /* One datum mapper for every main-series write: OHLC styles get whole
+     bars, value styles get closes. Typed `never` so the same call sites
+     feed whichever series the style built (the ref stays nominally
+     'Candlestick'; the payload is always correct for the REAL series). */
+  const toMain = useCallback(
+    (b: Candle) =>
+      (OHLC_STYLES.has(styleRef.current)
+        ? toCandle(b)
+        : { time: b.time as UTCTimestamp, value: b.close }) as never,
+    []
+  );
+
+  // Widen the visible price range to always include the walls/king so several
+  // strike-node bands are on screen, not just the couple around spot — and
+  // the FOCUS strike, when one is set (a strike sent here to be SEEN
+  // cannot be off-screen; Noah, 2026-08-22).
+  const autoscaleProvider = useCallback(
+    (original: () => { priceRange: { minValue: number; maxValue: number } } | null) => {
+      const base = original();
+      const lv = levelsRef.current;
+      const extras = [lv.putWall, lv.callWall, lv.king, lv.spot, focusPriceRef.current ?? NaN].filter(v =>
+        Number.isFinite(v)
+      );
+      let min = base?.priceRange.minValue ?? Math.min(...extras);
+      let max = base?.priceRange.maxValue ?? Math.max(...extras);
+      for (const v of extras) {
+        if (v < min) min = v;
+        if (v > max) max = v;
+      }
+      const pad = Math.max((max - min) * 0.08, 0.01);
+      return { priceRange: { minValue: min - pad, maxValue: max + pad } };
+    },
+    []
+  );
+
+  /* Build the main series for a style. Always returned as the nominal
+     'Candlestick' handle — every consumer routes data through toMain and
+     hangs price lines, which every series type supports. */
+  const makeMain = useCallback(
+    (chart: IChartApi, style: ChartStyle, t: CandleTheme): ISeriesApi<'Candlestick'> => {
+      const base = {
+        priceLineVisible: true,
+        priceLineColor: 'rgba(237,237,237,0.4)',
+        priceLineStyle: LineStyle.Dotted,
+        autoscaleInfoProvider: autoscaleProvider,
+      };
+      let s: ISeriesApi<SeriesType>;
+      switch (style) {
+        case 'hollow': {
+          // Up bodies filled with the surface = hollow; down bodies solid
+          const surface = chartSurface(t).bg;
+          s = chart.addSeries(CandlestickSeries, {
+            ...candleSeriesOptions(t),
+            upColor: surface === 'transparent' ? 'rgba(0,0,0,0)' : surface,
+            borderUpColor: t.borderUp ?? t.up,
+            wickUpColor: t.wickUp,
+            ...base,
+          });
+          break;
+        }
+        case 'bars':
+          s = chart.addSeries(BarSeries, { upColor: t.up, downColor: t.down, thinBars: false, ...base });
+          break;
+        case 'line':
+          s = chart.addSeries(LineSeries, { color: t.up, lineWidth: 2, ...base });
+          break;
+        case 'step':
+          s = chart.addSeries(LineSeries, { color: t.up, lineWidth: 2, lineType: LineType.WithSteps, ...base });
+          break;
+        case 'area':
+          s = chart.addSeries(AreaSeries, {
+            lineColor: t.up,
+            lineWidth: 2,
+            topColor: `${t.up}40`,
+            bottomColor: `${t.up}05`,
+            ...base,
+          });
+          break;
+        case 'baseline':
+          // Above/below the session open IS a price-direction read → the
+          // house bull/bear pair (the one style allowed to speak it)
+          s = chart.addSeries(BaselineSeries, {
+            topLineColor: '#30D158',
+            topFillColor1: 'rgba(48,209,88,0.20)',
+            topFillColor2: 'rgba(48,209,88,0.02)',
+            bottomLineColor: '#FF3B30',
+            bottomFillColor1: 'rgba(255,59,48,0.02)',
+            bottomFillColor2: 'rgba(255,59,48,0.20)',
+            lineWidth: 2,
+            ...base,
+          });
+          break;
+        default:
+          s = chart.addSeries(CandlestickSeries, { ...candleSeriesOptions(t), ...base });
+      }
+      return s as ISeriesApi<'Candlestick'>;
+    },
+    [autoscaleProvider]
+  );
+
   // Mount once
   useEffect(() => {
     const container = containerRef.current;
@@ -236,7 +392,7 @@ const StrikeChart = ({
       layout: {
         background: { color: s0.bg },
         textColor: '#7d7d7d', // matches textMuted (lifted 2026-07-25 for legibility)
-        fontFamily: FONT_FAMILY,
+        fontFamily: "'SF Pro', sans-serif",
         fontSize: 10,
         attributionLogo: true,
       },
@@ -247,47 +403,15 @@ const StrikeChart = ({
         horzLines: { visible: false },
       },
       rightPriceScale: { borderColor: '#1c1c1c' },
-      // The recordings carry true ET session epochs; without these the axis and
-      // the crosshair render them in UTC and every session reads 13:30-20:00.
-      localization: { timeFormatter: (t: number) => etTime(t) },
-      timeScale: {
-        borderColor: '#1c1c1c',
-        timeVisible: true,
-        secondsVisible: false,
-        rightOffset: 6,
-        barSpacing: 7,
-        tickMarkFormatter: (t: number, tickMarkType: number) => etTickMark(t, tickMarkType),
-      },
+      timeScale: { borderColor: '#1c1c1c', timeVisible: true, secondsVisible: false, rightOffset: 6, barSpacing: 7 },
       crosshair: {
         vertLine: { color: 'rgba(255,255,255,0.3)', labelBackgroundColor: '#262626' },
         horzLine: { color: 'rgba(255,255,255,0.3)', labelBackgroundColor: '#262626' },
       },
     });
 
-    const t0 = getCandleTheme();
-    const candles = chart.addSeries(CandlestickSeries, {
-      ...candleSeriesOptions(t0),
-      priceLineVisible: true,
-      priceLineColor: 'rgba(237,237,237,0.4)',
-      priceLineStyle: LineStyle.Dotted,
-      // Widen the visible price range to always include the walls/king so several
-      // strike-node bands are on screen, not just the couple around spot — and
-      // the FOCUS strike, when one is set (a strike sent here to be SEEN
-      // cannot be off-screen; Noah, 2026-08-22).
-      autoscaleInfoProvider: (original: () => { priceRange: { minValue: number; maxValue: number } } | null) => {
-        const base = original();
-        const lv = levelsRef.current;
-        const extras = [lv.putWall, lv.callWall, lv.king, lv.spot, focusPriceRef.current ?? NaN].filter(v => Number.isFinite(v));
-        let min = base?.priceRange.minValue ?? Math.min(...extras);
-        let max = base?.priceRange.maxValue ?? Math.max(...extras);
-        for (const v of extras) {
-          if (v < min) min = v;
-          if (v > max) max = v;
-        }
-        const pad = Math.max((max - min) * 0.08, 0.01);
-        return { priceRange: { minValue: min - pad, maxValue: max + pad } };
-      },
-    });
+    const candles = makeMain(chart, styleRef.current, getCandleTheme());
+    styleBuiltRef.current = styleRef.current;
 
     const volume = chart.addSeries(HistogramSeries, {
       priceScaleId: 'vol',
@@ -315,30 +439,224 @@ const StrikeChart = ({
       volumeSeriesRef.current = null;
       trailsRef.current = null;
       drawingsRef.current = null;
+      compareSeriesRef.current.clear();
+      compareLoadedRef.current = '';
+      indicatorSeriesRef.current.clear();
+      indicatorLoadedRef.current = '';
+      styleBuiltRef.current = null;
       printLinesRef.current = [];
       levelLinesRef.current = {};
       shownLevelsRef.current = null;
       cancelAnimationFrame(levelRafRef.current);
       loadedRef.current = { ticker: '', timeframe: '1m', theme: '' };
     };
-  }, []);
+  }, [makeMain]);
+
+  /* Style swap (Noah, 2026-08-23): replace ONLY the main series in place —
+     price lines and primitives die with the old one, so the nonce tells the
+     level/focus/print/data effects to re-hang everything on the new series.
+     Pan/zoom survives; the tape reloads on the next pass of the data
+     effect. */
+  useEffect(() => {
+    const chart = chartRef.current;
+    const prev = candleSeriesRef.current;
+    if (!chart || !prev) return;
+    if (styleBuiltRef.current === chartStyle) return;
+    const trails = trailsRef.current;
+    const drawingsPrim = drawingsRef.current;
+    chart.removeSeries(prev);
+    const next = makeMain(chart, chartStyle, getCandleTheme());
+    if (trails) next.attachPrimitive(trails);
+    if (drawingsPrim) next.attachPrimitive(drawingsPrim);
+    candleSeriesRef.current = next;
+    styleBuiltRef.current = chartStyle;
+    levelLinesRef.current = {};
+    shownLevelsRef.current = null;
+    focusLineRef.current = null;
+    printLinesRef.current = [];
+    loadedRef.current = { ticker: '', timeframe: '1m', theme: '' }; // force full reload
+    setMainNonce(n => n + 1);
+  }, [chartStyle, makeMain]);
 
   // Volume overlay toggle — series stays mounted, just hides
   useEffect(() => {
     volumeSeriesRef.current?.applyOptions({ visible: overlays.volume });
   }, [overlays.volume]);
 
+  /* Indicator overlays (Noah, 2026-08-23) — EMAs and a session-anchored
+     VWAP, computed from the SAME aggregated bars the tape draws so they
+     agree on every timeframe. Full rebuild when the set/world changes; per
+     revision the math re-runs (O(n), trivial) but only the last point is
+     pushed to the series. */
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    if (replayRef.current) return; // frozen during replay, like compares
+    const mins = tfMinutes(timeframe);
+    const active = (Object.keys(INDICATOR_INKS) as (keyof ChartIndicators)[]).filter(k => indicators[k]);
+    const sig = `${ticker}|${timeframe}|${active.join(',')}|${mainNonce}`;
+    const rebuild = indicatorLoadedRef.current !== sig;
+    if (rebuild) {
+      for (const s of indicatorSeriesRef.current.values()) {
+        try {
+          chart.removeSeries(s);
+        } catch {
+          /* chart already torn down */
+        }
+      }
+      indicatorSeriesRef.current.clear();
+      for (const key of active) {
+        indicatorSeriesRef.current.set(
+          key,
+          chart.addSeries(LineSeries, {
+            color: INDICATOR_INKS[key],
+            lineWidth: 1,
+            priceScaleId: 'right',
+            priceLineVisible: false,
+            lastValueVisible: false,
+            crosshairMarkerVisible: false,
+          })
+        );
+      }
+      indicatorLoadedRef.current = sig;
+    }
+    if (active.length === 0) return;
+    const bars = aggregateCandles(Simulator.getCandles(ticker) ?? [], mins);
+    if (bars.length === 0) return;
+    const pointsFor = (key: keyof ChartIndicators) => {
+      if (key === 'vwap') {
+        // Session-anchored: cumulative typical×volume over cumulative volume,
+        // reset at every overnight gap
+        const pts: { time: UTCTimestamp; value: number }[] = [];
+        let pv = 0;
+        let vol = 0;
+        for (let i = 0; i < bars.length; i++) {
+          const b = bars[i];
+          if (i > 0 && b.time - bars[i - 1].time > mins * 60 * 1.5) {
+            pv = 0;
+            vol = 0;
+          }
+          const typical = (b.high + b.low + b.close) / 3;
+          pv += typical * b.volume;
+          vol += b.volume;
+          pts.push({ time: b.time as UTCTimestamp, value: vol > 0 ? pv / vol : b.close });
+        }
+        return pts;
+      }
+      const period = key === 'ema9' ? 9 : key === 'ema21' ? 21 : 50;
+      const k = 2 / (period + 1);
+      let ema = bars[0].close;
+      return bars.map(b => {
+        ema = b.close * k + ema * (1 - k);
+        return { time: b.time as UTCTimestamp, value: ema };
+      });
+    };
+    for (const key of active) {
+      const s = indicatorSeriesRef.current.get(key);
+      if (!s) continue;
+      const pts = pointsFor(key);
+      if (rebuild) s.setData(pts);
+      else s.update(pts[pts.length - 1]);
+    }
+  }, [indicators, ticker, revision, timeframe, mainNonce]);
+
+  /* Compare lines (Noah, 2026-08-23, TradingView's three flavors). Rebuilt
+     when the roster/timeframe/ticker changes, ticked per revision otherwise —
+     the same full-load/incremental split the candles use. Scales follow the
+     roster: any percent compare flips the WHOLE right scale to % change (the
+     levels ride along, exactly as TV does it); any own-scale compare shows
+     the left axis; pane compares live in pane 1, which lightweight-charts
+     creates and removes with its series. */
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    if (replayRef.current) return; // replay owns the tape; compares freeze
+    const mins = tfMinutes(timeframe);
+    const sig = `${ticker}|${timeframe}|${compares.map(c => `${c.ticker}:${c.mode}:${c.ink}`).join(',')}`;
+    const rebuild = compareLoadedRef.current !== sig;
+    if (rebuild) {
+      for (const s of compareSeriesRef.current.values()) {
+        try {
+          chart.removeSeries(s);
+        } catch {
+          /* chart already torn down */
+        }
+      }
+      compareSeriesRef.current.clear();
+      for (const c of compares) {
+        Simulator.ensureTicker(c.ticker);
+        const series = chart.addSeries(
+          LineSeries,
+          {
+            color: c.ink,
+            lineWidth: 2,
+            priceScaleId: c.mode === 'scale' ? 'left' : 'right',
+            priceLineVisible: false,
+            lastValueVisible: true,
+            title: c.ticker,
+          },
+          c.mode === 'pane' ? 1 : 0
+        );
+        compareSeriesRef.current.set(`${c.ticker}:${c.mode}`, series);
+      }
+      chart
+        .priceScale('right')
+        .applyOptions({ mode: compares.some(c => c.mode === 'percent') ? PriceScaleMode.Percentage : PriceScaleMode.Normal });
+      chart.applyOptions({
+        leftPriceScale: { visible: compares.some(c => c.mode === 'scale'), borderColor: '#1c1c1c' },
+      });
+      // TV proportions: the tape keeps ~3/4 of the window, the compare pane
+      // rides below at ~1/4 (lightweight-charts defaults to an even split)
+      const panes = chart.panes();
+      if (panes.length > 1) {
+        panes[0].setStretchFactor(3);
+        for (let i = 1; i < panes.length; i++) panes[i].setStretchFactor(1);
+      }
+      compareLoadedRef.current = sig;
+    }
+    for (const c of compares) {
+      const s = compareSeriesRef.current.get(`${c.ticker}:${c.mode}`);
+      if (!s) continue;
+      const bars = aggregateCandles(Simulator.getCandles(c.ticker) ?? [], mins);
+      if (bars.length === 0) continue;
+      if (rebuild) {
+        s.setData(bars.map(b => ({ time: b.time as UTCTimestamp, value: b.close })));
+      } else {
+        const last = bars[bars.length - 1];
+        s.update({ time: last.time as UTCTimestamp, value: last.close });
+      }
+    }
+  }, [compares, ticker, revision, timeframe]);
+
   // Recolor the candle series AND the chart surface in place when the theme
   // picker changes — gallery themes carry their own background tint.
   useEffect(() => {
     const t = getCandleTheme();
-    candleSeriesRef.current?.applyOptions(candleSeriesOptions(t));
+    const main = candleSeriesRef.current;
+    if (main) {
+      // Recolor IN the active style's vocabulary — baseline keeps its fixed
+      // bull/bear pair and needs nothing
+      const style = styleRef.current;
+      if (style === 'candles') main.applyOptions(candleSeriesOptions(t));
+      else if (style === 'hollow') {
+        const surface = chartSurface(t).bg;
+        main.applyOptions({
+          ...candleSeriesOptions(t),
+          upColor: surface === 'transparent' ? 'rgba(0,0,0,0)' : surface,
+          borderUpColor: t.borderUp ?? t.up,
+          wickUpColor: t.wickUp,
+        });
+      } else if (style === 'bars') (main as unknown as ISeriesApi<'Bar'>).applyOptions({ upColor: t.up, downColor: t.down });
+      else if (style === 'line' || style === 'step') (main as unknown as ISeriesApi<'Line'>).applyOptions({ color: t.up });
+      else if (style === 'area')
+        (main as unknown as ISeriesApi<'Area'>).applyOptions({ lineColor: t.up, topColor: `${t.up}40`, bottomColor: `${t.up}05` });
+    }
     const s = chartSurface(t);
     chartRef.current?.applyOptions({
       layout: { background: { color: s.bg } },
       grid: { vertLines: { visible: false }, horzLines: { visible: false } },
     });
-  }, [themeKey]);
+  }, [themeKey, mainNonce]);
 
   // Candle data + trails: full load on ticker/timeframe/theme change, incremental
   // per tick (theme forces a reload because volume bars carry per-bar colors)
@@ -350,7 +668,7 @@ const StrikeChart = ({
     const trails = trailsRef.current;
     if (!chart || !candleSeries || !volumeSeries || !trails) return;
 
-    const base = Feed.getCandles(ticker);
+    const base = Simulator.getCandles(ticker);
     if (!base || base.length === 0) return;
 
     const theme = getCandleTheme();
@@ -364,8 +682,21 @@ const StrikeChart = ({
     const newWorld = loaded.ticker !== ticker || loaded.timeframe !== timeframe;
 
     if (changed) {
-      candleSeries.setData(bars.map(toCandle));
+      candleSeries.setData(bars.map(toMain));
       volumeSeries.setData(bars.map(b => toVolume(b, theme)));
+      // Baseline style pivots on the CURRENT session's open — found at the
+      // last overnight gap in the aggregated bars (intraday only; dailies
+      // fall back to the buffer's first open)
+      if (styleRef.current === 'baseline' && bars.length > 0) {
+        let baseValue = bars[0].open;
+        for (let i = bars.length - 1; i > 0; i--) {
+          if (bars[i].time - bars[i - 1].time > mins * 60 * 1.5) {
+            baseValue = bars[i].open;
+            break;
+          }
+        }
+        (candleSeries as unknown as ISeriesApi<'Baseline'>).applyOptions({ baseValue: { type: 'price', price: baseValue } });
+      }
       if (newWorld) {
         showRecent(); // theme swaps must not yank the user's pan/zoom
         /* A timeframe change BREATHES in (Noah, 2026-08-22: "should have a
@@ -392,7 +723,7 @@ const StrikeChart = ({
       loadedRef.current = { ticker, timeframe, theme: themeKey };
     } else {
       const last = bars[bars.length - 1];
-      candleSeries.update(toCandle(last));
+      candleSeries.update(toMain(last));
       volumeSeries.update(toVolume(last, theme));
     }
 
@@ -401,94 +732,44 @@ const StrikeChart = ({
     // per 30m/1h bar was a row of pearls): every 5 minutes of real history
     // is a bead, tiled across its bar by its time — six to a 30m bar, twelve
     // to an hour. More beads, same data.
-    const baseGex = Feed.getGexHistory(ticker);
+    const baseGex = Simulator.getGexHistory(ticker);
     const snaps = aggregateSnapshots(baseGex ?? [], Math.min(mins, TRAIL_TEXTURE_MINUTES));
     const showTrails = overlays.trails && mins <= INTRADAY_MAX_MINUTES;
     trails.setData(snaps, snapshotsMaxAbs(snaps), showTrails, mins * 60);
-  }, [ticker, revision, timeframe, themeKey, overlays.trails, showRecent, reloadNonce]);
+  }, [ticker, revision, timeframe, themeKey, overlays.trails, showRecent, reloadNonce, mainNonce, toMain]);
 
   // Key-level price lines — create/destroy only when overlay or ticker changes
   useEffect(() => {
     const candleSeries = candleSeriesRef.current;
     if (!candleSeries) return;
     cancelAnimationFrame(levelRafRef.current);
-    /*
-      Remove each LINE once, not each KEY once. Levels sharing a price share a
-      single price-line object (see the merge below), so several keys can point
-      at the same line and the old per-key loop would hand the same object to
-      removePriceLine two or three times.
-    */
-    const removed = new Set<unknown>();
     for (const spec of LEVEL_SPEC) {
       const line = levelLinesRef.current[spec.key];
-      if (line && !removed.has(line)) {
-        candleSeries.removePriceLine(line);
-        removed.add(line);
-      }
+      if (line) candleSeries.removePriceLine(line);
       delete levelLinesRef.current[spec.key];
     }
     shownLevelsRef.current = null;
-    // No lines, nothing for the trails' labels to stand down from.
-    trailsRef.current?.setPriceLines([]);
 
     // Levels are LIVE values — hidden during replay so history isn't lied about
     if (!overlays.levels || replay) return;
 
-    /*
-      Chips, not lines: the level lives as a colored tag on the price axis.
-      Hovering its legend chip flashes the full line for orientation.
-
-      LEVELS THAT SHARE A PRICE SHARE A CHIP. Four separate price lines each
-      asked for their own axis label, and lightweight-charts obliges — so two
-      levels at the same price drew two pills at the same y, overlapping into an
-      unreadable smear. That is not an edge case: the king strike sits on a wall
-      constantly, and on the four-way board three of the four charts were doing
-      it at once (SPY 465/465, QQQ 405/405, NVDA 115/115).
-
-      Merging is also the more informative answer. "PUT WALL · KING" at one
-      price says something a reader wants to know — the wall and the heaviest
-      strike are the same level — where two pills fighting for the same pixels
-      said nothing at all.
-
-      The group takes the colour and weight of its highest-priority member, so a
-      merged chip still reads as the king when the king is in it.
-    */
+    // Chips, not lines: the level lives as a colored tag on the price axis.
+    // Hovering its legend chip flashes the full line for orientation.
     const L = levelsRef.current;
-    const groups = new Map<string, typeof LEVEL_SPEC>();
-    for (const spec of LEVEL_SPEC) {
-      const key = L[spec.key].toFixed(2);
-      const bucket = groups.get(key);
-      if (bucket) bucket.push(spec);
-      else groups.set(key, [spec]);
-    }
-
-    for (const [priceKey, specs] of groups) {
-      // LEVEL_SPEC is ordered call wall, put wall, flip, king; the king is the
-      // scarcity colour and wins a tie, otherwise the first listed does.
-      const lead = specs.reduce((a, s) => (s.key === 'king' ? s : a), specs[0]);
-      const line = candleSeries.createPriceLine({
-        price: Number(priceKey),
-        color: lead.color,
-        title: specs.map(s => s.title).join(' · '),
-        lineStyle: lead.style,
-        lineWidth: lead.width,
+    for (const spec of LINE_LEVELS) {
+      levelLinesRef.current[spec.key] = candleSeries.createPriceLine({
+        price: L[spec.key],
+        color: spec.color,
+        title: spec.title,
+        lineStyle: spec.style,
+        lineWidth: spec.width,
         lineVisible: false,
         axisLabelVisible: true,
       });
-      // Every member points at the shared line so the legend hover still finds
-      // one to flash. The teardown above de-duplicates by line object.
-      for (const s of specs) levelLinesRef.current[s.key] = line;
     }
-    /* Tell the trails which strikes now carry an axis badge. Those badges are
-       drawn on a layer above the trails' pane, so a strength label at the same
-       price is buried under one — measured on /pulse/board, "187.50 · 18%"
-       with its bottom half beneath PUT WALL · KING. The badge already names
-       the level; the label stands down and keeps its ink for the heavy strikes
-       nothing else is naming. */
-    trailsRef.current?.setPriceLines([...groups.keys()].map(Number));
     shownLevelsRef.current = { ...L };
     levelTickerRef.current = ticker;
-  }, [ticker, overlays.levels, replay, levelGroupKey]);
+  }, [ticker, overlays.levels, replay, mainNonce]);
 
   // Dark-pool whisper lines — same grammar as the flow board minis
   useEffect(() => {
@@ -511,12 +792,12 @@ const StrikeChart = ({
         axisLabelTextColor: '#0a0a0a',
       })
     );
-  }, [prints, overlays.darkpool, replay]);
+  }, [prints, overlays.darkpool, replay, mainNonce]);
 
   // Tween level prices to their new scan values — lines glide, never teleport
   useEffect(() => {
     const lines = levelLinesRef.current;
-    if (!lines.callWall) return; // levels hidden
+    if (!lines.king) return; // levels hidden
 
     // Ticker switch = new world: snap, don't tween across symbols
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -579,7 +860,7 @@ const StrikeChart = ({
     // Re-run autoscale now, not on the next tick — the provider above reads
     // the new focus and brings the line into frame immediately.
     candleSeries.priceScale().applyOptions({ autoScale: true });
-  }, [focusPrice, overlays.trails, timeframe]);
+  }, [focusPrice, overlays.trails, timeframe, mainNonce]);
 
   /* The focus INK follows the strike's standing, re-read every scan: magenta
      while the focused strike is the king, lime otherwise. The focus itself
@@ -589,8 +870,14 @@ const StrikeChart = ({
     const isKing = focusPrice != null && Math.abs(levels.king - focusPrice) < 1e-9;
     trailsRef.current?.setFocus(focusPrice, isKing ? 'king' : 'focus');
     trailsRef.current?.setKing(Number.isFinite(levels.king) ? levels.king : null);
+    // Today's levels, for the one green band, one red band, one blue line
+    trailsRef.current?.setWalls(
+      Number.isFinite(levels.callWall) ? levels.callWall : null,
+      Number.isFinite(levels.putWall) ? levels.putWall : null,
+      Number.isFinite(levels.flip) ? levels.flip : null
+    );
     focusLineRef.current?.applyOptions({ color: isKing ? KING : FOCUS });
-  }, [focusPrice, levels.king]);
+  }, [focusPrice, levels.king, levels.callWall, levels.putWall, levels.flip]);
 
   // ---- replay lifecycle -----------------------------------------------------
   // Enter: snapshot the aggregated world and rewind. Exit: hand the series
@@ -604,8 +891,8 @@ const StrikeChart = ({
 
     if (replay) {
       const mins = tfMinutes(timeframe);
-      const bars = aggregateCandles(Feed.getCandles(ticker) ?? [], mins);
-      const snaps = aggregateSnapshots(Feed.getGexHistory(ticker) ?? [], Math.min(mins, TRAIL_TEXTURE_MINUTES));
+      const bars = aggregateCandles(Simulator.getCandles(ticker) ?? [], mins);
+      const snaps = aggregateSnapshots(Simulator.getGexHistory(ticker) ?? [], Math.min(mins, TRAIL_TEXTURE_MINUTES));
       if (bars.length < 40) return;
       replayDataRef.current = { bars, snaps, maxAbs: snapshotsMaxAbs(snaps) };
       const startIdx = Math.max(30, bars.length - 180);
@@ -646,11 +933,11 @@ const StrikeChart = ({
     const idx = Math.max(1, Math.min(replayIdx, data.bars.length));
     if (idx === replayAppliedRef.current + 1 && replayAppliedRef.current >= 1) {
       const bar = data.bars[idx - 1];
-      candleSeries.update(toCandle(bar));
+      candleSeries.update(toMain(bar));
       volumeSeries.update(toVolume(bar, theme));
     } else {
       const visible = data.bars.slice(0, idx);
-      candleSeries.setData(visible.map(toCandle));
+      candleSeries.setData(visible.map(toMain));
       volumeSeries.setData(visible.map(b => toVolume(b, theme)));
     }
     replayAppliedRef.current = idx;
@@ -746,78 +1033,14 @@ const StrikeChart = ({
     if (d.p1.time !== d.p2.time || Math.abs(d.p1.price - d.p2.price) > 1e-9) commitDrawing(d);
   };
 
-  const flashLevel = (key: 'callWall' | 'putWall' | 'flip' | 'king', on: boolean) => {
-    levelLinesRef.current[key]?.applyOptions({ lineVisible: on });
-  };
-
-  const fmtLevel = (v: number) => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
-
   return (
-    <div className="flex flex-col gap-2 h-full">
-      <div className="flex items-center gap-2 px-1 flex-wrap select-none">
-        {overlays.levels &&
-          ([
-            // Each chip wears its LINE's ink (palette.CALL_WALL = BULL since
-            // Noah retired the mint wall, 2026-08-18).
-            { key: 'callWall', label: 'CW', cls: 'bg-bull', text: 'text-bull' },
-            { key: 'putWall', label: 'PW', cls: 'bg-bear', text: 'text-bear' },
-            { key: 'flip', label: 'FLIP', cls: 'bg-[#7DD3FC]', text: 'text-[#7DD3FC]' },
-            // Matches the magenta king LINE (palette.KING) — one king color everywhere
-            { key: 'king', label: 'KING', cls: 'bg-[#EA00FF]', text: 'text-[#EA00FF]' },
-          ] as const).map(item => (
-            <button
-              key={item.key}
-              onMouseEnter={() => flashLevel(item.key, true)}
-              onMouseLeave={() => flashLevel(item.key, false)}
-              title="Hover to flash this level on the chart"
-              className="inline-flex items-center gap-1.5 rounded border border-borderSubtle bg-inset px-2 py-1 font-mono text-[10px] hover:border-borderMuted transition-colors cursor-default"
-            >
-              <span className={`inline-block w-1.5 h-1.5 rounded-full ${item.cls}`} />
-              <span className={`font-semibold ${item.text}`}>{item.label}</span>
-              <span className="text-textPrimary tnum">{fmtLevel(levels[item.key])}</span>
-            </button>
-          ))}
-        {overlays.trails && (
-          <span className="flex items-center gap-2.5 ml-1 font-mono text-[10px] text-textSecondary">
-            {/* The field's own inks (the house steel-gold): gold = put side,
-                amplifies; steel = call side, absorbs; magenta = the king.
-                Not the candles' red/green — on this surface those are the tape's. */}
-            <span className="inline-flex items-center gap-1.5">
-              <span className="inline-flex items-center gap-[2px]" aria-hidden="true">
-                <span className="inline-block w-[5px] h-[3px] rounded-full" style={{ background: 'rgba(245,197,66,0.5)' }} />
-                <span className="inline-block w-[5px] h-[5px] rounded-full" style={{ background: 'rgba(245,197,66,0.75)' }} />
-                <span className="inline-block w-[5px] h-[7px] rounded-full" style={{ background: DEALER_PUT }} />
-              </span>
-              put walls
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="inline-flex items-center gap-[2px]" aria-hidden="true">
-                <span className="inline-block w-[5px] h-[3px] rounded-full" style={{ background: 'rgba(226,234,244,0.5)' }} />
-                <span className="inline-block w-[5px] h-[5px] rounded-full" style={{ background: 'rgba(226,234,244,0.75)' }} />
-                <span className="inline-block w-[5px] h-[7px] rounded-full" style={{ background: DEALER_CALL }} />
-              </span>
-              call walls
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="inline-block w-[7px] h-[7px] rounded-full" style={{ background: KING }} aria-hidden="true" />
-              king
-            </span>
-            <span className="text-textMuted">· brighter is heavier</span>
-          </span>
-        )}
-        <span className="ml-auto font-mono text-[10px] text-textMuted uppercase tracking-wider">
-          scroll zoom · drag pan · dbl-click reset
-        </span>
-        <button
-          onClick={resetView}
-          title="Reset view (or double-click the chart)"
-          className="inline-flex items-center gap-1.5 border border-borderSubtle hover:border-borderMuted bg-panel rounded px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
-        >
-          <RotateCcw className="w-3 h-3" /> Reset
-        </button>
-      </div>
+    <div className="flex flex-col h-full">
+      {/* No legend row — the chart owns the whole widget; inks are taught by
+          the field itself, dbl-click resets the view (Noah, 2026-08-23) */}
       <div
-        className="relative flex-grow border border-borderSubtle bg-inset rounded-md overflow-hidden"
+        className={`relative flex-grow overflow-hidden ${
+          frameless ? '' : 'border border-borderSubtle bg-inset rounded-md'
+        }`}
         style={{ minHeight: height }}
         onDoubleClick={resetView}
       >

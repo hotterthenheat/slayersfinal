@@ -50,11 +50,7 @@ const StateTag = ({ verdict }: { verdict: StockVerdict }) => (
    than ladder position — named so it can't be read as rank. A mid-table
    sector can be RISING; the ladder says where it sits, the phase says
    which way it's moving. LEADING is reserved for the ladder's absolute
-   top and wears `king` — the same token the king strike wears, one colour
-   for "the single one that matters most" wherever a board has one. (It read
-   silver when this was written; king moved to magenta 2026-08-18 and the
-   token followed, so the comment is caught up with the pixels.) Never used
-   as a phase word. */
+   top (silver/holo — the king family), never used as a phase word. */
 const PHASE_LABEL: Record<SectorRow['phase'], string> = {
   LEADING: 'RISING',
   IMPROVING: 'TURNING UP',
@@ -164,13 +160,14 @@ const Stocks = () => {
     },
     {
       key: 'sleeves',
-      header: 'Sleeves · Mom / Qual / Flow',
+      header: 'Sleeves · Mom / Qual / Flow / News',
       width: '220px',
       render: p => (
         <span className="flex flex-col gap-1 py-0.5">
           <SleeveBar label="Mom" value={p.sleeves.momentum} />
           <SleeveBar label="Qual" value={p.sleeves.quality} />
           <SleeveBar label="Flow" value={p.sleeves.flow} />
+          <SleeveBar label="News" value={p.sleeves.news} />
         </span>
       ),
     },
@@ -187,7 +184,7 @@ const Stocks = () => {
       <PageHeader
         breadcrumb={['Terminal', 'Stocks']}
         title="Stocks"
-        subtitle="Screening board — how every name and sector screens on momentum, quality and flow"
+        subtitle="Screening board — how every name and sector screens on momentum, quality, flow and news"
       />
 
       <MetricGrid min="170px">
@@ -229,14 +226,7 @@ const Stocks = () => {
             This board ranks <span className="text-textPrimary">price strength</span> — who's outperforming the tape.
           </p>
         </div>
-        {/* SCROLLS SIDEWAYS INSIDE ITSELF, not the page. The row below is a
-            seven-column grid with a 614px minimum — 26 + 120 + 112 + 80 + 74 +
-            74 + 56 and six 12px gaps. Held at every width it made <main> 647px
-            wide on a 390px screen, so the whole terminal slid left and right
-            under the reader's thumb. The list takes the overflow instead, the
-            way DataTable already does; nothing is lost and nothing else moves.
-            Measured: 257px over -> 0. */}
-        <div className="flex flex-col overflow-x-auto">
+        <div className="flex flex-col">
           {sectors.map((s, i) => {
             // The crown: only the ladder's absolute best (ties share it)
             const isLeader = s.score === topSector.score;

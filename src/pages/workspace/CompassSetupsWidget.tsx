@@ -35,9 +35,8 @@ import {
 } from '../../types/compass';
 import { expiryFor } from '../../core/calendar';
 import { buildCompassView, makeSetup } from '../../data/compass';
-import Feed from '../../core/feed';
+import Simulator from '../../core/simulator';
 import type { WorkspaceCtx } from './registry';
-import { etClock } from '../../core/etFormat';
 
 /** What a card click opens — enough to rebuild the campaign live. */
 interface CampaignTarget {
@@ -95,15 +94,15 @@ const CampaignTakeover = ({
   // Rebuilt live on every desk revision — the same road Compass takes.
   const setup = useMemo(() => {
     try {
-      Feed.ensureTicker(target.ticker);
-      const cfg = Feed.TICKERS[target.ticker];
+      Simulator.ensureTicker(target.ticker);
+      const cfg = Simulator.TICKERS[target.ticker];
       return makeSetup(target.ticker, cfg.currentPrice, target.strike, target.right, target.scanner, cfg.iv, target.sleeve);
     } catch {
       return null;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target, revision]);
-  const spot = Feed.TICKERS[target.ticker]?.currentPrice ?? 0;
+  const spot = Simulator.TICKERS[target.ticker]?.currentPrice ?? 0;
 
   // Esc closes — unless the campaign chart's OWN fullscreen (z-[80]) is up,
   // in which case that layer owns the keypress and closes first.
@@ -248,7 +247,7 @@ const CompassSetupsWidget = ({ ctx }: { ctx: WorkspaceCtx }) => {
   const view = useMemo(() => {
     if (scanner === 'top-setups' && sleeve === 'weekly') return ctx.setups;
     try {
-      return buildCompassView(ctx.snapshot, scanner, Feed.universeQuotes(ctx.snapshot.ticker), sleeve);
+      return buildCompassView(ctx.snapshot, scanner, Simulator.universeQuotes(ctx.snapshot.ticker), sleeve);
     } catch {
       return null;
     }
@@ -275,7 +274,7 @@ const CompassSetupsWidget = ({ ctx }: { ctx: WorkspaceCtx }) => {
         right: setup.right,
         scanner,
         sleeve,
-        gradedAt: etClock(),
+        gradedAt: new Date().toLocaleTimeString('en-GB'),
       }),
     [scanner, sleeve]
   );

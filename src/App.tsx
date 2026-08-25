@@ -1,9 +1,8 @@
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { MotionConfig } from 'framer-motion';
 import { MarketDataProvider } from './context/MarketDataContext';
 import { TrackerProvider } from './context/TrackerContext';
 import AppShell from './components/layout/AppShell';
-import PageFault from './components/ui/PageFault';
 import { LaunchProvider } from './components/layout/LaunchTransition';
 import Compass from './pages/Compass';
 import Tracker from './pages/Tracker';
@@ -17,6 +16,7 @@ import TraceLayout from './pages/trace/TraceLayout';
 import LiveTape from './pages/trace/LiveTape';
 import FlowTracker from './pages/trace/FlowTracker';
 import Stocks from './pages/Stocks';
+import News from './pages/News';
 import EarningsHub from './pages/EarningsHub';
 import EarningsDossier from './pages/EarningsDossier';
 import ProveIt from './pages/proveit/ProveIt';
@@ -27,29 +27,11 @@ import Requests from './pages/community/Requests';
 import Feedback from './pages/community/Feedback';
 
 const App = () => {
-  /*
-    THE OUTERMOST NET, AND WHY IT IS NOT REDUNDANT WITH APPSHELL'S.
-
-    AppShell wraps its <Outlet /> in the same component, which covers every
-    desk. Two things are not under that Outlet: the landing page, which is
-    routed outside AppShell entirely, and AppShell's own chrome — TopBar and
-    the command palette render above the Outlet, not inside it. Both were
-    checked by wiring a throw to a query parameter and loading it: a desk page
-    throwing rendered the fault panel with the header still there, while the
-    landing page and TopBar each gave a white screen, 0 characters and nothing
-    to click.
-
-    Keyed on the path for the same reason AppShell's is: navigating somewhere
-    else earns a clean try, and it is a prop rather than a React key so
-    nothing below remounts on an ordinary render.
-  */
-  const location = useLocation();
   return (
     <MotionConfig reducedMotion="user">
       <MarketDataProvider>
         <TrackerProvider>
         <LaunchProvider>
-        <PageFault resetKey={location.pathname}>
         <Routes>
           {/* Public landing — full-bleed, outside the app shell. First thing a
               visitor sees; "Launch terminal" plays the gate into /pulse. */}
@@ -65,12 +47,7 @@ const App = () => {
             <Route path="/compass" element={<Compass />} />
             <Route path="/skys-vision" element={<Navigate to="/compass" replace />} />
             <Route path="/stocks" element={<Stocks />} />
-            {/* News unrouted (2026-08-24): nothing in the data entitlements
-                carries headline text, and the generator attributed invented
-                headlines — including rating actions with price targets — to
-                real mastheads and real banks. Page kept on disk for the day a
-                wire is licensed, same treatment as Vol Lab and Dark Pool. */}
-            <Route path="/news" element={<Navigate to="/pulse" replace />} />
+            <Route path="/news" element={<News />} />
             <Route path="/earnings" element={<EarningsHub />} />
             <Route path="/earnings/:ticker" element={<EarningsDossier />} />
             <Route path="/prove-it" element={<ProveIt />} />
@@ -91,9 +68,8 @@ const App = () => {
             <Route path="/trace" element={<TraceLayout />}>
               <Route index element={<Navigate to="/trace/live-tape" replace />} />
               <Route path="live-tape" element={<LiveTape />} />
-              {/* Launch trim (Noah, 2026-08-17): Dark Pool + Scanner unrouted.
-                  Dark-pool prints still draw as levels on the Pulse chart via
-                  buildPrints(); the tape carries blocks and sweeps only. */}
+              {/* Launch trim (Noah, 2026-08-17): Dark Pool + Scanner unrouted —
+                  dark-pool prints still stream on the tape and the charts */}
               <Route path="dark-pool" element={<Navigate to="/trace/live-tape" replace />} />
               <Route path="dark-feed" element={<Navigate to="/trace/live-tape" replace />} />
               <Route path="scanner" element={<Navigate to="/trace/live-tape" replace />} />
@@ -112,7 +88,6 @@ const App = () => {
             <Route path="/auditor-log" element={<Navigate to="/tracker" replace />} />
           </Route>
         </Routes>
-        </PageFault>
         </LaunchProvider>
         </TrackerProvider>
       </MarketDataProvider>

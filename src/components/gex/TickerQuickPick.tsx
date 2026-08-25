@@ -49,10 +49,14 @@ const TickerQuickPick = ({ ticker, onPick }: TickerQuickPickProps) => {
 
   return (
     <div ref={rootRef} className="relative">
+      {/* TradingView's symbol button (Noah, 2026-08-23): the name wears a
+          capsule a shade grayer than the bar it sits on — the one control
+          on the taskbar with its own surface, because it IS the subject.
+          TV-sized: ~112×28, name leading, the affordance at the far end. */}
       <button
         onClick={() => setOpen(o => !o)}
         title="Switch ticker"
-        className="inline-flex items-center gap-1 font-mono text-[11px] font-bold text-textPrimary hover:text-select transition-colors"
+        className="inline-flex items-center justify-between gap-2 h-7 min-w-[112px] px-3 rounded-full bg-white/[0.06] hover:bg-white/[0.10] font-mono text-[11px] font-bold text-textPrimary transition-colors"
       >
         {ticker}
         <ChevronDown className={`w-3 h-3 text-textSecondary transition-transform ${open ? 'rotate-180' : ''}`} />

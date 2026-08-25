@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, useAnimationControls, useReducedMotion } from 'framer-motion';
 import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, Scale } from 'lucide-react';
-import Feed from '../../core/feed';
+import Simulator from '../../core/simulator';
 import {
   weighContract,
   weighContracts,
@@ -20,8 +20,6 @@ import SignalBadge from '../ui/SignalBadge';
 import type { Tone } from '../ui/tones';
 import ContractChainView, { type ChainSelection } from './ContractChain';
 import ContractFacts from './ContractFacts';
-import { preserveGreek } from '../ui/greek';
-import { etClock } from '../../core/etFormat';
 
 /* States, not orders — same doctrine as Compass setups. The engine's
    BUY/WATCH/FADE verdicts are INTERNAL loop-scoring vocabulary (it chose
@@ -77,17 +75,9 @@ const FactorRow = ({
 );
 
 /** Borderless figure — label over value, GreeksRow idiom (not a stat card). */
-/*
-  Labels go through preserveGreek because these carry `uppercase`, and CSS
-  uppercasing does not skip Greek: it renders "1σ move" as "1Σ MOVE". Σ is
-  summation, σ is a standard deviation, and on a terminal that also prints Θ
-  for theta the substitution is not cosmetic. Wrapping at the component rather
-  than the call site means a label written here later is protected too —
-  src/components/ui/greek.tsx.
-*/
 const Fig = ({ label, value, tone = 'text-textPrimary' }: { label: string; value: string; tone?: string }) => (
   <span className="flex flex-col gap-0.5 min-w-0">
-    <span className="font-mono text-[9px] uppercase tracking-wider text-textMuted">{preserveGreek(label)}</span>
+    <span className="font-mono text-[9px] uppercase tracking-wider text-textMuted">{label}</span>
     <span className={`font-mono text-[12px] font-semibold tnum ${tone}`}>{value}</span>
   </span>
 );
@@ -325,7 +315,7 @@ const ContractWeigher = ({ snapshot }: ContractWeigherProps) => {
 
 
   // ---- the chain + the analysis --------------------------------------------
-  const tickerIv = Feed.TICKERS[snapshot.ticker]?.iv ?? 0.2;
+  const tickerIv = Simulator.TICKERS[snapshot.ticker]?.iv ?? 0.2;
 
   /* The rail's real expiries, clock-aware — the listed-calendar ladder,
      already deduped by the builder. */
@@ -382,7 +372,7 @@ const ContractWeigher = ({ snapshot }: ContractWeigherProps) => {
       earned the click (the provenance rule). */
   const openAnalysis = (strike: number, right: 'C' | 'P', dte: number) => {
     const graded = weighContract(snapshot, right, strike, dte);
-    setAnalysis({ strike, right, dte, gradedAt: etClock() });
+    setAnalysis({ strike, right, dte, gradedAt: new Date().toLocaleTimeString('en-GB') });
   };
 
   const handleChainSelect = (sel: ChainSelection) => openAnalysis(sel.strike, sel.right, railDte);

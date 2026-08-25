@@ -23,15 +23,7 @@ const SubNav = ({ items, ariaLabel }: SubNavProps) => {
   return (
     <nav
       aria-label={ariaLabel}
-      /* WRAPS. Three Pinpoint tabs run 411px; on a 390px phone the lane is
-         356, so "Vanna & Charm" sat at 295–428. It was still reachable —
-         `overflow-y: auto` on <main> makes the computed overflow-x `auto`
-         too, so the whole PAGE slid sideways to reach it — which is the
-         thing that should not happen, not a saving grace. Wrapping the strip
-         takes main's scrollWidth from 428 back to 390 on the Exposure and
-         Vanna routes, and changes nothing at 768 or above, or for the Trace
-         and Community strips, which already fit. */
-      className="inline-flex flex-wrap items-center gap-0.5 border border-borderSubtle bg-panel rounded-md p-0.5"
+      className="inline-flex items-center gap-0.5 border border-borderSubtle bg-panel rounded-md p-0.5"
     >
       {items.map(item => (
         <NavLink

@@ -26,7 +26,7 @@ import {
   type UTCTimestamp,
 } from 'lightweight-charts';
 import { AlertTriangle, ArrowLeft, Bookmark, Check, Droplets, Info, LayoutGrid, ShieldAlert } from 'lucide-react';
-import Feed from '../../core/feed';
+import Simulator from '../../core/simulator';
 import { getCandleTheme, useCandleThemeKey, candleSeriesOptions, chartSurface } from '../gex/candleTheme';
 import ChartToolbar from '../gex/ChartToolbar';
 import type { ChartOverlays } from '../gex/StrikeChart';
@@ -54,8 +54,6 @@ import {
   type Setup,
   type SleeveKey,
 } from '../../types/compass';
-import { FONT_FAMILY } from '../ui/typeface';
-import { etHm } from '../../core/etFormat';
 
 interface CampaignAnalysisProps {
   setup: Setup;
@@ -168,7 +166,7 @@ const CampaignChart = ({ setup, revision, entry, hits, brk, timeframe, overlays 
       layout: {
         background: { color: s0.bg },
         textColor: '#5a5a5a',
-        fontFamily: FONT_FAMILY,
+        fontFamily: "'SF Pro', sans-serif",
         fontSize: 10,
         attributionLogo: false,
       },
@@ -249,7 +247,7 @@ const CampaignChart = ({ setup, revision, entry, hits, brk, timeframe, overlays 
       layout: { background: { color: s.bg } },
       grid: { horzLines: { color: s.grid } },
     });
-    const bars = aggregateCandles(Feed.getCandles(setup.ticker) ?? [], tfMinutes(timeframe));
+    const bars = aggregateCandles(Simulator.getCandles(setup.ticker) ?? [], tfMinutes(timeframe));
     if (bars.length > 0 && volumeRef.current) {
       volumeRef.current.setData(
         bars.map(b => ({
@@ -305,7 +303,7 @@ const CampaignChart = ({ setup, revision, entry, hits, brk, timeframe, overlays 
     const volumeSeries = volumeRef.current;
     if (!chart || !candleSeries || !volumeSeries) return;
 
-    const raw = Feed.getCandles(setup.ticker);
+    const raw = Simulator.getCandles(setup.ticker);
     if (!raw || raw.length === 0) return;
     const bars = aggregateCandles(raw, tfMinutes(timeframe));
     if (bars.length === 0) return;
@@ -501,7 +499,7 @@ const CampaignAnalysis = ({
     | null
   >(null);
   {
-    const bars = Feed.getCandles(setup.ticker);
+    const bars = Simulator.getCandles(setup.ticker);
     if (entryRef.current?.id !== setup.id && bars && bars.length > 0) {
       entryRef.current = {
         id: setup.id,
@@ -552,7 +550,7 @@ const CampaignAnalysis = ({
     }
     const st = tapeRef.current;
     if (!st.brk) {
-      const bars = Feed.getCandles(setup.ticker) ?? [];
+      const bars = Simulator.getCandles(setup.ticker) ?? [];
       for (const b of bars) {
         if (b.time <= st.scanned) continue;
         st.scanned = b.time;
@@ -588,7 +586,7 @@ const CampaignAnalysis = ({
       st.key = key;
       st.at = now;
       try {
-        st.rows = buildSetupDrivers(Feed.snapshotFor(setup.ticker), c, sleeve);
+        st.rows = buildSetupDrivers(Simulator.snapshotFor(setup.ticker), c, sleeve);
       } catch {
         st.rows = [];
       }
@@ -598,7 +596,7 @@ const CampaignAnalysis = ({
   }, [setup.ticker, setup.strike, setup.right, sleeve, revision]);
 
   const breakTimeLabel = floorBreak
-    ? etHm(floorBreak.time)
+    ? new Date(floorBreak.time * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
     : '';
 
   const bankedLevels = useMemo(() => new Set(tpHits.map(h => h.level)), [tpHits]);
@@ -615,13 +613,7 @@ const CampaignAnalysis = ({
   const [timeframe, setTimeframe] = useState<Timeframe>(() => loadChartPrefs().timeframe);
   const [overlays, setOverlays] = useState<ChartOverlays>(() => loadChartPrefs().overlays);
   useEffect(() => {
-    try {
-      localStorage.setItem(CAMPAIGN_CHART_LS, JSON.stringify({ timeframe, overlays }));
-    } catch {
-      /* Quota, or storage switched off — the chart keeps the preference for
-         this session and simply does not remember it next time. Matches the
-         other seven writes in the tree. */
-    }
+    localStorage.setItem(CAMPAIGN_CHART_LS, JSON.stringify({ timeframe, overlays }));
   }, [timeframe, overlays]);
 
   /* Fullscreen chart takeover — the Pulse contract verbatim: 'contents'
@@ -750,7 +742,7 @@ const CampaignAnalysis = ({
           sweep that surfaced the row is named. */}
       {gradedAt != null && (
         <p className="-mt-1 font-mono text-[11px] text-textSecondary">
-          Surfaced on the <span className="text-textPrimary tnum">{gradedAt}</span> sweep · reading live ever since
+          Surfaced on the <span className="text-textPrimary tnum">{gradedAt}</span> sweep · reading live since
         </p>
       )}
 

@@ -29,39 +29,11 @@ export const DARK_POOL = '#2dd4bf'; // teal — institutional reference prints
 export const SPOT = '#ededed'; // white — where the market is
 export const FOCUS = LIME; // neon lime — what the user clicked (selection language)
 
-/*
-  ── DEALER SIDE: GOLD AND STEEL ───────────────────────────────────────────
-
-  Red and green carried TWO meanings in this terminal:
-
-    1. price direction — candles, up/down, bull/bear verdicts, P&L, change %
-    2. dealer side — who owns a strike's gamma, and whether hedging amplifies
-       or absorbs
-
-  On most surfaces only one is present, so it survived. On the live chart both
-  are present at once, which is why the chart's own field already moved to
-  gold/steel. `docs/dealer-ink-pass.md` (2026-08-22) made that the rule
-  everywhere and specified these tokens — and then nothing implemented it, so
-  the doc described a palette that did not exist while `PositioningMap` went on
-  painting a dealer book in the candles' own red and green.
-
-  A NOTE ON THE REVERSAL, because it is a real one. The block these replace
-  recorded the opposite call: "the partner's redesign wears gold = SHORT gamma
-  / blue = LONG gamma; Noah's call (2026-08-18) keeps his geometry and swaps
-  the ink to the house market pair." The dealer-ink doc is dated four days
-  later, argues the case explicitly, and is the more recent recorded decision,
-  so it wins. To reverse it, point the four tokens below back at the market
-  pair — every surface reads them from here now, which is the point.
-
-  Gold and steel also separate by LUMINANCE as well as hue, so the dealer-side
-  split survives red/green colour blindness. The old pair does not.
-*/
-/** Put-dominant, dealer hedging amplifies — bars, bands, lines. */
-export const DEALER_PUT = '#F5C542';
-/** Call-dominant, dips absorbed — bars, bands, lines. */
-export const DEALER_CALL = '#E2EAF4';
-/** Figures and labels. Gold reads on dark at 11px; platinum does not — at
-    #E2EAF4 a number is indistinguishable from textPrimary, so the ink variant
-    steps down to a tone that still reads as "steel" rather than "body text". */
-export const DEALER_PUT_INK = '#F5C542';
-export const DEALER_CALL_INK = '#AAB6C6';
+// Dealer-gamma sign, for the positioning map. The partner's redesign wears
+// gold = SHORT gamma / blue = LONG gamma; Noah's call (2026-08-18) keeps his
+// geometry and swaps the ink to the house market pair: red = SHORT gamma
+// (dealer hedging amplifies the move), green = LONG gamma (dips absorbed).
+// Same values as bull/bear — named by regime so a dealer-inventory surface
+// doesn't import "BULL" to paint an absorbing book.
+export const SHORT_GAMMA = '#FF3B30'; // red — amplifying regime
+export const LONG_GAMMA = BULL; // green — absorbing regime

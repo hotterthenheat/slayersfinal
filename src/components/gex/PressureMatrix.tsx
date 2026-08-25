@@ -3,8 +3,6 @@ import { fmtUsd } from '../../data/gex';
 import SpotRule from '../ui/SpotRule';
 import { heatRgb } from './heatmap';
 import type { PressureRow, PressureSide } from '../../types/gex';
-import { ROW_INTERACTIVE, interactiveRowProps } from '../ui/interactiveRow';
-import { fmtNum } from '../../core/numFormat';
 
 interface PressureMatrixProps {
   ticker: string;
@@ -29,10 +27,10 @@ const SideCells = ({ side, significantAbs }: { side: PressureSide; significantAb
           significant ? (dOiUp ? 'text-bull font-semibold' : 'text-bear font-semibold') : 'text-textSecondary'
         }`}
       >
-        {dOiUp ? '↑' : '↓'}{fmtNum(Math.abs(side.deltaOI))}
+        {dOiUp ? '↑' : '↓'}{Math.abs(side.deltaOI).toLocaleString()}
       </td>
       <td className="px-1.5 py-1 text-right font-mono text-[9px] tnum text-textMuted">
-        {fmtNum(side.volume)}
+        {side.volume.toLocaleString()}
       </td>
     </>
   );
@@ -99,12 +97,9 @@ const PressureMatrix = ({ ticker, spot, rows, maxAbs, onSelectStrike }: Pressure
               <Fragment key={row.strike}>
                 <tr
                   onClick={onSelectStrike ? () => onSelectStrike(row.strike) : undefined}
-                  {...(onSelectStrike
-                    ? interactiveRowProps(() => onSelectStrike(row.strike), false, 'native')
-                    : {})}
                   title={onSelectStrike ? 'Flash on chart' : undefined}
                   className={`border-b border-borderSubtle/30 transition-colors ${row.pin ? 'bg-white/[0.03]' : ''} ${
-                    onSelectStrike ? `${ROW_INTERACTIVE} hover:bg-white/[0.04]` : ''
+                    onSelectStrike ? 'cursor-pointer hover:bg-white/[0.04]' : ''
                   }`}
                 >
                   <td className="px-2 py-1 bg-inset border-r border-borderSubtle/40 font-mono text-[10px] font-semibold tnum text-textSecondary whitespace-nowrap">

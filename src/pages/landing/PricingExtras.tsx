@@ -39,10 +39,9 @@ const LADDER: LadderTier[] = [
       { label: 'Pulse', detail: 'Chart with walls, flip & king, dealer pressure, order flow' },
       { label: 'Pinpoint', detail: 'GEX · DEX · VEX by strike — exposure matrix & positioning map' },
       { label: 'Ranked Targets', detail: 'Every strike ranked by structural priority — the levels that matter today' },
-      { label: 'Trace', detail: 'Streaming options tape — sweeps, blocks and the prints behind them' },
-      { label: 'Dark pool', detail: 'Off-exchange prints against the level they crossed at', soon: true },
+      { label: 'Trace', detail: 'Streaming options tape, sweeps, blocks & dark-pool intelligence' },
       { label: 'Tracker & the Pulse desk', detail: 'Bookmarked setups with live monitoring, saved desk layouts' },
-      { label: 'Discord chat & alerts', detail: 'Community room, and setup alerts pushed to your phone', soon: true },
+      { label: 'Discord chat & alerts', detail: 'Real-time community and setup alerts to your phone' },
     ],
   },
   {
@@ -52,13 +51,14 @@ const LADDER: LadderTier[] = [
     inherits: 'Pinpoint',
     items: [
       { label: 'Compass', detail: 'Graded setups — ACTIVE, WATCH or FADING, explained in plain English' },
-      { label: 'Stocks', detail: 'Sector rotation ranked, every name screened on momentum, quality & flow' },
+      { label: 'Stocks', detail: 'Sector rotation ranked, every name screened on momentum, quality, flow & news' },
+      { label: 'News', detail: 'The wire on the left, what the model thinks it does to price on the right' },
       {
         label: 'Earnings',
         detail: 'Week calendar with our expected move, plus a dossier per company — beats, past reactions, probabilities',
       },
       { label: 'Vanna & Charm', detail: 'How the levels migrate as time decays and volatility shifts' },
-      { label: 'Chain momentum reads', detail: 'Momentum and desk action across the whole chain', soon: true },
+      { label: 'Chain momentum reads', detail: 'Live momentum & desk action across the whole chain' },
       { label: 'Quant Lab', detail: 'Backtester, order flow & momentum research tools', soon: true },
     ],
   },
@@ -141,15 +141,15 @@ export const ComparePlans = () => (
 const FAQS = [
   {
     q: 'Do you offer alerts and signals?',
-    a: "Signals, no — Slayer never tells you to enter anything. Compass surfaces the setups where the confluences line up — structure, flow, volatility — grades each one 0–100, and carries a live state: ACTIVE while the thesis holds, WATCH while it proves itself, FADING when the structure breaks. What you do with it is entirely yours. Alerts are not shipped yet; when they are, they will push the setup, never an instruction.",
+    a: "Alerts, yes — signals, no. Slayer never tells you to enter anything. Compass surfaces the setups where the confluences line up — structure, flow, volatility — grades each one 0–100, and carries a live state: ACTIVE while the thesis holds, WATCH while it proves itself, FADING when the structure breaks. Discord pings you the moment one appears. What you do with it is entirely yours.",
   },
   {
     q: 'Is the data live?',
-    a: 'Not in the terminal you can open from here. Every panel replays a recorded session so the desk can be explored end to end without an account — the header carries a Sim badge the whole time it does that. The panels are the real ones, and the market reaches them through a single feed module: price, candles, dealer levels and the tape all arrive through that one file, so pointing it at a live feed is the whole switch — no layout and no math above it changes. Four research desks — Stocks, Earnings, News and the contract-flow drilldown — still ship sample numbers of their own, and move onto the same feed as their data lands.',
+    a: 'Yes. Every panel runs on live market data — the tape, the walls, the greeks and the dark-pool prints all update in real time through the session.',
   },
   {
     q: 'What makes Slayer different from other GEX tools?',
-    a: "Every GEX tool can draw a flip and a wall — the structure itself is table stakes. Slayer's difference is everything after the map: it reads structure, tape and volatility as one confluence, weighs the actual contracts against it, and keeps reading the idea while it plays out rather than grading it once and walking away. The map is a commodity. A desk that keeps watching isn't.",
+    a: "Every GEX tool can draw a flip and a wall — the structure itself is table stakes. Slayer's difference is everything after the map: it reads structure, tape, dark pool and volatility as one confluence, weighs the actual contracts against it, keeps reading the idea live while it plays out, and keeps its own record on the page — every state change a setup goes through stays visible. The map is a commodity. An engine that stands behind its reads isn't.",
   },
   {
     q: 'Do I need to be an options expert?',

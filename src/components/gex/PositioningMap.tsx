@@ -6,9 +6,9 @@ import HoverReadout from '../ui/HoverReadout';
 import SignalBadge from '../ui/SignalBadge';
 import SpotRule from '../ui/SpotRule';
 import { ROW_INTERACTIVE, interactiveRowProps, rowKeyDown } from '../ui/interactiveRow';
-import { DEALER_CALL, DEALER_PUT } from './palette';
+import { LONG_GAMMA, SHORT_GAMMA } from './palette';
 import TrendLine from './TrendLine';
-import Feed from '../../core/feed';
+import Simulator from '../../core/simulator';
 import { fmtUsd } from '../../data/gex';
 import type { ExposureProfileData, StrikeExposure, ZoneBand, ZoneKind } from '../../types/gex';
 import type { Tone } from '../ui/tones';
@@ -132,7 +132,7 @@ const StrikeReadout = ({
   anchorWord: string;
 }) => {
   const series = useMemo(() => {
-    const snaps = Feed.getGexHistory(ticker) ?? [];
+    const snaps = Simulator.getGexHistory(ticker) ?? [];
     const out: number[] = [];
     for (let i = Math.max(0, snaps.length - 391); i < snaps.length; i++) {
       const lvl = snaps[i].levels.find(l => l.strike === row.strike);
@@ -162,7 +162,7 @@ const StrikeReadout = ({
 
       <div className="mt-2">
         <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Net gamma</div>
-        <div className="font-mono text-[16px] leading-6 font-bold tnum" style={{ color: short ? DEALER_PUT : DEALER_CALL }}>
+        <div className="font-mono text-[16px] leading-6 font-bold tnum" style={{ color: short ? SHORT_GAMMA : LONG_GAMMA }}>
           {now >= 0 ? '+' : ''}
           {fmtUsd(now)}
         </div>
@@ -191,7 +191,7 @@ const StrikeReadout = ({
 
       <div className="mt-2 pt-2 border-t border-borderSubtle/60 font-mono text-[10px] uppercase tracking-wider text-textMuted tnum">
         From {anchorWord} to {fmtStrike(row.strike)} ·{' '}
-        <span style={{ color: cum > 0 ? DEALER_PUT : DEALER_CALL }}>{fmtUsd(cum)}</span> · {gammaWords(cum)}
+        <span style={{ color: cum > 0 ? SHORT_GAMMA : LONG_GAMMA }}>{fmtUsd(cum)}</span> · {gammaWords(cum)}
       </div>
 
       {recent.length > 1 && (
@@ -292,7 +292,7 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
   // effective multiplier this view applied to the live value — so the ghost and
   // the band are always on one scale, never a raw-vs-scaled mismatch.
   const prior = useMemo(() => {
-    const snaps = Feed.getGexHistory(ticker) ?? [];
+    const snaps = Simulator.getGexHistory(ticker) ?? [];
     if (snaps.length < 2) return new Map<number, number>();
     const nowMap = new Map(snaps[snaps.length - 1].levels.map(l => [l.strike, l.value]));
     const pastMap = new Map(snaps[Math.max(0, snaps.length - 16)].levels.map(l => [l.strike, l.value]));
@@ -307,7 +307,7 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
   }, [ticker, strikes]);
 
   // ±1σ expected move off the symbol's IV — the straddle-implied daily range
-  const iv = Feed.TICKERS[ticker]?.iv ?? 0.2;
+  const iv = Simulator.TICKERS[ticker]?.iv ?? 0.2;
   const em = levels.spot * iv * Math.sqrt(1 / 252);
 
   const bandH = strikes.length ? plot.h / strikes.length : 0;
@@ -483,12 +483,12 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
     {
       label: preserveGreek(rootW >= W_LEGEND_LONG ? 'Short γ · moves amplified' : 'Short γ'),
       kind: 'square' as const,
-      color: DEALER_PUT,
+      color: SHORT_GAMMA,
     },
     {
       label: preserveGreek(rootW >= W_LEGEND_LONG ? 'Long γ · dips absorbed' : 'Long γ'),
       kind: 'square' as const,
-      color: DEALER_CALL,
+      color: LONG_GAMMA,
     },
     {
       label: rootW >= W_LEGEND_LONG ? 'cumulative from spot' : 'Cum',
@@ -511,7 +511,7 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
         <SignalBadge tone={BIAS_TONE[bias]}>{bias}</SignalBadge>
         <span className="font-mono text-[10px] font-semibold uppercase tracking-wider text-textMuted tnum whitespace-nowrap">
           NET{' '}
-          <span style={{ color: netGex > 0 ? DEALER_PUT : DEALER_CALL }}>
+          <span style={{ color: netGex > 0 ? SHORT_GAMMA : LONG_GAMMA }}>
             {netGex >= 0 ? '+' : ''}
             {fmtUsd(netGex)}
           </span>
@@ -597,7 +597,7 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
                 style={{
                   top: Math.min(scale.yOf(levels.spot), scale.yOf(levels.flip)),
                   height: Math.abs(scale.yOf(levels.flip) - scale.yOf(levels.spot)),
-                  background: `${levels.spot < levels.flip ? DEALER_PUT : DEALER_CALL}08`,
+                  background: `${levels.spot < levels.flip ? SHORT_GAMMA : LONG_GAMMA}08`,
                 }}
               />
             )}
@@ -652,7 +652,7 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
                     initial={false}
                     animate={{ left: v < 0 ? spine - w : spine, width: w < 0.5 ? 0 : w }}
                     transition={{ duration: DUR_DATA, ease: EASE }}
-                    style={{ background: v > 0 ? DEALER_PUT : DEALER_CALL, opacity: 0.88 }}
+                    style={{ background: v > 0 ? SHORT_GAMMA : LONG_GAMMA, opacity: 0.88 }}
                   />
                   {labelsOn &&
                     (v < 0 ? (

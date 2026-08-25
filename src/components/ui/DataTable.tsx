@@ -1,28 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import { ROW_INTERACTIVE, interactiveRowProps } from './interactiveRow';
 
 export interface Column<T> {
   key: string;
-  /** ReactNode so a header can carry its own markup */
+  /** ReactNode so a header can wrap itself in a Term explainer */
   header: React.ReactNode;
-  /**
-   * Rendered BESIDE the sort control, never inside it.
-   *
-   * A `<button>` may not contain interactive content — that is the HTML
-   * content model, not a preference — and a Term explainer is interactive:
-   * it is a `span` with `tabIndex={0}` and `role="button"`. Passing one as
-   * `header` on a sortable column therefore put a control inside a control,
-   * and the browser does exactly what that asks for. Measured on Earnings:
-   * five sortable headers produced TEN tab stops, in consecutive pairs
-   * reading "Priced", "Priced", "Beat rate", "Beat rate" — and a screen
-   * reader folds the inner one into the button's name, so the explainer it
-   * is there to offer becomes unreachable.
-   *
-   * So the label goes in the button and the explainer goes next to it. Both
-   * keep their own focus stop, and each says one thing.
-   */
-  headerAside?: React.ReactNode;
   align?: 'left' | 'right';
   width?: string;
   /** Provide to make the column sortable */
@@ -84,50 +66,20 @@ const DataTable = <T,>({
               <th
                 key={col.key}
                 style={col.width ? { width: col.width } : undefined}
-                aria-sort={
-                  sort?.key === col.key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined
-                }
                 className={`px-3 py-2 font-mono text-[10px] font-semibold uppercase tracking-wider text-textMuted whitespace-nowrap ${
                   col.align === 'right' ? 'text-right' : 'text-left'
-                }`}
+                } ${col.sortValue ? 'cursor-pointer select-none hover:text-textSecondary' : ''}`}
+                onClick={() => toggleSort(col)}
               >
-                {/*
-                  A SORT CONTROL IS A BUTTON.
-
-                  The whole `th` carried the onClick and nothing else — no
-                  tab stop, no key handler, no name — so sorting this table
-                  was mouse-only, and a screen reader was told the column was
-                  a plain header. The control is now a real button inside the
-                  cell, which gets focus, Enter and Space from the browser
-                  rather than from hand-written handlers, and `aria-sort` on
-                  the cell says which way it is currently ordered.
-
-                  A non-sortable column renders no button at all, so the tab
-                  order does not fill up with headers that do nothing.
-                */}
-                {col.sortValue ? (
-                  <span className="inline-flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => toggleSort(col)}
-                    className={`inline-flex items-center gap-1 select-none uppercase tracking-wider transition-colors hover:text-textSecondary ${ROW_INTERACTIVE}`}
-                  >
-                    {col.align === 'right' && sort?.key === col.key && (
-                      sort.dir === 'desc' ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />
-                    )}
-                    {col.header}
-                    {col.align !== 'right' && sort?.key === col.key && (
-                      sort.dir === 'desc' ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />
-                    )}
-                  </button>
-                  {col.headerAside}
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1">
-                    {col.header}
-                    {col.headerAside}
-                  </span>
-                )}
+                <span className="inline-flex items-center gap-1">
+                  {col.align === 'right' && sort?.key === col.key && (
+                    sort.dir === 'desc' ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />
+                  )}
+                  {col.header}
+                  {col.align !== 'right' && sort?.key === col.key && (
+                    sort.dir === 'desc' ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />
+                  )}
+                </span>
               </th>
             ))}
           </tr>
@@ -147,9 +99,8 @@ const DataTable = <T,>({
                 <tr
                   key={key}
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
-                  {...(onRowClick ? interactiveRowProps(() => onRowClick(row), selected, 'native') : {})}
                   className={`border-b border-borderSubtle/60 last:border-0 transition-colors ${
-                    onRowClick ? ROW_INTERACTIVE : ''
+                    onRowClick ? 'cursor-pointer' : ''
                   } ${
                     selected
                       ? 'bg-select/[0.06] shadow-[inset_2px_0_0_0_rgba(210,255,0,0.7)]'

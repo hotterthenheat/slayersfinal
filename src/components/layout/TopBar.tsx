@@ -18,34 +18,24 @@ import { useMarketData } from '../../context/MarketDataContext';
 import { useLaunch } from './LaunchTransition';
 import SignalBadge from '../ui/SignalBadge';
 import { NAV_GROUPS, NAV_GROUP_META, NAV_ITEMS, itemsByGroup } from './nav';
-import { etClock } from '../../core/etFormat';
 
 interface TopBarProps {
   onOpenPalette: () => void;
 }
 
 const TopBar = ({ onOpenPalette }: TopBarProps) => {
-  const { activeTicker, marketData, recordingEnded } = useMarketData();
+  const { activeTicker, marketData } = useMarketData();
   const { launch } = useLaunch();
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  /*
-    The header clock is Eastern, and says so.
-
-    It rendered in the VIEWER's timezone, unlabelled, on a terminal where
-    every other time — session, expiry, scan stamp, chart axis — is a US
-    market time. So it agreed with the desk only for readers sitting in New
-    York and quietly disagreed with everyone else, which is worse than being
-    wrong everywhere: nothing on screen said which clock it was.
-  */
-  const [clock, setClock] = useState(() => etClock());
+  const [clock, setClock] = useState(() => new Date().toLocaleTimeString('en-US', { hour12: false }));
   const [dropdown, setDropdown] = useState<string | null>(null);
 
   // Which workflow the current route lives in — drives the underline.
   const activeGroup = NAV_ITEMS.find(i => pathname.startsWith(i.path))?.group ?? null;
 
   useEffect(() => {
-    const id = setInterval(() => setClock(etClock()), 1000);
+    const id = setInterval(() => setClock(new Date().toLocaleTimeString('en-US', { hour12: false })), 1000);
     return () => clearInterval(id);
   }, []);
 
@@ -90,27 +80,13 @@ const TopBar = ({ onOpenPalette }: TopBarProps) => {
                   navigate(items[0].path);
                   setDropdown(null);
                 }}
-                className={`relative self-stretch flex items-center gap-1.5 px-2 lg:px-3 font-mono text-[11px] font-semibold uppercase tracking-wider transition-colors ${
+                className={`relative self-stretch flex items-center gap-1.5 px-3 font-mono text-[11px] font-semibold uppercase tracking-wider transition-colors ${
                   isActive ? 'text-textPrimary' : 'text-textSecondary hover:text-textPrimary'
                 }`}
               >
-                {/*
-                  BELOW lg THE TABS ARE LABELS ONLY.
-
-                  The nav switches on at md (768px) and wants 462px there; the
-                  right cluster wants another 355. With 32px of padding and two
-                  16px gaps that is 881px of content in a 768px bar, and the
-                  bar does not scroll — it clips. The casualty was the whole
-                  right end (price, change, clock) AND the brand mark, which
-                  flex-1 squeezed to exactly 0px wide.
-
-                  The icon and the chevron are decoration next to a word that
-                  already says what the tab is, so they are the first things to
-                  go and the last things anyone misses.
-                */}
-                <GroupIcon className={`hidden lg:block w-3.5 h-3.5 ${isActive ? 'text-textPrimary' : 'text-textMuted'}`} />
+                <GroupIcon className={`w-3.5 h-3.5 ${isActive ? 'text-textPrimary' : 'text-textMuted'}`} />
                 {group}
-                <ChevronDown className="hidden lg:block w-3 h-3 text-textMuted" />
+                <ChevronDown className="w-3 h-3 text-textMuted" />
                 {isActive && (
                   <motion.span
                     layoutId="topnav-underline"
@@ -208,26 +184,7 @@ const TopBar = ({ onOpenPalette }: TopBarProps) => {
           )}
         </div>
         <SignalBadge tone="warn">Sim</SignalBadge>
-        {/* The badge keeps saying Sim — that claim is about the FEED and it
-            never stops being true. This says the recording behind THIS NAME
-            has finished, which is a different fact and used to be said
-            nowhere: the price above stops moving and every animation around
-            it keeps running as though it had not. Measured by sitting on the
-            terminal — the header price and the tape both froze while the
-            pill still read LIVE. Held back to lg for the same reason the
-            clock is — see the nav comment above. */}
-        {recordingEnded && (
-          <span className="hidden lg:inline font-mono text-[10px] uppercase tracking-wider text-textMuted whitespace-nowrap">
-            recording played out
-          </span>
-        )}
-        {/* lg, not md: between the two the bar has no room for it — see the
-            nav comment above. The ticker, price and change stay, because they
-            are the market context; a clock is not. */}
-        <span className="hidden lg:flex items-baseline gap-1 font-mono text-xs text-textSecondary tnum select-none">
-          {clock}
-          <span className="text-[9px] uppercase tracking-widest text-textMuted">ET</span>
-        </span>
+        <span className="hidden md:block font-mono text-xs text-textSecondary tnum select-none">{clock}</span>
       </div>
     </header>
   );

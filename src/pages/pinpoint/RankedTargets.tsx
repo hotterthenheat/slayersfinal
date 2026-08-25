@@ -12,8 +12,6 @@ import Term from '../../components/ui/Term';
 import type { MarketSnapshot } from '../../types/market';
 import type { HedgingClass, RankLens, RankedTarget, TargetTag } from '../../types/gex';
 import type { Tone } from '../../components/ui/tones';
-import { etClock } from '../../core/etFormat';
-import { fmtNum } from '../../core/numFormat';
 
 /** Rankings sweep on the scan tier — priority must not reshuffle per tick. */
 const SCAN_INTERVAL_MS = 10_000;
@@ -65,9 +63,9 @@ const fmtLens = (t: RankedTarget, lens: RankLens): string => {
     case 'gex':
       return fmtUsd(t.netGex);
     case 'oi':
-      return `${fmtNum(t.openInterest)} OI`;
+      return `${t.openInterest.toLocaleString()} OI`;
     case 'volume':
-      return `${fmtNum(t.volume)} vol`;
+      return `${t.volume.toLocaleString()} vol`;
     case 'nbr':
       return `${t.nbr.toFixed(2)}x NBR`;
     case 'proximity':
@@ -170,21 +168,6 @@ const PodiumCard = forwardRef<
       exit={{ opacity: 0 }}
       transition={{ layout: { type: 'spring', stiffness: 340, damping: 32 }, opacity: { duration: 0.18 } }}
       onClick={onFlash}
-      /*
-        A button with no aria-label is named by everything inside it, and
-        these cards hold a rank, a class, a verdict sentence and four
-        figures. Measured: 133, 154 and 197 characters for the top three,
-        read out in one run before the reader knows the control shows the
-        strike on a chart.
-
-        The name says the strike, its rank and its class; the rest is still
-        there to be read. Same treatment as the Compass setup card, and the
-        same limit — the card is a <button> holding interactive Term
-        explainers, which HTML's content model forbids, and that
-        restructuring is open decision #11. Naming it is the part every
-        candidate answer to #11 needs.
-      */
-      aria-label={`Rank ${t.rank}, strike ${fmtStrike(t.strike)}, ${t.hedgingClass.toLowerCase()}`}
       title="See this strike on the chart"
       className={`group relative text-left rounded-md border overflow-hidden transition-colors ${
         isPrimary
@@ -217,24 +200,15 @@ const PodiumCard = forwardRef<
         <EdgeLine t={t} above={above} lens={lens} />
       </div>
 
-      {/*
-        Stats — neutral ink; color is reserved for the verdict.
-
-        WRAP, DON'T WEDGE. Four fixed columns gave each stat 44px at a 768px
-        viewport, and a six-figure open-interest with its comma — "108,444" —
-        needs 50 at this size, so it spilled into its neighbour. The podium's
-        width comes from the page grid rather than the viewport, so a media
-        query would only be a guess at it; a wrap with a per-stat floor is
-        right at every width, and folds 4x1 into 2x2 exactly when it has to.
-      */}
-      <div className="px-3.5 mt-3 flex flex-wrap gap-x-2 gap-y-2">
+      {/* Stats — neutral ink; color is reserved for the verdict */}
+      <div className="px-3.5 mt-3 grid grid-cols-4 gap-2">
         {[
           { label: 'BPS', term: 'BPS' as const, value: `${t.bps >= 0 ? '+' : ''}${t.bps}`, lens: 'proximity' as const },
           { label: 'NBR', term: 'NBR' as const, value: `${t.nbr.toFixed(2)}x`, strong: t.nbr >= 1.5, lens: 'nbr' as const },
-          { label: 'Volume', term: undefined, value: fmtNum(t.volume), lens: 'volume' as const },
-          { label: 'Open Int', term: undefined, value: fmtNum(t.openInterest), lens: 'oi' as const },
+          { label: 'Volume', term: undefined, value: t.volume.toLocaleString(), lens: 'volume' as const },
+          { label: 'Open Int', term: undefined, value: t.openInterest.toLocaleString(), lens: 'oi' as const },
         ].map(s => (
-          <div key={s.label} className="min-w-[68px] flex-1">
+          <div key={s.label}>
             <span className="block font-mono text-[9px] uppercase tracking-widest text-textSecondary">
               {s.term ? <Term k={s.term}>{s.label}</Term> : s.label}
             </span>
@@ -245,20 +219,10 @@ const PodiumCard = forwardRef<
         ))}
       </div>
 
-      {/*
-        Verdict strip — the only place color speaks.
-
-        WRAPS, for the same reason the stats above it do. Four items on one
-        nowrap line inside a card whose width comes from the page grid: at a
-        768px viewport the podium is ~240px and the class label — the longest
-        of them, "DOWNSIDE CUSHION" — ran 69px past the card's edge and the
-        card's own overflow-hidden ate it. Measured across widths, clipped
-        items in this strip: 390px 0, 768px 6, 1024px 1, 1440px 0. With the
-        wrap: 0 at every width.
-      */}
-      <div className="mt-3 px-3.5 py-2 border-t border-borderSubtle/60 flex flex-wrap items-center gap-x-2 gap-y-1">
+      {/* Verdict strip — the only place color speaks */}
+      <div className="mt-3 px-3.5 py-2 border-t border-borderSubtle/60 flex items-center gap-2">
         {/* Positive = put-dominant = short gamma = red (sim side-coding, unified 2026-08-18) */}
-        <span className={`font-mono text-[13px] font-semibold tnum ${t.netGex > 0 ? 'text-gold-ink' : 'text-steel-ink'}`}>
+        <span className={`font-mono text-[13px] font-semibold tnum ${t.netGex > 0 ? 'text-bear' : 'text-bull'}`}>
           {fmtUsd(t.netGex)}
         </span>
         <span className={`font-mono text-[9px] font-semibold uppercase tracking-wider ${t.pressure === 'SUPPORT' ? 'text-bull' : 'text-bear'}`}>
@@ -292,12 +256,6 @@ const LadderRow = forwardRef<HTMLButtonElement, { t: RankedTarget; lens: RankLen
         exit={{ opacity: 0 }}
         transition={{ layout: { type: 'spring', stiffness: 340, damping: 32 }, opacity: { duration: 0.18 } }}
         onClick={onFlash}
-        /* Same reason as PodiumCard above, one tier down. Unnamed, a ladder
-           row reads out as its own contents — "#8 516 +72 1.24x 36,152
-           43,630 71%C -$171.8M UPSIDE RESISTANCE" — which is a run of
-           figures with nothing saying which is which. It also sat directly
-           under three podium cards that WERE named, on one screen. */
-        aria-label={`Rank ${t.rank}, strike ${fmtStrike(t.strike)}, ${t.hedgingClass.toLowerCase()}`}
         title={`${t.reason} — click to see this strike on the chart`}
         className="group relative w-full flex items-center gap-3 px-3.5 h-11 text-left border-b border-borderSubtle/30 last:border-0 transition-colors hover:bg-white/[0.03]"
       >
@@ -322,19 +280,15 @@ const LadderRow = forwardRef<HTMLButtonElement, { t: RankedTarget; lens: RankLen
           {t.nbr.toFixed(2)}x
         </span>
         <span className={`hidden lg:block w-20 shrink-0 text-right font-mono text-[11px] tnum text-textPrimary ${lensCls('volume')}`}>
-          {fmtNum(t.volume)}
+          {t.volume.toLocaleString()}
         </span>
         <span className={`hidden lg:block w-20 shrink-0 text-right font-mono text-[11px] tnum text-textPrimary ${lensCls('oi')}`}>
-          {fmtNum(t.openInterest)}
+          {t.openInterest.toLocaleString()}
         </span>
         <span className="hidden xl:block shrink-0">
           <CpChip t={t} />
         </span>
-        {/* Net GEX joins the columns this row already drops as it narrows —
-            Volume and Open Int below lg, C/P below xl. Held at every width it
-            made <main> 85px wider than a 390px screen, so the whole page slid
-            sideways to reach a number the podium cards above already carry. */}
-        <span className={`hidden sm:block ml-auto w-24 shrink-0 text-right font-mono text-[11px] font-semibold tnum ${t.netGex > 0 ? 'text-gold-ink' : 'text-steel-ink'}`}>
+        <span className={`ml-auto w-24 shrink-0 text-right font-mono text-[11px] font-semibold tnum ${t.netGex > 0 ? 'text-bear' : 'text-bull'}`}>
           {fmtUsd(t.netGex)}
         </span>
         <span className={`hidden sm:block w-36 shrink-0 text-right font-mono text-[9px] font-semibold uppercase tracking-wider ${CLASS_TEXT[t.hedgingClass]}`}>
@@ -363,7 +317,7 @@ const LadderHead = () => (
     <span className="hidden lg:block w-20 shrink-0 text-right font-mono text-[9px] uppercase tracking-widest text-textSecondary">Volume</span>
     <span className="hidden lg:block w-20 shrink-0 text-right font-mono text-[9px] uppercase tracking-widest text-textSecondary">Open Int</span>
     <span className="hidden xl:block w-[76px] shrink-0 font-mono text-[9px] uppercase tracking-widest text-textSecondary">C/P</span>
-    <span className="hidden sm:block ml-auto w-24 shrink-0 text-right font-mono text-[9px] uppercase tracking-widest text-textSecondary">
+    <span className="ml-auto w-24 shrink-0 text-right font-mono text-[9px] uppercase tracking-widest text-textSecondary">
       <Term k="Net GEX" />
     </span>
     <span className="hidden sm:block w-36 shrink-0 text-right font-mono text-[9px] uppercase tracking-widest text-textSecondary">
@@ -396,7 +350,7 @@ const RankedTargets = () => {
       scanRef.current = marketData;
       lastScanTimeRef.current = now;
       setScanSnapshot(marketData);
-      setLastScanAt(etClock(new Date(now)));
+      setLastScanAt(new Date(now).toLocaleTimeString('en-GB'));
     }
   }, [marketData]);
 

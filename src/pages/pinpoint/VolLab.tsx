@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMarketData } from '../../context/MarketDataContext';
-import Feed from '../../core/feed';
+import Simulator from '../../core/simulator';
 import { buildVolLab } from '../../data/vollab';
 import Panel from '../../components/ui/Panel';
 import IvSurface from '../../components/gex/vollab/IvSurface';
 import TermStructure from '../../components/gex/vollab/TermStructure';
 import RiskNeutralDist from '../../components/gex/vollab/RiskNeutralDist';
 import RegimePanel from '../../components/gex/vollab/RegimePanel';
-import { etClock } from '../../core/etFormat';
 
 /** Vol analytics recalibrate on the scan tier — surfaces must not flicker per tick. */
 const SCAN_INTERVAL_MS = 10_000;
@@ -29,14 +28,14 @@ const VolLab = () => {
     if (due) {
       lastScanTimeRef.current = now;
       setScanKey({ ticker: marketData.ticker, spot: marketData.spot });
-      setCalibratedAt(etClock(new Date(now)));
+      setCalibratedAt(new Date(now).toLocaleTimeString('en-GB'));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [marketData]);
 
   const data = useMemo(() => {
     if (!scanKey) return null;
-    const iv = Feed.TICKERS[scanKey.ticker]?.iv ?? 0.2;
+    const iv = Simulator.TICKERS[scanKey.ticker]?.iv ?? 0.2;
     return buildVolLab(scanKey.ticker, scanKey.spot, iv);
   }, [scanKey]);
 

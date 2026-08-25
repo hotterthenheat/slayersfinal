@@ -8,7 +8,7 @@
 ==================================================
 */
 
-import Feed from '../core/feed';
+import Simulator from '../core/simulator';
 import type { MarketSnapshot, StrikeNode } from '../types/market';
 import type {
   IvShift,
@@ -105,8 +105,8 @@ const DRIFT_BARS = 390; // one session of 1-min bars
 const DRIFT_STEP = 3; // sample every 3rd bar
 
 function buildDrift(ticker: string): WallDriftPoint[] {
-  const candles = Feed.getCandles(ticker);
-  const snaps = Feed.getGexHistory(ticker);
+  const candles = Simulator.getCandles(ticker);
+  const snaps = Simulator.getGexHistory(ticker);
   if (!candles?.length || !snaps?.length) return [];
 
   const n = Math.min(DRIFT_BARS, snaps.length, candles.length);
@@ -186,7 +186,7 @@ export function buildVannaCharm(
   // Largest per-strike net-gex change vs the previous scan (the 10s tier —
   // history snaps are ~1/sec, so ten back ≈ one scan ago)
   let delta: MigrationRead['delta'] = null;
-  const snaps = Feed.getGexHistory(ticker);
+  const snaps = Simulator.getGexHistory(ticker);
   if (snaps && snaps.length >= 2) {
     const nowSnap = snaps[snaps.length - 1];
     const prevSnap = snaps[Math.max(0, snaps.length - 1 - 10)];
@@ -200,21 +200,7 @@ export function buildVannaCharm(
       const change = l.value - prev;
       if (!best || Math.abs(change) > Math.abs(best.changeUsd)) best = { strike: l.strike, changeUsd: change };
     }
-    /*
-      NOTHING TO REPORT IS NOT A REPORT. `best` starts as the first strike in
-      the window and is only replaced by a STRICTLY larger absolute change, so
-      when every strike is flat it keeps whichever strike the loop happened to
-      reach first — and the panel printed that as "moved most since last
-      scan". Measured on the running page: 20 samples over 30 seconds, every
-      one of them "+$0", the strike flipping between 502 and 503 as the window
-      shifted. That is iteration order presented as a finding.
-
-      The arithmetic above is untouched. This only declines to publish a
-      "largest move" when there was no move; the row returns the moment one
-      strike actually differs, and the panel's own summary line already says
-      when a scenario leaves every level in place.
-    */
-    if (best && best.changeUsd !== 0) delta = { ...best, distPct: dist(best.strike) };
+    if (best) delta = { ...best, distPct: dist(best.strike) };
   }
 
   // One line: what THIS SCENARIO computes — counts and prices only.

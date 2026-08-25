@@ -1,5 +1,4 @@
 import type { RndData } from '../../../types/gex';
-import { preserveGreek } from '../../ui/greek';
 
 interface RiskNeutralDistProps {
   data: RndData;
@@ -82,9 +81,7 @@ const RiskNeutralDist = ({ data }: RiskNeutralDistProps) => {
       <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 pt-2 border-t border-borderSubtle">
         {statCells.map(s => (
           <span key={s.label} className="min-w-0">
-            <span className="block font-mono text-[8px] uppercase tracking-widest text-textMuted truncate">
-              {preserveGreek(s.label)}
-            </span>
+            <span className="block font-mono text-[8px] uppercase tracking-widest text-textMuted truncate">{s.label}</span>
             <span className={`block font-mono text-[10px] font-semibold tnum ${s.tone ?? 'text-textPrimary'}`}>{s.value}</span>
           </span>
         ))}

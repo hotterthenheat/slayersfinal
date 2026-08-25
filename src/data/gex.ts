@@ -8,7 +8,7 @@
 ==================================================
 */
 
-import Feed from '../core/feed';
+import Simulator from '../core/simulator';
 import { expiryFor } from '../core/calendar';
 import type { MarketSnapshot, StrikeNode } from '../types/market';
 import type {
@@ -46,14 +46,7 @@ export function fmtUsd(v: number): string {
   if (a >= 1e9) return `${sign}$${(a / 1e9).toFixed(1)}B`;
   if (a >= 1e6) return `${sign}$${(a / 1e6).toFixed(1)}M`;
   if (a >= 1e3) return `${sign}$${(a / 1e3).toFixed(1)}K`;
-  /* NEVER "-$0". Anything under half a dollar rounds to zero here, and the
-     sign came from the raw value — so the ranked-targets rail printed the
-     same quantity (nothing) two different ways down one column: $0 on some
-     rows, -$0 on others. Sign belongs to a magnitude; zero has none. Only
-     this branch can round to zero — the B/M/K branches are each guarded by
-     their own threshold. */
-  const whole = a.toFixed(0);
-  return `${whole === '0' ? '' : sign}$${whole}`;
+  return `${sign}$${a.toFixed(0)}`;
 }
 
 // ---- metric extraction ------------------------------------------------------
@@ -276,10 +269,10 @@ export function buildPrints(ticker: string, spot: number): DarkPoolPrint[] {
 function buildBoard(tickers?: string[]): BoardTicker[] {
   const list =
     tickers && tickers.length > 0
-      ? tickers.map(t => Feed.ensureTicker(t))
-      : Feed.WATCHLIST;
+      ? tickers.map(t => Simulator.ensureTicker(t))
+      : Simulator.WATCHLIST;
   return list.map(ticker => {
-    const cfg = Feed.TICKERS[ticker];
+    const cfg = Simulator.TICKERS[ticker];
     const { ladder, maxAbs } = buildLadder(ticker, cfg.currentPrice, cfg.step);
     return {
       ticker,
@@ -295,9 +288,9 @@ function buildBoard(tickers?: string[]): BoardTicker[] {
 /** Key levels for ANY ticker, derived from its latest GEX snapshot — the same
     book the trails draw, so an expanded board chart agrees with its heatmap. */
 export function buildLevelsFor(ticker: string): KeyLevels {
-  const sym = Feed.ensureTicker(ticker);
-  const spot = Feed.TICKERS[sym].currentPrice;
-  const snaps = Feed.getGexHistory(sym);
+  const sym = Simulator.ensureTicker(ticker);
+  const spot = Simulator.TICKERS[sym].currentPrice;
+  const snaps = Simulator.getGexHistory(sym);
   const latest = snaps?.[snaps.length - 1];
   if (!latest) return { spot, callWall: spot, putWall: spot, flip: spot, king: spot };
 

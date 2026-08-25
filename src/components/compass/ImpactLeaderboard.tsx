@@ -49,10 +49,8 @@ const FACTS: {
     label: <Term k="Exposure">Exposure</Term>,
     raw: r => r.exposureUsd,
     format: fmtUsd,
-    // Dealer side, so gold/steel: negative = dealers absorb (steel), positive
-    // = hedging amplifies (gold). Red and green are price direction only —
-    // docs/dealer-ink-pass.md, step 3.
-    tone: r => (r.exposureUsd < 0 ? 'text-steel-ink' : 'text-gold-ink'),
+    // Sim side-coding: negative = dealers absorb (bull), positive = amplify (bear)
+    tone: r => (r.exposureUsd < 0 ? 'text-bull' : 'text-bear'),
   },
 ];
 

@@ -18,7 +18,7 @@
 */
 
 import { useEffect, useState } from 'react';
-import Feed from '../../core/feed';
+import Simulator from '../../core/simulator';
 
 // ---- one shared seeding queue ----------------------------------------------
 const queued = new Set<string>();
@@ -40,7 +40,7 @@ function requestSeed(sym: string): void {
       return;
     }
     try {
-      Feed.ensureTicker(next);
+      Simulator.ensureTicker(next);
     } catch {
       /* a name the sim can't build simply never gets a spark */
     }
@@ -68,12 +68,12 @@ interface SessionSparkProps {
 
 const SessionSpark = ({ ticker, width = 96, height = 26 }: SessionSparkProps) => {
   const [, force] = useState(0);
-  const bars = Feed.peekCandles(ticker);
+  const bars = Simulator.peekCandles(ticker);
 
   useEffect(() => {
     if (bars) return;
     const bump = () => {
-      if (Feed.peekCandles(ticker)) force(n => n + 1);
+      if (Simulator.peekCandles(ticker)) force(n => n + 1);
     };
     listeners.add(bump);
     requestSeed(ticker);

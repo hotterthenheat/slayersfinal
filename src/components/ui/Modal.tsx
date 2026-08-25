@@ -14,10 +14,9 @@
 ==================================================
 */
 
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
-import { useFocusTrap } from './useFocusTrap';
 
 interface ModalProps {
   open: boolean;
@@ -49,12 +48,6 @@ const Modal = ({ open, onClose, ariaLabel, header, children, headerActions, head
     };
   }, [open, onClose]);
 
-  /* Escape and the scroll lock were already here; the keyboard was not.
-     Opening this card left focus on the row behind it, so the first Tab
-     walked the tape underneath instead of the drilldown on top of it. */
-  const cardRef = useRef<HTMLDivElement | null>(null);
-  useFocusTrap(open, cardRef);
-
   if (!open) return null;
 
   return createPortal(
@@ -62,30 +55,18 @@ const Modal = ({ open, onClose, ariaLabel, header, children, headerActions, head
       {/* Backdrop — dimmed but deliberately still legible underneath */}
       <div className="absolute inset-0 bg-black/55 backdrop-blur-[2px] animate-modal-backdrop" onClick={onClose} aria-hidden />
 
-      {/* tabIndex -1: not a tab stop, but focusable, so the trap has somewhere
-          to put the keyboard when the card has no focusable child of its own. */}
       <div
-        ref={cardRef}
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel}
-        tabIndex={-1}
         className={`relative w-full ${widthClass} max-h-[86vh] flex flex-col border border-borderMuted bg-panel rounded-lg shadow-2xl shadow-black/70 overflow-hidden animate-modal-card`}
       >
         {/* Three tracks so the centre stays centred no matter how long the
-            identity on the left runs — an absolute overlay would collide.
-
-            THREE TRACKS NEED THREE TRACKS' WORTH OF ROOM. Held at every width,
-            the identity was squeezed into roughly 100px on a 390px screen and
-            wrapped to seven lines, with the stepper and the close button
-            floating vertically centred in the MIDDLE of that stack — measured
-            on the print drilldown, a 250px header on an 844px phone. Below
-            `sm` the header wraps instead: identity across the top, controls on
-            the row beneath. The grid returns the moment there is room for it. */}
-        <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-borderSubtle shrink-0 sm:grid sm:grid-cols-[1fr_auto_1fr] sm:gap-3">
-          <div className="w-full min-w-0 sm:w-auto">{header}</div>
+            identity on the left runs — an absolute overlay would collide. */}
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 py-3 border-b border-borderSubtle shrink-0">
+          <div className="min-w-0">{header}</div>
           <div className="flex items-center justify-center">{headerCenter}</div>
-          <div className="ml-auto flex items-center justify-end gap-2 sm:ml-0">
+          <div className="flex items-center justify-end gap-2">
             {headerActions}
             <button
               onClick={onClose}

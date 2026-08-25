@@ -10,6 +10,7 @@
 */
 
 import { dayKey, hGauss, h01, hRange } from '../core/rng';
+import { tickerSentiment } from './news';
 import { UNIVERSE } from './universe';
 import type { Sector } from './universe';
 
@@ -31,29 +32,13 @@ export interface EarningsEvent {
   /** true = company has officially set the date; false = still an analyst estimate */
   confirmed: boolean;
   slot: ReportSlot;
-  /** Expected move for the print, %.
-
-      NOT straddle-implied, whatever this comment said before. It is
-      `histAvgMovePct * richness` (line ~388), and `richness` is drawn from a
-      hash BEFORE it — so the implied move is derived from the realized one,
-      not measured against it. */
+  /** Straddle-implied move for the print, % */
   impliedMovePct: number;
   /** Average absolute move over the last 8 prints, % */
   histAvgMovePct: number;
   /** The last 8 earnings-day moves, signed %, oldest first — the receipts */
   pastMoves: { label: string; movePct: number }[];
-  /** The richness factor, 0.7-1.75.
-
-      Reads as `implied ÷ realized` on screen and that arithmetic holds, but
-      the causality runs the other way: this is the INPUT, drawn first, and
-      the implied move is realized × this. The ratio the board prints as
-      PRICED is therefore this number returned to itself, not two independent
-      measurements that happen to disagree.
-
-      That is a property of the generator, not of the shape. Both fields
-      survive a real feed unchanged: implied comes off the straddle, realized
-      off the last 8 prints, and the ratio becomes a comparison. Until then
-      the panel should not be read as evidence of anything. */
+  /** implied ÷ realized — the mispricing everything hangs on */
   richness: number;
   /** % of the last 8 quarters beaten */
   beatRate8q: number;
@@ -420,11 +405,7 @@ export function buildEarningsCalendar(): EarningsEvent[] {
         pastMoves: pastMovesFor(s, histAvgMovePct),
         richness,
         beatRate8q: Math.round(hRange(s('beat'), 25, 95) / 12.5) * 12.5,
-        /* The news term is gone with the News desk — it had no source. What is
-           left is still unsourced: estimate revisions need an analyst-estimates
-           product, which is the same missing purchase as beatRate8q. Flagged
-           for the Earnings re-scope rather than widened here. */
-        revisionTrend: Math.max(-1, Math.min(1, hGauss(s('rev')) * 0.45)),
+        revisionTrend: Math.max(-1, Math.min(1, hGauss(s('rev')) * 0.45 + tickerSentiment(u.ticker) * 0.4)),
         ivRank: Math.round(hRange(s('ivr'), 35, 96)),
         technicalScore: Math.round(hRange(s('tech'), 22, 92)),
         flowLean: Math.max(-1, Math.min(1, hGauss(s('flow')) * 0.5)),

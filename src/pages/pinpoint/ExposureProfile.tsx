@@ -15,7 +15,6 @@ import Term from '../../components/ui/Term';
 import ExposureMatrix from '../../components/gex/ExposureMatrix';
 import PositioningMap from '../../components/gex/PositioningMap';
 import ExposureInsight from '../../components/gex/ExposureInsight';
-import { etClock } from '../../core/etFormat';
 
 /** Exposure sweeps on its own cadence — bars must not vibrate with every tick. */
 const SCAN_INTERVAL_MS = 10_000;
@@ -63,7 +62,7 @@ const ExposureProfile = () => {
       scanRef.current = marketData;
       lastScanTimeRef.current = now;
       setScanSnapshot(marketData);
-      setLastScanAt(etClock(new Date(now)));
+      setLastScanAt(new Date(now).toLocaleTimeString('en-GB'));
     }
   }, [marketData]);
 
@@ -121,9 +120,9 @@ const ExposureProfile = () => {
             {(['gex', 'dex', 'vex'] as const).map(k => (
               <span key={k} className="font-mono text-[10px] uppercase tracking-wider text-textMuted tnum">
                 {k}{' '}
-                <span className="text-gold-ink">{fmtUsd(selectedRow[k].put)}</span>
+                <span className="text-bear">{fmtUsd(selectedRow[k].put)}</span>
                 {' / '}
-                <span className="text-steel-ink">{fmtUsd(selectedRow[k].call)}</span>
+                <span className="text-bull">{fmtUsd(selectedRow[k].call)}</span>
                 {' / '}
                 <span className="text-textPrimary font-semibold">{fmtUsd(selectedRow[k].net)}</span>
               </span>
@@ -187,10 +186,7 @@ const ExposureProfile = () => {
                   </span>
                 </>
               }
-              /* Dollars of dealer gamma, so gold/steel rather than the candles'
-                 own red and green — docs/dealer-ink-pass.md step 3. The WORDS
-                 beside it stay plain: "moves amplified" is a read on price. */
-              valueCls={data.netGex > 0 ? 'text-gold-ink' : 'text-steel-ink'}
+              valueCls={data.netGex > 0 ? 'text-bear' : 'text-bull'}
             />
             <Fact label={<Term k="Net DEX" />} value={<AnimatedNumber value={data.netDex} format={fmtUsd} />} />
             <Fact label={<Term k="Net VEX" />} value={<AnimatedNumber value={data.netVex} format={fmtUsd} />} />

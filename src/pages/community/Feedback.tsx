@@ -46,7 +46,7 @@ const Feedback = () => {
               value={message}
               onChange={e => setMessage(e.target.value)}
               placeholder="What slowed you down, confused you, or looked wrong?"
-              rows={7}
+              rows={4}
               className="w-full bg-inputBg border border-borderSubtle rounded-md px-2.5 py-2 text-[12px] text-textPrimary placeholder:text-textMuted focus:border-borderMuted outline-none transition-colors resize-y"
             />
             <div className="flex items-center gap-3">
@@ -66,25 +66,9 @@ const Feedback = () => {
           </div>
         </Panel>
 
-        <Panel
-          title="Your notes"
-          subtitle="stored in this browser until accounts launch"
-          flush={state.feedback.length > 0}
-          className="w-full"
-        >
-          {state.feedback.length === 0 ? (
-            <div className="flex min-h-[200px] flex-col items-center justify-center gap-2 text-center">
-              <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Nothing sent yet</span>
-              <p className="max-w-[42ch] text-[12.5px] leading-relaxed text-textSecondary">
-                Whatever you send comes back here so you can read it later.
-              </p>
-              <p className="max-w-[46ch] text-[11.5px] leading-relaxed text-textMuted">
-                Notes are written to this browser and nowhere else — clearing site data clears them with it.
-                Accounts will move them somewhere that survives a new laptop.
-              </p>
-            </div>
-          ) : (
-            state.feedback.map(fb => (
+        {state.feedback.length > 0 && (
+          <Panel title="Your notes" subtitle="stored in this browser until accounts launch" flush className="w-full">
+            {state.feedback.map(fb => (
               <div key={fb.id} className="px-4 py-2.5 border-b border-borderSubtle/40 last:border-0">
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-[9px] font-semibold uppercase tracking-widest text-textSecondary">
@@ -92,11 +76,11 @@ const Feedback = () => {
                   </span>
                   <span className="ml-auto font-mono text-[10px] text-textMuted tnum">{timeAgo(fb.createdAt)}</span>
                 </div>
-                <p className="mt-1 text-[12px] text-textSecondary leading-relaxed break-words">{fb.message}</p>
+                <p className="mt-1 text-[12px] text-textSecondary leading-relaxed">{fb.message}</p>
               </div>
-            ))
-          )}
-        </Panel>
+            ))}
+          </Panel>
+        )}
       </div>
 
       {/* The loop, closed */}
@@ -106,8 +90,8 @@ const Feedback = () => {
             <div key={item.title} className="flex items-start gap-2.5 px-4 py-3 border-b border-borderSubtle/40 last:border-0">
               <Check className="w-3.5 h-3.5 text-bull shrink-0 mt-0.5" />
               <div className="min-w-0">
-                <span className="block text-[12px] font-semibold text-textPrimary break-words">{item.title}</span>
-                <span className="block text-[11px] text-textSecondary leading-snug break-words">{item.note}</span>
+                <span className="block text-[12px] font-semibold text-textPrimary">{item.title}</span>
+                <span className="block text-[11px] text-textSecondary leading-snug">{item.note}</span>
               </div>
             </div>
           ))}

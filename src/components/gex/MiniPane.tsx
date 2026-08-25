@@ -10,19 +10,11 @@ import {
   type IPriceLine,
   type UTCTimestamp,
 } from 'lightweight-charts';
-import Feed from '../../core/feed';
+import Simulator from '../../core/simulator';
 import { DARK_POOL } from './palette';
-import {
-  getCandleTheme,
-  useCandleThemeKey,
-  candleSeriesOptions,
-  chartSurface,
-  etTime,
-  etTickMark,
-} from './candleTheme';
+import { getCandleTheme, useCandleThemeKey, candleSeriesOptions, chartSurface } from './candleTheme';
 import TickerQuickPick from './TickerQuickPick';
 import type { DarkPoolPrint } from '../../types/gex';
-import { FONT_FAMILY } from '../ui/typeface';
 
 interface MiniPaneProps {
   ticker: string;
@@ -64,22 +56,13 @@ const MiniPane = ({ ticker, spot, changePercent, prints, revision, onChangeTicke
       layout: {
         background: { color: s0.bg },
         textColor: '#5a5a5a',
-        fontFamily: FONT_FAMILY,
+        fontFamily: "'SF Pro', sans-serif",
         fontSize: 9,
         attributionLogo: false,
       },
       grid: { vertLines: { visible: false }, horzLines: { color: s0.grid } },
       rightPriceScale: { borderColor: '#1c1c1c' },
-      // Same Eastern clock as the full chart — see candleTheme.ts.
-      localization: { timeFormatter: (t: number) => etTime(t) },
-      timeScale: {
-        borderColor: '#1c1c1c',
-        timeVisible: true,
-        secondsVisible: false,
-        rightOffset: 3,
-        barSpacing: 4,
-        tickMarkFormatter: (t: number, tickMarkType: number) => etTickMark(t, tickMarkType),
-      },
+      timeScale: { borderColor: '#1c1c1c', timeVisible: true, secondsVisible: false, rightOffset: 3, barSpacing: 4 },
       crosshair: {
         vertLine: { color: 'rgba(255,255,255,0.25)', labelBackgroundColor: '#262626' },
         horzLine: { color: 'rgba(255,255,255,0.25)', labelBackgroundColor: '#262626' },
@@ -122,7 +105,7 @@ const MiniPane = ({ ticker, spot, changePercent, prints, revision, onChangeTicke
       layout: { background: { color: s.bg } },
       grid: { horzLines: { color: s.grid } },
     });
-    const bars = Feed.getCandles(ticker);
+    const bars = Simulator.getCandles(ticker);
     if (bars && bars.length > 0 && volumeRef.current) {
       volumeRef.current.setData(
         bars.map(b => ({
@@ -141,7 +124,7 @@ const MiniPane = ({ ticker, spot, changePercent, prints, revision, onChangeTicke
     const volumeSeries = volumeRef.current;
     if (!chart || !candleSeries || !volumeSeries) return;
 
-    const bars = Feed.getCandles(ticker);
+    const bars = Simulator.getCandles(ticker);
     if (!bars || bars.length === 0) return;
 
     const theme = getCandleTheme();

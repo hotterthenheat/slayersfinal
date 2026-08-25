@@ -16,19 +16,10 @@ import SignalBadge from '../ui/SignalBadge';
 import SessionSpark from './SessionSpark';
 import { hitLevel } from './setupStage';
 import { processState, PROCESS_META } from './setupProcess';
-import { preserveGreek } from '../ui/greek';
 
-/*
-  Labels go through preserveGreek because these carry `uppercase`, and CSS
-  uppercasing does not skip Greek: it renders "1σ move" as "1Σ MOVE". Σ is
-  summation, σ is a standard deviation, and on a terminal that also prints Θ
-  for theta the substitution is not cosmetic. Wrapping at the component rather
-  than the call site means a label written here later is protected too —
-  src/components/ui/greek.tsx.
-*/
 const Stat = ({ label, value, ink = 'text-textPrimary', right = false }: { label: string; value: string; ink?: string; right?: boolean }) => (
   <span className={`flex flex-col gap-0.5 min-w-0 ${right ? 'items-end text-right' : ''}`}>
-    <span className="font-mono text-[9px] uppercase tracking-wider text-textMuted">{preserveGreek(label)}</span>
+    <span className="font-mono text-[9px] uppercase tracking-wider text-textMuted">{label}</span>
     <span className={`font-mono text-[13px] font-semibold tnum ${ink}`}>{value}</span>
   </span>
 );
@@ -54,27 +45,6 @@ const SetupScanCard = ({ setup, rank, selected, onSelect, onAnalysis, expiryChip
     <button
       onClick={() => onSelect(setup)}
       aria-pressed={selected}
-      /*
-        WITHOUT THIS, THE CARD'S NAME IS THE WHOLE CARD.
-
-        A button with no aria-label is named by its text content, and this
-        card holds a lot of it. Measured: 97 characters, read out in one run
-        before the reader knows what the control even does —
-
-          "#1MSFT 430C0DTE · 08/25/26Top pickTP1 HITACTIVE1σ move±1%Premium
-           $1.68Breaks below $426.03Analysis"
-
-        Naming it explicitly says the one thing a reader needs to decide
-        whether to press it, and everything else stays available by reading
-        the card itself.
-
-        This does NOT close the other half — the card is a <button> holding
-        an interactive "Analysis" control, which HTML's content model
-        forbids, and that is open decision #11 because the fix restructures
-        the card. The name is the part BOTH candidate answers to #11 need,
-        which is why it is here and the rest is not.
-      */
-      aria-label={`Setup ${rank}, ${setup.contract}, expiry ${setup.expiry}${selected ? ', selected' : ''}`}
       title={selected ? 'Selected — click again for the full analysis' : 'Select — the rail shows this name’s book'}
       /* Selected = the white "where you are" ink (Noah, 2026-08-19: "a white
          border button") — one click selects and points the rail at this

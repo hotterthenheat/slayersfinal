@@ -51,8 +51,6 @@ import RichRead from '../ui/RichRead';
 import { flowAxisLabel, flowClock, sessionDate, type ContractFlow, type ContractPrintPoint } from '../../data/contractflow';
 import { fmtUsd } from '../../data/gex';
 import { BULL, KING } from '../gex/palette';
-import { FONT_FAMILY } from '../ui/typeface';
-import { fmtNum } from '../../core/numFormat';
 
 const ASK = BULL; // lifted the offer — the market's bull colour
 const BID = '#FF3B30';
@@ -81,13 +79,13 @@ const printLine = (min: number, yAxisId: string, withLabel: boolean) => (
     strokeDasharray="4 3"
     label={
       withLabel
-        ? { value: 'THIS PRINT', position: 'insideTopLeft', fill: PRICE_LINE, fontSize: 9, fontFamily: FONT_FAMILY, offset: 8 }
+        ? { value: 'THIS PRINT', position: 'insideTopLeft', fill: PRICE_LINE, fontSize: 9, fontFamily: "'SF Pro', sans-serif", offset: 8 }
         : undefined
     }
   />
 );
 
-const axisTick = { fill: AXIS, fontSize: 9, fontFamily: FONT_FAMILY };
+const axisTick = { fill: AXIS, fontSize: 9, fontFamily: "'SF Pro', sans-serif" };
 
 const Box = ({ children }: { children: React.ReactNode }) => (
   <div className="rounded border border-borderMuted bg-panel px-2.5 py-1.5 shadow-2xl shadow-black/60 font-mono text-[10px]">
@@ -305,7 +303,7 @@ const LedgerLayer = ({ bins, intervalMin, whale }: {
           fill={KING}
           fontSize={9}
           fontWeight={600}
-          fontFamily={FONT_FAMILY}
+          fontFamily="'SF Pro', sans-serif"
         >
           LARGEST PRINT · {fmtUsd(whale.premium)}
         </text>
@@ -397,7 +395,7 @@ export const FlowPanel = ({ cf, showAvg, onShowAvg, showIv, onShowIv, dayOffset,
         leftLabel="Hit the bid"
         rightLabel="Paid the offer"
         leftPct={100 - s.askSharePct}
-        caption={`${fmtNum(s.bidCount)} / ${fmtNum(s.midCount)} mid / ${fmtNum(s.askCount)}`}
+        caption={`${s.bidCount.toLocaleString()} / ${s.midCount.toLocaleString()} mid / ${s.askCount.toLocaleString()}`}
       />
 
       <div className="h-[200px] -ml-2">
@@ -609,7 +607,7 @@ const BarTooltip = ({ active, payload, isUsd }: BarTipProps) => {
   if (!p) return null;
   const call = isUsd ? p.callPrem : p.callVol;
   const put = isUsd ? p.putPrem : p.putVol;
-  const fmt = (v: number) => (isUsd ? fmtUsd(Math.abs(v)) : `${fmtNum(Math.abs(v))} contracts`);
+  const fmt = (v: number) => (isUsd ? fmtUsd(Math.abs(v)) : `${Math.abs(v).toLocaleString()} contracts`);
   return (
     <Box>
       <div className="text-textMuted">
@@ -636,8 +634,8 @@ const StrikeTooltip = ({ active, payload }: StrikeTipProps) => {
         {Number.isFinite(p.strike) ? `${p.strike} strike` : ''}
         {p.isFocus && <span className="text-select"> · this contract</span>}
       </div>
-      {Number.isFinite(p.callVol) && <div style={{ color: ASK }}>calls {fmtNum(p.callVol as number)}</div>}
-      {Number.isFinite(p.putVol) && <div style={{ color: BID }}>puts {fmtNum(Math.abs(p.putVol as number))}</div>}
+      {Number.isFinite(p.callVol) && <div style={{ color: ASK }}>calls {(p.callVol as number).toLocaleString()}</div>}
+      {Number.isFinite(p.putVol) && <div style={{ color: BID }}>puts {Math.abs(p.putVol as number).toLocaleString()}</div>}
     </Box>
   );
 };
@@ -694,9 +692,9 @@ export const NetPanel = ({
         <MetricPicker value={metric} onChange={onMetric} />
         {isVolOrUsd ? (
           <span className="font-mono text-[10px] text-textMuted tnum">
-            {fmtNum(u.callVol + u.putVol)} contracts · {fmtUsd(u.callPrem + u.putPrem)} traded · calls minus puts{' '}
+            {(u.callVol + u.putVol).toLocaleString()} contracts · {fmtUsd(u.callPrem + u.putPrem)} traded · calls minus puts{' '}
             <span className={(isUsd ? u.callPrem - u.putPrem : u.callVol - u.putVol) >= 0 ? 'text-bull font-semibold' : 'text-bear font-semibold'}>
-              {isUsd ? fmtUsd(u.callPrem - u.putPrem) : fmtNum(u.callVol - u.putVol)}
+              {isUsd ? fmtUsd(u.callPrem - u.putPrem) : (u.callVol - u.putVol).toLocaleString()}
             </span>
           </span>
         ) : metric === 'netPremium' ? (
@@ -721,7 +719,7 @@ export const NetPanel = ({
           leftLabel="Puts"
           rightLabel="Calls"
           leftPct={isUsd ? u.putPremSharePct : u.putSharePct}
-          caption={isUsd ? fmtUsd(u.putPrem) + ' vs ' + fmtUsd(u.callPrem) : `${fmtNum(u.putVol)} vs ${fmtNum(u.callVol)}`}
+          caption={isUsd ? fmtUsd(u.putPrem) + ' vs ' + fmtUsd(u.callPrem) : `${u.putVol.toLocaleString()} vs ${u.callVol.toLocaleString()}`}
         />
       ) : metric === 'netPremium' ? (
         <TugBar
@@ -741,7 +739,7 @@ export const NetPanel = ({
             <ComposedChart data={cf.strikes} margin={{ top: 6, right: RIGHT_PAD + Y_RIGHT_W, bottom: 0, left: 0 }}>
               <CartesianGrid stroke={GRID} vertical={false} />
               <XAxis dataKey="strike" tick={axisTick} stroke={AXIS} tickLine={false} />
-              <YAxis tick={axisTick} stroke={AXIS} tickLine={false} width={Y_LEFT_W} tickFormatter={(v: number) => fmtNum(Math.abs(v))} />
+              <YAxis tick={axisTick} stroke={AXIS} tickLine={false} width={Y_LEFT_W} tickFormatter={(v: number) => Math.abs(v).toLocaleString()} />
               <Tooltip content={<StrikeTooltip />} isAnimationActive={false} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
               <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" />
               <Bar dataKey="callVol" stackId="k" fill={ASK} fillOpacity={0.75} isAnimationActive={false} />
@@ -752,7 +750,7 @@ export const NetPanel = ({
                   stroke={PRICE_LINE}
                   strokeOpacity={0.9}
                   strokeDasharray="4 3"
-                  label={{ value: 'THIS CONTRACT', position: 'insideTopLeft', fill: PRICE_LINE, fontSize: 9, fontFamily: FONT_FAMILY, offset: 8 }}
+                  label={{ value: 'THIS CONTRACT', position: 'insideTopLeft', fill: PRICE_LINE, fontSize: 9, fontFamily: "'SF Pro', sans-serif", offset: 8 }}
                 />
               )}
             </ComposedChart>

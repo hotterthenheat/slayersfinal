@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Bookmark, Check, ChevronDown, Pause, Play, Search, SlidersHorizontal, X } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { ArrowUp, Bookmark, Check, ChevronDown, Filter, Pause, Play, Search, SlidersHorizontal, X } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { enrichPrint, rankNotable, sentimentOf, summarizeTape } from '../../data/tape';
 import { buildGexView, fmtUsd } from '../../data/gex';
@@ -10,8 +11,6 @@ import type { TermKey } from '../../data/terms';
 import RichRead from '../../components/ui/RichRead';
 import PrintDrilldown from '../../components/trace/PrintDrilldown';
 import type { FlowPrint, PrintSentiment, TapeSummary } from '../../types/trace';
-import { ROW_INTERACTIVE, interactiveRowProps } from '../../components/ui/interactiveRow';
-import { fmtNum } from '../../core/numFormat';
 
 const MAX_ROWS = 120;
 const READ_INTERVAL_MS = 8_000;
@@ -101,9 +100,8 @@ const TapeRow = memo(
     return (
       <tr
         onClick={() => onOpen(r)}
-        {...interactiveRowProps(() => onOpen(r), isOpen, 'native')}
         title="Open the print drilldown"
-        className={`border-b border-borderSubtle/30 last:border-0 animate-slide-in transition-colors ${ROW_INTERACTIVE} ${
+        className={`border-b border-borderSubtle/30 last:border-0 animate-slide-in cursor-pointer transition-colors ${
           isOpen ? 'bg-white/[0.05]' : 'hover:bg-white/[0.03]'
         } ${rowAccent(r.premium)}`}
       >
@@ -112,21 +110,13 @@ const TapeRow = memo(
           <span className="flex items-center gap-1.5">
             <button
               onClick={e => {
-                // The star is its own control — marking must
+                // The star is its own control — bookmarking must
                 // not also open the drilldown.
                 e.stopPropagation();
                 onMark(r.id);
               }}
               className={`transition-colors ${isMarked ? 'text-select' : 'text-textMuted/40 hover:text-textSecondary'}`}
-              /* MARK, not "track". `marked` is component state (line ~970) —
-                 no localStorage, no context — so it is gone on reload and on
-                 leaving the tape. The desk that would make it durable is
-                 /trace/tracker's TRACKED FLOW module, and that module says
-                 NOT BUILT in its own words. A star labelled "Track print"
-                 promises that desk; this one highlights a row while you are
-                 reading, which is what it actually does. */
-              aria-label={isMarked ? 'Marked — click to clear' : 'Mark this print'}
-              title={isMarked ? 'Marked — click to clear' : 'Mark this print'}
+              aria-label="Track print"
             >
               <Bookmark className="w-3 h-3" fill={isMarked ? 'currentColor' : 'none'} />
             </button>
@@ -170,280 +160,6 @@ function tapeRead(rows: FlowPrint[], summary: TapeSummary): string {
   if (rows.length >= 20 && zdte / rows.length > 0.25) parts.push(`0DTE is ${Math.round((zdte / rows.length) * 100)}% of flow`);
   return `${parts.join(' · ')}.`;
 }
-
-// ---- session beam ---------------------------------------------------------------
-/*
-  The tape's aggregates as ONE instrument — replaces the six-stat-card wall
-  (Noah, 2026-08-18: "ai slob that every single website has"), and deliberately
-  does NOT re-draw the stream: the table below already owns per-print detail
-  (his follow-up: "that didnt mean make the same thing twice"). The beam is a
-  tug-of-war over directional premium — bull dollars fill from the left, bear
-  dollars from the right, and the SEAM'S POSITION is the session verdict, so
-  the label rides it instead of sitting in a labeled box. Composition (call/put
-  premium, sweeps vs blocks) is spoken beside it, and the whale chip is the one
-  door up here: the largest print, click for its drilldown. Aggregates above,
-  prints below — nothing rendered twice.
-*/
-/** The house glide for the beam's geometry — compositor-only (transform), so
-    it stays silky while the table below re-renders every streaming tick.
-    Width/left transitions ran on layout and stuttered (Noah, 2026-08-18:
-    "so laggy and slow"). */
-const BEAM_GLIDE = 'transform 300ms cubic-bezier(0.16, 1, 0.3, 1)';
-
-const SessionBeam = ({
-  rows,
-  summary,
-  label,
-  sub,
-  empty,
-  sentFilter,
-  onSentFilter,
-  onOpen,
-}: {
-  /** The prints in the beam's SCOPE — the active view, not always the session */
-  rows: FlowPrint[];
-  summary: TapeSummary;
-  /** Scope name: "Session flow", "NVDA flow", "Filtered flow" */
-  label: string;
-  sub: string;
-  empty: string;
-  /** The beam's sides are filter doors (Noah, 2026-08-19): click a side to
-      isolate that sentiment on the tape, click again to let go. */
-  sentFilter: SentFilter;
-  onSentFilter: (v: SentFilter) => void;
-  onOpen: (p: FlowPrint) => void;
-}) => {
-  // The whales, split by direction (Noah, 2026-08-19: "way more useful for
-  // reading direction") — largest bullish, largest bearish, and the overall
-  // largest, which is usually one of those two and only earns its own row
-  // when it traded mid.
-  const whales = useMemo(() => {
-    let all: FlowPrint | null = null;
-    let bull: FlowPrint | null = null;
-    let bear: FlowPrint | null = null;
-    for (const p of rows) {
-      if (!all || p.premium > all.premium) all = p;
-      const s = sentimentOf(p);
-      if (s === 'BULLISH' && (!bull || p.premium > bull.premium)) bull = p;
-      if (s === 'BEARISH' && (!bear || p.premium > bear.premium)) bear = p;
-    }
-    return { all, bull, bear };
-  }, [rows]);
-
-  // UNROUNDED for geometry: rounding first made the seam sit frozen and then
-  // hop a whole percent — sub-percent drift is exactly what should glide.
-  const dirTotal = summary.bullPremium + summary.bearPremium;
-  const bullPct = dirTotal > 0 ? (summary.bullPremium / dirTotal) * 100 : 50;
-  const bearish = bullPct < 50;
-  const shownPct = Math.round(bearish ? 100 - bullPct : bullPct);
-  // The verdict label rides the seam; clamped so it never clips an edge.
-  const seam = Math.min(90, Math.max(10, bullPct));
-
-  return (
-    /*
-      THE BEAM IS THE INSTRUMENT; IT GETS THE WIDTH FIRST.
-
-      This row is scope (min-w 104, shrink-0), beam (flex-1), composition
-      (min-w 190, shrink-0) and the whale chip. On a 390px phone the two
-      shrink-0 blocks plus two gaps want more than the row has, so the only
-      thing left to give was the beam — it was measured at 56px wide, and its
-      own end labels ("$1.1M bull" / "bear $1.7M") overflowed a 28px box each
-      and ran together into "$1.1M bullbear $1.7M".
-
-      The boxes did not technically overlap, which is why a bounding-box
-      check called it clean: they abutted at exactly one pixel and the TEXT
-      spilled. Reading the render is what caught it.
-
-      So the row wraps, and the beam carries a floor it cannot be squeezed
-      below. When the width is not there, the beam takes its own line at full
-      width instead of being crushed to make room for two blocks that had
-      declared themselves unshrinkable.
-    */
-    <div className="border border-borderSubtle bg-panel rounded-md px-3.5 py-2.5 flex flex-wrap items-center gap-x-6 gap-y-3">
-      {/* The scope's weight — the label IS the scope, so a filtered strip can
-          never be misread as the market. min-w so a digit-count change
-          ($9.9M -> $10.1M) doesn't nudge the beam. */}
-      <div className="shrink-0 select-none min-w-[104px]">
-        <div className="font-mono text-[9px] uppercase tracking-widest text-textSecondary">{label}</div>
-        <div className="font-mono text-[17px] leading-6 font-bold tnum text-textPrimary">{fmtUsd(summary.totalPremium)}</div>
-        <div className="font-mono text-[9px] text-textMuted tnum">{sub}</div>
-      </div>
-
-      {/* The beam — directional premium as a tug-of-war; the seam is the verdict */}
-      {rows.length === 0 ? (
-        <div className="flex-1 min-w-[220px] h-[38px] flex items-center justify-center border border-dashed border-borderSubtle rounded font-mono text-[10px] text-textMuted uppercase tracking-widest select-none">
-          {empty}
-        </div>
-      ) : (
-        <div className="flex-1 min-w-[220px] select-none">
-          {/* The label rides the seam on the same glide as the bar — a
-              full-width rail translated by the seam %, label hanging at its
-              left edge (translateX % is compositor-cheap; `left` is not). */}
-          {/* CLIPPED ON X. The span below is full-width on purpose — a
-              translateX percentage resolves against the element's OWN size, so
-              a full-width span is how the seam percentage becomes a container
-              percentage. Only its left edge is used; the rest is scaffolding,
-              and it hung 97px past the panel on a 390px screen, growing
-              <main>'s scroll width and sliding the whole page sideways as the
-              ratio moved. `clip` rather than `hidden` so no scroll container
-              is created. Measured: the label itself stays fully inside the
-              wrapper at 390, 768 and 1440 — nothing visible is lost. */}
-          <div className="relative h-[16px] overflow-x-clip">
-            <span className="absolute inset-x-0 top-0" style={{ transform: `translateX(${seam}%)`, transition: BEAM_GLIDE }}>
-              <span
-                className={`absolute left-0 -translate-x-1/2 font-mono text-[11px] font-bold tnum whitespace-nowrap ${
-                  bearish ? 'text-bear' : 'text-bull'
-                }`}
-              >
-                {shownPct}% {bearish ? 'BEAR' : 'BULL'}
-              </span>
-            </span>
-          </div>
-          {/* BOTH sides are composited scaleX layers — bull from the left,
-              bear from the right — so they rasterize identically. Scaling
-              green over a static red ground put the two on different
-              pixel-snapping paths, and the green layer could land half a
-              device pixel low, exposing a red sliver along the top edge
-              (Noah, 2026-08-18: "red is on top a bit"). The tick rides the
-              seam and covers the junction. */}
-          <div className="relative h-[12px] rounded-sm overflow-hidden bg-white/[0.05]">
-            <span
-              className="absolute inset-0 origin-left bg-bull/90"
-              style={{ transform: `scaleX(${bullPct / 100})`, transition: BEAM_GLIDE }}
-            />
-            <span
-              className="absolute inset-0 origin-right bg-bear/80"
-              style={{ transform: `scaleX(${(100 - bullPct) / 100})`, transition: BEAM_GLIDE }}
-            />
-            <span className="absolute inset-0 pointer-events-none" style={{ transform: `translateX(${bullPct}%)`, transition: BEAM_GLIDE }}>
-              {/* Dark guards flank the white core (the heatmap king-ring trick):
-                  at fractional positions the tick's antialiased edges blended
-                  into green on one side and red on the other — two different
-                  halo colors that read as asymmetry (Noah, 2026-08-18). With
-                  guards, white always meets dark, identically on both sides,
-                  and the fills' own seam edges hide underneath. */}
-              <span className="absolute left-0 top-0 bottom-0 w-[6px] -translate-x-1/2 flex">
-                <span className="w-[2px] h-full bg-[#0a0a0a]" />
-                <span className="w-[2px] h-full bg-[#ededed]" />
-                <span className="w-[2px] h-full bg-[#0a0a0a]" />
-              </span>
-            </span>
-            {/* The sides are the filter. With a sentiment already isolated the
-                beam is one color, so the whole bar becomes the way back out. */}
-            {sentFilter === 'ALL' ? (
-              <>
-                <button
-                  aria-label="Filter the tape to bullish prints"
-                  title="Show only bullish prints"
-                  onClick={() => onSentFilter('BULLISH')}
-                  className="absolute inset-y-0 left-0 z-10 cursor-pointer hover:bg-white/[0.09] transition-colors"
-                  style={{ width: `${bullPct}%` }}
-                />
-                <button
-                  aria-label="Filter the tape to bearish prints"
-                  title="Show only bearish prints"
-                  onClick={() => onSentFilter('BEARISH')}
-                  className="absolute inset-y-0 right-0 z-10 cursor-pointer hover:bg-white/[0.09] transition-colors"
-                  style={{ width: `${100 - bullPct}%` }}
-                />
-              </>
-            ) : (
-              <button
-                aria-label="Clear the sentiment filter"
-                title="Back to the whole tape"
-                onClick={() => onSentFilter('ALL')}
-                className="absolute inset-0 z-10 cursor-pointer hover:bg-white/[0.09] transition-colors"
-              />
-            )}
-          </div>
-          <div className="mt-1 flex justify-between font-mono text-[9px] tnum">
-            <span className="text-bull">{fmtUsd(summary.bullPremium)} bull</span>
-            <span className="text-bear">bear {fmtUsd(summary.bearPremium)}</span>
-          </div>
-        </div>
-      )}
-
-      {/* Composition — spoken, not boxed. min-w keeps the beam from breathing
-          as the dollar strings change length. */}
-      <div className="shrink-0 text-right select-none min-w-[190px]">
-        <div className="font-mono text-[11px] tnum leading-5">
-          <span className="text-bull font-semibold">{summary.callCount}C</span>
-          <span className="text-textMuted tnum"> {fmtUsd(summary.callPremium)} </span>
-          <span className="text-textMuted">/</span>
-          <span className="text-bear font-semibold"> {summary.putCount}P</span>
-          <span className="text-textMuted tnum"> {fmtUsd(summary.putPremium)}</span>
-        </div>
-        <div className="font-mono text-[10px] text-textMuted tnum leading-4">
-          <span className="text-warn">{summary.sweeps} sweeps</span> · {summary.blocks} blocks
-        </div>
-      </div>
-
-      {/* The whales, in the magenta frame (Noah, 2026-08-19: the plain list
-          "looks generic. i liked the big magenta look"). The chip is the
-          whale-family door it always was; inside it the OVERALL largest is
-          the hero line and the other side's largest rides below in half
-          voice — a mid-side hero gets both sides beneath it. Every line is
-          a door to its drilldown; size × fill rides the title. min-h covers
-          the two-secondary case per the never-resize law. */}
-      {whales.all &&
-        (() => {
-          const hero = whales.all;
-          const heroSent = sentimentOf(hero);
-          const heroWord = heroSent === 'BULLISH' ? 'Bull' : heroSent === 'BEARISH' ? 'Bear' : 'Mid';
-          const heroInk = heroSent === 'BULLISH' ? 'text-bull' : heroSent === 'BEARISH' ? 'text-bear' : 'text-textSecondary';
-          const others = (
-            [
-              { key: 'bull', p: whales.bull, word: 'Bull', ink: 'text-bull' },
-              { key: 'bear', p: whales.bear, word: 'Bear', ink: 'text-bear' },
-            ] as { key: string; p: FlowPrint | null; word: string; ink: string }[]
-          ).filter((o): o is { key: string; p: FlowPrint; word: string; ink: string } => !!o.p && o.p !== hero);
-          const door = (p: FlowPrint) => `${fmtNum(p.size)} × $${p.fill.toFixed(2)} · open the drilldown`;
-          return (
-            <div className="shrink-0 flex flex-col justify-center rounded-md border border-[#EA00FF]/40 bg-[#EA00FF]/[0.06] px-2.5 py-1.5 min-w-[236px] min-h-[64px] select-none">
-              <span className="flex items-baseline gap-2">
-                <span className="font-mono text-[8px] font-semibold uppercase tracking-widest text-[#EA00FF]">
-                  Largest prints
-                </span>
-                <span className={`ml-auto font-mono text-[8px] font-semibold uppercase tracking-wider ${hero.sweep ? 'text-warn' : 'text-textMuted'}`}>
-                  {hero.sweep ? 'Sweep' : 'Block'}
-                </span>
-              </span>
-              <button
-                onClick={() => onOpen(hero)}
-                title={door(hero)}
-                className="flex items-baseline gap-1.5 w-full text-left rounded font-mono tnum hover:bg-[#EA00FF]/[0.08] transition-colors"
-              >
-                <span className={`shrink-0 text-[8px] font-semibold uppercase tracking-wider ${heroInk}`}>{heroWord}</span>
-                <span className="text-[11px] leading-4 font-bold text-textPrimary whitespace-nowrap">
-                  {hero.ticker} {hero.strike}
-                  {hero.right}
-                  <span className={`font-normal ${hero.dte === 0 ? 'text-warn' : 'text-textSecondary'}`}> · {hero.dte}d</span>
-                </span>
-                <span className="text-[11px] leading-4 font-bold text-textPrimary">{fmtUsd(hero.premium)}</span>
-                <span className="ml-auto text-[9px] text-textMuted whitespace-nowrap">{hero.time}</span>
-              </button>
-              {others.map(o => (
-                <button
-                  key={o.key}
-                  onClick={() => onOpen(o.p)}
-                  title={door(o.p)}
-                  className="flex items-baseline gap-1.5 w-full text-left rounded font-mono tnum hover:bg-[#EA00FF]/[0.08] transition-colors"
-                >
-                  <span className={`shrink-0 text-[8px] font-semibold uppercase tracking-wider ${o.ink}`}>{o.word}</span>
-                  <span className="text-[9px] leading-4 text-textSecondary whitespace-nowrap">
-                    {o.p.ticker} {o.p.strike}
-                    {o.p.right} · {o.p.dte}d · <span className="font-bold text-textPrimary">{fmtUsd(o.p.premium)}</span>
-                    {o.p.sweep && <span className="text-warn font-semibold"> · sweep</span>}
-                  </span>
-                  <span className="ml-auto text-[9px] text-textMuted whitespace-nowrap">{o.p.time}</span>
-                </button>
-              ))}
-            </div>
-          );
-        })()}
-    </div>
-  );
-};
 
 // ---- cells ----------------------------------------------------------------------
 const SpreadCell = ({ print }: { print: FlowPrint }) => {
@@ -597,7 +313,7 @@ const TAPE_COLUMNS: TapeColumn[] = [
     group: 'Execution',
     label: 'Size',
     align: 'right',
-    cell: r => <span className="font-mono text-[11px] tnum text-textPrimary">{fmtNum(r.size)}</span>,
+    cell: r => <span className="font-mono text-[11px] tnum text-textPrimary">{r.size.toLocaleString()}</span>,
   },
   {
     key: 'prem',
@@ -635,14 +351,14 @@ const TAPE_COLUMNS: TapeColumn[] = [
     group: 'Activity',
     label: 'Vol',
     align: 'right',
-    cell: r => <span className="font-mono text-[10px] tnum text-textSecondary">{fmtNum(r.volume)}</span>,
+    cell: r => <span className="font-mono text-[10px] tnum text-textSecondary">{r.volume.toLocaleString()}</span>,
   },
   {
     key: 'oi',
     group: 'Activity',
     label: 'OI',
     align: 'right',
-    cell: r => <span className="font-mono text-[10px] tnum text-textSecondary">{fmtNum(r.oi)}</span>,
+    cell: r => <span className="font-mono text-[10px] tnum text-textSecondary">{r.oi.toLocaleString()}</span>,
   },
   {
     key: 'deltaOi',
@@ -655,7 +371,7 @@ const TAPE_COLUMNS: TapeColumn[] = [
       ) : (
         <span className={`font-mono text-[10px] tnum ${r.deltaOI > 0 ? 'text-bull' : 'text-bear'}`}>
           {r.deltaOI > 0 ? '↑' : '↓'}
-          {fmtNum(Math.abs(r.deltaOI))}
+          {Math.abs(r.deltaOI).toLocaleString()}
         </span>
       ),
   },
@@ -979,6 +695,134 @@ const ColumnChooser = ({
   );
 };
 
+/* One door for every tape filter (Noah, 2026-08-23: "all apart of the same
+   button dropdown... like the column button") — the ColumnChooser's grammar
+   over the three filter axes. Each axis stays SINGLE-select (a sweep-only
+   tape can't also be block-only); checking one side of an axis releases the
+   other, checking it again releases the axis. */
+const FilterChooser = ({
+  flowFilter,
+  onFlow,
+  sentFilter,
+  onSent,
+  minPremKey,
+  onMinPrem,
+}: {
+  flowFilter: FlowFilter;
+  onFlow: (v: FlowFilter) => void;
+  sentFilter: SentFilter;
+  onSent: (v: SentFilter) => void;
+  minPremKey: PremKey;
+  onMinPrem: (v: PremKey) => void;
+}) => {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener('mousedown', onDown);
+    return () => window.removeEventListener('mousedown', onDown);
+  }, [open]);
+
+  const activeCount = (flowFilter !== 'ALL' ? 1 : 0) + (sentFilter !== 'ALL' ? 1 : 0) + (minPremKey !== '0' ? 1 : 0);
+  const clear = () => {
+    onFlow('ALL');
+    onSent('ALL');
+    onMinPrem('0');
+  };
+
+  const Row = ({ checked, label, title, onClick }: { checked: boolean; label: string; title: string; onClick: () => void }) => (
+    <button
+      onClick={onClick}
+      title={title}
+      className="w-full flex items-center gap-2.5 pl-3 pr-2 py-1.5 rounded hover:bg-white/[0.03] transition-colors"
+    >
+      <span
+        className={`inline-flex w-3.5 h-3.5 shrink-0 items-center justify-center rounded-[3px] border transition-colors ${
+          checked ? 'bg-select border-select' : 'border-borderMuted'
+        }`}
+      >
+        {checked && <Check className="w-2.5 h-2.5 text-[#0a0a0a]" />}
+      </span>
+      <span className={`font-mono text-[11px] ${checked ? 'text-textPrimary' : 'text-textSecondary'}`}>{label}</span>
+    </button>
+  );
+
+  const Header = ({ children }: { children: React.ReactNode }) => (
+    <span className="block px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-widest text-textMuted">{children}</span>
+  );
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border font-mono text-[10px] uppercase tracking-wider transition-colors ${
+          open ? 'border-borderMuted bg-white/[0.05] text-textPrimary' : 'border-borderSubtle bg-white/[0.02] text-textSecondary hover:text-textPrimary'
+        }`}
+      >
+        <Filter className="w-3 h-3" />
+        Filters
+        {activeCount > 0 && <span className="tnum text-select">{activeCount}</span>}
+        <ChevronDown className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full mt-1 z-40 w-[210px] border border-borderMuted bg-panel rounded-md shadow-2xl shadow-black/60 overflow-hidden animate-slide-in">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-borderSubtle">
+            <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-textPrimary">Tape filters</span>
+            <button
+              onClick={clear}
+              className="font-mono text-[9px] uppercase tracking-wider text-textSecondary hover:text-select transition-colors"
+            >
+              Clear
+            </button>
+          </div>
+          <div className="py-1 px-1">
+            <Header>Order flow</Header>
+            <Row
+              checked={flowFilter === 'SWEEP'}
+              label="Sweeps"
+              title="Only sweeps — aggressive orders"
+              onClick={() => onFlow(flowFilter === 'SWEEP' ? 'ALL' : 'SWEEP')}
+            />
+            <Row
+              checked={flowFilter === 'BLOCK'}
+              label="Blocks"
+              title="Only blocks — negotiated size"
+              onClick={() => onFlow(flowFilter === 'BLOCK' ? 'ALL' : 'BLOCK')}
+            />
+            <Header>Sentiment</Header>
+            <Row
+              checked={sentFilter === 'BULLISH'}
+              label="Bullish"
+              title="Only bullish prints"
+              onClick={() => onSent(sentFilter === 'BULLISH' ? 'ALL' : 'BULLISH')}
+            />
+            <Row
+              checked={sentFilter === 'BEARISH'}
+              label="Bearish"
+              title="Only bearish prints"
+              onClick={() => onSent(sentFilter === 'BEARISH' ? 'ALL' : 'BEARISH')}
+            />
+            <Header>Premium floor</Header>
+            {PREM_CHIPS.map(c => (
+              <Row
+                key={c.value}
+                checked={minPremKey === c.value}
+                label={c.label}
+                title={`Only prints ${c.label}`}
+                onClick={() => onMinPrem(minPremKey === c.value ? '0' : c.value)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // Grouped two-tier header — same grammar as the exposure / pressure matrices
 /** Streaming rich options prints in the house grammar — session strip, filters, multi-ticker. */
 const LiveTape = () => {
@@ -997,11 +841,58 @@ const LiveTape = () => {
       buffer is capped, so a print the user is reading eventually scrolls out of
       it — looking it up by id would silently close the drilldown mid-read. */
   const [openPrint, setOpenPrint] = useState<FlowPrint | null>(null);
-  /** Latches once the feed has no prints left — see the accumulation effect. */
-  const [tapePlayedOut, setTapePlayedOut] = useState(false);
-  const emptyTicksRef = useRef(0);
   const idRef = useRef(0);
   const lastReadRef = useRef(0);
+
+  /* Back to the top (Noah, 2026-08-23): the tape page grows without a cap
+     now, so a floating door home appears once the reader is a screen or so
+     deep. The app scrolls in AppShell's <main>, not the window — listen and
+     scroll THERE. Native smooth scroll, compositor-driven, no jitter;
+     reduced-motion gets an instant jump. */
+  const [showTop, setShowTop] = useState(false);
+  const scrollerRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const main = document.querySelector('main');
+    if (!main) return;
+    scrollerRef.current = main;
+    const onScroll = () => setShowTop(main.scrollTop > 600);
+    main.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+    return () => main.removeEventListener('scroll', onScroll);
+  }, []);
+  /* NOT native smooth scroll: the tape PREPENDS a row per second, and scroll
+     anchoring shoves scrollTop mid-animation — Chrome's untunable ~2s glide
+     visibly fought it (the exact "lag or jitters" Noah banned). A 450ms
+     house-curve tween writes ABSOLUTE positions each frame, so prepends
+     can't move it, and a timer finishes the jump even if frames never come
+     (background tab). */
+  const scrollToTop = () => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      el.scrollTop = 0;
+      return;
+    }
+    const start = el.scrollTop;
+    const t0 = performance.now();
+    const DUR = 450;
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      el.scrollTop = 0;
+    };
+    const step = (now: number) => {
+      if (done) return;
+      const t = Math.min(1, (now - t0) / DUR);
+      const e = 1 - Math.pow(1 - t, 3); // easeOutCubic, the house curve
+      el.scrollTop = Math.round(start * (1 - e));
+      if (t < 1) requestAnimationFrame(step);
+      else finish();
+    };
+    requestAnimationFrame(step);
+    window.setTimeout(finish, DUR + 150);
+  };
 
   useEffect(() => {
     try {
@@ -1030,43 +921,8 @@ const LiveTape = () => {
   useEffect(() => {
     if (!marketData || paused) return;
     const fresh = marketData.tape.map(o => enrichPrint(o, ++idRef.current));
-    /*
-      THE TAPE RUNS OUT BEFORE ANYTHING ELSE DOES.
-
-      1,013 prints served four per 1,500ms tick runs out at tick 255 — six
-      minutes twenty-two — and then core/feed.ts serves an empty batch on every
-      tick forever. Both numbers measured: ticked headless, and confirmed by
-      sitting on this page for twelve minutes, where the newest row froze at
-      15:59:37 while the pill still read LIVE and every animation kept running.
-
-      Feed.atEnd() exists for exactly this kind of announcement, but it is true
-      only once every recording has finished, at tick 389 — three and a half
-      minutes after the tape has gone quiet — and the context reads
-      end-of-recording per name anyway, which is a different clock again. The
-      tape runs out first and on its own schedule, so it counts for itself.
-
-      Two empties rather than one: TAPE_PER_TICK always slices four while any
-      remain, so one empty batch already means exhausted, and the second is
-      margin against a tick that arrives mid-swap.
-    */
-    if (fresh.length === 0) {
-      emptyTicksRef.current += 1;
-      if (emptyTicksRef.current >= 2) setTapePlayedOut(true);
-      return;
-    }
-    emptyTicksRef.current = 0;
-    /*
-      THE BATCH GOES ON TOP REVERSED.
-
-      The feed serves a tick's prints in chronological order and this table is
-      captioned "newest first", so prepending the batch as-is puts the newest
-      print of the four at the BOTTOM of its own group: the TIME column climbs
-      for four rows, drops back 23 seconds, climbs again.
-
-      Invisible until now, because the capture stamped all 1,013 prints with
-      the same wall-clock second. Session times made it a visible sawtooth.
-    */
-    setRows(prev => [...[...fresh].reverse(), ...prev].slice(0, MAX_ROWS));
+    if (fresh.length === 0) return;
+    setRows(prev => [...fresh, ...prev].slice(0, MAX_ROWS));
   }, [marketData, paused]);
 
   const summary = useMemo(() => summarizeTape(rows), [rows]);
@@ -1103,6 +959,9 @@ const LiveTape = () => {
     }
   }, [view, filtered]);
 
+  /* The beam is GONE (Noah + partner, 2026-08-23: "my partner doesnt like
+     the idea of session flow") — but the tape read still speaks the active
+     SCOPE, so the scoped rows/summary survive it. */
   const scopeActive =
     searchQuery.trim() !== '' || flowFilter !== 'ALL' || sentFilter !== 'ALL' || minPremKey !== '0';
   const beamRows = scopeActive ? filtered : rows;
@@ -1110,13 +969,28 @@ const LiveTape = () => {
     () => (scopeActive ? summarizeTape(filtered) : summary),
     [scopeActive, filtered, summary]
   );
-  const searchOnly =
-    searchQuery.trim() !== '' && flowFilter === 'ALL' && sentFilter === 'ALL' && minPremKey === '0';
-  const beamLabel = !scopeActive ? 'Session flow' : searchOnly ? `${searchQuery.trim().toUpperCase()} flow` : 'Filtered flow';
-  const beamSub = scopeActive
-    ? `${filtered.length} of ${rows.length} prints`
-    : `${rows.length} prints on tape${tapePlayedOut ? ' · recording played out' : ''}`;
-  const beamEmpty = scopeActive ? 'No prints match this view' : 'Awaiting tape';
+
+  /* The whale doors (Noah kept these when the beam went, 2026-08-23):
+     largest bullish, largest bearish, and the overall largest — which only
+     earns its own chip when it traded mid and is neither of those two. */
+  const whales = useMemo(() => {
+    let all: FlowPrint | null = null;
+    let bull: FlowPrint | null = null;
+    let bear: FlowPrint | null = null;
+    for (const p of beamRows) {
+      if (!all || p.premium > all.premium) all = p;
+      const s = sentimentOf(p);
+      if (s === 'BULLISH' && (!bull || p.premium > bull.premium)) bull = p;
+      if (s === 'BEARISH' && (!bear || p.premium > bear.premium)) bear = p;
+    }
+    return { all, bull, bear };
+  }, [beamRows]);
+
+  // 0DTE share of the active view — same-day contracts as a slice of the flow
+  const zdteShare = useMemo(() => {
+    if (beamRows.length === 0) return 0;
+    return beamRows.filter(r => r.dte === 0).length / beamRows.length;
+  }, [beamRows]);
 
   // Which columns are on, in order, and which one leads each group (border-l)
   const shownColumns = useMemo(() => TAPE_COLUMNS.filter(c => visibleCols.has(c.key)), [visibleCols]);
@@ -1175,36 +1049,13 @@ const LiveTape = () => {
   // eight more seconds would be the same lie the beam just stopped telling.
   const scopeKey = `${searchQuery}|${flowFilter}|${sentFilter}|${minPremKey}`;
   const lastScopeRef = useRef(scopeKey);
-  const emptyReadRef = useRef(true);
   useEffect(() => {
     const now = Date.now();
     const scopeChanged = scopeKey !== lastScopeRef.current;
-
-    /*
-      A STALE EMPTY-STATE MUST NOT OUTLIVE THE ARRIVAL OF PRINTS.
-
-      The desk mounts before the first tick delivers anything, so the read is
-      set to "No prints in this view." with nothing on screen — correct at that
-      instant — and the throttle is stamped. The old guard then held that
-      sentence for the next eight seconds, and its `beamRows.length > 3` clause
-      made it worse rather than better: the early return only engaged ONCE
-      prints existed, so the throttle protected the empty message precisely
-      when it had become false. Every visit to /trace/live-tape opened with
-      "No prints in this view." sitting directly above a full, streaming table
-      and a counter reading "17 OF 17 PRINTS".
-
-      So the throttle is bypassed whenever the standing read is the empty one
-      and rows now exist. It still throttles the expensive part — re-narrating
-      a tape that is merely growing.
-    */
-    const staleEmpty = emptyReadRef.current && beamRows.length > 0;
-    if (!scopeChanged && !staleEmpty && now - lastReadRef.current < READ_INTERVAL_MS) return;
-
+    if (!scopeChanged && now - lastReadRef.current < READ_INTERVAL_MS && beamRows.length > 3) return;
     lastScopeRef.current = scopeKey;
     lastReadRef.current = now;
-    const empty = beamRows.length === 0;
-    emptyReadRef.current = empty;
-    setRead(empty ? 'No prints in this view.' : tapeRead(beamRows, beamSummary));
+    setRead(beamRows.length === 0 ? 'No prints in this view.' : tapeRead(beamRows, beamSummary));
   }, [beamRows, beamSummary, scopeKey]);
 
   // Stable identity — TapeRow is memoized, and a fresh callback per render
@@ -1243,19 +1094,76 @@ const LiveTape = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openPrint, openIdx, displayRows]);
 
+  const WhaleChip = ({
+    print,
+    label,
+    ink,
+  }: {
+    print: FlowPrint;
+    label: string;
+    ink: 'king' | 'bull' | 'bear';
+  }) => {
+    const tone =
+      ink === 'king'
+        ? 'border-[#EA00FF]/40 bg-[#EA00FF]/[0.06] hover:bg-[#EA00FF]/[0.12]'
+        : ink === 'bull'
+          ? 'border-bull/40 bg-bull/[0.05] hover:bg-bull/[0.1]'
+          : 'border-bear/40 bg-bear/[0.05] hover:bg-bear/[0.1]';
+    const labelInk = ink === 'king' ? 'text-[#EA00FF]' : ink === 'bull' ? 'text-bull' : 'text-bear';
+    return (
+      <button
+        onClick={() => setOpenPrint(print)}
+        title="Open this print's drilldown"
+        className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-md border font-mono transition-colors ${tone}`}
+      >
+        <span className={`text-[8px] font-bold uppercase tracking-widest ${labelInk}`}>{label}</span>
+        <span className="text-[11px] font-semibold tnum text-textPrimary whitespace-nowrap">
+          {print.ticker} {print.strike}
+          {print.right} · {fmtUsd(print.premium)}
+        </span>
+      </button>
+    );
+  };
+
   return (
     <>
-      {/* Session beam — the active view's aggregates in one instrument */}
-      <SessionBeam
-        rows={beamRows}
-        summary={beamSummary}
-        label={beamLabel}
-        sub={beamSub}
-        empty={beamEmpty}
-        sentFilter={sentFilter}
-        onSentFilter={setSentFilter}
-        onOpen={setOpenPrint}
-      />
+      {/* Composition strip (Noah, 2026-08-23: "i still wanted these
+          sections") — the beam's FACTS without the beam's verdict: what the
+          flow is MADE of, plus the whale doors. Speaks the active scope,
+          like the read and the counter. */}
+      <div className="flex items-center gap-x-5 gap-y-2 flex-wrap border border-borderSubtle bg-panel rounded-md px-3.5 py-2 select-none">
+        <span className="font-mono text-[11px] tnum whitespace-nowrap">
+          <span className="text-bull font-semibold">{beamSummary.callCount}C</span>{' '}
+          <span className="text-textPrimary font-bold">{fmtUsd(beamSummary.callPremium)}</span>
+          <span className="text-textMuted"> / </span>
+          <span className="text-bear font-semibold">{beamSummary.putCount}P</span>{' '}
+          <span className="text-textPrimary font-bold">{fmtUsd(beamSummary.putPremium)}</span>
+        </span>
+        <span className="font-mono text-[10px] tnum whitespace-nowrap text-textSecondary">
+          <span className="text-textPrimary font-semibold">{beamSummary.sweeps}</span> sweeps
+          <span className="text-textMuted"> · </span>
+          <span className="text-textPrimary font-semibold">{beamSummary.blocks}</span> blocks
+        </span>
+        <span
+          className="font-mono text-[10px] tnum whitespace-nowrap text-textSecondary"
+          title="Put premium against call premium in this view"
+        >
+          P/C <span className="text-textPrimary font-semibold">{beamSummary.pcRatio.toFixed(2)}</span>
+        </span>
+        <span
+          className={`font-mono text-[10px] tnum whitespace-nowrap ${zdteShare >= 0.25 ? 'text-warn' : 'text-textSecondary'}`}
+          title="Share of this view's prints expiring today"
+        >
+          0DTE <span className="font-semibold">{Math.round(zdteShare * 100)}%</span> of flow
+        </span>
+        {/* The magenta whale anchors the right edge — the bull/bear whales
+            join it when they are different prints */}
+        <span className="ml-auto flex items-center gap-2 flex-wrap">
+          {whales.bull && whales.bull !== whales.all && <WhaleChip print={whales.bull} label="Top bull" ink="bull" />}
+          {whales.bear && whales.bear !== whales.all && <WhaleChip print={whales.bear} label="Top bear" ink="bear" />}
+          {whales.all && <WhaleChip print={whales.all} label="Largest print" ink="king" />}
+        </span>
+      </div>
 
       {/* Controls + filters */}
       <div className="flex items-center gap-3 flex-wrap">
@@ -1278,62 +1186,18 @@ const LiveTape = () => {
           )}
         </button>
         <TapeSearch value={searchQuery} onChange={setSearchQuery} rows={rows} />
-        {/* Toggle chips, not three boxed rails each spending a segment on
-            "All" — the row was mostly chrome (Noah, 2026-08-19). Unlit = the
-            axis is off; clicking a lit chip clears it — the beam sides'
-            toggle grammar, and the sentiment chips share the beam's state. */}
-        <span className="flex items-center gap-0.5">
-          <Chip
-            active={flowFilter === 'SWEEP'}
-            onClick={() => setFlowFilter(f => (f === 'SWEEP' ? 'ALL' : 'SWEEP'))}
-            title="Only sweeps — aggressive orders"
-          >
-            Sweeps
-          </Chip>
-          <Chip
-            active={flowFilter === 'BLOCK'}
-            onClick={() => setFlowFilter(f => (f === 'BLOCK' ? 'ALL' : 'BLOCK'))}
-            title="Only blocks — negotiated size"
-          >
-            Blocks
-          </Chip>
-        </span>
-        <span className="w-px h-3.5 bg-borderSubtle" aria-hidden="true" />
-        <span className="flex items-center gap-0.5">
-          <Chip
-            active={sentFilter === 'BULLISH'}
-            onClick={() => setSentFilter(s => (s === 'BULLISH' ? 'ALL' : 'BULLISH'))}
-            title="Only bullish prints"
-          >
-            Bullish
-          </Chip>
-          <Chip
-            active={sentFilter === 'BEARISH'}
-            onClick={() => setSentFilter(s => (s === 'BEARISH' ? 'ALL' : 'BEARISH'))}
-            title="Only bearish prints"
-          >
-            Bearish
-          </Chip>
-        </span>
-        <span className="w-px h-3.5 bg-borderSubtle" aria-hidden="true" />
-        <span className="flex items-center gap-0.5">
-          {PREM_CHIPS.map(c => (
-            <Chip
-              key={c.value}
-              active={minPremKey === c.value}
-              onClick={() => setMinPremKey(m => (m === c.value ? '0' : c.value))}
-              title={`Only prints ${c.label}`}
-            >
-              {c.label}
-            </Chip>
-          ))}
-        </span>
-        {/* WRAPS. This group is one flex item on a flex-wrap row, and a flex
-            item wider than its line does not split — it spills. Measured at
-            390px after "this session" was added to the count: the span ran
-            179→413 on a 390px viewport, 23px off the edge. Same shape as the
-            chart's timeframe strip; same fix. */}
-        <div className="ml-auto flex flex-wrap items-center justify-end gap-x-3 gap-y-1.5">
+        {/* Every filter axis behind ONE door (Noah, 2026-08-23) — the chip
+            row is gone; the ColumnChooser grammar carries flow, sentiment
+            and the premium floor. */}
+        <FilterChooser
+          flowFilter={flowFilter}
+          onFlow={setFlowFilter}
+          sentFilter={sentFilter}
+          onSent={setSentFilter}
+          minPremKey={minPremKey}
+          onMinPrem={setMinPremKey}
+        />
+        <div className="ml-auto flex items-center gap-3">
           <ColumnChooser
             visible={visibleCols}
             onToggleColumn={toggleColumn}
@@ -1342,7 +1206,7 @@ const LiveTape = () => {
             onNone={() => setVisibleCols(new Set())}
           />
           <span className="font-mono text-[10px] text-textMuted uppercase tracking-wider tnum whitespace-nowrap">
-            {filtered.length} of {rows.length} prints · {marked.size} marked this session
+            {filtered.length} of {rows.length} prints · {marked.size} marked
           </span>
         </div>
       </div>
@@ -1377,13 +1241,13 @@ const LiveTape = () => {
             </span>
           }
         >
-          {/* FIXED height, not max-h: while the buffer warms up the table grew
-              a row at a time and the whole page crawled taller with it —
-              half of the "resizing itself" (Noah, 2026-08-18). Keyed by the
-              SENTIMENT filter only, so beam-side clicks soft-in the swapped
-              view both directions (the house filtered-table rule) without
-              remounting 120 rows per search keystroke. */}
-          <div key={`${sentFilter}-${view}`} className="h-[640px] overflow-auto animate-soft-in">
+          {/* NO cap (Noah, 2026-08-23, reversing 2026-08-18's fixed height):
+              every print renders and the PAGE grows — the buffer's MAX_ROWS
+              bounds it. Only horizontal overflow stays contained (wide
+              column sets scroll inside the panel, never the page). Keyed by
+              the sentiment filter only, so filter clicks soft-in the swapped
+              view without remounting 120 rows per search keystroke. */}
+          <div key={`${sentFilter}-${view}`} className="overflow-x-auto animate-soft-in">
             <table className={`w-full border-collapse ${shownColumns.length >= 8 ? 'min-w-[1200px]' : ''}`}>
               <thead className="sticky top-0 z-10">
                 <tr className="bg-[#0c0c0c]">
@@ -1444,8 +1308,11 @@ const LiveTape = () => {
           </div>
         </Panel>
 
-        {/* Right rail: concentration summary on top, dark-pool feed below */}
-        <div className="xl:col-span-3 min-w-0 flex flex-col gap-4">
+        {/* Right rail: concentration summary on top, dark-pool feed below.
+            STICKY (Noah, 2026-08-23): the tape column now grows without a
+            cap, and the rail keeps pace with the reader instead of being
+            left at the top of a mile-long page. */}
+        <div className="xl:col-span-3 min-w-0 flex flex-col gap-4 xl:sticky xl:top-4">
           <Panel title="Top Tickers" subtitle="session premium concentration" className="w-full">
             {/* ALWAYS six slots: the rolling buffer's ticker mix breathes, and
                 a list that gains or loses a row reflows the whole right rail —
@@ -1525,7 +1392,7 @@ const LiveTape = () => {
                           </span>
                         </td>
                         <td className="px-2 py-2 text-right font-mono text-[11px] tnum text-textSecondary">
-                          {fmtNum(p.size)}
+                          {p.size.toLocaleString()}
                         </td>
                         <td className="px-2 py-2 text-right font-mono text-[11px] tnum text-textSecondary">
                           ${p.price.toFixed(2)}
@@ -1560,6 +1427,21 @@ const LiveTape = () => {
         tapeRows={rows}
         onOpenPrint={setOpenPrint}
       />
+
+      {/* The door home — portaled to body so no animated ancestor can trap
+          its fixed positioning (the campaign-chart lesson) */}
+      {showTop &&
+        createPortal(
+          <button
+            onClick={scrollToTop}
+            title="Back to top"
+            aria-label="Scroll back to the top"
+            className="fixed bottom-6 right-6 z-40 inline-flex items-center justify-center w-9 h-9 rounded-full border border-borderMuted bg-panel/90 backdrop-blur-sm text-textSecondary hover:text-textPrimary hover:border-borderMuted hover:bg-panelHover shadow-lg shadow-black/40 transition-colors animate-soft-in"
+          >
+            <ArrowUp className="w-4 h-4" />
+          </button>,
+          document.body
+        )}
     </>
   );
 };

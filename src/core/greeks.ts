@@ -4,10 +4,10 @@
   Pure math, no state, no clock. Extracted from the
   simulator so the SCORING engine can price greeks
   without importing the simulator at all — a replay
-  process must never boot a market generator. The
-  synthetic market this was extracted from is gone;
-  the terminal now replays a recording through
-  core/feed.ts.
+  process that pulls in core/simulator boots the
+  whole synthetic market (seeded history, timers,
+  Math.random), which is exactly what a backtest
+  must never do.
 
   The simulator now imports THIS, so live and replay
   price greeks with byte-identical code.

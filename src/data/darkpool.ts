@@ -9,7 +9,7 @@
 ==================================================
 */
 
-import Feed from '../core/feed';
+import Simulator from '../core/simulator';
 import { dayKey, h01, hPick, hRange } from '../core/rng';
 import type { MarketSnapshot } from '../types/market';
 import type {
@@ -23,7 +23,6 @@ import type {
   LevelRole,
   Posture,
 } from '../types/darkpool';
-import { etClock } from '../core/etFormat';
 
 const VENUES = ['UBS ATS', 'MS Pool', 'JPM-X', 'Sigma X', 'CrossFinder', 'IEX-D', 'Level ATS'];
 
@@ -49,7 +48,7 @@ const SECTOR_UNIVERSE: { sector: string; color: string; weight: number; tickers:
 /** Stable per-ticker price: live sim price when the sim tracks it, otherwise a
     hash-derived quote that never jumps between renders. */
 function leaderPrice(sym: string): number {
-  const live = Feed.TICKERS[sym];
+  const live = Simulator.TICKERS[sym];
   if (live) return live.currentPrice;
   return Number((12 + Math.pow(h01(`dpl-px-${sym}`), 1.6) * 950).toFixed(2));
 }
@@ -99,7 +98,7 @@ export function buildDarkPoolLeaders(): DarkLeadersView {
   return {
     totalNotional,
     totalPrints: sectors.reduce((a, s) => a + s.prints, 0),
-    updated: etClock(),
+    updated: new Date().toLocaleTimeString('en-GB'),
     sectors,
   };
 }

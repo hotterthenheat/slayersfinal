@@ -16,11 +16,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Minimize2 } from 'lucide-react';
-import Feed from '../core/feed';
+import Simulator from '../core/simulator';
 import { useMarketData } from '../context/MarketDataContext';
 import { buildLevelsFor, buildPrints } from '../data/gex';
 import StrikeChart, { DEFAULT_OVERLAYS, type ChartOverlays } from '../components/gex/StrikeChart';
 import ChartToolbar from '../components/gex/ChartToolbar';
+import { CANDLE_THEMES, chartSurface, useCandleThemeKey } from '../components/gex/candleTheme';
 import TickerQuickPick from '../components/gex/TickerQuickPick';
 import SpotPrice from '../components/gex/SpotPrice';
 import { TIMEFRAMES, type Timeframe } from '../data/timeframe';
@@ -37,7 +38,7 @@ const TF_VALUES = new Set<string>(TIMEFRAMES.map(t => t.value));
 
 /** Self-healing load — anything malformed falls back to the default slot. */
 function loadCells(): BoardCellCfg[] {
-  const defaults: BoardCellCfg[] = Feed.WATCHLIST.slice(0, 4).map(ticker => ({
+  const defaults: BoardCellCfg[] = Simulator.WATCHLIST.slice(0, 4).map(ticker => ({
     ticker,
     timeframe: '1m',
     overlays: { ...DEFAULT_OVERLAYS },
@@ -85,23 +86,36 @@ const BoardCell = ({ cfg, onCfg, revision, expanded, onToggleExpand, index }: Bo
     [cfg.ticker]
   );
 
+  /* Same one-surface contract as the chart widget (Noah, 2026-08-23): the
+     candle theme's canvas — or the house inset black — under toolbar AND
+     tape, so a cell is one continuous black inside its frame. */
+  const themeKey = useCandleThemeKey();
+  const themeBg = chartSurface(CANDLE_THEMES[themeKey]).bg;
+  const surface = themeBg === 'transparent' ? '#0a0a0a' : themeBg;
+
   return (
     // 'contents' keeps the grid slot when docked; expanding lifts the same
-    // cell into a viewport takeover without remounting the chart
-    <div className={expanded ? 'fixed inset-0 z-[80] bg-canvas p-3 flex flex-col' : 'contents'}>
+    // cell into a viewport takeover without remounting the chart. Expanded
+    // goes edge to edge — no padding, no frame, the chart IS the screen.
+    <div className={expanded ? 'fixed inset-0 z-[80] flex flex-col' : 'contents'}>
       <div
-        className={`flex flex-col min-h-0 border border-borderSubtle bg-panel rounded-md overflow-hidden animate-soft-in ${
-          expanded ? 'flex-1' : ''
+        className={`relative flex flex-col min-h-0 overflow-hidden animate-soft-in ${
+          expanded ? 'flex-1' : 'border border-borderSubtle rounded-md'
         }`}
-        style={{ animationDelay: `${index * 70}ms` }}
+        style={{ animationDelay: `${index * 70}ms`, background: surface }}
       >
-        <div className="flex items-center gap-2.5 flex-wrap px-2.5 py-1.5 border-b border-borderSubtle shrink-0 select-none">
+        {/* THE TASKBAR, the chart widget's grammar (settled 2026-08-23
+            against TradingView's): chrome, not an object — full width, fused
+            to the cell's top edge, no container, no border, no glass. Name
+            left, actions at the right edge. */}
+        <div className="shrink-0 w-full select-none flex items-center gap-2.5 flex-wrap px-2.5 py-1.5">
           <TickerQuickPick ticker={cfg.ticker} onPick={t => onCfg({ ticker: t })} />
           <SpotPrice value={levels.spot} />
-          <div className="ml-auto">
+          <div className="flex-1 min-w-0">
             <ChartToolbar
               minimal
               candles
+              spread
               timeframe={cfg.timeframe}
               onTimeframe={tf => onCfg({ timeframe: tf })}
               overlays={cfg.overlays}
@@ -120,6 +134,7 @@ const BoardCell = ({ cfg, onCfg, revision, expanded, onToggleExpand, index }: Bo
             height={expanded ? 300 : 280}
             overlays={cfg.overlays}
             prints={prints}
+            frameless
           />
         </div>
       </div>

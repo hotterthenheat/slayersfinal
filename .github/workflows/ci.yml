@@ -39,39 +39,11 @@ jobs:
       # `npm run lint` is "Missing script" and would fail every push without
       # saying anything about the code.
       #
-      # There IS a test step now. `npm test` runs the ten assertion scripts
-      # under scripts/ — covering the partner spec's worked fixtures, replay
-      # determinism under a pinned clock, the Weigher query parser, the
-      # scoring-weight tables, the landing page's claims against the code that
-      # backs them, what the terminal does when playback runs out, what the
-      # deployed host promises the browser, whether the gate's own assertions
-      # can fail at all, the one font family against the four places that
-      # spell it (plus a refusal to vendor a proprietary system font), the
-      # recorded clocks, and the header's responsive ladder.
-      #
-      # gate-proof is the one that reads the others. The recurring defect in
-      # this repo is a guard that passes without proving anything — seven have
-      # been found, each by hand — so it scans every check() condition for the
-      # shapes that CANNOT fail, and requires every proof script on disk to be
-      # in the chain above. It cannot guard its own invocation; that is what
-      # this step is.
-      #
-      # Every assertion in weights-proof, sales-proof, playback-proof and
-      # deploy-proof is mutation-verified. Dropping a factor without re-normalising fails it;
-      # restoring the news sleeve fails it; re-importing the news generator
-      # anywhere in src fails it. So does selling an unbuilt feature without
-      # the Soon chip, linking the footer at a route that only redirects, or
-      # letting the pricing page claim a live feed while TopBar still renders
-      # the Sim badge — and, in the other direction, shipping one of those
-      # features and forgetting to take the Soon chip off. playback-proof adds
-      # the other direction again: looping the tape, looping the playhead,
-      # advancing two bars a tick, or re-cutting the recordings to one length
-      # each fail a different assertion, verified by making each change. So
-      # does dropping a security header, adding 'unsafe-eval' to script-src,
-      # naming a CDN in the policy, or adding a remote <script> the policy
-      # would then block in production — which is how the headers went missing
-      # in the first place, deleted with vercel.json in a commit about
-      # something else.
+      # `npm test` runs the three assertion scripts under scripts/ — the
+      # partner spec's worked fixtures, replay determinism under a pinned
+      # clock, and the Weigher's order-free query parser. The uploaded tree
+      # ships those three files but did not wire a `test` script, so CI called
+      # a script that did not exist; this restores the call.
 
       - name: Test
         run: npm test

@@ -43,8 +43,6 @@ import { useMarketData } from '../../context/MarketDataContext';
 import type { FlowPrint, PrintSentiment } from '../../types/trace';
 import type { MarketSnapshot } from '../../types/market';
 import { toneBar, type Tone } from '../ui/tones';
-import { etMonthDay } from '../../core/etFormat';
-import { fmtNum } from '../../core/numFormat';
 
 // recharts is heavy — it only loads when a print is actually opened
 const FlowPanels = lazy(() => import('./ContractFlowChart').then(m => ({ default: m.FlowPanel })));
@@ -62,7 +60,7 @@ type TableTab = (typeof TABLE_TABS)[number]['value'];
 
 /* The drilldown reads whatever the feed hands it. A field that is missing must
    render as a dash — never throw and take the page down with it. */
-const num = (v: number | undefined | null): string => (Number.isFinite(v as number) ? fmtNum(v as number) : '—');
+const num = (v: number | undefined | null): string => (Number.isFinite(v as number) ? (v as number).toLocaleString() : '—');
 const fixed = (v: number | undefined | null, dp = 2): string => (Number.isFinite(v as number) ? (v as number).toFixed(dp) : '—');
 const usd = (v: number | undefined | null): string => (Number.isFinite(v as number) ? fmtUsd(v as number) : '—');
 
@@ -212,7 +210,7 @@ const SequenceStrip = ({
                 <span className="w-[86px] shrink-0 font-mono text-[10px] tnum text-textMuted">{p.time}</span>
                 <span className={`w-[74px] shrink-0 font-mono text-[9px] font-semibold uppercase tracking-wider ${ink}`}>{word}</span>
                 <span className="font-mono text-[10px] tnum text-textSecondary">
-                  {fmtNum(p.size)} × ${p.fill.toFixed(2)}
+                  {p.size.toLocaleString()} × ${p.fill.toFixed(2)}
                 </span>
                 <span className="font-mono text-[10px] font-bold tnum text-textPrimary">{fmtUsd(p.premium)}</span>
                 {p.sweep && <span className="font-mono text-[8px] font-semibold uppercase tracking-wider text-warn">Sweep</span>}
@@ -363,7 +361,7 @@ const PrintDrilldown = ({ print, snapshot, onClose, isMarked, onToggleMark, onSt
   const linkBtn =
     'inline-flex items-center justify-center gap-1.5 px-2.5 py-2 rounded border border-borderSubtle bg-white/[0.02] font-mono text-[10px] uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:border-borderMuted transition-colors';
 
-  const dateLabel = etMonthDay(sessionDate(dayOffset));
+  const dateLabel = sessionDate(dayOffset).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
   return (
     <Modal
@@ -379,18 +377,25 @@ const PrintDrilldown = ({ print, snapshot, onClose, isMarked, onToggleMark, onSt
         /* The whole session box wears the holo foil — navigation hardware,
            dark ink on the bright material (Noah: "the entire box"). The label
            carries today-vs-past, so the material stays constant. */
-        <div className="relative flex items-center gap-0.5 rounded holo-bg text-[#0a0a0a] px-1 py-0.5">
+        <div className="group relative flex items-center gap-0.5 rounded holo-bg text-[#0a0a0a] px-1 py-0.5">
+            {/* ONE hover for the WHOLE box (Noah, 2026-08-23: "the entire
+                button and not just the inner section") — a full-box wash on
+                group hover instead of per-segment tints */}
+            <span
+              className="absolute inset-0 rounded bg-black/0 group-hover:bg-black/[0.12] transition-colors pointer-events-none"
+              aria-hidden
+            />
             <button
               onClick={() => setDayOffset(d => d + 1)}
               title="Previous session"
-              className="p-0.5 rounded hover:bg-black/[0.12] transition-colors"
+              className="p-0.5 rounded transition-colors"
             >
               <ChevronLeft className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={() => setCalendarOpen(o => !o)}
               title="Pick a session"
-              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-mono text-[10px] font-semibold tnum hover:bg-black/[0.12] transition-colors"
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-mono text-[10px] font-semibold tnum transition-colors"
             >
               <CalendarDays className="w-3 h-3" />
               {dayOffset === 0 ? 'Today' : dateLabel}
@@ -399,7 +404,7 @@ const PrintDrilldown = ({ print, snapshot, onClose, isMarked, onToggleMark, onSt
               onClick={() => setDayOffset(d => Math.max(0, d - 1))}
               disabled={dayOffset === 0}
               title="Next session"
-              className="p-0.5 rounded hover:bg-black/[0.12] disabled:opacity-30 transition-colors"
+              className="p-0.5 rounded disabled:opacity-30 transition-colors"
             >
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
@@ -415,11 +420,7 @@ const PrintDrilldown = ({ print, snapshot, onClose, isMarked, onToggleMark, onSt
             <button
               onClick={() => onToggleMark(print.id)}
               aria-pressed={isMarked}
-              /* Same wording as the tape's star, and for the same reason: the
-                 mark lives in LiveTape's component state for this session
-                 only. "Tracking" names /trace/tracker's TRACKED FLOW, which
-                 is NOT BUILT. */
-              title={isMarked ? 'Marked — click to clear' : 'Mark this print'}
+              title={isMarked ? 'Tracking this print' : 'Track this print'}
               className={`p-1 rounded transition-colors ${isMarked ? 'text-select' : 'text-textMuted hover:text-textPrimary hover:bg-white/[0.05]'}`}
             >
               <Bookmark className="w-3.5 h-3.5" fill={isMarked ? 'currentColor' : 'none'} />
@@ -751,7 +752,7 @@ const OrdersTable = ({ cf }: { cf: ReturnType<typeof buildContractFlow> }) => (
           <tr key={o.id} className="border-b border-borderSubtle/30 last:border-0 hover:bg-white/[0.02]">
             <td className={`${td} text-textSecondary`}>{o.time}</td>
             <td className={`${td} text-right text-textPrimary`}>${o.price.toFixed(2)}</td>
-            <td className={`${td} text-right text-textPrimary`}>{fmtNum(o.size)}</td>
+            <td className={`${td} text-right text-textPrimary`}>{o.size.toLocaleString()}</td>
             <td className={`${td} ${o.side === 'ASK' ? 'text-bull' : o.side === 'BID' ? 'text-bear' : 'text-textMuted'}`}>
               {o.side === 'ASK' ? 'Paid offer' : o.side === 'BID' ? 'Hit bid' : 'Mid'}
             </td>

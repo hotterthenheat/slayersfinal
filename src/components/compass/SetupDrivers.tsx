@@ -115,9 +115,8 @@ const SetupDrivers = ({ ticker, rows, onOpen }: SetupDriversProps) => {
                   <td className="px-3 py-2 text-right font-mono text-[11px] tnum text-textPrimary">{r.gamma.toFixed(1)}%</td>
                   <td className="px-3 py-2 text-right font-mono text-[11px] tnum text-textSecondary">{r.volOi.toFixed(2)}×</td>
                   <td className="px-3 py-2 text-right font-mono text-[11px] tnum text-textSecondary">{fmtDist(r.distPct)}</td>
-                  {/* Dealer side, so gold/steel — docs/dealer-ink-pass.md step 3.
-                      Negative = dealers absorb (steel), positive = amplify (gold). */}
-                  <td className={`px-3 py-2 text-right font-mono text-[11px] font-semibold tnum ${r.exposureUsd < 0 ? 'text-steel-ink' : 'text-gold-ink'}`}>
+                  {/* Sim side-coding: negative = dealers absorb (bull), positive = amplify (bear) */}
+                  <td className={`px-3 py-2 text-right font-mono text-[11px] font-semibold tnum ${r.exposureUsd < 0 ? 'text-bull' : 'text-bear'}`}>
                     {fmtUsd(r.exposureUsd)}
                   </td>
                   {onOpen && (

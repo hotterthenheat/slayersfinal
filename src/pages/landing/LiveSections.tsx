@@ -13,7 +13,7 @@ import { Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
-import Feed from '../../core/feed';
+import Simulator from '../../core/simulator';
 import { buildGexView, fmtUsd, pulseMatrix } from '../../data/gex';
 import { buildExposureProfile } from '../../data/exposure';
 import { buildPulseView } from '../../data/pulse';
@@ -28,7 +28,6 @@ import Reveal from './Reveal';
 import WorkspaceLoop, { type WorkspaceTile } from './WorkspaceLoop';
 import type { MarketSnapshot } from '../../types/market';
 import type { PulseView, ExposureProfileData, GexMatrixData, GexView } from '../../types/gex';
-import type { FlowPrint } from '../../types/trace';
 import { VERDICT_LABEL, type Setup, type CompassView } from '../../types/compass';
 
 const SCAN_INTERVAL_MS = 10_000;
@@ -128,7 +127,7 @@ function useLandingScan(enabled: boolean): LandingCtx | null {
       gex,
       exposure: buildExposureProfile(scan, '0DTE', 10),
       pulse: buildPulseView(scan),
-      setups: buildCompassView(scan, 'top-setups', Feed.universeQuotes(scan.ticker)),
+      setups: buildCompassView(scan, 'top-setups', Simulator.universeQuotes(scan.ticker)),
     };
   }, [scan]);
 
@@ -156,7 +155,7 @@ const hotMatrix = (matrix: GexMatrixData): GexMatrixData => ({
 const LivePill = () => (
   <span className="inline-flex items-center gap-1.5 font-mono text-[9px] font-bold uppercase tracking-widest text-select">
     <span className="w-1.5 h-1.5 rounded-full bg-select animate-pulse" />
-    Running
+    Live
   </span>
 );
 
@@ -188,34 +187,11 @@ const EngineBox = ({ name, line, accent, to, children }: EngineBoxProps) => (
 // ---- box demos ---------------------------------------------------------------
 
 /** Mini tape driven by the live 1.5s tick — rows slide in as prints land. */
-/** Rows of 38px that fit the 296px body under EngineBox's 44px header. */
-const DEMO_TAPE_ROWS = 7;
-
 const DemoTape = ({ snapshot }: { snapshot: MarketSnapshot }) => {
-  /*
-    `snapshot.tape` is what is NEW this tick, not a window on the tape: the
-    feed serves each print exactly once (core/feed.ts) and the real panel
-    accumulates. This demo read it as a window and rendered `.slice(0, 7)`
-    of a four-print batch, so measured against the running page it showed
-
-        4 rows, 143px of the 296px body empty — 48% void, every tick
-
-    and replaced all four wholesale each tick instead of streaming. Both are
-    the opposite of what the section claims: "not screenshots, the actual
-    panels, printing."
-
-    Mirrors LiveTape.tsx:1011-1024 exactly rather than inventing a second
-    accumulation — monotonic ids, the batch reversed before it is prepended
-    (the feed serves a tick chronologically, and prepending as-is would climb
-    for four rows then drop back 23 seconds), capped at what fits.
-  */
-  const [prints, setPrints] = useState<FlowPrint[]>([]);
-  const idRef = useRef(0);
-  useEffect(() => {
-    const fresh = snapshot.tape.map(o => enrichPrint(o, ++idRef.current));
-    if (fresh.length === 0) return;
-    setPrints(prev => [...[...fresh].reverse(), ...prev].slice(0, DEMO_TAPE_ROWS));
-  }, [snapshot.tape]);
+  const prints = useMemo(
+    () => snapshot.tape.slice(0, 7).map((o, i) => enrichPrint(o, i)),
+    [snapshot.tape]
+  );
   return (
     <div className="h-full overflow-hidden select-none">
       <AnimatePresence initial={false} mode="popLayout">
@@ -402,14 +378,10 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
             <LivePill />
           </span>
         </div>
-        {/* Grid, not a plain block: both states share one cell so the swap crossfades
-            instead of leaving the card blank between exit and enter. This one flips
-            itself on a timer, so a gap here is a hole the reader never asked for. */}
-        <div className="p-5 min-h-[290px] grid grid-cols-1">
-          <AnimatePresence initial={false}>
+        <div className="p-5 min-h-[290px]">
+          <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={mode}
-              className="col-start-1 row-start-1"
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
@@ -507,7 +479,7 @@ const ChartShowcase = ({ ctx }: { ctx: LandingCtx | null }) => (
       </h2>
       <p className="mt-4 text-[14px] text-textSecondary leading-relaxed max-w-xl mx-auto">
         Walls, the gamma flip, the king strike — drawn straight on the candles and repriced as the
-        session moves. This isn't a screenshot; it's the terminal's chart, running on a recorded session.
+        session moves. This isn't a screenshot; it's the terminal's chart, running on the live feed.
       </p>
     </Reveal>
 
@@ -516,13 +488,7 @@ const ChartShowcase = ({ ctx }: { ctx: LandingCtx | null }) => (
         <div className="h-[430px] border border-borderSubtle bg-panel rounded-lg animate-pulse" />
       ) : (
         <>
-          {/* Below the chart's own toolbar and inside of its price scale: at top-5
-              this chip sat squarely on the zoom/pan hint and the Reset button at
-              every width. A decorative label does not get to bury a control.
-              Hidden under lg because that is where the toolbar wraps to two and
-              three rows — no fixed offset clears a row count that moves, and a
-              122px pill over a 342px chart was never worth the collision. */}
-          <FloatChip label="Dealer walls" dot="#30D158" className="hidden lg:inline-flex top-12 right-32" />
+          <FloatChip label="Dealer walls" dot="#30D158" className="top-5 right-6" />
           <FloatChip label="Gamma flip" dot="#7DD3FC" className="top-1/2 -left-2 md:left-4" delay={1.4} />
           <FloatChip label="King strike" dot="#EA00FF" className="bottom-8 right-10" delay={2.6} />
           <TiltBox maxTilt={2} glare={false} className="p-3">
@@ -537,7 +503,7 @@ const ChartShowcase = ({ ctx }: { ctx: LandingCtx | null }) => (
         </>
       )}
       <p className="mt-4 text-center font-mono text-[10px] uppercase tracking-widest text-textMuted">
-        replayed tick feed · levels on a 10s scan
+        live tick feed · levels on a 10s scan
       </p>
     </Reveal>
   </section>
@@ -648,9 +614,9 @@ const LiveSections = () => {
       <section id="live" className="px-6 md:px-10 py-20 max-w-6xl mx-auto">
         <Reveal>
           <div className="flex items-baseline gap-3 flex-wrap">
-            <SectionKicker>The terminal, running</SectionKicker>
+            <SectionKicker>The terminal, live</SectionKicker>
             <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted">
-              these panels are running right now · recorded session
+              these panels are running right now · live feed
             </span>
           </div>
           <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight max-w-2xl">

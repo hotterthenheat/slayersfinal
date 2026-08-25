@@ -17,8 +17,6 @@ import CardTabs from '../ui/CardTabs';
 import SignalBadge from '../ui/SignalBadge';
 import SetupScanCard from './SetupScanCard';
 import { processState, PROCESS_META } from './setupProcess';
-import { preserveGreek } from '../ui/greek';
-import { ROW_INTERACTIVE, interactiveRowProps } from '../ui/interactiveRow';
 
 export type ScanLayout = 'cards' | 'table';
 
@@ -117,7 +115,7 @@ const SetupScanBoard = ({ setups, title, sweepAt, selectedId, onSelect, onAnalys
               <tr className="border-b border-borderSubtle">
                 {['#', 'Contract', 'Expiry', 'State', '1σ move', 'Premium', 'Breaks at'].map(h => (
                   <th key={h} className="font-mono text-[9px] uppercase tracking-wider text-textMuted font-medium px-2 py-2">
-                    {preserveGreek(h)}
+                    {h}
                   </th>
                 ))}
               </tr>
@@ -131,8 +129,8 @@ const SetupScanBoard = ({ setups, title, sweepAt, selectedId, onSelect, onAnalys
                   <tr
                     key={s.id}
                     onClick={() => onSelect(s)}
-                    {...interactiveRowProps(() => onSelect(s), s.id === selectedId, 'native')}
-                    className={`border-b border-borderSubtle/50 transition-colors ${ROW_INTERACTIVE} ${
+                    aria-selected={s.id === selectedId}
+                    className={`border-b border-borderSubtle/50 cursor-pointer transition-colors ${
                       s.id === selectedId ? 'bg-white/[0.05]' : 'hover:bg-white/[0.02]'
                     }`}
                   >
