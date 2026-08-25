@@ -14,8 +14,10 @@ import { buildCompassView } from '../../data/compass';
 import Chip from '../../components/ui/Chip';
 import HoverReadout from '../../components/ui/HoverReadout';
 import PageHeader from '../../components/ui/PageHeader';
+import { useIsPhone } from '../../components/ui/useMediaQuery';
 import Panel from '../../components/ui/Panel';
 import { WIDGETS, widgetByKey, type WorkspaceCtx } from './registry';
+import LiveChartWidget from './LiveChartWidget';
 import WidgetThumb from './WidgetThumb';
 import WidgetTickerPicker from './WidgetTickerPicker';
 import {
@@ -74,6 +76,9 @@ const DeskPeek = ({ name, ws }: { name: string; ws: SavedWorkspace }) => {
 const Pulse = () => {
   const { activeTicker, marketData, changeTicker } = useMarketData();
   const location = useLocation();
+  /* Read every render, and read BEFORE any early return — a hook cannot sit
+     behind the branch it decides. */
+  const isPhone = useIsPhone();
 
   /* A strike sent here to be SEEN (Ranked Targets, Exposure Profile — Mo,
      2026-08-19: "clicking a strike should take me directly to that strike on
@@ -365,6 +370,71 @@ const Pulse = () => {
     setInstances(prev => prev.filter(w => w.id !== id));
     setLayout(prev => prev.filter(l => l.i !== id));
   };
+
+  /*
+    ══ THE PHONE'S PULSE: ONE CHART, AND THAT IS THE WHOLE PAGE ══════════════
+
+    Noah, 2026-08-25, on the desk collapsing badly at 390px: "it's okay if
+    pulse does not work on phone, it should just be one chart on the phone
+    like this" — with a TradingView mobile chart.
+
+    That is the right call and it is worth saying why, because the obvious
+    alternative is to make the grid responsive and it cannot be made to work.
+    The desk is twelve columns wide. At 390px a column is 32px, so the
+    NARROWEST panel the registry allows is about 97px across — not cramped,
+    illegible. Stacking every panel to full width instead just trades that for
+    a page you scroll through ten charts to reach the bottom of, which is not
+    a desk either: the whole point of an arrangement is seeing the panels AT
+    ONCE, and a phone cannot show two of these panels at once no matter how
+    they are stacked. So the desk is a desktop object, and the phone gets the
+    one panel that is worth the entire screen on its own.
+
+    Branched in JS, not hidden with CSS, and the difference is the reason
+    `useIsPhone` exists: a `md:hidden` grid still MOUNTS — ten live panels
+    building canvases and subscribing to the tick behind a screen nobody can
+    see, on the device least able to carry them.
+
+    The desk state above is untouched by this. It still loads, still saves,
+    still autosaves the active desk — a reader who opens the terminal on a
+    laptop finds their arrangement exactly as they left it, having been on a
+    phone in between.
+  */
+  if (isPhone) {
+    return (
+      /*
+        Full bleed, cancelling the shell's own padding (`px-4 pt-5 pb-16`) so
+        the chart reaches all four edges, exactly as Terrain does it — the one
+        difference being that Terrain only takes the vertical cancellation
+        from `lg` and this takes it always, because here the narrow width IS
+        the case being built for rather than the one being escaped.
+
+        `dvh`, not `vh`: on a phone browser `100vh` is the height with the URL
+        bar RETRACTED, so a chart sized to it is taller than the window until
+        the reader scrolls — the bottom of the tape, which is where the price
+        axis and the taskbar live, sits under the browser chrome on arrival.
+        `dvh` tracks the viewport that is actually showing. 3.5rem is the top
+        bar, the same measured constant Terrain uses.
+      */
+      <div className="-mx-4 -mt-5 -mb-16 flex h-[calc(100dvh-3.5rem)] flex-col">
+        {pulsedCtx ? (
+          <LiveChartWidget
+            /* Remounts on a name change so the chart rebuilds cleanly rather
+               than re-pointing a live series — the desk's charts key the same
+               way. */
+            key={pulsedCtx.ticker}
+            ctx={{ ...pulsedCtx, pickTicker: changeTicker }}
+            soleChart
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center">
+            <span className="font-mono text-[11px] uppercase tracking-widest text-textMuted">
+              Awaiting feed initialization…
+            </span>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <>

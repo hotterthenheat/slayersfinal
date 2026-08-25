@@ -18,6 +18,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Fullscreen,
   Grid2x2,
   Layers,
@@ -55,12 +56,27 @@ interface ChartToolbarProps {
       right (fullscreen stays last, so it lands furthest right). The divider
       becomes the invisible spacer that does the pushing. */
   spread?: boolean;
+  /**
+   * EVERY CONTROL AT ITS SMALLEST — for a strip that has to fit a phone.
+   *
+   * Two changes, and both are about line count rather than taste. The seven
+   * timeframe buttons collapse into one trigger that opens them as a menu:
+   * they need 251px laid out, which is most of a 390px screen and the single
+   * biggest reason the strip wrapped. And every dropdown drops its word for
+   * its icon, keeping the word as the hover/AT name — the same trade
+   * `vertical` already makes for a side-docked toolbox.
+   *
+   * Measured at 390px: a 218px strip before, 75px after. (The phone host then
+   * spends some of that back on 40px touch targets, landing at 105px — still
+   * an eighth of the screen where the first attempt took a quarter.)
+   */
+  compact?: boolean;
   /** Stack the strip top-to-bottom — the floating toolbox docked to a side
       edge (Noah, 2026-08-23). Ignores `spread`. */
   vertical?: boolean;
   /** Which side the dropdown menus open toward — a side-docked toolbox has
       no room below itself. */
-  menuSide?: 'bottom' | 'left' | 'right';
+  menuSide?: MenuSide;
   fullscreen?: boolean;
   onToggleFullscreen?: () => void;
   drawing?: boolean;
@@ -203,16 +219,29 @@ const OVERLAY_ITEMS: { key: keyof ChartOverlays; label: string; hint: string }[]
   { key: 'volume', label: 'Volume', hint: 'Session bars along the floor' },
 ];
 
+export type MenuSide = 'bottom' | 'top' | 'left' | 'right';
+
 /** Small anchored dropdown with outside-click dismissal. */
-const MENU_SIDE_POS: Record<'bottom' | 'left' | 'right', string> = {
+const MENU_SIDE_POS: Record<MenuSide, string> = {
   bottom: 'right-0 top-full mt-1',
+  /* UP, for a toolbar sitting on the bottom edge — the phone's Pulse, where
+     the strip is in flow beneath the tape. A `bottom` menu there opens past
+     the bottom of the window, and because the menu is `absolute` inside a
+     page that does not scroll sideways or down, it is not merely awkward to
+     reach: it is unreachable. */
+  top: 'right-0 bottom-full mb-1',
   right: 'left-full top-0 ml-1',
   left: 'right-full top-0 mr-1',
 };
 
 /* The caret points where the menu will pop (Noah, 2026-08-23) — down when it
    drops below, sideways when a side-docked toolbox throws it left or right. */
-const MENU_SIDE_CARET = { bottom: ChevronDown, left: ChevronLeft, right: ChevronRight } as const;
+const MENU_SIDE_CARET = {
+  bottom: ChevronDown,
+  top: ChevronUp,
+  left: ChevronLeft,
+  right: ChevronRight,
+} as const;
 
 const Dropdown = ({
   label,
@@ -227,7 +256,7 @@ const Dropdown = ({
   icon?: ReactNode;
   open: boolean;
   onToggle: () => void;
-  menuSide?: 'bottom' | 'left' | 'right';
+  menuSide?: MenuSide;
   /** Hover name — carries the words when a compact trigger drops its label. */
   title?: string;
   children: ReactNode;
@@ -268,6 +297,7 @@ const ChartToolbar = ({
   candles = false,
   overlayKeys,
   spread = false,
+  compact = false,
   vertical = false,
   menuSide = 'bottom',
   fullscreen = false,
@@ -286,7 +316,9 @@ const ChartToolbar = ({
   onOpenQuad,
 }: ChartToolbarProps) => {
   const themeKey = useCandleThemeKey();
-  const [openMenu, setOpenMenu] = useState<'overlays' | 'candles' | 'style' | 'indicators' | 'alerts' | null>(null);
+  const [openMenu, setOpenMenu] = useState<
+    'overlays' | 'candles' | 'style' | 'indicators' | 'alerts' | 'timeframe' | null
+  >(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   // Outside click closes whichever menu is open
@@ -307,17 +339,60 @@ const ChartToolbar = ({
     <div
       ref={rootRef}
       className={`flex ${
-        vertical ? 'flex-col items-stretch gap-1' : `items-center gap-2 flex-wrap ${spread ? 'w-full' : ''}`
+        vertical
+          ? 'flex-col items-stretch gap-1'
+          : `items-center gap-2 flex-wrap ${spread && !compact ? 'w-full' : ''}`
       }`}
     >
-      <TimeframeStrip value={timeframe} onChange={onTimeframe} vertical={vertical} />
+      {compact ? (
+        /* The current interval IS the trigger, the way every mobile charting
+           app does it — the label is the answer to "what am I looking at" and
+           the menu is the answer to "what else can I look at". */
+        <Dropdown
+          label={TIMEFRAME_OPTIONS.find(o => o.value === timeframe)?.label ?? String(timeframe)}
+          open={openMenu === 'timeframe'}
+          onToggle={() => setOpenMenu(m => (m === 'timeframe' ? null : 'timeframe'))}
+          menuSide={menuSide}
+          title="Timeframe"
+        >
+          <div role="group" aria-label="Timeframe">
+            {TIMEFRAME_OPTIONS.map(opt => {
+              const active = opt.value === timeframe;
+              return (
+                <button
+                  key={opt.value}
+                  aria-pressed={active}
+                  onClick={() => {
+                    onTimeframe(opt.value);
+                    setOpenMenu(null);
+                  }}
+                  className={`flex w-full items-center gap-2 px-3 py-2 text-left font-mono text-[11px] transition-colors ${
+                    active ? 'bg-white/[0.06] text-textPrimary' : 'text-textSecondary hover:bg-white/[0.03]'
+                  }`}
+                >
+                  <Check className={`w-3 h-3 shrink-0 ${active ? 'opacity-100' : 'opacity-0'}`} aria-hidden />
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+        </Dropdown>
+      ) : (
+        <TimeframeStrip value={timeframe} onChange={onTimeframe} vertical={vertical} />
+      )}
 
       {/* Spread mode: the divider stops being a line and becomes the spacer
           that shoves every following control to the right edge — the
           timeframes get the whole left side to breathe (Noah, 2026-08-23).
           Vertical turns it back into a line, lying flat. */}
       <span
-        className={vertical ? 'h-px w-4 self-center bg-borderSubtle' : spread ? 'ml-auto' : 'w-px h-4 bg-borderSubtle'}
+        className={
+          vertical
+            ? 'h-px w-4 self-center bg-borderSubtle'
+            : spread && !compact
+              ? 'ml-auto'
+              : 'w-px h-4 shrink-0 bg-borderSubtle'
+        }
         aria-hidden
       />
 
@@ -327,7 +402,11 @@ const ChartToolbar = ({
           (bars/line/area…), not the color theme; Alerts is an empty shell
           he's cooking on. The host only wires these in FULLSCREEN. */}
       {(onToggleReplay || onIndicators || alertTicker || onChartStyle) && (
-        <span className={`flex gap-1 ${vertical ? 'flex-col items-stretch' : 'flex-wrap items-center justify-end'}`}>
+        <span
+          className={`flex gap-1 ${
+            vertical ? 'flex-col items-stretch' : 'flex-wrap items-center justify-end'
+          }`}
+        >
           {onToggleReplay && (
             <button
               onClick={onToggleReplay}
@@ -342,7 +421,7 @@ const ChartToolbar = ({
           )}
           {onIndicators && indicators && (
             <Dropdown
-              label={vertical ? '' : 'Indicators'}
+              label={vertical || compact ? '' : 'Indicators'}
               /* Signature inks on the tool icons (Noah, 2026-08-23) —
                  categorical identity, no house meaning: indicators wear the
                  blue their EMA lines lead with */
@@ -389,7 +468,7 @@ const ChartToolbar = ({
           )}
           {alertTicker && (
             <Dropdown
-              label={vertical ? '' : 'Alerts'}
+              label={vertical || compact ? '' : 'Alerts'}
               icon={<Bell className="w-3 h-3 text-[#FF9500]" />}
               title="Alerts"
               open={openMenu === 'alerts'}
@@ -401,7 +480,7 @@ const ChartToolbar = ({
           )}
           {onChartStyle && (
             <Dropdown
-              label={vertical ? '' : 'Candles'}
+              label={vertical || compact ? '' : 'Candles'}
               icon={<CandlestickChart className="w-3 h-3 text-[#30D158]" />}
               title="Chart style"
               open={openMenu === 'style'}
@@ -445,7 +524,7 @@ const ChartToolbar = ({
           what set the upright toolbox's width (Noah, 2026-08-23: "too wide");
           the hover title keeps the name. */}
       <Dropdown
-        label={vertical ? String(activeOverlayCount) : `Overlays ${activeOverlayCount}`}
+        label={vertical || compact ? String(activeOverlayCount) : `Overlays ${activeOverlayCount}`}
         icon={<Layers className="w-3 h-3" />}
         title="Overlays"
         open={openMenu === 'overlays'}
@@ -487,9 +566,9 @@ const ChartToolbar = ({
            row's right edge; the menu itself still shows the active theme. */
         /* "Theme", no longer "Candles" — that name now belongs to the chart
            STYLE picker beside the timeframes (Noah, 2026-08-23) */
-        label={vertical ? '' : minimal ? 'Theme' : `Theme · ${activeCandleLabel}`}
+        label={vertical || compact ? '' : minimal ? 'Theme' : `Theme · ${activeCandleLabel}`}
+        title={`Candle theme · ${activeCandleLabel}`}
         icon={<Palette className="w-3 h-3 text-[#BBB2E8]" />}
-        title="Candle theme"
         open={openMenu === 'candles'}
         onToggle={() => setOpenMenu(m => (m === 'candles' ? null : 'candles'))}
         menuSide={menuSide}

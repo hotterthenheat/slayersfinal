@@ -1,6 +1,6 @@
 /*
-  BROWSER SWEEP for the Terrain desk. Runs against a built `dist/` served on
-  :4319 (see `npm run test:ui`).
+  BROWSER SWEEP for the Terrain desk and the phone's Pulse. Runs against a
+  built `dist/` served on :4319 (see `npm run test:ui`).
 
   Everything here was a scratch script first. Three things had to change before
   any of it belonged in the repo, and each one was a way for this file to be
@@ -437,6 +437,159 @@ head('one pane at a time, and it survives a reload');
   JSON.stringify(back) === JSON.stringify(after)
     ? ok('and it is still there after a reload')
     : bad(`after a reload it reads ${JSON.stringify(back)}`);
+  await ctx.close();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   6. THE PHONE'S PULSE — one chart, and the desk not built at all.
+
+   Every assertion here exists because the FIRST version of this layout passed
+   the obvious ones. It had a full-height chart, a correctly sized canvas with
+   22,625 pixels of ink, and no sideways page scroll — and it was unusable: the
+   control strip had wrapped into a ~600px column down the right edge, sitting
+   on the price axis and covering most of the tape. Nothing that measures the
+   chart can see that, so the checks below measure the STRIP, and where it sits
+   relative to the tape.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the phone gets one chart, not a crushed desk');
+{
+  const ctx = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    hasTouch: true,
+    isMobile: true,
+  });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/pulse`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+
+  const g = await page.evaluate(() => {
+    const strip = [...document.querySelectorAll('div')].find(d => {
+      const c = d.className;
+      return typeof c === 'string' && c.includes('backdrop-blur-md') && c.includes('backdrop-saturate-150');
+    });
+    const canvas = [...document.querySelectorAll('canvas')].sort(
+      (a, b) => b.getBoundingClientRect().height - a.getBoundingClientRect().height
+    )[0];
+    const cr = canvas?.getBoundingClientRect();
+    const sr = strip?.getBoundingClientRect();
+    let ink = 0;
+    if (canvas) {
+      const d = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+      for (let k = 3; k < d.length; k += 4) if (d[k] > 8) ink++;
+    }
+    return {
+      innerH: window.innerHeight,
+      grid: !!document.querySelector('.react-grid-layout'),
+      chartH: cr ? Math.round(cr.height) : 0,
+      chartBottom: cr ? Math.round(cr.bottom) : 0,
+      bitmap: canvas?.width ?? 0,
+      box: cr ? Math.round(cr.width) : 0,
+      ink,
+      stripTop: sr ? Math.round(sr.top) : null,
+      stripH: sr ? Math.round(sr.height) : null,
+      hscroll: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      triggers: strip
+        ? [...strip.querySelectorAll('button')].map(bt => ({
+            name: (bt.getAttribute('title') || bt.getAttribute('aria-label') || '').trim(),
+            h: Math.round(bt.getBoundingClientRect().height),
+          }))
+        : [],
+    };
+  });
+
+  /* The desk must not merely be hidden — it must never have been built. Ten
+     live panels mounting behind a `md:hidden` is the cost this branch exists
+     to avoid, and only the DOM can tell the two apart. */
+  !g.grid ? ok('the widget desk was not mounted at all') : bad('react-grid-layout is in the DOM at 390px');
+
+  g.chartH > g.innerH * 0.6
+    ? ok(`the chart is ${g.chartH}px of an ${g.innerH}px window`)
+    : bad(`the chart is only ${g.chartH}px of ${g.innerH}px`);
+
+  /* Really painted, at THIS width — a chart in a container that collapsed to
+     zero width still reports a height. */
+  Math.abs(g.bitmap - g.box) <= 2 && g.ink > 500
+    ? ok(`its canvas is ${g.bitmap}px for a ${g.box}px box, ${g.ink} pixels of ink`)
+    : bad(`canvas ${g.bitmap}px for a ${g.box}px box with ${g.ink} pixels of ink`);
+
+  /* THE ONE THAT CATCHES THE COLLAPSE. A strip that has wrapped into a column
+     is tall; a strip laid over the tape starts above the tape's bottom. */
+  g.stripH !== null && g.stripH <= 140
+    ? ok(`the control strip is ${g.stripH}px`)
+    : bad(`the control strip is ${g.stripH}px — it has wrapped`);
+
+  g.stripTop !== null && g.stripTop >= g.chartBottom - 2
+    ? ok('and it sits below the tape rather than over it')
+    : bad(`the strip starts at ${g.stripTop}px, above the tape's bottom at ${g.chartBottom}px`);
+
+  /* Reachable by a finger, not just by a cursor. */
+  const small = g.triggers.filter(t => t.h < 40);
+  g.triggers.length >= 6 && small.length === 0
+    ? ok(`${g.triggers.length} controls, every one at least 40px tall`)
+    : bad(
+        `${g.triggers.length} controls, ${small.length} under 40px: ` +
+          JSON.stringify(small.map(t => `${t.name} ${t.h}px`))
+      );
+
+  /* The symbol is changeable — the desk header that normally carries the
+     picker does not exist here, so the chart has to carry it itself. */
+  g.triggers.some(t => /ticker|symbol/i.test(t.name))
+    ? ok('the symbol can be changed from the strip')
+    : bad('no symbol picker on the strip — the chart is stuck on one name');
+
+  g.hscroll === 0 ? ok('nothing scrolls sideways') : bad(`${g.hscroll}px of sideways scroll`);
+  errs.length === 0 ? ok('no page errors') : bad(`page errors: ${errs.slice(0, 2).join(' | ')}`);
+
+  /* Every menu opens UPWARD off a strip on the bottom edge, and lands on
+     screen. Downward would put it past the bottom of a page that does not
+     scroll — present in the DOM, and unreachable. */
+  for (const name of ['Timeframe', 'Overlays']) {
+    const trigger = page.locator(`button[title="${name}"]`).first();
+    if (!(await trigger.count())) {
+      bad(`no ${name} control on the phone strip`);
+      continue;
+    }
+    await trigger.click();
+    await page.waitForTimeout(400);
+    const panel = await page.evaluate(() => {
+      const p = [...document.querySelectorAll('div')].find(d => {
+        const c = d.className;
+        return typeof c === 'string' && c.includes('z-40') && c.includes('min-w-[210px]');
+      });
+      if (!p) return null;
+      const r = p.getBoundingClientRect();
+      return { inView: r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth };
+    });
+    panel?.inView ? ok(`the ${name} menu opens fully on screen`) : bad(`the ${name} menu opens off screen`);
+    await page.keyboard.press('Escape');
+    await page.mouse.click(195, 300);
+    await page.waitForTimeout(300);
+  }
+  await ctx.close();
+}
+
+/* And the other half: the desk is still THERE on a desk-sized window. A branch
+   that simply deleted it would pass every check above. */
+head('the desk survives above the phone line');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await ctx.newPage();
+  await page.goto(`${BASE}/pulse`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+  const d = await page.evaluate(() => {
+    const grid = document.querySelector('.react-grid-layout');
+    return {
+      grid: !!grid,
+      panels: grid ? grid.children.length : 0,
+      hscroll: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    };
+  });
+  d.grid && d.panels >= 2
+    ? ok(`the widget desk is mounted with ${d.panels} panels at 1280px`)
+    : bad(`at 1280px the desk has ${d.panels} panels (grid: ${d.grid})`);
+  d.hscroll === 0 ? ok('and nothing scrolls sideways') : bad(`${d.hscroll}px of sideways scroll`);
   await ctx.close();
 }
 

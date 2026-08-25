@@ -46,7 +46,28 @@ import type { WorkspaceCtx } from './registry';
    baby-blue), or the voices (lime/mint). */
 const COMPARE_INKS = ['#5B9CF6', '#BBB2E8', '#EDE4CD', '#6BD3C7'];
 
-const LiveChartWidget = ({ ctx }: { ctx: WorkspaceCtx }) => {
+export interface LiveChartWidgetProps {
+  ctx: WorkspaceCtx;
+  /**
+   * This chart is the ONLY thing on the screen — the phone's Pulse, where
+   * there is no desk around it.
+   *
+   * Two things follow, and they are the two the docked chart gets from its
+   * surroundings rather than from itself. The symbol picker: docked, the name
+   * is changed from the panel header the desk draws above this component, and
+   * with no desk there is no header and the chart would be stuck on whatever
+   * name it opened with. The style and indicator menus: docked they are held
+   * back because a 12-column panel has no room for them, which is not true of
+   * a chart holding the whole window.
+   *
+   * It is NOT a second fullscreen. `full` is a portal that covers the app;
+   * this is a chart laid out normally inside a host that happens to be the
+   * viewport, so the terminal's own nav stays reachable above it.
+   */
+  soleChart?: boolean;
+}
+
+const LiveChartWidget = ({ ctx, soleChart = false }: LiveChartWidgetProps) => {
   const [timeframe, setTimeframe] = useState<Timeframe>('1m');
   const [overlays, setOverlays] = useState<ChartOverlays>(DEFAULT_OVERLAYS);
   const [compares, setCompares] = useState<CompareEntry[]>([]);
@@ -149,7 +170,15 @@ const LiveChartWidget = ({ ctx }: { ctx: WorkspaceCtx }) => {
   }, [full]);
 
   const body = (
-    <div className="relative h-full min-h-0" style={{ background: surface }}>
+    /*
+      A COLUMN when this chart owns the screen, so the control strip can take
+      a row of its own beneath the tape instead of floating over it. Docked
+      and fullscreen keep the plain relative box the floating bar needs.
+    */
+    <div
+      className={`relative h-full min-h-0 ${soleChart ? 'flex flex-col' : ''}`}
+      style={{ background: surface }}
+    >
       {/* Controls sit in the body, not the header — the header is the drag
           handle, and a click there would start dragging the panel. The quad
           button is the door to /pulse/board — it moved here when the desk
@@ -165,8 +194,31 @@ const LiveChartWidget = ({ ctx }: { ctx: WorkspaceCtx }) => {
           fullscreen) */}
       {!superFull && (
       <div
-        className={`absolute top-0 inset-x-0 z-10 w-full select-none flex items-center flex-wrap backdrop-blur-md backdrop-saturate-150 ${
-          full ? 'px-3 py-2 gap-3' : 'px-2 py-1.5 gap-2'
+        /*
+          The roomier spread when this chart owns the screen — and on a phone
+          it is not a preference: the tight set is built for a pointer, and its
+          controls land under the 44px a fingertip actually covers.
+
+          ONE LINE THAT SCROLLS, never a block that wraps, in `soleChart`.
+          Wrapping is the right answer for a bar that is merely snug; it is the
+          wrong one for a bar that does not remotely fit. Measured at 390px
+          with `flex-wrap`: the strip became a ~600px vertical column pinned to
+          the right edge, over the price axis, hiding most of the tape — while
+          the chart underneath was full height with a correctly sized canvas
+          and the page had no sideways scroll. Nothing that measures the CHART
+          can see this; it is entirely inside the overlay.
+        */
+        className={`z-10 w-full select-none flex flex-wrap items-center backdrop-blur-md backdrop-saturate-150 ${
+          soleChart
+            ? /* 40px on every control in the strip AND in the menus it opens.
+                 The toolbar's own buttons are sized for a cursor and measure
+                 20–23px tall, which is half what a fingertip actually covers —
+                 fine under a mouse, a mis-tap generator on the device this
+                 layout exists for. Applied from the host rather than threaded
+                 through the shared toolbar: it is a property of being touched,
+                 not of being compact, and the desk's charts are not touched. */
+              'order-last shrink-0 border-t border-borderSubtle px-3 py-2 gap-3 [&_button]:min-h-[40px]'
+            : `absolute top-0 inset-x-0 ${full ? 'px-3 py-2 gap-3' : 'px-2 py-1.5 gap-2'}`
         }`}
         style={{ background: `${surface}8C` }}
       >
@@ -174,7 +226,7 @@ const LiveChartWidget = ({ ctx }: { ctx: WorkspaceCtx }) => {
             the name without leaving the takeover — same quick-pick the 4-way
             cells carry, wired to this panel's pin. Docked keeps the header
             picker. */}
-        {full && ctx.pickTicker && (
+        {(full || soleChart) && ctx.pickTicker && (
           <>
             <span className="inline-flex items-center gap-2">
               <TickerQuickPick ticker={ctx.ticker} onPick={ctx.pickTicker} />
@@ -192,6 +244,13 @@ const LiveChartWidget = ({ ctx }: { ctx: WorkspaceCtx }) => {
                   cash index and the futures beside the ETF, no TradingView
                   detour. */}
               {(() => {
+                /* Not on the phone strip. The twins are a useful third and
+                   fourth price on a desk that has room for them; on 390px they
+                   are ~180px of text sitting between the symbol and the
+                   timeframes, pushing the control a reader reaches for most
+                   off the end of a strip they then have to scroll back. The
+                   name's own price is in the legend on the tape either way. */
+                if (soleChart) return null;
                 const fam = twinFamilyFor(ctx.ticker);
                 if (!fam) return null;
                 const s = Simulator.TICKERS[ctx.ticker]?.currentPrice ?? ctx.gex.levels.spot;
@@ -212,7 +271,14 @@ const LiveChartWidget = ({ ctx }: { ctx: WorkspaceCtx }) => {
           <ChartToolbar
             minimal
             candles
-            spread
+            /* Every menu opens UPWARD off the bottom strip — downward would
+               put it past the bottom of a window that does not scroll. */
+            menuSide={soleChart ? 'top' : 'bottom'}
+            compact={soleChart}
+            /* `spread` shoves the right cluster to the far edge — meaningless
+               on a strip narrower than its own contents, where it only opens
+               a gap nobody can reach past. */
+            spread={!soleChart}
             timeframe={timeframe}
             onTimeframe={setTimeframe}
             overlays={overlays}
@@ -223,13 +289,16 @@ const LiveChartWidget = ({ ctx }: { ctx: WorkspaceCtx }) => {
             replay={replay}
             onToggleReplay={full ? () => setReplay(r => !r) : undefined}
             chartStyle={chartStyle}
-            onChartStyle={full ? setChartStyle : undefined}
+            onChartStyle={full || soleChart ? setChartStyle : undefined}
             indicators={indicators}
-            onIndicators={full ? setIndicators : undefined}
+            onIndicators={full || soleChart ? setIndicators : undefined}
             alertTicker={full ? ctx.ticker : undefined}
             alertSpot={ctx.gex.levels.spot}
             onTotalFullscreen={full ? () => setSuperFull(true) : undefined}
-            onOpenQuad={() => setQuad(true)}
+            /* The 4-way board is four charts, which is the one thing the
+               phone's Pulse exists to NOT be — and it opens as a takeover
+               with no way back that fits a 390px screen. */
+            onOpenQuad={soleChart ? undefined : () => setQuad(true)}
             fullscreen={full}
             onToggleFullscreen={() => (full ? closeFull() : setFull(true))}
           />
@@ -291,8 +360,15 @@ const LiveChartWidget = ({ ctx }: { ctx: WorkspaceCtx }) => {
       </div>
       )}
       {/* The tape owns the WHOLE window and runs under the translucent bar,
-          edge to edge — no padding, no inner frame. */}
-      <div className="absolute inset-0">
+          edge to edge — no padding, no inner frame.
+
+          Except in `soleChart`, where it is a flex ROW of the body's column
+          and takes whatever the strip below it leaves. `absolute inset-0`
+          there would lay the tape over the strip as well as under it, and the
+          strip's own controls would still be tappable — so it would look
+          right and the chart would simply be 60px taller than the space it
+          was given, with its time axis behind the buttons. */}
+      <div className={soleChart ? 'relative flex-1 min-h-0' : 'absolute inset-0'}>
         {/* The chart legend (Noah, 2026-08-23, TradingView's grammar): name ·
             timeframe · the live tick, floating on the tape's top-left just
             under the taskbar (which the tape now runs beneath). Facts only —
