@@ -1,7 +1,5 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Search } from 'lucide-react';
-import CompanyLogo from './CompanyLogo';
-import EmptyState from './EmptyState';
 import type { TickerListing } from '../../data/tickers';
 
 type TickerModule = typeof import('../../data/tickers');
@@ -18,8 +16,6 @@ const TickerSearch = ({ value, onChange }: TickerSearchProps) => {
   const [highlight, setHighlight] = useState(0);
   const [mod, setMod] = useState<TickerModule | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
-  const listRef = useRef<HTMLDivElement | null>(null);
-  const listId = useId();
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const results: TickerListing[] = useMemo(
@@ -38,14 +34,6 @@ const TickerSearch = ({ value, onChange }: TickerSearchProps) => {
 
   useEffect(() => setHighlight(0), [query]);
 
-  // Keep the keyboard highlight visible. The list is a 288px scroll box; the
-  // highlight moved but never scrolled, so ArrowDown past row ~10 had no
-  // visible effect at all.
-  useEffect(() => {
-    if (!open) return;
-    listRef.current?.querySelector<HTMLElement>(`[data-idx="${highlight}"]`)?.scrollIntoView({ block: 'nearest' });
-  }, [highlight, open]);
-
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
@@ -54,8 +42,6 @@ const TickerSearch = ({ value, onChange }: TickerSearchProps) => {
     window.addEventListener('mousedown', onDown);
     return () => window.removeEventListener('mousedown', onDown);
   }, [open]);
-
-  const optionId = (i: number) => `${listId}-opt-${i}`;
 
   const pick = (symbol: string) => {
     onChange(symbol);
@@ -82,22 +68,16 @@ const TickerSearch = ({ value, onChange }: TickerSearchProps) => {
     <div ref={wrapRef} className="relative">
       <button
         onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-2 border border-borderSubtle hover:border-borderMuted bg-panel rounded-md pl-2.5 pr-2 py-1.5 font-mono text-caption transition-colors min-w-[104px] leading-4"
+        className="flex items-center gap-2 border border-borderSubtle hover:border-borderMuted bg-panel rounded-md pl-2.5 pr-2 py-1.5 font-mono text-xs transition-colors min-w-[104px]"
       >
-        {/* The mark stands in for the magnifier on the trigger. The button
-            already says what it is by carrying a symbol and a chevron, and the
-            search affordance is repeated inside the popover on the input that
-            actually searches — so this slot is better spent saying WHICH name
-            the desk is on. Single-name surface: exactly where a brand mark
-            belongs (see ui/CompanyLogo.tsx). */}
-        <CompanyLogo ticker={value} size={16} />
+        <Search className="w-3.5 h-3.5 text-textMuted" />
         <span className="font-semibold text-textPrimary">{value}</span>
         <ChevronDown className={`w-3.5 h-3.5 text-textMuted ml-auto transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (
         <div
-          className="absolute right-0 top-full mt-1.5 z-40 w-72 border border-borderMuted bg-panel rounded-lg shadow-overlay overflow-hidden animate-slide-in"
+          className="absolute right-0 top-full mt-1.5 z-40 w-72 border border-borderMuted bg-panel rounded-lg shadow-2xl shadow-black overflow-hidden animate-slide-in"
           onKeyDown={onKeyDown}
         >
           <div className="flex items-center gap-2 px-3 border-b border-borderSubtle">
@@ -107,31 +87,18 @@ const TickerSearch = ({ value, onChange }: TickerSearchProps) => {
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Search all tickers…"
-              role="combobox"
-              aria-expanded
-              aria-controls={listId}
-              aria-autocomplete="list"
-              aria-activedescendant={results[highlight] ? optionId(highlight) : undefined}
-              aria-label="Search all tickers"
-              className="w-full bg-transparent py-2.5 text-body text-textPrimary placeholder:text-textMuted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60 leading-5"
+              className="w-full bg-transparent py-2.5 text-sm text-textPrimary placeholder:text-textMuted focus:outline-none"
             />
           </div>
-          <div ref={listRef} id={listId} role="listbox" aria-label="Tickers" className="max-h-72 overflow-y-auto py-1">
+          <div className="max-h-72 overflow-y-auto py-1">
             {!mod ? (
-              <div className="px-3 py-6 text-center font-mono text-label text-textMuted">Loading tickers…</div>
+              <div className="px-3 py-6 text-center font-mono text-[11px] text-textMuted">Loading tickers…</div>
             ) : results.length === 0 ? (
-              <EmptyState size="sm" title="No matches" body={`Nothing matches “${query}”`} />
+              <div className="px-3 py-6 text-center font-mono text-[11px] text-textMuted">No matches</div>
             ) : (
               results.map((t, i) => (
                 <button
                   key={t.symbol}
-                  id={optionId(i)}
-                  data-idx={i}
-                  role="option"
-                  aria-selected={i === highlight}
-                  /* Tab should leave the popover, not walk 60 stops through it —
-                     the arrow keys drive this list. */
-                  tabIndex={-1}
                   onClick={() => pick(t.symbol)}
                   onMouseEnter={() => setHighlight(i)}
                   className={`w-full flex items-center gap-3 px-3 py-1.5 text-left transition-colors ${
@@ -139,13 +106,13 @@ const TickerSearch = ({ value, onChange }: TickerSearchProps) => {
                   }`}
                 >
                   <span
-                    className={`font-mono text-caption font-semibold w-16 shrink-0 ${
+                    className={`font-mono text-xs font-semibold w-16 shrink-0 ${
                       t.symbol === value ? 'text-select' : 'text-textPrimary'
-                    } leading-4`}
+                    }`}
                   >
                     {t.symbol}
                   </span>
-                  <span className="text-label text-textSecondary truncate">{t.name}</span>
+                  <span className="text-[11px] text-textSecondary truncate">{t.name}</span>
                 </button>
               ))
             )}

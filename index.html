@@ -5,52 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Slayer Terminal — Institutional Options GEX Analytics</title>
   <meta name="description" content="Professional-grade options order flow, market-maker hedging dynamics, and institutional liquidity tracking.">
-  <meta name="theme-color" content="#050505">
-  <link rel="canonical" href="https://slayerterminal.com/">
-
-  <!-- Icons + PWA manifest -->
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-  <link rel="apple-touch-icon" href="/favicon.svg">
-  <link rel="manifest" href="/site.webmanifest">
-
-  <!-- Open Graph -->
-  <meta property="og:type" content="website">
-  <meta property="og:site_name" content="Slayer Terminal">
-  <meta property="og:title" content="Slayer Terminal — Dealer-Flow Options Analytics">
-  <meta property="og:description" content="Order flow, market-maker hedging dynamics, and institutional liquidity tracking. Compass finds the setup, Pinpoint reads the flow.">
-  <meta property="og:url" content="https://slayerterminal.com/">
-  <meta property="og:image" content="https://slayerterminal.com/assets/og-cover.png">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="Slayer Terminal — dealer-flow options analytics">
-
-  <!-- Twitter / X -->
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:site" content="@JoinSlayer">
-  <meta name="twitter:title" content="Slayer Terminal — Dealer-Flow Options Analytics">
-  <meta name="twitter:description" content="Order flow, market-maker hedging dynamics, and institutional liquidity tracking. Compass finds the setup, Pinpoint reads the flow.">
-  <meta name="twitter:image" content="https://slayerterminal.com/assets/og-cover.png">
-
-  <!-- SF Pro — self-hosted variable font, the site's ONE family.
-
-       Replaces a two-family Google Fonts stylesheet (Inter + JetBrains Mono).
-       That link was a render-blocking request to a third party: measured in a
-       sandbox that cannot reach fonts.googleapis.com, every navigation stalled
-       ~13.6s before painting anything. The workaround was to load it as
-       `media="print"` and promote it to `all` from the bundle — which worked,
-       but left the first paint in a fallback face and the swap-in reflow with
-       it, and kept two third-party hosts in the CSP.
-
-       Self-hosting deletes the whole problem instead of managing it. The file
-       ships from our own origin, so it is subject to the same cache rules as
-       the bundle, there is no third-party round trip to stall on, and
-       `style-src`/`font-src` in lib/securityHeaders.ts are now `'self'` alone.
-
-       One file covers the whole range: wght is a 100-900 axis, so every
-       Tailwind weight comes out of the same 256KB download rather than the
-       eleven static cuts the two-family stylesheet was requesting. `preload`
-       because it is needed for the first paint and is discoverable here rather
-       than one hop deeper inside the CSS. -->
+  
+  <!-- SF Pro (self-hosted variable font — the site's one and only family) -->
   <link rel="preload" href="/fonts/SF-Pro.var.woff2" as="font" type="font/woff2" crossorigin>
 </head>
 <body class="bg-canvas">

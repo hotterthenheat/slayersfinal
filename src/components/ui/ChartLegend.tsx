@@ -33,14 +33,13 @@ const SWATCH: Record<SwatchKind, string> = {
 /**
  * The house chart legend.
  *
- * Two label grammars: `line` (thin rule + sentence-case secondary label), the
- * look every lightweight-charts toolbar uses, and `square` (small filled block +
- * uppercase muted label) for area and band fills.
+ * Two label grammars: `line` (thin rule + sentence-case secondary label) for
+ * chart toolbars, and `square` (small filled block + uppercase muted label)
+ * for area and band fills.
  *
  * Individual keys can override the swatch with `kind`, because a real legend
- * mixes shapes — the positioning map carries two filled blocks, a dot, a solid
- * rule and two dashed rules in one row. Hand-rolling that is what produced a
- * fourth and fifth spelling of the same component.
+ * mixes shapes — the positioning map carries two filled blocks, a solid rule
+ * and a dashed rule in one row.
  *
  * Pass `color` for a raw chart color, `swatchClass` for a token background, or
  * `gradient` with `kind: 'gradient'` for a diverging ramp chip.
@@ -64,7 +63,7 @@ const ChartLegend = ({ items, className = '', variant = 'square' }: ChartLegendP
         return (
           <span
             key={i}
-            className={`inline-flex items-center gap-1.5 font-mono text-micro ${
+            className={`inline-flex items-center gap-1.5 font-mono text-[10px] ${
               line ? 'text-textSecondary' : 'uppercase tracking-wider text-textMuted'
             }`}
           >

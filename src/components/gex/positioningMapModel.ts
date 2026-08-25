@@ -4,9 +4,10 @@ import type { StrikeExposure } from '../../types/gex';
   Pure derivations behind the dealer positioning map.
 
   The map stopped being a stacked ladder of fixed-height rows: rows are what
-  gave it a ~508px intrinsic height, and two of its three hosts give it under
-  400. Strikes are now placed on a continuous price axis as tiled bands, so the
-  same 21 strikes fit 190px or 520px with nothing elided and nothing scrolling.
+  gave it a fixed intrinsic height, and its hosts (Pinpoint panel, Pulse tile,
+  landing tilt-box) hand it wildly different boxes. Strikes are now placed on
+  a continuous price axis as tiled bands, so the same 21 strikes fit 190px or
+  520px with nothing elided and nothing scrolling.
 
   Everything here is geometry and arithmetic over data the component already
   receives, kept out of the component so it can be reasoned about (and tested)
@@ -44,12 +45,11 @@ export function priceScale(strikes: StrikeExposure[], plotH = 1): PriceScale {
 
 /**
  * One band per strike, centered on it, spanning to the midpoint of each
- * neighbour. That midpoint is exactly how the flip is defined upstream — the
- * plan places it halfway between the two strikes the smoothed net-GEX profile
- * crosses zero across (simulator.ts `generateTradePlan`, surfaced by gex.ts
- * `buildLevels`) — so the boundary where the fill changes colour IS the engine's
- * flip: no synthetic vertex, no interpolant, no second opinion about where the
- * regime turns.
+ * neighbour. That midpoint is exactly how the flip is defined upstream —
+ * exposure.ts `buildExposureProfile` places it halfway between the two strikes
+ * the net-GEX profile crosses zero across — so the boundary where the fill
+ * changes colour IS the engine's flip: no synthetic vertex, no interpolant,
+ * no second opinion about where the regime turns.
  *
  * Edges come from the neighbours rather than a single `step`, so an uneven
  * strike chain still tiles exactly instead of opening seams; on the even chains
@@ -75,8 +75,9 @@ export function bands(strikes: StrikeExposure[], plotH: number): BandGeom[] {
 /**
  * The honest bar ceiling. `maxAbs.gex` is max(|put|, |call|, |net|), which is
  * right for the panels that draw the legs and wrong here: the map draws only
- * `net`, the cancellation of two opposite-signed legs, so every bar was scaled
- * against a ceiling roughly twice the tallest thing on screen.
+ * `net`, the cancellation of two opposite-signed legs, so scaling against
+ * maxAbs.gex sizes every bar against a ceiling roughly twice the tallest
+ * thing on screen.
  */
 export function netMaxOf(strikes: StrikeExposure[]): number {
   let m = 1;
@@ -90,13 +91,12 @@ export function netMaxOf(strikes: StrikeExposure[]): number {
   This module only ever sees `StrikeExposure[]` — a WINDOWED, expiry-decayed,
   per-strike-jittered view of the book — so an argmax over it answers "the
   biggest bar currently drawn", which is a different question from "the book's
-  king" and moves when the panel is resized. The two disagreed on 8 of 32
-  ticker × expiry combinations, and the map crowned one strike while the levels
-  rail above it named another.
+  king" and moves when the panel is resized.
 
-  `ExposureLevels.king` carries the book's answer from gex.ts `buildLevels`, and
-  PositioningMap.tsx reads it. If the king falls outside the rendered window, no
-  row is crowned — the honest outcome, and the one the type makes easy.
+  `ExposureLevels.king` carries the book's answer from exposure.ts
+  `buildExposureProfile` (full-chain argmax), and PositioningMap.tsx reads it.
+  If the king falls outside the rendered window, no row is crowned — the
+  honest outcome, and the one the type makes easy.
 */
 
 /**
@@ -153,9 +153,9 @@ export function cumHalfOf(strikes: StrikeExposure[]): number {
 }
 
 /**
- * Contiguous runs only. `priorScaled` skips strikes whose raw current value is
- * zero, and a single path across a hole would draw a straight line through
- * prices it has no reading for.
+ * Contiguous runs only. The prior-snapshot map skips strikes whose raw current
+ * value is zero, and a single path across a hole would draw a straight line
+ * through prices it has no reading for.
  */
 export function ghostRuns(bandList: BandGeom[], prior: Map<number, number>): BandGeom[][] {
   const runs: BandGeom[][] = [];

@@ -1,243 +1,194 @@
 /*
 ==================================================
   SLAYER TERMINAL - PRICING EXTRAS (landing)
-  Compare-plans matrix + FAQ accordion. Feature rows
-  are OUR pages and engines — information catered to
-  Slayer, presentation in house grammar.
-
-  A feature row may not describe a feed the build does
-  not carry. The FAQ below states plainly that live
-  market data lands with launch, so "streaming",
-  "live" and "real-time" in the matrix above it were
-  the page arguing with itself, and the matrix is what
-  a buyer reads first. Describe what the engines do;
-  let the FAQ own the provenance.
+  "What each tier unlocks" additive ladder + FAQ as
+  a terminal transcript. Feature rows are OUR pages
+  and engines; the presentation is house grammar —
+  no borrowed compare-matrix or accordion patterns.
 ==================================================
 */
 
-import { useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
-import { Check, ChevronDown, Clock, Minus } from 'lucide-react';
-import SignalBadge from '../../components/ui/SignalBadge';
-import { DUR, EASE } from '../../lib/motion';
+import { Clock } from 'lucide-react';
+import Reveal from './Reveal';
 
-// ---- compare plans -----------------------------------------------------------
+// ---- what each tier unlocks --------------------------------------------------
+// Not a checkmark matrix: each tier lists ONLY what it adds on top of the one
+// before it. Reads in seconds, and the middle tier carries the house silver.
 
-type Avail = boolean | 'soon';
-
-interface FeatureRow {
+interface LadderItem {
   label: string;
   detail: string;
-  badge?: string;
-  /** [Pinpoint, Compass, Lifetime] */
-  tiers: [Avail, Avail, Avail];
+  soon?: boolean;
 }
 
-const TIER_COLS = ['Pinpoint', 'Compass', 'Lifetime'];
+interface LadderTier {
+  name: string;
+  kicker: string;
+  featured?: boolean;
+  /** The tier this one builds on — null for the base */
+  inherits: string | null;
+  items: LadderItem[];
+}
 
-const ROWS: FeatureRow[] = [
+const LADDER: LadderTier[] = [
   {
-    label: 'Pulse',
-    detail: 'Chart with walls, flip & king, dealer pressure, order flow',
-    tiers: [true, true, true],
+    name: 'Pinpoint',
+    kicker: 'the structure desk',
+    inherits: null,
+    items: [
+      { label: 'Pulse', detail: 'Chart with walls, flip & king, dealer pressure, order flow' },
+      { label: 'Pinpoint', detail: 'GEX · DEX · VEX by strike — exposure matrix & positioning map' },
+      { label: 'Ranked Targets', detail: 'Every strike ranked by structural priority — the levels that matter today' },
+      { label: 'Trace', detail: 'Streaming options tape, sweeps, blocks & dark-pool intelligence' },
+      { label: 'Tracker & the Pulse desk', detail: 'Bookmarked setups with live monitoring, saved desk layouts' },
+      { label: 'Discord chat & alerts', detail: 'Real-time community and setup alerts to your phone' },
+    ],
   },
   {
-    label: 'Pinpoint',
-    detail: 'GEX · DEX · VEX by strike: exposure matrix & positioning map',
-    tiers: [true, true, true],
+    name: 'Compass',
+    kicker: 'the graded-setups desk',
+    featured: true,
+    inherits: 'Pinpoint',
+    items: [
+      { label: 'Compass', detail: 'Graded setups — ACTIVE, WATCH or FADING, explained in plain English' },
+      { label: 'Stocks', detail: 'Sector rotation ranked, every name screened on momentum, quality, flow & news' },
+      { label: 'News', detail: 'The wire on the left, what the model thinks it does to price on the right' },
+      {
+        label: 'Earnings',
+        detail: 'Week calendar with our expected move, plus a dossier per company — beats, past reactions, probabilities',
+      },
+      { label: 'Vanna & Charm', detail: 'How the levels migrate as time decays and volatility shifts' },
+      { label: 'Chain momentum reads', detail: 'Live momentum & desk action across the whole chain' },
+      { label: 'Quant Lab', detail: 'Backtester, order flow & momentum research tools', soon: true },
+    ],
   },
   {
-    label: 'Ranked Targets',
-    detail: 'Every strike scored 0–100: the levels that matter today',
-    tiers: [true, true, true],
-  },
-  {
-    label: 'Trace',
-    detail: 'Options tape tagged sweep or block, plus dark-pool prints',
-    tiers: [true, true, true],
-  },
-  {
-    label: 'Tracker & Workspace',
-    detail: 'Bookmarked setups re-read as the session moves, saved desk layouts',
-    tiers: [true, true, true],
-  },
-  {
-    label: 'Discord chat & alerts',
-    detail: 'Community access and setup alerts to your phone',
-    tiers: [true, true, true],
-  },
-  {
-    label: 'Compass',
-    detail: 'Graded setups with a QUALIFIED / WATCH / FADED read, in plain English',
-    tiers: [false, true, true],
-  },
-  {
-    label: 'Vanna & Charm',
-    detail: 'How the levels migrate as time decays and volatility shifts',
-    tiers: [false, true, true],
-  },
-  {
-    label: 'Volatility Lab',
-    detail: 'IV surface, term structure & expected move',
-    tiers: [false, true, true],
-  },
-  {
-    label: 'Contract health scores',
-    detail: 'Health & momentum scored across the whole chain',
-    tiers: [false, true, true],
-  },
-  {
-    label: 'Prove It',
-    detail: 'Monte Carlo modeling, predictive analytics & the model scoreboard',
-    tiers: [false, true, true],
-  },
-  {
-    label: 'Research suite',
-    detail: 'The ranked Stocks board — momentum and options flow, per name',
-    tiers: [false, true, true],
-  },
-  {
-    label: 'Private 1-on-1 onboarding',
-    detail: 'A dedicated session to set up your desk',
-    tiers: [false, false, true],
-  },
-  {
-    label: 'Early beta access',
-    detail: 'New tools before they ship to everyone',
-    tiers: [false, false, true],
+    name: 'Lifetime',
+    kicker: 'the founder tier',
+    inherits: 'Compass',
+    items: [
+      { label: 'Private 1-on-1 onboarding', detail: 'A dedicated session to set up your desk' },
+      { label: 'Early beta access', detail: 'New tools before they ship to everyone' },
+    ],
   },
 ];
 
-const AvailCell = ({ a }: { a: Avail }) => (
-  <span
-    className={`inline-flex w-6 h-6 rounded-full items-center justify-center border ${
-      a === 'soon'
-        ? 'border-warn/30 bg-warn/10'
-        : a
-          ? 'border-select/25 bg-select/10'
-          : 'border-borderSubtle bg-white/[0.02]'
-    }`}
-  >
-    {a === 'soon' ? (
-      <Clock className="w-3 h-3 text-warn" />
-    ) : a ? (
-      <Check className="w-3 h-3 text-select" />
-    ) : (
-      <Minus className="w-3 h-3 text-textMuted/50" />
-    )}
-  </span>
-);
-
 export const ComparePlans = () => (
   <div className="mt-16">
-    <h3 className="text-2xl md:text-3xl font-bold tracking-tight">Compare plans</h3>
-    <div className="mt-8 border border-borderSubtle bg-panel rounded-lg overflow-x-auto">
-      <div className="min-w-[640px]">
-        {/* Header */}
-        <div className="flex items-center px-5 py-3 border-b border-borderSubtle">
-          <span className="flex-grow font-mono text-micro font-bold uppercase tracking-widest text-textMuted">
-            Features
-          </span>
-          {TIER_COLS.map((t, i) => (
+    <Reveal className="text-center">
+      <h3 className="text-2xl md:text-3xl font-bold tracking-tight">What each tier unlocks</h3>
+      <p className="mt-2 text-[13px] text-textSecondary">
+        Every tier contains the one before it — you only ever pay for what gets added.
+      </p>
+    </Reveal>
+    <Reveal delay={0.08} className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-5 items-stretch">
+      {LADDER.map(tier => (
+        <div
+          key={tier.name}
+          className={`rounded-lg border p-5 flex flex-col gap-4 ${
+            tier.featured ? 'border-[#C7D3E8]/60 bg-white/[0.03]' : 'border-borderSubtle bg-panel'
+          }`}
+        >
+          <div>
             <span
-              key={t}
-              className={`w-28 text-center font-mono text-micro font-bold uppercase tracking-widest ${
-                i === 1 ? 'text-select' : 'text-textSecondary'
+              className={`font-mono text-[12px] font-bold uppercase tracking-widest ${
+                tier.featured ? 'holo-text' : 'text-textPrimary'
               }`}
             >
-              {t}
+              {tier.name}
             </span>
-          ))}
-        </div>
-        {/* Rows */}
-        {ROWS.map(row => (
-          <div key={row.label} className="flex items-center px-5 py-3.5 border-b border-borderSubtle/50 last:border-0">
-            <div className="flex-grow min-w-0 pr-4">
-              <span className="flex items-center gap-2">
-                <span className="text-data font-bold text-textPrimary tracking-tight">{row.label}</span>
-                {row.badge && <SignalBadge tone="warn">{row.badge}</SignalBadge>}
-              </span>
-              <span className="block mt-0.5 text-label text-textSecondary leading-snug">{row.detail}</span>
-            </div>
-            {row.tiers.map((a, i) => (
-              <span key={i} className="w-28 flex justify-center shrink-0">
-                <AvailCell a={a} />
-              </span>
-            ))}
+            <span className="block mt-0.5 font-mono text-[10px] uppercase tracking-widest text-textMuted">
+              {tier.kicker}
+            </span>
           </div>
-        ))}
-      </div>
-    </div>
+          {tier.inherits && (
+            <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-textSecondary border-y border-borderSubtle py-2">
+              <span className="text-textMuted">+</span> everything in {tier.inherits}, plus
+            </div>
+          )}
+          <ul className="flex flex-col gap-3">
+            {tier.items.map(item => (
+              <li key={item.label} className="flex items-start gap-2.5">
+                <span
+                  className={`mt-[5px] w-1.5 h-1.5 rounded-[2px] shrink-0 ${
+                    tier.featured ? 'bg-[#C7D3E8]' : 'bg-white/40'
+                  }`}
+                />
+                <span className="min-w-0">
+                  <span className="flex items-center gap-2 text-[13px] font-bold text-textPrimary tracking-tight">
+                    {item.label}
+                    {item.soon && (
+                      <span className="inline-flex items-center gap-1 rounded border border-warn/30 bg-warn/10 px-1.5 py-0.5 font-mono text-[8px] font-bold uppercase tracking-widest text-warn">
+                        <Clock className="w-2.5 h-2.5" /> Soon
+                      </span>
+                    )}
+                  </span>
+                  <span className="block mt-0.5 text-[11px] text-textSecondary leading-snug">{item.detail}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </Reveal>
   </div>
 );
 
-// ---- FAQ -----------------------------------------------------------------------
+// ---- FAQ: a terminal transcript ---------------------------------------------
+// No accordion — every question is a prompt line, every answer its output,
+// all visible. The page talks the way the product does.
 
 const FAQS = [
   {
     q: 'Do you offer alerts and signals?',
-    a: "Yes, that's Compass. Every setup is graded and carries a read: QUALIFIED, WATCH or FADED, with the reasoning in plain English. Discord alerts fire when a setup is detected. The terminal reads the tape; you decide and you place it.",
+    a: "Alerts, yes — signals, no. Slayer never tells you to enter anything. Compass surfaces the setups where the confluences line up — structure, flow, volatility — grades each one 0–100, and carries a live state: ACTIVE while the thesis holds, WATCH while it proves itself, FADING when the structure breaks. Discord pings you the moment one appears. What you do with it is entirely yours.",
   },
   {
     q: 'Is the data live?',
-    a: 'Every panel, engine and animation is the real product. Live market data lands with launch, and nothing about the interface changes when it does.',
+    a: 'Yes. Every panel runs on live market data — the tape, the walls, the greeks and the dark-pool prints all update in real time through the session.',
   },
   {
     q: 'What makes Slayer different from other GEX tools?',
-    a: "Most tools show you a chart of gamma and leave you to figure it out. Slayer maps the structure (walls, flip, pin, king strike), then grades the actual contracts that trade it, and keeps watching after you enter. It's the difference between a weather map and a pilot.",
+    a: "Every GEX tool can draw a flip and a wall — the structure itself is table stakes. Slayer's difference is everything after the map: it reads structure, tape, dark pool and volatility as one confluence, weighs the actual contracts against it, keeps reading the idea live while it plays out, and keeps its own record on the page — every state change a setup goes through stays visible. The map is a commodity. An engine that stands behind its reads isn't.",
   },
   {
     q: 'Do I need to be an options expert?',
-    a: 'No. Every page explains itself in plain English: what a wall is, why the flip matters, what dealers are forced to do at each level. Real trading terms stay; jargon and buzzwords were deliberately purged.',
+    a: 'No. Every page explains itself in plain English — what a wall is, why the flip matters, what dealers are forced to do at each level. Real trading terms stay; jargon and buzzwords were deliberately purged.',
   },
   {
     q: 'Can I cancel anytime?',
-    a: 'Yes. Subscriptions are month to month and stop at the end of your billing cycle, no questions. Lifetime is a single payment, forever. Billing questions: info@slayerterminal.com.',
+    a: 'Yes — subscriptions are month to month and stop at the end of your billing cycle, no questions. Lifetime is a single payment, forever. Billing questions: info@slayerterminal.com.',
   },
 ];
 
-export const Faq = () => {
-  const [open, setOpen] = useState<number | null>(0);
-
-  return (
-    <section id="faq" className="px-6 md:px-10 py-20 max-w-3xl mx-auto">
-      <div>
-        <span className="font-mono text-label font-semibold uppercase tracking-[0.25em] text-textSecondary">FAQ</span>
-        <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">Before you ask.</h2>
-      </div>
-      <div className="mt-10 border border-borderSubtle bg-panel rounded-lg overflow-hidden">
-        {FAQS.map((item, i) => {
-          const isOpen = open === i;
-          return (
-            <div key={item.q} className="border-b border-borderSubtle/60 last:border-0">
-              <button
-                onClick={() => setOpen(isOpen ? null : i)}
-                className="w-full flex items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-rowHover"
-              >
-                <span className={`flex-grow text-body font-semibold tracking-tight ${isOpen ? 'text-textPrimary' : 'text-textSecondary'}`}>
-                  {item.q}
-                </span>
-                <motion.span animate={{ rotate: isOpen ? 180 : 0 }} transition={{ duration: DUR.slow, ease: EASE }}>
-                  <ChevronDown className="w-4 h-4 text-textMuted" />
-                </motion.span>
-              </button>
-              <AnimatePresence initial={false}>
-                {isOpen && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: DUR.slow, ease: EASE }}
-                    className="overflow-hidden"
-                  >
-                    <p className="px-5 pb-5 text-data text-textSecondary leading-relaxed">{item.a}</p>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          );
-        })}
-      </div>
-    </section>
-  );
-};
+export const Faq = () => (
+  <section id="faq" className="px-6 md:px-10 py-20 max-w-3xl mx-auto">
+    <Reveal className="text-center">
+      <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.25em] text-textSecondary">FAQ</span>
+      <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">
+        Questions, <span className="text-textMuted">answered.</span>
+      </h2>
+    </Reveal>
+    <Reveal
+      delay={0.08}
+      className="mt-10 border border-borderSubtle bg-panel rounded-lg px-6 py-6 flex flex-col gap-6"
+    >
+      {FAQS.map(item => (
+        <div key={item.q}>
+          <p className="font-mono text-[13px] font-semibold text-textPrimary">
+            <span className="text-textMuted">&gt; </span>
+            {item.q}
+          </p>
+          <p className="mt-2 ml-[7px] pl-4 border-l border-borderSubtle text-[13px] text-textSecondary leading-relaxed">
+            {item.a}
+          </p>
+        </div>
+      ))}
+      {/* the session stays open */}
+      <p className="font-mono text-[13px] text-textMuted select-none leading-none">
+        &gt;
+        <span className="inline-block w-[6px] h-[12px] ml-1.5 bg-textPrimary align-middle animate-cursor-blink" />
+      </p>
+    </Reveal>
+  </section>
+);

@@ -1,0 +1,487 @@
+/*
+==================================================
+  SLAYER TERMINAL - WORKSPACE LIVE CHART
+  The chart widget owns its own window. Each copy on
+  the desk keeps its own timeframe and overlays, so
+  two live charts side by side can watch the same
+  name on different clocks — which is most of the
+  reason to put two of them on a desk.
+
+  State lives HERE rather than in the registry so
+  every instance gets its own, for free.
+==================================================
+*/
+
+import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { X } from 'lucide-react';
+import Simulator from '../../core/simulator';
+import ChartToolbar from '../../components/gex/ChartToolbar';
+import CompareControl from '../../components/gex/CompareControl';
+import { CANDLE_THEMES, chartSurface, useCandleThemeKey } from '../../components/gex/candleTheme';
+import StrikeChart, {
+  DEFAULT_INDICATORS,
+  DEFAULT_OVERLAYS,
+  type ChartIndicators,
+  type ChartOverlays,
+  type ChartStyle,
+  type CompareEntry,
+  type CompareMode,
+} from '../../components/gex/StrikeChart';
+import { FOCUS, KING } from '../../components/gex/palette';
+import { buildLevelRead } from '../../data/levelview';
+
+const fmtFocus = (v: number) => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
+import TickerQuickPick from '../../components/gex/TickerQuickPick';
+import SpotPrice from '../../components/gex/SpotPrice';
+import { buildPrints } from '../../data/gex';
+import { twinFamilyFor, twinPrice, fmtTwin } from '../../data/indexTwins';
+import PulseBoard from '../PulseBoard';
+import { useFadeClose } from '../../components/ui/useFadeClose';
+import type { Timeframe } from '../../data/timeframe';
+import type { WorkspaceCtx } from './registry';
+
+/* Compare-line inks, blue leading like TradingView's; four slots. None of
+   these collide with the field (gold/steel), the levels (magenta/green/red/
+   baby-blue), or the voices (lime/mint). */
+const COMPARE_INKS = ['#5B9CF6', '#BBB2E8', '#EDE4CD', '#6BD3C7'];
+
+export interface LiveChartWidgetProps {
+  ctx: WorkspaceCtx;
+  /**
+   * This chart is the ONLY thing on the screen — the phone's Pulse, where
+   * there is no desk around it.
+   *
+   * Two things follow, and they are the two the docked chart gets from its
+   * surroundings rather than from itself. The symbol picker: docked, the name
+   * is changed from the panel header the desk draws above this component, and
+   * with no desk there is no header and the chart would be stuck on whatever
+   * name it opened with. The style and indicator menus: docked they are held
+   * back because a 12-column panel has no room for them, which is not true of
+   * a chart holding the whole window.
+   *
+   * It is NOT a second fullscreen. `full` is a portal that covers the app;
+   * this is a chart laid out normally inside a host that happens to be the
+   * viewport, so the terminal's own nav stays reachable above it.
+   */
+  soleChart?: boolean;
+}
+
+const LiveChartWidget = ({ ctx, soleChart = false }: LiveChartWidgetProps) => {
+  const [timeframe, setTimeframe] = useState<Timeframe>('1m');
+  const [overlays, setOverlays] = useState<ChartOverlays>(DEFAULT_OVERLAYS);
+  const [compares, setCompares] = useState<CompareEntry[]>([]);
+  const [chartStyle, setChartStyle] = useState<ChartStyle>('candles');
+  const [indicators, setIndicators] = useState<ChartIndicators>(DEFAULT_INDICATORS);
+  const [replay, setReplay] = useState(false);
+  const [full, setFull] = useState(false);
+  /* Mode 3 of 3 (Noah, 2026-08-23: "the full full screen one") — the
+     taskbar itself disappears and the tape IS the screen; Esc steps back
+     down to fullscreen. Only reachable FROM fullscreen. */
+  const [superFull, setSuperFull] = useState(false);
+  /* The 4-way board opens as a TAKEOVER over the desk, not a route (Noah,
+     2026-08-17: the route's Back remounted the whole desk — a hard cut).
+     The /pulse/board route survives for direct links. */
+  const [quad, setQuad] = useState(false);
+  const { closing: fullClosing, close: closeFull } = useFadeClose(() => setFull(false));
+  const { closing: quadClosing, close: closeQuad } = useFadeClose(() => setQuad(false));
+
+  /* ONE surface for the whole window (Noah, 2026-08-23: "different layers of
+     black... the top toolbar is a different color black than the actual
+     chart"): the candle theme's own canvas when it carries one, the house
+     inset black otherwise. Toolbar and tape both sit on it — no second black,
+     no seam. */
+  const addCompare = (t: string, mode: CompareMode) =>
+    setCompares(cs => {
+      if (cs.length >= 4 || cs.some(c => c.ticker === t) || t === ctx.ticker) return cs;
+      const ink = COMPARE_INKS.find(i => !cs.some(c => c.ink === i)) ?? COMPARE_INKS[0];
+      return [...cs, { ticker: t, mode, ink }];
+    });
+  const removeCompare = (t: string, mode: CompareMode) =>
+    setCompares(cs => cs.filter(c => !(c.ticker === t && c.mode === mode)));
+
+  const themeKey = useCandleThemeKey();
+  const themeBg = chartSurface(CANDLE_THEMES[themeKey]).bg;
+  /* Panel black, not inset — the desk widget's chrome is #0a0a0a, and a
+     #070707 body against it read as a second shade (Noah, 2026-08-23:
+     "i see 2 different shades"). One black, header to tape. */
+  const surface = themeBg === 'transparent' ? '#0a0a0a' : themeBg;
+
+  // Dark-pool prints for the DP overlay. Deterministic per ticker and pinned to
+  // it (PulseBoard's contract), so the lines don't wander with the 1s pulse —
+  // without this prop the toolbar's Dark pool toggle drew nothing (Noah,
+  // 2026-08-18).
+  const prints = useMemo(
+    () => buildPrints(ctx.ticker, ctx.gex.levels.spot),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ctx.ticker]
+  );
+
+  /* A strike ARRIVES (Noah, 2026-08-22: "why does it take me to the default
+     pulse page") — the chart comes to you: the takeover opens on the arrival
+     token, the FOCUS line already on the tape, so the destination is
+     unmistakable. One-shot: closing it leaves the docked chart focused. */
+  useEffect(() => {
+    if (!ctx.focusOpen) return;
+    setFull(true);
+    // The level view needs the trails on — the focused band IS the level's
+    // history, and it can't lead a field that isn't drawn.
+    setOverlays(o => (o.trails ? o : { ...o, trails: true }));
+  }, [ctx.focusOpen]);
+
+  /* What the focused level is doing today — distance, tests, gamma trend —
+     re-read per revision so the distance walks with the tape. */
+  const levelRead = useMemo(
+    () => (ctx.focusPrice != null ? buildLevelRead(ctx.ticker, ctx.focusPrice) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ctx.focusPrice, ctx.ticker, ctx.revision]
+  );
+
+  // Same takeover contract as the heatmap widget: Esc exits (fading), page
+  // scroll locks underneath. The z-[80] guard hands Esc to a board cell's
+  // own fullscreen first.
+  useEffect(() => {
+    if (!full && !quad) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (quad) {
+        if (document.querySelector('[class*="z-[80]"]')) return;
+        closeQuad();
+        return;
+      }
+      // Esc steps DOWN the ladder: total fullscreen → fullscreen → desk
+      if (superFull) {
+        setSuperFull(false);
+        return;
+      }
+      closeFull();
+    };
+    window.addEventListener('keydown', onKey);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = '';
+    };
+  }, [full, quad, superFull, closeFull, closeQuad]);
+
+  // Leaving fullscreen by any road also leaves total fullscreen
+  useEffect(() => {
+    if (!full) setSuperFull(false);
+  }, [full]);
+
+  const body = (
+    /*
+      A COLUMN when this chart owns the screen, so the control strip can take
+      a row of its own beneath the tape instead of floating over it. Docked
+      and fullscreen keep the plain relative box the floating bar needs.
+    */
+    <div
+      className={`relative h-full min-h-0 ${soleChart ? 'flex flex-col' : ''}`}
+      style={{ background: surface }}
+    >
+      {/* Controls sit in the body, not the header — the header is the drag
+          handle, and a click there would start dragging the panel. The quad
+          button is the door to /pulse/board — it moved here when the desk
+          became the Pulse page (2026-08-17); the old page carried it before. */}
+      {/* THE TASKBAR (settled 2026-08-23 against TradingView's): chrome, not
+          an object — full width, fused to the top edge, no container, no
+          border, TradingView's spread. TRANSLUCENT TRIAL (Noah, 2026-08-23:
+          "try making the taskbar translucent i want to see something"): the
+          tape runs full-bleed underneath and the bar is a veil over it —
+          55% of the surface color plus a soft blur. */}
+      {/* Mode 3 hides the ENTIRE taskbar — the tape is the screen; Esc
+          brings it back (Noah, 2026-08-23, TradingView's total
+          fullscreen) */}
+      {!superFull && (
+      <div
+        /*
+          The roomier spread when this chart owns the screen — and on a phone
+          it is not a preference: the tight set is built for a pointer, and its
+          controls land under the 44px a fingertip actually covers.
+
+          ONE LINE THAT SCROLLS, never a block that wraps, in `soleChart`.
+          Wrapping is the right answer for a bar that is merely snug; it is the
+          wrong one for a bar that does not remotely fit. Measured at 390px
+          with `flex-wrap`: the strip became a ~600px vertical column pinned to
+          the right edge, over the price axis, hiding most of the tape — while
+          the chart underneath was full height with a correctly sized canvas
+          and the page had no sideways scroll. Nothing that measures the CHART
+          can see this; it is entirely inside the overlay.
+        */
+        className={`z-10 w-full select-none flex flex-wrap items-center backdrop-blur-md backdrop-saturate-150 ${
+          soleChart
+            ? /* 40px on every control in the strip AND in the menus it opens.
+                 The toolbar's own buttons are sized for a cursor and measure
+                 20–23px tall, which is half what a fingertip actually covers —
+                 fine under a mouse, a mis-tap generator on the device this
+                 layout exists for. Applied from the host rather than threaded
+                 through the shared toolbar: it is a property of being touched,
+                 not of being compact, and the desk's charts are not touched. */
+              'order-last shrink-0 border-t border-borderSubtle px-3 py-2 gap-3 [&_button]:min-h-[40px]'
+            : `absolute top-0 inset-x-0 ${full ? 'px-3 py-2 gap-3' : 'px-2 py-1.5 gap-2'}`
+        }`}
+        style={{ background: `${surface}8C` }}
+      >
+        {/* Fullscreen earns the TradingView move (Noah, 2026-08-17): change
+            the name without leaving the takeover — same quick-pick the 4-way
+            cells carry, wired to this panel's pin. Docked keeps the header
+            picker. */}
+        {(full || soleChart) && ctx.pickTicker && (
+          <>
+            <span className="inline-flex items-center gap-2">
+              <TickerQuickPick ticker={ctx.ticker} onPick={ctx.pickTicker} />
+              {/* TV's "+" beside the symbol capsule — compare symbols */}
+              <CompareControl
+                current={ctx.ticker}
+                compares={compares}
+                onAdd={addCompare}
+                onRemove={removeCompare}
+              />
+              {/* No price here (Noah, 2026-08-23: "too redundant") — the
+                  chart legend below carries the live tick now. The twins
+                  stay: they are prices the legend does NOT show. */}
+              {/* The price twins on index names (Noah, 2026-08-18) — the
+                  cash index and the futures beside the ETF, no TradingView
+                  detour. */}
+              {(() => {
+                /* Not on the phone strip. The twins are a useful third and
+                   fourth price on a desk that has room for them; on 390px they
+                   are ~180px of text sitting between the symbol and the
+                   timeframes, pushing the control a reader reaches for most
+                   off the end of a strip they then have to scroll back. The
+                   name's own price is in the legend on the tape either way. */
+                if (soleChart) return null;
+                const fam = twinFamilyFor(ctx.ticker);
+                if (!fam) return null;
+                const s = Simulator.TICKERS[ctx.ticker]?.currentPrice ?? ctx.gex.levels.spot;
+                return (
+                  <span className="font-mono text-[10px] text-textMuted tnum">
+                    {fam.index} {fmtTwin(twinPrice(fam, 'index', s, s))} · {fam.futures}{' '}
+                    {fmtTwin(twinPrice(fam, 'futures', s, s))}
+                  </span>
+                );
+              })()}
+            </span>
+            <span className="w-px h-4 bg-borderSubtle shrink-0 mx-1.5" aria-hidden />
+          </>
+        )}
+        {/* Spread, the TradingView grammar: timeframes pinned left, every
+            other control pushed to the right edge. */}
+        <div className="flex-1 min-w-0">
+          <ChartToolbar
+            minimal
+            candles
+            /* Every menu opens UPWARD off the bottom strip — downward would
+               put it past the bottom of a window that does not scroll. */
+            menuSide={soleChart ? 'top' : 'bottom'}
+            compact={soleChart}
+            /* `spread` shoves the right cluster to the far edge — meaningless
+               on a strip narrower than its own contents, where it only opens
+               a gap nobody can reach past. */
+            spread={!soleChart}
+            timeframe={timeframe}
+            onTimeframe={setTimeframe}
+            overlays={overlays}
+            onOverlays={setOverlays}
+            /* The quartet rides ONLY in fullscreen (Noah, 2026-08-23:
+               "remove those sections completely unless... full screen");
+               the settings themselves persist across modes. */
+            replay={replay}
+            onToggleReplay={full ? () => setReplay(r => !r) : undefined}
+            chartStyle={chartStyle}
+            onChartStyle={full || soleChart ? setChartStyle : undefined}
+            indicators={indicators}
+            onIndicators={full || soleChart ? setIndicators : undefined}
+            alertTicker={full ? ctx.ticker : undefined}
+            alertSpot={ctx.gex.levels.spot}
+            onTotalFullscreen={full ? () => setSuperFull(true) : undefined}
+            /* The 4-way board is four charts, which is the one thing the
+               phone's Pulse exists to NOT be — and it opens as a takeover
+               with no way back that fits a 390px screen. */
+            onOpenQuad={soleChart ? undefined : () => setQuad(true)}
+            fullscreen={full}
+            onToggleFullscreen={() => (full ? closeFull() : setFull(true))}
+          />
+        </div>
+        {/* The FOCUS line's chip — a strike sent here from Ranked Targets /
+            Exposure Profile. Says what the dashed line on the tape IS, and
+            is the only way to take it down by hand (it also clears when the
+            desk changes name). Lime = the selection voice: what you clicked. */}
+        {ctx.focusPrice != null && (
+          <span
+            className="inline-flex items-center gap-1.5 pl-2 pr-1 py-0.5 rounded border font-mono text-[9px] uppercase tracking-widest animate-soft-in"
+            style={{ color: FOCUS, borderColor: `${FOCUS}66`, background: `${FOCUS}0f` }}
+          >
+            Focus
+            <span className="text-[11px] font-bold tnum normal-case tracking-normal">{fmtFocus(ctx.focusPrice)}</span>
+            {/* The strike's standing right now — it wears the king's magenta
+                on the tape while it holds the crown, and this says why */}
+            {Math.abs(ctx.gex.levels.king - ctx.focusPrice) < 1e-9 && (
+              <span className="font-bold" style={{ color: KING }}>
+                King
+              </span>
+            )}
+            {/* The level read — the three things that decide whether a ranked
+                level is about to matter: distance, tests today, gamma trend.
+                Neutral ink: none of these is a market direction. */}
+            {levelRead && (
+              <span className="inline-flex items-center gap-1.5 normal-case tracking-normal text-[10px] text-textSecondary tnum">
+                <span aria-hidden="true" className="text-textMuted">·</span>
+                <span className="text-textPrimary">
+                  {levelRead.distPct > 0 ? '+' : ''}
+                  {levelRead.distPct.toFixed(2)}%
+                </span>
+                <span aria-hidden="true" className="text-textMuted">·</span>
+                <span title="Times price has tested this level this session">
+                  {levelRead.touches === 0
+                    ? 'untested today'
+                    : `tested ${levelRead.touches}× · last ${levelRead.lastTouch}`}
+                </span>
+                <span aria-hidden="true" className="text-textMuted">·</span>
+                <span title="Gamma at this strike, now against the session open">
+                  {levelRead.trend === 'NEW'
+                    ? 'gamma new since open'
+                    : `gamma ${levelRead.trend.toLowerCase()} ${levelRead.changePct! > 0 ? '+' : ''}${levelRead.changePct!.toFixed(0)}%`}
+                </span>
+              </span>
+            )}
+            {ctx.clearFocus && (
+              <button
+                onClick={ctx.clearFocus}
+                aria-label="Clear focus line"
+                title="Clear the focus line"
+                className="inline-flex items-center justify-center w-4 h-4 rounded hover:bg-white/[0.08] transition-colors"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </span>
+        )}
+      </div>
+      )}
+      {/* The tape owns the WHOLE window and runs under the translucent bar,
+          edge to edge — no padding, no inner frame.
+
+          Except in `soleChart`, where it is a flex ROW of the body's column
+          and takes whatever the strip below it leaves. `absolute inset-0`
+          there would lay the tape over the strip as well as under it, and the
+          strip's own controls would still be tappable — so it would look
+          right and the chart would simply be 60px taller than the space it
+          was given, with its time axis behind the buttons. */}
+      <div className={soleChart ? 'relative flex-1 min-h-0' : 'absolute inset-0'}>
+        {/* The chart legend (Noah, 2026-08-23, TradingView's grammar): name ·
+            timeframe · the live tick, floating on the tape's top-left just
+            under the taskbar (which the tape now runs beneath). Facts only —
+            no buy/sell, we are not a broker. pointer-events-none: the tape
+            pans straight through it. */}
+        <div
+          className={`absolute left-2 z-10 pointer-events-none select-none flex flex-col gap-1 font-mono ${
+            superFull ? 'top-2' : full ? 'top-12' : 'top-10'
+          }`}
+        >
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-[11px] font-semibold text-textPrimary">{ctx.ticker}</span>
+            <span className="text-[10px] text-textMuted" aria-hidden>·</span>
+            <span className="text-[10px] text-textMuted">{timeframe}</span>
+            <span className="text-[10px] text-textMuted" aria-hidden>·</span>
+            <SpotPrice
+              value={Simulator.TICKERS[ctx.ticker]?.currentPrice ?? ctx.gex.levels.spot}
+              className="text-[11px] font-semibold tnum text-textPrimary"
+            />
+          </div>
+          {/* One quiet row per comparison — its line ink, its name, and the
+              only hand-removal outside the + menu */}
+          {compares.map(c => (
+            <div key={`${c.ticker}:${c.mode}`} className="flex items-center gap-1.5">
+              <span className="w-2 h-[3px] rounded-full" style={{ background: c.ink }} aria-hidden />
+              <span className="text-[10px] font-semibold" style={{ color: c.ink }}>
+                {c.ticker}
+              </span>
+              {Simulator.TICKERS[c.ticker] && (
+                <SpotPrice
+                  value={Simulator.TICKERS[c.ticker].currentPrice}
+                  className="text-[10px] tnum text-textSecondary"
+                />
+              )}
+              <button
+                onClick={() => removeCompare(c.ticker, c.mode)}
+                aria-label={`Remove ${c.ticker} comparison`}
+                title="Remove comparison"
+                className="pointer-events-auto inline-flex items-center justify-center w-4 h-4 rounded text-textMuted hover:text-textPrimary hover:bg-white/[0.08] transition-colors"
+              >
+                <X className="w-2.5 h-2.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+        {/* Ticker-keyed slow fade (the Weigher's browse grammar): a name
+            change breathes in instead of hard-swapping the tape. */}
+        <div key={ctx.ticker} className="h-full min-h-0 animate-soft-in-slow">
+          <StrikeChart
+            ticker={ctx.ticker}
+            revision={ctx.revision}
+            levels={ctx.gex.levels}
+            timeframe={timeframe}
+            overlays={overlays}
+            prints={prints}
+            compares={compares}
+            chartStyle={chartStyle}
+            indicators={indicators}
+            replay={replay}
+            onExitReplay={() => setReplay(false)}
+            focusPrice={ctx.focusPrice ?? null}
+            height={full ? 460 : 180}
+            /* The axis labels and strike chips at phone size — they are fixed
+               sizes tuned on a ~550px chart, and the 54px price gutter they
+               produce is 4% of a desktop chart but 14% of a 390px screen. */
+            compact={soleChart}
+            frameless
+          />
+        </div>
+      </div>
+    </div>
+  );
+
+  // Portal, not a plain fixed div: react-grid-layout positions panels with CSS
+  // transforms, and a transformed ancestor becomes the containing block for
+  // position:fixed — an in-place overlay would size itself to the widget.
+  if (full) {
+    return createPortal(
+      /* Edge to edge — no padding, no panel frame, no rounded corners: the
+         chart IS the screen (Noah, 2026-08-23: "i want it to cover the
+         ENTIRE screen"). The body paints the surface. */
+      <div
+        className={`fixed inset-0 z-[80] flex flex-col animate-soft-in transition-opacity duration-200 ease-out ${
+          fullClosing ? 'opacity-0' : ''
+        }`}
+        style={{ background: surface }}
+      >
+        <div className="flex-1 min-h-0">{body}</div>
+      </div>,
+      document.body
+    );
+  }
+
+  return (
+    <>
+      {body}
+      {quad &&
+        createPortal(
+          <div
+            className={`fixed inset-0 z-[70] bg-canvas flex flex-col animate-soft-in transition-opacity duration-200 ease-out ${
+              quadClosing ? 'opacity-0' : ''
+            }`}
+          >
+            <div className="flex-1 min-h-0 overflow-y-auto px-4 lg:px-6 py-4">
+              <div className="flex flex-col gap-4 pb-10">
+                <PulseBoard onBack={closeQuad} />
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+    </>
+  );
+};
+
+export default LiveChartWidget;

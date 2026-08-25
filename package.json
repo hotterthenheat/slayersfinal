@@ -9,27 +9,11 @@
     "preview": "vite preview",
     "serve": "tsx server.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
-    "lint": "eslint .",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:dates": "node scripts/date-sweep.mjs",
-    "audit:ui": "node scripts/ui-audit.mjs",
-    "audit:ui:self-test": "node scripts/ui-audit.mjs --self-test",
-    "audit:csp": "node scripts/csp-check.mjs"
+    "test": "tsx scripts/fixture-proof.ts && tsx scripts/replay-proof.ts && tsx scripts/weigher-query-proof.ts && tsx scripts/terrain-setups-proof.ts",
+    "test:ui": "node scripts/run-ui-sweep.mjs"
   },
   "dependencies": {
-    "@radix-ui/react-dialog": "^1.1.23",
-    "@radix-ui/react-popover": "^1.1.23",
-    "@radix-ui/react-tabs": "^1.1.21",
-    "@radix-ui/react-tooltip": "^1.2.16",
-    "@react-three/drei": "^9.122.0",
-    "@react-three/fiber": "^8.18.0",
-    "@react-three/postprocessing": "^2.19.1",
-    "@tanstack/react-table": "^9.1.1",
     "@types/react-grid-layout": "^1.3.6",
-    "@types/three": "^0.171.0",
-    "class-variance-authority": "^0.7.1",
-    "clsx": "^2.1.1",
     "express": "^5.2.1",
     "framer-motion": "^12.42.2",
     "lightweight-charts": "^5.2.0",
@@ -38,29 +22,20 @@
     "react-dom": "^18.3.1",
     "react-grid-layout": "^1.5.2",
     "react-router-dom": "^6.24.0",
-    "recharts": "^3.10.0",
-    "tailwind-merge": "^3.6.0",
-    "three": "^0.171.0"
+    "recharts": "^3.9.2"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.5",
     "@types/express": "^5.0.6",
     "@types/node": "^26.1.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.19",
-    "eslint": "^9.39.5",
-    "eslint-plugin-react-hooks": "^7.1.1",
-    "eslint-plugin-react-refresh": "^0.5.3",
-    "globals": "^17.7.0",
     "playwright": "^1.61.1",
     "postcss": "^8.4.38",
     "tailwindcss": "^3.4.4",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.65.0",
-    "vite": "^5.3.1",
-    "vitest": "^2.1.9"
+    "vite": "^5.3.1"
   }
 }

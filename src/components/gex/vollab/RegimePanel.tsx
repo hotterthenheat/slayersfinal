@@ -1,9 +1,4 @@
-import { useMemo } from 'react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import SignalBadge from '../../ui/SignalBadge';
-import ChartLegend from '../../ui/ChartLegend';
-import { ChartTip, TipHead, TipSeries, TipNote } from '../../charts/ChartTip';
-import { CHART_FONT, CURSOR, GRID, axisPct, categoryAxis, chartMargin } from '../../charts/chartTheme';
 import type { RegimeData, VolRegime } from '../../../types/gex';
 import type { Tone } from '../../ui/tones';
 
@@ -11,18 +6,8 @@ interface RegimePanelProps {
   data: RegimeData;
 }
 
-/*
-  Vol-regime probability history (stacked to 100%) + the current regime read.
-  On recharts, on the house chart theme.
-
-  The three bands ARE a market read — low vol is the benign state and high vol
-  the stressed one — so this is one of the few charts where green and red are
-  the correct inks rather than borrowed ones.
-*/
-
-const LOW = 'rgba(48,209,88,0.5)';
-const NORMAL = 'rgba(255,255,255,0.18)';
-const HIGH = 'rgba(255,59,48,0.45)';
+const W = 100;
+const H = 40;
 
 const regimeTone: Record<VolRegime, Tone> = {
   'LOW VOL': 'bull',
@@ -30,27 +15,30 @@ const regimeTone: Record<VolRegime, Tone> = {
   'HIGH VOL': 'bear',
 };
 
-interface Row {
-  month: string;
-  /** Percent, 0-100, summing to 100 across the three. */
-  low: number;
-  normal: number;
-  high: number;
+/** Stacked band path between cumulative series `lower` and `upper` (0–1). */
+function bandPath(lower: number[], upper: number[]): string {
+  const n = lower.length;
+  const x = (i: number) => (i / (n - 1)) * W;
+  const y = (v: number) => H - v * H;
+  const top = upper.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(2)},${y(v).toFixed(2)}`).join(' ');
+  const bottom = [...lower]
+    .reverse()
+    .map((v, i) => `L${x(n - 1 - i).toFixed(2)},${y(v).toFixed(2)}`)
+    .join(' ');
+  return `${top} ${bottom} Z`;
 }
 
+/** Vol-regime probability history (stacked) + current regime read. */
 const RegimePanel = ({ data }: RegimePanelProps) => {
   const { series, current, prob, since, avgDurationDays, nextLow, nextHigh } = data;
 
-  const rows: Row[] = useMemo(
-    () => series.map(s => ({ month: s.month, low: s.low * 100, normal: s.normal * 100, high: s.high * 100 })),
-    [series]
-  );
+  const lowTop = series.map(s => s.low);
+  const normTop = series.map(s => s.low + s.normal);
+  const fullTop = series.map(() => 1);
+  const zero = series.map(() => 0);
 
   const stats: { label: string; value: string }[] = [
-    // Not "Confidence". `prob` is this regime's weight in a three-way mixture
-    // that sums to 1 — a real share of the model's own state, which is a
-    // different claim from how likely the model is to be right about it.
-    { label: 'Probability', value: `${prob}%` },
+    { label: 'Confidence', value: `${prob}%` },
     { label: 'Since', value: since },
     { label: 'Avg Duration', value: `${avgDurationDays}d` },
     { label: 'Next Low 1M', value: `${nextLow}%` },
@@ -59,14 +47,18 @@ const RegimePanel = ({ data }: RegimePanelProps) => {
 
   return (
     <div className="flex flex-col gap-3 h-full min-h-0">
+      {/* Legend + current badge */}
       <div className="flex items-center gap-3 flex-wrap select-none">
-        <ChartLegend
-          items={[
-            { label: 'Low vol', swatchClass: 'bg-bull/60' },
-            { label: 'Normal', swatchClass: 'bg-white/[0.18]' },
-            { label: 'High vol', swatchClass: 'bg-bear/50' },
-          ]}
-        />
+        {[
+          { label: 'Low vol', cls: 'bg-bull/60' },
+          { label: 'Normal', cls: 'bg-white/20' },
+          { label: 'High vol', cls: 'bg-bear/50' },
+        ].map(item => (
+          <span key={item.label} className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-wider text-textMuted">
+            <span className={`inline-block w-2.5 h-2 rounded-[2px] ${item.cls}`} />
+            {item.label}
+          </span>
+        ))}
         <span className="ml-auto">
           <SignalBadge tone={regimeTone[current]} dot>
             {current}
@@ -74,71 +66,27 @@ const RegimePanel = ({ data }: RegimePanelProps) => {
         </span>
       </div>
 
-      <div
-        className="flex-grow min-h-0"
-        role="img"
-        aria-label={`Volatility-regime probability history across ${rows.length} months, stacked to one hundred percent. The current regime is ${current.toLowerCase()} at ${prob} percent probability, held since ${since}.`}
-      >
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={rows} margin={chartMargin} stackOffset="expand">
-            <CartesianGrid stroke={GRID} vertical={false} />
-            <XAxis {...categoryAxis} dataKey="month" minTickGap={28} />
-            {/* stackOffset="expand" normalises to 0-1, so the axis reads as a share. */}
-            <YAxis
-              orientation="right"
-              domain={[0, 1]}
-              ticks={[0, 0.5, 1]}
-              tickFormatter={(v: number) => axisPct(v * 100)}
-              tick={{ fill: '#7d7d7d', fontSize: 10, fontFamily: CHART_FONT }}
-              tickLine={false}
-              axisLine={false}
-              width={38}
-            />
-            <Tooltip
-              cursor={CURSOR}
-              content={
-                <ChartTip<Row>
-                  render={r => {
-                    const i = rows.indexOf(r);
-                    const prev = i > 0 ? rows[i - 1] : null;
-                    const top = r.high >= r.low && r.high >= r.normal ? 'high' : r.low >= r.normal ? 'low' : 'normal';
-                    const dHigh = prev ? r.high - prev.high : 0;
-                    return (
-                      <>
-                        <TipHead sub="regime odds">{r.month}</TipHead>
-                        <TipSeries color={LOW} label="Low vol" value={`${Math.round(r.low)}%`} />
-                        <TipSeries color={NORMAL} label="Normal" value={`${Math.round(r.normal)}%`} />
-                        <TipSeries color={HIGH} label="High vol" value={`${Math.round(r.high)}%`} />
-                        <TipNote>
-                          {top === 'high'
-                            ? 'The stressed state carried the month — the market priced range expansion as the base case.'
-                            : top === 'low'
-                              ? 'The benign state carried the month — vol was priced to stay compressed.'
-                              : 'Neither tail state dominated; the market held the middle.'}
-                          {prev && Math.abs(dHigh) >= 5
-                            ? ` High-vol odds ${dHigh > 0 ? 'rose' : 'fell'} ${Math.abs(Math.round(dHigh))} points from the month before.`
-                            : ''}
-                        </TipNote>
-                      </>
-                    );
-                  }}
-                />
-              }
-            />
-            {/* Order matters: low at the bottom, high on top, so the stack reads
-                calm-to-stressed upward the way the legend lists it. */}
-            <Area type="monotone" dataKey="low" stackId="r" stroke="none" fill={LOW} isAnimationActive={false} />
-            <Area type="monotone" dataKey="normal" stackId="r" stroke="none" fill={NORMAL} isAnimationActive={false} />
-            <Area type="monotone" dataKey="high" stackId="r" stroke="none" fill={HIGH} isAnimationActive={false} />
-          </AreaChart>
-        </ResponsiveContainer>
+      {/* Stacked probability bands */}
+      <div className="flex-grow min-h-0">
+        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-full">
+          <path d={bandPath(zero, lowTop)} fill="rgba(48,209,88,0.55)" />
+          <path d={bandPath(lowTop, normTop)} fill="rgba(255,255,255,0.07)" />
+          <path d={bandPath(normTop, fullTop)} fill="rgba(255,59,48,0.45)" />
+        </svg>
+      </div>
+      <div className="flex justify-between font-mono text-[8px] text-textMuted select-none">
+        {series.filter((_, i) => i % 6 === 0).map(s => (
+          <span key={s.month}>{s.month}</span>
+        ))}
+        <span>{series[series.length - 1]?.month}</span>
       </div>
 
+      {/* Stats */}
       <div className="grid grid-cols-5 gap-2 pt-2 border-t border-borderSubtle">
         {stats.map(s => (
           <span key={s.label} className="min-w-0">
-            <span className="block font-mono text-micro uppercase tracking-widest text-textMuted truncate">{s.label}</span>
-            <span className="block font-mono text-micro font-semibold tnum text-textPrimary">{s.value}</span>
+            <span className="block font-mono text-[8px] uppercase tracking-widest text-textMuted truncate">{s.label}</span>
+            <span className="block font-mono text-[10px] font-semibold tnum text-textPrimary">{s.value}</span>
           </span>
         ))}
       </div>

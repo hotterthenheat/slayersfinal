@@ -1,15 +1,17 @@
 /*
 ==================================================
-  SLAYER TERMINAL - CODE-RAIN (hero backdrop)
-  The real slayerterminal.com hero, dialled down to a
-  whisper: columns of desk-tinted terminal output that
-  sit almost invisible and twinkle like distant stars.
-  The cursor is a flashlight — a single soft window
-  follows the pointer and is the only place the code
-  becomes legible ("one frame open at a time"). Move
-  off the hero and the window closes back to the faint
-  twinkle. Reduced-motion freezes everything to a dim,
-  static field. DOM columns + a CSS mask — GPU-cheap.
+  SLAYER TERMINAL - CODE-RAIN (hero layer)
+  Columns of Slayer terminal output drifting behind
+  the hero copy, almost invisible, twinkling like
+  distant stars. The cursor is a flashlight — a soft
+  window follows the pointer and is the only place
+  the code becomes legible; leave the hero and it
+  eases shut. Background is transparent so the scene
+  behind stays visible. Tints are decoration-tier
+  (muted steel/moss) — never the semantic tokens, so
+  the rain can't impersonate live data. Reduced
+  motion freezes everything to a dim static field.
+  DOM columns + a CSS mask — GPU-cheap.
 ==================================================
 */
 
@@ -25,8 +27,8 @@ interface Column {
 }
 
 const TINT_COLOR: Record<RainTint, string> = {
-  steel: '#6A93B5',
-  amber: '#C79350',
+  struct: '#7E96B8', // dealer structure — muted steel
+  engine: '#30D158', // engine verdicts — the house bull green (Noah, 2026-07-24)
   bright: '#6B7177',
   '': '#454E58',
 };
@@ -124,10 +126,16 @@ const CodeRain = ({ className = '' }: { className?: string }) => {
       cy += (ty - cy) * 0.16;
       // open a touch faster than it closes, so it feels responsive but calm
       rev += (revTarget - rev) * (revTarget > rev ? 0.09 : 0.04);
-      const ca = 0.05 + rev * 0.95;
-      wrap.style.setProperty('--mx', `${cx.toFixed(2)}%`);
-      wrap.style.setProperty('--my', `${cy.toFixed(2)}%`);
-      wrap.style.setProperty('--ca', ca.toFixed(3));
+      // once settled, stop touching the vars — writing them invalidates the
+      // mask and forces a repaint of the whole rain layer every frame
+      const settled =
+        Math.abs(tx - cx) < 0.04 && Math.abs(ty - cy) < 0.04 && Math.abs(revTarget - rev) < 0.002;
+      if (!settled) {
+        const ca = 0.05 + rev * 0.95;
+        wrap.style.setProperty('--mx', `${cx.toFixed(2)}%`);
+        wrap.style.setProperty('--my', `${cy.toFixed(2)}%`);
+        wrap.style.setProperty('--ca', ca.toFixed(3));
+      }
       raf = requestAnimationFrame(loop);
     };
     window.addEventListener('pointermove', onMove, { passive: true });
@@ -151,7 +159,6 @@ const CodeRain = ({ className = '' }: { className?: string }) => {
       ref={wrapRef}
       className={`absolute inset-0 overflow-hidden ${className}`}
       style={{
-        background: '#08090A',
         ['--mx' as string]: '50%',
         ['--my' as string]: '40%',
         ['--ca' as string]: '0.05',
@@ -181,14 +188,9 @@ const CodeRain = ({ className = '' }: { className?: string }) => {
               flexDirection: 'column',
               gap: '16px',
               whiteSpace: 'nowrap',
-              /* No family of its own — it inherits the page's. This used to
-                 name JetBrains Mono explicitly, which was the only monospace
-                 left once the terminal moved to one family, so the hero would
-                 have been the single surface running a different typeface (and
-                 on a generic `monospace` fallback, a different one per
-                 machine). The rain is decorative text, not a grid: each column
-                 is its own flex stack with `nowrap`, so nothing here needs
-                 characters to line up across columns. */
+              // Deliberately NOT SF Pro: this is an illustration of raining
+              // code, and code is drawn in a monospace face.
+              fontFamily: 'ui-monospace, "Cascadia Mono", Consolas, monospace',
               fontSize: '12px',
               fontWeight: 500,
               lineHeight: 1.85,
@@ -201,7 +203,7 @@ const CodeRain = ({ className = '' }: { className?: string }) => {
           >
             {[...col.lines, ...col.lines].map((line, j) => {
               const t = tintFor(line);
-              const hi = t === 'steel' || t === 'amber';
+              const hi = t === 'struct' || t === 'engine';
               const tw = twinkle(i, j);
               return (
                 <span

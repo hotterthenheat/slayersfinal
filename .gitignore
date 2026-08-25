@@ -38,12 +38,3 @@ Thumbs.db
 # Scratch / screenshot scripts
 _shot.mjs
 _scratch*
-
-# Throwaway Playwright probes. These have to live in the repo root so node
-# resolves the local playwright install, but they are never deliverables —
-# they drive the preview server, print a measurement, and get deleted.
-/.*.mjs
-
-# 64-gate audit screenshots: 308 files / 34MB of transient evidence.
-# The measured numbers live in the reports; the PNGs do not belong in history.
-docs/audit64/shots/

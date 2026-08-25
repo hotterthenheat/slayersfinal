@@ -1,6 +1,5 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { Link } from 'react-router-dom';
 import { TERMS, type TermKey } from '../../data/terms';
 
 interface TermProps {
@@ -12,12 +11,12 @@ interface TermProps {
 }
 
 /**
- * Inline jargon explainer — wraps an abbreviation (GEX, OTM%, Sig…) with a
- * dotted underline and reveals its one-line definition in a floating card on
- * hover OR keyboard focus. Fixed-position so it never clips inside scroll
- * containers; any scroll dismisses it (a fixed card would detach from its
- * anchor otherwise). The card itself stays hoverable so the glossary link is
- * reachable; a short close delay bridges the anchor→card gap.
+ * Inline jargon explainer — wraps a label with a dotted underline and reveals
+ * its one-line definition in a floating card on hover OR keyboard focus.
+ * Fixed-position so it never clips inside scroll containers; any scroll
+ * dismisses it (a fixed card would detach from its anchor otherwise). The
+ * card itself stays hoverable; a short close delay bridges the anchor→card
+ * gap.
  */
 const Term = ({ k, children, className = '' }: TermProps) => {
   const anchorRef = useRef<HTMLSpanElement | null>(null);
@@ -69,9 +68,9 @@ const Term = ({ k, children, className = '' }: TermProps) => {
           return;
         }
         if (e.key === 'Enter' || e.key === ' ') {
-          // A Term often sits inside a sortable table header. Left to bubble,
-          // Enter on the definition re-sorted the table instead of toggling
-          // the explainer.
+          // A Term can sit inside a sortable table header. Left to bubble,
+          // Enter on the definition would re-sort the table instead of
+          // toggling the explainer.
           e.preventDefault();
           e.stopPropagation();
           if (pos) setPos(null);
@@ -82,38 +81,29 @@ const Term = ({ k, children, className = '' }: TermProps) => {
     >
       {children ?? k}
       {pos &&
-        // Portaled to <body> — inside transformed containers (Pulse grid tiles)
-        // `fixed` would anchor to the tile and clip.
+        // Portaled to <body> — inside transformed containers (Pulse grid
+        // tiles) `fixed` would anchor to the tile and clip.
         createPortal(
-        <span
-          id={tipId}
-          role="tooltip"
-          onMouseEnter={show}
-          onMouseLeave={hide}
-          onClick={e => e.stopPropagation()}
-          className="fixed z-[60] block w-56 rounded-md border border-borderMuted bg-panelRaised px-3 py-2 shadow-overlay normal-case tracking-normal"
-          style={{
-            left: Math.min(Math.max(pos.x, 120), (window.innerWidth || 1440) - 120),
-            top: pos.y,
-            transform: `translate(-50%, ${pos.up ? '-100%' : '0'})`,
-          }}
-        >
-          <span className="flex items-baseline justify-between gap-2">
-            <span className="font-mono text-label font-semibold uppercase tracking-wider text-textPrimary">{k}</span>
-            <Link
-              to="/guide/concepts"
-              tabIndex={-1}
-              className="font-mono text-micro uppercase tracking-wider text-textMuted no-underline hover:text-textSecondary"
-            >
-              glossary →
-            </Link>
-          </span>
-          <span className="mt-0.5 block font-sans text-label font-normal leading-relaxed text-textSecondary">
-            {TERMS[k]}
-          </span>
-        </span>,
-        document.body
-      )}
+          <span
+            id={tipId}
+            role="tooltip"
+            onMouseEnter={show}
+            onMouseLeave={hide}
+            onClick={e => e.stopPropagation()}
+            className="fixed z-[60] block w-56 rounded-md border border-borderMuted bg-[#0c0c0c] px-3 py-2 shadow-[0_12px_32px_-12px_rgba(0,0,0,0.75),0_4px_10px_-6px_rgba(0,0,0,0.55)] normal-case tracking-normal"
+            style={{
+              left: Math.min(Math.max(pos.x, 120), (window.innerWidth || 1440) - 120),
+              top: pos.y,
+              transform: `translate(-50%, ${pos.up ? '-100%' : '0'})`,
+            }}
+          >
+            <span className="block font-mono text-[11px] font-semibold uppercase tracking-wider text-textPrimary">{k}</span>
+            <span className="mt-0.5 block font-sans text-[11px] font-normal leading-relaxed text-textSecondary">
+              {TERMS[k]}
+            </span>
+          </span>,
+          document.body
+        )}
     </span>
   );
 };

@@ -3,15 +3,14 @@ import React from 'react';
 /**
  * Lowercase Greek survives `text-transform: uppercase`.
  *
- * The metric primitives uppercase their labels, and CSS uppercasing does not
- * skip Greek: θ becomes Θ, which in a monospace face is indistinguishable from
- * a zero — so "θ / day" painted as "0 / DAY" and a trader could read it as zero
- * theta. σ became Σ and β became Β the same way. (Δ is unharmed; it is already
- * uppercase.)
+ * CSS uppercasing does not skip Greek: θ becomes Θ, which in a monospace face
+ * is indistinguishable from a zero — so "θ / day" painted as "0 / DAY" and a
+ * trader could read it as zero theta. σ became Σ and γ became Γ the same way.
+ * (Δ is unharmed; it is already uppercase.)
  *
- * Rather than patch each call site, the primitives run their label through this,
- * so any label written later is protected too. Only lowercase Greek is wrapped,
- * so the surrounding Latin still uppercases normally.
+ * Rather than patch each call site, labels run through this, so any label
+ * written later is protected too. Only lowercase Greek is wrapped, so the
+ * surrounding Latin still uppercases normally.
  */
 const GREEK = /[α-ω]/;
 const GREEK_RUN = /([α-ω]+)/;

@@ -1,300 +1,194 @@
-import React, { memo, useMemo } from 'react';
-import { AlertTriangle, ChevronLeft, ChevronRight, SearchX } from 'lucide-react';
-import Panel from '../ui/Panel';
-import SegmentedControl from '../ui/SegmentedControl';
-import EmptyState from '../ui/EmptyState';
-import VerdictBadge from './VerdictBadge';
-import DataTable, { type Column } from '../ui/DataTable';
-import { StateBadge } from './StateBadge';
-import { setupState, STATE_META } from './setupState';
-import SetupScanCard from './SetupScanCard';
-import { expiryRead } from './setupHorizon';
+/*
+==================================================
+  SLAYER TERMINAL - SETUP SCAN BOARD (SetupScanBoard.tsx)
+  The flat, globally-ranked board for the two-axis scan
+  (sleeve × scanner). Cards or table, 24 per page.
+  Grouping by ticker retired with the dossiers — rank
+  is the organizing principle now; the ticker filter
+  upstream is how a user narrows to one name.
+==================================================
+*/
+
+import { useEffect, useState } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Setup } from '../../types/compass';
+import Panel from '../ui/Panel';
+import CardTabs from '../ui/CardTabs';
+import SignalBadge from '../ui/SignalBadge';
+import SetupScanCard from './SetupScanCard';
+import { processState, PROCESS_META } from './setupProcess';
 
 export type ScanLayout = 'cards' | 'table';
 
-/** The user's words, not ours. "List" is what a developer calls a stack of cards. */
-const SCAN_LAYOUT_OPTIONS = [
+/* 20 per page (10 rows of 2, Noah 2026-08-17): the parent panel stays a
+   fixed, scannable height — content scrolls inside it and the pager does the
+   walking; the box must never grow with the field. */
+const PER_PAGE = 20;
+
+/* One height for BOTH layouts — the board's geometry is a constant of the
+   page, never a function of its content. Viewport-relative with a floor. */
+const BOARD_HEIGHT = 'max(360px, calc(100vh - 380px))';
+
+const LAYOUT_OPTIONS = [
   { value: 'cards', label: 'Cards' },
   { value: 'table', label: 'Table' },
 ] as const;
 
-/** A page of twelve rows of two: a screenful you can actually read, out of the
-    couple of hundred a sweep now admits. */
-const CARDS_PER_PAGE = 24;
-
-/* No height cap and no scroller of its own.
-
-   There was one — `max(360px, calc(100vh - 340px))` — and it made the board a
-   box inside the page: a reader who scrolled the window hit the bottom of the
-   document with the board's own list still holding rows, then had to find the
-   inner scrollbar and start again. The page paginates at CARDS_PER_PAGE, which
-   is the actual answer to "a couple of hundred rows"; a second, invisible
-   window on top of the pagination was doing nothing the pager did not.
-
-   The table branch drops its cap for the same reason. */
-
 interface SetupScanBoardProps {
-  /** Flat and already globally ranked — best in the scan first. */
+  /** Flat, already-ranked (rank = index + 1). */
   setups: Setup[];
-  /** Everything the sweep found, before the ticker filter. */
-  totalFound: number;
-  scannerLabel: string;
-  /** The expiry range this preset actually selected, e.g. "0DTE". */
-  expiryLabel: string;
-  layout: ScanLayout;
-  onLayoutChange: (layout: ScanLayout) => void;
-  /**
-   * Controlled by Compass, not held here.
-   *
-   * Review mode swaps this whole board out for the SignalMonitor, so local page
-   * state was destroyed on unmount: browse to row 60, open a setup, come back,
-   * and you were on page 1 with the contract you had just been reading three
-   * pages away. Every other piece of browse state already lived in the page.
-   */
-  page: number;
-  onPageChange: (page: number) => void;
-  /** Rendered in the panel header — which clock these rows are on. */
-  freshness?: React.ReactNode;
+  title: string;
+  sweepAt: string | null;
   selectedId: string | null;
   onSelect: (setup: Setup) => void;
-  onStudy: (setup: Setup) => void;
+  onAnalysis: (setup: Setup) => void;
+  /** Real-date chip for the active sleeve, e.g. "08/04/26". */
+  expiryChip: string;
 }
 
-/**
- * The scan layer, in both of its densities.
- *
- * Cards and Table are two readings of one list, so they live in one panel with
- * the switch in its header rather than in a metadata strip on the far side of
- * the screen — the control now sits on the thing it changes. Both densities show
- * the same fields for the same reason: a preset is a filter over one
- * presentation, so Top Setups, Quick Scalp, Discounted, Rebounds, Whale Sweeps
- * and All cannot look like different products.
- */
-const SetupScanBoard = ({
-  setups,
-  totalFound,
-  scannerLabel,
-  expiryLabel,
-  layout,
-  onLayoutChange,
-  page,
-  onPageChange,
-  freshness,
-  selectedId,
-  onSelect,
-  onStudy,
-}: SetupScanBoardProps) => {
-  /*
-    The board no longer resets its own paging.
+const SetupScanBoard = ({ setups, title, sweepAt, selectedId, onSelect, onAnalysis, expiryChip }: SetupScanBoardProps) => {
+  const [layout, setLayout] = useState<ScanLayout>('cards');
+  const [page, setPage] = useState(0);
 
-    It used to, on a `resetKey` effect — but review mode unmounts this component,
-    so the effect fired again on the way back and sent the user to page 1 with
-    the setup they had just been reading three pages away. An effect keyed on
-    "what changed" cannot tell a change from a remount. Compass owns the page
-    number and zeroes it at the three places a scan actually changes, which is
-    where the decision belongs.
-  */
+  const pages = Math.max(1, Math.ceil(setups.length / PER_PAGE));
+  // A sweep or filter can shrink the list under the current page — clamp,
+  // never render an empty page with a working pager.
+  useEffect(() => {
+    if (page >= pages) setPage(pages - 1);
+  }, [page, pages]);
 
-  const pageCount = Math.max(1, Math.ceil(setups.length / CARDS_PER_PAGE));
-  const safePage = Math.min(page, pageCount - 1);
-  const pageStart = safePage * CARDS_PER_PAGE;
-  const cardPage = setups.slice(pageStart, pageStart + CARDS_PER_PAGE);
-
-  const columns: Column<Setup>[] = useMemo(
-    () => [
-      {
-        key: 'contract',
-        header: 'Contract',
-        sortValue: s => s.contract,
-        render: s => (
-          <span className="inline-flex items-center gap-2">
-            <span className={`inline-block w-1.5 h-1.5 rounded-full ${s.right === 'C' ? 'bg-bull' : 'bg-bear'}`} />
-            <span className="text-textPrimary font-semibold">{s.contract}</span>
-          </span>
-        ),
-      },
-      {
-        // Date AND dte, the same chip the card carries — nothing on this desk
-        // should leave a trader guessing which session a contract dies in.
-        key: 'expiry',
-        header: 'Expiry',
-        help: 'DTE',
-        sortValue: s => expiryRead(s.expiry).dte,
-        render: s => <span className="text-textSecondary">{expiryRead(s.expiry).chip}</span>,
-      },
-      {
-        key: 'state',
-        header: 'State',
-        sortValue: s => STATE_META[setupState(s)].rank,
-        render: s => <StateBadge state={setupState(s)} />,
-      },
-      {
-        /* The read, not the grade. `setup.score` is a 0-100 figure with nothing
-           measured behind its weights; the verdict is the same read at a
-           precision three coarse bands can carry. The sort still runs on the
-           number, because a board ordered by a tag alone collapses every
-           QUALIFIED into one indistinguishable block — and a hidden ordering key
-           is a far weaker claim than a printed grade. */
-        key: 'score',
-        header: 'Read',
-        align: 'right',
-        sortValue: s => s.score,
-        render: s => <VerdictBadge verdict={s.verdict} />,
-      },
-      {
-        key: 'move',
-        header: '1σ Move',
-        align: 'right',
-        sortValue: s => s.expectedMovePct,
-        render: s => <span className="text-textPrimary">±{s.expectedMovePct}%</span>,
-      },
-      {
-        key: 'mid',
-        header: 'Mid',
-        align: 'right',
-        sortValue: s => s.mid,
-        render: s => <span className="text-textPrimary">${s.mid.toFixed(2)}</span>,
-      },
-      {
-        key: 'health',
-        header: 'Health',
-        align: 'right',
-        sortValue: s => s.health,
-        render: s => (
-          <span className="text-textSecondary">
-            {s.health}
-            <span className="text-textMuted">/100</span>
-          </span>
-        ),
-      },
-      /* No Evidence column. The chips come from the scanner's own thesis
-         library, so all 240 rows carried the identical three badges — three
-         wrapped lines of row height, per row, restating what the tab above
-         already says. They live on the card, where a per-contract set would
-         show if the engine ever varies them, and in full analysis. */
-      {
-        key: 'invalidation',
-        header: 'Breaks At',
-        align: 'right',
-        sortValue: s => s.invalidationPrice,
-        render: s => (
-          <span className="inline-flex items-center gap-1.5 text-warn" title={s.invalidationReason}>
-            <AlertTriangle className="w-3 h-3 shrink-0" />
-            {s.right === 'C' ? 'below' : 'above'} ${s.invalidationPrice.toFixed(2)}
-          </span>
-        ),
-      },
-    ],
-    []
-  );
-
-  /* The panel is content-height under a cap, so it cannot leave a void — but a
-     thin scan is still a fact about the market, and a fact gets said out loud
-     rather than left as three rows floating in a box. */
-  const status =
-    setups.length < 6
-      ? `Only ${setups.length} contract${setups.length === 1 ? '' : 's'} came back on this sweep. The All preset widens the scan.`
-      : layout === 'table'
-        ? `${setups.length} ranked rows. Any header re-ranks all of them.`
-        : null;
+  const start = Math.min(page, pages - 1) * PER_PAGE;
+  const slice = setups.slice(start, start + PER_PAGE);
 
   return (
     <Panel
-      flush
-      title={scannerLabel}
-      subtitle={`${expiryLabel ? `${expiryLabel} · ` : ''}${setups.length} of ${totalFound}`}
-      className="w-full"
+      title={title}
       actions={
-        <div className="flex items-center gap-2">
-          {freshness}
-          <SegmentedControl
-            ariaLabel="Scan layout"
-            options={SCAN_LAYOUT_OPTIONS}
+        <div className="flex items-center gap-3">
+          {sweepAt && (
+            <span className="font-mono text-[10px] text-textMuted uppercase tracking-wider">
+              Sweep <span className="text-textSecondary tnum">{sweepAt}</span>
+            </span>
+          )}
+          {/* Child tier (Noah, 2026-08-17): in-panel controls wear the
+              underline glide, never the parent pill rail. */}
+          <CardTabs
+            ariaLabel="Board layout"
+            options={LAYOUT_OPTIONS}
             value={layout}
-            onChange={v => onLayoutChange(v as ScanLayout)}
+            onChange={v => setLayout(v as ScanLayout)}
           />
         </div>
       }
     >
       {setups.length === 0 ? (
-        <EmptyState
-          icon={SearchX}
-          title="Nothing clears this floor"
-          body={`No contract met the ${scannerLabel} threshold on the last sweep. Try All, or wait for the next scan.`}
-        />
-      ) : layout === 'table' ? (
-        /* One sorted body rather than pages: a header sort has to rank the whole
-           scan, not whichever slice a pager happened to be showing. The sticky
-           head and the cap carry the length.
-
-           The selected row keeps DataTable's `inst-selected` rail. That marker
-           is deliberate here and gone from the card: a 2px rail is what a
-           selected row looks like in every table in this app, whereas on a card
-           it was a third selection signal stacked on a border and a wash, and
-           the loudest mark on the screen belonged to something nobody clicked. */
-        <DataTable
-          columns={columns}
-          rows={setups}
-          rowKey={s => s.id}
-          onRowClick={onSelect}
-          selectedKey={selectedId}
-          initialSort={{ key: 'score', dir: 'desc' }}
-          emptyText="No setups meet this scanner's threshold right now"
-        />
-      ) : (
-        <div className="p-2.5">
-          {/* The cards are listitems, so the thing holding them has to be a
-              list — an orphaned listitem is dropped from the tree entirely. */}
-          <div role="list" aria-label="Ranked contracts" className="grid gap-2 sm:grid-cols-2">
-            {cardPage.map((setup, i) => (
+        <div className="flex items-center justify-center" style={{ height: BOARD_HEIGHT }}>
+          <p className="font-mono text-[11px] text-textSecondary px-1 text-center">
+            Nothing cleared the bar on this sweep — an empty board is a read, not an error.
+          </p>
+        </div>
+      ) : layout === 'cards' ? (
+        /* FIXED height, not a cap — cards and table must occupy the IDENTICAL
+           box so switching layouts never moves the row's bottom edge, and the
+           right rail (absolute-inset) adopts this exact height (Noah,
+           2026-08-05: "the gap changes again"). Content scrolls inside; the
+           pager lives OUTSIDE the scroll, always in reach. */
+        <div key="cards" className="overflow-y-auto pr-1 animate-soft-in" style={{ height: BOARD_HEIGHT }}>
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+            {slice.map((s, i) => (
               <SetupScanCard
-                key={setup.id}
-                setup={setup}
-                rank={pageStart + i + 1}
-                selected={selectedId === setup.id}
-                onSelect={() => onSelect(setup)}
-                onStudy={() => onStudy(setup)}
+                key={s.id}
+                setup={s}
+                rank={start + i + 1}
+                selected={s.id === selectedId}
+                onSelect={onSelect}
+                onAnalysis={onAnalysis}
+                expiryChip={expiryChip}
               />
             ))}
           </div>
         </div>
-      )}
-
-      {setups.length > 0 && (status || (layout === 'cards' && pageCount > 1)) && (
-        <div className="flex items-center gap-3 flex-wrap border-t border-borderSubtle px-3 py-2">
-          {status && <span className="font-mono text-label text-textMuted">{status}</span>}
-          {layout === 'cards' && pageCount > 1 && (
-            <div className="ml-auto flex items-center gap-2">
-              <span className="font-mono text-label text-textMuted uppercase tracking-wider tnum">
-                {pageStart + 1}-{Math.min(pageStart + CARDS_PER_PAGE, setups.length)} of {setups.length}
-              </span>
-              <button
-                onClick={() => onPageChange(Math.max(0, safePage - 1))}
-                disabled={safePage === 0}
-                aria-label="Previous page of setups"
-                className="-my-1 py-1 px-1.5 rounded-md border border-borderSubtle text-textSecondary hover:text-textPrimary hover:border-borderMuted disabled:opacity-40 disabled:hover:text-textSecondary transition-colors"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={() => onPageChange(Math.min(pageCount - 1, safePage + 1))}
-                disabled={safePage >= pageCount - 1}
-                aria-label="Next page of setups"
-                className="-my-1 py-1 px-1.5 rounded-md border border-borderSubtle text-textSecondary hover:text-textPrimary hover:border-borderMuted disabled:opacity-40 disabled:hover:text-textSecondary transition-colors"
-              >
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
+      ) : (
+        <div key="table" className="overflow-auto animate-soft-in" style={{ height: BOARD_HEIGHT }}>
+          <table className="w-full text-left">
+            <thead>
+              <tr className="border-b border-borderSubtle">
+                {['#', 'Contract', 'Expiry', 'State', '1σ move', 'Premium', 'Breaks at'].map(h => (
+                  <th key={h} className="font-mono text-[9px] uppercase tracking-wider text-textMuted font-medium px-2 py-2">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {slice.map((s, i) => {
+                const state = processState(s);
+                const meta = PROCESS_META[state];
+                const isCall = s.right === 'C';
+                return (
+                  <tr
+                    key={s.id}
+                    onClick={() => onSelect(s)}
+                    aria-selected={s.id === selectedId}
+                    className={`border-b border-borderSubtle/50 cursor-pointer transition-colors ${
+                      s.id === selectedId ? 'bg-white/[0.05]' : 'hover:bg-white/[0.02]'
+                    }`}
+                  >
+                    <td className="font-mono text-[10px] text-textMuted px-2 py-2 tnum">{start + i + 1}</td>
+                    <td className={`font-mono text-[12px] font-semibold px-2 py-2 ${isCall ? 'text-bull' : 'text-bear'}`}>
+                      {s.contract}
+                    </td>
+                    <td className="font-mono text-[11px] text-textSecondary px-2 py-2">
+                      {s.expiry} · {expiryChip}
+                    </td>
+                    <td className="px-2 py-2">
+                      <SignalBadge tone={meta.tone} dot pulse={meta.pulse}>
+                        {state}
+                      </SignalBadge>
+                    </td>
+                    <td className="font-mono text-[11px] text-textPrimary px-2 py-2 tnum">±{s.sigmaMovePct}%</td>
+                    <td className="font-mono text-[11px] text-textPrimary px-2 py-2 tnum">${s.mid.toFixed(2)}</td>
+                    <td className="font-mono text-[11px] text-warn px-2 py-2 tnum">${s.invalidationPrice.toFixed(2)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
+
+      {/* Always rendered — a pager row that appears and disappears with the
+          page count would change the panel's height, the exact wobble this
+          box exists to prevent. Buttons only show when there is a walk. */}
+      <div className="flex items-center justify-end gap-2 pt-3 min-h-[34px]">
+        <span className="font-mono text-[10px] text-textMuted tnum">
+          {setups.length === 0
+            ? '0 setups'
+            : `${start + 1}–${Math.min(start + PER_PAGE, setups.length)} of ${setups.length}`}
+        </span>
+        {pages > 1 && (
+          <>
+            <button
+              onClick={() => setPage(p => Math.max(0, p - 1))}
+              disabled={page === 0}
+              className="p-1 rounded border border-borderSubtle text-textSecondary hover:text-textPrimary disabled:opacity-30 transition-colors"
+              aria-label="Previous page"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setPage(p => Math.min(pages - 1, p + 1))}
+              disabled={page >= pages - 1}
+              className="p-1 rounded border border-borderSubtle text-textSecondary hover:text-textPrimary disabled:opacity-30 transition-colors"
+              aria-label="Next page"
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </>
+        )}
+      </div>
     </Panel>
   );
 };
 
-/* Memoised: the scan re-ranks on the 10s sweep, not on the 1.5s price tick, and
-   a table of a couple of hundred rows is not something to reconcile six times a
-   sweep for prices none of its cells show. Every prop Compass hands in is a
-   stable identity for exactly this reason. */
-export default memo(SetupScanBoard);
+export default SetupScanBoard;

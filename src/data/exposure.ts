@@ -8,7 +8,7 @@
 ==================================================
 */
 
-import { buildLevels, fmtUsd, pinStrike as pinStrikeOf } from './gex';
+import { fmtUsd } from './gex';
 import type { MarketSnapshot, StrikeNode } from '../types/market';
 import type {
   DealerBias,
@@ -34,15 +34,16 @@ function h01(seed: string): number {
   return (hash(seed) % 1000) / 1000;
 }
 
-// Farther expiries carry less gamma; ALL is exactly the SUM of the five
-// expiry factors, so the aggregate view always equals the sum of its parts.
+// Farther expiries carry less gamma; ALL aggregates the pipeline.
 const EXPIRY_DECAY: Record<ExposureExpiry, number> = {
   '0DTE': 1,
   '1D': 0.52,
   '2D': 0.38,
   '5D': 0.22,
   '7D': 0.16,
-  ALL: 1 + 0.52 + 0.38 + 0.22 + 0.16,
+  // Monthly expiration carries the heavy structural weight (institutional books)
+  OPEX: 0.85,
+  ALL: 3.13,
 };
 
 function scaleSplit(put: number, call: number, factor: number, jitter: number): GreekSplit {
@@ -51,11 +52,15 @@ function scaleSplit(put: number, call: number, factor: number, jitter: number): 
   return { put: p, call: c, net: p + c };
 }
 
+/** Strikes shown each side of spot. 30 is the whole book. */
+export type StrikeWindow = 10 | 15 | 20 | 30;
+export const STRIKE_WINDOWS: StrikeWindow[] = [10, 15, 20, 30];
+
 // ---- top-level build ----------------------------------------------------------
 export function buildExposureProfile(
   snapshot: MarketSnapshot,
   expiry: ExposureExpiry,
-  half: 10 | 15
+  half: StrikeWindow
 ): ExposureProfileData {
   const { ticker, spot, chain } = snapshot;
   const factor = EXPIRY_DECAY[expiry];
@@ -66,46 +71,85 @@ export function buildExposureProfile(
   const start = Math.max(0, spotIdx - half);
   const window = desc.slice(start, start + half * 2 + 1);
 
-  // Pin comes from gex.ts rather than a second copy of the same scan. The two
-  // copies agreed only by being identical, so either could be edited alone and
-  // the panels would drift apart with nothing to catch it.
-  const pin = pinStrikeOf(snapshot, half);
+  // Pin = max total OI strike inside the window (round-number magnets win)
+  let pinStrike = window[0]?.strike ?? spot;
+  let pinOI = 0;
+  for (const n of window) {
+    if (n.callOI + n.putOI > pinOI) {
+      pinOI = n.callOI + n.putOI;
+      pinStrike = n.strike;
+    }
+  }
 
   const maxAbs = { gex: 1, dex: 1, vex: 1 };
   const strikes: StrikeExposure[] = window.map((n: StrikeNode) => {
     const jitter = h01(`${ticker}-${n.strike}-${expiry}-exp`);
     const gex = scaleSplit(n.putGex, n.callGex, factor, jitter);
     const dex = scaleSplit(n.putDex, n.callDex, factor, jitter);
-    const vex = scaleSplit(n.putVex, n.callVex, factor, jitter); // true $ per 1% vol
+    const vex = scaleSplit(n.putVex * 40, n.callVex * 40, factor, jitter); // dollar-comparable
     maxAbs.gex = Math.max(maxAbs.gex, Math.abs(gex.put), Math.abs(gex.call), Math.abs(gex.net));
     maxAbs.dex = Math.max(maxAbs.dex, Math.abs(dex.put), Math.abs(dex.call), Math.abs(dex.net));
     maxAbs.vex = Math.max(maxAbs.vex, Math.abs(vex.put), Math.abs(vex.call), Math.abs(vex.net));
-    return { strike: n.strike, pin: n.strike === pin, gex, dex, vex };
+    const oi = n.callOI + n.putOI;
+    // SAME seed and formula as rankedtargets.ts — one volume per strike across
+    // the terminal, until a real tape replaces both (placeholder, OI-anchored)
+    const volume = Math.round(oi * (0.2 + h01(`${ticker}-${n.strike}-tvol`) * 0.7));
+    return { strike: n.strike, pin: n.strike === pinStrike, gex, dex, vex, oi, volume };
   });
 
-  // Aggregates over the rendered window. These scale the bars and nothing else:
-  // they are an expiry-filtered, windowed view, so they are NOT the same number
-  // as the whole-chain net the cockpit prints, and must not be used to decide
-  // which way dealers lean.
+  // Aggregates
   const netGex = strikes.reduce((a, s) => a + s.gex.net, 0);
   const netDex = strikes.reduce((a, s) => a + s.dex.net, 0);
   const netVex = strikes.reduce((a, s) => a + s.vex.net, 0);
 
-  // Levels come from gex.ts. This function used to derive walls and the flip
-  // from its own rescaled, jittered, expiry-decayed copy of the chain, which is
-  // why the landing page printed FLIP 501.50 in the levels rail and FLIP 500.50
-  // in the positioning map roughly five hundred pixels below it — same screen,
-  // same instrument, two answers. A level is a property of the book, not of how
-  // many strikes a panel happens to be drawing, so there is one derivation now.
-  const shared = buildLevels(snapshot);
-  const { callWall, putWall, flip } = shared;
-  const levels: ExposureLevels = { spot, callWall, putWall, pin, flip, king: shared.king };
+  // Walls = strongest |net GEX| above / below spot; flip = first sign change
+  let callWall = spot;
+  let putWall = spot;
+  let maxAbove = 0;
+  let maxBelow = 0;
+  for (const s of strikes) {
+    const mag = Math.abs(s.gex.net);
+    if (s.strike > spot && mag > maxAbove) {
+      maxAbove = mag;
+      callWall = s.strike;
+    }
+    if (s.strike < spot && mag > maxBelow) {
+      maxBelow = mag;
+      putWall = s.strike;
+    }
+  }
+  // Nearest-to-spot crossing, same rule as the trade plan and buildLevelsFor
+  // (unified 2026-08-18) — first-from-the-bottom picked jitter crossings in
+  // the window's tail over the structural one at spot.
+  const asc = [...strikes].sort((a, b) => a.strike - b.strike);
+  let flip = spot;
+  let flipDist = Infinity;
+  for (let i = 1; i < asc.length; i++) {
+    if (Math.sign(asc[i - 1].gex.net) !== Math.sign(asc[i].gex.net)) {
+      const mid = (asc[i - 1].strike + asc[i].strike) / 2;
+      const d = Math.abs(mid - spot);
+      if (d < flipDist) {
+        flipDist = d;
+        flip = mid;
+      }
+    }
+  }
 
-  // The bias reads the whole chain, on the same basis as the cockpit. Deciding
-  // it from the windowed sum above had the two panels disagreeing on the SIGN
-  // for two of sixteen tickers, so one screen said dealers amplify while the
-  // other said they absorb.
-  const chainNetGex = chain.reduce((a, n) => a + n.netGex, 0);
+  // The book's king — argmax |net gamma| over the FULL chain, not the window.
+  // A windowed argmax answers "the biggest bar currently drawn", which moves
+  // when the panel resizes and can disagree with the levels rail; when the
+  // real king sits outside the window, no row is crowned.
+  let king = spot;
+  let kingAbs = 0;
+  for (const n of chain) {
+    const a = Math.abs(n.putGex + n.callGex);
+    if (a > kingAbs) {
+      kingAbs = a;
+      king = n.strike;
+    }
+  }
+
+  const levels: ExposureLevels = { spot, callWall, putWall, pin: pinStrike, flip, king };
 
   // Zone bands (strikes descending: from ≥ to). One row of breathing room per wall.
   const strikeList = strikes.map(s => s.strike);
@@ -118,31 +162,40 @@ export function buildExposureProfile(
     zones.push({ from: callWall - step * 2, to: putWall + step * 2, kind: 'friction', label: 'FRICTION' });
   }
 
-  // Dealer bias from net gamma positioning, measured against the chain's own
-  // scale so the threshold means the same thing on SPY as on a $40 name.
-  const chainScale = chain.reduce((a, n) => Math.max(a, Math.abs(n.netGex)), 1);
-  const biasThreshold = chainScale * 0.6;
+  // Dealer bias from net gamma positioning.
+  // SIGN NOTE: the sim codes the call side NEGATIVE and the put side POSITIVE
+  // (the heatmap's steel/gold split and the positioning map read the same
+  // way), so a NEGATIVE aggregate = call-dominant book = dealers long gamma =
+  // absorbing = supportive, and a POSITIVE aggregate = put-dominant = short
+  // gamma = amplifying. This used to read the classic street convention
+  // (negative = amplified), which contradicted every field surface
+  // (unified 2026-08-18). Real ThetaData ingestion (task #23) must re-verify
+  // which convention the live feed carries.
+  const biasThreshold = maxAbs.gex * 0.6;
   let bias: DealerBias = 'NEUTRAL';
   let biasNote = 'Balanced positioning';
-  if (chainNetGex < -biasThreshold) {
+  if (netGex > biasThreshold) {
     bias = 'BEARISH';
-    biasNote = 'Net negative gamma, moves amplified';
-  } else if (chainNetGex > biasThreshold) {
+    biasNote = 'Net short gamma — moves amplified';
+  } else if (netGex < -biasThreshold) {
     bias = 'BULLISH';
-    biasNote = 'Net supportive gamma, dips absorbed';
+    biasNote = 'Net long gamma — dips absorbed';
   }
 
   // Insight narrative — levels translated to English
   const fmtK = (v: number) => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
   const inFriction = spot > putWall && spot < callWall;
   const insights = [
-    // The sides are a property of the FLIP (short gamma below, long above),
-    // not of the aggregate sign — the sentence anchors on where spot sits.
-    `Net GEX is ${chainNetGex < 0 ? 'negative' : 'positive'} (${fmtUsd(chainNetGex)}). Dealers amplify moves below ${fmtK(flip)} and dampen them above it, and spot is ${spot >= flip ? 'above' : 'below'} the flip.`,
+    // Above the flip the book is call-dominant and absorbs; below it, put
+    // gamma dominates and dealer hedging amplifies. That spatial fact is what
+    // the flip IS — the aggregate sign only says which side outweighs.
+    `Net GEX is ${netGex > 0 ? 'positive' : 'negative'} (${fmtUsd(netGex)}) — ${
+      netGex > 0 ? 'put gamma dominates and hedging amplifies moves' : 'call gamma dominates and hedging absorbs dips'
+    }. Above ${fmtK(flip)} dealers dampen the tape; below it they chase it.`,
     inFriction
-      ? `Price sits between key levels (${fmtK(putWall)} to ${fmtK(callWall)}) inside the friction zone.`
-      : `Price is ${spot >= callWall ? 'above the call wall' : 'below the put wall'}, outside the friction zone.`,
-    `Heaviest OI magnet sits at ${fmtK(pin)} (pin level), so price gravitates there into expiry.`,
+      ? `Price sits between key levels (${fmtK(putWall)} – ${fmtK(callWall)}) inside the friction zone.`
+      : `Price is ${spot >= callWall ? 'above the call wall' : 'below the put wall'} — outside the friction zone.`,
+    `Strongest dealer support sits at ${fmtK(pinStrike)} (pin level).`,
     `A break below ${fmtK(putWall)} shifts pressure toward ${fmtK(putWall - step * 2)}.`,
     `A break above ${fmtK(callWall)} opens quick supply up to ${fmtK(callWall + step * 2)}.`,
   ];

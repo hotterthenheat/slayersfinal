@@ -17,8 +17,6 @@ import type {
   VolLabData,
   VolRegime,
 } from '../types/gex';
-import { ivRankFor } from '../core/ivRank';
-import { dayKey } from '../core/rng';
 
 // ---- deterministic RNG ------------------------------------------------------
 function hash(seed: string): number {
@@ -91,7 +89,6 @@ function buildTerm(ticker: string, baseIv: number): TermStructureData {
   const monthAgo = termCurve(ticker, baseIv, 1.9, 0.9, 'm1');
 
   const atm30 = Number(ivAt(current, 30).toFixed(2));
-  const ivr = ivRankFor(ticker, dayKey()); // one source of truth, shared with the Vol Complex
   return {
     current,
     dayAgo,
@@ -103,8 +100,8 @@ function buildTerm(ticker: string, baseIv: number): TermStructureData {
       iv3m: Number(ivAt(current, 90).toFixed(2)),
       iv6m: Number(ivAt(current, 180).toFixed(2)),
       iv1y: Number(ivAt(current, 360).toFixed(2)),
-      ivRank: ivr.rank,
-      ivPercentile: ivr.percentile,
+      ivRank: Math.round(25 + h01(`${ticker}-ivrank`) * 45),
+      ivPercentile: Math.round(20 + h01(`${ticker}-ivpct`) * 50),
     },
   };
 }

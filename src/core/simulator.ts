@@ -5,7 +5,6 @@
 ==================================================
 */
 
-import { DEALER_BOOK } from './dealerBook';
 import type {
   Candle,
   GexSnapshot,
@@ -18,82 +17,69 @@ import type {
   TickerSymbol,
   TradePlan,
 } from '../types/market';
-import type { MarketDataProvider } from './marketDataProvider';
-import { math } from './mathProvider';
-import { lookup as universeLookup } from '../data/universe';
-// rng.ts imports nothing, so this cannot cycle. (scanUniverse.ts is the one
-// module this file must never import: that dependency runs the other way, and
-// the cycle surfaces as `undefined` at module init rather than as a type error.)
+import { blackScholesGreeks } from './greeks';
 import { dayKey } from './rng';
-import { etTime } from './calendar';
-import { expiryCalendar, listingConvention } from './expiryCalendar';
-
-/*
-  OI freshness lives in core/openInterest.ts, not here.
-
-  The provider seam says in its own header that the simulator's conveniences are
-  not part of the contract and nothing outside core/ should import them — but
-  data/flowtape needed to stamp the OI on each print, so it was importing
-  `settledOI` straight off this module. Re-exported below so existing callers
-  inside core/ keep working; new callers should import from core/openInterest.
-*/
-import { settledOI, OI_SETTLED_ASOF } from './openInterest';
-
-export { settledOI, OI_SETTLED_ASOF };
+import type { UniverseQuote } from '../types/compass';
 
 const Simulator = (() => {
-  /*
-    The chain's greeks — the single biggest math surface in the terminal, since
-    every GEX / DEX / VEX number on every desk is built from these.
+  // Math Helpers
+  // Greeks math lives in core/greeks.ts now — shared with the scoring
+  // engine so replay prices with byte-identical code.
+  const calculateGreeks = blackScholesGreeks;
 
-    They come from the MATH SEAM (core/mathProvider.ts) rather than a private
-    Black-Scholes here. That matters for the handoff: a house model registered on
-    the seam has to reach the CHAIN, or it would restate the Weigher and the tape
-    while the entire Pinpoint desk kept quoting the old model.
-
-    This wrapper keeps two things that are the SIMULATOR's business, not the
-    model's: the degenerate-input floors below, and the Greeks shape the feed
-    contract publishes (call/put split, charm equal across rights because no
-    dividend yield is modelled — see the note that was here before).
-  */
-  function calculateGreeks(S: number, K: number, t: number, v: number): Greeks {
-    const tt = t <= 0 ? 0.0001 : t; // Avoid division by zero
-    const vv = v <= 0 ? 0.01 : v;
-    const g = math.optionGreeks(S, K, vv, tt, 'C');
-    return {
-      deltaCall: g.delta,
-      // Put delta is a constant one below call delta with q = 0.
-      deltaPut: g.delta - 1,
-      // Gamma and vega are right-independent.
-      gamma: g.gamma,
-      vega: g.vega,
-      vanna: g.vanna ?? 0,
-      charmCall: g.charm ?? 0,
-      charmPut: g.charm ?? 0,
-    };
-  }
-
-  // Configured Tick States — core tickers with hand-set params. Equity base
-  // prices are sourced from the shared universe so the live desks and the
-  // research pages (Stocks/Compass) show the same price for the
-  // same name; SPY/QQQ are ETFs outside that universe and keep their own refs.
-  const aaplPx = universeLookup('AAPL')?.px ?? 232.4;
-  const nvdaPx = universeLookup('NVDA')?.px ?? 138.6;
+  // Configured Tick States — core tickers with hand-set params
   const TICKERS: Record<string, TickerConfig> = {
     SPY: { basePrice: 500, currentPrice: 500, iv: 0.15, step: 1 },
     QQQ: { basePrice: 440, currentPrice: 440, iv: 0.18, step: 1 },
-    AAPL: { basePrice: aaplPx, currentPrice: aaplPx, iv: 0.20, step: 0.5 },
-    NVDA: { basePrice: nvdaPx, currentPrice: nvdaPx, iv: 0.35, step: 0.5 }
+    AAPL: { basePrice: 190, currentPrice: 190, iv: 0.20, step: 0.5 },
+    NVDA: { basePrice: 120, currentPrice: 120, iv: 0.35, step: 0.5 }
   };
 
   /** Core watchlist that always populates the opportunity feed. */
   const WATCHLIST = ['SPY', 'QQQ', 'AAPL', 'NVDA'];
 
-  // Cash indices carry no share volume — not a vendor gap, a definitional fact.
-  // Marked here so the volume-derived Pulse panels can say so rather than
-  // fabricate a cumulative delta / VWAP / POC that cannot exist. The
-  // delta-equivalent substitute is a later phase (P4.4).
-  const INDEX_SYMBOLS = new Set(['SPX', 'NDX', 'RUT', 'VIX', 'XSP', 'DJX']);
+  /* The scan roster: famous optionable names the Compass board sweeps WITHOUT
+     seeding them into the tick loop (registration costs ~0.6s of forward-simmed
+     candles per name — twenty at once is a frozen terminal). Base prices are
+     hand-set sim reference values, same idea as TICKERS above; a name promotes
+     to a full TICKERS entry the first time the user actually opens it. */
+  const SCAN_ROSTER: { ticker: string; px: number; iv: number }[] = [
+    { ticker: 'TSLA', px: 248, iv: 0.48 },
+    { ticker: 'META', px: 512, iv: 0.3 },
+    { ticker: 'MSFT', px: 428, iv: 0.22 },
+    { ticker: 'AMZN', px: 186, iv: 0.28 },
+    { ticker: 'GOOGL', px: 172, iv: 0.26 },
+    { ticker: 'AMD', px: 162, iv: 0.42 },
+    { ticker: 'NFLX', px: 640, iv: 0.32 },
+    { ticker: 'AVGO', px: 168, iv: 0.34 },
+    { ticker: 'COIN', px: 245, iv: 0.55 },
+    { ticker: 'PLTR', px: 28, iv: 0.5 },
+    { ticker: 'JPM', px: 205, iv: 0.2 },
+    { ticker: 'ORCL', px: 142, iv: 0.27 },
+    { ticker: 'CRM', px: 262, iv: 0.29 },
+    { ticker: 'UBER', px: 72, iv: 0.36 },
+    { ticker: 'MU', px: 118, iv: 0.44 },
+    { ticker: 'BA', px: 178, iv: 0.33 },
+    { ticker: 'DIS', px: 92, iv: 0.25 },
+    { ticker: 'INTC', px: 31, iv: 0.4 },
+  ];
+
+  /** Strike grid increment by price magnitude — the sim's convention. */
+  function stepFor(price: number): number {
+    if (price < 50) return 0.5;
+    if (price < 150) return 1;
+    if (price < 400) return 2.5;
+    return 5;
+  }
+
+  /** Day-stable lightweight quote for an unregistered roster name. Reads the
+      engine clock through dayKey, so a pinned replay re-derives it exactly. */
+  function scanQuote(base: { ticker: string; px: number; iv: number }): UniverseQuote {
+    const h = symbolHash(`${base.ticker}-${dayKey()}-uq`);
+    const jitter = 1 + (((h % 1000) / 1000 - 0.5) * 0.06); // ±3%, day-stable
+    const price = Number((base.px * jitter).toFixed(2));
+    return { ticker: base.ticker, price, iv: base.iv, step: stepFor(price) };
+  }
 
   let activeTicker = 'SPY';
   const priceHistory: Record<string, number[]> = {};
@@ -108,10 +94,10 @@ const Simulator = (() => {
   const SESSIONS = 22; // ~1 month of sessions seeded up front
   const CANDLE_LIMIT = SESSIONS * SESSION_BARS + 600;
 
-  // Net-GEX-per-strike snapshots, parallel to candleHistory but only kept for
-  // recent sessions — the node overlay is an intraday feature.
+  // Net-GEX-per-strike snapshots, kept as deep as the candle buffer so the
+  // chart's exposure trails cover the full visible history.
   const gexHistory: Record<string, GexSnapshot[]> = {};
-  const RECENT_GEX_BARS = 6 * SESSION_BARS;
+  const RECENT_GEX_BARS = SESSIONS * SESSION_BARS;
   const GEX_LIMIT = RECENT_GEX_BARS + 600;
 
   function symbolHash(sym: string): number {
@@ -123,103 +109,236 @@ const Simulator = (() => {
     return h >>> 0;
   }
 
-  // ---- seeded per-symbol RNG --------------------------------------------------
-  // The terminal is designed to be reproducible ("the same seed always paints
-  // the same tape" — core/rng.ts). Every stochastic draw below comes from a
-  // per-symbol mulberry32 stream seeded from the symbol and the calendar day,
-  // so a reload replays the identical month of candles and session tape.
-  //
-  // The day comes from `dayKey()`, the same function the twenty research
-  // modules use. It used to be `Math.floor(Date.now() / 86400000)`, which is a
-  // UTC boundary while `dayKey()` reads the LOCAL date — so west of Greenwich
-  // the terminal had two new-day events. Reload after 5pm Pacific and every
-  // candle regenerated while the scanners, news and dossiers stayed on the
-  // previous draw; reload again at local midnight and the reverse happened.
-  // Both halves are arbitrary generated data, which is exactly why nothing
-  // caught it: neither one looks wrong on its own.
-  const daySeed = symbolHash(dayKey());
-  const rngStreams: Record<string, () => number> = {};
-  function mulberry32(a: number): () => number {
-    return () => {
-      a |= 0;
-      a = (a + 0x6d2b79f5) | 0;
-      let t = Math.imul(a ^ (a >>> 15), 1 | a);
-      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
+  /*
+    Persistent OI book — the market's memory. Real open interest lives at a
+    strike for days; it doesn't teleport to wherever price wanders. Each
+    ticker keeps a per-strike OI ledger that drifts slowly toward the "fresh"
+    ATM-centered profile (positioning migrates), breathes with order-flow
+    noise, and decays once price leaves a strike far behind. Everything that
+    reads a chain (matrix, trails, walls) reads THIS book, so walls persist,
+    get tested, and fade for real instead of shadowing price.
+  */
+  interface BookEntry {
+    callOI: number;
+    putOI: number;
   }
-  function rand(sym: string): number {
-    let s = rngStreams[sym];
-    if (!s) s = rngStreams[sym] = mulberry32(symbolHash(sym) ^ Math.imul(daySeed, 2654435761));
-    return s();
-  }
+  const oiBook: Record<string, Map<number, BookEntry>> = {};
+  const BOOK_RANGE = 30; // strikes maintained each side of spot
+  const BOOK_BLEND = 0.012; // per-bar migration toward the fresh profile (~1h half-life)
 
-  // Seed a historical price buffer with realistic values
-  function seedHistory(sym: string): void {
-    const cfg = TICKERS[sym];
-    let p = cfg.basePrice;
-    priceHistory[sym] = [];
-    for (let i = 0; i < historyLimit; i++) {
-      p += (rand(sym) - 0.5) * cfg.step * 0.5;
-      priceHistory[sym].push(p);
+  // The profile OI drifts toward: ATM-concentrated, round-number magnets.
+  function freshOI(strike: number, spot: number, step: number): BookEntry {
+    const distance = Math.abs(strike - spot) / spot;
+    const baseOI = Math.max(100, Math.round(20000 * Math.exp(-Math.pow(distance * 15, 2))));
+    let callOI = Math.round(baseOI * (strike > spot ? 1.4 : 0.8));
+    let putOI = Math.round(baseOI * (strike < spot ? 1.6 : 0.7));
+    if (Math.round(strike / (step * 5)) * step * 5 === strike) {
+      callOI = Math.round(callOI * 2.2);
+      putOI = Math.round(putOI * 2.5);
     }
-    cfg.currentPrice = Number(p.toFixed(2));
+    return { callOI, putOI };
+  }
+
+  function evolveBook(sym: string, spot: number, blend = BOOK_BLEND): void {
+    const cfg = TICKERS[sym];
+    const step = cfg.step;
+    let book = oiBook[sym];
+    if (!book) {
+      book = oiBook[sym] = new Map();
+      blend = 1; // first call seeds the book outright
+    }
+    const base = Math.round(spot / step) * step;
+    const alive = new Set<number>();
+    for (let i = -BOOK_RANGE; i <= BOOK_RANGE; i++) {
+      const strike = Number((base + i * step).toFixed(2));
+      alive.add(strike);
+      const want = freshOI(strike, spot, step);
+      const cur = book.get(strike);
+      if (!cur) {
+        // a strike entering the tradable window starts small — OI builds, it doesn't teleport
+        const scale = blend >= 1 ? 1 : 0.2;
+        book.set(strike, {
+          callOI: Math.round(want.callOI * scale),
+          putOI: Math.round(want.putOI * scale),
+        });
+      } else {
+        const flow = () => 1 + (Math.random() - 0.5) * 0.05; // order-flow breathing
+        cur.callOI = Math.max(50, Math.round((cur.callOI + (want.callOI - cur.callOI) * blend) * flow()));
+        cur.putOI = Math.max(50, Math.round((cur.putOI + (want.putOI - cur.putOI) * blend) * flow()));
+      }
+    }
+    // strikes price left behind: positions unwind gradually, then fall away
+    for (const [k, e] of book) {
+      if (alive.has(k)) continue;
+      e.callOI = Math.round(e.callOI * 0.985);
+      e.putOI = Math.round(e.putOI * 0.985);
+      if (e.callOI < 120 && e.putOI < 120) book.delete(k);
+    }
+  }
+
+  /*
+    GEX-aware price step — the feedback loop. The book shapes the walk:
+      · heavy shelves are BARRIERS: a move that would punch through gets most
+        of its overshoot absorbed (tests and bounces), with a rare clean
+        break that runs;
+      · the nearest strong shelf exerts a gentle PIN when price is close
+        (grind-along-the-wall days);
+      · between shelves ("no man's land") volatility runs freer.
+    Gamma is approximated with a single Gaussian per strike so seeding stays
+    fast; the display path keeps exact Black-Scholes.
+  */
+  function gexAwareStep(sym: string, price: number, scale = 1): number {
+    const cfg = TICKERS[sym];
+    const book = oiBook[sym];
+    const step = cfg.step;
+    if (!book) return (Math.random() - 0.5) * cfg.basePrice * cfg.iv * 0.0035;
+
+    const sqT = Math.sqrt(0.003); // 0DTE horizon, matching the display chain
+    const denom = Math.max(1e-6, price * cfg.iv * sqT);
+    // reference wall: what a fully-loaded ATM round-number shelf computes to
+    const refWall = (20000 * 2.4 * 100 * price * price * 0.01 * 0.54) / (2.5066 * denom);
+
+    const base = Math.round(price / step) * step;
+    let nearAbove: { strike: number; s: number } | null = null;
+    let nearBelow: { strike: number; s: number } | null = null;
+    let localNet = 0;
+    for (let i = -8; i <= 8; i++) {
+      const strike = Number((base + i * step).toFixed(2));
+      const e = book.get(strike);
+      if (!e) continue;
+      const z = (strike - price) / denom;
+      const gamma = Math.exp(-z * z / 2) / (2.5066 * denom);
+      const v =
+        e.callOI * 100 * gamma * price * price * 0.01 * -0.55 +
+        e.putOI * 100 * gamma * price * price * 0.01 * 0.53;
+      localNet += v;
+      const s = Math.min(1, Math.abs(v) / refWall);
+      if (s < 0.22) continue; // not a real shelf
+      if (strike > price && (!nearAbove || strike < nearAbove.strike)) nearAbove = { strike, s };
+      if (strike < price && (!nearBelow || strike > nearBelow.strike)) nearBelow = { strike, s };
+    }
+
+    // base random step; quiet zones (no shelf either side) run ~35% hotter
+    const inNoMansLand = !nearAbove && !nearBelow;
+    const range = cfg.basePrice * cfg.iv * 0.0035 * (0.4 + Math.random()) * (inNoMansLand ? 1.35 : 1);
+    let move = (Math.random() - 0.5) * 2 * range * scale;
+
+    // pin: the nearest strong shelf pulls when price is within ~2.5 strikes
+    const magnet = [nearAbove, nearBelow]
+      .filter((w): w is { strike: number; s: number } => w !== null)
+      .sort((a, b) => Math.abs(a.strike - price) - Math.abs(b.strike - price))[0];
+    if (magnet && Math.abs(magnet.strike - price) < step * 2.5) {
+      move += (magnet.strike - price) * 0.05 * magnet.s;
+    }
+
+    // barrier: absorb most of any overshoot through a strong shelf; rare clean break
+    const next = price + move;
+    const wall = move > 0 ? nearAbove : nearBelow;
+    if (wall && ((move > 0 && next > wall.strike) || (move < 0 && next < wall.strike))) {
+      const breakout = Math.random() > 0.975;
+      if (!breakout) {
+        const through = next - wall.strike;
+        move = wall.strike - price + through * (1 - 0.85 * wall.s);
+      } else {
+        move *= 1.6; // wall breaks: the move runs
+      }
+    }
+
+    return move;
+  }
+
+  // Seed a historical price buffer + candles + GEX history for one symbol.
+  function seedHistory(sym: string): void {
     seedCandles(sym);
+    const closes = candleHistory[sym].map(b => b.close);
+    priceHistory[sym] = closes.slice(-historyLimit);
   }
 
-  /** Markets don't trade weekends — sessions must land on weekdays only. */
-  function isWeekend(sec: number): boolean {
-    const d = new Date(sec * 1000).getUTCDay();
-    return d === 0 || d === 6;
-  }
-
-  // Seed a multi-session OHLC candle buffer walking back from the current price.
-  // Sessions sit one TRADING day apart (weekends skipped) so daily/weekly
-  // aggregation produces sensible bars.
+  // Forward-simulate a multi-session OHLC buffer from basePrice: price walks
+  // THROUGH the evolving OI book (pins, tests, breaks), and every bar's GEX
+  // snapshot is taken from the book as it stood at that moment. Sessions are
+  // one calendar day apart so daily/weekly aggregation produces sensible bars.
   function seedCandles(sym: string): void {
     const cfg = TICKERS[sym];
-    const nowSec = Math.floor(Date.now() / 1000);
-    let alignedNow = nowSec - (nowSec % BAR_SECONDS);
-    while (isWeekend(alignedNow)) alignedNow -= 86400; // anchor the live session to a weekday
-    const overnightGap = 86400 - (SESSION_BARS - 1) * BAR_SECONDS; // jump to same slot, prev day
+    /* Late-seeded names join the CLOCK ALREADY RUNNING, not the wall clock:
+       bar time advances ~15× wall speed (one 60s bar per 4 real ticks), so a
+       name ensured mid-session and anchored to Date.now() would land its
+       whole history deep in the veterans' past — its compare line ends a
+       fifth of the way into the chart and never catches up (Noah,
+       2026-08-23: "the iwm one looks far behind"). Anchor to the newest bar
+       of any ticker already seeded; wall clock only for the very first. */
+    const ref = Object.values(candleHistory).find(b => b && b.length > 0);
+    const nowSec = ref ? ref[ref.length - 1].time : Math.floor(Date.now() / 1000);
+    const alignedNow = nowSec - (nowSec % BAR_SECONDS);
+    const overnightGap = 86400 - (SESSION_BARS - 1) * BAR_SECONDS;
+    const totalSpanSec = SESSIONS * (SESSION_BARS - 1) * BAR_SECONDS + SESSIONS * overnightGap;
     const bars: Candle[] = [];
-    let close = cfg.currentPrice;
-    let t = alignedNow;
+    const snaps: GexSnapshot[] = [];
+    let close = cfg.basePrice;
+    let t = alignedNow - totalSpanSec + overnightGap;
 
-    // Build newest→oldest, then reverse
+    /* Roster names must LAND on their scan quote: the board priced their
+       cards off it, and a first click that seeds them 15% away opens the
+       monitor on floor-priced garbage. A gentle homeward pull (0.15% of the
+       remaining gap per bar) steers the walk to end ≈ basePrice while the
+       book evolves ON the corrected path — wall physics stay coherent, and
+       the watchlist keeps its unpulled drift (a feature: it reads live). */
+    const homeK = SCAN_ROSTER.some(r => r.ticker === sym) ? 0.0015 : 0;
+
+    evolveBook(sym, close, 1); // seed the book at the journey's start
+
     for (let s = 0; s < SESSIONS; s++) {
       for (let i = 0; i < SESSION_BARS; i++) {
-        const range = cfg.basePrice * cfg.iv * 0.0035 * (0.4 + rand(sym));
-        const open = close + (rand(sym) - 0.5) * range;
-        const high = Math.max(open, close) + rand(sym) * range * 0.5;
-        const low = Math.min(open, close) - rand(sym) * range * 0.5;
+        const open = close;
+        const move = gexAwareStep(sym, close);
+        const pull = homeK > 0 ? (cfg.basePrice - close) * homeK : 0;
+        close = Number((close + move + pull).toFixed(2));
+        const wig = cfg.basePrice * cfg.iv * 0.0012 * Math.random();
         bars.push({
           time: t,
           open: Number(open.toFixed(2)),
-          high: Number(high.toFixed(2)),
-          low: Number(low.toFixed(2)),
-          close: Number(close.toFixed(2)),
-          volume: Math.round(2000 + rand(sym) * 18000),
+          high: Number((Math.max(open, close) + wig).toFixed(2)),
+          low: Number((Math.min(open, close) - wig).toFixed(2)),
+          close,
+          volume: Math.round(2000 + Math.random() * 18000),
         });
-        close = open;
-        if (i === SESSION_BARS - 1) {
-          t -= overnightGap;
-          while (isWeekend(t)) t -= 86400; // skip Sat/Sun when crossing sessions
-        } else {
-          t -= BAR_SECONDS;
-        }
+        evolveBook(sym, close);
+        snaps.push(computeGexSnapshot(sym, close, t));
+        t += BAR_SECONDS;
       }
-      // Overnight price gap between sessions
-      close += (rand(sym) - 0.5) * cfg.basePrice * cfg.iv * 0.02;
+      // overnight: gap the price, roll positions harder than intraday drift
+      t += overnightGap - BAR_SECONDS;
+      close = Number((close + (Math.random() - 0.5) * cfg.basePrice * cfg.iv * 0.02).toFixed(2));
+      evolveBook(sym, close, 0.18);
     }
 
-    bars.reverse();
+    /* Final-session taper (roster names only): the homeward pull gets the
+       walk NEAR the quote; this closes the residual exactly, spread across
+       the last session so no single bar jumps. The book evolved on the
+       unadjusted path, so its strain is bounded by that residual (≈2%) over
+       one session — versus 15% everywhere without it. First click now
+       prices the SAME market the card did. */
+    if (homeK > 0 && bars.length > 0) {
+      const gap = Number((cfg.basePrice - close).toFixed(2));
+      if (Math.abs(gap) > 0.005) {
+        const K = Math.min(SESSION_BARS, bars.length);
+        for (let j = 0; j < K; j++) {
+          const b = bars[bars.length - K + j];
+          const adjC = gap * ((j + 1) / K);
+          const adjO = gap * (j / K);
+          b.open = Number((b.open + adjO).toFixed(2));
+          b.close = Number((b.close + adjC).toFixed(2));
+          b.high = Number((b.high + Math.max(adjO, adjC)).toFixed(2));
+          b.low = Number((b.low + Math.min(adjO, adjC)).toFixed(2));
+        }
+        close = cfg.basePrice;
+      }
+    }
+
+    cfg.currentPrice = close;
     candleHistory[sym] = bars;
     candleTickCount[sym] = 0;
-
-    // GEX snapshots only for the most recent sessions (intraday overlay)
-    const gexStart = Math.max(0, bars.length - RECENT_GEX_BARS);
-    gexHistory[sym] = bars.slice(gexStart).map(b => computeGexSnapshot(sym, b.close, b.time));
+    gexHistory[sym] = snaps.slice(-GEX_LIMIT);
   }
 
   // Net GEX (all-expiry proxy) per strike at a given price, captured as one snapshot
@@ -245,9 +364,11 @@ const Simulator = (() => {
         high: Math.max(last.close, price),
         low: Math.min(last.close, price),
         close: price,
-        volume: Math.round(1500 + rand(sym) * 9000),
+        volume: Math.round(1500 + Math.random() * 9000),
       });
       if (bars.length > CANDLE_LIMIT) bars.shift();
+
+      evolveBook(sym, price); // the book keeps living as new bars roll
 
       if (gh) {
         gh.push(computeGexSnapshot(sym, price, time));
@@ -257,7 +378,7 @@ const Simulator = (() => {
       last.close = price;
       last.high = Math.max(last.high, price);
       last.low = Math.min(last.low, price);
-      last.volume += Math.round(500 + rand(sym) * 4000);
+      last.volume += Math.round(500 + Math.random() * 4000);
 
       // Keep the forming bar's node snapshot live — only for the visible (active) ticker
       if (gh && gh.length && sym === activeTicker) {
@@ -270,14 +391,21 @@ const Simulator = (() => {
   function ensureTicker(symbolRaw: string): string {
     const sym = symbolRaw.toUpperCase();
     if (!TICKERS[sym]) {
-      const h = symbolHash(sym);
-      // Prefer the shared universe's reference price so a name shown on the
-      // research desks reads the same here; fall back to a hashed price for the
-      // long tail of searchable tickers the universe doesn't list.
-      const basePrice = universeLookup(sym)?.px ?? Number((15 + (h % 58500) / 100).toFixed(2)); // ~15..600
-      const iv = 0.15 + ((h >>> 5) % 45) / 100; // ~0.15..0.60
-      const step = basePrice >= 100 ? 1 : 0.5;
-      TICKERS[sym] = { basePrice, currentPrice: basePrice, iv, step };
+      /* A roster name seeds FROM its roster quote — the scan board priced its
+         cards off that quote, and a click that re-rolled the name to a hash
+         price would grade a different market than the card the user clicked
+         (the exact board-vs-panel schism documented in the partner's build). */
+      const roster = SCAN_ROSTER.find(r => r.ticker === sym);
+      if (roster) {
+        const q = scanQuote(roster);
+        TICKERS[sym] = { basePrice: q.price, currentPrice: q.price, iv: q.iv, step: q.step };
+      } else {
+        const h = symbolHash(sym);
+        const basePrice = Number((15 + (h % 58500) / 100).toFixed(2)); // ~15..600
+        const iv = 0.15 + ((h >>> 5) % 45) / 100; // ~0.15..0.60
+        const step = basePrice >= 100 ? 1 : 0.5;
+        TICKERS[sym] = { basePrice, currentPrice: basePrice, iv, step };
+      }
     }
     if (!priceHistory[sym]) seedHistory(sym);
     return sym;
@@ -322,48 +450,25 @@ const Simulator = (() => {
       rsi = 100 - (100 / (1 + rs));
     }
 
-    // TTM-style squeeze: volatility compression — the recent 20-tick dispersion
-    // sits well inside the longer-run dispersion. (The classic BB-inside-KC test
-    // is unsatisfiable when the Keltner "ATR" is derived from the SAME stdDev:
-    // 2σ < 1.35σ can never hold. The channel needs an independent, longer
-    // baseline, which is what the full-buffer dispersion provides here.)
+    // TTM Squeeze Approximation: Bollinger Bands inside Keltner Channel
     const slice = prices.slice(-20);
     const sma20 = slice.reduce((a, b) => a + b, 0) / 20;
     const variance = slice.reduce((a, b) => a + Math.pow(b - sma20, 2), 0) / 20;
     const stdDev = Math.sqrt(variance);
-    const smaAll = prices.reduce((a, b) => a + b, 0) / len;
-    const varAll = prices.reduce((a, b) => a + Math.pow(b - smaAll, 2), 0) / len;
-    const squeeze = stdDev < Math.sqrt(varAll) * 0.72;
+    const atrProxy = stdDev * 0.9; // Simplified range proxy
+
+    const bbUpper = sma20 + 2 * stdDev;
+    const bbLower = sma20 - 2 * stdDev;
+    const kUpper = sma20 + 1.5 * atrProxy;
+    const kLower = sma20 - 1.5 * atrProxy;
+
+    const squeeze = (bbUpper < kUpper) && (bbLower > kLower);
 
     return { rsi, ema9, ema21, ema50, squeeze };
   }
 
-  /**
-   * A price series that ends at `spot`, derived rather than remembered.
-   *
-   * Only `buildSnapshotAt` uses this. The live `priceHistory` is a rolling buffer
-   * that `tick()` rewrites, so anything reading it inherits the wall clock; this
-   * is a pure function of (symbol, spot, regime day), which is what makes a
-   * pinned snapshot actually pinned. Shape matches the live seeding — a drift
-   * with per-bar texture — so the indicators come out in the same range.
-   */
-  function pinnedHistory(tickerKey: TickerSymbol, spot: number, regimeDay: number): number[] {
-    const cfg = TICKERS[tickerKey];
-    const key = `${tickerKey}:pin:${spot.toFixed(2)}:${regimeDay}`;
-    const out: number[] = [];
-    for (let i = 0; i < historyLimit; i++) {
-      const u = i / (historyLimit - 1);
-      const noise = ((symbolHash(`${key}:${i}`) % 1000) / 1000 - 0.5) * cfg.step * 1.6;
-      // Older bars sit below, so the series arrives at spot rather than wandering
-      // to it — the same "walked up into the level" shape the live seeding has.
-      out.push(Number((spot - (1 - u) * cfg.step * 5 + noise).toFixed(2)));
-    }
-    out[out.length - 1] = spot;
-    return out;
-  }
-
   // Generate Strike-by-Strike Chain
-  function generateOptionsChain(tickerKey: TickerSymbol, spotOverride?: number, regimeDayOverride?: number): StrikeNode[] {
+  function generateOptionsChain(tickerKey: TickerSymbol, spotOverride?: number): StrikeNode[] {
     const config = TICKERS[tickerKey];
     const spot = spotOverride ?? config.currentPrice;
     const step = config.step;
@@ -371,69 +476,41 @@ const Simulator = (() => {
 
     const strikes: StrikeNode[] = [];
     const baseStrike = Math.round(spot / step) * step;
-    // Chain-realistic, ticker-dependent width: an index or large ETF lists a
-    // deep ladder, a single name a shallower one. Kept moderate so the panels
-    // that read the whole chain do not regress — the exposure profile and the
-    // matrix window around spot regardless of how many strikes exist.
-    const conv = listingConvention(tickerKey);
-    const strikeRange = conv === 'daily' ? 30 : conv === 'weekly' ? 22 : 16;
-    // Time from the ticker's actual FRONT expiry, not a hardcoded 0DTE. A daily
-    // root's front is ~0DTE; a monthlies-only name's is weeks out, so its gamma
-    // is spread across strikes instead of spiked at the money. Every greek in
-    // the chain is priced at this t.
-    const t = expiryCalendar(tickerKey)[0].t;
-
-    // Daily positioning regime: the price where customer call-overwriting supply
-    // gives way to put-hedging demand. It pivots the OI skew — and therefore the
-    // gamma flip — so the flip is a real structural level that sits away from
-    // spot and moves day to day, not an artifact glued half a step above price.
-    // Mostly a touch below spot (positive-gamma days), sometimes above.
-    //
-    // The day is overridable so a caller that must be reproducible can name the
-    // session it is showing. Live desks pass nothing and get today's regime.
-    const regimeDay = regimeDayOverride ?? Math.floor(Date.now() / 86400000);
-    const regime01 = (symbolHash(`${tickerKey}:regime:${regimeDay}`) % 1000) / 1000;
-    const pivot = spot * (1 + (regime01 * 0.014 - 0.011)); // −1.1% … +0.3% of spot
+    // 30 each side — the whole maintained book (BOOK_RANGE), so a ±30 window
+    // on the ladder shows real rows, not a repeat of ±15 (Noah, 2026-08-22:
+    // far strikes are where the tail hedges sit). The real feed carries the
+    // full chain; this only costs the sim's seeding ~2× per name.
+    const strikeRange = 30;
+    if (!oiBook[tickerKey]) evolveBook(tickerKey, spot); // lazy seed for stray callers
+    const book = oiBook[tickerKey];
 
     for (let i = -strikeRange; i <= strikeRange; i++) {
-      const strike = baseStrike + i * step;
+      const strike = Number((baseStrike + i * step).toFixed(2));
 
-      const distance = Math.abs(strike - spot) / spot;
-      const baseOI = Math.max(100, Math.round(20000 * Math.exp(-Math.pow(distance * 15, 2))));
+      // OI comes from the persistent book — walls have memory. Fallback for
+      // strikes outside the maintained window (spot far from book center).
+      const entry = book.get(strike) ?? freshOI(strike, spot, step);
+      const callOI = entry.callOI;
+      const putOI = entry.putOI;
 
-      // Per-strike positioning noise so the book has texture and the flip zone
-      // is a zone, not a razor edge.
-      const sh = symbolHash(`${tickerKey}:${strike.toFixed(2)}:oi`);
-      const noiseC = 0.75 + ((sh % 1000) / 1000) * 0.5;
-      const noiseP = 0.75 + (((sh >>> 10) % 1000) / 1000) * 0.5;
-
-      let callOI = Math.round(baseOI * (strike > pivot ? 1.5 : 0.8) * noiseC);
-      let putOI = Math.round(baseOI * (strike < pivot ? 1.5 : 0.7) * noiseP);
-
-      if (strike % (step * 5) === 0) {
-        callOI = Math.round(callOI * 2.2);
-        putOI = Math.round(putOI * 2.2);
-      }
-
+      const t = 0.003; // 0DTE
       const greeks = calculateGreeks(spot, strike, t, iv);
 
-      // The dealer-book convention. See DEALER_BOOK in core/dealerBook.ts for
-      // why these two numbers are an ASSUMPTION about inventory and not a
-      // property of the greek, and why flipping them inverts every regime this
-      // desk reports while leaving every magnitude on screen unchanged.
-      const dealerCallDirection = DEALER_BOOK.call;
-      const dealerPutDirection = DEALER_BOOK.put;
+      // Weights chosen so net GEX comes out two-sided with comparable
+      // magnitudes: call-dominated shelves above spot ≈ −0.4·base, put
+      // shelves below ≈ +0.4·base. The old −0.4/−0.6 split let the put side
+      // outweigh calls ~4.5× everywhere, so negative walls never registered
+      // anywhere in the terminal (heatmap, trails, positioning).
+      const dealerCallDirection = -0.55; // Net short calls
+      const dealerPutDirection = -0.53;  // Net short puts
 
       const callGex = callOI * 100 * greeks.gamma * spot * spot * 0.01 * dealerCallDirection;
-      const putGex = putOI * 100 * greeks.gamma * spot * spot * 0.01 * dealerPutDirection;
+      const putGex = putOI * 100 * greeks.gamma * spot * spot * 0.01 * dealerPutDirection * -1;
 
       const netGex = callGex + putGex;
 
-      // DEX uses the standard delta-weighted-OI display convention: call delta
-      // is positive, put delta negative, so the profile reads call-heavy above /
-      // put-heavy below without a dealer-direction overlay.
-      const callDex = callOI * 100 * greeks.deltaCall * spot;
-      const putDex = putOI * 100 * greeks.deltaPut * spot;
+      const callDex = callOI * 100 * greeks.deltaCall * spot * dealerCallDirection;
+      const putDex = putOI * 100 * greeks.deltaPut * spot * dealerPutDirection;
       const netDex = callDex + putDex;
 
       const callVex = callOI * 100 * greeks.vega * dealerCallDirection;
@@ -442,8 +519,8 @@ const Simulator = (() => {
 
       strikes.push({
         strike,
-        callOI: settledOI(callOI),
-        putOI: settledOI(putOI),
+        callOI,
+        putOI,
         gamma: greeks.gamma,
         callGex,
         putGex,
@@ -462,7 +539,7 @@ const Simulator = (() => {
     return strikes;
   }
 
-  // Generate Compass Plan
+  // Generate Compass plan
   function generateTradePlan(tickerKey: TickerSymbol, spot: number, chain: StrikeNode[], indicators: Indicators): TradePlan {
     const config = TICKERS[tickerKey];
 
@@ -482,20 +559,20 @@ const Simulator = (() => {
       }
     });
 
-    // Gamma flip: first upward zero-crossing of the (3-strike smoothed) net-GEX
-    // profile — put-dominated (negative) below, call-supported (positive) above.
-    // Smoothing keeps a single noisy strike from faking the crossover.
+    // The crossing NEAREST SPOT, not the first one walking up the chain: a
+    // noisy book can carry a jitter crossing deep in a tail, and breaking on
+    // the first hit labeled THAT as the regime border while the structural
+    // flip sat at spot. Matches data/gex.ts buildLevelsFor (Noah, 2026-08-18).
     let flipStrike = spot;
-    const smoothGex = (i: number) => {
-      const a = chain[Math.max(0, i - 1)].netGex;
-      const b = chain[i].netGex;
-      const c = chain[Math.min(chain.length - 1, i + 1)].netGex;
-      return (a + b + c) / 3;
-    };
+    let flipDist = Infinity;
     for (let i = 1; i < chain.length; i++) {
-      if (smoothGex(i - 1) < 0 && smoothGex(i) >= 0) {
-        flipStrike = (chain[i - 1].strike + chain[i].strike) / 2;
-        break;
+      if (Math.sign(chain[i - 1].netGex) !== Math.sign(chain[i].netGex)) {
+        const mid = (chain[i - 1].strike + chain[i].strike) / 2;
+        const d = Math.abs(mid - spot);
+        if (d < flipDist) {
+          flipDist = d;
+          flipStrike = mid;
+        }
       }
     }
 
@@ -518,19 +595,7 @@ const Simulator = (() => {
     score = Math.max(10, Math.min(90, score));
 
     const direction = score >= 50 ? 'BULLISH' : 'BEARISH';
-    /*
-      A `confidence` field used to be derived here as
-      `50 + Math.abs(score - 50) * 1.25`, under a comment claiming it "stays a
-      true percentage". It was not one. `score` is clamped to [10, 90] two lines
-      up, so the expression spans [50, 100] exactly: the strongest read printed
-      100% certainty, and — because it is a V in `score`, monotone in the
-      DISTANCE from 50 rather than in the score itself — the most bearish read
-      printed 100% too. It could not express doubt at all; its floor was 50.
-
-      Nothing ever read it. It is gone rather than renamed: `score` is already on
-      this object and carries the same information without the percent sign that
-      made it look like a second, agreeing opinion.
-    */
+    const confidence = Math.abs(score - 50) * 2 + 50;
 
     const entry = spot;
     let stopLoss = direction === 'BULLISH' ? supportWall - config.step * 0.5 : resistanceWall + config.step * 0.5;
@@ -546,6 +611,7 @@ const Simulator = (() => {
       ticker: tickerKey,
       direction,
       score,
+      confidence: Math.round(confidence),
       entry: Number(entry.toFixed(2)),
       stopLoss: Number(stopLoss.toFixed(2)),
       target1: Number(target1.toFixed(2)),
@@ -562,11 +628,10 @@ const Simulator = (() => {
       const config = TICKERS[ticker];
       const history = priceHistory[ticker];
 
-      const drift = 0.02 * (rand(ticker) - 0.48);
-      const volatility = config.iv * 0.15;
-      const shock = rand(ticker) > 0.98 ? (rand(ticker) - 0.5) * 3 : 1;
-
-      let deltaPrice = (drift + (rand(ticker) - 0.5) * volatility * shock) * config.basePrice * 0.01;
+      // Live ticks walk through the SAME wall physics as seeded history
+      // (scale 0.5: four ticks compose one bar-sized move in quadrature).
+      const shock = Math.random() > 0.98 ? 2.2 : 1;
+      let deltaPrice = gexAwareStep(ticker, config.currentPrice, 0.5) * shock;
       deltaPrice = Math.max(-config.step * 2, Math.min(config.step * 2, deltaPrice));
 
       config.currentPrice = Number((config.currentPrice + deltaPrice).toFixed(2));
@@ -591,21 +656,21 @@ const Simulator = (() => {
       const cfg = TICKERS[sym];
       const count =
         sym === activeTicker
-          ? Math.floor(rand(sym) * 2) + 1
-          : rand(sym) > 0.45
-            ? Math.floor(rand(sym) * 2) + 1
+          ? Math.floor(Math.random() * 2) + 1
+          : Math.random() > 0.45
+            ? Math.floor(Math.random() * 2) + 1
             : 0;
       for (let i = 0; i < count; i++) {
-        const offset = (Math.floor(rand(sym) * 7) - 3) * cfg.step;
+        const offset = (Math.floor(Math.random() * 7) - 3) * cfg.step;
         const strike = Math.round(cfg.currentPrice / cfg.step) * cfg.step + offset;
         tape.push({
-          time: etTime(Date.now()),
+          time: new Date().toLocaleTimeString(),
           ticker: sym,
           strike: strike.toFixed(2),
-          type: rand(sym) > 0.5 ? 'C' : 'P',
-          size: Math.floor(rand(sym) * 250) + 10,
-          orderType: rand(sym) > 0.65 ? 'SWEEP' : 'BLOCK',
-          side: rand(sym) > 0.48 ? 'ASK' : 'BID'
+          type: Math.random() > 0.5 ? 'C' : 'P',
+          size: Math.floor(Math.random() * 250) + 10,
+          orderType: Math.random() > 0.65 ? 'SWEEP' : 'BLOCK',
+          side: Math.random() > 0.48 ? 'ASK' : 'BID'
         });
       }
     }
@@ -624,120 +689,85 @@ const Simulator = (() => {
     }
   }
 
+  /**
+   * A snapshot for ANY ticker, read from current state without advancing the
+   * simulation. `tick` only ever emits the active symbol, so surfaces that show
+   * several names at once (a workspace of panels, a multi-chart board) need
+   * this to derive per-ticker views. Pure read — safe to call during render.
+   */
+  function snapshotFor(symbolRaw: string): MarketSnapshot {
+    const sym = ensureTicker(symbolRaw);
+    const cfg = TICKERS[sym];
+    const chain = generateOptionsChain(sym);
+    const indicators = getIndicators(priceHistory[sym]);
+    return {
+      ticker: sym,
+      spot: cfg.currentPrice,
+      changePercent: ((cfg.currentPrice - cfg.basePrice) / cfg.basePrice) * 100,
+      priceHistory: priceHistory[sym],
+      chain,
+      indicators,
+      plan: generateTradePlan(sym, cfg.currentPrice, chain, indicators),
+      // The tape is a session-wide stream, not a per-ticker derivation; callers
+      // that need prints read them from the live snapshot instead.
+      tape: [],
+    };
+  }
+
   return {
     TICKERS,
     WATCHLIST,
+    snapshotFor,
     ensureTicker,
     setActiveTicker: (t: string): string => {
       activeTicker = ensureTicker(t);
       return activeTicker;
     },
     getActiveTicker: (): string => activeTicker,
-    /** True for cash indices (SPX/NDX/RUT/VIX…) — they have no share volume, so
-        the volume-derived views null out instead of fabricating one. */
-    isIndex: (sym: string): boolean => INDEX_SYMBOLS.has(sym.toUpperCase()),
     /** Live intraday OHLC bars (mutated in place each tick — treat as read-only). */
     getCandles: (sym: string): Candle[] => {
       const key = ensureTicker(sym);
       return candleHistory[key];
     },
+    /** Bars WITHOUT the seeding side effect — null for names never simmed.
+        For render-time reads over many symbols (the board's session sparks):
+        getCandles would synchronously forward-sim every unseeded name. */
+    peekCandles: (sym: string): Candle[] | null => candleHistory[sym.toUpperCase()] ?? null,
     /** Net-GEX-per-strike snapshots parallel to the candle series (read-only). */
     getGexHistory: (sym: string): GexSnapshot[] => {
       const key = ensureTicker(sym);
       return gexHistory[key];
     },
-    /**
-     * Build a full MarketSnapshot for ANY symbol — the enabler for per-panel
-     * independent tickers in the Pulse workspace. Prices for every ticker
-     * already advance each tick(); this runs the same chain/indicator/plan
-     * builders the active feed uses, for the requested symbol, plus a small
-     * per-symbol tape slice. Every downstream view builder is pure (snapshot)
-     * => view, so it works unchanged on a per-panel snapshot.
-     */
-    buildSnapshot: (sym: string): MarketSnapshot => {
-      const key = ensureTicker(sym);
-      const cfg = TICKERS[key];
-      const chain = generateOptionsChain(key);
-      const indicators = getIndicators(priceHistory[key]);
-      const plan = generateTradePlan(key, cfg.currentPrice, chain, indicators);
-      const tape: TapeOrder[] = [];
-      const count = Math.floor(rand(key) * 3);
-      for (let i = 0; i < count; i++) {
-        const offset = (Math.floor(rand(key) * 7) - 3) * cfg.step;
-        const strike = Math.round(cfg.currentPrice / cfg.step) * cfg.step + offset;
-        tape.push({
-          time: etTime(Date.now()),
-          ticker: key,
-          strike: strike.toFixed(2),
-          type: rand(key) > 0.5 ? 'C' : 'P',
-          size: Math.floor(rand(key) * 250) + 10,
-          orderType: rand(key) > 0.65 ? 'SWEEP' : 'BLOCK',
-          side: rand(key) > 0.48 ? 'ASK' : 'BID',
-        });
-      }
-      return {
-        ticker: key,
-        spot: cfg.currentPrice,
-        changePercent: ((cfg.currentPrice - cfg.basePrice) / cfg.basePrice) * 100,
-        priceHistory: priceHistory[key],
-        chain,
-        indicators,
-        plan,
-        tape,
-      };
-    },
-    /**
-     * A snapshot pinned to a caller-supplied spot, with no tape and no RNG draw.
-     *
-     * `buildSnapshot` reads the live `currentPrice` and pulls from the symbol's
-     * random stream to mint a tape slice, so two calls a tick apart return
-     * different books — right for a live desk, fatal for anything that has to be
-     * reproducible. Every field here is a pure function of (symbol, spot,
-     * positioning regime): nothing is drawn, nothing is mutated, and calling it
-     * leaves the live feed exactly where it was.
-     *
-     * That includes the price history, which is the part that is easy to get
-     * wrong. Handing back `priceHistory[key]` looked harmless — the chain and the
-     * walls do not read it — but `tick()` rewrites that array every 1.5 seconds,
-     * so the indicators moved between two identical calls AND the array inside an
-     * already-returned snapshot kept changing underneath its holder. A pinned
-     * snapshot that aliases live state is not pinned. `pinnedHistory` synthesises
-     * its own series instead, ending exactly at the requested spot.
-     *
-     * `regimeDay` pins the daily positioning regime (the OI pivot, and therefore
-     * the gamma flip). Omit it for today's regime; pass one to name the session
-     * being shown.
-     */
-    buildSnapshotAt: (sym: string, spot: number, regimeDay?: number): MarketSnapshot => {
-      const key = ensureTicker(sym);
-      const cfg = TICKERS[key];
-      const day = regimeDay ?? Math.floor(Date.now() / 86400000);
-      const chain = generateOptionsChain(key, spot, day);
-      const history = pinnedHistory(key, spot, day);
-      const indicators = getIndicators(history);
-      return {
-        ticker: key,
-        spot,
-        changePercent: ((spot - cfg.basePrice) / cfg.basePrice) * 100,
-        priceHistory: history,
-        chain,
-        indicators,
-        plan: generateTradePlan(key, spot, chain, indicators),
-        tape: [],
-      };
-    },
     tick,
-    getGreeks: calculateGreeks
+    getGreeks: calculateGreeks,
+    /** The live harness's answer to "what is the market right now" for the
+        scan universe. Engine modules (Compass) take this as an ARGUMENT
+        instead of reading the simulator themselves — a replay harness passes
+        historical quotes through the same parameter.
+
+        The roster reaches past the seeded watchlist WITHOUT registering
+        names: ensureTicker forward-seeds a full candle history (~0.6s per
+        name — 20 of them would freeze the terminal for the exact reason the
+        partner's build grew a separate scan engine). Unseeded names get a
+        lightweight day-stable quote instead; the first CLICK on one of their
+        cards is what seeds them, one name at a time, the Dark Pool Leaders
+        precedent. */
+    universeQuotes: (active: string): UniverseQuote[] => {
+      const names = Array.from(new Set([active, ...WATCHLIST, ...SCAN_ROSTER.map(r => r.ticker)]));
+      return names.map(t => {
+        if (TICKERS[t]) {
+          const cfg = TICKERS[t];
+          return { ticker: t, price: cfg.currentPrice, iv: cfg.iv, step: cfg.step };
+        }
+        const base = SCAN_ROSTER.find(r => r.ticker === t);
+        if (base) return scanQuote(base);
+        // Unknown free-entry name — seed it for real (single name, user-chosen).
+        const key = ensureTicker(t);
+        const cfg = TICKERS[key];
+        return { ticker: key, price: cfg.currentPrice, iv: cfg.iv, step: cfg.step };
+      });
+    },
   };
 })();
 
-/*
-  The provider seam (P5.1). The whole terminal depends on the MarketDataProvider
-  shape, never on the simulator's internals — every view builder is
-  (snapshot) => view and the snapshot comes from here. A real ThetaData-backed
-  feed implements the same interface and drops in at context/MarketDataContext
-  without a view builder changing. `satisfies` is the compile-time proof: if a
-  method drifts from the contract, the build fails on this line rather than in a
-  panel. It does not narrow the export — the simulator's own extras stay visible.
-*/
-export default Simulator satisfies MarketDataProvider;
+export default Simulator;

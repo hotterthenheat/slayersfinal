@@ -1,22 +1,5 @@
 import type { Config } from 'tailwindcss';
 
-/**
- * The one family, plus the closest metric match on each platform for the short
- * window before the self-hosted file lands. Declared once so `sans` and `mono`
- * cannot drift apart — the point of the token pair is the tabular-figures
- * switch in index.css, not a second typeface.
- */
-const SYSTEM_SANS = [
-  'SF Pro',
-  '-apple-system',
-  'BlinkMacSystemFont',
-  'Segoe UI',
-  'Roboto',
-  'Helvetica Neue',
-  'Arial',
-  'sans-serif',
-];
-
 export default {
   content: [
     "./index.html",
@@ -24,33 +7,11 @@ export default {
   ],
   theme: {
     extend: {
-      // One motion hand: every bare `transition-*` inherits the house
-      // easeOutExpo curve at DUR.fast (120ms), so CSS transitions read the same
-      // as the framer-motion ones instead of Tailwind's generic default.
-      transitionTimingFunction: {
-        DEFAULT: 'cubic-bezier(0.16, 1, 0.3, 1)',
-      },
-      transitionDuration: {
-        DEFAULT: '120ms',
-      },
-      // One elevation for every floating surface — menus, drawers, toasts,
-      // tooltips, modals. Replaces a scattered `shadow-2xl shadow-black` (a
-      // 50px, fully-opaque black shadow) with a tight, restrained lift: the
-      // hairline border owns the edge, the shadow just sets it off the canvas.
-      boxShadow: {
-        overlay: '0 12px 32px -12px rgba(0,0,0,0.75), 0 4px 10px -6px rgba(0,0,0,0.55)',
-      },
       colors: {
         // Surfaces
         canvas: '#050505',
         panel: '#0a0a0a',
-        // Dark ink for text/icons ON a light chrome surface (holo pills, silver
-        // CTAs). Same value as the canvas-dark family, named for its role.
-        ink: '#0a0a0a',
         panelHover: '#101010',
-        // Raised surface — sticky table headers, tooltips, hover cards (was a
-        // repeated raw #0c0c0c across 17+ files; single-sourced here).
-        panelRaised: '#0c0c0c',
         inset: '#070707',
         inputBg: '#050505',
 
@@ -59,83 +20,58 @@ export default {
         borderMuted: '#2a2a2a',
         borderFocus: '#ededed',
 
-        // Text — tiers must clear WCAG on the dark canvas. Muted lifted #6b6b6b→#7d7d7d
-        // so sub-12px labels clear ~4.5:1 (were ~3.7:1, below AA — the #1 legibility gripe).
+        // Text — tiers must clear WCAG on the dark canvas (muted was 2.06:1, illegible)
         textPrimary: '#ededed',
         textSecondary: '#a3a3a3',
+        // Lifted #6b6b6b → #7d7d7d (2026-07-25): at the 9-10px label sizes this
+        // token actually lives at, 6b6b6b was ~3.98:1 on canvas — below AA, and
+        // Noah was squinting. 7d7d7d reads ~5.2:1 and stays clearly quieter
+        // than textSecondary, so labels still whisper; they just stop mumbling.
         textMuted: '#7d7d7d',
 
-        // Directional / status accents (always paired with a label or icon)
-        // Direction reads green up / hot red down; silver is reserved for
-        // selection + brand only (see `select`), never for bullishness.
+        // Directional / status accents (always paired with a label or icon).
+        // THE SPLIT (2026-07-20): green = the MARKET talking (bullish, calls,
+        // beats, up-moves). Neon lime = the TERMINAL talking about itself
+        // (selection, navigation, brand, extreme importance). One color, one
+        // meaning — and lime stays scarce, which is what makes it loud.
+        // Green went mint #CFFFB1 → #30D158 on 2026-07-24: a true green reads
+        // as green, and it no longer shares a hue family with the neon lime,
+        // so the split is easier to see. The live chart keeps the old mint on
+        // purpose — see CHART_MINT in components/gex/palette.ts.
         bull: '#30D158',
         bear: '#FF3B30',
-        // Dealer-gamma sign. Gold = SHORT gamma (hedging amplifies the move),
-        // blue = LONG gamma (dips absorbed). Mirrors SHORT_GAMMA / LONG_GAMMA in
-        // components/gex/palette.ts, which serves the JS-API chart consumers —
-        // these two exist so class call sites stop reaching for text-[#E0B84E].
-        shortGamma: '#E0B84E',
-        longGamma: '#5EA0EF',
-        // One hover tint for every subtle interactive surface. Eight
-        // white-alpha spellings had accumulated (0.02 → 0.07) and the
-        // most-used, 0.03, measured 1.09:1 on a dark panel — below the
-        // perceptual floor, so rows barely answered the pointer. Selection
-        // keeps its own select-tinted language.
-        rowHover: 'rgba(255,255,255,0.055)',
-        // True orange — caution reads clearly apart from silver and hot red
+        // True orange — caution reads clearly apart from green and hot red
         warn: '#FF9500',
-        // Interface accent — holographic silver, ~14:1 on canvas. Interface only, never data.
-        select: '#E4E8F4',
+        // Interface accent — neon lime, ~17:1 on canvas. Interface only, never data.
+        select: '#D2FF00',
 
         // GEX structural levels
-        // Flip = baby blue (the cool regime border against silver/red direction)
+        // Flip = baby blue (the cool regime border against lime/red direction)
         flip: '#7DD3FC',
-        // King = magenta — the engine's-standout family (TOP PICK, NET, king)
+        // King = magenta — the engine's-standout family (TOP PICK, NET, king).
+        // Exception: the king LINE on charts is silver (palette.ts KING).
         king: '#EA00FF',
         darkpool: '#2dd4bf',
 
+        // Legacy aliases (pre-redesign pages)
+        primary: '#ededed',
+        secondary: '#a3a3a3',
+        silver: '#a1a1aa',
+        gammaPos: '#D2FF00',
+        gammaNeg: '#FF3B30',
+        warning: '#FF9500',
       },
-      // Terminal type ramp. Every size below `text-lg` came from ~1,180
-      // scattered `text-[Npx]` utilities; these name them as one system.
-      // Deliberately font-size ONLY (string form, no bundled line-height) —
-      // unlike Tailwind's built-in text-xs/sm/base — so the leading each call
-      // site already set via `leading-*` is preserved untouched. The dense
-      // 10–13px micro-steps are the terminal's label tiers; 14–16px carry
-      // prose and inline copy. Headings keep the rem-based display scale.
       fontSize: {
-        micro: '10px', // axis ticks, densest legends
-        label: '11px', // the dominant uppercase mono label
-        caption: '12px', // table cells, secondary text
-        data: '13px', // readable panel body / data rows
-        body: '14px', // prose in guide / legal / landing
-        read: '15px', // prose emphasis, card titles
-        lead: '16px', // largest inline copy
+        'xxs': '0.7rem',
+        'xxxs': '0.6rem',
       },
-      /*
-        ONE family, two tokens.
-
-        `sans` and `mono` both resolve to SF Pro (self-hosted variable, see the
-        @font-face block in index.css). Two typefaces over a surface this dense
-        read as "all over the place", and the terminal was overwhelmingly one of
-        them anyway: 1,331 `font-mono` call sites against 1 `font-sans`.
-
-        `mono` SURVIVES AS A TOKEN ON PURPOSE. It marks the data voice, and
-        index.css gives every `.font-mono` element `tabular-nums`, so it still
-        does real work — it is the switch that keeps a numeric column aligned in
-        a proportional face. Deleting it would mean touching 1,331 call sites to
-        remove a class that is still meaningful; keeping it means the intent is
-        recorded where the number is written.
-
-        The fallbacks stay real rather than a bare generic. SF Pro is a local
-        file now, so the fallback window is short, but the system stack is the
-        closest metric match available while it opens — `-apple-system` IS this
-        face on Apple platforms, and Segoe UI / Roboto are the nearest
-        equivalents elsewhere.
-      */
       fontFamily: {
-        sans: SYSTEM_SANS,
-        mono: SYSTEM_SANS,
-      },
+        // One family site-wide (2026-08-16). `mono` is kept as a token — it
+        // marks the data/instrument voice (tabular figures via index.css),
+        // not a different typeface.
+        sans: ['SF Pro', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
+        mono: ['SF Pro', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
+      }
     },
   },
   plugins: [],

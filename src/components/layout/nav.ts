@@ -5,21 +5,24 @@ import {
   Radar,
   Sigma,
   BarChart3,
+  Newspaper,
+  CalendarClock,
   Bookmark,
   Users,
+  Telescope,
+  CandlestickChart,
+  Microscope,
+  FolderKanban,
+  ClipboardCheck,
   type LucideIcon,
 } from 'lucide-react';
 
-// Groups are named after what the desks inside them hold, not after a generic
-// workflow verb. Discover/Analyze/Manage/Review said nothing this product does
-// and could have sat on any dashboard: Scan ranks the whole universe, Read goes
-// deep on one name, Yours is the only pair whose contents you write, Models is
-// the math. Order is load-bearing — the terminal index pairs groups 0+2 and 1+3
-// into two columns, so the two column heights are Scan+Yours and Read+Models.
-// They are 3+2 and 2+1 since the Earnings desk was removed for want of an
-// earnings calendar; TerminalIndex renders a short group without complaint, but
-// a new desk should go to Read or Models before Scan if the balance matters.
-export type NavGroup = 'Scan' | 'Read' | 'Yours' | 'Models';
+// Navigation is organised by WORKFLOW, not by product name: Discover → Analyze
+// → Manage → Review reads as the pipeline a trader actually runs, so a new
+// user knows what each tab is FOR before learning a single brand name. The
+// branded desks (Pulse, Compass, Pinpoint…) live inside those workflows.
+// Home exits via the wordmark.
+export type NavGroup = 'Discover' | 'Analyze' | 'Manage' | 'Review';
 
 export interface NavItem {
   path: string;
@@ -31,107 +34,110 @@ export interface NavItem {
 }
 
 export const NAV_ITEMS: NavItem[] = [
-  // ── Scan: the whole universe, ranked ──
+  // ── Discover — find what is moving and what to trade ──
   {
     path: '/compass',
     label: 'Compass',
     code: '01',
     icon: Compass,
-    description: 'Options chooser: weeklies, swings and LEAPS, weighed and graded',
-    group: 'Scan',
+    description: 'Options chooser — weeklies, swings & LEAPS weighed and graded',
+    group: 'Discover',
   },
   {
     path: '/stocks',
     label: 'Stocks',
     code: '02',
     icon: BarChart3,
-    description: 'Ranked equity picks — momentum and options flow, per name',
-    group: 'Scan',
+    description: 'Ranked equity picks & sector rotation',
+    group: 'Discover',
   },
   {
     path: '/trace',
     label: 'Trace',
     code: '03',
     icon: Radar,
-    description: 'Options flow and dark-pool prints, and what they mean',
-    group: 'Scan',
+    description: 'Options flow & dark-pool intelligence — what the prints actually mean',
+    group: 'Discover',
   },
-  // ── Read: one name, in depth ──
+  // ── Analyze — study the tape, the dealers, the catalysts ──
   {
     path: '/pulse',
     label: 'Pulse',
     code: '04',
     icon: Activity,
-    // The Key Levels panel was removed from Pulse (levels ride the chart now),
-    // so the promise had to go with it.
-    description: 'The market desk: chart, dealer pressure, order flow and the options tape',
-    group: 'Read',
+    description: 'The live market desk — chart, dealer pressure & key levels, arranged your way',
+    group: 'Analyze',
+  },
+  {
+    path: '/terrain',
+    label: 'Terrain',
+    code: '05',
+    icon: CandlestickChart,
+    description: 'Charts only — one to four books side by side, one set of controls',
+    group: 'Analyze',
   },
   {
     path: '/pinpoint',
     label: 'Pinpoint',
-    code: '05',
+    code: '06',
     icon: Crosshair,
-    description: 'GEX, dealer positioning, hedge impact and the fracture line',
-    group: 'Read',
+    description: 'GEX & dealer-positioning system',
+    group: 'Analyze',
   },
-  // ── Yours: the desks you fill in ──
+  {
+    path: '/news',
+    label: 'News',
+    code: '07',
+    icon: Newspaper,
+    description: 'Stock news + predicted outcomes per headline',
+    group: 'Analyze',
+  },
+  {
+    path: '/earnings',
+    label: 'Earnings',
+    code: '08',
+    icon: CalendarClock,
+    description: 'Earnings hub — implied vs. realized, play it or fade it',
+    group: 'Analyze',
+  },
+  // ── Manage — track what you are in, build your desk, talk shop ──
   {
     path: '/tracker',
     label: 'Tracker',
-    code: '06',
+    code: '09',
     icon: Bookmark,
-    description: 'Bookmarked setups, contracts and names, watched in one place',
-    group: 'Yours',
+    description: 'Bookmarked setups — live monitoring',
+    group: 'Manage',
   },
   {
     path: '/community',
     label: 'Community',
-    code: '07',
+    code: '10',
     icon: Users,
-    description: 'Trade ideas, requests and feedback',
-    group: 'Yours',
+    description: 'Trade ideas, requests & feedback',
+    group: 'Manage',
   },
-  // ── Models: the math behind the calls ──
+  // ── Review — audit the models and the calls ──
   {
     path: '/prove-it',
     label: 'Prove It',
-    code: '08',
+    code: '11',
     icon: Sigma,
-    description: 'Quantitative modeling and predictive analytics',
-    group: 'Models',
+    description: 'Quantitative modeling & predictive analytics',
+    group: 'Review',
   },
 ];
 
-export const NAV_GROUPS: NavGroup[] = ['Scan', 'Read', 'Yours', 'Models'];
+export const NAV_GROUPS: NavGroup[] = ['Discover', 'Analyze', 'Manage', 'Review'];
 
-/** What each group holds. Promoted out of the section comments above: the index
-    is the first surface that shows all four at once and needs to say what they
-    mean. */
-export const NAV_GROUP_PURPOSE: Record<NavGroup, string> = {
-  Scan: 'The whole universe, ranked: contracts, equities and the flow behind them',
-  Read: 'One name in depth: the tape, the dealers, the catalysts',
-  Yours: 'The two desks whose contents you write, kept in this browser',
-  Models: 'The math behind the calls, and how it scored against what happened',
+/** Top-bar tab metadata: the icon Noah asked for + a one-line answer to
+    "what is this tab for", shown as the dropdown header. */
+export const NAV_GROUP_META: Record<NavGroup, { icon: LucideIcon; hint: string }> = {
+  Discover: { icon: Telescope, hint: 'Find what to trade' },
+  Analyze: { icon: Microscope, hint: 'Study the tape & the dealers' },
+  Manage: { icon: FolderKanban, hint: 'Track what you are in' },
+  Review: { icon: ClipboardCheck, hint: 'Audit the models' },
 };
 
-/** The group a desk path belongs to, for surfaces that hold a path and not an item. */
-export const groupOfPath = (path: string): NavGroup | undefined =>
-  NAV_ITEMS.find(i => i.path === path || path.startsWith(`${i.path}/`))?.group;
-
-export interface ReferenceItem {
-  path: string;
-  label: string;
-}
-
-/** Guide and Legal, deliberately outside NAV_ITEMS: putting them there would
-    file them under a desk group, underline a group they do not belong to, and
-    resolve a PageHeader icon for pages that carry none. */
-export const REFERENCE_ITEMS: ReferenceItem[] = [
-  { path: '/guide', label: 'Guide' },
-  { path: '/legal/disclaimer', label: 'Disclaimer' },
-  { path: '/legal/terms', label: 'Terms' },
-  { path: '/legal/privacy', label: 'Privacy' },
-];
-
-export const itemsByGroup = (group: NavGroup): NavItem[] => NAV_ITEMS.filter(i => i.group === group);
+export const itemsByGroup = (group: NavGroup): NavItem[] =>
+  NAV_ITEMS.filter(i => i.group === group);

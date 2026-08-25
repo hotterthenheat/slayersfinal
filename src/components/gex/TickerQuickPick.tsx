@@ -1,0 +1,94 @@
+/*
+==================================================
+  SLAYER TERMINAL - TICKER QUICK-PICK
+  The compact in-header ticker switcher shared by
+  the flow-board minis, the 4-way chart board and
+  the live chart's fullscreen strip. The menu is a
+  full-universe search (S&P 500 + NASDAQ listings),
+  not a watchlist — four presets and a blind text
+  box was the whole reachable market until Noah
+  called it (2026-08-18). Unknown symbols still
+  pick on Enter; the sim synthesizes them.
+==================================================
+*/
+
+import { useEffect, useRef, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
+import TickerLookup from '../ui/TickerLookup';
+
+interface TickerQuickPickProps {
+  ticker: string;
+  onPick: (ticker: string) => void;
+  /* OPTIONALLY CONTROLLED. Left alone the button owns its own open state, the
+     way every other caller uses it. A host that has to open this from a
+     keyboard passes both, and then owns it — there is no third state where
+     both the host and the button think they are in charge. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}
+
+const TickerQuickPick = ({ ticker, onPick, open: openProp, onOpenChange }: TickerQuickPickProps) => {
+  const [selfOpen, setSelfOpen] = useState(false);
+  const open = openProp ?? selfOpen;
+  const setOpen = (next: boolean) => {
+    onOpenChange?.(next);
+    if (openProp === undefined) setSelfOpen(next);
+  };
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  // Outside click / Escape closes the picker
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    /* CAPTURE, and it stops the key going any further.
+
+       Escape is not owned by one component: the desk behind this menu closes
+       an expanded pane on the same key, and both listeners are on `window`.
+       Bubble-phase, both fire — measured: one Escape with this open inside an
+       expanded pane closed the menu AND collapsed the pane. Window-capture
+       runs before window-bubble, so the innermost thing open gets the key and
+       nothing else sees it. Same pattern as the date picker. */
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      setOpen(false);
+    };
+    window.addEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onKey, true);
+    return () => {
+      window.removeEventListener('mousedown', onDown);
+      window.removeEventListener('keydown', onKey, true);
+    };
+  }, [open]);
+
+  const pick = (sym: string) => {
+    setOpen(false);
+    if (sym && sym !== ticker) onPick(sym);
+  };
+
+  return (
+    <div ref={rootRef} className="relative">
+      {/* TradingView's symbol button (Noah, 2026-08-23): the name wears a
+          capsule a shade grayer than the bar it sits on — the one control
+          on the taskbar with its own surface, because it IS the subject.
+          TV-sized: ~112×28, name leading, the affordance at the far end. */}
+      <button
+        onClick={() => setOpen(!open)}
+        title="Switch ticker"
+        className="inline-flex items-center justify-between gap-2 h-7 min-w-[112px] px-3 rounded-full bg-white/[0.06] hover:bg-white/[0.10] font-mono text-[11px] font-bold text-textPrimary transition-colors"
+      >
+        {ticker}
+        <ChevronDown className={`w-3 h-3 text-textSecondary transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full mt-1 z-40 w-72 border border-borderMuted bg-panel rounded-md shadow-2xl shadow-black/60 overflow-hidden animate-slide-in">
+          <TickerLookup active={ticker} onPick={pick} />
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default TickerQuickPick;

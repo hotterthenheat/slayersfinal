@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components -- provider component + its consumer hook are colocated by design (the React context pattern); fast-refresh's component-only rule does not apply here. */
 /*
 ==================================================
   SLAYER TERMINAL - TRACKER CONTEXT
@@ -10,36 +9,37 @@
 
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import type { TrackedSetup } from '../types/tracker';
-import type { Setup, ScannerKey, SleeveKey, OptionRight, Verdict } from '../types/compass';
-
-/** Minimal shape to bookmark a contract weighed outside the setups scan. */
-export interface TrackContractInput {
-  id: string;
-  contract: string;
-  ticker: string;
-  strike: number;
-  right: OptionRight;
-  score: number;
-  verdict: Verdict;
-  scanner?: ScannerKey;
-  /** Horizon the contract was weighed on. Same-session when unstated. */
-  sleeve?: SleeveKey;
-}
+import { SCANNERS, type Setup, type ScannerKey } from '../types/compass';
 
 const STORAGE_KEY = 'slayer_tracked_setups';
+
+/** Entries written by older builds can miss fields newer code dereferences
+    (strike/right landed after launch) — one malformed row must never be able
+    to take the Tracker page down. */
+function isValidTracked(t: unknown): t is TrackedSetup {
+  if (typeof t !== 'object' || t === null) return false;
+  const s = t as Record<string, unknown>;
+  return (
+    typeof s.id === 'string' &&
+    typeof s.ticker === 'string' &&
+    typeof s.contract === 'string' &&
+    typeof s.strike === 'number' &&
+    (s.right === 'C' || s.right === 'P') &&
+    // Must be a scanner this build actually knows — stale keys crash builders
+    SCANNERS.some(sc => sc.key === s.scanner) &&
+    typeof s.trackedAt === 'number'
+  );
+}
 
 function loadFromStorage(): TrackedSetup[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    /*
-      Rows written before the sleeve existed get 'odte', which is not a fallback
-      so much as the truth: every horizon the desk could produce at the time
-      they were tracked was same-session. Without it they rebuild as `undefined`
-      and makeSetup silently prices them 0DTE anyway — the same answer, arrived
-      at by accident instead of on purpose.
-    */
-    return (JSON.parse(raw) as TrackedSetup[]).map(t => ({ ...t, sleeve: t.sleeve ?? 'odte' }));
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return [];
+    const valid = parsed.filter(isValidTracked);
+    // Persist the cleaned list so stale rows don't resurface
+    if (valid.length !== parsed.length) saveToStorage(valid);
+    return valid;
   } catch {
     return [];
   }
@@ -56,10 +56,7 @@ function saveToStorage(setups: TrackedSetup[]): void {
 interface TrackerContextValue {
   trackedSetups: TrackedSetup[];
   trackSetup: (setup: Setup, scanner: ScannerKey) => void;
-  trackContract: (c: TrackContractInput) => void;
   untrackSetup: (id: string) => void;
-  /** Reinsert a previously untracked setup verbatim — the undo path */
-  restoreSetup: (setup: TrackedSetup) => void;
   isTracked: (id: string) => boolean;
 }
 
@@ -91,41 +88,9 @@ export const TrackerProvider = ({ children }: { children: React.ReactNode }) => 
     });
   }, []);
 
-  const trackContract = useCallback((c: TrackContractInput) => {
-    setTrackedSetups(prev => {
-      if (prev.some(t => t.id === c.id)) return prev; // already tracked
-      const next = [
-        ...prev,
-        {
-          id: c.id,
-          contract: c.contract,
-          ticker: c.ticker,
-          strike: c.strike,
-          right: c.right,
-          scanner: c.scanner ?? 'top-setups',
-          sleeve: c.sleeve ?? 'odte',
-          trackedAt: Date.now(),
-          scoreAtTrack: c.score,
-          verdictAtTrack: c.verdict,
-        },
-      ];
-      saveToStorage(next);
-      return next;
-    });
-  }, []);
-
   const untrackSetup = useCallback((id: string) => {
     setTrackedSetups(prev => {
       const next = prev.filter(t => t.id !== id);
-      saveToStorage(next);
-      return next;
-    });
-  }, []);
-
-  const restoreSetup = useCallback((setup: TrackedSetup) => {
-    setTrackedSetups(prev => {
-      if (prev.some(t => t.id === setup.id)) return prev;
-      const next = [...prev, setup].sort((a, b) => a.trackedAt - b.trackedAt);
       saveToStorage(next);
       return next;
     });
@@ -137,7 +102,7 @@ export const TrackerProvider = ({ children }: { children: React.ReactNode }) => 
   );
 
   return (
-    <TrackerContext.Provider value={{ trackedSetups, trackSetup, trackContract, untrackSetup, restoreSetup, isTracked }}>
+    <TrackerContext.Provider value={{ trackedSetups, trackSetup, untrackSetup, isTracked }}>
       {children}
     </TrackerContext.Provider>
   );

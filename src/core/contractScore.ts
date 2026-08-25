@@ -1,30 +1,28 @@
 /*
 ==================================================
   SLAYER TERMINAL - CONTRACT WEIGHER (contractScore.ts)
-  Compass's scale. For weeklies, swings and LEAPS it
-  prices real candidates (Black-Scholes), then weighs
+  Compass's scale. Across every sleeve — same-day,
+  weeklies, swings and LEAPS — it prices real
+  candidates (Black-Scholes), then weighs
   the math (breakeven vs expected move, theta burden),
   the tape (flow + dark-pool posture), and the story
-  into one composite: what's worth buying
+  (news lean) into one composite: what's worth buying
   and what isn't — with the reason attached.
+
+  ONE scorer, two callers: weighContracts() grades the
+  auto sleeve; weighContract() grades any single strike
+  the user names. Both route through scoreCandidate() so
+  the number can never drift between them.
 ==================================================
 */
 
-/*
-  `dayKey`/`hRange` used to be imported here and this module has stopped needing
-  them: its only two hashed quantities were the base IV and the IV rank, and
-  both were numbers the reader was told were measurements. Nothing else on the
-  Weigher is drawn — every factor comes off the chain, the tape, the dark-pool
-  view.
-*/
-import Simulator from './simulator';
 import { expiryFor } from './calendar';
-import { yearsToExpiry } from './optionTime';
-import { math } from './mathProvider';
+import { dayKey, hRange } from './rng';
 import { buildDarkPoolView } from '../data/darkpool';
-import type { MarketSnapshot } from '../types/market';
+import { tickerSentiment } from '../data/news';
+import type { MarketSnapshot, StrikeNode } from '../types/market';
 
-export type Horizon = 'LOTTO' | 'WEEKLIES' | 'SWINGS' | 'LEAPS';
+export type Horizon = 'SAMEDAY' | 'WEEKLIES' | 'SWINGS' | 'LEAPS';
 
 export interface FactorScore {
   key: string;
@@ -43,25 +41,18 @@ export interface WeighedContract {
   ticker: string;
   right: 'C' | 'P';
   strike: number;
+  /** CALENDAR days to the real expiry (what the pricing math uses) */
   dte: number;
   expiryLabel: string;
+  /** Weekday of the expiry — "Fri". Printed so a bad date can never hide. */
+  expiryWeekday: string;
+  /** TRADING sessions left — the count that actually decays the contract, and
+      the honest answer to "how long do I have" over a weekend or a holiday. */
+  sessionsLeft: number;
   mid: number;
   delta: number;
   ivPct: number;
-  /**
-   * What this contract's vol costs relative to the name's own baseline, in
-   * percent: `+30` is paying 30% more vol than the ticker usually carries,
-   * `-20` is paying 20% less.
-   *
-   * This replaced `ivRank`, which was a daily hash in 12–92 with no connection
-   * to the IV printed beside it. With the pricing IV anchored to the name, the
-   * two sat three inches apart and disagreed out loud — a header reading
-   * "IV 12%" under a factor row reading "IV rank 82 — premium is expensive".
-   * A percentile also needs a distribution over time to be a percentile, and
-   * this engine has no IV history to take one from; a ratio against the name's
-   * baseline is a quantity it can actually compute.
-   */
-  ivPremiumPct: number;
+  ivRank: number;
   /** Daily decay as % of premium (negative burden expressed positive) */
   thetaPerDayPct: number;
   spreadPct: number;
@@ -71,36 +62,18 @@ export interface WeighedContract {
   /** One-sigma move to expiry, % */
   expectedMovePct: number;
   factors: FactorScore[];
-  /**
-   * ORDERING ONLY. Never rendered.
-   *
-   * This was `composite` — a 0-100 grade, printed at 36px on the Weigher, in
-   * every chain cell, and in the prose comparing one contract to another. It was
-   * a weighted mean of five hand-chosen factor scores at hand-chosen weights,
-   * and nothing behind those weights was measured: no forward log, no hit rate,
-   * no interval. A number on a 0-100 scale claims a precision that a weighted
-   * guess does not have, and putting it in the largest type on the pane made the
-   * claim the loudest thing on the desk.
-   *
-   * The number itself still has one honest job. Three call sites need a total
-   * order over candidate contracts — `weighContracts` sorts the chain, Lotto
-   * ranks each side, and `betterAlternative` picks a challenger — and a ranking
-   * is a weaker claim than a grade: it says "this one before that one", not
-   * "this one is 94 out of 100". So the quantity survives as a sort key with a
-   * name that cannot be mistaken for a verdict, and the type stops it reaching a
-   * pane: see `weighedGrade.test.ts`, which fails the build if any component
-   * renders it.
-   *
-   * `verdict` below is still derived from it and still ships. That is the tag,
-   * and a tag drawn from three coarse bands is a claim the arithmetic can carry.
-   */
-  rankKey: number;
+  composite: number;
   verdict: ContractVerdict;
   edge: string;
   risk: string;
 }
 
 export const HORIZONS: { key: Horizon; label: string; blurb: string }[] = [
+  {
+    key: 'SAMEDAY',
+    label: 'Same-day',
+    blurb: 'Hours, not days — the arithmetic is close to a coin flip, so the tape does most of the voting.',
+  },
   {
     key: 'WEEKLIES',
     label: 'Weeklies',
@@ -109,7 +82,7 @@ export const HORIZONS: { key: Horizon; label: string; blurb: string }[] = [
   {
     key: 'SWINGS',
     label: 'Swings',
-    blurb: '2–6 week holds — the balanced sleeve: math and flow both get a vote.',
+    blurb: '2–6 week holds — the balanced sleeve: math, flow and news all get a vote.',
   },
   {
     key: 'LEAPS',
@@ -118,145 +91,146 @@ export const HORIZONS: { key: Horizon; label: string; blurb: string }[] = [
   },
 ];
 
+/** 100 shares per contract — turns a premium into a dollar outlay. */
+export const CONTRACT_MULTIPLIER = 100;
+
 // ---- Black-Scholes ------------------------------------------------------------
 
-export interface BsOut {
+function normCdf(x: number): number {
+  // Abramowitz–Stegun 7.1.26 via erf
+  const t = 1 / (1 + 0.3275911 * Math.abs(x) / Math.SQRT2);
+  const erf =
+    1 -
+    (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) *
+      t *
+      Math.exp(-(x * x) / 2);
+  return 0.5 * (1 + Math.sign(x) * erf);
+}
+
+interface BsOut {
   price: number;
   delta: number;
   /** Per-day theta, absolute dollars */
   thetaDay: number;
 }
 
-/**
- * The ONE option pricer the desks quote through — now a thin adapter over the
- * MATH SEAM (core/mathProvider.ts) rather than its own copy of Black-Scholes.
- *
- * data/compass.ts (the setups board and the chain) used to carry a normal-shaped
- * estimator that disagreed with this by up to ~2× on the same contract;
- * estimatePremium delegates here, so every surface quotes one mid
- * (compassCoherence.test.ts). The two also floored a 0DTE differently, which is
- * settled in core/optionTime.ts and now expressed as math.yearsToExpiry.
- *
- * What stays HERE rather than in the seam: the $0.02 quote floor. That is a
- * market convention (an option does not quote below a penny-ish tick), not a
- * property of the model, so replacing the math must not silently remove it.
- */
-export const QUOTE_FLOOR = 0.02;
+/** Effective years to expiry — floored at half a day so a 0DTE still carries a
+    real move/price instead of collapsing to zero. Shared by pricing AND the
+    expected-move line so the two can't disagree. */
+function timeYears(dte: number): number {
+  return Math.max(dte, 0.5) / 365;
+}
 
-export function blackScholes(spot: number, strike: number, ivAnnual: number, dte: number, right: 'C' | 'P'): BsOut {
-  const t = math.yearsToExpiry(dte);
-  const g = math.optionGreeks(spot, strike, ivAnnual, t, right);
-  return {
-    price: Math.max(math.optionPrice(spot, strike, ivAnnual, t, right), QUOTE_FLOOR),
-    delta: g.delta,
-    thetaDay: g.theta,
-  };
+function blackScholes(spot: number, strike: number, ivAnnual: number, dte: number, right: 'C' | 'P'): BsOut {
+  const T = timeYears(dte);
+  const r = 0.045;
+  const sq = ivAnnual * Math.sqrt(T);
+  const d1 = (Math.log(spot / strike) + (r + (ivAnnual * ivAnnual) / 2) * T) / sq;
+  const d2 = d1 - sq;
+  const pdf = Math.exp(-(d1 * d1) / 2) / Math.sqrt(2 * Math.PI);
+  const disc = Math.exp(-r * T);
+
+  if (right === 'C') {
+    const price = spot * normCdf(d1) - strike * disc * normCdf(d2);
+    const theta = (-(spot * pdf * ivAnnual) / (2 * Math.sqrt(T)) - r * strike * disc * normCdf(d2)) / 365;
+    return { price: Math.max(price, 0.02), delta: normCdf(d1), thetaDay: theta };
+  }
+  const price = strike * disc * normCdf(-d2) - spot * normCdf(-d1);
+  const theta = (-(spot * pdf * ivAnnual) / (2 * Math.sqrt(T)) + r * strike * disc * normCdf(-d2)) / 365;
+  return { price: Math.max(price, 0.02), delta: normCdf(d1) - 1, thetaDay: theta };
 }
 
 // ---- candidate generation --------------------------------------------------------
 
 const HORIZON_SHAPE: Record<Horizon, { dtes: number[]; otm: number[] }> = {
-  // % OTM offsets per horizon — lottos hug spot on 0–1 DTE, LEAPS reach for cheap deltas
-  LOTTO: { dtes: [0, 1], otm: [0, 0.003, 0.006, 0.011] },
+  // % OTM offsets per horizon — same-day hugs spot (there is no time for a big
+  // move), weeklies sit close, LEAPS reach for cheap deltas
+  SAMEDAY: { dtes: [0, 1], otm: [0, 0.003, 0.006, 0.011] },
   WEEKLIES: { dtes: [2, 5, 7], otm: [0, 0.01, 0.02, 0.035] },
   SWINGS: { dtes: [21, 30, 45], otm: [0, 0.02, 0.045, 0.07] },
-  LEAPS: { dtes: [365, 480], otm: [-0.15, -0.07, 0, 0.08] },
+  LEAPS: { dtes: [365, 480], otm: [0, 0.05, 0.1, 0.18] },
 };
 
+// Same-day deliberately leans on FLOW over arithmetic: inside a session the
+// breakeven math is close to a coin flip, so who is actually pushing the tape
+// decides more than the numbers do. Tuned against our own factor scales.
 const WEIGHTS: Record<Horizon, Record<string, number>> = {
-  // 0DTE: the math is a coin-flip, so the tape (flow) and decay/liquidity carry the vote
-  // The news lean is gone (no news wire on any feed tier). Each horizon's
-  // remaining five weights are renormalised to sum to 1 so the composite still
-  // spans 0-100 — the news weight is not dropped as dead weight, it is
-  // redistributed proportionally across the survivors.
-  LOTTO: { math: 0.17, decay: 0.255, vol: 0.106, flow: 0.299, liq: 0.17 },
-  WEEKLIES: { math: 0.261, decay: 0.283, vol: 0.087, flow: 0.239, liq: 0.13 },
-  SWINGS: { math: 0.262, decay: 0.167, vol: 0.167, flow: 0.238, liq: 0.166 },
-  LEAPS: { math: 0.231, decay: 0.051, vol: 0.359, flow: 0.154, liq: 0.205 },
+  SAMEDAY: { math: 0.12, decay: 0.2, vol: 0.06, flow: 0.38, news: 0.14, liq: 0.1 },
+  WEEKLIES: { math: 0.24, decay: 0.26, vol: 0.08, flow: 0.22, news: 0.08, liq: 0.12 },
+  SWINGS: { math: 0.22, decay: 0.14, vol: 0.14, flow: 0.2, news: 0.16, liq: 0.14 },
+  LEAPS: { math: 0.18, decay: 0.04, vol: 0.28, flow: 0.12, news: 0.22, liq: 0.16 },
 };
 
-// Theta scored against a horizon-realistic ceiling — 0DTE burns a huge % of
-// premium per day, so it needs its own scale or every lotto reads as a zero.
-const DECAY_CEILING: Record<Horizon, number> = { LOTTO: 250, WEEKLIES: 30, SWINGS: 3.5, LEAPS: 0.8 };
-
-function expiryLabel(dte: number): string {
-  return expiryFor(dte).label;
-}
+// expiryLabel() used to be Date.now() + dte*86400000 with no calendar at all,
+// which listed contracts expiring on Saturdays. Every expiry now resolves
+// through core/calendar.ts — see expiryFor().
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));
 }
 
-/** Which sleeve a given DTE belongs to — drives weights when weighing a
-    single searched contract (0-1d = lotto, ≤10d = weeklies, ≤90d = swings). */
+/** Which sleeve a raw DTE falls in — so a user-named contract is graded on the
+    same weights the auto sleeve would use. */
 export function horizonForDte(dte: number): Horizon {
-  return dte <= 1 ? 'LOTTO' : dte <= 10 ? 'WEEKLIES' : dte <= 90 ? 'SWINGS' : 'LEAPS';
+  if (dte <= 1) return 'SAMEDAY';
+  if (dte <= 10) return 'WEEKLIES';
+  if (dte <= 120) return 'SWINGS';
+  return 'LEAPS';
 }
 
-/** Shared per-name context — one read per build, reused across every candidate. */
-interface ScoreCtx {
+/** Everything read once per snapshot and shared by every candidate — the tape,
+    the news lean, the IV regime, the strike grid. Built once by both callers. */
+export interface ScoreCtx {
+  ticker: string;
+  spot: number;
+  chain: StrikeNode[];
   dp: ReturnType<typeof buildDarkPoolView>;
-  /** The name's own volatility — the reference every vol read on the desk is against. */
-  nameIv: number;
+  news: number;
+  ivRank: number;
   baseIv: number;
   trendUp: boolean;
   rsi: number;
+  /** Strike increment from the chain grid */
   step: number;
 }
 
 function buildScoreCtx(snapshot: MarketSnapshot): ScoreCtx {
   const { ticker, spot, chain, indicators } = snapshot;
+  const day = dayKey();
   const dp = buildDarkPoolView(snapshot);
-  /*
-    The level options are priced at is the NAME's, not this module's opinion of
-    it.
-
-    This read `0.18 + (squeeze ? -0.03 : 0.02) + hRange(ticker-day-iv, 0, 0.25)`
-    — a daily hash in 0.20–0.45 that never looked at the ticker the snapshot
-    came from. Every other pricer in the app reads `Simulator.TICKERS[t].iv`
-    (0.15 on SPY, 0.35 on NVDA), so the Weigher and the board were quoting the
-    same contract off two different volatilities, and the gap moved with the
-    calendar rather than with anything a reader could see.
-
-    Measured on 2026-08-05, SPY 500C 0DTE with spot at 500.06: the board said
-    $1.40 and the Weigher $3.39 — a 2.4× disagreement between two panels on one
-    screen. `compassCoherence.test.ts` bounds that ratio at 0.5–2, and this is
-    the day the hash drifted far enough to trip it; the defect was there on every
-    other day too, just inside the band.
-
-    The squeeze term is left exactly as it was. It is a real signal about
-    compressed range and it is not what was wrong — only the level was. It stays
-    additive, which means it is worth proportionally more on a low-IV name than
-    a high-IV one; that is a separate question and not one this fix should
-    answer silently.
-  */
-  const nameIv = Simulator.TICKERS[ticker]?.iv ?? 0.25;
-  const baseIv = Math.max(0.12, chain.length > 0 ? nameIv + (indicators.squeeze ? -0.03 : 0.02) : nameIv);
+  const news = tickerSentiment(ticker);
+  const ivRank = Math.round(hRange(`${ticker}-${day}-ivr`, 12, 92));
+  const baseIv = Math.max(
+    0.12,
+    chain.length > 0 ? 0.18 + (indicators.squeeze ? -0.03 : 0.02) + hRange(`${ticker}-${day}-iv`, 0, 0.25) : 0.25
+  );
   const trendUp = indicators.ema9 >= indicators.ema21;
   const rsi = indicators.rsi;
-  // Strike increment from the chain grid — candidates stay on listed strikes
-  // even past the chain window's edge (LEAPS reach further OTM than it holds).
   const sorted = [...chain].sort((a, b) => a.strike - b.strike);
   const step = sorted.length > 1 ? Math.abs(sorted[1].strike - sorted[0].strike) : Math.max(spot * 0.005, 0.5);
-  return { dp, nameIv, baseIv, trendUp, rsi, step };
+  return { ticker, spot, chain, dp, news, ivRank, baseIv, trendUp, rsi, step };
 }
 
-/** Weigh one concrete contract with the full factor stack. This is the single
-    scoring path both the setups scan and the searched-contract weigher run — so
-    a contract you type in is graded on the exact same math as the top picks. */
-function scoreCandidate(
-  snapshot: MarketSnapshot,
+/** Score ONE contract on the shared 6-factor scale. strike + dte + right are
+    already chosen; horizon picks the weights. The batch weigher and the
+    weigh-your-own path both call this — one number, no drift. */
+export function scoreCandidate(
   ctx: ScoreCtx,
-  horizon: Horizon,
   right: 'C' | 'P',
-  strikeInput: number,
-  dte: number
+  strike: number,
+  requestedDte: number,
+  horizon: Horizon
 ): WeighedContract {
-  const { ticker, spot, chain } = snapshot;
+  const { ticker, spot, chain, dp, news, ivRank, baseIv, trendUp, rsi } = ctx;
   const weights = WEIGHTS[horizon];
-  const { dp, nameIv, baseIv, trendUp, rsi, step } = ctx;
 
-  const strike = Math.max(step, Math.round(strikeInput / step) * step);
+  // Resolve the requested horizon to a REAL expiry first, then price against
+  // THAT. Asking for 7 days on a Friday used to price and label a Saturday
+  // contract; it now prices the Friday weekly it actually resolves to, and
+  // every downstream `dte` below is the resolved one.
+  const expiry = expiryFor(requestedDte);
+  const dte = expiry.dte;
+
   const node = chain.reduce(
     (best, n) => (Math.abs(n.strike - strike) < Math.abs(best.strike - strike) ? n : best),
     chain[0]
@@ -269,14 +243,11 @@ function scoreCandidate(
   const mid = Number(bs.price.toFixed(2));
   const thetaPerDayPct = (Math.abs(bs.thetaDay) / mid) * 100;
   // OI thins out the further the strike sits past the chain window
-  const baseOi = node ? (right === 'C' ? node.callOI.value : node.putOI.value) : 500;
+  const baseOi = node ? (right === 'C' ? node.callOI : node.putOI) : 500;
   const oiCount = Math.max(50, Math.round(baseOi * Math.exp((-Math.abs(strike - (node?.strike ?? strike)) / spot) * 24)));
-  const spreadPct = clamp((6 - Math.log10(Math.max(oiCount, 10)) * 1.4) * (dte > 180 ? 1.5 : 1), 0.4, 6);
+  const spreadPct = clamp(6 - Math.log10(Math.max(oiCount, 10)) * 1.4, 0.4, 6) * (dte > 180 ? 1.5 : 1);
 
-  // Time floors at half a SESSION so a 0DTE still carries a real 1σ move —
-  // one convention, shared with the scan engine. See core/optionTime.ts.
-  const tYears = yearsToExpiry(dte);
-  const expectedMovePct = iv * Math.sqrt(tYears) * 100;
+  const expectedMovePct = iv * Math.sqrt(timeYears(dte)) * 100;
   const beMove = right === 'C' ? (strike + mid) / spot - 1 : 1 - (strike - mid) / spot;
   const breakevenMovePct = beMove * 100;
 
@@ -288,41 +259,28 @@ function scoreCandidate(
       ? `1σ move (${expectedMovePct.toFixed(1)}%) clears the ${breakevenMovePct.toFixed(1)}% breakeven — the math works without a miracle.`
       : `Needs ${breakevenMovePct.toFixed(1)}% by expiry but 1σ is only ${expectedMovePct.toFixed(1)}% — you're paying for a tail.`;
 
-  const decayCeiling = DECAY_CEILING[horizon];
+  // Same-day needs a far higher ceiling: measured 0DTE candidates burn 50–200%
+  // of premium per day, so grading them against the weeklies ceiling pinned every
+  // one of them at the clamp floor — an inert factor that told the reader nothing.
+  // 250 spreads the observed range across a usable 20–80 band.
+  const decayCeiling = horizon === 'SAMEDAY' ? 250 : horizon === 'WEEKLIES' ? 9 : horizon === 'SWINGS' ? 3.5 : 0.8;
   const decayScore = Math.round(clamp(100 - (thetaPerDayPct / decayCeiling) * 100, 2, 98));
+  // Inside a session, "per day" is the wrong unit — the contract dies today.
+  const thetaPerHourPct = thetaPerDayPct / 6.5;
   const decayDetail =
-    decayScore >= 55
-      ? `Theta ${thetaPerDayPct.toFixed(1)}%/day is carryable for the holding window.`
-      : `Theta ${thetaPerDayPct.toFixed(1)}%/day — the clock beats you unless the move comes fast.`;
+    horizon === 'SAMEDAY'
+      ? `Theta is about ${thetaPerHourPct.toFixed(1)}% of the premium every hour — ${
+          dte === 0 ? 'this one settles at zero if it has not worked by the close' : 'it has one session and an overnight left'
+        }.`
+      : decayScore >= 55
+        ? `Theta ${thetaPerDayPct.toFixed(1)}%/day is carryable for the holding window.`
+        : `Theta ${thetaPerDayPct.toFixed(1)}%/day — the clock beats you unless the move comes fast.`;
 
-  /*
-    What you are paying for volatility, against what this name normally carries.
-
-    `iv` here is the priced volatility — the name's baseline, plus the squeeze
-    adjustment, plus the strike's skew — so on the money it is roughly the
-    baseline and out on the wings it is meaningfully above it. Dividing by the
-    baseline gives a number the panel can defend: `-20` means this contract's
-    vol is a fifth cheaper than the name's own, `+45` means you are paying
-    nearly half again for the wing.
-
-    The old form was `100 - ivRank`, and `ivRank` was `hRange(ticker-day-ivr,
-    12, 92)` — a hash. It moved with the date and with nothing on screen, and
-    once the pricing IV was anchored to the name it started contradicting the
-    header out loud: "IV 12%" three inches above "IV rank 82 — premium is
-    expensive". The `LEAPS ? 0 : 18` term is inherited unchanged and not
-    re-derived here; it is not what was wrong.
-  */
-  // One rounding, used by the sentence below and by the field the card renders,
-  // so the prose and the number can never disagree about the same IV.
-  const ivPct = Number((iv * 100).toFixed(1));
-  const ivPremiumPct = Math.round((iv / nameIv - 1) * 100);
-  const volScore = Math.round(clamp(62 - ivPremiumPct * 0.9 + (horizon === 'LEAPS' ? 0 : 18), 4, 96));
+  const volScore = Math.round(clamp(100 - ivRank + (horizon === 'LEAPS' ? 0 : 18), 4, 96));
   const volDetail =
-    ivPremiumPct >= 25
-      ? `${ivPct}% IV is ${ivPremiumPct}% over what ${ticker} normally carries — you're paying up for this strike, and vol crush works against longs.`
-      : ivPremiumPct <= -8
-        ? `${ivPct}% IV is ${Math.abs(ivPremiumPct)}% under ${ticker}'s own — you're not overpaying for volatility here.`
-        : `${ivPct}% IV is within a few points of what ${ticker} normally carries — vol is neither the reason to take this nor the reason to skip it.`;
+    ivRank >= 65
+      ? `IV rank ${ivRank} — premium is expensive; vol crush works against longs.`
+      : `IV rank ${ivRank} — you're not overpaying for volatility here.`;
 
   const dirSign = right === 'C' ? 1 : -1;
   const flowAlign = dp.netPosturePct * dirSign;
@@ -334,6 +292,14 @@ function scoreCandidate(
       : flowScore <= 40
         ? `Smart-money flow leans against ${right === 'C' ? 'calls' : 'puts'} here — you'd be fading the desks.`
         : 'Flow is mixed — no institutional wind either way.';
+
+  const newsScore = Math.round(clamp(50 + news * 48 * dirSign, 4, 96));
+  const newsDetail =
+    Math.abs(news) < 0.12
+      ? 'Quiet tape on the name — news is a non-factor.'
+      : newsScore >= 55
+        ? 'The headline tape supports the direction.'
+        : 'Headline risk points the other way.';
 
   const liqScore = Math.round(clamp(100 - spreadPct * 13 + Math.log10(Math.max(oiCount, 10)) * 6, 4, 98));
   const liqDetail =
@@ -349,20 +315,12 @@ function scoreCandidate(
     { key: 'decay', label: 'Theta burden', score: decayScore, weight: weights.decay, detail: decayDetail },
     { key: 'vol', label: 'Vol pricing', score: volScore, weight: weights.vol, detail: volDetail },
     { key: 'flow', label: 'Flow & dark pool', score: flowScore, weight: weights.flow, detail: flowDetail },
+    { key: 'news', label: 'News lean', score: newsScore, weight: weights.news, detail: newsDetail },
     { key: 'liq', label: 'Liquidity', score: liqScore, weight: weights.liq, detail: liqDetail },
   ];
 
-  /*
-    The one line the owner's math files replace.
-
-    Kept as a local, not deleted, because `verdict` is derived from it and the
-    directive that removed the grade also said to keep the tag. Deleting the
-    arithmetic would have taken the tag with it, and re-deriving the same
-    weighted sum at each of the three sort sites would have cloned this line
-    into three seams instead of one.
-  */
-  const rankKey = Math.round(factors.reduce((a, f) => a + f.score * f.weight, 0));
-  const verdict: ContractVerdict = rankKey >= 70 ? 'BUY' : rankKey >= 52 ? 'WATCH' : 'FADE';
+  const composite = Math.round(factors.reduce((a, f) => a + f.score * f.weight, 0));
+  const verdict: ContractVerdict = composite >= 70 ? 'BUY' : composite >= 52 ? 'WATCH' : 'FADE';
   const ranked = [...factors].sort((a, b) => b.score - a.score);
 
   return {
@@ -371,35 +329,90 @@ function scoreCandidate(
     right,
     strike,
     dte,
-    expiryLabel: expiryLabel(dte),
+    expiryLabel: expiry.label,
+    expiryWeekday: expiry.weekday,
+    sessionsLeft: expiry.sessions,
     mid,
     delta: Number(bs.delta.toFixed(2)),
-    ivPct,
-    ivPremiumPct,
+    ivPct: Number((iv * 100).toFixed(1)),
+    ivRank,
     thetaPerDayPct: Number(thetaPerDayPct.toFixed(2)),
     spreadPct: Number(spreadPct.toFixed(1)),
     oi: oiCount,
     breakevenMovePct: Number(breakevenMovePct.toFixed(2)),
     expectedMovePct: Number(expectedMovePct.toFixed(2)),
     factors,
-    rankKey,
+    composite,
     verdict,
     edge: ranked[0].detail,
     risk: ranked[ranked.length - 1].detail,
   };
 }
 
-export function weighContracts(snapshot: MarketSnapshot, horizon: Horizon): WeighedContract[] {
-  const { spot } = snapshot;
-  const shape = HORIZON_SHAPE[horizon];
+/** Result of weighing a single user-named contract — the graded contract plus
+    how far its strike was snapped onto the listed grid (for an honest note). */
+export interface WeighYourOwn {
+  contract: WeighedContract;
+  requestedStrike: number;
+  snappedStrike: number;
+  snapped: boolean;
+  horizon: Horizon;
+}
+
+/** Weigh any contract the user names — snaps the strike to the nearest LISTED
+    strike and grades it on the sleeve its DTE falls in. Same scorer as the
+    auto scale, so the two never disagree. */
+export function weighContract(snapshot: MarketSnapshot, right: 'C' | 'P', strike: number, dte: number): WeighYourOwn {
   const ctx = buildScoreCtx(snapshot);
+  const snappedStrike = ctx.chain.length
+    ? ctx.chain.reduce((b, n) => (Math.abs(n.strike - strike) < Math.abs(b.strike - strike) ? n : b), ctx.chain[0]).strike
+    : Math.round(strike / ctx.step) * ctx.step;
+  const horizon = horizonForDte(dte);
+  const contract = scoreCandidate(ctx, right, snappedStrike, dte, horizon);
+  return { contract, requestedStrike: strike, snappedStrike, snapped: Math.abs(snappedStrike - strike) > 1e-6, horizon };
+}
+
+/** The strictly-stronger expression in the SAME direction, or null. Two gates:
+    a real composite margin (+5) AND better 1σ-over-breakeven headroom — so it
+    only ever redirects toward a genuinely better contract, never a lateral one. */
+export function betterAlternative(contracts: WeighedContract[], target: WeighedContract): WeighedContract | null {
+  const coverage = (c: WeighedContract) => c.expectedMovePct / Math.max(c.breakevenMovePct, 0.05);
+  // Apply BOTH gates as a filter over the whole pool first, THEN take the best
+  // survivor — checking only the argmax-composite contract would miss a
+  // slightly-lower-composite one that clears both gates.
+  const qualified = contracts.filter(
+    c =>
+      c.right === target.right &&
+      c.id !== target.id &&
+      c.composite - target.composite >= 5 &&
+      coverage(c) > coverage(target)
+  );
+  if (qualified.length === 0) return null;
+  return qualified.reduce((best, c) => (c.composite > best.composite ? c : best), qualified[0]);
+}
+
+export function weighContracts(snapshot: MarketSnapshot, horizon: Horizon): WeighedContract[] {
+  const ctx = buildScoreCtx(snapshot);
+  const shape = HORIZON_SHAPE[horizon];
   const out: WeighedContract[] = [];
 
+  // Candidates stay on listed strikes (snapped to the grid step) even past the
+  // chain window's edge — LEAPS reach further OTM than the chain holds.
+  // On low-priced names the tight OTM offsets can round onto the SAME strike
+  // (a 0.3% offset on a $40 stock is less than one increment), which used to
+  // collapse the sleeve to a handful of duplicates — so each collision walks one
+  // more step out in its own direction.
+  const taken = new Set<string>();
   (['C', 'P'] as const).forEach(right => {
     shape.otm.forEach((otm, oi) => {
-      const dte = shape.dtes[oi % shape.dtes.length];
-      const rawStrike = right === 'C' ? spot * (1 + otm) : spot * (1 - otm);
-      out.push(scoreCandidate(snapshot, ctx, horizon, right, rawStrike, dte));
+      const dte = shape.dtes[(oi + (right === 'P' ? 1 : 0)) % shape.dtes.length];
+      const rawStrike = right === 'C' ? ctx.spot * (1 + otm) : ctx.spot * (1 - otm);
+      let strike = Math.round(rawStrike / ctx.step) * ctx.step;
+      const away = right === 'C' ? ctx.step : -ctx.step;
+      let guard = 0;
+      while (taken.has(`${right}|${dte}|${strike}`) && guard++ < 12) strike += away;
+      taken.add(`${right}|${dte}|${strike}`);
+      out.push(scoreCandidate(ctx, right, strike, dte, horizon));
     });
   });
 
@@ -407,36 +420,5 @@ export function weighContracts(snapshot: MarketSnapshot, horizon: Horizon): Weig
   const seen = new Set<string>();
   return out
     .filter(c => (seen.has(c.id) ? false : (seen.add(c.id), true)))
-    .sort((a, b) => b.rankKey - a.rankKey);
-}
-
-/** Weigh a single contract the user searched — same engine as the setups scan. */
-export function weighContract(
-  snapshot: MarketSnapshot,
-  right: 'C' | 'P',
-  strike: number,
-  dte: number
-): WeighedContract {
-  const ctx = buildScoreCtx(snapshot);
-  return scoreCandidate(snapshot, ctx, horizonForDte(dte), right, strike, dte);
-}
-
-/**
- * Given a weighed contract, scan its sleeve for the best same-direction
- * alternative and return it when it clears the searched one on both score and
- * reward-to-risk (1σ ÷ breakeven). Null when nothing beats what they've got.
- */
-export function betterAlternative(
-  snapshot: MarketSnapshot,
-  target: WeighedContract
-): WeighedContract | null {
-  const horizon = horizonForDte(target.dte);
-  const rr = (c: WeighedContract) => c.expectedMovePct / Math.max(c.breakevenMovePct, 0.05);
-  const targetRr = rr(target);
-  const candidate = weighContracts(snapshot, horizon)
-    .filter(c => c.right === target.right && c.id !== target.id)
-    .sort((a, b) => b.rankKey - a.rankKey)[0];
-  if (!candidate) return null;
-  const better = candidate.rankKey >= target.rankKey + 5 && rr(candidate) >= targetRr;
-  return better ? candidate : null;
+    .sort((a, b) => b.composite - a.composite);
 }

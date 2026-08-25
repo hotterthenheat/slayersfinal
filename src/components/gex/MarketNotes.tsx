@@ -1,86 +1,52 @@
-import { useEffect, useRef, useState } from 'react';
-import { Plus } from 'lucide-react';
-import EmptyState from '../ui/EmptyState';
+import { useState } from 'react';
+import RichRead from '../ui/RichRead';
 import type { MarketNote } from '../../types/gex';
 
 interface MarketNotesProps {
-  /** The current generated observation, or null when nothing is notable. */
-  autoNote: string | null;
-  /** Bumps per scan — a repeat of the same text is not a new entry. */
-  revision: number;
+  notes: MarketNote[];
+  onAddNote: (text: string) => void;
 }
 
-const stamp = () => {
-  const d = new Date();
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
-};
-
 /**
- * Session log — the generated observation from each scan, newest first, with
- * room for your own line beside it. The engine only speaks when something is
- * notable (spot testing a wall, price at the flip), so an entry appearing is
- * itself the signal; a quiet log means the book hasn't done anything worth
- * saying. Repeats are suppressed — the same note re-firing every scan would
- * bury the moment it first fired.
+ * Timestamped session commentary — engine observations arrive on the scan
+ * cadence; the trader can append their own lines.
  */
-const MarketNotes = ({ autoNote, revision }: MarketNotesProps) => {
-  const [notes, setNotes] = useState<MarketNote[]>([]);
+const MarketNotes = ({ notes, onAddNote }: MarketNotesProps) => {
   const [draft, setDraft] = useState('');
-  const lastAutoRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    if (!autoNote || autoNote === lastAutoRef.current) return;
-    lastAutoRef.current = autoNote;
-    setNotes(prev => [{ time: stamp(), text: autoNote }, ...prev].slice(0, 60));
-  }, [autoNote, revision]);
-
-  const addManual = () => {
+  const submit = () => {
     const text = draft.trim();
     if (!text) return;
-    setNotes(prev => [{ time: stamp(), text, manual: true }, ...prev].slice(0, 60));
+    onAddNote(text);
     setDraft('');
   };
 
   return (
-    <div className="h-full min-h-0 flex flex-col">
-      <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-borderSubtle">
+    <div className="flex flex-col h-full min-h-0">
+      <div className="flex-grow overflow-y-auto min-h-0 flex flex-col gap-2 pr-1">
+        {notes.length === 0 && (
+          <span className="font-mono text-[10px] text-textMuted uppercase tracking-widest py-4 text-center">
+            Awaiting first observation…
+          </span>
+        )}
+        {notes.map((note, i) => (
+          <div key={`${note.time}-${i}`} className="flex items-start gap-2 animate-slide-in">
+            <span className="shrink-0 font-mono text-[9px] tnum text-textMuted pt-px">{note.time}</span>
+            <p className={`text-[11px] leading-snug ${note.manual ? 'text-textPrimary' : 'text-textSecondary'}`}>
+              {note.manual && <span className="font-mono text-[8px] uppercase tracking-wider text-textMuted mr-1.5">you</span>}
+              <RichRead text={note.text} />
+            </p>
+          </div>
+        ))}
+      </div>
+      <div className="pt-2 mt-2 border-t border-borderSubtle">
         <input
           value={draft}
           onChange={e => setDraft(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === 'Enter') addManual();
-          }}
+          onKeyDown={e => e.key === 'Enter' && submit()}
           placeholder="Add a note…"
-          aria-label="Add a market note"
-          className="flex-grow min-w-0 bg-inset border border-borderSubtle rounded px-2 py-1 font-mono text-label text-textPrimary placeholder:text-textMuted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-select/60"
+          className="w-full bg-inputBg border border-borderSubtle rounded-md px-2.5 py-1.5 font-mono text-[11px] text-textPrimary placeholder:text-textMuted focus:border-borderMuted outline-none transition-colors"
         />
-        <button
-          onClick={addManual}
-          disabled={!draft.trim()}
-          aria-label="Save note"
-          className="shrink-0 inline-flex items-center gap-1 border border-borderSubtle hover:border-borderMuted disabled:opacity-40 disabled:hover:border-borderSubtle bg-panel rounded px-2 py-1 font-mono text-micro uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors active:scale-[0.98]"
-        >
-          <Plus className="w-3 h-3" /> Add
-        </button>
-      </div>
-
-      <div className="flex-grow overflow-y-auto min-h-0">
-        {notes.length === 0 ? (
-          <EmptyState size="sm" title="Nothing notable yet" body="Observations post here as the book moves" />
-        ) : (
-          notes.map((n, i) => (
-            <div key={`${n.time}-${i}`} className="flex gap-2 px-2.5 py-1.5 border-b border-borderSubtle/30">
-              <span className="shrink-0 font-mono text-micro text-textMuted tnum leading-5">{n.time}</span>
-              <span
-                className={`shrink-0 w-[3px] rounded-full ${n.manual ? 'bg-select/70' : 'bg-borderMuted'}`}
-                aria-label={n.manual ? 'Your note' : 'Generated observation'}
-              />
-              <span className={`font-mono text-label leading-5 ${n.manual ? 'text-textPrimary' : 'text-textSecondary'}`}>
-                {n.text}
-              </span>
-            </div>
-          ))
-        )}
       </div>
     </div>
   );

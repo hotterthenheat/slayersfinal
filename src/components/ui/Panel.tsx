@@ -1,29 +1,5 @@
-import React, { useId } from 'react';
-import { createPortal } from 'react-dom';
-import { Maximize2, Minimize2 } from 'lucide-react';
+import React from 'react';
 import type { Tone } from './tones';
-import { useFocus } from '../../context/FocusContext';
-import { titleOf } from './truncation';
-
-/** Renders the panel title at the requested level without four near-copies. */
-const Heading = ({
-  level,
-  className,
-  title,
-  children,
-}: {
-  level: 2 | 3 | 4;
-  className?: string;
-  title?: string;
-  children: React.ReactNode;
-}) => {
-  const Tag = (`h${level}` as const) as 'h2' | 'h3' | 'h4';
-  return (
-    <Tag className={className} title={title}>
-      {children}
-    </Tag>
-  );
-};
 
 interface PanelProps {
   title?: React.ReactNode;
@@ -33,136 +9,63 @@ interface PanelProps {
   flush?: boolean;
   /** Tint the surface with a directional/status accent */
   tone?: Tone;
-  /** The one hero surface on a page — living holo frame + halo */
-  emphasis?: boolean;
-  /** Opt in to Focus Mode — a header control blooms this panel full-bleed */
-  focusable?: boolean;
-  /** Stable focus id so a page can detect its own panel's focus state (e.g. to
-      render more data when expanded). Falls back to an auto-generated id. */
-  focusId?: string;
-  /** Heading level for `title`. Defaults to 2 — panels sit under the page H1. */
-  headingLevel?: 2 | 3 | 4;
   className?: string;
   bodyClassName?: string;
   children: React.ReactNode;
 }
 
-// Tone reads through a whisper of header tint + the divider — never a muddy
-// full-surface wash and never a decorative color bar.
-const toneHeaderTint: Record<Tone, string> = {
-  bull: 'bg-bull/[0.05]',
-  bear: 'bg-bear/[0.05]',
-  warn: 'bg-warn/[0.05]',
-  info: 'bg-flip/[0.05]',
-  select: 'bg-select/[0.05]',
-  magenta: 'bg-king/[0.06]',
-  neutral: '',
+// Full class strings kept static so Tailwind JIT picks them up
+const toneSurface: Record<Tone, string> = {
+  bull: 'border-bull/30 bg-bull/[0.04]',
+  bear: 'border-bear/30 bg-bear/[0.04]',
+  warn: 'border-warn/30 bg-warn/[0.04]',
+  select: 'border-select/30 bg-select/[0.04]',
+  magenta: 'border-king/30 bg-king/[0.04]',
+  // A whole panel never wears the foil — holo is chip-scale hardware. Falls
+  // back to the neutral surface so `tone="holo"` on a Panel can't tint it.
+  holo: 'border-borderSubtle bg-panel',
+  neutral: 'border-borderSubtle bg-panel',
 };
 
 const toneDivider: Record<Tone, string> = {
-  bull: 'border-bull/15',
-  bear: 'border-bear/15',
-  warn: 'border-warn/15',
-  info: 'border-flip/15',
-  select: 'border-select/15',
-  magenta: 'border-king/15',
+  bull: 'border-bull/20',
+  bear: 'border-bear/20',
+  warn: 'border-warn/20',
+  select: 'border-select/20',
+  magenta: 'border-king/20',
+  holo: 'border-borderSubtle',
   neutral: 'border-borderSubtle',
 };
 
-/** The base dark surface every widget sits in — a machined instrument panel. */
+/** The base dark surface every widget sits in. */
 const Panel = ({
   title,
   subtitle,
   actions,
   flush = false,
   tone = 'neutral',
-  emphasis = false,
-  focusable = false,
-  focusId,
-  headingLevel = 2,
   className = '',
   bodyClassName = '',
   children,
 }: PanelProps) => {
-  // Emphasis is now a quiet static lift (brighter hairline) — no animated
-  // holo frame, glow, or corner ticks. Hierarchy from contrast, not ornament.
-  const surface = emphasis ? 'inst-emphasis' : 'inst-surface';
-  const generatedId = useId();
-  const uid = focusId ?? generatedId;
-  const { focusedId, overlayEl, focus, close } = useFocus();
-  const isFocused = focusable && focusedId === uid;
-  const bodyPad = flush ? '' : 'p-4';
-
   return (
-    <section
-      /* No radius and no frame: `surface` no longer paints one either. A panel
-         is a section of the page — its header rule separates it from what came
-         before, and the space around it does the rest. */
-      className={`relative ${surface} flex flex-col min-w-0 ${className}`}
-    >
-      {(title || actions || focusable) && (
-        <header
-          className={`relative flex items-center justify-between gap-3 px-3.5 h-10 border-b ${toneDivider[tone]} ${toneHeaderTint[tone]} shrink-0`}
-        >
+    <section className={`border ${toneSurface[tone]} rounded-lg flex flex-col min-w-0 ${className}`}>
+      {(title || actions) && (
+        <header className={`flex items-center justify-between gap-3 px-4 h-10 border-b ${toneDivider[tone]} shrink-0`}>
           <div className="flex items-baseline gap-2 min-w-0">
             {title && (
-              // h2 by default: on all 13 routes that mount panels they are direct
-              // children of the page H1, so h3 skipped a level. `headingLevel`
-              // exists for a page that genuinely nests panels inside a section.
-              <Heading
-                level={headingLevel}
-                title={titleOf(title)}
-                className="font-mono text-label font-semibold uppercase tracking-widest text-textPrimary truncate"
-              >
+              <h3 className="font-mono text-[11px] font-semibold uppercase tracking-widest text-textPrimary truncate">
                 {title}
-              </Heading>
+              </h3>
             )}
             {subtitle && (
-              // Hidden on phones: the title + subtitle + actions can't share one
-              // narrow row without the title truncating to a few letters, and a
-              // clipped subtitle reads as nothing. Title wins; subtitle returns at sm.
-              <span
-                title={titleOf(subtitle)}
-                className="hidden sm:inline font-mono text-label text-textSecondary uppercase tracking-wider truncate"
-              >
-                {subtitle}
-              </span>
+              <span className="font-mono text-[10px] text-textSecondary uppercase tracking-wider truncate">{subtitle}</span>
             )}
           </div>
-          {(actions || focusable) && (
-            <div className="flex items-center gap-2 shrink-0">
-              {actions}
-              {focusable && (
-                <button
-                  onClick={() => (isFocused ? close() : focus(uid, title ?? subtitle))}
-                  aria-label={isFocused ? 'Exit focus' : 'Focus this panel'}
-                  title={isFocused ? 'Exit focus (Esc)' : 'Focus'}
-                  /* The icon is 14px, which is a hard target even with a mouse.
-                     Padding grows the hit box to 30px and the matching negative
-                     margin cancels the layout growth, so the header row keeps
-                     its density and the glyph does not move. */
-                  className="-m-2 p-2 text-textMuted hover:text-textPrimary transition-colors"
-                >
-                  {isFocused ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-                </button>
-              )}
-            </div>
-          )}
+          {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
         </header>
       )}
-      {isFocused && overlayEl ? (
-        <>
-          {/* Body lives in the focus overlay while focused — hold the height here. */}
-          <div className={`${bodyPad} flex-grow min-h-0 flex items-center justify-center`}>
-            <span className="font-mono text-micro uppercase tracking-widest text-textMuted">
-              Viewing in focus · Esc to return
-            </span>
-          </div>
-          {createPortal(<div className={`h-full min-h-0 ${bodyClassName}`}>{children}</div>, overlayEl)}
-        </>
-      ) : (
-        <div className={`${bodyPad} flex-grow min-h-0 ${bodyClassName}`}>{children}</div>
-      )}
+      <div className={`${flush ? '' : 'p-4'} flex-grow min-h-0 ${bodyClassName}`}>{children}</div>
     </section>
   );
 };
