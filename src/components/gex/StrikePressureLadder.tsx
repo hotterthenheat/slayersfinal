@@ -377,9 +377,9 @@ const StrikePressureLadder = ({ data, strikeFormat = fmtStrikeDefault, fill = fa
           <Term k="From spot">Δ spot</Term>
         </span>
         <span ref={laneRef} className={`${head} text-center text-textMuted block min-w-0`}>
-          <span style={{ color: PUT_INK }}>◂ puts</span>
+          <span style={{ color: PUT_INK }}>◀ puts</span>
           <span className="mx-2 text-textMuted">·</span>
-          <span style={{ color: CALL_INK }}>calls ▸</span>
+          <span style={{ color: CALL_INK }}>calls ▶</span>
         </span>
         <span className={`${head} text-right`}>
           <Term k="Net GEX">Net</Term>

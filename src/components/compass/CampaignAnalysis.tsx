@@ -54,6 +54,7 @@ import {
   type Setup,
   type SleeveKey,
 } from '../../types/compass';
+import { FONT_FAMILY } from '../ui/typeface';
 
 interface CampaignAnalysisProps {
   setup: Setup;
@@ -166,7 +167,7 @@ const CampaignChart = ({ setup, revision, entry, hits, brk, timeframe, overlays 
       layout: {
         background: { color: s0.bg },
         textColor: '#5a5a5a',
-        fontFamily: "'SF Pro', sans-serif",
+        fontFamily: FONT_FAMILY,
         fontSize: 10,
         attributionLogo: false,
       },

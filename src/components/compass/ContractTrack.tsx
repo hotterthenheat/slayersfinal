@@ -34,12 +34,13 @@ import type { Setup } from '../../types/compass';
 import Feed from '../../core/feed';
 import { buildSetupTrack, barsToSpan, barsToOffset, type TrackLevel } from './trackModel';
 import { BULL, PUT_WALL } from '../gex/palette';
+import { FONT_FAMILY } from '../ui/typeface';
 
 const BEAR = PUT_WALL; // #FF3B30 — the bear token, named by direction here
 const MUTED_INK = '#7d7d7d'; // matches textMuted (the lifted AA value)
 const WARN_INK = '#FF9500';
 const REF_INK = '#ededed';
-const MONO = "'SF Pro', sans-serif";
+const MONO = FONT_FAMILY;
 
 const LEVEL_INK: Record<TrackLevel['status'], string> = {
   HIT: BULL,

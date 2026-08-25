@@ -1,5 +1,6 @@
 import type { ISeriesPrimitive, SeriesAttachedParameter, Time, IChartApi, ISeriesApi } from 'lightweight-charts';
 import type { GexSnapshot } from '../../types/market';
+import { canvasFont } from '../ui/typeface';
 
 /*
   Exposure nodes — the ORIGINAL trail form, back by request (Noah,
@@ -218,7 +219,7 @@ class TrailsPaneRenderer {
         .slice(0, 4)
         .filter(l => Math.abs(l.value) / total >= 0.08);
 
-      ctx.font = `${Math.round(9.5 * vr)}px "SF Pro", sans-serif`;
+      ctx.font = canvasFont(Math.round(9.5 * vr));
       ctx.textAlign = 'right';
       ctx.textBaseline = 'middle';
       const xRight = (wCss - 8) * hr;

@@ -39,11 +39,12 @@ jobs:
       # `npm run lint` is "Missing script" and would fail every push without
       # saying anything about the code.
       #
-      # There IS a test step now. `npm test` runs the five assertion scripts
+      # There IS a test step now. `npm test` runs the six assertion scripts
       # under scripts/ — covering the partner spec's worked fixtures, replay
       # determinism under a pinned clock, the Weigher query parser, the
-      # scoring-weight tables, and the landing page's claims against the code
-      # that backs them.
+      # scoring-weight tables, the landing page's claims against the code that
+      # backs them, and the one font family against the four places that spell
+      # it — plus a refusal to vendor a proprietary system font.
       #
       # Every assertion in weights-proof and sales-proof is mutation-verified.
       # Dropping a factor without re-normalising fails it; restoring the news

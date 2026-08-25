@@ -62,6 +62,7 @@ interface StrikeChartProps {
 
 // Wall / flip / king overlay colors (independent of candle theme)
 import { CALL_WALL, PUT_WALL, FLIP, KING, FOCUS, DARK_POOL, DEALER_PUT, DEALER_CALL } from './palette';
+import { FONT_FAMILY } from '../ui/typeface';
 
 // Level lines are created once per overlay/ticker, then their prices are
 // TWEENED (rAF + easeOutCubic) so scan-tier level moves glide instead of jumping.
@@ -227,7 +228,7 @@ const StrikeChart = ({
       layout: {
         background: { color: s0.bg },
         textColor: '#7d7d7d', // matches textMuted (lifted 2026-07-25 for legibility)
-        fontFamily: "'SF Pro', sans-serif",
+        fontFamily: FONT_FAMILY,
         fontSize: 10,
         attributionLogo: true,
       },

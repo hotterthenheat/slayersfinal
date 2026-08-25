@@ -72,8 +72,9 @@ const App = () => {
             <Route path="/trace" element={<TraceLayout />}>
               <Route index element={<Navigate to="/trace/live-tape" replace />} />
               <Route path="live-tape" element={<LiveTape />} />
-              {/* Launch trim (Noah, 2026-08-17): Dark Pool + Scanner unrouted —
-                  dark-pool prints still stream on the tape and the charts */}
+              {/* Launch trim (Noah, 2026-08-17): Dark Pool + Scanner unrouted.
+                  Dark-pool prints still draw as levels on the Pulse chart via
+                  buildPrints(); the tape carries blocks and sweeps only. */}
               <Route path="dark-pool" element={<Navigate to="/trace/live-tape" replace />} />
               <Route path="dark-feed" element={<Navigate to="/trace/live-tape" replace />} />
               <Route path="scanner" element={<Navigate to="/trace/live-tape" replace />} />

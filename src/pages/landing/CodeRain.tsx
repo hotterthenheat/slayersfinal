@@ -188,7 +188,7 @@ const CodeRain = ({ className = '' }: { className?: string }) => {
               flexDirection: 'column',
               gap: '16px',
               whiteSpace: 'nowrap',
-              // Deliberately NOT SF Pro: this is an illustration of raining
+              // Deliberately NOT the house family: this is an illustration of raining
               // code, and code is drawn in a monospace face.
               fontFamily: 'ui-monospace, "Cascadia Mono", Consolas, monospace',
               fontSize: '12px',

@@ -44,7 +44,13 @@ import Term from '../components/ui/Term';
 import { StateTag, stateOf } from '../components/earnings/volState';
 import ConfirmTag from '../components/earnings/ConfirmTag';
 import { BULL } from '../components/gex/palette';
-import { buildEarningsDossier, type ActiveContract, type EarningsDossier as Dossier } from '../data/earnings';
+import {
+  buildEarningsCalendar,
+  buildEarningsDossier,
+  type ActiveContract,
+  type EarningsDossier as Dossier,
+} from '../data/earnings';
+import { FONT_FAMILY } from '../components/ui/typeface';
 
 /*
   The per-company earnings dossier — /earnings/:ticker. Everything a user
@@ -55,7 +61,7 @@ import { buildEarningsDossier, type ActiveContract, type EarningsDossier as Doss
 */
 
 // ---- chart theming ----------------------------------------------------------
-const AXIS = { stroke: 'transparent', tick: { fill: '#a3a3a3', fontSize: 10, fontFamily: "'SF Pro', sans-serif" } };
+const AXIS = { stroke: 'transparent', tick: { fill: '#a3a3a3', fontSize: 10, fontFamily: FONT_FAMILY } };
 const GRID = { stroke: 'rgba(255,255,255,0.05)', vertical: false };
 const BEAR = '#FF3B30';
 const WHITE_DIM = 'rgba(237,237,237,0.28)';
@@ -251,18 +257,65 @@ const EarningsDossier = () => {
     return () => clearInterval(id);
   }, []);
   const dossier = useMemo(() => buildEarningsDossier(ticker, scanTick), [ticker, scanTick]);
+  // Only read when the ticker has no dossier, but hooks cannot live behind a
+  // branch — and the calendar is a cheap pure build.
+  const calendar = useMemo(() => buildEarningsCalendar(), []);
 
+  /*
+    A DEAD END IS NOT AN EMPTY STATE.
+
+    /earnings/SPY is a reachable URL — the ticker search, a bookmark and the
+    address bar all get there — and it used to answer with a 128px box saying
+    "no report on the next two weeks' slate" over 600px of black, with nothing
+    on screen but a Back arrow. The reader's next question is always the same
+    one: then who does report? That list already exists, so it is on the page
+    instead of one navigation away.
+  */
   if (!dossier) {
+    const soonest = [...calendar].sort((a, b) => a.daysOut - b.daysOut).slice(0, 8);
     return (
       <>
         <NavRow fromDesk={fromDesk} />
-        <Panel className="mt-3">
-          <div className="h-40 flex flex-col items-center justify-center gap-2">
+        <Panel className="mt-3" bodyClassName="flex flex-col items-center gap-6 py-12">
+          <div className="flex flex-col items-center gap-2 text-center">
             <span className="font-mono text-sm font-bold text-textPrimary">{ticker.toUpperCase()}</span>
-            <span className="font-mono text-[11px] text-textSecondary uppercase tracking-wider">
-              no report on the next two weeks' slate
+            <span className="font-mono text-[11px] uppercase tracking-wider text-textSecondary">
+              no report on the next two weeks&rsquo; slate
             </span>
+            <p className="mt-1 max-w-[46ch] text-[12px] leading-relaxed text-textMuted">
+              Dossiers cover the names reporting inside the calendar&rsquo;s two-week window. Outside it there is no
+              print to price, so there is nothing to show.
+            </p>
           </div>
+
+          {soonest.length > 0 && (
+            <div className="flex w-full max-w-4xl flex-col gap-3 border-t border-borderSubtle pt-6">
+              <span className="text-center font-mono text-[9px] uppercase tracking-widest text-textMuted">
+                Reporting soonest
+              </span>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {soonest.map(ev => (
+                  <Link
+                    key={ev.ticker}
+                    to={`/earnings/${ev.ticker}`}
+                    className="flex flex-col gap-0.5 rounded-md border border-borderSubtle px-3 py-2 transition-colors hover:border-borderMuted hover:bg-white/[0.03]"
+                  >
+                    <span className="font-mono text-[12px] font-bold text-textPrimary">{ev.ticker}</span>
+                    <span className="truncate text-[11px] text-textSecondary">{ev.name}</span>
+                    <span className="font-mono text-[10px] tnum text-textMuted">
+                      {ev.daysOut === 0 ? 'today' : `in ${ev.daysOut}d`} · {ev.slot}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+              <Link
+                to="/earnings"
+                className="self-center font-mono text-[10px] uppercase tracking-wider text-select transition-colors hover:underline"
+              >
+                See the whole calendar
+              </Link>
+            </div>
+          )}
         </Panel>
       </>
     );

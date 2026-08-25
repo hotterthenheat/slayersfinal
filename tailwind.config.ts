@@ -83,8 +83,8 @@ export default {
         // One family site-wide (2026-08-16). `mono` is kept as a token — it
         // marks the data/instrument voice (tabular figures via index.css),
         // not a different typeface.
-        sans: ['SF Pro', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
-        mono: ['SF Pro', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
+        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
+        mono: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
       }
     },
   },

@@ -15,6 +15,7 @@ import { DARK_POOL } from './palette';
 import { getCandleTheme, useCandleThemeKey, candleSeriesOptions, chartSurface } from './candleTheme';
 import TickerQuickPick from './TickerQuickPick';
 import type { DarkPoolPrint } from '../../types/gex';
+import { FONT_FAMILY } from '../ui/typeface';
 
 interface MiniPaneProps {
   ticker: string;
@@ -56,7 +57,7 @@ const MiniPane = ({ ticker, spot, changePercent, prints, revision, onChangeTicke
       layout: {
         background: { color: s0.bg },
         textColor: '#5a5a5a',
-        fontFamily: "'SF Pro', sans-serif",
+        fontFamily: FONT_FAMILY,
         fontSize: 9,
         attributionLogo: false,
       },
