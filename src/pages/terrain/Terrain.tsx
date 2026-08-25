@@ -358,7 +358,7 @@ const Pane = ({ cfg, onCfg, revision, expanded, onToggleExpand, index, tall, hea
               prints={prints}
               compares={compares}
               focusPrice={focus}
-              axisLevels
+              priceTag
               frameless
             />
 

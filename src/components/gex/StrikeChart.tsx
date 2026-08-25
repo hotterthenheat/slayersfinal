@@ -122,13 +122,10 @@ interface StrikeChartProps {
   /** Replay mode — scrub through history bar by bar, trails included */
   replay?: boolean;
   onExitReplay?: () => void;
-  /* Name the structural levels ON the price axis — CALL WALL, PUT WALL, FLIP,
-     KING as tags in the right-hand gutter, the way a platform labels a level
-     you have drawn. OFF everywhere by default, which is not laziness: the
-     chips were taken off every chart on 2026-08-23 and no other surface has
-     asked for them back. Terrain turns them on because a wall you cannot name
-     is a line, and a workspace built for reading structure has to name it. */
-  axisLevels?: boolean;
+  /** The live price on the right scale as a soft two-line card — the price, a
+      rule, and the time left in the current bar — in place of the library's
+      flat last-value tag. Off by default; Terrain turns it on. */
+  priceTag?: boolean;
 }
 
 // Wall / flip / king overlay colors (independent of candle theme)
@@ -156,63 +153,20 @@ const LEVEL_SPEC: {
 const LINE_LEVELS: typeof LEVEL_SPEC = [];
 
 /*
-  One colour composited over another, returned SOLID.
+  NOTHING IS NAMED ON THE PRICE AXIS — not the walls, not the flip, not the
+  king (Noah, 2026-08-25: "you can remove the flip zone and king node if you
+  have it on the screen with its own UI touch that should be enough").
 
-  lightweight-charts repaints a price line's axis capsule opaque: hand it
-  `rgba(125,211,252,0.45)` and the canvas comes back holding
-  `rgb(125,211,252)` — measured, 1984 pixels of it, at full strength. So
-  asking the library for a translucent capsule does not work, and the blend
-  has to happen before the colour is handed over. Against the chart's own
-  backdrop the result is indistinguishable from real transparency, and it
-  cannot be undone by whatever the library does with the value next.
+  That is the argument that took the walls off, carried the rest of the way.
+  Every one of these levels already has a treatment ON the field: a green node
+  band is the call wall, a red one the put wall, a dashed blue rule the flip,
+  a magenta band the king. A capsule in the gutter repeats a fact the chart
+  has already made, in the loudest form available, on top of the tape.
 
-  The backdrop is the ACTIVE theme's canvas, not a hardcoded black: the six
-  dark themes run from #050505 to #120D1D, and blending violet-black artwork
-  against pure black leaves a capsule that does not sit on its own surface.
+  LEVEL_SPEC above stays for the tween plumbing and any future re-enable; the
+  pre-blending helper that went with the capsules is gone with them rather
+  than left behind as scenery.
 */
-const mixInk = (hex: string, backdrop: string, alpha: number): string => {
-  const rgb = (v: string): [number, number, number] => {
-    const raw = v.replace('#', '');
-    const h = raw.length === 3 ? raw.split('').map(c => c + c).join('') : raw;
-    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
-  };
-  const [r1, g1, b1] = rgb(hex);
-  const [r2, g2, b2] = rgb(/^#[0-9a-f]{3,6}$/i.test(backdrop) ? backdrop : '#0a0a0a');
-  const c = (a: number, b: number) => Math.round(a * alpha + b * (1 - alpha));
-  return `rgb(${c(r1, r2)},${c(g1, g2)},${c(b1, b2)})`;
-};
-
-/*
-  WHAT `axisLevels` ACTUALLY NAMES — the flip and the king, and nothing else.
-
-  The walls are deliberately absent (Noah, 2026-08-25: "you don't have to add
-  call wall or put wall to the right bar cause on the screen the green node is
-  the call wall and the red is the put wall"). He is right, and it is the
-  stronger argument: the field ALREADY says it. A green node band is the call
-  wall and a red one is the put wall, so a green capsule reading CALL WALL in
-  the gutter is the same fact printed twice, in the loudest available form,
-  covering the tape while it does it. The flip and the king have no such
-  reading — a dashed blue rule and a magenta band are positions, not names —
-  so those two get named and the rest of the axis stays quiet.
-
-  And the ink is TRANSLUCENT here, not the solid palette value (same note:
-  "everything is transparency there i need mines to be like that not all out
-  there like this"). The palette colours are for LINES, which are one pixel
-  tall and can afford to be saturated. An axis capsule is a filled block, and
-  the same colour at full strength reads as a button stuck on the chart. At
-  these alphas the capsule sits UNDER the reading rather than on top of it,
-  and the label still clears contrast against the black gutter.
-*/
-const AXIS_ALPHA: Partial<Record<(typeof LEVEL_SPEC)[number]['key'], number>> = { flip: 0.42, king: 0.42 };
-
-/** What a chart actually draws: nothing, unless it asked to name its levels. */
-const lineLevelsFor = (axisLevels: boolean, backdrop: string): typeof LEVEL_SPEC =>
-  axisLevels
-    ? LEVEL_SPEC.filter(sp => sp.key in AXIS_ALPHA).map(sp => ({
-        ...sp,
-        color: mixInk(sp.color, backdrop, AXIS_ALPHA[sp.key] as number),
-      }))
-    : LINE_LEVELS;
 
 const toCandle = (b: Candle) => ({
   time: b.time as UTCTimestamp,
@@ -257,7 +211,7 @@ const StrikeChart = ({
   onExitDraw,
   replay = false,
   onExitReplay,
-  axisLevels = false,
+  priceTag = false,
 }: StrikeChartProps) => {
   const themeKey = useCandleThemeKey();
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -287,6 +241,10 @@ const StrikeChart = ({
   const runwaySeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   /** Bar time the runway was last built from, and how far it reaches. */
   const runwayRef = useRef<{ from: number; slots: number }>({ from: 0, slots: 0 });
+  /** Close of the newest bar — what the price card prints. */
+  const lastCloseRef = useRef<number | null>(null);
+  const priceTagRef = useRef<HTMLDivElement | null>(null);
+  const priceTagRafRef = useRef(0);
   const trailsRef = useRef<GexTrailsPrimitive | null>(null);
   const compareSeriesRef = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
   const compareLoadedRef = useRef('');
@@ -835,6 +793,7 @@ const StrikeChart = ({
     const changed = loaded.ticker !== ticker || loaded.timeframe !== timeframe || loaded.theme !== themeKey;
     const newWorld = loaded.ticker !== ticker || loaded.timeframe !== timeframe;
 
+    lastCloseRef.current = bars.length ? bars[bars.length - 1].close : null;
     if (bars.length) {
       lastBarTimeRef.current = bars[bars.length - 1].time;
       bucketSecRef.current = mins * 60;
@@ -917,7 +876,7 @@ const StrikeChart = ({
     // Chips, not lines: the level lives as a colored tag on the price axis.
     // Hovering its legend chip flashes the full line for orientation.
     const L = levelsRef.current;
-    for (const spec of lineLevelsFor(axisLevels, chartSurface(getCandleTheme()).bg)) {
+    for (const spec of LINE_LEVELS) {
       levelLinesRef.current[spec.key] = candleSeries.createPriceLine({
         price: L[spec.key],
         color: spec.color,
@@ -930,9 +889,92 @@ const StrikeChart = ({
     }
     shownLevelsRef.current = { ...L };
     levelTickerRef.current = ticker;
-    // themeKey: the capsules are pre-blended against the theme's own canvas,
-    // so a theme swap has to rebuild them or they keep the old surface's tint
-  }, [ticker, overlays.levels, replay, mainNonce, axisLevels, themeKey]);
+  }, [ticker, overlays.levels, replay, mainNonce]);
+
+  /*
+    THE LIVE PRICE, as a card on the right scale.
+
+    The library draws a flat one-line tag for the last value. This replaces it
+    with the two-line card from the reference: the price, a hairline, and the
+    time left in the current bar. So the library's own tag has to go, or there
+    are two labels at the same y arguing with each other — `lastValueVisible`
+    is turned off for exactly as long as the card is on, and restored if it
+    ever goes off.
+
+    Frame loop, not a one-second timer, and the reason is the position rather
+    than the clock: the card's y is priceToCoordinate(lastClose), which moves
+    when the price ticks, when the autoscale re-fits, AND when the reader pans
+    or zooms. A timer leaves the card stranded on every one of those. It
+    writes nothing it does not have to — price, countdown and transform are
+    each compared before they are set — so a still chart on a still second
+    does no DOM work at all.
+
+    Hidden during replay: a countdown to the next live bar is a lie about
+    history.
+  */
+  useEffect(() => {
+    const series = candleSeriesRef.current;
+    if (!series) return;
+    const on = priceTag && !replay;
+    series.applyOptions({ lastValueVisible: !on });
+    if (!on) return;
+
+    const chart = chartRef.current;
+    const el = priceTagRef.current;
+    if (!chart || !el) return;
+    const priceEl = el.firstElementChild as HTMLElement | null;
+    const timeEl = el.lastElementChild as HTMLElement | null;
+    if (!priceEl || !timeEl) return;
+
+    const bucket = Math.max(60, tfMinutes(timeframe) * 60);
+    let shownPrice = '';
+    let shownLeft = '';
+    let shownY = Number.NaN;
+
+    const frame = () => {
+      priceTagRafRef.current = requestAnimationFrame(frame);
+      const price = lastCloseRef.current;
+      const y = price == null ? null : series.priceToCoordinate(price);
+      if (price == null || y == null) {
+        if (!Number.isNaN(shownY)) {
+          el.style.opacity = '0';
+          shownY = Number.NaN;
+        }
+        return;
+      }
+
+      const p = price.toFixed(2);
+      if (p !== shownPrice) {
+        priceEl.textContent = p;
+        shownPrice = p;
+      }
+
+      const left = bucket - (Math.floor(Date.now() / 1000) % bucket);
+      const pad = (v: number) => String(v).padStart(2, '0');
+      const hh = Math.floor(left / 3600);
+      const t = hh > 0
+        ? `${hh}:${pad(Math.floor((left % 3600) / 60))}:${pad(left % 60)}`
+        : `${pad(Math.floor(left / 60))}:${pad(left % 60)}`;
+      if (t !== shownLeft) {
+        timeEl.textContent = t;
+        shownLeft = t;
+      }
+
+      /* Centred on the price, the way the tag it replaces was. */
+      const top = Math.round(y);
+      if (top !== shownY) {
+        el.style.transform = `translateY(${top}px) translateY(-50%)`;
+        el.style.opacity = '1';
+        shownY = top;
+      }
+    };
+
+    priceTagRafRef.current = requestAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(priceTagRafRef.current);
+      candleSeriesRef.current?.applyOptions({ lastValueVisible: true });
+    };
+  }, [priceTag, timeframe, replay, mainNonce]);
 
   // Dark-pool whisper lines — same grammar as the flow board minis
   useEffect(() => {
@@ -1208,6 +1250,21 @@ const StrikeChart = ({
         onDoubleClick={resetView}
       >
         <div ref={containerRef} className="absolute inset-0" />
+
+        {/* Pinned to the container's right edge and moved down it by
+            transform, so it rides the price scale rather than being re-laid
+            out. The soft slate fill and the hairline are the reference's. */}
+        {priceTag && !replay && (
+          <div
+            ref={priceTagRef}
+            aria-hidden
+            className="pointer-events-none absolute top-0 right-1 z-10 min-w-[68px] rounded-[9px] border border-white/[0.14] px-2 py-1 text-center opacity-0 shadow-lg shadow-black/40"
+            style={{ background: 'rgba(72,78,98,0.92)', backdropFilter: 'blur(2px)' }}
+          >
+            <div className="font-mono text-[12px] font-bold leading-[15px] tnum text-white" />
+            <div className="mt-[3px] border-t border-white/25 pt-[3px] font-mono text-[11px] leading-[13px] tnum text-white/85" />
+          </div>
+        )}
 
         {/* Draw mode: pointer sketches instead of panning */}
         {drawing && (
