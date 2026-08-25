@@ -427,7 +427,10 @@ ranked-target cards     133, 154, 197        26–37 chars
 ```
 
 "Setup 2, SPY 512C, expiry 0DTE, selected" and "Rank 1, strike 510,
-magnet", against the whole card read out in one run. Selection still tracks
+magnet", against the whole card read out in one run. Sweeping the whole app
+afterwards found three more of the same shape one tier down — the ladder
+rows under the podium, 61–62 characters each — so those are named too, and
+**0 of 599 controls across 16 routes are now named by their contents**. Selection still tracks
 (`aria-pressed` and the label move together across all 17 setups), clicking
 a ranked target still lands on `/pulse`, and the nested "Analysis" control
 is still focusable and named. What is left for you is the structure.
@@ -493,6 +496,7 @@ the detector and stronger for the fix.
 | Tap latency on a slow device | five controls on Ranked Targets and two on the tape, clicked at 390px under a 6× CPU slowdown, timed inside the page from click to the paint that shows the change | **acceptable, and now on record.** Ranked Targets' lens rail: **30–38ms unthrottled, 285–407ms at 6×** — consistent across all five lenses, so it is the desk's re-render cost rather than one slow control. The tape's filter chips are 57–81ms at 6×, about five times lighter. 300–400ms is a delay a reader notices and does not lose their place to; it is not a defect, and the numbers are here so nobody re-measures to find that out |
 | 320px screens | 12 routes at 320 with 390 as the control, so the report is what 320 breaks that 390 does not | 3 routes slide sideways at 320 and none at 390. `FilterTabs` now wraps (the same fix `SubNav` and `ChartToolbar` carry), taking Exposure Profile from 20px to 4 and changing nothing at 390/768/1440. The rest is a layout decision on a dense desk — folded into #6, which is the same question: which phones? |
 | Charts as instruments | every visualisation in the app hovered at three x-positions, reading the page text before, during and after — because "it responded" needs two different answers, not one | **clean.** 7 canvas charts (Pulse, the four-up board, both Prove It panels), 22 DOM strike bands on Exposure Profile, and Vanna & Charm's SVG chart: **0 inert, 0 that respond without varying, 0 uncaught errors.** A readout pinned to the last bar looks alive and answers the wrong question — that is the failure this was looking for, and none of them does it. Every previous sweep treated a chart as a rectangle: does it paint, does it fit, does its canvas resize |
+| Controls named by their own contents | the accessible name computed for all 599 interactive elements on 16 routes, the way a browser computes it | **5 found, all fixed.** A `<button>` with no `aria-label` is named by everything inside it: the Compass setup card was 97 characters, the ranked-target podium 133/154/197, and the ladder rows beneath them another 61–62. Now 30–41 and 26–37, and **0 of 599 controls are named by their contents**. Two long names remain and are correct — the exposure map's strike bands carry a deliberate 68 and 91-character label, because a data band has no other text for a screen reader to read |
 | Chart label collisions | /pulse/board, four charts | two found and fixed: the trails' strength labels drew under the axis badges at the same strike, and their own backing pad was mis-centred |
 | Click-gated surfaces | the command palette, the print drilldown, Campaign Analysis — at 390 / 768 / 1440 | two found and fixed: the timeframe strip put `1W` off the screen with nothing to scroll, and the modal header spent 32% of a phone on itself |
 

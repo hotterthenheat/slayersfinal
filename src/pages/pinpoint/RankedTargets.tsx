@@ -292,6 +292,12 @@ const LadderRow = forwardRef<HTMLButtonElement, { t: RankedTarget; lens: RankLen
         exit={{ opacity: 0 }}
         transition={{ layout: { type: 'spring', stiffness: 340, damping: 32 }, opacity: { duration: 0.18 } }}
         onClick={onFlash}
+        /* Same reason as PodiumCard above, one tier down. Unnamed, a ladder
+           row reads out as its own contents — "#8 516 +72 1.24x 36,152
+           43,630 71%C -$171.8M UPSIDE RESISTANCE" — which is a run of
+           figures with nothing saying which is which. It also sat directly
+           under three podium cards that WERE named, on one screen. */
+        aria-label={`Rank ${t.rank}, strike ${fmtStrike(t.strike)}, ${t.hedgingClass.toLowerCase()}`}
         title={`${t.reason} — click to see this strike on the chart`}
         className="group relative w-full flex items-center gap-3 px-3.5 h-11 text-left border-b border-borderSubtle/30 last:border-0 transition-colors hover:bg-white/[0.03]"
       >

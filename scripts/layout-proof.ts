@@ -160,12 +160,15 @@ for (const { file, what } of SELF_MEASURING) {
   const scan = read('src/components/compass/SetupScanCard.tsx');
   const rank = read('src/pages/pinpoint/RankedTargets.tsx');
   const scanNamed = /aria-label=\{`Setup \$\{rank\}/.test(scan);
-  const rankNamed = /aria-label=\{`Rank \$\{t\.rank\}/.test(rank);
+  /* BOTH tiers of the ranked ladder, not just the podium. The first pass
+     named the top three and left the other fifty-eight reading out as a run
+     of figures, on the same screen, directly underneath. */
+  const rankNamed = (rank.match(/aria-label=\{`Rank \$\{t\.rank\}/g) ?? []).length >= 2;
   check(
     'a clickable card says what it is, not everything it contains',
     scanNamed && rankNamed,
     scanNamed && rankNamed
-      ? 'the Compass setup card and the ranked-target cards are both named'
+      ? 'the Compass setup card and both tiers of the ranked ladder are named'
       : `compass:${scanNamed} rankedTargets:${rankNamed} — an unnamed card reads its whole contents as its name`
   );
 }
