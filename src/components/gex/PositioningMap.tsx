@@ -6,7 +6,7 @@ import HoverReadout from '../ui/HoverReadout';
 import SignalBadge from '../ui/SignalBadge';
 import SpotRule from '../ui/SpotRule';
 import { ROW_INTERACTIVE, interactiveRowProps, rowKeyDown } from '../ui/interactiveRow';
-import { LONG_GAMMA, SHORT_GAMMA } from './palette';
+import { DEALER_CALL, DEALER_PUT } from './palette';
 import TrendLine from './TrendLine';
 import Feed from '../../core/feed';
 import { fmtUsd } from '../../data/gex';
@@ -162,7 +162,7 @@ const StrikeReadout = ({
 
       <div className="mt-2">
         <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Net gamma</div>
-        <div className="font-mono text-[16px] leading-6 font-bold tnum" style={{ color: short ? SHORT_GAMMA : LONG_GAMMA }}>
+        <div className="font-mono text-[16px] leading-6 font-bold tnum" style={{ color: short ? DEALER_PUT : DEALER_CALL }}>
           {now >= 0 ? '+' : ''}
           {fmtUsd(now)}
         </div>
@@ -191,7 +191,7 @@ const StrikeReadout = ({
 
       <div className="mt-2 pt-2 border-t border-borderSubtle/60 font-mono text-[10px] uppercase tracking-wider text-textMuted tnum">
         From {anchorWord} to {fmtStrike(row.strike)} ·{' '}
-        <span style={{ color: cum > 0 ? SHORT_GAMMA : LONG_GAMMA }}>{fmtUsd(cum)}</span> · {gammaWords(cum)}
+        <span style={{ color: cum > 0 ? DEALER_PUT : DEALER_CALL }}>{fmtUsd(cum)}</span> · {gammaWords(cum)}
       </div>
 
       {recent.length > 1 && (
@@ -483,12 +483,12 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
     {
       label: preserveGreek(rootW >= W_LEGEND_LONG ? 'Short γ · moves amplified' : 'Short γ'),
       kind: 'square' as const,
-      color: SHORT_GAMMA,
+      color: DEALER_PUT,
     },
     {
       label: preserveGreek(rootW >= W_LEGEND_LONG ? 'Long γ · dips absorbed' : 'Long γ'),
       kind: 'square' as const,
-      color: LONG_GAMMA,
+      color: DEALER_CALL,
     },
     {
       label: rootW >= W_LEGEND_LONG ? 'cumulative from spot' : 'Cum',
@@ -511,7 +511,7 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
         <SignalBadge tone={BIAS_TONE[bias]}>{bias}</SignalBadge>
         <span className="font-mono text-[10px] font-semibold uppercase tracking-wider text-textMuted tnum whitespace-nowrap">
           NET{' '}
-          <span style={{ color: netGex > 0 ? SHORT_GAMMA : LONG_GAMMA }}>
+          <span style={{ color: netGex > 0 ? DEALER_PUT : DEALER_CALL }}>
             {netGex >= 0 ? '+' : ''}
             {fmtUsd(netGex)}
           </span>
@@ -597,7 +597,7 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
                 style={{
                   top: Math.min(scale.yOf(levels.spot), scale.yOf(levels.flip)),
                   height: Math.abs(scale.yOf(levels.flip) - scale.yOf(levels.spot)),
-                  background: `${levels.spot < levels.flip ? SHORT_GAMMA : LONG_GAMMA}08`,
+                  background: `${levels.spot < levels.flip ? DEALER_PUT : DEALER_CALL}08`,
                 }}
               />
             )}
@@ -652,7 +652,7 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
                     initial={false}
                     animate={{ left: v < 0 ? spine - w : spine, width: w < 0.5 ? 0 : w }}
                     transition={{ duration: DUR_DATA, ease: EASE }}
-                    style={{ background: v > 0 ? SHORT_GAMMA : LONG_GAMMA, opacity: 0.88 }}
+                    style={{ background: v > 0 ? DEALER_PUT : DEALER_CALL, opacity: 0.88 }}
                   />
                   {labelsOn &&
                     (v < 0 ? (

@@ -230,12 +230,13 @@ const TRIO = [
 ];
 // #FF3B30 / #30D158 and their rgb() forms — the direction pair, written out.
 const DIRECTION_LITERAL = /#FF3B30|#30D158|rgba?\(\s*255,\s*59,\s*48|rgba?\(\s*48,\s*209,\s*88/i;
-// DEALER_PUT/DEALER_CALL, their _INK variants (correct for figures rather than
-// bars), or the deprecated aliases that resolve to them. The optional suffix
-// matters: \b after DEALER_PUT will not match inside DEALER_PUT_INK, because
-// _ is a word character, and the first version of this flagged the ladder for
-// using exactly the right token.
-const DEALER_IMPORT = /\b(DEALER_(?:PUT|CALL)(?:_INK)?|SHORT_GAMMA|LONG_GAMMA)\b/;
+// DEALER_PUT/DEALER_CALL or their _INK variants, which are the correct token
+// for figures rather than bars. The optional suffix matters: \b after
+// DEALER_PUT will not match inside DEALER_PUT_INK, because _ is a word
+// character, and the first version of this flagged the ladder for using
+// exactly the right token. The SHORT_GAMMA / LONG_GAMMA aliases were accepted
+// here while they existed; step 6 removed them, so they are not.
+const DEALER_IMPORT = /\b(DEALER_(?:PUT|CALL)(?:_INK)?)\b/;
 
 for (const file of TRIO) {
   const src = read(file);
@@ -309,6 +310,33 @@ check(
   'the net-figure scan found lines to check',
   netLineCount >= 10,
   `${netLineCount} lines name a net-exposure value`
+);
+
+/*
+  ---- Step 6: the migration aliases are gone --------------------------------
+
+  SHORT_GAMMA and LONG_GAMMA were `= DEALER_PUT` / `= DEALER_CALL`, kept for
+  one release so the migration could be read in one place. An alias that
+  outlives its migration is just a second name for one colour, which is the
+  drift the token commit existed to remove. The map was the last consumer.
+*/
+const paletteSrc = read('src/components/gex/palette.ts');
+const aliasesGone = !/export const (SHORT_GAMMA|LONG_GAMMA)/.test(paletteSrc);
+const aliasUsers: string[] = [];
+for (const file of walk(path.join(ROOT, 'src'))) {
+  if (/\b(SHORT_GAMMA|LONG_GAMMA)\b/.test(readFileSync(file, 'utf8'))) {
+    aliasUsers.push(path.relative(ROOT, file).split(path.sep).join('/'));
+  }
+}
+check(
+  'the deprecated gamma aliases are removed from the palette',
+  aliasesGone,
+  aliasesGone ? 'no SHORT_GAMMA / LONG_GAMMA export' : 'palette still exports them'
+);
+check(
+  'nothing in src still names the deprecated aliases',
+  aliasUsers.length === 0,
+  aliasUsers.length ? aliasUsers.join(', ') : `${walk(path.join(ROOT, 'src')).length} files scanned, none`
 );
 
 console.log(`\n${pass} passed, ${fail} failed`);

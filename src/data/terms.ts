@@ -41,7 +41,7 @@ export const TERMS = {
   Tag: 'How the order executed. A SWEEP raced across exchanges at once — the aggressive fingerprint; custom and ratio prints are parts of structures.',
   // ---- strikes & levels ----
   GEX: 'Gamma exposure — the dealer hedging weight at a strike. It decides whether moves get absorbed there or amplified.',
-  'Net GEX': 'Call and put gamma netted at a strike. Negative = call-heavy = dealers absorb moves there; positive = put-heavy = dealers amplify.',
+  'Net GEX': 'Call and put gamma netted at a strike. Positive = put-heavy = dealers amplify moves there, and the figure reads gold; negative = call-heavy = dealers absorb, and it reads steel.',
   'Net DEX': 'Net delta exposure — the directional share risk dealers carry from the options at that strike.',
   'Net VEX': 'Net vega exposure — how much dealer books swing as implied volatility moves.',
   BPS: 'Distance from the current price in basis points — 100 bps = 1%.',
@@ -58,7 +58,7 @@ export const TERMS = {
   // ---- contracts driving the setup ----
   'Gamma share': 'This contract’s slice of the whole book’s gamma, as a percent. The bigger the slice, the more dealer hedging this one strike commands.',
   'From spot': 'How far the strike sits from the current price — plus above it, minus below. The nearer, the more its hedging bears on today’s tape.',
-  Exposure: 'The dealer gamma this one contract carries, in dollars. Negative = dealers absorb moves at it; positive = they amplify them.',
+  Exposure: 'The dealer gamma this one contract carries, in dollars. Positive = dealers amplify moves at it, in gold; negative = they absorb them, in steel.',
   'In the path': 'A heavy strike between the current price and the campaign’s final target — hedging the move has to get through on its way.',
   // ---- strike pressure ladder ----
   'Open interest': 'Contracts outstanding at this strike, calls and puts together — the positions that exist, whether or not they traded today.',

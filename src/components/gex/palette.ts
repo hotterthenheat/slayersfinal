@@ -65,8 +65,3 @@ export const DEALER_CALL = '#E2EAF4';
     steps down to a tone that still reads as "steel" rather than "body text". */
 export const DEALER_PUT_INK = '#F5C542';
 export const DEALER_CALL_INK = '#AAB6C6';
-
-/** @deprecated Regime aliases kept for one release so the migration is
-    reviewable in one place. Import DEALER_PUT / DEALER_CALL instead. */
-export const SHORT_GAMMA = DEALER_PUT;
-export const LONG_GAMMA = DEALER_CALL;
