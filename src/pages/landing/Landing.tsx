@@ -287,21 +287,19 @@ const Landing = () => (
           Community
         </span>
         <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">Built in the open.</h2>
-        <p className="mt-4 text-[14px] text-textSecondary leading-relaxed max-w-xl">
-          Trade ideas, feature requests, feedback — posted inside the terminal, voted on by the people
-          trading with it. What ships next is decided out loud.
+        <p className="mt-4 max-w-xl text-[14px] leading-relaxed text-textSecondary">
+          Trade ideas, feature requests and feedback are boards inside the terminal, not a forum bolted on
+          beside it. They open to everyone when accounts land — until then what you post stays on your own
+          machine. The rows below ship with the app to show the shape of one.
         </p>
       </Reveal>
       <Reveal delay={0.1} className="mt-8 border border-borderSubtle bg-panel rounded-lg overflow-hidden">
         {SEED_IDEAS.slice(0, 3).map(idea => (
           <div
             key={idea.id}
-            className="flex items-center gap-4 px-5 py-4 border-b border-borderSubtle/50 last:border-0"
+            className="flex items-center gap-4 border-b border-borderSubtle/50 px-5 py-4 last:border-0"
           >
-            <span className="flex flex-col items-center w-9 shrink-0 border border-borderSubtle rounded-md py-1.5">
-              <span className="font-mono text-[12px] font-bold text-textPrimary tnum">{idea.votes}</span>
-            </span>
-            <span className="font-mono text-[12px] font-bold text-textPrimary shrink-0">{idea.ticker}</span>
+            <span className="shrink-0 font-mono text-[12px] font-bold text-textPrimary">{idea.ticker}</span>
             <span
               className={`inline-flex items-center rounded px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider shrink-0 ${
                 idea.direction === 'BULLISH' ? 'bg-bull/10 text-bull' : 'bg-bear/10 text-bear'
@@ -310,8 +308,8 @@ const Landing = () => (
               {idea.direction}
             </span>
             <span className="text-[12px] text-textSecondary truncate">"{idea.thesis}"</span>
-            <span className="ml-auto hidden md:block font-mono text-[10px] text-textMuted shrink-0">
-              {idea.author}
+            <span className="ml-auto hidden shrink-0 items-center rounded border border-borderMuted px-1.5 py-0.5 font-mono text-[8px] font-bold uppercase tracking-widest text-textMuted md:inline-flex">
+              Example
             </span>
           </div>
         ))}

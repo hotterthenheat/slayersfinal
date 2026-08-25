@@ -286,5 +286,33 @@ for (const [page, field] of [
   );
 }
 
+/*
+  The landing page renders three of the same seeds as a community showcase, so
+  it has to obey the same rule the terminal now does: no vote count and no
+  byline on a row nobody wrote. It reads them straight off SEED_IDEAS, so a
+  future seed with a handle on it would surface here too.
+*/
+check(
+  'the landing showcase renders no vote count on a seeded row',
+  !/\{idea\.votes\}/.test(landing),
+  /\{idea\.votes\}/.test(landing) ? 'landing prints idea.votes' : 'no vote pill'
+);
+check(
+  'the landing showcase renders no byline on a seeded row',
+  !/\{idea\.author\}/.test(landing),
+  /\{idea\.author\}/.test(landing) ? 'landing prints idea.author' : 'no byline'
+);
+const showsSeeds = /SEED_IDEAS/.test(landing);
+const hasChip = /Example\s*\n?\s*<\/span>/.test(landing);
+check(
+  'the landing showcase marks the rows as examples',
+  showsSeeds === hasChip,
+  !showsSeeds
+    ? 'landing does not show seeds'
+    : hasChip
+      ? 'seeds shown, Example chip present'
+      : 'seeds shown with NO Example chip'
+);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
