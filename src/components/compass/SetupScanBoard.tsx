@@ -17,6 +17,7 @@ import CardTabs from '../ui/CardTabs';
 import SignalBadge from '../ui/SignalBadge';
 import SetupScanCard from './SetupScanCard';
 import { processState, PROCESS_META } from './setupProcess';
+import { preserveGreek } from '../ui/greek';
 
 export type ScanLayout = 'cards' | 'table';
 
@@ -115,7 +116,7 @@ const SetupScanBoard = ({ setups, title, sweepAt, selectedId, onSelect, onAnalys
               <tr className="border-b border-borderSubtle">
                 {['#', 'Contract', 'Expiry', 'State', '1σ move', 'Premium', 'Breaks at'].map(h => (
                   <th key={h} className="font-mono text-[9px] uppercase tracking-wider text-textMuted font-medium px-2 py-2">
-                    {h}
+                    {preserveGreek(h)}
                   </th>
                 ))}
               </tr>

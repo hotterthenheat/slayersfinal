@@ -16,10 +16,19 @@ import SignalBadge from '../ui/SignalBadge';
 import SessionSpark from './SessionSpark';
 import { hitLevel } from './setupStage';
 import { processState, PROCESS_META } from './setupProcess';
+import { preserveGreek } from '../ui/greek';
 
+/*
+  Labels go through preserveGreek because these carry `uppercase`, and CSS
+  uppercasing does not skip Greek: it renders "1σ move" as "1Σ MOVE". Σ is
+  summation, σ is a standard deviation, and on a terminal that also prints Θ
+  for theta the substitution is not cosmetic. Wrapping at the component rather
+  than the call site means a label written here later is protected too —
+  src/components/ui/greek.tsx.
+*/
 const Stat = ({ label, value, ink = 'text-textPrimary', right = false }: { label: string; value: string; ink?: string; right?: boolean }) => (
   <span className={`flex flex-col gap-0.5 min-w-0 ${right ? 'items-end text-right' : ''}`}>
-    <span className="font-mono text-[9px] uppercase tracking-wider text-textMuted">{label}</span>
+    <span className="font-mono text-[9px] uppercase tracking-wider text-textMuted">{preserveGreek(label)}</span>
     <span className={`font-mono text-[13px] font-semibold tnum ${ink}`}>{value}</span>
   </span>
 );

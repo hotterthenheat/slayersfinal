@@ -200,5 +200,79 @@ check(
   existsSync(path.join(FONT_DIR, 'Inter-LICENSE.txt')) ? 'public/fonts/Inter-LICENSE.txt' : 'no licence file'
 );
 
+// ---- 5. CSS uppercasing does not mangle a Greek letter ---------------------
+
+/*
+  `text-transform: uppercase` does not skip Greek. It renders "1σ move" as
+  "1Σ MOVE" and "θ / day" as "Θ / DAY" — and in a mono-ish face at 9px, Θ is
+  hard to tell from a zero, so theta-per-day can read as zero theta. On a
+  terminal that prints σ for a standard deviation and Σ for a sum, this is a
+  changed meaning rather than a changed shape.
+
+  src/components/ui/greek.tsx exists for it and wraps only the Greek run, so
+  the surrounding Latin still uppercases. Two checks, because the defect
+  arrives in two shapes:
+
+  A literal Greek label sitting on an uppercased element is catchable exactly.
+  A Greek label arriving through a prop is not — that one is caught by
+  rendering the app and reading computed styles, which is how the live
+  instance on Compass was found in the first place. What is asserted here is
+  that every component known to render a Greek-bearing label pipes it through
+  the helper, so the prop case has one place to go wrong rather than five.
+*/
+const GREEK_LOWER = /[\u03b1-\u03c9]/;
+const literalOffenders: string[] = [];
+for (const file of walk(path.join(ROOT, 'src'))) {
+  const rel = path.relative(ROOT, file).split(path.sep).join('/');
+  if (rel === 'src/components/ui/greek.tsx') continue;
+  readFileSync(file, 'utf8')
+    .split('\n')
+    .forEach((line, i) => {
+      if (!GREEK_LOWER.test(line)) return;
+      if (!/\buppercase\b/.test(line)) return;
+      if (/normal-case|preserveGreek/.test(line)) return;
+      literalOffenders.push(`${rel}:${i + 1}`);
+    });
+}
+check(
+  'no Greek literal sits on an uppercased element',
+  literalOffenders.length === 0,
+  literalOffenders.length ? literalOffenders.join(', ') : 'none'
+);
+
+/*
+  The label components. Each renders a caption under `uppercase` and each has
+  carried, or can carry, a Greek label: 1σ move, Expected (1σ), P(>+2σ),
+  Short γ.
+*/
+const GREEK_LABEL_COMPONENTS = [
+  'src/components/compass/SetupScanCard.tsx',
+  'src/components/compass/SetupScanBoard.tsx',
+  'src/components/compass/ContractWeigher.tsx',
+  'src/components/gex/vollab/RiskNeutralDist.tsx',
+  'src/components/gex/PositioningMap.tsx',
+];
+/*
+  Import AND call. Testing for the string "preserveGreek" anywhere in the file
+  was the first version, and the explanatory comment above each call site
+  satisfied it on its own — so deleting the call and its import left the check
+  green. It passed on exactly the defect it exists to catch.
+*/
+const usesHelper = (src: string) =>
+  /import\s*\{[^}]*\bpreserveGreek\b[^}]*\}\s*from/.test(src) && /preserveGreek\s*\(/.test(src);
+const unprotected = GREEK_LABEL_COMPONENTS.filter(f => !usesHelper(read(f)));
+check(
+  'every Greek-bearing label component runs its label through preserveGreek',
+  unprotected.length === 0,
+  unprotected.length ? unprotected.map(f => f.split('/').pop()).join(', ') : `${GREEK_LABEL_COMPONENTS.length} components protected`
+);
+// Guard the guard: the helper has to still do something.
+const helper = read('src/components/ui/greek.tsx');
+check(
+  'preserveGreek still wraps the Greek run in normal-case',
+  /normal-case/.test(helper) && /\[\u03b1-\u03c9\]/.test(helper),
+  /normal-case/.test(helper) ? 'wraps in normal-case' : 'helper no longer applies normal-case'
+);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
