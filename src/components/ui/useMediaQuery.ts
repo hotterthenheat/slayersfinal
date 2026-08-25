@@ -22,17 +22,38 @@ import { useEffect, useState } from 'react';
 */
 
 /**
- * Tailwind's `md` floor, expressed as a query.
+ * A PHONE — the device, not a narrow window.
  *
- * **767.98, not 767.** A window can land on a fractional CSS pixel — a zoomed
- * page, a device pixel ratio that does not divide evenly, a desktop browser
- * dragged slowly. At exactly 767.5px `(max-width: 767px)` does not match and
- * neither does Tailwind's `md:` (which is `min-width: 768px`), so the JS
- * branch and the CSS would disagree about which side of the line the page is
- * on — the layout would pick one shape and its styling the other. The
- * fractional bound closes the gap.
+ * Two clauses, comma-separated (a media query list is an OR, and it is
+ * supported everywhere `or` is not):
+ *
+ * **`(max-width: 767.98px)`** — Tailwind's `md` floor. Any window this narrow
+ * gets the one-chart layout whatever it is running on, because a twelve-column
+ * desk in 768px is a twelve-column desk nobody can read. 767.98 rather than
+ * 767: a window can land on a fractional CSS pixel — a zoomed page, a device
+ * pixel ratio that does not divide evenly, a desktop browser dragged slowly —
+ * and at exactly 767.5px `(max-width: 767px)` does not match and neither does
+ * Tailwind's `md:` (`min-width: 768px`). The JS branch and the CSS would pick
+ * opposite sides of the same line. The fractional bound closes the gap.
+ *
+ * **`(pointer: coarse) and (max-height: 540px)`** — a phone TURNED SIDEWAYS,
+ * and the reason this constant is not width alone.
+ *
+ * That was the bug. Width-only, an iPhone 14 in landscape is 844×390: wider
+ * than the `md` floor, so it took the desktop branch and got the full widget
+ * desk — four panels, the page header, the desk rail and two buttons, inside
+ * 390px of height. Measured: the charts began below the fold. Every portrait
+ * check passed the whole time, because the device only fails this test when
+ * the reader rotates it.
+ *
+ * A phone is not "narrow", it is SMALL — its short side is short in either
+ * orientation — and the short side is what a desk needs. Height alone would
+ * be wrong too (a desktop window dragged short is still a desktop), so the
+ * touch clause carries the "this is a handset" half. 540px separates the two
+ * populations cleanly and with room on both sides: phones in landscape run
+ * 375–440px tall, the smallest tablet in landscape is 744.
  */
-export const PHONE_QUERY = '(max-width: 767.98px)';
+export const PHONE_QUERY = '(max-width: 767.98px), (pointer: coarse) and (max-height: 540px)';
 
 /** Whether `query` matches now, kept current as the window changes. */
 export function useMediaQuery(query: string): boolean {
@@ -60,5 +81,5 @@ export function useMediaQuery(query: string): boolean {
   return matches;
 }
 
-/** Below Tailwind's `md` — the width at which a multi-panel desk stops working. */
+/** A handset, in either orientation — or any window too narrow for a desk. */
 export const useIsPhone = (): boolean => useMediaQuery(PHONE_QUERY);

@@ -451,13 +451,22 @@ head('one pane at a time, and it survives a reload');
    chart can see that, so the checks below measure the STRIP, and where it sits
    relative to the tape.
    ───────────────────────────────────────────────────────────────────────── */
-head('the phone gets one chart, not a crushed desk');
+/*
+  BOTH ORIENTATIONS, and the second one is here because the first shipped
+  broken. The rule was width-only, so an iPhone in landscape — 844x390, WIDER
+  than the md floor — took the desktop branch and got the full widget desk
+  inside 390px of height: page header, desk rail, two buttons, and the charts
+  starting below the fold. Every portrait assertion passed the whole time. A
+  phone is small in its SHORT side whichever way it is held, so the desk test
+  has to be held both ways too.
+*/
+for (const [orientation, viewport] of [
+  ['portrait', { width: 390, height: 844 }],
+  ['landscape', { width: 844, height: 390 }],
+]) {
+head(`the phone gets one chart, not a crushed desk — ${orientation}`);
 {
-  const ctx = await browser.newContext({
-    viewport: { width: 390, height: 844 },
-    hasTouch: true,
-    isMobile: true,
-  });
+  const ctx = await browser.newContext({ viewport, hasTouch: true, isMobile: true });
   const page = await ctx.newPage();
   const errs = [];
   page.on('pageerror', e => errs.push(String(e)));
@@ -504,7 +513,11 @@ head('the phone gets one chart, not a crushed desk');
      to avoid, and only the DOM can tell the two apart. */
   !g.grid ? ok('the widget desk was not mounted at all') : bad('react-grid-layout is in the DOM at 390px');
 
-  g.chartH > g.innerH * 0.6
+  /* Landscape has 56px of top bar and a strip to pay for out of 390px, so it
+     cannot reach portrait's share; what matters is that the tape is still the
+     largest thing on the screen. */
+  const floor = orientation === 'portrait' ? 0.6 : 0.5;
+  g.chartH > g.innerH * floor
     ? ok(`the chart is ${g.chartH}px of an ${g.innerH}px window`)
     : bad(`the chart is only ${g.chartH}px of ${g.innerH}px`);
 
@@ -516,9 +529,12 @@ head('the phone gets one chart, not a crushed desk');
 
   /* THE ONE THAT CATCHES THE COLLAPSE. A strip that has wrapped into a column
      is tall; a strip laid over the tape starts above the tape's bottom. */
-  g.stripH !== null && g.stripH <= 140
+  /* Landscape is wider, so the same controls fit on ONE row — the cap is
+     tighter there precisely because there is no excuse for a second line. */
+  const stripCap = orientation === 'portrait' ? 140 : 90;
+  g.stripH !== null && g.stripH <= stripCap
     ? ok(`the control strip is ${g.stripH}px`)
-    : bad(`the control strip is ${g.stripH}px — it has wrapped`);
+    : bad(`the control strip is ${g.stripH}px, over the ${stripCap}px cap — it has wrapped`);
 
   g.stripTop !== null && g.stripTop >= g.chartBottom - 2
     ? ok('and it sits below the tape rather than over it')
@@ -564,33 +580,48 @@ head('the phone gets one chart, not a crushed desk');
     });
     panel?.inView ? ok(`the ${name} menu opens fully on screen`) : bad(`the ${name} menu opens off screen`);
     await page.keyboard.press('Escape');
-    await page.mouse.click(195, 300);
+    await page.mouse.click(Math.round(viewport.width / 2), Math.round(viewport.height / 2));
     await page.waitForTimeout(300);
   }
   await ctx.close();
 }
+}
 
 /* And the other half: the desk is still THERE on a desk-sized window. A branch
    that simply deleted it would pass every check above. */
-head('the desk survives above the phone line');
+/*
+  The other half, and it is not optional: a rule that simply returned true
+  would pass every check above. A TABLET is the case that pins the boundary —
+  it is touch, like a phone, and it is big enough for a desk, unlike a phone,
+  so it is the one device that tells the two clauses apart. Held both ways,
+  because the landscape clause is a height test and an iPad in landscape (820)
+  is the closest any tablet gets to a phone's 440.
+*/
+head('the desk survives on everything that can hold it');
 {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-  const page = await ctx.newPage();
-  await page.goto(`${BASE}/pulse`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(BOOT_MS);
-  const d = await page.evaluate(() => {
-    const grid = document.querySelector('.react-grid-layout');
-    return {
-      grid: !!grid,
-      panels: grid ? grid.children.length : 0,
-      hscroll: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-    };
-  });
-  d.grid && d.panels >= 2
-    ? ok(`the widget desk is mounted with ${d.panels} panels at 1280px`)
-    : bad(`at 1280px the desk has ${d.panels} panels (grid: ${d.grid})`);
-  d.hscroll === 0 ? ok('and nothing scrolls sideways') : bad(`${d.hscroll}px of sideways scroll`);
-  await ctx.close();
+  for (const [label, viewport, touch] of [
+    ['iPad portrait', { width: 820, height: 1180 }, true],
+    ['iPad landscape', { width: 1180, height: 820 }, true],
+    ['desktop', { width: 1280, height: 900 }, false],
+  ]) {
+    const ctx = await browser.newContext({ viewport, hasTouch: touch, isMobile: touch });
+    const page = await ctx.newPage();
+    await page.goto(`${BASE}/pulse`, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(BOOT_MS);
+    const d = await page.evaluate(() => {
+      const grid = document.querySelector('.react-grid-layout');
+      return {
+        grid: !!grid,
+        panels: grid ? grid.children.length : 0,
+        hscroll: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      };
+    });
+    d.grid && d.panels >= 2
+      ? ok(`${label} keeps the desk — ${d.panels} panels at ${viewport.width}x${viewport.height}`)
+      : bad(`${label} (${viewport.width}x${viewport.height}) has ${d.panels} panels (grid: ${d.grid})`);
+    d.hscroll === 0 ? ok(`${label} scrolls nothing sideways`) : bad(`${label}: ${d.hscroll}px sideways`);
+    await ctx.close();
+  }
 }
 
 console.log(`\n${fails} failing`);
