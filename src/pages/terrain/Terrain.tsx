@@ -233,6 +233,15 @@ const COLS: Record<TerrainLayout, string> = {
 const TIME_AXIS_PX = 26;
 
 /*
+  Width of the price gutter lightweight-charts draws down the right of the
+  plot, in px. MEASURED like TIME_AXIS_PX, and used the same way: floating
+  chrome has to stop short of it, or it lands on the price ticks. The sweep
+  asserts it, so a library change that moves it fails loudly instead of
+  quietly parking a button on top of a price.
+*/
+const PRICE_GUTTER_PX = 56;
+
+/*
   The heaviest strikes in the pane's window, signed — the one-line read of
   where the book is, and the same rows the rail draws.
 
@@ -345,7 +354,7 @@ const Pane = ({ cfg, onCfg, revision, expanded, onToggleExpand, index, tall, hea
             spills, and a chart's natural width is whatever its container was
             last tick. */}
         <div className="absolute inset-0 flex">
-          <div className="relative flex-1 min-w-0">
+          <div className="group relative flex-1 min-w-0">
             <StrikeChart
               ticker={ticker}
               revision={revision}
@@ -384,7 +393,32 @@ const Pane = ({ cfg, onCfg, revision, expanded, onToggleExpand, index, tall, hea
               cannot pan by its top third is broken in a way that looks like
               nothing at all.
             */}
-            <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-col items-start gap-1 p-1.5">
+            {/*
+              IT COMES AND GOES (Noah, 2026-08-25: "fix the chart float to
+              actual be a hover over kinda thing, that way you can have all
+              the info you need but it comes and goes").
+
+              Graded, not all-or-nothing, because the two rows answer
+              different questions. WHAT AM I LOOKING AT is a question you have
+              while your eyes are on the tape and your cursor is somewhere
+              else entirely — so the symbol, price and change stay on screen,
+              just quiet. HOW IS IT SET UP is a question you only have while
+              you are reaching for a control, so the toolbar is not there at
+              all until the cursor arrives. Hiding the symbol too would mean
+              a four-pane desk where you cannot tell the panes apart without
+              waving at each one.
+
+              focus-within, not only hover: the toolbar is reachable by Tab,
+              and a control you can focus but not see is worse than one you
+              cannot reach. Keyboard focus brings the strip up exactly as the
+              cursor does.
+            */}
+            <div
+              /* Right padding clears the price gutter, so nothing floating
+                 ever lands on a price tick. */
+              style={{ paddingRight: PRICE_GUTTER_PX }}
+              className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-col items-start gap-1 p-1.5"
+            >
               {/*
                 ONE ROW, ALWAYS — it does not wrap, it clips.
 
@@ -396,7 +430,14 @@ const Pane = ({ cfg, onCfg, revision, expanded, onToggleExpand, index, tall, hea
                 strike read gives, and it gives by being cut off at the pane's
                 edge — visibly, predictably, and equally in every pane.
               */}
-              <div className="pointer-events-auto max-w-full select-none flex items-center gap-2 rounded-md bg-canvas/55 backdrop-blur-[2px] px-2 py-1 overflow-hidden">
+              {/*
+                IT HUGS ITS CONTENT. It used to carry the heaviest-strike read
+                as well, which is as wide as its numbers happen to be, so the
+                row overflowed and `max-w-full` stretched the translucent band
+                across the entire top of the tape — and pushed the expand icon
+                out over the price ticks. Identity alone always fits.
+              */}
+              <div className="pointer-events-auto w-fit max-w-full select-none flex items-center gap-2 rounded-md bg-canvas/25 backdrop-blur-[3px] px-2 py-1 opacity-55 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
                 <span className="shrink-0 inline-flex items-center gap-1.5">
                   <TickerQuickPick ticker={ticker} onPick={t => onCfg({ ticker: t })} />
                   {/* TradingView's "+" beside the symbol capsule — cross
@@ -411,20 +452,30 @@ const Pane = ({ cfg, onCfg, revision, expanded, onToggleExpand, index, tall, hea
                   {changePct.toFixed(2)}%
                 </span>
 
-                {/* The three heaviest strikes in the pane's window with their
-                    signed exposure — the same rows the rail draws, so the line
-                    and the column can never name different strikes. Gold is
-                    put-dominant, steel call-dominant: the desk's ramp poles. */}
-                {heavy.length > 0 && (
-                  <span
-                    className="flex items-center gap-2.5 min-w-0 overflow-hidden whitespace-nowrap"
-                    /* Anything that still does not fit fades out over the last
-                       20px, so a cut value never reads as a whole one. */
-                    style={{
-                      maskImage: 'linear-gradient(to right, #000 calc(100% - 20px), transparent)',
-                      WebkitMaskImage: 'linear-gradient(to right, #000 calc(100% - 20px), transparent)',
-                    }}
-                  >
+                <button
+                  onClick={onToggleExpand}
+                  aria-pressed={expanded}
+                  aria-label={expanded ? `Collapse ${ticker}` : `Expand ${ticker} to the full screen`}
+                  title={expanded ? 'Collapse — Esc' : 'Expand this pane'}
+                  className="shrink-0 inline-flex items-center justify-center w-6 h-6 rounded text-textMuted hover:text-textPrimary hover:bg-white/[0.05] transition-colors"
+                >
+                  {expanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+
+              {/*
+                THE BOOK, on its own line and only while you are looking.
+
+                It rode in the identity row and kept getting cut mid-number —
+                a pane printed "521 -$235.4", which is the front of -$235.4M
+                and reads as a complete number that is wrong by six orders of
+                magnitude. Fading the tail did not fix that; a faded number is
+                still a number. On its own full-width line, revealed with the
+                toolbar, there is room for every entry whole.
+              */}
+              {heavy.length > 0 && (
+                <div className="pointer-events-none w-fit max-w-full rounded-md bg-canvas/25 backdrop-blur-[3px] px-2 py-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
+                  <span className="flex items-center gap-2.5 whitespace-nowrap">
                     <span className="shrink-0 font-mono text-[9px] uppercase tracking-widest text-textMuted">Heaviest</span>
                     {heavy.map(row => (
                       <span key={row.strike} className="shrink-0 font-mono text-[10px] tnum whitespace-nowrap">
@@ -437,21 +488,11 @@ const Pane = ({ cfg, onCfg, revision, expanded, onToggleExpand, index, tall, hea
                       </span>
                     ))}
                   </span>
-                )}
+                </div>
+              )}
 
-                <button
-                  onClick={onToggleExpand}
-                  aria-pressed={expanded}
-                  aria-label={expanded ? `Collapse ${ticker}` : `Expand ${ticker} to the full screen`}
-                  title={expanded ? 'Collapse — Esc' : 'Expand this pane'}
-                  className="shrink-0 inline-flex items-center justify-center w-6 h-6 rounded text-textMuted hover:text-textPrimary hover:bg-white/[0.05] transition-colors"
-                >
-                  {expanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-                </button>
-              </div>
-
-              {/* Its own, every one of them. */}
-              <div className="pointer-events-auto max-w-full rounded-md bg-canvas/55 backdrop-blur-[2px] px-2 py-1">
+              {/* Its own, every one of them — and not there until you reach. */}
+              <div className="pointer-events-none max-w-full rounded-md bg-canvas/25 backdrop-blur-[3px] px-2 py-1 opacity-0 transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
                 <ChartToolbar
                   minimal
                   candles
@@ -474,7 +515,7 @@ const Pane = ({ cfg, onCfg, revision, expanded, onToggleExpand, index, tall, hea
                 the stack and back on for the buttons, so the legend never eats
                 a drag on the chart. */}
             {compares.length > 0 && (
-              <div className="pointer-events-none absolute top-[74px] left-3 z-10 flex flex-col gap-0.5">
+              <div className="pointer-events-none absolute top-[46px] left-3 z-10 flex flex-col gap-0.5 opacity-70 transition-opacity duration-200 group-hover:opacity-100">
                 {compares.map(c => (
                   <span key={`${c.ticker}:${c.mode}`} className="flex items-center gap-1.5">
                     <span className="w-2 h-[3px] rounded-full" style={{ background: c.ink }} aria-hidden />
@@ -595,15 +636,19 @@ const Terrain = () => {
           drifts the first time somebody edits the other file.
         */
         style={{
-          right: (panes[panes.length - 1]?.ladder ? LADDER_WIDTH_PX : 0) + 10,
+          right: (panes[panes.length - 1]?.ladder ? LADDER_WIDTH_PX : 0) + PRICE_GUTTER_PX + 8,
           bottom: TIME_AXIS_PX + 12,
         }}
-        className="pointer-events-none absolute z-30 flex items-center gap-2"
+        /* They come and go like the pane chrome, and they were the loudest
+           thing on the screen while they were here: a solid white STRIKES
+           button and a solid white active count, on a desk that had just been
+           asked for less. Quiet at rest, full on hover or keyboard focus. */
+        className="pointer-events-none absolute z-30 flex items-center gap-2 opacity-40 transition-opacity duration-200 hover:opacity-100 focus-within:opacity-100"
       >
         <div
           role="group"
           aria-label="How many charts"
-          className="pointer-events-auto inline-flex flex-wrap items-center gap-0.5 border border-borderSubtle bg-canvas/70 backdrop-blur-[2px] rounded-md p-0.5"
+          className="pointer-events-auto inline-flex flex-wrap items-center gap-0.5 border border-white/[0.08] bg-canvas/40 backdrop-blur-[3px] rounded-md p-0.5"
         >
           <Rows3 className="w-3.5 h-3.5 mx-1.5 text-textMuted shrink-0" aria-hidden />
           {LAYOUTS.map(n => {
@@ -616,7 +661,7 @@ const Terrain = () => {
                 aria-label={`${n} ${n === 1 ? 'chart' : 'charts'}`}
                 title={`${n} ${n === 1 ? 'chart' : 'charts'}`}
                 className={`px-2.5 py-1 rounded font-mono text-[11px] font-semibold tnum transition-colors ${
-                  active ? 'bg-[#ededed] text-[#0a0a0a]' : 'text-textSecondary hover:text-textPrimary hover:bg-white/[0.04]'
+                  active ? 'bg-white/[0.16] text-textPrimary' : 'text-textSecondary hover:text-textPrimary hover:bg-white/[0.06]'
                 }`}
               >
                 {n}
@@ -635,8 +680,8 @@ const Terrain = () => {
           onClick={() => setCfg(prev => ({ ...prev, panes: prev.panes.map(p => ({ ...p, ladder: !anyLadder })) }))}
           aria-pressed={anyLadder}
           title={anyLadder ? 'Hide every strike rail' : 'Show the strike rail beside every chart'}
-          className={`pointer-events-auto inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-borderSubtle font-mono text-[10px] uppercase tracking-wider transition-colors ${
-            anyLadder ? 'bg-[#ededed] text-[#0a0a0a]' : 'bg-canvas/70 backdrop-blur-[2px] text-textSecondary hover:text-textPrimary'
+          className={`pointer-events-auto inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-white/[0.08] backdrop-blur-[3px] font-mono text-[10px] uppercase tracking-wider transition-colors ${
+            anyLadder ? 'bg-white/[0.16] text-textPrimary' : 'bg-canvas/40 text-textSecondary hover:text-textPrimary'
           }`}
         >
           Strikes
