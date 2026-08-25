@@ -165,6 +165,35 @@ Three ways out:
 phone user gets a readable column instead of four unusable slivers.
 Drag-to-arrange was never a phone gesture.
 
+### And a second phone question, since it is the same one: how narrow?
+
+This pass targeted **390px** and every route now works there. **320px** — an
+SE-sized phone, and a split-screen window on a larger one — was never a
+target and three routes slide sideways on it:
+
+```
+                              at 390     at 320     after the FilterTabs fix
+/earnings                     clean      +58px      +58px
+/pinpoint/exposure-profile    clean      +20px       +4px
+/pinpoint/ranked-targets      clean      +48px      +47px
+```
+
+`FilterTabs` now wraps — the same one-word fix `SubNav` and `ChartToolbar`
+already carry, and it changes nothing at 390 or above, so it is applied.
+What is left needs a layout decision on a dense desk rather than a fix:
+
+- **Earnings, 58px** — a ten-column week bar strip, `w-7` per day. Wrapping
+  a bar chart to two rows breaks the comparison it exists for; a horizontal
+  scroller keeps it. Either is defensible.
+- **Ranked Targets, 47px** — `w-14 shrink-0` columns in every row. Making
+  them flexible changes the ladder's alignment, which is the point of it.
+- **Exposure Profile, 4px** — one `ml-auto` caption. Trivial, and not worth
+  a commit on its own.
+
+**Recommendation:** answer "which phones?" once. If 320 is in, these three
+are an afternoon. If the floor is 390, they are already correct and this
+paragraph is the record that somebody checked.
+
 ---
 
 ## 7. Two take-profit prices on Campaign Analysis
@@ -440,6 +469,8 @@ the detector and stronger for the fix.
 | Locale-sensitive sorting | the three `localeCompare` call sites, against the data each one actually sorts | **clean, and worth the reason.** `DataTable` sorts ticker symbols and English company names, `tickers.ts` sorts symbols, `Ideas.tsx` compares ISO-8601 timestamps — all ASCII, which every locale orders identically. The only non-ASCII in the data files is typography (`— – · × ÷ … −`) in prose and labels, never in a sorted field, and no DataTable column carries user-entered text. Left alone rather than churned |
 | Long-session memory | `/trace/live-tape` left open for 12.4 minutes — past both settling points, since the tape caps inside a minute and the recording pins at 9m45s — sampling DOM nodes, tape rows and JS heap after a forced collection each time | **clean.** Across the late window, with everything that is supposed to stop having stopped: DOM nodes **6,943 → 6,943 (+0)**, heap **16.9MB → 16.7MB (−0.2MB)**, tape rows pinned at its 128 cap throughout. Nothing accumulates that should not. The point of running past 9m45s is that growth up to there is legitimate — one bar per tick — and only what grows *after* would be a leak |
 | Back and forward | three in-app navigations then walked back and forward; sub-tab clicks; and a modal open when Back is pressed | **clean.** Back retraced `/earnings → /stocks → /compass → /pulse` exactly and Forward retraced it, every page rendering fully, zero uncaught errors. Each sub-tab click adds exactly one entry and Back returns to the previous tab. The print drilldown is deliberately *not* in history — Back leaves the page — but it is torn down on the way out rather than left floating over a different route, which is the failure worth checking for |
+| Tap latency on a slow device | five controls on Ranked Targets and two on the tape, clicked at 390px under a 6× CPU slowdown, timed inside the page from click to the paint that shows the change | **acceptable, and now on record.** Ranked Targets' lens rail: **30–38ms unthrottled, 285–407ms at 6×** — consistent across all five lenses, so it is the desk's re-render cost rather than one slow control. The tape's filter chips are 57–81ms at 6×, about five times lighter. 300–400ms is a delay a reader notices and does not lose their place to; it is not a defect, and the numbers are here so nobody re-measures to find that out |
+| 320px screens | 12 routes at 320 with 390 as the control, so the report is what 320 breaks that 390 does not | 3 routes slide sideways at 320 and none at 390. `FilterTabs` now wraps (the same fix `SubNav` and `ChartToolbar` carry), taking Exposure Profile from 20px to 4 and changing nothing at 390/768/1440. The rest is a layout decision on a dense desk — folded into #6, which is the same question: which phones? |
 | Chart label collisions | /pulse/board, four charts | two found and fixed: the trails' strength labels drew under the axis badges at the same strike, and their own backing pad was mis-centred |
 | Click-gated surfaces | the command palette, the print drilldown, Campaign Analysis — at 390 / 768 / 1440 | two found and fixed: the timeframe strip put `1W` off the screen with nothing to scroll, and the modal header spent 32% of a phone on itself |
 

@@ -17,7 +17,18 @@ const FilterTabs = <V extends string>({ options, value, onChange, ariaLabel }: F
 
   return (
     <LayoutGroup id={scope}>
-      <div role="group" aria-label={ariaLabel} className="inline-flex items-center gap-0.5 rounded-lg bg-white/[0.04] p-0.5">
+      {/* flex-wrap, for the third time in this codebase and for the same
+          reason: a flex ITEM wider than its line does not split, it SPILLS,
+          and the page slides sideways under a thumb. SubNav and ChartToolbar
+          already carry it. This strip fits on one line at 390 and does not at
+          320 — measured, the Pinpoint lens rail is 352px and the exposure
+          timeframes 324px — so the wrap changes nothing on any width that
+          was already working. */}
+      <div
+        role="group"
+        aria-label={ariaLabel}
+        className="inline-flex flex-wrap items-center gap-0.5 rounded-lg bg-white/[0.04] p-0.5"
+      >
         {options.map(opt => {
           const active = opt.value === value;
           return (

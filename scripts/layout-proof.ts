@@ -837,6 +837,30 @@ check(
     ? 'inline-flex flex-wrap'
     : "nowrap again — Pinpoint's three tabs run 411px into a 356px lane and <main> starts scrolling sideways"
 );
+/*
+  The third strip of the same shape, and the one that carries two desks.
+
+  FilterTabs renders the Pinpoint lens rail and the exposure timeframes.
+  Measured at 320px — a narrower phone than the 390 this pass targeted, and a
+  split-screen window on a wider one — the lens rail is 352px and the
+  timeframes 324px, against a 288px content lane. Both fit at 390, so the wrap
+  changes nothing on any width that already worked; it stops the page sliding
+  sideways on one that did not. Re-measured after: exposure profile 20px of
+  sideways scroll to 4, and 0 at 390, 768 and 1440.
+
+  The sliding pill survives the wrap — clicked the last option at 320 with the
+  strip on two lines, and the pill box lands on the pressed button.
+*/
+const filterTabs = read('src/components/ui/FilterTabs.tsx');
+const filterWraps = /className="inline-flex flex-wrap items-center gap-0\.5 rounded-lg bg-white/.test(filterTabs);
+check(
+  'the shared filter strip wraps rather than pushing the page sideways',
+  filterWraps,
+  filterWraps
+    ? 'inline-flex flex-wrap — covers the Pinpoint lens rail and the exposure timeframes'
+    : 'nowrap again — the lens rail runs 352px into a 288px lane at 320px'
+);
+
 const stocks = read('src/pages/Stocks.tsx');
 const sectorScrolls = /<div className="flex flex-col overflow-x-auto">/.test(stocks);
 check(
