@@ -1,8 +1,9 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { MotionConfig } from 'framer-motion';
 import { MarketDataProvider } from './context/MarketDataContext';
 import { TrackerProvider } from './context/TrackerContext';
 import AppShell from './components/layout/AppShell';
+import PageFault from './components/ui/PageFault';
 import { LaunchProvider } from './components/layout/LaunchTransition';
 import Compass from './pages/Compass';
 import Tracker from './pages/Tracker';
@@ -26,11 +27,29 @@ import Requests from './pages/community/Requests';
 import Feedback from './pages/community/Feedback';
 
 const App = () => {
+  /*
+    THE OUTERMOST NET, AND WHY IT IS NOT REDUNDANT WITH APPSHELL'S.
+
+    AppShell wraps its <Outlet /> in the same component, which covers every
+    desk. Two things are not under that Outlet: the landing page, which is
+    routed outside AppShell entirely, and AppShell's own chrome — TopBar and
+    the command palette render above the Outlet, not inside it. Both were
+    checked by wiring a throw to a query parameter and loading it: a desk page
+    throwing rendered the fault panel with the header still there, while the
+    landing page and TopBar each gave a white screen, 0 characters and nothing
+    to click.
+
+    Keyed on the path for the same reason AppShell's is: navigating somewhere
+    else earns a clean try, and it is a prop rather than a React key so
+    nothing below remounts on an ordinary render.
+  */
+  const location = useLocation();
   return (
     <MotionConfig reducedMotion="user">
       <MarketDataProvider>
         <TrackerProvider>
         <LaunchProvider>
+        <PageFault resetKey={location.pathname}>
         <Routes>
           {/* Public landing — full-bleed, outside the app shell. First thing a
               visitor sees; "Launch terminal" plays the gate into /pulse. */}
@@ -93,6 +112,7 @@ const App = () => {
             <Route path="/auditor-log" element={<Navigate to="/tracker" replace />} />
           </Route>
         </Routes>
+        </PageFault>
         </LaunchProvider>
         </TrackerProvider>
       </MarketDataProvider>

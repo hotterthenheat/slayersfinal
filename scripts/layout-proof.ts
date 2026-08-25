@@ -138,6 +138,42 @@ for (const { file, what } of SELF_MEASURING) {
 }
 
 /*
+  ---- Nothing may white-screen the terminal --------------------------------
+
+  A React error boundary catches only what is BELOW it, so where it sits is
+  the whole assertion. AppShell wrapped its <Outlet /> and that covers every
+  desk — but the landing page is routed outside AppShell entirely, and
+  AppShell's own chrome (TopBar, the command palette) renders above the
+  Outlet rather than inside it.
+
+  Verified rather than reasoned about: a throw wired to a query parameter,
+  built, and loaded. A desk page throwing rendered the fault panel with the
+  header intact, 307 characters and a working Reload. The landing page
+  throwing and TopBar throwing each gave 0 characters and 15 elements —
+  nothing to read and nothing to click. With the outer net added, all three
+  render the panel.
+
+  BOTH call sites are pinned. Either alone leaves a hole that nothing else in
+  the gate can see, and the hole is silent until the day something throws.
+*/
+{
+  const app = read('src/App.tsx');
+  const shell = read('src/components/layout/AppShell.tsx');
+  const outer = /<PageFault resetKey=\{location\.pathname\}>[\s\S]*<Routes>/.test(app);
+  check(
+    'the whole route tree sits inside a page-fault net',
+    outer,
+    outer ? 'App wraps <Routes>, so the landing page and the shell chrome are covered' : 'nothing catches a throw outside AppShell — that is a white screen'
+  );
+  const inner = /<PageFault resetKey=\{location\.pathname\}>[\s\S]*<Outlet \/>/.test(shell);
+  check(
+    "the desks keep their own net inside the shell",
+    inner,
+    inner ? 'AppShell wraps <Outlet />, so a page fault keeps the header and nav' : 'a desk throw would take the chrome down with it'
+  );
+}
+
+/*
   ---- A canvas whose pixels were resized by a price change ------------------
 
   MonteCarloPanel sets `canvas.width` from `clientWidth` inside its drawing
@@ -410,15 +446,22 @@ check(
   intact, while the Live Chart, the pressure ladder and the positioning map
   carry on and no page fault appears.
 */
+/*
+  The class used to live inside AppShell as `RouteBoundary`. It now has two
+  callers — AppShell and App — so it lives in components/ui/PageFault.tsx and
+  the check follows it there. Where it is MOUNTED is asserted separately,
+  above; this is only that the thing itself still exists and still recovers.
+*/
 const shell = read('src/components/layout/AppShell.tsx');
+const fault = read('src/components/ui/PageFault.tsx');
 check(
-  'the route-level boundary is still wired',
-  /class RouteBoundary/.test(shell) && /<RouteBoundary/.test(shell),
-  /<RouteBoundary/.test(shell) ? 'AppShell wraps the outlet' : 'the page-level net is gone'
+  'the page-level boundary is still wired',
+  /class PageFault/.test(fault) && /<PageFault/.test(shell),
+  /<PageFault/.test(shell) ? 'AppShell wraps the outlet' : 'the page-level net is gone'
 );
-const routeResets = /prevProps\.resetKey !== this\.props\.resetKey/.test(shell);
+const routeResets = /prevProps\.resetKey !== this\.props\.resetKey/.test(fault);
 check(
-  'the route boundary clears itself on navigation',
+  'the page boundary clears itself on navigation',
   routeResets,
   routeResets ? 'resets on pathname change' : 'a page fault would stick across navigation'
 );
