@@ -365,3 +365,33 @@
     animation: none;
   }
 }
+
+/*
+  A HOVER-REVEALED CONTROL IS UNREACHABLE ON A TOUCH SCREEN.
+
+  Terrain's pane chrome fades in on hover so the tape can be seen clean. On a
+  phone or tablet there is no hover to give — the toolbar would simply never
+  arrive, and every control on it would be unreachable by any means. That is
+  not a degraded experience, it is a missing feature, and it is one this
+  change would have introduced.
+
+  So on any pointer that cannot hover, the chrome is simply always there. The
+  charts lose a little room; a touch reader keeps their controls. Marked with
+  a class rather than pushed through Tailwind's `hover:` variant because the
+  strips also carry `opacity-0` and `pointer-events-none` utilities of the
+  same specificity, and both have to be overridden together.
+*/
+@media (hover: none), (pointer: coarse) {
+  .chrome-hover {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+  }
+
+  /* Same problem, a different mechanism: the compare menu's scale buttons are
+     `hidden group-hover:flex`, i.e. display:none until a cursor arrives. A
+     touch reader could open the menu, see the symbols, and have no way at all
+     to pick one. Additive — the pointer path is untouched. */
+  .touch-reveal {
+    display: flex !important;
+  }
+}

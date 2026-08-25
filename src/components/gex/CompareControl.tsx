@@ -135,7 +135,7 @@ const CompareControl = ({ current, compares, onAdd, onRemove, max = 4 }: Compare
                   {/* The TV move: the row's right side becomes the three
                       scale choices on hover — how the line joins the chart */}
                   {!full && (
-                    <span className="absolute right-1.5 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center gap-1 bg-panel pl-1.5">
+                    <span className="touch-reveal absolute right-1.5 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center gap-1 bg-panel pl-1.5">
                       {(Object.keys(MODE_LABEL) as CompareMode[]).map(mode => (
                         <button
                           key={mode}

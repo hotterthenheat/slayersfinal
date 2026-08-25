@@ -437,7 +437,7 @@ const Pane = ({ cfg, onCfg, revision, expanded, onToggleExpand, index, tall, hea
                 across the entire top of the tape — and pushed the expand icon
                 out over the price ticks. Identity alone always fits.
               */}
-              <div className="pointer-events-auto w-fit max-w-full select-none flex items-center gap-2 rounded-md bg-canvas/25 backdrop-blur-[3px] px-2 py-1 opacity-55 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
+              <div className="chrome-hover pointer-events-auto w-fit max-w-full select-none flex items-center gap-2 rounded-md bg-canvas/25 backdrop-blur-[3px] px-2 py-1 opacity-55 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
                 <span className="shrink-0 inline-flex items-center gap-1.5">
                   <TickerQuickPick ticker={ticker} onPick={t => onCfg({ ticker: t })} />
                   {/* TradingView's "+" beside the symbol capsule — cross
@@ -474,7 +474,7 @@ const Pane = ({ cfg, onCfg, revision, expanded, onToggleExpand, index, tall, hea
                 toolbar, there is room for every entry whole.
               */}
               {heavy.length > 0 && (
-                <div className="pointer-events-none w-fit max-w-full rounded-md bg-canvas/25 backdrop-blur-[3px] px-2 py-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
+                <div className="chrome-hover pointer-events-none w-fit max-w-full rounded-md bg-canvas/25 backdrop-blur-[3px] px-2 py-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
                   <span className="flex items-center gap-2.5 whitespace-nowrap">
                     <span className="shrink-0 font-mono text-[9px] uppercase tracking-widest text-textMuted">Heaviest</span>
                     {heavy.map(row => (
@@ -492,7 +492,7 @@ const Pane = ({ cfg, onCfg, revision, expanded, onToggleExpand, index, tall, hea
               )}
 
               {/* Its own, every one of them — and not there until you reach. */}
-              <div className="pointer-events-none max-w-full rounded-md bg-canvas/25 backdrop-blur-[3px] px-2 py-1 opacity-0 transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+              <div className="chrome-hover pointer-events-none max-w-full rounded-md bg-canvas/25 backdrop-blur-[3px] px-2 py-1 opacity-0 transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
                 <ChartToolbar
                   minimal
                   candles
@@ -643,7 +643,7 @@ const Terrain = () => {
            thing on the screen while they were here: a solid white STRIKES
            button and a solid white active count, on a desk that had just been
            asked for less. Quiet at rest, full on hover or keyboard focus. */
-        className="pointer-events-none absolute z-30 flex items-center gap-2 opacity-40 transition-opacity duration-200 hover:opacity-100 focus-within:opacity-100"
+        className="chrome-hover pointer-events-none absolute z-30 flex items-center gap-2 opacity-40 transition-opacity duration-200 hover:opacity-100 focus-within:opacity-100"
       >
         <div
           role="group"
