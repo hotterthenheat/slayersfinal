@@ -129,10 +129,6 @@ interface StrikeChartProps {
      asked for them back. Terrain turns them on because a wall you cannot name
      is a line, and a workspace built for reading structure has to name it. */
   axisLevels?: boolean;
-  /** The clock on the TIME axis, under the newest bar: what time it is now,
-      and how long this bar has left. Off by default, same reasoning as
-      `axisLevels`. */
-  countdown?: boolean;
 }
 
 // Wall / flip / king overlay colors (independent of candle theme)
@@ -262,13 +258,35 @@ const StrikeChart = ({
   replay = false,
   onExitReplay,
   axisLevels = false,
-  countdown = false,
 }: StrikeChartProps) => {
   const themeKey = useCandleThemeKey();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
+  /*
+    THE RUNWAY — a series that draws nothing and holds only WHITESPACE.
+
+    lightweight-charts labels the time axis from the time points its series
+    hold, and it has none past the last bar. That is why the axis stopped 62%
+    of the way across and the room this chart deliberately keeps open ahead of
+    the market came out blank: not a spacing problem, a data problem. There is
+    literally nothing there to label.
+
+    Whitespace items — `{ time }` and no value — are the library's own answer.
+    They are real time points to the scale and invisible to the plot, so the
+    ticks continue past the last bar and keep continuing as the reader zooms
+    out, which is what every platform does and what was asked for.
+
+    It is a SEPARATE series on purpose. Appending whitespace to the candles
+    would put the newest data point in the future, and `update()` refuses a
+    point older than the last one — every live tick would be rejected and the
+    tape would freeze. Keeping the runway beside the candles leaves that path
+    exactly as it was.
+  */
+  const runwaySeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  /** Bar time the runway was last built from, and how far it reaches. */
+  const runwayRef = useRef<{ from: number; slots: number }>({ from: 0, slots: 0 });
   const trailsRef = useRef<GexTrailsPrimitive | null>(null);
   const compareSeriesRef = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
   const compareLoadedRef = useRef('');
@@ -285,10 +303,11 @@ const StrikeChart = ({
   const levelLinesRef = useRef<Partial<Record<'callWall' | 'putWall' | 'flip' | 'king', IPriceLine>>>({});
   const shownLevelsRef = useRef<KeyLevels | null>(null);
   const levelRafRef = useRef(0);
-  /** Close of the newest bar the chart holds — what the axis prints as "now". */
-  const lastCloseRef = useRef<number | null>(null);
-  const countdownRef = useRef<HTMLDivElement | null>(null);
-  const countdownRafRef = useRef(0);
+  /** Time of that bar, and the seconds one bar covers — what the runway is
+      built from, kept in refs so the time-scale subscription can read them
+      without being torn down and rebuilt on every tick. */
+  const lastBarTimeRef = useRef(0);
+  const bucketSecRef = useRef(60);
   const levelTickerRef = useRef('');
   const focusLineRef = useRef<IPriceLine | null>(null);
   /** The focus price, readable from the autoscale provider (a closure built
@@ -348,6 +367,43 @@ const StrikeChart = ({
     const history = Math.round(total * HISTORY_SHARE);
     const ahead = total - history;
     chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, len - history), to: len + ahead });
+  }, []);
+
+  /*
+    Keep enough whitespace ahead of the last bar that the time axis is labelled
+    all the way to the right edge, at whatever zoom the reader is at.
+
+    GROW-ONLY, and that is what stops it oscillating. `setData` on the runway
+    can itself nudge the visible range, and a routine that recomputes a
+    smaller number on the way back would sit in a loop shrinking and growing
+    forever. It only ever extends, and rebuilds from scratch when a new bar
+    forms and the anchor moves.
+
+    The margin is a full screen's worth beyond the right edge, so dragging the
+    scale does not outrun the labels between frames — the thing that would
+    show up as ticks appearing a beat late.
+  */
+  const RUNWAY_MAX = 4000;
+  const ensureRunway = useCallback((lastTime: number, bucketSec: number) => {
+    const chart = chartRef.current;
+    const series = runwaySeriesRef.current;
+    if (!chart || !series || !lastTime || bucketSec <= 0) return;
+
+    const len = barCountRef.current;
+    const range = chart.timeScale().getVisibleLogicalRange();
+    const span = range ? Math.max(60, range.to - range.from) : 200;
+    const reach = range ? range.to - (len - 1) : 0;
+    const cur = runwayRef.current;
+    const want = Math.min(
+      RUNWAY_MAX,
+      Math.max(120, Math.ceil(reach + span), cur.from === lastTime ? cur.slots : 0)
+    );
+    if (cur.from === lastTime && cur.slots >= want) return;
+
+    const pts = [];
+    for (let i = 1; i <= want; i++) pts.push({ time: (lastTime + i * bucketSec) as UTCTimestamp });
+    series.setData(pts);
+    runwayRef.current = { from: lastTime, slots: want };
   }, []);
 
   const resetView = useCallback(() => {
@@ -495,6 +551,16 @@ const StrikeChart = ({
       lastValueVisible: false,
       priceLineVisible: false,
     });
+
+    /* Its own price scale, so an empty series cannot drag the tape's autoscale
+       around, and every visible affordance off. */
+    const runway = chart.addSeries(LineSeries, {
+      priceScaleId: 'runway',
+      visible: false,
+      lastValueVisible: false,
+      priceLineVisible: false,
+      crosshairMarkerVisible: false,
+    });
     chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.84, bottom: 0 } });
 
     const trails = new GexTrailsPrimitive();
@@ -502,17 +568,27 @@ const StrikeChart = ({
     const drawingsPrim = new DrawingsPrimitive();
     candles.attachPrimitive(drawingsPrim);
 
+    /* Zooming out reaches past the runway's end; extend it as they go. The
+       handler reads refs rather than closing over the bar time, so it is
+       installed once with the chart and never re-subscribed. */
+    const onRange = () => ensureRunway(lastBarTimeRef.current, bucketSecRef.current);
+    chart.timeScale().subscribeVisibleLogicalRangeChange(onRange);
+
     chartRef.current = chart;
     candleSeriesRef.current = candles;
     volumeSeriesRef.current = volume;
+    runwaySeriesRef.current = runway;
     trailsRef.current = trails;
     drawingsRef.current = drawingsPrim;
 
     return () => {
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRange);
       chart.remove();
       chartRef.current = null;
       candleSeriesRef.current = null;
       volumeSeriesRef.current = null;
+      runwaySeriesRef.current = null;
+      runwayRef.current = { from: 0, slots: 0 };
       trailsRef.current = null;
       drawingsRef.current = null;
       compareSeriesRef.current.clear();
@@ -526,7 +602,9 @@ const StrikeChart = ({
       cancelAnimationFrame(levelRafRef.current);
       loadedRef.current = { ticker: '', timeframe: '1m', theme: '' };
     };
-  }, [makeMain]);
+    // ensureRunway is a stable useCallback([]) — listed so the subscription
+    // installed here is never reading a stale one.
+  }, [makeMain, ensureRunway]);
 
   /* Style swap (Noah, 2026-08-23): replace ONLY the main series in place —
      price lines and primitives die with the old one, so the nonce tells the
@@ -757,7 +835,11 @@ const StrikeChart = ({
     const changed = loaded.ticker !== ticker || loaded.timeframe !== timeframe || loaded.theme !== themeKey;
     const newWorld = loaded.ticker !== ticker || loaded.timeframe !== timeframe;
 
-    lastCloseRef.current = bars.length ? bars[bars.length - 1].close : null;
+    if (bars.length) {
+      lastBarTimeRef.current = bars[bars.length - 1].time;
+      bucketSecRef.current = mins * 60;
+      ensureRunway(lastBarTimeRef.current, bucketSecRef.current);
+    }
 
 
     if (changed) {
@@ -851,76 +933,6 @@ const StrikeChart = ({
     // themeKey: the capsules are pre-blended against the theme's own canvas,
     // so a theme swap has to rebuild them or they keep the old surface's tint
   }, [ticker, overlays.levels, replay, mainNonce, axisLevels, themeKey]);
-
-  /*
-    THE CLOCK, ON THE TIME AXIS, UNDER THE NEWEST BAR.
-
-    It was in the price gutter first, which was the wrong axis (Noah,
-    2026-08-25: "you put the time on the right side bar, i meant the time on
-    the bottom"). A price gutter answers "what is it worth"; a time axis
-    answers "when is it", and a clock is an answer to the second question. So
-    it moved, and it sits at the x of the newest bar rather than at the right
-    edge — the right edge of this chart is empty room ahead of the market, and
-    a clock parked out there is a clock pointing at nothing.
-
-    It carries both halves of "when": the wall clock, and how much of the
-    current bar is left. Two facts, one pill, in that order.
-
-    It rides a frame loop rather than a one-second timer for the same reason
-    the price version did — the newest bar's x moves when the reader pans or
-    zooms, and a timer leaves the pill behind on every drag. It writes nothing
-    it does not have to: text and transform are both compared before they are
-    set, so a still chart on a still second does no DOM work at all.
-  */
-  useEffect(() => {
-    if (!countdown || replay) return;
-    const chart = chartRef.current;
-    const el = countdownRef.current;
-    if (!chart || !el) return;
-
-    const bucket = Math.max(60, tfMinutes(timeframe) * 60);
-    let shownText = '';
-    let shownX = Number.NaN;
-
-    const frame = () => {
-      countdownRafRef.current = requestAnimationFrame(frame);
-      const len = barCountRef.current;
-      const x = len > 0 ? chart.timeScale().logicalToCoordinate((len - 1) as never) : null;
-      if (x == null) {
-        if (!Number.isNaN(shownX)) {
-          el.style.opacity = '0';
-          shownX = Number.NaN;
-        }
-        return;
-      }
-
-      const now = new Date();
-      const pad = (v: number) => String(v).padStart(2, '0');
-      const clock = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-      const left = bucket - (Math.floor(now.getTime() / 1000) % bucket);
-      const hh = Math.floor(left / 3600);
-      const mm = Math.floor((left % 3600) / 60);
-      const ss = left % 60;
-      const remain = hh > 0 ? `${hh}:${pad(mm)}:${pad(ss)}` : `${pad(mm)}:${pad(ss)}`;
-      const text = `${clock} · ${remain}`;
-      if (text !== shownText) {
-        el.textContent = text;
-        shownText = text;
-      }
-
-      /* translate(-50%) centres the pill on the bar, the way the library
-         centres its own tick labels. */
-      const px = Math.round(x);
-      if (px !== shownX) {
-        el.style.transform = `translateX(${px}px) translateX(-50%)`;
-        el.style.opacity = '1';
-        shownX = px;
-      }
-    };
-
-    countdownRafRef.current = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(countdownRafRef.current);
-  }, [countdown, timeframe, replay, mainNonce]);
 
   // Dark-pool whisper lines — same grammar as the flow board minis
   useEffect(() => {
@@ -1196,18 +1208,6 @@ const StrikeChart = ({
         onDoubleClick={resetView}
       >
         <div ref={containerRef} className="absolute inset-0" />
-
-        {/* Pinned to the container's bottom-left and moved along the axis by
-            transform, so it rides the time scale the reader is dragging.
-            TIME_AXIS_PX of lift puts it inside the axis strip rather than on
-            the plot floor above it. */}
-        {countdown && !replay && (
-          <div
-            ref={countdownRef}
-            aria-hidden
-            className="pointer-events-none absolute left-0 bottom-[5px] z-10 whitespace-nowrap px-1.5 text-center font-mono text-[9px] font-semibold tnum leading-[15px] text-[#0a0a0a] bg-textPrimary rounded-[2px] opacity-0"
-          />
-        )}
 
         {/* Draw mode: pointer sketches instead of panning */}
         {drawing && (

@@ -359,7 +359,6 @@ const Pane = ({ cfg, onCfg, revision, expanded, onToggleExpand, index, tall, hea
               compares={compares}
               focusPrice={focus}
               axisLevels
-              countdown
               frameless
             />
 
