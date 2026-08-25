@@ -621,6 +621,49 @@ check(
   footerWraps,
   footerWraps ? 'ml-auto group is flex-wrap' : 'the group is nowrap again — the marked count leaves a 390px screen'
 );
+const subnav = read('src/components/ui/SubNav.tsx');
+const subnavWraps = /className="inline-flex flex-wrap items-center gap-0\.5 border border-borderSubtle/.test(subnav);
+check(
+  'the sub-page tab strip wraps rather than pushing the page sideways',
+  subnavWraps,
+  subnavWraps
+    ? 'inline-flex flex-wrap'
+    : "nowrap again — Pinpoint's three tabs run 411px into a 356px lane and <main> starts scrolling sideways"
+);
+const stocks = read('src/pages/Stocks.tsx');
+const sectorScrolls = /<div className="flex flex-col overflow-x-auto">/.test(stocks);
+check(
+  'the sector rotation list takes its own overflow instead of the page',
+  sectorScrolls,
+  sectorScrolls
+    ? 'overflow-x-auto on the list'
+    : "the list is static again — its 614px grid minimum makes <main> 647px wide on a 390px screen"
+);
+const beamClipped = /<div className="relative h-\[16px\] overflow-x-clip">/.test(tape);
+check(
+  "the tape beam's positioning span cannot push the page sideways",
+  beamClipped,
+  beamClipped
+    ? 'overflow-x-clip on the seam label wrapper'
+    : 'unclipped again — the full-width translateX span hangs 97px past the panel at 390px'
+);
+const ranked = read('src/pages/pinpoint/RankedTargets.tsx');
+const verdictWraps = /border-t border-borderSubtle\/60 flex flex-wrap items-center gap-x-2 gap-y-1/.test(ranked);
+const netGexResponsive = (ranked.match(/hidden sm:block ml-auto w-24 shrink-0/g) ?? []).length === 2;
+check(
+  'the ranked ladder drops Net GEX on a phone, as it already drops its neighbours',
+  netGexResponsive,
+  netGexResponsive
+    ? 'header and row both hidden below sm'
+    : 'held at every width — 85px of sideways page scroll at 390px, for a number the podium already carries'
+);
+check(
+  "the ranked target's verdict strip wraps rather than being eaten by its card",
+  verdictWraps,
+  verdictWraps
+    ? 'flex-wrap with a row gap'
+    : 'nowrap again — "DOWNSIDE CUSHION" ran 69px past the card edge at 768px and the card clipped it'
+);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

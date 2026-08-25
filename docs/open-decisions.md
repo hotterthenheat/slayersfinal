@@ -211,6 +211,7 @@ the defect was put back and the detector caught it.
 | Under-filled panels | 15 routes, any panel with >60px of dead space at the bottom | zero |
 | Unreachable content | 15 routes × 7 viewports — 390, 768, 1024, 1280, 1366, 1440, 1920 — 105 page loads | zero |
 | Popovers and dropdowns | every `aria-haspopup` / `aria-expanded` trigger on 10 routes, opened at 390 and 1440 | 63 opened, none landing outside the viewport |
+| Sideways page scroll | 15 routes × 390 / 768 / 1280 / 1440, before and after | five routes made `<main>` wider than a 390px screen — Stocks by 257px, Pinpoint's ranked ladder by 85, the tape's beam by 97, and two by the sub-page tab strip. Nothing at 768 or above. All five fixed; re-measured 60 page loads, **zero** |
 | Stateful journeys | tracking a campaign, posting an idea, marking a print, the desk layout — each driven in a browser and reloaded | 11 of 11. Everything the UI promises to keep is kept, except the tape's print marks, which never claimed to and now say so |
 | Header fit | 768px, every route | fits at exactly 768 after the labels-only ladder |
 | Company-mark licensing | the 17 SVGs in `public/logos` | clean — Simple Icons, CC0. Provenance and the trademark caveat are now recorded in `public/logos/README.md`; unlike the SF Pro problem, nothing here needed replacing |

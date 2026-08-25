@@ -278,7 +278,16 @@ const SessionBeam = ({
           {/* The label rides the seam on the same glide as the bar — a
               full-width rail translated by the seam %, label hanging at its
               left edge (translateX % is compositor-cheap; `left` is not). */}
-          <div className="relative h-[16px]">
+          {/* CLIPPED ON X. The span below is full-width on purpose — a
+              translateX percentage resolves against the element's OWN size, so
+              a full-width span is how the seam percentage becomes a container
+              percentage. Only its left edge is used; the rest is scaffolding,
+              and it hung 97px past the panel on a 390px screen, growing
+              <main>'s scroll width and sliding the whole page sideways as the
+              ratio moved. `clip` rather than `hidden` so no scroll container
+              is created. Measured: the label itself stays fully inside the
+              wrapper at 390, 768 and 1440 — nothing visible is lost. */}
+          <div className="relative h-[16px] overflow-x-clip">
             <span className="absolute inset-x-0 top-0" style={{ transform: `translateX(${seam}%)`, transition: BEAM_GLIDE }}>
               <span
                 className={`absolute left-0 -translate-x-1/2 font-mono text-[11px] font-bold tnum whitespace-nowrap ${

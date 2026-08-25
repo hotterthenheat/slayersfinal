@@ -229,8 +229,18 @@ const PodiumCard = forwardRef<
         ))}
       </div>
 
-      {/* Verdict strip — the only place color speaks */}
-      <div className="mt-3 px-3.5 py-2 border-t border-borderSubtle/60 flex items-center gap-2">
+      {/*
+        Verdict strip — the only place color speaks.
+
+        WRAPS, for the same reason the stats above it do. Four items on one
+        nowrap line inside a card whose width comes from the page grid: at a
+        768px viewport the podium is ~240px and the class label — the longest
+        of them, "DOWNSIDE CUSHION" — ran 69px past the card's edge and the
+        card's own overflow-hidden ate it. Measured across widths, clipped
+        items in this strip: 390px 0, 768px 6, 1024px 1, 1440px 0. With the
+        wrap: 0 at every width.
+      */}
+      <div className="mt-3 px-3.5 py-2 border-t border-borderSubtle/60 flex flex-wrap items-center gap-x-2 gap-y-1">
         {/* Positive = put-dominant = short gamma = red (sim side-coding, unified 2026-08-18) */}
         <span className={`font-mono text-[13px] font-semibold tnum ${t.netGex > 0 ? 'text-gold-ink' : 'text-steel-ink'}`}>
           {fmtUsd(t.netGex)}
@@ -298,7 +308,11 @@ const LadderRow = forwardRef<HTMLButtonElement, { t: RankedTarget; lens: RankLen
         <span className="hidden xl:block shrink-0">
           <CpChip t={t} />
         </span>
-        <span className={`ml-auto w-24 shrink-0 text-right font-mono text-[11px] font-semibold tnum ${t.netGex > 0 ? 'text-gold-ink' : 'text-steel-ink'}`}>
+        {/* Net GEX joins the columns this row already drops as it narrows —
+            Volume and Open Int below lg, C/P below xl. Held at every width it
+            made <main> 85px wider than a 390px screen, so the whole page slid
+            sideways to reach a number the podium cards above already carry. */}
+        <span className={`hidden sm:block ml-auto w-24 shrink-0 text-right font-mono text-[11px] font-semibold tnum ${t.netGex > 0 ? 'text-gold-ink' : 'text-steel-ink'}`}>
           {fmtUsd(t.netGex)}
         </span>
         <span className={`hidden sm:block w-36 shrink-0 text-right font-mono text-[9px] font-semibold uppercase tracking-wider ${CLASS_TEXT[t.hedgingClass]}`}>
@@ -327,7 +341,7 @@ const LadderHead = () => (
     <span className="hidden lg:block w-20 shrink-0 text-right font-mono text-[9px] uppercase tracking-widest text-textSecondary">Volume</span>
     <span className="hidden lg:block w-20 shrink-0 text-right font-mono text-[9px] uppercase tracking-widest text-textSecondary">Open Int</span>
     <span className="hidden xl:block w-[76px] shrink-0 font-mono text-[9px] uppercase tracking-widest text-textSecondary">C/P</span>
-    <span className="ml-auto w-24 shrink-0 text-right font-mono text-[9px] uppercase tracking-widest text-textSecondary">
+    <span className="hidden sm:block ml-auto w-24 shrink-0 text-right font-mono text-[9px] uppercase tracking-widest text-textSecondary">
       <Term k="Net GEX" />
     </span>
     <span className="hidden sm:block w-36 shrink-0 text-right font-mono text-[9px] uppercase tracking-widest text-textSecondary">

@@ -229,7 +229,14 @@ const Stocks = () => {
             This board ranks <span className="text-textPrimary">price strength</span> — who's outperforming the tape.
           </p>
         </div>
-        <div className="flex flex-col">
+        {/* SCROLLS SIDEWAYS INSIDE ITSELF, not the page. The row below is a
+            seven-column grid with a 614px minimum — 26 + 120 + 112 + 80 + 74 +
+            74 + 56 and six 12px gaps. Held at every width it made <main> 647px
+            wide on a 390px screen, so the whole terminal slid left and right
+            under the reader's thumb. The list takes the overflow instead, the
+            way DataTable already does; nothing is lost and nothing else moves.
+            Measured: 257px over -> 0. */}
+        <div className="flex flex-col overflow-x-auto">
           {sectors.map((s, i) => {
             // The crown: only the ladder's absolute best (ties share it)
             const isLeader = s.score === topSector.score;
