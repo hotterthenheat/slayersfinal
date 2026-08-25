@@ -222,7 +222,7 @@ const PodiumCard = forwardRef<
       {/* Verdict strip — the only place color speaks */}
       <div className="mt-3 px-3.5 py-2 border-t border-borderSubtle/60 flex items-center gap-2">
         {/* Positive = put-dominant = short gamma = red (sim side-coding, unified 2026-08-18) */}
-        <span className={`font-mono text-[13px] font-semibold tnum ${t.netGex > 0 ? 'text-bear' : 'text-bull'}`}>
+        <span className={`font-mono text-[13px] font-semibold tnum ${t.netGex > 0 ? 'text-gold-ink' : 'text-steel-ink'}`}>
           {fmtUsd(t.netGex)}
         </span>
         <span className={`font-mono text-[9px] font-semibold uppercase tracking-wider ${t.pressure === 'SUPPORT' ? 'text-bull' : 'text-bear'}`}>
@@ -288,7 +288,7 @@ const LadderRow = forwardRef<HTMLButtonElement, { t: RankedTarget; lens: RankLen
         <span className="hidden xl:block shrink-0">
           <CpChip t={t} />
         </span>
-        <span className={`ml-auto w-24 shrink-0 text-right font-mono text-[11px] font-semibold tnum ${t.netGex > 0 ? 'text-bear' : 'text-bull'}`}>
+        <span className={`ml-auto w-24 shrink-0 text-right font-mono text-[11px] font-semibold tnum ${t.netGex > 0 ? 'text-gold-ink' : 'text-steel-ink'}`}>
           {fmtUsd(t.netGex)}
         </span>
         <span className={`hidden sm:block w-36 shrink-0 text-right font-mono text-[9px] font-semibold uppercase tracking-wider ${CLASS_TEXT[t.hedgingClass]}`}>

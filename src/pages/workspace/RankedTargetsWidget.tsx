@@ -94,7 +94,7 @@ const RankedTargetsWidget = ({ ctx }: { ctx: WorkspaceCtx }) => {
                 {t.bps}
               </span>
               {/* Positive = put-dominant = short gamma = red (sim side-coding) */}
-              <span className={`text-right font-mono text-[11px] font-semibold tnum ${t.netGex > 0 ? 'text-bear' : 'text-bull'}`}>{fmtUsd(t.netGex)}</span>
+              <span className={`text-right font-mono text-[11px] font-semibold tnum ${t.netGex > 0 ? 'text-gold-ink' : 'text-steel-ink'}`}>{fmtUsd(t.netGex)}</span>
             </button>
           );
         })}

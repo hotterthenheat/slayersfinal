@@ -260,5 +260,56 @@ check(
   TRIO.map(f => `${f.split('/').pop()} ${read(f).length}b`).join(' · ')
 );
 
+/*
+  ---- Step 3: net figures are dollars of dealer gamma, not a price read ------
+
+  docs/dealer-ink-pass.md's rule of thumb: "if the number is dollars of dealer
+  gamma or the identity of a side, it is gold/steel; if it is a read on price,
+  it is red/green." Two of these files carried the confusion in a comment —
+  "Sim side-coding: negative = dealers absorb (bull), positive = amplify
+  (bear)" — which is a dealer-side fact wearing the candles' colours.
+
+  The check is deliberately narrow: a line may not name a net-exposure value
+  AND a direction class at once. It says nothing about SUPPORT / RESISTANCE,
+  DOWNSIDE CUSHION / UPSIDE RESISTANCE, the dealer bias chip or the prose,
+  all of which the doc lists under "stays red/green" — those are reads on
+  price and they still render bull/bear, verified from the DOM.
+*/
+const NET_FIGURE_SURFACES = [
+  'src/pages/pinpoint/ExposureProfile.tsx',
+  'src/pages/pinpoint/RankedTargets.tsx',
+  'src/pages/workspace/RankedTargetsWidget.tsx',
+  'src/components/compass/ImpactLeaderboard.tsx',
+  'src/components/compass/SetupDrivers.tsx',
+];
+const NET_VALUE = /netGex|exposureUsd|\[k\]\.put|\[k\]\.call/;
+const DIRECTION_CLASS = /text-(bull|bear)\b/;
+
+const netOffenders: string[] = [];
+for (const file of NET_FIGURE_SURFACES) {
+  const lines = read(file).split('\n');
+  lines.forEach((line, i) => {
+    if (NET_VALUE.test(line) && DIRECTION_CLASS.test(line)) {
+      netOffenders.push(`${file.split('/').pop()}:${i + 1}`);
+    }
+  });
+}
+check(
+  'no net-exposure figure is painted in direction ink',
+  netOffenders.length === 0,
+  netOffenders.length ? netOffenders.join(', ') : `${NET_FIGURE_SURFACES.length} surfaces clean`
+);
+// Guard the guard: the scan must be seeing net-exposure lines at all, or a
+// renamed field would empty it out and it would pass on nothing.
+const netLineCount = NET_FIGURE_SURFACES.reduce(
+  (n, f) => n + read(f).split('\n').filter(l => NET_VALUE.test(l)).length,
+  0
+);
+check(
+  'the net-figure scan found lines to check',
+  netLineCount >= 10,
+  `${netLineCount} lines name a net-exposure value`
+);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

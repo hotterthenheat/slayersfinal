@@ -120,9 +120,9 @@ const ExposureProfile = () => {
             {(['gex', 'dex', 'vex'] as const).map(k => (
               <span key={k} className="font-mono text-[10px] uppercase tracking-wider text-textMuted tnum">
                 {k}{' '}
-                <span className="text-bear">{fmtUsd(selectedRow[k].put)}</span>
+                <span className="text-gold-ink">{fmtUsd(selectedRow[k].put)}</span>
                 {' / '}
-                <span className="text-bull">{fmtUsd(selectedRow[k].call)}</span>
+                <span className="text-steel-ink">{fmtUsd(selectedRow[k].call)}</span>
                 {' / '}
                 <span className="text-textPrimary font-semibold">{fmtUsd(selectedRow[k].net)}</span>
               </span>
@@ -186,7 +186,10 @@ const ExposureProfile = () => {
                   </span>
                 </>
               }
-              valueCls={data.netGex > 0 ? 'text-bear' : 'text-bull'}
+              /* Dollars of dealer gamma, so gold/steel rather than the candles'
+                 own red and green — docs/dealer-ink-pass.md step 3. The WORDS
+                 beside it stay plain: "moves amplified" is a read on price. */
+              valueCls={data.netGex > 0 ? 'text-gold-ink' : 'text-steel-ink'}
             />
             <Fact label={<Term k="Net DEX" />} value={<AnimatedNumber value={data.netDex} format={fmtUsd} />} />
             <Fact label={<Term k="Net VEX" />} value={<AnimatedNumber value={data.netVex} format={fmtUsd} />} />
