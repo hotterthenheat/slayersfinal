@@ -346,5 +346,52 @@ check(
   uncovered.length ? `not covered: ${uncovered.join(', ')}` : `${usedLoops.length} in use, all covered`
 );
 
+// ---- One bad panel does not cost you the desk -----------------------------
+
+/*
+  Two nets, and only one of them was hung.
+
+  AppShell's RouteBoundary catches anything a page throws and shows a fault
+  card with a reload and a way back — so nothing could ever white-screen the
+  terminal. But it catches at the ROUTE, which means a fault inside one Pulse
+  widget replaces the WHOLE desk, and the reader loses a layout they arranged
+  by hand to a hiccup in one panel.
+
+  ErrorBoundary was written for exactly that and names it in its own header:
+  "for surfaces that read live feed data and must fail small — a drilldown, a
+  widget, a chart". One file had adopted it.
+
+  Proved by breaking a widget on purpose rather than by reading the code: a
+  deliberate throw in KeyLevelsWidget renders "KEY LEVELS COULD NOT RENDER"
+  inside that panel's frame, with its header, ticker picker and close button
+  intact, while the Live Chart, the pressure ladder and the positioning map
+  carry on and no page fault appears.
+*/
+const shell = read('src/components/layout/AppShell.tsx');
+check(
+  'the route-level boundary is still wired',
+  /class RouteBoundary/.test(shell) && /<RouteBoundary/.test(shell),
+  /<RouteBoundary/.test(shell) ? 'AppShell wraps the outlet' : 'the page-level net is gone'
+);
+const routeResets = /prevProps\.resetKey !== this\.props\.resetKey/.test(shell);
+check(
+  'the route boundary clears itself on navigation',
+  routeResets,
+  routeResets ? 'resets on pathname change' : 'a page fault would stick across navigation'
+);
+
+const pulse = read('src/pages/workspace/Pulse.tsx');
+check(
+  'every Pulse widget renders inside its own boundary',
+  /<ErrorBoundary label=\{def\.title\}/.test(pulse),
+  /<ErrorBoundary/.test(pulse) ? 'wrapped per widget, labelled by title' : 'one widget can still take the desk'
+);
+const widgetResets = /resetKey=\{`\$\{inst\.id\}-\$\{inst\.ticker\}`\}/.test(pulse);
+check(
+  'a faulted widget retries when its ticker changes',
+  widgetResets,
+  widgetResets ? 'keyed on instance + ticker' : 'no resetKey — a faulted widget would stay stuck'
+);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
