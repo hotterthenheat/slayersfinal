@@ -57,6 +57,7 @@ import SpotRule from '../ui/SpotRule';
 import Term from '../ui/Term';
 import { CALL_WALL, DEALER_CALL_INK, DEALER_PUT_INK, FLIP, KING, PUT_WALL } from './palette';
 import type { ExposureProfileData, StrikeExposure } from '../../types/gex';
+import { fmtNum } from '../../core/numFormat';
 
 interface StrikePressureLadderProps {
   data: ExposureProfileData;
@@ -495,8 +496,8 @@ const StrikePressureLadder = ({ data, strikeFormat = fmtStrikeDefault, fill = fa
                 </span>
                 {!compact && (
                   <>
-                    <span className={`${cell} text-right text-textPrimary`}>{row.oi.toLocaleString()}</span>
-                    <span className={`${cell} text-right text-textPrimary`}>{row.volume.toLocaleString()}</span>
+                    <span className={`${cell} text-right text-textPrimary`}>{fmtNum(row.oi)}</span>
+                    <span className={`${cell} text-right text-textPrimary`}>{fmtNum(row.volume)}</span>
                     <span className="flex items-center justify-end gap-1.5 min-w-0">
                       {roles.slice(0, 2).map(r => (
                         <span key={r.label} className="font-mono text-[8px] font-bold uppercase tracking-wider whitespace-nowrap" style={{ color: r.color }}>
@@ -607,11 +608,11 @@ const StrikeCard = ({
         </span>
         <span className="flex flex-col">
           <span className="font-mono text-[8px] uppercase tracking-widest text-textMuted">Open int</span>
-          <span className="font-mono text-[11px] tnum text-textPrimary">{row.oi.toLocaleString()}</span>
+          <span className="font-mono text-[11px] tnum text-textPrimary">{fmtNum(row.oi)}</span>
         </span>
         <span className="flex flex-col">
           <span className="font-mono text-[8px] uppercase tracking-widest text-textMuted">Volume</span>
-          <span className="font-mono text-[11px] tnum text-textPrimary">{row.volume.toLocaleString()}</span>
+          <span className="font-mono text-[11px] tnum text-textPrimary">{fmtNum(row.volume)}</span>
         </span>
       </div>
       {sinceOpen && (

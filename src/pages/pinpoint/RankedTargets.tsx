@@ -13,6 +13,7 @@ import type { MarketSnapshot } from '../../types/market';
 import type { HedgingClass, RankLens, RankedTarget, TargetTag } from '../../types/gex';
 import type { Tone } from '../../components/ui/tones';
 import { etClock } from '../../core/etFormat';
+import { fmtNum } from '../../core/numFormat';
 
 /** Rankings sweep on the scan tier — priority must not reshuffle per tick. */
 const SCAN_INTERVAL_MS = 10_000;
@@ -64,9 +65,9 @@ const fmtLens = (t: RankedTarget, lens: RankLens): string => {
     case 'gex':
       return fmtUsd(t.netGex);
     case 'oi':
-      return `${t.openInterest.toLocaleString()} OI`;
+      return `${fmtNum(t.openInterest)} OI`;
     case 'volume':
-      return `${t.volume.toLocaleString()} vol`;
+      return `${fmtNum(t.volume)} vol`;
     case 'nbr':
       return `${t.nbr.toFixed(2)}x NBR`;
     case 'proximity':
@@ -215,8 +216,8 @@ const PodiumCard = forwardRef<
         {[
           { label: 'BPS', term: 'BPS' as const, value: `${t.bps >= 0 ? '+' : ''}${t.bps}`, lens: 'proximity' as const },
           { label: 'NBR', term: 'NBR' as const, value: `${t.nbr.toFixed(2)}x`, strong: t.nbr >= 1.5, lens: 'nbr' as const },
-          { label: 'Volume', term: undefined, value: t.volume.toLocaleString(), lens: 'volume' as const },
-          { label: 'Open Int', term: undefined, value: t.openInterest.toLocaleString(), lens: 'oi' as const },
+          { label: 'Volume', term: undefined, value: fmtNum(t.volume), lens: 'volume' as const },
+          { label: 'Open Int', term: undefined, value: fmtNum(t.openInterest), lens: 'oi' as const },
         ].map(s => (
           <div key={s.label} className="min-w-[68px] flex-1">
             <span className="block font-mono text-[9px] uppercase tracking-widest text-textSecondary">
@@ -300,10 +301,10 @@ const LadderRow = forwardRef<HTMLButtonElement, { t: RankedTarget; lens: RankLen
           {t.nbr.toFixed(2)}x
         </span>
         <span className={`hidden lg:block w-20 shrink-0 text-right font-mono text-[11px] tnum text-textPrimary ${lensCls('volume')}`}>
-          {t.volume.toLocaleString()}
+          {fmtNum(t.volume)}
         </span>
         <span className={`hidden lg:block w-20 shrink-0 text-right font-mono text-[11px] tnum text-textPrimary ${lensCls('oi')}`}>
-          {t.openInterest.toLocaleString()}
+          {fmtNum(t.openInterest)}
         </span>
         <span className="hidden xl:block shrink-0">
           <CpChip t={t} />

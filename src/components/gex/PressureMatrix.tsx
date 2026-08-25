@@ -4,6 +4,7 @@ import SpotRule from '../ui/SpotRule';
 import { heatRgb } from './heatmap';
 import type { PressureRow, PressureSide } from '../../types/gex';
 import { ROW_INTERACTIVE, interactiveRowProps } from '../ui/interactiveRow';
+import { fmtNum } from '../../core/numFormat';
 
 interface PressureMatrixProps {
   ticker: string;
@@ -28,10 +29,10 @@ const SideCells = ({ side, significantAbs }: { side: PressureSide; significantAb
           significant ? (dOiUp ? 'text-bull font-semibold' : 'text-bear font-semibold') : 'text-textSecondary'
         }`}
       >
-        {dOiUp ? '↑' : '↓'}{Math.abs(side.deltaOI).toLocaleString()}
+        {dOiUp ? '↑' : '↓'}{fmtNum(Math.abs(side.deltaOI))}
       </td>
       <td className="px-1.5 py-1 text-right font-mono text-[9px] tnum text-textMuted">
-        {side.volume.toLocaleString()}
+        {fmtNum(side.volume)}
       </td>
     </>
   );

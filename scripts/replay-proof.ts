@@ -300,6 +300,46 @@ check('decision id shape (sleeveless source)', idNoSleeve === 'SPY   260731C0050
     files.length > 100 && offenders.length === 0,
     offenders.length ? offenders.join(', ') : `${files.length} files scanned, none`
   );
+
+  /*
+    THE SAME RULE, FOR THE OTHER HALF OF WHAT toLocaleString DOES.
+
+    The check above has always been about the ZONE. Locale is the other thing
+    that call decides, and numbers were never brought under it: 44 calls across
+    41 lines in 13 files, exactly one of which passed a locale. Loaded with the
+    browser set to de-DE, /trace/live-tape rendered
+
+        2.350   4.467   10.892   38.688      (sizes, viewer's locale)
+        $512.28   $419.73   $9.46            (prices, a hard-coded '$' and toFixed)
+
+    on one screen — the same dot as a thousands separator in one column and a
+    decimal point in the next. It was inconsistent between routes too, which
+    is the tell that nothing was deciding it: the same browser gave US
+    grouping on /pulse and German grouping on the tape.
+
+    So every number goes through core/numFormat.ts, which pins the same locale
+    etFormat.ts pins for dates. This asserts nothing goes round it.
+  */
+  const numOffenders: string[] = [];
+  for (const file of files) {
+    const rel = path.relative(ROOT, file).split(path.sep).join('/');
+    if (rel === skip || rel === 'src/core/numFormat.ts') continue;
+    readFileSync(file, 'utf8')
+      .split('\n')
+      .forEach((line, i) => {
+        if (!/\.toLocaleString\s*\(/.test(line)) return;
+        // a pinned locale is the point; anything else takes the viewer's
+        if (/toLocaleString\s*\(\s*'en-US'/.test(line)) return;
+        numOffenders.push(`${rel}:${i + 1}`);
+      });
+  }
+  check(
+    'no number is punctuated in the viewer locale',
+    files.length > 100 && numOffenders.length === 0,
+    numOffenders.length
+      ? numOffenders.join(', ')
+      : `${files.length} files scanned, every number goes through core/numFormat.ts`
+  );
 }
 
 {

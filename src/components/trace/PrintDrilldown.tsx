@@ -44,6 +44,7 @@ import type { FlowPrint, PrintSentiment } from '../../types/trace';
 import type { MarketSnapshot } from '../../types/market';
 import { toneBar, type Tone } from '../ui/tones';
 import { etMonthDay } from '../../core/etFormat';
+import { fmtNum } from '../../core/numFormat';
 
 // recharts is heavy — it only loads when a print is actually opened
 const FlowPanels = lazy(() => import('./ContractFlowChart').then(m => ({ default: m.FlowPanel })));
@@ -61,7 +62,7 @@ type TableTab = (typeof TABLE_TABS)[number]['value'];
 
 /* The drilldown reads whatever the feed hands it. A field that is missing must
    render as a dash — never throw and take the page down with it. */
-const num = (v: number | undefined | null): string => (Number.isFinite(v as number) ? (v as number).toLocaleString() : '—');
+const num = (v: number | undefined | null): string => (Number.isFinite(v as number) ? fmtNum(v as number) : '—');
 const fixed = (v: number | undefined | null, dp = 2): string => (Number.isFinite(v as number) ? (v as number).toFixed(dp) : '—');
 const usd = (v: number | undefined | null): string => (Number.isFinite(v as number) ? fmtUsd(v as number) : '—');
 
@@ -211,7 +212,7 @@ const SequenceStrip = ({
                 <span className="w-[86px] shrink-0 font-mono text-[10px] tnum text-textMuted">{p.time}</span>
                 <span className={`w-[74px] shrink-0 font-mono text-[9px] font-semibold uppercase tracking-wider ${ink}`}>{word}</span>
                 <span className="font-mono text-[10px] tnum text-textSecondary">
-                  {p.size.toLocaleString()} × ${p.fill.toFixed(2)}
+                  {fmtNum(p.size)} × ${p.fill.toFixed(2)}
                 </span>
                 <span className="font-mono text-[10px] font-bold tnum text-textPrimary">{fmtUsd(p.premium)}</span>
                 {p.sweep && <span className="font-mono text-[8px] font-semibold uppercase tracking-wider text-warn">Sweep</span>}
@@ -750,7 +751,7 @@ const OrdersTable = ({ cf }: { cf: ReturnType<typeof buildContractFlow> }) => (
           <tr key={o.id} className="border-b border-borderSubtle/30 last:border-0 hover:bg-white/[0.02]">
             <td className={`${td} text-textSecondary`}>{o.time}</td>
             <td className={`${td} text-right text-textPrimary`}>${o.price.toFixed(2)}</td>
-            <td className={`${td} text-right text-textPrimary`}>{o.size.toLocaleString()}</td>
+            <td className={`${td} text-right text-textPrimary`}>{fmtNum(o.size)}</td>
             <td className={`${td} ${o.side === 'ASK' ? 'text-bull' : o.side === 'BID' ? 'text-bear' : 'text-textMuted'}`}>
               {o.side === 'ASK' ? 'Paid offer' : o.side === 'BID' ? 'Hit bid' : 'Mid'}
             </td>

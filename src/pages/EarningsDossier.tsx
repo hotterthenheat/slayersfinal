@@ -51,6 +51,7 @@ import {
   type EarningsDossier as Dossier,
 } from '../data/earnings';
 import { FONT_FAMILY } from '../components/ui/typeface';
+import { fmtNum } from '../core/numFormat';
 
 /*
   The per-company earnings dossier — /earnings/:ticker. Everything a user
@@ -229,10 +230,10 @@ const ActiveRow = ({ c, maxVol }: { c: ActiveContract; maxVol: number }) => (
         />
       </span>
       <span className="font-mono text-[11px] font-semibold text-textPrimary tnum">
-        <AnimatedNumber value={c.volume} format={v => Math.round(v).toLocaleString()} />
+        <AnimatedNumber value={c.volume} format={v => fmtNum(Math.round(v))} />
       </span>
       <span className="font-mono text-[10px] text-textSecondary tnum">
-        OI {c.oi.toLocaleString()} · <AnimatedNumber value={c.volOverOi} format={v => `${v.toFixed(2)}×`} /> · IV {c.ivPct}%
+        OI {fmtNum(c.oi)} · <AnimatedNumber value={c.volOverOi} format={v => `${v.toFixed(2)}×`} /> · IV {c.ivPct}%
       </span>
     </div>
     <span className="font-mono text-[10px] text-textMuted tnum">

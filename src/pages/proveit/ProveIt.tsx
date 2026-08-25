@@ -11,6 +11,7 @@ import MetricGrid from '../../components/ui/MetricGrid';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import MonteCarloPanel from './MonteCarloPanel';
 import Surface3D from './Surface3D';
+import { fmtNum } from '../../core/numFormat';
 
 type Window = '10' | '30' | '60';
 
@@ -72,7 +73,7 @@ const ProveIt = () => {
         <StatCard
           label={`P(up in ${mc.days} sessions)`}
           value={`${mc.stats.probUpPct}%`}
-          sub={`${mc.runs.toLocaleString()} Monte Carlo runs`}
+          sub={`${fmtNum(mc.runs)} Monte Carlo runs`}
           tone={mc.stats.probUpPct >= 55 ? 'bull' : mc.stats.probUpPct <= 45 ? 'bear' : 'neutral'}
         />
         <StatCard
@@ -111,7 +112,7 @@ const ProveIt = () => {
               <FlaskConical className="w-3.5 h-3.5" /> Monte Carlo
             </span>
           }
-          subtitle={`${activeTicker} · GBM · ${mc.runs.toLocaleString()} runs over ${mc.days} sessions`}
+          subtitle={`${activeTicker} · GBM · ${fmtNum(mc.runs)} runs over ${mc.days} sessions`}
           className="xl:col-span-7"
         >
           <MonteCarloPanel mc={mc} spot={marketData.spot} />

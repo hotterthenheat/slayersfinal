@@ -19,6 +19,8 @@
 ==================================================
 */
 
+
+import { fmtNum } from '../core/numFormat';
 export type TwinLensKey = 'etf' | 'index' | 'futures';
 
 export interface TwinFamily {
@@ -70,4 +72,4 @@ export const twinLabel = (fam: TwinFamily, lens: TwinLensKey): string =>
 
 /** Index/futures prices print with thousands separators, no dollar sign. */
 export const fmtTwin = (v: number): string =>
-  v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  fmtNum(v, { minimumFractionDigits: 2, maximumFractionDigits: 2 });

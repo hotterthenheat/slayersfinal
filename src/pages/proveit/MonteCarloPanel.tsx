@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { histogram, type MonteCarloResult } from '../../core/quant';
+import { fmtNum } from '../../core/numFormat';
 
 /*
   The fan chart: sampled GBM paths in faint chrome, the percentile cone in
@@ -211,7 +212,7 @@ const MonteCarloPanel = ({ mc, spot, height = 260 }: MonteCarloPanelProps) => {
         </div>
         <div className="mt-1.5 flex items-center justify-between font-mono text-[9px] uppercase tracking-widest text-textMuted">
           <span>${mc.terminal[0].toFixed(0)}</span>
-          <span>terminal price after {mc.days} sessions · {mc.runs.toLocaleString()} runs</span>
+          <span>terminal price after {mc.days} sessions · {fmtNum(mc.runs)} runs</span>
           <span>${mc.terminal[mc.terminal.length - 1].toFixed(0)}</span>
         </div>
       </div>

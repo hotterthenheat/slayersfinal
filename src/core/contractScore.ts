@@ -20,6 +20,7 @@ import { expiryFor } from './calendar';
 import { dayKey, hRange } from './rng';
 import { buildDarkPoolView } from '../data/darkpool';
 import type { MarketSnapshot, StrikeNode } from '../types/market';
+import { fmtNum } from '../core/numFormat';
 
 export type Horizon = 'SAMEDAY' | 'WEEKLIES' | 'SWINGS' | 'LEAPS';
 
@@ -312,7 +313,7 @@ export function scoreCandidate(
   const liqScore = Math.round(clamp(100 - spreadPct * 13 + Math.log10(Math.max(oiCount, 10)) * 6, 4, 98));
   const liqDetail =
     liqScore >= 55
-      ? `${spreadPct.toFixed(1)}% spread on ${oiCount.toLocaleString()} OI — in and out without paying a toll.`
+      ? `${spreadPct.toFixed(1)}% spread on ${fmtNum(oiCount)} OI — in and out without paying a toll.`
       : `${spreadPct.toFixed(1)}% spread — the market maker wins twice on this one.`;
 
   // RSI sanity nudges the math sleeve at extremes (chasing into 80 RSI weeklies etc.)

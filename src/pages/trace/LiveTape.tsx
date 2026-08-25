@@ -11,6 +11,7 @@ import RichRead from '../../components/ui/RichRead';
 import PrintDrilldown from '../../components/trace/PrintDrilldown';
 import type { FlowPrint, PrintSentiment, TapeSummary } from '../../types/trace';
 import { ROW_INTERACTIVE, interactiveRowProps } from '../../components/ui/interactiveRow';
+import { fmtNum } from '../../core/numFormat';
 
 const MAX_ROWS = 120;
 const READ_INTERVAL_MS = 8_000;
@@ -396,7 +397,7 @@ const SessionBeam = ({
               { key: 'bear', p: whales.bear, word: 'Bear', ink: 'text-bear' },
             ] as { key: string; p: FlowPrint | null; word: string; ink: string }[]
           ).filter((o): o is { key: string; p: FlowPrint; word: string; ink: string } => !!o.p && o.p !== hero);
-          const door = (p: FlowPrint) => `${p.size.toLocaleString()} × $${p.fill.toFixed(2)} · open the drilldown`;
+          const door = (p: FlowPrint) => `${fmtNum(p.size)} × $${p.fill.toFixed(2)} · open the drilldown`;
           return (
             <div className="shrink-0 flex flex-col justify-center rounded-md border border-[#EA00FF]/40 bg-[#EA00FF]/[0.06] px-2.5 py-1.5 min-w-[236px] min-h-[64px] select-none">
               <span className="flex items-baseline gap-2">
@@ -596,7 +597,7 @@ const TAPE_COLUMNS: TapeColumn[] = [
     group: 'Execution',
     label: 'Size',
     align: 'right',
-    cell: r => <span className="font-mono text-[11px] tnum text-textPrimary">{r.size.toLocaleString()}</span>,
+    cell: r => <span className="font-mono text-[11px] tnum text-textPrimary">{fmtNum(r.size)}</span>,
   },
   {
     key: 'prem',
@@ -634,14 +635,14 @@ const TAPE_COLUMNS: TapeColumn[] = [
     group: 'Activity',
     label: 'Vol',
     align: 'right',
-    cell: r => <span className="font-mono text-[10px] tnum text-textSecondary">{r.volume.toLocaleString()}</span>,
+    cell: r => <span className="font-mono text-[10px] tnum text-textSecondary">{fmtNum(r.volume)}</span>,
   },
   {
     key: 'oi',
     group: 'Activity',
     label: 'OI',
     align: 'right',
-    cell: r => <span className="font-mono text-[10px] tnum text-textSecondary">{r.oi.toLocaleString()}</span>,
+    cell: r => <span className="font-mono text-[10px] tnum text-textSecondary">{fmtNum(r.oi)}</span>,
   },
   {
     key: 'deltaOi',
@@ -654,7 +655,7 @@ const TAPE_COLUMNS: TapeColumn[] = [
       ) : (
         <span className={`font-mono text-[10px] tnum ${r.deltaOI > 0 ? 'text-bull' : 'text-bear'}`}>
           {r.deltaOI > 0 ? '↑' : '↓'}
-          {Math.abs(r.deltaOI).toLocaleString()}
+          {fmtNum(Math.abs(r.deltaOI))}
         </span>
       ),
   },
@@ -1524,7 +1525,7 @@ const LiveTape = () => {
                           </span>
                         </td>
                         <td className="px-2 py-2 text-right font-mono text-[11px] tnum text-textSecondary">
-                          {p.size.toLocaleString()}
+                          {fmtNum(p.size)}
                         </td>
                         <td className="px-2 py-2 text-right font-mono text-[11px] tnum text-textSecondary">
                           ${p.price.toFixed(2)}

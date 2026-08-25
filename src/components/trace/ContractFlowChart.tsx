@@ -52,6 +52,7 @@ import { flowAxisLabel, flowClock, sessionDate, type ContractFlow, type Contract
 import { fmtUsd } from '../../data/gex';
 import { BULL, KING } from '../gex/palette';
 import { FONT_FAMILY } from '../ui/typeface';
+import { fmtNum } from '../../core/numFormat';
 
 const ASK = BULL; // lifted the offer — the market's bull colour
 const BID = '#FF3B30';
@@ -396,7 +397,7 @@ export const FlowPanel = ({ cf, showAvg, onShowAvg, showIv, onShowIv, dayOffset,
         leftLabel="Hit the bid"
         rightLabel="Paid the offer"
         leftPct={100 - s.askSharePct}
-        caption={`${s.bidCount.toLocaleString()} / ${s.midCount.toLocaleString()} mid / ${s.askCount.toLocaleString()}`}
+        caption={`${fmtNum(s.bidCount)} / ${fmtNum(s.midCount)} mid / ${fmtNum(s.askCount)}`}
       />
 
       <div className="h-[200px] -ml-2">
@@ -608,7 +609,7 @@ const BarTooltip = ({ active, payload, isUsd }: BarTipProps) => {
   if (!p) return null;
   const call = isUsd ? p.callPrem : p.callVol;
   const put = isUsd ? p.putPrem : p.putVol;
-  const fmt = (v: number) => (isUsd ? fmtUsd(Math.abs(v)) : `${Math.abs(v).toLocaleString()} contracts`);
+  const fmt = (v: number) => (isUsd ? fmtUsd(Math.abs(v)) : `${fmtNum(Math.abs(v))} contracts`);
   return (
     <Box>
       <div className="text-textMuted">
@@ -635,8 +636,8 @@ const StrikeTooltip = ({ active, payload }: StrikeTipProps) => {
         {Number.isFinite(p.strike) ? `${p.strike} strike` : ''}
         {p.isFocus && <span className="text-select"> · this contract</span>}
       </div>
-      {Number.isFinite(p.callVol) && <div style={{ color: ASK }}>calls {(p.callVol as number).toLocaleString()}</div>}
-      {Number.isFinite(p.putVol) && <div style={{ color: BID }}>puts {Math.abs(p.putVol as number).toLocaleString()}</div>}
+      {Number.isFinite(p.callVol) && <div style={{ color: ASK }}>calls {fmtNum(p.callVol as number)}</div>}
+      {Number.isFinite(p.putVol) && <div style={{ color: BID }}>puts {fmtNum(Math.abs(p.putVol as number))}</div>}
     </Box>
   );
 };
@@ -693,9 +694,9 @@ export const NetPanel = ({
         <MetricPicker value={metric} onChange={onMetric} />
         {isVolOrUsd ? (
           <span className="font-mono text-[10px] text-textMuted tnum">
-            {(u.callVol + u.putVol).toLocaleString()} contracts · {fmtUsd(u.callPrem + u.putPrem)} traded · calls minus puts{' '}
+            {fmtNum(u.callVol + u.putVol)} contracts · {fmtUsd(u.callPrem + u.putPrem)} traded · calls minus puts{' '}
             <span className={(isUsd ? u.callPrem - u.putPrem : u.callVol - u.putVol) >= 0 ? 'text-bull font-semibold' : 'text-bear font-semibold'}>
-              {isUsd ? fmtUsd(u.callPrem - u.putPrem) : (u.callVol - u.putVol).toLocaleString()}
+              {isUsd ? fmtUsd(u.callPrem - u.putPrem) : fmtNum(u.callVol - u.putVol)}
             </span>
           </span>
         ) : metric === 'netPremium' ? (
@@ -720,7 +721,7 @@ export const NetPanel = ({
           leftLabel="Puts"
           rightLabel="Calls"
           leftPct={isUsd ? u.putPremSharePct : u.putSharePct}
-          caption={isUsd ? fmtUsd(u.putPrem) + ' vs ' + fmtUsd(u.callPrem) : `${u.putVol.toLocaleString()} vs ${u.callVol.toLocaleString()}`}
+          caption={isUsd ? fmtUsd(u.putPrem) + ' vs ' + fmtUsd(u.callPrem) : `${fmtNum(u.putVol)} vs ${fmtNum(u.callVol)}`}
         />
       ) : metric === 'netPremium' ? (
         <TugBar
@@ -740,7 +741,7 @@ export const NetPanel = ({
             <ComposedChart data={cf.strikes} margin={{ top: 6, right: RIGHT_PAD + Y_RIGHT_W, bottom: 0, left: 0 }}>
               <CartesianGrid stroke={GRID} vertical={false} />
               <XAxis dataKey="strike" tick={axisTick} stroke={AXIS} tickLine={false} />
-              <YAxis tick={axisTick} stroke={AXIS} tickLine={false} width={Y_LEFT_W} tickFormatter={(v: number) => Math.abs(v).toLocaleString()} />
+              <YAxis tick={axisTick} stroke={AXIS} tickLine={false} width={Y_LEFT_W} tickFormatter={(v: number) => fmtNum(Math.abs(v))} />
               <Tooltip content={<StrikeTooltip />} isAnimationActive={false} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
               <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" />
               <Bar dataKey="callVol" stackId="k" fill={ASK} fillOpacity={0.75} isAnimationActive={false} />
