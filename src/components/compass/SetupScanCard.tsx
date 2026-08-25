@@ -54,6 +54,27 @@ const SetupScanCard = ({ setup, rank, selected, onSelect, onAnalysis, expiryChip
     <button
       onClick={() => onSelect(setup)}
       aria-pressed={selected}
+      /*
+        WITHOUT THIS, THE CARD'S NAME IS THE WHOLE CARD.
+
+        A button with no aria-label is named by its text content, and this
+        card holds a lot of it. Measured: 97 characters, read out in one run
+        before the reader knows what the control even does —
+
+          "#1MSFT 430C0DTE · 08/25/26Top pickTP1 HITACTIVE1σ move±1%Premium
+           $1.68Breaks below $426.03Analysis"
+
+        Naming it explicitly says the one thing a reader needs to decide
+        whether to press it, and everything else stays available by reading
+        the card itself.
+
+        This does NOT close the other half — the card is a <button> holding
+        an interactive "Analysis" control, which HTML's content model
+        forbids, and that is open decision #11 because the fix restructures
+        the card. The name is the part BOTH candidate answers to #11 need,
+        which is why it is here and the rest is not.
+      */
+      aria-label={`Setup ${rank}, ${setup.contract}, expiry ${setup.expiry}${selected ? ', selected' : ''}`}
       title={selected ? 'Selected — click again for the full analysis' : 'Select — the rail shows this name’s book'}
       /* Selected = the white "where you are" ink (Noah, 2026-08-19: "a white
          border button") — one click selects and points the rail at this

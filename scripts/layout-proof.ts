@@ -138,6 +138,39 @@ for (const { file, what } of SELF_MEASURING) {
 }
 
 /*
+  ---- A clickable card is named by everything inside it --------------------
+
+  A <button> with no aria-label takes its accessible name from its text
+  content, and a card holds a lot of that. Measured before naming them:
+
+      Compass setup card              97 characters
+      Ranked-target cards       133, 154, 197 characters
+
+  read out in one run before the reader knows what the control does. Named
+  explicitly they are 30-41 and 26-37, and everything else is still on the
+  card to be read.
+
+  This does NOT close open decision #11 — both are still a <button> holding
+  interactive Term explainers, which HTML's content model forbids, and the
+  fix for that restructures two prominent surfaces. Naming is the part BOTH
+  candidate answers to #11 need, which is the test for whether a change is
+  safe to make while a decision is still open.
+*/
+{
+  const scan = read('src/components/compass/SetupScanCard.tsx');
+  const rank = read('src/pages/pinpoint/RankedTargets.tsx');
+  const scanNamed = /aria-label=\{`Setup \$\{rank\}/.test(scan);
+  const rankNamed = /aria-label=\{`Rank \$\{t\.rank\}/.test(rank);
+  check(
+    'a clickable card says what it is, not everything it contains',
+    scanNamed && rankNamed,
+    scanNamed && rankNamed
+      ? 'the Compass setup card and the ranked-target cards are both named'
+      : `compass:${scanNamed} rankedTargets:${rankNamed} — an unnamed card reads its whole contents as its name`
+  );
+}
+
+/*
   ---- A control may not contain another control ----------------------------
 
   HTML says a `<button>` may contain phrasing content with NO interactive

@@ -170,6 +170,21 @@ const PodiumCard = forwardRef<
       exit={{ opacity: 0 }}
       transition={{ layout: { type: 'spring', stiffness: 340, damping: 32 }, opacity: { duration: 0.18 } }}
       onClick={onFlash}
+      /*
+        A button with no aria-label is named by everything inside it, and
+        these cards hold a rank, a class, a verdict sentence and four
+        figures. Measured: 133, 154 and 197 characters for the top three,
+        read out in one run before the reader knows the control shows the
+        strike on a chart.
+
+        The name says the strike, its rank and its class; the rest is still
+        there to be read. Same treatment as the Compass setup card, and the
+        same limit — the card is a <button> holding interactive Term
+        explainers, which HTML's content model forbids, and that
+        restructuring is open decision #11. Naming it is the part every
+        candidate answer to #11 needs.
+      */
+      aria-label={`Rank ${t.rank}, strike ${fmtStrike(t.strike)}, ${t.hedgingClass.toLowerCase()}`}
       title="See this strike on the chart"
       className={`group relative text-left rounded-md border overflow-hidden transition-colors ${
         isPrimary

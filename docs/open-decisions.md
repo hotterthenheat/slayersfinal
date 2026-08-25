@@ -415,6 +415,27 @@ this case and these two surfaces are the ones that did not follow it. But
 it restructures the Compass card and the ranked-target row, so it is your
 call rather than something to do quietly inside a sweep.
 
+**The naming half is already done**, because both answers need it. Every
+candidate fix for this item leaves a clickable card that has to be called
+something, so an explicit `aria-label` is not pre-empting the decision — it
+is the part they share. Measured before and after:
+
+```
+                             before          after
+Compass setup card           97 chars        30–41 chars
+ranked-target cards     133, 154, 197        26–37 chars
+```
+
+"Setup 2, SPY 512C, expiry 0DTE, selected" and "Rank 1, strike 510,
+magnet", against the whole card read out in one run. Selection still tracks
+(`aria-pressed` and the label move together across all 17 setups), clicking
+a ranked target still lands on `/pulse`, and the nested "Analysis" control
+is still focusable and named. What is left for you is the structure.
+
+That is the test worth reusing when a decision is open: **do all the
+candidate answers include this change?** If yes it is safe to make now; if
+no it waits.
+
 ---
 
 ## What was checked and found clean
