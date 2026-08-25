@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Maximize2, Minimize2, Rows3, X } from 'lucide-react';
+import { AlignRight, Maximize2, Minimize2, Rows3, X } from 'lucide-react';
 import Simulator from '../../core/simulator';
 import { useMarketData } from '../../context/MarketDataContext';
-import { buildLevelsFor, buildPrints } from '../../data/gex';
+import { buildLadderFor, buildLevelsFor, buildPrints } from '../../data/gex';
 import StrikeChart, {
   DEFAULT_INDICATORS,
   DEFAULT_OVERLAYS,
@@ -11,6 +11,7 @@ import StrikeChart, {
   type ChartStyle,
 } from '../../components/gex/StrikeChart';
 import ChartToolbar from '../../components/gex/ChartToolbar';
+import PaneLadder from '../../components/gex/PaneLadder';
 import TickerQuickPick from '../../components/gex/TickerQuickPick';
 import SpotPrice from '../../components/gex/SpotPrice';
 import { CANDLE_THEMES, chartSurface, useCandleThemeKey } from '../../components/gex/candleTheme';
@@ -68,6 +69,8 @@ interface TerrainCfg {
   overlays: ChartOverlays;
   indicators: ChartIndicators;
   chartStyle: ChartStyle;
+  /** The strike column down the right edge of every pane */
+  ladder: boolean;
 }
 
 const TF_VALUES = new Set<string>(TIMEFRAMES.map(t => t.value));
@@ -80,6 +83,7 @@ const defaults = (): TerrainCfg => ({
   overlays: { ...DEFAULT_OVERLAYS },
   indicators: { ...DEFAULT_INDICATORS },
   chartStyle: 'candles',
+  ladder: true,
 });
 
 /*
@@ -106,6 +110,7 @@ function loadCfg(): TerrainCfg {
       overlays: { ...DEFAULT_OVERLAYS, ...(c.overlays && typeof c.overlays === 'object' ? c.overlays : {}) },
       indicators: { ...DEFAULT_INDICATORS, ...(c.indicators && typeof c.indicators === 'object' ? c.indicators : {}) },
       chartStyle: typeof c.chartStyle === 'string' && STYLES.has(c.chartStyle as ChartStyle) ? (c.chartStyle as ChartStyle) : def.chartStyle,
+      ladder: typeof c.ladder === 'boolean' ? c.ladder : def.ladder,
     };
   } catch {
     return def;
@@ -130,6 +135,7 @@ interface PaneProps {
   overlays: ChartOverlays;
   indicators: ChartIndicators;
   chartStyle: ChartStyle;
+  ladder: boolean;
   revision: number;
   expanded: boolean;
   onToggleExpand: () => void;
@@ -145,6 +151,7 @@ const Pane = ({
   overlays,
   indicators,
   chartStyle,
+  ladder,
   revision,
   expanded,
   onToggleExpand,
@@ -163,6 +170,20 @@ const Pane = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [ticker]
   );
+  /* The rail's rows come off the SAME snapshot `levels` was reduced from, and
+     are only read when the rail is on — an off rail costs nothing. */
+  const rail = useMemo(
+    () => (ladder ? buildLadderFor(ticker) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ticker, revision, ladder]
+  );
+
+  /* What the reader clicked in the rail, flashed on the chart. Clicking the
+     same strike again clears it, so the rail is a toggle rather than a thing
+     you can only turn on. It resets on a symbol change because a price from
+     the last book means nothing against this one. */
+  const [focus, setFocus] = useState<number | null>(null);
+  useEffect(() => setFocus(null), [ticker]);
 
   /* One surface under the header AND the tape, so a pane is one continuous
      black inside its frame rather than two shades meeting at a seam. */
@@ -201,19 +222,35 @@ const Pane = ({
             black under them. min-h-0 is what lets a flex child actually
             shrink — without it the chart sets the floor and the grid grows
             past the viewport. */}
-        <div className="flex-1 min-h-0">
-          <StrikeChart
-            ticker={ticker}
-            revision={revision}
-            levels={levels}
-            timeframe={timeframe}
-            height={tall ? 260 : 200}
-            overlays={overlays}
-            indicators={indicators}
-            chartStyle={chartStyle}
-            prints={prints}
-            frameless
-          />
+        {/* Chart and rail on ONE line. min-w-0 on the chart is load-bearing:
+            a flex item wider than its line does not wrap, it spills, and a
+            chart's natural width is whatever its container was last tick. */}
+        <div className="flex-1 min-h-0 flex">
+          <div className="flex-1 min-w-0">
+            <StrikeChart
+              ticker={ticker}
+              revision={revision}
+              levels={levels}
+              timeframe={timeframe}
+              height={tall ? 260 : 200}
+              overlays={overlays}
+              indicators={indicators}
+              chartStyle={chartStyle}
+              prints={prints}
+              focusPrice={focus}
+              frameless
+            />
+          </div>
+          {rail && (
+            <PaneLadder
+              ticker={ticker}
+              rows={rail.rows}
+              maxAbs={rail.maxAbs}
+              levels={levels}
+              focusPrice={focus}
+              onSelect={price => setFocus(cur => (cur != null && Math.abs(cur - price) < 1e-9 ? null : price))}
+            />
+          )}
         </div>
       </div>
     </div>
@@ -291,6 +328,23 @@ const Terrain = () => {
           })}
         </div>
 
+        {/* The strike rail is Terrain's, not the toolbar's — it belongs to the
+            PANE arrangement, and adding it to the shared ChartToolbar would
+            put a dead control on every other chart on the desk. */}
+        <button
+          onClick={() => set('ladder', !cfg.ladder)}
+          aria-pressed={cfg.ladder}
+          title={cfg.ladder ? 'Hide the strike rail' : 'Show the strike rail beside each chart'}
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border font-mono text-[10px] uppercase tracking-wider transition-colors ${
+            cfg.ladder
+              ? 'border-borderSubtle bg-[#ededed] text-[#0a0a0a]'
+              : 'border-borderSubtle bg-panel text-textSecondary hover:text-textPrimary'
+          }`}
+        >
+          <AlignRight className="w-3.5 h-3.5 shrink-0" aria-hidden />
+          Strikes
+        </button>
+
         <div className="flex-1 min-w-0">
           <ChartToolbar
             spread
@@ -342,6 +396,7 @@ const Terrain = () => {
             overlays={cfg.overlays}
             indicators={cfg.indicators}
             chartStyle={cfg.chartStyle}
+            ladder={cfg.ladder}
             revision={revision}
             expanded={expanded === i}
             onToggleExpand={() => setExpanded(cur => (cur === i ? null : i))}

@@ -10,7 +10,7 @@
 
 import Simulator from '../core/simulator';
 import { expiryFor } from '../core/calendar';
-import type { MarketSnapshot, StrikeNode } from '../types/market';
+import type { GexLevel, MarketSnapshot, StrikeNode } from '../types/market';
 import type {
   BoardTicker,
   DarkPoolPrint,
@@ -331,6 +331,46 @@ export function buildLevelsFor(ticker: string): KeyLevels {
   }
 
   return { spot, callWall, putWall, flip, king };
+}
+
+/*
+  The strike rows BESIDE a chart — the very snapshot `buildLevelsFor` reduces,
+  handed back row by row instead of collapsed to four prices.
+
+  That sourcing is the whole point and it is not an implementation detail. A
+  rail that read its own generator would drift from the chart it sits against:
+  the pane would draw a KING line at one strike while the column beside it
+  printed the heaviest bar at another, and both would look right on their own.
+  `buildLadder` (the 4-way board's column) is exactly that second generator,
+  which is why it is NOT what this returns.
+
+  Nothing is computed here that the levels above do not already read. This
+  windows the rows around spot — the same centring `buildNodes` uses for the
+  chart's own nodes — and reports the largest magnitude in that window so a
+  bar can be drawn as a fraction of it. The named levels stay the caller's:
+  it already holds `KeyLevels` and passes them in, so wall, flip and king
+  agree with the lines by construction rather than by coincidence.
+*/
+export function buildLadderFor(
+  ticker: string,
+  depth = 10
+): { rows: GexLevel[]; maxAbs: number; spot: number } {
+  const sym = Simulator.ensureTicker(ticker);
+  const spot = Simulator.TICKERS[sym].currentPrice;
+  const snaps = Simulator.getGexHistory(sym);
+  const latest = snaps?.[snaps.length - 1];
+  if (!latest || latest.levels.length === 0) return { rows: [], maxAbs: 1, spot };
+
+  const sorted = [...latest.levels].sort((a, b) => a.strike - b.strike);
+  const spotIdx = Math.max(0, sorted.findIndex(n => n.strike >= spot));
+  const start = Math.max(0, spotIdx - depth);
+  const window = sorted.slice(start, start + depth * 2 + 1);
+
+  let maxAbs = 1;
+  for (const r of window) maxAbs = Math.max(maxAbs, Math.abs(r.value));
+
+  // Descending, so the column runs the way a price axis does: high at the top.
+  return { rows: window.reverse(), maxAbs, spot };
 }
 
 // ---- live pulse ------------------------------------------------------------------

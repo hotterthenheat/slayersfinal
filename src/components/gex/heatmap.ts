@@ -370,6 +370,17 @@ function relativeLuminance([r, g, b]: RGB): number {
 const INK_CROSSOVER = Math.sqrt((relativeLuminance([237, 237, 237]) + 0.05) * (relativeLuminance([10, 10, 10]) + 0.05)) - 0.05;
 const inkFor = (rgb: RGB): string => (relativeLuminance(rgb) > INK_CROSSOVER ? INK_DARK : INK_LIGHT);
 
+/*
+  Magnitude on the ramp's OWN curve, 0..1 — exported so a bar's LENGTH can use
+  the same spacing its colour does. Sizing a bar linearly while colouring it on
+  the gamma curve gives a row that is visibly hot and visibly ~empty, which
+  reads as a rendering fault rather than as a light strike. The note above says
+  why the linear scale is wrong for this data; it is wrong for length too.
+*/
+export function heatMagnitude(value: number, maxAbs: number): number {
+  return heatT(value, maxAbs);
+}
+
 /** Raw ramp color for a signed value — used by the on-chart node overlay. */
 export function heatRgb(value: number, maxAbs: number): RGB {
   const t = heatT(value, maxAbs);
