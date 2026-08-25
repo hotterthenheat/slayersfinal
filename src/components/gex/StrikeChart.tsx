@@ -129,8 +129,9 @@ interface StrikeChartProps {
      asked for them back. Terrain turns them on because a wall you cannot name
      is a line, and a workspace built for reading structure has to name it. */
   axisLevels?: boolean;
-  /** Time left in the current bar, printed in the price gutter under the live
-      price. Off by default, same reasoning as `axisLevels`. */
+  /** The clock on the TIME axis, under the newest bar: what time it is now,
+      and how long this bar has left. Off by default, same reasoning as
+      `axisLevels`. */
   countdown?: boolean;
 }
 
@@ -284,9 +285,7 @@ const StrikeChart = ({
   const levelLinesRef = useRef<Partial<Record<'callWall' | 'putWall' | 'flip' | 'king', IPriceLine>>>({});
   const shownLevelsRef = useRef<KeyLevels | null>(null);
   const levelRafRef = useRef(0);
-  /** Close of the newest bar the chart holds — what the axis prints as "now".
-      Read by the countdown so its pill sits ON that label rather than near a
-      second number computed somewhere else. */
+  /** Close of the newest bar the chart holds — what the axis prints as "now". */
   const lastCloseRef = useRef<number | null>(null);
   const countdownRef = useRef<HTMLDivElement | null>(null);
   const countdownRafRef = useRef(0);
@@ -760,6 +759,7 @@ const StrikeChart = ({
 
     lastCloseRef.current = bars.length ? bars[bars.length - 1].close : null;
 
+
     if (changed) {
       candleSeries.setData(bars.map(toMain));
       volumeSeries.setData(bars.map(b => toVolume(b, theme)));
@@ -853,73 +853,68 @@ const StrikeChart = ({
   }, [ticker, overlays.levels, replay, mainNonce, axisLevels, themeKey]);
 
   /*
-    TIME LEFT IN THE BAR, in the price gutter under the live price.
+    THE CLOCK, ON THE TIME AXIS, UNDER THE NEWEST BAR.
 
-    It rides a rAF loop rather than a one-second timer, and that is the whole
-    difficulty of this feature: the pill's y is `priceToCoordinate(lastClose)`,
-    and that moves for three unrelated reasons — the price ticks, the autoscale
-    re-fits, and the reader pans or zooms. A timer would leave the pill behind
-    the label on every one of those; subscribing to each event separately
-    means finding all three and getting them all right. One frame loop is
-    correct by construction.
+    It was in the price gutter first, which was the wrong axis (Noah,
+    2026-08-25: "you put the time on the right side bar, i meant the time on
+    the bottom"). A price gutter answers "what is it worth"; a time axis
+    answers "when is it", and a clock is an answer to the second question. So
+    it moved, and it sits at the x of the newest bar rather than at the right
+    edge — the right edge of this chart is empty room ahead of the market, and
+    a clock parked out there is a clock pointing at nothing.
 
-    It writes nothing it does not have to. The text is compared before it is
-    set and the transform before it is applied, so a still chart with a
-    still second does no DOM work at all — 60 reads a second, near-zero
-    writes. Background tabs stop being served frames, which is the right
-    behaviour for a clock nobody is looking at.
+    It carries both halves of "when": the wall clock, and how much of the
+    current bar is left. Two facts, one pill, in that order.
 
-    Hidden during replay: a countdown to the next live bar is a lie about
-    history.
+    It rides a frame loop rather than a one-second timer for the same reason
+    the price version did — the newest bar's x moves when the reader pans or
+    zooms, and a timer leaves the pill behind on every drag. It writes nothing
+    it does not have to: text and transform are both compared before they are
+    set, so a still chart on a still second does no DOM work at all.
   */
   useEffect(() => {
     if (!countdown || replay) return;
     const chart = chartRef.current;
-    const series = candleSeriesRef.current;
     const el = countdownRef.current;
-    if (!chart || !series || !el) return;
+    if (!chart || !el) return;
 
     const bucket = Math.max(60, tfMinutes(timeframe) * 60);
     let shownText = '';
-    let shownY = Number.NaN;
-    let shownW = -1;
+    let shownX = Number.NaN;
 
     const frame = () => {
       countdownRafRef.current = requestAnimationFrame(frame);
-      const price = lastCloseRef.current;
-      const y = price == null ? null : series.priceToCoordinate(price);
-      if (y == null) {
-        if (!Number.isNaN(shownY)) {
+      const len = barCountRef.current;
+      const x = len > 0 ? chart.timeScale().logicalToCoordinate((len - 1) as never) : null;
+      if (x == null) {
+        if (!Number.isNaN(shownX)) {
           el.style.opacity = '0';
-          shownY = Number.NaN;
+          shownX = Number.NaN;
         }
         return;
       }
 
-      const left = bucket - (Math.floor(Date.now() / 1000) % bucket);
+      const now = new Date();
+      const pad = (v: number) => String(v).padStart(2, '0');
+      const clock = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+      const left = bucket - (Math.floor(now.getTime() / 1000) % bucket);
       const hh = Math.floor(left / 3600);
       const mm = Math.floor((left % 3600) / 60);
       const ss = left % 60;
-      const text =
-        hh > 0
-          ? `${hh}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`
-          : `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+      const remain = hh > 0 ? `${hh}:${pad(mm)}:${pad(ss)}` : `${pad(mm)}:${pad(ss)}`;
+      const text = `${clock} · ${remain}`;
       if (text !== shownText) {
         el.textContent = text;
         shownText = text;
       }
 
-      const w = chart.priceScale('right').width();
-      if (w !== shownW) {
-        el.style.width = `${w}px`;
-        shownW = w;
-      }
-      /* +9px clears the axis label the library draws at the same y. */
-      const top = Math.round(y) + 9;
-      if (top !== shownY) {
-        el.style.transform = `translateY(${top}px)`;
+      /* translate(-50%) centres the pill on the bar, the way the library
+         centres its own tick labels. */
+      const px = Math.round(x);
+      if (px !== shownX) {
+        el.style.transform = `translateX(${px}px) translateX(-50%)`;
         el.style.opacity = '1';
-        shownY = top;
+        shownX = px;
       }
     };
 
@@ -1202,14 +1197,15 @@ const StrikeChart = ({
       >
         <div ref={containerRef} className="absolute inset-0" />
 
-        {/* Sits in the price gutter, pinned to the container's right edge and
-            sized to the scale, so it lands under the library's own price
-            label instead of beside it. */}
+        {/* Pinned to the container's bottom-left and moved along the axis by
+            transform, so it rides the time scale the reader is dragging.
+            TIME_AXIS_PX of lift puts it inside the axis strip rather than on
+            the plot floor above it. */}
         {countdown && !replay && (
           <div
             ref={countdownRef}
             aria-hidden
-            className="pointer-events-none absolute top-0 right-0 z-10 text-center font-mono text-[9px] font-semibold tnum leading-[13px] text-[#0a0a0a] bg-textPrimary rounded-[2px] opacity-0"
+            className="pointer-events-none absolute left-0 bottom-[5px] z-10 whitespace-nowrap px-1.5 text-center font-mono text-[9px] font-semibold tnum leading-[15px] text-[#0a0a0a] bg-textPrimary rounded-[2px] opacity-0"
           />
         )}
 

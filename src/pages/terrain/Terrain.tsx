@@ -85,6 +85,11 @@ interface PaneCfg {
   /** Symbols crossed onto this pane's tape — the compare overlay. Per pane,
       like everything else here, and persisted with it. */
   compares: CompareEntry[];
+  /** Whether this pane carries the strike rail down its right edge. Per pane
+      too (Noah, 2026-08-25: "make sure the strike thing you added is
+      removable") — the rail has its own × and the top button is a
+      convenience that sets every pane at once, not the only way out. */
+  ladder: boolean;
 }
 
 interface TerrainCfg {
@@ -92,7 +97,6 @@ interface TerrainCfg {
   /** Always four, whatever the layout, so going 3 → 2 → 3 gives the third
       pane back exactly as it was rather than resetting it. */
   panes: PaneCfg[];
-  ladder: boolean;
 }
 
 const TF_VALUES = new Set<string>(TIMEFRAMES.map(t => t.value));
@@ -112,9 +116,10 @@ const defaultPanes = (): PaneCfg[] =>
     indicators: { ...DEFAULT_INDICATORS },
     chartStyle: 'candles' as ChartStyle,
     compares: [] as CompareEntry[],
+    ladder: true,
   }));
 
-const defaults = (): TerrainCfg => ({ layout: 3, panes: defaultPanes(), ladder: true });
+const defaults = (): TerrainCfg => ({ layout: 3, panes: defaultPanes() });
 
 /** One stored pane, validated field by field against a known-good default. */
 function readPane(raw: unknown, def: PaneCfg): PaneCfg {
@@ -139,6 +144,7 @@ function readPane(raw: unknown, def: PaneCfg): PaneCfg {
           )
           .slice(0, COMPARE_INKS.length)
       : def.compares,
+    ladder: typeof c.ladder === 'boolean' ? c.ladder : def.ladder,
   };
 }
 
@@ -169,11 +175,17 @@ function loadCfg(): TerrainCfg {
     const layout = (LAYOUTS as readonly number[]).includes(c.layout as number)
       ? (c.layout as TerrainLayout)
       : def.layout;
-    const ladder = typeof c.ladder === 'boolean' ? c.ladder : def.ladder;
+    /* `ladder` used to be one flag for the whole desk. If that is what is in
+       storage it becomes every pane's flag, the same way the one shared
+       interval did. */
+    const deskLadder = typeof c.ladder === 'boolean' ? (c.ladder as boolean) : undefined;
 
     if (Array.isArray(c.panes)) {
       const stored = c.panes as unknown[];
-      return { layout, ladder, panes: def.panes.map((d, i) => readPane(stored[i], d)) };
+      return {
+        layout,
+        panes: def.panes.map((d, i) => readPane(stored[i], { ...d, ladder: deskLadder ?? d.ladder })),
+      };
     }
 
     // ── the flat shape, fanned out ──
@@ -186,9 +198,11 @@ function loadCfg(): TerrainCfg {
     const tickers = Array.isArray(c.tickers) ? (c.tickers as unknown[]) : [];
     return {
       layout,
-      ladder,
       panes: def.panes.map((d, i) =>
-        readPane({ ...legacy, ticker: typeof tickers[i] === 'string' ? tickers[i] : d.ticker }, d)
+        readPane({ ...legacy, ticker: typeof tickers[i] === 'string' ? tickers[i] : d.ticker }, {
+          ...d,
+          ladder: deskLadder ?? d.ladder,
+        })
       ),
     };
   } catch {
@@ -236,7 +250,6 @@ const heaviest = (rows: { strike: number; value: number }[], n: number) =>
 interface PaneProps {
   cfg: PaneCfg;
   onCfg: (patch: Partial<PaneCfg>) => void;
-  ladder: boolean;
   revision: number;
   expanded: boolean;
   onToggleExpand: () => void;
@@ -247,8 +260,8 @@ interface PaneProps {
   heavyCount: number;
 }
 
-const Pane = ({ cfg, onCfg, ladder, revision, expanded, onToggleExpand, index, tall, heavyCount }: PaneProps) => {
-  const { ticker, timeframe, overlays, indicators, chartStyle, compares } = cfg;
+const Pane = ({ cfg, onCfg, revision, expanded, onToggleExpand, index, tall, heavyCount }: PaneProps) => {
+  const { ticker, timeframe, overlays, indicators, chartStyle, compares, ladder } = cfg;
 
   /* Add / remove a crossed symbol. Capped at the ink list's length so every
      comparison on a pane is a DIFFERENT colour — two lines sharing an ink is
@@ -482,6 +495,7 @@ const Pane = ({ cfg, onCfg, ladder, revision, expanded, onToggleExpand, index, t
               levels={levels}
               focusPrice={focus}
               axisInset={TIME_AXIS_PX}
+              onClose={() => onCfg({ ladder: false })}
               onSelect={price => setFocus(cur => (cur != null && Math.abs(cur - price) < 1e-9 ? null : price))}
             />
           )}
@@ -524,6 +538,7 @@ const Terrain = () => {
   }, [expanded]);
 
   const panes = cfg.panes.slice(0, cfg.layout);
+  const anyLadder = panes.some(p => p.ladder);
 
   return (
     /*
@@ -571,15 +586,18 @@ const Terrain = () => {
           })}
         </div>
 
-        {/* The strike rail is an arrangement choice — it changes what a pane
-            is made of, not how its tape is drawn, which is why it lives here
-            and not in the pane's own toolbar. */}
+        {/* Every pane at once — a convenience over the per-pane ×, not the
+            only way out of the rail. It reads the panes rather than holding
+            its own flag: if any visible pane still shows a rail the button is
+            lit and pressing it clears them all; with none showing it puts
+            them all back. A button that can disagree with what is on screen
+            is a button nobody trusts. */}
         <button
-          onClick={() => setCfg(prev => ({ ...prev, ladder: !prev.ladder }))}
-          aria-pressed={cfg.ladder}
-          title={cfg.ladder ? 'Hide the strike rail' : 'Show the strike rail beside each chart'}
+          onClick={() => setCfg(prev => ({ ...prev, panes: prev.panes.map(p => ({ ...p, ladder: !anyLadder })) }))}
+          aria-pressed={anyLadder}
+          title={anyLadder ? 'Hide every strike rail' : 'Show the strike rail beside every chart'}
           className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-borderSubtle font-mono text-[10px] uppercase tracking-wider transition-colors ${
-            cfg.ladder ? 'bg-[#ededed] text-[#0a0a0a]' : 'bg-panel text-textSecondary hover:text-textPrimary'
+            anyLadder ? 'bg-[#ededed] text-[#0a0a0a]' : 'bg-panel text-textSecondary hover:text-textPrimary'
           }`}
         >
           Strikes
@@ -612,7 +630,6 @@ const Terrain = () => {
             key={i}
             cfg={pane}
             onCfg={patch => setPane(i, patch)}
-            ladder={cfg.ladder}
             revision={revision}
             expanded={expanded === i}
             onToggleExpand={() => setExpanded(cur => (cur === i ? null : i))}

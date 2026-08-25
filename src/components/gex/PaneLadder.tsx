@@ -1,3 +1,4 @@
+import { X } from 'lucide-react';
 import { fmtUsd } from '../../data/gex';
 import { heatMagnitude, heatRgb } from './heatmap';
 import type { GexLevel } from '../../types/market';
@@ -60,6 +61,10 @@ interface PaneLadderProps {
     charting product draws it.
   */
   axisInset?: number;
+  /** Close this rail. Given one, the header carries an × — a panel you can
+      turn on from a toolbar and not off from itself is a panel that feels
+      stuck to the page. */
+  onClose?: () => void;
 }
 
 /*
@@ -148,6 +153,7 @@ const PaneLadder = ({
   focusPrice = null,
   onSelect,
   axisInset = 0,
+  onClose,
 }: PaneLadderProps) => {
   if (rows.length === 0) return null;
   const items = interleave(rows, levels);
@@ -178,9 +184,19 @@ const PaneLadder = ({
       className="shrink-0 w-[132px] flex flex-col min-h-0 border-l border-borderSubtle/70"
       aria-label={`${ticker} exposure by strike`}
     >
-      <div className="shrink-0 flex items-baseline gap-1 px-2 py-1 border-b border-borderSubtle/70 select-none">
+      <div className="shrink-0 flex items-center gap-1 pl-2 pr-1 py-0.5 border-b border-borderSubtle/70 select-none">
         <span className="font-mono text-[8px] font-semibold uppercase tracking-widest text-textMuted">Size</span>
         <span className="ml-auto font-mono text-[8px] font-semibold uppercase tracking-widest text-textMuted">Strike</span>
+        {onClose && (
+          <button
+            onClick={onClose}
+            aria-label={`Hide the ${ticker} strike rail`}
+            title="Hide this strike rail"
+            className="shrink-0 inline-flex items-center justify-center w-4 h-4 rounded text-textMuted hover:text-textPrimary hover:bg-white/[0.08] transition-colors"
+          >
+            <X className="w-2.5 h-2.5" />
+          </button>
+        )}
       </div>
 
       <div className="flex-1 min-h-0 flex flex-col overflow-y-auto">
