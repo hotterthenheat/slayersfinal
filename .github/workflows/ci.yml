@@ -39,14 +39,22 @@ jobs:
       # `npm run lint` is "Missing script" and would fail every push without
       # saying anything about the code.
       #
-      # There IS a test step now. `npm test` runs the nine assertion scripts
+      # There IS a test step now. `npm test` runs the ten assertion scripts
       # under scripts/ — covering the partner spec's worked fixtures, replay
       # determinism under a pinned clock, the Weigher query parser, the
       # scoring-weight tables, the landing page's claims against the code that
       # backs them, what the terminal does when playback runs out, what the
-      # deployed host promises the browser, the one font family against the
-      # four places that spell it (plus a refusal to vendor a proprietary
-      # system font), the recorded clocks, and the header's responsive ladder.
+      # deployed host promises the browser, whether the gate's own assertions
+      # can fail at all, the one font family against the four places that
+      # spell it (plus a refusal to vendor a proprietary system font), the
+      # recorded clocks, and the header's responsive ladder.
+      #
+      # gate-proof is the one that reads the others. The recurring defect in
+      # this repo is a guard that passes without proving anything — seven have
+      # been found, each by hand — so it scans every check() condition for the
+      # shapes that CANNOT fail, and requires every proof script on disk to be
+      # in the chain above. It cannot guard its own invocation; that is what
+      # this step is.
       #
       # Every assertion in weights-proof, sales-proof, playback-proof and
       # deploy-proof is mutation-verified. Dropping a factor without re-normalising fails it;
