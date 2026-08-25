@@ -28,9 +28,13 @@
   fifty; `512.28` is five hundred and twelve. A reader who applies either
   convention consistently gets one of the two columns wrong.
 
-  It was also inconsistent BETWEEN routes, which is the tell that nothing was
-  deciding this: the same German browser rendered US grouping (`5,135`) on
-  /pulse and German grouping on the tape.
+  It was also inconsistent BETWEEN routes, and the reason is the sharpest way
+  to put the whole problem. The same German browser rendered US grouping on
+  /pulse — `5,135.50`, the SPX twin price in KEY LEVELS — while the tape
+  rendered German. That one number came from `fmtTwin`, which was the single
+  call site in the tree that had passed a locale. So the only figure that
+  looked right to an American was the only one somebody had thought about,
+  and it looked wrong to the German next to everything else on the page.
 
   THE CHOICE, AND WHY IT IS NOT "LOCALISE PROPERLY". Prices here are US
   dollars with a `$` written into the string, strikes are US option strikes,

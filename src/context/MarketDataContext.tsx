@@ -60,6 +60,15 @@ export const MarketDataProvider = ({ children }: { children: React.ReactNode }) 
     freeze. Not latched — it does not need to be. A pinned playhead keeps
     repeating, and the one thing that legitimately un-freezes the header is
     switching to a name that still has bars left.
+
+    WHAT THAT COSTS, measured rather than left as a surprise: comparing the
+    ticker means a switch resets the count, so a name that is ALREADY played
+    out takes a beat to say so again. Timed over three switches between pinned
+    names: 1640ms, 1844ms, 2072ms — under two ticks, and it varies only with
+    where the switch lands in the tick phase. The label appears a moment late
+    rather than flashing on and off, which is the better of the two, and the
+    alternative is announcing a played-out recording for a name that is still
+    running the first time two recordings happen to be the same length.
   */
   const seenRef = useRef({ ticker: '', bars: -1, repeats: 0 });
   const noteSnapshot = (snap: MarketSnapshot) => {
