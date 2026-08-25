@@ -11,6 +11,29 @@ choice with two defensible answers.
 
 Status as of 2026-08-25.
 
+## All eleven at a glance
+
+Sorted by what I think they are worth against what they cost. The detail,
+with the measurement and the options, is under each heading below.
+
+| # | the question | what was measured | I would | blocked by |
+|---|---|---|---|---|
+| [10](#10-the-host-sends-29mb-uncompressed-and-the-landing-page-takes-15-seconds-on-a-phone) | Does `server.ts` serve production, or a platform that compresses for you? | first paint **15.3s** on Slow 4G, **5.7s** gzipped | add the middleware if it is `server.ts` | you, one sentence |
+| [1](#1-the-tapes-bidask-reconstruction-is-inverted--987-of-fills-print-outside-their-own-quote) | Fix the tape's bid/ask reconstruction? | **1,000 of 1,013** fills print outside their own band | apply the one-line fix | "no generator math" |
+| [5](#5-re-scope-earnings-against-what-the-entitlements-can-source) | Which Earnings columns survive? | BEAT RATE and REVISIONS have **no source**; PRICED is circular | cut the two, rebuild PRICED | you |
+| [8](#8-eighteen-of-the-twenty-two-recordings-run-out-in-under-two-minutes) | Give the short recordings more runway? | **18 of 22** freeze at **1m57s**; the other four at 9m45s | re-record the eighteen at watchlist depth | a data change |
+| [6](#6-does-the-pulse-desk-support-phones) | Which phone widths does this support? | Pulse gives **173×488** widgets at 390px; 3 routes slide sideways at 320 | stack below `md`; answer "which phones" once | you |
+| [7](#7-two-take-profit-prices-on-campaign-analysis) | Which take-profit price is the real one? | MSFT 430C TP1: chart **431.18**, ladder **430.55** | freeze the ladder against the chart's anchor | "no generator math" |
+| [11](#11-a-whole-setup-card-is-one-button-and-it-reads-as-one-97-character-name) | Restructure the clickable cards? | naming already fixed (97 → 30 chars); the nesting is not | make the card a `listitem`, per `interactiveRow.ts` | you |
+| [4](#4-the-walls-cw-green--pw-red-or-steel--gold) | Which ink do the walls wear? | `dealer-ink-pass.md` and `palette.ts:20` **contradict each other** | follow whichever you said last | you |
+| [9](#9-two-dependency-advisories-need-a-major-version-upgrade) | Take React Router 7 and Vite 8? | 4 advisories closed; **2 need a major**, neither reachable here | Router 7 first, Vite 8 separately | you |
+| [2 · 3](#2-delete-the-engines--3-repoint-every-data-module-at-the-seam) | Delete the engines and move every desk onto the seam? | **4 desks** still seed from a hash, not the feed | do it as one pass, after #1 | "no backend" |
+
+Two of these unblock the others. **#10 is one sentence from you** and is worth
+nine and a half seconds of first paint. **Lifting "no generator math"** clears
+#1, #7 and half of #5 in a single pass, and #1 is the largest measured defect
+in the codebase.
+
 ---
 
 ## 1. The tape's bid/ask reconstruction is inverted — 98.7% of fills print outside their own quote
