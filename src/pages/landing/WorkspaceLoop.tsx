@@ -77,7 +77,25 @@ const WorkspaceLoop = ({ tiles }: { tiles: WorkspaceTile[] }) => {
               {tile.title}
             </span>
           </div>
-          <div className="flex-grow min-h-0 overflow-hidden pointer-events-none select-none">{tile.node}</div>
+          {/*
+            The tiles are 220px rows holding full panels, so every one of them
+            ends mid-content. Measured across the three presets, the hard edge
+            was cutting text in half rather than ending it:
+
+                Options tape   a whole row down to a 4px sliver — "09:38:28"
+                Key levels     "510" showing 3px of 14, "-0.45%" 9 of 12
+                Top setup      the why-paragraph guillotined mid-line
+
+            A fade says "this continues", which is both true and what the real
+            desk does — a Pulse widget scrolls when its content outgrows it.
+          */}
+          <div className="relative flex-grow min-h-0 overflow-hidden pointer-events-none select-none">
+            {tile.node}
+            <span
+              aria-hidden
+              className="absolute inset-x-0 bottom-0 h-5 bg-gradient-to-b from-transparent to-panel"
+            />
+          </div>
         </motion.div>
       ))}
     </div>

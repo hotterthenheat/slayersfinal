@@ -28,6 +28,7 @@ import Reveal from './Reveal';
 import WorkspaceLoop, { type WorkspaceTile } from './WorkspaceLoop';
 import type { MarketSnapshot } from '../../types/market';
 import type { PulseView, ExposureProfileData, GexMatrixData, GexView } from '../../types/gex';
+import type { FlowPrint } from '../../types/trace';
 import { VERDICT_LABEL, type Setup, type CompassView } from '../../types/compass';
 
 const SCAN_INTERVAL_MS = 10_000;
@@ -187,11 +188,34 @@ const EngineBox = ({ name, line, accent, to, children }: EngineBoxProps) => (
 // ---- box demos ---------------------------------------------------------------
 
 /** Mini tape driven by the live 1.5s tick — rows slide in as prints land. */
+/** Rows of 38px that fit the 296px body under EngineBox's 44px header. */
+const DEMO_TAPE_ROWS = 7;
+
 const DemoTape = ({ snapshot }: { snapshot: MarketSnapshot }) => {
-  const prints = useMemo(
-    () => snapshot.tape.slice(0, 7).map((o, i) => enrichPrint(o, i)),
-    [snapshot.tape]
-  );
+  /*
+    `snapshot.tape` is what is NEW this tick, not a window on the tape: the
+    feed serves each print exactly once (core/feed.ts) and the real panel
+    accumulates. This demo read it as a window and rendered `.slice(0, 7)`
+    of a four-print batch, so measured against the running page it showed
+
+        4 rows, 143px of the 296px body empty — 48% void, every tick
+
+    and replaced all four wholesale each tick instead of streaming. Both are
+    the opposite of what the section claims: "not screenshots, the actual
+    panels, printing."
+
+    Mirrors LiveTape.tsx:1011-1024 exactly rather than inventing a second
+    accumulation — monotonic ids, the batch reversed before it is prepended
+    (the feed serves a tick chronologically, and prepending as-is would climb
+    for four rows then drop back 23 seconds), capped at what fits.
+  */
+  const [prints, setPrints] = useState<FlowPrint[]>([]);
+  const idRef = useRef(0);
+  useEffect(() => {
+    const fresh = snapshot.tape.map(o => enrichPrint(o, ++idRef.current));
+    if (fresh.length === 0) return;
+    setPrints(prev => [...[...fresh].reverse(), ...prev].slice(0, DEMO_TAPE_ROWS));
+  }, [snapshot.tape]);
   return (
     <div className="h-full overflow-hidden select-none">
       <AnimatePresence initial={false} mode="popLayout">

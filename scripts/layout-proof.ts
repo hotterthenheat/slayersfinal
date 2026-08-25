@@ -444,5 +444,43 @@ check(
     : 'the states no longer share a cell; a crossfade would stack them vertically or blank the card'
 );
 
+/*
+  The landing tape demo accumulates the way the real tape does.
+
+  `snapshot.tape` is what is NEW this tick — core/feed.ts serves each print
+  exactly once, and LiveTape.tsx:1011-1024 accumulates. The landing demo read
+  it as a window instead and rendered `.slice(0, 7)` of a four-print batch:
+
+      measured, steady state:  4 rows, 143px of the 296px body empty
+
+  48% void under a heading that reads "Not screenshots. The actual panels,
+  printing." After mirroring LiveTape: 7 rows, 29px.
+
+  The batch must also be reversed before it is prepended. The feed serves a
+  tick chronologically and the list is newest-first, so prepending as-is makes
+  the time column climb for four rows, drop back 23 seconds, and climb again.
+  That is the same sawtooth LiveTape documents at line 1013 — it would have
+  been reintroduced here the moment this demo started accumulating.
+*/
+const liveTape = read('src/pages/trace/LiveTape.tsx');
+const ACCUM = /setRows\(prev => \[\.\.\.\[\.\.\.fresh\]\.reverse\(\), \.\.\.prev\]\.slice\(0, MAX_ROWS\)\)/;
+check(
+  'the real tape still prepends its batch reversed',
+  ACCUM.test(liveTape),
+  ACCUM.test(liveTape) ? 'LiveTape reverses the batch before prepending' : 'LiveTape changed shape — the demo below now mirrors nothing'
+);
+const demoAccum = /setPrints\(prev => \[\.\.\.\[\.\.\.fresh\]\.reverse\(\), \.\.\.prev\]\.slice\(0, DEMO_TAPE_ROWS\)\)/.test(live);
+check(
+  'the landing tape demo accumulates the same way',
+  demoAccum,
+  demoAccum ? 'same reversed prepend, capped at DEMO_TAPE_ROWS' : 'the demo no longer mirrors LiveTape — it will half-fill or sawtooth'
+);
+const readsAsWindow = /snapshot\.tape\.slice\(/.test(live);
+check(
+  'the landing demo does not read the tick batch as a window',
+  !readsAsWindow,
+  readsAsWindow ? 'snapshot.tape.slice(...) is back — that is a 4-print batch, not a window' : 'no slice of snapshot.tape'
+);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
