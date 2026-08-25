@@ -209,8 +209,10 @@ the defect was put back and the detector caught it.
 | Keyboard reachability | 9 non-native clickable elements | all reachable; PositioningMap's 21-band roving tabindex verified correct against WCAG 2.5.8 |
 | Text overflow | 4 viewports × every route | zero spilling text nodes |
 | Under-filled panels | 15 routes, any panel with >60px of dead space at the bottom | zero |
-| Unreachable content | 15 routes × 3 viewports, text below the fold on a non-scrolling page | zero |
+| Unreachable content | 15 routes × 7 viewports — 390, 768, 1024, 1280, 1366, 1440, 1920 — 105 page loads | zero |
+| Popovers and dropdowns | every `aria-haspopup` / `aria-expanded` trigger on 10 routes, opened at 390 and 1440 | 63 opened, none landing outside the viewport |
 | Header fit | 768px, every route | fits at exactly 768 after the labels-only ladder |
+| Company-mark licensing | the 17 SVGs in `public/logos` | clean — Simple Icons, CC0. Provenance and the trademark caveat are now recorded in `public/logos/README.md`; unlike the SF Pro problem, nothing here needed replacing |
 | Chart label collisions | /pulse/board, four charts | two found and fixed: the trails' strength labels drew under the axis badges at the same strike, and their own backing pad was mis-centred |
 | Click-gated surfaces | the command palette, the print drilldown, Campaign Analysis — at 390 / 768 / 1440 | two found and fixed: the timeframe strip put `1W` off the screen with nothing to scroll, and the modal header spent 32% of a phone on itself |
 
