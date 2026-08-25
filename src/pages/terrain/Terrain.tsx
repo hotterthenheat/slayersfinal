@@ -22,6 +22,9 @@ import TickerQuickPick from '../../components/gex/TickerQuickPick';
 import SpotPrice from '../../components/gex/SpotPrice';
 import { CANDLE_THEMES, chartSurface, useCandleThemeKey } from '../../components/gex/candleTheme';
 import { TIMEFRAMES, type Timeframe } from '../../data/timeframe';
+import {
+  SETUP_KEYS, applySetup, captureSetup, evict, readSetups, symKey, type SetupMap,
+} from './setups';
 
 /*
 ==================================================
@@ -86,8 +89,19 @@ const stepTf = (tf: Timeframe, dir: 1 | -1): Timeframe => {
 export const LAYOUTS = [1, 2, 3, 4] as const;
 export type TerrainLayout = (typeof LAYOUTS)[number];
 
-/** Everything one pane owns. There is nothing else — a setting that is not
-    here is a setting every pane shares, and only two of those exist. */
+/*
+  Everything one pane owns. There is nothing else — a setting that is not here
+  is a setting every pane shares, and only two of those exist.
+
+  KEPT FLAT on purpose, even though five of these fields now also follow the
+  SYMBOL (SETUP_KEYS in ./setups). A complete PaneCfg on disk means an older
+  build — a rollback, or a tab still holding cached JS — reads the reader's
+  setup instead of resetting every pane to 15m candles, and it costs nothing,
+  because the whole config was already being stringified.
+
+  `ticker` and `ladder` follow the SLOT, never the symbol; see ./setups for
+  why the rail in particular has to.
+*/
 interface PaneCfg {
   ticker: string;
   timeframe: Timeframe;
@@ -109,6 +123,10 @@ interface TerrainCfg {
   /** Always four, whatever the layout, so going 3 → 2 → 3 gives the third
       pane back exactly as it was rather than resetting it. */
   panes: PaneCfg[];
+  /** How each symbol was last set up. Consulted ONLY when a symbol is newly
+      picked — never re-applied to what is already on screen, or a reader's
+      live pane would be rewritten under them by an old decision. */
+  setups: SetupMap;
 }
 
 const TF_VALUES = new Set<string>(TIMEFRAMES.map(t => t.value));
@@ -131,9 +149,30 @@ const defaultPanes = (): PaneCfg[] =>
     ladder: true,
   }));
 
-const defaults = (): TerrainCfg => ({ layout: 3, panes: defaultPanes() });
+/* The map starts EMPTY on a fresh install, deliberately. Seeding it from the
+   four watchlist rows would mean a reader who sets a pane to 1h and then picks
+   SPY gets yanked back to 15m by a setup they never chose — precisely the
+   surprise the earned-by-touch rule exists to prevent. */
+const defaults = (): TerrainCfg => ({ layout: 3, panes: defaultPanes(), setups: {} });
 
 /** One stored pane, validated field by field against a known-good default. */
+/*
+  MIGRATION ONLY. A blob written before setups existed has four panes a reader
+  did configure, so their settings become those four symbols' setups — the
+  same reasoning as the legacy fan-out below.
+
+  It runs only off a blob that ALREADY EXISTED: a fresh browser returns the
+  defaults before reaching here, so its map stays empty and nothing is
+  remembered that the reader never chose. Duplicate tickers across panes:
+  later index wins, the same last-touch-wins rule the reducer uses.
+*/
+const seedFrom = (panes: PaneCfg[]): SetupMap => {
+  const now = Date.now();
+  const out: SetupMap = {};
+  for (const p of panes) out[symKey(p.ticker)] = captureSetup(p, now);
+  return out;
+};
+
 function readPane(raw: unknown, def: PaneCfg): PaneCfg {
   const c = (raw && typeof raw === 'object' ? raw : {}) as Partial<PaneCfg>;
   return {
@@ -194,10 +233,9 @@ function loadCfg(): TerrainCfg {
 
     if (Array.isArray(c.panes)) {
       const stored = c.panes as unknown[];
-      return {
-        layout,
-        panes: def.panes.map((d, i) => readPane(stored[i], { ...d, ladder: deskLadder ?? d.ladder })),
-      };
+      const panes = def.panes.map((d, i) => readPane(stored[i], { ...d, ladder: deskLadder ?? d.ladder }));
+      const hadSetups = !!c.setups && typeof c.setups === 'object';
+      return { layout, panes, setups: hadSetups ? readSetups(c.setups) : seedFrom(panes) };
     }
 
     // ── the flat shape, fanned out ──
@@ -208,15 +246,13 @@ function loadCfg(): TerrainCfg {
       chartStyle: typeof c.chartStyle === 'string' && STYLES.has(c.chartStyle as ChartStyle) ? (c.chartStyle as ChartStyle) : undefined,
     };
     const tickers = Array.isArray(c.tickers) ? (c.tickers as unknown[]) : [];
-    return {
-      layout,
-      panes: def.panes.map((d, i) =>
-        readPane({ ...legacy, ticker: typeof tickers[i] === 'string' ? tickers[i] : d.ticker }, {
-          ...d,
-          ladder: deskLadder ?? d.ladder,
-        })
-      ),
-    };
+    const panes = def.panes.map((d, i) =>
+      readPane({ ...legacy, ticker: typeof tickers[i] === 'string' ? tickers[i] : d.ticker }, {
+        ...d,
+        ladder: deskLadder ?? d.ladder,
+      })
+    );
+    return { layout, panes, setups: seedFrom(panes) };
   } catch {
     return def;
   }
@@ -350,13 +386,12 @@ const Pane = ({
   const removeCompare = (t: string, mode: CompareMode) =>
     onCfg({ compares: compares.filter(c => !(c.ticker === t && c.mode === mode)) });
 
-  /* A comparison is drawn against THIS pane's symbol, so crossing SPY with
-     IWM and then switching the pane to IWM would leave it comparing a symbol
-     with itself. Clear on a symbol change, the same reason focus clears. */
-  useEffect(() => {
-    if (compares.length) onCfg({ compares: [] });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ticker]);
+  /* The desk's reducer now sets `compares` explicitly on every symbol change,
+     so the effect that used to clear them here is gone — and it had to go.
+     Keyed on [ticker], it also ran on MOUNT, which wrote a saved comparison
+     back and then wiped it a frame later: measured on a boot with one stored
+     comparison, the array ended empty and no legend row ever rendered.
+     Compares have been persisted-but-dead since they were added. */
 
   // Each pane reads its own book; revision keeps the levels tracking the tick
   const levels = useMemo(
@@ -730,8 +765,51 @@ const Terrain = () => {
     }
   }, [cfg]);
 
+  /* The key handler is installed once, so it reaches the reducer through a ref
+     rather than closing over the first render's copy of it. */
+  const setPaneRef = useRef<(i: number, patch: Partial<PaneCfg>) => void>(() => {});
+
+  /*
+    EVERY pane mutation funnels here, which is why both halves of the symbol
+    memory live here and nowhere else.
+
+    Doing the restore in a Pane effect instead would give one render with the
+    new symbol and the OLD interval, then another with both — two full reloads
+    of candles, volume and trails for one pick, and it would mis-fire the
+    chart's own "same ticker" fade guard. This is one commit: symbol and
+    settings land together.
+  */
   const setPane = (i: number, patch: Partial<PaneCfg>) =>
-    setCfg(prev => ({ ...prev, panes: prev.panes.map((p, j) => (j === i ? { ...p, ...patch } : p)) }));
+    setCfg(prev => {
+      const cur = prev.panes[i];
+      if (!cur) return prev;
+      const now = Date.now();
+      const put = (p: PaneCfg, setups: SetupMap) => ({
+        ...prev,
+        setups,
+        panes: prev.panes.map((q, j) => (j === i ? p : q)),
+      });
+
+      // A SYMBOL CHANGE — restore, and never capture the symbol on its way out
+      if (patch.ticker && symKey(patch.ticker) !== symKey(cur.ticker)) {
+        const key = symKey(patch.ticker);
+        const saved = prev.setups[key];
+        /* With nothing saved, applySetup reduces to `cur` — a symbol nobody
+           has configured inherits the pane exactly as it stands, which is the
+           behaviour that was here before any of this. `compares` is written
+           explicitly every time, so a comparison can never leak across a
+           symbol change. */
+        const next = { ...applySetup(cur, saved), ...patch, compares: saved?.compares ?? [] };
+        return put(next, saved ? { ...prev.setups, [key]: { ...saved, seen: now } } : prev.setups);
+      }
+
+      // A CONTROL TOUCH — this is what earns the symbol its entry
+      const next = { ...cur, ...patch };
+      // A rail-only patch is slot business and writes nothing to the symbol.
+      if (!SETUP_KEYS.some(k => k in patch)) return put(next, prev.setups);
+      return put(next, evict({ ...prev.setups, [symKey(cur.ticker)]: captureSetup(next, now) }));
+    });
+  setPaneRef.current = setPane;
 
   const [expanded, setExpanded] = useState<number | null>(null);
   const expandedRef = useRef<number | null>(null);
@@ -804,16 +882,20 @@ const Terrain = () => {
       if (e.metaKey || e.ctrlKey || e.altKey || e.isComposing || e.repeat) return;
       if (editable(e.target) || editable(document.activeElement)) return;
       const i = activeRef.current;
-      /* Read the config, compute the new pane, then set — rather than doing
-         any of it inside the updater. An updater that also calls setState is
-         not pure, and React is free to run it more than once. */
+      /* Read the config, compute the delta, then set — rather than doing any
+         of it inside the updater. An updater that also calls setState is not
+         pure, and React is free to run it more than once. */
       const cur = cfgRef.current;
+      /* THROUGH setPane, not straight to setCfg. That reducer is the one place
+         a pane change is turned into the symbol's remembered setup, and a
+         second writer here meant a key-driven change was never remembered —
+         measured: the `=` key moved the pane to 1h and wrote no SPY entry. */
       const patch = (fn: (q: PaneCfg) => Partial<PaneCfg>, say: (q: PaneCfg) => string) => {
         const q = cur.panes[i];
         if (!q) return;
-        const next = { ...q, ...fn(q) };
-        setCfg(prev => ({ ...prev, panes: prev.panes.map((r, j) => (j === i ? next : r)) }));
-        setAnnounce(say(next));
+        const delta = fn(q);
+        setPaneRef.current(i, delta);
+        setAnnounce(say({ ...q, ...delta }));
       };
 
       switch (e.key) {
