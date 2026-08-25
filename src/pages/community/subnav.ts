@@ -12,13 +12,13 @@ export const COMMUNITY_SUBPAGES: CommunitySubpage[] = [
   {
     path: '/community/ideas',
     label: 'Ideas',
-    subtitle: 'Trade ideas from the community — post yours, vote on theirs',
+    subtitle: 'Post a thesis and keep it — the room opens when accounts land',
     icon: Lightbulb,
   },
   {
     path: '/community/requests',
     label: 'Requests',
-    subtitle: 'Tell us what to build next — and watch it move to shipped',
+    subtitle: 'Tell us what to build next — kept on this browser for now',
     icon: Hammer,
   },
   {

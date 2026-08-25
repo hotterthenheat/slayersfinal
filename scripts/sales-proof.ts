@@ -225,5 +225,66 @@ check(
       : 'ledger.ts is gone and nothing sells it'
 );
 
+// ---- 6. the community seeds do not impersonate anybody --------------------
+
+/*
+  The seeds used to carry invented handles, vote counts and "3h ago"
+  timestamps under a page titled "from the community". A reader has no way to
+  tell an invented thesis from a real one, and this is a page where they might
+  act on it.
+
+  Three assertions, because the defect has three halves that can each come
+  back on their own: an author that reads like a person, a starting vote count
+  that reads like agreement, and a row that renders without the chip that says
+  what it is.
+*/
+const community = read('src/data/community.ts');
+const seedStart = community.indexOf('export const SEED_IDEAS');
+const seedEnd = community.indexOf('export const SHIPPED_FROM_FEEDBACK');
+const seedBlock = seedStart >= 0 && seedEnd > seedStart ? community.slice(seedStart, seedEnd) : '';
+const seedAuthors = [...seedBlock.matchAll(/author: '([^']*)'/g)].map(m => m[1]);
+const seedVotes = [...seedBlock.matchAll(/votes: (\d+)/g)].map(m => Number(m[1]));
+const seedFlags = [...seedBlock.matchAll(/example: true/g)].length;
+
+check(
+  'the seed block actually parsed',
+  seedAuthors.length >= 9,
+  `${seedAuthors.length} seeded rows found`
+);
+check(
+  'no seeded row carries an author that reads like a person',
+  seedAuthors.every(a => a === 'example'),
+  seedAuthors.every(a => a === 'example')
+    ? `all ${seedAuthors.length} say "example"`
+    : `handles: ${[...new Set(seedAuthors.filter(a => a !== 'example'))].join(', ')}`
+);
+check(
+  'no seeded row ships with votes on it',
+  seedVotes.every(v => v === 0),
+  seedVotes.every(v => v === 0) ? `all ${seedVotes.length} start at 0` : `counts: ${seedVotes.filter(v => v).join(', ')}`
+);
+check(
+  'every seeded row is flagged as an example',
+  seedFlags === seedAuthors.length,
+  `${seedFlags} flagged of ${seedAuthors.length} rows`
+);
+
+/*
+  And both feeds must actually branch on the flag. Without this, the seeds
+  could be flagged correctly and still render a byline — the data would be
+  honest and the screen would not.
+*/
+for (const [page, field] of [
+  ['src/pages/community/Ideas.tsx', 'idea'],
+  ['src/pages/community/Requests.tsx', 'req'],
+] as const) {
+  const src = read(page);
+  check(
+    `${page.split('/').pop()} renders the Example chip instead of a byline`,
+    new RegExp(`${field}\\.example \\?`).test(src) && /Example\s*\n?\s*<\/span>/.test(src),
+    `branches on ${field}.example`
+  );
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

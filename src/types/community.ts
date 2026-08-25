@@ -10,6 +10,8 @@ export type IdeaDirection = 'BULLISH' | 'BEARISH';
 export interface CommunityIdea {
   id: string;
   author: string;
+  /** Ships with the app to show the format. Never rendered as a person. */
+  example?: boolean;
   ticker: string;
   direction: IdeaDirection;
   /** The thesis, in the poster's words */
@@ -26,6 +28,8 @@ export type RequestStatus = 'UNDER REVIEW' | 'PLANNED' | 'BUILDING' | 'SHIPPED';
 export interface FeatureRequest {
   id: string;
   author: string;
+  /** Ships with the app to show the format. Never rendered as a person. */
+  example?: boolean;
   title: string;
   detail: string;
   kind: RequestKind;

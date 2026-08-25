@@ -120,6 +120,16 @@ const Ideas = () => {
         </span>
       </div>
 
+      {/*
+        The four seeded rows show the format and nothing else — no handle, no
+        timestamp, no starting vote count. See src/data/community.ts.
+      */}
+      <p className="text-[12px] leading-relaxed text-textSecondary">
+        Nobody else is in the room yet. The rows marked{' '}
+        <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">example</span> ship with the
+        app to show the format; yours sits alongside them, on this browser, until accounts land.
+      </p>
+
       {/* Feed */}
       <div className="flex flex-col gap-3">
         {shown.map(idea => {
@@ -142,9 +152,16 @@ const Ideas = () => {
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-mono text-[12px] font-bold text-textPrimary">{idea.ticker}</span>
                   <SignalBadge tone={idea.direction === 'BULLISH' ? 'bull' : 'bear'}>{idea.direction}</SignalBadge>
-                  <span className="ml-auto font-mono text-[10px] text-textMuted tnum">
-                    {idea.author === 'you' ? <span className="text-select">you</span> : idea.author} · {timeAgo(idea.createdAt)}
-                  </span>
+                  {idea.example ? (
+                    <span className="ml-auto inline-flex items-center rounded border border-borderMuted px-1.5 py-0.5 font-mono text-[8px] font-bold uppercase tracking-widest text-textMuted">
+                      Example
+                    </span>
+                  ) : (
+                    <span className="ml-auto font-mono text-[10px] text-textMuted tnum">
+                      {idea.author === 'you' ? <span className="text-select">you</span> : idea.author} ·{' '}
+                      {timeAgo(idea.createdAt)}
+                    </span>
+                  )}
                 </div>
                 <p className="mt-1.5 text-[12px] text-textSecondary leading-relaxed">“{idea.thesis}”</p>
               </div>
