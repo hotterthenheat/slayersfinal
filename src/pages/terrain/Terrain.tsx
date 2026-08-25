@@ -288,9 +288,19 @@ interface PaneProps {
   tall: boolean;
   /** How many heaviest-strike entries this pane's width can print whole */
   heavyCount: number;
+  /*
+    Extra grid classes for THIS pane's box.
+
+    They have to arrive here rather than being written on the grid, for the
+    same reason the stacked-phone floor does: the wrapper below is
+    `display: contents` when the pane is not expanded, so a `[&>*]` rule on
+    the grid lands on an element that generates no box and is ignored. That
+    trap has already cost one silent defect in this file.
+  */
+  cell?: string;
 }
 
-const Pane = ({ cfg, onCfg, revision, expanded, onToggleExpand, index, tall, heavyCount }: PaneProps) => {
+const Pane = ({ cfg, onCfg, revision, expanded, onToggleExpand, index, tall, heavyCount, cell = '' }: PaneProps) => {
   const { ticker, timeframe, overlays, indicators, chartStyle, compares, ladder } = cfg;
 
   /* Add / remove a crossed symbol. Capped at the ink list's length so every
@@ -378,7 +388,7 @@ const Pane = ({ cfg, onCfg, revision, expanded, onToggleExpand, index, tall, hea
       */}
       <div
         className={`relative flex flex-col overflow-hidden animate-soft-in ${
-          expanded ? 'flex-1 min-h-0' : 'min-h-[420px] lg:min-h-0 border border-borderSubtle rounded-md'
+          expanded ? 'flex-1 min-h-0' : `min-h-[420px] lg:min-h-0 border border-borderSubtle rounded-md ${cell}`
         }`}
         style={{ animationDelay: `${index * 60}ms`, background: surface }}
       >
@@ -771,6 +781,17 @@ const Terrain = () => {
             index={i}
             tall={cfg.layout === 1}
             heavyCount={cfg.layout >= 3 ? 2 : 3}
+            /*
+              THE ODD PANE OUT TAKES THE WHOLE ROW.
+
+              Three panes in two columns leaves the second row half empty —
+              at 1440, the most ordinary laptop width there is, that is a
+              quarter of the desk showing nothing. The third pane spans both
+              columns instead. From `2xl` the layout is three columns and the
+              span comes straight back off, because there is no odd pane any
+              more.
+            */
+            cell={cfg.layout === 3 && i === 2 ? 'lg:col-span-2 2xl:col-span-1' : ''}
           />
         ))}
       </div>
