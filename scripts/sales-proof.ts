@@ -459,5 +459,34 @@ check(
   sessionScoped ? 'the footer counts "marked this session"' : 'the count no longer says the marks are ephemeral'
 );
 
+/*
+  "Moved most since last scan" only appears when something moved.
+
+  The winner search starts with the first strike in the window and replaces it
+  only on a STRICTLY larger absolute change, so a flat book leaves whichever
+  strike the loop reached first — and Vanna & Charm printed it as a finding.
+  Measured on the running page: 20 samples over 30 seconds, every one "+$0",
+  the strike flipping between 502 and 503 as the window slid. Iteration order,
+  dressed as a measurement.
+
+  The arithmetic is untouched; the module simply declines to publish a largest
+  move when there was none. Re-measured after: the row is absent in all 20.
+*/
+const vanna = read('src/data/vannacharm.ts');
+const guardsZero = /if \(best && best\.changeUsd !== 0\) delta = \{ \.\.\.best, distPct: dist\(best\.strike\) \};/.test(vanna);
+check(
+  'the migration read publishes a largest move only when there was one',
+  guardsZero,
+  guardsZero
+    ? 'zero change publishes nothing'
+    : 'a flat book would print the first strike in the window as "moved most"'
+);
+const rowIsConditional = /\{data\.read\.delta && \(/.test(read('src/pages/pinpoint/VannaCharm.tsx'));
+check(
+  'the panel renders that row only when the read carries one',
+  rowIsConditional,
+  rowIsConditional ? 'guarded on data.read.delta' : 'the row renders unconditionally — a null delta would print blank'
+);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

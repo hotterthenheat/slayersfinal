@@ -182,7 +182,14 @@ export function loadCommunity(): CommunityState {
 }
 
 export function saveCommunity(state: CommunityState): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    /* Quota, or a browser with storage switched off. Every other write in
+       this tree already guards — this one did not, and it is called straight
+       out of a click handler, so a throw here took the board down rather
+       than losing one post. The state stays in memory for the session. */
+  }
 }
 
 /** "3h ago" style relative time. */

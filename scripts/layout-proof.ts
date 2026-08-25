@@ -665,5 +665,120 @@ check(
     : 'nowrap again — "DOWNSIDE CUSHION" ran 69px past the card edge at 768px and the card clipped it'
 );
 
+/*
+  Free text the reader typed has to break.
+
+  The community boards render whatever was put in the composer. Prose is
+  fine; a pasted URL is not, and a URL in a trade idea is an ordinary thing
+  to paste. Measured at 1440px by posting one and reading <main>:
+
+      400-character unbroken token   main 2041px wider than the viewport
+      a pasted URL                    main  748px wider
+      long prose                      main  0px — which is why nothing
+                                      caught this until something did
+
+  The whole terminal slid sideways off one post, at every width, not just
+  on a phone.
+
+  The field list is derived from the types rather than typed here: every
+  `string` member of the community entities that is not an id, an author, a
+  timestamp or an enum is free text, and every place it is rendered must
+  carry `break-words`. Add a field to the composer and it must be handled
+  here too, or this fails.
+*/
+const communityTypes = read('src/types/community.ts');
+const FREE_TEXT_EXCLUDE = new Set(['id', 'author', 'createdAt', 'ticker']);
+const freeTextFields = [...new Set(
+  [...communityTypes.matchAll(/^\s{2}([a-zA-Z]+)\??:\s*string;/gm)].map(m => m[1])
+)].filter(f => !FREE_TEXT_EXCLUDE.has(f));
+check(
+  'the free-text field list came off the types',
+  freeTextFields.length >= 4,
+  freeTextFields.length ? `${freeTextFields.join(', ')}` : 'no string fields found — the types moved'
+);
+const communityPages = walkTsx(path.join(ROOT, 'src/pages/community'));
+const unbroken: string[] = [];
+let renderSites = 0;
+for (const file of communityPages) {
+  const src = readFileSync(file, 'utf8');
+  const rel = path.relative(ROOT, file).split(path.sep).join('/');
+  for (const field of freeTextFields) {
+    // a JSX interpolation of that field, e.g. {idea.thesis} or {fb.message}
+    for (const m of src.matchAll(new RegExp(`\\{[a-zA-Z]+\\.${field}\\}`, 'g'))) {
+      const before = src.slice(Math.max(0, m.index! - 400), m.index!);
+      // `key={item.title}` is a React key, not rendered text
+      if (/(?:key|aria-label|title)=$/.test(before)) continue;
+      renderSites++;
+      const tagStart = before.lastIndexOf('<');
+      const tag = tagStart === -1 ? before : before.slice(tagStart);
+      if (!/break-words/.test(tag)) unbroken.push(`${rel}: ${m[0]}`);
+    }
+  }
+}
+check(
+  'the free-text render sites were found',
+  renderSites >= 4,
+  `${renderSites} interpolation(s) of ${freeTextFields.length} field(s) across ${communityPages.length} page(s)`
+);
+check(
+  'every rendered free-text field breaks long words',
+  unbroken.length === 0,
+  unbroken.length ? `no break-words on: ${unbroken.join(', ')}` : `all ${renderSites} render sites carry break-words`
+);
+
+/*
+  Every write to localStorage is guarded.
+
+  `setItem` throws — quota exceeded, a browser with site data switched off,
+  Safari private mode. Six of the eight writes in this tree already caught
+  it, with comments saying why. Two did not:
+
+      data/community.ts saveCommunity        called straight out of a click
+      CampaignAnalysis chart-prefs effect    throws inside useEffect
+
+  Losing one saved preference is nothing. A throw out of a click handler or
+  an effect is a page fault, and the reader loses the board rather than the
+  post. Both now match their six neighbours.
+
+  The scan is over the whole tree rather than a list, so a ninth write has
+  to guard itself too.
+*/
+const writes: string[] = [];
+let writeSites = 0;
+for (const file of walkTsx(path.join(ROOT, 'src')).concat(
+  // walkTsx only returns .tsx; the plain .ts modules write too
+  (function walkTs(dir: string, out: string[] = []): string[] {
+    for (const entry of readdirSync(dir)) {
+      const full = path.join(dir, entry);
+      if (statSync(full).isDirectory()) walkTs(full, out);
+      else if (entry.endsWith('.ts')) out.push(full);
+    }
+    return out;
+  })(path.join(ROOT, 'src'))
+)) {
+  const src = readFileSync(file, 'utf8');
+  const rel = path.relative(ROOT, file).split(path.sep).join('/');
+  for (const m of src.matchAll(/localStorage\.setItem\(/g)) {
+    // walk backwards counting braces to the enclosing function, looking for a try
+    const before = src.slice(0, m.index!);
+    const lastTry = before.lastIndexOf('try {');
+    const lastFn = Math.max(before.lastIndexOf('function '), before.lastIndexOf('=> {'));
+    writeSites++;
+    if (lastTry === -1 || lastTry < lastFn) writes.push(`${rel}:${before.split('\n').length}`);
+  }
+}
+check(
+  'the localStorage write scan found the writes',
+  writeSites >= 8,
+  `${writeSites} setItem call(s) across src — the scan is looking at something`
+);
+check(
+  'every localStorage write is inside a try',
+  writes.length === 0,
+  writes.length
+    ? `unguarded: ${writes.join(', ')} — a full quota or a private window takes the page down, not the preference`
+    : 'all guarded'
+);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

@@ -133,7 +133,7 @@ const Requests = () => {
               </button>
               <div className="min-w-0 flex-grow">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[13px] font-semibold text-textPrimary">{req.title}</span>
+                  <span className="text-[13px] font-semibold text-textPrimary break-words">{req.title}</span>
                   <SignalBadge tone={STATUS_TONE[req.status]}>{req.status}</SignalBadge>
                   <SignalBadge tone="neutral">{req.kind}</SignalBadge>
                   {req.example ? (
@@ -147,7 +147,7 @@ const Requests = () => {
                     </span>
                   )}
                 </div>
-                {req.detail && <p className="mt-1.5 text-[12px] text-textSecondary leading-relaxed">{req.detail}</p>}
+                {req.detail && <p className="mt-1.5 text-[12px] text-textSecondary leading-relaxed break-words">{req.detail}</p>}
               </div>
             </div>
           );

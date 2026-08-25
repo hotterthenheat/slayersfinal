@@ -163,7 +163,12 @@ const Ideas = () => {
                     </span>
                   )}
                 </div>
-                <p className="mt-1.5 text-[12px] text-textSecondary leading-relaxed">“{idea.thesis}”</p>
+                {/* BREAKS. This is whatever the reader typed, and a pasted URL is an
+                    ordinary thing to put in a trade idea. Measured at 1440px: a
+                    400-character unbroken token pushed <main> 2041px wider than the
+                    viewport, a pasted URL 748px — the whole terminal slid sideways
+                    off one post. Prose was fine, which is why nothing caught it. */}
+                <p className="mt-1.5 text-[12px] text-textSecondary leading-relaxed break-words">“{idea.thesis}”</p>
               </div>
             </div>
           );

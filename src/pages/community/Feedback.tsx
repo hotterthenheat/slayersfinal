@@ -92,7 +92,7 @@ const Feedback = () => {
                   </span>
                   <span className="ml-auto font-mono text-[10px] text-textMuted tnum">{timeAgo(fb.createdAt)}</span>
                 </div>
-                <p className="mt-1 text-[12px] text-textSecondary leading-relaxed">{fb.message}</p>
+                <p className="mt-1 text-[12px] text-textSecondary leading-relaxed break-words">{fb.message}</p>
               </div>
             ))
           )}
@@ -106,8 +106,8 @@ const Feedback = () => {
             <div key={item.title} className="flex items-start gap-2.5 px-4 py-3 border-b border-borderSubtle/40 last:border-0">
               <Check className="w-3.5 h-3.5 text-bull shrink-0 mt-0.5" />
               <div className="min-w-0">
-                <span className="block text-[12px] font-semibold text-textPrimary">{item.title}</span>
-                <span className="block text-[11px] text-textSecondary leading-snug">{item.note}</span>
+                <span className="block text-[12px] font-semibold text-textPrimary break-words">{item.title}</span>
+                <span className="block text-[11px] text-textSecondary leading-snug break-words">{item.note}</span>
               </div>
             </div>
           ))}

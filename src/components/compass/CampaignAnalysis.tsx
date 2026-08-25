@@ -615,7 +615,13 @@ const CampaignAnalysis = ({
   const [timeframe, setTimeframe] = useState<Timeframe>(() => loadChartPrefs().timeframe);
   const [overlays, setOverlays] = useState<ChartOverlays>(() => loadChartPrefs().overlays);
   useEffect(() => {
-    localStorage.setItem(CAMPAIGN_CHART_LS, JSON.stringify({ timeframe, overlays }));
+    try {
+      localStorage.setItem(CAMPAIGN_CHART_LS, JSON.stringify({ timeframe, overlays }));
+    } catch {
+      /* Quota, or storage switched off — the chart keeps the preference for
+         this session and simply does not remember it next time. Matches the
+         other seven writes in the tree. */
+    }
   }, [timeframe, overlays]);
 
   /* Fullscreen chart takeover — the Pulse contract verbatim: 'contents'

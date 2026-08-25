@@ -196,30 +196,42 @@ answer, and the frozen-campaign guarantee survives. But it is the
 
 ## What was checked and found clean
 
-Recorded so it is not paid for twice. Every one of these was measured
-from rendered pixels, and every detector below was mutation-verified —
-the defect was put back and the detector caught it.
+Recorded so it is not paid for twice.
+
+Two of these were measured from actual rendered pixels — contrast, and
+whether focusing a control changes anything on screen. The rest are
+geometry: element rectangles, scroll widths, clip chains. Both are
+measurements of the running page; neither is a reading of the source.
+
+Where a detector could be mutation-verified — inject the defect, watch it
+get caught — it was, and it says so. The sideways-scroll and popover
+sweeps were not mutation-tested against a synthetic defect; they were
+verified by the before/after on real ones, which is weaker evidence for
+the detector and stronger for the fix.
 
 | dimension | coverage | result |
 | --- | --- | --- |
-| WCAG contrast | 3,125 text nodes sampled from rendered pixels — 16 routes × 2 viewports, 119 distinct fg/bg pairs | one real failure, fixed: the spot rule's ticker on the gold pressure bar, 1.21:1 → 6.58:1. One reported failure was the sampler's own fault (see below). |
+| WCAG contrast | 3,126 text nodes sampled from rendered pixels — 16 routes × 2 viewports, 121 distinct fg/bg pairs. Mutation-verified | one real failure, fixed: the spot rule's ticker on the gold pressure bar, 1.21:1 → 6.58:1. One reported failure was the sampler's own fault (see below) |
 | Tooltip edge positioning | 32 tooltips opened at edge positions | none leaves the viewport |
 | Focus rings | 457 tab stops walked across 15 routes, each checked for a rendered focus indicator | zero with no visible focus, zero focused off-view. 451 cleared on the computed ring, 6 needed a pixel test and passed it |
 | Reduced motion | every infinite CSS animation and Tailwind loop utility | covered — three were not, and are now |
 | Keyboard reachability | 9 non-native clickable elements, plus the 457-stop tab walk above | all reachable; PositioningMap's 21-band roving tabindex verified correct against WCAG 2.5.8 |
-| Text overflow | 4 viewports × every route | zero spilling text nodes |
-| Under-filled panels | 15 routes, any panel with >60px of dead space at the bottom | zero |
-| Unreachable content | 15 routes × 7 viewports — 390, 768, 1024, 1280, 1366, 1440, 1920 — 105 page loads | zero |
+| Text overflow | 15 routes × 390 / 768 / 1280 / 1600 — 64 page loads | zero spilling text nodes |
+| Under-filled panels | 15 routes, any panel with >60px of dead space at the bottom. Mutation-verified (an injected 219px void was caught) | zero |
+| Unreachable content | 15 routes × 7 viewports — 390, 768, 1024, 1280, 1366, 1440, 1920 — 105 page loads. Mutation-verified | zero |
 | Popovers and dropdowns | every `aria-haspopup` / `aria-expanded` trigger on 10 routes, opened at 390 and 1440 | 63 opened, none landing outside the viewport |
 | Sideways page scroll | 15 routes × 390 / 768 / 1280 / 1440, before and after | five routes made `<main>` wider than a 390px screen — Stocks by 257px, Pinpoint's ranked ladder by 85, the tape's beam by 97, and two by the sub-page tab strip. Nothing at 768 or above. All five fixed; re-measured 60 page loads, **zero** |
+| Corrupt saved state | 5 localStorage keys × 8 kinds of bad value — not JSON, wrong type, null, empty, right container with wrong members, deeply nested — across 5 routes, 200 page loads | nothing broke: 0 blank pages, 0 uncaught errors. The read paths all guard. Two **write** paths did not, and now do |
+| Free-text robustness | a 400-char unbroken token, a pasted URL and long prose posted through the community composer | the token made `<main>` 2041px wider than a 1440px viewport and the URL 748px — the terminal slid sideways off one post. Prose was fine, which is why nothing caught it. Fixed; re-measured 0 |
 | Stateful journeys | tracking a campaign, posting an idea, marking a print, the desk layout — each driven in a browser and reloaded | 11 of 11. Everything the UI promises to keep is kept, except the tape's print marks, which never claimed to and now say so |
 | Header fit | 768px, every route | fits at exactly 768 after the labels-only ladder |
 | Company-mark licensing | the 17 SVGs in `public/logos` | clean — Simple Icons, CC0. Provenance and the trademark caveat are now recorded in `public/logos/README.md`; unlike the SF Pro problem, nothing here needed replacing |
 | Chart label collisions | /pulse/board, four charts | two found and fixed: the trails' strength labels drew under the axis badges at the same strike, and their own backing pad was mis-centred |
 | Click-gated surfaces | the command palette, the print drilldown, Campaign Analysis — at 390 / 768 / 1440 | two found and fixed: the timeframe strip put `1W` off the screen with nothing to scroll, and the modal header spent 32% of a phone on itself |
 
-Two notes on method, because a measurement is only worth what its failure
-modes are worth:
+Five notes on method, because a measurement is only worth what its failure
+modes are worth — and four of these were my own measurement being wrong
+before the product was:
 
 - **An earlier contrast detector reported 47 failures. All 47 were false.** It walked up the DOM for a background colour, which finds nothing on a gradient and finds the wrong thing when the coloured element is a `layoutId` sibling rather than a parent. Sampling the rendered pixels instead is what turned 47 noisy failures into 1 real one.
 - **Every sweep before this one ran against pages in their default state.** A drawer, a modal, or a view behind a button was in none of them — and two of the three carried a defect. Anything measured route-by-route is measuring the front door only.
