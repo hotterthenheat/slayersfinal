@@ -18,6 +18,7 @@ import SignalBadge from '../ui/SignalBadge';
 import SetupScanCard from './SetupScanCard';
 import { processState, PROCESS_META } from './setupProcess';
 import { preserveGreek } from '../ui/greek';
+import { ROW_INTERACTIVE, interactiveRowProps } from '../ui/interactiveRow';
 
 export type ScanLayout = 'cards' | 'table';
 
@@ -130,8 +131,8 @@ const SetupScanBoard = ({ setups, title, sweepAt, selectedId, onSelect, onAnalys
                   <tr
                     key={s.id}
                     onClick={() => onSelect(s)}
-                    aria-selected={s.id === selectedId}
-                    className={`border-b border-borderSubtle/50 cursor-pointer transition-colors ${
+                    {...interactiveRowProps(() => onSelect(s), s.id === selectedId, 'native')}
+                    className={`border-b border-borderSubtle/50 transition-colors ${ROW_INTERACTIVE} ${
                       s.id === selectedId ? 'bg-white/[0.05]' : 'hover:bg-white/[0.02]'
                     }`}
                   >

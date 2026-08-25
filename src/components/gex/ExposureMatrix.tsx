@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { fmtUsd } from '../../data/gex';
 import SpotRule from '../ui/SpotRule';
 import { DEALER_CALL, DEALER_PUT } from './palette';
+import { ROW_INTERACTIVE, interactiveRowProps } from '../ui/interactiveRow';
 import type { ExposureProfileData, GreekSplit } from '../../types/gex';
 
 interface ExposureMatrixProps {
@@ -182,8 +183,15 @@ const ExposureMatrix = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
                 onMouseEnter={onHoverStrike ? () => onHoverStrike(row.strike) : undefined}
                 onMouseLeave={onHoverStrike ? () => onHoverStrike(null) : undefined}
                 onClick={onSelectStrike ? () => onSelectStrike(row.strike) : undefined}
+                {...(onSelectStrike
+                  ? interactiveRowProps(
+                      () => onSelectStrike(row.strike),
+                      selectedStrike === row.strike,
+                      'native'
+                    )
+                  : {})}
                 className={`border-b border-borderSubtle/30 transition-colors ${row.pin ? 'bg-white/[0.03]' : ''} ${
-                  onSelectStrike ? 'cursor-pointer' : ''
+                  onSelectStrike ? ROW_INTERACTIVE : ''
                 } ${
                   selectedStrike === row.strike
                     ? 'bg-white/[0.05] shadow-[inset_2px_0_0_0_rgba(237,237,237,0.7)]'

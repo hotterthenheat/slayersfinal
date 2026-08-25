@@ -10,6 +10,7 @@ import type { TermKey } from '../../data/terms';
 import RichRead from '../../components/ui/RichRead';
 import PrintDrilldown from '../../components/trace/PrintDrilldown';
 import type { FlowPrint, PrintSentiment, TapeSummary } from '../../types/trace';
+import { ROW_INTERACTIVE, interactiveRowProps } from '../../components/ui/interactiveRow';
 
 const MAX_ROWS = 120;
 const READ_INTERVAL_MS = 8_000;
@@ -99,8 +100,9 @@ const TapeRow = memo(
     return (
       <tr
         onClick={() => onOpen(r)}
+        {...interactiveRowProps(() => onOpen(r), isOpen, 'native')}
         title="Open the print drilldown"
-        className={`border-b border-borderSubtle/30 last:border-0 animate-slide-in cursor-pointer transition-colors ${
+        className={`border-b border-borderSubtle/30 last:border-0 animate-slide-in transition-colors ${ROW_INTERACTIVE} ${
           isOpen ? 'bg-white/[0.05]' : 'hover:bg-white/[0.03]'
         } ${rowAccent(r.premium)}`}
       >

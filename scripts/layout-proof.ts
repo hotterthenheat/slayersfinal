@@ -30,7 +30,7 @@
   Run: npx tsx scripts/layout-proof.ts
 */
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -145,6 +145,123 @@ check(
   'the rail keeps a sane width threshold',
   threshold >= 180 && threshold <= 400,
   Number.isFinite(threshold) ? `DIST_COLUMN_MIN = ${threshold}` : 'DIST_COLUMN_MIN not found'
+);
+
+// ---- Nothing clickable is mouse-only --------------------------------------
+
+/*
+  A div with an onClick and a cursor-pointer looks interactive, answers a
+  mouse, and does not exist for a keyboard. src/components/ui/interactiveRow.ts
+  was written for exactly this and says so in its own header — and until now
+  ONE file imported it. Eight hand-rolled clickable rows had between them: no
+  tab stop, no key handler, and in two cases a role="button" that announced a
+  control to a screen reader and then ignored Enter.
+
+  THE SCAN NEEDS A REAL PARSER, NOT A REGEX. The first version of this matched
+  JSX attributes with `(?:[^<>]|\{[^{}]*\})*?`, which cannot survive a
+  multi-line arrow function in an onKeyDown — so it reported two components as
+  broken that were already correct. Attributes are extracted here by walking
+  forward from the tag name tracking brace depth and quote state, which is the
+  only way to know where the tag actually ends.
+
+  Verified in a browser, not just in the source: a Live Tape row takes focus
+  and Enter opens the drilldown; a Stocks header button takes focus and Enter
+  re-sorts the table (JPM -> XOM) with aria-sort following; and Compass reports
+  87 focus stops with zero role="button" elements that cannot be focused.
+
+  ONE PATTERN THAT LOOKS LIKE THE DEFECT AND IS NOT. The positioning map's 21
+  strike bands are a roving tabindex: exactly one carries tabIndex 0 and the
+  other twenty carry -1, with arrow keys moving focus along the rail. A
+  browser sweep counting "role=button that cannot be focused" reports twenty
+  offenders there and is wrong every time — that is the standard ARIA
+  composite-widget pattern, it is documented at the call site against WCAG
+  2.5.8, and it works: arrows walk the strikes and Enter selects one. This
+  scan reads the SOURCE, where the band's spread carries both tabIndex and
+  onKeyDown, so it passes correctly. Anyone re-checking this in a browser
+  should expect those twenty and leave them alone.
+*/
+function attrsOf(src: string, from: number): string | null {
+  let i = from, depth = 0, quote: string | null = null;
+  while (i < src.length) {
+    const c = src[i];
+    if (quote) {
+      if (c === quote && src[i - 1] !== '\\') quote = null;
+    } else if (c === '"' || c === "'" || c === '`') {
+      quote = c;
+    } else if (c === '{') {
+      depth++;
+    } else if (c === '}') {
+      depth--;
+    } else if (c === '>' && depth === 0) {
+      return src.slice(from, i);
+    } else if (c === '<' && depth === 0) {
+      return null; // ran into the next tag — malformed for our purposes
+    }
+    i++;
+  }
+  return null;
+}
+
+const NATIVE = new Set(['button', 'a', 'input', 'select', 'textarea', 'summary', 'label']);
+const mouseOnly: string[] = [];
+let clickSites = 0;
+
+function walkTsx(dir: string, out: string[] = []): string[] {
+  for (const entry of readdirSync(dir)) {
+    const full = path.join(dir, entry);
+    if (statSync(full).isDirectory()) walkTsx(full, out);
+    else if (entry.endsWith('.tsx')) out.push(full);
+  }
+  return out;
+}
+
+for (const file of walkTsx(path.join(ROOT, 'src'))) {
+  const rel = path.relative(ROOT, file).split(path.sep).join('/');
+  const src = readFileSync(file, 'utf8');
+  for (const m of src.matchAll(/<([a-z][a-zA-Z0-9]*)\s/g)) {
+    const tag = m[1];
+    if (NATIVE.has(tag)) continue;
+    const attrs = attrsOf(src, m.index! + m[0].length);
+    if (attrs === null || !/\bonClick\b/.test(attrs)) continue;
+    // A backdrop closes on Escape and must not be a tab stop of its own.
+    if (/aria-hidden/.test(attrs)) continue;
+    // role="tooltip" with a stopPropagation click is not a control.
+    if (/role="tooltip"/.test(attrs)) continue;
+    clickSites++;
+    const reachable =
+      (/\btabIndex\b/.test(attrs) && /\bonKeyDown\b/.test(attrs)) ||
+      /interactiveRowProps\(/.test(attrs);
+    if (!reachable) mouseOnly.push(`${rel}:${src.slice(0, m.index!).split('\n').length}<${tag}>`);
+  }
+}
+
+check(
+  'the clickable-element scan found sites to check',
+  clickSites >= 6,
+  `${clickSites} non-native clickable element(s) parsed`
+);
+check(
+  'no clickable element is mouse-only',
+  mouseOnly.length === 0,
+  mouseOnly.length ? mouseOnly.join(', ') : `all ${clickSites} reachable by keyboard`
+);
+
+/*
+  And the helper has to keep doing its job. It is spread onto elements, so a
+  version of it that quietly stopped returning tabIndex or onKeyDown would
+  leave every adopter mouse-only again with nothing else to notice.
+*/
+const helper = read('src/components/ui/interactiveRow.ts');
+check(
+  'interactiveRowProps still returns a tab stop and a key handler',
+  /tabIndex: 0/.test(helper) && /onKeyDown: rowKeyDown\(/.test(helper),
+  /tabIndex: 0/.test(helper) ? 'tabIndex 0 + onKeyDown' : 'the helper stopped returning them'
+);
+const answersBoth = /e\.key !== 'Enter' && e\.key !== ' '/.test(helper);
+check(
+  'the row key handler answers Enter and Space',
+  answersBoth,
+  answersBoth ? 'Enter and Space' : 'the key set changed — Space is the one browsers do not fire click for on a tr'
 );
 
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -3,6 +3,7 @@ import { fmtUsd } from '../../data/gex';
 import SpotRule from '../ui/SpotRule';
 import { heatRgb } from './heatmap';
 import type { PressureRow, PressureSide } from '../../types/gex';
+import { ROW_INTERACTIVE, interactiveRowProps } from '../ui/interactiveRow';
 
 interface PressureMatrixProps {
   ticker: string;
@@ -97,9 +98,12 @@ const PressureMatrix = ({ ticker, spot, rows, maxAbs, onSelectStrike }: Pressure
               <Fragment key={row.strike}>
                 <tr
                   onClick={onSelectStrike ? () => onSelectStrike(row.strike) : undefined}
+                  {...(onSelectStrike
+                    ? interactiveRowProps(() => onSelectStrike(row.strike), false, 'native')
+                    : {})}
                   title={onSelectStrike ? 'Flash on chart' : undefined}
                   className={`border-b border-borderSubtle/30 transition-colors ${row.pin ? 'bg-white/[0.03]' : ''} ${
-                    onSelectStrike ? 'cursor-pointer hover:bg-white/[0.04]' : ''
+                    onSelectStrike ? `${ROW_INTERACTIVE} hover:bg-white/[0.04]` : ''
                   }`}
                 >
                   <td className="px-2 py-1 bg-inset border-r border-borderSubtle/40 font-mono text-[10px] font-semibold tnum text-textSecondary whitespace-nowrap">

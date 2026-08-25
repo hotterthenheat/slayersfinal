@@ -3,6 +3,7 @@ import { fmtUsd } from '../../data/gex';
 import Term from '../ui/Term';
 import type { TermKey } from '../../data/terms';
 import type { KeyLevelKind, KeyLevelRow } from '../../types/gex';
+import { ROW_INTERACTIVE, interactiveRowProps } from '../ui/interactiveRow';
 
 interface KeyLevelsRailProps {
   rows: KeyLevelRow[];
@@ -110,12 +111,12 @@ const KeyLevelsRail = ({ rows, maxPressure, onSelect, priceFormat }: KeyLevelsRa
       return (
         <div
           key={row.kind}
-          role={onSelect ? 'button' : undefined}
           onClick={onSelect ? () => onSelect(row.price) : undefined}
+          {...(onSelect ? interactiveRowProps(() => onSelect(row.price)) : {})}
           title={onSelect ? 'Flash on chart' : undefined}
           className={`grid ${cols} gap-x-2 items-center px-2.5 py-[7px] border-b border-borderSubtle/30 last:border-0 transition-colors ${
             isSpot ? 'bg-white/[0.04]' : ''
-          } ${onSelect ? 'cursor-pointer hover:bg-white/[0.03]' : ''}`}
+          } ${onSelect ? `${ROW_INTERACTIVE} hover:bg-white/[0.03]` : ''}`}
         >
           <span className="min-w-0">
             <span className={`block truncate font-mono text-[10px] font-semibold uppercase tracking-wider ${KIND_TEXT[row.kind]}`}>
