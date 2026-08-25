@@ -91,6 +91,16 @@ interface SalesRow {
   why: string;
 }
 
+/** Every .ts/.tsx under src, absolute paths. */
+const walkSrc = (dir = path.join(ROOT, 'src'), out: string[] = []): string[] => {
+  for (const entry of readdirSync(dir)) {
+    const full = path.join(dir, entry);
+    if (statSync(full).isDirectory()) walkSrc(full, out);
+    else if (/\.(ts|tsx)$/.test(entry)) out.push(full);
+  }
+  return out;
+};
+
 const discordHits = (() => {
   let n = 0;
   const walk = (dir: string) => {
@@ -312,6 +322,74 @@ check(
     : hasChip
       ? 'seeds shown, Example chip present'
       : 'seeds shown with NO Example chip'
+);
+
+/*
+  The FAQ's answer to "Is the data live?" names every desk that is NOT on the
+  feed seam — and the list is measured, not typed.
+
+  WHY. The answer used to read "The panels are the real ones and they read
+  through the same feed the live data lands on, so nothing about the layout or
+  the math changes when it is switched over." That is true of price, candles,
+  dealer levels and the tape — 26 files import core/feed. It is not true of
+  Stocks, Earnings, News or Trace's contract-flow drilldown, which seed their
+  numbers from a hash and would not change at all if the seam were repointed.
+  A buyer reading that answer would have been told the switch is done above
+  four desks where it is not even started.
+
+  The set below is derived the same way a reader would check it: a data module
+  that imports core/rng, does NOT import core/feed, and is consumed by at least
+  one component. That last clause keeps data/moc.ts out — it seeds from the
+  same hash but nothing imports it, so it is an orphan, not a desk a customer
+  can open.
+
+  COUPLED IN BOTH DIRECTIONS. Repoint Stocks at the seam and forget the copy:
+  fails. Add a new hash-seeded desk and forget the copy: fails.
+*/
+const dataDir = path.join(ROOT, 'src/data');
+const offSeam = readdirSync(dataDir)
+  .filter(f => f.endsWith('.ts'))
+  .map(f => ({ name: f.replace(/\.ts$/, ''), src: readFileSync(path.join(dataDir, f), 'utf8') }))
+  .filter(({ src }) => /core\/rng/.test(src) && !/core\/feed/.test(src))
+  .filter(({ name }) => {
+    const users = walkSrc().filter(
+      abs => abs.endsWith('.tsx') && new RegExp(`data/${name}'`).test(readFileSync(abs, 'utf8'))
+    );
+    return users.length > 0;
+  })
+  .map(({ name }) => name);
+
+const FAQ_NAME: Record<string, RegExp> = {
+  stocks: /Stocks/,
+  earnings: /Earnings/,
+  news: /News/,
+  contractflow: /contract-flow/,
+};
+const faqAnswer = (extras.match(/Is the data live\?',\s*\n\s*a: '([^']*)'/) ?? [])[1] ?? '';
+check(
+  'the live-data answer was found in the FAQ',
+  faqAnswer.length > 0,
+  faqAnswer.length ? `${faqAnswer.length} chars` : 'could not read the answer — the shape of FAQS changed'
+);
+const unnamed = offSeam.filter(m => !(FAQ_NAME[m] && FAQ_NAME[m].test(faqAnswer)));
+const unmapped = offSeam.filter(m => !FAQ_NAME[m]);
+check(
+  'every desk that is off the feed seam is named in the FAQ answer',
+  unnamed.length === 0,
+  unnamed.length
+    ? `off the seam and NOT disclosed: ${unnamed.join(', ')}${unmapped.length ? ` (${unmapped.join(', ')} has no entry in FAQ_NAME either)` : ''}`
+    : `${offSeam.length} off the seam, all four named: ${offSeam.join(', ')}`
+);
+const stale = Object.keys(FAQ_NAME).filter(m => !offSeam.includes(m) && FAQ_NAME[m].test(faqAnswer));
+check(
+  'the FAQ does not still disclaim a desk that has since moved onto the seam',
+  stale.length === 0,
+  stale.length ? `${stale.join(', ')} now reads the seam — the copy still calls it a sample` : 'no stale disclaimers'
+);
+check(
+  'the answer still says the switch is one file, not a rewrite',
+  /single feed module/.test(faqAnswer) && /no layout and no math above it changes/.test(faqAnswer),
+  /single feed module/.test(faqAnswer) ? 'the seam promise survives the disclosure' : 'the seam promise was dropped'
 );
 
 console.log(`\n${pass} passed, ${fail} failed`);

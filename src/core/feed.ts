@@ -15,9 +15,27 @@ import { RECORDED } from '../data/recorded/manifest';
 ==================================================
   SLAYER TERMINAL - THE MARKET FEED SEAM (core/feed.ts)
 
-  The one module the whole product reads the market
-  through. Everything above it — 74 files across every
-  desk — asks this and nothing else.
+  The one module the market itself reads through. Price,
+  candles, dealer levels and the tape all arrive here and
+  nowhere else: 26 files import it, and every chart, the
+  tape, Compass, Pulse, Pinpoint and Tracker are among
+  them.
+
+  NOT YET EVERYTHING (measured 2026-08-25, and asserted in
+  scripts/sales-proof.ts so the count cannot drift quietly).
+  Four research desks still build their own sample numbers
+  from a hash seed instead of reading this file:
+
+      data/stocks.ts        Stocks
+      data/earnings.ts      Earnings hub + dossier
+      data/news.ts          News
+      data/contractflow.ts  Trace's contract-flow drilldown
+
+  Swapping the body of this file would not change any of
+  those four, so the landing FAQ names them rather than
+  claiming the whole terminal is on the seam. data/moc.ts
+  seeds from the same hash but has no consumer at all —
+  an orphan kept for revival, not a desk.
 
   WHY IT EXISTS. Until now the terminal computed its own
   market: a random-walk price simulator, a Black-Scholes

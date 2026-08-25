@@ -145,7 +145,7 @@ const FAQS = [
   },
   {
     q: 'Is the data live?',
-    a: 'Not in the terminal you can open from here. Every panel replays a recorded session so the desk can be explored end to end without an account — the header carries a Sim badge the whole time it does that. The panels are the real ones and they read through the same feed the live data lands on, so nothing about the layout or the math changes when it is switched over.',
+    a: 'Not in the terminal you can open from here. Every panel replays a recorded session so the desk can be explored end to end without an account — the header carries a Sim badge the whole time it does that. The panels are the real ones, and the market reaches them through a single feed module: price, candles, dealer levels and the tape all arrive through that one file, so pointing it at a live feed is the whole switch — no layout and no math above it changes. Four research desks — Stocks, Earnings, News and the contract-flow drilldown — still ship sample numbers of their own, and move onto the same feed as their data lands.',
   },
   {
     q: 'What makes Slayer different from other GEX tools?',
