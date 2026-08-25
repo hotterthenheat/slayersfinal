@@ -61,7 +61,7 @@ interface StrikeChartProps {
 }
 
 // Wall / flip / king overlay colors (independent of candle theme)
-import { CALL_WALL, PUT_WALL, FLIP, KING, FOCUS, DARK_POOL } from './palette';
+import { CALL_WALL, PUT_WALL, FLIP, KING, FOCUS, DARK_POOL, DEALER_PUT, DEALER_CALL } from './palette';
 
 // Level lines are created once per overlay/ticker, then their prices are
 // TWEENED (rAF + easeOutCubic) so scan-tier level moves glide instead of jumping.
@@ -694,7 +694,7 @@ const StrikeChart = ({
               <span className="inline-flex items-center gap-[2px]" aria-hidden="true">
                 <span className="inline-block w-[5px] h-[3px] rounded-full" style={{ background: 'rgba(245,197,66,0.5)' }} />
                 <span className="inline-block w-[5px] h-[5px] rounded-full" style={{ background: 'rgba(245,197,66,0.75)' }} />
-                <span className="inline-block w-[5px] h-[7px] rounded-full" style={{ background: '#F5C542' }} />
+                <span className="inline-block w-[5px] h-[7px] rounded-full" style={{ background: DEALER_PUT }} />
               </span>
               put walls
             </span>
@@ -702,7 +702,7 @@ const StrikeChart = ({
               <span className="inline-flex items-center gap-[2px]" aria-hidden="true">
                 <span className="inline-block w-[5px] h-[3px] rounded-full" style={{ background: 'rgba(226,234,244,0.5)' }} />
                 <span className="inline-block w-[5px] h-[5px] rounded-full" style={{ background: 'rgba(226,234,244,0.75)' }} />
-                <span className="inline-block w-[5px] h-[7px] rounded-full" style={{ background: '#E2EAF4' }} />
+                <span className="inline-block w-[5px] h-[7px] rounded-full" style={{ background: DEALER_CALL }} />
               </span>
               call walls
             </span>

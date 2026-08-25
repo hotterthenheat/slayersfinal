@@ -55,7 +55,7 @@ import { fmtUsd } from '../../data/gex';
 import HoverReadout from '../ui/HoverReadout';
 import SpotRule from '../ui/SpotRule';
 import Term from '../ui/Term';
-import { CALL_WALL, FLIP, KING, PUT_WALL } from './palette';
+import { CALL_WALL, DEALER_CALL_INK, DEALER_PUT_INK, FLIP, KING, PUT_WALL } from './palette';
 import type { ExposureProfileData, StrikeExposure } from '../../types/gex';
 
 interface StrikePressureLadderProps {
@@ -77,8 +77,8 @@ interface StrikePressureLadderProps {
 const PUT_RGB = '245,197,66'; // honey gold
 const CALL_RGB = '226,234,244'; // platinum steel
 /** Steel as TEXT — a darker step of the same ramp; full platinum is white at 11px */
-const PUT_INK = '#F5C542';
-const CALL_INK = '#AAB6C6';
+const PUT_INK = DEALER_PUT_INK;
+const CALL_INK = DEALER_CALL_INK;
 const INK_FLOOR = 0.3;
 const legInk = (rgb: string, strength: number) => `rgba(${rgb},${(INK_FLOOR + (1 - INK_FLOOR) * Math.pow(strength, 0.7)).toFixed(3)})`;
 const PUT_KEY = legInk(PUT_RGB, 1);

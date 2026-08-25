@@ -448,6 +448,11 @@ export const heatScaleLabels =
   HEAT_MODE === 'steel-gold'
     ? // Each end label wears its pole: + is the gold (amplify) end of the
       // bar, − the steel (absorb) end.
+      // Literal hexes, NOT `text-[${DEALER_PUT}]`. Tailwind's JIT scans source
+      // for complete class strings; an interpolated one is never generated, so
+      // the template-literal version would have compiled fine and rendered
+      // these labels with no colour at all. weights-proof asserts they match
+      // DEALER_PUT / DEALER_CALL so the two cannot drift apart silently.
       { pos: 'text-[#F5C542]', neg: 'text-[#E2EAF4]' }
     : HEAT_MODE === 'ice-plasma'
     ? // Each end label wears its pole: + is the plasma (amplify) end of the

@@ -132,5 +132,78 @@ check(
   '/news redirects instead'
 );
 
+// ---- one dealer ink, in two places that must agree -------------------------
+
+/*
+  Gold and steel exist twice by necessity: JS chart code cannot read a Tailwind
+  class, and Tailwind's JIT cannot read a JS constant — it scans source for
+  complete literal class strings, which is why heatmap.ts writes the hex out
+  rather than interpolating the token (an interpolated class compiles fine and
+  renders with no colour at all).
+
+  Two copies of one fact is the failure this codebase keeps hitting, so the
+  copies are pinned to each other here. The palette file says "change here +
+  there together, never one alone"; this is what makes that sentence true.
+*/
+const palette = read('src/components/gex/palette.ts');
+const tw = read('tailwind.config.ts');
+const heat = read('src/components/gex/heatmap.ts');
+
+const hexOf = (src: string, re: RegExp) => (src.match(re)?.[1] ?? '').toUpperCase();
+
+const DEALER = [
+  {
+    name: 'gold (put-dominant)',
+    js: hexOf(palette, /export const DEALER_PUT\s*=\s*'(#[0-9a-fA-F]{6})'/),
+    css: hexOf(tw, /^\s*gold:\s*'(#[0-9a-fA-F]{6})'/m),
+  },
+  {
+    name: 'steel (call-dominant)',
+    js: hexOf(palette, /export const DEALER_CALL\s*=\s*'(#[0-9a-fA-F]{6})'/),
+    css: hexOf(tw, /^\s*steel:\s*'(#[0-9a-fA-F]{6})'/m),
+  },
+  {
+    name: 'gold ink',
+    js: hexOf(palette, /export const DEALER_PUT_INK\s*=\s*'(#[0-9a-fA-F]{6})'/),
+    css: hexOf(tw, /'gold-ink':\s*'(#[0-9a-fA-F]{6})'/),
+  },
+  {
+    name: 'steel ink',
+    js: hexOf(palette, /export const DEALER_CALL_INK\s*=\s*'(#[0-9a-fA-F]{6})'/),
+    css: hexOf(tw, /'steel-ink':\s*'(#[0-9a-fA-F]{6})'/),
+  },
+];
+
+for (const d of DEALER) {
+  check(
+    `${d.name} matches between palette.ts and tailwind.config.ts`,
+    Boolean(d.js) && d.js === d.css,
+    d.js && d.css ? `${d.js} === ${d.css}` : `palette ${d.js || 'MISSING'} / tailwind ${d.css || 'MISSING'}`
+  );
+}
+
+// The one place a literal hex is unavoidable, pinned to the same source.
+const heatPos = hexOf(heat, /pos:\s*'text-\[(#[0-9a-fA-F]{6})\]'/);
+const heatNeg = hexOf(heat, /neg:\s*'text-\[(#[0-9a-fA-F]{6})\]'/);
+check(
+  'the heatmap scale labels use the dealer inks',
+  heatPos === DEALER[0].js && heatNeg === DEALER[1].js,
+  `pos ${heatPos} / neg ${heatNeg}`
+);
+
+/*
+  The dealer book must not be painted in the candles' own colours. This is the
+  regression the whole pass exists to prevent, and it is one grep: the map that
+  renders dealer gamma may not import BULL, or the direction pair, from the
+  palette.
+*/
+const map = read('src/components/gex/PositioningMap.tsx');
+const directionInk = /import\s*\{[^}]*\b(BULL|PUT_WALL|CALL_WALL)\b[^}]*\}\s*from\s*'\.\/palette'/.test(map);
+check(
+  'the positioning map does not import direction ink',
+  !directionInk,
+  directionInk ? 'imports a bull/bear token' : 'dealer tokens only'
+);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

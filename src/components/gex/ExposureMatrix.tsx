@@ -1,4 +1,4 @@
-import { Fragment } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { fmtUsd } from '../../data/gex';
 import SpotRule from '../ui/SpotRule';
 import type { ExposureProfileData, GreekSplit } from '../../types/gex';
@@ -59,6 +59,34 @@ const SpotRow = ({ ticker, spot }: { ticker: string; spot: number }) => (
 const ExposureMatrix = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSelectStrike }: ExposureMatrixProps) => {
   const { ticker, strikes, maxAbs, spotAfterIndex, levels } = data;
 
+  /*
+    A SCROLLBAR THE READER NEVER SEES IS NOT AN AFFORDANCE.
+
+    Making the table scrollable stops it truncating a greek, but on its own it
+    swaps a silently-clipped column for a silently-scrollable one: the bar is
+    an overlay, it appears only while scrolling, and a VEX header cut mid-word
+    still reads as a rendering fault rather than an invitation. So the right
+    edge fades while there is more table to the right, and the fade clears when
+    you reach the end — which also tells you when you have seen everything.
+  */
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [more, setMore] = useState(false);
+  const syncMore = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    // 2px of slack: sub-pixel layout leaves a permanent 0.5px "overflow" that
+    // would otherwise pin the fade on for a table that is fully visible.
+    setMore(el.scrollWidth - el.clientWidth - el.scrollLeft > 2);
+  }, []);
+  useEffect(() => {
+    syncMore();
+    const el = scrollRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(syncMore);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [syncMore, strikes.length]);
+
   const GROUPS: { key: 'gex' | 'dex' | 'vex'; label: string; unit: string }[] = [
     { key: 'gex', label: 'GEX', unit: '1% move' },
     { key: 'dex', label: 'DEX', unit: '1σ move' },
@@ -82,7 +110,12 @@ const ExposureMatrix = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
       `w-full` so that on a wide desk the table still fills the panel rather
       than leaving a gutter.
     */
-    <div className="overflow-x-auto overflow-y-auto h-full min-h-0">
+    <div className="relative h-full min-h-0">
+      <div
+        ref={scrollRef}
+        onScroll={syncMore}
+        className="overflow-x-auto overflow-y-auto h-full min-h-0"
+      >
       <table className="w-full min-w-max border-collapse">
         <thead className="sticky top-0 z-10">
           <tr className="bg-[#0c0c0c]">
@@ -152,6 +185,13 @@ const ExposureMatrix = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
           ))}
         </tbody>
       </table>
+      </div>
+      {more && (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-[#0c0c0c] to-transparent"
+        />
+      )}
     </div>
   );
 };

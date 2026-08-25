@@ -53,6 +53,20 @@ export default {
         king: '#EA00FF',
         darkpool: '#2dd4bf',
 
+        // Dealer side — gold = put-dominant / amplifying, steel = call-dominant
+        // / absorbing. These are the CLASS-side half of the pair whose JS half
+        // lives in components/gex/palette.ts as DEALER_PUT / DEALER_CALL; the
+        // two must change together and weights-proof asserts they match.
+        // Separate from bull/bear on purpose: red and green mean price
+        // DIRECTION, and a dealer book painted in them collides with the very
+        // candles it is drawn against.
+        gold: '#F5C542',
+        steel: '#E2EAF4',
+        // Figures and labels. Steel at #E2EAF4 is indistinguishable from
+        // textPrimary at 11px, so the ink variant steps down.
+        'gold-ink': '#F5C542',
+        'steel-ink': '#AAB6C6',
+
         // Legacy aliases (pre-redesign pages)
         primary: '#ededed',
         secondary: '#a3a3a3',
