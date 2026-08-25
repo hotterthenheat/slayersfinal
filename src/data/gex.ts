@@ -46,7 +46,14 @@ export function fmtUsd(v: number): string {
   if (a >= 1e9) return `${sign}$${(a / 1e9).toFixed(1)}B`;
   if (a >= 1e6) return `${sign}$${(a / 1e6).toFixed(1)}M`;
   if (a >= 1e3) return `${sign}$${(a / 1e3).toFixed(1)}K`;
-  return `${sign}$${a.toFixed(0)}`;
+  /* NEVER "-$0". Anything under half a dollar rounds to zero here, and the
+     sign came from the raw value — so the ranked-targets rail printed the
+     same quantity (nothing) two different ways down one column: $0 on some
+     rows, -$0 on others. Sign belongs to a magnitude; zero has none. Only
+     this branch can round to zero — the B/M/K branches are each guarded by
+     their own threshold. */
+  const whole = a.toFixed(0);
+  return `${whole === '0' ? '' : sign}$${whole}`;
 }
 
 // ---- metric extraction ------------------------------------------------------

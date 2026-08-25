@@ -19,7 +19,7 @@
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (rel: string) => readFileSync(path.join(ROOT, rel), 'utf8');
@@ -402,6 +402,39 @@ check(
   'the sleeve column header names exactly the sleeves that exist',
   headerMismatch.length === 0,
   headerMismatch.length ? headerMismatch.join(' | ') : sleeveHeader.replace("header: ", '')
+);
+
+/*
+  fmtUsd never prints negative zero.
+
+  The formatter took its sign from the raw value and its magnitude from a
+  rounded one, so anything between -$0.50 and $0 came out as "-$0". On the
+  ranked-targets rail that put the same quantity — nothing — down one column
+  in two different renderings: $0 on some rows, -$0 on others. Sign belongs to
+  a magnitude; zero has none.
+
+  Run against the real function rather than its source text, because what is
+  being asserted is behaviour at a boundary and the source could satisfy a
+  regex while getting the boundary wrong.
+*/
+const { fmtUsd } = await import(pathToFileURL(path.join(ROOT, 'src/data/gex.ts')).href) as { fmtUsd: (v: number) => string };
+const usdCases: [number, string][] = [
+  [0, '$0'],
+  [-0, '$0'],
+  [-0.4, '$0'],
+  [0.4, '$0'],
+  [-1, '-$1'],
+  [-999, '-$999'],
+  [-1000, '-$1.0K'],
+  [1500, '$1.5K'],
+  [-2_400_000, '-$2.4M'],
+  [3_100_000_000, '$3.1B'],
+];
+const usdWrong = usdCases.filter(([v, want]) => fmtUsd(v) !== want).map(([v, want]) => `fmtUsd(${v}) = ${fmtUsd(v)}, expected ${want}`);
+check(
+  'fmtUsd keeps the sign on real magnitudes and drops it on zero',
+  usdWrong.length === 0,
+  usdWrong.length ? usdWrong.join(' | ') : `${usdCases.length} boundary cases, including -0.4 -> $0 and -999 -> -$999`
 );
 
 console.log(`\n${pass} passed, ${fail} failed`);
