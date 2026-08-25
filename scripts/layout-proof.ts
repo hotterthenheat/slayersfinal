@@ -780,5 +780,96 @@ check(
     : 'all guarded'
 );
 
+/*
+  Everything in public/ is actually used.
+
+  `public/` is copied verbatim into the build, so anything sitting there
+  ships to every visitor whether or not a line of code asks for it. It held
+  `assets/` — 19 PNGs, 2.1MB, arrived with the revamp-1 upload, not one of
+  them referenced from src, index.html, docs or scripts. Five pairs were
+  byte-identical duplicates of each other, and one was `auditor-ledger.png`,
+  a screenshot of a feature that had already been deleted. That was 38% of
+  the deployed bundle: 5.5MB down to 3.4MB by removing files nothing asked
+  for. Git keeps every byte.
+
+  Two directories are referenced by paths BUILT AT RUNTIME rather than
+  written as literals, so a grep for their filenames finds nothing and they
+  are allowed here by name with the reason:
+
+      fonts/   the @font-face src in index.css, and the preload in index.html
+      logos/   CompanyLogo.tsx builds `/logos/${TICKER}.svg` per row
+
+  Anything else new in public/ has to be referenced or listed, which is the
+  point: the next 2MB of screenshots cannot land quietly.
+*/
+const PUBLIC_ALLOW = new Map([
+  ['fonts', '@font-face in index.css and the preload in index.html'],
+  ['logos', 'CompanyLogo builds /logos/${TICKER}.svg at runtime'],
+]);
+const publicDir = path.join(ROOT, 'public');
+const searchable = walkTsx(path.join(ROOT, 'src'))
+  .concat((function walkAll(dir: string, out: string[] = []): string[] {
+    for (const entry of readdirSync(dir)) {
+      const full = path.join(dir, entry);
+      if (statSync(full).isDirectory()) walkAll(full, out);
+      else if (/\.(ts|tsx|css|html|md|json)$/.test(entry)) out.push(full);
+    }
+    return out;
+  })(path.join(ROOT, 'src')))
+  .concat([path.join(ROOT, 'index.html')])
+  .filter((f, i, a) => a.indexOf(f) === i);
+const haystack = searchable.map(f => readFileSync(f, 'utf8')).join('\n');
+const orphans: string[] = [];
+for (const entry of readdirSync(publicDir)) {
+  if (PUBLIC_ALLOW.has(entry)) continue;
+  const full = path.join(publicDir, entry);
+  const names = statSync(full).isDirectory() ? readdirSync(full).map(n => `${entry}/${n}`) : [entry];
+  for (const n of names) {
+    const stem = path.basename(n).replace(/\.[a-z0-9]+$/i, '');
+    if (!haystack.includes(stem)) orphans.push(`public/${n}`);
+  }
+}
+check(
+  'the public/ scan had somewhere to look',
+  searchable.length > 50 && haystack.length > 10000,
+  `${searchable.length} source files searched`
+);
+check(
+  'nothing in public/ ships without being asked for',
+  orphans.length === 0,
+  orphans.length
+    ? `unreferenced, and shipping to every visitor: ${orphans.slice(0, 8).join(', ')}${orphans.length > 8 ? ` (+${orphans.length - 8} more)` : ''}`
+    : `every entry is referenced, or allowed by name: ${[...PUBLIC_ALLOW.keys()].join(', ')}`
+);
+
+/*
+  The heading outline does not skip a rank.
+
+  Every desk renders exactly one h1 — the page name — and then nothing but
+  Panels. Panel titled itself h3, so the outline read h1 -> h3 on twelve of
+  the sixteen routes, and a reader navigating by heading level hears a
+  section that is not there. Measured before and after with a walk of every
+  visible h1..h6 in document order: 12 skips -> 0.
+
+  Panel is not used on the landing page, whose own order was already correct,
+  so this straightened the desks and left the marketing site alone. Anything
+  nested INSIDE a panel — SignalMonitor's setup headline — stays h3, which is
+  the right level under an h2.
+*/
+const panel = read('src/components/ui/Panel.tsx');
+const titleIsH2 = /<h2 className="font-mono text-\[11px\] font-semibold uppercase tracking-widest text-textPrimary truncate">/.test(panel);
+const noH3Title = !/<h3[^>]*>\s*\{title\}/.test(panel);
+check(
+  'Panel titles itself one level under the page, not two',
+  titleIsH2 && noH3Title,
+  titleIsH2 ? 'h2 under the page h1' : 'the panel title is not an h2 — the desk outline skips a rank again'
+);
+const nested = read('src/components/compass/SignalMonitor.tsx');
+check(
+  "a heading nested inside a panel stays under the panel's level",
+  /<h3 className=\{`text-base font-semibold/.test(nested),
+  /<h3/.test(nested) ? 'SignalMonitor headline is h3, under the panel h2' : 'the nested headline moved — check it still sits under h2'
+);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

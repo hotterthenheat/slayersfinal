@@ -53,10 +53,18 @@ const Panel = ({
       {(title || actions) && (
         <header className={`flex items-center justify-between gap-3 px-4 h-10 border-b ${toneDivider[tone]} shrink-0`}>
           <div className="flex items-baseline gap-2 min-w-0">
+            {/* h2, not h3. Every desk renders one h1 (the page name) and then
+                nothing but Panels, so an h3 here made the outline jump h1 -> h3
+                on twelve of sixteen routes — a screen reader navigating by
+                heading level reads that as a missing section. Panel is not used
+                on the landing page, whose own heading order is already correct,
+                so this only straightens the desks. Anything nested inside a
+                panel (SignalMonitor's setup headline) stays h3, which is now
+                the right level under it. */}
             {title && (
-              <h3 className="font-mono text-[11px] font-semibold uppercase tracking-widest text-textPrimary truncate">
+              <h2 className="font-mono text-[11px] font-semibold uppercase tracking-widest text-textPrimary truncate">
                 {title}
-              </h3>
+              </h2>
             )}
             {subtitle && (
               <span className="font-mono text-[10px] text-textSecondary uppercase tracking-wider truncate">{subtitle}</span>
