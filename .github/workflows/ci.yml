@@ -39,22 +39,26 @@ jobs:
       # `npm run lint` is "Missing script" and would fail every push without
       # saying anything about the code.
       #
-      # There IS a test step now. `npm test` runs the seven assertion scripts
+      # There IS a test step now. `npm test` runs the eight assertion scripts
       # under scripts/ — covering the partner spec's worked fixtures, replay
       # determinism under a pinned clock, the Weigher query parser, the
       # scoring-weight tables, the landing page's claims against the code that
-      # backs them, the one font family against the four places that spell it
-      # (plus a refusal to vendor a proprietary system font), the recorded
-      # clocks, and the header's responsive ladder.
+      # backs them, what the terminal does when playback runs out, the one font
+      # family against the four places that spell it (plus a refusal to vendor a
+      # proprietary system font), the recorded clocks, and the header's
+      # responsive ladder.
       #
-      # Every assertion in weights-proof and sales-proof is mutation-verified.
-      # Dropping a factor without re-normalising fails it; restoring the news
-      # sleeve fails it; re-importing the news generator anywhere in src fails
-      # it. So does selling an unbuilt feature without the Soon chip, linking
-      # the footer at a route that only redirects, or letting the pricing page
-      # claim a live feed while TopBar still renders the Sim badge — and, in
-      # the other direction, shipping one of those features and forgetting to
-      # take the Soon chip off.
+      # Every assertion in weights-proof, sales-proof and playback-proof is
+      # mutation-verified. Dropping a factor without re-normalising fails it;
+      # restoring the news sleeve fails it; re-importing the news generator
+      # anywhere in src fails it. So does selling an unbuilt feature without
+      # the Soon chip, linking the footer at a route that only redirects, or
+      # letting the pricing page claim a live feed while TopBar still renders
+      # the Sim badge — and, in the other direction, shipping one of those
+      # features and forgetting to take the Soon chip off. playback-proof adds
+      # the other direction again: looping the tape, looping the playhead,
+      # advancing two bars a tick, or re-cutting the recordings to one length
+      # each fail a different assertion, verified by making each change.
 
       - name: Test
         run: npm test

@@ -25,7 +25,7 @@ interface TopBarProps {
 }
 
 const TopBar = ({ onOpenPalette }: TopBarProps) => {
-  const { activeTicker, marketData } = useMarketData();
+  const { activeTicker, marketData, recordingEnded } = useMarketData();
   const { launch } = useLaunch();
   const { pathname } = useLocation();
   const navigate = useNavigate();
@@ -208,6 +208,19 @@ const TopBar = ({ onOpenPalette }: TopBarProps) => {
           )}
         </div>
         <SignalBadge tone="warn">Sim</SignalBadge>
+        {/* The badge keeps saying Sim — that claim is about the FEED and it
+            never stops being true. This says the recording behind THIS NAME
+            has finished, which is a different fact and used to be said
+            nowhere: the price above stops moving and every animation around
+            it keeps running as though it had not. Measured by sitting on the
+            terminal — the header price and the tape both froze while the
+            pill still read LIVE. Held back to lg for the same reason the
+            clock is — see the nav comment above. */}
+        {recordingEnded && (
+          <span className="hidden lg:inline font-mono text-[10px] uppercase tracking-wider text-textMuted whitespace-nowrap">
+            recording played out
+          </span>
+        )}
         {/* lg, not md: between the two the bar has no room for it — see the
             nav comment above. The ticker, price and change stay, because they
             are the market context; a clock is not. */}

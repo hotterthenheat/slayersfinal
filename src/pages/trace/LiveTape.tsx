@@ -996,6 +996,9 @@ const LiveTape = () => {
       buffer is capped, so a print the user is reading eventually scrolls out of
       it — looking it up by id would silently close the drilldown mid-read. */
   const [openPrint, setOpenPrint] = useState<FlowPrint | null>(null);
+  /** Latches once the feed has no prints left — see the accumulation effect. */
+  const [tapePlayedOut, setTapePlayedOut] = useState(false);
+  const emptyTicksRef = useRef(0);
   const idRef = useRef(0);
   const lastReadRef = useRef(0);
 
@@ -1026,7 +1029,31 @@ const LiveTape = () => {
   useEffect(() => {
     if (!marketData || paused) return;
     const fresh = marketData.tape.map(o => enrichPrint(o, ++idRef.current));
-    if (fresh.length === 0) return;
+    /*
+      THE TAPE RUNS OUT BEFORE ANYTHING ELSE DOES.
+
+      1,013 prints served four per 1,500ms tick runs out at tick 255 — six
+      minutes twenty-two — and then core/feed.ts serves an empty batch on every
+      tick forever. Both numbers measured: ticked headless, and confirmed by
+      sitting on this page for twelve minutes, where the newest row froze at
+      15:59:37 while the pill still read LIVE and every animation kept running.
+
+      Feed.atEnd() exists for exactly this kind of announcement, but it is true
+      only once every recording has finished, at tick 389 — three and a half
+      minutes after the tape has gone quiet — and the context reads
+      end-of-recording per name anyway, which is a different clock again. The
+      tape runs out first and on its own schedule, so it counts for itself.
+
+      Two empties rather than one: TAPE_PER_TICK always slices four while any
+      remain, so one empty batch already means exhausted, and the second is
+      margin against a tick that arrives mid-swap.
+    */
+    if (fresh.length === 0) {
+      emptyTicksRef.current += 1;
+      if (emptyTicksRef.current >= 2) setTapePlayedOut(true);
+      return;
+    }
+    emptyTicksRef.current = 0;
     /*
       THE BATCH GOES ON TOP REVERSED.
 
@@ -1085,7 +1112,9 @@ const LiveTape = () => {
   const searchOnly =
     searchQuery.trim() !== '' && flowFilter === 'ALL' && sentFilter === 'ALL' && minPremKey === '0';
   const beamLabel = !scopeActive ? 'Session flow' : searchOnly ? `${searchQuery.trim().toUpperCase()} flow` : 'Filtered flow';
-  const beamSub = scopeActive ? `${filtered.length} of ${rows.length} prints` : `${rows.length} prints on tape`;
+  const beamSub = scopeActive
+    ? `${filtered.length} of ${rows.length} prints`
+    : `${rows.length} prints on tape${tapePlayedOut ? ' · recording played out' : ''}`;
   const beamEmpty = scopeActive ? 'No prints match this view' : 'Awaiting tape';
 
   // Which columns are on, in order, and which one leads each group (border-l)

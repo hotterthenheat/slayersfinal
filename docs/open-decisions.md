@@ -1,6 +1,6 @@
 # Open decisions
 
-Seven things this pass found, measured, and then stopped at — because
+Eight things this pass found, measured, and then stopped at — because
 finishing them is your call, not mine. Each one names the file, the number
 that was measured, the options, and what I would do.
 
@@ -194,6 +194,53 @@ answer, and the frozen-campaign guarantee survives. But it is the
 
 ---
 
+## 8. Eighteen of the twenty-two recordings run out in under two minutes
+
+**Where:** `src/data/recorded/` (the recordings), `src/core/feed.ts:141` (`START_SHARE`)
+**Scope:** the recordings themselves. Not UI.
+
+Playback is finite and the recordings are two different lengths. Ticked
+headless by `scripts/playback-proof.ts`, and confirmed by watching a
+browser for twelve minutes:
+
+```
+                     bars   starts at   runway    real time
+SPY QQQ AAPL NVDA    1950        1561   389 ticks   9m45s
+the other eighteen    390         313    77 ticks   1m57s
+the tape             1013 prints          255 ticks   6m23s
+```
+
+`START_SHARE = 0.8` is what makes the short ones short: a 390-bar
+recording starts at bar 313, so it has 77 bars left. Open the terminal,
+switch to TSLA or AMD, and its price is frozen **within two minutes** —
+and stays frozen for as long as the tab is open, because the playhead
+holds rather than loops. Holding is right; the comment in `feed.ts`
+argues it well, and looping would restate prices the reader watched move
+on. The problem is not the holding, it is how soon it starts.
+
+The terminal now *says* so — the header prints "recording played out" and
+the tape says it in its beam subtitle — which is the honest interim and
+was the part I could fix. What it cannot do is give you more market.
+
+**Three ways out, in the order I would take them:**
+
+1. **Re-record the eighteen at the same depth as the four.** 1,950 bars
+   is five sessions; the four watchlist names already have it. This is
+   the only option that removes the difference rather than managing it.
+2. **Lower `START_SHARE` for the short names only** — 0.2 would give a
+   390-bar recording 311 ticks, about 7m47s, at the cost of two hours of
+   chart history behind the playhead. Cheap, and it makes the desks
+   inconsistent in a second way instead of the first.
+3. **Leave it and let the label carry it.** Defensible for a demo that
+   nobody sits in front of for two minutes. Not defensible for a
+   recorded session you hand to somebody to explore.
+
+**Recommendation:** (1). The four long names prove the recorder can
+already do it, so this is a re-run of a script rather than new work — but
+it is a data change, which is why it stopped here.
+
+---
+
 ## What was checked and found clean
 
 Recorded so it is not paid for twice.
@@ -233,6 +280,7 @@ the detector and stronger for the fix.
 | Stateful journeys | tracking a campaign, posting an idea, marking a print, the desk layout — each driven in a browser and reloaded | 11 of 11. Everything the UI promises to keep is kept, except the tape's print marks, which never claimed to and now say so |
 | Header fit | 768px, every route | fits at exactly 768 after the labels-only ladder |
 | Company-mark licensing | the 17 SVGs in `public/logos` | clean — Simple Icons, CC0. Provenance and the trademark caveat are now recorded in `public/logos/README.md`; unlike the SF Pro problem, nothing here needed replacing |
+| End of recording | playback ticked to exhaustion headless, and watched in a browser for twelve minutes on the tape. Mutation-verified — looping the tape, looping the playhead, advancing two bars a tick, or re-cutting the recordings to one length each fail a different assertion | **two real finds, both fixed.** The tape went quiet at 6m23s and the price froze at 9m45s while the pill still read LIVE and every animation kept running. Nothing said so: `feed.ts` had exported `atEnd()` with the comment *"the UI may want to say so"* since it was written, with no caller. The header and the tape now say it. See #8 for the part that is not a UI fix |
 | Chart label collisions | /pulse/board, four charts | two found and fixed: the trails' strength labels drew under the axis badges at the same strike, and their own backing pad was mis-centred |
 | Click-gated surfaces | the command palette, the print drilldown, Campaign Analysis — at 390 / 768 / 1440 | two found and fixed: the timeframe strip put `1W` off the screen with nothing to scroll, and the modal header spent 32% of a phone on itself |
 
@@ -246,4 +294,5 @@ before the product was:
 - **A screenshot of an element does not contain that element's focus ring.** The house ring is `outline: 1px solid rgba(210,255,0,0.6)` at `outline-offset: 1px` — drawn entirely outside the border box, which is exactly what `elementHandle.screenshot()` clips to. The first version of the tab walk pixel-diffed those and reported every ringed control in the app as having no visible focus. The fix is to clip the page with an 8px margin instead; the second version clears 451 of 457 stops on computed style and only reaches for pixels on the remaining 6.
 - **The font preload warning is not a bug, and ripping out the preload would make things worse.** Chromium says `Inter.var.woff2 was preloaded using link preload but not used within a few seconds from the window's load event` on 15 of 16 routes. Measured: the font is requested **once**, starts at 11ms, finishes at 18ms, `document.fonts.ready` resolves at 399ms — and first contentful paint is at 488ms. The font is ready *before* anything is painted. There is no double fetch and no flash of fallback text; the warning is Chromium's heuristic not seeing a glyph attached to the preload inside its own window, which is what a React SPA looks like. Leave it. (An earlier reading of `document.fonts.ready` at 6376ms was my own `waitForTimeout(6000)` — the promise had resolved long before I asked what time it was.)
 - **A zero is not automatically a lie, and this detector needed three corrections of my own reading.** It flagged 20 always-zero cells on Compass's impact rail; dumping the rail showed ranks 1–8 running 32.6% down to 2.4% with real exposures — those zeros are the *tail* of a 24-deep leaderboard, which is what a tail looks like. It flagged `0d` on the tape, which is a 0DTE contract and exactly right. It flagged `—` in the open-interest-change column, which is the deliberate render for "unchanged". What it did find was `-$0`, printed beside `$0` down one column of the ranked-targets rail — the same quantity in two renderings, because the formatter took its sign from the raw value and its magnitude from a rounded one.
+- **`atEnd()` was the obvious caller to add and the wrong one.** It is true only once *every* recording has finished — tick 389. A short name pins at tick 78. Wiring the header to it would have left AMD's price frozen and unremarked for 7m47s because SPY was still playing, which is the same shape of defect as the thing it was fixing. The header reads `priceHistory.length` per name instead, from the snapshot the UI already holds, and `playback-proof.ts` asserts the gap so that re-cutting the recordings to one length fails the check rather than passing it silently. My first pass at this got the arithmetic wrong in the other direction too — I put "48.7 minutes" in a code comment, having forgotten `START_SHARE` moves the playhead 80% in before the first tick. Ticking the real feed is what corrected it.
 - **The pixel sampler still reported one false failure**, and it is worth naming: `textMuted` on a Pulse expiry tab, 4.18:1. Screenshotting that exact button by element handle put it on `bg-panel` at **4.81:1** — it passes. The full-page sampler had collected the rect and the pixels a fraction apart on a desk that was still settling, so it compared a colour against pixels the active chip had moved into. I filtered for rects that were identical before and after the capture, which was not enough: a rect can hold still while what is painted in it changes. Anything that sampler flags is worth re-shooting by element handle before it is believed.
