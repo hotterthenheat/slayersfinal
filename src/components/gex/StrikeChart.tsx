@@ -341,7 +341,16 @@ const StrikeChart = ({
     scale does not outrun the labels between frames — the thing that would
     show up as ticks appearing a beat late.
   */
-  const RUNWAY_MAX = 4000;
+  /*
+    The ceiling was 4000 and a reader found the end of it: at 2560px wide,
+    fully zoomed out with the tape dragged off the left edge, the visible span
+    was 5011 bars and the right fifth of the axis went unlabelled — the exact
+    symptom the runway exists to remove. A cap is still needed (this is a
+    runaway guard, not a budget), but it has to sit above any span a scale can
+    actually reach: barSpacing bottoms out around 0.5, so a 4K-wide plot tops
+    out near 8000 bars.
+  */
+  const RUNWAY_MAX = 12000;
   const ensureRunway = useCallback((lastTime: number, bucketSec: number) => {
     const chart = chartRef.current;
     const series = runwaySeriesRef.current;

@@ -384,6 +384,21 @@
 @media (hover: none), (pointer: coarse) {
   .chrome-hover {
     opacity: 1 !important;
+  }
+
+  /*
+    POINTER EVENTS ARE A SEPARATE GRANT, and lumping them in with opacity was
+    a real defect.
+
+    `.chrome-hover` used to restore both. It is worn by four strips, and only
+    one of them wants to be touched: the heaviest-strike readout is
+    deliberately `pointer-events-none` at every size — it is a readout, not a
+    control — and a blanket `auto !important` handed it the ability to
+    swallow taps on the tape underneath it. Restore what a strip actually
+    asked for: opacity for all of them, taps only where a strip carries
+    controls.
+  */
+  .chrome-tap {
     pointer-events: auto !important;
   }
 
