@@ -1,6 +1,6 @@
 # Open decisions
 
-Eight things this pass found, measured, and then stopped at — because
+Nine things this pass found, measured, and then stopped at — because
 finishing them is your call, not mine. Each one names the file, the number
 that was measured, the options, and what I would do.
 
@@ -241,6 +241,47 @@ it is a data change, which is why it stopped here.
 
 ---
 
+## 9. Two dependency advisories need a major-version upgrade
+
+**Where:** `package.json` — `react-router-dom ^6.24.0`, `vite ^5.3.1`
+**Scope:** dependency majors. Migration work, not UI.
+
+`npm audit` reported six advisories. Four are now closed by patches that
+fit inside the ranges already declared, applied and re-verified:
+
+```
+postcss   8.5.16 -> 8.5.26   two path-traversal advisories, one HIGH
+nanoid     3.3.17 -> 3.3.18   two infinite-loop advisories, both HIGH
+```
+
+Both are build-time only — they process our own CSS during `vite build`
+and never reach a browser.
+
+**Two remain, and each needs a major.** I did not take either.
+
+| package | advisory | fix | reachable here? |
+| --- | --- | --- | --- |
+| `react-router` | open redirect via backslash in `<Link>`/`useNavigate` | react-router-dom **7** | **no** — every route target in the tree is a literal or is built from recorded ticker data. The command palette navigates to `item.path` from static lists; nothing derives a route from user input or from the URL |
+| `react-router` | constructor injection via `deserializeErrors()` in SSR hydration | react-router-dom **7** | **no** — `src/main.tsx` calls `createRoot`, not `hydrateRoot`. There is no server entry and no `ssr` config. The code path does not exist in this build |
+| `vite` / `esbuild` | dev-server request forgery, `server.fs.deny` bypass on Windows, `.map` path traversal, NTLM disclosure via UNC paths | vite **8** | **not in production** — all four are `npm run dev` issues, three of them Windows-specific. None touches the built artefact |
+
+Note the one still marked HIGH is in that last row: it is a Windows dev
+server, not the deployed site.
+
+The router bump I *did* apply — 6.30.4 → 6.30.6 — does **not** clear its
+advisories; the flagged range is `6.0.0 – 7.17.0` and 6.30.6 is inside it.
+It was worth taking for the other fixes in the patch, and it is verified
+(16 routes re-swept after the bump, element counts identical on every
+one), but it should not be read as closing anything.
+
+**Recommendation:** React Router 6 → 7 first, since it is the one that
+ships to a browser, even though nothing here can reach it today — the
+guarantee "no route target comes from user input" is one refactor away
+from being false, and it is not asserted anywhere. Vite 5 → 8 second, on
+its own, because a build-tool major moves the output.
+
+---
+
 ## What was checked and found clean
 
 Recorded so it is not paid for twice.
@@ -282,6 +323,7 @@ the detector and stronger for the fix.
 | Company-mark licensing | the 17 SVGs in `public/logos` | clean — Simple Icons, CC0. Provenance and the trademark caveat are now recorded in `public/logos/README.md`; unlike the SF Pro problem, nothing here needed replacing |
 | End of recording | playback ticked to exhaustion headless, and watched in a browser for twelve minutes on the tape. Mutation-verified — looping the tape, looping the playhead, advancing two bars a tick, or re-cutting the recordings to one length each fail a different assertion | **two real finds, both fixed.** The tape went quiet at 6m23s and the price froze at 9m45s while the pill still read LIVE and every animation kept running. Nothing said so: `feed.ts` had exported `atEnd()` with the comment *"the UI may want to say so"* since it was written, with no caller. The header and the tape now say it. See #8 for the part that is not a UI fix |
 | Deployed security headers | the five headers the old `vercel.json` carried, checked against the express host that replaced it; then the policy served to a real browser on all 16 routes | **a real regression, fixed.** `f7be84a` replaced the tracked tree and took `vercel.json` with it — the content-security policy, the clickjacking refusal, the MIME-sniffing refusal, the referrer policy and the permissions policy all went with it, in a commit about something else, and nothing failed for fifty commits. Restored verbatim onto `server.ts`. Swept: **0 CSP violations, 0 console errors, 0 blank pages.** The sweep is not taken on trust — tightening `style-src` made it report 5, so it can see one |
+| Dependency advisories | `npm audit`, production and dev trees, each advisory read against the code that would have to reach it | 6 found. **4 closed** by in-range patches — postcss 8.5.16 → 8.5.26 and nanoid 3.3.17 → 3.3.18, both HIGH, both build-time only. 2 remain and need majors; neither is reachable in this build (no route target comes from user input; `createRoot`, not `hydrateRoot`) and the four vite/esbuild ones are dev-server only. See #9 |
 | Chart label collisions | /pulse/board, four charts | two found and fixed: the trails' strength labels drew under the axis badges at the same strike, and their own backing pad was mis-centred |
 | Click-gated surfaces | the command palette, the print drilldown, Campaign Analysis — at 390 / 768 / 1440 | two found and fixed: the timeframe strip put `1W` off the screen with nothing to scroll, and the modal header spent 32% of a phone on itself |
 
