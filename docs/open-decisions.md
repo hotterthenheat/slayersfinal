@@ -1,6 +1,6 @@
 # Open decisions
 
-Ten things this pass found, measured, and then stopped at — because
+Eleven things this pass found, measured, and then stopped at — because
 finishing them is your call, not mine. Each one names the file, the number
 that was measured, the options, and what I would do.
 
@@ -336,6 +336,58 @@ matters after compression, and as its own pass.
 
 ---
 
+## 11. A whole setup card is one `<button>`, and it reads as one 97-character name
+
+**Where:** `src/components/compass/SetupScanCard.tsx:115`,
+`src/components/compass/ImpactLeaderboard.tsx:174`,
+`src/pages/pinpoint/RankedTargets.tsx`
+**Scope:** the structure of two prominent surfaces. A design call, not a bug fix.
+
+Sweeping for interactive elements nested inside interactive elements found
+41 sites. Three groups, and only one of them was a defect I could fix
+outright:
+
+| where | shape | verdict |
+| --- | --- | --- |
+| Earnings, 6 | `<button>` sort control wrapping a `Term` explainer | **fixed** — the explainer now renders beside the button |
+| Live Tape, 8 | `<tr tabindex=0>` containing a `<button>` | **not a defect.** `interactiveRow.ts` documents this exactly: a row may hold its own button, which is why the row uses `role: 'native'` and `rowKeyDown` stops propagation. A `tr` has no "no interactive descendant" rule; `<button>` does |
+| Compass 21, Ranked Targets 6 | the whole **card** is a `<button>`, containing `Term` explainers | **open — this item** |
+
+Making the entire card clickable is good for a mouse. What it costs is
+measurable:
+
+```
+Compass setup card, accessible name, 97 characters:
+"#1MSFT 430C0DTE · 08/25/26Top pickTP1 HITACTIVE1σ move±1%Premium$1.68Breaks below $426.03Analysis"
+```
+
+A screen reader reads that entire run as the button's name before the user
+knows what the control does. The nested `Term`s inside it are interactive
+content inside a `<button>`, which HTML's content model forbids, and which
+in practice means the explainers are folded into that name rather than
+being reachable.
+
+**Two ways out:**
+
+1. **Give the card a name and stop nesting.** `aria-label` on the card
+   ("Setup 1, MSFT 430 call, top pick"), and the `Term`s move out of it or
+   become plain text. Small change, keeps the click target, loses the
+   in-card explainers.
+2. **Make the card a region, not a button.** A `<div>` with
+   `interactiveRowProps(..., 'listitem')` — the house's own documented
+   pattern for exactly this: *"a card may hold its own button, and
+   `listitem` is the one of these three whose children are still exposed,
+   so that nested button keeps its own name and its own focus stop"*
+   (`interactiveRow.ts`). Correct, and it changes how two prominent
+   surfaces are built.
+
+**Recommendation:** (2), because the house already wrote down that rule for
+this case and these two surfaces are the ones that did not follow it. But
+it restructures the Compass card and the ranked-target row, so it is your
+call rather than something to do quietly inside a sweep.
+
+---
+
 ## What was checked and found clean
 
 Recorded so it is not paid for twice.
@@ -382,6 +434,8 @@ the detector and stronger for the fix.
 | First load, cold, throttled | the landing page over Chrome's Slow 4G and Fast 4G profiles with an empty cache, wire bytes read from CDP rather than from headers | 2.92MB, **first contentful paint at 15.3s** on Slow 4G. The same bundle gzipped is 1.01MB and paints at **5.7s**. Warm is fine and always was — an in-app route change is 69–91ms with no network, a cached reload 61–230ms. See #10; not fixed here because it depends on where this deploys |
 | White-screen resistance | a throw wired to a query parameter and built, fired from three places: the landing page, a desk page, and the shell's own chrome | **two real gaps, fixed.** A desk page throwing was caught — the fault panel rendered with the header intact. The landing page throwing and TopBar throwing each gave **0 characters and 15 elements**: nothing to read, nothing to click. Both sit outside AppShell's boundary — the landing page is routed outside AppShell entirely, and TopBar renders above the `<Outlet />`, not inside it. The whole route tree is now wrapped too; all three re-tested and all three render the panel with a working Reload |
 | Keyboard use of the overlays | both overlays opened and driven from the keyboard: where focus lands, whether Tab escapes, whether Escape closes, where focus goes afterwards | **the same defect in both, fixed.** The drilldown moved focus nowhere on open — it stayed on the tape row behind, so the first Tab walked the tape *under* the card. The palette focused its input, then the first Tab landed on a control on the desk behind. The palette also never announced itself as a dialog; Modal had `role="dialog"` all along. Now: focus lands inside, 80 forward tabs and 40 backward never leave, Escape closes, focus returns to the row it came from. The 457-stop ring walk could not have seen any of this — it measures the resting page |
+| Target size (WCAG 2.5.8) | every interactive element on 16 routes at 1440 and 390, measured against 24×24 **with the spacing exception implemented** — a small target passes if a 24px circle centred on it clears every other target's | 673 targets at 1440, 167 under 24px, **16** that also fail spacing; 605 at 390, 184 under, **50** fail. Most of the 50 are dense rows on a phone — 15px strike rows on Exposure Profile, 16px tape rows — which is the terminal's density, not an oversight, and two are lightweight-charts' own attribution link. The Earnings headers in that list are fixed. A flat 24px rule would have reported 167 things that are fine |
+| Nested interactive elements | every route swept for a control inside a control | 41 sites, three different shapes. 6 fixed (Earnings sort headers), 8 correct by design and documented (`tr` containing a button), 27 open as #11 (a whole card as one `<button>`) |
 | Chart label collisions | /pulse/board, four charts | two found and fixed: the trails' strength labels drew under the axis badges at the same strike, and their own backing pad was mis-centred |
 | Click-gated surfaces | the command palette, the print drilldown, Campaign Analysis — at 390 / 768 / 1440 | two found and fixed: the timeframe strip put `1W` off the screen with nothing to scroll, and the modal header spent 32% of a phone on itself |
 
@@ -400,4 +454,5 @@ before the product was:
 - **A `truncate` is not a spill, and the first resize detector could not tell.** It reported 18 failures; 14 were Panel titles and subtitles wearing Tailwind's `truncate` — `overflow:hidden`, `nowrap`, `text-overflow:ellipsis`. `Range.getBoundingClientRect()` returns the **unclipped** width of a text node, so a title rendering correctly as `Strike Press…` measures 121px past its box. Skipping any element that has asked to be ellipsised took it to 4, and the one that mattered was not text at all. The general lesson is the one that keeps recurring here: a measurement that cannot distinguish a deliberate design from a defect will hand you a list where most entries are the design.
 - **A throttle does not apply to the first document a browser context ever requests, and that made compression look worthless.** Measured with and without gzip and got first contentful paint of 15,300ms **both times**, to the millisecond — which would mean compression buys nothing, against the plain physics of 2.92MB versus 1.01MB on a 1.6 Mbps link. The throttle was set on a fresh page and then the navigation was issued; it did not take. Landing on a trivial document first, so the emulation is provably live, gives 15,312ms against 5,696ms. The tell was that the two numbers were identical rather than merely close: real measurements of two different things are not equal to the millisecond, and that should have been read as an instrument fault immediately rather than as a result.
 - **Twice in one sitting I reported a defect in something I had never opened.** The first focus sweep tabbed for a tape row, pressed Enter on the first candidate, and — having opened nothing — ran its checks against the resting page and declared the drilldown had no `role="dialog"`. `Modal.tsx` has carried `role`, `aria-modal` and `aria-label` since it was written. The same run measured "does focus return to the opener" *after* walking focus 30 times, so it was measuring nothing. Both were rewritten to refuse to check anything until the overlay is confirmed up, and to test containment and return as two separate openings. A probe that cannot tell "this is broken" from "I did not reach it" reports the second as the first, every time.
+- **My first fix for the nested headers was worse than the defect.** Moving the `Term` out of the sort button left the label in the button and the Term beside it — and a `Term` with no children renders its own key, so the header read "Beat rateBeat rate". Rendering it and looking at it is what caught that; the assertion I had written was green throughout, because it asked about structure and the regression was in the text. The explainer became a dotted `?` instead. Then the `?` measured 6×15, which is precisely the target size I was in the middle of reporting on other people's controls, so it got a 26×25 hit area with a negative margin to keep the row height. Three passes, and only the third one was worth shipping.
 - **The pixel sampler still reported one false failure**, and it is worth naming: `textMuted` on a Pulse expiry tab, 4.18:1. Screenshotting that exact button by element handle put it on `bg-panel` at **4.81:1** — it passes. The full-page sampler had collected the rect and the pixels a fraction apart on a desk that was still settling, so it compared a colour against pixels the active chip had moved into. I filtered for rects that were identical before and after the capture, which was not enough: a rect can hold still while what is painted in it changes. Anything that sampler flags is worth re-shooting by element handle before it is believed.

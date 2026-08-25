@@ -4,8 +4,25 @@ import { ROW_INTERACTIVE, interactiveRowProps } from './interactiveRow';
 
 export interface Column<T> {
   key: string;
-  /** ReactNode so a header can wrap itself in a Term explainer */
+  /** ReactNode so a header can carry its own markup */
   header: React.ReactNode;
+  /**
+   * Rendered BESIDE the sort control, never inside it.
+   *
+   * A `<button>` may not contain interactive content — that is the HTML
+   * content model, not a preference — and a Term explainer is interactive:
+   * it is a `span` with `tabIndex={0}` and `role="button"`. Passing one as
+   * `header` on a sortable column therefore put a control inside a control,
+   * and the browser does exactly what that asks for. Measured on Earnings:
+   * five sortable headers produced TEN tab stops, in consecutive pairs
+   * reading "Priced", "Priced", "Beat rate", "Beat rate" — and a screen
+   * reader folds the inner one into the button's name, so the explainer it
+   * is there to offer becomes unreachable.
+   *
+   * So the label goes in the button and the explainer goes next to it. Both
+   * keep their own focus stop, and each says one thing.
+   */
+  headerAside?: React.ReactNode;
   align?: 'left' | 'right';
   width?: string;
   /** Provide to make the column sortable */
@@ -89,6 +106,7 @@ const DataTable = <T,>({
                   order does not fill up with headers that do nothing.
                 */}
                 {col.sortValue ? (
+                  <span className="inline-flex items-center gap-1">
                   <button
                     type="button"
                     onClick={() => toggleSort(col)}
@@ -102,8 +120,13 @@ const DataTable = <T,>({
                       sort.dir === 'desc' ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />
                     )}
                   </button>
+                  {col.headerAside}
+                  </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1">{col.header}</span>
+                  <span className="inline-flex items-center gap-1">
+                    {col.header}
+                    {col.headerAside}
+                  </span>
                 )}
               </th>
             ))}

@@ -138,6 +138,56 @@ for (const { file, what } of SELF_MEASURING) {
 }
 
 /*
+  ---- A control may not contain another control ----------------------------
+
+  HTML says a `<button>` may contain phrasing content with NO interactive
+  descendant. That is the content model, not a preference. Term — the glossary
+  explainer — is `<span tabIndex={0} role="button">`, so passing one as a
+  sortable column's `header` put a control inside a control.
+
+  Measured on Earnings rather than argued: five sortable headers produced TEN
+  tab stops, in consecutive pairs reading "Priced", "Priced", "Beat rate",
+  "Beat rate". A screen reader folds the inner one into the button's name, so
+  the explainer it exists to offer is the thing that disappears.
+
+  DataTable now takes `headerAside`, rendered as the button's SIBLING. Both
+  keep their own focus stop and each says one thing. Re-measured: 6 nested
+  controls to 0, and 0 consecutive stops with identical text.
+
+  Pinned in three ways, because each covers a different way of losing it: the
+  slot has to exist, it has to be rendered outside the button, and no caller
+  may go back to passing a Term as the header of a sortable column.
+*/
+{
+  const dt = read('src/components/ui/DataTable.tsx');
+  const hub = read('src/pages/EarningsHub.tsx');
+
+  const slot = /headerAside\?: React\.ReactNode/.test(dt);
+  check(
+    'DataTable offers a slot beside the sort control',
+    slot,
+    slot ? 'headerAside is part of the Column contract' : 'no way to put an explainer anywhere but inside the button'
+  );
+
+  /* The button must CLOSE before the aside is rendered. Matching the two in
+     order is what distinguishes "beside" from "inside" — a check that only
+     looked for both strings would pass either way. */
+  const outside = /<\/button>\s*\{col\.headerAside\}/.test(dt);
+  check(
+    'the aside renders outside the button, not within it',
+    outside,
+    outside ? 'the button closes first' : 'headerAside is inside the button — that is the defect it was added to remove'
+  );
+
+  const nested = /header: <Term/.test(hub);
+  check(
+    'no sortable header passes a Term as its own label',
+    !nested,
+    nested ? 'a Term is back inside a sort button' : 'labels in the button, explainers beside it'
+  );
+}
+
+/*
   ---- The keyboard may not walk out of an open overlay ----------------------
 
   The 457-stop tab walk proved every control shows a focus ring. That is a

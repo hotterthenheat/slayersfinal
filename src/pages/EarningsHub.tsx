@@ -113,6 +113,19 @@ const Shelf = ({
     </div>
   );
 
+/*
+  A one-glyph explainer still has to be hittable.
+
+  The dotted "?" beside a sortable header is 6x15 CSS pixels of glyph, which
+  is a fine thing to look at and a poor thing to hit — WCAG 2.5.8 asks for
+  24x24, and it sits right next to the sort button so the spacing exception
+  does not rescue it either. Padding gives it a 26x25 hit area; the negative
+  vertical margin hands the row back the height, so nothing moves. Underline
+  decoration applies to the text and not to padding, so the mark itself looks
+  exactly the same.
+*/
+const EXPLAIN_HIT = 'inline-block px-2.5 py-[5px] -my-[5px]';
+
 const EarningsHub = () => {
   const navigate = useNavigate();
   const events = useMemo(() => buildEarningsCalendar(), []);
@@ -193,19 +206,21 @@ const EarningsHub = () => {
       key: 'move',
       header: (
         <span className="inline-flex items-baseline gap-1.5">
-          <Term k="Implied vs realized" />
+          Implied vs realized
           <span className="font-mono text-[9px] normal-case tracking-normal text-textMuted tnum">
             full = {moveScale.toFixed(1)}%
           </span>
         </span>
       ),
+      headerAside: <Term k="Implied vs realized" className={EXPLAIN_HIT}>?</Term>,
       width: '190px',
       sortValue: e => e.richness,
       render: e => <MoveCompare implied={e.impliedMovePct} hist={e.histAvgMovePct} scale={moveScale} />,
     },
     {
       key: 'rich',
-      header: <Term k="Priced vs typical">Priced</Term>,
+      header: 'Priced',
+      headerAside: <Term k="Priced vs typical" className={EXPLAIN_HIT}>?</Term>,
       align: 'right',
       sortValue: e => e.richness,
       render: e => (
@@ -216,14 +231,16 @@ const EarningsHub = () => {
     },
     {
       key: 'beat',
-      header: <Term k="Beat rate" />,
+      header: 'Beat rate',
+      headerAside: <Term k="Beat rate" className={EXPLAIN_HIT}>?</Term>,
       align: 'right',
       sortValue: e => e.beatRate8q,
       render: e => <span className="font-mono text-xs text-textPrimary tnum">{e.beatRate8q}%</span>,
     },
     {
       key: 'rev',
-      header: <Term k="Revisions" />,
+      header: 'Revisions',
+      headerAside: <Term k="Revisions" className={EXPLAIN_HIT}>?</Term>,
       align: 'right',
       sortValue: e => e.revisionTrend,
       render: e => (
@@ -234,14 +251,16 @@ const EarningsHub = () => {
     },
     {
       key: 'ivr',
-      header: <Term k="IV rank" />,
+      header: 'IV rank',
+      headerAside: <Term k="IV rank" className={EXPLAIN_HIT}>?</Term>,
       align: 'right',
       sortValue: e => e.ivRank,
       render: e => <span className="font-mono text-xs text-textPrimary tnum">{e.ivRank}</span>,
     },
     {
       key: 'state',
-      header: <Term k="Pricing" />,
+      header: 'Pricing',
+      headerAside: <Term k="Pricing" className={EXPLAIN_HIT}>?</Term>,
       sortValue: e => stateOf(e),
       render: e => <StateTag state={stateOf(e)} />,
     },
