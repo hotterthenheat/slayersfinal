@@ -1,4 +1,7 @@
-import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import {
+  useCallback, useEffect, useRef, useState,
+  type MutableRefObject, type PointerEvent as ReactPointerEvent,
+} from 'react';
 import { Check, Eraser, Minus, Pause, Play, StepBack, StepForward, TrendingUp, X } from 'lucide-react';
 import {
   createChart,
@@ -96,6 +99,33 @@ export const DEFAULT_OVERLAYS: ChartOverlays = {
   volume: true,
 };
 
+/*
+  WHERE A PRICE LANDS ON THIS CHART, published live.
+
+  A column drawn beside the tape has to agree with the tape's own price scale
+  or it is a second, contradicting set of numbers 54px away. Rather than have
+  the neighbour re-derive the mapping — it cannot; autoscale, a price-scale
+  drag and percent mode all move it — the chart hands out the mapping itself.
+
+  Every member reads at CALL time, so a consumer polling this in its own frame
+  loop always gets the live answer and nothing goes stale across a style swap,
+  a re-fit or a resize.
+
+  yFor is NOT clamped: a price outside the visible range returns an off-plot y,
+  including a negative one, because the caller has to be able to tell "above
+  the top" from "at the top". It returns 0 for EVERY price while the scale is
+  still empty, which is why a consumer must check the spacing between two
+  prices rather than trusting a single coordinate.
+*/
+export interface PriceProjection {
+  /** y in CSS px from the top of the plot, or null if the series is gone. */
+  yFor(price: number): number | null;
+  /** The plot's own height — NOT the container's; the time axis is below it. */
+  plotHeight(): number;
+  /** The time axis's height, for a neighbour that has to stop above it. */
+  axisHeight(): number;
+}
+
 interface StrikeChartProps {
   ticker: string;
   /** Bumped every simulator tick so the chart folds in the newest bar */
@@ -136,6 +166,11 @@ interface StrikeChartProps {
   /** Handed this chart's own "mark that moment" function on mount and null on
       unmount, so a host can call it when a DIFFERENT pane is hovered. */
   syncRegister?: (apply: CrosshairSync | null) => void;
+  /** Filled with this chart's live price projection on mount, nulled on
+      unmount. A REF rather than a callback on purpose: a ref object's identity
+      never changes, so it can sit in the mount effect's dep array without
+      rebuilding the chart on every parent render. */
+  projectionRef?: MutableRefObject<PriceProjection | null>;
 }
 
 /** Mark a moment on this chart on another pane's behalf; null clears it. */
@@ -227,6 +262,7 @@ const StrikeChart = ({
   priceTag = false,
   onCrosshair,
   syncRegister,
+  projectionRef,
 }: StrikeChartProps) => {
   const themeKey = useCandleThemeKey();
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -672,11 +708,23 @@ const StrikeChart = ({
     trailsRef.current = trails;
     drawingsRef.current = drawingsPrim;
 
+    /* Reads candleSeriesRef rather than closing over `candles`: the style swap
+       removes and replaces the main series in place, and a captured series
+       would leave the neighbour projecting against a dead one. */
+    if (projectionRef) {
+      projectionRef.current = {
+        yFor: price => candleSeriesRef.current?.priceToCoordinate(price) ?? null,
+        plotHeight: () => chart.paneSize(0).height,
+        axisHeight: () => chart.timeScale().height(),
+      };
+    }
+
     return () => {
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRange);
       chart.unsubscribeCrosshairMove(onCross);
       syncRegisterRef.current?.(null);
       syncedRef.current = null;
+      if (projectionRef) projectionRef.current = null;
       chart.remove();
       chartRef.current = null;
       candleSeriesRef.current = null;
@@ -698,7 +746,7 @@ const StrikeChart = ({
     };
     // ensureRunway and applySync are stable useCallback([])s — listed so the
     // subscriptions installed here are never reading a stale one.
-  }, [makeMain, ensureRunway, applySync, setFollower]);
+  }, [makeMain, ensureRunway, applySync, setFollower, projectionRef]);
 
   /* Style swap (Noah, 2026-08-23): replace ONLY the main series in place —
      price lines and primitives die with the old one, so the nonce tells the

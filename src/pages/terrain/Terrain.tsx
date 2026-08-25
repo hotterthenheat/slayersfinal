@@ -12,6 +12,7 @@ import StrikeChart, {
   type CompareEntry,
   type CompareMode,
   type CrosshairSync,
+  type PriceProjection,
 } from '../../components/gex/StrikeChart';
 import ChartToolbar from '../../components/gex/ChartToolbar';
 import CompareControl from '../../components/gex/CompareControl';
@@ -360,12 +361,21 @@ const Pane = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [ticker, revision]
   );
-  const heavy = useMemo(() => heaviest(rail.rows, heavyCount), [rail, heavyCount]);
+  /* The header's heaviest read comes off the NEAR-SPOT core, not the widened
+     set the rail draws. `rows` now reaches the whole maintained book so the
+     column can fill the price scale; pointing the header at it would have it
+     naming strikes $30 away from the market. */
+  const heavy = useMemo(() => heaviest(rail.core, heavyCount), [rail, heavyCount]);
 
   /* What the reader clicked in the rail, flashed on the chart. Clicking the
      same strike again clears it, so the rail is a toggle rather than a thing
      you can only turn on. It resets on a symbol change because a price from
      the last book means nothing against this one. */
+  /* Where the chart puts a price, handed to the rail so the two columns cannot
+     disagree. A ref, so it never re-renders anything: the rail reads it inside
+     its own frame loop. */
+  const projectionRef = useRef<PriceProjection | null>(null);
+
   const [focus, setFocus] = useState<number | null>(null);
   useEffect(() => setFocus(null), [ticker]);
 
@@ -424,6 +434,7 @@ const Pane = ({
               priceTag
               onCrosshair={onCrosshair}
               syncRegister={registerSync}
+              projectionRef={projectionRef}
               frameless
             />
 
@@ -615,9 +626,10 @@ const Pane = ({
               ticker={ticker}
               rows={rail.rows}
               maxAbs={rail.maxAbs}
+              step={rail.step}
               levels={levels}
               focusPrice={focus}
-              axisInset={TIME_AXIS_PX}
+              projection={projectionRef}
               onClose={() => onCfg({ ladder: false })}
               onSelect={price => setFocus(cur => (cur != null && Math.abs(cur - price) < 1e-9 ? null : price))}
               className="hidden lg:flex"

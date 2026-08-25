@@ -353,24 +353,50 @@ export function buildLevelsFor(ticker: string): KeyLevels {
 */
 export function buildLadderFor(
   ticker: string,
-  depth = 10
-): { rows: GexLevel[]; maxAbs: number; spot: number } {
+  depth = 30,
+  scaleDepth = 10
+): { rows: GexLevel[]; core: GexLevel[]; maxAbs: number; spot: number; step: number } {
   const sym = Simulator.ensureTicker(ticker);
   const spot = Simulator.TICKERS[sym].currentPrice;
   const snaps = Simulator.getGexHistory(sym);
   const latest = snaps?.[snaps.length - 1];
-  if (!latest || latest.levels.length === 0) return { rows: [], maxAbs: 1, spot };
+  if (!latest || latest.levels.length === 0) return { rows: [], core: [], maxAbs: 1, spot, step: 1 };
 
   const sorted = [...latest.levels].sort((a, b) => a.strike - b.strike);
   const spotIdx = Math.max(0, sorted.findIndex(n => n.strike >= spot));
-  const start = Math.max(0, spotIdx - depth);
-  const window = sorted.slice(start, start + depth * 2 + 1);
+
+  /*
+    TWO WINDOWS, and they are deliberately different sizes.
+
+    `rows` is what a consumer may DRAW — as wide as the chain is maintained, so
+    a column placed against a price scale can fill whatever that scale happens
+    to be showing. `core` is the near-spot set everything else reads: the bar
+    scale, and the header's heaviest-strike line.
+
+    They cannot be the same slice. Scale the bars over the wide window and
+    every bar shortens the moment a far, heavy strike enters it. Let the drawn
+    set follow the reader's zoom and the bars rescale under a zoom gesture —
+    a bar chart whose scale moves while you look at it is a lie about size.
+  */
+  const slice = (d: number) => sorted.slice(Math.max(0, spotIdx - d), spotIdx + d + 1);
+  const window = slice(depth);
+  const core = slice(scaleDepth);
 
   let maxAbs = 1;
-  for (const r of window) maxAbs = Math.max(maxAbs, Math.abs(r.value));
+  for (const r of core) maxAbs = Math.max(maxAbs, Math.abs(r.value));
+
+  /* The chain's own spacing, taken as the smallest gap actually present rather
+     than assumed — a consumer placing rows by price needs it to know how many
+     pixels one strike is worth. */
+  let step = Infinity;
+  for (let i = 1; i < sorted.length; i++) {
+    const d = sorted[i].strike - sorted[i - 1].strike;
+    if (d > 1e-9) step = Math.min(step, d);
+  }
+  if (!Number.isFinite(step) || step <= 0) step = 1;
 
   // Descending, so the column runs the way a price axis does: high at the top.
-  return { rows: window.reverse(), maxAbs, spot };
+  return { rows: [...window].reverse(), core: [...core].reverse(), maxAbs, spot, step };
 }
 
 /** Session change for a ticker — the same expression the flow board's cells
