@@ -137,6 +137,49 @@ for (const { file, what } of SELF_MEASURING) {
   );
 }
 
+/*
+  ---- A canvas whose pixels were resized by a price change ------------------
+
+  MonteCarloPanel sets `canvas.width` from `clientWidth` inside its drawing
+  effect, and that effect was keyed on the market data alone. So the backing
+  store was resized by a PRICE TICK and by nothing else. Dragging the viewport
+  left the chart stretched for 950-1507ms — which is the 1500ms feed tick, and
+  reads as a slow redraw.
+
+  It is not slow, it is absent, and playback is finite: once the active name's
+  playhead pins (tick 78 for the eighteen short recordings, one minute
+  fifty-seven), `spot` stops changing and the dependency that was accidentally
+  standing in for a resize handler stops firing too. A window resize after that
+  leaves the chart stretched for as long as the tab is open.
+
+  Both halves are pinned, because either alone is a guard that proves nothing:
+  an observer nothing depends on is dead code, and a dependency with no
+  observer never updates.
+
+  Surface3D is deliberately NOT in this list — it re-checks its size on every
+  animation frame because it is always spinning, so an observer would be a
+  second mechanism for a fact already covered.
+*/
+{
+  const src = read('src/pages/proveit/MonteCarloPanel.tsx');
+  const observes = /new ResizeObserver\(/.test(src) && /\.observe\(/.test(src);
+  const cleans = /ro\.disconnect\(\)/.test(src);
+  check(
+    'the Monte Carlo canvas observes its own width',
+    observes && cleans,
+    observes ? (cleans ? 'ResizeObserver, disconnected on unmount' : 'observer leaks past unmount') : 'no observer — the canvas is resized by the feed tick'
+  );
+  // the drawing effect must actually depend on it
+  const wired = /\}, \[[^\]]*\bspot\b[^\]]*\bboxWidth\b[^\]]*\]\);/.test(src);
+  check(
+    'the Monte Carlo draw depends on the observed width, not only on the data',
+    wired,
+    wired
+      ? 'the draw effect lists boxWidth alongside the market data'
+      : 'the observed width is not in the draw effect deps — the observer changes nothing (renamed? update this check)'
+  );
+}
+
 // The rail's threshold has to stay a real number, not drift to 0 (always three
 // columns, back to the clipping) or to Infinity (always two, on a 27in screen).
 const rail = read('src/components/gex/KeyLevelsRail.tsx');

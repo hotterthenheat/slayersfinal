@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { histogram, type MonteCarloResult } from '../../core/quant';
 
 /*
@@ -26,6 +26,45 @@ const MonteCarloPanel = ({ mc, spot, height = 260 }: MonteCarloPanelProps) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const bins = useMemo(() => histogram(mc.terminal, spot, 28), [mc, spot]);
   const maxBin = Math.max(...bins.map(b => b.count), 1);
+
+  /*
+    THE CANVAS HAS TO HEAR ABOUT ITS OWN WIDTH.
+
+    Everything below runs in one effect keyed on the market data, and the
+    first thing it does is set `canvas.width` from `clientWidth`. That is the
+    only place the backing store is ever sized, so before this observer the
+    chart's pixels were resized by a PRICE CHANGE and by nothing else.
+
+    Measured by dragging the viewport: the canvas stayed stretched for
+    950-1507ms, which is the 1500ms feed tick, and looked like a slow redraw.
+    It is not slow, it is absent — and the recordings run out. Once the active
+    name's playhead pins, `spot` stops changing and the last dependency that
+    was accidentally standing in for a resize handler stops firing too, so a
+    window resize would leave this chart stretched for as long as the tab
+    stayed open.
+
+    Surface3D on the same page does not need this: it re-checks its size on
+    every animation frame because it is always spinning.
+
+    Same shape as PositioningMap's observer, including the bail-out compare —
+    setting the same width back would re-run the whole draw for nothing.
+  */
+  const [boxWidth, setBoxWidth] = useState(0);
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const read = (w: number) => {
+      const rw = Math.round(w);
+      setBoxWidth(prev => (prev === rw ? prev : rw));
+    };
+    read(el.getBoundingClientRect().width);
+    const ro = new ResizeObserver(entries => {
+      const c = entries[0]?.contentRect;
+      if (c) read(c.width);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -153,7 +192,7 @@ const MonteCarloPanel = ({ mc, spot, height = 260 }: MonteCarloPanelProps) => {
       ctx.textAlign = align;
       ctx.fillText(d === 0 ? 'now' : `+${d}d`, X(d), plotH + 8);
     }
-  }, [mc, spot]);
+  }, [mc, spot, boxWidth]);
 
   return (
     <div className="flex flex-col gap-3">
