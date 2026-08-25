@@ -373,6 +373,14 @@ export function buildLadderFor(
   return { rows: window.reverse(), maxAbs, spot };
 }
 
+/** Session change for a ticker — the same expression the flow board's cells
+    print (`buildBoard`, above), exported so a chart header and a board cell
+    can never disagree about the day. */
+export function spotChangePct(ticker: string): number {
+  const cfg = Simulator.TICKERS[Simulator.ensureTicker(ticker)];
+  return ((cfg.currentPrice - cfg.basePrice) / cfg.basePrice) * 100;
+}
+
 // ---- live pulse ------------------------------------------------------------------
 /**
  * Per-second modulation of the matrix cells — a looping (self-recycling)

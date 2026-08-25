@@ -122,6 +122,16 @@ interface StrikeChartProps {
   /** Replay mode — scrub through history bar by bar, trails included */
   replay?: boolean;
   onExitReplay?: () => void;
+  /* Name the structural levels ON the price axis — CALL WALL, PUT WALL, FLIP,
+     KING as tags in the right-hand gutter, the way a platform labels a level
+     you have drawn. OFF everywhere by default, which is not laziness: the
+     chips were taken off every chart on 2026-08-23 and no other surface has
+     asked for them back. Terrain turns them on because a wall you cannot name
+     is a line, and a workspace built for reading structure has to name it. */
+  axisLevels?: boolean;
+  /** Time left in the current bar, printed in the price gutter under the live
+      price. Off by default, same reasoning as `axisLevels`. */
+  countdown?: boolean;
 }
 
 // Wall / flip / king overlay colors (independent of candle theme)
@@ -147,6 +157,8 @@ const LEVEL_SPEC: {
    band = king, green/red beads = walls, blue ticks = flip. LEVEL_SPEC stays
    for the tween plumbing and any future re-enable. */
 const LINE_LEVELS: typeof LEVEL_SPEC = [];
+/** What a chart actually draws: nothing, unless it asked to name its levels. */
+const lineLevelsFor = (axisLevels: boolean): typeof LEVEL_SPEC => (axisLevels ? LEVEL_SPEC : LINE_LEVELS);
 
 const toCandle = (b: Candle) => ({
   time: b.time as UTCTimestamp,
@@ -191,6 +203,8 @@ const StrikeChart = ({
   onExitDraw,
   replay = false,
   onExitReplay,
+  axisLevels = false,
+  countdown = false,
 }: StrikeChartProps) => {
   const themeKey = useCandleThemeKey();
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -213,6 +227,12 @@ const StrikeChart = ({
   const levelLinesRef = useRef<Partial<Record<'callWall' | 'putWall' | 'flip' | 'king', IPriceLine>>>({});
   const shownLevelsRef = useRef<KeyLevels | null>(null);
   const levelRafRef = useRef(0);
+  /** Close of the newest bar the chart holds — what the axis prints as "now".
+      Read by the countdown so its pill sits ON that label rather than near a
+      second number computed somewhere else. */
+  const lastCloseRef = useRef<number | null>(null);
+  const countdownRef = useRef<HTMLDivElement | null>(null);
+  const countdownRafRef = useRef(0);
   const levelTickerRef = useRef('');
   const focusLineRef = useRef<IPriceLine | null>(null);
   /** The focus price, readable from the autoscale provider (a closure built
@@ -681,6 +701,8 @@ const StrikeChart = ({
     const changed = loaded.ticker !== ticker || loaded.timeframe !== timeframe || loaded.theme !== themeKey;
     const newWorld = loaded.ticker !== ticker || loaded.timeframe !== timeframe;
 
+    lastCloseRef.current = bars.length ? bars[bars.length - 1].close : null;
+
     if (changed) {
       candleSeries.setData(bars.map(toMain));
       volumeSeries.setData(bars.map(b => toVolume(b, theme)));
@@ -756,7 +778,7 @@ const StrikeChart = ({
     // Chips, not lines: the level lives as a colored tag on the price axis.
     // Hovering its legend chip flashes the full line for orientation.
     const L = levelsRef.current;
-    for (const spec of LINE_LEVELS) {
+    for (const spec of lineLevelsFor(axisLevels)) {
       levelLinesRef.current[spec.key] = candleSeries.createPriceLine({
         price: L[spec.key],
         color: spec.color,
@@ -769,7 +791,82 @@ const StrikeChart = ({
     }
     shownLevelsRef.current = { ...L };
     levelTickerRef.current = ticker;
-  }, [ticker, overlays.levels, replay, mainNonce]);
+  }, [ticker, overlays.levels, replay, mainNonce, axisLevels]);
+
+  /*
+    TIME LEFT IN THE BAR, in the price gutter under the live price.
+
+    It rides a rAF loop rather than a one-second timer, and that is the whole
+    difficulty of this feature: the pill's y is `priceToCoordinate(lastClose)`,
+    and that moves for three unrelated reasons — the price ticks, the autoscale
+    re-fits, and the reader pans or zooms. A timer would leave the pill behind
+    the label on every one of those; subscribing to each event separately
+    means finding all three and getting them all right. One frame loop is
+    correct by construction.
+
+    It writes nothing it does not have to. The text is compared before it is
+    set and the transform before it is applied, so a still chart with a
+    still second does no DOM work at all — 60 reads a second, near-zero
+    writes. Background tabs stop being served frames, which is the right
+    behaviour for a clock nobody is looking at.
+
+    Hidden during replay: a countdown to the next live bar is a lie about
+    history.
+  */
+  useEffect(() => {
+    if (!countdown || replay) return;
+    const chart = chartRef.current;
+    const series = candleSeriesRef.current;
+    const el = countdownRef.current;
+    if (!chart || !series || !el) return;
+
+    const bucket = Math.max(60, tfMinutes(timeframe) * 60);
+    let shownText = '';
+    let shownY = Number.NaN;
+    let shownW = -1;
+
+    const frame = () => {
+      countdownRafRef.current = requestAnimationFrame(frame);
+      const price = lastCloseRef.current;
+      const y = price == null ? null : series.priceToCoordinate(price);
+      if (y == null) {
+        if (!Number.isNaN(shownY)) {
+          el.style.opacity = '0';
+          shownY = Number.NaN;
+        }
+        return;
+      }
+
+      const left = bucket - (Math.floor(Date.now() / 1000) % bucket);
+      const hh = Math.floor(left / 3600);
+      const mm = Math.floor((left % 3600) / 60);
+      const ss = left % 60;
+      const text =
+        hh > 0
+          ? `${hh}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`
+          : `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+      if (text !== shownText) {
+        el.textContent = text;
+        shownText = text;
+      }
+
+      const w = chart.priceScale('right').width();
+      if (w !== shownW) {
+        el.style.width = `${w}px`;
+        shownW = w;
+      }
+      /* +9px clears the axis label the library draws at the same y. */
+      const top = Math.round(y) + 9;
+      if (top !== shownY) {
+        el.style.transform = `translateY(${top}px)`;
+        el.style.opacity = '1';
+        shownY = top;
+      }
+    };
+
+    countdownRafRef.current = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(countdownRafRef.current);
+  }, [countdown, timeframe, replay, mainNonce]);
 
   // Dark-pool whisper lines — same grammar as the flow board minis
   useEffect(() => {
@@ -1045,6 +1142,17 @@ const StrikeChart = ({
         onDoubleClick={resetView}
       >
         <div ref={containerRef} className="absolute inset-0" />
+
+        {/* Sits in the price gutter, pinned to the container's right edge and
+            sized to the scale, so it lands under the library's own price
+            label instead of beside it. */}
+        {countdown && !replay && (
+          <div
+            ref={countdownRef}
+            aria-hidden
+            className="pointer-events-none absolute top-0 right-0 z-10 text-center font-mono text-[9px] font-semibold tnum leading-[13px] text-[#0a0a0a] bg-textPrimary rounded-[2px] opacity-0"
+          />
+        )}
 
         {/* Draw mode: pointer sketches instead of panning */}
         {drawing && (

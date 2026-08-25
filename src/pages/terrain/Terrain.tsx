@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlignRight, Maximize2, Minimize2, Rows3, X } from 'lucide-react';
+import { Maximize2, Minimize2, Rows3, X } from 'lucide-react';
 import Simulator from '../../core/simulator';
 import { useMarketData } from '../../context/MarketDataContext';
-import { buildLadderFor, buildLevelsFor, buildPrints } from '../../data/gex';
+import { buildLadderFor, buildLevelsFor, buildPrints, fmtUsd, spotChangePct } from '../../data/gex';
 import StrikeChart, {
   DEFAULT_INDICATORS,
   DEFAULT_OVERLAYS,
@@ -21,35 +21,46 @@ import { TIMEFRAMES, type Timeframe } from '../../data/timeframe';
 ==================================================
   SLAYER TERMINAL - TERRAIN (pages/terrain/Terrain.tsx)
 
-  Charts, and nothing else. One rail across the top
-  drives every pane; each pane carries its own name.
+  Charts, and nothing else. One to four of them,
+  filling the screen, and EACH ONE IS ITS OWN
+  WORKSPACE — its own symbol, interval, overlays,
+  indicators and tape shape.
 ==================================================
 
-  WHY IT IS NOT THE 4-WAY BOARD.
+  THE PANES ARE INDEPENDENT (Noah, 2026-08-25: "each chart box should have
+  its own time frame area, it's own everything because each is different from
+  the other ones"). The first cut shared one rail across every pane, on the
+  reasoning that a three-up read only means something if the panes agree. That
+  was the wrong call for this desk and it is reversed here: the panes are
+  three different instruments at three different resolutions, and the whole
+  point of putting them side by side is that they are set up differently.
 
-  /pulse/board already puts four charts on a screen, and it is deliberately
-  the opposite arrangement: four cells, each with its OWN full toolbar,
-  because its job is comparing four books that are each set up differently.
-  That is four workspaces on one page.
+  So the only things left on the top rail are the two that belong to the
+  ARRANGEMENT rather than to any chart: how many panes there are, and whether
+  they carry their strike rail. Everything else lives in the pane.
 
-  Terrain is one workspace with several viewports. The timeframe, the
-  overlays, the indicators and the tape's shape are set ONCE and every pane
-  obeys, so what changes between panes is the instrument and nothing else —
-  which is the only way a three-up read of SPY, QQQ and AAPL means anything.
-  Change the timeframe and all three move together.
+  WHAT A PANE CARRIES, top to bottom:
 
-  So the two are not duplicates and neither replaces the other. If they ever
-  drift toward each other, the board is the one that should keep per-cell
-  controls.
+      symbol · price · session change      identity
+      interval + overlays + indicators     ChartToolbar, `minimal`
+      the three heaviest strikes near      the book, in one line
+      spot, signed
+      the chart, and its strike rail       StrikeChart + PaneLadder
 
-  WHAT IS SHARED AND WHAT IS NOT, stated because it is the whole design:
+  IT TAKES THE WHOLE SCREEN. The shell wraps every page in horizontal padding,
+  20px above and 64px below, then ends it with the site footer. A workspace
+  wants none of that, so the margins are cancelled and the height is pinned to
+  the viewport less the top bar — measured at 56px, not guessed. The footer
+  still follows, below the fold, exactly as it does on every other page.
+  Below `lg` all of it comes off: the panes stack, the height cap lifts, and
+  the page scrolls, because four charts sharing one phone screen is four
+  charts nobody can read.
 
-      shared    timeframe · overlays · indicators · chart style
-      per pane  the symbol, and nothing else
-
-  The rail is `ChartToolbar` in `spread` mode — the same component every
-  other chart on the desk uses, not a second toolbar that looks like it.
-  Layout is the one control Terrain adds, because no single chart needs it.
+  WHY IT IS NOT THE 4-WAY BOARD. /pulse/board is four cells with four
+  toolbars, fixed at four, on a page that scrolls. Terrain is one to four
+  panes that own the viewport, with a strike rail and named levels on the
+  axis. They have converged on per-pane controls, which is the right answer
+  for both; what still separates them is the arrangement and the density.
 */
 
 const TERRAIN_KEY = 'slayer_terrain_v1';
@@ -60,57 +71,99 @@ const TERRAIN_KEY = 'slayer_terrain_v1';
 export const LAYOUTS = [1, 2, 3, 4] as const;
 export type TerrainLayout = (typeof LAYOUTS)[number];
 
-interface TerrainCfg {
-  layout: TerrainLayout;
-  /** One per pane slot; kept at length 4 so switching layout never loses a
-      symbol the reader chose — going 3 → 2 → 3 gives the third pane back. */
-  tickers: string[];
+/** Everything one pane owns. There is nothing else — a setting that is not
+    here is a setting every pane shares, and only two of those exist. */
+interface PaneCfg {
+  ticker: string;
   timeframe: Timeframe;
   overlays: ChartOverlays;
   indicators: ChartIndicators;
   chartStyle: ChartStyle;
-  /** The strike column down the right edge of every pane */
+}
+
+interface TerrainCfg {
+  layout: TerrainLayout;
+  /** Always four, whatever the layout, so going 3 → 2 → 3 gives the third
+      pane back exactly as it was rather than resetting it. */
+  panes: PaneCfg[];
   ladder: boolean;
 }
 
 const TF_VALUES = new Set<string>(TIMEFRAMES.map(t => t.value));
 const STYLES = new Set<ChartStyle>(['candles', 'hollow', 'bars', 'line', 'step', 'area', 'baseline']);
 
-const defaults = (): TerrainCfg => ({
-  layout: 3,
-  tickers: [...Simulator.WATCHLIST.slice(0, 4)],
-  timeframe: '15m',
-  overlays: { ...DEFAULT_OVERLAYS },
-  indicators: { ...DEFAULT_INDICATORS },
-  chartStyle: 'candles',
-  ladder: true,
-});
+/** The pane slots differ only by symbol at first; a reader sets the rest. */
+const defaultPanes = (): PaneCfg[] =>
+  Simulator.WATCHLIST.slice(0, 4).map(ticker => ({
+    ticker,
+    timeframe: '15m' as Timeframe,
+    overlays: { ...DEFAULT_OVERLAYS },
+    indicators: { ...DEFAULT_INDICATORS },
+    chartStyle: 'candles' as ChartStyle,
+  }));
+
+const defaults = (): TerrainCfg => ({ layout: 3, panes: defaultPanes(), ladder: true });
+
+/** One stored pane, validated field by field against a known-good default. */
+function readPane(raw: unknown, def: PaneCfg): PaneCfg {
+  const c = (raw && typeof raw === 'object' ? raw : {}) as Partial<PaneCfg>;
+  return {
+    ticker: typeof c.ticker === 'string' && c.ticker ? c.ticker : def.ticker,
+    timeframe: typeof c.timeframe === 'string' && TF_VALUES.has(c.timeframe) ? (c.timeframe as Timeframe) : def.timeframe,
+    overlays: { ...DEFAULT_OVERLAYS, ...(c.overlays && typeof c.overlays === 'object' ? c.overlays : {}) },
+    indicators: { ...DEFAULT_INDICATORS, ...(c.indicators && typeof c.indicators === 'object' ? c.indicators : {}) },
+    chartStyle: typeof c.chartStyle === 'string' && STYLES.has(c.chartStyle as ChartStyle) ? (c.chartStyle as ChartStyle) : def.chartStyle,
+  };
+}
 
 /*
-  Self-healing load, the same contract the board's uses: anything malformed in
-  storage falls back to the default rather than throwing on read. A saved
-  layout of 7, a ticker that is a number, a timeframe that was renamed — each
-  is a value somebody's browser can be holding after a deploy, and none of
-  them may take the page down.
+  Self-healing load, and a MIGRATION.
+
+  The shape stored before this change was flat — one timeframe, one set of
+  overlays, one style for the whole desk, plus a `tickers` array. Somebody's
+  browser is holding that right now, and dropping it would silently reset the
+  symbols and the interval they chose. So the old fields are read and fanned
+  out across the panes: the shared interval becomes every pane's interval,
+  which is precisely what the reader was looking at when they left.
+
+  Everything else keeps the contract the board's loader set: anything
+  malformed falls back to the default rather than throwing on read. A layout
+  of 7, a ticker that is a number, a timeframe that was renamed — each is a
+  value a browser can be holding after a deploy, and none of them may take
+  the page down.
 */
 function loadCfg(): TerrainCfg {
   const def = defaults();
   try {
     const raw = localStorage.getItem(TERRAIN_KEY);
     if (!raw) return def;
-    const c = JSON.parse(raw) as Partial<TerrainCfg>;
+    const c = JSON.parse(raw) as Record<string, unknown>;
     if (!c || typeof c !== 'object') return def;
-    const tickers = Array.isArray(c.tickers)
-      ? def.tickers.map((d, i) => (typeof c.tickers?.[i] === 'string' && c.tickers[i] ? c.tickers[i] : d))
-      : def.tickers;
+
+    const layout = (LAYOUTS as readonly number[]).includes(c.layout as number)
+      ? (c.layout as TerrainLayout)
+      : def.layout;
+    const ladder = typeof c.ladder === 'boolean' ? c.ladder : def.ladder;
+
+    if (Array.isArray(c.panes)) {
+      const stored = c.panes as unknown[];
+      return { layout, ladder, panes: def.panes.map((d, i) => readPane(stored[i], d)) };
+    }
+
+    // ── the flat shape, fanned out ──
+    const legacy: Partial<PaneCfg> = {
+      timeframe: typeof c.timeframe === 'string' && TF_VALUES.has(c.timeframe) ? (c.timeframe as Timeframe) : undefined,
+      overlays: c.overlays && typeof c.overlays === 'object' ? (c.overlays as ChartOverlays) : undefined,
+      indicators: c.indicators && typeof c.indicators === 'object' ? (c.indicators as ChartIndicators) : undefined,
+      chartStyle: typeof c.chartStyle === 'string' && STYLES.has(c.chartStyle as ChartStyle) ? (c.chartStyle as ChartStyle) : undefined,
+    };
+    const tickers = Array.isArray(c.tickers) ? (c.tickers as unknown[]) : [];
     return {
-      layout: (LAYOUTS as readonly number[]).includes(c.layout as number) ? (c.layout as TerrainLayout) : def.layout,
-      tickers,
-      timeframe: typeof c.timeframe === 'string' && TF_VALUES.has(c.timeframe) ? (c.timeframe as Timeframe) : def.timeframe,
-      overlays: { ...DEFAULT_OVERLAYS, ...(c.overlays && typeof c.overlays === 'object' ? c.overlays : {}) },
-      indicators: { ...DEFAULT_INDICATORS, ...(c.indicators && typeof c.indicators === 'object' ? c.indicators : {}) },
-      chartStyle: typeof c.chartStyle === 'string' && STYLES.has(c.chartStyle as ChartStyle) ? (c.chartStyle as ChartStyle) : def.chartStyle,
-      ladder: typeof c.ladder === 'boolean' ? c.ladder : def.ladder,
+      layout,
+      ladder,
+      panes: def.panes.map((d, i) =>
+        readPane({ ...legacy, ticker: typeof tickers[i] === 'string' ? tickers[i] : d.ticker }, d)
+      ),
     };
   } catch {
     return def;
@@ -128,13 +181,25 @@ const COLS: Record<TerrainLayout, string> = {
   4: 'grid-cols-1 lg:grid-cols-2',
 };
 
+/*
+  Height of the time axis lightweight-charts draws under the plot, in px.
+
+  MEASURED, not chosen: with `timeVisible: true` and this font the axis canvas
+  runs 858→884 in a 1000px viewport. It is a library constant for this
+  configuration, so it is written down once here and asserted in the sweep —
+  if a library upgrade moves it, the rail stops lining up with the plot floor
+  and the check fails instead of the corner quietly filling with ladder again.
+*/
+const TIME_AXIS_PX = 26;
+
+/** The three heaviest strikes in the pane's window, signed — the one-line
+    read of where the book is, and the same rows the rail draws. */
+const heavyThree = (rows: { strike: number; value: number }[]) =>
+  [...rows].sort((a, b) => Math.abs(b.value) - Math.abs(a.value)).slice(0, 3);
+
 interface PaneProps {
-  ticker: string;
-  onTicker: (t: string) => void;
-  timeframe: Timeframe;
-  overlays: ChartOverlays;
-  indicators: ChartIndicators;
-  chartStyle: ChartStyle;
+  cfg: PaneCfg;
+  onCfg: (patch: Partial<PaneCfg>) => void;
   ladder: boolean;
   revision: number;
   expanded: boolean;
@@ -144,23 +209,17 @@ interface PaneProps {
   tall: boolean;
 }
 
-const Pane = ({
-  ticker,
-  onTicker,
-  timeframe,
-  overlays,
-  indicators,
-  chartStyle,
-  ladder,
-  revision,
-  expanded,
-  onToggleExpand,
-  index,
-  tall,
-}: PaneProps) => {
+const Pane = ({ cfg, onCfg, ladder, revision, expanded, onToggleExpand, index, tall }: PaneProps) => {
+  const { ticker, timeframe, overlays, indicators, chartStyle } = cfg;
+
   // Each pane reads its own book; revision keeps the levels tracking the tick
   const levels = useMemo(
     () => buildLevelsFor(ticker),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ticker, revision]
+  );
+  const changePct = useMemo(
+    () => spotChangePct(ticker),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [ticker, revision]
   );
@@ -170,13 +229,16 @@ const Pane = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [ticker]
   );
-  /* The rail's rows come off the SAME snapshot `levels` was reduced from, and
-     are only read when the rail is on — an off rail costs nothing. */
+  /* The rail's rows come off the SAME snapshot `levels` was reduced from. The
+     header's three-strike read uses them too, so the line and the column can
+     never name different strikes. Read even when the rail is hidden, because
+     the header is not. */
   const rail = useMemo(
-    () => (ladder ? buildLadderFor(ticker) : null),
+    () => buildLadderFor(ticker),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ticker, revision, ladder]
+    [ticker, revision]
   );
+  const heavy = useMemo(() => heavyThree(rail.rows), [rail]);
 
   /* What the reader clicked in the rail, flashed on the chart. Clicking the
      same strike again clears it, so the rail is a toggle rather than a thing
@@ -191,6 +253,8 @@ const Pane = ({
   const themeBg = chartSurface(CANDLE_THEMES[themeKey]).bg;
   const surface = themeBg === 'transparent' ? '#0a0a0a' : themeBg;
 
+  const up = changePct >= 0;
+
   return (
     <div className={expanded ? 'fixed inset-0 z-[80] flex flex-col' : 'contents'}>
       <div
@@ -199,16 +263,65 @@ const Pane = ({
         }`}
         style={{ animationDelay: `${index * 60}ms`, background: surface }}
       >
-        {/* The pane's whole header is its IDENTITY — symbol, price, and the
-            timeframe the rail chose, read-only here. Every control that would
-            change how the chart is drawn lives on the rail, because a control
-            that only moves one pane defeats the point of the arrangement. */}
-        <div className="shrink-0 w-full select-none flex items-center gap-2 px-2.5 py-1.5">
-          <TickerQuickPick ticker={ticker} onPick={onTicker} />
-          <SpotPrice value={levels.spot} />
-          <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">{timeframe}</span>
+        {/* ── who this pane is ────────────────────────────────────────────
+            ITS OWN ROW, and that is not a stylistic preference. Sharing one
+            wrapping line with the toolbar put the timeframe pills ABOVE the
+            symbol at three-up: `spread` pins the pills left and pushes the
+            rest right, so the first thing to wrap was the whole identity
+            block, and the pane announced its interval before it announced
+            what it was charting. Two rows cannot do that. */}
+        {/*
+          ONE ROW, ALWAYS — it does not wrap, it clips.
+
+          Wrapping made the panes disagree about where their charts start: the
+          heaviest-strike read is as wide as its numbers happen to be, so a
+          pane holding three $200M strikes pushed the expand button onto a
+          second line while the pane beside it stayed on one, and the two
+          charts began at different heights. In a side-by-side workspace that
+          reads as a rendering fault. The identity and the button are fixed;
+          only the strike read gives, and it gives by being cut off at the
+          pane's edge — visibly, predictably, and equally in every pane.
+        */}
+        <div className="shrink-0 w-full select-none flex items-center gap-2 px-2 pt-1.5 overflow-hidden">
+          <span className="shrink-0">
+            <TickerQuickPick ticker={ticker} onPick={t => onCfg({ ticker: t })} />
+          </span>
+          <span className="shrink-0">
+            <SpotPrice value={levels.spot} />
+          </span>
+          <span className={`shrink-0 font-mono text-[11px] font-semibold tnum ${up ? 'text-bull' : 'text-bear'}`}>
+            {up ? '+' : ''}
+            {changePct.toFixed(2)}%
+          </span>
+
+          {/* ── the book, on the same line ────────────────────────────────
+              The three heaviest strikes in the pane's window with their
+              signed exposure — the same rows the rail draws, so the line and
+              the column can never name different strikes. It rides beside the
+              identity because a pane that spends four rows on chrome is a
+              pane with no room left to chart anything. Gold is put-dominant,
+              steel call-dominant: the desk's ramp poles, so this line, the
+              rail and the trails under it all say the same thing in the same
+              colours. */}
+          {heavy.length > 0 && (
+            <span className="flex items-center gap-2.5 min-w-0 overflow-hidden whitespace-nowrap">
+              <span className="shrink-0 font-mono text-[9px] uppercase tracking-widest text-textMuted">Heaviest</span>
+              {heavy.map(row => (
+                <span key={row.strike} className="shrink-0 font-mono text-[10px] tnum whitespace-nowrap">
+                  <span className="text-textSecondary">
+                    {row.strike % 1 === 0 ? row.strike.toFixed(0) : row.strike.toFixed(2)}
+                  </span>
+                  <span className={`ml-1.5 font-semibold ${row.value >= 0 ? 'text-[#F5C542]' : 'text-[#AAB6C6]'}`}>
+                    {fmtUsd(row.value)}
+                  </span>
+                </span>
+              ))}
+            </span>
+          )}
+
           <button
             onClick={onToggleExpand}
+            aria-pressed={expanded}
             aria-label={expanded ? `Collapse ${ticker}` : `Expand ${ticker} to the full screen`}
             title={expanded ? 'Collapse — Esc' : 'Expand this pane'}
             className="ml-auto shrink-0 inline-flex items-center justify-center w-6 h-6 rounded text-textMuted hover:text-textPrimary hover:bg-white/[0.05] transition-colors"
@@ -216,12 +329,24 @@ const Pane = ({
             {expanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
           </button>
         </div>
-        {/* flex-1 min-h-0, not a vh slice. The grid below sizes itself to the
-            workspace and the pane fills its cell, so three charts and four
-            charts each use the whole height instead of leaving a band of
-            black under them. min-h-0 is what lets a flex child actually
-            shrink — without it the chart sets the floor and the grid grows
-            past the viewport. */}
+
+        {/* ── and how this pane is set up. Its own, every one of them. ──── */}
+        <div className="shrink-0 w-full px-2 pt-1 pb-1">
+          <ChartToolbar
+            minimal
+            candles
+            alerts
+            timeframe={timeframe}
+            onTimeframe={tf => onCfg({ timeframe: tf })}
+            overlays={overlays}
+            onOverlays={o => onCfg({ overlays: o })}
+            indicators={indicators}
+            onIndicators={i => onCfg({ indicators: i })}
+            chartStyle={chartStyle}
+            onChartStyle={s => onCfg({ chartStyle: s })}
+          />
+        </div>
+
         {/* Chart and rail on ONE line. min-w-0 on the chart is load-bearing:
             a flex item wider than its line does not wrap, it spills, and a
             chart's natural width is whatever its container was last tick. */}
@@ -238,16 +363,19 @@ const Pane = ({
               chartStyle={chartStyle}
               prints={prints}
               focusPrice={focus}
+              axisLevels
+              countdown
               frameless
             />
           </div>
-          {rail && (
+          {ladder && rail.rows.length > 0 && (
             <PaneLadder
               ticker={ticker}
               rows={rail.rows}
               maxAbs={rail.maxAbs}
               levels={levels}
               focusPrice={focus}
+              axisInset={TIME_AXIS_PX}
               onSelect={price => setFocus(cur => (cur != null && Math.abs(cur - price) < 1e-9 ? null : price))}
             />
           )}
@@ -271,8 +399,9 @@ const Terrain = () => {
       /* storage can be full, private, or switched off — never fatal */
     }
   }, [cfg]);
-  const set = <K extends keyof TerrainCfg>(key: K, value: TerrainCfg[K]) =>
-    setCfg(prev => ({ ...prev, [key]: value }));
+
+  const setPane = (i: number, patch: Partial<PaneCfg>) =>
+    setCfg(prev => ({ ...prev, panes: prev.panes.map((p, j) => (j === i ? { ...p, ...patch } : p)) }));
 
   const [expanded, setExpanded] = useState<number | null>(null);
   useEffect(() => {
@@ -288,21 +417,26 @@ const Terrain = () => {
     };
   }, [expanded]);
 
-  const panes = cfg.tickers.slice(0, cfg.layout);
+  const panes = cfg.panes.slice(0, cfg.layout);
 
   return (
-    <>
-      {/* ── The rail. One row, and it drives every pane. ────────────────── */}
-      <div className="flex items-center gap-3 flex-wrap">
+    /*
+      FULL BLEED, and only from `lg`. The negative margins cancel the shell's
+      own padding (px-4/6/8, pt-5, pb-16) so the panes reach the window edges,
+      and the height is the viewport less the 56px top bar — measured in the
+      built page, not guessed at. Below `lg` every one of those comes off and
+      the page scrolls normally.
+    */
+    <div className="-mx-4 lg:-mx-6 2xl:-mx-8 lg:-mt-5 lg:-mb-16 px-2 lg:pt-2 lg:pb-1 flex flex-col gap-2 lg:h-[calc(100vh-3.5rem)] lg:min-h-0">
+      {/* ── The rail. Only what belongs to the ARRANGEMENT. ─────────────── */}
+      <div className="shrink-0 flex items-center gap-3 flex-wrap">
         <div>
           <h1 className="font-mono text-[13px] font-bold uppercase tracking-wider text-textPrimary">Terrain</h1>
           <p className="font-mono text-[10px] text-textMuted uppercase tracking-widest">
-            {cfg.layout} {cfg.layout === 1 ? 'chart' : 'charts'} · one set of controls
+            {cfg.layout} {cfg.layout === 1 ? 'chart' : 'charts'} · each on its own
           </p>
         </div>
 
-        {/* Layout is the one control that belongs to Terrain and to no single
-            chart, so it sits first and reads as a count rather than an icon. */}
         <div
           role="group"
           aria-label="How many charts"
@@ -314,7 +448,7 @@ const Terrain = () => {
             return (
               <button
                 key={n}
-                onClick={() => set('layout', n)}
+                onClick={() => setCfg(prev => ({ ...prev, layout: n }))}
                 aria-pressed={active}
                 aria-label={`${n} ${n === 1 ? 'chart' : 'charts'}`}
                 title={`${n} ${n === 1 ? 'chart' : 'charts'}`}
@@ -328,43 +462,24 @@ const Terrain = () => {
           })}
         </div>
 
-        {/* The strike rail is Terrain's, not the toolbar's — it belongs to the
-            PANE arrangement, and adding it to the shared ChartToolbar would
-            put a dead control on every other chart on the desk. */}
+        {/* The strike rail is an arrangement choice — it changes what a pane
+            is made of, not how its tape is drawn, which is why it lives here
+            and not in the pane's own toolbar. */}
         <button
-          onClick={() => set('ladder', !cfg.ladder)}
+          onClick={() => setCfg(prev => ({ ...prev, ladder: !prev.ladder }))}
           aria-pressed={cfg.ladder}
           title={cfg.ladder ? 'Hide the strike rail' : 'Show the strike rail beside each chart'}
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border font-mono text-[10px] uppercase tracking-wider transition-colors ${
-            cfg.ladder
-              ? 'border-borderSubtle bg-[#ededed] text-[#0a0a0a]'
-              : 'border-borderSubtle bg-panel text-textSecondary hover:text-textPrimary'
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-borderSubtle font-mono text-[10px] uppercase tracking-wider transition-colors ${
+            cfg.ladder ? 'bg-[#ededed] text-[#0a0a0a]' : 'bg-panel text-textSecondary hover:text-textPrimary'
           }`}
         >
-          <AlignRight className="w-3.5 h-3.5 shrink-0" aria-hidden />
           Strikes
         </button>
-
-        <div className="flex-1 min-w-0">
-          <ChartToolbar
-            spread
-            candles
-            alerts
-            timeframe={cfg.timeframe}
-            onTimeframe={tf => set('timeframe', tf)}
-            overlays={cfg.overlays}
-            onOverlays={o => set('overlays', o)}
-            indicators={cfg.indicators}
-            onIndicators={i => set('indicators', i)}
-            chartStyle={cfg.chartStyle}
-            onChartStyle={s => set('chartStyle', s)}
-          />
-        </div>
 
         {expanded !== null && (
           <button
             onClick={() => setExpanded(null)}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-borderSubtle font-mono text-[10px] uppercase tracking-wider text-textSecondary hover:text-textPrimary"
+            className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-borderSubtle font-mono text-[10px] uppercase tracking-wider text-textSecondary hover:text-textPrimary"
           >
             <X className="w-3.5 h-3.5" /> Esc
           </button>
@@ -372,30 +487,22 @@ const Terrain = () => {
       </div>
 
       {/*
-        THE CHARTS ARE THE PAGE, so the grid takes the height rather than a
-        fixed slice of it. 15rem is the shell's top bar, this rail, and the
-        page's own padding — measured, not guessed. Below `lg` the panes
-        stack and the height cap comes off, because four charts sharing one
-        phone screen is four unreadable charts.
+        THE CHARTS ARE THE PAGE, so the grid takes every pixel the root has
+        left rather than a fraction of the viewport. `flex-1 min-h-0` is what
+        does it — min-h-0 is what lets a flex child actually shrink; without
+        it the charts set the floor and the grid grows past the window.
 
-        The site footer still ends the page, as it does everywhere else
-        (AppShell, 2026-08-23). It simply falls below the fold here, which is
-        where a workspace wants it.
+        Below `lg` the panes stack and each takes a readable minimum instead,
+        because four charts sharing one phone screen is four unreadable ones.
       */}
       <div
-        className={`grid ${COLS[cfg.layout]} ${cfg.layout === 4 ? 'lg:grid-rows-2' : 'lg:grid-rows-1'} gap-3 lg:h-[calc(100vh-15rem)] lg:min-h-[520px]`}
+        className={`grid ${COLS[cfg.layout]} ${cfg.layout === 4 ? 'lg:grid-rows-2' : 'lg:grid-rows-1'} gap-2 flex-1 min-h-0 [&>*]:min-h-[420px] lg:[&>*]:min-h-0`}
       >
-        {panes.map((ticker, i) => (
+        {panes.map((pane, i) => (
           <Pane
             key={i}
-            ticker={ticker}
-            onTicker={t =>
-              setCfg(prev => ({ ...prev, tickers: prev.tickers.map((x, j) => (j === i ? t : x)) }))
-            }
-            timeframe={cfg.timeframe}
-            overlays={cfg.overlays}
-            indicators={cfg.indicators}
-            chartStyle={cfg.chartStyle}
+            cfg={pane}
+            onCfg={patch => setPane(i, patch)}
             ladder={cfg.ladder}
             revision={revision}
             expanded={expanded === i}
@@ -405,7 +512,7 @@ const Terrain = () => {
           />
         ))}
       </div>
-    </>
+    </div>
   );
 };
 

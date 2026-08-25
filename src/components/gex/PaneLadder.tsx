@@ -49,6 +49,17 @@ interface PaneLadderProps {
   focusPrice?: number | null;
   /** Click a strike to flash it on the chart beside this rail */
   onSelect?: (price: number) => void;
+  /*
+    Pixels of the host's height that belong to the CHART'S TIME AXIS, not to
+    its plot. The rail runs down the side of a chart, and without this it runs
+    down the side of the time axis too — which is what made the times read as
+    cut off: the axis stopped at the chart's edge and a column of strike bars
+    carried on past it, so the corner where the two scales should meet was
+    full of ladder. Reserving the axis's own height lines the rail's last row
+    up with the plot's floor and leaves that corner empty, the way every
+    charting product draws it.
+  */
+  axisInset?: number;
 }
 
 /** Strikes print whole when they are whole — the rule every strike list uses. */
@@ -112,7 +123,15 @@ const interleave = (rows: GexLevel[], levels: KeyLevels): Item[] => {
   return out;
 };
 
-const PaneLadder = ({ ticker, rows, maxAbs, levels, focusPrice = null, onSelect }: PaneLadderProps) => {
+const PaneLadder = ({
+  ticker,
+  rows,
+  maxAbs,
+  levels,
+  focusPrice = null,
+  onSelect,
+  axisInset = 0,
+}: PaneLadderProps) => {
   if (rows.length === 0) return null;
   const items = interleave(rows, levels);
 
@@ -148,6 +167,7 @@ const PaneLadder = ({ ticker, rows, maxAbs, levels, focusPrice = null, onSelect 
       </div>
 
       <div className="flex-1 min-h-0 flex flex-col overflow-y-auto">
+
         {items.map((item, i) => {
           if (item.kind === 'rule') return <Rule key={`r${i}`} ticker={ticker} price={item.price} tone={item.tone} />;
 
@@ -229,6 +249,8 @@ const PaneLadder = ({ ticker, rows, maxAbs, levels, focusPrice = null, onSelect 
             </div>
           );
         })}
+        {/* The chart's time axis, kept empty beside itself — see `axisInset`. */}
+        {axisInset > 0 && <div className="shrink-0" style={{ height: axisInset }} aria-hidden />}
       </div>
     </div>
   );
