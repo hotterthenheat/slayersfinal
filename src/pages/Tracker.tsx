@@ -207,6 +207,22 @@ const TABLE_COLUMNS: Column<{ tracked: TrackedSetup; live: Setup; expired: boole
   },
 ];
 
+/*
+  WHAT THE EMPTY STATE PROMISES IS WHAT THE TABLE ABOVE DELIVERS.
+
+  A panel holding one icon and one sentence over 58vh is not a filled page —
+  it is the same void with a border drawn round it, which reads worse because
+  the frame draws the eye to the emptiness. So the empty state carries the
+  three things tracking actually does, each one traceable to code on this
+  page: liveData recomputes from the feed on every marketData change, and
+  Premium / Exp. Move / the contracts tab are TABLE_COLUMNS above.
+*/
+const WHAT_TRACKING_GIVES: { label: string; detail: string }[] = [
+  { label: 'Stays live', detail: 'Verdict and confidence recompute as price moves — not a snapshot of the moment you tracked it.' },
+  { label: 'Keeps the entry', detail: 'Premium and expected move stay pinned to the level the setup was tracked at.' },
+  { label: 'Two views', detail: 'Cards here, and the same setups as a sortable contract table under the second tab.' },
+];
+
 // ---- Main Page Component ---------------------------------------------------
 
 const Tracker = () => {
@@ -275,23 +291,30 @@ const Tracker = () => {
         rather than an empty one.
       */}
       {trackedSetups.length === 0 ? (
-        <Panel className="w-full" bodyClassName="flex flex-col items-center justify-center py-16 gap-4">
-          <Bookmark className="w-10 h-10 text-textMuted/40" />
+        <Panel className="w-full" bodyClassName="flex flex-col items-center gap-5 py-12">
+          <Bookmark className="w-9 h-9 text-textMuted/40" />
           <span className="font-mono text-[11px] text-textMuted uppercase tracking-widest">
             {tab === 'setups' ? 'No tracked setups yet' : 'No tracked contracts yet'}
           </span>
-          <p className="text-[12px] text-textSecondary text-center max-w-sm leading-relaxed">
-            Go to{' '}
-            <button
-              onClick={() => navigate('/compass')}
-              className="text-select hover:underline"
-            >
-              Compass
-            </button>
-            , open a setup&rsquo;s <strong className="text-textPrimary">Analysis</strong>, and click{' '}
-            <strong className="text-textPrimary">Track campaign</strong>.
-            {tab === 'contracts' && ' Tracked setups appear here as a sortable contract table.'}
+          <p className="max-w-sm text-center text-[12px] leading-relaxed text-textSecondary">
+            Open a setup&rsquo;s <strong className="text-textPrimary">Analysis</strong> in Compass and click{' '}
+            <strong className="text-textPrimary">Track campaign</strong>. It lands here.
           </p>
+          <button
+            onClick={() => navigate('/compass')}
+            className="inline-flex items-center gap-1.5 rounded-md border border-select/40 bg-select/[0.06] px-3 py-1.5 font-mono text-[11px] font-semibold uppercase tracking-wider text-select transition-colors hover:bg-select/[0.12]"
+          >
+            Go to Compass <ArrowUpRight className="h-3.5 w-3.5" />
+          </button>
+
+          <div className="mt-2 grid w-full max-w-3xl grid-cols-1 gap-3 border-t border-borderSubtle pt-6 sm:grid-cols-3">
+            {WHAT_TRACKING_GIVES.map(item => (
+              <div key={item.label} className="flex flex-col gap-1 px-2 text-center">
+                <span className="font-mono text-[9px] uppercase tracking-widest text-textMuted">{item.label}</span>
+                <span className="text-[12px] leading-snug text-textSecondary">{item.detail}</span>
+              </div>
+            ))}
+          </div>
         </Panel>
       ) : tab === 'setups' ? (
         /* ---- Grid of tracked setup cards ---- */

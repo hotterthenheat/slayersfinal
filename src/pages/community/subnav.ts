@@ -24,7 +24,7 @@ export const COMMUNITY_SUBPAGES: CommunitySubpage[] = [
   {
     path: '/community/feedback',
     label: 'Feedback',
-    subtitle: 'What should we improve? Every note gets read',
+    subtitle: 'What should we improve? Notes stay on this browser until accounts land',
     icon: MessageSquare,
   },
 ];
