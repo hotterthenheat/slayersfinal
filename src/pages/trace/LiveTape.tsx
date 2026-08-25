@@ -989,7 +989,18 @@ const LiveTape = () => {
     if (!marketData || paused) return;
     const fresh = marketData.tape.map(o => enrichPrint(o, ++idRef.current));
     if (fresh.length === 0) return;
-    setRows(prev => [...fresh, ...prev].slice(0, MAX_ROWS));
+    /*
+      THE BATCH GOES ON TOP REVERSED.
+
+      The feed serves a tick's prints in chronological order and this table is
+      captioned "newest first", so prepending the batch as-is puts the newest
+      print of the four at the BOTTOM of its own group: the TIME column climbs
+      for four rows, drops back 23 seconds, climbs again.
+
+      Invisible until now, because the capture stamped all 1,013 prints with
+      the same wall-clock second. Session times made it a visible sawtooth.
+    */
+    setRows(prev => [...[...fresh].reverse(), ...prev].slice(0, MAX_ROWS));
   }, [marketData, paused]);
 
   const summary = useMemo(() => summarizeTape(rows), [rows]);

@@ -75,6 +75,7 @@ for (const h of HORIZONS) {
 
 const stocks = read('src/data/stocks.ts');
 const sleeveRow = stocks.match(/const SLEEVE_WEIGHTS\s*=\s*\{([^}]*)\}/);
+let stocksSleeveKeys: string[] = [];
 if (!sleeveRow) {
   check('the Stocks sleeve table was found', false, 'SLEEVE_WEIGHTS not found');
 } else {
@@ -86,6 +87,7 @@ if (!sleeveRow) {
     `${Object.keys(w).length} sleeves, sum ${sum.toFixed(3)}`
   );
   check('Stocks carries no news sleeve', !('news' in w), `keys: ${Object.keys(w).join(', ')}`);
+  stocksSleeveKeys = Object.keys(w);
 }
 
 // ---- The News desk stays unwired --------------------------------------------
@@ -337,6 +339,69 @@ check(
   'nothing in src still names the deprecated aliases',
   aliasUsers.length === 0,
   aliasUsers.length ? aliasUsers.join(', ') : `${walk(path.join(ROOT, 'src')).length} files scanned, none`
+);
+
+/*
+  ---- The Stocks copy names the sleeves the table actually has --------------
+
+  Deleting the news sleeve from SLEEVE_WEIGHTS was asserted above the day it
+  happened. What was not asserted is that anything on screen stopped promising
+  it — and the page header went on reading "how every name and sector screens
+  on momentum, quality, flow and news" for as long as the guard was green,
+  three columns wide, directly above a table whose own header said
+  "Sleeves · Mom / Qual / Flow".
+
+  A weight table and the sentence describing it are one fact with two
+  generators. This couples them in both directions: every sleeve in the table
+  must be named in the copy, and nothing else may be. Adding a sleeve back
+  without updating the copy fails here too.
+*/
+const stocksPage = read('src/pages/Stocks.tsx');
+const stocksSubtitle = stocksPage.match(/subtitle="([^"]*)"/)?.[1] ?? '';
+const sleeveHeader = stocksPage.match(/header: 'Sleeves[^']*'/)?.[0] ?? '';
+const sleeveKeys = stocksSleeveKeys;
+
+check(
+  'the Stocks subtitle was found',
+  stocksSubtitle.length > 20 && sleeveHeader.length > 0,
+  `subtitle ${stocksSubtitle.length} chars, header ${sleeveHeader ? 'found' : 'MISSING'}`
+);
+
+// Every screen a reader could be told about, and the word that names it.
+const SLEEVE_WORDS: Record<string, string> = {
+  momentum: 'momentum',
+  quality: 'quality',
+  flow: 'flow',
+  news: 'news',
+};
+const copyMismatch: string[] = [];
+for (const [key, word] of Object.entries(SLEEVE_WORDS)) {
+  const inTable = sleeveKeys.includes(key);
+  const inCopy = new RegExp(`\\b${word}\\b`, 'i').test(stocksSubtitle);
+  if (inTable !== inCopy) {
+    copyMismatch.push(`${word}: ${inTable ? 'in the table, not in the copy' : 'in the copy, not in the table'}`);
+  }
+}
+check(
+  'the Stocks subtitle names exactly the sleeves that exist',
+  copyMismatch.length === 0,
+  copyMismatch.length ? copyMismatch.join(' | ') : `${sleeveKeys.join(', ')}`
+);
+
+const headerMismatch: string[] = [];
+for (const [key, word] of Object.entries(SLEEVE_WORDS)) {
+  const inTable = sleeveKeys.includes(key);
+  // The column header abbreviates: Mom / Qual / Flow.
+  const abbrev = word.slice(0, 3);
+  const inHeader = new RegExp(abbrev, 'i').test(sleeveHeader);
+  if (inTable !== inHeader) {
+    headerMismatch.push(`${word}: ${inTable ? 'in the table, not in the header' : 'in the header, not in the table'}`);
+  }
+}
+check(
+  'the sleeve column header names exactly the sleeves that exist',
+  headerMismatch.length === 0,
+  headerMismatch.length ? headerMismatch.join(' | ') : sleeveHeader.replace("header: ", '')
 );
 
 console.log(`\n${pass} passed, ${fail} failed`);

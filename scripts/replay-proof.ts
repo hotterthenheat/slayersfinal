@@ -11,6 +11,11 @@
   4. Engine modules import cleanly without booting the simulator
   5. occSymbol builds the canonical OCC key correctly
 */
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 import { withEngineClock } from '../src/core/clock';
 import { weighContracts } from '../src/core/contractScore';
 import { buildCompassView } from '../src/data/compass';
@@ -102,6 +107,62 @@ const id = decisionId(
 check('decision id shape (sleeve-aware source)', id === 'SPY   260731C00500000|scanner:top-setups@weekly|2026-07-29T15:00:00Z', id);
 const idNoSleeve = decisionId(optionContractId('SPY', '2026-07-31', 'C', 500), { kind: 'scanner', scanner: 'all' }, '2026-07-29T15:00:00Z');
 check('decision id shape (sleeveless source)', idNoSleeve === 'SPY   260731C00500000|scanner:all|2026-07-29T15:00:00Z', idNoSleeve);
+
+
+/*
+  ---- The tape's clock ------------------------------------------------------
+
+  The capture stamped every print with `new Date()`, so all 1,013 landed on
+  11:20:31 or 11:20:32 PM: a whole session's tape claiming to have crossed
+  inside two seconds, at an hour the market is shut, in the first column of
+  the first panel on the Trace desk. It also contradicted the dark-pool table
+  beside it, which prints ET session times.
+
+  Three assertions, because a re-capture is exactly the thing that would put
+  it back: the stamps stay inside the 09:30-16:00 session, they never go
+  backwards (replay order IS chronological order, and the tape says "newest
+  first"), and they are not all the same instant.
+*/
+{
+  const tape = JSON.parse(
+    readFileSync(path.join(ROOT, 'src/data/recorded/tape.json'), 'utf8')
+  ) as { time: string }[];
+
+  const secs = tape.map(p => {
+    const m = /^(\d{2}):(\d{2}):(\d{2})$/.exec(p.time);
+    return m ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : NaN;
+  });
+
+  const OPEN = 9 * 3600 + 30 * 60;
+  const CLOSE = 16 * 3600;
+  const shaped = secs.every(n => Number.isFinite(n));
+  check(
+    'every tape print carries an HH:MM:SS stamp',
+    shaped && tape.length > 100,
+    shaped ? `${tape.length} prints parsed` : 'a stamp is not HH:MM:SS — a wall-clock format is back'
+  );
+
+  const outside = secs.filter(n => Number.isFinite(n) && (n < OPEN || n >= CLOSE));
+  check(
+    'no tape print lands outside the session',
+    outside.length === 0,
+    outside.length ? `${outside.length} outside 09:30-16:00` : `09:30-16:00, all ${secs.length}`
+  );
+
+  let backwards = 0;
+  for (let i = 1; i < secs.length; i++) if (secs[i] < secs[i - 1]) backwards++;
+  check(
+    'the tape never runs backwards',
+    backwards === 0,
+    backwards ? `${backwards} print(s) go back in time` : 'monotonic in replay order'
+  );
+
+  check(
+    'the tape is not one frozen instant',
+    new Set(secs).size > secs.length / 2,
+    `${new Set(secs).size} distinct stamps across ${secs.length} prints`
+  );
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

@@ -216,6 +216,19 @@ export function getGexHistory(sym: string): GexSnapshot[] {
   1,013 recorded prints across the four watchlist names, revealed a few at a
   time so the tape streams rather than arriving all at once.
 
+  THE TIMESTAMPS ARE SESSION TIMES, ASSIGNED. The capture wrote `new Date()`
+  into every print, so all 1,013 came out stamped 11:20:31 or 11:20:32 PM — a
+  whole session's tape claiming to have crossed inside two seconds, at an hour
+  the market is shut, in a TIME column that is the first thing the eye lands
+  on. It also disagreed with the dark-pool panel beside it, which prints ET
+  session times.
+
+  They are now spread 09:30:00 to 15:59:37 in replay order, evenly, which is
+  the only thing the column can honestly mean for a recording: where in the
+  session this print arrives. Even spacing is not a claim about clustering —
+  a real tape is heavier at the open and the close, and pretending otherwise
+  here would be inventing structure the recording does not have.
+
   `tick` is the only thing that serves them, and it serves each print EXACTLY
   ONCE, because LiveTape treats `marketData.tape` as "what is new this tick"
   and accumulates (LiveTape.tsx:990). `snapshotFor` therefore returns an empty

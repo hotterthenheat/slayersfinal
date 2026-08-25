@@ -183,7 +183,7 @@ const Stocks = () => {
       <PageHeader
         breadcrumb={['Terminal', 'Stocks']}
         title="Stocks"
-        subtitle="Screening board — how every name and sector screens on momentum, quality, flow and news"
+        subtitle="Screening board — how every name and sector screens on momentum, quality and flow"
       />
 
       <MetricGrid min="170px">
