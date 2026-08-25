@@ -61,7 +61,7 @@ const ProveIt = () => {
         actions={
           <span className="inline-flex items-center gap-2">
             <SegmentedControl
-              ariaLabel="Simulation window"
+              ariaLabel="Forecast horizon"
               options={WINDOW_OPTIONS}
               value={window_}
               onChange={v => setWindow(v as Window)}
@@ -97,7 +97,7 @@ const ProveIt = () => {
               ${mc.stats.rangeLow.toFixed(0)}–${mc.stats.rangeHigh.toFixed(0)}
             </span>
           }
-          sub="90% of simulated paths land inside"
+          sub="90% of modeled paths land inside"
         />
         <StatCard
           label="Vol regime"

@@ -55,7 +55,6 @@ const VolLab = () => {
       <div className="flex items-center gap-3 flex-wrap">
         <span className="inline-flex items-center gap-1.5 border border-borderSubtle bg-panel rounded-md px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider text-textSecondary">
           Model <span className="text-textPrimary font-semibold">SLAYER-VOL v0.2</span>
-          <span className="text-textMuted">· SIM</span>
         </span>
         <span className="font-mono text-[10px] text-textMuted uppercase tracking-widest tnum">
           calibrated {calibratedAt}

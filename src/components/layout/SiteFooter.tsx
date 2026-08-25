@@ -156,7 +156,7 @@ const SiteFooter = ({ home = false }: { home?: boolean }) => (
           © 2026 Slayer Terminal · Compass · Pinpoint
         </span>
         <span className="md:ml-auto font-mono text-[10px] tracking-wide text-textMuted">
-          For informational purposes only. Not investment advice. Preview data is simulated.
+          For informational purposes only. Not investment advice. Preview data — not a live market feed.
         </span>
       </div>
     </div>

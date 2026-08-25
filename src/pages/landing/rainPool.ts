@@ -52,7 +52,6 @@ const BASE_POOL: string[] = [
   'RISK-ON · 11 up / 7 down',
   'half-life 6.5h · priced-in 58%',
   'book fades the headline',
-  'sim -> live: same contract',
 ];
 
 // Generated number-heavy lines — strikes, scores, prints — built once at load.
