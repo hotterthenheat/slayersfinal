@@ -488,5 +488,64 @@ check(
   rowIsConditional ? 'guarded on data.read.delta' : 'the row renders unconditionally — a null delta would print blank'
 );
 
+/*
+  Nothing offers a door that does not exist.
+
+  There is no auth in this tree and no payment: no sign-in, no sign-up, no
+  session, no Stripe, nothing. Two places said otherwise.
+
+  The footer's Access column carried "Log in / Sign up" pointing at `/`,
+  because there was nowhere for it to point — a nav row for a door that is
+  not there, the same defect as a star labelled "Track print". Beside it,
+  "Launch Terminal" also pointed at `/`: every other Launch Terminal on the
+  page opens the desk, so that one sent the reader back to the marketing
+  page they were already standing on.
+
+  And under the pricing cards: "sign in to check out — access is granted at
+  payment". Pressing Select plan opens /pulse. None of that runs.
+
+  Both sides are asserted. If auth or checkout ever ships, the first check
+  releases and the copy can say so; while they have not, no navigation label
+  and no sales line may promise them.
+*/
+const AUTH_CODE = /\b(?:signIn|signUp|logIn|useAuth|AuthProvider|createCheckout|stripe)\b/;
+const authFiles = walkSrc()
+  .filter(f => !f.includes(path.join('pages', 'landing')))
+  .filter(f => AUTH_CODE.test(readFileSync(f, 'utf8')))
+  .map(f => path.relative(ROOT, f).split(path.sep).join('/'));
+check(
+  'the auth/checkout scan ran over the tree',
+  walkSrc().length > 100,
+  `${walkSrc().length} files scanned for sign-in, sign-up and checkout code`
+);
+const navPromises = [...landing.matchAll(/label: '([^']*)'/g)]
+  .map(m => m[1])
+  .filter(t => /\b(log ?in|sign ?up|sign ?in|checkout|check out)\b/i.test(t));
+check(
+  'no navigation label offers a sign-in while there is no sign-in',
+  authFiles.length > 0 || navPromises.length === 0,
+  authFiles.length
+    ? `auth exists in ${authFiles.join(', ')} — the labels may say so now`
+    : navPromises.length
+      ? `still offering: ${navPromises.join(', ')}`
+      : 'no auth in src, and nothing in the nav claims one'
+);
+const checkoutClaim = /sign in to check out|access is granted at payment/i.test(landing + extras);
+check(
+  'no pricing line describes a checkout that cannot run',
+  authFiles.length > 0 || !checkoutClaim,
+  authFiles.length
+    ? 'checkout code exists — the line may describe it'
+    : checkoutClaim
+      ? 'the pricing footnote still describes signing in and paying'
+      : 'the footnote says what the button does'
+);
+const launchGoesToDesk = /\{ label: 'Launch Terminal', to: '\/pulse' \}/.test(landing);
+check(
+  'the footer Launch Terminal opens the terminal',
+  launchGoesToDesk,
+  launchGoesToDesk ? 'to /pulse, like every other Launch Terminal on the page' : "points somewhere else — it was '/' , the page it sits on"
+);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

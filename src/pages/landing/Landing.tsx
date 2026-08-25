@@ -118,8 +118,15 @@ const FOOTER_COLS = [
   {
     title: 'Access',
     links: [
-      { label: 'Launch Terminal', to: '/' },
-      { label: 'Log in / Sign up', to: '/' },
+      /* /pulse, not '/'. Every other Launch Terminal on this page opens the
+         desk; this one sent the reader back to the marketing page they were
+         already standing on. */
+      { label: 'Launch Terminal', to: '/pulse' },
+      /* "Log in / Sign up" pointed at '/' because there is nowhere for it to
+         point: there is no auth in this tree — no sign-in, no sign-up, no
+         session, nothing. A nav row for a door that does not exist is the
+         same defect as a star labelled "Track print". The community boards
+         already tell the reader accounts come later, in words. */
       { label: 'Pulse', to: '/pulse' },
     ],
   },
@@ -390,7 +397,8 @@ const Landing = () => (
         ))}
       </Reveal>
       <p className="mt-6 text-center font-mono text-[10px] uppercase tracking-wider text-textMuted">
-        Prices in USD · sign in to check out — access is granted at payment · cancel anytime
+        Prices in USD · month to month, cancel anytime · billing is not live yet — Select plan opens the
+        terminal on the recorded session
       </p>
 
       <ComparePlans />
