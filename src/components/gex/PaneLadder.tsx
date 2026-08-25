@@ -88,6 +88,8 @@ interface PaneLadderProps {
       turn on from a toolbar and not off from itself is a panel that feels
       stuck to the page. */
   onClose?: () => void;
+  /** What the close button's tooltip says — the host knows the key. */
+  closeHint?: string;
   /** Extra classes from the host — used to hold the rail back at narrow
       widths, where it would take a third of the screen. */
   className?: string;
@@ -158,6 +160,7 @@ const PaneLadder = ({
   onSelect,
   projection,
   onClose,
+  closeHint = 'Hide this strike rail',
   className = '',
 }: PaneLadderProps) => {
   const trackRef = useRef<HTMLDivElement | null>(null);
@@ -384,7 +387,7 @@ const PaneLadder = ({
           <button
             onClick={onClose}
             aria-label={`Hide the ${ticker} strike rail`}
-            title="Hide this strike rail"
+            title={closeHint}
             className="pointer-events-auto shrink-0 inline-flex items-center justify-center w-4 h-4 rounded text-textMuted hover:text-textPrimary hover:bg-white/[0.08] transition-colors"
           >
             <X className="w-2.5 h-2.5" />

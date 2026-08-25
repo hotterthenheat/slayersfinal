@@ -19,10 +19,21 @@ import TickerLookup from '../ui/TickerLookup';
 interface TickerQuickPickProps {
   ticker: string;
   onPick: (ticker: string) => void;
+  /* OPTIONALLY CONTROLLED. Left alone the button owns its own open state, the
+     way every other caller uses it. A host that has to open this from a
+     keyboard passes both, and then owns it — there is no third state where
+     both the host and the button think they are in charge. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
-const TickerQuickPick = ({ ticker, onPick }: TickerQuickPickProps) => {
-  const [open, setOpen] = useState(false);
+const TickerQuickPick = ({ ticker, onPick, open: openProp, onOpenChange }: TickerQuickPickProps) => {
+  const [selfOpen, setSelfOpen] = useState(false);
+  const open = openProp ?? selfOpen;
+  const setOpen = (next: boolean) => {
+    onOpenChange?.(next);
+    if (openProp === undefined) setSelfOpen(next);
+  };
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   // Outside click / Escape closes the picker
@@ -64,7 +75,7 @@ const TickerQuickPick = ({ ticker, onPick }: TickerQuickPickProps) => {
           on the taskbar with its own surface, because it IS the subject.
           TV-sized: ~112×28, name leading, the affordance at the far end. */}
       <button
-        onClick={() => setOpen(o => !o)}
+        onClick={() => setOpen(!open)}
         title="Switch ticker"
         className="inline-flex items-center justify-between gap-2 h-7 min-w-[112px] px-3 rounded-full bg-white/[0.06] hover:bg-white/[0.10] font-mono text-[11px] font-bold text-textPrimary transition-colors"
       >

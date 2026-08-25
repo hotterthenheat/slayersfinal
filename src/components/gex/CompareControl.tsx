@@ -33,10 +33,20 @@ interface CompareControlProps {
   onRemove: (ticker: string, mode: CompareMode) => void;
   /** Roster cap — the + dims when reached */
   max?: number;
+  /* OPTIONALLY CONTROLLED — see TickerQuickPick for the same shim and why. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
-const CompareControl = ({ current, compares, onAdd, onRemove, max = 4 }: CompareControlProps) => {
-  const [open, setOpen] = useState(false);
+const CompareControl = ({
+  current, compares, onAdd, onRemove, max = 4, open: openProp, onOpenChange,
+}: CompareControlProps) => {
+  const [selfOpen, setSelfOpen] = useState(false);
+  const open = openProp ?? selfOpen;
+  const setOpen = (next: boolean) => {
+    onOpenChange?.(next);
+    if (openProp === undefined) setSelfOpen(next);
+  };
   const [query, setQuery] = useState('');
   const [mod, setMod] = useState<TickerModule | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -147,7 +157,7 @@ const CompareControl = ({ current, compares, onAdd, onRemove, max = 4 }: Compare
   return (
     <div ref={rootRef} className="relative">
       <button
-        onClick={() => setOpen(o => !o)}
+        onClick={() => setOpen(!open)}
         title={full ? `Compare (${max} max — remove one first)` : 'Compare symbol'}
         aria-label="Compare symbol"
         className="inline-flex items-center justify-center w-7 h-7 rounded-md bg-white/[0.06] hover:bg-white/[0.10] text-textSecondary hover:text-textPrimary transition-colors"

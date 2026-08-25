@@ -71,6 +71,15 @@ import { TIMEFRAMES, type Timeframe } from '../../data/timeframe';
 
 const TERRAIN_KEY = 'slayer_terrain_v1';
 
+/* One step along the interval list, CLAMPED at both ends. Wrapping would
+   turn one keypress on a 1-minute chart into a weekly chart, which is a
+   different instrument, not a smaller adjustment. */
+const stepTf = (tf: Timeframe, dir: 1 | -1): Timeframe => {
+  const i = TIMEFRAMES.findIndex(t => t.value === tf);
+  const j = Math.max(0, Math.min(TIMEFRAMES.length - 1, (i < 0 ? 2 : i) + dir));
+  return TIMEFRAMES[j].value;
+};
+
 /** How many panes are on screen. Four is the ceiling: at 1440 a fifth pane is
     260px wide, and a chart that narrow stops being a chart — the same finding
     that keeps the Pulse desk's widgets from going below their floor. */
@@ -295,6 +304,18 @@ interface PaneProps {
   onCrosshair: CrosshairSync;
   /** Hand the desk this pane's "mark that moment" function, null on unmount. */
   registerSync: (apply: CrosshairSync | null) => void;
+  /** Whether the keys act on this pane, and how to make them. */
+  isActive: boolean;
+  onActivate: () => void;
+  /** How many panes are on the desk — a number badge on the only pane on
+      screen is chrome that says nothing. */
+  paneCount: number;
+  /** Which of this pane's menus a key has opened, if any. */
+  menuOpen: 'symbol' | 'compare' | null;
+  onMenu: (which: 'symbol' | 'compare' | null) => void;
+  /** The pane's real box, handed up so the desk can scroll it into view when
+      a key makes it active — below `lg` the panes stack and the page scrolls. */
+  boxRef?: (el: HTMLDivElement | null) => void;
   /*
     Extra grid classes for THIS pane's box.
 
@@ -309,7 +330,8 @@ interface PaneProps {
 
 const Pane = ({
   cfg, onCfg, revision, expanded, onToggleExpand, index, tall, heavyCount,
-  onCrosshair, registerSync, cell = '',
+  onCrosshair, registerSync, isActive, onActivate, paneCount, menuOpen, onMenu,
+  boxRef, cell = '',
 }: PaneProps) => {
   const { ticker, timeframe, overlays, indicators, chartStyle, compares, ladder } = cfg;
 
@@ -418,9 +440,21 @@ const Pane = ({
         Only below `lg`. Above it the grid owns the height and a floor here
         would fight it.
       */}
+      {/* Activation lives on THIS div, not the wrapper above: the wrapper is
+          `display: contents` when the pane is not expanded and generates no
+          box, so it has neither a border to ring nor an area to click. Both
+          handlers are capture-phase, so reaching for any control inside the
+          pane makes it the active one before that control does its own job. */}
       <div
+        ref={boxRef}
+        onPointerDownCapture={onActivate}
+        onFocusCapture={onActivate}
         className={`relative flex flex-col overflow-hidden animate-soft-in ${
-          expanded ? 'flex-1 min-h-0' : `min-h-[420px] lg:min-h-0 border border-borderSubtle rounded-md ${cell}`
+          expanded
+            ? 'flex-1 min-h-0'
+            : `min-h-[420px] lg:min-h-0 border rounded-md ${cell} ${
+                isActive && paneCount > 1 ? 'border-select' : 'border-borderSubtle'
+              }`
         }`}
         style={{ animationDelay: `${index * 60}ms`, background: surface }}
       >
@@ -519,11 +553,35 @@ const Pane = ({
                 out over the price ticks. Identity alone always fits.
               */}
               <div className="chrome-hover relative z-30 pointer-events-auto w-fit max-w-full select-none flex items-center gap-2 rounded-md bg-canvas/25 backdrop-blur-[3px] px-2 py-1 opacity-55 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
+                {/* This strip is the one row visible at rest, so the number
+                    is legible without a pointer ever touching the desk. */}
+                {paneCount > 1 && (
+                  <span
+                    aria-hidden
+                    className={`shrink-0 w-4 h-4 rounded-[3px] font-mono text-[9px] font-bold tnum inline-flex items-center justify-center ${
+                      isActive ? 'bg-select text-[#0a0a0a]' : 'bg-white/[0.08] text-textMuted'
+                    }`}
+                  >
+                    {index + 1}
+                  </span>
+                )}
                 <span className="shrink-0 inline-flex items-center gap-1.5">
-                  <TickerQuickPick ticker={ticker} onPick={t => onCfg({ ticker: t })} />
+                  <TickerQuickPick
+                    ticker={ticker}
+                    onPick={t => onCfg({ ticker: t })}
+                    open={menuOpen === 'symbol'}
+                    onOpenChange={o => onMenu(o ? 'symbol' : null)}
+                  />
                   {/* TradingView's "+" beside the symbol capsule — cross
                       another symbol onto this tape. Per pane, like the rest. */}
-                  <CompareControl current={ticker} compares={compares} onAdd={addCompare} onRemove={removeCompare} />
+                  <CompareControl
+                    current={ticker}
+                    compares={compares}
+                    onAdd={addCompare}
+                    onRemove={removeCompare}
+                    open={menuOpen === 'compare'}
+                    onOpenChange={o => onMenu(o ? 'compare' : null)}
+                  />
                 </span>
                 <span className="shrink-0">
                   <SpotPrice value={levels.spot} />
@@ -537,7 +595,7 @@ const Pane = ({
                   onClick={onToggleExpand}
                   aria-pressed={expanded}
                   aria-label={expanded ? `Collapse ${ticker}` : `Expand ${ticker} to the full screen`}
-                  title={expanded ? 'Collapse — Esc' : 'Expand this pane'}
+                  title={expanded ? 'Collapse — Esc' : 'Expand this pane — F'}
                   className="shrink-0 inline-flex items-center justify-center w-6 h-6 rounded text-textMuted hover:text-textPrimary hover:bg-white/[0.05] transition-colors"
                 >
                   {expanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
@@ -645,6 +703,7 @@ const Pane = ({
               focusPrice={focus}
               projection={projectionRef}
               onClose={() => onCfg({ ladder: false })}
+              closeHint="Hide this rail — R"
               onSelect={price => setFocus(cur => (cur != null && Math.abs(cur - price) < 1e-9 ? null : price))}
               className="hidden lg:flex"
             />
@@ -674,6 +733,8 @@ const Terrain = () => {
     setCfg(prev => ({ ...prev, panes: prev.panes.map((p, j) => (j === i ? { ...p, ...patch } : p)) }));
 
   const [expanded, setExpanded] = useState<number | null>(null);
+  const expandedRef = useRef<number | null>(null);
+  expandedRef.current = expanded;
   useEffect(() => {
     if (expanded === null) return;
     const onKey = (e: KeyboardEvent) => {
@@ -689,6 +750,123 @@ const Terrain = () => {
 
   const panes = cfg.panes.slice(0, cfg.layout);
   const anyLadder = panes.some(p => p.ladder);
+
+  /*
+    WHICH PANE A KEY ACTS ON.
+
+    Stored unclamped and clamped on read, the same way the pane configs are:
+    going 4 → 2 → 4 gives the fourth pane back rather than having silently
+    forgotten it. It starts at 0 from first paint, so no key ever acts on
+    something the reader cannot see, and reaching for any control inside a
+    pane makes that pane active before the control does its own job.
+  */
+  const [activeRaw, setActiveRaw] = useState(0);
+  const activeRaw0 = useRef(0);
+  activeRaw0.current = activeRaw;
+  const active = Math.min(activeRaw, cfg.layout - 1);
+  /* Mirrors for the key handler, which is installed once and must never read
+     a stale closure — the same pattern the charts use for their own
+     subscriptions. */
+  const activeRef = useRef(0);
+  activeRef.current = active;
+  /* Assigned during render, not in an effect: two keys inside one frame must
+     both see the config the first one produced. */
+  const cfgRef = useRef(cfg);
+  cfgRef.current = cfg;
+
+  /** Which pane has a menu open, and which menu — so `s` and `c` can open one
+      without every pane growing its own piece of state. */
+  const [menu, setMenu] = useState<{ pane: number; which: 'symbol' | 'compare' } | null>(null);
+
+  /* A ring is feedback for people who can see it. Everything a key changes is
+     also said out loud, or the whole layer is silent to a screen reader. */
+  const [announce, setAnnounce] = useState('');
+  const paneRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  /*
+    THE KEYS.
+
+    Installed once, for the page's life: every mutation goes through a
+    functional updater so the deps stay empty and `revision` — which bumps ten
+    times a minute — cannot tear the listener down and rebuild it.
+
+    Guards first. A key pressed while typing belongs to the text field, not to
+    the desk, and `e.repeat` is dropped so a held key does not walk the
+    timeframe list at the keyboard's repeat rate.
+  */
+  useEffect(() => {
+    const editable = (el: EventTarget | null) => {
+      const n = el as HTMLElement | null;
+      return !!n && (n.tagName === 'INPUT' || n.tagName === 'TEXTAREA' || n.tagName === 'SELECT' || n.isContentEditable);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.isComposing || e.repeat) return;
+      if (editable(e.target) || editable(document.activeElement)) return;
+      const i = activeRef.current;
+      /* Read the config, compute the new pane, then set — rather than doing
+         any of it inside the updater. An updater that also calls setState is
+         not pure, and React is free to run it more than once. */
+      const cur = cfgRef.current;
+      const patch = (fn: (q: PaneCfg) => Partial<PaneCfg>, say: (q: PaneCfg) => string) => {
+        const q = cur.panes[i];
+        if (!q) return;
+        const next = { ...q, ...fn(q) };
+        setCfg(prev => ({ ...prev, panes: prev.panes.map((r, j) => (j === i ? next : r)) }));
+        setAnnounce(say(next));
+      };
+
+      switch (e.key) {
+        case '1': case '2': case '3': case '4': {
+          e.preventDefault();
+          const n = Number(e.key) as TerrainLayout;
+          setCfg(prev => ({ ...prev, layout: n }));
+          setAnnounce(n === 1 ? 'One chart' : `${n} charts`);
+          return;
+        }
+        case '[': case ']': {
+          e.preventDefault();
+          const n = cur.layout;
+          const next = ((Math.min(activeRaw0.current, n - 1) + (e.key === ']' ? 1 : -1)) + n) % n;
+          setActiveRaw(next);
+          /* Below `lg` the panes stack and the page scrolls, so the newly
+             active one can be off screen entirely. */
+          paneRefs.current[next]?.scrollIntoView({ block: 'nearest' });
+          setAnnounce(`Chart ${next + 1} of ${n}, ${cur.panes[next]?.ticker ?? ''}`);
+          return;
+        }
+        case '-': case '=':
+          e.preventDefault();
+          patch(q => ({ timeframe: stepTf(q.timeframe, e.key === '=' ? 1 : -1) }), q => `${q.ticker} ${q.timeframe}`);
+          return;
+        case 'r':
+          e.preventDefault();
+          patch(q => ({ ladder: !q.ladder }), q => `${q.ticker} strike rail ${q.ladder ? 'shown' : 'hidden'}`);
+          return;
+        case 'R': {
+          e.preventDefault();
+          const any = cur.panes.slice(0, cur.layout).some(q => q.ladder);
+          setCfg(prev => ({ ...prev, panes: prev.panes.map(q => ({ ...q, ladder: !any })) }));
+          setAnnounce(any ? 'Every strike rail hidden' : 'Strike rail on every chart');
+          return;
+        }
+        case 'f':
+          e.preventDefault();
+          setExpanded(v => (v === i ? null : i));
+          setAnnounce(`${cur.panes[i]?.ticker ?? ''} ${expandedRef.current === i ? 'collapsed' : 'expanded'}`);
+          return;
+        case 's':
+          e.preventDefault();
+          setMenu({ pane: i, which: 'symbol' });
+          return;
+        case 'c':
+          e.preventDefault();
+          setMenu({ pane: i, which: 'compare' });
+          return;
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   /*
     CROSSHAIR SYNC — one pane's hover, marking the same MOMENT on the others.
@@ -799,7 +977,7 @@ const Terrain = () => {
                 onClick={() => setCfg(prev => ({ ...prev, layout: n }))}
                 aria-pressed={active}
                 aria-label={`${n} ${n === 1 ? 'chart' : 'charts'}`}
-                title={`${n} ${n === 1 ? 'chart' : 'charts'}`}
+                title={`${n} ${n === 1 ? 'chart' : 'charts'} — press ${n}`}
                 className={`px-2.5 py-1 rounded font-mono text-[11px] font-semibold tnum transition-colors ${
                   active ? 'bg-white/[0.16] text-textPrimary' : 'text-textSecondary hover:text-textPrimary hover:bg-white/[0.06]'
                 }`}
@@ -819,7 +997,7 @@ const Terrain = () => {
         <button
           onClick={() => setCfg(prev => ({ ...prev, panes: prev.panes.map(p => ({ ...p, ladder: !anyLadder })) }))}
           aria-pressed={anyLadder}
-          title={anyLadder ? 'Hide every strike rail' : 'Show the strike rail beside every chart'}
+          title={anyLadder ? 'Hide every strike rail — Shift R' : 'Show the strike rail beside every chart — Shift R'}
           className={`pointer-events-auto inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-white/[0.08] backdrop-blur-[3px] font-mono text-[10px] uppercase tracking-wider transition-colors ${
             anyLadder ? 'bg-white/[0.16] text-textPrimary' : 'bg-canvas/40 text-textSecondary hover:text-textPrimary'
           }`}
@@ -836,6 +1014,11 @@ const Terrain = () => {
           </button>
         )}
       </div>
+
+      {/* The ring and the badge are feedback for people who can see them. A
+          key that rearranges the desk has to say so as well, or the whole
+          layer is silent to a screen reader. */}
+      <span className="sr-only" aria-live="polite">{announce}</span>
 
       {/*
         THE CHARTS ARE THE PAGE, so the grid takes every pixel the root has
@@ -864,6 +1047,12 @@ const Terrain = () => {
             heavyCount={cfg.layout >= 3 ? 2 : 3}
             onCrosshair={t => emitCrosshair(i, t)}
             registerSync={apply => registerSync(i, apply)}
+            isActive={i === active}
+            onActivate={() => setActiveRaw(i)}
+            paneCount={cfg.layout}
+            menuOpen={menu?.pane === i ? menu.which : null}
+            onMenu={which => setMenu(which ? { pane: i, which } : null)}
+            boxRef={el => { paneRefs.current[i] = el; }}
             /*
               THE ODD PANE OUT TAKES THE WHOLE ROW.
 
