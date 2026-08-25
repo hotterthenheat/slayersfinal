@@ -10,13 +10,11 @@
 ==================================================
 */
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronDown, Search } from 'lucide-react';
-import { useMarketData } from '../../context/MarketDataContext';
 import { useLaunch } from './LaunchTransition';
-import SignalBadge from '../ui/SignalBadge';
 import { NAV_GROUPS, NAV_GROUP_META, NAV_ITEMS, itemsByGroup } from './nav';
 
 interface TopBarProps {
@@ -24,22 +22,13 @@ interface TopBarProps {
 }
 
 const TopBar = ({ onOpenPalette }: TopBarProps) => {
-  const { activeTicker, marketData } = useMarketData();
   const { launch } = useLaunch();
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const [clock, setClock] = useState(() => new Date().toLocaleTimeString('en-US', { hour12: false }));
   const [dropdown, setDropdown] = useState<string | null>(null);
 
   // Which workflow the current route lives in — drives the underline.
   const activeGroup = NAV_ITEMS.find(i => pathname.startsWith(i.path))?.group ?? null;
-
-  useEffect(() => {
-    const id = setInterval(() => setClock(new Date().toLocaleTimeString('en-US', { hour12: false })), 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  const changeUp = (marketData?.changePercent ?? 0) >= 0;
 
   return (
     <header className="h-14 shrink-0 border-b border-borderSubtle bg-canvas/90 backdrop-blur flex items-center gap-4 px-4 relative z-40">
@@ -159,7 +148,16 @@ const TopBar = ({ onOpenPalette }: TopBarProps) => {
         })}
       </nav>
 
-      {/* Right cluster: search + live context */}
+      {/*
+        Right cluster: SEARCH, and nothing else (Noah, 2026-08-25).
+
+        It used to carry a ticker readout, a Sim badge and a wall clock. All
+        three were the same fact printed twice by the time you were anywhere
+        worth being: a chart desk shows its own symbol and price per pane, and
+        the tape now carries the clock on its own time axis. A global header
+        that repeats what the page under it already says is a header that
+        costs 14px of every page for nothing.
+      */}
       <div className="flex-1 flex items-center justify-end gap-4">
         <button
           onClick={onOpenPalette}
@@ -171,20 +169,6 @@ const TopBar = ({ onOpenPalette }: TopBarProps) => {
             ⌘K
           </kbd>
         </button>
-        <div className="hidden sm:flex items-center gap-2 font-mono text-xs">
-          <span className="text-textSecondary font-semibold">{activeTicker}</span>
-          <span className="text-textPrimary font-semibold tnum">
-            {marketData ? `$${marketData.spot.toFixed(2)}` : '--'}
-          </span>
-          {marketData && (
-            <span className={`tnum text-[11px] ${changeUp ? 'text-bull' : 'text-bear'}`}>
-              {changeUp ? '+' : ''}
-              {marketData.changePercent.toFixed(2)}%
-            </span>
-          )}
-        </div>
-        <SignalBadge tone="warn">Sim</SignalBadge>
-        <span className="hidden md:block font-mono text-xs text-textSecondary tnum select-none">{clock}</span>
       </div>
     </header>
   );

@@ -14,7 +14,7 @@ import StrikeChart, {
 } from '../../components/gex/StrikeChart';
 import ChartToolbar from '../../components/gex/ChartToolbar';
 import CompareControl from '../../components/gex/CompareControl';
-import PaneLadder from '../../components/gex/PaneLadder';
+import PaneLadder, { LADDER_WIDTH_PX } from '../../components/gex/PaneLadder';
 import TickerQuickPick from '../../components/gex/TickerQuickPick';
 import SpotPrice from '../../components/gex/SpotPrice';
 import { CANDLE_THEMES, chartSurface, useCandleThemeKey } from '../../components/gex/candleTheme';
@@ -337,105 +337,14 @@ const Pane = ({ cfg, onCfg, revision, expanded, onToggleExpand, index, tall, hea
         }`}
         style={{ animationDelay: `${index * 60}ms`, background: surface }}
       >
-        {/* ── who this pane is ────────────────────────────────────────────
-            ITS OWN ROW, and that is not a stylistic preference. Sharing one
-            wrapping line with the toolbar put the timeframe pills ABOVE the
-            symbol at three-up: `spread` pins the pills left and pushes the
-            rest right, so the first thing to wrap was the whole identity
-            block, and the pane announced its interval before it announced
-            what it was charting. Two rows cannot do that. */}
-        {/*
-          ONE ROW, ALWAYS — it does not wrap, it clips.
-
-          Wrapping made the panes disagree about where their charts start: the
-          heaviest-strike read is as wide as its numbers happen to be, so a
-          pane holding three $200M strikes pushed the expand button onto a
-          second line while the pane beside it stayed on one, and the two
-          charts began at different heights. In a side-by-side workspace that
-          reads as a rendering fault. The identity and the button are fixed;
-          only the strike read gives, and it gives by being cut off at the
-          pane's edge — visibly, predictably, and equally in every pane.
-        */}
-        <div className="shrink-0 w-full select-none flex items-center gap-2 px-2 pt-1.5 overflow-hidden">
-          <span className="shrink-0 inline-flex items-center gap-1.5">
-            <TickerQuickPick ticker={ticker} onPick={t => onCfg({ ticker: t })} />
-            {/* TradingView's "+" beside the symbol capsule — cross another
-                symbol onto this tape. Per pane, like everything else. */}
-            <CompareControl current={ticker} compares={compares} onAdd={addCompare} onRemove={removeCompare} />
-          </span>
-          <span className="shrink-0">
-            <SpotPrice value={levels.spot} />
-          </span>
-          <span className={`shrink-0 font-mono text-[11px] font-semibold tnum ${up ? 'text-bull' : 'text-bear'}`}>
-            {up ? '+' : ''}
-            {changePct.toFixed(2)}%
-          </span>
-
-          {/* ── the book, on the same line ────────────────────────────────
-              The three heaviest strikes in the pane's window with their
-              signed exposure — the same rows the rail draws, so the line and
-              the column can never name different strikes. It rides beside the
-              identity because a pane that spends four rows on chrome is a
-              pane with no room left to chart anything. Gold is put-dominant,
-              steel call-dominant: the desk's ramp poles, so this line, the
-              rail and the trails under it all say the same thing in the same
-              colours. */}
-          {heavy.length > 0 && (
-            <span
-              className="flex items-center gap-2.5 min-w-0 overflow-hidden whitespace-nowrap"
-              /* Anything that still does not fit fades out over the last
-                 20px, so a cut value never reads as a whole one. */
-              style={{
-                maskImage: 'linear-gradient(to right, #000 calc(100% - 20px), transparent)',
-                WebkitMaskImage: 'linear-gradient(to right, #000 calc(100% - 20px), transparent)',
-              }}
-            >
-              <span className="shrink-0 font-mono text-[9px] uppercase tracking-widest text-textMuted">Heaviest</span>
-              {heavy.map(row => (
-                <span key={row.strike} className="shrink-0 font-mono text-[10px] tnum whitespace-nowrap">
-                  <span className="text-textSecondary">
-                    {row.strike % 1 === 0 ? row.strike.toFixed(0) : row.strike.toFixed(2)}
-                  </span>
-                  <span className={`ml-1.5 font-semibold ${row.value >= 0 ? 'text-[#F5C542]' : 'text-[#AAB6C6]'}`}>
-                    {fmtUsd(row.value)}
-                  </span>
-                </span>
-              ))}
-            </span>
-          )}
-
-          <button
-            onClick={onToggleExpand}
-            aria-pressed={expanded}
-            aria-label={expanded ? `Collapse ${ticker}` : `Expand ${ticker} to the full screen`}
-            title={expanded ? 'Collapse — Esc' : 'Expand this pane'}
-            className="ml-auto shrink-0 inline-flex items-center justify-center w-6 h-6 rounded text-textMuted hover:text-textPrimary hover:bg-white/[0.05] transition-colors"
-          >
-            {expanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-          </button>
-        </div>
-
-        {/* ── and how this pane is set up. Its own, every one of them. ──── */}
-        <div className="shrink-0 w-full px-2 pt-1 pb-1">
-          <ChartToolbar
-            minimal
-            candles
-            alerts
-            timeframe={timeframe}
-            onTimeframe={tf => onCfg({ timeframe: tf })}
-            overlays={overlays}
-            onOverlays={o => onCfg({ overlays: o })}
-            indicators={indicators}
-            onIndicators={i => onCfg({ indicators: i })}
-            chartStyle={chartStyle}
-            onChartStyle={s => onCfg({ chartStyle: s })}
-          />
-        </div>
-
-        {/* Chart and rail on ONE line. min-w-0 on the chart is load-bearing:
-            a flex item wider than its line does not wrap, it spills, and a
-            chart's natural width is whatever its container was last tick. */}
-        <div className="flex-1 min-h-0 flex">
+        {/* Chart and rail on ONE line, and that line is the WHOLE pane —
+            `absolute inset-0`, not a flex row under a header. The header
+            floats on top of the chart instead of sitting above it, so the
+            tape gets every pixel the pane has. min-w-0 on the chart column is
+            load-bearing: a flex item wider than its line does not wrap, it
+            spills, and a chart's natural width is whatever its container was
+            last tick. */}
+        <div className="absolute inset-0 flex">
           <div className="relative flex-1 min-w-0">
             <StrikeChart
               ticker={ticker}
@@ -454,14 +363,119 @@ const Pane = ({ cfg, onCfg, revision, expanded, onToggleExpand, index, tall, hea
               frameless
             />
 
-            {/* ── the crossed symbols, over the tape's top-left corner ──────
-                Where a platform puts them, and where they cost the pane no
-                header height: one quiet row each, its line's own ink, its
-                live price, and the only hand-removal outside the + menu.
-                pointer-events are off on the stack and back on for the
-                buttons, so the legend never eats a drag on the chart. */}
+            {/*
+              ── who this pane is, and how it is set up ──────────────────
+              FLOATING OVER THE TAPE, not stacked above it (Noah, 2026-08-25:
+              "find a way in logic to make that stuff transparently fit into
+              the chart screens so the charts can be damn near full screen").
+              Two header rows in flow cost every pane ~56px of chart; over the
+              tape they cost nothing, because the top of a chart is the
+              emptiest part of it — price sits in the middle and volume at the
+              floor.
+
+              SCOPED TO THE CHART COLUMN, not the pane. Spanning the pane put
+              the strip across the strike rail's own header and clipped it to
+              "TRIKE ×". The rail is a sibling of this column, so bounding the
+              overlay to the column is the fix — not a z-index, and not a
+              right-margin that has to be kept in step with the rail's width.
+
+              The strip is `pointer-events-none` and each control group turns
+              them back on. Without that the invisible gaps BETWEEN the
+              controls swallow drags on the chart underneath, and a chart you
+              cannot pan by its top third is broken in a way that looks like
+              nothing at all.
+            */}
+            <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-col items-start gap-1 p-1.5">
+              {/*
+                ONE ROW, ALWAYS — it does not wrap, it clips.
+
+                Wrapping made the panes disagree about where their charts
+                start: the heaviest-strike read is as wide as its numbers
+                happen to be, so a pane holding three $200M strikes pushed the
+                expand button onto a second line while the pane beside it
+                stayed on one. The identity and the button are fixed; only the
+                strike read gives, and it gives by being cut off at the pane's
+                edge — visibly, predictably, and equally in every pane.
+              */}
+              <div className="pointer-events-auto max-w-full select-none flex items-center gap-2 rounded-md bg-canvas/55 backdrop-blur-[2px] px-2 py-1 overflow-hidden">
+                <span className="shrink-0 inline-flex items-center gap-1.5">
+                  <TickerQuickPick ticker={ticker} onPick={t => onCfg({ ticker: t })} />
+                  {/* TradingView's "+" beside the symbol capsule — cross
+                      another symbol onto this tape. Per pane, like the rest. */}
+                  <CompareControl current={ticker} compares={compares} onAdd={addCompare} onRemove={removeCompare} />
+                </span>
+                <span className="shrink-0">
+                  <SpotPrice value={levels.spot} />
+                </span>
+                <span className={`shrink-0 font-mono text-[11px] font-semibold tnum ${up ? 'text-bull' : 'text-bear'}`}>
+                  {up ? '+' : ''}
+                  {changePct.toFixed(2)}%
+                </span>
+
+                {/* The three heaviest strikes in the pane's window with their
+                    signed exposure — the same rows the rail draws, so the line
+                    and the column can never name different strikes. Gold is
+                    put-dominant, steel call-dominant: the desk's ramp poles. */}
+                {heavy.length > 0 && (
+                  <span
+                    className="flex items-center gap-2.5 min-w-0 overflow-hidden whitespace-nowrap"
+                    /* Anything that still does not fit fades out over the last
+                       20px, so a cut value never reads as a whole one. */
+                    style={{
+                      maskImage: 'linear-gradient(to right, #000 calc(100% - 20px), transparent)',
+                      WebkitMaskImage: 'linear-gradient(to right, #000 calc(100% - 20px), transparent)',
+                    }}
+                  >
+                    <span className="shrink-0 font-mono text-[9px] uppercase tracking-widest text-textMuted">Heaviest</span>
+                    {heavy.map(row => (
+                      <span key={row.strike} className="shrink-0 font-mono text-[10px] tnum whitespace-nowrap">
+                        <span className="text-textSecondary">
+                          {row.strike % 1 === 0 ? row.strike.toFixed(0) : row.strike.toFixed(2)}
+                        </span>
+                        <span className={`ml-1.5 font-semibold ${row.value >= 0 ? 'text-[#F5C542]' : 'text-[#AAB6C6]'}`}>
+                          {fmtUsd(row.value)}
+                        </span>
+                      </span>
+                    ))}
+                  </span>
+                )}
+
+                <button
+                  onClick={onToggleExpand}
+                  aria-pressed={expanded}
+                  aria-label={expanded ? `Collapse ${ticker}` : `Expand ${ticker} to the full screen`}
+                  title={expanded ? 'Collapse — Esc' : 'Expand this pane'}
+                  className="shrink-0 inline-flex items-center justify-center w-6 h-6 rounded text-textMuted hover:text-textPrimary hover:bg-white/[0.05] transition-colors"
+                >
+                  {expanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+
+              {/* Its own, every one of them. */}
+              <div className="pointer-events-auto max-w-full rounded-md bg-canvas/55 backdrop-blur-[2px] px-2 py-1">
+                <ChartToolbar
+                  minimal
+                  candles
+                  alerts
+                  timeframe={timeframe}
+                  onTimeframe={tf => onCfg({ timeframe: tf })}
+                  overlays={overlays}
+                  onOverlays={o => onCfg({ overlays: o })}
+                  indicators={indicators}
+                  onIndicators={i => onCfg({ indicators: i })}
+                  chartStyle={chartStyle}
+                  onChartStyle={s => onCfg({ chartStyle: s })}
+                />
+              </div>
+            </div>
+
+            {/* ── the crossed symbols, under the floating header ───────────
+                One quiet row each: its line's own ink, its live price, and the
+                only hand-removal outside the + menu. pointer-events are off on
+                the stack and back on for the buttons, so the legend never eats
+                a drag on the chart. */}
             {compares.length > 0 && (
-              <div className="pointer-events-none absolute top-1 left-2 z-10 flex flex-col gap-0.5">
+              <div className="pointer-events-none absolute top-[74px] left-3 z-10 flex flex-col gap-0.5">
                 {compares.map(c => (
                   <span key={`${c.ticker}:${c.mode}`} className="flex items-center gap-1.5">
                     <span className="w-2 h-[3px] rounded-full" style={{ background: c.ink }} aria-hidden />
@@ -487,6 +501,7 @@ const Pane = ({ cfg, onCfg, revision, expanded, onToggleExpand, index, tall, hea
               </div>
             )}
           </div>
+
           {ladder && rail.rows.length > 0 && (
             <PaneLadder
               ticker={ticker}
@@ -548,23 +563,48 @@ const Terrain = () => {
       built page, not guessed at. Below `lg` every one of those comes off and
       the page scrolls normally.
     */
-    <div className="-mx-4 lg:-mx-6 2xl:-mx-8 lg:-mt-5 lg:-mb-16 px-1.5 lg:pt-1.5 lg:pb-1 flex flex-col gap-1.5 lg:h-[calc(100vh-3.5rem)] lg:min-h-0">
-      {/* ── The rail. Only what belongs to the ARRANGEMENT. ─────────────── */}
-      <div className="shrink-0 flex items-center gap-3 flex-wrap">
-        {/* ONE LINE. The title and its caption used to stack, and two lines of
-            chrome at the top of the page is two lines taken off every chart
-            below it — on a desk whose entire point is the size of the charts. */}
-        <h1 className="font-mono text-[12px] font-bold uppercase tracking-wider text-textPrimary">
-          Terrain
-          <span className="ml-2 font-normal text-[10px] tracking-widest text-textMuted">
-            {cfg.layout} {cfg.layout === 1 ? 'chart' : 'charts'} · each on its own
-          </span>
-        </h1>
+    <div className="relative -mx-4 lg:-mx-6 2xl:-mx-8 lg:-mt-5 lg:-mb-16 px-1.5 lg:py-1.5 flex flex-col lg:h-[calc(100vh-3.5rem)] lg:min-h-0">
+      {/*
+        THE ARRANGEMENT CONTROLS, floating over the top-right of the grid.
 
+        There is no page title and no caption any more (Noah, 2026-08-25: "i
+        don't need to be told what page i'm on i know what i clicked"). He is
+        right — a heading that names the thing you just navigated to is a line
+        of chrome that tells a reader something they did on purpose thirty
+        seconds ago, and on this desk that line was coming out of the charts.
+
+        What is left is the two controls that belong to the ARRANGEMENT rather
+        than to any chart, and they float rather than sit in flow, so they
+        cost the grid nothing. Top RIGHT, because every pane's own controls
+        float top left and two translucent strips on the same corner would
+        stack into an unreadable pile.
+      */}
+      <div
+        /*
+          BOTTOM right, not top right.
+
+          Top right put them straight through the last pane's own header: a
+          pane's identity strip is as wide as its numbers, and at three-up the
+          heaviest-strike read carries it most of the way across. Two floating
+          things on the same corner is one unreadable thing.
+
+          The bottom right of a chart is the emptiest region on this desk — it
+          is the room held open AHEAD of the last bar, by design — so controls
+          parked there cover nothing. Lifted clear of the time axis, and
+          cleared past the last pane's rail when it has one; the rail's width
+          comes from its own export rather than a number copied here that
+          drifts the first time somebody edits the other file.
+        */
+        style={{
+          right: (panes[panes.length - 1]?.ladder ? LADDER_WIDTH_PX : 0) + 10,
+          bottom: TIME_AXIS_PX + 12,
+        }}
+        className="pointer-events-none absolute z-30 flex items-center gap-2"
+      >
         <div
           role="group"
           aria-label="How many charts"
-          className="inline-flex flex-wrap items-center gap-0.5 border border-borderSubtle bg-panel rounded-md p-0.5"
+          className="pointer-events-auto inline-flex flex-wrap items-center gap-0.5 border border-borderSubtle bg-canvas/70 backdrop-blur-[2px] rounded-md p-0.5"
         >
           <Rows3 className="w-3.5 h-3.5 mx-1.5 text-textMuted shrink-0" aria-hidden />
           {LAYOUTS.map(n => {
@@ -596,8 +636,8 @@ const Terrain = () => {
           onClick={() => setCfg(prev => ({ ...prev, panes: prev.panes.map(p => ({ ...p, ladder: !anyLadder })) }))}
           aria-pressed={anyLadder}
           title={anyLadder ? 'Hide every strike rail' : 'Show the strike rail beside every chart'}
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-borderSubtle font-mono text-[10px] uppercase tracking-wider transition-colors ${
-            anyLadder ? 'bg-[#ededed] text-[#0a0a0a]' : 'bg-panel text-textSecondary hover:text-textPrimary'
+          className={`pointer-events-auto inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-borderSubtle font-mono text-[10px] uppercase tracking-wider transition-colors ${
+            anyLadder ? 'bg-[#ededed] text-[#0a0a0a]' : 'bg-canvas/70 backdrop-blur-[2px] text-textSecondary hover:text-textPrimary'
           }`}
         >
           Strikes
@@ -606,7 +646,7 @@ const Terrain = () => {
         {expanded !== null && (
           <button
             onClick={() => setExpanded(null)}
-            className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-borderSubtle font-mono text-[10px] uppercase tracking-wider text-textSecondary hover:text-textPrimary"
+            className="pointer-events-auto inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-borderSubtle bg-canvas/70 backdrop-blur-[2px] font-mono text-[10px] uppercase tracking-wider text-textSecondary hover:text-textPrimary"
           >
             <X className="w-3.5 h-3.5" /> Esc
           </button>

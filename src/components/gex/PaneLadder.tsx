@@ -84,6 +84,11 @@ interface PaneLadderProps {
 */
 const BAR_ALPHA = 0.5;
 
+/** The rail's width, in px. Exported because a host that floats controls over
+    the top-right of a pane has to clear it, and two places guessing the same
+    number is how they end up disagreeing after one of them is edited. */
+export const LADDER_WIDTH_PX = 132;
+
 /** Strikes print whole when they are whole — the rule every strike list uses. */
 const fmtStrike = (v: number): string => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
 
@@ -181,7 +186,8 @@ const PaneLadder = ({
 
   return (
     <div
-      className="shrink-0 w-[132px] flex flex-col min-h-0 border-l border-borderSubtle/70"
+      style={{ width: LADDER_WIDTH_PX }}
+      className="shrink-0 flex flex-col min-h-0 border-l border-borderSubtle/70"
       aria-label={`${ticker} exposure by strike`}
     >
       <div className="shrink-0 flex items-center gap-1 pl-2 pr-1 py-0.5 border-b border-borderSubtle/70 select-none">
