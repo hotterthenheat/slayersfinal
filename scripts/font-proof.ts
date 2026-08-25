@@ -141,6 +141,25 @@ check(
   html.includes(`href="${faceUrl}"`) ? `preloads ${faceUrl}` : `preload does not name ${faceUrl}`
 );
 
+/*
+  And every other asset index.html names has to be on disk too. A <link> to a
+  file that is not there fails silently: no console error a user would see, no
+  build failure, just the browser's default tab glyph — which is the state the
+  page was in before it declared an icon at all.
+*/
+const declared = [...html.matchAll(/(?:href|content)="(\/[^"]+\.(?:svg|png|ico|webmanifest|woff2?))"/g)].map(m => m[1]);
+const missingAssets = declared.filter(a => !existsSync(path.join(ROOT, 'public', a.replace(/^\//, ''))));
+check(
+  'every asset index.html declares exists in public/',
+  declared.length > 0 && missingAssets.length === 0,
+  declared.length === 0 ? 'no assets declared — did the head change?' : missingAssets.length ? `missing: ${missingAssets.join(', ')}` : `${declared.length} declared, all present`
+);
+check(
+  'index.html declares a tab icon',
+  /<link[^>]+rel="icon"/.test(html),
+  /<link[^>]+rel="icon"/.test(html) ? 'rel="icon" present' : 'no icon declared — browsers will probe /favicon.ico'
+);
+
 // ---- 4. no font ships that we cannot serve ---------------------------------
 
 /*
