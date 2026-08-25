@@ -744,7 +744,7 @@ const CampaignAnalysis = ({
           sweep that surfaced the row is named. */}
       {gradedAt != null && (
         <p className="-mt-1 font-mono text-[11px] text-textSecondary">
-          Surfaced on the <span className="text-textPrimary tnum">{gradedAt}</span> sweep · reading live since
+          Surfaced on the <span className="text-textPrimary tnum">{gradedAt}</span> sweep · reading live ever since
         </p>
       )}
 
