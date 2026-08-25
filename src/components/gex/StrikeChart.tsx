@@ -148,7 +148,7 @@ const LEVEL_SPEC: {
 }[] = [
   { key: 'callWall', color: CALL_WALL, title: 'CALL WALL', style: LineStyle.Solid, width: 1 },
   { key: 'putWall', color: PUT_WALL, title: 'PUT WALL', style: LineStyle.Solid, width: 1 },
-  { key: 'flip', color: FLIP, title: 'FLIP', style: LineStyle.Dashed, width: 1 },
+  { key: 'flip', color: FLIP, title: 'FLIP ZONE', style: LineStyle.Dashed, width: 1 },
   { key: 'king', color: KING, title: 'KING', style: LineStyle.Solid, width: 2 },
 ];
 /* NO axis chips at all now — the king's capsule left the right pane too
@@ -157,8 +157,65 @@ const LEVEL_SPEC: {
    band = king, green/red beads = walls, blue ticks = flip. LEVEL_SPEC stays
    for the tween plumbing and any future re-enable. */
 const LINE_LEVELS: typeof LEVEL_SPEC = [];
+
+/*
+  One colour composited over another, returned SOLID.
+
+  lightweight-charts repaints a price line's axis capsule opaque: hand it
+  `rgba(125,211,252,0.45)` and the canvas comes back holding
+  `rgb(125,211,252)` — measured, 1984 pixels of it, at full strength. So
+  asking the library for a translucent capsule does not work, and the blend
+  has to happen before the colour is handed over. Against the chart's own
+  backdrop the result is indistinguishable from real transparency, and it
+  cannot be undone by whatever the library does with the value next.
+
+  The backdrop is the ACTIVE theme's canvas, not a hardcoded black: the six
+  dark themes run from #050505 to #120D1D, and blending violet-black artwork
+  against pure black leaves a capsule that does not sit on its own surface.
+*/
+const mixInk = (hex: string, backdrop: string, alpha: number): string => {
+  const rgb = (v: string): [number, number, number] => {
+    const raw = v.replace('#', '');
+    const h = raw.length === 3 ? raw.split('').map(c => c + c).join('') : raw;
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  };
+  const [r1, g1, b1] = rgb(hex);
+  const [r2, g2, b2] = rgb(/^#[0-9a-f]{3,6}$/i.test(backdrop) ? backdrop : '#0a0a0a');
+  const c = (a: number, b: number) => Math.round(a * alpha + b * (1 - alpha));
+  return `rgb(${c(r1, r2)},${c(g1, g2)},${c(b1, b2)})`;
+};
+
+/*
+  WHAT `axisLevels` ACTUALLY NAMES — the flip and the king, and nothing else.
+
+  The walls are deliberately absent (Noah, 2026-08-25: "you don't have to add
+  call wall or put wall to the right bar cause on the screen the green node is
+  the call wall and the red is the put wall"). He is right, and it is the
+  stronger argument: the field ALREADY says it. A green node band is the call
+  wall and a red one is the put wall, so a green capsule reading CALL WALL in
+  the gutter is the same fact printed twice, in the loudest available form,
+  covering the tape while it does it. The flip and the king have no such
+  reading — a dashed blue rule and a magenta band are positions, not names —
+  so those two get named and the rest of the axis stays quiet.
+
+  And the ink is TRANSLUCENT here, not the solid palette value (same note:
+  "everything is transparency there i need mines to be like that not all out
+  there like this"). The palette colours are for LINES, which are one pixel
+  tall and can afford to be saturated. An axis capsule is a filled block, and
+  the same colour at full strength reads as a button stuck on the chart. At
+  these alphas the capsule sits UNDER the reading rather than on top of it,
+  and the label still clears contrast against the black gutter.
+*/
+const AXIS_ALPHA: Partial<Record<(typeof LEVEL_SPEC)[number]['key'], number>> = { flip: 0.42, king: 0.42 };
+
 /** What a chart actually draws: nothing, unless it asked to name its levels. */
-const lineLevelsFor = (axisLevels: boolean): typeof LEVEL_SPEC => (axisLevels ? LEVEL_SPEC : LINE_LEVELS);
+const lineLevelsFor = (axisLevels: boolean, backdrop: string): typeof LEVEL_SPEC =>
+  axisLevels
+    ? LEVEL_SPEC.filter(sp => sp.key in AXIS_ALPHA).map(sp => ({
+        ...sp,
+        color: mixInk(sp.color, backdrop, AXIS_ALPHA[sp.key] as number),
+      }))
+    : LINE_LEVELS;
 
 const toCandle = (b: Candle) => ({
   time: b.time as UTCTimestamp,
@@ -778,7 +835,7 @@ const StrikeChart = ({
     // Chips, not lines: the level lives as a colored tag on the price axis.
     // Hovering its legend chip flashes the full line for orientation.
     const L = levelsRef.current;
-    for (const spec of lineLevelsFor(axisLevels)) {
+    for (const spec of lineLevelsFor(axisLevels, chartSurface(getCandleTheme()).bg)) {
       levelLinesRef.current[spec.key] = candleSeries.createPriceLine({
         price: L[spec.key],
         color: spec.color,
@@ -791,7 +848,9 @@ const StrikeChart = ({
     }
     shownLevelsRef.current = { ...L };
     levelTickerRef.current = ticker;
-  }, [ticker, overlays.levels, replay, mainNonce, axisLevels]);
+    // themeKey: the capsules are pre-blended against the theme's own canvas,
+    // so a theme swap has to rebuild them or they keep the old surface's tint
+  }, [ticker, overlays.levels, replay, mainNonce, axisLevels, themeKey]);
 
   /*
     TIME LEFT IN THE BAR, in the price gutter under the live price.

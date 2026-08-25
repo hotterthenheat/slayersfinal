@@ -62,6 +62,23 @@ interface PaneLadderProps {
   axisInset?: number;
 }
 
+/*
+  The bars are TRANSLUCENT (Noah, 2026-08-25: "everything is transparency
+  there i need mines to be like that not all out there like this").
+
+  Full-strength ramp values are right for a heatmap CELL, where the colour is
+  the entire content of the cell and it is read against its neighbours. A rail
+  beside a chart is not that: it sits in the reader's periphery while they
+  watch the tape, and at full strength a column of solid gold and platinum
+  blocks pulls the eye off the thing it is there to annotate. At 0.5 the ramp
+  keeps its whole ordering — both poles, the gamma curve, the neutral floor —
+  and stops competing with the candles.
+
+  Nothing about contrast rides on this: the price and the tags sit in their
+  own lanes on the bare surface, never over the bar.
+*/
+const BAR_ALPHA = 0.5;
+
 /** Strikes print whole when they are whole — the rule every strike list uses. */
 const fmtStrike = (v: number): string => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
 
@@ -210,7 +227,7 @@ const PaneLadder = ({
                 <span
                   aria-hidden
                   className="absolute inset-y-0 left-0 rounded-[2px] transition-[width] duration-700"
-                  style={{ width: `${pct.toFixed(1)}%`, backgroundColor: `rgb(${rgb[0]},${rgb[1]},${rgb[2]})` }}
+                  style={{ width: `${pct.toFixed(1)}%`, backgroundColor: `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${BAR_ALPHA})` }}
                 />
               </span>
               <span

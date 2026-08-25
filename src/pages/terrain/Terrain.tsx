@@ -9,8 +9,11 @@ import StrikeChart, {
   type ChartIndicators,
   type ChartOverlays,
   type ChartStyle,
+  type CompareEntry,
+  type CompareMode,
 } from '../../components/gex/StrikeChart';
 import ChartToolbar from '../../components/gex/ChartToolbar';
+import CompareControl from '../../components/gex/CompareControl';
 import PaneLadder from '../../components/gex/PaneLadder';
 import TickerQuickPick from '../../components/gex/TickerQuickPick';
 import SpotPrice from '../../components/gex/SpotPrice';
@@ -79,6 +82,9 @@ interface PaneCfg {
   overlays: ChartOverlays;
   indicators: ChartIndicators;
   chartStyle: ChartStyle;
+  /** Symbols crossed onto this pane's tape — the compare overlay. Per pane,
+      like everything else here, and persisted with it. */
+  compares: CompareEntry[];
 }
 
 interface TerrainCfg {
@@ -90,6 +96,11 @@ interface TerrainCfg {
 }
 
 const TF_VALUES = new Set<string>(TIMEFRAMES.map(t => t.value));
+const COMPARE_MODES = new Set<CompareMode>(['percent', 'scale', 'pane']);
+/* The desk's comparison inks (LiveChartWidget's set, verbatim): none of them
+   collide with the field's gold/steel, the levels' magenta/green/red/blue, or
+   the interface's lime. Four, so a pane can cross four symbols at most. */
+const COMPARE_INKS = ['#5B9CF6', '#BBB2E8', '#EDE4CD', '#6BD3C7'];
 const STYLES = new Set<ChartStyle>(['candles', 'hollow', 'bars', 'line', 'step', 'area', 'baseline']);
 
 /** The pane slots differ only by symbol at first; a reader sets the rest. */
@@ -100,6 +111,7 @@ const defaultPanes = (): PaneCfg[] =>
     overlays: { ...DEFAULT_OVERLAYS },
     indicators: { ...DEFAULT_INDICATORS },
     chartStyle: 'candles' as ChartStyle,
+    compares: [] as CompareEntry[],
   }));
 
 const defaults = (): TerrainCfg => ({ layout: 3, panes: defaultPanes(), ladder: true });
@@ -113,6 +125,20 @@ function readPane(raw: unknown, def: PaneCfg): PaneCfg {
     overlays: { ...DEFAULT_OVERLAYS, ...(c.overlays && typeof c.overlays === 'object' ? c.overlays : {}) },
     indicators: { ...DEFAULT_INDICATORS, ...(c.indicators && typeof c.indicators === 'object' ? c.indicators : {}) },
     chartStyle: typeof c.chartStyle === 'string' && STYLES.has(c.chartStyle as ChartStyle) ? (c.chartStyle as ChartStyle) : def.chartStyle,
+    /* Each entry validated on its own: a stored comparison whose symbol was
+       renamed, or whose ink went missing, must not take the pane down. */
+    compares: Array.isArray(c.compares)
+      ? (c.compares as unknown[])
+          .filter(
+            (e): e is CompareEntry =>
+              !!e &&
+              typeof e === 'object' &&
+              typeof (e as CompareEntry).ticker === 'string' &&
+              typeof (e as CompareEntry).ink === 'string' &&
+              COMPARE_MODES.has((e as CompareEntry).mode)
+          )
+          .slice(0, COMPARE_INKS.length)
+      : def.compares,
   };
 }
 
@@ -192,10 +218,20 @@ const COLS: Record<TerrainLayout, string> = {
 */
 const TIME_AXIS_PX = 26;
 
-/** The three heaviest strikes in the pane's window, signed — the one-line
-    read of where the book is, and the same rows the rail draws. */
-const heavyThree = (rows: { strike: number; value: number }[]) =>
-  [...rows].sort((a, b) => Math.abs(b.value) - Math.abs(a.value)).slice(0, 3);
+/*
+  The heaviest strikes in the pane's window, signed — the one-line read of
+  where the book is, and the same rows the rail draws.
+
+  HOW MANY depends on the layout, and that is a correctness fix rather than a
+  tidiness one. The row clips at the pane's edge, and clipping happens WITHIN
+  an entry, not between them: at three-up a pane printed "425 -$13", which is
+  the front of -$135.6M and reads as thirteen dollars. A number cut in half is
+  not a shortened number, it is a different number. Narrow panes therefore
+  carry fewer entries, and what still clips is faded out so an incomplete
+  value cannot pass for a complete one.
+*/
+const heaviest = (rows: { strike: number; value: number }[], n: number) =>
+  [...rows].sort((a, b) => Math.abs(b.value) - Math.abs(a.value)).slice(0, n);
 
 interface PaneProps {
   cfg: PaneCfg;
@@ -207,10 +243,35 @@ interface PaneProps {
   index: number;
   /** Panes get shorter as the grid gets wider — one chart earns the height */
   tall: boolean;
+  /** How many heaviest-strike entries this pane's width can print whole */
+  heavyCount: number;
 }
 
-const Pane = ({ cfg, onCfg, ladder, revision, expanded, onToggleExpand, index, tall }: PaneProps) => {
-  const { ticker, timeframe, overlays, indicators, chartStyle } = cfg;
+const Pane = ({ cfg, onCfg, ladder, revision, expanded, onToggleExpand, index, tall, heavyCount }: PaneProps) => {
+  const { ticker, timeframe, overlays, indicators, chartStyle, compares } = cfg;
+
+  /* Add / remove a crossed symbol. Capped at the ink list's length so every
+     comparison on a pane is a DIFFERENT colour — two lines sharing an ink is
+     a chart that cannot be read, and the legend below would name them both
+     the same. A symbol already crossed, or the pane's own, is refused. */
+  const addCompare = (t: string, mode: CompareMode) =>
+    onCfg({
+      compares: (() => {
+        if (compares.length >= COMPARE_INKS.length || compares.some(c => c.ticker === t) || t === ticker) return compares;
+        const ink = COMPARE_INKS.find(i => !compares.some(c => c.ink === i)) ?? COMPARE_INKS[0];
+        return [...compares, { ticker: t, mode, ink }];
+      })(),
+    });
+  const removeCompare = (t: string, mode: CompareMode) =>
+    onCfg({ compares: compares.filter(c => !(c.ticker === t && c.mode === mode)) });
+
+  /* A comparison is drawn against THIS pane's symbol, so crossing SPY with
+     IWM and then switching the pane to IWM would leave it comparing a symbol
+     with itself. Clear on a symbol change, the same reason focus clears. */
+  useEffect(() => {
+    if (compares.length) onCfg({ compares: [] });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ticker]);
 
   // Each pane reads its own book; revision keeps the levels tracking the tick
   const levels = useMemo(
@@ -238,7 +299,7 @@ const Pane = ({ cfg, onCfg, ladder, revision, expanded, onToggleExpand, index, t
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [ticker, revision]
   );
-  const heavy = useMemo(() => heavyThree(rail.rows), [rail]);
+  const heavy = useMemo(() => heaviest(rail.rows, heavyCount), [rail, heavyCount]);
 
   /* What the reader clicked in the rail, flashed on the chart. Clicking the
      same strike again clears it, so the rail is a toggle rather than a thing
@@ -283,8 +344,11 @@ const Pane = ({ cfg, onCfg, ladder, revision, expanded, onToggleExpand, index, t
           pane's edge — visibly, predictably, and equally in every pane.
         */}
         <div className="shrink-0 w-full select-none flex items-center gap-2 px-2 pt-1.5 overflow-hidden">
-          <span className="shrink-0">
+          <span className="shrink-0 inline-flex items-center gap-1.5">
             <TickerQuickPick ticker={ticker} onPick={t => onCfg({ ticker: t })} />
+            {/* TradingView's "+" beside the symbol capsule — cross another
+                symbol onto this tape. Per pane, like everything else. */}
+            <CompareControl current={ticker} compares={compares} onAdd={addCompare} onRemove={removeCompare} />
           </span>
           <span className="shrink-0">
             <SpotPrice value={levels.spot} />
@@ -304,7 +368,15 @@ const Pane = ({ cfg, onCfg, ladder, revision, expanded, onToggleExpand, index, t
               rail and the trails under it all say the same thing in the same
               colours. */}
           {heavy.length > 0 && (
-            <span className="flex items-center gap-2.5 min-w-0 overflow-hidden whitespace-nowrap">
+            <span
+              className="flex items-center gap-2.5 min-w-0 overflow-hidden whitespace-nowrap"
+              /* Anything that still does not fit fades out over the last
+                 20px, so a cut value never reads as a whole one. */
+              style={{
+                maskImage: 'linear-gradient(to right, #000 calc(100% - 20px), transparent)',
+                WebkitMaskImage: 'linear-gradient(to right, #000 calc(100% - 20px), transparent)',
+              }}
+            >
               <span className="shrink-0 font-mono text-[9px] uppercase tracking-widest text-textMuted">Heaviest</span>
               {heavy.map(row => (
                 <span key={row.strike} className="shrink-0 font-mono text-[10px] tnum whitespace-nowrap">
@@ -351,7 +423,7 @@ const Pane = ({ cfg, onCfg, ladder, revision, expanded, onToggleExpand, index, t
             a flex item wider than its line does not wrap, it spills, and a
             chart's natural width is whatever its container was last tick. */}
         <div className="flex-1 min-h-0 flex">
-          <div className="flex-1 min-w-0">
+          <div className="relative flex-1 min-w-0">
             <StrikeChart
               ticker={ticker}
               revision={revision}
@@ -362,11 +434,45 @@ const Pane = ({ cfg, onCfg, ladder, revision, expanded, onToggleExpand, index, t
               indicators={indicators}
               chartStyle={chartStyle}
               prints={prints}
+              compares={compares}
               focusPrice={focus}
               axisLevels
               countdown
               frameless
             />
+
+            {/* ── the crossed symbols, over the tape's top-left corner ──────
+                Where a platform puts them, and where they cost the pane no
+                header height: one quiet row each, its line's own ink, its
+                live price, and the only hand-removal outside the + menu.
+                pointer-events are off on the stack and back on for the
+                buttons, so the legend never eats a drag on the chart. */}
+            {compares.length > 0 && (
+              <div className="pointer-events-none absolute top-1 left-2 z-10 flex flex-col gap-0.5">
+                {compares.map(c => (
+                  <span key={`${c.ticker}:${c.mode}`} className="flex items-center gap-1.5">
+                    <span className="w-2 h-[3px] rounded-full" style={{ background: c.ink }} aria-hidden />
+                    <span className="font-mono text-[10px] font-semibold" style={{ color: c.ink }}>
+                      {c.ticker}
+                    </span>
+                    {Simulator.TICKERS[c.ticker] && (
+                      <SpotPrice
+                        value={Simulator.TICKERS[c.ticker].currentPrice}
+                        className="font-mono text-[10px] tnum text-textSecondary"
+                      />
+                    )}
+                    <button
+                      onClick={() => removeCompare(c.ticker, c.mode)}
+                      aria-label={`Remove the ${c.ticker} comparison`}
+                      title="Remove comparison"
+                      className="pointer-events-auto inline-flex items-center justify-center w-4 h-4 rounded text-textMuted hover:text-textPrimary hover:bg-white/[0.08] transition-colors"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
           {ladder && rail.rows.length > 0 && (
             <PaneLadder
@@ -427,15 +533,18 @@ const Terrain = () => {
       built page, not guessed at. Below `lg` every one of those comes off and
       the page scrolls normally.
     */
-    <div className="-mx-4 lg:-mx-6 2xl:-mx-8 lg:-mt-5 lg:-mb-16 px-2 lg:pt-2 lg:pb-1 flex flex-col gap-2 lg:h-[calc(100vh-3.5rem)] lg:min-h-0">
+    <div className="-mx-4 lg:-mx-6 2xl:-mx-8 lg:-mt-5 lg:-mb-16 px-1.5 lg:pt-1.5 lg:pb-1 flex flex-col gap-1.5 lg:h-[calc(100vh-3.5rem)] lg:min-h-0">
       {/* ── The rail. Only what belongs to the ARRANGEMENT. ─────────────── */}
       <div className="shrink-0 flex items-center gap-3 flex-wrap">
-        <div>
-          <h1 className="font-mono text-[13px] font-bold uppercase tracking-wider text-textPrimary">Terrain</h1>
-          <p className="font-mono text-[10px] text-textMuted uppercase tracking-widest">
+        {/* ONE LINE. The title and its caption used to stack, and two lines of
+            chrome at the top of the page is two lines taken off every chart
+            below it — on a desk whose entire point is the size of the charts. */}
+        <h1 className="font-mono text-[12px] font-bold uppercase tracking-wider text-textPrimary">
+          Terrain
+          <span className="ml-2 font-normal text-[10px] tracking-widest text-textMuted">
             {cfg.layout} {cfg.layout === 1 ? 'chart' : 'charts'} · each on its own
-          </p>
-        </div>
+          </span>
+        </h1>
 
         <div
           role="group"
@@ -496,7 +605,7 @@ const Terrain = () => {
         because four charts sharing one phone screen is four unreadable ones.
       */}
       <div
-        className={`grid ${COLS[cfg.layout]} ${cfg.layout === 4 ? 'lg:grid-rows-2' : 'lg:grid-rows-1'} gap-2 flex-1 min-h-0 [&>*]:min-h-[420px] lg:[&>*]:min-h-0`}
+        className={`grid ${COLS[cfg.layout]} ${cfg.layout === 4 ? 'lg:grid-rows-2' : 'lg:grid-rows-1'} gap-1.5 flex-1 min-h-0 [&>*]:min-h-[420px] lg:[&>*]:min-h-0`}
       >
         {panes.map((pane, i) => (
           <Pane
@@ -509,6 +618,7 @@ const Terrain = () => {
             onToggleExpand={() => setExpanded(cur => (cur === i ? null : i))}
             index={i}
             tall={cfg.layout === 1}
+            heavyCount={cfg.layout >= 3 ? 2 : 3}
           />
         ))}
       </div>
