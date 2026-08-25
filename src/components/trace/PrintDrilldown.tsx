@@ -414,7 +414,11 @@ const PrintDrilldown = ({ print, snapshot, onClose, isMarked, onToggleMark, onSt
             <button
               onClick={() => onToggleMark(print.id)}
               aria-pressed={isMarked}
-              title={isMarked ? 'Tracking this print' : 'Track this print'}
+              /* Same wording as the tape's star, and for the same reason: the
+                 mark lives in LiveTape's component state for this session
+                 only. "Tracking" names /trace/tracker's TRACKED FLOW, which
+                 is NOT BUILT. */
+              title={isMarked ? 'Marked — click to clear' : 'Mark this print'}
               className={`p-1 rounded transition-colors ${isMarked ? 'text-select' : 'text-textMuted hover:text-textPrimary hover:bg-white/[0.05]'}`}
             >
               <Bookmark className="w-3.5 h-3.5" fill={isMarked ? 'currentColor' : 'none'} />

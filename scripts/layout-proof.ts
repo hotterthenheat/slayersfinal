@@ -597,5 +597,30 @@ check(
     : 'the header is back to a fixed three-track grid at every width'
 );
 
+/*
+  A flex ITEM wider than its line does not split — it spills. Third instance
+  in this pass, so it is a pattern rather than an accident:
+
+      the chart's timeframe strip   7 buttons, 252px, 1W off the screen
+      the modal's header identity   squeezed to ~100px, seven wrapped lines
+      the tape's footer group       179→413 on a 390px viewport
+
+  In each case the ROW was `flex-wrap` and the group inside it was not, so
+  wrapping never reached the thing that needed it. Each fix is the same shape:
+  let the inner group wrap too.
+
+  These are class pins, not the measurement. The measurement is a browser
+  sweep for text whose box crosses a viewport edge with nothing to scroll —
+  which the earlier version of that sweep missed, because it only flagged runs
+  whose LEFT edge was already past the edge.
+*/
+const tape = read('src/pages/trace/LiveTape.tsx');
+const footerWraps = /ml-auto flex flex-wrap items-center justify-end gap-x-3 gap-y-1\.5/.test(tape);
+check(
+  "the tape's footer group wraps rather than running off the edge",
+  footerWraps,
+  footerWraps ? 'ml-auto group is flex-wrap' : 'the group is nowrap again — the marked count leaves a 390px screen'
+);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

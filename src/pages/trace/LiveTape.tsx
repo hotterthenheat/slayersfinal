@@ -111,13 +111,21 @@ const TapeRow = memo(
           <span className="flex items-center gap-1.5">
             <button
               onClick={e => {
-                // The star is its own control — bookmarking must
+                // The star is its own control — marking must
                 // not also open the drilldown.
                 e.stopPropagation();
                 onMark(r.id);
               }}
               className={`transition-colors ${isMarked ? 'text-select' : 'text-textMuted/40 hover:text-textSecondary'}`}
-              aria-label="Track print"
+              /* MARK, not "track". `marked` is component state (line ~970) —
+                 no localStorage, no context — so it is gone on reload and on
+                 leaving the tape. The desk that would make it durable is
+                 /trace/tracker's TRACKED FLOW module, and that module says
+                 NOT BUILT in its own words. A star labelled "Track print"
+                 promises that desk; this one highlights a row while you are
+                 reading, which is what it actually does. */
+              aria-label={isMarked ? 'Marked — click to clear' : 'Mark this print'}
+              title={isMarked ? 'Marked — click to clear' : 'Mark this print'}
             >
               <Bookmark className="w-3 h-3" fill={isMarked ? 'currentColor' : 'none'} />
             </button>
@@ -1281,7 +1289,12 @@ const LiveTape = () => {
             </Chip>
           ))}
         </span>
-        <div className="ml-auto flex items-center gap-3">
+        {/* WRAPS. This group is one flex item on a flex-wrap row, and a flex
+            item wider than its line does not split — it spills. Measured at
+            390px after "this session" was added to the count: the span ran
+            179→413 on a 390px viewport, 23px off the edge. Same shape as the
+            chart's timeframe strip; same fix. */}
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-x-3 gap-y-1.5">
           <ColumnChooser
             visible={visibleCols}
             onToggleColumn={toggleColumn}
@@ -1290,7 +1303,7 @@ const LiveTape = () => {
             onNone={() => setVisibleCols(new Set())}
           />
           <span className="font-mono text-[10px] text-textMuted uppercase tracking-wider tnum whitespace-nowrap">
-            {filtered.length} of {rows.length} prints · {marked.size} marked
+            {filtered.length} of {rows.length} prints · {marked.size} marked this session
           </span>
         </div>
       </div>

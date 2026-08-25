@@ -392,5 +392,72 @@ check(
   /single feed module/.test(faqAnswer) ? 'the seam promise survives the disclosure' : 'the seam promise was dropped'
 );
 
+/*
+  Nothing offers to TRACK a print while tracking prints is not built.
+
+  The live tape's star was `aria-label="Track print"` and the drilldown's
+  matching control read "Track this print" / "Tracking this print". Neither
+  tracks anything: `marked` is component state in LiveTape — no localStorage,
+  no context — so it is gone on reload and gone on leaving the tape. Verified
+  by driving it in a browser: the whole reader journey (track a campaign,
+  post an idea, rearrange the desk) persists; this one does not, because it
+  was never wired to persist.
+
+  The desk that WOULD make it durable is /trace/tracker's TRACKED FLOW module,
+  and that page says "Not built" in its own words — "Bookmark a print off the
+  live tape and follow it past the moment it crossed". So a star promising to
+  track pointed at a screen that says it cannot yet.
+
+  The controls now say "Mark this print", which is what they do. This check
+  couples the two: while FlowTracker still renders "Not built", no mark
+  control may use the word "track". Build the module and delete that label,
+  and this fails until the wording is revisited — which is the direction that
+  gets forgotten.
+*/
+const flowTracker = read('src/pages/trace/FlowTracker.tsx');
+const liveTape = read('src/pages/trace/LiveTape.tsx');
+const drilldown = read('src/components/trace/PrintDrilldown.tsx');
+const trackerUnbuilt = />Not built</.test(flowTracker);
+/* The mechanism, not the desk's copy: while the marks are seeded from a bare
+   `new Set()` they cannot survive a reload, whatever any page claims. Wire
+   them to storage and this relaxes on its own. */
+const marksEphemeral = /const \[marked, setMarked\] = useState<Set<number>>\(new Set\(\)\)/.test(liveTape);
+const labelSrc = (src: string) =>
+  [...src.matchAll(/(?:aria-label|title)=\{?[^}\n]*?(?:'|")([^'"]*)(?:'|")/g)].map(m => m[1]);
+const marky = (src: string) =>
+  labelSrc(src).filter(t => /\bmark(ed|s)?\b/i.test(t) || /\btrack(ing|s|ed)?\b/i.test(t));
+const promises = [...marky(liveTape), ...marky(drilldown)].filter(t => /\btrack(ing|s|ed)?\b/i.test(t));
+check(
+  'the tape mark control was found',
+  marky(liveTape).length > 0 && marky(drilldown).length > 0,
+  `${marky(liveTape).length} on the tape, ${marky(drilldown).length} in the drilldown`
+);
+check(
+  'no print control offers to track while the marks cannot survive a reload',
+  !marksEphemeral || promises.length === 0,
+  !marksEphemeral
+    ? 'the marks are seeded from storage now — "track" is honest again'
+    : promises.length
+      ? `still promising: ${promises.join(' | ')}`
+      : 'the controls say mark, and mark is what they do'
+);
+check(
+  'the tracked-flow desk and the tape agree about what exists',
+  trackerUnbuilt === marksEphemeral,
+  trackerUnbuilt === marksEphemeral
+    ? trackerUnbuilt
+      ? 'TRACKED FLOW says "Not built" and the tape cannot persist a mark — consistent'
+      : 'TRACKED FLOW has shipped and the tape persists its marks — consistent'
+    : trackerUnbuilt
+      ? 'the tape persists marks now, but /trace/tracker still says the module is not built'
+      : 'TRACKED FLOW no longer says "Not built", but the tape still loses every mark on reload'
+);
+const sessionScoped = /\{marked\.size\} marked this session/.test(liveTape);
+check(
+  'the tape says its marks are session-scoped',
+  sessionScoped,
+  sessionScoped ? 'the footer counts "marked this session"' : 'the count no longer says the marks are ephemeral'
+);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
