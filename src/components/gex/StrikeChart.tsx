@@ -156,6 +156,29 @@ const StrikeChart = ({
   // Keep the autoscale provider reading the freshest levels without re-mounting
   levelsRef.current = levels;
 
+  /*
+    WHICH levels currently share a price, as a stable string.
+
+    Levels at one price share one axis chip (see the merge below), and the tween
+    writes prices per KEY — so if a merged pair later DIVERGES, the shared line
+    would be yanked between two prices every frame and settle on whichever key
+    LEVEL_SPEC lists last, silently swallowing the other level's chip. Feeding
+    this signature into the create-effect rebuilds the chips whenever the
+    grouping changes, so a tween only ever runs while the grouping is stable —
+    and while it is stable, members share a price and writing twice is a no-op.
+  */
+  const levelGroupKey = (() => {
+    // Group INDEX per level, not the price. Keying on the prices themselves
+    // would rebuild the chips on every scan and destroy the tween this file
+    // exists to provide — the lines are supposed to glide, not be replaced.
+    const seen = new Map<string, number>();
+    return LEVEL_SPEC.map(spec => {
+      const at = levels[spec.key].toFixed(2);
+      if (!seen.has(at)) seen.set(at, seen.size);
+      return seen.get(at);
+    }).join(',');
+  })();
+
   /* The default view on a new world (ticker or timeframe): as many bars as
      the chart can hold at a DENSE pitch, not a fixed 130 (Noah, 2026-08-22:
      130 bars on a wide screen spread to ~10px and the ribbons ballooned;
@@ -370,9 +393,19 @@ const StrikeChart = ({
     const candleSeries = candleSeriesRef.current;
     if (!candleSeries) return;
     cancelAnimationFrame(levelRafRef.current);
+    /*
+      Remove each LINE once, not each KEY once. Levels sharing a price share a
+      single price-line object (see the merge below), so several keys can point
+      at the same line and the old per-key loop would hand the same object to
+      removePriceLine two or three times.
+    */
+    const removed = new Set<unknown>();
     for (const spec of LEVEL_SPEC) {
       const line = levelLinesRef.current[spec.key];
-      if (line) candleSeries.removePriceLine(line);
+      if (line && !removed.has(line)) {
+        candleSeries.removePriceLine(line);
+        removed.add(line);
+      }
       delete levelLinesRef.current[spec.key];
     }
     shownLevelsRef.current = null;
@@ -380,23 +413,54 @@ const StrikeChart = ({
     // Levels are LIVE values — hidden during replay so history isn't lied about
     if (!overlays.levels || replay) return;
 
-    // Chips, not lines: the level lives as a colored tag on the price axis.
-    // Hovering its legend chip flashes the full line for orientation.
+    /*
+      Chips, not lines: the level lives as a colored tag on the price axis.
+      Hovering its legend chip flashes the full line for orientation.
+
+      LEVELS THAT SHARE A PRICE SHARE A CHIP. Four separate price lines each
+      asked for their own axis label, and lightweight-charts obliges — so two
+      levels at the same price drew two pills at the same y, overlapping into an
+      unreadable smear. That is not an edge case: the king strike sits on a wall
+      constantly, and on the four-way board three of the four charts were doing
+      it at once (SPY 465/465, QQQ 405/405, NVDA 115/115).
+
+      Merging is also the more informative answer. "PUT WALL · KING" at one
+      price says something a reader wants to know — the wall and the heaviest
+      strike are the same level — where two pills fighting for the same pixels
+      said nothing at all.
+
+      The group takes the colour and weight of its highest-priority member, so a
+      merged chip still reads as the king when the king is in it.
+    */
     const L = levelsRef.current;
+    const groups = new Map<string, typeof LEVEL_SPEC>();
     for (const spec of LEVEL_SPEC) {
-      levelLinesRef.current[spec.key] = candleSeries.createPriceLine({
-        price: L[spec.key],
-        color: spec.color,
-        title: spec.title,
-        lineStyle: spec.style,
-        lineWidth: spec.width,
+      const key = L[spec.key].toFixed(2);
+      const bucket = groups.get(key);
+      if (bucket) bucket.push(spec);
+      else groups.set(key, [spec]);
+    }
+
+    for (const [priceKey, specs] of groups) {
+      // LEVEL_SPEC is ordered call wall, put wall, flip, king; the king is the
+      // scarcity colour and wins a tie, otherwise the first listed does.
+      const lead = specs.reduce((a, s) => (s.key === 'king' ? s : a), specs[0]);
+      const line = candleSeries.createPriceLine({
+        price: Number(priceKey),
+        color: lead.color,
+        title: specs.map(s => s.title).join(' · '),
+        lineStyle: lead.style,
+        lineWidth: lead.width,
         lineVisible: false,
         axisLabelVisible: true,
       });
+      // Every member points at the shared line so the legend hover still finds
+      // one to flash. The teardown above de-duplicates by line object.
+      for (const s of specs) levelLinesRef.current[s.key] = line;
     }
     shownLevelsRef.current = { ...L };
     levelTickerRef.current = ticker;
-  }, [ticker, overlays.levels, replay]);
+  }, [ticker, overlays.levels, replay, levelGroupKey]);
 
   // Dark-pool whisper lines — same grammar as the flow board minis
   useEffect(() => {
