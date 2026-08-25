@@ -172,6 +172,19 @@ interface StrikeChartProps {
       never changes, so it can sit in the mount effect's dep array without
       rebuilding the chart on every parent render. */
   projectionRef?: MutableRefObject<PriceProjection | null>;
+  /**
+   * SHRINK THE PRICE-SCALE FURNITURE — for a chart on a phone.
+   *
+   * The axis labels and the strike chips are fixed sizes, tuned on a chart
+   * about 550px wide. They do not scale with the tape, so on a narrow one they
+   * take a far larger share of it. Measured on `/pulse`: the price gutter is
+   * 54px on BOTH — 4.2% of a 1280px desktop chart and 13.8% of a 390px phone
+   * screen, three times the proportional cost for the same information.
+   *
+   * `compact` is the same idea as `ChartToolbar`'s: not a different design,
+   * the same one at the size the host can afford.
+   */
+  compact?: boolean;
 }
 
 /** Mark a moment on this chart on another pane's behalf; null clears it. */
@@ -249,6 +262,7 @@ const StrikeChart = ({
   levels,
   timeframe,
   height = 460,
+  compact = false,
   frameless = false,
   focusPrice = null,
   overlays = DEFAULT_OVERLAYS,
@@ -272,6 +286,12 @@ const StrikeChart = ({
   const alerts = useAlerts(ticker);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  /* Read at CREATE time by the mount effect, which must not take `compact` as
+     a dep — that effect builds the whole chart, and rebuilding it on a prop
+     change would drop the reader's pan, zoom and drawings. An effect below
+     applies later changes with `applyOptions` instead. */
+  const compactRef = useRef(compact);
+  compactRef.current = compact;
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
   /*
@@ -625,7 +645,9 @@ const StrikeChart = ({
         background: { color: s0.bg },
         textColor: '#7d7d7d', // matches textMuted (lifted 2026-07-25 for legibility)
         fontFamily: "'SF Pro', sans-serif",
-        fontSize: 10,
+        // 9 on a phone. lightweight-charts sizes the price gutter from its
+        // widest label, so this is what actually buys the tape its width back.
+        fontSize: compactRef.current ? 9 : 10,
         attributionLogo: true,
       },
       // No grid (Noah, 2026-08-22): the nodes and the levels ARE the
@@ -1046,8 +1068,16 @@ const StrikeChart = ({
     const baseGex = Simulator.getGexHistory(ticker);
     const snaps = aggregateSnapshots(baseGex ?? [], Math.min(mins, TRAIL_TEXTURE_MINUTES));
     const showTrails = overlays.trails && mins <= INTRADAY_MAX_MINUTES;
+    trails.labelPx = compact ? 8.5 : 9.5;
     trails.setData(snaps, snapshotsMaxAbs(snaps), showTrails, mins * 60);
-  }, [ticker, revision, timeframe, themeKey, overlays.trails, showRecent, reloadNonce, mainNonce, toMain]);
+  }, [ticker, revision, timeframe, themeKey, overlays.trails, showRecent, reloadNonce, mainNonce, toMain, compact]);
+
+  /* `compact` can change without the chart being rebuilt — a desktop window
+     dragged across the phone line, a handset rotated. The mount effect read it
+     once at create time, so apply later changes here. */
+  useEffect(() => {
+    chartRef.current?.applyOptions({ layout: { fontSize: compact ? 9 : 10 } });
+  }, [compact]);
 
   // Key-level price lines — create/destroy only when overlay or ticker changes
   useEffect(() => {

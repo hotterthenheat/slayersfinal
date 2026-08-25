@@ -431,6 +431,10 @@ const LiveChartWidget = ({ ctx, soleChart = false }: LiveChartWidgetProps) => {
             onExitReplay={() => setReplay(false)}
             focusPrice={ctx.focusPrice ?? null}
             height={full ? 460 : 180}
+            /* The axis labels and strike chips at phone size — they are fixed
+               sizes tuned on a ~550px chart, and the 54px price gutter they
+               produce is 4% of a desktop chart but 14% of a 390px screen. */
+            compact={soleChart}
             frameless
           />
         </div>

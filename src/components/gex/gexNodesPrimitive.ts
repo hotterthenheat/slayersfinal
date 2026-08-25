@@ -287,7 +287,8 @@ class TrailsPaneRenderer {
         .slice(0, 4)
         .filter(l => Math.abs(l.value) / total >= 0.08);
 
-      ctx.font = `${Math.round(9.5 * vr)}px "SF Pro", sans-serif`;
+      const labelPx = src.labelPx;
+      ctx.font = `${Math.round(labelPx * vr)}px "SF Pro", sans-serif`;
       ctx.textAlign = 'right';
       ctx.textBaseline = 'middle';
       const xRight = (wCss - 8) * hr;
@@ -302,10 +303,16 @@ class TrailsPaneRenderer {
 
         // Dark backing pad so the label survives whatever sits behind it
         const w = ctx.measureText(text).width;
-        const padX = 4 * hr;
-        const padY = 2.5 * vr;
+        /* The pad rides the type size. Fixed padding around shrinking text
+           leaves the chip the same height with a smaller word rattling inside
+           it — smaller type and no more room, which is the opposite of the
+           point. */
+        const scale = labelPx / 9.5;
+        const padX = 4 * hr * scale;
+        const padY = 2.5 * vr * scale;
+        const boxH = 12 * vr * scale;
         ctx.fillStyle = 'rgba(5,5,5,0.72)';
-        ctx.fillRect(xRight - w - padX, yPix - 6 * vr - padY + 6 * vr, w + padX * 2, 12 * vr + padY);
+        ctx.fillRect(xRight - w - padX, yPix - boxH / 2 - padY / 2, w + padX * 2, boxH + padY);
         ctx.fillStyle = color;
         ctx.fillText(text, xRight, yPix);
       };
@@ -351,6 +358,15 @@ export class GexTrailsPrimitive implements ISeriesPrimitive<Time> {
   enabled = true;
   /** The chart's bar length, seconds — a bead finds its bar by it */
   barSec = 60;
+  /**
+   * The strike chips' type size in CSS px — 9.5 normally, smaller on a phone.
+   *
+   * A field rather than another `setData` argument: it is a presentation
+   * setting that changes with the HOST, while setData carries the data and is
+   * called on every tick. Bundling them would make a size change look like new
+   * data to every reader of this class.
+   */
+  labelPx = 9.5;
   /** The field's own clock, seconds between snapshots — beads per bar = barSec / stepSec */
   stepSec = 60;
   /** The level view's strike — its beads lead, the field steps back. */
