@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { fmtUsd } from '../../data/gex';
 import SpotRule from '../ui/SpotRule';
+import { DEALER_CALL, DEALER_PUT } from './palette';
 import type { ExposureProfileData, GreekSplit } from '../../types/gex';
 
 interface ExposureMatrixProps {
@@ -15,13 +16,38 @@ interface ExposureMatrixProps {
 
 type Leg = 'put' | 'call' | 'net';
 
-// Puts/calls carry side tints; NET wears its own magenta identity so the
-// column the eye should land on is unmistakable at speed.
+/*
+  THE THREE PANELS ON THIS PAGE HAVE TO AGREE ON THE SAME DAY.
+
+  The ladder and the positioning map moved to gold/steel for dealer side; this
+  table did not, so a reader looking at one screen saw the same put/call split
+  painted red/green here and gold/steel two panels to the left. Adjacent
+  disagreement is worse than either scheme on its own — it reads as two
+  different facts.
+
+  Red and green now mean price direction only. Gold is put-dominant (hedging
+  amplifies), steel is call-dominant (dips absorbed), and they separate by
+  luminance as well as hue, so the split survives red/green colour blindness.
+  Spec: docs/dealer-ink-pass.md, step 2.
+
+  NET keeps its magenta: it is not a side, it is the summary figure the eye
+  should land on, and it is the only column that carries the king's colour.
+
+  The walls are NOT touched here — docs/dealer-ink-pass.md lists CW-green /
+  PW-red as an open decision, and palette.ts records Noah reversing the call
+  wall to green on 2026-08-18. That one is not mine to make.
+*/
 const NET_BAR = 'rgba(234,0,255,0.8)';
 
+/** Hex token + alpha, so the bar tints stay tied to the one palette entry. */
+const tint = (hex: string, alpha: number): string => {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
+};
+
 const legBar = (leg: Leg): string => {
-  if (leg === 'put') return 'rgba(255,59,48,0.7)';
-  if (leg === 'call') return 'rgba(48,209,88,0.85)';
+  if (leg === 'put') return tint(DEALER_PUT, 0.8);
+  if (leg === 'call') return tint(DEALER_CALL, 0.8);
   return NET_BAR;
 };
 

@@ -205,5 +205,60 @@ check(
   directionInk ? 'imports a bull/bear token' : 'dealer tokens only'
 );
 
+/*
+  ---- The Exposure Profile trio agrees on the same day ----------------------
+
+  docs/dealer-ink-pass.md, step 2: the ladder, the positioning map and the
+  exposure matrix "sit on one page and must agree on the same day", and
+  "nothing is half-migrated on a given surface". For a while that was exactly
+  what shipped — two panels in gold/steel with the third painting the same
+  put/call split in red and green, side by side on one screen.
+
+  So the assertion is about the SET, not each file: all three take dealer ink
+  from the palette, and none of them writes the direction pair as a literal.
+  Adding a fourth panel to this page without migrating it fails here.
+
+  The walls are deliberately not covered. docs/dealer-ink-pass.md files
+  CW-green / PW-red under "Open decisions (yours)", and palette.ts records the
+  call wall being reversed back to green by Noah on 2026-08-18. A guard has no
+  business pre-empting that.
+*/
+const TRIO = [
+  'src/components/gex/StrikePressureLadder.tsx',
+  'src/components/gex/PositioningMap.tsx',
+  'src/components/gex/ExposureMatrix.tsx',
+];
+// #FF3B30 / #30D158 and their rgb() forms — the direction pair, written out.
+const DIRECTION_LITERAL = /#FF3B30|#30D158|rgba?\(\s*255,\s*59,\s*48|rgba?\(\s*48,\s*209,\s*88/i;
+// DEALER_PUT/DEALER_CALL, their _INK variants (correct for figures rather than
+// bars), or the deprecated aliases that resolve to them. The optional suffix
+// matters: \b after DEALER_PUT will not match inside DEALER_PUT_INK, because
+// _ is a word character, and the first version of this flagged the ladder for
+// using exactly the right token.
+const DEALER_IMPORT = /\b(DEALER_(?:PUT|CALL)(?:_INK)?|SHORT_GAMMA|LONG_GAMMA)\b/;
+
+for (const file of TRIO) {
+  const src = read(file);
+  const name = file.split('/').pop();
+  check(
+    `${name} takes its side ink from the palette`,
+    DEALER_IMPORT.test(src),
+    DEALER_IMPORT.test(src) ? 'uses the dealer tokens' : 'no dealer token in the file'
+  );
+  const literal = src.match(DIRECTION_LITERAL);
+  check(
+    `${name} writes no direction literal`,
+    literal === null,
+    literal ? `found ${literal[0]}` : 'no #FF3B30 / #30D158 in any form'
+  );
+}
+// Guard the guard: a typo'd path would make read() throw, but an empty file
+// would pass both checks above silently.
+check(
+  'the trio files actually have content',
+  TRIO.every(f => read(f).length > 500),
+  TRIO.map(f => `${f.split('/').pop()} ${read(f).length}b`).join(' · ')
+);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
