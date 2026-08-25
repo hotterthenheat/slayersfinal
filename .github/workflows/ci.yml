@@ -39,17 +39,17 @@ jobs:
       # `npm run lint` is "Missing script" and would fail every push without
       # saying anything about the code.
       #
-      # There IS a test step now. `npm test` runs the eight assertion scripts
+      # There IS a test step now. `npm test` runs the nine assertion scripts
       # under scripts/ — covering the partner spec's worked fixtures, replay
       # determinism under a pinned clock, the Weigher query parser, the
       # scoring-weight tables, the landing page's claims against the code that
-      # backs them, what the terminal does when playback runs out, the one font
-      # family against the four places that spell it (plus a refusal to vendor a
-      # proprietary system font), the recorded clocks, and the header's
-      # responsive ladder.
+      # backs them, what the terminal does when playback runs out, what the
+      # deployed host promises the browser, the one font family against the
+      # four places that spell it (plus a refusal to vendor a proprietary
+      # system font), the recorded clocks, and the header's responsive ladder.
       #
-      # Every assertion in weights-proof, sales-proof and playback-proof is
-      # mutation-verified. Dropping a factor without re-normalising fails it;
+      # Every assertion in weights-proof, sales-proof, playback-proof and
+      # deploy-proof is mutation-verified. Dropping a factor without re-normalising fails it;
       # restoring the news sleeve fails it; re-importing the news generator
       # anywhere in src fails it. So does selling an unbuilt feature without
       # the Soon chip, linking the footer at a route that only redirects, or
@@ -58,7 +58,12 @@ jobs:
       # features and forgetting to take the Soon chip off. playback-proof adds
       # the other direction again: looping the tape, looping the playhead,
       # advancing two bars a tick, or re-cutting the recordings to one length
-      # each fail a different assertion, verified by making each change.
+      # each fail a different assertion, verified by making each change. So
+      # does dropping a security header, adding 'unsafe-eval' to script-src,
+      # naming a CDN in the policy, or adding a remote <script> the policy
+      # would then block in production — which is how the headers went missing
+      # in the first place, deleted with vercel.json in a commit about
+      # something else.
 
       - name: Test
         run: npm test
