@@ -40,11 +40,15 @@ thing where it would otherwise be a silent omission.
 
 ## The proof scripts
 
-`npm test` runs seven scripts under `scripts/`. They are not unit tests —
+`npm test` runs ten scripts under `scripts/`. They are not unit tests —
 there is no test runner in this tree. Each one asserts a fact about the
 codebase that nothing else can catch: `tsc` cannot see that a pricing page
 sells a feature which does not exist, and a human reading a diff of
 `src/core` cannot either.
+
+Run one on its own with `npx tsx scripts/<name>-proof.ts`. Every one prints
+a `PASS`/`FAIL` line per assertion with the measured value in it, so a
+failure tells you the number it found rather than only that it was wrong.
 
 | script | what it holds |
 | --- | --- |
@@ -54,16 +58,31 @@ sells a feature which does not exist, and a human reading a diff of
 | `weights-proof` | the scoring weights sum to one; the News desk stays unwired |
 | `sales-proof` | no sentence on the landing page sells something the code does not ship — **and none of it goes stale when a feature lands** |
 | `font-proof` | one family name across four spellings; no platform font vendored |
-| `layout-proof` | the header fits, panels measure themselves, controls stay reachable |
+| `layout-proof` | the header fits, panels and canvases measure themselves, overlays trap the keyboard, nothing white-screens, controls stay reachable |
+| `playback-proof` | what the terminal does when the recording runs out — and that it says so |
+| `deploy-proof` | what the deployed host promises the browser: the security headers, the cache policy, and that nothing in the tree wants an origin the policy blocks |
+| `gate-proof` | **the one that reads the others.** Every `check()` condition, scanned for shapes that cannot fail, and every proof script required to be in the `npm test` chain |
 
 **The standard these are held to is mutation verification**: put the defect
 back, watch the assertion fail, then restore. An assertion that has never
 failed has proved nothing, and this repo has caught itself writing several
 of those — a guard satisfied by a code comment, a regex that stopped at
-the first quote it met, a scan that passed on a `/* ... */` block. If you
-add an assertion, break the thing it guards before you trust it. The prose
-at the top of each script records what was measured, and where the
-measurement was wrong the first time.
+the first quote it met, a scan that passed on a `/* ... */` block, one that
+asserted `array.length >= 0`, and one that searched a file for
+`Feed.atEnd()` and matched the comment explaining why that call is
+deliberately *not* made. If you add an assertion, break the thing it guards
+before you trust it.
+
+`gate-proof` automates the narrow half of that — it fails on a condition
+that is tautological on its face — but it cannot tell you an assertion is
+*meaningful*. A regex matching the wrong thing looks perfectly healthy to
+it. Only breaking the thing on purpose proves that, and it stays a habit
+rather than a script.
+
+The prose at the top of each script records what was measured, and where
+the measurement was wrong the first time. That last part is not modesty:
+several of the sweeps behind this codebase reported the product as broken
+when the instrument was, and the write-ups say which.
 
 ---
 

@@ -183,5 +183,55 @@ check(
   unwired.length ? `not run: ${unwired.join(', ')}` : `all ${onDisk.length} are in the test chain`
 );
 
+/*
+  The README describes this gate, and a description with a number in it goes
+  stale the moment a script is added — quietly, because nothing reads prose.
+  It said "seven scripts" while ten were running. So both halves are pinned:
+  the count it states, and a row in its table for every script on disk.
+
+  An earlier pass met this exact shape in docs/dealer-ink-pass.md, which
+  claimed the alias scan covered "all 183 files under src" when there were
+  184, and solved it by printing the count instead of pinning one. That works
+  for a scan's own output; it does not work for prose somebody has to read,
+  so here the prose stays and the assertion holds it honest.
+*/
+const readme = readFileSync(path.join(ROOT, 'README.md'), 'utf8');
+const WORDS: Record<string, number> = {
+  five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12,
+};
+const stated = readme.match(/`npm test` runs (\w+) scripts/);
+const statedN = stated ? (WORDS[stated[1].toLowerCase()] ?? Number(stated[1])) : NaN;
+check(
+  'the README states the number of proof scripts there actually are',
+  statedN === onDisk.length,
+  Number.isNaN(statedN)
+    ? 'could not find the sentence in README.md'
+    : `README says ${stated?.[1]} (${statedN}), ${onDisk.length} on disk`
+);
+
+/*
+  Scoped to the TABLE, not the whole file. The first version searched the
+  README for the backticked name anywhere, and removing gate-proof's table
+  row did not fail it — because the prose two paragraphs down also names
+  gate-proof. The assertion was called "has a row in the README table" and
+  actually tested "is mentioned somewhere", which is a check whose NAME
+  overstates its condition.
+
+  Worth noting what caught that: not the scan in this same file, which reads
+  conditions and cannot see that a name promises more than a condition
+  delivers. Mutation verification caught it, on the second of two mutations.
+*/
+const tableRows = readme.split('\n').filter(l => l.trim().startsWith('|'));
+const undocumented = onDisk
+  .map(f => f.replace(/\.ts$/, ''))
+  .filter(name => !tableRows.some(row => row.includes(`\`${name}\``)));
+check(
+  'every proof script has a row in the README table',
+  undocumented.length === 0,
+  undocumented.length
+    ? `no table row for: ${undocumented.join(', ')}`
+    : `all ${onDisk.length} have a row among ${tableRows.length} table lines`
+);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
