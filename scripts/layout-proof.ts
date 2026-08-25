@@ -138,6 +138,62 @@ for (const { file, what } of SELF_MEASURING) {
 }
 
 /*
+  ---- The keyboard may not walk out of an open overlay ----------------------
+
+  The 457-stop tab walk proved every control shows a focus ring. That is a
+  property of the RESTING page. Driving the two overlays from a keyboard found
+  the same defect in both:
+
+      print drilldown   opening it moved focus nowhere at all. Focus stayed on
+                        the tape row behind, so the first Tab went to that
+                        row's own "Mark this print" button and kept walking
+                        the tape underneath the card.
+      command palette   focused its input, then the first Tab landed on
+                        "Compass Options chooser — week" on the desk behind.
+
+  Both dim the page behind and neither hid it from the keyboard, so a reader
+  who cannot see the dim tabs into content that is not there for them. The
+  palette also never announced itself as an overlay at all — Modal has carried
+  role="dialog" and aria-modal since it was written; the palette had neither.
+
+  Re-measured after: focus lands inside on open, 80 forward tabs and 40
+  backward never leave, Escape closes, and focus returns to the row (and to
+  the opener) it came from.
+
+  All three pinned. The hook alone proves nothing if an overlay stops calling
+  it, and a call alone proves nothing if the hook stops restoring focus.
+*/
+{
+  const trap = read('src/components/ui/useFocusTrap.ts');
+  const modal = read('src/components/ui/Modal.tsx');
+  const palette = read('src/components/layout/CommandPalette.tsx');
+
+  const restores = /opener && document\.contains\(opener\)[\s\S]{0,40}opener\.focus\(\)/.test(trap);
+  const cycles = /e\.shiftKey && here === first/.test(trap) && /here === last/.test(trap);
+  check(
+    'the trap cycles Tab and hands focus back on the way out',
+    restores && cycles,
+    restores
+      ? cycles ? 'wraps at both ends, restores the opener if it still exists' : 'no wrap — Tab still walks off the end'
+      : 'nothing returns focus to the opener, so closing drops the reader at the top of the document'
+  );
+
+  const both = /useFocusTrap\(open, cardRef\)/.test(modal) && /useFocusTrap\(open, cardRef\)/.test(palette);
+  check(
+    'both overlays are trapped, not just the one that had a role',
+    both,
+    both ? 'Modal and the command palette both call it' : `modal:${/useFocusTrap/.test(modal)} palette:${/useFocusTrap/.test(palette)}`
+  );
+
+  const announced = /role="dialog"/.test(palette) && /aria-modal="true"/.test(palette) && /aria-label="Command palette"/.test(palette);
+  check(
+    'the command palette says it is a dialog',
+    announced,
+    announced ? 'role=dialog, aria-modal, and a name' : 'a screen reader is never told the context changed'
+  );
+}
+
+/*
   ---- Nothing may white-screen the terminal --------------------------------
 
   A React error boundary catches only what is BELOW it, so where it sits is
@@ -259,10 +315,25 @@ check(
   onKeyDown, so it passes correctly. Anyone re-checking this in a browser
   should expect those twenty and leave them alone.
 */
+/*
+  Comments are skipped BEFORE quotes are tracked, and that order is the whole
+  point. JSX allows a block comment between attributes, and one of mine
+  contained the word "trap's" — that lone apostrophe opened a string as far as
+  this scanner was concerned, so it ran past the closing `>` and swallowed a
+  LATER element's onClick, then reported the innocent element in between as a
+  mouse-only control. A guard that fires on prose is worse than no guard, so
+  the prose is removed before anything else is decided.
+*/
 function attrsOf(src: string, from: number): string | null {
   let i = from, depth = 0, quote: string | null = null;
   while (i < src.length) {
     const c = src[i];
+    if (!quote && c === '/' && src[i + 1] === '*') {
+      const close = src.indexOf('*/', i + 2);
+      if (close === -1) return null;
+      i = close + 2;
+      continue;
+    }
     if (quote) {
       if (c === quote && src[i - 1] !== '\\') quote = null;
     } else if (c === '"' || c === "'" || c === '`') {

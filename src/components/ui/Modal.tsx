@@ -14,9 +14,10 @@
 ==================================================
 */
 
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
+import { useFocusTrap } from './useFocusTrap';
 
 interface ModalProps {
   open: boolean;
@@ -48,6 +49,12 @@ const Modal = ({ open, onClose, ariaLabel, header, children, headerActions, head
     };
   }, [open, onClose]);
 
+  /* Escape and the scroll lock were already here; the keyboard was not.
+     Opening this card left focus on the row behind it, so the first Tab
+     walked the tape underneath instead of the drilldown on top of it. */
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  useFocusTrap(open, cardRef);
+
   if (!open) return null;
 
   return createPortal(
@@ -55,10 +62,14 @@ const Modal = ({ open, onClose, ariaLabel, header, children, headerActions, head
       {/* Backdrop — dimmed but deliberately still legible underneath */}
       <div className="absolute inset-0 bg-black/55 backdrop-blur-[2px] animate-modal-backdrop" onClick={onClose} aria-hidden />
 
+      {/* tabIndex -1: not a tab stop, but focusable, so the trap has somewhere
+          to put the keyboard when the card has no focusable child of its own. */}
       <div
+        ref={cardRef}
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel}
+        tabIndex={-1}
         className={`relative w-full ${widthClass} max-h-[86vh] flex flex-col border border-borderMuted bg-panel rounded-lg shadow-2xl shadow-black/70 overflow-hidden animate-modal-card`}
       >
         {/* Three tracks so the centre stays centred no matter how long the

@@ -4,6 +4,7 @@ import { Activity, ArrowRightLeft, CornerDownLeft, Crosshair, Users } from 'luci
 import { NAV_ITEMS } from './nav';
 import { GEX_SUBPAGES } from '../../pages/pinpoint/subnav';
 import { TRACE_SUBPAGES } from '../../pages/trace/subnav';
+import { useFocusTrap } from '../ui/useFocusTrap';
 import { COMMUNITY_SUBPAGES } from '../../pages/community/subnav';
 import { useMarketData } from '../../context/MarketDataContext';
 import Feed from '../../core/feed';
@@ -122,6 +123,19 @@ const CommandPalette = ({ open, onClose }: CommandPaletteProps) => {
     setHighlight(0);
   }, [query]);
 
+  /* The palette focused its input already, which looked like enough and was
+     not: the first Tab out of that input landed on "Compass Options chooser
+     — week", a control on the desk behind the dim. It is also the one overlay
+     in the app that never said it was one — Modal has carried role="dialog"
+     and aria-modal all along, this had neither, so a screen reader was never
+     told the context had changed.
+
+     Tab has nowhere useful to go inside a palette — this is a combobox, driven
+     by ArrowUp/ArrowDown and Enter — so trapping it means Tab stays on the
+     input. That is the correct nothing, rather than the wrong something. */
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  useFocusTrap(open, cardRef);
+
   if (!open) return null;
 
   const runAction = (action: PaletteAction | undefined) => {
@@ -151,7 +165,14 @@ const CommandPalette = ({ open, onClose }: CommandPaletteProps) => {
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-[18vh] px-4" onKeyDown={onKeyDown}>
       <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" onClick={onClose} aria-hidden />
-      <div className="relative w-full max-w-lg border border-borderMuted bg-panel rounded-lg shadow-2xl shadow-black overflow-hidden animate-slide-in">
+      <div
+        ref={cardRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Command palette"
+        tabIndex={-1}
+        className="relative w-full max-w-lg border border-borderMuted bg-panel rounded-lg shadow-2xl shadow-black overflow-hidden animate-slide-in"
+      >
         <input
           ref={inputRef}
           value={query}
