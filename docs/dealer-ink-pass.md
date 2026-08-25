@@ -97,7 +97,7 @@ it is red/green.*
 | 3 · Net figures | **done** — profile facts and pinned-strike legs, Ranked Targets page + widget, both Compass rails. Verified from the DOM, not the source |
 | 4 · Walls | **blocked — needs your call.** See *Open decisions* below |
 | 5 · Legends and dictionary | **done** for the migrated surfaces. `Call wall` / `Put wall` wait on step 4 |
-| 6 · Remove the aliases | **done** — `SHORT_GAMMA` / `LONG_GAMMA` deleted, the map repointed, asserted absent across all 183 files under `src` |
+| 6 · Remove the aliases | **done** — `SHORT_GAMMA` / `LONG_GAMMA` deleted, the map repointed, asserted absent across every file under `src` — the assertion prints the count it scanned rather than pinning one, so adding a file cannot quietly narrow it |
 
 Everything the pass claims is checked by `npm test`, and every assertion in it
 was mutation-verified: the defect was put back and the guard watched until it
