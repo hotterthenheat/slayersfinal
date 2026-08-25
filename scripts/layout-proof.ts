@@ -264,5 +264,87 @@ check(
   answersBoth ? 'Enter and Space' : 'the key set changed — Space is the one browsers do not fire click for on a tr'
 );
 
+// ---- Nothing loops forever against the reader's wishes --------------------
+
+/*
+  This codebase honours prefers-reduced-motion carefully — four @media blocks
+  in index.css, a <MotionConfig reducedMotion="user"> around the whole app, and
+  three useReducedMotion call sites where finer control was wanted. Two
+  animations still slipped past all of it: `.custom-pulse`, the live-indicator
+  dot on every SignalBadge, and Tailwind's own `animate-pulse` and
+  `animate-bounce`, which the config never disables.
+
+  Measured in a browser before and after: infinite animations still running
+  with reducedMotion=reduce went from 10 to 0. The live dot stays visible and
+  stops moving — opacity 1, transform none — which is the point. Turning it
+  off entirely would have hidden the fact that the desk is live.
+
+  Two checks, because the two families fail differently: an infinite animation
+  declared in index.css must have its selector inside a reduce block, and a
+  Tailwind infinite-animation utility used anywhere in src must be named in
+  one.
+*/
+const css = read('src/index.css');
+
+/*
+  Every reduce block's body, WITH COMMENTS STRIPPED.
+
+  The first version kept them, and the comment above the block names
+  `.custom-pulse` in its prose — so deleting the selector left the check green,
+  because the string was still in there. That is the fourth guard in this
+  session to pass on a comment describing the thing rather than the thing.
+  Comments come out before anything is matched against.
+*/
+const stripComments = (t: string) => t.replace(/\/\*[\s\S]*?\*\//g, '');
+const reduceBodies = [...css.matchAll(/@media \(prefers-reduced-motion:\s*reduce\)\s*\{([\s\S]*?)\n\}/g)]
+  .map(m => stripComments(m[1]))
+  .join('\n');
+
+check(
+  'index.css still has reduced-motion blocks',
+  reduceBodies.length > 100,
+  `${reduceBodies.split('\n').length} lines across the reduce blocks`
+);
+
+// Selectors that declare an infinite animation outside a reduce block.
+const infiniteSelectors: string[] = [];
+for (const m of css.matchAll(/(\.[a-zA-Z][\w-]*)\s*\{[^}]*animation:[^;}]*\binfinite\b/g)) {
+  const sel = m[1];
+  // Skip declarations that are themselves inside a reduce block.
+  if (reduceBodies.includes(sel)) continue;
+  infiniteSelectors.push(sel);
+}
+check(
+  'every infinite CSS animation is disabled under reduced motion',
+  infiniteSelectors.length === 0,
+  infiniteSelectors.length ? infiniteSelectors.join(', ') : 'all covered'
+);
+
+/*
+  Tailwind's four looping utilities are not in index.css at all — they arrive
+  from the framework, and nothing disables them by default.
+*/
+const TAILWIND_LOOPS = ['animate-spin', 'animate-ping', 'animate-pulse', 'animate-bounce'];
+const usedLoops: string[] = [];
+const uncovered: string[] = [];
+for (const cls of TAILWIND_LOOPS) {
+  const used = walkTsx(path.join(ROOT, 'src')).some(f =>
+    new RegExp(`\\b${cls}\\b`).test(readFileSync(f, 'utf8'))
+  );
+  if (!used) continue;
+  usedLoops.push(cls);
+  if (!reduceBodies.includes(`.${cls}`)) uncovered.push(cls);
+}
+check(
+  'the Tailwind loop scan found utilities in use',
+  usedLoops.length > 0,
+  usedLoops.length ? usedLoops.join(', ') : 'none used — did the scan break?'
+);
+check(
+  'every Tailwind looping utility in use is disabled under reduced motion',
+  uncovered.length === 0,
+  uncovered.length ? `not covered: ${uncovered.join(', ')}` : `${usedLoops.length} in use, all covered`
+);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

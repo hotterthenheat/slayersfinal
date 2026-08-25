@@ -275,7 +275,18 @@
   .holo-text,
   .holo-bar,
   .holo-border,
-  .holo-glow {
+  .holo-glow,
+  /* The two that were missed. `.custom-pulse` is the live-indicator dot on
+     SignalBadge and `.animate-pulse` is Tailwind's own, used for skeleton
+     loaders and the landing's live pills — both run forever and neither was
+     covered, on a codebase that otherwise honours the setting in four CSS
+     blocks, a MotionConfig and three useReducedMotion call sites.
+
+     `animation: none` leaves the dot solid rather than hiding it: the reader
+     still sees the thing is live, it just stops moving. */
+  .custom-pulse,
+  .animate-pulse,
+  .animate-bounce {
     animation: none;
   }
 }
