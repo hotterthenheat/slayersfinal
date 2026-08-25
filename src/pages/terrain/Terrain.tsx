@@ -11,6 +11,7 @@ import StrikeChart, {
   type ChartStyle,
   type CompareEntry,
   type CompareMode,
+  type CrosshairSync,
 } from '../../components/gex/StrikeChart';
 import ChartToolbar from '../../components/gex/ChartToolbar';
 import CompareControl from '../../components/gex/CompareControl';
@@ -288,6 +289,10 @@ interface PaneProps {
   tall: boolean;
   /** How many heaviest-strike entries this pane's width can print whole */
   heavyCount: number;
+  /** This pane's real hover, out to the desk. null when the pointer leaves. */
+  onCrosshair: CrosshairSync;
+  /** Hand the desk this pane's "mark that moment" function, null on unmount. */
+  registerSync: (apply: CrosshairSync | null) => void;
   /*
     Extra grid classes for THIS pane's box.
 
@@ -300,7 +305,10 @@ interface PaneProps {
   cell?: string;
 }
 
-const Pane = ({ cfg, onCfg, revision, expanded, onToggleExpand, index, tall, heavyCount, cell = '' }: PaneProps) => {
+const Pane = ({
+  cfg, onCfg, revision, expanded, onToggleExpand, index, tall, heavyCount,
+  onCrosshair, registerSync, cell = '',
+}: PaneProps) => {
   const { ticker, timeframe, overlays, indicators, chartStyle, compares, ladder } = cfg;
 
   /* Add / remove a crossed symbol. Capped at the ink list's length so every
@@ -414,6 +422,8 @@ const Pane = ({ cfg, onCfg, revision, expanded, onToggleExpand, index, tall, hea
               compares={compares}
               focusPrice={focus}
               priceTag
+              onCrosshair={onCrosshair}
+              syncRegister={registerSync}
               frameless
             />
 
@@ -654,6 +664,51 @@ const Terrain = () => {
   const panes = cfg.panes.slice(0, cfg.layout);
   const anyLadder = panes.some(p => p.ladder);
 
+  /*
+    CROSSHAIR SYNC — one pane's hover, marking the same MOMENT on the others.
+
+    IMPERATIVE, and that is the design rather than a shortcut. A hovered
+    timestamp in React state would re-render every Pane and every StrikeChart
+    at mousemove rate; neither is memoised, so that is up to four chart
+    subtrees reconciled per pointer event on a desk whose whole premise is that
+    the charts stay smooth. The panes hand up their own "mark that moment"
+    function and the desk calls it directly: no state, no render.
+
+    Only the moment travels — never a price. Two panes are usually two symbols,
+    and the library's magnet discards a foreign price anyway, snapping to the
+    receiving chart's own close.
+  */
+  const sinks = useRef(new Map<number, CrosshairSync>()).current;
+  const sourcePane = useRef<number | null>(null);
+
+  /* Plain functions, recreated every render on purpose: StrikeChart holds
+     syncRegister through a ref and calls it only on mount, and reaches
+     onCrosshair through a ref refreshed every render, so a changing identity
+     costs nothing and useCallback here would be ceremony. */
+  const registerSync = (i: number, apply: CrosshairSync | null) => {
+    if (apply) sinks.set(i, apply);
+    else sinks.delete(i);
+  };
+
+  const emitCrosshair = (i: number, time: Parameters<CrosshairSync>[0]) => {
+    /* A LEAVE from a pane that is not the current source is stale. Dragging
+       the pointer from one pane straight onto the next fires the old pane's
+       leave and the new pane's enter in the same turn, and honouring that
+       leave would wipe the mark the new pane had just set — a visible flicker
+       on exactly the gesture this feature exists for. */
+    if (time === null && sourcePane.current !== i) return;
+    sourcePane.current = time === null ? null : i;
+    for (const [j, apply] of sinks) if (j !== i) apply(time);
+  };
+
+  /* Nothing carries across a change of arrangement: a pane that has gone
+     leaves no mark behind it, and the fullscreen takeover has nothing to sync
+     with. */
+  useEffect(() => {
+    for (const apply of sinks.values()) apply(null);
+    sourcePane.current = null;
+  }, [cfg.layout, expanded, sinks]);
+
   return (
     /*
       FULL BLEED, and only from `lg`. The negative margins cancel the shell's
@@ -781,6 +836,8 @@ const Terrain = () => {
             index={i}
             tall={cfg.layout === 1}
             heavyCount={cfg.layout >= 3 ? 2 : 3}
+            onCrosshair={t => emitCrosshair(i, t)}
+            registerSync={apply => registerSync(i, apply)}
             /*
               THE ODD PANE OUT TAKES THE WHOLE ROW.
 

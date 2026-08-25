@@ -16,6 +16,8 @@ import {
   type IPriceLine,
   type SeriesType,
   type UTCTimestamp,
+  type MouseEventParams,
+  type Time,
 } from 'lightweight-charts';
 import Simulator from '../../core/simulator';
 import {
@@ -126,7 +128,18 @@ interface StrikeChartProps {
       rule, and the time left in the current bar — in place of the library's
       flat last-value tag. Off by default; Terrain turns it on. */
   priceTag?: boolean;
+  /** Fired on REAL pointer input only — the hovered bar's time, or null when
+      the pointer leaves the plot. The library re-fires its crosshair event on
+      every model update, and this chart updates four series a tick; those
+      echoes are filtered out before this is called. */
+  onCrosshair?: CrosshairSync;
+  /** Handed this chart's own "mark that moment" function on mount and null on
+      unmount, so a host can call it when a DIFFERENT pane is hovered. */
+  syncRegister?: (apply: CrosshairSync | null) => void;
 }
+
+/** Mark a moment on this chart on another pane's behalf; null clears it. */
+export type CrosshairSync = (time: UTCTimestamp | null) => void;
 
 // Wall / flip / king overlay colors (independent of candle theme)
 import { CALL_WALL, PUT_WALL, FLIP, KING, FOCUS, DARK_POOL } from './palette';
@@ -212,6 +225,8 @@ const StrikeChart = ({
   replay = false,
   onExitReplay,
   priceTag = false,
+  onCrosshair,
+  syncRegister,
 }: StrikeChartProps) => {
   const themeKey = useCandleThemeKey();
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -273,6 +288,22 @@ const StrikeChart = ({
   const focusPriceRef = useRef<number | null>(focusPrice);
   const levelsRef = useRef<KeyLevels>(levels);
   const barCountRef = useRef(0);
+  /* Mirrored every render, read from a subscription installed once — the same
+     pattern levelsRef and focusPriceRef use, and the reason the mount effect
+     never has to re-subscribe. `revision` bumps every 1500ms and an effect
+     keyed on the prop would tear the handler down ten times a minute. */
+  const onCrosshairRef = useRef(onCrosshair);
+  onCrosshairRef.current = onCrosshair;
+  const syncRegisterRef = useRef(syncRegister);
+  syncRegisterRef.current = syncRegister;
+  /** The moment this chart is currently marking for another pane, or null. */
+  const syncedRef = useRef<UTCTimestamp | null>(null);
+  /** Whether the horizontal crosshair arm is currently hidden because this
+      chart is following another pane. Tracked SEPARATELY from syncedRef: a
+      follower that is told to clear still has to get its own arm back, and
+      hanging that off "am I marking a time" loses it the moment the time
+      goes null. */
+  const followerRef = useRef(false);
   const loadedRef = useRef<{ ticker: string; timeframe: Timeframe; theme: string }>({
     ticker: '',
     timeframe: '1m',
@@ -379,6 +410,65 @@ const StrikeChart = ({
     chart.priceScale('right').applyOptions({ autoScale: true });
     showRecent();
   }, [showRecent]);
+
+  /* The horizontal arm goes off while this chart is following another pane —
+     a full crosshair reads as "your cursor is here", and it is not. Guarded so
+     the option write only happens on a real change, not on every mousemove of
+     whichever pane is leading. */
+  const setFollower = useCallback((on: boolean) => {
+    if (followerRef.current === on) return;
+    followerRef.current = on;
+    chartRef.current?.applyOptions({
+      crosshair: { horzLine: { visible: !on, labelVisible: !on } },
+    });
+  }, []);
+
+  /* Mark a moment that belongs to ANOTHER pane. TIME ONLY, and that is forced
+     rather than chosen: setCrosshairPosition demands a price, but crosshair
+     mode defaults to Magnet and this chart never overrides it, so the magnet
+     throws the price away and snaps to the RECEIVING chart's own close. No
+     price can cross a pane boundary here — which is right, since two panes are
+     usually two symbols. The horizontal arm goes off while this chart is a
+     follower: a full crosshair reads as "your cursor is here", and it is not.
+
+     Reads only refs, so the empty dep list is honest and the mount effect can
+     list it without churn. */
+  const applySync = useCallback((time: UTCTimestamp | null) => {
+    const chart = chartRef.current;
+    const series = candleSeriesRef.current;
+    if (!chart || !series) return;
+    syncedRef.current = time;
+    const price = lastCloseRef.current;
+    /* Not a nicety: setCrosshairPosition on a series whose price scale has no
+       first value throws. Terrain boots through a splash and panes reload on
+       every ticker and timeframe change, so this window is real. lastCloseRef
+       is written from the same bars that feed setData. */
+    if (time === null || price == null) {
+      chart.clearCrosshairPosition();
+      setFollower(false);
+      return;
+    }
+    /* THIS chart's bucket, FLOORED — the bar the moment is inside of. The
+       library's own lookup rounds UP, so a 12:07 hover would land on a 15m
+       neighbour's 12:15 bar: one that had not happened at 12:07. Same formula
+       aggregateCandles uses, so the result is an exact grid hit or nothing. */
+    const bucket = Math.max(60, tfMinutes(timeframeRef.current) * 60);
+    const target = (Math.floor(time / bucket) * bucket) as UTCTimestamp;
+    const ts = chart.timeScale();
+    const idx = ts.timeToIndex(target, false); // exact hit or null — never nearest
+    const vis = ts.getVisibleLogicalRange();
+    /* Outside this chart's data, or outside what it is currently showing, draw
+       NOTHING. setCrosshairPosition clamps the index to the visible range and
+       would otherwise print a confident mark on the wrong bar. Panes here pan
+       and zoom independently, so this is the common case. */
+    if (idx === null || vis === null || idx < vis.from || idx > vis.to) {
+      chart.clearCrosshairPosition();
+      setFollower(false);
+      return;
+    }
+    setFollower(true);
+    chart.setCrosshairPosition(price, target, series);
+  }, [setFollower]);
 
   /* One datum mapper for every main-series write: OHLC styles get whole
      bars, value styles get closes. Typed `never` so the same call sites
@@ -538,8 +628,42 @@ const StrikeChart = ({
     /* Zooming out reaches past the runway's end; extend it as they go. The
        handler reads refs rather than closing over the bar time, so it is
        installed once with the chart and never re-subscribed. */
-    const onRange = () => ensureRunway(lastBarTimeRef.current, bucketSecRef.current);
+    const onRange = () => {
+      ensureRunway(lastBarTimeRef.current, bucketSecRef.current);
+      /* A synthetic crosshair is anchored to a PIXEL, not to a time: the model
+         re-derives its bar from the saved x on the next update, so panning this
+         pane slides someone else's mark onto a different bar without a word.
+         Re-apply from the time we were actually told. applySync touches only
+         the crosshair, so this cannot recurse. */
+      if (syncedRef.current !== null) applySync(syncedRef.current);
+    };
     chart.timeScale().subscribeVisibleLogicalRangeChange(onRange);
+
+    /*
+      HOVER, OUT — and only REAL hover.
+
+      The library re-fires this handler on every model update while a crosshair
+      is live, twice per series.update(); this chart updates candles, volume,
+      indicators and compares on every 1500ms tick. Left unfiltered, a follower
+      pane's own tick would look like a hover and it would broadcast straight
+      back. Only pointer-driven fires carry `sourceEvent`, and a pointer LEAVING
+      carries neither `point` nor `sourceEvent`. setCrosshairPosition itself
+      never reaches here at all — it skips the event internally — so the fan-out
+      cannot reflect even once.
+    */
+    const onCross = (param: MouseEventParams<Time>) => {
+      if (!param.point) {              // the pointer left the plot
+        onCrosshairRef.current?.(null);
+        return;
+      }
+      if (!param.sourceEvent) return;  // a model echo, not a hover
+      // This pane owns its crosshair again — give the horizontal arm back.
+      syncedRef.current = null;
+      setFollower(false);
+      onCrosshairRef.current?.(typeof param.time === 'number' ? (param.time as UTCTimestamp) : null);
+    };
+    chart.subscribeCrosshairMove(onCross);
+    syncRegisterRef.current?.(applySync);
 
     chartRef.current = chart;
     candleSeriesRef.current = candles;
@@ -550,6 +674,9 @@ const StrikeChart = ({
 
     return () => {
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRange);
+      chart.unsubscribeCrosshairMove(onCross);
+      syncRegisterRef.current?.(null);
+      syncedRef.current = null;
       chart.remove();
       chartRef.current = null;
       candleSeriesRef.current = null;
@@ -569,9 +696,9 @@ const StrikeChart = ({
       cancelAnimationFrame(levelRafRef.current);
       loadedRef.current = { ticker: '', timeframe: '1m', theme: '' };
     };
-    // ensureRunway is a stable useCallback([]) — listed so the subscription
-    // installed here is never reading a stale one.
-  }, [makeMain, ensureRunway]);
+    // ensureRunway and applySync are stable useCallback([])s — listed so the
+    // subscriptions installed here are never reading a stale one.
+  }, [makeMain, ensureRunway, applySync, setFollower]);
 
   /* Style swap (Noah, 2026-08-23): replace ONLY the main series in place —
      price lines and primitives die with the old one, so the nonce tells the
