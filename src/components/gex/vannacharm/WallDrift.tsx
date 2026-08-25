@@ -9,20 +9,55 @@ interface WallDriftProps {
 const W = 100;
 const H = 40;
 
-function linePath(points: WallDriftPoint[], pick: (p: WallDriftPoint) => number, min: number, span: number): string {
-  return points
-    .map((p, i) => {
-      const x = (i / (points.length - 1)) * W;
-      const y = H - ((pick(p) - min) / span) * H;
-      return `${i === 0 ? 'M' : 'L'}${x.toFixed(2)},${y.toFixed(2)}`;
-    })
-    .join(' ');
+/*
+  Two shapes, because two kinds of series are drawn here.
+
+  A WALL DOES NOT SLIDE. Walls and the flip sit on listed strikes, so between
+  two samples the level HELD and then JUMPED. Drawing a straight segment
+  between them draws a diagonal ramp — a level gliding from 510 to 515 through
+  prices no strike exists at — and a session of those ramps is what made this
+  panel read as a square wave rather than a timeline. A step keeps the level
+  flat for the interval it was actually at, then moves.
+
+  SPOT IS CONTINUOUS and stays a straight line: price really does pass through
+  every value in between, so stepping it would be the opposite error.
+*/
+function linePath(
+  points: WallDriftPoint[],
+  pick: (p: WallDriftPoint) => number,
+  min: number,
+  span: number,
+  step = false
+): string {
+  const at = (i: number) => ({
+    x: (i / (points.length - 1)) * W,
+    y: H - ((pick(points[i]) - min) / span) * H,
+  });
+  let d = '';
+  let prev = at(0);
+  d += `M${prev.x.toFixed(2)},${prev.y.toFixed(2)}`;
+  for (let i = 1; i < points.length; i++) {
+    const p = at(i);
+    // Hold the old level to this sample's x, then jump — never in between.
+    if (step) d += ` L${p.x.toFixed(2)},${prev.y.toFixed(2)}`;
+    d += ` L${p.x.toFixed(2)},${p.y.toFixed(2)}`;
+    prev = p;
+  }
+  return d;
 }
 
-const SERIES: { label: string; color: string; pick: (p: WallDriftPoint) => number; dash?: string; width: number }[] = [
-  { label: 'Call wall', color: BULL, pick: p => p.callWall, width: 0.6 },
-  { label: 'Put wall', color: PUT_WALL, pick: p => p.putWall, width: 0.6 },
-  { label: 'Flip', color: FLIP, pick: p => p.flip, dash: '2 2', width: 0.7 },
+const SERIES: {
+  label: string;
+  color: string;
+  pick: (p: WallDriftPoint) => number;
+  dash?: string;
+  width: number;
+  /** Levels sit on listed strikes and jump; price is continuous. */
+  step?: boolean;
+}[] = [
+  { label: 'Call wall', color: BULL, pick: p => p.callWall, width: 0.6, step: true },
+  { label: 'Put wall', color: PUT_WALL, pick: p => p.putWall, width: 0.6, step: true },
+  { label: 'Flip', color: FLIP, pick: p => p.flip, dash: '2 2', width: 0.7, step: true },
   { label: 'Spot', color: SPOT, pick: p => p.spot, width: 0.9 },
 ];
 
@@ -91,7 +126,7 @@ const WallDrift = ({ drift }: WallDriftProps) => {
           {SERIES.map(s => (
             <path
               key={s.label}
-              d={linePath(drift, s.pick, min, span)}
+              d={linePath(drift, s.pick, min, span, s.step)}
               fill="none"
               stroke={s.color}
               strokeWidth={s.width}

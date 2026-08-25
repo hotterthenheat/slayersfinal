@@ -104,7 +104,7 @@ const VannaCharm = () => {
               prediction). Each level with its distance from spot, the charm
               concentration, the biggest mover since the last scan — then ONE
               line stating what this scenario computes. */}
-          <Panel title="Migration Read" subtitle="the structure, measured" className="w-full flex-1" bodyClassName="flex flex-col">
+          <Panel title="Migration Read" subtitle="each level, and how far spot sits from it" className="w-full flex-1" bodyClassName="flex flex-col">
             {/* The rows SPREAD over the card's height (the panel is stretched
                 to match its column) and the scenario line pins to the floor —
                 a stack hugging the top left half the card empty (Noah,
@@ -124,10 +124,21 @@ const VannaCharm = () => {
                   value={
                     <>
                       {row.l.price % 1 === 0 ? row.l.price.toFixed(0) : row.l.price.toFixed(2)}
+                      {/*
+                        "from spot", spelled out. This percentage is the level's
+                        DISTANCE from spot, and it sat unlabelled directly
+                        beside Level Shifts — a panel whose rows report whether
+                        a level MOVED. Two adjacent panels, the same four level
+                        names, bare signed percentages in both, and one of them
+                        saying "holds" while the other showed -0.90%. Both
+                        numbers were right; nothing on screen said they measured
+                        different things.
+                      */}
                       <span className={`font-normal ${row.l.distPct > 0 ? 'text-bull' : row.l.distPct < 0 ? 'text-bear' : 'text-textMuted'}`}>
                         {' '}
                         {row.l.distPct > 0 ? '+' : ''}
                         {row.l.distPct.toFixed(2)}%
+                        <span className="text-textMuted"> from spot</span>
                       </span>
                     </>
                   }
