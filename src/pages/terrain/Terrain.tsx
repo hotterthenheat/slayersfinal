@@ -340,9 +340,24 @@ const Pane = ({ cfg, onCfg, revision, expanded, onToggleExpand, index, tall, hea
 
   return (
     <div className={expanded ? 'fixed inset-0 z-[80] flex flex-col' : 'contents'}>
+      {/*
+        THE PANE'S OWN FLOOR, and it has to be here.
+
+        The wrapper above is `display: contents` when the pane is not
+        expanded, so THIS div is the real grid item. A `[&>*]:min-h-[420px]`
+        rule on the grid targets the wrapper instead, where min-height is
+        computed and then ignored — `contents` elements generate no box for it
+        to apply to. Measured on a phone with that rule in place: both panes
+        0px tall, the whole grid 10px, the charts stacked on top of each other
+        under a pile of floating chrome. It looked like a layout bug and it
+        was a selector pointing one element too high.
+
+        Only below `lg`. Above it the grid owns the height and a floor here
+        would fight it.
+      */}
       <div
-        className={`relative flex flex-col min-h-0 overflow-hidden animate-soft-in ${
-          expanded ? 'flex-1' : 'border border-borderSubtle rounded-md'
+        className={`relative flex flex-col overflow-hidden animate-soft-in ${
+          expanded ? 'flex-1 min-h-0' : 'min-h-[420px] lg:min-h-0 border border-borderSubtle rounded-md'
         }`}
         style={{ animationDelay: `${index * 60}ms`, background: surface }}
       >
@@ -707,7 +722,9 @@ const Terrain = () => {
         because four charts sharing one phone screen is four unreadable ones.
       */}
       <div
-        className={`grid ${COLS[cfg.layout]} ${cfg.layout === 4 ? 'lg:grid-rows-2' : 'lg:grid-rows-1'} gap-1.5 flex-1 min-h-0 [&>*]:min-h-[420px] lg:[&>*]:min-h-0`}
+        /* The stacked-phone minimum lives on the PANE, not here — see the
+           note on Pane's own wrapper for why a rule here does nothing. */
+        className={`grid ${COLS[cfg.layout]} ${cfg.layout === 4 ? 'lg:grid-rows-2' : 'lg:grid-rows-1'} gap-1.5 flex-1 min-h-0`}
       >
         {panes.map((pane, i) => (
           <Pane
