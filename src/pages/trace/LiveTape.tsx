@@ -229,7 +229,26 @@ const SessionBeam = ({
   const seam = Math.min(90, Math.max(10, bullPct));
 
   return (
-    <div className="border border-borderSubtle bg-panel rounded-md px-3.5 py-2.5 flex items-center gap-6">
+    /*
+      THE BEAM IS THE INSTRUMENT; IT GETS THE WIDTH FIRST.
+
+      This row is scope (min-w 104, shrink-0), beam (flex-1), composition
+      (min-w 190, shrink-0) and the whale chip. On a 390px phone the two
+      shrink-0 blocks plus two gaps want more than the row has, so the only
+      thing left to give was the beam — it was measured at 56px wide, and its
+      own end labels ("$1.1M bull" / "bear $1.7M") overflowed a 28px box each
+      and ran together into "$1.1M bullbear $1.7M".
+
+      The boxes did not technically overlap, which is why a bounding-box
+      check called it clean: they abutted at exactly one pixel and the TEXT
+      spilled. Reading the render is what caught it.
+
+      So the row wraps, and the beam carries a floor it cannot be squeezed
+      below. When the width is not there, the beam takes its own line at full
+      width instead of being crushed to make room for two blocks that had
+      declared themselves unshrinkable.
+    */
+    <div className="border border-borderSubtle bg-panel rounded-md px-3.5 py-2.5 flex flex-wrap items-center gap-x-6 gap-y-3">
       {/* The scope's weight — the label IS the scope, so a filtered strip can
           never be misread as the market. min-w so a digit-count change
           ($9.9M -> $10.1M) doesn't nudge the beam. */}
@@ -241,11 +260,11 @@ const SessionBeam = ({
 
       {/* The beam — directional premium as a tug-of-war; the seam is the verdict */}
       {rows.length === 0 ? (
-        <div className="flex-1 min-w-0 h-[38px] flex items-center justify-center border border-dashed border-borderSubtle rounded font-mono text-[10px] text-textMuted uppercase tracking-widest select-none">
+        <div className="flex-1 min-w-[220px] h-[38px] flex items-center justify-center border border-dashed border-borderSubtle rounded font-mono text-[10px] text-textMuted uppercase tracking-widest select-none">
           {empty}
         </div>
       ) : (
-        <div className="flex-1 min-w-0 select-none">
+        <div className="flex-1 min-w-[220px] select-none">
           {/* The label rides the seam on the same glide as the bar — a
               full-width rail translated by the seam %, label hanging at its
               left edge (translateX % is compositor-cheap; `left` is not). */}

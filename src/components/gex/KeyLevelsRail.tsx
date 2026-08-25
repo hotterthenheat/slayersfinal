@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { fmtUsd } from '../../data/gex';
 import Term from '../ui/Term';
 import type { TermKey } from '../../data/terms';
@@ -41,13 +42,67 @@ const KIND_TERM: Partial<Record<KeyLevelKind, TermKey>> = {
   king: 'King',
 };
 
-/** Price-ordered ladder of structural levels: distance from spot + parked exposure. */
-const KeyLevelsRail = ({ rows, maxPressure, onSelect, priceFormat }: KeyLevelsRailProps) => (
-  <div className="flex flex-col">
-    <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 px-2.5 py-1.5 border-b border-borderSubtle font-mono text-[8px] font-semibold uppercase tracking-widest text-textMuted select-none">
-      <span>Level</span>
-      <span className="text-right w-14">Dist</span>
-      <span className="text-right w-16">Pressure</span>
+/*
+  THE RAIL MEASURES ITSELF.
+
+  Three data columns need about 190px before the level name gets anything.
+  Dropped into a Pulse widget six of twelve columns wide on a 390px phone the
+  rail has 171, and the first version of this fix — a minmax floor on the name
+  — only moved the damage: the name fitted and the pressure figure was clipped
+  by 15px instead. There is no arrangement of three columns that reads at
+  171px.
+
+  So below a threshold it shows two. Which level and how much exposure is
+  parked there are the reasons to look at this rail at all; distance from spot
+  is the one a reader can get from the price printed under the name.
+
+  It measures its OWN width rather than the viewport, because the width comes
+  from the desk's 12-column grid and a widget can be narrow on a wide screen.
+  Same ResizeObserver pattern as ExposureMatrix, for the same reason.
+*/
+const DIST_COLUMN_MIN = 210;
+
+const KeyLevelsRail = ({ rows, maxPressure, onSelect, priceFormat }: KeyLevelsRailProps) => {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [showDist, setShowDist] = useState(true);
+
+  const sync = useCallback(() => {
+    const el = ref.current;
+    if (el) setShowDist(el.clientWidth >= DIST_COLUMN_MIN);
+  }, []);
+
+  useEffect(() => {
+    sync();
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(sync);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [sync]);
+
+  const cols = showDist
+    ? 'grid-cols-[minmax(56px,1fr)_auto_auto]'
+    : 'grid-cols-[minmax(56px,1fr)_auto]';
+
+  return (
+  <div ref={ref} className="flex flex-col">
+    {/*
+      THE NAME COLUMN HAS A FLOOR NOW.
+
+      The two right-hand columns were fixed at w-14 and w-16, which with the
+      padding and two gap-x-3s came to 164px of the row before the level name
+      got any. Dropped into a Pulse widget six of twelve columns wide on a
+      390px phone, the row had 171px — so "Call wall" and "513.50" were handed
+      a 7px box and spilled straight out of it.
+
+      Tighter fixed columns and a minmax floor on the name, so the name is the
+      last thing squeezed rather than the first, and truncates with an
+      ellipsis when it finally is.
+    */}
+    <div className={`grid ${cols} gap-x-2 px-2.5 py-1.5 border-b border-borderSubtle font-mono text-[8px] font-semibold uppercase tracking-widest text-textMuted select-none`}>
+      <span className="truncate">Level</span>
+      {showDist && <span className="text-right w-12">Dist</span>}
+      <span className="text-right w-14">Pressure</span>
     </div>
     {rows.map(row => {
       const isSpot = row.kind === 'spot';
@@ -58,26 +113,28 @@ const KeyLevelsRail = ({ rows, maxPressure, onSelect, priceFormat }: KeyLevelsRa
           role={onSelect ? 'button' : undefined}
           onClick={onSelect ? () => onSelect(row.price) : undefined}
           title={onSelect ? 'Flash on chart' : undefined}
-          className={`grid grid-cols-[1fr_auto_auto] gap-x-3 items-center px-2.5 py-[7px] border-b border-borderSubtle/30 last:border-0 transition-colors ${
+          className={`grid ${cols} gap-x-2 items-center px-2.5 py-[7px] border-b border-borderSubtle/30 last:border-0 transition-colors ${
             isSpot ? 'bg-white/[0.04]' : ''
           } ${onSelect ? 'cursor-pointer hover:bg-white/[0.03]' : ''}`}
         >
           <span className="min-w-0">
-            <span className={`block font-mono text-[10px] font-semibold uppercase tracking-wider ${KIND_TEXT[row.kind]}`}>
+            <span className={`block truncate font-mono text-[10px] font-semibold uppercase tracking-wider ${KIND_TEXT[row.kind]}`}>
               {KIND_TERM[row.kind] ? <Term k={KIND_TERM[row.kind] as TermKey}>{row.label}</Term> : row.label}
             </span>
-            <span className="block font-mono text-[11px] font-bold tnum text-textPrimary">
+            <span className="block truncate font-mono text-[11px] font-bold tnum text-textPrimary">
               {priceFormat ? priceFormat(row.price) : row.price % 1 === 0 ? row.price.toFixed(0) : row.price.toFixed(2)}
             </span>
           </span>
-          <span
-            className={`w-14 text-right font-mono text-[10px] tnum ${
-              isSpot ? 'text-textMuted' : row.distPct >= 0 ? 'text-bull' : 'text-bear'
-            }`}
-          >
-            {isSpot ? '—' : `${row.distPct >= 0 ? '+' : ''}${row.distPct.toFixed(2)}%`}
-          </span>
-          <span className="w-16 text-right">
+          {showDist && (
+            <span
+              className={`w-12 text-right font-mono text-[10px] tnum ${
+                isSpot ? 'text-textMuted' : row.distPct >= 0 ? 'text-bull' : 'text-bear'
+              }`}
+            >
+              {isSpot ? '—' : `${row.distPct >= 0 ? '+' : ''}${row.distPct.toFixed(2)}%`}
+            </span>
+          )}
+          <span className="w-14 text-right">
             <span className="block font-mono text-[10px] tnum text-textSecondary">
               {isSpot ? '—' : fmtUsd(row.pressure)}
             </span>
@@ -90,7 +147,8 @@ const KeyLevelsRail = ({ rows, maxPressure, onSelect, priceFormat }: KeyLevelsRa
         </div>
       );
     })}
-  </div>
-);
+    </div>
+  );
+};
 
 export default KeyLevelsRail;

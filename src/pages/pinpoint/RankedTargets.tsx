@@ -201,15 +201,24 @@ const PodiumCard = forwardRef<
         <EdgeLine t={t} above={above} lens={lens} />
       </div>
 
-      {/* Stats — neutral ink; color is reserved for the verdict */}
-      <div className="px-3.5 mt-3 grid grid-cols-4 gap-2">
+      {/*
+        Stats — neutral ink; color is reserved for the verdict.
+
+        WRAP, DON'T WEDGE. Four fixed columns gave each stat 44px at a 768px
+        viewport, and a six-figure open-interest with its comma — "108,444" —
+        needs 50 at this size, so it spilled into its neighbour. The podium's
+        width comes from the page grid rather than the viewport, so a media
+        query would only be a guess at it; a wrap with a per-stat floor is
+        right at every width, and folds 4x1 into 2x2 exactly when it has to.
+      */}
+      <div className="px-3.5 mt-3 flex flex-wrap gap-x-2 gap-y-2">
         {[
           { label: 'BPS', term: 'BPS' as const, value: `${t.bps >= 0 ? '+' : ''}${t.bps}`, lens: 'proximity' as const },
           { label: 'NBR', term: 'NBR' as const, value: `${t.nbr.toFixed(2)}x`, strong: t.nbr >= 1.5, lens: 'nbr' as const },
           { label: 'Volume', term: undefined, value: t.volume.toLocaleString(), lens: 'volume' as const },
           { label: 'Open Int', term: undefined, value: t.openInterest.toLocaleString(), lens: 'oi' as const },
         ].map(s => (
-          <div key={s.label}>
+          <div key={s.label} className="min-w-[68px] flex-1">
             <span className="block font-mono text-[9px] uppercase tracking-widest text-textSecondary">
               {s.term ? <Term k={s.term}>{s.label}</Term> : s.label}
             </span>

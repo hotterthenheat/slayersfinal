@@ -97,5 +97,55 @@ check(
   `${mdCount} md: rules, ${lgCount} lg: rules`
 );
 
+/*
+  ---- Two panels that measure themselves rather than the window -------------
+
+  Both of these live inside containers whose width comes from a layout, not
+  from the viewport: the Key Levels rail sits in a Pulse widget on a
+  12-column drag grid, and the Exposure Matrix sits in a page column. A media
+  query cannot see either, so a viewport breakpoint would be a guess at the
+  number that actually matters.
+
+  The rail was the one that proved it. Three data columns need ~190px before
+  the level name gets anything; six of twelve columns on a 390px phone gives
+  171. The first fix put a minmax floor on the name and only moved the damage
+  — the name fitted and the pressure figure clipped by 15px instead. There is
+  no arrangement of three columns that reads at 171px, so below a threshold it
+  shows two.
+
+  Measured after the fix: 171px -> 2 columns, and 360 / 608 / 760 -> 3, all
+  fitting. What is pinned here is the mechanism, since the gate has no browser
+  to re-measure with.
+*/
+const SELF_MEASURING = [
+  { file: 'src/components/gex/KeyLevelsRail.tsx', what: 'the Key Levels rail' },
+  { file: 'src/components/gex/ExposureMatrix.tsx', what: 'the Exposure Matrix' },
+];
+for (const { file, what } of SELF_MEASURING) {
+  const src = read(file);
+  const observes = /new ResizeObserver\(/.test(src) && /\.observe\(/.test(src);
+  const reads = /clientWidth|scrollWidth/.test(src);
+  check(
+    `${what} measures its own container`,
+    observes && reads,
+    observes && reads ? 'ResizeObserver + a width read' : `observer:${observes} widthRead:${reads}`
+  );
+  check(
+    `${what} disconnects its observer`,
+    /ro\.disconnect\(\)/.test(src),
+    /ro\.disconnect\(\)/.test(src) ? 'cleaned up on unmount' : 'observer leaks past unmount'
+  );
+}
+
+// The rail's threshold has to stay a real number, not drift to 0 (always three
+// columns, back to the clipping) or to Infinity (always two, on a 27in screen).
+const rail = read('src/components/gex/KeyLevelsRail.tsx');
+const threshold = Number(rail.match(/const DIST_COLUMN_MIN = (\d+)/)?.[1] ?? NaN);
+check(
+  'the rail keeps a sane width threshold',
+  threshold >= 180 && threshold <= 400,
+  Number.isFinite(threshold) ? `DIST_COLUMN_MIN = ${threshold}` : 'DIST_COLUMN_MIN not found'
+);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
