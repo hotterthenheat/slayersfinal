@@ -88,6 +88,21 @@ it is red/green.*
    them neutral and let the bars carry the ink. Recommend inked.
 3. **Steel text tone.** `#AAB6C6` proposed; tune on screen.
 
+## Status (2026-08-25)
+
+| step | state |
+|---|---|
+| 1 · Tokens: palette + tailwind | **done** — `DEALER_PUT` / `DEALER_CALL` and the `_INK` variants, asserted against Tailwind in `weights-proof` |
+| 2 · Exposure Profile trio | **done** — the ladder and map moved with the tokens; the matrix followed in `a2a4280`. Asserted as a set, so a fourth panel on that page cannot ship unmigrated |
+| 3 · Net figures | **done** — profile facts and pinned-strike legs, Ranked Targets page + widget, both Compass rails. Verified from the DOM, not the source |
+| 4 · Walls | **blocked — needs your call.** See *Open decisions* below |
+| 5 · Legends and dictionary | **done** for the migrated surfaces. `Call wall` / `Put wall` wait on step 4 |
+| 6 · Remove the aliases | **done** — `SHORT_GAMMA` / `LONG_GAMMA` deleted, the map repointed, asserted absent across all 183 files under `src` |
+
+Everything the pass claims is checked by `npm test`, and every assertion in it
+was mutation-verified: the defect was put back and the guard watched until it
+failed.
+
 ## Order of work
 
 1. Tokens: palette + tailwind, aliases in place. Build green.
