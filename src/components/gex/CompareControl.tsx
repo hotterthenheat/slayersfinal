@@ -10,10 +10,11 @@
 ==================================================
 */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Plus, Search, X } from 'lucide-react';
 import type { TickerListing } from '../../data/tickers';
 import type { CompareEntry, CompareMode } from './StrikeChart';
+import useFocusTrap from '../ui/useFocusTrap';
 
 type TickerModule = typeof import('../../data/tickers');
 
@@ -22,6 +23,7 @@ const MODE_LABEL: Record<CompareMode, string> = {
   scale: 'New price scale',
   pane: 'New pane',
 };
+const MODES = Object.keys(MODE_LABEL) as CompareMode[];
 
 interface CompareControlProps {
   /** The chart's own name — excluded from the list */
@@ -39,7 +41,31 @@ const CompareControl = ({ current, compares, onAdd, onRemove, max = 4 }: Compare
   const [mod, setMod] = useState<TickerModule | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
   const full = compares.length >= max;
+
+  /*
+    IT IS A COMBOBOX, WITH ONE TAB STOP.
+
+    Adding a comparison was flatly impossible from a keyboard. Measured on the
+    running build: the three scale buttons compute `display: none` on every row
+    with a real desktop pointer, so they cannot be reached; there was no Enter
+    handler in this file at all, so typing QQQ and pressing Enter added
+    nothing; and the first Tab out of the search box landed on a control BEHIND
+    the still-open menu. On a coarse pointer the same markup went the other way
+    — the buttons show, and the menu became 28 tab stops named from three
+    repeated strings.
+
+    So the row is chosen with Up/Down and the way it joins the chart with
+    Left/Right, both driven from the search box. Focus never leaves the input,
+    because it has to keep filtering while you steer. The scale buttons stay
+    exactly as they are for the pointer, and are taken out of the tab order
+    rather than out of the DOM — which leaves the touch path untouched.
+  */
+  const [highlight, setHighlight] = useState(0);
+  const [modeIdx, setModeIdx] = useState(0);
+  const uid = useId();
 
   // Outside click / Escape closes — the TickerQuickPick contract
   useEffect(() => {
@@ -47,14 +73,24 @@ const CompareControl = ({ current, compares, onAdd, onRemove, max = 4 }: Compare
     const onDown = (e: MouseEvent) => {
       if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
     };
+    /* CAPTURE, and it stops the key going any further.
+
+       Escape is not owned by one component: the desk behind this menu closes
+       an expanded pane on the same key, and both listeners are on `window`.
+       Bubble-phase, both fire — measured: one Escape with this open inside an
+       expanded pane closed the menu AND collapsed the pane. Window-capture
+       runs before window-bubble, so the innermost thing open gets the key and
+       nothing else sees it. Same pattern as the date picker. */
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      setOpen(false);
     };
     window.addEventListener('mousedown', onDown);
-    window.addEventListener('keydown', onKey);
+    window.addEventListener('keydown', onKey, true);
     return () => {
       window.removeEventListener('mousedown', onDown);
-      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keydown', onKey, true);
     };
   }, [open]);
 
@@ -62,13 +98,45 @@ const CompareControl = ({ current, compares, onAdd, onRemove, max = 4 }: Compare
     if (!open) return;
     import('../../data/tickers').then(setMod);
     requestAnimationFrame(() => inputRef.current?.focus());
+    setHighlight(0);
+    setModeIdx(0);
   }, [open]);
+
+  /* A new search is a new list — keeping the old index would leave the
+     highlight on whatever row happens to sit at that position now. */
+  useEffect(() => setHighlight(0), [query]);
+
+  /* One focusable inside, so the trap pins Tab to the search box rather than
+     letting it land on a control hidden behind this menu — and hands focus
+     back to the + button on the way out, which did not happen before. */
+  useFocusTrap(open, menuRef);
 
   const taken = useMemo(() => new Set(compares.map(c => c.ticker)), [compares]);
   const results: TickerListing[] = useMemo(
     () => (mod ? mod.searchTickers(query, 24).filter(t => t.symbol !== current && !taken.has(t.symbol)) : []),
     [mod, query, current, taken]
   );
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Escape') { e.stopPropagation(); setOpen(false); return; }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const next = Math.max(0, Math.min(results.length - 1, highlight + (e.key === 'ArrowDown' ? 1 : -1)));
+      setHighlight(next);
+      rowRefs.current[next]?.scrollIntoView({ block: 'nearest' });
+      return;
+    }
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      e.preventDefault();
+      setModeIdx(cur => Math.max(0, Math.min(MODES.length - 1, cur + (e.key === 'ArrowRight' ? 1 : -1))));
+      return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const pick = results[highlight];
+      if (!full && pick) add(pick.symbol, MODES[modeIdx]);
+    }
+  };
 
   const add = (symbol: string, mode: CompareMode) => {
     onAdd(symbol.trim().toUpperCase(), mode);
@@ -87,14 +155,25 @@ const CompareControl = ({ current, compares, onAdd, onRemove, max = 4 }: Compare
         <Plus className="w-3.5 h-3.5" />
       </button>
       {open && (
-        <div className="absolute left-0 top-full mt-1 z-40 w-[380px] border border-borderMuted bg-panel rounded-md shadow-2xl shadow-black/60 overflow-hidden animate-slide-in">
+        <div
+          ref={menuRef}
+          tabIndex={-1}
+          className="absolute left-0 top-full mt-1 z-40 w-[380px] border border-borderMuted bg-panel rounded-md shadow-2xl shadow-black/60 overflow-hidden animate-slide-in"
+        >
           <div className="flex items-center gap-1.5 px-2 border-b border-borderSubtle">
             <Search className="w-3 h-3 text-textMuted shrink-0" />
             <input
               ref={inputRef}
               value={query}
               onChange={e => setQuery(e.target.value)}
+              onKeyDown={onKeyDown}
+              role="combobox"
+              aria-expanded
+              aria-controls={`${uid}-list`}
+              aria-autocomplete="list"
+              aria-activedescendant={results[highlight] ? `${uid}-opt-${highlight}` : undefined}
               placeholder="Compare symbols…"
+              title="Up and down to choose a symbol, left and right for the scale, Enter to add"
               className="w-full bg-transparent py-1.5 font-mono text-[11px] text-textPrimary placeholder:text-textMuted focus:outline-none"
             />
           </div>
@@ -122,25 +201,51 @@ const CompareControl = ({ current, compares, onAdd, onRemove, max = 4 }: Compare
             </div>
           )}
 
-          <div className="max-h-64 overflow-y-auto py-1">
+          {/* tabIndex is not decorative: Chrome makes an overflowing scroll
+              container focusable, which showed up as an unnamed tab stop. */}
+          <div id={`${uid}-list`} role="listbox" tabIndex={-1} aria-label="Symbols to compare" className="max-h-64 overflow-y-auto py-1">
             {!mod ? (
               <div className="px-2.5 py-4 text-center font-mono text-[10px] text-textMuted">Loading tickers…</div>
             ) : results.length === 0 ? (
               <div className="px-2.5 py-4 text-center font-mono text-[10px] text-textMuted">No matches</div>
             ) : (
-              results.map(t => (
-                <div key={t.symbol} className="group relative flex items-center gap-2 px-2.5 py-1.5 hover:bg-white/[0.04] transition-colors">
+              results.map((t, i) => (
+                <div
+                  key={t.symbol}
+                  id={`${uid}-opt-${i}`}
+                  role="option"
+                  aria-selected={i === highlight}
+                  ref={el => { rowRefs.current[i] = el; }}
+                  onMouseEnter={() => setHighlight(i)}
+                  className={`group relative flex items-center gap-2 px-2.5 py-1.5 hover:bg-white/[0.04] transition-colors ${
+                    i === highlight ? 'bg-white/[0.05]' : ''
+                  }`}
+                >
                   <span className="font-mono text-[11px] font-semibold text-textPrimary w-14 shrink-0">{t.symbol}</span>
                   <span className="text-[10px] text-textSecondary truncate">{t.name === t.symbol ? '' : t.name}</span>
                   {/* The TV move: the row's right side becomes the three
                       scale choices on hover — how the line joins the chart */}
                   {!full && (
-                    <span className="touch-reveal absolute right-1.5 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center gap-1 bg-panel pl-1.5">
-                      {(Object.keys(MODE_LABEL) as CompareMode[]).map(mode => (
+                    <span
+                      className={`touch-reveal absolute right-1.5 top-1/2 -translate-y-1/2 items-center gap-1 bg-panel pl-1.5 ${
+                        i === highlight ? 'flex' : 'hidden group-hover:flex'
+                      }`}
+                    >
+                      {MODES.map((mode, mi) => (
                         <button
                           key={mode}
+                          /* Out of the TAB ORDER, not out of the DOM: the
+                             pointer and touch paths are unchanged, and a
+                             keyboard user steers these from the search box
+                             instead of walking three of them per row. */
+                          tabIndex={-1}
                           onClick={() => add(t.symbol, mode)}
-                          className="px-1.5 py-0.5 rounded border border-borderSubtle bg-inset font-mono text-[9px] text-textSecondary hover:text-textPrimary hover:border-borderMuted whitespace-nowrap transition-colors"
+                          aria-label={`Add ${t.symbol} — ${MODE_LABEL[mode]}`}
+                          className={`px-1.5 py-0.5 rounded border bg-inset font-mono text-[9px] whitespace-nowrap transition-colors ${
+                            i === highlight && mi === modeIdx
+                              ? 'border-select text-textPrimary'
+                              : 'border-borderSubtle text-textSecondary hover:text-textPrimary hover:border-borderMuted'
+                          }`}
                         >
                           {MODE_LABEL[mode]}
                         </button>

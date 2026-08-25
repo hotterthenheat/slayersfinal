@@ -31,14 +31,24 @@ const TickerQuickPick = ({ ticker, onPick }: TickerQuickPickProps) => {
     const onDown = (e: MouseEvent) => {
       if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
     };
+    /* CAPTURE, and it stops the key going any further.
+
+       Escape is not owned by one component: the desk behind this menu closes
+       an expanded pane on the same key, and both listeners are on `window`.
+       Bubble-phase, both fire — measured: one Escape with this open inside an
+       expanded pane closed the menu AND collapsed the pane. Window-capture
+       runs before window-bubble, so the innermost thing open gets the key and
+       nothing else sees it. Same pattern as the date picker. */
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      setOpen(false);
     };
     window.addEventListener('mousedown', onDown);
-    window.addEventListener('keydown', onKey);
+    window.addEventListener('keydown', onKey, true);
     return () => {
       window.removeEventListener('mousedown', onDown);
-      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keydown', onKey, true);
     };
   }, [open]);
 

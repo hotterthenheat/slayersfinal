@@ -17,6 +17,7 @@ import StrikeChart, {
 import ChartToolbar from '../../components/gex/ChartToolbar';
 import CompareControl from '../../components/gex/CompareControl';
 import PaneLadder, { LADDER_WIDTH_PX } from '../../components/gex/PaneLadder';
+import useFocusTrap from '../../components/ui/useFocusTrap';
 import TickerQuickPick from '../../components/gex/TickerQuickPick';
 import SpotPrice from '../../components/gex/SpotPrice';
 import { CANDLE_THEMES, chartSurface, useCandleThemeKey } from '../../components/gex/candleTheme';
@@ -376,6 +377,13 @@ const Pane = ({
      its own frame loop. */
   const projectionRef = useRef<PriceProjection | null>(null);
 
+  /* An expanded pane covers the desk, so the keyboard has to be inside it.
+     Measured before this: thirteen Tabs from the expand button walked out of
+     the overlay and into the pane underneath, and the overlay told assistive
+     technology nothing about being modal at all. */
+  const overlayRef = useRef<HTMLDivElement | null>(null);
+  useFocusTrap(expanded, overlayRef);
+
   const [focus, setFocus] = useState<number | null>(null);
   useEffect(() => setFocus(null), [ticker]);
 
@@ -388,7 +396,13 @@ const Pane = ({
   const up = changePct >= 0;
 
   return (
-    <div className={expanded ? 'fixed inset-0 z-[80] flex flex-col' : 'contents'}>
+    <div
+      ref={overlayRef}
+      className={expanded ? 'fixed inset-0 z-[80] flex flex-col' : 'contents'}
+      {...(expanded
+        ? { role: 'dialog' as const, 'aria-modal': true, tabIndex: -1, 'aria-label': `${ticker} expanded` }
+        : {})}
+    >
       {/*
         THE PANE'S OWN FLOOR, and it has to be here.
 
