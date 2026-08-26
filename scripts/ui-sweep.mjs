@@ -779,8 +779,11 @@ head('an expanded pane does not outlive the pane it points at');
     ? ok('and the page is scroll-locked underneath it')
     : bad(`expected the body locked while expanded, got overflow:${opened.locked}`);
 
-  /* Now shrink past it with the keyboard, which is the door the layout buttons
-     cannot be: they sit at z-30, under the expanded pane's own overlay. */
+  /* Now shrink past it with the keyboard. This used to be the ONLY door —
+     the layout buttons sat at z-30 under the expanded pane's `fixed inset-0
+     z-[80]` overlay and could not be clicked. They can be now (section 13
+     asserts it); the keyboard is kept here because this check is about the
+     stale-index bug, and the key is the shortest path to reproducing it. */
   await page.keyboard.press('2');
   await page.waitForTimeout(700);
 
@@ -940,6 +943,84 @@ head('no pane chrome lands on a price axis');
         await ctx.close();
       }
     }
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   13. THE ARRANGEMENT BAR WORKS WHILE A PANE IS EXPANDED.
+
+   The defect this replaces: the expanded pane is `fixed inset-0 z-[80]` and
+   this bar was `absolute z-30`, so its three controls stayed mounted with
+   `opacity: 1` and `pointer-events: auto` while `elementFromPoint` at each
+   one's own centre returned the expanded chart's canvas. Painted, and dead.
+
+   The Esc chip is why it mattered: it renders ONLY while expanded, so a
+   control whose whole job is the pointer way out of fullscreen shipped in the
+   one state where it could never be clicked. The pane's own Collapse button
+   is inside the modal and did work, so this was a dead duplicate rather than
+   a trap — which is the reason to state what is asserted here precisely.
+
+   Clickability is `elementFromPoint` at the control's own centre, never the
+   presence of the node: every one of these was in the DOM, sized, and opaque
+   the whole time it did not work.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the arrangement bar is reachable while a pane is expanded');
+{
+  for (const [w, h] of [[1440, 900], [1024, 768]]) {
+    const { ctx, page } = await openDesk(w, h, 1);
+    await page.keyboard.press('f');
+    await page.waitForTimeout(900);
+
+    const r = await page.evaluate(() => {
+      const hit = el => {
+        if (!el) return { missing: true };
+        const b = el.getBoundingClientRect();
+        if (!b.width) return { missing: true };
+        const t = document.elementFromPoint(Math.round(b.left + b.width / 2), Math.round(b.top + b.height / 2));
+        return { ok: !!t && (t === el || el.contains(t)), was: t ? t.tagName.toLowerCase() : 'none', box: b };
+      };
+      const esc = [...document.querySelectorAll('button')].find(b => (b.textContent || '').trim() === 'Esc');
+      const grp = document.querySelector('[role=group][aria-label="How many charts"]');
+      const out = {
+        expanded: !!document.querySelector('[role="dialog"][aria-modal="true"]'),
+        esc: hit(esc),
+        strikes: hit(document.querySelector('[data-strikes-toggle]')),
+        layout: hit(grp && grp.querySelector('button')),
+      };
+      /* And it must not have bought its clearance from the expanded pane's own
+         price axis — the bar clears LADDER_WIDTH + the price gutter for
+         exactly this reason, and while expanded the pane under it is the
+         EXPANDED one, not the last one in the array. */
+      const axes = [...document.querySelectorAll('canvas')]
+        .map(c => c.getBoundingClientRect())
+        .filter(b => b.height > 120 && b.width > 25 && b.width < 95);
+      const bar = esc && esc.parentElement.getBoundingClientRect();
+      out.onAxis = bar
+        ? axes.filter(a => bar.right > a.left && bar.left < a.right && bar.bottom > a.top && bar.top < a.bottom).length
+        : -1;
+      return out;
+    });
+
+    const at = `${w}x${h}`;
+    r.expanded ? ok(`${at} — f expands a pane`) : bad(`${at} — nothing expanded, the rest proves nothing`);
+    for (const [name, v] of [['the Esc chip', r.esc], ['the Strikes toggle', r.strikes], ['the layout picker', r.layout]]) {
+      if (v.missing) bad(`${at} — ${name} is not on screen while expanded`);
+      else v.ok ? ok(`${at} — ${name} takes a click`) : bad(`${at} — ${name} is painted but ${v.was} takes its click`);
+    }
+    r.onAxis === 0
+      ? ok(`${at} — and the bar clears the expanded pane's price axis`)
+      : bad(`${at} — the bar overlaps ${r.onAxis} price axis canvas(es) of the expanded pane`);
+
+    /* It is not decorative: clicking it actually leaves fullscreen. */
+    await page.evaluate(() => {
+      const b = [...document.querySelectorAll('button')].find(x => (x.textContent || '').trim() === 'Esc');
+      const r = b.getBoundingClientRect();
+      document.elementFromPoint(Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)).click();
+    });
+    await page.waitForTimeout(700);
+    const closed = await page.evaluate(() => !document.querySelector('[role="dialog"][aria-modal="true"]'));
+    closed ? ok(`${at} — and clicking it leaves fullscreen`) : bad(`${at} — the Esc chip took the click and nothing happened`);
+    await ctx.close();
   }
 }
 

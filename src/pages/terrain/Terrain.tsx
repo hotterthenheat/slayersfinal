@@ -1316,15 +1316,46 @@ const Terrain = () => {
           comes from its own export rather than a number copied here that
           drifts the first time somebody edits the other file.
         */
+        /* Cleared past the rail of the pane that is actually UNDER it. That is
+           the last pane normally, but the EXPANDED one while a pane is
+           expanded — it is the only one on screen, and its rail is the only
+           one this bar can land on. Reading the last pane's flag there put the
+           clearance on the wrong pane's setting the moment the two differed. */
         style={{
-          right: (panes[panes.length - 1]?.ladder ? LADDER_WIDTH_PX : 0) + PRICE_GUTTER_PX + 8,
+          right:
+            ((expanded !== null ? panes[expanded] : panes[panes.length - 1])?.ladder ? LADDER_WIDTH_PX : 0) +
+            PRICE_GUTTER_PX +
+            8,
           bottom: TIME_AXIS_PX + 12,
         }}
         /* They come and go like the pane chrome, and they were the loudest
            thing on the screen while they were here: a solid white STRIKES
            button and a solid white active count, on a desk that had just been
            asked for less. Quiet at rest, full on hover or keyboard focus. */
-        className="chrome-hover pointer-events-none absolute z-30 flex items-center gap-2 opacity-40 transition-opacity duration-200 hover:opacity-100 focus-within:opacity-100"
+        /*
+          ABOVE THE EXPANDED PANE, AND FIXED WHILE IT IS UP.
+
+          The expanded pane is `fixed inset-0 z-[80]`, and this bar was
+          `absolute z-30` — under it. All three controls stayed mounted,
+          `opacity: 1` and `pointer-events: auto`, and `elementFromPoint` at
+          each one's own centre returned the expanded chart's canvas: painted,
+          and dead. Measured at 1440x900 and 1024x768.
+
+          The Esc chip is the one that made this worth fixing, because it
+          renders ONLY while expanded — a control whose entire job is the
+          pointer way out of fullscreen, shipped in the one state where it
+          cannot be clicked. (The pane's own Collapse button is inside the
+          modal and does work, so this was a dead duplicate rather than a
+          trap; it still offered a reader a button that does nothing.)
+
+          `fixed` rather than `absolute` while expanded, to match what it now
+          sits over: `absolute` anchors to this page root, and below `lg` the
+          root is a scrolling column rather than the viewport, so the bar
+          would ride down the page while the modal stayed pinned to the glass.
+        */
+        className={`chrome-hover pointer-events-none flex items-center gap-2 opacity-40 transition-opacity duration-200 hover:opacity-100 focus-within:opacity-100 ${
+          expanded !== null ? 'fixed z-[90]' : 'absolute z-30'
+        }`}
       >
         <div
           role="group"
