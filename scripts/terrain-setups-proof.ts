@@ -23,6 +23,7 @@ import {
   type SetupMap,
   type SymbolSetup,
 } from '../src/pages/terrain/setups';
+import { DEFAULT_OVERLAYS } from '../src/components/gex/StrikeChart';
 
 let pass = 0, fail = 0;
 const check = (name: string, ok: boolean, extra = '') => {
@@ -30,9 +31,22 @@ const check = (name: string, ok: boolean, extra = '') => {
   ok ? pass++ : fail++;
 };
 
+/* Today's shape, carrying EVERY overlay. The other fixtures below deliberately
+   carry four — they stand for records written before `flow` existed, which is
+   the whole point of the migration assertions. */
+/*
+  The pane fixture spreads DEFAULT_OVERLAYS rather than listing the overlays.
+
+  It used to list them, and the list went stale twice: once when `flow` landed
+  and again when the two drift panes did. Both times an assertion about JUNK
+  HANDLING failed for a reason that had nothing to do with junk, which is the
+  worst kind of red — it teaches you to edit the test instead of reading it.
+  Spreading the shipped defaults means a new overlay arrives here already
+  counted, and the two this fixture actually cares about are still named.
+*/
 const pane = (): SymbolSetup => ({
   timeframe: '1h',
-  overlays: { trails: true, levels: true, darkpool: false, volume: true },
+  overlays: { ...DEFAULT_OVERLAYS, trails: true, levels: true, darkpool: false, volume: true },
   indicators: { ema9: false, ema21: true, ema50: false, vwap: false },
   chartStyle: 'candles',
   compares: [],
@@ -77,9 +91,62 @@ const withJunk = readSetup(
   { seen: 1, overlays: { trails: true, levels: true, darkpool: true, volume: true, ghost: true } },
   'SPY'
 );
+/*
+  The count comes from the SHIPPED DEFAULTS, not from a literal and not from
+  this file's own fixture.
+
+  It was `=== 4`, then a fixture's key count — and the fixture was a literal
+  one level down, so it went stale on the very next overlay anyway.
+  DEFAULT_OVERLAYS is the type's canonical instance, and setups.ts is held to
+  the same type by a `satisfies` tripwire that fails the build if it drifts, so
+  reading the count from there cannot silently disagree with the module under
+  test.
+*/
+const OVERLAY_COUNT = Object.keys(DEFAULT_OVERLAYS).length;
 check(
   'and an extra key is dropped rather than carried',
-  !!withJunk?.overlays && !('ghost' in withJunk.overlays) && Object.keys(withJunk.overlays).length === 4
+  !!withJunk?.overlays && !('ghost' in withJunk.overlays) && Object.keys(withJunk.overlays).length === OVERLAY_COUNT,
+  `${withJunk?.overlays ? Object.keys(withJunk.overlays).length : 'none'} of ${OVERLAY_COUNT}`
+);
+
+/*
+  ADDING AN OVERLAY MUST NOT COST A READER THE ONES THEY ALREADY SET.
+
+  The gate here used to be `length === OVERLAY_KEYS.length` — a stored record
+  had to carry EVERY overlay or the whole field was thrown away. That is
+  invisible until an overlay is added, at which point every setup ever saved is
+  one key short and every symbol loses ALL of its overlays at once, for a key
+  the reader has never heard of. Measured against the real store before the fix:
+  the overlays field vanished from every stored symbol.
+
+  This is the regression guard for that. The fixture is deliberately written as
+  a record from BEFORE the new key existed.
+*/
+const legacy = readSetup(
+  { overlays: { trails: true, levels: false, darkpool: true, volume: false } },
+  'TSLA'
+);
+check(
+  'a setup saved before a new overlay existed still returns its overlays',
+  !!legacy?.overlays,
+  legacy?.overlays ? 'kept' : 'WIPED — every symbol just lost its overlays'
+);
+check(
+  'and every value the reader actually chose survives unchanged',
+  legacy?.overlays?.trails === true &&
+    legacy?.overlays?.levels === false &&
+    legacy?.overlays?.darkpool === true &&
+    legacy?.overlays?.volume === false,
+  JSON.stringify(legacy?.overlays)
+);
+check(
+  'the key they never saw comes back OFF, not on',
+  legacy?.overlays !== undefined &&
+    Object.keys(legacy.overlays).length === OVERLAY_COUNT &&
+    Object.entries(legacy.overlays).every(
+      ([k, v]) => ['trails', 'levels', 'darkpool', 'volume'].includes(k) || v === false
+    ),
+  JSON.stringify(legacy?.overlays)
 );
 
 // 5. a symbol cannot compare against itself

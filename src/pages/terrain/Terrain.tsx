@@ -4,6 +4,7 @@ import Simulator from '../../core/simulator';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildLadderFor, buildLevelsFor, buildPrints, fmtUsd, spotChangePct } from '../../data/gex';
 import StrikeChart, {
+  PRICE_SCALE_MIN_WIDTH,
   DEFAULT_INDICATORS,
   DEFAULT_OVERLAYS,
   type ChartIndicators,
@@ -18,6 +19,7 @@ import ChartToolbar from '../../components/gex/ChartToolbar';
 import CompareControl from '../../components/gex/CompareControl';
 import PaneLadder, { LADDER_WIDTH_PX } from '../../components/gex/PaneLadder';
 import useFocusTrap from '../../components/ui/useFocusTrap';
+import { useIsBelowLg } from '../../components/ui/useMediaQuery';
 import TickerQuickPick from '../../components/gex/TickerQuickPick';
 import SpotPrice from '../../components/gex/SpotPrice';
 import { CANDLE_THEMES, chartSurface, useCandleThemeKey } from '../../components/gex/candleTheme';
@@ -306,14 +308,62 @@ const TIME_AXIS_PX = 26;
   the plot, in px. Floating chrome has to stop short of that gutter or it
   lands on the price ticks.
 
-  It is deliberately a hair MORE than the gutter itself, which measures 54 at
-  every price magnitude tested (three digits to six). The sweep asserts the
-  relationship rather than the number — clearance at least as wide as the
-  gutter, and not so much wider that it is throwing away chart — so a library
-  change that widens the gutter fails loudly instead of quietly parking a
-  button on top of a price.
+  It is deliberately a hair MORE than the gutter itself, and it is DERIVED
+  from the chart's own minimum rather than typed here. It used to be a literal
+  56 against a ~54px gutter, and when the chart widened its scale to 74 (so
+  the live-price card sits in the gutter instead of over the tape) the two
+  became a two-generators-for-one-fact bug: the desk would have gone on
+  clearing 56 and parking a button on the price ticks. The browser sweep
+  caught it — clearance at least as wide as the gutter, and not so much wider
+  that it is throwing away chart — and this is the fix that keeps it caught.
 */
-const PRICE_GUTTER_PX = 56;
+const PRICE_GUTTER_PX = PRICE_SCALE_MIN_WIDTH + 2;
+
+/*
+  WHAT THE FULL CONTROL STRIP NEEDS — inside the chart column, with the price
+  gutter already taken off it.
+
+  Measured against this build: the un-compacted toolbar lays out at 818px on
+  one line. The seven-button timeframe strip is 251 of that, the three worded
+  triggers (Indicators 117 · Alerts 93 · Candles 102) another 311, `Overlays 3`
+  117, `Theme` 89, and 42 of gaps and dividers. Add the strip's 6px left pad
+  and the toolbar band's 8px sides and the column has to give it 840px past
+  the gutter.
+
+  Under that it does not clip or scroll, it WRAPS — the root is `flex-wrap`
+  and the Indicators/Alerts/Candles span inside it wraps again. At 1024px with
+  two grid columns the chart column is 369px, so 291px of line takes 818px of
+  controls in FOUR rows: 126px of toolbar inside a 205px chrome stack over a
+  411px pane — half the pane, sitting on the tape. On a coarse pointer
+  `.chrome-hover` pins that visible (index.css), so it never goes away.
+
+  It is a PANE width, not a window width: a four-pane desk at 1440px still
+  gives each toolbar ~577px and still wraps.
+*/
+const TOOLBAR_FULL_PX = 840;
+
+/*
+  THE COLUMN WIDTH AT WHICH A PANE CAN AFFORD BOTH PRICE GUTTERS.
+
+  An "Own scale" compare gives the tape a SECOND gutter down the left, and
+  this pane's chrome is left-anchored, so it prints over that axis's ticks
+  unless it steps aside — the same way it already steps aside on the right.
+
+  But the clearance is not free, and the first attempt at this shipped the
+  same defect on the other side: the strip's rows compute `overflow: visible`
+  (`w-fit max-w-full` caps the box, it does not clip the text), so the 76px
+  taken off the left comes out of the right clearance. Measured at a 369px
+  column with the left padding applied: the identity row ran 28px into the
+  right gutter and the HEAVIEST dollar figure sat entirely inside it —
+  "-0.90%" printed over the 471.00 tick, "$140.1M" over 470.00.
+
+  So the clearance is taken only where the column can hold it: the widest
+  row measured (the identity capsule, 299-325px) plus both gutters. Below
+  that the left axis is still overprinted — no worse than before this, and
+  strictly better than trading it for the right one, which carries the same
+  live numbers.
+*/
+const BOTH_GUTTERS_PX = 330 + 2 * PRICE_GUTTER_PX;
 
 /*
   The heaviest strikes in the pane's window, signed — the one-line read of
@@ -375,6 +425,67 @@ const Pane = ({
   boxRef, cell = '',
 }: PaneProps) => {
   const { ticker, timeframe, overlays, indicators, chartStyle, compares, ladder } = cfg;
+  /* An "Own scale" comparison gives the tape a SECOND price gutter, down the
+     LEFT (StrikeChart's `leftPriceScale.visible`). Every piece of this pane's
+     floating chrome is left-anchored, so it has to step aside for that axis
+     exactly the way it already steps aside for the right-hand one. */
+  const ownScale = compares.some(c => c.mode === 'scale');
+  /* Below `lg` this desk stops filling the viewport and becomes a column the
+     page scrolls through — so the wheel has to belong to the page, not to the
+     chart. See `pageScroll` on StrikeChart for what was measured. */
+  const belowLg = useIsBelowLg();
+
+  /*
+    ══ THE COMPARE LEGEND HAS TO START BELOW THE STRIP, NOT AT 46px ═════════
+
+    The legend was pinned at `top-[46px]` — the strip's height when it holds
+    one row. The strip is a `flex-col` and holds two whenever the toolbar is
+    up, so on hover it grew over the legend and the legend is z-10 against the
+    strip's z-20.
+
+    Measured at 1440x900, one compare: legend row [19,109,109,16] against the
+    heaviest-strike read [13,109,316,23] — 16px of 16 vertical overlap, 109 of
+    109 horizontal. With four compares the Remove buttons land at y=109/127/
+    145/163 and elementFromPoint at the third one's own centre returns the
+    timeframe strip's button: that × cannot be clicked at all, even though it
+    carries `pointer-events-auto`.
+
+    So the offset is the strip's OWN height, measured. A second hard-coded
+    number would be the same bug with a bigger constant — the strip's height
+    is whatever its content and the pane's width make it.
+  */
+  const stripRef = useRef<HTMLDivElement | null>(null);
+  const [stripH, setStripH] = useState(46);
+  /* The SAME observation answers a second question: how much room the toolbar
+     has. The strip is `inset-x-0` on the chart column, so its width IS the
+     column's — which is the width that decides whether the strip wraps, and
+     which no media query on the window can stand in for.
+
+     Width in, height out: the decision is made on the room AVAILABLE, never
+     on the strip's own content, so compacting cannot feed back into the
+     measurement and oscillate. `inset-x-0` also means flipping to compact
+     leaves this width unchanged — only stripH moves, and that only shifts the
+     compare legend. */
+  const [stripW, setStripW] = useState(0);
+  useEffect(() => {
+    const el = stripRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const obs = new ResizeObserver(() => {
+      // getBoundingClientRect, not contentRect: the strip carries p-1.5 and
+      // contentRect excludes padding, which would put the legend back under it.
+      const r = el.getBoundingClientRect();
+      const h = Math.round(r.height);
+      if (h > 0) setStripH(h);
+      if (r.width > 0) setStripW(Math.round(r.width));
+    });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+  /* The tape, straight from the provider that accumulates it. Read HERE rather
+     than threaded down from Terrain: this component already takes fourteen
+     props, and every pane wants the same unfiltered tape — StrikeChart narrows
+     it to its own symbol. */
+  const { flowTape } = useMarketData();
 
   /* Add / remove a crossed symbol. Capped at the ink list's length so every
      comparison on a pane is a DIFFERENT colour — two lines sharing an ink is
@@ -512,6 +623,7 @@ const Pane = ({
               revision={revision}
               levels={levels}
               timeframe={timeframe}
+              flowPrints={flowTape}
               height={tall ? 260 : 200}
               overlays={overlays}
               indicators={indicators}
@@ -523,6 +635,7 @@ const Pane = ({
               onCrosshair={onCrosshair}
               syncRegister={registerSync}
               projectionRef={projectionRef}
+              pageScroll={belowLg}
               frameless
             />
 
@@ -569,9 +682,16 @@ const Pane = ({
               cursor does.
             */}
             <div
-              /* Right padding clears the price gutter, so nothing floating
-                 ever lands on a price tick. */
-              style={{ paddingRight: PRICE_GUTTER_PX }}
+              ref={stripRef}
+              /* Padding clears the price gutter, so nothing floating ever
+                 lands on a price tick — BOTH gutters when there is a left
+                 one and the column is wide enough to hold the clearance.
+                 See BOTH_GUTTERS_PX: taking it unconditionally moves the
+                 collision to the right axis on a narrow pane. */
+              style={{
+                paddingLeft: ownScale && stripW >= BOTH_GUTTERS_PX ? PRICE_GUTTER_PX : undefined,
+                paddingRight: PRICE_GUTTER_PX,
+              }}
               className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-col items-start gap-1 p-1.5"
             >
               {/*
@@ -599,7 +719,7 @@ const Pane = ({
                   <span
                     aria-hidden
                     className={`shrink-0 w-4 h-4 rounded-[3px] font-mono text-[9px] font-bold tnum inline-flex items-center justify-center ${
-                      isActive ? 'bg-select text-[#0a0a0a]' : 'bg-white/[0.08] text-textMuted'
+                      isActive ? 'bg-select text-[#0a0a0a]' : 'bg-white/[0.08] text-textPrimary'
                     }`}
                   >
                     {index + 1}
@@ -675,6 +795,20 @@ const Pane = ({
                 <ChartToolbar
                   minimal
                   candles
+                  /* COMPACT WHEN THE STRIP WOULD NOT FIT ON ONE LINE — the
+                     mode the phone already uses (ChartToolbar's `compact`):
+                     the seven timeframes collapse into the current interval
+                     as a trigger, and every dropdown trades its word for its
+                     icon, keeping the word as the hover/AT name.
+
+                     Measured after: 818px of controls becomes 350px. Four
+                     rows become one at 1180/1280 in every layout (177px of
+                     chrome down to 112, 43% of the pane down to 27%), and two
+                     at 1024 with 2+ panes, where the column is only 369px
+                     (205px down to 145, 50% down to 35%). The single wide
+                     pane beside a narrow one keeps its full labels, because
+                     the test is its own column's width. */
+                  compact={stripW > 0 && stripW - PRICE_GUTTER_PX < TOOLBAR_FULL_PX}
                   alertTicker={ticker}
                   alertSpot={levels.spot}
                   timeframe={timeframe}
@@ -695,7 +829,12 @@ const Pane = ({
                 the stack and back on for the buttons, so the legend never eats
                 a drag on the chart. */}
             {compares.length > 0 && (
-              <div className="pointer-events-none absolute top-[46px] left-3 z-10 flex flex-col gap-0.5 opacity-70 transition-opacity duration-200 group-hover:opacity-100">
+              <div
+                /* Unconditional, unlike the strip above: the legend rows are
+                   ~106px, so even at a 369px column they clear both gutters. */
+                style={{ top: stripH + 4, left: ownScale ? PRICE_GUTTER_PX : undefined }}
+                className="pointer-events-none absolute left-3 z-10 flex flex-col gap-0.5 opacity-70 transition-opacity duration-200 group-hover:opacity-100"
+              >
                 {compares.map(c => (
                   <span key={`${c.ticker}:${c.mode}`} className="flex items-center gap-1.5">
                     <span className="w-2 h-[3px] rounded-full" style={{ background: c.ink }} aria-hidden />
@@ -743,7 +882,29 @@ const Pane = ({
               levels={levels}
               focusPrice={focus}
               projection={projectionRef}
-              onClose={() => onCfg({ ladder: false })}
+              onClose={() => {
+                onCfg({ ladder: false });
+                /*
+                  A control that removes ITSELF has to say where focus goes.
+
+                  This button unmounts on the same click, and the browser's
+                  answer to "the focused element is gone" is <body> — so a
+                  keyboard reader is dropped to the top of the document and
+                  tabs back through the whole desk to reach anything. Focus
+                  goes to the one control that undoes this, which is what a
+                  reader would look for next.
+
+                  After the commit, not during: the button is still mounted in
+                  this tick, and focusing the target before React removes it
+                  would be undone by the removal.
+                */
+                requestAnimationFrame(() => {
+                  const undo = document.querySelector<HTMLElement>('[data-strikes-toggle]');
+                  // Below `lg` the arrangement chrome can be off screen; there
+                  // is nothing better to offer than leaving focus where it is.
+                  if (undo?.isConnected) undo.focus();
+                });
+              }}
               closeHint="Hide this rail — R"
               onSelect={price => setFocus(cur => (cur != null && Math.abs(cur - price) < 1e-9 ? null : price))}
               className="hidden lg:flex"
@@ -819,6 +980,30 @@ const Terrain = () => {
   const [expanded, setExpanded] = useState<number | null>(null);
   const expandedRef = useRef<number | null>(null);
   expandedRef.current = expanded;
+
+  /*
+    AN EXPANDED PANE CANNOT OUTLIVE THE PANE IT POINTS AT.
+
+    `expanded` is an INDEX, and the number of panes is a separate piece of
+    state that the layout buttons and the 1-4 keys both change without
+    consulting it. Expand the fourth chart, then press 2: the fourth pane stops
+    rendering, so its `fixed inset-0` overlay vanishes and the desk looks
+    normal — while `expanded` is still 3.
+
+    What is left behind is worse than a stale number. The scroll lock is
+    installed by the effect below and released by its cleanup, and the cleanup
+    only runs when `expanded` CHANGES: it did not, so `document.body.style
+    .overflow` stays `hidden` with nothing expanded. Below `lg` the desk is a
+    scrolling page, and the reader is left on a page that will not scroll, with
+    a floating "Esc" chip offering to close something that is not open.
+
+    Clearing rather than clamping: shrinking the desk past the pane you were
+    looking at is not a request to look at a different one.
+  */
+  useEffect(() => {
+    setExpanded(cur => (cur !== null && cur >= cfg.layout ? null : cur));
+  }, [cfg.layout]);
+
   useEffect(() => {
     if (expanded === null) return;
     const onKey = (e: KeyboardEvent) => {
@@ -1083,6 +1268,11 @@ const Terrain = () => {
             them all back. A button that can disagree with what is on screen
             is a button nobody trusts. */}
         <button
+          /* Named so a control that REMOVES itself can hand focus here — see
+             the rail's × below. A data attribute rather than an id: a desk can
+             hold four panes and an id has to be unique, while this button is
+             the one global undo for all of them. */
+          data-strikes-toggle=""
           onClick={() => setCfg(prev => ({ ...prev, panes: prev.panes.map(p => ({ ...p, ladder: !anyLadder })) }))}
           aria-pressed={anyLadder}
           title={anyLadder ? 'Hide every strike rail — Shift R' : 'Show the strike rail beside every chart — Shift R'}

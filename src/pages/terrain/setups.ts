@@ -70,7 +70,7 @@ export const SETUP_KEYS = ['timeframe', 'overlays', 'indicators', 'chartStyle', 
   build, instead of silently never persisting it.
 */
 const OVERLAY_KEYS = Object.keys({
-  trails: 0, levels: 0, darkpool: 0, volume: 0,
+  trails: 0, levels: 0, darkpool: 0, volume: 0, flow: 0, netDrift: 0, volDrift: 0, dexStrike: 0,
 } satisfies Record<keyof ChartOverlays, number>) as (keyof ChartOverlays)[];
 
 const INDICATOR_KEYS = Object.keys({
@@ -144,7 +144,31 @@ export function readSetup(raw: unknown, key: string): StoredSetup | null {
     const src = r.overlays as Record<string, unknown>;
     const o: Partial<ChartOverlays> = {};
     for (const k of OVERLAY_KEYS) if (typeof src[k] === 'boolean') o[k] = src[k] as boolean;
-    if (Object.keys(o).length === OVERLAY_KEYS.length) out.overlays = o as ChartOverlays;
+    /*
+      MIGRATED, not discarded — and the difference is a reader's stored work.
+
+      This was `length === OVERLAY_KEYS.length`: a record had to carry EVERY
+      overlay or the whole field was thrown away. That is fine until an overlay
+      is ADDED, at which point every setup ever saved is one key short and every
+      symbol silently loses all of its overlays at once — up to sixty of them,
+      for a key the reader has never heard of. Measured before the fix: adding
+      `flow` dropped the overlays field from every stored symbol.
+
+      A missing key now falls back to FALSE rather than to DEFAULT_OVERLAYS, and
+      that is deliberate twice over. An overlay a reader never saw cannot have
+      been chosen by them, so off is the honest reading of their intent. And
+      importing the defaults here would pull a React component module into a
+      file whose whole point is running headless in the proof.
+
+      The floor stays at ONE recognised boolean, which is what keeps junk out:
+      `{ trails: 'yes', ghost: true }` still yields no overlays at all rather
+      than a full set of invented ones.
+    */
+    if (Object.keys(o).length > 0) {
+      const filled = {} as ChartOverlays;
+      for (const k of OVERLAY_KEYS) filled[k] = o[k] ?? false;
+      out.overlays = filled;
+    }
   }
   if (typeof r.indicators === 'object' && r.indicators !== null) {
     const src = r.indicators as Record<string, unknown>;

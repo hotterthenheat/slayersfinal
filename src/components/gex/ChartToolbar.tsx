@@ -8,7 +8,8 @@
 ==================================================
 */
 
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import {
   Activity,
@@ -39,6 +40,7 @@ import {
 } from './candleTheme';
 import { CHART_STYLES, INDICATOR_INKS, type ChartIndicators, type ChartOverlays, type ChartStyle } from './StrikeChart';
 import AlertsMenu from './AlertsMenu';
+import { placeMenu, type MenuBox, type MenuSide } from './menuPlacement';
 
 interface ChartToolbarProps {
   timeframe: Timeframe;
@@ -214,25 +216,18 @@ const INDICATOR_ITEMS: { key: keyof ChartIndicators; label: string; hint: string
 
 const OVERLAY_ITEMS: { key: keyof ChartOverlays; label: string; hint: string }[] = [
   { key: 'trails', label: 'Exposure trails', hint: 'LED strike bands — strength & fade' },
-  { key: 'levels', label: 'Key levels', hint: 'CW · PW · flip · king axis chips' },
+  { key: 'levels', label: 'Key levels', hint: 'Call & put walls, flip and king, marked on the field' },
   { key: 'darkpool', label: 'Dark pool', hint: 'Off-exchange print lines' },
   { key: 'volume', label: 'Volume', hint: 'Session bars along the floor' },
+  { key: 'flow', label: 'Flow', hint: 'Option premium from the tape — calls up, puts down' },
+  { key: 'netDrift', label: 'Net drift', hint: "Running call & put premium totals — the session's lean" },
+  { key: 'volDrift', label: 'Vol drift', hint: 'Realised vol off these bars against the implied the feed reports' },
+  { key: 'dexStrike', label: 'Exposure by strike', hint: 'Delta, gamma or vega across the chain — docked under the tape' },
 ];
 
-export type MenuSide = 'bottom' | 'top' | 'left' | 'right';
-
-/** Small anchored dropdown with outside-click dismissal. */
-const MENU_SIDE_POS: Record<MenuSide, string> = {
-  bottom: 'right-0 top-full mt-1',
-  /* UP, for a toolbar sitting on the bottom edge — the phone's Pulse, where
-     the strip is in flow beneath the tape. A `bottom` menu there opens past
-     the bottom of the window, and because the menu is `absolute` inside a
-     page that does not scroll sideways or down, it is not merely awkward to
-     reach: it is unreachable. */
-  top: 'right-0 bottom-full mb-1',
-  right: 'left-full top-0 ml-1',
-  left: 'right-full top-0 mr-1',
-};
+/* Re-exported so every consumer keeps importing its menu vocabulary from the
+   toolbar rather than reaching past it into the placement module. */
+export type { MenuSide };
 
 /* The caret points where the menu will pop (Noah, 2026-08-23) — down when it
    drops below, sideways when a side-docked toolbox throws it left or right. */
@@ -261,12 +256,53 @@ const Dropdown = ({
   title?: string;
   children: ReactNode;
 }) => {
-  const Caret = MENU_SIDE_CARET[menuSide];
+  const anchorRef = useRef<HTMLButtonElement | null>(null);
+  const [placed, setPlaced] = useState<{ box: MenuBox; side: MenuSide } | null>(null);
+
+  const measure = useCallback(() => {
+    const el = anchorRef.current;
+    if (!el) return;
+    setPlaced(placeMenu(el.getBoundingClientRect(), menuSide, window.innerWidth, window.innerHeight));
+  }, [menuSide]);
+
+  /*
+    Measured in a LAYOUT effect, before paint: a passive effect would paint the
+    menu at its previous position for one frame, which on a desk of four panes
+    reads as the menu jumping in from the last pane you opened.
+  */
+  useLayoutEffect(() => {
+    if (!open) { setPlaced(null); return; }
+    measure();
+  }, [open, measure]);
+
+  useEffect(() => {
+    if (!open) return;
+    /* Capture, so a scroll inside ANY ancestor moves the menu with its trigger
+       and not just a scroll of the window. */
+    const onMove = () => measure();
+    window.addEventListener('scroll', onMove, true);
+    window.addEventListener('resize', onMove);
+    return () => {
+      window.removeEventListener('scroll', onMove, true);
+      window.removeEventListener('resize', onMove);
+    };
+  }, [open, measure]);
+
+  const Caret = MENU_SIDE_CARET[placed?.side ?? menuSide];
   return (
   <div className="relative">
     <button
+      ref={anchorRef}
       onClick={onToggle}
       title={title}
+      /* A trigger that drops a menu has to say so, and say whether it is
+         already open — otherwise the only cue is the caret, which is a
+         rotation nobody can hear. In `compact` and `vertical` the label is
+         dropped for the icon, so `title` becomes the accessible name too;
+         without this those triggers announce as an empty button. */
+      aria-haspopup="menu"
+      aria-expanded={open}
+      aria-label={label ? undefined : title}
       className={`inline-flex items-center gap-1.5 px-2 py-1 rounded font-mono text-[10px] uppercase tracking-wider transition-colors ${
         open
           ? 'bg-white/[0.07] text-textPrimary'
@@ -277,12 +313,45 @@ const Dropdown = ({
       {label}
       <Caret className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} />
     </button>
-    {open && (
+    {open && placed && createPortal(
+      /*
+        THE MENU IS A PORTAL, and that is a correctness fix rather than a
+        preference.
+
+        It used to be `position: absolute` inside the toolbar. On Terrain the
+        toolbar floats inside a pane whose box is `overflow-hidden` — which it
+        has to be, for its rounded corners and to contain the chart — so the
+        menu was CLIPPED at the pane's bottom edge. Measured at 1440x900 with
+        four panes: the Overlays menu ran to y=696 against a pane clipping at
+        y=475, and three of its eight rows were rendered, invisible and
+        unclickable. The candle theme menu lost four of eleven. Turning a pane
+        into a bigger one is not a fix; any ancestor with a scroll or a clip
+        anywhere in the app would do the same thing again.
+
+        Out at the body there is no ancestor left to clip it, so the only bound
+        is the window — and the window is a bound the placement already knows
+        how to respect: it caps the height to the room actually available and
+        FLIPS to the other side when that room is not worth using.
+
+        `overflow-x-hidden` keeps the rounded corners clipping the way the plain
+        `overflow-hidden` did; `overscroll-contain` stops a flick that reaches
+        the end of the list from scrolling the page underneath it.
+      */
       <div
-        className={`absolute z-40 min-w-[210px] border border-borderMuted bg-panel rounded-md shadow-2xl shadow-black/60 overflow-hidden animate-slide-in ${MENU_SIDE_POS[menuSide]}`}
+        data-toolbar-menu=""
+        style={{
+          position: 'fixed',
+          left: placed.box.left,
+          right: placed.box.right,
+          top: placed.box.top,
+          bottom: placed.box.bottom,
+          maxHeight: placed.box.maxHeight,
+        }}
+        className="z-[120] min-w-[210px] overflow-y-auto overflow-x-hidden overscroll-contain border border-borderMuted bg-panel rounded-md shadow-2xl shadow-black/60 animate-slide-in"
       >
         {children}
-      </div>
+      </div>,
+      document.body
     )}
   </div>
   );
@@ -325,10 +394,51 @@ const ChartToolbar = ({
   useEffect(() => {
     if (!openMenu) return;
     const onDown = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpenMenu(null);
+      const t = e.target as Node | null;
+      if (!t) return;
+      if (rootRef.current?.contains(t)) return;
+      /*
+        THE MENU IS NO LONGER INSIDE THE TOOLBAR IN THE DOM.
+
+        It portals to the body so a clipping ancestor cannot cut it off, which
+        means a containment test against the toolbar alone now calls every
+        click on a menu row an OUTSIDE click — the menu would close before the
+        row it was clicked on could act. Every portalled panel carries
+        `data-toolbar-menu`, so the test asks whether the click landed in one.
+      */
+      if (t instanceof Element && t.closest('[data-toolbar-menu]')) return;
+      if (t instanceof Node && t.parentElement?.closest('[data-toolbar-menu]')) return;
+      setOpenMenu(null);
+    };
+    /*
+      ESCAPE CLOSES THE MENU, AND ONLY THE MENU.
+
+      There was no Escape handler here at all, so the only thing listening was
+      Terrain's — `window` keydown, bubble phase, which collapses the expanded
+      pane (Terrain.tsx:855). Open a menu inside an expanded pane, press the
+      key every reader presses to dismiss a menu, and the whole pane came down
+      with it: the reader loses the pane to close a dropdown they could
+      otherwise only dismiss by clicking elsewhere.
+
+      CAPTURE PHASE, and it has to be. Terrain's listener is on the same
+      target, so a bubble-phase handler here would fire alongside it rather
+      than instead of it and the pane would still collapse.
+      `stopImmediatePropagation` is the one that holds when both are on
+      `window` — plain `stopPropagation` does not stop a second listener
+      already attached to the same node.
+    */
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      setOpenMenu(null);
     };
     window.addEventListener('mousedown', onDown);
-    return () => window.removeEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onKey, true);
+    return () => {
+      window.removeEventListener('mousedown', onDown);
+      window.removeEventListener('keydown', onKey, true);
+    };
   }, [openMenu]);
 
   const activeCandleLabel = CANDLE_THEME_OPTIONS.find(o => o.value === themeKey)?.label ?? 'Chrome';
@@ -437,6 +547,8 @@ const ChartToolbar = ({
                   return (
                     <button
                       key={item.key}
+                      role="checkbox"
+                      aria-checked={on}
                       onClick={() => onIndicators({ ...indicators, [item.key]: !on })}
                       className="flex items-start gap-2.5 px-2.5 py-2 rounded text-left hover:bg-white/[0.03] transition-colors"
                     >
@@ -537,6 +649,13 @@ const ChartToolbar = ({
             return (
               <button
                 key={item.key}
+                /* The checkbox is drawn in PIXELS — a bordered square that
+                   fills and takes a tick. A screen reader saw a plain button
+                   and could not tell an overlay that is on from one that is
+                   off, which is the only thing this row says. role/aria-checked
+                   is the pairing that matches what is already drawn. */
+                role="checkbox"
+                aria-checked={on}
                 onClick={() => onOverlays({ ...overlays, [item.key]: !on })}
                 className="flex items-start gap-2.5 px-2.5 py-2 rounded text-left hover:bg-white/[0.03] transition-colors"
               >

@@ -83,3 +83,14 @@ export function useMediaQuery(query: string): boolean {
 
 /** A handset, in either orientation — or any window too narrow for a desk. */
 export const useIsPhone = (): boolean => useMediaQuery(PHONE_QUERY);
+
+/**
+ * Below Tailwind's `lg` — where Terrain stops filling the viewport and becomes
+ * a column the page scrolls through.
+ *
+ * Same fractional bound and the same reason as PHONE_QUERY: `lg:` is
+ * `min-width: 1024px`, so anything short of 1024 must match here or the JS
+ * branch and the CSS would disagree about a half pixel.
+ */
+export const BELOW_LG_QUERY = '(max-width: 1023.98px)';
+export const useIsBelowLg = (): boolean => useMediaQuery(BELOW_LG_QUERY);

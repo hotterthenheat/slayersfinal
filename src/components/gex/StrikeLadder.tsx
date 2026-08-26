@@ -1,6 +1,7 @@
 import { fmtUsd } from '../../data/gex';
 import SpotRule from '../ui/SpotRule';
-import { heatCellStyle } from './heatmap';
+import HeatPill from './HeatPill';
+import { KING } from './palette';
 import type { BoardTicker } from '../../types/gex';
 
 interface StrikeLadderProps {
@@ -39,14 +40,19 @@ const StrikeLadder = ({ board }: StrikeLadderProps) => {
                 {row.strike % 1 === 0 ? row.strike.toFixed(0) : row.strike.toFixed(2)}
               </span>
               {/* Value — the only heatmap-tinted part of the row */}
-              <span
-                style={heatCellStyle(row.value, ladderMaxAbs)}
-                className="flex-grow flex items-center justify-end gap-1.5 px-2.5 py-[5px] font-mono text-[11px] font-semibold tnum transition-colors duration-700"
-              >
-                {/* Holo silver — same king marker as the matrix, and the only
-                    accent that survives sitting on either heat pole */}
-                {row.king && <span className="inline-block w-1.5 h-1.5 rounded-full holo-bg" />}
-                {fmtUsd(row.value)}
+              {/* The same capsule the matrix draws, so a cell means the same
+                  thing on both surfaces. The wrapper is spacing only. */}
+              <span className="flex-grow px-[3px] py-[3px]">
+                <HeatPill
+                  value={row.value}
+                  maxAbs={ladderMaxAbs}
+                  selected={row.king}
+                  ringColor={KING}
+                  className="h-[19px]"
+                  title={`${row.strike} · ${fmtUsd(row.value)}`}
+                >
+                  {fmtUsd(row.value)}
+                </HeatPill>
               </span>
             </div>
             {i === spotAfterIndex && <SpotMarker ticker={ticker} spot={spot} />}

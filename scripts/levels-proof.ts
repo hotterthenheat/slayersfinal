@@ -1,0 +1,313 @@
+/*
+  Acceptance test for KEY LEVEL SELECTION — which strike gets called the call
+  wall, which the put wall, and whether either can contradict the flip line
+  drawn beside it.
+
+  WHY THIS FILE EXISTS. `buildLevelsFor` picked the walls by |value| plus SIDE
+  OF SPOT, and side-of-spot is only a PROXY for option side. It holds for a
+  fresh OI profile (simulator.ts seeds calls above spot, puts below) and
+  deliberately does NOT hold for the live book, which is sticky on purpose
+  (BOOK_BLEND, ~1h half-life: "walls persist, get tested, and fade for real
+  instead of shadowing price") — so a shelf keeps its option side while price
+  walks past it and its side of spot flips.
+
+  Measured on SPY at spot 505.17 before the fix: strike 505 carried
+  -$436.8M — CALL-dominant — and was named the PUT wall, so the strike rail
+  printed a red PW tag on a steel row sitting ABOVE its own flip rule at
+  504.50. A put wall on the call side of the flip is not a thing that can
+  exist.
+
+  Nothing in `npm test` asserted anything about wall selection when that
+  shipped: `grep -rl callWall scripts/` was empty. The only check that caught
+  it was the rail's own rendering, in a browser. This is that check, moved to
+  where it runs on every push.
+
+  Runs the REAL module against the REAL simulator book — the sign convention
+  under test is the simulator's, so a mock would be asserting my own
+  arithmetic rather than the product's.
+
+  FIVE GENERATORS, ALL COVERED. The rule was written twice over the same
+  numbers — `buildLevelsFor` (data/gex.ts) and `generateTradePlan`
+  (core/simulator.ts) — and only the first was fixed, so Terrain named one pair
+  of walls while the GEX matrix, `readHeatPattern`'s prose and the Pulse board
+  named another off the same book. Both now call `core/walls.ts`, and this file
+  asserts BOTH paths: the snapshot path below, and the PLAN path in the tick
+  callback, which is checked against the very chain the plan was built from.
+
+  SAMPLED ALONG THE WALK, NOT AT THE END, and that is the whole design. The
+  book BLENDS toward a fresh profile (`evolveBook`, per bar roll), and a fresh
+  profile is the one shape where side-of-spot happens to agree with option
+  side. Walk far enough and the book CONVERGES back onto the benign case, so
+  "walk a long time, then assert once" tests the least interesting instant it
+  could have picked. The pathological shape is TRANSIENT — it exists in the
+  window after spot jumps and before the blend catches up. So this walks in
+  short chunks and re-checks every name at every chunk boundary, which is both
+  cheaper in ticks and a strictly stronger claim: the invariant holds
+  CONTINUOUSLY, not just at one arbitrary endpoint.
+*/
+// FIRST — pins Math.random before simulator.ts seeds its watchlist at module
+// scope. Below that import it would pin nothing. See the file for why.
+import './deterministic-random';
+import Simulator from '../src/core/simulator';
+import { buildLevelsFor } from '../src/data/gex';
+import { buildExposureProfile } from '../src/data/exposure';
+import { buildVannaCharm } from '../src/data/vannacharm';
+import { buildRankedTargets } from '../src/data/rankedtargets';
+
+let pass = 0,
+  fail = 0;
+const check = (name: string, ok: boolean, extra = '') => {
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${extra ? ' — ' + extra : ''}`);
+  ok ? pass++ : fail++;
+};
+
+/* Enough names to catch a book that has drifted, not just the four the
+   simulator seeds by hand. Registration forward-sims candles per name, so this
+   is the cost/coverage trade: eight names spans three step sizes (0.5 / 1) and
+   an IV range from SPY's 0.15 to TSLA's 0.48, and high IV is what moves spot
+   far enough per bar to strand a shelf on the wrong side. */
+const NAMES = ['SPY', 'QQQ', 'AAPL', 'NVDA', 'MSFT', 'TSLA', 'AMD', 'META'];
+
+/* 60 samples x 100 ticks. The tick count is the same order as walking straight
+   through; the sampling is what makes it inspect 60 book states per name
+   instead of 1. */
+const SAMPLES = 60;
+const TICKS_PER_SAMPLE = 100;
+
+for (const n of NAMES) Simulator.ensureTicker(n);
+
+type Tally = { checked: number; bad: number; first: string };
+const blank = (): Tally => ({ checked: 0, bad: 0, first: '' });
+const rec = (t: Tally, ok: boolean, detail: string) => {
+  t.checked++;
+  if (!ok) {
+    t.bad++;
+    if (!t.first) t.first = detail;
+  }
+};
+
+const stats: Record<string, {
+  cwSign: Tally; cwSide: Tally; cwFlip: Tally;
+  pwSign: Tally; pwSide: Tally; pwFlip: Tally;
+}> = {};
+for (const n of NAMES)
+  stats[n] = {
+    cwSign: blank(), cwSide: blank(), cwFlip: blank(),
+    pwSign: blank(), pwSide: blank(), pwFlip: blank()
+  };
+
+const sign = (v: number) => (v > 0 ? '+' : v < 0 ? '-' : '0');
+
+/* THE PLAN PATH. `tick` already builds a TradePlan for the active ticker every
+   tick and hands the whole snapshot to this callback, so validating here costs
+   no extra ticks and — the point — checks the plan against the EXACT chain it
+   was built from rather than a book re-read afterwards.
+
+   The contract is stated as an implication rather than a flat "is
+   call-dominant", because an unnamed wall legitimately falls back to
+   spot +/- step*4, which need not be a real strike. So: IF the chain holds any
+   call-dominant strike above spot, the plan's resistance wall must be one. */
+const planCw = blank(), planCwFlip = blank(), planPw = blank(), planPwFlip = blank();
+let plansSeen = 0;
+
+/* The three DOWNSTREAM builders that each carried their own copy of the rule.
+   Validated at sample boundaries rather than every tick — they rebuild a whole
+   profile per call, and 6000 of those is a gate nobody waits for — off the
+   snapshot the tick handed over, so they are checked against the same book. */
+const expCw = blank(), expPw = blank();
+const vcCw = blank(), vcPw = blank();
+const rtCw = blank(), rtPw = blank();
+let downstreamSeen = 0;
+let lastSnap: any = null;
+
+/* Same implication as the plan: IF the chain holds a call-dominant strike
+   above spot, whatever this builder calls the call wall must be one. Stated
+   against the builder's OWN window where it has one, because these builders
+   slice a window around spot and a wall outside it is not theirs to name. */
+const checkPair = (
+  cwT: Tally, pwT: Tally, label: string,
+  window: readonly { strike: number; value: number }[],
+  spot: number, callWall: number, putWall: number
+) => {
+  if (window.some(n => n.strike > spot && n.value < 0)) {
+    const n = window.find(x => x.strike === callWall);
+    rec(cwT, !!n && n.value < 0 && callWall > spot,
+      `${label} cw ${callWall} vs spot ${spot.toFixed(2)}` +
+      (n ? ` value ${sign(n.value)}${Math.abs(n.value).toExponential(2)}` : ' (not in window)'));
+  }
+  if (window.some(n => n.strike < spot && n.value > 0)) {
+    const n = window.find(x => x.strike === putWall);
+    rec(pwT, !!n && n.value > 0 && putWall < spot,
+      `${label} pw ${putWall} vs spot ${spot.toFixed(2)}` +
+      (n ? ` value ${sign(n.value)}${Math.abs(n.value).toExponential(2)}` : ' (not in window)'));
+  }
+};
+
+const validateDownstream = (snap: any) => {
+  if (!snap?.chain?.length) return;
+  downstreamSeen++;
+  const spot = snap.spot;
+
+  const exp = buildExposureProfile(snap, '0DTE', 10);
+  checkPair(expCw, expPw, 'exposure',
+    exp.strikes.map((s: any) => ({ strike: s.strike, value: s.gex.net })),
+    spot, exp.levels.callWall, exp.levels.putWall);
+
+  const vc = buildVannaCharm(snap, 'CHARM', 1, 10);
+  const cw = vc.shifts.find((x: any) => x.kind === 'call-wall');
+  const pw = vc.shifts.find((x: any) => x.kind === 'put-wall');
+  checkPair(vcCw, vcPw, 'vannacharm',
+    vc.rows.map((r: any) => ({ strike: r.strike, value: r.current })),
+    spot, cw.current, pw.current);
+  /* The PROJECTED walls run the same rule over a different value set
+     (`projectStrike`), so they are a second, independent exercise of it — and
+     a migrating wall is the entire point of that panel. */
+  checkPair(vcCw, vcPw, 'vannacharm/projected',
+    vc.rows.map((r: any) => ({ strike: r.strike, value: r.projected })),
+    spot, cw.projected, pw.projected);
+
+  /* `buildRankedTargets` keeps its walls internal — they only TAG a target —
+     so this asserts what the panel actually shows: every strike wearing a
+     WALL tag has to be a wall, i.e. call-dominant above spot or put-dominant
+     below. Reaching into the module for the raw numbers would test the
+     implementation; the tag is what a reader sees. */
+  const rt = buildRankedTargets(snap);
+  const byStrike = new Map<number, number>(snap.chain.map((n: any) => [n.strike, n.netGex]));
+  for (const t of rt.targets as any[]) {
+    if (!t.tags.includes('WALL')) continue;
+    const v = byStrike.get(t.strike);
+    const isCallWall = v !== undefined && v < 0 && t.strike > spot;
+    const isPutWall = v !== undefined && v > 0 && t.strike < spot;
+    rec(isCallWall || t.strike > spot ? rtCw : rtPw, isCallWall || isPutWall,
+      `WALL tag on ${t.strike} vs spot ${spot.toFixed(2)}` +
+      (v === undefined ? ' (not a chain strike)' : ` value ${sign(v)}${Math.abs(v).toExponential(2)}`));
+  }
+};
+
+const validatePlan = (snap: {
+  spot: number;
+  chain: readonly { strike: number; netGex: number }[];
+  plan: { supportWall: number; resistanceWall: number; flipZone: number };
+}) => {
+  const { spot, chain, plan } = snap;
+  if (!chain.length) return;
+  plansSeen++;
+
+  if (chain.some(n => n.strike > spot && n.netGex < 0)) {
+    const node = chain.find(n => n.strike === plan.resistanceWall);
+    rec(planCw, !!node && node.netGex < 0 && plan.resistanceWall > spot,
+      `rw ${plan.resistanceWall} vs spot ${spot.toFixed(2)}` +
+      (node ? ` value ${sign(node.netGex)}${Math.abs(node.netGex).toExponential(2)}` : ' (not a chain strike)'));
+    rec(planCwFlip, plan.resistanceWall >= plan.flipZone,
+      `rw ${plan.resistanceWall} vs flip ${plan.flipZone}`);
+  }
+  if (chain.some(n => n.strike < spot && n.netGex > 0)) {
+    const node = chain.find(n => n.strike === plan.supportWall);
+    rec(planPw, !!node && node.netGex > 0 && plan.supportWall < spot,
+      `sw ${plan.supportWall} vs spot ${spot.toFixed(2)}` +
+      (node ? ` value ${sign(node.netGex)}${Math.abs(node.netGex).toExponential(2)}` : ' (not a chain strike)'));
+    rec(planPwFlip, plan.supportWall <= plan.flipZone,
+      `sw ${plan.supportWall} vs flip ${plan.flipZone}`);
+  }
+};
+
+/* MUTATION GUARD, and the reason it is here: every assertion below passes on a
+   FRESH book whether or not the sign is checked, because the seeded profile
+   puts calls above spot and puts below. If the walk never strands a shelf,
+   this file is decorative — it would go green against the exact bug it was
+   written for. So it counts the sampled book states where the OLD rule
+   (biggest |value| on that side of spot, sign ignored) would have named a
+   DIFFERENT strike than the shipped rule does. Zero such states means the walk
+   never reproduced the bug's precondition, and the file fails rather than
+   quietly reporting a green it did not earn. */
+let naiveDiffered = 0;
+let statesSampled = 0;
+
+for (let s = 0; s < SAMPLES; s++) {
+  /* The plan is built for the ACTIVE ticker only, so rotate — otherwise this
+     would assert the plan rule against SPY 60 times and nothing else. */
+  Simulator.setActiveTicker(NAMES[s % NAMES.length]);
+  for (let i = 0; i < TICKS_PER_SAMPLE; i++)
+    Simulator.tick(snap => {
+      validatePlan(snap as any);
+      lastSnap = snap;
+    });
+  validateDownstream(lastSnap);
+
+  for (const name of NAMES) {
+    const sym = Simulator.ensureTicker(name);
+    const { spot, callWall, putWall, flip } = buildLevelsFor(sym);
+    const snaps = Simulator.getGexHistory(sym);
+    const levels = snaps[snaps.length - 1]?.levels ?? [];
+    if (!levels.length) continue;
+    const at = (k: number) => levels.find(l => l.strike === k);
+    const st = stats[name];
+    statesSampled++;
+
+    /* An unnamed wall is the honest answer to "no call wall overhead" — the
+       picker leaves it at spot when nothing on that side qualifies. Skip
+       those: a valid outcome, not a violation. */
+    const cw = callWall !== spot ? at(callWall) : null;
+    const pw = putWall !== spot ? at(putWall) : null;
+
+    if (cw) {
+      rec(st.cwSign, cw.value < 0, `${callWall} value ${sign(cw.value)}${Math.abs(cw.value).toExponential(2)}`);
+      rec(st.cwSide, callWall > spot, `${callWall} vs spot ${spot.toFixed(2)}`);
+      /* THE ONE THAT WOULD HAVE CAUGHT IT. The flip IS the sign-change
+         midpoint, so a call wall below it is a call wall on the put side of
+         the book. */
+      rec(st.cwFlip, callWall >= flip, `cw ${callWall} vs flip ${flip}`);
+    }
+    if (pw) {
+      rec(st.pwSign, pw.value > 0, `${putWall} value ${sign(pw.value)}${Math.abs(pw.value).toExponential(2)}`);
+      rec(st.pwSide, putWall < spot, `${putWall} vs spot ${spot.toFixed(2)}`);
+      rec(st.pwFlip, putWall <= flip, `pw ${putWall} vs flip ${flip}`);
+    }
+
+    let naiveCw = spot, naiveAbs = 0, signedCw = spot, signedAbs = 0;
+    for (const l of levels) {
+      const a = Math.abs(l.value);
+      if (l.strike > spot && a > naiveAbs) { naiveAbs = a; naiveCw = l.strike; }
+      if (l.strike > spot && l.value < 0 && a > signedAbs) { signedAbs = a; signedCw = l.strike; }
+    }
+    if (naiveCw !== signedCw) naiveDiffered++;
+  }
+}
+
+const report = (name: string, label: string, t: Tally) => {
+  if (!t.checked) return; // wall never named across the whole walk — nothing claimed
+  check(`${name}: ${label}`, t.bad === 0, t.bad ? `${t.bad}/${t.checked} bad, first: ${t.first}` : `${t.checked} states`);
+};
+
+for (const name of NAMES) {
+  const st = stats[name];
+  report(name, 'the call wall is CALL-dominant', st.cwSign);
+  report(name, 'the call wall is above spot', st.cwSide);
+  report(name, 'the call wall is on the call side of the flip', st.cwFlip);
+  report(name, 'the put wall is PUT-dominant', st.pwSign);
+  report(name, 'the put wall is below spot', st.pwSide);
+  report(name, 'the put wall is on the put side of the flip', st.pwFlip);
+}
+
+report('plan', 'the resistance wall is CALL-dominant and above spot', planCw);
+report('plan', 'the resistance wall is on the call side of the flip', planCwFlip);
+report('plan', 'the support wall is PUT-dominant and below spot', planPw);
+report('plan', 'the support wall is on the put side of the flip', planPwFlip);
+check('the plan path was actually exercised', plansSeen > 0, `${plansSeen} plans validated against their own chain`);
+
+report('exposure', 'the call wall is CALL-dominant and above spot', expCw);
+report('exposure', 'the put wall is PUT-dominant and below spot', expPw);
+report('vannacharm', 'the call wall is CALL-dominant and above spot', vcCw);
+report('vannacharm', 'the put wall is PUT-dominant and below spot', vcPw);
+report('rankedtargets', 'the call wall is CALL-dominant and above spot', rtCw);
+report('rankedtargets', 'the put wall is PUT-dominant and below spot', rtPw);
+check('the downstream builders were actually exercised', downstreamSeen > 0, `${downstreamSeen} profiles built`);
+
+check(
+  'the walked books actually exercise the difference',
+  naiveDiffered > 0,
+  `${naiveDiffered}/${statesSampled} sampled book states where side-of-spot alone would name a different call wall`
+);
+
+console.log(`\n${pass} passed, ${fail} failed`);
+if (fail) process.exit(1);

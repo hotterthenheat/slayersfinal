@@ -9,6 +9,7 @@
 */
 
 import { fmtUsd } from './gex';
+import { pickWalls } from '../core/walls';
 import type { MarketSnapshot, StrikeNode } from '../types/market';
 import type {
   DealerBias,
@@ -102,22 +103,25 @@ export function buildExposureProfile(
   const netDex = strikes.reduce((a, s) => a + s.dex.net, 0);
   const netVex = strikes.reduce((a, s) => a + s.vex.net, 0);
 
-  // Walls = strongest |net GEX| above / below spot; flip = first sign change
-  let callWall = spot;
-  let putWall = spot;
-  let maxAbove = 0;
-  let maxBelow = 0;
-  for (const s of strikes) {
-    const mag = Math.abs(s.gex.net);
-    if (s.strike > spot && mag > maxAbove) {
-      maxAbove = mag;
-      callWall = s.strike;
-    }
-    if (s.strike < spot && mag > maxBelow) {
-      maxBelow = mag;
-      putWall = s.strike;
-    }
-  }
+  /* Walls come from core/walls.ts, the ONE copy of this rule — the third
+     place it was written. This picked by |net GEX| plus side of spot, which
+     names a shelf by which side of price it sits on rather than by what it is
+     made of; the sticky book (BOOK_BLEND) strands shelves on the far side
+     routinely, so it labelled put shelves CALL WALL. That matters here more
+     than most: these two prices draw the 'CALL WALL' / 'PUT WALL' zone bands
+     below, the friction test, and the narrative that tells the reader "a break
+     above X opens quick supply".
+
+     The flip immediately below already carries a note that it was unified
+     across this file, the trade plan and buildLevelsFor. The walls were
+     unified in none of the three. Now they are.
+
+     Unnamed stays at SPOT, which is what this function already did when a side
+     held nothing — measured 0 times in 6480 sampled states, so it stays a
+     defensive floor rather than a branch anything renders today. */
+  const picked = pickWalls(strikes, spot, s => s.gex.net);
+  const callWall = picked.callWall ?? spot;
+  const putWall = picked.putWall ?? spot;
   // Nearest-to-spot crossing, same rule as the trade plan and buildLevelsFor
   // (unified 2026-08-18) — first-from-the-bottom picked jitter crossings in
   // the window's tail over the structural one at spot.

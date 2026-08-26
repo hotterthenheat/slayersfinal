@@ -119,7 +119,19 @@ interface CampaignChartProps {
     are deliberately NOT offered here: whole-market texture drowns a one-trade
     story. Volume is on by default; structural levels are opt-in axis chips. */
 const CAMPAIGN_CHART_LS = 'slayer_campaign_chart';
-const CAMPAIGN_OVERLAY_DEFAULTS: ChartOverlays = { trails: false, levels: false, darkpool: false, volume: true };
+/* `flow` joins the diet's exclusions rather than its menu (see overlayKeys
+   below): this chart tells one trade's story, and the whole tape's premium is
+   exactly the market-wide texture that drowns it. */
+const CAMPAIGN_OVERLAY_DEFAULTS: ChartOverlays = {
+  trails: false, levels: false, darkpool: false, volume: true, flow: false,
+  /* Off for the same reason the flow band is: the drift lines are the whole
+     tape's premium summed, which is exactly the market-wide texture that
+     drowns one campaign's story. The vol pane is off because this chart is
+     already short — a third band would leave the tape a strip. */
+  netDrift: false, volDrift: false,
+  /* And this one costs the tape height outright, on a chart already short. */
+  dexStrike: false,
+};
 const loadChartPrefs = (): { timeframe: Timeframe; overlays: ChartOverlays } => {
   try {
     const raw = localStorage.getItem(CAMPAIGN_CHART_LS);

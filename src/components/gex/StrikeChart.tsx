@@ -37,6 +37,103 @@ import { getCandleTheme, useCandleThemeKey, candleSeriesOptions, chartSurface, t
 import { markFired, useAlerts } from './alertStore';
 import type { Candle } from '../../types/market';
 import type { DarkPoolPrint, KeyLevels } from '../../types/gex';
+import { bucketFlow, flowMaxLeg } from '../../data/flowBars';
+import { cumulativeDrift, driftPeak } from '../../data/driftSeries';
+import { impliedVolLine, realizedVol, volCeiling } from '../../data/volDrift';
+import type { FlowPrint } from '../../types/trace';
+
+/* The shape this chart needs off a print: whatever FlowPrint is, plus the
+   instant it arrived. Declared here rather than imported from the provider so a
+   chart never depends on a React context it does not use. */
+type StampedFlowPrint = FlowPrint & { at: number };
+
+/*
+  The band's share of the chart, as a STRETCH FACTOR against the price pane's.
+
+  `setHeight(90)` was the first attempt and it does not hold: measured, the pane
+  came back at 201px on a 900px window — lightweight-charts lays panes out by
+  stretch and redistributes an explicit height away. A constant that names a
+  pixel count it does not produce is worse than no constant, so this says what
+  the library actually honours. 4:1 gives the tape four fifths, which is the
+  reference's proportion, and a reader can still drag the separator.
+
+  3 and not 4, and the reason is a coupling worth naming: the compare effect
+  normalises EVERY pane whenever more than one exists — `panes[0]` to 3, all the
+  rest to 1 — so whatever is set here is re-applied as 3:1 the next time
+  comparisons rebuild. Asking for 4:1 measured 3:1 anyway. Matching it means the
+  two places agree instead of silently fighting over the layout.
+*/
+const FLOW_STRETCH = 1;
+const PRICE_STRETCH = 3;
+
+/*
+  A comparison in PANE mode goes BELOW the flow band when there is one.
+
+  It was hard-coded to index 1. The flow band is built on demand, so 1 is
+  sometimes the flow band and sometimes free — a compare line dropped into the
+  flow pane would share its scale (pinned to +/- the heaviest premium leg) and
+  render as a flat line on the zero rule while squashing the bars it landed on.
+  Asking the flow series where it actually is beats assuming.
+*/
+
+/*
+  THE FLOW LEGS DO NOT TAKE THE CANDLE THEME'S VOLUME INK, and that was the
+  first thing I tried.
+
+  Volume is ONE quantity, so it can be monochrome and still be readable — and
+  in several themes it is: the Chrome theme paints volUp `rgba(238,241,245,.22)`
+  and volDown `rgba(86,92,104,.30)`, two greys. Driven live with the legs on
+  those, the flow band rendered with ZERO green and ZERO red pixels: calls and
+  puts became the same colour, which is the one thing a two-sided histogram
+  cannot survive. The whole point of drawing both legs is telling them apart.
+
+  So the legs wear the house DIRECTION inks, always. That is the right register
+  as well as the readable one: call premium arriving is bullish and put premium
+  arriving is bearish, which is direction, not dealer side — gold and steel
+  would be the wrong vocabulary here.
+*/
+const FLOW_CALL_INK = BULL;
+const FLOW_PUT_INK = PUT_WALL;
+
+/*
+  THE DRIFT LINES WEAR THE SAME TWO INKS AS THE FLOW LEGS, and they should:
+  they are the same two quantities. The band draws call and put premium per
+  bar; the drift lines draw the running totals of exactly those bars. Giving
+  the totals their own colours would ask a reader to learn a second vocabulary
+  for a number they already know.
+*/
+const DRIFT_CALL_INK = BULL;
+const DRIFT_PUT_INK = PUT_WALL;
+
+/*
+  THE TWO VOLATILITY LINES ADD NO NEW HUE.
+
+  Both values already exist in this file as INDICATOR_INKS — the pale violet
+  the ema21 wears and the warm cream the ema50 wears — and that is the correct
+  register rather than a convenient one: realised vol is a line COMPUTED from
+  the bars, which is what every ink in that set marks. The reference happens to
+  draw the same pair as saturated purple and yellow; these are the house's
+  muted version of the same two positions.
+
+  Written out rather than read from INDICATOR_INKS on purpose. Reaching into
+  that map would couple the vol pane to the EMA palette, so recolouring an
+  indicator would silently recolour a different pane in a different unit.
+*/
+const RV_INK = '#BBB2E8';
+const IV_INK = '#EDE4CD';
+
+/** Height of a pane's name chip, and its inset from the pane's top edge. */
+const PANE_LABEL_H = 17;
+const PANE_LABEL_INSET = 3;
+
+/* Every product pane names itself, the way the reference does — an unlabelled
+   strip of bars under a chart is a puzzle. The fills are the faintest wash of
+   each pane's own subject so the chip reads as belonging to its band. */
+const PANE_LABEL_LOOK: Record<string, { text: string; bg: string; fg: string }> = {
+  flow: { text: 'Flow', bg: 'rgba(120,110,40,0.35)', fg: '#E8E4C8' },
+  netDrift: { text: 'Net drift', bg: 'rgba(40,90,60,0.35)', fg: '#CFE8D8' },
+  volDrift: { text: 'Vol drift', bg: 'rgba(70,60,110,0.35)', fg: '#DCD6F0' },
+};
 
 /** What the user chose to draw — every overlay is independent. */
 export interface ChartOverlays {
@@ -44,6 +141,21 @@ export interface ChartOverlays {
   levels: boolean;
   darkpool: boolean;
   volume: boolean;
+  /** Trace's option prints, bucketed to these bars — calls up, puts down. */
+  flow: boolean;
+  /** Running call/put premium totals for the session — the flow band summed. */
+  netDrift: boolean;
+  /** Realised vol measured off these bars against the feed's implied. */
+  volDrift: boolean;
+  /*
+    Exposure by STRIKE, docked under the chart rather than drawn inside it.
+
+    It lives on this type and not on a second one because the reader toggles it
+    from the same menu as the panes and expects it saved with them — but this
+    component never reads it. Every pane lightweight-charts draws shares one
+    TIME axis, and this band's axis is the strike; the host renders it below.
+  */
+  dexStrike: boolean;
 }
 
 /* Chart styles, TradingView's picker (Noah, 2026-08-23: "notice how candles
@@ -98,6 +210,19 @@ export const DEFAULT_OVERLAYS: ChartOverlays = {
   levels: true,
   darkpool: false,
   volume: true,
+  /* OFF by default, and not out of caution — the tape has no history. It
+     accumulates from the moment the app opens, so on a cold load this pane has
+     nothing to draw. Defaulting it on would greet every reader with an empty
+     band under their chart and no clue why. */
+  flow: false,
+  /* Off for the same reason — it reads the same tape. */
+  netDrift: false,
+  /* Off because realised vol needs RV_MODEL.window bars before it can say
+     anything, and because a reader who has not asked for a third band should
+     not get one: every extra pane is height taken off the tape. */
+  volDrift: false,
+  /* Off because it costs the tape real height rather than sharing it. */
+  dexStrike: false,
 };
 
 /*
@@ -118,6 +243,23 @@ export const DEFAULT_OVERLAYS: ChartOverlays = {
   still empty, which is why a consumer must check the spacing between two
   prices rather than trusting a single coordinate.
 */
+/**
+ * How wide the price gutter is forced to be when the chart draws its own
+ * live-price card (`priceTag`).
+ *
+ * The card is min-w-[68px] at right-1, so on the library's natural ~54px
+ * gutter it hung ~18px over the plot and covered the tape's own right edge.
+ * Widening the SCALE puts the card inside the gutter instead of over the
+ * chart.
+ *
+ * EXPORTED because a host that floats chrome has to clear the same number.
+ * Terrain kept its own `PRICE_GUTTER_PX = 56`, and the moment this became 74
+ * the two disagreed and the desk would have parked a button on the price
+ * ticks — the browser sweep failed on exactly that, which is what it is for.
+ * One number, one place, both consumers reading it.
+ */
+export const PRICE_SCALE_MIN_WIDTH = 74;
+
 export interface PriceProjection {
   /** y in CSS px from the top of the plot, or null if the series is gone. */
   yFor(price: number): number | null;
@@ -143,6 +285,16 @@ interface StrikeChartProps {
   overlays?: ChartOverlays;
   /** Dark-pool prints for the DP overlay (whisper lines, MiniPane grammar) */
   prints?: DarkPoolPrint[];
+  /**
+   * Trace's option prints, for the FLOW pane.
+   *
+   * Handed in rather than read here, and that is the point: the tape desk and
+   * this pane are two readers of ONE accumulated tape (the provider owns it),
+   * so they cannot end up quoting different premium for the same session.
+   * Every print, unfiltered — this component narrows to its own ticker, because
+   * a host with four panes should not bucket the same tape four times.
+   */
+  flowPrints?: readonly StampedFlowPrint[];
   /** Comparison symbols drawn as lines over/under the tape */
   compares?: CompareEntry[];
   /** The tape's shape — candles, bars, line, area… (theme-independent) */
@@ -185,13 +337,32 @@ interface StrikeChartProps {
    * the same one at the size the host can afford.
    */
   compact?: boolean;
+  /**
+   * THIS CHART IS INSIDE A PAGE THAT SCROLLS — leave the wheel to it.
+   *
+   * lightweight-charts captures the wheel by default and zooms with it, which
+   * is right when the chart owns its viewport and wrong when it is one tile in
+   * a column taller than the window.
+   *
+   * Terrain below `lg` is the second case. Its root says "the page scrolls
+   * normally" there, and it did not: measured at 900x700 with two panes, the
+   * grid is a fixed 76..922 whatever the window height, so 222px sits below the
+   * fold — and wheeling anywhere over a chart scrolled nothing. The page moved
+   * only at x = 0, 3, 6, 894 and 897: two ~7px strips at the margins, plus the
+   * 6px gap between the panes. The arrangement controls sat at y=854 in a
+   * 700px window, unreachable.
+   *
+   * The trade is real and worth stating: wheel-zoom goes away on those widths.
+   * A reader who cannot reach the controls at all has lost more.
+   */
+  pageScroll?: boolean;
 }
 
 /** Mark a moment on this chart on another pane's behalf; null clears it. */
 export type CrosshairSync = (time: UTCTimestamp | null) => void;
 
 // Wall / flip / king overlay colors (independent of candle theme)
-import { CALL_WALL, PUT_WALL, FLIP, KING, FOCUS, DARK_POOL, ALERT as ALERT_INK } from './palette';
+import { BULL, CALL_WALL, PUT_WALL, FLIP, KING, FOCUS, DARK_POOL, ALERT as ALERT_INK } from './palette';
 
 // Level lines are created once per overlay/ticker, then their prices are
 // TWEENED (rAF + easeOutCubic) so scan-tier level moves glide instead of jumping.
@@ -263,10 +434,12 @@ const StrikeChart = ({
   timeframe,
   height = 460,
   compact = false,
+  pageScroll = false,
   frameless = false,
   focusPrice = null,
   overlays = DEFAULT_OVERLAYS,
   prints = [],
+  flowPrints,
   compares = [],
   chartStyle = 'candles',
   indicators = DEFAULT_INDICATORS,
@@ -292,8 +465,26 @@ const StrikeChart = ({
      applies later changes with `applyOptions` instead. */
   const compactRef = useRef(compact);
   compactRef.current = compact;
+  const pageScrollRef = useRef(pageScroll);
+  pageScrollRef.current = pageScroll;
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
+  /* Two series, not one signed one: the reference draws BOTH legs around a zero
+     line, and a single net bar cannot say whether a quiet bucket was quiet or
+     whether a billion dollars hit each side and cancelled. */
+  const flowCallsRef = useRef<ISeriesApi<'Histogram'> | null>(null);
+  const flowPutsRef = useRef<ISeriesApi<'Histogram'> | null>(null);
+  /* The two drift lines and the two vol lines, each pair sharing one pane. */
+  const driftCallsRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const driftPutsRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const rvRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const ivRef = useRef<ISeriesApi<'Line'> | null>(null);
+  /* Where each product pane's top edge sits, in px up from the container's
+     bottom. MEASURED off the chart rather than computed from a constant: a
+     reader can drag the separators, the time axis's height is the library's to
+     decide, and with three optional panes the offsets depend on which of them
+     happen to be open. */
+  const [paneLabels, setPaneLabels] = useState<{ key: string; bottom: number }[]>([]);
   /*
     THE RUNWAY — a series that draws nothing and holds only WHITESPACE.
 
@@ -341,6 +532,11 @@ const StrikeChart = ({
       built from, kept in refs so the time-scale subscription can read them
       without being torn down and rebuilt on every tick. */
   const lastBarTimeRef = useRef(0);
+  /* What the price card's countdown measures against: the bar time we last
+     saw, when we saw it in REAL ms, and the observed real gap between the
+     last two arrivals. `realMs: 0` means "not yet observed" and the countdown
+     stays blank rather than guessing. */
+  const barClockRef = useRef({ stamp: 0, at: 0, realMs: 0 });
   const bucketSecRef = useRef(60);
   const levelTickerRef = useRef('');
   const focusLineRef = useRef<IPriceLine | null>(null);
@@ -422,6 +618,59 @@ const StrikeChart = ({
   }, []);
 
   /*
+    ══ RE-FIT WHEN THE PANE CHANGES WIDTH ═══════════════════════════════════
+
+    `showRecent` splits the visible span 64% history / 36% runway, and it ran
+    ONLY on mount, on a ticker/timeframe/theme change, and on a double-click
+    reset. Nothing watched the container.
+
+    That is fine until a pane changes size under a chart that is already
+    mounted — which is what every Terrain layout change does. lightweight-
+    charts preserves BAR SPACING across a resize, not the logical range, so a
+    narrowed pane shows fewer bars while the runway, fixed in bars, keeps its
+    pixel width. A 36% runway sized for a 1240px pane is ~446px; drop it into
+    the 522px pane that "3 charts" produces and it is 85% of the chart.
+
+    Measured across 24 transitions at 1280/1440/1760, candle occupancy of the
+    pane that was already open:
+
+      1 -> 2, 1 -> 3, 1 -> 4    0.60  ->  0.03-0.17   (1760 1->3 was 3%)
+      2 -> 4, 4 -> 2            unchanged  (width is equal, only height moves)
+      4 -> 1, 3 -> 1, 2 -> 1    0.49-0.61 -> 0.66-0.81  (wider: it IMPROVES)
+
+    The asymmetry is the proof: it tracks WIDTH, not layout, and it never
+    self-healed — identical at +2s and +17s, nine live ticks later.
+
+    WIDTH ONLY. A height change is harmless (the 2<->4 row above), and re-
+    fitting on one would throw the reader's view away for nothing.
+  */
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    let lastWidth = el.clientWidth;
+    let raf = 0;
+    const obs = new ResizeObserver(entries => {
+      const w = Math.round(entries[0]?.contentRect.width ?? 0);
+      if (!w) return; // a pane being torn down reports 0 — re-fitting to it is meaningless
+      // 2%: a layout change is a third of the width or more; this is well clear
+      // of sub-pixel reflow noise without needing to guess at a pixel count.
+      if (Math.abs(w - lastWidth) < lastWidth * 0.02) return;
+      lastWidth = w;
+      // Coalesce: a drag fires this every frame, and setVisibleLogicalRange
+      // mid-drag would fight the browser's own layout.
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        if (chartRef.current) showRecent();
+      });
+    });
+    obs.observe(el);
+    return () => {
+      cancelAnimationFrame(raf);
+      obs.disconnect();
+    };
+  }, [showRecent]);
+
+  /*
     Keep enough whitespace ahead of the last bar that the time axis is labelled
     all the way to the right edge, at whatever zoom the reader is at.
 
@@ -482,6 +731,9 @@ const StrikeChart = ({
     if (followerRef.current === on) return;
     followerRef.current = on;
     chartRef.current?.applyOptions({
+      // The wheel belongs to the page when the page is the thing that scrolls.
+      handleScroll: { mouseWheel: !pageScrollRef.current },
+      handleScale: { mouseWheel: !pageScrollRef.current },
       crosshair: { horzLine: { visible: !on, labelVisible: !on } },
     });
   }, []);
@@ -656,7 +908,13 @@ const StrikeChart = ({
         vertLines: { visible: false },
         horzLines: { visible: false },
       },
-      rightPriceScale: { borderColor: '#1c1c1c' },
+      // The live-price capsule REPLACES the series' own last-value label and is
+      // 68px wide at `right-1` (see the priceTag element below). The gutter is
+      // sized from its widest tick label — 54px — so the capsule stood 18px on
+      // the plot, on top of the strip where lightweight-charts flush-rights its
+      // price-line titles, and ate the date off every dark-pool print near spot.
+      // 68 + 4 + 2 clear. Charts without the capsule keep the default 0.
+      rightPriceScale: { borderColor: '#1c1c1c', minimumWidth: priceTag ? PRICE_SCALE_MIN_WIDTH : 0 },
       timeScale: { borderColor: '#1c1c1c', timeVisible: true, secondsVisible: false, rightOffset: 6, barSpacing: 7 },
       crosshair: {
         vertLine: { color: 'rgba(255,255,255,0.3)', labelBackgroundColor: '#262626' },
@@ -758,6 +1016,12 @@ const StrikeChart = ({
       chartRef.current = null;
       candleSeriesRef.current = null;
       volumeSeriesRef.current = null;
+      flowCallsRef.current = null;
+      flowPutsRef.current = null;
+      driftCallsRef.current = null;
+      driftPutsRef.current = null;
+      rvRef.current = null;
+      ivRef.current = null;
       runwaySeriesRef.current = null;
       runwayRef.current = { from: 0, slots: 0 };
       trailsRef.current = null;
@@ -799,7 +1063,12 @@ const StrikeChart = ({
     shownLevelsRef.current = null;
     focusLineRef.current = null;
     printLinesRef.current = [];
-    loadedRef.current = { ticker: '', timeframe: '1m', theme: '' }; // force full reload
+    /* Force the data effect to re-setData() onto the new series, but ONLY by
+       blanking the theme: a style swap is a REDRAW, not a new world. Blanking
+       ticker/timeframe also sets `newWorld`, and that calls showRecent() —
+       the reader's pan/zoom thrown away for a change of shape. This is the
+       same lane a candle-theme swap already takes. */
+    loadedRef.current = { ...loadedRef.current, theme: '' };
     setMainNonce(n => n + 1);
   }, [chartStyle, makeMain]);
 
@@ -807,6 +1076,352 @@ const StrikeChart = ({
   useEffect(() => {
     volumeSeriesRef.current?.applyOptions({ visible: overlays.volume });
   }, [overlays.volume]);
+
+  /*
+    THE LAST PANE ANY PRODUCT OCCUPIES, or 0 when none of them are open.
+
+    Three optional panes open and close in any order, so "the pane below the
+    products" cannot be a constant and cannot be read off any one of them.
+    Every product series is asked where it actually is and the deepest answer
+    wins; with none open the answer is the tape's own pane, and the caller's
+    +1 puts the compare band directly under it — the behaviour before any of
+    these panes existed.
+  */
+  const lastProductPaneIndex = useCallback(() => {
+    let deepest = 0;
+    for (const s of [flowCallsRef.current, driftCallsRef.current, rvRef.current] as const) {
+      if (!s) continue;
+      try {
+        const i = s.getPane().paneIndex();
+        if (Number.isFinite(i) && i > deepest) deepest = i;
+      } catch {
+        /* a series mid-teardown has no pane to report */
+      }
+    }
+    return deepest;
+  }, []);
+
+  /*
+    WHERE EVERY PRODUCT PANE'S NAME CHIP GOES, measured in one pass.
+
+    Each product effect calls this when it finishes, and it re-measures ALL of
+    them rather than only its own — which is the point. Turning the drift pane
+    on moves the flow band up by the drift pane's height, so a chip that only
+    moved when its own effect ran would be left floating over its neighbour.
+
+    Walking up from the container's bottom: the time axis first, then every
+    pane at or below this one. The chip is then dropped just inside that pane's
+    top edge, INSIDE the band rather than on its separator.
+
+    The result is compared before it is stored. The flow effect re-runs on every
+    tick of the tape, and handing React a fresh array each time would re-render
+    the whole chart shell per tick for a set of numbers that had not changed.
+  */
+  const remeasurePaneLabels = useCallback(() => {
+    const chart = chartRef.current;
+    const wanted: { key: string; series: ISeriesApi<'Histogram'> | ISeriesApi<'Line'> | null }[] = [
+      { key: 'flow', series: flowCallsRef.current },
+      { key: 'netDrift', series: driftCallsRef.current },
+      { key: 'volDrift', series: rvRef.current },
+    ];
+    let next: { key: string; bottom: number }[] = [];
+    if (chart) {
+      try {
+        const panes = chart.panes();
+        const heights = panes.map(pane => pane.getHeight());
+        const axisH = chart.timeScale().height();
+        for (const w of wanted) {
+          if (!w.series) continue;
+          const idx = w.series.getPane().paneIndex();
+          /* Pane 0 is the tape. A product series that somehow landed there has
+             no band of its own to label. */
+          if (idx <= 0 || idx >= heights.length) continue;
+          /* A band collapsed to a sliver has no room for a chip, and one drawn
+             anyway would sit over the pane above it. */
+          if (heights[idx] <= 8) continue;
+          let up = axisH;
+          for (let j = idx; j < heights.length; j++) up += heights[j];
+          next.push({ key: w.key, bottom: up - PANE_LABEL_H - PANE_LABEL_INSET });
+        }
+      } catch {
+        /* the chart is mid-teardown; no chips rather than a thrown render */
+        next = [];
+      }
+    }
+    setPaneLabels(prev =>
+      prev.length === next.length && prev.every((p, i) => p.key === next[i].key && p.bottom === next[i].bottom)
+        ? prev
+        : next
+    );
+  }, []);
+
+  /*
+    THE FLOW BAND: Trace's premium, in this chart's own buckets.
+
+    Rebuilt whenever the tape grows, the timeframe changes or the symbol
+    changes. `bucketFlow` does the summing and is proved separately
+    (scripts/flow-bars-proof.ts); this only decides ink and sign.
+
+    Puts are NEGATED here rather than in the bucketer, which hands back two
+    magnitudes. Which leg hangs below the axis is a drawing decision, and a
+    module that answers "how much traded" should not be the one making it.
+  */
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+
+    /*
+      THE BAND IS BUILT ON DEMAND AND TORN DOWN WHEN IT IS OFF.
+
+      The first cut created the pane at mount and collapsed it to 1px when the
+      overlay was off. That looked equivalent and was not: a second pane adds a
+      SEPARATOR, and the time axis grew 26px -> 30px for every chart in the app,
+      including charts whose reader never turns flow on. The desk's floating
+      chrome clears a hard-coded 26px, so it started landing on the axis — which
+      is exactly what `scripts/ui-sweep.mjs` asserts, and it failed there.
+
+      Removing the series removes the pane, so a chart with flow off is the
+      chart that existed before this feature. A toggle nobody touches costs
+      nothing.
+    */
+    if (!overlays.flow) {
+      const oldCalls = flowCallsRef.current;
+      const oldPuts = flowPutsRef.current;
+      /* Refs cleared BEFORE the removals, not after: removing a series can
+         throw on a chart that is already tearing down, and a ref still holding
+         a destroyed series is one the label measurer would ask for a pane. */
+      flowCallsRef.current = null;
+      flowPutsRef.current = null;
+      try {
+        if (oldCalls) chart.removeSeries(oldCalls);
+        if (oldPuts) chart.removeSeries(oldPuts);
+      } catch {
+        /* already gone */
+      }
+      remeasurePaneLabels();
+      return;
+    }
+
+    let calls = flowCallsRef.current;
+    let puts = flowPutsRef.current;
+    if (!calls || !puts) {
+      /* APPENDED, never a fixed index. Compare-in-pane mode may already own a
+         pane, and hard-coding 1 is how two features end up in the same band. */
+      const opts = {
+        priceFormat: { type: 'volume' as const },
+        lastValueVisible: false,
+        priceLineVisible: false,
+        base: 0,
+      };
+      const paneIndex = chart.panes().length;
+      calls = chart.addSeries(HistogramSeries, opts, paneIndex);
+      puts = chart.addSeries(HistogramSeries, opts, paneIndex);
+      flowCallsRef.current = calls;
+      flowPutsRef.current = puts;
+      try {
+        chart.panes()[0]?.setStretchFactor(PRICE_STRETCH);
+        calls.getPane().setStretchFactor(FLOW_STRETCH);
+      } catch {
+        /* pane sizing is a nicety; never lose the chart over it */
+      }
+    }
+
+    const barSec = tfMinutes(timeframe) * 60;
+    const bars = bucketFlow(flowPrints ?? [], { barSec, ticker });
+
+    calls.setData(
+      bars
+        .filter(b => b.callPrem > 0)
+        .map(b => ({ time: b.time as UTCTimestamp, value: b.callPrem, color: FLOW_CALL_INK }))
+    );
+    puts.setData(
+      bars
+        .filter(b => b.putPrem > 0)
+        .map(b => ({ time: b.time as UTCTimestamp, value: -b.putPrem, color: FLOW_PUT_INK }))
+    );
+
+    /*
+      ONE SCALE ACROSS BOTH LEGS, and symmetric about zero.
+
+      Left to autoscale, lightweight-charts fits each series to its own extent,
+      so a $10k call bucket would be drawn exactly as tall as a $10M put bucket
+      and the zero line would wander off centre. The heaviest leg anywhere sets
+      both halves.
+    */
+    const max = flowMaxLeg(bars);
+    if (max > 0) {
+      const range = () => ({ priceRange: { minValue: -max, maxValue: max } });
+      calls.applyOptions({ autoscaleInfoProvider: range });
+      puts.applyOptions({ autoscaleInfoProvider: range });
+    }
+
+    remeasurePaneLabels();
+  }, [overlays.flow, flowPrints, timeframe, ticker, themeKey, remeasurePaneLabels]);
+
+  /*
+    THE NET DRIFT: the same premium the flow band bars, kept as a running total.
+
+    Two LINES, not a histogram, and they share the flow legs' inks because they
+    are the flow legs' numbers. The gap between them is the session's lean; the
+    slope of each is where money is arriving right now.
+
+    `cumulativeDrift` does the summing and is proved separately
+    (scripts/drift-series-proof.ts); this only decides ink, scale and the pane.
+  */
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+
+    /* Built on demand and torn down when off — the flow band's rule, and for
+       the same measured reason: a pane that is always present adds a separator
+       and grows the time axis for every chart in the app, including charts
+       whose reader never turns this on. */
+    if (!overlays.netDrift) {
+      const oldCalls = driftCallsRef.current;
+      const oldPuts = driftPutsRef.current;
+      driftCallsRef.current = null;
+      driftPutsRef.current = null;
+      try {
+        if (oldCalls) chart.removeSeries(oldCalls);
+        if (oldPuts) chart.removeSeries(oldPuts);
+      } catch {
+        /* already gone */
+      }
+      remeasurePaneLabels();
+      return;
+    }
+
+    let calls = driftCallsRef.current;
+    let puts = driftPutsRef.current;
+    if (!calls || !puts) {
+      /* APPENDED, never a fixed index — three optional panes can be open in any
+         combination, and hard-coding one is how two of them end up sharing a
+         scale that belongs to neither. */
+      const paneIndex = chart.panes().length;
+      const opts = {
+        lineWidth: 2 as const,
+        priceFormat: { type: 'volume' as const },
+        lastValueVisible: true,
+        priceLineVisible: false,
+        crosshairMarkerVisible: false,
+      };
+      calls = chart.addSeries(LineSeries, { ...opts, color: DRIFT_CALL_INK, title: 'Calls' }, paneIndex);
+      puts = chart.addSeries(LineSeries, { ...opts, color: DRIFT_PUT_INK, title: 'Puts' }, paneIndex);
+      driftCallsRef.current = calls;
+      driftPutsRef.current = puts;
+      try {
+        chart.panes()[0]?.setStretchFactor(PRICE_STRETCH);
+        calls.getPane().setStretchFactor(FLOW_STRETCH);
+      } catch {
+        /* pane sizing is a nicety; never lose the chart over it */
+      }
+    }
+
+    const barSec = tfMinutes(timeframe) * 60;
+    const points = cumulativeDrift(flowPrints ?? [], { barSec, ticker });
+    calls.setData(points.map(p => ({ time: p.time as UTCTimestamp, value: p.calls })));
+    puts.setData(points.map(p => ({ time: p.time as UTCTimestamp, value: p.puts })));
+
+    /*
+      ONE SCALE ACROSS BOTH LINES, anchored at zero.
+
+      Left to autoscale, lightweight-charts fits each series to its own extent,
+      so a session where calls took $50M and puts took $2M would draw the two
+      lines at the same height and hide the entire story. Both are cumulative
+      dollars — the same unit — so they share one range, and the range starts at
+      zero because a running total that starts mid-axis exaggerates every wiggle
+      in it.
+    */
+    const peak = driftPeak(points);
+    if (peak > 0) {
+      const range = () => ({ priceRange: { minValue: 0, maxValue: peak * 1.05 } });
+      calls.applyOptions({ autoscaleInfoProvider: range });
+      puts.applyOptions({ autoscaleInfoProvider: range });
+    }
+
+    remeasurePaneLabels();
+  }, [overlays.netDrift, flowPrints, timeframe, ticker, themeKey, remeasurePaneLabels]);
+
+  /*
+    THE VOLATILITY DRIFT: what the underlying is doing against what the option
+    market says it expects.
+
+    Realised is MEASURED from the same aggregated bars the tape draws, so the
+    two agree on every timeframe. Implied is REPORTED by the feed and drawn as
+    it arrives — see data/volDrift.ts for why the implied line is currently
+    flat and why nothing here invents movement for it.
+  */
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    /* Frozen during replay, like the compares and the indicators: the vol lines
+       are computed off live bars, and letting them run forward while the tape
+       is rewound would put two different clocks in one window. */
+    if (replayRef.current) return;
+
+    if (!overlays.volDrift) {
+      const oldRv = rvRef.current;
+      const oldIv = ivRef.current;
+      rvRef.current = null;
+      ivRef.current = null;
+      try {
+        if (oldRv) chart.removeSeries(oldRv);
+        if (oldIv) chart.removeSeries(oldIv);
+      } catch {
+        /* already gone */
+      }
+      remeasurePaneLabels();
+      return;
+    }
+
+    let rv = rvRef.current;
+    let iv = ivRef.current;
+    if (!rv || !iv) {
+      const paneIndex = chart.panes().length;
+      const opts = {
+        lineWidth: 1 as const,
+        priceFormat: { type: 'custom' as const, formatter: (v: number) => `${v.toFixed(2)}%`, minMove: 0.01 },
+        lastValueVisible: true,
+        priceLineVisible: false,
+        crosshairMarkerVisible: false,
+      };
+      rv = chart.addSeries(LineSeries, { ...opts, color: RV_INK, title: 'RV' }, paneIndex);
+      iv = chart.addSeries(LineSeries, { ...opts, color: IV_INK, title: 'IV' }, paneIndex);
+      rvRef.current = rv;
+      ivRef.current = iv;
+      try {
+        chart.panes()[0]?.setStretchFactor(PRICE_STRETCH);
+        rv.getPane().setStretchFactor(FLOW_STRETCH);
+      } catch {
+        /* pane sizing is a nicety; never lose the chart over it */
+      }
+    }
+
+    const mins = tfMinutes(timeframe);
+    const bars = aggregateCandles(Simulator.getCandles(ticker) ?? [], mins);
+    const rvPoints = realizedVol(bars, mins * 60);
+    /* The implied line is drawn only where realised is, so the pane never shows
+       a lone flat line hanging over an empty half — the two are read as a PAIR,
+       and a spread against nothing is not a spread. */
+    const ivPoints = impliedVolLine(Simulator.TICKERS[ticker]?.iv, rvPoints);
+    rv.setData(rvPoints.map(p => ({ time: p.time as UTCTimestamp, value: p.value })));
+    iv.setData(ivPoints.map(p => ({ time: p.time as UTCTimestamp, value: p.value })));
+
+    /*
+      ONE SCALE, FROM ZERO. Both lines are percent, and the distance between
+      them is the whole reading — two independently autoscaled lines would put
+      realised and implied on top of each other whatever the spread actually
+      was, which is the one thing this pane exists to show.
+    */
+    const ceiling = volCeiling(rvPoints, ivPoints);
+    if (ceiling > 0) {
+      const range = () => ({ priceRange: { minValue: 0, maxValue: ceiling } });
+      rv.applyOptions({ autoscaleInfoProvider: range });
+      iv.applyOptions({ autoscaleInfoProvider: range });
+    }
+
+    remeasurePaneLabels();
+  }, [overlays.volDrift, revision, timeframe, ticker, themeKey, remeasurePaneLabels]);
 
   /* Indicator overlays (Noah, 2026-08-23) — EMAs and a session-anchored
      VWAP, computed from the SAME aggregated bars the tape draws so they
@@ -920,7 +1535,12 @@ const StrikeChart = ({
             lastValueVisible: true,
             title: c.ticker,
           },
-          c.mode === 'pane' ? 1 : 0
+          /* Below every product pane that is open, not below the flow band
+             alone. The original asked the flow series where it was, which was
+             right when flow was the only optional pane; with three of them a
+             compare line would land inside whichever one happened to be last
+             and inherit a scale pinned to dollars or percent. */
+          c.mode === 'pane' ? lastProductPaneIndex() + 1 : 0
         );
         compareSeriesRef.current.set(`${c.ticker}:${c.mode}`, series);
       }
@@ -1079,6 +1699,15 @@ const StrikeChart = ({
     chartRef.current?.applyOptions({ layout: { fontSize: compact ? 9 : 10 } });
   }, [compact]);
 
+  /* Crossing the breakpoint must not need a remount — the chart is created
+     once and a window drag changes which side of it the reader is on. */
+  useEffect(() => {
+    chartRef.current?.applyOptions({
+      handleScroll: { mouseWheel: !pageScroll },
+      handleScale: { mouseWheel: !pageScroll },
+    });
+  }, [pageScroll]);
+
   // Key-level price lines — create/destroy only when overlay or ticker changes
   useEffect(() => {
     const candleSeries = candleSeriesRef.current;
@@ -1151,9 +1780,27 @@ const StrikeChart = ({
     let shownPrice = '';
     let shownLeft = '';
     let shownY = Number.NaN;
+    let shownW = -1;
 
     const frame = () => {
       priceTagRafRef.current = requestAnimationFrame(frame);
+      /*
+        AS WIDE AS THE GUTTER, MEASURED — not 68px of guess.
+
+        The card was min-w-[68px] pinned 4px off the container's right edge:
+        72px of card against a gutter lightweight-charts sizes from its widest
+        LABEL, which measures 54px at three digits and 48 at two. So it hung
+        17-23px back over the PLOT and covered the tape's right edge — the last
+        bars and the end of every price line. Sitting ON the gutter is the
+        point; sitting PAST it is the bug. Take the width from the scale itself
+        so it follows the gutter when a longer price widens it. Guarded on >0:
+        width() reports 0 for a hidden scale, and a 0px card is no card.
+      */
+      const gw = Math.round(chart.priceScale('right').width());
+      if (gw > 0 && gw !== shownW) {
+        el.style.width = `${gw}px`;
+        shownW = gw;
+      }
       const price = lastCloseRef.current;
       const y = price == null ? null : series.priceToCoordinate(price);
       if (price == null || y == null) {
@@ -1170,12 +1817,52 @@ const StrikeChart = ({
         shownPrice = p;
       }
 
-      const left = bucket - (Math.floor(Date.now() / 1000) % bucket);
+      /*
+        ══ TIME LEFT IN THE BAR, ON THE CHART'S CLOCK ═══════════════════════
+
+        This read `bucket - (now % bucket)`: wall-clock seconds to the next
+        multiple of the timeframe. Two things wrong with it.
+
+        It was off by an order of magnitude. A bar here is TICKS_PER_BAR (4)
+        ticks at 1500ms, so one 1-minute bar arrives every SIX real seconds,
+        not sixty. On 15m the card counted down from 15:00 while the bar it
+        was counting to appeared in about ninety seconds.
+
+        And the phase was wrong even in its own terms: epoch-modulo assumes
+        bars land on multiples of the timeframe, which only holds at seeding.
+        Live bars advance on tick count and drift off that grid immediately.
+
+        So it is MEASURED instead of assumed — the real gap between the last
+        two bar arrivals, which is the chart telling us its own cadence. No
+        constant imported from the simulator, so the two cannot drift apart,
+        and nothing is printed until a full bar has actually been observed:
+        a countdown that has not yet seen a bar has nothing true to say.
+      */
+      const barAt = lastBarTimeRef.current;
+      if (barAt !== barClockRef.current.stamp) {
+        const nowMs = Date.now();
+        if (barClockRef.current.stamp !== 0) barClockRef.current.realMs = nowMs - barClockRef.current.at;
+        barClockRef.current.stamp = barAt;
+        barClockRef.current.at = nowMs;
+      }
+      const period = barClockRef.current.realMs;
       const pad = (v: number) => String(v).padStart(2, '0');
-      const hh = Math.floor(left / 3600);
-      const t = hh > 0
-        ? `${hh}:${pad(Math.floor((left % 3600) / 60))}:${pad(left % 60)}`
-        : `${pad(Math.floor(left / 60))}:${pad(left % 60)}`;
+      /*
+        Blank until a full bar has been observed — but NEVER return early here.
+        The card is POSITIONED below, and an early exit leaves it wherever it
+        was last put. Measured when this returned instead of falling through:
+        the card sat 654px from the price it names, and the sweep's
+        "both columns print the same number at the same height" assertion
+        failed in seven places across layouts 1, 2 and 4.
+      */
+      let t = '';
+      if (period > 0) {
+        const left = Math.max(0, Math.round((period - (Date.now() - barClockRef.current.at)) / 1000));
+        const hh = Math.floor(left / 3600);
+        t = hh > 0
+          ? `${hh}:${pad(Math.floor((left % 3600) / 60))}:${pad(left % 60)}`
+          : `${pad(Math.floor(left / 60))}:${pad(left % 60)}`;
+      }
       if (t !== shownLeft) {
         timeEl.textContent = t;
         shownLeft = t;
@@ -1366,15 +2053,33 @@ const StrikeChart = ({
   useEffect(() => {
     const isKing = focusPrice != null && Math.abs(levels.king - focusPrice) < 1e-9;
     trailsRef.current?.setFocus(focusPrice, isKing ? 'king' : 'focus');
-    trailsRef.current?.setKing(Number.isFinite(levels.king) ? levels.king : null);
-    // Today's levels, for the one green band, one red band, one blue line
+    /*
+      ══ "KEY LEVELS" IS A SWITCH THAT NOW SWITCHES SOMETHING ══════════════
+
+      It did nothing. `overlays.levels` gated exactly one loop — over
+      LINE_LEVELS, which is `[]` because the axis capsules were deliberately
+      removed (see its comment above). So the toggle had nothing left to turn
+      off, while its menu row went on offering "CW · PW · flip · king".
+
+      Measured before this change: toggling it moved 23 pixels of a 1240x804
+      plot, against 795 pixels of drift on an untouched chart over the same
+      interval — its entire effect was 34x below the tape's own tick noise.
+
+      The levels were never missing, though: they are ON THE FIELD, as the
+      bead inks and the dotted flip line, and the primitive already keeps
+      those as four settable prices. Feeding it nulls is exactly "draw the
+      exposure field with nothing named on it", which is what the label
+      promises. No primitive change, and `trails` still owns the field itself.
+    */
+    const showLevels = overlays.levels;
+    trailsRef.current?.setKing(showLevels && Number.isFinite(levels.king) ? levels.king : null);
     trailsRef.current?.setWalls(
-      Number.isFinite(levels.callWall) ? levels.callWall : null,
-      Number.isFinite(levels.putWall) ? levels.putWall : null,
-      Number.isFinite(levels.flip) ? levels.flip : null
+      showLevels && Number.isFinite(levels.callWall) ? levels.callWall : null,
+      showLevels && Number.isFinite(levels.putWall) ? levels.putWall : null,
+      showLevels && Number.isFinite(levels.flip) ? levels.flip : null
     );
     focusLineRef.current?.applyOptions({ color: isKing ? KING : FOCUS });
-  }, [focusPrice, levels.king, levels.callWall, levels.putWall, levels.flip]);
+  }, [focusPrice, overlays.levels, levels.king, levels.callWall, levels.putWall, levels.flip]);
 
   // ---- replay lifecycle -----------------------------------------------------
   // Enter: snapshot the aggregated world and rewind. Exit: hand the series
@@ -1542,6 +2247,24 @@ const StrikeChart = ({
         onDoubleClick={resetView}
       >
         <div ref={containerRef} className="absolute inset-0" />
+        {/* Every band says its own name, the way the reference does. An
+            unlabelled strip under a chart is a puzzle; `pointer-events-none` so
+            the tape still pans straight through them. Positions are measured
+            off the live layout — see remeasurePaneLabels. */}
+        {paneLabels.map(l => {
+          const look = PANE_LABEL_LOOK[l.key];
+          if (!look) return null;
+          return (
+            <span
+              key={l.key}
+              aria-hidden
+              className="pointer-events-none absolute left-2 z-10 rounded px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-widest"
+              style={{ bottom: l.bottom, background: look.bg, color: look.fg }}
+            >
+              {look.text}
+            </span>
+          );
+        })}
 
         {/* Pinned to the container's right edge and moved down it by
             transform, so it rides the price scale rather than being re-laid
@@ -1550,7 +2273,7 @@ const StrikeChart = ({
           <div
             ref={priceTagRef}
             aria-hidden
-            className="pointer-events-none absolute top-0 right-1 z-10 min-w-[68px] rounded-[9px] border border-white/[0.14] px-2 py-1 text-center opacity-0 shadow-lg shadow-black/40"
+            className="pointer-events-none absolute top-0 right-0 z-10 rounded-[9px] border border-white/[0.14] px-0.5 py-1 text-center opacity-0 shadow-lg shadow-black/40"
             style={{ background: 'rgba(72,78,98,0.92)', backdropFilter: 'blur(2px)' }}
           >
             <div className="font-mono text-[12px] font-bold leading-[15px] tnum text-white" />

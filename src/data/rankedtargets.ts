@@ -10,6 +10,7 @@
 */
 
 import type { MarketSnapshot } from '../types/market';
+import { pickWalls } from '../core/walls';
 import type {
   FactorShare,
   HedgingClass,
@@ -118,24 +119,19 @@ export function buildRankedTargets(snapshot: MarketSnapshot): RankedTargetsView 
   });
 
   // Structural landmarks for tagging
-  let callWall = spot;
-  let putWall = spot;
+  /* Walls from core/walls.ts, the ONE copy of this rule — it was written here
+     too, by |netGex| plus side of spot, and these landmarks TAG the ranked
+     targets, so a mislabeled wall mislabels every contract sitting on it. */
+  const picked = pickWalls(nodes, spot, n => n.netGex);
+  const callWall = picked.callWall ?? spot;
+  const putWall = picked.putWall ?? spot;
+
   let king = spot;
   let pin = spot;
-  let maxAbove = 0;
-  let maxBelow = 0;
   let maxAll = 0;
   let maxOI = 0;
   for (const n of nodes) {
     const mag = Math.abs(n.netGex);
-    if (n.strike > spot && mag > maxAbove) {
-      maxAbove = mag;
-      callWall = n.strike;
-    }
-    if (n.strike < spot && mag > maxBelow) {
-      maxBelow = mag;
-      putWall = n.strike;
-    }
     if (mag > maxAll) {
       maxAll = mag;
       king = n.strike;

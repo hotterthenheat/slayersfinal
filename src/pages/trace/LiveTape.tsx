@@ -826,8 +826,21 @@ const FilterChooser = ({
 // Grouped two-tier header — same grammar as the exposure / pressure matrices
 /** Streaming rich options prints in the house grammar — session strip, filters, multi-ticker. */
 const LiveTape = () => {
-  const { marketData } = useMarketData();
-  const [rows, setRows] = useState<FlowPrint[]>([]);
+  const { marketData, flowTape } = useMarketData();
+  /*
+    THE TAPE IS NOT ACCUMULATED HERE ANY MORE.
+
+    It used to be: a local buffer fed by an effect on every tick. That made the
+    tape exist only while a reader stood on this page, so a chart elsewhere had
+    no way to read it, and giving the chart its own accumulator would have been
+    two buffers filling from one source. The provider owns it now and this desk
+    is one of its readers.
+
+    PAUSE STILL PAUSES — it freezes what you are READING. Recording never stops,
+    which is the behaviour a reader actually wants: pausing to study a print
+    should not punch a hole in the session's flow.
+  */
+  const [frozen, setFrozen] = useState<FlowPrint[] | null>(null);
   const [paused, setPaused] = useState(false);
   const [marked, setMarked] = useState<Set<number>>(new Set());
   const [read, setRead] = useState('Awaiting prints…');
@@ -841,7 +854,6 @@ const LiveTape = () => {
       buffer is capped, so a print the user is reading eventually scrolls out of
       it — looking it up by id would silently close the drilldown mid-read. */
   const [openPrint, setOpenPrint] = useState<FlowPrint | null>(null);
-  const idRef = useRef(0);
   const lastReadRef = useRef(0);
 
   /* Back to the top (Noah, 2026-08-23): the tape page grows without a cap
@@ -918,12 +930,14 @@ const LiveTape = () => {
       return next;
     });
 
+  /* Snapshot on the way into pause, release on the way out. Keyed on `paused`
+     ALONE: adding flowTape would re-snapshot every tick and pause nothing. */
   useEffect(() => {
-    if (!marketData || paused) return;
-    const fresh = marketData.tape.map(o => enrichPrint(o, ++idRef.current));
-    if (fresh.length === 0) return;
-    setRows(prev => [...fresh, ...prev].slice(0, MAX_ROWS));
-  }, [marketData, paused]);
+    setFrozen(paused ? flowTape.slice(0, MAX_ROWS) : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paused]);
+
+  const rows = frozen ?? (flowTape.length > MAX_ROWS ? flowTape.slice(0, MAX_ROWS) : flowTape);
 
   const summary = useMemo(() => summarizeTape(rows), [rows]);
 

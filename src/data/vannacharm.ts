@@ -9,6 +9,7 @@
 */
 
 import Simulator from '../core/simulator';
+import { pickWalls } from '../core/walls';
 import type { MarketSnapshot, StrikeNode } from '../types/market';
 import type {
   IvShift,
@@ -45,22 +46,26 @@ interface LevelSet {
 
 /** Walls / flip / king from a set of (strike, value) pairs, descending input. */
 function levelsFrom(rows: { strike: number; value: number }[], spot: number): LevelSet {
-  let callWall = spot;
-  let putWall = spot;
+  /* Walls from core/walls.ts, the ONE copy of this rule. This picked by
+     |value| plus side of spot, which names a shelf by where it sits rather
+     than what it is made of.
+
+     The sign convention holds for every caller here, which is why the shared
+     rule applies: `current` is `n.netGex`, and `projectStrike` returns
+     `callGex * decay + putGex * decay` (CHARM) or `netGex + vanna * ...`
+     (VANNA) — both keep negative call-dominant / positive put-dominant, and
+     this function's own flip below reads `Math.sign(value)` as exactly that
+     boundary. Under a projection a wall that MIGRATES is the whole point of
+     this panel, so naming it by the wrong half of the book moved the wrong
+     line. */
+  const picked = pickWalls(rows, spot, r => r.value);
+  const callWall = picked.callWall ?? spot;
+  const putWall = picked.putWall ?? spot;
+
   let king = spot;
-  let maxAbove = 0;
-  let maxBelow = 0;
   let maxAll = 0;
   for (const r of rows) {
     const mag = Math.abs(r.value);
-    if (r.strike > spot && mag > maxAbove) {
-      maxAbove = mag;
-      callWall = r.strike;
-    }
-    if (r.strike < spot && mag > maxBelow) {
-      maxBelow = mag;
-      putWall = r.strike;
-    }
     if (mag > maxAll) {
       maxAll = mag;
       king = r.strike;
