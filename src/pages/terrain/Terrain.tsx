@@ -19,7 +19,7 @@ import ChartToolbar from '../../components/gex/ChartToolbar';
 import CompareControl from '../../components/gex/CompareControl';
 import PaneLadder, { LADDER_WIDTH_PX } from '../../components/gex/PaneLadder';
 import useFocusTrap from '../../components/ui/useFocusTrap';
-import { useIsBelowLg } from '../../components/ui/useMediaQuery';
+import { useIsBelowLg, useIsPhone } from '../../components/ui/useMediaQuery';
 import TickerQuickPick from '../../components/gex/TickerQuickPick';
 import SpotPrice from '../../components/gex/SpotPrice';
 import { CANDLE_THEMES, chartSurface, useCandleThemeKey } from '../../components/gex/candleTheme';
@@ -472,6 +472,9 @@ const Pane = ({
      page scrolls through — so the wheel has to belong to the page, not to the
      chart. See `pageScroll` on StrikeChart for what was measured. */
   const belowLg = useIsBelowLg();
+  /* Read here rather than threaded down: this component already takes fourteen
+     props, and it is the same one-line media query the page reads. */
+  const isPhone = useIsPhone();
 
   /*
     ══ THE COMPARE LEGEND HAS TO START BELOW THE STRIP, NOT AT 46px ═════════
@@ -664,7 +667,16 @@ const Pane = ({
         className={`relative flex flex-col overflow-hidden animate-soft-in ${
           expanded
             ? 'flex-1 min-h-0'
-            : `min-h-[420px] lg:min-h-0 border rounded-md ${cell} ${
+            /*
+              The 420px floor is for the STACKED, SCROLLING shape between phone
+              and `lg`, where a pane with no floor collapses to nothing. It is
+              not lowered here — on a phone it does not apply at all, because
+              there is exactly one pane and it is inside a fixed-height parent
+              that already gives it the whole viewport. Keeping the floor there
+              would push a 420px pane into a 334px landscape window and
+              overflow it, which is the floor doing the opposite of its job.
+            */
+            : `${isPhone ? 'min-h-0' : 'min-h-[420px]'} lg:min-h-0 border rounded-md ${cell} ${
                 isActive && paneCount > 1 ? 'border-select' : 'border-borderSubtle'
               }`
         }`}
@@ -1107,6 +1119,24 @@ const Terrain = () => {
     };
   }, [expanded]);
 
+  /*
+    A PHONE GETS ONE CHART, and it is the same rule Pulse uses — `useIsPhone`,
+    not a second breakpoint. `PHONE_QUERY` already carries the landscape clause
+    `(pointer: coarse) and (max-height: 540px)`, which was written for exactly
+    this failure: a handset held sideways is 844x390, WIDER than the md floor,
+    so a width test hands it the full desk inside 390px of height.
+
+    Terrain has been on `useIsBelowLg` alone, which stacks the panes and lets
+    the page scroll — four charts at `min-h-[420px]` against a 334px viewport.
+
+    ONE pane, not four shrunk. 420px is the floor for a chart that can be read
+    at all, and the desk already caps at four for the matching reason ("at 1440
+    a fifth pane is 260px wide, and a chart that narrow stops being a chart").
+    Four panes into 334px produces four charts nobody can read; one pane
+    produces one they can.
+  */
+  const isPhone = useIsPhone();
+
   const panes = cfg.panes.slice(0, cfg.layout);
   const anyLadder = panes.some(p => p.ladder);
 
@@ -1284,7 +1314,27 @@ const Terrain = () => {
       built page, not guessed at. Below `lg` every one of those comes off and
       the page scrolls normally.
     */
-    <div className="relative -mx-4 lg:-mx-6 2xl:-mx-8 lg:-mt-5 lg:-mb-16 px-1.5 lg:py-1.5 flex flex-col lg:h-[calc(100vh-3.5rem)] lg:min-h-0">
+    <div
+      /*
+        FULL BLEED, from `lg` — and on a PHONE, which is the addition. The
+        negative margins cancel the shell's own padding (px-4/6/8, pt-5, pb-16)
+        so the pane reaches the window edges, and the height is the viewport
+        less the 56px top bar, measured in the built page rather than guessed.
+        Between the two — tablets, narrow laptops — the panes still stack and
+        the page scrolls normally, which is the right shape for a window that
+        can hold more than one chart but not side by side.
+
+        `dvh` on the phone, `vh` above it. On a phone browser `100vh` is the
+        height with the URL bar RETRACTED, so a pane sized to it runs under the
+        browser chrome until the reader scrolls — and the bottom of a Terrain
+        pane is its time axis. Pulse already documents this; same reason here.
+      */
+      className={`relative -mx-4 lg:-mx-6 2xl:-mx-8 px-1.5 flex flex-col ${
+        isPhone
+          ? '-mt-5 -mb-16 py-1.5 h-[calc(100dvh-3.5rem)] min-h-0'
+          : 'lg:-mt-5 lg:-mb-16 lg:py-1.5 lg:h-[calc(100vh-3.5rem)] lg:min-h-0'
+      }`}
+    >
       {/*
         THE ARRANGEMENT CONTROLS, floating over the top-right of the grid.
 
@@ -1299,7 +1349,19 @@ const Terrain = () => {
         cost the grid nothing. Top RIGHT, because every pane's own controls
         float top left and two translucent strips on the same corner would
         stack into an unreadable pile.
+
+        NOT ON A PHONE, and this is a correctness point rather than a space
+        one. Both controls are inert there: the arrangement picker sets a pane
+        COUNT, and a phone renders exactly one pane whatever it says, so
+        pressing 4 changes nothing a reader can see; STRIKES toggles the strike
+        rails, which are `hidden lg:flex` and so never draw on a phone at all.
+        A control that visibly does nothing when pressed is worse than an
+        absent one — it teaches the reader that the desk is broken.
+
+        The symbol is still changeable: every pane carries its own picker in
+        its header, and `[` / `]` still walk the configured slots.
       */}
+      {!isPhone && (
       <div
         /*
           BOTTOM right, not top right.
@@ -1413,6 +1475,7 @@ const Terrain = () => {
           </button>
         )}
       </div>
+      )}
 
       {/* The ring and the badge are feedback for people who can see them. A
           key that rearranges the desk has to say so as well, or the whole
@@ -1431,9 +1494,25 @@ const Terrain = () => {
       <div
         /* The stacked-phone minimum lives on the PANE, not here — see the
            note on Pane's own wrapper for why a rule here does nothing. */
-        className={`grid ${COLS[cfg.layout]} ${ROWS[cfg.layout]} gap-1.5 flex-1 min-h-0`}
+        className={`grid ${isPhone ? COLS[1] : COLS[cfg.layout]} ${
+          isPhone ? ROWS[1] : ROWS[cfg.layout]
+        } gap-1.5 flex-1 min-h-0`}
       >
-        {panes.map((pane, i) => (
+        {panes.map((pane, i) =>
+          /*
+            A REAL BRANCH, not `hidden`. A CSS-hidden pane still MOUNTS: three
+            more StrikeCharts building canvases, subscribing to the tick and
+            re-rendering every revision, behind a screen nobody can see, on the
+            device least able to carry them.
+
+            The INDEX is preserved rather than the array re-sliced, because
+            every callback below is index-based — `setPane(i, …)`,
+            `expanded === i`, `paneRefs.current[i]`, and the `[`/`]` cycle. Show
+            pane 2 of 4 on a phone and it is still pane 2 to all of them, so a
+            setting changed there lands where the reader expects when they open
+            the desk again.
+          */
+          isPhone && i !== active ? null : (
           <Pane
             key={i}
             cfg={pane}
@@ -1463,7 +1542,8 @@ const Terrain = () => {
             */
             cell={cfg.layout === 3 && i === 2 ? 'lg:col-span-2 2xl:col-span-1' : ''}
           />
-        ))}
+          )
+        )}
       </div>
     </div>
   );

@@ -1275,6 +1275,117 @@ head('no menu hangs off the edge of the window');
   }
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   16. TERRAIN ON A PHONE — one chart, and the other three never built.
+
+   Terrain ran on `useIsBelowLg` alone, which stacks the panes and scrolls the
+   page: four charts at `min-h-[420px]` against a 334px landscape viewport.
+   Held BOTH ways, because the rule that fixes it is `useIsPhone`, whose
+   landscape clause exists precisely because a handset turned sideways is
+   844x390 — wider than the md floor, and so invisible to a width test.
+   ───────────────────────────────────────────────────────────────────────── */
+for (const [orientation, viewport] of [
+  ['portrait', { width: 390, height: 844 }],
+  ['landscape', { width: 844, height: 390 }],
+]) {
+  head(`Terrain gives a phone one chart — ${orientation}`);
+  const ctx = await browser.newContext({ viewport, hasTouch: true, isMobile: true });
+  await ctx.addInitScript(
+    `localStorage.setItem('slayer_terrain_v1', ${JSON.stringify(seed(4, TICKERS))})`
+  );
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+
+  const g = await page.evaluate(() => {
+    const plots = [...document.querySelectorAll('canvas')]
+      .map(c => ({ c, r: c.getBoundingClientRect() }))
+      .filter(o => o.r.height > 120 && o.r.width > 100);
+    const first = plots.sort((a, b) => a.r.left - b.r.left || a.r.top - b.r.top)[0];
+    let ink = 0;
+    if (first) {
+      const d = first.c.getContext('2d').getImageData(0, 0, first.c.width, first.c.height).data;
+      for (let k = 3; k < d.length; k += 4) if (d[k] > 8) ink++;
+    }
+    return {
+      innerH: window.innerHeight,
+      plots: plots.length,
+      h: first ? Math.round(first.r.height) : 0,
+      w: first ? Math.round(first.r.width) : 0,
+      bitmap: first ? first.c.width : 0,
+      ink,
+      vscroll: document.documentElement.scrollHeight - document.documentElement.clientHeight,
+      hscroll: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      /* Controls that cannot affect anything here: the arrangement picker sets
+         a pane count a phone ignores, and Strikes toggles rails that are
+         `hidden lg:flex`. Both must be absent, not merely invisible. */
+      arrangement: !!document.querySelector('[aria-label="How many charts"]'),
+      strikes: !!document.querySelector('[data-strikes-toggle]'),
+    };
+  });
+
+  /* ONE chart. A pane draws a plot canvas and a volume canvas, so one chart is
+     two; four charts would be eight. Counting canvases rather than panes is
+     deliberate — a `hidden` pane still has both. */
+  g.plots === 2
+    ? ok(`one chart is mounted — ${g.plots} plot canvases`)
+    : bad(`${g.plots} plot canvases — expected 2 (four charts would be 8)`);
+
+  /* It fills the window rather than overflowing it. The 420px pane floor would
+     push a pane past a 334px landscape viewport, so this is what catches the
+     floor being left on. */
+  g.vscroll === 0
+    ? ok('the page does not scroll — the chart fits the window')
+    : bad(`${g.vscroll}px of vertical scroll — the pane is taller than the viewport`);
+
+  g.h > g.innerH * 0.55
+    ? ok(`the chart is ${g.h}px of an ${g.innerH}px window`)
+    : bad(`the chart is only ${g.h}px of ${g.innerH}px`);
+
+  Math.abs(g.bitmap - g.w) <= 2 && g.ink > 500
+    ? ok(`really painted — ${g.bitmap}px bitmap for a ${g.w}px box, ${g.ink} pixels of ink`)
+    : bad(`canvas ${g.bitmap}px for a ${g.w}px box with ${g.ink} pixels of ink`);
+
+  !g.arrangement && !g.strikes
+    ? ok('the two controls that could not do anything here are gone')
+    : bad(`inert chrome still rendered — arrangement:${g.arrangement} strikes:${g.strikes}`);
+
+  g.hscroll === 0 ? ok('nothing scrolls sideways') : bad(`${g.hscroll}px sideways`);
+  errs.length === 0 ? ok('no page errors') : bad(`page errors: ${errs.slice(0, 2).join(' | ')}`);
+  await ctx.close();
+}
+
+/* And the boundary from the other side: a tablet is touch, like a phone, and
+   roomy, unlike one. A rule that simply returned true would pass everything
+   above. */
+head('Terrain keeps its desk on a tablet');
+{
+  const ctx = await browser.newContext({
+    viewport: { width: 820, height: 1180 },
+    hasTouch: true,
+    isMobile: true,
+  });
+  await ctx.addInitScript(
+    `localStorage.setItem('slayer_terrain_v1', ${JSON.stringify(seed(4, TICKERS))})`
+  );
+  const page = await ctx.newPage();
+  await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+  const n = await page.evaluate(
+    () =>
+      [...document.querySelectorAll('canvas')].filter(c => {
+        const r = c.getBoundingClientRect();
+        return r.height > 120 && r.width > 100;
+      }).length
+  );
+  n === 8
+    ? ok(`an iPad still builds four charts — ${n} plot canvases`)
+    : bad(`an iPad built ${n} plot canvases, expected 8`);
+  await ctx.close();
+}
+
 console.log(`\n${fails} failing`);
 await browser.close();
 process.exit(fails ? 1 : 0);
