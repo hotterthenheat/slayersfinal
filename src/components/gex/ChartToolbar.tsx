@@ -8,7 +8,8 @@
 ==================================================
 */
 
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import {
   Activity,
@@ -39,6 +40,7 @@ import {
 } from './candleTheme';
 import { CHART_STYLES, INDICATOR_INKS, type ChartIndicators, type ChartOverlays, type ChartStyle } from './StrikeChart';
 import AlertsMenu from './AlertsMenu';
+import { placeMenu, type MenuBox, type MenuSide } from './menuPlacement';
 
 interface ChartToolbarProps {
   timeframe: Timeframe;
@@ -223,20 +225,9 @@ const OVERLAY_ITEMS: { key: keyof ChartOverlays; label: string; hint: string }[]
   { key: 'dexStrike', label: 'Exposure by strike', hint: 'Delta, gamma or vega across the chain — docked under the tape' },
 ];
 
-export type MenuSide = 'bottom' | 'top' | 'left' | 'right';
-
-/** Small anchored dropdown with outside-click dismissal. */
-const MENU_SIDE_POS: Record<MenuSide, string> = {
-  bottom: 'right-0 top-full mt-1',
-  /* UP, for a toolbar sitting on the bottom edge — the phone's Pulse, where
-     the strip is in flow beneath the tape. A `bottom` menu there opens past
-     the bottom of the window, and because the menu is `absolute` inside a
-     page that does not scroll sideways or down, it is not merely awkward to
-     reach: it is unreachable. */
-  top: 'right-0 bottom-full mb-1',
-  right: 'left-full top-0 ml-1',
-  left: 'right-full top-0 mr-1',
-};
+/* Re-exported so every consumer keeps importing its menu vocabulary from the
+   toolbar rather than reaching past it into the placement module. */
+export type { MenuSide };
 
 /* The caret points where the menu will pop (Noah, 2026-08-23) — down when it
    drops below, sideways when a side-docked toolbox throws it left or right. */
@@ -265,10 +256,43 @@ const Dropdown = ({
   title?: string;
   children: ReactNode;
 }) => {
-  const Caret = MENU_SIDE_CARET[menuSide];
+  const anchorRef = useRef<HTMLButtonElement | null>(null);
+  const [placed, setPlaced] = useState<{ box: MenuBox; side: MenuSide } | null>(null);
+
+  const measure = useCallback(() => {
+    const el = anchorRef.current;
+    if (!el) return;
+    setPlaced(placeMenu(el.getBoundingClientRect(), menuSide, window.innerWidth, window.innerHeight));
+  }, [menuSide]);
+
+  /*
+    Measured in a LAYOUT effect, before paint: a passive effect would paint the
+    menu at its previous position for one frame, which on a desk of four panes
+    reads as the menu jumping in from the last pane you opened.
+  */
+  useLayoutEffect(() => {
+    if (!open) { setPlaced(null); return; }
+    measure();
+  }, [open, measure]);
+
+  useEffect(() => {
+    if (!open) return;
+    /* Capture, so a scroll inside ANY ancestor moves the menu with its trigger
+       and not just a scroll of the window. */
+    const onMove = () => measure();
+    window.addEventListener('scroll', onMove, true);
+    window.addEventListener('resize', onMove);
+    return () => {
+      window.removeEventListener('scroll', onMove, true);
+      window.removeEventListener('resize', onMove);
+    };
+  }, [open, measure]);
+
+  const Caret = MENU_SIDE_CARET[placed?.side ?? menuSide];
   return (
   <div className="relative">
     <button
+      ref={anchorRef}
       onClick={onToggle}
       title={title}
       className={`inline-flex items-center gap-1.5 px-2 py-1 rounded font-mono text-[10px] uppercase tracking-wider transition-colors ${
@@ -281,28 +305,45 @@ const Dropdown = ({
       {label}
       <Caret className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} />
     </button>
-    {open && (
+    {open && placed && createPortal(
       /*
-        A MENU TALLER THAN THE WINDOW SCROLLS RATHER THAN OVERFLOWING IT.
+        THE MENU IS A PORTAL, and that is a correctness fix rather than a
+        preference.
 
-        `70vh` and `overflow-y-auto` are not defensive decoration — they are the
-        fix for a measured failure. This panel had no height cap at all, which
-        was survivable only while every menu happened to be short enough. Adding
-        two overlay rows took the Overlays menu to 419px, and a HANDSET IN
-        LANDSCAPE is 390px tall: the menu opens upward off a strip on the bottom
-        edge, so the overflow goes past the TOP of a page that does not scroll,
-        and the rows that fell off were not merely awkward to reach — they were
-        unreachable. `scripts/ui-sweep.mjs` failed exactly as written.
+        It used to be `position: absolute` inside the toolbar. On Terrain the
+        toolbar floats inside a pane whose box is `overflow-hidden` — which it
+        has to be, for its rounded corners and to contain the chart — so the
+        menu was CLIPPED at the pane's bottom edge. Measured at 1440x900 with
+        four panes: the Overlays menu ran to y=696 against a pane clipping at
+        y=475, and three of its eight rows were rendered, invisible and
+        unclickable. The candle theme menu lost four of eleven. Turning a pane
+        into a bigger one is not a fix; any ancestor with a scroll or a clip
+        anywhere in the app would do the same thing again.
+
+        Out at the body there is no ancestor left to clip it, so the only bound
+        is the window — and the window is a bound the placement already knows
+        how to respect: it caps the height to the room actually available and
+        FLIPS to the other side when that room is not worth using.
 
         `overflow-x-hidden` keeps the rounded corners clipping the way the plain
         `overflow-hidden` did; `overscroll-contain` stops a flick that reaches
         the end of the list from scrolling the page underneath it.
       */
       <div
-        className={`absolute z-40 max-h-[70vh] min-w-[210px] overflow-y-auto overflow-x-hidden overscroll-contain border border-borderMuted bg-panel rounded-md shadow-2xl shadow-black/60 animate-slide-in ${MENU_SIDE_POS[menuSide]}`}
+        data-toolbar-menu=""
+        style={{
+          position: 'fixed',
+          left: placed.box.left,
+          right: placed.box.right,
+          top: placed.box.top,
+          bottom: placed.box.bottom,
+          maxHeight: placed.box.maxHeight,
+        }}
+        className="z-[120] min-w-[210px] overflow-y-auto overflow-x-hidden overscroll-contain border border-borderMuted bg-panel rounded-md shadow-2xl shadow-black/60 animate-slide-in"
       >
         {children}
-      </div>
+      </div>,
+      document.body
     )}
   </div>
   );
@@ -345,7 +386,21 @@ const ChartToolbar = ({
   useEffect(() => {
     if (!openMenu) return;
     const onDown = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpenMenu(null);
+      const t = e.target as Node | null;
+      if (!t) return;
+      if (rootRef.current?.contains(t)) return;
+      /*
+        THE MENU IS NO LONGER INSIDE THE TOOLBAR IN THE DOM.
+
+        It portals to the body so a clipping ancestor cannot cut it off, which
+        means a containment test against the toolbar alone now calls every
+        click on a menu row an OUTSIDE click — the menu would close before the
+        row it was clicked on could act. Every portalled panel carries
+        `data-toolbar-menu`, so the test asks whether the click landed in one.
+      */
+      if (t instanceof Element && t.closest('[data-toolbar-menu]')) return;
+      if (t instanceof Node && t.parentElement?.closest('[data-toolbar-menu]')) return;
+      setOpenMenu(null);
     };
     window.addEventListener('mousedown', onDown);
     return () => window.removeEventListener('mousedown', onDown);

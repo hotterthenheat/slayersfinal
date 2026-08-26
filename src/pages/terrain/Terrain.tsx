@@ -825,6 +825,30 @@ const Terrain = () => {
   const [expanded, setExpanded] = useState<number | null>(null);
   const expandedRef = useRef<number | null>(null);
   expandedRef.current = expanded;
+
+  /*
+    AN EXPANDED PANE CANNOT OUTLIVE THE PANE IT POINTS AT.
+
+    `expanded` is an INDEX, and the number of panes is a separate piece of
+    state that the layout buttons and the 1-4 keys both change without
+    consulting it. Expand the fourth chart, then press 2: the fourth pane stops
+    rendering, so its `fixed inset-0` overlay vanishes and the desk looks
+    normal — while `expanded` is still 3.
+
+    What is left behind is worse than a stale number. The scroll lock is
+    installed by the effect below and released by its cleanup, and the cleanup
+    only runs when `expanded` CHANGES: it did not, so `document.body.style
+    .overflow` stays `hidden` with nothing expanded. Below `lg` the desk is a
+    scrolling page, and the reader is left on a page that will not scroll, with
+    a floating "Esc" chip offering to close something that is not open.
+
+    Clearing rather than clamping: shrinking the desk past the pane you were
+    looking at is not a request to look at a different one.
+  */
+  useEffect(() => {
+    setExpanded(cur => (cur !== null && cur >= cfg.layout ? null : cur));
+  }, [cfg.layout]);
+
   useEffect(() => {
     if (expanded === null) return;
     const onKey = (e: KeyboardEvent) => {

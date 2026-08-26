@@ -570,15 +570,70 @@ head(`the phone gets one chart, not a crushed desk — ${orientation}`);
     await trigger.click();
     await page.waitForTimeout(400);
     const panel = await page.evaluate(() => {
-      const p = [...document.querySelectorAll('div')].find(d => {
-        const c = d.className;
-        return typeof c === 'string' && c.includes('z-40') && c.includes('min-w-[210px]');
-      });
+      /*
+        Found by its data attribute, not by its classes. The menu is a PORTAL
+        now — it renders at the body so no clipping ancestor can cut it off —
+        and the class-based selector this used went stale the moment that
+        landed, which turned two real assertions into two that could only ever
+        fail. A marker attribute is the contract; the classes are styling.
+      */
+      const p = document.querySelector('[data-toolbar-menu]');
       if (!p) return null;
-      const r = p.getBoundingClientRect();
-      return { inView: r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth };
+      /*
+        AND THE TEST IS PER-ROW AND SCROLL-AWARE.
+
+        Three versions of this got it wrong in three different ways, which is
+        worth writing down because each one LOOKED like a reachability test.
+
+        v1 asked whether the PANEL's box was inside the window. A panel can be
+        entirely on screen and still hold rows that are not — it scrolls.
+
+        v2 hit-tested every row where it currently sat. That caught the real
+        clipping bug and then failed on a menu that was working perfectly: on a
+        390px-tall handset the eight-row Overlays menu is a 273px scroller, so
+        its last two rows are legitimately below its own fold. "Not visible
+        right now" is not "unreachable".
+
+        v3, this one, scrolls each row into its menu's view and THEN hit-tests
+        it. That is the actual question a user has: can I get to this row? It
+        still catches the clipping bug — a row clipped by an ANCESTOR does not
+        come into view when the menu scrolls, because the menu is not what is
+        hiding it.
+      */
+      const rows = [...p.querySelectorAll('button')];
+      let unreachable = 0;
+      const missed = [];
+      for (const b of rows) {
+        b.scrollIntoView({ block: 'nearest' });
+        const rr = b.getBoundingClientRect();
+        const off = rr.bottom > innerHeight + 1 || rr.top < -1 || rr.left < -1 || rr.right > innerWidth + 1;
+        const hit = off
+          ? null
+          : document.elementFromPoint(Math.round(rr.left + rr.width / 2), Math.round(rr.top + rr.height / 2));
+        if (off || !(hit && (hit === b || b.contains(hit)))) {
+          unreachable++;
+          missed.push((b.textContent || '').trim().slice(0, 20));
+        }
+      }
+      /* Re-measure the panel AFTER the scrolling above, or `inView` is a
+         reading of where it was before the loop moved anything. */
+      const r2 = p.getBoundingClientRect();
+      return {
+        inView: r2.top >= -1 && r2.bottom <= innerHeight + 1 && r2.left >= -1 && r2.right <= innerWidth + 1,
+        rows: rows.length,
+        unreachable,
+        missed,
+        scrolls: p.scrollHeight > p.clientHeight + 1,
+      };
     });
-    panel?.inView ? ok(`the ${name} menu opens fully on screen`) : bad(`the ${name} menu opens off screen`);
+    if (!panel) bad(`the ${name} menu did not open at all`);
+    else if (!panel.inView) bad(`the ${name} menu opens off screen`);
+    else if (panel.unreachable)
+      bad(`${panel.unreachable} of ${panel.rows} ${name} rows cannot be tapped: ${panel.missed.join(', ')}`);
+    else
+      ok(
+        `the ${name} menu opens on screen with all ${panel.rows} rows reachable${panel.scrolls ? ' (scrolling)' : ''}`
+      );
     await page.keyboard.press('Escape');
     await page.mouse.click(Math.round(viewport.width / 2), Math.round(viewport.height / 2));
     await page.waitForTimeout(300);
@@ -622,6 +677,140 @@ head('the desk survives on everything that can hold it');
     d.hscroll === 0 ? ok(`${label} scrolls nothing sideways`) : bad(`${label}: ${d.hscroll}px sideways`);
     await ctx.close();
   }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   A PANE'S OWN MENUS, INSIDE A BOX THAT CLIPS
+   ───────────────────────────────────────────────────────────────────────── */
+head('every toolbar menu is reachable inside a pane that clips its overflow');
+{
+  /*
+    THE ONE THAT WOULD HAVE CAUGHT IT. A pane's box is `overflow-hidden` — it
+    has to be, for its rounded corners and to contain the chart — and the
+    toolbar floats inside it. While the menus were `position: absolute` they
+    were cut off at the pane's bottom edge: measured at 1440x900 with four
+    panes, the Overlays menu ran to y=696 against a pane clipping at y=475 and
+    three of its eight rows were rendered, invisible and unclickable. The
+    candle theme menu lost four of eleven.
+
+    Nothing in this file could see it, because menus were only ever opened on
+    the phone's Pulse, where the toolbar's ancestor does not clip. The desk is
+    where panes are short and where the bug lived.
+  */
+  for (const [w, h, layout] of [
+    [1440, 900, 4],
+    [1920, 1080, 4],
+    [1280, 800, 3],
+  ]) {
+    const { ctx, page, errs } = await openDesk(w, h, layout);
+    /* The toolbar only appears on hover — it is deliberately not there until
+       you reach for it. */
+    const pane = page.locator('[role="group"], canvas').first();
+    await pane.hover().catch(() => {});
+    await page.waitForTimeout(500);
+
+    let checked = 0;
+    const broken = [];
+    for (const name of ['Overlays', 'Indicators', 'Chart style', 'Candle theme']) {
+      const trigger = page.locator(`button[title="${name}"], button[title^="${name} "]`).first();
+      if (!(await trigger.count())) continue;
+      await trigger.click({ force: true }).catch(() => {});
+      await page.waitForTimeout(300);
+      const r = await page.evaluate(() => {
+        const p = document.querySelector('[data-toolbar-menu]');
+        if (!p) return null;
+        const rows = [...p.querySelectorAll('button')];
+        let bad = 0;
+        for (const b of rows) {
+          b.scrollIntoView({ block: 'nearest' });
+          const rr = b.getBoundingClientRect();
+          const off = rr.bottom > innerHeight + 1 || rr.top < -1 || rr.left < -1 || rr.right > innerWidth + 1;
+          const hit = off
+            ? null
+            : document.elementFromPoint(Math.round(rr.left + rr.width / 2), Math.round(rr.top + rr.height / 2));
+          if (off || !(hit && (hit === b || b.contains(hit)))) bad++;
+        }
+        return { rows: rows.length, bad };
+      });
+      await page.keyboard.press('Escape').catch(() => {});
+      await page.waitForTimeout(150);
+      if (!r) continue;
+      checked++;
+      if (r.bad) broken.push(`${name} ${r.bad}/${r.rows}`);
+    }
+
+    checked >= 3
+      ? ok(`${w}x${h} L${layout}: opened ${checked} pane menus`)
+      : bad(`${w}x${h} L${layout}: only ${checked} pane menus opened — the check below proves little`);
+    broken.length === 0
+      ? ok(`${w}x${h} L${layout}: every row of every pane menu is reachable`)
+      : bad(`${w}x${h} L${layout}: unreachable rows — ${broken.join(', ')}`);
+    errs.length === 0 ? ok(`${w}x${h} L${layout}: no page errors opening menus`) : bad(`page errors: ${errs[0]}`);
+    await ctx.close();
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   SHRINKING THE DESK PAST THE PANE YOU EXPANDED
+   ───────────────────────────────────────────────────────────────────────── */
+head('an expanded pane does not outlive the pane it points at');
+{
+  const { ctx, page } = await openDesk(1440, 900, 4);
+
+  /* Expand the LAST pane, so shrinking the desk is guaranteed to remove it. */
+  await page.keyboard.press(']');
+  await page.keyboard.press(']');
+  await page.keyboard.press(']');
+  await page.keyboard.press('f');
+  await page.waitForTimeout(700);
+
+  const opened = await page.evaluate(() => ({
+    dialog: !!document.querySelector('[role="dialog"][aria-modal="true"]'),
+    locked: getComputedStyle(document.body).overflow,
+  }));
+  opened.dialog
+    ? ok('f expands the active pane into a modal')
+    : bad('f did not expand the fourth pane — the rest of this check proves nothing');
+  opened.locked === 'hidden'
+    ? ok('and the page is scroll-locked underneath it')
+    : bad(`expected the body locked while expanded, got overflow:${opened.locked}`);
+
+  /* Now shrink past it with the keyboard, which is the door the layout buttons
+     cannot be: they sit at z-30, under the expanded pane's own overlay. */
+  await page.keyboard.press('2');
+  await page.waitForTimeout(700);
+
+  const after = await page.evaluate(() => ({
+    dialog: !!document.querySelector('[role="dialog"][aria-modal="true"]'),
+    overflow: getComputedStyle(document.body).overflow,
+    /* The floating chip that offers to close something. If it is still on
+       screen with nothing expanded, it is offering to close nothing. */
+    escChip: [...document.querySelectorAll('button')].some(b => (b.textContent || '').trim() === 'Esc'),
+    panes: document.querySelectorAll('canvas').length,
+  }));
+
+  /*
+    THE ONE THAT CATCHES THE BUG. `expanded` is an index and the pane count is
+    separate state; nothing used to reconcile them. The overlay vanishing is
+    NOT evidence the state was cleared — the pane simply stopped rendering —
+    so the assertion has to be about what the stale index left behind.
+  */
+  after.overflow !== 'hidden'
+    ? ok('shrinking past the expanded pane releases the scroll lock')
+    : bad('the body is still scroll-locked with nothing expanded');
+  !after.escChip
+    ? ok('and takes the Esc chip with it')
+    : bad('an Esc chip is still offering to close a pane that is not open');
+  !after.dialog ? ok('no modal survives the shrink') : bad('a modal survived the shrink');
+
+  /* And the desk is genuinely usable again rather than merely unlocked. */
+  const usable = await page.evaluate(() => {
+    const el = document.elementFromPoint(Math.round(innerWidth / 2), Math.round(innerHeight / 2));
+    return !!el && !el.closest('[role="dialog"]');
+  });
+  usable ? ok('the desk takes clicks again') : bad('something invisible is still covering the desk');
+
+  await ctx.close();
 }
 
 console.log(`\n${fails} failing`);
