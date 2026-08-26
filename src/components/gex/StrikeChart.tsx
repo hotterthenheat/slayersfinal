@@ -320,6 +320,25 @@ interface StrikeChartProps {
    * the same one at the size the host can afford.
    */
   compact?: boolean;
+  /**
+   * THIS CHART IS INSIDE A PAGE THAT SCROLLS — leave the wheel to it.
+   *
+   * lightweight-charts captures the wheel by default and zooms with it, which
+   * is right when the chart owns its viewport and wrong when it is one tile in
+   * a column taller than the window.
+   *
+   * Terrain below `lg` is the second case. Its root says "the page scrolls
+   * normally" there, and it did not: measured at 900x700 with two panes, the
+   * grid is a fixed 76..922 whatever the window height, so 222px sits below the
+   * fold — and wheeling anywhere over a chart scrolled nothing. The page moved
+   * only at x = 0, 3, 6, 894 and 897: two ~7px strips at the margins, plus the
+   * 6px gap between the panes. The arrangement controls sat at y=854 in a
+   * 700px window, unreachable.
+   *
+   * The trade is real and worth stating: wheel-zoom goes away on those widths.
+   * A reader who cannot reach the controls at all has lost more.
+   */
+  pageScroll?: boolean;
 }
 
 /** Mark a moment on this chart on another pane's behalf; null clears it. */
@@ -398,6 +417,7 @@ const StrikeChart = ({
   timeframe,
   height = 460,
   compact = false,
+  pageScroll = false,
   frameless = false,
   focusPrice = null,
   overlays = DEFAULT_OVERLAYS,
@@ -428,6 +448,8 @@ const StrikeChart = ({
      applies later changes with `applyOptions` instead. */
   const compactRef = useRef(compact);
   compactRef.current = compact;
+  const pageScrollRef = useRef(pageScroll);
+  pageScrollRef.current = pageScroll;
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
   /* Two series, not one signed one: the reference draws BOTH legs around a zero
@@ -687,6 +709,9 @@ const StrikeChart = ({
     if (followerRef.current === on) return;
     followerRef.current = on;
     chartRef.current?.applyOptions({
+      // The wheel belongs to the page when the page is the thing that scrolls.
+      handleScroll: { mouseWheel: !pageScrollRef.current },
+      handleScale: { mouseWheel: !pageScrollRef.current },
       crosshair: { horzLine: { visible: !on, labelVisible: !on } },
     });
   }, []);
@@ -1640,6 +1665,15 @@ const StrikeChart = ({
   useEffect(() => {
     chartRef.current?.applyOptions({ layout: { fontSize: compact ? 9 : 10 } });
   }, [compact]);
+
+  /* Crossing the breakpoint must not need a remount — the chart is created
+     once and a window drag changes which side of it the reader is on. */
+  useEffect(() => {
+    chartRef.current?.applyOptions({
+      handleScroll: { mouseWheel: !pageScroll },
+      handleScale: { mouseWheel: !pageScroll },
+    });
+  }, [pageScroll]);
 
   // Key-level price lines — create/destroy only when overlay or ticker changes
   useEffect(() => {

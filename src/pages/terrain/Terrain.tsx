@@ -18,6 +18,7 @@ import ChartToolbar from '../../components/gex/ChartToolbar';
 import CompareControl from '../../components/gex/CompareControl';
 import PaneLadder, { LADDER_WIDTH_PX } from '../../components/gex/PaneLadder';
 import useFocusTrap from '../../components/ui/useFocusTrap';
+import { useIsBelowLg } from '../../components/ui/useMediaQuery';
 import TickerQuickPick from '../../components/gex/TickerQuickPick';
 import SpotPrice from '../../components/gex/SpotPrice';
 import { CANDLE_THEMES, chartSurface, useCandleThemeKey } from '../../components/gex/candleTheme';
@@ -375,6 +376,10 @@ const Pane = ({
   boxRef, cell = '',
 }: PaneProps) => {
   const { ticker, timeframe, overlays, indicators, chartStyle, compares, ladder } = cfg;
+  /* Below `lg` this desk stops filling the viewport and becomes a column the
+     page scrolls through — so the wheel has to belong to the page, not to the
+     chart. See `pageScroll` on StrikeChart for what was measured. */
+  const belowLg = useIsBelowLg();
   /* The tape, straight from the provider that accumulates it. Read HERE rather
      than threaded down from Terrain: this component already takes fourteen
      props, and every pane wants the same unfiltered tape — StrikeChart narrows
@@ -529,6 +534,7 @@ const Pane = ({
               onCrosshair={onCrosshair}
               syncRegister={registerSync}
               projectionRef={projectionRef}
+              pageScroll={belowLg}
               frameless
             />
 
