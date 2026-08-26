@@ -15,6 +15,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import TickerLookup from '../ui/TickerLookup';
+import useFocusTrap from '../ui/useFocusTrap';
 
 interface TickerQuickPickProps {
   ticker: string;
@@ -35,6 +36,20 @@ const TickerQuickPick = ({ ticker, onPick, open: openProp, onOpenChange }: Ticke
     if (openProp === undefined) setSelfOpen(next);
   };
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  /*
+    The menu covers the pane's own controls, and without a trap Tab walked
+    straight out of it onto them: a keyboard reader kept tabbing into things
+    they could not see, hidden behind the panel they were reading. Measured on
+    the Terrain desk, Tab from the search box reached desk controls underneath
+    the open menu within a few dozen stops.
+
+    `CompareControl` — the other menu on this toolbar — already does exactly
+    this. This one was the odd one out, so it uses the same hook rather than a
+    second mechanism: the trap also hands focus back to the trigger on close,
+    which is the half a reader notices when it is missing.
+  */
+  useFocusTrap(open, menuRef);
 
   // Outside click / Escape closes the picker
   useEffect(() => {
@@ -83,7 +98,12 @@ const TickerQuickPick = ({ ticker, onPick, open: openProp, onOpenChange }: Ticke
         <ChevronDown className={`w-3 h-3 text-textSecondary transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <div className="absolute left-0 top-full mt-1 z-40 w-72 border border-borderMuted bg-panel rounded-md shadow-2xl shadow-black/60 overflow-hidden animate-slide-in">
+        <div
+          ref={menuRef}
+          role="dialog"
+          aria-label={`Change symbol — currently ${ticker}`}
+          className="absolute left-0 top-full mt-1 z-40 w-72 border border-borderMuted bg-panel rounded-md shadow-2xl shadow-black/60 overflow-hidden animate-slide-in"
+        >
           <TickerLookup active={ticker} onPick={pick} />
         </div>
       )}

@@ -793,7 +793,29 @@ const Pane = ({
               levels={levels}
               focusPrice={focus}
               projection={projectionRef}
-              onClose={() => onCfg({ ladder: false })}
+              onClose={() => {
+                onCfg({ ladder: false });
+                /*
+                  A control that removes ITSELF has to say where focus goes.
+
+                  This button unmounts on the same click, and the browser's
+                  answer to "the focused element is gone" is <body> — so a
+                  keyboard reader is dropped to the top of the document and
+                  tabs back through the whole desk to reach anything. Focus
+                  goes to the one control that undoes this, which is what a
+                  reader would look for next.
+
+                  After the commit, not during: the button is still mounted in
+                  this tick, and focusing the target before React removes it
+                  would be undone by the removal.
+                */
+                requestAnimationFrame(() => {
+                  const undo = document.querySelector<HTMLElement>('[data-strikes-toggle]');
+                  // Below `lg` the arrangement chrome can be off screen; there
+                  // is nothing better to offer than leaving focus where it is.
+                  if (undo?.isConnected) undo.focus();
+                });
+              }}
               closeHint="Hide this rail — R"
               onSelect={price => setFocus(cur => (cur != null && Math.abs(cur - price) < 1e-9 ? null : price))}
               className="hidden lg:flex"
@@ -1157,6 +1179,11 @@ const Terrain = () => {
             them all back. A button that can disagree with what is on screen
             is a button nobody trusts. */}
         <button
+          /* Named so a control that REMOVES itself can hand focus here — see
+             the rail's × below. A data attribute rather than an id: a desk can
+             hold four panes and an id has to be unique, while this button is
+             the one global undo for all of them. */
+          data-strikes-toggle=""
           onClick={() => setCfg(prev => ({ ...prev, panes: prev.panes.map(p => ({ ...p, ladder: !anyLadder })) }))}
           aria-pressed={anyLadder}
           title={anyLadder ? 'Hide every strike rail — Shift R' : 'Show the strike rail beside every chart — Shift R'}
