@@ -5,6 +5,7 @@ import { TrackerProvider } from './context/TrackerContext';
 import AppShell from './components/layout/AppShell';
 import { LaunchProvider } from './components/layout/LaunchTransition';
 import Compass from './pages/Compass';
+import WeigherDesk from './pages/weigher/WeigherDesk';
 import Tracker from './pages/Tracker';
 import PinpointLayout from './pages/pinpoint/PinpointLayout';
 import Pulse from './pages/workspace/Pulse';
@@ -47,6 +48,7 @@ const App = () => {
             {/* Workspace merged INTO Pulse (2026-08-17) — old links land there */}
             <Route path="/workspace" element={<Navigate to="/pulse" replace />} />
             <Route path="/compass" element={<Compass />} />
+            <Route path="/weigher" element={<WeigherDesk />} />
             <Route path="/skys-vision" element={<Navigate to="/compass" replace />} />
             <Route path="/stocks" element={<Stocks />} />
             <Route path="/news" element={<News />} />

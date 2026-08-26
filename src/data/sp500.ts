@@ -6,9 +6,11 @@
   change to the entire s&p 500").
 
   Snapshot of the membership as of early 2026 — sim-era data. The data phase
-  (ThetaData ingestion, task #23) replaces this with the provider's live
-  universe; constituents churn a handful of times a year, so do not hand-tend
-  this list beyond obvious corrections.
+  replaces this with the provider's live universe; constituents churn a handful
+  of times a year, so do not hand-tend this list beyond obvious corrections.
+
+  The provider is MKT (Polygon / Massive Advanced), not ThetaData, which is out
+  (re-pointed 2026-08-26).
 */
 
 import type { TickerListing } from './tickers';

@@ -61,6 +61,9 @@ const at = (top: number, left: number, w = 80, h = 24): AnchorRect => ({
   bottom: top + h,
 });
 const place = (r: AnchorRect, s: MenuSide, vw = VW, vh = VH) => placeMenu(r, s, vw, vh);
+/** The same, with the menu's real width — the parameter the wide-menu block
+    at the bottom exists to exercise. */
+const place2 = (r: AnchorRect, s: MenuSide, vw: number, vh: number, w?: number) => placeMenu(r, s, vw, vh, w);
 
 // ---- 1. each side anchors where it says --------------------------------------
 {
@@ -252,6 +255,54 @@ const place = (r: AnchorRect, s: MenuSide, vw = VW, vh = VH) => placeMenu(r, s, 
   /* Where the window IS tall enough, the floor does its job. */
   const short = place(at(700, 400), 'bottom', VW, VH);
   check('a cramped trigger in a tall window still gets the floor', short.box.maxHeight >= MENU_MIN_USEFUL, `${short.box.maxHeight}`);
+}
+
+/*
+  A MENU WIDER THAN THE ASSUMED MINIMUM STAYS ON SCREEN.
+
+  The clamp keeps the menu's FAR edge inside the window, and to do that it has
+  to assume a width. It assumed MENU_MIN_WIDTH — true of the toolbar menus this
+  module was written for, false of the two that were later routed through it:
+  the compare popover is `w-[380px]` and the symbol quick-pick `w-72` (288).
+
+  Measured in the built desk before this: at 1024x768 with four panes, the
+  compare menu in a LEFT-COLUMN pane landed at x = -162. 162px of a 380px menu
+  was off the side of the window, and the old clamp passed it because keeping
+  210px on screen was all it ever promised.
+*/
+{
+  const edgeOf = (box: { left?: number; right?: number }, vw: number, w: number) =>
+    box.left !== undefined ? box.left : vw - (box.right as number) - w;
+
+  for (const w of [MENU_MIN_WIDTH, 288, 380]) {
+    /* A trigger hard against the left of the window — the worst case for a
+       menu anchored by its right edge, because it extends its whole width
+       back the other way. */
+    const p = place2(at(100, 12), 'bottom', 1024, 768, w);
+    const left = edgeOf(p.box, 1024, w);
+    check(
+      `a ${w}px menu on a left-edge trigger keeps its left edge on screen`,
+      left >= MENU_EDGE - 0.5,
+      `left ${left.toFixed(1)} vs edge ${MENU_EDGE}`
+    );
+    check(`and its right edge too`, left + w <= 1024 - MENU_EDGE + 0.5, `right ${(left + w).toFixed(1)} of 1024`);
+  }
+
+  /* THE GUARD FOR THE GUARD: the default must still behave exactly as it did,
+     or every existing caller silently moved. */
+  const a = place2(at(100, 12), 'bottom', 1024, 768);
+  const b = place2(at(100, 12), 'bottom', 1024, 768, MENU_MIN_WIDTH);
+  check('omitting the width matches passing the old assumed one', JSON.stringify(a) === JSON.stringify(b));
+
+  /* And it has to actually MOVE for a wide menu, or the check above is passing
+     on a value the parameter never changed. */
+  const narrow = place2(at(100, 12), 'bottom', 1024, 768, MENU_MIN_WIDTH);
+  const wide = place2(at(100, 12), 'bottom', 1024, 768, 380);
+  check(
+    'and a wider menu is placed differently from a narrow one',
+    JSON.stringify(narrow.box) !== JSON.stringify(wide.box),
+    `narrow ${JSON.stringify(narrow.box)} vs wide ${JSON.stringify(wide.box)}`
+  );
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

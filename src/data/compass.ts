@@ -3,7 +3,8 @@
   SLAYER TERMINAL - COMPASS ENGINE (compass.ts)
   Placeholder advisory model. Deterministic per contract
   so rows stay stable across ticks. Swap this whole file
-  for the real quant engine / ThetaData feed later.
+  for the real quant engine later — fed by UW and MKT.
+  ThetaData is out (re-pointed 2026-08-26).
 ==================================================
 */
 

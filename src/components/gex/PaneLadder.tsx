@@ -135,6 +135,37 @@ const MAX_PITCH = 22;
     own height and with the stub's `top-5`. */
 const HEAD_BAND = 32;
 
+/* HOW CLOSE THE SPOT AND FLIP RULES CAN BE BEFORE THEIR BADGES TOUCH.
+
+   A badge is 10px of line box (`leading-[10px]`) inside a 14px rule band, and
+   the two are placed independently by price. Measured collisions at 4.3, 6.2,
+   6.9 and 9.2px of vertical overlap, so anything under a full band is a hit;
+   14 is that band, and it is the number the rules are already sized to rather
+   than a second one invented here. */
+const BADGE_CLEAR_PX = 14;
+
+/* THE LANE THE ▼ STUB SITS IN, reserved the way HEAD_BAND is reserved at the
+   top — and it is the same fix the ▲ stub already got.
+
+   That stub was moved to `top-5` because at `top-0` it printed over the
+   caption AND took the close x's hit target; the note on it says its lane is
+   "the lower half of HEAD_BAND, which no row is placed in". The ▼ stub sits
+   at `bottom-0`, and nothing reserved a lane for it: `fits` floored rows at
+   HEAD_BAND on top but ran them all the way to H at the bottom, so the last
+   row was placed underneath it. Measured: the stub covered the strike label
+   "106" by 25x7.9px and document.elementFromPoint at that label's own centre
+   returned THE STUB — the bottom strike could not be clicked.
+
+   14px is the stub's own line box (`leading-[12px]` plus its 1px of padding),
+   which is what has to be kept clear.
+
+   Reserving it costs nothing that is not accounted for: if a row would have
+   landed in the band it is now culled, which makes `down` non-zero, which is
+   exactly when the stub appears and says so — and clicking it goes to that
+   strike. If no row would have landed there the stub stays hidden and no row
+   was lost. */
+const FOOT_BAND = 14;
+
 /** Strikes print whole when they are whole — the rule every strike list uses. */
 const fmtStrike = (v: number): string => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
 
@@ -277,9 +308,11 @@ const PaneLadder = ({
          not. The track clips at the plot floor, so a row centred two pixels
          above it is drawn sliced in half — which reads as a rendering fault,
          and is worse than the row simply being one of the ones the stub is
-         holding. Same at the top. */
+         holding. Same at the top, and now symmetric at the bottom: each end
+         keeps its stub's lane clear (HEAD_BAND / FOOT_BAND) so neither stub is
+         ever drawn on top of a row it would then steal the click from. */
       const half = rowH / 2;
-      const fits = (y: number) => y - half >= HEAD_BAND && y + half <= H;
+      const fits = (y: number) => y - half >= HEAD_BAND && y + half <= H - FOOT_BAND;
 
       els.forEach((el, i) => {
         const k = Number(el.dataset.strike);
@@ -311,13 +344,38 @@ const PaneLadder = ({
       /* Spot and the flip are PRICES, not strikes — they almost never equal
          one. Placed by their own price, hidden when the plot is not showing
          them, rather than being slotted between rows. */
+      const ruleY = new Map<string, number>();
       track.querySelectorAll<HTMLElement>('[data-rule]').forEach(el => {
         const y = p.yFor(Number(el.dataset.price));
         if (y == null || y - 7 < 0 || y + 7 > H) return drop(el);
         const t = `translateY(${(y - 7).toFixed(1)}px)`;
         if (el.style.transform !== t) el.style.transform = t;
         if (el.style.display === 'none') el.style.display = '';
+        ruleY.set(el.dataset.rule ?? '', y);
       });
+
+      /* THE TWO RULES SHARE ONE LANE, and the flip spends most of its life
+         near spot — that is what a flip IS. Both badges are `ml-auto`, so at
+         any distance under a badge height they print on top of each other:
+         measured 37.6x9.2px of a 38x10 badge, spot "513.45" underneath flip
+         "513.50". Two DIFFERENT prices in the same 38 pixels is not a near
+         miss, it is an unreadable number.
+
+         The rows already avoid each other through `anchors` above; the rules
+         were the pair that never checked. So the FLIP steps aside — spot is
+         the reference a reader looks for, and it is the one that stays put —
+         moving left by its own measured width rather than a guessed constant,
+         so a restyle or a longer price cannot make the two touch again. The
+         rail is 132px against a ~38px badge, so the stepped-aside badge stays
+         inside the column. */
+      const ySpot = ruleY.get('spot');
+      const yFlip = ruleY.get('flip');
+      const flipBadge = track.querySelector<HTMLElement>('[data-rule="flip"] [data-badge]');
+      if (flipBadge) {
+        const clash = ySpot != null && yFlip != null && Math.abs(ySpot - yFlip) < BADGE_CLEAR_PX;
+        const shift = clash ? `translateX(${-(flipBadge.offsetWidth + 3)}px)` : '';
+        if (flipBadge.style.transform !== shift) flipBadge.style.transform = shift;
+      }
 
       /* Culled strikes must not vanish silently: a hidden row cannot be
          clicked, and clicking is exactly what brings it back — a click sets
@@ -537,7 +595,11 @@ const Rule = ({ ticker, price, tone }: { ticker: string; price: number; tone: 's
         className={`absolute inset-x-0 top-1/2 h-px ${spot ? 'bg-textPrimary/60' : 'bg-flip/60'}`}
         style={spot ? undefined : { backgroundImage: 'repeating-linear-gradient(to right,#7DD3FC 0 3px,transparent 3px 6px)' }}
       />
+      {/* `data-badge` so the placement pass can step this aside when the two
+          rules land on top of each other — a stable hook rather than a class
+          selector that a restyle would silently break. */}
       <span
+        data-badge=""
         className={`relative ml-auto mr-1 rounded-[2px] px-1 font-mono text-[8px] font-bold tnum leading-[10px] ${
           spot ? 'bg-textPrimary text-[#0a0a0a]' : 'bg-flip text-[#0a0a0a]'
         }`}

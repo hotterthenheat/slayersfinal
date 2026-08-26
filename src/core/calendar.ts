@@ -128,3 +128,20 @@ export function expiryFor(dte: number, from: Date = today()): Expiry {
     sessions: sessionsBetween(base, date),
   };
 }
+
+/*
+  HOW LONG A REGULAR SESSION IS, in one place.
+
+  09:30 to 16:00 New York — 6.5 hours, 390 minutes. It was written out as a
+  bare `6.5` in four modules (`vannacharm`, `volDrift`, `contractScore`) and as
+  the derived `390` in a fifth (`simulator`'s SESSION_BARS), so the session
+  length was five facts that happened to agree.
+
+  It lives in the calendar because that is the module that already owns when
+  the market is open, and because the Globex work (T-8) makes this number
+  wrong: once the desk knows about the overnight session, "how much of the day
+  is left" stops being a fraction of 6.5 and everything reading it has to
+  follow. One constant means one edit; five means four of them drift.
+*/
+export const RTH_HOURS = 6.5;
+export const RTH_MINUTES = RTH_HOURS * 60;

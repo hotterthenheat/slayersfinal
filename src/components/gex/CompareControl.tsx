@@ -11,6 +11,13 @@
 */
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { useAnchoredMenu } from './useAnchoredMenu';
+
+/** Matches the `w-[380px]` on the menu below. Passed to the placement so it can
+    keep the menu's far edge on screen; assuming a narrower default put this
+    one 162px off the left of the window in a left-column pane. */
+const MENU_W = 380;
 import { Plus, Search, X } from 'lucide-react';
 import type { TickerListing } from '../../data/tickers';
 import type { CompareEntry, CompareMode } from './StrikeChart';
@@ -50,6 +57,9 @@ const CompareControl = ({
   const [query, setQuery] = useState('');
   const [mod, setMod] = useState<TickerModule | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  /* Portalled and placed, same as the toolbar's menus — see useAnchoredMenu
+     for why this could not stay `absolute` inside the pane. */
+  const { anchorRef, placed } = useAnchoredMenu<HTMLButtonElement>(open, 'bottom', MENU_W);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -81,7 +91,12 @@ const CompareControl = ({
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+      /* The menu is PORTALLED to the body, so it is not inside rootRef any
+         more — without the menuRef clause every click on the menu counted as
+         an outside click and closed it before it could act. */
+      const t = e.target as Node;
+      if (rootRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
     };
     /* CAPTURE, and it stops the key going any further.
 
@@ -160,15 +175,17 @@ const CompareControl = ({
         onClick={() => setOpen(!open)}
         title={full ? `Compare (${max} max — remove one first)` : 'Compare symbol'}
         aria-label="Compare symbol"
+        ref={anchorRef}
         className="inline-flex items-center justify-center w-7 h-7 rounded-md bg-white/[0.06] hover:bg-white/[0.10] text-textSecondary hover:text-textPrimary transition-colors"
       >
         <Plus className="w-3.5 h-3.5" />
       </button>
-      {open && (
+      {open && placed && createPortal(
         <div
           ref={menuRef}
           tabIndex={-1}
-          className="absolute left-0 top-full mt-1 z-40 w-[380px] border border-borderMuted bg-panel rounded-md shadow-2xl shadow-black/60 overflow-hidden animate-slide-in"
+          style={{ position: 'fixed', ...placed.box }}
+          className="z-[120] w-[380px] border border-borderMuted bg-panel rounded-md shadow-2xl shadow-black/60 overflow-x-hidden overflow-y-auto overscroll-contain animate-slide-in"
         >
           <div className="flex items-center gap-1.5 px-2 border-b border-borderSubtle">
             <Search className="w-3 h-3 text-textMuted shrink-0" />
@@ -266,7 +283,8 @@ const CompareControl = ({
               ))
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

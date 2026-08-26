@@ -22,6 +22,7 @@ jspm_packages/
 
 # Production Build
 dist/
+dist-*/
 build/
 
 # Local env files
@@ -36,5 +37,13 @@ build/
 Thumbs.db
 
 # Scratch / screenshot scripts
+#
+# Probes written to MEASURE something in a browser and then thrown away. They
+# are not the sweep: `scripts/ui-sweep.mjs` is the load-bearing one, it exits
+# non-zero, and it is the only browser script that belongs in a commit. These
+# patterns carry no slash, so they match at any depth — `scripts/_audit-x.mjs`
+# included.
 _shot.mjs
 _scratch*
+_probe*
+_audit*

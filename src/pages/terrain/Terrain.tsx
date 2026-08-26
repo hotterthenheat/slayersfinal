@@ -19,7 +19,7 @@ import ChartToolbar from '../../components/gex/ChartToolbar';
 import CompareControl from '../../components/gex/CompareControl';
 import PaneLadder, { LADDER_WIDTH_PX } from '../../components/gex/PaneLadder';
 import useFocusTrap from '../../components/ui/useFocusTrap';
-import { useIsBelowLg } from '../../components/ui/useMediaQuery';
+import { useIsBelowLg, useIsPhone } from '../../components/ui/useMediaQuery';
 import TickerQuickPick from '../../components/gex/TickerQuickPick';
 import SpotPrice from '../../components/gex/SpotPrice';
 import { CANDLE_THEMES, chartSurface, useCandleThemeKey } from '../../components/gex/candleTheme';
@@ -343,27 +343,67 @@ const PRICE_GUTTER_PX = PRICE_SCALE_MIN_WIDTH + 2;
 const TOOLBAR_FULL_PX = 840;
 
 /*
-  THE COLUMN WIDTH AT WHICH A PANE CAN AFFORD BOTH PRICE GUTTERS.
-
-  An "Own scale" compare gives the tape a SECOND gutter down the left, and
-  this pane's chrome is left-anchored, so it prints over that axis's ticks
-  unless it steps aside — the same way it already steps aside on the right.
-
-  But the clearance is not free, and the first attempt at this shipped the
-  same defect on the other side: the strip's rows compute `overflow: visible`
-  (`w-fit max-w-full` caps the box, it does not clip the text), so the 76px
-  taken off the left comes out of the right clearance. Measured at a 369px
-  column with the left padding applied: the identity row ran 28px into the
-  right gutter and the HEAVIEST dollar figure sat entirely inside it —
-  "-0.90%" printed over the 471.00 tick, "$140.1M" over 470.00.
-
-  So the clearance is taken only where the column can hold it: the widest
-  row measured (the identity capsule, 299-325px) plus both gutters. Below
-  that the left axis is still overprinted — no worse than before this, and
-  strictly better than trading it for the right one, which carries the same
-  live numbers.
+  THE STRIP'S OWN PADDING, when it is not clearing a price gutter (`p-1.5`).
+  Named because the usable width below is derived from it rather than from a
+  second copy of the number.
 */
-const BOTH_GUTTERS_PX = 330 + 2 * PRICE_GUTTER_PX;
+const STRIP_PAD_PX = 6;
+
+/*
+  WHAT THE IDENTITY ROW COSTS, AND WHAT IT GIVES UP WHEN THE COLUMN CANNOT PAY.
+
+  The row is `w-fit max-w-full` and every child is `shrink-0`, which caps the
+  BOX at the column and lets the CONTENTS overflow it visibly. So it does not
+  wrap and it does not clip — it prints past the pane's edge, onto the price
+  ticks. Measured at a 1024px viewport with the rail up, where the chart column
+  is 369px and the usable width is 287:
+
+    padding 16 · badge 16 · symbol capsule 146 · price 47 · change 44 · expand 24
+    = 317 needed against 287 available, on ALL FOUR panes (315 on QQQ).
+
+  The 30px that did not fit was the EXPAND BUTTON, sitting on the price axis —
+  in the shipped build, at a laptop width, with or without a second axis. The
+  comment above this row says the identity and the button are fixed and only
+  the strike read gives. That was not true, and this is what makes it true.
+
+  The order things go in is by what the reader loses least:
+
+    the CHANGE %  first — the price it is a delta of is still right there, and
+                  the chart draws the same move. Costs 52 (44 + its gap).
+    the BADGE     next — the symbol already names the pane; the number is only
+                  a shorthand for it. Costs 24, and only exists at all when
+                  more than one pane is up.
+    the COMPARE + last — a control, so it goes last. Removing a comparison is
+                  still possible from the legend's own x, and the menu comes
+                  back the moment the column is wide enough. Costs 34, since
+                  the button sits inside the capsule (146 = 112 + 6 + 28).
+
+  Thresholds are the cost of the NEXT tier down plus room to spare, because
+  the parts are not fixed: `min-w-[112px]` on the symbol button is a floor, so
+  a five-letter symbol grows it, and a four-figure price is wider than the
+  $501.80 measured here. The sweep asserts the GEOMETRY — nothing over an axis
+  — rather than these numbers, so a symbol that outgrows them fails the build
+  instead of quietly printing on the ticks.
+*/
+const ID_ROW_FULL_PX = 340;
+const ID_ROW_NO_PCT_PX = 285;
+const ID_ROW_NO_BADGE_PX = 260;
+
+/*
+  THE HEAVIEST READ'S ENTRIES, measured the same way: the HEAVIEST label is 50
+  and the widest entry seen is 86 ("172.50 $131.3M"), each followed by a 10px
+  gap.
+
+  This count used to come from the LAYOUT — `layout >= 3 ? 2 : 3` — and layout
+  is not what decides it. At a 1024px viewport every layout from 2 up has the
+  SAME 369px column, so a two-pane desk printed three entries in exactly the
+  width where a four-pane desk correctly printed two, and the third ran onto
+  the price axis. Measured: 2 entries fit 287px with room (`scrollWidth ===
+  clientWidth`), 3 need ~338.
+*/
+const HEAVY_LABEL_PX = 60; // the word plus its gap
+const HEAVY_ENTRY_PX = 96; // the widest entry plus its gap
+const HEAVY_MAX = 3;
 
 /*
   The heaviest strikes in the pane's window, signed — the one-line read of
@@ -389,8 +429,6 @@ interface PaneProps {
   index: number;
   /** Panes get shorter as the grid gets wider — one chart earns the height */
   tall: boolean;
-  /** How many heaviest-strike entries this pane's width can print whole */
-  heavyCount: number;
   /** This pane's real hover, out to the desk. null when the pointer leaves. */
   onCrosshair: CrosshairSync;
   /** Hand the desk this pane's "mark that moment" function, null on unmount. */
@@ -420,7 +458,7 @@ interface PaneProps {
 }
 
 const Pane = ({
-  cfg, onCfg, revision, expanded, onToggleExpand, index, tall, heavyCount,
+  cfg, onCfg, revision, expanded, onToggleExpand, index, tall,
   onCrosshair, registerSync, isActive, onActivate, paneCount, menuOpen, onMenu,
   boxRef, cell = '',
 }: PaneProps) => {
@@ -434,6 +472,9 @@ const Pane = ({
      page scrolls through — so the wheel has to belong to the page, not to the
      chart. See `pageScroll` on StrikeChart for what was measured. */
   const belowLg = useIsBelowLg();
+  /* Read here rather than threaded down: this component already takes fourteen
+     props, and it is the same one-line media query the page reads. */
+  const isPhone = useIsPhone();
 
   /*
     ══ THE COMPARE LEGEND HAS TO START BELOW THE STRIP, NOT AT 46px ═════════
@@ -481,6 +522,29 @@ const Pane = ({
     obs.observe(el);
     return () => obs.disconnect();
   }, []);
+
+  /* WHAT THE STRIP'S ROWS CAN ACTUALLY USE — the column, less the gutter it
+     clears on each side. Derived from the SAME expression the padding above
+     applies, so the two cannot disagree about how much room was taken.
+
+     Width in, content out, exactly as the observer's own note requires: the
+     tiers below read this, never their own rendered width, so shedding a part
+     cannot change the number that decided to shed it. `inset-x-0` keeps this
+     width fixed across a tier change, so there is no oscillation to damp.
+
+     Before the first measurement stripW is 0 and everything renders — the
+     honest default is the full row for one frame, not a shed one that grows. */
+  const stripInner = stripW > 0 ? stripW - PRICE_GUTTER_PX - (ownScale ? PRICE_GUTTER_PX : STRIP_PAD_PX) : 0;
+  const roomFor = (px: number) => stripInner === 0 || stripInner >= px;
+  const showChangePct = roomFor(ID_ROW_FULL_PX);
+  const showBadge = paneCount > 1 && roomFor(ID_ROW_NO_PCT_PX);
+  const showCompareAdd = roomFor(ID_ROW_NO_BADGE_PX);
+  /* At least one entry: a HEAVIEST label with nothing after it is chrome that
+     says nothing, so the row hides itself entirely rather than print a header
+     over an empty line (see `heavy.length > 0` at the row). */
+  const heavyCount = stripInner === 0
+    ? HEAVY_MAX
+    : Math.max(1, Math.min(HEAVY_MAX, Math.floor((stripInner - HEAVY_LABEL_PX) / HEAVY_ENTRY_PX)));
   /* The tape, straight from the provider that accumulates it. Read HERE rather
      than threaded down from Terrain: this component already takes fourteen
      props, and every pane wants the same unfiltered tape — StrikeChart narrows
@@ -603,7 +667,16 @@ const Pane = ({
         className={`relative flex flex-col overflow-hidden animate-soft-in ${
           expanded
             ? 'flex-1 min-h-0'
-            : `min-h-[420px] lg:min-h-0 border rounded-md ${cell} ${
+            /*
+              The 420px floor is for the STACKED, SCROLLING shape between phone
+              and `lg`, where a pane with no floor collapses to nothing. It is
+              not lowered here — on a phone it does not apply at all, because
+              there is exactly one pane and it is inside a fixed-height parent
+              that already gives it the whole viewport. Keeping the floor there
+              would push a 420px pane into a 334px landscape window and
+              overflow it, which is the floor doing the opposite of its job.
+            */
+            : `${isPhone ? 'min-h-0' : 'min-h-[420px]'} lg:min-h-0 border rounded-md ${cell} ${
                 isActive && paneCount > 1 ? 'border-select' : 'border-borderSubtle'
               }`
         }`}
@@ -684,12 +757,20 @@ const Pane = ({
             <div
               ref={stripRef}
               /* Padding clears the price gutter, so nothing floating ever
-                 lands on a price tick — BOTH gutters when there is a left
-                 one and the column is wide enough to hold the clearance.
-                 See BOTH_GUTTERS_PX: taking it unconditionally moves the
-                 collision to the right axis on a narrow pane. */
+                 lands on a price tick — BOTH gutters whenever there is a left
+                 one, with no width condition on it.
+
+                 It used to be conditional, and the condition was covering for
+                 a different bug. Taking the left gutter on a narrow pane moved
+                 the collision to the RIGHT axis, so the clearance was gated on
+                 the column being wide enough to hold both. But the right axis
+                 was ALREADY being overprinted at those widths by 28-30px, with
+                 or without a left one — the gate was not preventing that, only
+                 declining to make it worse. Now that the row sheds parts to fit
+                 (ID_ROW_* above), there is nothing to trade and the axis on
+                 each side is simply left alone. */
               style={{
-                paddingLeft: ownScale && stripW >= BOTH_GUTTERS_PX ? PRICE_GUTTER_PX : undefined,
+                paddingLeft: ownScale ? PRICE_GUTTER_PX : undefined,
                 paddingRight: PRICE_GUTTER_PX,
               }}
               className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-col items-start gap-1 p-1.5"
@@ -701,21 +782,29 @@ const Pane = ({
                 start: the heaviest-strike read is as wide as its numbers
                 happen to be, so a pane holding three $200M strikes pushed the
                 expand button onto a second line while the pane beside it
-                stayed on one. The identity and the button are fixed; only the
-                strike read gives, and it gives by being cut off at the pane's
-                edge — visibly, predictably, and equally in every pane.
+                stayed on one. The strike read gives by carrying
+                fewer entries, and the identity row gives by dropping parts of
+                itself (ID_ROW_* above). Neither is ever cut mid-value.
               */}
               {/*
                 IT HUGS ITS CONTENT. It used to carry the heaviest-strike read
                 as well, which is as wide as its numbers happen to be, so the
                 row overflowed and `max-w-full` stretched the translucent band
                 across the entire top of the tape — and pushed the expand icon
-                out over the price ticks. Identity alone always fits.
+                out over the price ticks.
+
+                Moving the read off did not fix that, it only made it smaller:
+                identity ALONE still needed 317px of the 287 a 369px column
+                gives, and the expand icon was still on the ticks. `max-w-full`
+                caps this box; it does not clip `shrink-0` children, so what
+                does not fit is drawn past the edge either way. This row is
+                only narrow enough because it now sheds parts — ID_ROW_* above,
+                and the sweep section that measures it in a real browser.
               */}
               <div className="chrome-hover relative z-30 pointer-events-auto w-fit max-w-full select-none flex items-center gap-2 rounded-md bg-canvas/25 backdrop-blur-[3px] px-2 py-1 opacity-55 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
                 {/* This strip is the one row visible at rest, so the number
                     is legible without a pointer ever touching the desk. */}
-                {paneCount > 1 && (
+                {showBadge && (
                   <span
                     aria-hidden
                     className={`shrink-0 w-4 h-4 rounded-[3px] font-mono text-[9px] font-bold tnum inline-flex items-center justify-center ${
@@ -733,23 +822,36 @@ const Pane = ({
                     onOpenChange={o => onMenu(o ? 'symbol' : null)}
                   />
                   {/* TradingView's "+" beside the symbol capsule — cross
-                      another symbol onto this tape. Per pane, like the rest. */}
-                  <CompareControl
-                    current={ticker}
-                    compares={compares}
-                    onAdd={addCompare}
-                    onRemove={removeCompare}
-                    open={menuOpen === 'compare'}
-                    onOpenChange={o => onMenu(o ? 'compare' : null)}
-                  />
+                      another symbol onto this tape. Per pane, like the rest.
+
+                      Last thing the row gives up (ID_ROW_NO_BADGE_PX): it is a
+                      control, and a control is worth more than a label. What
+                      it opens is still reachable — an existing comparison has
+                      its own x in the legend below — and it returns as soon as
+                      the column can hold it. */}
+                  {showCompareAdd && (
+                    <CompareControl
+                      current={ticker}
+                      compares={compares}
+                      onAdd={addCompare}
+                      onRemove={removeCompare}
+                      open={menuOpen === 'compare'}
+                      onOpenChange={o => onMenu(o ? 'compare' : null)}
+                    />
+                  )}
                 </span>
                 <span className="shrink-0">
                   <SpotPrice value={levels.spot} />
                 </span>
-                <span className={`shrink-0 font-mono text-[11px] font-semibold tnum ${up ? 'text-bull' : 'text-bear'}`}>
-                  {up ? '+' : ''}
-                  {changePct.toFixed(2)}%
-                </span>
+                {/* First thing the row gives up when the column is narrow
+                    (ID_ROW_FULL_PX) — the price it is a delta of is directly
+                    to its left, and the chart draws the same move. */}
+                {showChangePct && (
+                  <span className={`shrink-0 font-mono text-[11px] font-semibold tnum ${up ? 'text-bull' : 'text-bear'}`}>
+                    {up ? '+' : ''}
+                    {changePct.toFixed(2)}%
+                  </span>
+                )}
 
                 <button
                   onClick={onToggleExpand}
@@ -1017,6 +1119,24 @@ const Terrain = () => {
     };
   }, [expanded]);
 
+  /*
+    A PHONE GETS ONE CHART, and it is the same rule Pulse uses — `useIsPhone`,
+    not a second breakpoint. `PHONE_QUERY` already carries the landscape clause
+    `(pointer: coarse) and (max-height: 540px)`, which was written for exactly
+    this failure: a handset held sideways is 844x390, WIDER than the md floor,
+    so a width test hands it the full desk inside 390px of height.
+
+    Terrain has been on `useIsBelowLg` alone, which stacks the panes and lets
+    the page scroll — four charts at `min-h-[420px]` against a 334px viewport.
+
+    ONE pane, not four shrunk. 420px is the floor for a chart that can be read
+    at all, and the desk already caps at four for the matching reason ("at 1440
+    a fifth pane is 260px wide, and a chart that narrow stops being a chart").
+    Four panes into 334px produces four charts nobody can read; one pane
+    produces one they can.
+  */
+  const isPhone = useIsPhone();
+
   const panes = cfg.panes.slice(0, cfg.layout);
   const anyLadder = panes.some(p => p.ladder);
 
@@ -1194,7 +1314,27 @@ const Terrain = () => {
       built page, not guessed at. Below `lg` every one of those comes off and
       the page scrolls normally.
     */
-    <div className="relative -mx-4 lg:-mx-6 2xl:-mx-8 lg:-mt-5 lg:-mb-16 px-1.5 lg:py-1.5 flex flex-col lg:h-[calc(100vh-3.5rem)] lg:min-h-0">
+    <div
+      /*
+        FULL BLEED, from `lg` — and on a PHONE, which is the addition. The
+        negative margins cancel the shell's own padding (px-4/6/8, pt-5, pb-16)
+        so the pane reaches the window edges, and the height is the viewport
+        less the 56px top bar, measured in the built page rather than guessed.
+        Between the two — tablets, narrow laptops — the panes still stack and
+        the page scrolls normally, which is the right shape for a window that
+        can hold more than one chart but not side by side.
+
+        `dvh` on the phone, `vh` above it. On a phone browser `100vh` is the
+        height with the URL bar RETRACTED, so a pane sized to it runs under the
+        browser chrome until the reader scrolls — and the bottom of a Terrain
+        pane is its time axis. Pulse already documents this; same reason here.
+      */
+      className={`relative -mx-4 lg:-mx-6 2xl:-mx-8 px-1.5 flex flex-col ${
+        isPhone
+          ? '-mt-5 -mb-16 py-1.5 h-[calc(100dvh-3.5rem)] min-h-0'
+          : 'lg:-mt-5 lg:-mb-16 lg:py-1.5 lg:h-[calc(100vh-3.5rem)] lg:min-h-0'
+      }`}
+    >
       {/*
         THE ARRANGEMENT CONTROLS, floating over the top-right of the grid.
 
@@ -1209,7 +1349,19 @@ const Terrain = () => {
         cost the grid nothing. Top RIGHT, because every pane's own controls
         float top left and two translucent strips on the same corner would
         stack into an unreadable pile.
+
+        NOT ON A PHONE, and this is a correctness point rather than a space
+        one. Both controls are inert there: the arrangement picker sets a pane
+        COUNT, and a phone renders exactly one pane whatever it says, so
+        pressing 4 changes nothing a reader can see; STRIKES toggles the strike
+        rails, which are `hidden lg:flex` and so never draw on a phone at all.
+        A control that visibly does nothing when pressed is worse than an
+        absent one — it teaches the reader that the desk is broken.
+
+        The symbol is still changeable: every pane carries its own picker in
+        its header, and `[` / `]` still walk the configured slots.
       */}
+      {!isPhone && (
       <div
         /*
           BOTTOM right, not top right.
@@ -1226,15 +1378,46 @@ const Terrain = () => {
           comes from its own export rather than a number copied here that
           drifts the first time somebody edits the other file.
         */
+        /* Cleared past the rail of the pane that is actually UNDER it. That is
+           the last pane normally, but the EXPANDED one while a pane is
+           expanded — it is the only one on screen, and its rail is the only
+           one this bar can land on. Reading the last pane's flag there put the
+           clearance on the wrong pane's setting the moment the two differed. */
         style={{
-          right: (panes[panes.length - 1]?.ladder ? LADDER_WIDTH_PX : 0) + PRICE_GUTTER_PX + 8,
+          right:
+            ((expanded !== null ? panes[expanded] : panes[panes.length - 1])?.ladder ? LADDER_WIDTH_PX : 0) +
+            PRICE_GUTTER_PX +
+            8,
           bottom: TIME_AXIS_PX + 12,
         }}
         /* They come and go like the pane chrome, and they were the loudest
            thing on the screen while they were here: a solid white STRIKES
            button and a solid white active count, on a desk that had just been
            asked for less. Quiet at rest, full on hover or keyboard focus. */
-        className="chrome-hover pointer-events-none absolute z-30 flex items-center gap-2 opacity-40 transition-opacity duration-200 hover:opacity-100 focus-within:opacity-100"
+        /*
+          ABOVE THE EXPANDED PANE, AND FIXED WHILE IT IS UP.
+
+          The expanded pane is `fixed inset-0 z-[80]`, and this bar was
+          `absolute z-30` — under it. All three controls stayed mounted,
+          `opacity: 1` and `pointer-events: auto`, and `elementFromPoint` at
+          each one's own centre returned the expanded chart's canvas: painted,
+          and dead. Measured at 1440x900 and 1024x768.
+
+          The Esc chip is the one that made this worth fixing, because it
+          renders ONLY while expanded — a control whose entire job is the
+          pointer way out of fullscreen, shipped in the one state where it
+          cannot be clicked. (The pane's own Collapse button is inside the
+          modal and does work, so this was a dead duplicate rather than a
+          trap; it still offered a reader a button that does nothing.)
+
+          `fixed` rather than `absolute` while expanded, to match what it now
+          sits over: `absolute` anchors to this page root, and below `lg` the
+          root is a scrolling column rather than the viewport, so the bar
+          would ride down the page while the modal stayed pinned to the glass.
+        */
+        className={`chrome-hover pointer-events-none flex items-center gap-2 opacity-40 transition-opacity duration-200 hover:opacity-100 focus-within:opacity-100 ${
+          expanded !== null ? 'fixed z-[90]' : 'absolute z-30'
+        }`}
       >
         <div
           role="group"
@@ -1292,6 +1475,7 @@ const Terrain = () => {
           </button>
         )}
       </div>
+      )}
 
       {/* The ring and the badge are feedback for people who can see them. A
           key that rearranges the desk has to say so as well, or the whole
@@ -1310,9 +1494,25 @@ const Terrain = () => {
       <div
         /* The stacked-phone minimum lives on the PANE, not here — see the
            note on Pane's own wrapper for why a rule here does nothing. */
-        className={`grid ${COLS[cfg.layout]} ${ROWS[cfg.layout]} gap-1.5 flex-1 min-h-0`}
+        className={`grid ${isPhone ? COLS[1] : COLS[cfg.layout]} ${
+          isPhone ? ROWS[1] : ROWS[cfg.layout]
+        } gap-1.5 flex-1 min-h-0`}
       >
-        {panes.map((pane, i) => (
+        {panes.map((pane, i) =>
+          /*
+            A REAL BRANCH, not `hidden`. A CSS-hidden pane still MOUNTS: three
+            more StrikeCharts building canvases, subscribing to the tick and
+            re-rendering every revision, behind a screen nobody can see, on the
+            device least able to carry them.
+
+            The INDEX is preserved rather than the array re-sliced, because
+            every callback below is index-based — `setPane(i, …)`,
+            `expanded === i`, `paneRefs.current[i]`, and the `[`/`]` cycle. Show
+            pane 2 of 4 on a phone and it is still pane 2 to all of them, so a
+            setting changed there lands where the reader expects when they open
+            the desk again.
+          */
+          isPhone && i !== active ? null : (
           <Pane
             key={i}
             cfg={pane}
@@ -1322,7 +1522,6 @@ const Terrain = () => {
             onToggleExpand={() => setExpanded(cur => (cur === i ? null : i))}
             index={i}
             tall={cfg.layout === 1}
-            heavyCount={cfg.layout >= 3 ? 2 : 3}
             onCrosshair={t => emitCrosshair(i, t)}
             registerSync={apply => registerSync(i, apply)}
             isActive={i === active}
@@ -1343,7 +1542,8 @@ const Terrain = () => {
             */
             cell={cfg.layout === 3 && i === 2 ? 'lg:col-span-2 2xl:col-span-1' : ''}
           />
-        ))}
+          )
+        )}
       </div>
     </div>
   );

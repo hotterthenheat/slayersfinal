@@ -779,8 +779,11 @@ head('an expanded pane does not outlive the pane it points at');
     ? ok('and the page is scroll-locked underneath it')
     : bad(`expected the body locked while expanded, got overflow:${opened.locked}`);
 
-  /* Now shrink past it with the keyboard, which is the door the layout buttons
-     cannot be: they sit at z-30, under the expanded pane's own overlay. */
+  /* Now shrink past it with the keyboard. This used to be the ONLY door —
+     the layout buttons sat at z-30 under the expanded pane's `fixed inset-0
+     z-[80]` overlay and could not be clicked. They can be now (section 13
+     asserts it); the keyboard is kept here because this check is about the
+     stale-index bug, and the key is the shortest path to reproducing it. */
   await page.keyboard.press('2');
   await page.waitForTimeout(700);
 
@@ -814,6 +817,572 @@ head('an expanded pane does not outlive the pane it points at');
   });
   usable ? ok('the desk takes clicks again') : bad('something invisible is still covering the desk');
 
+  await ctx.close();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   12. NO FLOATING CHROME PRINTS ON A PRICE AXIS.
+
+   The defect this replaces, measured in the shipped build: at a 1024px
+   viewport with the strike rail up, every layout from 2 up gives a 369px
+   chart column, and the identity row needed 317px of the 287 it had. The 30px
+   that did not fit was the EXPAND BUTTON, sitting on the right price ticks —
+   on all four panes, with or without a second axis. With an "own scale"
+   compare the identity row ALSO overprinted the left axis by 35-40px and the
+   toolbar row by 40px, so both axes were covered at once.
+
+   It asserts the GEOMETRY, not the tier constants in Terrain.tsx. The row's
+   parts are not fixed width — `min-w-[112px]` on the symbol button is a floor
+   a longer symbol grows past, and a four-figure price is wider than the one
+   measured — so a threshold that stops being generous enough has to fail the
+   build here rather than quietly print on the ticks again.
+
+   TEXT NODES AND CONTROLS, never the row's box: the rows are
+   `w-fit max-w-full` with `shrink-0` children, which caps the BOX at the
+   column while the contents overflow it visibly. Measuring the box reports
+   clean while the screen is wrong — that is how this shipped.
+   ───────────────────────────────────────────────────────────────────────── */
+head('no pane chrome lands on a price axis');
+{
+  const seedWith = (layout, compares) =>
+    JSON.stringify({
+      layout,
+      panes: TICKERS.map(t => ({
+        ticker: t,
+        timeframe: '15m',
+        overlays: { trails: true, levels: true, darkpool: false, volume: true },
+        indicators: { ema9: false, ema21: false, ema50: false, vwap: false },
+        chartStyle: 'candles',
+        compares: compares ? [{ ticker: t === 'SPY' ? 'QQQ' : 'SPY', mode: 'scale', ink: '#8B5CF6' }] : [],
+        ladder: true,
+      })),
+      setups: {},
+    });
+
+  const probe = async page =>
+    page.evaluate(() => {
+      /* Every text node and every control, by its own painted rect. */
+      const parts = el => {
+        const out = [];
+        const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+        let n;
+        while ((n = w.nextNode())) {
+          if (!n.nodeValue.trim()) continue;
+          const r = document.createRange();
+          r.selectNodeContents(n);
+          const b = r.getBoundingClientRect();
+          if (b.width > 0) out.push({ t: n.nodeValue.trim().slice(0, 14), l: b.left, r: b.right });
+        }
+        for (const c of el.querySelectorAll('button,svg')) {
+          const b = c.getBoundingClientRect();
+          if (b.width > 0) out.push({ t: '<' + c.tagName.toLowerCase() + '>', l: b.left, r: b.right });
+        }
+        return out;
+      };
+      const rects = sel => [...document.querySelectorAll(sel)].map(c => c.getBoundingClientRect());
+      const tall = rects('canvas').filter(r => r.height > 120);
+      const axes = tall.filter(r => r.width > 25 && r.width < 95);
+      const plots = tall.filter(r => r.width > 150);
+      const strips = [...document.querySelectorAll('div')].filter(
+        e => typeof e.className === 'string' && e.className.includes('inset-x-0') && e.className.includes('z-20')
+      );
+
+      const bad = [];
+      for (const strip of strips) {
+        const sr = strip.getBoundingClientRect();
+        const mine = r => r.left >= sr.left - 3 && r.right <= sr.right + 3;
+        const plot = plots.filter(mine).sort((a, b) => b.width - a.width)[0];
+        if (!plot) continue;
+        const cols = axes.filter(mine);
+        const left = cols.filter(a => a.right <= plot.left + 3).sort((a, b) => b.right - a.right)[0];
+        const right = cols.filter(a => a.left >= plot.right - 3).sort((a, b) => a.left - b.left)[0];
+        for (const row of strip.children) {
+          const cs = getComputedStyle(row);
+          if (cs.display === 'none' || cs.opacity === '0' || cs.visibility === 'hidden') continue;
+          for (const p of parts(row)) {
+            if (right && p.r > right.left + 1) bad.push(`${p.t} runs ${Math.round(p.r - right.left)}px onto the RIGHT axis`);
+            if (left && p.l < left.right - 1) bad.push(`${p.t} runs ${Math.round(left.right - p.l)}px onto the LEFT axis`);
+          }
+        }
+      }
+      return bad;
+    });
+
+  for (const own of [false, true]) {
+    for (const layout of [1, 2, 3, 4]) {
+      /* 1024 is the width that breaks it — with the rail up every layout from
+         2 gives the same 369px column, which is why layout alone can never
+         stand in for it. */
+      for (const [w, h] of [[1024, 768], [1280, 800], [1440, 900]]) {
+        const ctx = await browser.newContext({ viewport: { width: w, height: h } });
+        await ctx.addInitScript(
+          `localStorage.setItem('slayer_terrain_v1', ${JSON.stringify(seedWith(layout, own))})`
+        );
+        const page = await ctx.newPage();
+        await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+        await page.waitForTimeout(BOOT_MS);
+        /* The toolbar and the heaviest read are opacity-0 until group-hover.
+           Resting-state only would miss two of the three rows. */
+        const at = await page.evaluate(() => {
+          const s = [...document.querySelectorAll('div')].find(
+            e => typeof e.className === 'string' && e.className.includes('inset-x-0') && e.className.includes('z-20')
+          );
+          if (!s) return null;
+          const r = s.getBoundingClientRect();
+          return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height + 60) };
+        });
+        if (at) {
+          await page.mouse.move(at.x, at.y);
+          await page.waitForTimeout(700);
+        }
+        const hits = await probe(page);
+        const label = `layout ${layout} at ${w}x${h}${own ? ' with a left axis' : ''}`;
+        hits.length === 0
+          ? ok(`${label} — nothing on either axis`)
+          : bad(`${label} — ${hits.length} collision(s): ${hits.slice(0, 3).join('; ')}`);
+        await ctx.close();
+      }
+    }
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   13. THE ARRANGEMENT BAR WORKS WHILE A PANE IS EXPANDED.
+
+   The defect this replaces: the expanded pane is `fixed inset-0 z-[80]` and
+   this bar was `absolute z-30`, so its three controls stayed mounted with
+   `opacity: 1` and `pointer-events: auto` while `elementFromPoint` at each
+   one's own centre returned the expanded chart's canvas. Painted, and dead.
+
+   The Esc chip is why it mattered: it renders ONLY while expanded, so a
+   control whose whole job is the pointer way out of fullscreen shipped in the
+   one state where it could never be clicked. The pane's own Collapse button
+   is inside the modal and did work, so this was a dead duplicate rather than
+   a trap — which is the reason to state what is asserted here precisely.
+
+   Clickability is `elementFromPoint` at the control's own centre, never the
+   presence of the node: every one of these was in the DOM, sized, and opaque
+   the whole time it did not work.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the arrangement bar is reachable while a pane is expanded');
+{
+  for (const [w, h] of [[1440, 900], [1024, 768]]) {
+    const { ctx, page } = await openDesk(w, h, 1);
+    await page.keyboard.press('f');
+    await page.waitForTimeout(900);
+
+    const r = await page.evaluate(() => {
+      const hit = el => {
+        if (!el) return { missing: true };
+        const b = el.getBoundingClientRect();
+        if (!b.width) return { missing: true };
+        const t = document.elementFromPoint(Math.round(b.left + b.width / 2), Math.round(b.top + b.height / 2));
+        return { ok: !!t && (t === el || el.contains(t)), was: t ? t.tagName.toLowerCase() : 'none', box: b };
+      };
+      const esc = [...document.querySelectorAll('button')].find(b => (b.textContent || '').trim() === 'Esc');
+      const grp = document.querySelector('[role=group][aria-label="How many charts"]');
+      const out = {
+        expanded: !!document.querySelector('[role="dialog"][aria-modal="true"]'),
+        esc: hit(esc),
+        strikes: hit(document.querySelector('[data-strikes-toggle]')),
+        layout: hit(grp && grp.querySelector('button')),
+      };
+      /* And it must not have bought its clearance from the expanded pane's own
+         price axis — the bar clears LADDER_WIDTH + the price gutter for
+         exactly this reason, and while expanded the pane under it is the
+         EXPANDED one, not the last one in the array. */
+      const axes = [...document.querySelectorAll('canvas')]
+        .map(c => c.getBoundingClientRect())
+        .filter(b => b.height > 120 && b.width > 25 && b.width < 95);
+      const bar = esc && esc.parentElement.getBoundingClientRect();
+      out.onAxis = bar
+        ? axes.filter(a => bar.right > a.left && bar.left < a.right && bar.bottom > a.top && bar.top < a.bottom).length
+        : -1;
+      return out;
+    });
+
+    const at = `${w}x${h}`;
+    r.expanded ? ok(`${at} — f expands a pane`) : bad(`${at} — nothing expanded, the rest proves nothing`);
+    for (const [name, v] of [['the Esc chip', r.esc], ['the Strikes toggle', r.strikes], ['the layout picker', r.layout]]) {
+      if (v.missing) bad(`${at} — ${name} is not on screen while expanded`);
+      else v.ok ? ok(`${at} — ${name} takes a click`) : bad(`${at} — ${name} is painted but ${v.was} takes its click`);
+    }
+    r.onAxis === 0
+      ? ok(`${at} — and the bar clears the expanded pane's price axis`)
+      : bad(`${at} — the bar overlaps ${r.onAxis} price axis canvas(es) of the expanded pane`);
+
+    /* It is not decorative: clicking it actually leaves fullscreen. */
+    await page.evaluate(() => {
+      const b = [...document.querySelectorAll('button')].find(x => (x.textContent || '').trim() === 'Esc');
+      const r = b.getBoundingClientRect();
+      document.elementFromPoint(Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)).click();
+    });
+    await page.waitForTimeout(700);
+    const closed = await page.evaluate(() => !document.querySelector('[role="dialog"][aria-modal="true"]'));
+    closed ? ok(`${at} — and clicking it leaves fullscreen`) : bad(`${at} — the Esc chip took the click and nothing happened`);
+    await ctx.close();
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   14. THE SPOT AND FLIP BADGES DO NOT PRINT ON TOP OF EACH OTHER.
+
+   The defect this replaces: both rules are placed independently by price and
+   both badges are `ml-auto`, so they share one lane — and the flip spends most
+   of its life near spot, because that is what a flip IS. Measured overlaps of
+   4.3, 6.2, 6.9 and 9.2px of a 10px badge, worst case spot "513.45" underneath
+   flip "513.50": two DIFFERENT prices inside the same 38 pixels.
+
+   The rows already avoided each other through `anchors`; the two rules were
+   the pair that never checked.
+
+   THE CLASH COUNT IS LOGGED, NOT ASSERTED, and that is deliberate. In node the
+   proofs pin `Math.random` so a fixture is reproducible; the browser runs the
+   live unseeded tape, so whether any rail happens to hold spot and flip within
+   a badge of each other is not something this run controls. Asserting "at
+   least one clash occurred" would be a gate that fails on the tape being calm.
+   So: the overlap assertion always runs, and the count says how much of it was
+   actually exercised — a run reporting 0 exercised nothing and its green is
+   worth what that is worth.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the strike rail never prints two prices in the same pixels, and its stubs stay off the rows');
+{
+  let clashed = 0;
+  let rails = 0;
+  let closest = null;
+  let stubs = 0;
+  /* 1280x800 L4 and 1440x900 L1 are here because the three configs above did
+     not exercise the stub check: against a build with the foot band removed
+     they all reported clean. Where a row lands relative to the stub depends on
+     the price and the row pitch, so coverage is a matter of sampling enough
+     rails — these two are where the standalone probe actually caught it. */
+  for (const [w, h, layout] of [[1024, 768, 4], [1024, 768, 2], [1440, 900, 3], [1280, 800, 4], [1440, 900, 1]]) {
+    const { ctx, page } = await openDesk(w, h, layout);
+    const found = await page.evaluate(() => {
+      const out = [];
+      /* The rail is the element that DIRECTLY holds the stub — climbing by
+         class matched nested ancestors and counted one rail up to five times. */
+      const hosts = [...document.querySelectorAll('[data-stub="down"]')]
+        .map(s => s.parentElement)
+        .filter(p => p && p.querySelector('[data-rule="spot"]'));
+      for (const rail of hosts) {
+        const badge = t => rail.querySelector(`[data-rule="${t}"] [data-badge]`);
+        const yOf = t => {
+          const el = rail.querySelector(`[data-rule="${t}"]`);
+          const m = /translateY\(([-0-9.]+)px\)/.exec(el ? el.style.transform || '' : '');
+          return m ? parseFloat(m[1]) : null;
+        };
+        const bs = badge('spot');
+        const bf = badge('flip');
+        if (!bs || !bf) continue;
+        const a = bs.getBoundingClientRect();
+        const b = bf.getBoundingClientRect();
+        if (!a.width || !b.width) continue;
+        const ox = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+        const oy = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+        const ys = yOf('spot');
+        const yf = yOf('flip');
+        /* THE ▼ STUB, same idea one lane down. It sits at `bottom-0`; rows
+           used to run to the plot floor, so the last one was placed under it
+           and the stub took the click on its strike label. Measured before the
+           foot band: 2 of 13 stubs returned THE STUB from elementFromPoint at
+           a label's own centre. */
+        /* ONE PASS, ONE SET OF RECTS. The rail re-places its rows on rAF from
+           the chart's price projection, so a second pass over the same rows
+           reads a LATER layout: the first version measured `covered` and the
+           gap in two loops and they disagreed — clean rows, then a -6.8px
+           intersection, on the same build in the same evaluate. Both were true
+           when taken, which makes them useless together. Everything below
+           comes off one read per row. */
+        const stolen = [];
+        const covered = [];
+        let gap = null;
+        const st = rail.querySelector('[data-stub="down"]');
+        if (st && getComputedStyle(st).display !== 'none') {
+          const sb = st.getBoundingClientRect();
+          for (const row of rail.querySelectorAll('[data-strike]')) {
+            const rb = row.getBoundingClientRect();
+            if (!rb.width) continue;
+            if (rb.right <= sb.left || rb.left >= sb.right) continue; // not in the stub's column
+            /* Rows that START ABOVE the stub are the ones that can reach into
+               its lane. One sitting entirely below it is not approaching
+               anything, and counting it reported a phantom negative gap. */
+            if (rb.top < sb.top) {
+              const g = sb.top - rb.bottom;
+              if (gap == null || g < gap) gap = +g.toFixed(1);
+            }
+            if (!(sb.bottom > rb.top && sb.top < rb.bottom)) continue;
+            covered.push(row.getAttribute('data-strike'));
+            const tn = [...row.querySelectorAll('span')].filter(x => /tnum/.test(x.className || ''));
+            const lab = tn[tn.length - 1];
+            if (!lab) continue;
+            const lb = lab.getBoundingClientRect();
+            if (!lb.width) continue;
+            const who = document.elementFromPoint(Math.round(lb.left + lb.width / 2), Math.round(lb.top + lb.height / 2));
+            if (st === who || st.contains(who)) stolen.push(row.getAttribute('data-strike'));
+          }
+        }
+        out.push({
+          gap,
+          overlap: ox > 0 && oy > 0 ? `${ox.toFixed(1)}x${oy.toFixed(1)}` : null,
+          spot: (bs.textContent || '').trim(),
+          flip: (bf.textContent || '').trim(),
+          dy: ys != null && yf != null ? +Math.abs(ys - yf).toFixed(1) : null,
+          shifted: /translateX/.test(bf.style.transform || ''),
+          covered,
+          stolen,
+        });
+      }
+      return out;
+    });
+
+    const at = `${w}x${h} layout ${layout}`;
+    const hits = found.filter(r => r.overlap);
+    rails += found.length;
+    /* NO RAILS AT ALL IS A FAILURE, NOT A PASS. The desk is seeded with
+       `ladder: true`, so every pane has one. This block reads the rail through
+       `[data-badge]`, a hook that only exists once the step-aside shipped —
+       run against a build without it, the loop found nothing and reported
+       green three times over. A check that cannot see its subject has to say
+       so, or "no badge lands on another" is true of an empty page. */
+    if (found.length === 0) bad(`${at} — found no strike rail to measure; the desk is seeded with the rail up, so this check saw nothing`);
+    const near = found.filter(r => r.dy != null && r.dy < 14);
+    clashed += near.length;
+    hits.length === 0
+      ? ok(`${at} — ${found.length} rail(s), no badge lands on another`)
+      : bad(`${at} — ${hits.length} rail(s) print two prices in the same pixels, e.g. spot ${hits[0].spot} under flip ${hits[0].flip} overlapping ${hits[0].overlap}px`);
+    /* Where the two ARE within a badge of each other, the step-aside must have
+       been applied — otherwise the clean result above is luck, not the fix. */
+    const missed = near.filter(r => !r.shifted);
+    if (near.length) {
+      missed.length === 0
+        ? ok(`${at} — ${near.length} rail(s) had the rules within a badge, and every one stepped aside`)
+        : bad(`${at} — ${missed.length} rail(s) had the rules within a badge and did NOT step aside`);
+    }
+    /* ASSERT THE INVARIANT, NOT THE SYMPTOM. Whether the stub actually STEALS
+       a click depends on where the last row lands against a live price —
+       measured 2 of 13 stubs on the broken build. What FOOT_BAND guarantees is
+       that no row is placed in the stub's lane at all, so a row whose box
+       intersects the stub is the violation whether or not the theft lands.
+
+       AND THIS GUARD IS PROBABILISTIC — said plainly rather than left to look
+       stronger than it is. Against a build with the foot band removed it
+       reported clean on all five configs below: whether any row falls in the
+       bottom 14px depends on the price and the row pitch at that moment, and
+       that varies run to run, not just config to config. A standalone probe
+       caught 4 overlaps and 2 thefts across 13 stubs on the same broken build,
+       so the defect is real and this does catch it — just not on demand. The
+       gap line printed at the end says how close the run came, so a run that
+       never went near the lane cannot be mistaken for one that cleared it. */
+    for (const r of found) {
+      if (r.gap == null) continue;
+      stubs++;
+      if (closest == null || r.gap < closest) closest = r.gap;
+    }
+    const covered = found.filter(r => r.covered && r.covered.length);
+    const thieves = found.filter(r => r.stolen && r.stolen.length);
+    covered.length === 0
+      ? ok(`${at} — no strike row is placed under the down stub`)
+      : bad(
+          `${at} — the down stub sits on strike ${covered.flatMap(c => c.covered).join(', ')}` +
+            (thieves.length ? ` and takes the click on ${thieves.flatMap(t => t.stolen).join(', ')}` : '')
+        );
+
+    await ctx.close();
+  }
+  console.log(
+    `       (${stubs} visible down stub(s); closest a row came to the stub's lane was ${closest == null ? 'n/a' : closest + 'px'} — a large gap means the lane was never tested this run)`
+  );
+  console.log(`       (${clashed} of ${rails} rails held spot and flip within a badge this run — 0 would mean the check was not exercised)`);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   15. EVERY MENU LANDS INSIDE THE WINDOW.
+
+   The defect this replaces: `placeMenu` clamps a menu's FAR edge on screen and
+   had to assume a width to do it. It assumed MENU_MIN_WIDTH (210) — true of
+   the menus it was written for, false of several it later served. Measured at
+   1024x768 and 1280x800 in a left-column pane: the Alerts menu (230px) sat at
+   x = -12, and Indicators and Overlays sat flush at x = 0 instead of the 8px
+   edge. The pattern was exactly what a 210 assumption predicts — 210 -> 8,
+   218 -> 0, 230 -> -12 — which is what said the assumption was the fault.
+
+   MEASURE AFTER THE MENU SETTLES. The width feeds back into the placement, so
+   the first frame is placed from the assumption and corrected on the next.
+   Reading in the same turn as the click reports the uncorrected frame — that
+   is how an earlier version of this probe blamed the wrong menu.
+   ───────────────────────────────────────────────────────────────────────── */
+head('no menu hangs off the edge of the window');
+{
+  for (const [w, h, layout] of [[1024, 768, 4], [1280, 800, 3]]) {
+    const { ctx, page } = await openDesk(w, h, layout);
+    /* Pane 0 is the LEFT column, which is where a right-anchored menu runs out
+       of room — the only place this can fail. */
+    const at = await page.evaluate(() => {
+      const s = [...document.querySelectorAll('div')].find(
+        e => typeof e.className === 'string' && e.className.includes('inset-x-0') && e.className.includes('z-20')
+      );
+      if (!s) return null;
+      const r = s.getBoundingClientRect();
+      return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height + 40) };
+    });
+    if (at) {
+      await page.mouse.move(at.x, at.y);
+      await page.waitForTimeout(700);
+    }
+    const count = await page.evaluate(() => {
+      const s = [...document.querySelectorAll('div')].find(
+        e => typeof e.className === 'string' && e.className.includes('inset-x-0') && e.className.includes('z-20')
+      );
+      return s ? s.querySelectorAll('button[aria-haspopup="menu"]').length : 0;
+    });
+    const offEdge = [];
+    for (let i = 0; i < count; i++) {
+      await page.evaluate(i => {
+        const s = [...document.querySelectorAll('div')].find(
+          e => typeof e.className === 'string' && e.className.includes('inset-x-0') && e.className.includes('z-20')
+        );
+        const bs = [...s.querySelectorAll('button[aria-haspopup="menu"]')];
+        bs.forEach(b => { if (b.getAttribute('aria-expanded') === 'true') b.click(); });
+        bs[i].click();
+      }, i);
+      await page.waitForTimeout(450); // let the width feed back into the placement
+      const r = await page.evaluate(() => {
+        const m =
+          document.querySelector('[data-toolbar-menu]') ||
+          [...document.body.children].find(d => getComputedStyle(d).position === 'fixed' && d.getBoundingClientRect().width > 150);
+        if (!m) return null;
+        const exp = document.querySelector('button[aria-haspopup="menu"][aria-expanded="true"]');
+        const b = m.getBoundingClientRect();
+        return {
+          name: exp ? (exp.getAttribute('title') || exp.textContent || '').trim().slice(0, 18) : '?',
+          left: Math.round(b.left),
+          right: Math.round(b.right),
+          width: Math.round(b.width),
+          vw: window.innerWidth,
+        };
+      });
+      if (!r) continue;
+      if (r.left < 0 || r.right > r.vw) offEdge.push(`${r.name} (${r.width}px) at [${r.left},${r.right}] of ${r.vw}`);
+    }
+    const label = `${w}x${h} layout ${layout}`;
+    count === 0
+      ? bad(`${label} — found no menu triggers to open`)
+      : offEdge.length === 0
+        ? ok(`${label} — all ${count} menus land inside the window`)
+        : bad(`${label} — ${offEdge.length} menu(s) off the window: ${offEdge.join('; ')}`);
+    await ctx.close();
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   16. TERRAIN ON A PHONE — one chart, and the other three never built.
+
+   Terrain ran on `useIsBelowLg` alone, which stacks the panes and scrolls the
+   page: four charts at `min-h-[420px]` against a 334px landscape viewport.
+   Held BOTH ways, because the rule that fixes it is `useIsPhone`, whose
+   landscape clause exists precisely because a handset turned sideways is
+   844x390 — wider than the md floor, and so invisible to a width test.
+   ───────────────────────────────────────────────────────────────────────── */
+for (const [orientation, viewport] of [
+  ['portrait', { width: 390, height: 844 }],
+  ['landscape', { width: 844, height: 390 }],
+]) {
+  head(`Terrain gives a phone one chart — ${orientation}`);
+  const ctx = await browser.newContext({ viewport, hasTouch: true, isMobile: true });
+  await ctx.addInitScript(
+    `localStorage.setItem('slayer_terrain_v1', ${JSON.stringify(seed(4, TICKERS))})`
+  );
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+
+  const g = await page.evaluate(() => {
+    const plots = [...document.querySelectorAll('canvas')]
+      .map(c => ({ c, r: c.getBoundingClientRect() }))
+      .filter(o => o.r.height > 120 && o.r.width > 100);
+    const first = plots.sort((a, b) => a.r.left - b.r.left || a.r.top - b.r.top)[0];
+    let ink = 0;
+    if (first) {
+      const d = first.c.getContext('2d').getImageData(0, 0, first.c.width, first.c.height).data;
+      for (let k = 3; k < d.length; k += 4) if (d[k] > 8) ink++;
+    }
+    return {
+      innerH: window.innerHeight,
+      plots: plots.length,
+      h: first ? Math.round(first.r.height) : 0,
+      w: first ? Math.round(first.r.width) : 0,
+      bitmap: first ? first.c.width : 0,
+      ink,
+      vscroll: document.documentElement.scrollHeight - document.documentElement.clientHeight,
+      hscroll: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      /* Controls that cannot affect anything here: the arrangement picker sets
+         a pane count a phone ignores, and Strikes toggles rails that are
+         `hidden lg:flex`. Both must be absent, not merely invisible. */
+      arrangement: !!document.querySelector('[aria-label="How many charts"]'),
+      strikes: !!document.querySelector('[data-strikes-toggle]'),
+    };
+  });
+
+  /* ONE chart. A pane draws a plot canvas and a volume canvas, so one chart is
+     two; four charts would be eight. Counting canvases rather than panes is
+     deliberate — a `hidden` pane still has both. */
+  g.plots === 2
+    ? ok(`one chart is mounted — ${g.plots} plot canvases`)
+    : bad(`${g.plots} plot canvases — expected 2 (four charts would be 8)`);
+
+  /* It fills the window rather than overflowing it. The 420px pane floor would
+     push a pane past a 334px landscape viewport, so this is what catches the
+     floor being left on. */
+  g.vscroll === 0
+    ? ok('the page does not scroll — the chart fits the window')
+    : bad(`${g.vscroll}px of vertical scroll — the pane is taller than the viewport`);
+
+  g.h > g.innerH * 0.55
+    ? ok(`the chart is ${g.h}px of an ${g.innerH}px window`)
+    : bad(`the chart is only ${g.h}px of ${g.innerH}px`);
+
+  Math.abs(g.bitmap - g.w) <= 2 && g.ink > 500
+    ? ok(`really painted — ${g.bitmap}px bitmap for a ${g.w}px box, ${g.ink} pixels of ink`)
+    : bad(`canvas ${g.bitmap}px for a ${g.w}px box with ${g.ink} pixels of ink`);
+
+  !g.arrangement && !g.strikes
+    ? ok('the two controls that could not do anything here are gone')
+    : bad(`inert chrome still rendered — arrangement:${g.arrangement} strikes:${g.strikes}`);
+
+  g.hscroll === 0 ? ok('nothing scrolls sideways') : bad(`${g.hscroll}px sideways`);
+  errs.length === 0 ? ok('no page errors') : bad(`page errors: ${errs.slice(0, 2).join(' | ')}`);
+  await ctx.close();
+}
+
+/* And the boundary from the other side: a tablet is touch, like a phone, and
+   roomy, unlike one. A rule that simply returned true would pass everything
+   above. */
+head('Terrain keeps its desk on a tablet');
+{
+  const ctx = await browser.newContext({
+    viewport: { width: 820, height: 1180 },
+    hasTouch: true,
+    isMobile: true,
+  });
+  await ctx.addInitScript(
+    `localStorage.setItem('slayer_terrain_v1', ${JSON.stringify(seed(4, TICKERS))})`
+  );
+  const page = await ctx.newPage();
+  await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+  const n = await page.evaluate(
+    () =>
+      [...document.querySelectorAll('canvas')].filter(c => {
+        const r = c.getBoundingClientRect();
+        return r.height > 120 && r.width > 100;
+      }).length
+  );
+  n === 8
+    ? ok(`an iPad still builds four charts — ${n} plot canvases`)
+    : bad(`an iPad built ${n} plot canvases, expected 8`);
   await ctx.close();
 }
 

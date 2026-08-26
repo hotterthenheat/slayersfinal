@@ -8,8 +8,9 @@
 ==================================================
 */
 
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { useAnchoredMenu } from './useAnchoredMenu';
 import { motion } from 'framer-motion';
 import {
   Activity,
@@ -40,7 +41,7 @@ import {
 } from './candleTheme';
 import { CHART_STYLES, INDICATOR_INKS, type ChartIndicators, type ChartOverlays, type ChartStyle } from './StrikeChart';
 import AlertsMenu from './AlertsMenu';
-import { placeMenu, type MenuBox, type MenuSide } from './menuPlacement';
+import { type MenuSide } from './menuPlacement';
 
 interface ChartToolbarProps {
   timeframe: Timeframe;
@@ -256,37 +257,10 @@ const Dropdown = ({
   title?: string;
   children: ReactNode;
 }) => {
-  const anchorRef = useRef<HTMLButtonElement | null>(null);
-  const [placed, setPlaced] = useState<{ box: MenuBox; side: MenuSide } | null>(null);
-
-  const measure = useCallback(() => {
-    const el = anchorRef.current;
-    if (!el) return;
-    setPlaced(placeMenu(el.getBoundingClientRect(), menuSide, window.innerWidth, window.innerHeight));
-  }, [menuSide]);
-
-  /*
-    Measured in a LAYOUT effect, before paint: a passive effect would paint the
-    menu at its previous position for one frame, which on a desk of four panes
-    reads as the menu jumping in from the last pane you opened.
-  */
-  useLayoutEffect(() => {
-    if (!open) { setPlaced(null); return; }
-    measure();
-  }, [open, measure]);
-
-  useEffect(() => {
-    if (!open) return;
-    /* Capture, so a scroll inside ANY ancestor moves the menu with its trigger
-       and not just a scroll of the window. */
-    const onMove = () => measure();
-    window.addEventListener('scroll', onMove, true);
-    window.addEventListener('resize', onMove);
-    return () => {
-      window.removeEventListener('scroll', onMove, true);
-      window.removeEventListener('resize', onMove);
-    };
-  }, [open, measure]);
+  /* The placement plumbing lives in useAnchoredMenu now — the symbol
+     quick-pick and the compare '+' need the same thing, and this was the only
+     copy that had it. */
+  const { anchorRef, placed, menuRef } = useAnchoredMenu<HTMLButtonElement>(open, menuSide);
 
   const Caret = MENU_SIDE_CARET[placed?.side ?? menuSide];
   return (
@@ -338,6 +312,7 @@ const Dropdown = ({
         the end of the list from scrolling the page underneath it.
       */
       <div
+        ref={menuRef}
         data-toolbar-menu=""
         style={{
           position: 'fixed',

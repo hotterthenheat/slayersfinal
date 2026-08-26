@@ -1,0 +1,133 @@
+/*
+==================================================
+  SLAYER TERMINAL - CONTRACT PREMIUM PANE
+  The desk chart's CONTRACT lens — and it IS the
+  house chart now (Noah, 2026-08-25: "why is the
+  premium chart not the same lightweight chart?"):
+  the same lightweight-charts engine, the same
+  candle theme, the same fonts and crosshair, real
+  candles on the reader's chosen interval.
+
+  THE CANDLES ARE DERIVED, HONESTLY. The sim keeps
+  no per-bar tape for a contract, but premium is
+  MONOTONIC in spot (up for calls, down for puts),
+  so pricing the contract at a bar's own O, H, L
+  and C gives the bar's true premium extremes —
+  max/min of the four IS the high/low, whichever
+  right. Nothing is invented beyond what the
+  estimator already says.
+==================================================
+*/
+
+import { useEffect, useRef } from 'react';
+import {
+  createChart,
+  CandlestickSeries,
+  type IChartApi,
+  type ISeriesApi,
+  type UTCTimestamp,
+} from 'lightweight-charts';
+import Simulator from '../../core/simulator';
+import { aggregateCandles, tfMinutes, type Timeframe } from '../../data/timeframe';
+import { estimatePremium } from '../../data/compass';
+import { contractIvFor } from '../../data/weigherDesk';
+import { candleSeriesOptions, chartSurface, getCandleTheme, useCandleThemeKey } from '../../components/gex/candleTheme';
+import type { OptionRight } from '../../types/compass';
+
+interface ContractPremiumPaneProps {
+  ticker: string;
+  strike: number;
+  right: OptionRight;
+  /** Years to expiry, fixed at selection — the curve shows the session, not decay */
+  tYears: number;
+  timeframe: Timeframe;
+  revision: number;
+}
+
+const ContractPremiumPane = ({ ticker, strike, right, tYears, timeframe, revision }: ContractPremiumPaneProps) => {
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const loadedRef = useRef('');
+  const themeKey = useCandleThemeKey();
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const t = getCandleTheme();
+    const chart = createChart(host, {
+      autoSize: true,
+      layout: {
+        background: { color: chartSurface(t).bg },
+        textColor: '#7d7d7d',
+        fontFamily: "'SF Pro', sans-serif",
+        fontSize: 10,
+        attributionLogo: false,
+      },
+      grid: { vertLines: { visible: false }, horzLines: { visible: false } },
+      rightPriceScale: { borderColor: '#1c1c1c' },
+      timeScale: { borderColor: '#1c1c1c', timeVisible: true, secondsVisible: false, rightOffset: 5, barSpacing: 7 },
+      crosshair: {
+        vertLine: { color: 'rgba(255,255,255,0.3)', labelBackgroundColor: '#262626' },
+        horzLine: { color: 'rgba(255,255,255,0.3)', labelBackgroundColor: '#262626' },
+      },
+    });
+    const series = chart.addSeries(CandlestickSeries, {
+      ...candleSeriesOptions(t),
+      priceLineVisible: true,
+      priceLineColor: 'rgba(237,237,237,0.4)',
+      priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
+    });
+    chartRef.current = chart;
+    seriesRef.current = series;
+    return () => {
+      chart.remove();
+      chartRef.current = null;
+      seriesRef.current = null;
+      loadedRef.current = '';
+    };
+  }, []);
+
+  // Recolor in place when the app-wide theme changes — same contract as StrikeChart
+  useEffect(() => {
+    const t = getCandleTheme();
+    seriesRef.current?.applyOptions(candleSeriesOptions(t));
+    chartRef.current?.applyOptions({ layout: { background: { color: chartSurface(t).bg } } });
+  }, [themeKey]);
+
+  useEffect(() => {
+    const series = seriesRef.current;
+    const chart = chartRef.current;
+    if (!series || !chart) return;
+    const mins = tfMinutes(timeframe);
+    const bars = aggregateCandles(Simulator.getCandles(ticker) ?? [], mins);
+    if (bars.length === 0) return;
+    const iv = contractIvFor(ticker, strike, right);
+    const px = (spot: number) => estimatePremium(spot, strike, right, iv, tYears);
+    const pts = bars.map(b => {
+      const o = px(b.open);
+      const c = px(b.close);
+      const a = px(b.high);
+      const z = px(b.low);
+      return {
+        time: b.time as UTCTimestamp,
+        open: Number(o.toFixed(2)),
+        close: Number(c.toFixed(2)),
+        high: Number(Math.max(o, c, a, z).toFixed(2)),
+        low: Number(Math.min(o, c, a, z).toFixed(2)),
+      };
+    });
+    const sig = `${ticker}|${strike}|${right}|${timeframe}|${tYears.toFixed(4)}|${themeKey}`;
+    if (loadedRef.current !== sig) {
+      series.setData(pts);
+      chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, pts.length - 130), to: pts.length + 5 });
+      loadedRef.current = sig;
+    } else {
+      series.update(pts[pts.length - 1]);
+    }
+  }, [ticker, strike, right, timeframe, tYears, revision, themeKey]);
+
+  return <div ref={hostRef} className="absolute inset-0" />;
+};
+
+export default ContractPremiumPane;

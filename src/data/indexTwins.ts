@@ -11,12 +11,32 @@
 
   SIM-ERA CONTRACT: ratios are fixed and the basis
   drifts deterministically off the rounded spot —
-  replay-safe, no wall clock in data code. The data
-  phase swaps twinBasis for the measured feed (cash
-  indices via ThetaData; live futures optional — a
-  fair-value estimate keeps the lens honest without
-  a futures subscription).
+  replay-safe, no wall clock in data code.
 ==================================================
+
+  THE SWAP PLAN, RE-POINTED 2026-08-26. This block named
+  ThetaData as the source for the cash indices.
+  ThetaData is out. The measured feed is:
+
+    cash indices (SPX / NDX / RUT)  → MKT Indices
+    futures (ES / NQ / RTY)         → MKT Futures,
+      which also carries settlement and open interest
+
+  Corrected here rather than in a planning document
+  because this comment is what the next reader of this
+  file will act on, and chasing a subscription that was
+  never bought is the kind of afternoon a stale header
+  costs someone.
+
+  AND THE RATIOS ARE WRONG THE MOMENT ANYONE CHECKS.
+  SPY→SPX is not exactly 10 and drifts with dividends;
+  QQQ→NDX is not 41 and has moved materially over any
+  multi-year window. A trader compares this against
+  their broker in the first ten seconds. These numbers
+  are a placeholder that renders, not an estimate that
+  holds — which is why the swap is T-17 rather than a
+  tidy-up, and why the lens must print `inferred` until
+  the measured basis is behind it.
 */
 
 export type TwinLensKey = 'etf' | 'index' | 'futures';

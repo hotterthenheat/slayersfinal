@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildVannaCharm } from '../../data/vannacharm';
+import { readSessionClock } from '../../data/moc';
 import Fact from '../../components/ui/Fact';
 import Panel from '../../components/ui/Panel';
 import SegmentedControl from '../../components/ui/SegmentedControl';
@@ -52,9 +53,36 @@ const VannaCharm = () => {
     }
   }, [marketData]);
 
+  /*
+    THE LIVE CLOCK, and this is the half that makes P-0 real.
+
+    `readSessionClock` has existed in `data/moc.ts` — timezone-correct for any
+    viewer, holiday-aware, already computing the seconds to the 16:00 cross —
+    and rendered NOWHERE. The charm projection meanwhile ran on a hardcoded
+    three hours, so 09:35 and 15:55 drew the same map.
+
+    Read on the SCAN tier rather than per render: the page already rebuilds its
+    view when `scanSnapshot` changes, and re-reading the wall clock on every
+    render would make this memo useless while moving the map by a second's
+    worth of decay each time. A charm map that shifts under the cursor is
+    noise, not freshness.
+
+    Zero outside a live session is the honest answer, not a floor: after the
+    bell there IS no charm left to come, and the projection collapsing onto the
+    current map is what that means.
+  */
+  const hoursToClose = useMemo(() => {
+    const clock = readSessionClock();
+    return clock.secondsToClose / 3600;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scanSnapshot]);
+
   const data = useMemo(
-    () => (scanSnapshot ? buildVannaCharm(scanSnapshot, mode, Number(ivKey) as IvShift) : null),
-    [scanSnapshot, mode, ivKey]
+    () =>
+      scanSnapshot
+        ? buildVannaCharm(scanSnapshot, mode, Number(ivKey) as IvShift, 10, hoursToClose)
+        : null,
+    [scanSnapshot, mode, ivKey, hoursToClose]
   );
 
   if (!data) {

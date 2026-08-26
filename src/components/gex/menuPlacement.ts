@@ -89,7 +89,24 @@ export function placeMenu(
   rect: AnchorRect,
   side: MenuSide,
   vw: number,
-  vh: number
+  vh: number,
+  /**
+   * How wide the menu actually is, when the caller knows.
+   *
+   * The clamp below has to keep the FAR edge on screen, and to do that it has
+   * to assume a width. It assumed MENU_MIN_WIDTH, which is true of the toolbar
+   * menus this module was written for and false of the wider ones: the compare
+   * popover is `w-[380px]` and the symbol quick-pick `w-72` (288). Measured
+   * after those two were portalled through here — the compare menu in a
+   * left-column pane landed at x = -162, so 162px of a 380px menu was off the
+   * side of the window. The old default kept 210 of it on screen and called
+   * that clamped.
+   *
+   * Defaults to MENU_MIN_WIDTH so every existing caller places exactly as it
+   * did. A caller that knows its width passes it; one that does not is no
+   * worse off than before.
+   */
+  menuWidth: number = MENU_MIN_WIDTH
 ): { box: MenuBox; side: MenuSide } {
   let s = side;
   const below = vh - rect.bottom - MENU_OFFSET - MENU_EDGE;
@@ -122,13 +139,16 @@ export function placeMenu(
     THE HORIZONTAL ANCHOR IS CLAMPED AT BOTH ENDS, and the far end is the one
     that was missing.
 
-    A menu anchored by its RIGHT edge extends MENU_MIN_WIDTH to the LEFT of
+    A menu anchored by its RIGHT edge extends its own WIDTH to the LEFT of
     that anchor. A trigger within a menu-width of the window's left edge
     therefore produced a menu sitting neatly against the trigger with its first
     186px off the side of the screen — and a `Math.max(MENU_EDGE, …)` guard
     passed it, because it only ever checked the near end.
+
+    The width is `menuWidth`, not MENU_MIN_WIDTH: assuming the minimum keeps
+    exactly that much on screen and lets everything wider hang off the edge.
   */
-  const farRight = Math.max(MENU_EDGE, vw - MENU_MIN_WIDTH - MENU_EDGE);
+  const farRight = Math.max(MENU_EDGE, vw - menuWidth - MENU_EDGE);
   const anchorRight = (v: number) => Math.min(Math.max(MENU_EDGE, v), farRight);
   const anchorLeft = (v: number) => Math.min(Math.max(MENU_EDGE, v), farRight);
 

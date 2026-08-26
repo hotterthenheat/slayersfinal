@@ -170,11 +170,32 @@ export function readSetup(raw: unknown, key: string): StoredSetup | null {
       out.overlays = filled;
     }
   }
+  /*
+    THE SAME MIGRATION, and it is here because the fix above was applied to one
+    of the two fields that needed it.
+
+    This read `length === INDICATOR_KEYS.length` — the exact test the overlay
+    block above was rewritten to stop using, sitting two lines below the comment
+    explaining why it is wrong. `INDICATOR_KEYS` is currently the four EMAs and
+    VWAP; the moment a fifth is added — RSI, MACD, Bollinger, anything — every
+    stored record is one key short, fails the equality, and every symbol loses
+    all of its indicators at once. Up to sixty of them, silently, for a key the
+    reader has never heard of.
+
+    Identical rule to the overlays, for the identical reason: a missing key
+    falls back to FALSE (an indicator a reader never saw cannot have been chosen
+    by them), and the floor stays at ONE recognised boolean so junk still yields
+    nothing rather than a full set of invented values.
+  */
   if (typeof r.indicators === 'object' && r.indicators !== null) {
     const src = r.indicators as Record<string, unknown>;
     const o: Partial<ChartIndicators> = {};
     for (const k of INDICATOR_KEYS) if (typeof src[k] === 'boolean') o[k] = src[k] as boolean;
-    if (Object.keys(o).length === INDICATOR_KEYS.length) out.indicators = o as ChartIndicators;
+    if (Object.keys(o).length > 0) {
+      const filled = {} as ChartIndicators;
+      for (const k of INDICATOR_KEYS) filled[k] = o[k] ?? false;
+      out.indicators = filled;
+    }
   }
 
   if (Array.isArray(r.compares)) {
