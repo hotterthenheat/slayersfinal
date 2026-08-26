@@ -26,7 +26,7 @@
   under test is the simulator's, so a mock would be asserting my own
   arithmetic rather than the product's.
 
-  TWO GENERATORS, BOTH COVERED. The rule was written twice over the same
+  FIVE GENERATORS, ALL COVERED. The rule was written twice over the same
   numbers — `buildLevelsFor` (data/gex.ts) and `generateTradePlan`
   (core/simulator.ts) — and only the first was fixed, so Terrain named one pair
   of walls while the GEX matrix, `readHeatPattern`'s prose and the Pulse board
@@ -50,6 +50,9 @@
 import './deterministic-random';
 import Simulator from '../src/core/simulator';
 import { buildLevelsFor } from '../src/data/gex';
+import { buildExposureProfile } from '../src/data/exposure';
+import { buildVannaCharm } from '../src/data/vannacharm';
+import { buildRankedTargets } from '../src/data/rankedtargets';
 
 let pass = 0,
   fail = 0;
@@ -107,6 +110,80 @@ const sign = (v: number) => (v > 0 ? '+' : v < 0 ? '-' : '0');
 const planCw = blank(), planCwFlip = blank(), planPw = blank(), planPwFlip = blank();
 let plansSeen = 0;
 
+/* The three DOWNSTREAM builders that each carried their own copy of the rule.
+   Validated at sample boundaries rather than every tick — they rebuild a whole
+   profile per call, and 6000 of those is a gate nobody waits for — off the
+   snapshot the tick handed over, so they are checked against the same book. */
+const expCw = blank(), expPw = blank();
+const vcCw = blank(), vcPw = blank();
+const rtCw = blank(), rtPw = blank();
+let downstreamSeen = 0;
+let lastSnap: any = null;
+
+/* Same implication as the plan: IF the chain holds a call-dominant strike
+   above spot, whatever this builder calls the call wall must be one. Stated
+   against the builder's OWN window where it has one, because these builders
+   slice a window around spot and a wall outside it is not theirs to name. */
+const checkPair = (
+  cwT: Tally, pwT: Tally, label: string,
+  window: readonly { strike: number; value: number }[],
+  spot: number, callWall: number, putWall: number
+) => {
+  if (window.some(n => n.strike > spot && n.value < 0)) {
+    const n = window.find(x => x.strike === callWall);
+    rec(cwT, !!n && n.value < 0 && callWall > spot,
+      `${label} cw ${callWall} vs spot ${spot.toFixed(2)}` +
+      (n ? ` value ${sign(n.value)}${Math.abs(n.value).toExponential(2)}` : ' (not in window)'));
+  }
+  if (window.some(n => n.strike < spot && n.value > 0)) {
+    const n = window.find(x => x.strike === putWall);
+    rec(pwT, !!n && n.value > 0 && putWall < spot,
+      `${label} pw ${putWall} vs spot ${spot.toFixed(2)}` +
+      (n ? ` value ${sign(n.value)}${Math.abs(n.value).toExponential(2)}` : ' (not in window)'));
+  }
+};
+
+const validateDownstream = (snap: any) => {
+  if (!snap?.chain?.length) return;
+  downstreamSeen++;
+  const spot = snap.spot;
+
+  const exp = buildExposureProfile(snap, '0DTE', 10);
+  checkPair(expCw, expPw, 'exposure',
+    exp.strikes.map((s: any) => ({ strike: s.strike, value: s.gex.net })),
+    spot, exp.levels.callWall, exp.levels.putWall);
+
+  const vc = buildVannaCharm(snap, 'CHARM', 1, 10);
+  const cw = vc.shifts.find((x: any) => x.kind === 'call-wall');
+  const pw = vc.shifts.find((x: any) => x.kind === 'put-wall');
+  checkPair(vcCw, vcPw, 'vannacharm',
+    vc.rows.map((r: any) => ({ strike: r.strike, value: r.current })),
+    spot, cw.current, pw.current);
+  /* The PROJECTED walls run the same rule over a different value set
+     (`projectStrike`), so they are a second, independent exercise of it — and
+     a migrating wall is the entire point of that panel. */
+  checkPair(vcCw, vcPw, 'vannacharm/projected',
+    vc.rows.map((r: any) => ({ strike: r.strike, value: r.projected })),
+    spot, cw.projected, pw.projected);
+
+  /* `buildRankedTargets` keeps its walls internal — they only TAG a target —
+     so this asserts what the panel actually shows: every strike wearing a
+     WALL tag has to be a wall, i.e. call-dominant above spot or put-dominant
+     below. Reaching into the module for the raw numbers would test the
+     implementation; the tag is what a reader sees. */
+  const rt = buildRankedTargets(snap);
+  const byStrike = new Map<number, number>(snap.chain.map((n: any) => [n.strike, n.netGex]));
+  for (const t of rt.targets as any[]) {
+    if (!t.tags.includes('WALL')) continue;
+    const v = byStrike.get(t.strike);
+    const isCallWall = v !== undefined && v < 0 && t.strike > spot;
+    const isPutWall = v !== undefined && v > 0 && t.strike < spot;
+    rec(isCallWall || t.strike > spot ? rtCw : rtPw, isCallWall || isPutWall,
+      `WALL tag on ${t.strike} vs spot ${spot.toFixed(2)}` +
+      (v === undefined ? ' (not a chain strike)' : ` value ${sign(v)}${Math.abs(v).toExponential(2)}`));
+  }
+};
+
 const validatePlan = (snap: {
   spot: number;
   chain: readonly { strike: number; netGex: number }[];
@@ -150,7 +227,12 @@ for (let s = 0; s < SAMPLES; s++) {
   /* The plan is built for the ACTIVE ticker only, so rotate — otherwise this
      would assert the plan rule against SPY 60 times and nothing else. */
   Simulator.setActiveTicker(NAMES[s % NAMES.length]);
-  for (let i = 0; i < TICKS_PER_SAMPLE; i++) Simulator.tick(validatePlan);
+  for (let i = 0; i < TICKS_PER_SAMPLE; i++)
+    Simulator.tick(snap => {
+      validatePlan(snap as any);
+      lastSnap = snap;
+    });
+  validateDownstream(lastSnap);
 
   for (const name of NAMES) {
     const sym = Simulator.ensureTicker(name);
@@ -212,6 +294,14 @@ report('plan', 'the resistance wall is on the call side of the flip', planCwFlip
 report('plan', 'the support wall is PUT-dominant and below spot', planPw);
 report('plan', 'the support wall is on the put side of the flip', planPwFlip);
 check('the plan path was actually exercised', plansSeen > 0, `${plansSeen} plans validated against their own chain`);
+
+report('exposure', 'the call wall is CALL-dominant and above spot', expCw);
+report('exposure', 'the put wall is PUT-dominant and below spot', expPw);
+report('vannacharm', 'the call wall is CALL-dominant and above spot', vcCw);
+report('vannacharm', 'the put wall is PUT-dominant and below spot', vcPw);
+report('rankedtargets', 'the call wall is CALL-dominant and above spot', rtCw);
+report('rankedtargets', 'the put wall is PUT-dominant and below spot', rtPw);
+check('the downstream builders were actually exercised', downstreamSeen > 0, `${downstreamSeen} profiles built`);
 
 check(
   'the walked books actually exercise the difference',
