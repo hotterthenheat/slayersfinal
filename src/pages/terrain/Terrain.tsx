@@ -343,6 +343,29 @@ const PRICE_GUTTER_PX = PRICE_SCALE_MIN_WIDTH + 2;
 const TOOLBAR_FULL_PX = 840;
 
 /*
+  THE COLUMN WIDTH AT WHICH A PANE CAN AFFORD BOTH PRICE GUTTERS.
+
+  An "Own scale" compare gives the tape a SECOND gutter down the left, and
+  this pane's chrome is left-anchored, so it prints over that axis's ticks
+  unless it steps aside — the same way it already steps aside on the right.
+
+  But the clearance is not free, and the first attempt at this shipped the
+  same defect on the other side: the strip's rows compute `overflow: visible`
+  (`w-fit max-w-full` caps the box, it does not clip the text), so the 76px
+  taken off the left comes out of the right clearance. Measured at a 369px
+  column with the left padding applied: the identity row ran 28px into the
+  right gutter and the HEAVIEST dollar figure sat entirely inside it —
+  "-0.90%" printed over the 471.00 tick, "$140.1M" over 470.00.
+
+  So the clearance is taken only where the column can hold it: the widest
+  row measured (the identity capsule, 299-325px) plus both gutters. Below
+  that the left axis is still overprinted — no worse than before this, and
+  strictly better than trading it for the right one, which carries the same
+  live numbers.
+*/
+const BOTH_GUTTERS_PX = 330 + 2 * PRICE_GUTTER_PX;
+
+/*
   The heaviest strikes in the pane's window, signed — the one-line read of
   where the book is, and the same rows the rail draws.
 
@@ -402,6 +425,11 @@ const Pane = ({
   boxRef, cell = '',
 }: PaneProps) => {
   const { ticker, timeframe, overlays, indicators, chartStyle, compares, ladder } = cfg;
+  /* An "Own scale" comparison gives the tape a SECOND price gutter, down the
+     LEFT (StrikeChart's `leftPriceScale.visible`). Every piece of this pane's
+     floating chrome is left-anchored, so it has to step aside for that axis
+     exactly the way it already steps aside for the right-hand one. */
+  const ownScale = compares.some(c => c.mode === 'scale');
   /* Below `lg` this desk stops filling the viewport and becomes a column the
      page scrolls through — so the wheel has to belong to the page, not to the
      chart. See `pageScroll` on StrikeChart for what was measured. */
@@ -655,9 +683,15 @@ const Pane = ({
             */}
             <div
               ref={stripRef}
-              /* Right padding clears the price gutter, so nothing floating
-                 ever lands on a price tick. */
-              style={{ paddingRight: PRICE_GUTTER_PX }}
+              /* Padding clears the price gutter, so nothing floating ever
+                 lands on a price tick — BOTH gutters when there is a left
+                 one and the column is wide enough to hold the clearance.
+                 See BOTH_GUTTERS_PX: taking it unconditionally moves the
+                 collision to the right axis on a narrow pane. */
+              style={{
+                paddingLeft: ownScale && stripW >= BOTH_GUTTERS_PX ? PRICE_GUTTER_PX : undefined,
+                paddingRight: PRICE_GUTTER_PX,
+              }}
               className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-col items-start gap-1 p-1.5"
             >
               {/*
@@ -796,7 +830,9 @@ const Pane = ({
                 a drag on the chart. */}
             {compares.length > 0 && (
               <div
-                style={{ top: stripH + 4 }}
+                /* Unconditional, unlike the strip above: the legend rows are
+                   ~106px, so even at a 369px column they clear both gutters. */
+                style={{ top: stripH + 4, left: ownScale ? PRICE_GUTTER_PX : undefined }}
                 className="pointer-events-none absolute left-3 z-10 flex flex-col gap-0.5 opacity-70 transition-opacity duration-200 group-hover:opacity-100"
               >
                 {compares.map(c => (
