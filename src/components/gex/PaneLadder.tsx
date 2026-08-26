@@ -144,6 +144,28 @@ const HEAD_BAND = 32;
    than a second one invented here. */
 const BADGE_CLEAR_PX = 14;
 
+/* THE LANE THE ▼ STUB SITS IN, reserved the way HEAD_BAND is reserved at the
+   top — and it is the same fix the ▲ stub already got.
+
+   That stub was moved to `top-5` because at `top-0` it printed over the
+   caption AND took the close x's hit target; the note on it says its lane is
+   "the lower half of HEAD_BAND, which no row is placed in". The ▼ stub sits
+   at `bottom-0`, and nothing reserved a lane for it: `fits` floored rows at
+   HEAD_BAND on top but ran them all the way to H at the bottom, so the last
+   row was placed underneath it. Measured: the stub covered the strike label
+   "106" by 25x7.9px and document.elementFromPoint at that label's own centre
+   returned THE STUB — the bottom strike could not be clicked.
+
+   14px is the stub's own line box (`leading-[12px]` plus its 1px of padding),
+   which is what has to be kept clear.
+
+   Reserving it costs nothing that is not accounted for: if a row would have
+   landed in the band it is now culled, which makes `down` non-zero, which is
+   exactly when the stub appears and says so — and clicking it goes to that
+   strike. If no row would have landed there the stub stays hidden and no row
+   was lost. */
+const FOOT_BAND = 14;
+
 /** Strikes print whole when they are whole — the rule every strike list uses. */
 const fmtStrike = (v: number): string => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
 
@@ -286,9 +308,11 @@ const PaneLadder = ({
          not. The track clips at the plot floor, so a row centred two pixels
          above it is drawn sliced in half — which reads as a rendering fault,
          and is worse than the row simply being one of the ones the stub is
-         holding. Same at the top. */
+         holding. Same at the top, and now symmetric at the bottom: each end
+         keeps its stub's lane clear (HEAD_BAND / FOOT_BAND) so neither stub is
+         ever drawn on top of a row it would then steal the click from. */
       const half = rowH / 2;
-      const fits = (y: number) => y - half >= HEAD_BAND && y + half <= H;
+      const fits = (y: number) => y - half >= HEAD_BAND && y + half <= H - FOOT_BAND;
 
       els.forEach((el, i) => {
         const k = Number(el.dataset.strike);

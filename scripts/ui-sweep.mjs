@@ -1045,11 +1045,18 @@ head('the arrangement bar is reachable while a pane is expanded');
    actually exercised — a run reporting 0 exercised nothing and its green is
    worth what that is worth.
    ───────────────────────────────────────────────────────────────────────── */
-head('the strike rail never prints two prices in the same pixels');
+head('the strike rail never prints two prices in the same pixels, and its stubs stay off the rows');
 {
   let clashed = 0;
   let rails = 0;
-  for (const [w, h, layout] of [[1024, 768, 4], [1024, 768, 2], [1440, 900, 3]]) {
+  let closest = null;
+  let stubs = 0;
+  /* 1280x800 L4 and 1440x900 L1 are here because the three configs above did
+     not exercise the stub check: against a build with the foot band removed
+     they all reported clean. Where a row lands relative to the stub depends on
+     the price and the row pitch, so coverage is a matter of sampling enough
+     rails — these two are where the standalone probe actually caught it. */
+  for (const [w, h, layout] of [[1024, 768, 4], [1024, 768, 2], [1440, 900, 3], [1280, 800, 4], [1440, 900, 1]]) {
     const { ctx, page } = await openDesk(w, h, layout);
     const found = await page.evaluate(() => {
       const out = [];
@@ -1075,12 +1082,55 @@ head('the strike rail never prints two prices in the same pixels');
         const oy = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
         const ys = yOf('spot');
         const yf = yOf('flip');
+        /* THE ▼ STUB, same idea one lane down. It sits at `bottom-0`; rows
+           used to run to the plot floor, so the last one was placed under it
+           and the stub took the click on its strike label. Measured before the
+           foot band: 2 of 13 stubs returned THE STUB from elementFromPoint at
+           a label's own centre. */
+        /* ONE PASS, ONE SET OF RECTS. The rail re-places its rows on rAF from
+           the chart's price projection, so a second pass over the same rows
+           reads a LATER layout: the first version measured `covered` and the
+           gap in two loops and they disagreed — clean rows, then a -6.8px
+           intersection, on the same build in the same evaluate. Both were true
+           when taken, which makes them useless together. Everything below
+           comes off one read per row. */
+        const stolen = [];
+        const covered = [];
+        let gap = null;
+        const st = rail.querySelector('[data-stub="down"]');
+        if (st && getComputedStyle(st).display !== 'none') {
+          const sb = st.getBoundingClientRect();
+          for (const row of rail.querySelectorAll('[data-strike]')) {
+            const rb = row.getBoundingClientRect();
+            if (!rb.width) continue;
+            if (rb.right <= sb.left || rb.left >= sb.right) continue; // not in the stub's column
+            /* Rows that START ABOVE the stub are the ones that can reach into
+               its lane. One sitting entirely below it is not approaching
+               anything, and counting it reported a phantom negative gap. */
+            if (rb.top < sb.top) {
+              const g = sb.top - rb.bottom;
+              if (gap == null || g < gap) gap = +g.toFixed(1);
+            }
+            if (!(sb.bottom > rb.top && sb.top < rb.bottom)) continue;
+            covered.push(row.getAttribute('data-strike'));
+            const tn = [...row.querySelectorAll('span')].filter(x => /tnum/.test(x.className || ''));
+            const lab = tn[tn.length - 1];
+            if (!lab) continue;
+            const lb = lab.getBoundingClientRect();
+            if (!lb.width) continue;
+            const who = document.elementFromPoint(Math.round(lb.left + lb.width / 2), Math.round(lb.top + lb.height / 2));
+            if (st === who || st.contains(who)) stolen.push(row.getAttribute('data-strike'));
+          }
+        }
         out.push({
+          gap,
           overlap: ox > 0 && oy > 0 ? `${ox.toFixed(1)}x${oy.toFixed(1)}` : null,
           spot: (bs.textContent || '').trim(),
           flip: (bf.textContent || '').trim(),
           dy: ys != null && yf != null ? +Math.abs(ys - yf).toFixed(1) : null,
           shifted: /translateX/.test(bf.style.transform || ''),
+          covered,
+          stolen,
         });
       }
       return out;
@@ -1109,8 +1159,40 @@ head('the strike rail never prints two prices in the same pixels');
         ? ok(`${at} — ${near.length} rail(s) had the rules within a badge, and every one stepped aside`)
         : bad(`${at} — ${missed.length} rail(s) had the rules within a badge and did NOT step aside`);
     }
+    /* ASSERT THE INVARIANT, NOT THE SYMPTOM. Whether the stub actually STEALS
+       a click depends on where the last row lands against a live price —
+       measured 2 of 13 stubs on the broken build. What FOOT_BAND guarantees is
+       that no row is placed in the stub's lane at all, so a row whose box
+       intersects the stub is the violation whether or not the theft lands.
+
+       AND THIS GUARD IS PROBABILISTIC — said plainly rather than left to look
+       stronger than it is. Against a build with the foot band removed it
+       reported clean on all five configs below: whether any row falls in the
+       bottom 14px depends on the price and the row pitch at that moment, and
+       that varies run to run, not just config to config. A standalone probe
+       caught 4 overlaps and 2 thefts across 13 stubs on the same broken build,
+       so the defect is real and this does catch it — just not on demand. The
+       gap line printed at the end says how close the run came, so a run that
+       never went near the lane cannot be mistaken for one that cleared it. */
+    for (const r of found) {
+      if (r.gap == null) continue;
+      stubs++;
+      if (closest == null || r.gap < closest) closest = r.gap;
+    }
+    const covered = found.filter(r => r.covered && r.covered.length);
+    const thieves = found.filter(r => r.stolen && r.stolen.length);
+    covered.length === 0
+      ? ok(`${at} — no strike row is placed under the down stub`)
+      : bad(
+          `${at} — the down stub sits on strike ${covered.flatMap(c => c.covered).join(', ')}` +
+            (thieves.length ? ` and takes the click on ${thieves.flatMap(t => t.stolen).join(', ')}` : '')
+        );
+
     await ctx.close();
   }
+  console.log(
+    `       (${stubs} visible down stub(s); closest a row came to the stub's lane was ${closest == null ? 'n/a' : closest + 'px'} — a large gap means the lane was never tested this run)`
+  );
   console.log(`       (${clashed} of ${rails} rails held spot and flip within a badge this run — 0 would mean the check was not exercised)`);
 }
 
