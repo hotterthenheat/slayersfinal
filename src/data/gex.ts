@@ -309,11 +309,29 @@ export function buildLevelsFor(ticker: string): KeyLevels {
       kingAbs = a;
       king = l.strike;
     }
-    if (l.strike > spot && a > cwAbs) {
+    /* A CALL wall has to be CALL-DOMINANT, and dropping that was the whole
+       bug: the pick was |value| plus side-of-spot, and side-of-spot is only a
+       PROXY for option side. It holds for the fresh OI profile (simulator.ts
+       :132, calls x1.4 above spot / puts x1.6 below) and deliberately does
+       NOT hold for the live book, which is sticky on purpose (BOOK_BLEND,
+       ~1h half-life: "walls persist... instead of shadowing price"), so a
+       shelf keeps its side while price walks past it. Measured on SPY, spot
+       505.17: this named 505 (-$436.8M, CALL-dominant) the PUT wall and the
+       rail printed a red PW on a steel row sitting ABOVE its own flip rule at
+       504.50 — a put wall on the call side of the flip cannot exist.
+
+       The sign IS the measured option side (netGex, simulator.ts:504-510) and
+       every other surface already reads it that way: the heat ramps, the
+       field's `put: l.value >= 0`, and this rail's own bar colour. Naming it
+       here costs no new math — same magnitude comparison, restricted to the
+       half of the book the name claims. Nothing qualifying leaves the wall at
+       spot, i.e. unnamed, which is the honest answer to "no call wall
+       overhead" (measured 0 times in 40 rails). */
+    if (l.strike > spot && l.value < 0 && a > cwAbs) {
       cwAbs = a;
       callWall = l.strike;
     }
-    if (l.strike < spot && a > pwAbs) {
+    if (l.strike < spot && l.value > 0 && a > pwAbs) {
       pwAbs = a;
       putWall = l.strike;
     }

@@ -243,6 +243,23 @@ export const DEFAULT_OVERLAYS: ChartOverlays = {
   still empty, which is why a consumer must check the spacing between two
   prices rather than trusting a single coordinate.
 */
+/**
+ * How wide the price gutter is forced to be when the chart draws its own
+ * live-price card (`priceTag`).
+ *
+ * The card is min-w-[68px] at right-1, so on the library's natural ~54px
+ * gutter it hung ~18px over the plot and covered the tape's own right edge.
+ * Widening the SCALE puts the card inside the gutter instead of over the
+ * chart.
+ *
+ * EXPORTED because a host that floats chrome has to clear the same number.
+ * Terrain kept its own `PRICE_GUTTER_PX = 56`, and the moment this became 74
+ * the two disagreed and the desk would have parked a button on the price
+ * ticks — the browser sweep failed on exactly that, which is what it is for.
+ * One number, one place, both consumers reading it.
+ */
+export const PRICE_SCALE_MIN_WIDTH = 74;
+
 export interface PriceProjection {
   /** y in CSS px from the top of the plot, or null if the series is gone. */
   yFor(price: number): number | null;
@@ -891,7 +908,13 @@ const StrikeChart = ({
         vertLines: { visible: false },
         horzLines: { visible: false },
       },
-      rightPriceScale: { borderColor: '#1c1c1c' },
+      // The live-price capsule REPLACES the series' own last-value label and is
+      // 68px wide at `right-1` (see the priceTag element below). The gutter is
+      // sized from its widest tick label — 54px — so the capsule stood 18px on
+      // the plot, on top of the strip where lightweight-charts flush-rights its
+      // price-line titles, and ate the date off every dark-pool print near spot.
+      // 68 + 4 + 2 clear. Charts without the capsule keep the default 0.
+      rightPriceScale: { borderColor: '#1c1c1c', minimumWidth: priceTag ? PRICE_SCALE_MIN_WIDTH : 0 },
       timeScale: { borderColor: '#1c1c1c', timeVisible: true, secondsVisible: false, rightOffset: 6, barSpacing: 7 },
       crosshair: {
         vertLine: { color: 'rgba(255,255,255,0.3)', labelBackgroundColor: '#262626' },
@@ -1040,7 +1063,12 @@ const StrikeChart = ({
     shownLevelsRef.current = null;
     focusLineRef.current = null;
     printLinesRef.current = [];
-    loadedRef.current = { ticker: '', timeframe: '1m', theme: '' }; // force full reload
+    /* Force the data effect to re-setData() onto the new series, but ONLY by
+       blanking the theme: a style swap is a REDRAW, not a new world. Blanking
+       ticker/timeframe also sets `newWorld`, and that calls showRecent() —
+       the reader's pan/zoom thrown away for a change of shape. This is the
+       same lane a candle-theme swap already takes. */
+    loadedRef.current = { ...loadedRef.current, theme: '' };
     setMainNonce(n => n + 1);
   }, [chartStyle, makeMain]);
 
@@ -1752,9 +1780,27 @@ const StrikeChart = ({
     let shownPrice = '';
     let shownLeft = '';
     let shownY = Number.NaN;
+    let shownW = -1;
 
     const frame = () => {
       priceTagRafRef.current = requestAnimationFrame(frame);
+      /*
+        AS WIDE AS THE GUTTER, MEASURED — not 68px of guess.
+
+        The card was min-w-[68px] pinned 4px off the container's right edge:
+        72px of card against a gutter lightweight-charts sizes from its widest
+        LABEL, which measures 54px at three digits and 48 at two. So it hung
+        17-23px back over the PLOT and covered the tape's right edge — the last
+        bars and the end of every price line. Sitting ON the gutter is the
+        point; sitting PAST it is the bug. Take the width from the scale itself
+        so it follows the gutter when a longer price widens it. Guarded on >0:
+        width() reports 0 for a hidden scale, and a 0px card is no card.
+      */
+      const gw = Math.round(chart.priceScale('right').width());
+      if (gw > 0 && gw !== shownW) {
+        el.style.width = `${gw}px`;
+        shownW = gw;
+      }
       const price = lastCloseRef.current;
       const y = price == null ? null : series.priceToCoordinate(price);
       if (price == null || y == null) {
@@ -2227,7 +2273,7 @@ const StrikeChart = ({
           <div
             ref={priceTagRef}
             aria-hidden
-            className="pointer-events-none absolute top-0 right-1 z-10 min-w-[68px] rounded-[9px] border border-white/[0.14] px-2 py-1 text-center opacity-0 shadow-lg shadow-black/40"
+            className="pointer-events-none absolute top-0 right-0 z-10 rounded-[9px] border border-white/[0.14] px-0.5 py-1 text-center opacity-0 shadow-lg shadow-black/40"
             style={{ background: 'rgba(72,78,98,0.92)', backdropFilter: 'blur(2px)' }}
           >
             <div className="font-mono text-[12px] font-bold leading-[15px] tnum text-white" />

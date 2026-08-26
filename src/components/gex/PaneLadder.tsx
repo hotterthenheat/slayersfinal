@@ -125,6 +125,16 @@ const MIN_PITCH = 13;
     enormous ones with nothing between them. */
 const MAX_PITCH = 22;
 
+/** The band at the top of the track the floating header owns: the 20px caption
+    row (SIZE / STRIKE and the close ×) plus the 12px line the ▲ stub now sits
+    on, just under it. A row placed inside it prints its price UNDER the words —
+    measured 20px of overlap, the whole caption row, on three of four rails at
+    1440x900. So the band is reserved, and the rows that fall in it are culled
+    and COUNTED by the ▲ stub like any other row the plot is not showing, rather
+    than being drawn where they cannot be read. Keep in step with the header's
+    own height and with the stub's `top-5`. */
+const HEAD_BAND = 32;
+
 /** Strikes print whole when they are whole — the rule every strike list uses. */
 const fmtStrike = (v: number): string => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
 
@@ -269,7 +279,7 @@ const PaneLadder = ({
          and is worse than the row simply being one of the ones the stub is
          holding. Same at the top. */
       const half = rowH / 2;
-      const fits = (y: number) => y - half >= 0 && y + half <= H;
+      const fits = (y: number) => y - half >= HEAD_BAND && y + half <= H;
 
       els.forEach((el, i) => {
         const k = Number(el.dataset.strike);
@@ -540,7 +550,13 @@ const Rule = ({ ticker, price, tone }: { ticker: string; price: number; tone: 's
 
 /** How many strikes are sitting off the top or the bottom of the plot, and a
     way back to the nearest of them. A count that cannot be acted on would just
-    be an apology. */
+    be an apology.
+
+    The ▲ badge sits BELOW the caption row (`top-5`), not on it. At `top-0` it
+    printed over the word STRIKE and over the close × — and, being a later
+    sibling at the same z, it took the ×'s hit target with it: a real click at
+    the ×'s own centre flashed strike 514 instead of hiding the rail. Its lane
+    is the lower half of HEAD_BAND, which no row is placed in. */
 const Stub = ({ dir, onGo }: { dir: 'up' | 'down'; onGo: () => void }) => (
   <button
     type="button"
@@ -549,7 +565,7 @@ const Stub = ({ dir, onGo }: { dir: 'up' | 'down'; onGo: () => void }) => (
     aria-label={`${dir === 'up' ? 'Above' : 'Below'} the chart — flash the nearest of them`}
     title={`Strikes ${dir === 'up' ? 'above' : 'below'} what the chart is showing — click for the nearest`}
     className={`absolute right-1 z-10 inline-flex items-center gap-0.5 rounded px-1 font-mono text-[8px] font-bold leading-[12px] text-textMuted bg-canvas/70 hover:text-textPrimary transition-colors ${
-      dir === 'up' ? 'top-0' : 'bottom-0'
+      dir === 'up' ? 'top-5' : 'bottom-0'
     }`}
   >
     <span aria-hidden>{dir === 'up' ? '▲' : '▼'}</span>

@@ -4,6 +4,7 @@ import Simulator from '../../core/simulator';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildLadderFor, buildLevelsFor, buildPrints, fmtUsd, spotChangePct } from '../../data/gex';
 import StrikeChart, {
+  PRICE_SCALE_MIN_WIDTH,
   DEFAULT_INDICATORS,
   DEFAULT_OVERLAYS,
   type ChartIndicators,
@@ -307,14 +308,39 @@ const TIME_AXIS_PX = 26;
   the plot, in px. Floating chrome has to stop short of that gutter or it
   lands on the price ticks.
 
-  It is deliberately a hair MORE than the gutter itself, which measures 54 at
-  every price magnitude tested (three digits to six). The sweep asserts the
-  relationship rather than the number — clearance at least as wide as the
-  gutter, and not so much wider that it is throwing away chart — so a library
-  change that widens the gutter fails loudly instead of quietly parking a
-  button on top of a price.
+  It is deliberately a hair MORE than the gutter itself, and it is DERIVED
+  from the chart's own minimum rather than typed here. It used to be a literal
+  56 against a ~54px gutter, and when the chart widened its scale to 74 (so
+  the live-price card sits in the gutter instead of over the tape) the two
+  became a two-generators-for-one-fact bug: the desk would have gone on
+  clearing 56 and parking a button on the price ticks. The browser sweep
+  caught it — clearance at least as wide as the gutter, and not so much wider
+  that it is throwing away chart — and this is the fix that keeps it caught.
 */
-const PRICE_GUTTER_PX = 56;
+const PRICE_GUTTER_PX = PRICE_SCALE_MIN_WIDTH + 2;
+
+/*
+  WHAT THE FULL CONTROL STRIP NEEDS — inside the chart column, with the price
+  gutter already taken off it.
+
+  Measured against this build: the un-compacted toolbar lays out at 818px on
+  one line. The seven-button timeframe strip is 251 of that, the three worded
+  triggers (Indicators 117 · Alerts 93 · Candles 102) another 311, `Overlays 3`
+  117, `Theme` 89, and 42 of gaps and dividers. Add the strip's 6px left pad
+  and the toolbar band's 8px sides and the column has to give it 840px past
+  the gutter.
+
+  Under that it does not clip or scroll, it WRAPS — the root is `flex-wrap`
+  and the Indicators/Alerts/Candles span inside it wraps again. At 1024px with
+  two grid columns the chart column is 369px, so 291px of line takes 818px of
+  controls in FOUR rows: 126px of toolbar inside a 205px chrome stack over a
+  411px pane — half the pane, sitting on the tape. On a coarse pointer
+  `.chrome-hover` pins that visible (index.css), so it never goes away.
+
+  It is a PANE width, not a window width: a four-pane desk at 1440px still
+  gives each toolbar ~577px and still wraps.
+*/
+const TOOLBAR_FULL_PX = 840;
 
 /*
   The heaviest strikes in the pane's window, signed — the one-line read of
@@ -402,14 +428,27 @@ const Pane = ({
   */
   const stripRef = useRef<HTMLDivElement | null>(null);
   const [stripH, setStripH] = useState(46);
+  /* The SAME observation answers a second question: how much room the toolbar
+     has. The strip is `inset-x-0` on the chart column, so its width IS the
+     column's — which is the width that decides whether the strip wraps, and
+     which no media query on the window can stand in for.
+
+     Width in, height out: the decision is made on the room AVAILABLE, never
+     on the strip's own content, so compacting cannot feed back into the
+     measurement and oscillate. `inset-x-0` also means flipping to compact
+     leaves this width unchanged — only stripH moves, and that only shifts the
+     compare legend. */
+  const [stripW, setStripW] = useState(0);
   useEffect(() => {
     const el = stripRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
     const obs = new ResizeObserver(() => {
       // getBoundingClientRect, not contentRect: the strip carries p-1.5 and
       // contentRect excludes padding, which would put the legend back under it.
-      const h = Math.round(el.getBoundingClientRect().height);
+      const r = el.getBoundingClientRect();
+      const h = Math.round(r.height);
       if (h > 0) setStripH(h);
+      if (r.width > 0) setStripW(Math.round(r.width));
     });
     obs.observe(el);
     return () => obs.disconnect();
@@ -646,7 +685,7 @@ const Pane = ({
                   <span
                     aria-hidden
                     className={`shrink-0 w-4 h-4 rounded-[3px] font-mono text-[9px] font-bold tnum inline-flex items-center justify-center ${
-                      isActive ? 'bg-select text-[#0a0a0a]' : 'bg-white/[0.08] text-textMuted'
+                      isActive ? 'bg-select text-[#0a0a0a]' : 'bg-white/[0.08] text-textPrimary'
                     }`}
                   >
                     {index + 1}
@@ -722,6 +761,20 @@ const Pane = ({
                 <ChartToolbar
                   minimal
                   candles
+                  /* COMPACT WHEN THE STRIP WOULD NOT FIT ON ONE LINE — the
+                     mode the phone already uses (ChartToolbar's `compact`):
+                     the seven timeframes collapse into the current interval
+                     as a trigger, and every dropdown trades its word for its
+                     icon, keeping the word as the hover/AT name.
+
+                     Measured after: 818px of controls becomes 350px. Four
+                     rows become one at 1180/1280 in every layout (177px of
+                     chrome down to 112, 43% of the pane down to 27%), and two
+                     at 1024 with 2+ panes, where the column is only 369px
+                     (205px down to 145, 50% down to 35%). The single wide
+                     pane beside a narrow one keeps its full labels, because
+                     the test is its own column's width. */
+                  compact={stripW > 0 && stripW - PRICE_GUTTER_PX < TOOLBAR_FULL_PX}
                   alertTicker={ticker}
                   alertSpot={levels.spot}
                   timeframe={timeframe}

@@ -42,7 +42,11 @@ const head = t => console.log(`\n${t}`);
 /* Constants the desk's own source says are "asserted in the sweep". They are
    asserted below; if these drift the comment stops being true. */
 const TIME_AXIS_PX = 26;
-const PRICE_GUTTER_PX = 56;
+/* Mirrors PRICE_SCALE_MIN_WIDTH + 2 in the source. A THIRD copy of the
+   number would be the same bug this file just caught, so when it moves, it
+   moves here too — and the assertion below is the relationship, not equality,
+   so a small margin does not fail. */
+const PRICE_GUTTER_PX = 76;
 
 /*
   A REAL chromium, not the headless shell — see note 2 above.
