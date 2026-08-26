@@ -1,4 +1,5 @@
 import { Fragment } from 'react';
+import HeatPill from './HeatPill';
 import { fmtUsd } from '../../data/gex';
 import SpotRule from '../ui/SpotRule';
 import type { ExposureProfileData, GreekSplit } from '../../types/gex';
@@ -19,26 +20,35 @@ type Leg = 'put' | 'call' | 'net';
 // column the eye should land on is unmistakable at speed.
 const NET_BAR = 'rgba(234,0,255,0.8)';
 
-const legBar = (leg: Leg): string => {
-  if (leg === 'put') return 'rgba(255,59,48,0.7)';
-  if (leg === 'call') return 'rgba(48,209,88,0.85)';
-  return NET_BAR;
-};
+/*
+  ONE CAPSULE PER CELL, on the house heat ramp.
 
+  Two things changed and both were wrong before.
+
+  THE FORM: a number with a 3px bar beneath it spends two lines saying one
+  thing, and the bar was capped at 52px so the widest cells all bottomed out
+  together. The capsule carries the value in its fill and prints it inside, so
+  a row is read at a glance and still says its exact number.
+
+  THE COLOUR: the legs were painted `rgba(255,59,48)` and `rgba(48,209,88)` —
+  red and green, which in this product is PRICE DIRECTION. Put and call
+  dominance is dealer side, and dealer side is gold and steel. That collision
+  is exactly what `docs/dealer-ink-pass.md` was written about, and the leg's own
+  column header already says which leg it is, so the colour was carrying a
+  meaning it did not need to and could not have.
+*/
 const Cell = ({ split, leg, maxAbs }: { split: GreekSplit; leg: Leg; maxAbs: number }) => {
   const value = split[leg];
-  const pct = Math.min(100, (Math.abs(value) / (maxAbs || 1)) * 100);
   return (
-    <td className="px-2 py-1 text-right align-middle">
-      <span className={`block font-mono text-[11px] tnum ${leg === 'net' ? 'text-textPrimary font-semibold' : 'text-textPrimary'}`}>
+    <td className="px-[3px] py-[2px]">
+      <HeatPill
+        value={value}
+        maxAbs={maxAbs}
+        className={`h-[19px] ${leg === 'net' ? 'font-bold' : ''}`}
+        title={`${leg} · ${fmtUsd(value)}`}
+      >
         {fmtUsd(value)}
-      </span>
-      <span className="mt-0.5 ml-auto block h-[3px] w-full max-w-[52px] rounded-full bg-white/[0.04]">
-        <span
-          className="block h-full rounded-full"
-          style={{ width: `${pct}%`, background: legBar(leg) }}
-        />
-      </span>
+      </HeatPill>
     </td>
   );
 };

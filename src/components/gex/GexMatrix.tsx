@@ -1,5 +1,8 @@
 import { fmtUsd } from '../../data/gex';
-import { heatCellStyle, heatPoles, heatScaleGradient, heatScaleLabels } from './heatmap';
+import { heatPoles, heatScaleGradient, heatScaleLabels } from './heatmap';
+import HeatPill, { HiddenStrikes } from './HeatPill';
+import { foldQuietStrikes } from './foldStrikes';
+import { KING } from './palette';
 import type { GexMatrixData } from '../../types/gex';
 
 interface GexMatrixProps {
@@ -22,6 +25,24 @@ interface GexMatrixProps {
  */
 const GexMatrix = ({ data, fill = false, strikeFormat }: GexMatrixProps) => {
   const { expiries, strikes, cells, maxAbs, spotRowIndex, callWallIndex, putWallIndex } = data;
+
+  /*
+    THE QUIET RUNS FOLD.
+
+    A chain is mostly empty away from the money, and forty near-zero rows bury
+    the dozen that matter. The fold says how many went — a surface that drops
+    rows without saying so is lying about the chain it claims to show — and it
+    never touches the band around spot, however quiet, because a zero two ticks
+    from the money is a fact about the book rather than the chain being long.
+  */
+  const folded = foldQuietStrikes(
+    /* Folded over row INDICES, not strikes: a row's loudness is the heaviest
+       cell across its expiries, which lives in `cells`, not in the strike. */
+    strikes.map((_, i) => i),
+    i => cells[i]?.reduce((m, c) => Math.max(m, Math.abs(c.value)), 0) ?? 0,
+    maxAbs,
+    spotRowIndex
+  );
 
   return (
     // Default max-h-full, not h-full: when the grid is shorter than its
@@ -52,7 +73,18 @@ const GexMatrix = ({ data, fill = false, strikeFormat }: GexMatrixProps) => {
             </tr>
           </thead>
           <tbody>
-            {strikes.map((strike, r) => {
+            {folded.map((entry, k) => {
+              if (entry.kind === 'hidden') {
+                return (
+                  <tr key={`hidden-${k}`}>
+                    <td colSpan={expiries.length + 1} className="p-0">
+                      <HiddenStrikes count={entry.count} />
+                    </td>
+                  </tr>
+                );
+              }
+              const r = entry.row;
+              const strike = strikes[r];
               const isSpot = r === spotRowIndex;
               const isCallWall = r === callWallIndex;
               const isPutWall = r === putWallIndex;
@@ -89,27 +121,23 @@ const GexMatrix = ({ data, fill = false, strikeFormat }: GexMatrixProps) => {
                     )}
                   </td>
                   {cells[r].map((cell, c) => (
-                    <td
-                      key={c}
-                      style={heatCellStyle(cell.value, maxAbs)}
-                      className={`px-2 py-1 text-right font-mono text-[11px] tnum whitespace-nowrap transition-colors duration-700 ${
-                        // Magenta, matching the king LINE on the chart
-                        // (palette.KING) — silver stopped standing out once the
-                        // steel ramp's platinum pole arrived, and Noah retired
-                        // it (2026-08-18). Magenta is chromatic against both
-                        // the steel and gold poles.
-                        // A single 1px line vanished on a bright pole — the
-                        // dark outer ring is what makes it findable on both
-                        // ends of the ramp, not the accent alone.
-                        cell.king
-                          ? 'shadow-[inset_0_0_0_2px_#EA00FF,inset_0_0_0_3px_rgba(10,10,10,0.85)]'
-                          : ''
-                      }`}
-                    >
-                      {cell.king && (
-                        <span className="mr-1.5 inline-block w-2 h-2 rounded-full bg-[#EA00FF] ring-1 ring-[#0a0a0a]/70 align-middle" />
-                      )}
-                      {fmtUsd(cell.value)}
+                    /* The td is now only SPACING — the pill carries the value,
+                       and the gap between pills is what separates the columns.
+                       py-[2px] is the air that makes a row of them countable. */
+                    <td key={c} className="px-[3px] py-[2px]">
+                      <HeatPill
+                        value={cell.value}
+                        maxAbs={maxAbs}
+                        selected={cell.king}
+                        /* Magenta, matching the king LINE on the chart — a
+                           property of the book, not of what the reader
+                           clicked, so it does not wear the selection lime. */
+                        ringColor={KING}
+                        className="h-[19px]"
+                        title={`${strike} · ${expiries[c]} · ${fmtUsd(cell.value)}`}
+                      >
+                        {fmtUsd(cell.value)}
+                      </HeatPill>
                     </td>
                   ))}
                 </tr>
