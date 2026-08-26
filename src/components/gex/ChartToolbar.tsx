@@ -260,7 +260,7 @@ const Dropdown = ({
   /* The placement plumbing lives in useAnchoredMenu now — the symbol
      quick-pick and the compare '+' need the same thing, and this was the only
      copy that had it. */
-  const { anchorRef, placed } = useAnchoredMenu<HTMLButtonElement>(open, menuSide);
+  const { anchorRef, placed, menuRef } = useAnchoredMenu<HTMLButtonElement>(open, menuSide);
 
   const Caret = MENU_SIDE_CARET[placed?.side ?? menuSide];
   return (
@@ -312,6 +312,7 @@ const Dropdown = ({
         the end of the list from scrolling the page underneath it.
       */
       <div
+        ref={menuRef}
         data-toolbar-menu=""
         style={{
           position: 'fixed',

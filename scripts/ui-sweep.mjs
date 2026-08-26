@@ -1196,6 +1196,85 @@ head('the strike rail never prints two prices in the same pixels, and its stubs 
   console.log(`       (${clashed} of ${rails} rails held spot and flip within a badge this run — 0 would mean the check was not exercised)`);
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   15. EVERY MENU LANDS INSIDE THE WINDOW.
+
+   The defect this replaces: `placeMenu` clamps a menu's FAR edge on screen and
+   had to assume a width to do it. It assumed MENU_MIN_WIDTH (210) — true of
+   the menus it was written for, false of several it later served. Measured at
+   1024x768 and 1280x800 in a left-column pane: the Alerts menu (230px) sat at
+   x = -12, and Indicators and Overlays sat flush at x = 0 instead of the 8px
+   edge. The pattern was exactly what a 210 assumption predicts — 210 -> 8,
+   218 -> 0, 230 -> -12 — which is what said the assumption was the fault.
+
+   MEASURE AFTER THE MENU SETTLES. The width feeds back into the placement, so
+   the first frame is placed from the assumption and corrected on the next.
+   Reading in the same turn as the click reports the uncorrected frame — that
+   is how an earlier version of this probe blamed the wrong menu.
+   ───────────────────────────────────────────────────────────────────────── */
+head('no menu hangs off the edge of the window');
+{
+  for (const [w, h, layout] of [[1024, 768, 4], [1280, 800, 3]]) {
+    const { ctx, page } = await openDesk(w, h, layout);
+    /* Pane 0 is the LEFT column, which is where a right-anchored menu runs out
+       of room — the only place this can fail. */
+    const at = await page.evaluate(() => {
+      const s = [...document.querySelectorAll('div')].find(
+        e => typeof e.className === 'string' && e.className.includes('inset-x-0') && e.className.includes('z-20')
+      );
+      if (!s) return null;
+      const r = s.getBoundingClientRect();
+      return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height + 40) };
+    });
+    if (at) {
+      await page.mouse.move(at.x, at.y);
+      await page.waitForTimeout(700);
+    }
+    const count = await page.evaluate(() => {
+      const s = [...document.querySelectorAll('div')].find(
+        e => typeof e.className === 'string' && e.className.includes('inset-x-0') && e.className.includes('z-20')
+      );
+      return s ? s.querySelectorAll('button[aria-haspopup="menu"]').length : 0;
+    });
+    const offEdge = [];
+    for (let i = 0; i < count; i++) {
+      await page.evaluate(i => {
+        const s = [...document.querySelectorAll('div')].find(
+          e => typeof e.className === 'string' && e.className.includes('inset-x-0') && e.className.includes('z-20')
+        );
+        const bs = [...s.querySelectorAll('button[aria-haspopup="menu"]')];
+        bs.forEach(b => { if (b.getAttribute('aria-expanded') === 'true') b.click(); });
+        bs[i].click();
+      }, i);
+      await page.waitForTimeout(450); // let the width feed back into the placement
+      const r = await page.evaluate(() => {
+        const m =
+          document.querySelector('[data-toolbar-menu]') ||
+          [...document.body.children].find(d => getComputedStyle(d).position === 'fixed' && d.getBoundingClientRect().width > 150);
+        if (!m) return null;
+        const exp = document.querySelector('button[aria-haspopup="menu"][aria-expanded="true"]');
+        const b = m.getBoundingClientRect();
+        return {
+          name: exp ? (exp.getAttribute('title') || exp.textContent || '').trim().slice(0, 18) : '?',
+          left: Math.round(b.left),
+          right: Math.round(b.right),
+          width: Math.round(b.width),
+          vw: window.innerWidth,
+        };
+      });
+      if (!r) continue;
+      if (r.left < 0 || r.right > r.vw) offEdge.push(`${r.name} (${r.width}px) at [${r.left},${r.right}] of ${r.vw}`);
+    }
+    const label = `${w}x${h} layout ${layout}`;
+    count === 0
+      ? bad(`${label} — found no menu triggers to open`)
+      : offEdge.length === 0
+        ? ok(`${label} — all ${count} menus land inside the window`)
+        : bad(`${label} — ${offEdge.length} menu(s) off the window: ${offEdge.join('; ')}`);
+    await ctx.close();
+  }
+}
+
 console.log(`\n${fails} failing`);
 await browser.close();
 process.exit(fails ? 1 : 0);
