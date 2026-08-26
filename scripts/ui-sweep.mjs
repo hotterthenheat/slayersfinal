@@ -817,6 +817,132 @@ head('an expanded pane does not outlive the pane it points at');
   await ctx.close();
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   12. NO FLOATING CHROME PRINTS ON A PRICE AXIS.
+
+   The defect this replaces, measured in the shipped build: at a 1024px
+   viewport with the strike rail up, every layout from 2 up gives a 369px
+   chart column, and the identity row needed 317px of the 287 it had. The 30px
+   that did not fit was the EXPAND BUTTON, sitting on the right price ticks —
+   on all four panes, with or without a second axis. With an "own scale"
+   compare the identity row ALSO overprinted the left axis by 35-40px and the
+   toolbar row by 40px, so both axes were covered at once.
+
+   It asserts the GEOMETRY, not the tier constants in Terrain.tsx. The row's
+   parts are not fixed width — `min-w-[112px]` on the symbol button is a floor
+   a longer symbol grows past, and a four-figure price is wider than the one
+   measured — so a threshold that stops being generous enough has to fail the
+   build here rather than quietly print on the ticks again.
+
+   TEXT NODES AND CONTROLS, never the row's box: the rows are
+   `w-fit max-w-full` with `shrink-0` children, which caps the BOX at the
+   column while the contents overflow it visibly. Measuring the box reports
+   clean while the screen is wrong — that is how this shipped.
+   ───────────────────────────────────────────────────────────────────────── */
+head('no pane chrome lands on a price axis');
+{
+  const seedWith = (layout, compares) =>
+    JSON.stringify({
+      layout,
+      panes: TICKERS.map(t => ({
+        ticker: t,
+        timeframe: '15m',
+        overlays: { trails: true, levels: true, darkpool: false, volume: true },
+        indicators: { ema9: false, ema21: false, ema50: false, vwap: false },
+        chartStyle: 'candles',
+        compares: compares ? [{ ticker: t === 'SPY' ? 'QQQ' : 'SPY', mode: 'scale', ink: '#8B5CF6' }] : [],
+        ladder: true,
+      })),
+      setups: {},
+    });
+
+  const probe = async page =>
+    page.evaluate(() => {
+      /* Every text node and every control, by its own painted rect. */
+      const parts = el => {
+        const out = [];
+        const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+        let n;
+        while ((n = w.nextNode())) {
+          if (!n.nodeValue.trim()) continue;
+          const r = document.createRange();
+          r.selectNodeContents(n);
+          const b = r.getBoundingClientRect();
+          if (b.width > 0) out.push({ t: n.nodeValue.trim().slice(0, 14), l: b.left, r: b.right });
+        }
+        for (const c of el.querySelectorAll('button,svg')) {
+          const b = c.getBoundingClientRect();
+          if (b.width > 0) out.push({ t: '<' + c.tagName.toLowerCase() + '>', l: b.left, r: b.right });
+        }
+        return out;
+      };
+      const rects = sel => [...document.querySelectorAll(sel)].map(c => c.getBoundingClientRect());
+      const tall = rects('canvas').filter(r => r.height > 120);
+      const axes = tall.filter(r => r.width > 25 && r.width < 95);
+      const plots = tall.filter(r => r.width > 150);
+      const strips = [...document.querySelectorAll('div')].filter(
+        e => typeof e.className === 'string' && e.className.includes('inset-x-0') && e.className.includes('z-20')
+      );
+
+      const bad = [];
+      for (const strip of strips) {
+        const sr = strip.getBoundingClientRect();
+        const mine = r => r.left >= sr.left - 3 && r.right <= sr.right + 3;
+        const plot = plots.filter(mine).sort((a, b) => b.width - a.width)[0];
+        if (!plot) continue;
+        const cols = axes.filter(mine);
+        const left = cols.filter(a => a.right <= plot.left + 3).sort((a, b) => b.right - a.right)[0];
+        const right = cols.filter(a => a.left >= plot.right - 3).sort((a, b) => a.left - b.left)[0];
+        for (const row of strip.children) {
+          const cs = getComputedStyle(row);
+          if (cs.display === 'none' || cs.opacity === '0' || cs.visibility === 'hidden') continue;
+          for (const p of parts(row)) {
+            if (right && p.r > right.left + 1) bad.push(`${p.t} runs ${Math.round(p.r - right.left)}px onto the RIGHT axis`);
+            if (left && p.l < left.right - 1) bad.push(`${p.t} runs ${Math.round(left.right - p.l)}px onto the LEFT axis`);
+          }
+        }
+      }
+      return bad;
+    });
+
+  for (const own of [false, true]) {
+    for (const layout of [1, 2, 3, 4]) {
+      /* 1024 is the width that breaks it — with the rail up every layout from
+         2 gives the same 369px column, which is why layout alone can never
+         stand in for it. */
+      for (const [w, h] of [[1024, 768], [1280, 800], [1440, 900]]) {
+        const ctx = await browser.newContext({ viewport: { width: w, height: h } });
+        await ctx.addInitScript(
+          `localStorage.setItem('slayer_terrain_v1', ${JSON.stringify(seedWith(layout, own))})`
+        );
+        const page = await ctx.newPage();
+        await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+        await page.waitForTimeout(BOOT_MS);
+        /* The toolbar and the heaviest read are opacity-0 until group-hover.
+           Resting-state only would miss two of the three rows. */
+        const at = await page.evaluate(() => {
+          const s = [...document.querySelectorAll('div')].find(
+            e => typeof e.className === 'string' && e.className.includes('inset-x-0') && e.className.includes('z-20')
+          );
+          if (!s) return null;
+          const r = s.getBoundingClientRect();
+          return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height + 60) };
+        });
+        if (at) {
+          await page.mouse.move(at.x, at.y);
+          await page.waitForTimeout(700);
+        }
+        const hits = await probe(page);
+        const label = `layout ${layout} at ${w}x${h}${own ? ' with a left axis' : ''}`;
+        hits.length === 0
+          ? ok(`${label} — nothing on either axis`)
+          : bad(`${label} — ${hits.length} collision(s): ${hits.slice(0, 3).join('; ')}`);
+        await ctx.close();
+      }
+    }
+  }
+}
+
 console.log(`\n${fails} failing`);
 await browser.close();
 process.exit(fails ? 1 : 0);
