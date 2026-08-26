@@ -216,7 +216,7 @@ const INDICATOR_ITEMS: { key: keyof ChartIndicators; label: string; hint: string
 
 const OVERLAY_ITEMS: { key: keyof ChartOverlays; label: string; hint: string }[] = [
   { key: 'trails', label: 'Exposure trails', hint: 'LED strike bands — strength & fade' },
-  { key: 'levels', label: 'Key levels', hint: 'CW · PW · flip · king axis chips' },
+  { key: 'levels', label: 'Key levels', hint: 'Call & put walls, flip and king, marked on the field' },
   { key: 'darkpool', label: 'Dark pool', hint: 'Off-exchange print lines' },
   { key: 'volume', label: 'Volume', hint: 'Session bars along the floor' },
   { key: 'flow', label: 'Flow', hint: 'Option premium from the tape — calls up, puts down' },
@@ -295,6 +295,14 @@ const Dropdown = ({
       ref={anchorRef}
       onClick={onToggle}
       title={title}
+      /* A trigger that drops a menu has to say so, and say whether it is
+         already open — otherwise the only cue is the caret, which is a
+         rotation nobody can hear. In `compact` and `vertical` the label is
+         dropped for the icon, so `title` becomes the accessible name too;
+         without this those triggers announce as an empty button. */
+      aria-haspopup="menu"
+      aria-expanded={open}
+      aria-label={label ? undefined : title}
       className={`inline-flex items-center gap-1.5 px-2 py-1 rounded font-mono text-[10px] uppercase tracking-wider transition-colors ${
         open
           ? 'bg-white/[0.07] text-textPrimary'
@@ -402,8 +410,35 @@ const ChartToolbar = ({
       if (t instanceof Node && t.parentElement?.closest('[data-toolbar-menu]')) return;
       setOpenMenu(null);
     };
+    /*
+      ESCAPE CLOSES THE MENU, AND ONLY THE MENU.
+
+      There was no Escape handler here at all, so the only thing listening was
+      Terrain's — `window` keydown, bubble phase, which collapses the expanded
+      pane (Terrain.tsx:855). Open a menu inside an expanded pane, press the
+      key every reader presses to dismiss a menu, and the whole pane came down
+      with it: the reader loses the pane to close a dropdown they could
+      otherwise only dismiss by clicking elsewhere.
+
+      CAPTURE PHASE, and it has to be. Terrain's listener is on the same
+      target, so a bubble-phase handler here would fire alongside it rather
+      than instead of it and the pane would still collapse.
+      `stopImmediatePropagation` is the one that holds when both are on
+      `window` — plain `stopPropagation` does not stop a second listener
+      already attached to the same node.
+    */
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      setOpenMenu(null);
+    };
     window.addEventListener('mousedown', onDown);
-    return () => window.removeEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onKey, true);
+    return () => {
+      window.removeEventListener('mousedown', onDown);
+      window.removeEventListener('keydown', onKey, true);
+    };
   }, [openMenu]);
 
   const activeCandleLabel = CANDLE_THEME_OPTIONS.find(o => o.value === themeKey)?.label ?? 'Chrome';
@@ -512,6 +547,8 @@ const ChartToolbar = ({
                   return (
                     <button
                       key={item.key}
+                      role="checkbox"
+                      aria-checked={on}
                       onClick={() => onIndicators({ ...indicators, [item.key]: !on })}
                       className="flex items-start gap-2.5 px-2.5 py-2 rounded text-left hover:bg-white/[0.03] transition-colors"
                     >
@@ -612,6 +649,13 @@ const ChartToolbar = ({
             return (
               <button
                 key={item.key}
+                /* The checkbox is drawn in PIXELS — a bordered square that
+                   fills and takes a tick. A screen reader saw a plain button
+                   and could not tell an overlay that is on from one that is
+                   off, which is the only thing this row says. role/aria-checked
+                   is the pairing that matches what is already drawn. */
+                role="checkbox"
+                aria-checked={on}
                 onClick={() => onOverlays({ ...overlays, [item.key]: !on })}
                 className="flex items-start gap-2.5 px-2.5 py-2 rounded text-left hover:bg-white/[0.03] transition-colors"
               >

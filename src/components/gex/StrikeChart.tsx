@@ -1928,15 +1928,33 @@ const StrikeChart = ({
   useEffect(() => {
     const isKing = focusPrice != null && Math.abs(levels.king - focusPrice) < 1e-9;
     trailsRef.current?.setFocus(focusPrice, isKing ? 'king' : 'focus');
-    trailsRef.current?.setKing(Number.isFinite(levels.king) ? levels.king : null);
-    // Today's levels, for the one green band, one red band, one blue line
+    /*
+      ══ "KEY LEVELS" IS A SWITCH THAT NOW SWITCHES SOMETHING ══════════════
+
+      It did nothing. `overlays.levels` gated exactly one loop — over
+      LINE_LEVELS, which is `[]` because the axis capsules were deliberately
+      removed (see its comment above). So the toggle had nothing left to turn
+      off, while its menu row went on offering "CW · PW · flip · king".
+
+      Measured before this change: toggling it moved 23 pixels of a 1240x804
+      plot, against 795 pixels of drift on an untouched chart over the same
+      interval — its entire effect was 34x below the tape's own tick noise.
+
+      The levels were never missing, though: they are ON THE FIELD, as the
+      bead inks and the dotted flip line, and the primitive already keeps
+      those as four settable prices. Feeding it nulls is exactly "draw the
+      exposure field with nothing named on it", which is what the label
+      promises. No primitive change, and `trails` still owns the field itself.
+    */
+    const showLevels = overlays.levels;
+    trailsRef.current?.setKing(showLevels && Number.isFinite(levels.king) ? levels.king : null);
     trailsRef.current?.setWalls(
-      Number.isFinite(levels.callWall) ? levels.callWall : null,
-      Number.isFinite(levels.putWall) ? levels.putWall : null,
-      Number.isFinite(levels.flip) ? levels.flip : null
+      showLevels && Number.isFinite(levels.callWall) ? levels.callWall : null,
+      showLevels && Number.isFinite(levels.putWall) ? levels.putWall : null,
+      showLevels && Number.isFinite(levels.flip) ? levels.flip : null
     );
     focusLineRef.current?.applyOptions({ color: isKing ? KING : FOCUS });
-  }, [focusPrice, levels.king, levels.callWall, levels.putWall, levels.flip]);
+  }, [focusPrice, overlays.levels, levels.king, levels.callWall, levels.putWall, levels.flip]);
 
   // ---- replay lifecycle -----------------------------------------------------
   // Enter: snapshot the aggregated world and rewind. Exit: hand the series
