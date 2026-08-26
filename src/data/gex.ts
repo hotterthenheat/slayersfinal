@@ -277,7 +277,10 @@ function buildBoard(tickers?: string[]): BoardTicker[] {
     return {
       ticker,
       spot: cfg.currentPrice,
-      changePercent: ((cfg.currentPrice - cfg.basePrice) / cfg.basePrice) * 100,
+      // Through the one function, so the board cell and the chart header cannot
+      // disagree about the day — they were two copies of the same expression
+      // and would have had to be fixed twice.
+      changePercent: spotChangePct(ticker),
       prints: buildPrints(ticker, cfg.currentPrice),
       ladder,
       ladderMaxAbs: maxAbs,
@@ -399,12 +402,50 @@ export function buildLadderFor(
   return { rows: [...window].reverse(), core: [...core].reverse(), maxAbs, spot, step };
 }
 
-/** Session change for a ticker — the same expression the flow board's cells
-    print (`buildBoard`, above), exported so a chart header and a board cell
-    can never disagree about the day. */
+/*
+  ══ WHAT "TODAY" OPENED AT ═══════════════════════════════════════════════════
+
+  This used to divide by `basePrice`, and `basePrice` is not an open — it is a
+  hardcoded seed constant (SPY 500, QQQ 440, AAPL 190, NVDA 120,
+  `simulator.ts:32`). Every pane header printed that drift in green or red and
+  called it the session change. It is the distance from a number that was true
+  once and never moves again: it does not reset overnight, so it grows without
+  bound across sessions, and on a name the walk has carried it reads as a huge
+  day that never happened.
+
+  The bars already carry the answer. Sessions are separated by an overnight
+  gap (`simulator.ts:273`) that is far larger than the bar interval, so the
+  first bar after the last such gap is today's first bar, and its `open` is
+  today's open.
+*/
+function sessionOpenOf(bars: readonly { time: number; open: number }[]): number | null {
+  if (!bars.length) return null;
+  // The intraday spacing is the SMALLEST positive gap; an overnight gap is
+  // orders of magnitude larger. Derived rather than imported, so this cannot
+  // drift out of step with the simulator's own bar interval.
+  let step = Infinity;
+  for (let i = 1; i < bars.length; i++) {
+    const d = bars[i].time - bars[i - 1].time;
+    if (d > 0 && d < step) step = d;
+  }
+  if (!Number.isFinite(step)) return bars[0].open;
+  let i = bars.length - 1;
+  // 1.5x: tolerate a missing bar without mistaking it for a new session.
+  while (i > 0 && bars[i].time - bars[i - 1].time <= step * 1.5) i--;
+  return bars[i].open;
+}
+
+/** Session change for a ticker — measured from TODAY'S OPEN. Exported so a
+    chart header and a board cell can never disagree about the day. */
 export function spotChangePct(ticker: string): number {
-  const cfg = Simulator.TICKERS[Simulator.ensureTicker(ticker)];
-  return ((cfg.currentPrice - cfg.basePrice) / cfg.basePrice) * 100;
+  const key = Simulator.ensureTicker(ticker);
+  const cfg = Simulator.TICKERS[key];
+  const open = sessionOpenOf(Simulator.getCandles(key) ?? []);
+  // No bars yet is a real state on first paint. Zero is the honest answer —
+  // "no move recorded" — where falling back to basePrice would quietly print
+  // the very number this function exists to stop printing.
+  if (open == null || !(open > 0)) return 0;
+  return ((cfg.currentPrice - open) / open) * 100;
 }
 
 // ---- live pulse ------------------------------------------------------------------

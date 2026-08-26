@@ -574,6 +574,59 @@ const StrikeChart = ({
   }, []);
 
   /*
+    ══ RE-FIT WHEN THE PANE CHANGES WIDTH ═══════════════════════════════════
+
+    `showRecent` splits the visible span 64% history / 36% runway, and it ran
+    ONLY on mount, on a ticker/timeframe/theme change, and on a double-click
+    reset. Nothing watched the container.
+
+    That is fine until a pane changes size under a chart that is already
+    mounted — which is what every Terrain layout change does. lightweight-
+    charts preserves BAR SPACING across a resize, not the logical range, so a
+    narrowed pane shows fewer bars while the runway, fixed in bars, keeps its
+    pixel width. A 36% runway sized for a 1240px pane is ~446px; drop it into
+    the 522px pane that "3 charts" produces and it is 85% of the chart.
+
+    Measured across 24 transitions at 1280/1440/1760, candle occupancy of the
+    pane that was already open:
+
+      1 -> 2, 1 -> 3, 1 -> 4    0.60  ->  0.03-0.17   (1760 1->3 was 3%)
+      2 -> 4, 4 -> 2            unchanged  (width is equal, only height moves)
+      4 -> 1, 3 -> 1, 2 -> 1    0.49-0.61 -> 0.66-0.81  (wider: it IMPROVES)
+
+    The asymmetry is the proof: it tracks WIDTH, not layout, and it never
+    self-healed — identical at +2s and +17s, nine live ticks later.
+
+    WIDTH ONLY. A height change is harmless (the 2<->4 row above), and re-
+    fitting on one would throw the reader's view away for nothing.
+  */
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    let lastWidth = el.clientWidth;
+    let raf = 0;
+    const obs = new ResizeObserver(entries => {
+      const w = Math.round(entries[0]?.contentRect.width ?? 0);
+      if (!w) return; // a pane being torn down reports 0 — re-fitting to it is meaningless
+      // 2%: a layout change is a third of the width or more; this is well clear
+      // of sub-pixel reflow noise without needing to guess at a pixel count.
+      if (Math.abs(w - lastWidth) < lastWidth * 0.02) return;
+      lastWidth = w;
+      // Coalesce: a drag fires this every frame, and setVisibleLogicalRange
+      // mid-drag would fight the browser's own layout.
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        if (chartRef.current) showRecent();
+      });
+    });
+    obs.observe(el);
+    return () => {
+      cancelAnimationFrame(raf);
+      obs.disconnect();
+    };
+  }, [showRecent]);
+
+  /*
     Keep enough whitespace ahead of the last bar that the time axis is labelled
     all the way to the right edge, at whatever zoom the reader is at.
 
