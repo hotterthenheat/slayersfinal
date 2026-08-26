@@ -13,6 +13,13 @@
 */
 
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { useAnchoredMenu } from './useAnchoredMenu';
+
+/** Matches the `w-72` on the menu below. Passed to the placement so it can
+    keep the menu's far edge on screen; assuming a narrower default put this
+    one 162px off the left of the window in a left-column pane. */
+const MENU_W = 288;
 import { ChevronDown } from 'lucide-react';
 import TickerLookup from '../ui/TickerLookup';
 import useFocusTrap from '../ui/useFocusTrap';
@@ -36,6 +43,9 @@ const TickerQuickPick = ({ ticker, onPick, open: openProp, onOpenChange }: Ticke
     if (openProp === undefined) setSelfOpen(next);
   };
   const rootRef = useRef<HTMLDivElement | null>(null);
+  /* Portalled and placed, same as the toolbar's menus — see useAnchoredMenu
+     for why this could not stay `absolute` inside the pane. */
+  const { anchorRef, placed } = useAnchoredMenu<HTMLButtonElement>(open, 'bottom', MENU_W);
   const menuRef = useRef<HTMLDivElement | null>(null);
   /*
     The menu covers the pane's own controls, and without a trap Tab walked
@@ -55,7 +65,12 @@ const TickerQuickPick = ({ ticker, onPick, open: openProp, onOpenChange }: Ticke
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+      /* The menu is PORTALLED to the body, so it is not inside rootRef any
+         more — without the menuRef clause every click on the menu counted as
+         an outside click and closed it before it could act. */
+      const t = e.target as Node;
+      if (rootRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
     };
     /* CAPTURE, and it stops the key going any further.
 
@@ -90,6 +105,7 @@ const TickerQuickPick = ({ ticker, onPick, open: openProp, onOpenChange }: Ticke
           on the taskbar with its own surface, because it IS the subject.
           TV-sized: ~112×28, name leading, the affordance at the far end. */}
       <button
+        ref={anchorRef}
         onClick={() => setOpen(!open)}
         title="Switch ticker"
         className="inline-flex items-center justify-between gap-2 h-7 min-w-[112px] px-3 rounded-full bg-white/[0.06] hover:bg-white/[0.10] font-mono text-[11px] font-bold text-textPrimary transition-colors"
@@ -97,15 +113,17 @@ const TickerQuickPick = ({ ticker, onPick, open: openProp, onOpenChange }: Ticke
         {ticker}
         <ChevronDown className={`w-3 h-3 text-textSecondary transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
-      {open && (
+      {open && placed && createPortal(
         <div
           ref={menuRef}
           role="dialog"
           aria-label={`Change symbol — currently ${ticker}`}
-          className="absolute left-0 top-full mt-1 z-40 w-72 border border-borderMuted bg-panel rounded-md shadow-2xl shadow-black/60 overflow-hidden animate-slide-in"
+          style={{ position: 'fixed', ...placed.box }}
+          className="z-[120] w-72 border border-borderMuted bg-panel rounded-md shadow-2xl shadow-black/60 overflow-x-hidden overflow-y-auto overscroll-contain animate-slide-in"
         >
           <TickerLookup active={ticker} onPick={pick} />
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
