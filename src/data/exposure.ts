@@ -173,8 +173,11 @@ export function buildExposureProfile(
   // absorbing = supportive, and a POSITIVE aggregate = put-dominant = short
   // gamma = amplifying. This used to read the classic street convention
   // (negative = amplified), which contradicted every field surface
-  // (unified 2026-08-18). Real ThetaData ingestion (task #23) must re-verify
-  // which convention the live feed carries.
+  // (unified 2026-08-18). Live ingestion must re-verify which convention the
+  // feed carries — and the feed is UW's spot-exposures / greek-exposure now,
+  // not ThetaData, which is out (re-pointed 2026-08-26). UW publishes the
+  // dealer-signed answer directly, so this is a convention to CHECK AGAINST
+  // rather than one to keep applying.
   const biasThreshold = maxAbs.gex * 0.6;
   let bias: DealerBias = 'NEUTRAL';
   let biasNote = 'Balanced positioning';

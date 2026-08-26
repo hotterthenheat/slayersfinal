@@ -20,8 +20,36 @@ import type {
   VannaCharmView,
   WallDriftPoint,
 } from '../types/gex';
+import { RTH_HOURS } from '../core/calendar';
 
-const HOURS_TO_CLOSE = 3; // fixed session posture for the sim
+/*
+  THE CHARM CLOCK IS AN ARGUMENT NOW, not a constant.
+
+  This read `const HOURS_TO_CLOSE = 3`, feeding `t = HOURS_TO_CLOSE / 6.5`, so
+  `t` was always 0.4615 and the charm projection at 09:35 was BYTE-IDENTICAL to
+  the one at 15:55. On a page titled "where dealer exposure migrates as vol and
+  time shift", on a 0DTE product, where 15:00–16:00 is where charm does nearly
+  all of its work.
+
+  The comment it carried ("fixed session posture for the sim") was honest, and
+  the constraint behind it is real: `data/` modules avoid the wall clock so a
+  replay is deterministic and a proof is reproducible. That constraint is kept
+  — the clock is passed IN. The page hands it the live reading, the proof hands
+  it a fixed one, and a replay will hand it the historical one. Nothing in here
+  reads `Date.now()`.
+
+  DEFAULT of 3 hours, deliberately: every existing caller keeps the exact
+  posture it had before this change, so the fix is opt-in per call site and no
+  surface moves until it is pointed at a real clock.
+*/
+const DEFAULT_HOURS_TO_CLOSE = 3;
+
+/* A session cannot be more than fully ahead of you or less than over. Clamped
+   rather than trusted: the live clock returns 0 after the bell and a replay
+   could hand back anything, and a negative `t` would run the decay BACKWARDS —
+   walls migrating away from the money as the day ends, which is the opposite
+   of what charm does and would read as a working feature. */
+const clamp01 = (v: number): number => (Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0);
 
 // ---- deterministic RNG ------------------------------------------------------
 function hash(seed: string): number {
@@ -83,14 +111,22 @@ function levelsFrom(rows: { strike: number; value: number }[], spot: number): Le
 }
 
 // ---- scenario projection -------------------------------------------------------
-function projectStrike(n: StrikeNode, mode: ShiftMode, ivShift: IvShift, maxCharm: number, spot: number, ticker: string): number {
+function projectStrike(
+  n: StrikeNode,
+  mode: ShiftMode,
+  ivShift: IvShift,
+  maxCharm: number,
+  spot: number,
+  ticker: string,
+  hoursToClose: number
+): number {
   if (mode === 'CHARM') {
     // Delta decay bleeds gamma hardest at the money, and the CALL and PUT legs
     // bleed at different per-strike rates — that differential is what lets the
     // NET flip sign near zero (flip migrates) and lets neighboring strikes
     // overtake a wall (walls migrate). Pure uniform scaling can do neither.
     const norm = Math.abs(n.charm) / (maxCharm || 1);
-    const t = HOURS_TO_CLOSE / 6.5;
+    const t = clamp01(hoursToClose / RTH_HOURS);
     const jc = h01(`${ticker}-${n.strike}-charm-c`);
     const jp = h01(`${ticker}-${n.strike}-charm-p`);
     const callDecay = 1 - (0.42 + 0.4 * jc) * norm * t;
@@ -132,7 +168,17 @@ export function buildVannaCharm(
   snapshot: MarketSnapshot,
   mode: ShiftMode,
   ivShift: IvShift,
-  half: 10 | 15 = 10
+  half: 10 | 15 = 10,
+  /*
+    Hours left in the regular session. LAST, not fourth — the directive's
+    sketch put it fourth, and it cannot go there: `levels-proof.ts` already
+    calls `buildVannaCharm(snap, 'CHARM', 1, 10)` passing the STRIKE WINDOW in
+    that slot. Inserting ahead of it leaves that call typechecking perfectly
+    while silently meaning "ten hours to close" — a plausible wrong number
+    rather than an error, which is the failure mode this codebase keeps
+    getting bitten by. Appended, every existing call keeps its meaning.
+  */
+  hoursToClose: number = DEFAULT_HOURS_TO_CLOSE
 ): VannaCharmView {
   const { ticker, spot, chain } = snapshot;
 
@@ -155,7 +201,7 @@ export function buildVannaCharm(
 
   let maxAbs = 1;
   const rows: ShiftBarRow[] = window.map(n => {
-    const projected = projectStrike(n, mode, ivShift, maxCharm, spot, ticker);
+    const projected = projectStrike(n, mode, ivShift, maxCharm, spot, ticker, hoursToClose);
     maxAbs = Math.max(maxAbs, Math.abs(n.netGex), Math.abs(projected));
     return { strike: n.strike, pin: n.strike === pinStrike, current: n.netGex, projected };
   });

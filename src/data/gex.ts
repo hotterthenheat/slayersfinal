@@ -3,8 +3,10 @@
   SLAYER TERMINAL - PINPOINT GEX MODEL (gex.ts)
   Derives chart levels/nodes, the strike×expiry
   matrix and the multi-ticker flow board from the
-  simulator. Placeholder data contract — swaps for
-  the real dealer-flow engine / ThetaData later.
+  simulator. Placeholder data contract — swaps for the
+  real dealer-flow engine later. That engine is UW's
+  spot-exposures family; ThetaData is out (re-pointed
+  2026-08-26).
 ==================================================
 */
 
