@@ -1024,6 +1024,96 @@ head('the arrangement bar is reachable while a pane is expanded');
   }
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   14. THE SPOT AND FLIP BADGES DO NOT PRINT ON TOP OF EACH OTHER.
+
+   The defect this replaces: both rules are placed independently by price and
+   both badges are `ml-auto`, so they share one lane — and the flip spends most
+   of its life near spot, because that is what a flip IS. Measured overlaps of
+   4.3, 6.2, 6.9 and 9.2px of a 10px badge, worst case spot "513.45" underneath
+   flip "513.50": two DIFFERENT prices inside the same 38 pixels.
+
+   The rows already avoided each other through `anchors`; the two rules were
+   the pair that never checked.
+
+   THE CLASH COUNT IS LOGGED, NOT ASSERTED, and that is deliberate. In node the
+   proofs pin `Math.random` so a fixture is reproducible; the browser runs the
+   live unseeded tape, so whether any rail happens to hold spot and flip within
+   a badge of each other is not something this run controls. Asserting "at
+   least one clash occurred" would be a gate that fails on the tape being calm.
+   So: the overlap assertion always runs, and the count says how much of it was
+   actually exercised — a run reporting 0 exercised nothing and its green is
+   worth what that is worth.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the strike rail never prints two prices in the same pixels');
+{
+  let clashed = 0;
+  let rails = 0;
+  for (const [w, h, layout] of [[1024, 768, 4], [1024, 768, 2], [1440, 900, 3]]) {
+    const { ctx, page } = await openDesk(w, h, layout);
+    const found = await page.evaluate(() => {
+      const out = [];
+      /* The rail is the element that DIRECTLY holds the stub — climbing by
+         class matched nested ancestors and counted one rail up to five times. */
+      const hosts = [...document.querySelectorAll('[data-stub="down"]')]
+        .map(s => s.parentElement)
+        .filter(p => p && p.querySelector('[data-rule="spot"]'));
+      for (const rail of hosts) {
+        const badge = t => rail.querySelector(`[data-rule="${t}"] [data-badge]`);
+        const yOf = t => {
+          const el = rail.querySelector(`[data-rule="${t}"]`);
+          const m = /translateY\(([-0-9.]+)px\)/.exec(el ? el.style.transform || '' : '');
+          return m ? parseFloat(m[1]) : null;
+        };
+        const bs = badge('spot');
+        const bf = badge('flip');
+        if (!bs || !bf) continue;
+        const a = bs.getBoundingClientRect();
+        const b = bf.getBoundingClientRect();
+        if (!a.width || !b.width) continue;
+        const ox = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+        const oy = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+        const ys = yOf('spot');
+        const yf = yOf('flip');
+        out.push({
+          overlap: ox > 0 && oy > 0 ? `${ox.toFixed(1)}x${oy.toFixed(1)}` : null,
+          spot: (bs.textContent || '').trim(),
+          flip: (bf.textContent || '').trim(),
+          dy: ys != null && yf != null ? +Math.abs(ys - yf).toFixed(1) : null,
+          shifted: /translateX/.test(bf.style.transform || ''),
+        });
+      }
+      return out;
+    });
+
+    const at = `${w}x${h} layout ${layout}`;
+    const hits = found.filter(r => r.overlap);
+    rails += found.length;
+    /* NO RAILS AT ALL IS A FAILURE, NOT A PASS. The desk is seeded with
+       `ladder: true`, so every pane has one. This block reads the rail through
+       `[data-badge]`, a hook that only exists once the step-aside shipped —
+       run against a build without it, the loop found nothing and reported
+       green three times over. A check that cannot see its subject has to say
+       so, or "no badge lands on another" is true of an empty page. */
+    if (found.length === 0) bad(`${at} — found no strike rail to measure; the desk is seeded with the rail up, so this check saw nothing`);
+    const near = found.filter(r => r.dy != null && r.dy < 14);
+    clashed += near.length;
+    hits.length === 0
+      ? ok(`${at} — ${found.length} rail(s), no badge lands on another`)
+      : bad(`${at} — ${hits.length} rail(s) print two prices in the same pixels, e.g. spot ${hits[0].spot} under flip ${hits[0].flip} overlapping ${hits[0].overlap}px`);
+    /* Where the two ARE within a badge of each other, the step-aside must have
+       been applied — otherwise the clean result above is luck, not the fix. */
+    const missed = near.filter(r => !r.shifted);
+    if (near.length) {
+      missed.length === 0
+        ? ok(`${at} — ${near.length} rail(s) had the rules within a badge, and every one stepped aside`)
+        : bad(`${at} — ${missed.length} rail(s) had the rules within a badge and did NOT step aside`);
+    }
+    await ctx.close();
+  }
+  console.log(`       (${clashed} of ${rails} rails held spot and flip within a badge this run — 0 would mean the check was not exercised)`);
+}
+
 console.log(`\n${fails} failing`);
 await browser.close();
 process.exit(fails ? 1 : 0);
