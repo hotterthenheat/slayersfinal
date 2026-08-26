@@ -201,7 +201,7 @@ const PodiumCard = forwardRef<
       </div>
 
       {/* Stats — neutral ink; color is reserved for the verdict */}
-      <div className="px-3.5 mt-3 grid grid-cols-4 gap-2">
+      <div className="px-3.5 mt-3 grid grid-cols-4 gap-2 [&>*]:min-w-0">
         {[
           { label: 'BPS', term: 'BPS' as const, value: `${t.bps >= 0 ? '+' : ''}${t.bps}`, lens: 'proximity' as const },
           { label: 'NBR', term: 'NBR' as const, value: `${t.nbr.toFixed(2)}x`, strong: t.nbr >= 1.5, lens: 'nbr' as const },
@@ -407,7 +407,23 @@ const RankedTargets = () => {
         className="w-full"
       >
         <LayoutGroup>
-          <div className="p-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+          {/*
+            TWO up until there is room for three.
+
+            `md:grid-cols-3` put three cards across a 976px content area at a
+            1024 viewport — 309px each — and each card's four-stat row (BPS,
+            NBR, Volume, Open Int) needs 327px to print its figures. The card
+            is `overflow-hidden`, so the last 20px was simply cut off: at
+            1024 the Open Int column lost its final digits, which on a figure
+            like 57,200 is not a smaller number, it is a WRONG one.
+
+            Grid items default to `min-width: auto`, so the stats row could not
+            shrink to fit either — it forced the overflow rather than absorbing
+            it. `min-w-0` below lets it absorb; this breakpoint means it does
+            not have to. At 1024-1279 two cards get ~480px each and every
+            figure prints whole.
+          */}
+          <div className="p-3 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
             <AnimatePresence initial={false} mode="popLayout">
               {podium.map((t, i) => (
                 <PodiumCard key={t.strike} t={t} above={i > 0 ? podium[i - 1] : null} lens={lens} onFlash={() => flash(t)} />

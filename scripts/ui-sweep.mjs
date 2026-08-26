@@ -1386,6 +1386,88 @@ head('Terrain keeps its desk on a tablet');
   await ctx.close();
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   DOES THE CONTENT FIT ITS BOX?
+
+   Noah, 2026-08-26: "make things in their boxes fit perfectly, aspect ratio is
+   a serious thing visually."
+
+   Three faults, kept apart because they have different fixes:
+
+     CLIPPED    overflow:hidden with content bigger than the box — cut off with
+                no way to reach it. On a currency figure that is not a smaller
+                number, it is a WRONG one.
+     TRUNCATED  a horizontal scroller whose content is wider than it. Nothing is
+                unreachable in principle, but a desktop scrollbar is invisible
+                until you scroll, so the reader sees a table that simply stops.
+     SQUASHED   a canvas whose bitmap is a different aspect from its box — the
+                picture is stretched.
+
+   Deliberately not reported: a VERTICAL scroller with taller content (that is
+   what a scroller is for), and text with a real ellipsis (a considered
+   truncation, not a clip).
+
+   Found on the build this was written against: the Exposure Matrix needing
+   691px in a 502px column so VEX fell off entirely, and a Ranked Targets card
+   cut 20px short of its own Open Int figure.
+   ───────────────────────────────────────────────────────────────────────── */
+head('content fits the box it is drawn in');
+{
+  const SCAN = () => {
+    const bad = [];
+    const path = el => {
+      const bits = [];
+      for (let n = el; n && bits.length < 3; n = n.parentElement) {
+        const c = typeof n.className === 'string' ? n.className.split(/\s+/).slice(0, 2).join('.') : '';
+        bits.unshift(n.tagName.toLowerCase() + (c ? '.' + c : ''));
+      }
+      return bits.join(' > ').slice(0, 90);
+    };
+    for (const el of document.querySelectorAll('body *')) {
+      const r = el.getBoundingClientRect();
+      if (r.width < 8 || r.height < 8) continue;
+      const cs = getComputedStyle(el);
+      if (cs.visibility === 'hidden' || cs.display === 'none' || cs.opacity === '0') continue;
+
+      if (el.tagName === 'CANVAS' && el.width > 0 && el.height > 0 && r.width > 40 && r.height > 40) {
+        const skew = Math.abs(r.width / r.height - el.width / el.height) / (r.width / r.height);
+        if (skew > 0.02) bad.push(`SQUASH ${(skew * 100).toFixed(1)}% ${Math.round(r.width)}x${Math.round(r.height)} vs ${el.width}x${el.height} — ${path(el)}`);
+        continue;
+      }
+      const dx = el.scrollWidth - el.clientWidth;
+      const dy = el.scrollHeight - el.clientHeight;
+      const scrollsX = cs.overflowX === 'auto' || cs.overflowX === 'scroll';
+      const scrollsY = cs.overflowY === 'auto' || cs.overflowY === 'scroll';
+      if (scrollsX && dx > 8) bad.push(`TRUNC x by ${dx}px (box ${Math.round(r.width)}, content ${el.scrollWidth}) — ${path(el)}`);
+      if (cs.overflowX === 'hidden' && dx > 2 && cs.textOverflow !== 'ellipsis')
+        bad.push(`CLIP x by ${dx}px (box ${Math.round(r.width)}) — ${path(el)}`);
+      if (cs.overflowY === 'hidden' && dy > 2 && !scrollsY)
+        bad.push(`CLIP y by ${dy}px (box ${Math.round(r.height)}) — ${path(el)}`);
+    }
+    return [...new Set(bad)].slice(0, 6);
+  };
+
+  for (const [route, path] of [
+    ['terrain', '/terrain'],
+    ['exposure', '/pinpoint/exposure-profile'],
+    ['ranked', '/pinpoint/ranked-targets'],
+    ['vanna', '/pinpoint/vanna-charm'],
+    ['weigher', '/weigher'],
+  ]) {
+    for (const width of [1024, 1280, 1440, 1760]) {
+      const ctx = await browser.newContext({ viewport: { width, height: 900 } });
+      const page = await ctx.newPage();
+      await page.goto(`${BASE}${path}`, { waitUntil: 'networkidle' });
+      await page.waitForTimeout(BOOT_MS);
+      const found = await page.evaluate(SCAN);
+      found.length === 0
+        ? ok(`${route} @ ${width}`)
+        : bad(`${route} @ ${width}:\n         ${found.join('\n         ')}`);
+      await ctx.close();
+    }
+  }
+}
+
 console.log(`\n${fails} failing`);
 await browser.close();
 process.exit(fails ? 1 : 0);
