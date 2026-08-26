@@ -16,6 +16,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import Simulator from '../../core/simulator';
+import { useMarketData } from '../../context/MarketDataContext';
 import ChartToolbar from '../../components/gex/ChartToolbar';
 import CompareControl from '../../components/gex/CompareControl';
 import { CANDLE_THEMES, chartSurface, useCandleThemeKey } from '../../components/gex/candleTheme';
@@ -68,6 +69,7 @@ export interface LiveChartWidgetProps {
 }
 
 const LiveChartWidget = ({ ctx, soleChart = false }: LiveChartWidgetProps) => {
+  const { flowTape } = useMarketData();
   const [timeframe, setTimeframe] = useState<Timeframe>('1m');
   const [overlays, setOverlays] = useState<ChartOverlays>(DEFAULT_OVERLAYS);
   const [compares, setCompares] = useState<CompareEntry[]>([]);
@@ -420,6 +422,7 @@ const LiveChartWidget = ({ ctx, soleChart = false }: LiveChartWidgetProps) => {
           <StrikeChart
             ticker={ctx.ticker}
             revision={ctx.revision}
+            flowPrints={flowTape}
             levels={ctx.gex.levels}
             timeframe={timeframe}
             overlays={overlays}

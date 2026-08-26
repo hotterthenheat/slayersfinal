@@ -375,6 +375,11 @@ const Pane = ({
   boxRef, cell = '',
 }: PaneProps) => {
   const { ticker, timeframe, overlays, indicators, chartStyle, compares, ladder } = cfg;
+  /* The tape, straight from the provider that accumulates it. Read HERE rather
+     than threaded down from Terrain: this component already takes fourteen
+     props, and every pane wants the same unfiltered tape — StrikeChart narrows
+     it to its own symbol. */
+  const { flowTape } = useMarketData();
 
   /* Add / remove a crossed symbol. Capped at the ink list's length so every
      comparison on a pane is a DIFFERENT colour — two lines sharing an ink is
@@ -512,6 +517,7 @@ const Pane = ({
               revision={revision}
               levels={levels}
               timeframe={timeframe}
+              flowPrints={flowTape}
               height={tall ? 260 : 200}
               overlays={overlays}
               indicators={indicators}

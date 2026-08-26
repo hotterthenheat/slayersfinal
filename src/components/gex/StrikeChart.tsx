@@ -37,6 +37,61 @@ import { getCandleTheme, useCandleThemeKey, candleSeriesOptions, chartSurface, t
 import { markFired, useAlerts } from './alertStore';
 import type { Candle } from '../../types/market';
 import type { DarkPoolPrint, KeyLevels } from '../../types/gex';
+import { bucketFlow, flowMaxLeg } from '../../data/flowBars';
+import type { FlowPrint } from '../../types/trace';
+
+/* The shape this chart needs off a print: whatever FlowPrint is, plus the
+   instant it arrived. Declared here rather than imported from the provider so a
+   chart never depends on a React context it does not use. */
+type StampedFlowPrint = FlowPrint & { at: number };
+
+/*
+  The band's share of the chart, as a STRETCH FACTOR against the price pane's.
+
+  `setHeight(90)` was the first attempt and it does not hold: measured, the pane
+  came back at 201px on a 900px window — lightweight-charts lays panes out by
+  stretch and redistributes an explicit height away. A constant that names a
+  pixel count it does not produce is worse than no constant, so this says what
+  the library actually honours. 4:1 gives the tape four fifths, which is the
+  reference's proportion, and a reader can still drag the separator.
+
+  3 and not 4, and the reason is a coupling worth naming: the compare effect
+  normalises EVERY pane whenever more than one exists — `panes[0]` to 3, all the
+  rest to 1 — so whatever is set here is re-applied as 3:1 the next time
+  comparisons rebuild. Asking for 4:1 measured 3:1 anyway. Matching it means the
+  two places agree instead of silently fighting over the layout.
+*/
+const FLOW_STRETCH = 1;
+const PRICE_STRETCH = 3;
+
+/*
+  A comparison in PANE mode goes BELOW the flow band when there is one.
+
+  It was hard-coded to index 1. The flow band is built on demand, so 1 is
+  sometimes the flow band and sometimes free — a compare line dropped into the
+  flow pane would share its scale (pinned to +/- the heaviest premium leg) and
+  render as a flat line on the zero rule while squashing the bars it landed on.
+  Asking the flow series where it actually is beats assuming.
+*/
+
+/*
+  THE FLOW LEGS DO NOT TAKE THE CANDLE THEME'S VOLUME INK, and that was the
+  first thing I tried.
+
+  Volume is ONE quantity, so it can be monochrome and still be readable — and
+  in several themes it is: the Chrome theme paints volUp `rgba(238,241,245,.22)`
+  and volDown `rgba(86,92,104,.30)`, two greys. Driven live with the legs on
+  those, the flow band rendered with ZERO green and ZERO red pixels: calls and
+  puts became the same colour, which is the one thing a two-sided histogram
+  cannot survive. The whole point of drawing both legs is telling them apart.
+
+  So the legs wear the house DIRECTION inks, always. That is the right register
+  as well as the readable one: call premium arriving is bullish and put premium
+  arriving is bearish, which is direction, not dealer side — gold and steel
+  would be the wrong vocabulary here.
+*/
+const FLOW_CALL_INK = BULL;
+const FLOW_PUT_INK = PUT_WALL;
 
 /** What the user chose to draw — every overlay is independent. */
 export interface ChartOverlays {
@@ -44,6 +99,8 @@ export interface ChartOverlays {
   levels: boolean;
   darkpool: boolean;
   volume: boolean;
+  /** Trace's option prints, bucketed to these bars — calls up, puts down. */
+  flow: boolean;
 }
 
 /* Chart styles, TradingView's picker (Noah, 2026-08-23: "notice how candles
@@ -98,6 +155,11 @@ export const DEFAULT_OVERLAYS: ChartOverlays = {
   levels: true,
   darkpool: false,
   volume: true,
+  /* OFF by default, and not out of caution — the tape has no history. It
+     accumulates from the moment the app opens, so on a cold load this pane has
+     nothing to draw. Defaulting it on would greet every reader with an empty
+     band under their chart and no clue why. */
+  flow: false,
 };
 
 /*
@@ -143,6 +205,16 @@ interface StrikeChartProps {
   overlays?: ChartOverlays;
   /** Dark-pool prints for the DP overlay (whisper lines, MiniPane grammar) */
   prints?: DarkPoolPrint[];
+  /**
+   * Trace's option prints, for the FLOW pane.
+   *
+   * Handed in rather than read here, and that is the point: the tape desk and
+   * this pane are two readers of ONE accumulated tape (the provider owns it),
+   * so they cannot end up quoting different premium for the same session.
+   * Every print, unfiltered — this component narrows to its own ticker, because
+   * a host with four panes should not bucket the same tape four times.
+   */
+  flowPrints?: readonly StampedFlowPrint[];
   /** Comparison symbols drawn as lines over/under the tape */
   compares?: CompareEntry[];
   /** The tape's shape — candles, bars, line, area… (theme-independent) */
@@ -191,7 +263,7 @@ interface StrikeChartProps {
 export type CrosshairSync = (time: UTCTimestamp | null) => void;
 
 // Wall / flip / king overlay colors (independent of candle theme)
-import { CALL_WALL, PUT_WALL, FLIP, KING, FOCUS, DARK_POOL, ALERT as ALERT_INK } from './palette';
+import { BULL, CALL_WALL, PUT_WALL, FLIP, KING, FOCUS, DARK_POOL, ALERT as ALERT_INK } from './palette';
 
 // Level lines are created once per overlay/ticker, then their prices are
 // TWEENED (rAF + easeOutCubic) so scan-tier level moves glide instead of jumping.
@@ -267,6 +339,7 @@ const StrikeChart = ({
   focusPrice = null,
   overlays = DEFAULT_OVERLAYS,
   prints = [],
+  flowPrints,
   compares = [],
   chartStyle = 'candles',
   indicators = DEFAULT_INDICATORS,
@@ -294,6 +367,15 @@ const StrikeChart = ({
   compactRef.current = compact;
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
+  /* Two series, not one signed one: the reference draws BOTH legs around a zero
+     line, and a single net bar cannot say whether a quiet bucket was quiet or
+     whether a billion dollars hit each side and cancelled. */
+  const flowCallsRef = useRef<ISeriesApi<'Histogram'> | null>(null);
+  const flowPutsRef = useRef<ISeriesApi<'Histogram'> | null>(null);
+  /* Where the flow band's top edge sits, in px up from the container's bottom.
+     MEASURED off the chart rather than assumed from FLOW_PANE_PX: a reader can
+     drag the separator, and the time axis's height is the library's to decide. */
+  const [flowLabelBottom, setFlowLabelBottom] = useState<number | null>(null);
   /*
     THE RUNWAY — a series that draws nothing and holds only WHITESPACE.
 
@@ -758,6 +840,8 @@ const StrikeChart = ({
       chartRef.current = null;
       candleSeriesRef.current = null;
       volumeSeriesRef.current = null;
+      flowCallsRef.current = null;
+      flowPutsRef.current = null;
       runwaySeriesRef.current = null;
       runwayRef.current = { from: 0, slots: 0 };
       trailsRef.current = null;
@@ -807,6 +891,111 @@ const StrikeChart = ({
   useEffect(() => {
     volumeSeriesRef.current?.applyOptions({ visible: overlays.volume });
   }, [overlays.volume]);
+
+  /*
+    THE FLOW BAND: Trace's premium, in this chart's own buckets.
+
+    Rebuilt whenever the tape grows, the timeframe changes or the symbol
+    changes. `bucketFlow` does the summing and is proved separately
+    (scripts/flow-bars-proof.ts); this only decides ink and sign.
+
+    Puts are NEGATED here rather than in the bucketer, which hands back two
+    magnitudes. Which leg hangs below the axis is a drawing decision, and a
+    module that answers "how much traded" should not be the one making it.
+  */
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+
+    /*
+      THE BAND IS BUILT ON DEMAND AND TORN DOWN WHEN IT IS OFF.
+
+      The first cut created the pane at mount and collapsed it to 1px when the
+      overlay was off. That looked equivalent and was not: a second pane adds a
+      SEPARATOR, and the time axis grew 26px -> 30px for every chart in the app,
+      including charts whose reader never turns flow on. The desk's floating
+      chrome clears a hard-coded 26px, so it started landing on the axis — which
+      is exactly what `scripts/ui-sweep.mjs` asserts, and it failed there.
+
+      Removing the series removes the pane, so a chart with flow off is the
+      chart that existed before this feature. A toggle nobody touches costs
+      nothing.
+    */
+    if (!overlays.flow) {
+      const oldCalls = flowCallsRef.current;
+      const oldPuts = flowPutsRef.current;
+      if (oldCalls) chart.removeSeries(oldCalls);
+      if (oldPuts) chart.removeSeries(oldPuts);
+      flowCallsRef.current = null;
+      flowPutsRef.current = null;
+      setFlowLabelBottom(null);
+      return;
+    }
+
+    let calls = flowCallsRef.current;
+    let puts = flowPutsRef.current;
+    if (!calls || !puts) {
+      /* APPENDED, never a fixed index. Compare-in-pane mode may already own a
+         pane, and hard-coding 1 is how two features end up in the same band. */
+      const opts = {
+        priceFormat: { type: 'volume' as const },
+        lastValueVisible: false,
+        priceLineVisible: false,
+        base: 0,
+      };
+      const paneIndex = chart.panes().length;
+      calls = chart.addSeries(HistogramSeries, opts, paneIndex);
+      puts = chart.addSeries(HistogramSeries, opts, paneIndex);
+      flowCallsRef.current = calls;
+      flowPutsRef.current = puts;
+      try {
+        chart.panes()[0]?.setStretchFactor(PRICE_STRETCH);
+        calls.getPane().setStretchFactor(FLOW_STRETCH);
+      } catch {
+        /* pane sizing is a nicety; never lose the chart over it */
+      }
+    }
+
+    const barSec = tfMinutes(timeframe) * 60;
+    const bars = bucketFlow(flowPrints ?? [], { barSec, ticker });
+
+    calls.setData(
+      bars
+        .filter(b => b.callPrem > 0)
+        .map(b => ({ time: b.time as UTCTimestamp, value: b.callPrem, color: FLOW_CALL_INK }))
+    );
+    puts.setData(
+      bars
+        .filter(b => b.putPrem > 0)
+        .map(b => ({ time: b.time as UTCTimestamp, value: -b.putPrem, color: FLOW_PUT_INK }))
+    );
+
+    /*
+      ONE SCALE ACROSS BOTH LEGS, and symmetric about zero.
+
+      Left to autoscale, lightweight-charts fits each series to its own extent,
+      so a $10k call bucket would be drawn exactly as tall as a $10M put bucket
+      and the zero line would wander off centre. The heaviest leg anywhere sets
+      both halves.
+    */
+    const max = flowMaxLeg(bars);
+    if (max > 0) {
+      const range = () => ({ priceRange: { minValue: -max, maxValue: max } });
+      calls.applyOptions({ autoscaleInfoProvider: range });
+      puts.applyOptions({ autoscaleInfoProvider: range });
+    }
+
+    /* Read back what the layout actually did, so a dragged separator moves the
+       label with it. INSIDE the band, not on its separator. */
+    try {
+      const LABEL_H = 17;
+      const paneH = calls.getPane().getHeight();
+      const axisH = chart.timeScale().height();
+      setFlowLabelBottom(paneH > 8 ? paneH + axisH - LABEL_H - 3 : null);
+    } catch {
+      setFlowLabelBottom(null);
+    }
+  }, [overlays.flow, flowPrints, timeframe, ticker, themeKey]);
 
   /* Indicator overlays (Noah, 2026-08-23) — EMAs and a session-anchored
      VWAP, computed from the SAME aggregated bars the tape draws so they
@@ -920,7 +1109,9 @@ const StrikeChart = ({
             lastValueVisible: true,
             title: c.ticker,
           },
-          c.mode === 'pane' ? 1 : 0
+          c.mode === 'pane'
+            ? (flowCallsRef.current?.getPane().paneIndex() ?? 0) + 1
+            : 0
         );
         compareSeriesRef.current.set(`${c.ticker}:${c.mode}`, series);
       }
@@ -1542,6 +1733,18 @@ const StrikeChart = ({
         onDoubleClick={resetView}
       >
         <div ref={containerRef} className="absolute inset-0" />
+        {/* The band says its own name, the way the reference does. An unlabelled
+            strip of bars under a chart is a puzzle; `pointer-events-none` so the
+            tape still pans straight through it. */}
+        {overlays.flow && flowLabelBottom !== null && (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute left-2 z-10 rounded px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-widest"
+            style={{ bottom: flowLabelBottom, background: 'rgba(120,110,40,0.35)', color: '#E8E4C8' }}
+          >
+            Flow
+          </span>
+        )}
 
         {/* Pinned to the container's right edge and moved down it by
             transform, so it rides the price scale rather than being re-laid

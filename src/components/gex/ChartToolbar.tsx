@@ -217,6 +217,7 @@ const OVERLAY_ITEMS: { key: keyof ChartOverlays; label: string; hint: string }[]
   { key: 'levels', label: 'Key levels', hint: 'CW · PW · flip · king axis chips' },
   { key: 'darkpool', label: 'Dark pool', hint: 'Off-exchange print lines' },
   { key: 'volume', label: 'Volume', hint: 'Session bars along the floor' },
+  { key: 'flow', label: 'Flow', hint: 'Option premium from the tape — calls up, puts down' },
 ];
 
 export type MenuSide = 'bottom' | 'top' | 'left' | 'right';
