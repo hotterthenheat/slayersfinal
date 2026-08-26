@@ -515,6 +515,11 @@ const StrikeChart = ({
       built from, kept in refs so the time-scale subscription can read them
       without being torn down and rebuilt on every tick. */
   const lastBarTimeRef = useRef(0);
+  /* What the price card's countdown measures against: the bar time we last
+     saw, when we saw it in REAL ms, and the observed real gap between the
+     last two arrivals. `realMs: 0` means "not yet observed" and the countdown
+     stays blank rather than guessing. */
+  const barClockRef = useRef({ stamp: 0, at: 0, realMs: 0 });
   const bucketSecRef = useRef(60);
   const levelTickerRef = useRef('');
   const focusLineRef = useRef<IPriceLine | null>(null);
@@ -1766,12 +1771,52 @@ const StrikeChart = ({
         shownPrice = p;
       }
 
-      const left = bucket - (Math.floor(Date.now() / 1000) % bucket);
+      /*
+        ══ TIME LEFT IN THE BAR, ON THE CHART'S CLOCK ═══════════════════════
+
+        This read `bucket - (now % bucket)`: wall-clock seconds to the next
+        multiple of the timeframe. Two things wrong with it.
+
+        It was off by an order of magnitude. A bar here is TICKS_PER_BAR (4)
+        ticks at 1500ms, so one 1-minute bar arrives every SIX real seconds,
+        not sixty. On 15m the card counted down from 15:00 while the bar it
+        was counting to appeared in about ninety seconds.
+
+        And the phase was wrong even in its own terms: epoch-modulo assumes
+        bars land on multiples of the timeframe, which only holds at seeding.
+        Live bars advance on tick count and drift off that grid immediately.
+
+        So it is MEASURED instead of assumed — the real gap between the last
+        two bar arrivals, which is the chart telling us its own cadence. No
+        constant imported from the simulator, so the two cannot drift apart,
+        and nothing is printed until a full bar has actually been observed:
+        a countdown that has not yet seen a bar has nothing true to say.
+      */
+      const barAt = lastBarTimeRef.current;
+      if (barAt !== barClockRef.current.stamp) {
+        const nowMs = Date.now();
+        if (barClockRef.current.stamp !== 0) barClockRef.current.realMs = nowMs - barClockRef.current.at;
+        barClockRef.current.stamp = barAt;
+        barClockRef.current.at = nowMs;
+      }
+      const period = barClockRef.current.realMs;
       const pad = (v: number) => String(v).padStart(2, '0');
-      const hh = Math.floor(left / 3600);
-      const t = hh > 0
-        ? `${hh}:${pad(Math.floor((left % 3600) / 60))}:${pad(left % 60)}`
-        : `${pad(Math.floor(left / 60))}:${pad(left % 60)}`;
+      /*
+        Blank until a full bar has been observed — but NEVER return early here.
+        The card is POSITIONED below, and an early exit leaves it wherever it
+        was last put. Measured when this returned instead of falling through:
+        the card sat 654px from the price it names, and the sweep's
+        "both columns print the same number at the same height" assertion
+        failed in seven places across layouts 1, 2 and 4.
+      */
+      let t = '';
+      if (period > 0) {
+        const left = Math.max(0, Math.round((period - (Date.now() - barClockRef.current.at)) / 1000));
+        const hh = Math.floor(left / 3600);
+        t = hh > 0
+          ? `${hh}:${pad(Math.floor((left % 3600) / 60))}:${pad(left % 60)}`
+          : `${pad(Math.floor(left / 60))}:${pad(left % 60)}`;
+      }
       if (t !== shownLeft) {
         timeEl.textContent = t;
         shownLeft = t;
