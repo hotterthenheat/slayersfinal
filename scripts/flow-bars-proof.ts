@@ -202,6 +202,23 @@ if (T0_SEC % 60 !== 0) {
   const badRight = bucketFlow([print({ at: T0, right: 'X', premium: 100 })], { barSec: 60 });
   const leaked = badRight.reduce((n, b) => n + b.callPrem + b.putPrem + b.count, 0);
   check('an unknown right reaches NEITHER leg', leaked === 0, `leaked ${leaked}`);
+  /*
+    AND IT LEAVES NO BAR BEHIND — found by a second reader, not by this file.
+
+    The rejected print used to be dropped AFTER its bucket had been allocated,
+    so the output carried a bar with both legs at zero. The histogram drew
+    nothing for it and the assertion above stayed green, because zero premium
+    is zero premium however it got there. But the bar was still an entry in the
+    series asserting the tape was quiet in that minute, and the cumulative
+    drift line (which draws points, not columns) rendered it as a visible one.
+    The leg totals are not enough; the bar must not exist.
+  */
+  check('and leaves no empty bar behind', badRight.length === 0, `${badRight.length} bars`);
+  const mixedRight = bucketFlow(
+    [print({ at: T0, right: 'X', premium: 100 }), print({ at: T0 + 5 * 60_000, right: 'C', premium: 7 })],
+    { barSec: 60 }
+  );
+  check('a real print beside it still lands, alone', mixedRight.length === 1 && mixedRight[0].callPrem === 7, `${mixedRight.length} bars`);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

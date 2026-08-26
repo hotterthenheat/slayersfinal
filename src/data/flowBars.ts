@@ -92,6 +92,17 @@ export function bucketFlow(
     const prem = p.premium;
     if (typeof prem !== 'number' || !Number.isFinite(prem) || prem <= 0) continue;
 
+    /* THE RIGHT IS CHECKED BEFORE THE BUCKET EXISTS, and that ordering is the
+       fix for a real defect rather than a style preference. The first cut
+       created the bucket, then rejected an unknown right with `continue` — and
+       left the empty bucket behind. The histogram never showed it (both legs
+       were zero, so it drew nothing), but the bar was in the output claiming
+       the tape was QUIET in that minute when in truth a print had been
+       discarded there. A cumulative reader of the same buckets renders that
+       claim as a visible point at zero. Reject first, allocate second. */
+    const call = p.right === 'C';
+    if (!call && p.right !== 'P') continue; // an unknown right counts as neither
+
     // Floor to the bucket. Flooring, not rounding: rounding would put a print
     // in the bar AFTER the one it happened in for the back half of every bar.
     const sec = Math.floor(at / 1000);
@@ -102,9 +113,8 @@ export function bucketFlow(
       bar = { time, callPrem: 0, putPrem: 0, count: 0 };
       byBucket.set(time, bar);
     }
-    if (p.right === 'C') bar.callPrem += prem;
-    else if (p.right === 'P') bar.putPrem += prem;
-    else continue; // an unknown right is not silently counted as a call
+    if (call) bar.callPrem += prem;
+    else bar.putPrem += prem;
     bar.count += 1;
   }
 

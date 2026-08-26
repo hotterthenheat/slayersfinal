@@ -124,6 +124,11 @@ const CAMPAIGN_CHART_LS = 'slayer_campaign_chart';
    exactly the market-wide texture that drowns it. */
 const CAMPAIGN_OVERLAY_DEFAULTS: ChartOverlays = {
   trails: false, levels: false, darkpool: false, volume: true, flow: false,
+  /* Off for the same reason the flow band is: the drift lines are the whole
+     tape's premium summed, which is exactly the market-wide texture that
+     drowns one campaign's story. The vol pane is off because this chart is
+     already short — a third band would leave the tape a strip. */
+  netDrift: false, volDrift: false,
 };
 const loadChartPrefs = (): { timeframe: Timeframe; overlays: ChartOverlays } => {
   try {

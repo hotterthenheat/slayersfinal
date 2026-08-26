@@ -23,6 +23,7 @@ import {
   type SetupMap,
   type SymbolSetup,
 } from '../src/pages/terrain/setups';
+import { DEFAULT_OVERLAYS } from '../src/components/gex/StrikeChart';
 
 let pass = 0, fail = 0;
 const check = (name: string, ok: boolean, extra = '') => {
@@ -33,9 +34,19 @@ const check = (name: string, ok: boolean, extra = '') => {
 /* Today's shape, carrying EVERY overlay. The other fixtures below deliberately
    carry four — they stand for records written before `flow` existed, which is
    the whole point of the migration assertions. */
+/*
+  The pane fixture spreads DEFAULT_OVERLAYS rather than listing the overlays.
+
+  It used to list them, and the list went stale twice: once when `flow` landed
+  and again when the two drift panes did. Both times an assertion about JUNK
+  HANDLING failed for a reason that had nothing to do with junk, which is the
+  worst kind of red — it teaches you to edit the test instead of reading it.
+  Spreading the shipped defaults means a new overlay arrives here already
+  counted, and the two this fixture actually cares about are still named.
+*/
 const pane = (): SymbolSetup => ({
   timeframe: '1h',
-  overlays: { trails: true, levels: true, darkpool: false, volume: true, flow: false },
+  overlays: { ...DEFAULT_OVERLAYS, trails: true, levels: true, darkpool: false, volume: true },
   indicators: { ema9: false, ema21: true, ema50: false, vwap: false },
   chartStyle: 'candles',
   compares: [],
@@ -80,10 +91,18 @@ const withJunk = readSetup(
   { seen: 1, overlays: { trails: true, levels: true, darkpool: true, volume: true, ghost: true } },
   'SPY'
 );
-/* The count is DERIVED, not typed as a literal. It was `=== 4`, which went
-   stale the moment a fifth overlay landed and failed for a reason that had
-   nothing to do with what this assertion is about. */
-const OVERLAY_COUNT = Object.keys(pane().overlays).length;
+/*
+  The count comes from the SHIPPED DEFAULTS, not from a literal and not from
+  this file's own fixture.
+
+  It was `=== 4`, then a fixture's key count — and the fixture was a literal
+  one level down, so it went stale on the very next overlay anyway.
+  DEFAULT_OVERLAYS is the type's canonical instance, and setups.ts is held to
+  the same type by a `satisfies` tripwire that fails the build if it drifts, so
+  reading the count from there cannot silently disagree with the module under
+  test.
+*/
+const OVERLAY_COUNT = Object.keys(DEFAULT_OVERLAYS).length;
 check(
   'and an extra key is dropped rather than carried',
   !!withJunk?.overlays && !('ghost' in withJunk.overlays) && Object.keys(withJunk.overlays).length === OVERLAY_COUNT,

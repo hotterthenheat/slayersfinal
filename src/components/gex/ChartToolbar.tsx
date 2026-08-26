@@ -218,6 +218,8 @@ const OVERLAY_ITEMS: { key: keyof ChartOverlays; label: string; hint: string }[]
   { key: 'darkpool', label: 'Dark pool', hint: 'Off-exchange print lines' },
   { key: 'volume', label: 'Volume', hint: 'Session bars along the floor' },
   { key: 'flow', label: 'Flow', hint: 'Option premium from the tape — calls up, puts down' },
+  { key: 'netDrift', label: 'Net drift', hint: "Running call & put premium totals — the session's lean" },
+  { key: 'volDrift', label: 'Vol drift', hint: 'Realised vol off these bars against the implied the feed reports' },
 ];
 
 export type MenuSide = 'bottom' | 'top' | 'left' | 'right';
@@ -279,8 +281,24 @@ const Dropdown = ({
       <Caret className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} />
     </button>
     {open && (
+      /*
+        A MENU TALLER THAN THE WINDOW SCROLLS RATHER THAN OVERFLOWING IT.
+
+        `70vh` and `overflow-y-auto` are not defensive decoration — they are the
+        fix for a measured failure. This panel had no height cap at all, which
+        was survivable only while every menu happened to be short enough. Adding
+        two overlay rows took the Overlays menu to 419px, and a HANDSET IN
+        LANDSCAPE is 390px tall: the menu opens upward off a strip on the bottom
+        edge, so the overflow goes past the TOP of a page that does not scroll,
+        and the rows that fell off were not merely awkward to reach — they were
+        unreachable. `scripts/ui-sweep.mjs` failed exactly as written.
+
+        `overflow-x-hidden` keeps the rounded corners clipping the way the plain
+        `overflow-hidden` did; `overscroll-contain` stops a flick that reaches
+        the end of the list from scrolling the page underneath it.
+      */
       <div
-        className={`absolute z-40 min-w-[210px] border border-borderMuted bg-panel rounded-md shadow-2xl shadow-black/60 overflow-hidden animate-slide-in ${MENU_SIDE_POS[menuSide]}`}
+        className={`absolute z-40 max-h-[70vh] min-w-[210px] overflow-y-auto overflow-x-hidden overscroll-contain border border-borderMuted bg-panel rounded-md shadow-2xl shadow-black/60 animate-slide-in ${MENU_SIDE_POS[menuSide]}`}
       >
         {children}
       </div>
