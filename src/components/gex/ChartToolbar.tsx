@@ -220,6 +220,7 @@ const OVERLAY_ITEMS: { key: keyof ChartOverlays; label: string; hint: string }[]
   { key: 'flow', label: 'Flow', hint: 'Option premium from the tape — calls up, puts down' },
   { key: 'netDrift', label: 'Net drift', hint: "Running call & put premium totals — the session's lean" },
   { key: 'volDrift', label: 'Vol drift', hint: 'Realised vol off these bars against the implied the feed reports' },
+  { key: 'dexStrike', label: 'Exposure by strike', hint: 'Delta, gamma or vega across the chain — docked under the tape' },
 ];
 
 export type MenuSide = 'bottom' | 'top' | 'left' | 'right';

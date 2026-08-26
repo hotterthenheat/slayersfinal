@@ -36,6 +36,8 @@ const fmtFocus = (v: number) => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
 import TickerQuickPick from '../../components/gex/TickerQuickPick';
 import SpotPrice from '../../components/gex/SpotPrice';
 import { buildPrints } from '../../data/gex';
+import { buildExposureProfile } from '../../data/exposure';
+import StrikeExposureBand, { type BandMetric } from '../../components/gex/StrikeExposureBand';
 import { twinFamilyFor, twinPrice, fmtTwin } from '../../data/indexTwins';
 import PulseBoard from '../PulseBoard';
 import { useFadeClose } from '../../components/ui/useFadeClose';
@@ -76,6 +78,10 @@ const LiveChartWidget = ({ ctx, soleChart = false }: LiveChartWidgetProps) => {
   const [chartStyle, setChartStyle] = useState<ChartStyle>('candles');
   const [indicators, setIndicators] = useState<ChartIndicators>(DEFAULT_INDICATORS);
   const [replay, setReplay] = useState(false);
+  /* Which greek the docked strike band draws. Per instance, like the timeframe
+     and the overlays: two charts on one desk can watch the same name through
+     different greeks, which is most of the reason to have two of them. */
+  const [bandMetric, setBandMetric] = useState<BandMetric>('dex');
   const [full, setFull] = useState(false);
   /* Mode 3 of 3 (Noah, 2026-08-23: "the full full screen one") — the
      taskbar itself disappears and the tape IS the screen; Esc steps back
@@ -117,6 +123,23 @@ const LiveChartWidget = ({ ctx, soleChart = false }: LiveChartWidgetProps) => {
     () => buildPrints(ctx.ticker, ctx.gex.levels.spot),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [ctx.ticker]
+  );
+
+  /*
+    THE DOCKED BAND'S BOOK, rebuilt per tick from the desk's own snapshot.
+
+    0DTE and ten strikes each side — the window the desk's other exposure
+    surfaces already use, so a reader comparing the band to the ladder beside
+    it is comparing the same book rather than two different slices of it.
+
+    Built only while the band is actually drawn. `buildExposureProfile` walks
+    the whole chain, and doing that every tick for a panel nobody opened is the
+    kind of cost that only shows up on the desk with four charts on it.
+  */
+  const bandData = useMemo(
+    () => (overlays.dexStrike ? buildExposureProfile(ctx.snapshot, '0DTE', 10) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [overlays.dexStrike, ctx.snapshot, ctx.revision]
   );
 
   /* A strike ARRIVES (Noah, 2026-08-22: "why does it take me to the default
@@ -370,7 +393,17 @@ const LiveChartWidget = ({ ctx, soleChart = false }: LiveChartWidgetProps) => {
           strip's own controls would still be tappable — so it would look
           right and the chart would simply be 60px taller than the space it
           was given, with its time axis behind the buttons. */}
-      <div className={soleChart ? 'relative flex-1 min-h-0' : 'absolute inset-0'}>
+      {/*
+        A COLUMN, so the docked band can take a row of its own beneath the tape.
+
+        It was a plain box with the chart filling it. The band is a STRIKE-axis
+        panel — see StrikeExposureBand for why that can never be a pane inside
+        the price chart — so it needs real space rather than an overlay, and an
+        absolutely-positioned strip at the bottom would have covered the time
+        axis it sits under. The floating taskbar is unaffected: it is absolute
+        against the OUTER box, not this one.
+      */}
+      <div className={`flex flex-col ${soleChart ? 'relative flex-1 min-h-0' : 'absolute inset-0'}`}>
         {/* The chart legend (Noah, 2026-08-23, TradingView's grammar): name ·
             timeframe · the live tick, floating on the tape's top-left just
             under the taskbar (which the tape now runs beneath). Facts only —
@@ -418,7 +451,7 @@ const LiveChartWidget = ({ ctx, soleChart = false }: LiveChartWidgetProps) => {
         </div>
         {/* Ticker-keyed slow fade (the Weigher's browse grammar): a name
             change breathes in instead of hard-swapping the tape. */}
-        <div key={ctx.ticker} className="h-full min-h-0 animate-soft-in-slow">
+        <div key={ctx.ticker} className="min-h-0 flex-1 animate-soft-in-slow">
           <StrikeChart
             ticker={ctx.ticker}
             revision={ctx.revision}
@@ -441,6 +474,29 @@ const LiveChartWidget = ({ ctx, soleChart = false }: LiveChartWidgetProps) => {
             frameless
           />
         </div>
+        {/* Docked BELOW the tape rather than inside it, and toggled from the
+            same Overlays menu as the panes so the reader learns one control. */}
+        {bandData && (
+          <StrikeExposureBand
+            data={bandData}
+            metric={bandMetric}
+            onMetric={setBandMetric}
+            /*
+              THE BAND IS SIZED TO WHAT IS LEFT, not to a constant.
+
+              76px of plot is a fifth of a docked panel and a quarter of a
+              handset in LANDSCAPE, where a 390px window is already paying for
+              the nav and the touch strip: measured there, the tape dropped to
+              117px with the band open — still the biggest thing on screen by a
+              hair, and not a chart anyone can trade off. A shorter band gives
+              most of that back and still reads: a diverging histogram needs
+              enough height to tell a tall bar from a short one, and it has
+              that at 48px.
+            */
+            plotHeight={full ? 120 : soleChart ? 48 : 76}
+            onClose={() => setOverlays(o => ({ ...o, dexStrike: false }))}
+          />
+        )}
       </div>
     </div>
   );

@@ -129,6 +129,8 @@ const CAMPAIGN_OVERLAY_DEFAULTS: ChartOverlays = {
      drowns one campaign's story. The vol pane is off because this chart is
      already short — a third band would leave the tape a strip. */
   netDrift: false, volDrift: false,
+  /* And this one costs the tape height outright, on a chart already short. */
+  dexStrike: false,
 };
 const loadChartPrefs = (): { timeframe: Timeframe; overlays: ChartOverlays } => {
   try {

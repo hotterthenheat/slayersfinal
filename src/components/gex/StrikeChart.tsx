@@ -147,6 +147,15 @@ export interface ChartOverlays {
   netDrift: boolean;
   /** Realised vol measured off these bars against the feed's implied. */
   volDrift: boolean;
+  /*
+    Exposure by STRIKE, docked under the chart rather than drawn inside it.
+
+    It lives on this type and not on a second one because the reader toggles it
+    from the same menu as the panes and expects it saved with them — but this
+    component never reads it. Every pane lightweight-charts draws shares one
+    TIME axis, and this band's axis is the strike; the host renders it below.
+  */
+  dexStrike: boolean;
 }
 
 /* Chart styles, TradingView's picker (Noah, 2026-08-23: "notice how candles
@@ -212,6 +221,8 @@ export const DEFAULT_OVERLAYS: ChartOverlays = {
      anything, and because a reader who has not asked for a third band should
      not get one: every extra pane is height taken off the tape. */
   volDrift: false,
+  /* Off because it costs the tape real height rather than sharing it. */
+  dexStrike: false,
 };
 
 /*
