@@ -23,7 +23,7 @@ import {
   type SetupMap,
   type SymbolSetup,
 } from '../src/pages/terrain/setups';
-import { DEFAULT_OVERLAYS } from '../src/components/gex/StrikeChart';
+import { DEFAULT_INDICATORS, DEFAULT_OVERLAYS } from '../src/components/gex/StrikeChart';
 
 let pass = 0, fail = 0;
 const check = (name: string, ok: boolean, extra = '') => {
@@ -103,6 +103,10 @@ const withJunk = readSetup(
   test.
 */
 const OVERLAY_COUNT = Object.keys(DEFAULT_OVERLAYS).length;
+/* Same rule as OVERLAY_COUNT: read from the shipped defaults, never a literal.
+   A literal here goes stale on the very first indicator the directive adds,
+   which is the failure this whole block exists to catch. */
+const INDICATOR_COUNT = Object.keys(DEFAULT_INDICATORS).length;
 check(
   'and an extra key is dropped rather than carried',
   !!withJunk?.overlays && !('ghost' in withJunk.overlays) && Object.keys(withJunk.overlays).length === OVERLAY_COUNT,
@@ -147,6 +151,53 @@ check(
       ([k, v]) => ['trails', 'levels', 'darkpool', 'volume'].includes(k) || v === false
     ),
   JSON.stringify(legacy?.overlays)
+);
+
+/*
+  THE SAME GUARD FOR INDICATORS, and it is separate from the overlay one on
+  purpose: the two fields are validated by two blocks, and for a while only one
+  of them was fixed. A guard that covered "the migration works" through the
+  overlay path alone would have been green that entire time.
+
+  Half of the Terrain/Pinpoint directive adds indicators — RSI, MACD, ATR,
+  Bollinger, VWAP bands, anchored VWAP, SMA. Every one of them makes today's
+  stored records one key short. Before the fix that dropped all four indicators
+  from up to sixty symbols, with no error.
+
+  `INDICATOR_KEYS` is bound to `keyof ChartIndicators` by a `satisfies`
+  tripwire, so a proof cannot append a fictional fifth key to it at runtime —
+  the type would have to change first. The arithmetic that matters is identical
+  either way: what breaks is a STORED RECORD that carries fewer keys than the
+  list. So the fixture carries three of four, which is exactly the shape every
+  saved setup takes the day a fifth indicator ships.
+*/
+const legacyInd = readSetup({ indicators: { ema9: true, ema21: false, ema50: true } }, 'TSLA');
+check(
+  'a setup saved before a new indicator existed still returns its indicators',
+  !!legacyInd?.indicators,
+  legacyInd?.indicators ? 'kept' : 'WIPED — every symbol just lost its indicators'
+);
+check(
+  'and every indicator the reader actually chose survives unchanged',
+  legacyInd?.indicators?.ema9 === true &&
+    legacyInd?.indicators?.ema21 === false &&
+    legacyInd?.indicators?.ema50 === true,
+  JSON.stringify(legacyInd?.indicators)
+);
+check(
+  'the indicator they never saw comes back OFF, not on',
+  legacyInd?.indicators !== undefined &&
+    Object.keys(legacyInd.indicators).length === INDICATOR_COUNT &&
+    legacyInd.indicators.vwap === false,
+  JSON.stringify(legacyInd?.indicators)
+);
+/* Junk still yields nothing rather than a full set of invented values — the
+   floor that keeps the relaxed gate from accepting anything at all. */
+const poisonedInd = readSetup({ seen: 1, indicators: { ema9: 'yes', rsi: true } }, 'SPY');
+check(
+  'a half-typed indicators object yields no indicators at all',
+  !!poisonedInd && !('indicators' in poisonedInd),
+  JSON.stringify(poisonedInd)
 );
 
 // 5. a symbol cannot compare against itself
