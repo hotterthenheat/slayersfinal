@@ -380,6 +380,40 @@ const Pane = ({
      page scrolls through — so the wheel has to belong to the page, not to the
      chart. See `pageScroll` on StrikeChart for what was measured. */
   const belowLg = useIsBelowLg();
+
+  /*
+    ══ THE COMPARE LEGEND HAS TO START BELOW THE STRIP, NOT AT 46px ═════════
+
+    The legend was pinned at `top-[46px]` — the strip's height when it holds
+    one row. The strip is a `flex-col` and holds two whenever the toolbar is
+    up, so on hover it grew over the legend and the legend is z-10 against the
+    strip's z-20.
+
+    Measured at 1440x900, one compare: legend row [19,109,109,16] against the
+    heaviest-strike read [13,109,316,23] — 16px of 16 vertical overlap, 109 of
+    109 horizontal. With four compares the Remove buttons land at y=109/127/
+    145/163 and elementFromPoint at the third one's own centre returns the
+    timeframe strip's button: that × cannot be clicked at all, even though it
+    carries `pointer-events-auto`.
+
+    So the offset is the strip's OWN height, measured. A second hard-coded
+    number would be the same bug with a bigger constant — the strip's height
+    is whatever its content and the pane's width make it.
+  */
+  const stripRef = useRef<HTMLDivElement | null>(null);
+  const [stripH, setStripH] = useState(46);
+  useEffect(() => {
+    const el = stripRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const obs = new ResizeObserver(() => {
+      // getBoundingClientRect, not contentRect: the strip carries p-1.5 and
+      // contentRect excludes padding, which would put the legend back under it.
+      const h = Math.round(el.getBoundingClientRect().height);
+      if (h > 0) setStripH(h);
+    });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
   /* The tape, straight from the provider that accumulates it. Read HERE rather
      than threaded down from Terrain: this component already takes fourteen
      props, and every pane wants the same unfiltered tape — StrikeChart narrows
@@ -581,6 +615,7 @@ const Pane = ({
               cursor does.
             */}
             <div
+              ref={stripRef}
               /* Right padding clears the price gutter, so nothing floating
                  ever lands on a price tick. */
               style={{ paddingRight: PRICE_GUTTER_PX }}
@@ -707,7 +742,10 @@ const Pane = ({
                 the stack and back on for the buttons, so the legend never eats
                 a drag on the chart. */}
             {compares.length > 0 && (
-              <div className="pointer-events-none absolute top-[46px] left-3 z-10 flex flex-col gap-0.5 opacity-70 transition-opacity duration-200 group-hover:opacity-100">
+              <div
+                style={{ top: stripH + 4 }}
+                className="pointer-events-none absolute left-3 z-10 flex flex-col gap-0.5 opacity-70 transition-opacity duration-200 group-hover:opacity-100"
+              >
                 {compares.map(c => (
                   <span key={`${c.ticker}:${c.mode}`} className="flex items-center gap-1.5">
                     <span className="w-2 h-[3px] rounded-full" style={{ background: c.ink }} aria-hidden />
