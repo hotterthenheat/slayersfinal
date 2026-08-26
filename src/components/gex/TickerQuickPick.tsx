@@ -25,6 +25,9 @@ import TickerLookup from '../ui/TickerLookup';
 import useFocusTrap from '../ui/useFocusTrap';
 
 interface TickerQuickPickProps {
+  /* The chain card wears the squared cut (Noah, 2026-08-25: "make the chain
+     one more squared") — same button, corner radius only. */
+  squared?: boolean;
   ticker: string;
   onPick: (ticker: string) => void;
   /* OPTIONALLY CONTROLLED. Left alone the button owns its own open state, the
@@ -35,7 +38,7 @@ interface TickerQuickPickProps {
   onOpenChange?: (open: boolean) => void;
 }
 
-const TickerQuickPick = ({ ticker, onPick, open: openProp, onOpenChange }: TickerQuickPickProps) => {
+const TickerQuickPick = ({ ticker, onPick, open: openProp, onOpenChange, squared }: TickerQuickPickProps) => {
   const [selfOpen, setSelfOpen] = useState(false);
   const open = openProp ?? selfOpen;
   const setOpen = (next: boolean) => {
@@ -108,7 +111,9 @@ const TickerQuickPick = ({ ticker, onPick, open: openProp, onOpenChange }: Ticke
         ref={anchorRef}
         onClick={() => setOpen(!open)}
         title="Switch ticker"
-        className="inline-flex items-center justify-between gap-2 h-7 min-w-[112px] px-3 rounded-full bg-white/[0.06] hover:bg-white/[0.10] font-mono text-[11px] font-bold text-textPrimary transition-colors"
+        className={`inline-flex items-center justify-between gap-2 h-7 min-w-[112px] px-3 ${
+          squared ? 'rounded-md' : 'rounded-full'
+        } bg-white/[0.06] hover:bg-white/[0.10] font-mono text-[11px] font-bold text-textPrimary transition-colors`}
       >
         {ticker}
         <ChevronDown className={`w-3 h-3 text-textSecondary transition-transform ${open ? 'rotate-180' : ''}`} />

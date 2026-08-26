@@ -15,6 +15,7 @@ import {
   FolderKanban,
   ClipboardCheck,
   type LucideIcon,
+  Scale,
 } from 'lucide-react';
 
 // Navigation is organised by WORKFLOW, not by product name: Discover → Analyze
@@ -44,9 +45,17 @@ export const NAV_ITEMS: NavItem[] = [
     group: 'Discover',
   },
   {
+    path: '/weigher',
+    label: 'Weigher',
+    code: '02',
+    icon: Scale,
+    description: 'The weigh station — chart, chain, scanner and what a contract has to clear',
+    group: 'Discover',
+  },
+  {
     path: '/stocks',
     label: 'Stocks',
-    code: '02',
+    code: '03',
     icon: BarChart3,
     description: 'Ranked equity picks & sector rotation',
     group: 'Discover',
@@ -54,7 +63,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     path: '/trace',
     label: 'Trace',
-    code: '03',
+    code: '04',
     icon: Radar,
     description: 'Options flow & dark-pool intelligence — what the prints actually mean',
     group: 'Discover',
@@ -63,7 +72,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     path: '/pulse',
     label: 'Pulse',
-    code: '04',
+    code: '05',
     icon: Activity,
     description: 'The live market desk — chart, dealer pressure & key levels, arranged your way',
     group: 'Analyze',
@@ -71,7 +80,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     path: '/terrain',
     label: 'Terrain',
-    code: '05',
+    code: '06',
     icon: CandlestickChart,
     description: 'Charts only — one to four books side by side, one set of controls',
     group: 'Analyze',
@@ -79,7 +88,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     path: '/pinpoint',
     label: 'Pinpoint',
-    code: '06',
+    code: '07',
     icon: Crosshair,
     description: 'GEX & dealer-positioning system',
     group: 'Analyze',
@@ -87,7 +96,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     path: '/news',
     label: 'News',
-    code: '07',
+    code: '08',
     icon: Newspaper,
     description: 'Stock news + predicted outcomes per headline',
     group: 'Analyze',
@@ -95,7 +104,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     path: '/earnings',
     label: 'Earnings',
-    code: '08',
+    code: '09',
     icon: CalendarClock,
     description: 'Earnings hub — implied vs. realized, play it or fade it',
     group: 'Analyze',
@@ -104,7 +113,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     path: '/tracker',
     label: 'Tracker',
-    code: '09',
+    code: '10',
     icon: Bookmark,
     description: 'Bookmarked setups — live monitoring',
     group: 'Manage',
@@ -112,7 +121,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     path: '/community',
     label: 'Community',
-    code: '10',
+    code: '11',
     icon: Users,
     description: 'Trade ideas, requests & feedback',
     group: 'Manage',
@@ -121,7 +130,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     path: '/prove-it',
     label: 'Prove It',
-    code: '11',
+    code: '12',
     icon: Sigma,
     description: 'Quantitative modeling & predictive analytics',
     group: 'Review',
