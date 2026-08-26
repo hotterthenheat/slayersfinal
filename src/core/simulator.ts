@@ -19,6 +19,7 @@ import type {
 } from '../types/market';
 import { blackScholesGreeks } from './greeks';
 import { dayKey } from './rng';
+import { pickWalls } from './walls';
 import type { UniverseQuote } from '../types/compass';
 
 const Simulator = (() => {
@@ -543,21 +544,27 @@ const Simulator = (() => {
   function generateTradePlan(tickerKey: TickerSymbol, spot: number, chain: StrikeNode[], indicators: Indicators): TradePlan {
     const config = TICKERS[tickerKey];
 
-    let supportWall = spot - config.step * 4;
-    let resistanceWall = spot + config.step * 4;
-    let maxPutGex = 0;
-    let maxCallGex = 0;
+    /* Walls come from core/walls.ts, the ONE copy of this rule.
 
-    chain.forEach(node => {
-      if (node.strike < spot && Math.abs(node.netGex) > maxPutGex) {
-        maxPutGex = Math.abs(node.netGex);
-        supportWall = node.strike;
-      }
-      if (node.strike > spot && Math.abs(node.netGex) > maxCallGex) {
-        maxCallGex = Math.abs(node.netGex);
-        resistanceWall = node.strike;
-      }
-    });
+       This used to pick by |netGex| plus side of spot, which is the bug that
+       was already fixed in data/gex.ts `buildLevelsFor` and NOT here — so the
+       same book named one pair of walls for Terrain and a different pair for
+       the GEX matrix, `readHeatPattern`'s prose and the Pulse board. The flip
+       below carries a comment asking the reader to keep two copies in step;
+       the walls are the case where that did not survive, so they moved out.
+
+       `netGex` IS what the snapshot calls `value` — computeGexSnapshot maps
+       one spelling to the other — which is why both callers can share a rule
+       at all.
+
+       UNNAMED FALLS BACK TO A FIXED BRACKET, not to spot: these walls also set
+       target1/target2 and the stop below, and a target sitting exactly on
+       entry is not a plan. Four steps out is what this function always used
+       when the scan found nothing, and it keeps the support < spot < resistance
+       ordering that `readHeatPattern` reads as a percentage distance. */
+    const picked = pickWalls(chain, spot, n => n.netGex);
+    const supportWall = picked.putWall ?? spot - config.step * 4;
+    const resistanceWall = picked.callWall ?? spot + config.step * 4;
 
     // The crossing NEAREST SPOT, not the first one walking up the chain: a
     // noisy book can carry a jitter crossing deep in a tail, and breaking on

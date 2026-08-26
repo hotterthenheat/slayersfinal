@@ -26,6 +26,14 @@
   under test is the simulator's, so a mock would be asserting my own
   arithmetic rather than the product's.
 
+  TWO GENERATORS, BOTH COVERED. The rule was written twice over the same
+  numbers — `buildLevelsFor` (data/gex.ts) and `generateTradePlan`
+  (core/simulator.ts) — and only the first was fixed, so Terrain named one pair
+  of walls while the GEX matrix, `readHeatPattern`'s prose and the Pulse board
+  named another off the same book. Both now call `core/walls.ts`, and this file
+  asserts BOTH paths: the snapshot path below, and the PLAN path in the tick
+  callback, which is checked against the very chain the plan was built from.
+
   SAMPLED ALONG THE WALK, NOT AT THE END, and that is the whole design. The
   book BLENDS toward a fresh profile (`evolveBook`, per bar roll), and a fresh
   profile is the one shape where side-of-spot happens to agree with option
@@ -87,6 +95,45 @@ for (const n of NAMES)
 
 const sign = (v: number) => (v > 0 ? '+' : v < 0 ? '-' : '0');
 
+/* THE PLAN PATH. `tick` already builds a TradePlan for the active ticker every
+   tick and hands the whole snapshot to this callback, so validating here costs
+   no extra ticks and — the point — checks the plan against the EXACT chain it
+   was built from rather than a book re-read afterwards.
+
+   The contract is stated as an implication rather than a flat "is
+   call-dominant", because an unnamed wall legitimately falls back to
+   spot +/- step*4, which need not be a real strike. So: IF the chain holds any
+   call-dominant strike above spot, the plan's resistance wall must be one. */
+const planCw = blank(), planCwFlip = blank(), planPw = blank(), planPwFlip = blank();
+let plansSeen = 0;
+
+const validatePlan = (snap: {
+  spot: number;
+  chain: readonly { strike: number; netGex: number }[];
+  plan: { supportWall: number; resistanceWall: number; flipZone: number };
+}) => {
+  const { spot, chain, plan } = snap;
+  if (!chain.length) return;
+  plansSeen++;
+
+  if (chain.some(n => n.strike > spot && n.netGex < 0)) {
+    const node = chain.find(n => n.strike === plan.resistanceWall);
+    rec(planCw, !!node && node.netGex < 0 && plan.resistanceWall > spot,
+      `rw ${plan.resistanceWall} vs spot ${spot.toFixed(2)}` +
+      (node ? ` value ${sign(node.netGex)}${Math.abs(node.netGex).toExponential(2)}` : ' (not a chain strike)'));
+    rec(planCwFlip, plan.resistanceWall >= plan.flipZone,
+      `rw ${plan.resistanceWall} vs flip ${plan.flipZone}`);
+  }
+  if (chain.some(n => n.strike < spot && n.netGex > 0)) {
+    const node = chain.find(n => n.strike === plan.supportWall);
+    rec(planPw, !!node && node.netGex > 0 && plan.supportWall < spot,
+      `sw ${plan.supportWall} vs spot ${spot.toFixed(2)}` +
+      (node ? ` value ${sign(node.netGex)}${Math.abs(node.netGex).toExponential(2)}` : ' (not a chain strike)'));
+    rec(planPwFlip, plan.supportWall <= plan.flipZone,
+      `sw ${plan.supportWall} vs flip ${plan.flipZone}`);
+  }
+};
+
 /* MUTATION GUARD, and the reason it is here: every assertion below passes on a
    FRESH book whether or not the sign is checked, because the seeded profile
    puts calls above spot and puts below. If the walk never strands a shelf,
@@ -100,7 +147,10 @@ let naiveDiffered = 0;
 let statesSampled = 0;
 
 for (let s = 0; s < SAMPLES; s++) {
-  for (let i = 0; i < TICKS_PER_SAMPLE; i++) Simulator.tick(() => {});
+  /* The plan is built for the ACTIVE ticker only, so rotate — otherwise this
+     would assert the plan rule against SPY 60 times and nothing else. */
+  Simulator.setActiveTicker(NAMES[s % NAMES.length]);
+  for (let i = 0; i < TICKS_PER_SAMPLE; i++) Simulator.tick(validatePlan);
 
   for (const name of NAMES) {
     const sym = Simulator.ensureTicker(name);
@@ -156,6 +206,12 @@ for (const name of NAMES) {
   report(name, 'the put wall is below spot', st.pwSide);
   report(name, 'the put wall is on the put side of the flip', st.pwFlip);
 }
+
+report('plan', 'the resistance wall is CALL-dominant and above spot', planCw);
+report('plan', 'the resistance wall is on the call side of the flip', planCwFlip);
+report('plan', 'the support wall is PUT-dominant and below spot', planPw);
+report('plan', 'the support wall is on the put side of the flip', planPwFlip);
+check('the plan path was actually exercised', plansSeen > 0, `${plansSeen} plans validated against their own chain`);
 
 check(
   'the walked books actually exercise the difference',

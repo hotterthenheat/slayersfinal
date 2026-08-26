@@ -10,6 +10,7 @@
 
 import Simulator from '../core/simulator';
 import { expiryFor } from '../core/calendar';
+import { pickWalls } from '../core/walls';
 import type { GexLevel, MarketSnapshot, StrikeNode } from '../types/market';
 import type {
   BoardTicker,
@@ -299,43 +300,22 @@ export function buildLevelsFor(ticker: string): KeyLevels {
 
   let king = spot;
   let kingAbs = 0;
-  let callWall = spot;
-  let cwAbs = 0;
-  let putWall = spot;
-  let pwAbs = 0;
   for (const l of latest.levels) {
     const a = Math.abs(l.value);
     if (a > kingAbs) {
       kingAbs = a;
       king = l.strike;
     }
-    /* A CALL wall has to be CALL-DOMINANT, and dropping that was the whole
-       bug: the pick was |value| plus side-of-spot, and side-of-spot is only a
-       PROXY for option side. It holds for the fresh OI profile (simulator.ts
-       :132, calls x1.4 above spot / puts x1.6 below) and deliberately does
-       NOT hold for the live book, which is sticky on purpose (BOOK_BLEND,
-       ~1h half-life: "walls persist... instead of shadowing price"), so a
-       shelf keeps its side while price walks past it. Measured on SPY, spot
-       505.17: this named 505 (-$436.8M, CALL-dominant) the PUT wall and the
-       rail printed a red PW on a steel row sitting ABOVE its own flip rule at
-       504.50 — a put wall on the call side of the flip cannot exist.
-
-       The sign IS the measured option side (netGex, simulator.ts:504-510) and
-       every other surface already reads it that way: the heat ramps, the
-       field's `put: l.value >= 0`, and this rail's own bar colour. Naming it
-       here costs no new math — same magnitude comparison, restricted to the
-       half of the book the name claims. Nothing qualifying leaves the wall at
-       spot, i.e. unnamed, which is the honest answer to "no call wall
-       overhead" (measured 0 times in 40 rails). */
-    if (l.strike > spot && l.value < 0 && a > cwAbs) {
-      cwAbs = a;
-      callWall = l.strike;
-    }
-    if (l.strike < spot && l.value > 0 && a > pwAbs) {
-      pwAbs = a;
-      putWall = l.strike;
-    }
   }
+
+  /* Walls come from core/walls.ts, which is the ONE copy of this rule. It used
+     to live inline here and again in `generateTradePlan`; only this one got
+     the sign fix, so the GEX page and Terrain named different walls off the
+     same book. Unnamed stays at SPOT here — the rail draws no tag rather than
+     a tag pointing at a wall that is not there. */
+  const w = pickWalls(latest.levels, spot, l => l.value);
+  const callWall = w.callWall ?? spot;
+  const putWall = w.putWall ?? spot;
 
   let flip = spot;
   let flipDist = Infinity;
