@@ -98,6 +98,9 @@ export const TERMS = {
     'Average true range \u2014 how far this name typically travels in a session, gaps included. A wall 0.4 ATR away is the same distance on SPY and on NVDA.',
   '\u03c3 distance':
     'The move in implied one-day \u03c3 \u2014 how many of the moves the options are charging for. Past 1\u03c3, price has beaten what the options priced for the day.',
+  // ---- volume profile (T-10) ----
+  VPOC: 'The price where the session traded the most volume — the tape\u2019s own centre of gravity today. Price tends to return to it while value is being accepted.',
+  'Value area': 'The band holding 70% of the session\u2019s volume, VAL to VAH. Inside it the market is trading acceptance; outside it, discovery.',
   // ---- multi-timeframe (T-12) ----
   'Timeframe trend':
     'Where price sits on each interval against its own EMA21 and VWAP. Above both reads up, below both reads down, and between them reads flat — the timeframes disagreeing is itself the signal.',

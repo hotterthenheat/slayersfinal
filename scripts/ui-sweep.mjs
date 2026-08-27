@@ -4070,6 +4070,68 @@ head('two sub-panes stack under the tape, and the third is refused with its reas
   await ctx.close();
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   T-10. THE VOLUME PROFILE — the tape's traded volume on the rail's own
+   axis, under the exposure bars.
+
+   The engine is proved headless (scripts/volume-profile-proof.ts): binning,
+   VPOC ties, the 70% area, the session cut. The browser owns the overlay:
+   that the VOL chip really toggles paint into the rail's canvas, and that
+   toggling off clears it — the profile is texture UNDER the book's bars,
+   and texture that cannot be turned off is noise.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the rail takes a volume profile, and gives it back');
+{
+  const seed = JSON.stringify({
+    layout: 1,
+    panes: [{
+      ticker: 'SPY', timeframe: '15m',
+      overlays: { trails: false, levels: false, darkpool: false, volume: false, flow: false, netDrift: false, volDrift: false, dexStrike: false, session: false, cone: false, events: false },
+      indicators: { ema9: false, ema21: false, ema50: false, vwap: false },
+      chartStyle: 'candles', compares: [], priceScale: 'normal', sessionOr: 15, ladder: true,
+    }],
+    setups: {},
+  });
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  await ctx.addInitScript(`localStorage.setItem('slayer_terrain_v1', ${JSON.stringify(seed)})`);
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 1500);
+
+  const railInk = () => page.evaluate(() => {
+    const rail = document.querySelector('[aria-label$="exposure by strike"]');
+    const c = rail?.querySelector('canvas');
+    if (!c || c.width === 0) return -1;
+    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    let ink = 0;
+    for (let k = 3; k < d.length; k += 4) if (d[k] > 8) ink++;
+    return ink;
+  });
+  const chip = await page.$('button[title^="Volume profile"]');
+  chip ? ok('PREMISE: the rail header carries the VOL chip') : bad('PREMISE: no VOL chip on the rail');
+  if (chip) {
+    const before = await railInk();
+    before === 0 ? ok('the profile canvas starts clear — off by default') : bad(`the canvas already holds ${before} ink cells with the chip off`);
+    await chip.click();
+    await page.waitForTimeout(1200);
+    (await page.evaluate(() => document.querySelector('button[title^="Volume profile"]')?.getAttribute('aria-pressed'))) === 'true'
+      ? ok('the chip says it is on')
+      : bad('aria-pressed did not follow the toggle');
+    const after = await railInk();
+    after > 300
+      ? ok(`the profile paints — ${after} ink cells of bins, VPOC and value area`)
+      : bad(`the toggle painted ${after} cells`);
+    await chip.click();
+    await page.waitForTimeout(700);
+    const off = await railInk();
+    off === 0 ? ok('and toggling off clears every pixel of it') : bad(`toggle-off left ${off} cells`);
+  }
+  errs.length === 0 ? ok('no page errors through the toggle') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
 console.log(`\n${fails} failing`);
 await browser.close();
 process.exit(fails ? 1 : 0);
