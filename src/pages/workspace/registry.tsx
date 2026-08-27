@@ -13,7 +13,7 @@ import CompassSetupsWidget from './CompassSetupsWidget';
 import RankedTargetsWidget from './RankedTargetsWidget';
 import EarningsWidget from './EarningsWidget';
 import NewsWidget from './NewsWidget';
-import ContractWeigher from '../../components/compass/ContractWeigher';
+import WeigherChainWidget from './WeigherChainWidget';
 
 /* The Weigher re-renders on its snapshot prop only — the desk's 1s heat
    pulse must not re-render the whole chain every second (the "buffering"
@@ -33,8 +33,6 @@ import type {
 } from '../../types/gex';
 import type { MarketSnapshot } from '../../types/market';
 import type { CompassView } from '../../types/compass';
-
-const MemoWeigher = memo(ContractWeigher);
 
 export interface WorkspaceCtx {
   ticker: string;
@@ -227,19 +225,23 @@ export const WIDGETS: WidgetDef[] = [
     render: () => <NewsWidget />,
   },
   {
+    /* The stored-layout key stays 'compass-weigher'. Renaming it would orphan
+       every Pulse board anyone has already saved; only the words moved, since
+       the Weigher is its own page now rather than a Compass tab. */
     key: 'compass-weigher',
-    title: 'Compass Weigher',
-    description: 'The actual Weigher — expiry rail, contract chain & the full weigh view',
+    title: 'Weigher',
+    description: 'The Weigher desk in panel form — the deep chain & the strike weigh-up, live',
     w: 8,
     h: 6,
     minW: 5,
     minH: 4,
     maxH: 9, // the weigh view plus the chain — past this it was empty surface
-    render: ctx => (
-      <div className="h-full min-h-0 overflow-y-auto p-3">
-        <MemoWeigher snapshot={ctx.snapshot} />
-      </div>
-    ),
+    /* THE NEW WEIGHER'S OWN COMPONENTS. The add-widget preview mounts this
+       render, so the widget IS the picture a reader picks from — and it was
+       still showing the old weigh station, a desk this app no longer has
+       anywhere else. It runs the same ChainCard the /weigher page runs, so
+       what you preview is what you place. */
+    render: ctx => <WeigherChainWidget ctx={ctx} />,
   },
 ];
 
