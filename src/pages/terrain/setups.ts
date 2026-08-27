@@ -5,6 +5,7 @@ import type {
   ChartStyle,
   CompareEntry,
   CompareMode,
+  PriceScale,
 } from '../../components/gex/StrikeChart';
 
 /*
@@ -52,6 +53,10 @@ export interface SymbolSetup {
   indicators: ChartIndicators;
   chartStyle: ChartStyle;
   compares: CompareEntry[];
+  /* The main price axis's mode (T-7). It follows the SYMBOL rather than the
+     slot for the same reason the interval does: log is a decision about a
+     name's price behaviour, not about which box on the desk it landed in. */
+  priceScale: PriceScale;
 }
 
 /** What is actually on disk. Every field optional, because validation drops
@@ -61,7 +66,7 @@ export type SetupMap = Record<string, StoredSetup>;
 
 /** THE list. Capture, apply and the touched-a-control test all read it, so a
     field either follows the symbol in all three or in none of them. */
-export const SETUP_KEYS = ['timeframe', 'overlays', 'indicators', 'chartStyle', 'compares'] as const;
+export const SETUP_KEYS = ['timeframe', 'overlays', 'indicators', 'chartStyle', 'compares', 'priceScale'] as const;
 
 /*
   Key lists written as `satisfies Record<keyof T, …>` rather than as a bare
@@ -70,7 +75,7 @@ export const SETUP_KEYS = ['timeframe', 'overlays', 'indicators', 'chartStyle', 
   build, instead of silently never persisting it.
 */
 const OVERLAY_KEYS = Object.keys({
-  trails: 0, levels: 0, darkpool: 0, volume: 0, flow: 0, netDrift: 0, volDrift: 0, dexStrike: 0,
+  trails: 0, levels: 0, darkpool: 0, volume: 0, flow: 0, netDrift: 0, volDrift: 0, dexStrike: 0, session: 0, cone: 0,
 } satisfies Record<keyof ChartOverlays, number>) as (keyof ChartOverlays)[];
 
 const INDICATOR_KEYS = Object.keys({
@@ -81,16 +86,27 @@ const STYLE_KEYS = Object.keys({
   candles: 0, hollow: 0, bars: 0, line: 0, step: 0, area: 0, baseline: 0,
 } satisfies Record<ChartStyle, number>) as ChartStyle[];
 
+const SCALE_KEYS = Object.keys({
+  normal: 0, log: 0, percent: 0, indexed: 0,
+} satisfies Record<PriceScale, number>) as PriceScale[];
+
 const TF_VALUES = new Set<string>(TIMEFRAMES.map(t => t.value));
 const STYLE_VALUES = new Set<string>(STYLE_KEYS);
+const SCALE_VALUES = new Set<string>(SCALE_KEYS);
 const COMPARE_MODES = new Set<string>(['percent', 'scale', 'pane'] satisfies CompareMode[]);
 
 /*
   Sixty, argued from bytes rather than taste: one full entry with a comparison
-  serialises to about 240 bytes, so sixty of them is ~14 KB against a 5 MB
-  quota. A reader who has hand-configured more than sixty distinct names will
-  not miss the sixty-first-oldest, and eviction drops a SETUP, never a pane —
-  an evicted symbol simply inherits the pane again next time it is picked.
+  serialises to about 360 bytes, so sixty of them is ~21 KB against a 5 MB
+  quota — four thousandths of it. A reader who has hand-configured more than
+  sixty distinct names will not miss the sixty-first-oldest, and eviction drops
+  a SETUP, never a pane — an evicted symbol simply inherits the pane again next
+  time it is picked.
+
+  The figures are MEASURED by `terrain-setups-proof.ts`, which prints both and
+  holds the total under one percent of the quota. They were "240 bytes, ~14 KB"
+  here until T-7's sixth field moved them, which is how a number written in a
+  comment goes quietly wrong; the proof prints the live pair every run.
 */
 export const SETUP_CAP = 60;
 
@@ -104,6 +120,7 @@ export const captureSetup = (p: SymbolSetup, now: number): StoredSetup => ({
   indicators: { ...p.indicators },
   chartStyle: p.chartStyle,
   compares: p.compares.map(c => ({ ...c })),
+  priceScale: p.priceScale,
   seen: now,
 });
 
@@ -137,6 +154,11 @@ export function readSetup(raw: unknown, key: string): StoredSetup | null {
 
   if (isStr(r.timeframe) && TF_VALUES.has(r.timeframe)) out.timeframe = r.timeframe as Timeframe;
   if (isStr(r.chartStyle) && STYLE_VALUES.has(r.chartStyle)) out.chartStyle = r.chartStyle as ChartStyle;
+  /* Absent on every record written before T-7, and that is the whole design of
+     this function: a missing field is simply not assigned, so `applySetup`
+     spreads over it and the pane keeps the scale it already had. No migration,
+     no default written into a reader's stored setup. */
+  if (isStr(r.priceScale) && SCALE_VALUES.has(r.priceScale)) out.priceScale = r.priceScale as PriceScale;
 
   /* Rebuilt key by key rather than taken whole, so junk keys are dropped
      instead of multiplied across up to sixty symbols. */

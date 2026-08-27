@@ -131,6 +131,16 @@ const CAMPAIGN_OVERLAY_DEFAULTS: ChartOverlays = {
   netDrift: false, volDrift: false,
   /* And this one costs the tape height outright, on a chart already short. */
   dexStrike: false,
+  /* Session levels join the same diet. This chart tells ONE campaign's story
+     against the strikes that bear on it; yesterday's high and the opening
+     range are the day's general furniture, and seven more rules across a
+     short tape is exactly the texture that drowns the one line it exists to
+     show. Not in `overlayKeys` below either, so it is not offered. */
+  session: false,
+  /* The cone joins the session levels in the diet, for the same reason: it is
+     the DAY'S general claim, not this campaign's, and it is geometry across
+     the whole tape. Not in `overlayKeys` below either. */
+  cone: false,
 };
 const loadChartPrefs = (): { timeframe: Timeframe; overlays: ChartOverlays } => {
   try {

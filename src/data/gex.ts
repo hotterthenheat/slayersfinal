@@ -12,7 +12,7 @@
 
 import Simulator from '../core/simulator';
 import { expiryFor } from '../core/calendar';
-import { pickWalls } from '../core/walls';
+import { pickFlip, pickWalls } from '../core/walls';
 import type { GexLevel, MarketSnapshot, StrikeNode } from '../types/market';
 import type {
   BoardTicker,
@@ -319,19 +319,10 @@ export function buildLevelsFor(ticker: string): KeyLevels {
   const callWall = w.callWall ?? spot;
   const putWall = w.putWall ?? spot;
 
-  let flip = spot;
-  let flipDist = Infinity;
-  const sorted = [...latest.levels].sort((a, b) => a.strike - b.strike);
-  for (let i = 1; i < sorted.length; i++) {
-    if (Math.sign(sorted[i - 1].value) !== Math.sign(sorted[i].value)) {
-      const mid = (sorted[i - 1].strike + sorted[i].strike) / 2;
-      const d = Math.abs(mid - spot);
-      if (d < flipDist) {
-        flipDist = d;
-        flip = mid;
-      }
-    }
-  }
+  /* One copy, core/walls.ts — see pickFlip's header for the four this
+     replaced. `?? spot` keeps the rail's own fallback: no crossing, no tag
+     pointing anywhere new. */
+  const flip = pickFlip(latest.levels, spot, l => l.value) ?? spot;
 
   return { spot, callWall, putWall, flip, king };
 }

@@ -27,7 +27,7 @@ const H = 100;
 const MID = H / 2;
 const rows = (vals: number[]) => vals.map((v, i) => ({ strike: 100 + i, v }));
 const band = (vals: number[], maxAbs = 100, w = W, h = H, gap = 2): BandBar[] =>
-  layoutBand(rows(vals), r => (r as { v: number }).v, maxAbs, w, h, gap);
+  layoutBand(rows(vals), r => r.v, maxAbs, w, h, gap);
 
 // ---- 1. the bars tile the width ----------------------------------------------
 {
@@ -182,14 +182,14 @@ const band = (vals: number[], maxAbs = 100, w = W, h = H, gap = 2): BandBar[] =>
   const widths = [320, 760, 1600, 2560];
   const n = 21;
   const fractions = widths.map(w => {
-    const b = layoutBand(rows(new Array(n).fill(50)), r => (r as { v: number }).v, 100, w, H, barGap(w, n));
+    const b = layoutBand(rows(new Array(n).fill(50)), r => r.v, 100, w, H, barGap(w, n));
     return b[0].w / (w / n);
   });
   const spread = Math.max(...fractions) - Math.min(...fractions);
   check('a bar keeps the same share of its slot at every width', spread < 1e-9, fractions.map(f => f.toFixed(3)).join(' '));
   check('and that share leaves real air', fractions[0] > 0.4 && fractions[0] < 0.85, `${fractions[0].toFixed(2)}`);
   /* The failure this replaced: a fixed 2px gap at desk width. */
-  const fixed = layoutBand(rows(new Array(n).fill(50)), r => (r as { v: number }).v, 100, 1600, H, 2);
+  const fixed = layoutBand(rows(new Array(n).fill(50)), r => r.v, 100, 1600, H, 2);
   check('the fixed gap it replaced really did fuse the bars', fixed[0].w / (1600 / n) > 0.95, `${(fixed[0].w / (1600 / n)).toFixed(3)} of the slot`);
   /* Degenerate ends: never zero, never negative, never wider than the slot. */
   check('a band narrower than its strike count still gets a gap', barGap(10, 40) >= 1, `${barGap(10, 40)}`);

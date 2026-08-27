@@ -19,7 +19,7 @@ import type {
 } from '../types/market';
 import { blackScholesGreeks } from './greeks';
 import { dayKey } from './rng';
-import { pickWalls } from './walls';
+import { pickFlip, pickWalls } from './walls';
 import type { UniverseQuote } from '../types/compass';
 
 const Simulator = (() => {
@@ -89,9 +89,17 @@ const Simulator = (() => {
   // OHLC candle state — one rolling multi-session series per ticker
   const candleHistory: Record<string, Candle[]> = {};
   const candleTickCount: Record<string, number> = {};
+  /* Time of the CURRENT session's first bar, per symbol — what tells the
+     live roll when a session has run its SESSION_BARS and the next bar
+     belongs to tomorrow. Set by seeding, advanced by the roll. */
+  const sessionOpenTime: Record<string, number> = {};
   const BAR_SECONDS = 60; // 1-minute base bars
   const TICKS_PER_BAR = 4; // each simulated bar aggregates 4 ticks
   const SESSION_BARS = 390; // ~6.5h session at 1-min bars
+  /* One calendar day minus the session — the jump between a session's last
+     bar and the next session's first. Seeding and the LIVE roll below share
+     this single definition so they cannot disagree about what a night is. */
+  const OVERNIGHT_GAP_SECONDS = 86400 - (SESSION_BARS - 1) * BAR_SECONDS;
   const SESSIONS = 22; // ~1 month of sessions seeded up front
   const CANDLE_LIMIT = SESSIONS * SESSION_BARS + 600;
 
@@ -271,7 +279,7 @@ const Simulator = (() => {
     const ref = Object.values(candleHistory).find(b => b && b.length > 0);
     const nowSec = ref ? ref[ref.length - 1].time : Math.floor(Date.now() / 1000);
     const alignedNow = nowSec - (nowSec % BAR_SECONDS);
-    const overnightGap = 86400 - (SESSION_BARS - 1) * BAR_SECONDS;
+    const overnightGap = OVERNIGHT_GAP_SECONDS;
     const totalSpanSec = SESSIONS * (SESSION_BARS - 1) * BAR_SECONDS + SESSIONS * overnightGap;
     const bars: Candle[] = [];
     const snaps: GexSnapshot[] = [];
@@ -289,6 +297,7 @@ const Simulator = (() => {
     evolveBook(sym, close, 1); // seed the book at the journey's start
 
     for (let s = 0; s < SESSIONS; s++) {
+      sessionOpenTime[sym] = t; // by loop's end: the LAST session's open
       for (let i = 0; i < SESSION_BARS; i++) {
         const open = close;
         const move = gexAwareStep(sym, close);
@@ -358,21 +367,53 @@ const Simulator = (() => {
     const gh = gexHistory[sym];
 
     if (count % TICKS_PER_BAR === 0) {
-      const time = last.time + BAR_SECONDS;
+      /*
+        THE SESSION ROLLS LIVE, exactly as it does in the seeded history.
+
+        Before T-9 this branch appended bars at BAR_SECONDS forever, so the
+        seeded tape had sessions and the live tape was one endless day — after
+        ~26 wall-minutes of uptime (390 bars at ~4s each) every session-cut
+        feature quietly starved: the session levels' "prior day" stopped
+        advancing, and the expected-move cone's forward half stayed collapsed
+        because RTH_MINUTES − elapsed never went positive again.
+
+        A completed session gets the same overnight the seeder gives one: the
+        time jumps by the shared gap, the price gaps by the same formula, and
+        the book rolls harder than intraday drift (0.18 vs the tick's default)
+        — one set of physics, written once above and reused here.
+      */
+      const opened = sessionOpenTime[sym];
+      const rolls = opened !== undefined && last.time - opened >= (SESSION_BARS - 1) * BAR_SECONDS;
+      let time: number;
+      let open: number;
+      if (rolls) {
+        time = last.time + OVERNIGHT_GAP_SECONDS;
+        sessionOpenTime[sym] = time;
+        const cfg = TICKERS[sym];
+        cfg.currentPrice = Number(
+          (price + (Math.random() - 0.5) * cfg.basePrice * cfg.iv * 0.02).toFixed(2)
+        );
+        open = cfg.currentPrice;
+        evolveBook(sym, open, 0.18);
+      } else {
+        time = last.time + BAR_SECONDS;
+        open = last.close;
+      }
+      const barClose = TICKERS[sym].currentPrice;
       bars.push({
         time,
-        open: last.close,
-        high: Math.max(last.close, price),
-        low: Math.min(last.close, price),
-        close: price,
+        open,
+        high: Math.max(open, barClose),
+        low: Math.min(open, barClose),
+        close: barClose,
         volume: Math.round(1500 + Math.random() * 9000),
       });
       if (bars.length > CANDLE_LIMIT) bars.shift();
 
-      evolveBook(sym, price); // the book keeps living as new bars roll
+      evolveBook(sym, barClose); // the book keeps living as new bars roll
 
       if (gh) {
-        gh.push(computeGexSnapshot(sym, price, time));
+        gh.push(computeGexSnapshot(sym, barClose, time));
         if (gh.length > GEX_LIMIT) gh.shift();
       }
     } else {
@@ -566,22 +607,11 @@ const Simulator = (() => {
     const supportWall = picked.putWall ?? spot - config.step * 4;
     const resistanceWall = picked.callWall ?? spot + config.step * 4;
 
-    // The crossing NEAREST SPOT, not the first one walking up the chain: a
-    // noisy book can carry a jitter crossing deep in a tail, and breaking on
-    // the first hit labeled THAT as the regime border while the structural
-    // flip sat at spot. Matches data/gex.ts buildLevelsFor (Noah, 2026-08-18).
-    let flipStrike = spot;
-    let flipDist = Infinity;
-    for (let i = 1; i < chain.length; i++) {
-      if (Math.sign(chain[i - 1].netGex) !== Math.sign(chain[i].netGex)) {
-        const mid = (chain[i - 1].strike + chain[i].strike) / 2;
-        const d = Math.abs(mid - spot);
-        if (d < flipDist) {
-          flipDist = d;
-          flipStrike = mid;
-        }
-      }
-    }
+    /* The flip from core/walls.ts, beside the walls it already reads from
+       there. The comment this replaces said "Matches data/gex.ts
+       buildLevelsFor" — a request to keep two copies in step by hand, which
+       is the arrangement that failed for the walls in this same function. */
+    const flipStrike = pickFlip(chain, spot, n => n.netGex) ?? spot;
 
     let score = 50;
     const isEmaAligned = (indicators.ema9 > indicators.ema21) && (indicators.ema21 > indicators.ema50);

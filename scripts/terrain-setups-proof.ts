@@ -50,6 +50,7 @@ const pane = (): SymbolSetup => ({
   indicators: { ema9: false, ema21: true, ema50: false, vwap: false },
   chartStyle: 'candles',
   compares: [],
+  priceScale: 'normal',
 });
 
 // 1. the never-seen symbol — the whole reason this is unsurprising
@@ -255,7 +256,84 @@ check('lower-case keys are folded to one name', Object.keys(readSetups({ spy: { 
     );
   }
   const bytes = JSON.stringify(full).length;
-  check(`a full map is ${(bytes / 1024).toFixed(1)} KB — small enough to keep`, bytes < 20 * 1024, `${bytes} bytes`);
+  /*
+    THE BUDGET IS A SHARE OF THE QUOTA, not a round number.
+
+    This was `< 20 * 1024`, and adding ONE field to `SymbolSetup` (T-7's
+    `priceScale`) took a full map from 19.4 KB to 21.1 KB and turned it red —
+    for a change that consumes 0.03% of the storage this assertion exists to
+    protect. A literal that a routine field addition can trip is a literal
+    that gets bumped by whoever trips it, which is the same thing as not
+    having the check at all.
+
+    So it is stated as what it defends: a full map has to stay a rounding
+    error against the ~5 MB `localStorage` quota. One percent is two orders of
+    magnitude of headroom — enough that a real regression (a field carrying an
+    array, a nested history) fails it while a sixth boolean does not.
+  */
+  const QUOTA_BYTES = 5 * 1024 * 1024;
+  const perEntry = Math.round(bytes / SETUP_CAP);
+  check(
+    `a full map is ${(bytes / 1024).toFixed(1)} KB — ${((bytes / QUOTA_BYTES) * 100).toFixed(2)}% of the quota`,
+    bytes < QUOTA_BYTES * 0.01,
+    `${bytes} bytes, ${perEntry} per entry`
+  );
+}
+
+/*
+  T-7 · THE SIXTH FIELD, AND WHAT A RECORD WRITTEN BEFORE IT MUST DO.
+
+  `priceScale` is the first field added to `SymbolSetup` since the store
+  shipped, so this is the first time the "a stored record is one key short"
+  path has been exercised on a TOP-LEVEL field rather than inside overlays or
+  indicators. The two are validated differently — the nested ones rebuild a
+  full object, this one is a single conditional assignment — so the overlay
+  and indicator guards above say nothing about it.
+
+  The requirement is that a record from before T-7 leaves the pane's own scale
+  ALONE. Not defaulted to linear, not blanked: `applySetup` spreads the stored
+  object over the pane, and a key whose value is literally `undefined`
+  overwrites rather than falls through. Assigning `priceScale: undefined` for
+  a missing field would silently reset the axis of every symbol a reader has
+  ever configured, which is the same shape of bug T-0 was.
+*/
+{
+  const before = readSetup({ seen: 5, timeframe: '5m', chartStyle: 'area' }, 'TSLA');
+  check(
+    'a setup saved before T-7 still returns its other fields',
+    before?.timeframe === '5m' && before?.chartStyle === 'area',
+    JSON.stringify(before)
+  );
+  check(
+    'and carries no priceScale KEY at all — not the key set to undefined',
+    !!before && !('priceScale' in before),
+    JSON.stringify(Object.keys(before ?? {}))
+  );
+  /* The consequence, stated as the thing a reader would notice. */
+  const paneInLog = { ...pane(), priceScale: 'log' as const };
+  check(
+    'so applying it leaves a pane that was in log IN LOG',
+    applySetup(paneInLog, before ?? undefined).priceScale === 'log',
+    applySetup(paneInLog, before ?? undefined).priceScale
+  );
+
+  check('a valid scale is kept', readSetup({ seen: 1, priceScale: 'indexed' }, 'SPY')?.priceScale === 'indexed');
+  /* Junk is DROPPED rather than coerced — the same field-level rule the rest
+     of this module follows. A mode this build does not have would otherwise
+     reach `chart.priceScale().applyOptions({ mode: undefined })`. */
+  const junkScale = readSetup({ seen: 1, timeframe: '1h', priceScale: 'holographic' }, 'SPY');
+  check(
+    'a scale this build does not have is dropped, and takes nothing with it',
+    !!junkScale && !('priceScale' in junkScale) && junkScale.timeframe === '1h',
+    JSON.stringify(junkScale)
+  );
+
+  /* And it round-trips — the field is in captureSetup as well as readSetup.
+     It would be easy to add one and not the other, and the symptom would be a
+     scale that never persists rather than an error. */
+  const saved = captureSetup({ ...pane(), priceScale: 'log' }, 11);
+  const back = readSetup(JSON.parse(JSON.stringify(saved)), 'AAPL');
+  check('capture → JSON → read carries the scale', back?.priceScale === 'log', JSON.stringify(back?.priceScale));
 }
 
 // symKey

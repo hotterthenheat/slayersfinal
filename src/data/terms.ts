@@ -52,7 +52,8 @@ export const TERMS = {
   Class: 'What dealer hedging does at this strike — a cushion under price, resistance above it, or a magnet that pins.',
   'Call wall': 'The heaviest call-gamma strike above price. Dealer hedging supplies stock there, so rallies often stall at it.',
   'Put wall': 'The heaviest put-gamma strike below price. Dealer hedging bids stock there, so dips often hold it.',
-  'Gamma flip': 'The price where dealer hedging switches sides — above it moves get absorbed, below it they get amplified.',
+  'Gamma flip':
+    'The price where dealer hedging switches sides — above it moves get absorbed (dealers long gamma), below it they get amplified (dealers short gamma). The regime label reads which side spot is on right now.',
   Pin: 'The max-open-interest strike that price tends to gravitate toward into expiry.',
   King: 'The single largest gamma strike on the whole book — the level that matters most today.',
   // ---- contracts driving the setup ----
@@ -73,6 +74,30 @@ export const TERMS = {
   Gamma: 'How fast delta itself changes as the stock moves — the curvature.',
   Theta: 'What one day costs — the premium the option loses to time overnight.',
   Vega: 'How much the option’s price moves for a 1-point change in implied volatility.',
+  // ---- session levels (T-6) ----
+  'Prior day': 'Yesterday’s high, low and close. Price opening away from them and coming back is the most-watched move of the morning.',
+  'Opening range': 'The high and low of the session’s first 5, 15 or 30 minutes — the day’s first agreed boundary. Breaking out of it is where most intraday setups start.',
+  'Initial balance': 'The high and low of the first hour. A day that stays inside it is a range day; a day that leaves it usually keeps going.',
+  // ---- expected-move cone (T-9) ----
+  'Expected move cone':
+    'The band options priced for today, drawn on the chart: the envelope since the open, and the cone still left from here to the bell. Price leaving the band means the move has already beaten what the options charged; the cone shrinking into the close is normal — less day left, less move left.',
+  // ---- multi-timeframe (T-12) ----
+  'Timeframe trend':
+    'Where price sits on each interval against its own EMA21 and VWAP. Above both reads up, below both reads down, and between them reads flat — the timeframes disagreeing is itself the signal.',
+  'Max pain':
+    'The settlement price that pays option holders the least in total — the OI-weighted pin. The theory: the price with the least to pay out is the one the book drifts toward into expiry.',
+  'Gamma pin':
+    'Where the book’s hedging mass centres — every strike’s gamma dollars, magnitude-weighted, averaged into one price. Different from max pain because gamma and open interest can sit on different strikes.',
+  'GEX percentile':
+    'Where today’s whole-book net gamma ranks against this name’s own history — toward 0 the book is about as call-heavy (absorbing) as it gets, toward 100 as put-heavy (amplifying). The label says how much history the rank is against.',
+  // ---- the measure (T-1) ----
+  Measure:
+    'Drag across the tape for the move it covers: dollars, percent, bars, elapsed, and the same move stated at an annual rate so it can be read against implied volatility.',
+  Annualized:
+    'A move restated as the yearly rate it implies, so a 20-minute move and a two-day one can be compared — and both compared against implied volatility, which is quoted the same way. Measured in trading time, so a weekend does not count against it.',
+  // ---- price scale (T-7) ----
+  'Price scale':
+    'How the vertical axis is spaced. Linear gives equal dollars equal height; logarithmic gives equal percentages equal height, which is what you want comparing moves at different prices.',
 } as const;
 
 export type TermKey = keyof typeof TERMS;

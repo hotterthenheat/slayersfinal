@@ -156,6 +156,14 @@ const validateDownstream = (snap: any) => {
   const vc = buildVannaCharm(snap, 'CHARM', 1, 10);
   const cw = vc.shifts.find((x: any) => x.kind === 'call-wall');
   const pw = vc.shifts.find((x: any) => x.kind === 'put-wall');
+  /* A missing shift is a real failure of the thing under test — the panel
+     always publishes both walls — so it is REPORTED rather than thrown. A
+     TypeError here would kill the run mid-book and take every later
+     assertion with it, which reads as a crash rather than as a red. */
+  if (!cw || !pw) {
+    console.log(`FAIL  vannacharm published no ${!cw ? 'call' : 'put'} wall shift for ${snap.ticker}`);
+    process.exit(1);
+  }
   checkPair(vcCw, vcPw, 'vannacharm',
     vc.rows.map((r: any) => ({ strike: r.strike, value: r.current })),
     spot, cw.current, pw.current);

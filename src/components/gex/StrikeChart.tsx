@@ -1,8 +1,11 @@
 import {
-  useCallback, useEffect, useRef, useState,
+  useCallback, useEffect, useMemo, useRef, useState,
   type MutableRefObject, type PointerEvent as ReactPointerEvent,
 } from 'react';
-import { Check, Eraser, Minus, Pause, Play, StepBack, StepForward, TrendingUp, X } from 'lucide-react';
+import {
+  AlignJustify, ArrowUpRight, Check, Circle, Equal, Eraser, Minus, MoveDiagonal, MoveUpRight, MoveVertical,
+  Pause, Play, Ruler, Spline, Square, StepBack, StepForward, StickyNote, TrendingUp, X,
+} from 'lucide-react';
 import {
   createChart,
   AreaSeries,
@@ -32,12 +35,18 @@ import {
   type Timeframe,
 } from '../../data/timeframe';
 import { GexTrailsPrimitive } from './gexNodesPrimitive';
-import { DrawingsPrimitive, loadDrawings, saveDrawings, type Drawing, type DrawingKind } from './drawingsPrimitive';
+import { DrawingsPrimitive, loadDrawings, needsThirdAnchor, saveDrawings, type Drawing, type DrawingKind } from './drawingsPrimitive';
 import { getCandleTheme, useCandleThemeKey, candleSeriesOptions, chartSurface, type CandleTheme } from './candleTheme';
 import { markFired, useAlerts } from './alertStore';
 import type { Candle } from '../../types/market';
 import type { DarkPoolPrint, KeyLevels } from '../../types/gex';
 import { bucketFlow, flowMaxLeg } from '../../data/flowBars';
+import { emaSeries, sessionStarts, vwapSeries } from '../../data/indicators';
+import { buildSessionLevels, type OpeningRange } from '../../data/sessionLevels';
+import { SessionLevelsPrimitive, sessionLines } from './sessionLevelsPrimitive';
+import { buildExpectedMoveCone } from '../../data/expectedMove';
+import { ExpectedMovePrimitive } from './expectedMovePrimitive';
+import { RTH_MINUTES } from '../../core/calendar';
 import { cumulativeDrift, driftPeak } from '../../data/driftSeries';
 import { impliedVolLine, realizedVol, volCeiling } from '../../data/volDrift';
 import type { FlowPrint } from '../../types/trace';
@@ -135,6 +144,42 @@ const PANE_LABEL_LOOK: Record<string, { text: string; bg: string; fg: string }> 
   volDrift: { text: 'Vol drift', bg: 'rgba(70,60,110,0.35)', fg: '#DCD6F0' },
 };
 
+/*
+  The rail's thirteen, grouped the way a reader thinks: the lines they trade
+  against, the shapes that mark areas, and the marks that carry their own
+  words or numbers. Order inside a group is reach-for frequency.
+*/
+const DRAW_TOOL_GROUPS: { name: string; tools: { tool: DrawingKind; icon: JSX.Element; label: string }[] }[] = [
+  {
+    name: 'Lines',
+    tools: [
+      { tool: 'trend', icon: <TrendingUp className="w-3.5 h-3.5" />, label: 'Trend' },
+      { tool: 'ray', icon: <MoveUpRight className="w-3.5 h-3.5" />, label: 'Ray' },
+      { tool: 'extend', icon: <MoveDiagonal className="w-3.5 h-3.5" />, label: 'Extended' },
+      { tool: 'arrow', icon: <ArrowUpRight className="w-3.5 h-3.5" />, label: 'Arrow' },
+      { tool: 'hline', icon: <Minus className="w-3.5 h-3.5" />, label: 'Level' },
+      { tool: 'vline', icon: <MoveVertical className="w-3.5 h-3.5" />, label: 'Moment' },
+    ],
+  },
+  {
+    name: 'Shapes',
+    tools: [
+      { tool: 'rect', icon: <Square className="w-3.5 h-3.5" />, label: 'Box' },
+      { tool: 'ellipse', icon: <Circle className="w-3.5 h-3.5" />, label: 'Ellipse' },
+      { tool: 'channel', icon: <Equal className="w-3.5 h-3.5" />, label: 'Channel' },
+      { tool: 'curve', icon: <Spline className="w-3.5 h-3.5" />, label: 'Curve' },
+    ],
+  },
+  {
+    name: 'Marks',
+    tools: [
+      { tool: 'fib', icon: <AlignJustify className="w-3.5 h-3.5" />, label: 'Fib' },
+      { tool: 'measure', icon: <Ruler className="w-3.5 h-3.5" />, label: 'Measure' },
+      { tool: 'note', icon: <StickyNote className="w-3.5 h-3.5" />, label: 'Note' },
+    ],
+  },
+];
+
 /** What the user chose to draw — every overlay is independent. */
 export interface ChartOverlays {
   trails: boolean;
@@ -156,6 +201,28 @@ export interface ChartOverlays {
     TIME axis, and this band's axis is the strike; the host renders it below.
   */
   dexStrike: boolean;
+  /*
+    The session's reference prices — T-6. Prior day high/low/close, the
+    opening range and the initial balance, as horizontal rules with distinct
+    dashes and their shorthand ON THE FIELD rather than on the price axis.
+
+    ONE INK, FOUR DASH PATTERNS. The dealer palette is spoken for — gold is
+    put-dominant, steel call-dominant, magenta the king, blue the flip, lime
+    selection, white spot — and red and green mean price direction. A session
+    level is none of those things, so it takes none of those colours: the dash
+    pattern carries which level it is, which is what the directive asks for
+    and what leaves the palette meaning what it means.
+  */
+  session: boolean;
+  /*
+    The expected-move cone — T-9. What the options were charging for today,
+    drawn on the tape in the tape's own units: the ±1σ/±2σ envelope the book
+    claimed from the open, and the cone it still claims from here to the
+    bell, both off the feed's quoted vol (data/expectedMove.ts). White at
+    furniture alpha — it is a claim ABOUT spot, so it wears spot's ink and
+    none of the dealer palette's.
+  */
+  cone: boolean;
 }
 
 /* Chart styles, TradingView's picker (Noah, 2026-08-23: "notice how candles
@@ -205,6 +272,56 @@ export interface CompareEntry {
   ink: string;
 }
 
+/*
+  THE MAIN PRICE SCALE'S MODE — T-7.
+
+  Four, and they are the library's four: a plain price axis, a logarithmic
+  one, percent change from the left edge of the visible range, and every
+  series indexed to 100 at that same edge.
+
+  WHY THIS HAD TO EXIST. `CompareEntry` already carried a `percent` mode, and
+  turning it on quietly rewrote the MAIN scale to percent — the reader had no
+  control over the axis they read prices off, and no way to see that it had
+  changed. A percent comparison over a dollar axis reads two ways at once; the
+  library will not draw both, so something had to give, and what gave was
+  silent. Now the mode is the reader's, and the one case where it is not is
+  named on screen (see `priceScaleLock`).
+*/
+export type PriceScale = 'normal' | 'log' | 'percent' | 'indexed';
+
+/** The picker's rows, and the short label the trigger wears — the axis mode
+    is state a reader needs at a glance, so the trigger shows it rather than
+    the word "Scale". */
+export const PRICE_SCALES: { value: PriceScale; label: string; short: string; blurb: string }[] = [
+  { value: 'normal', label: 'Linear', short: 'LIN', blurb: 'Equal dollars, equal height' },
+  { value: 'log', label: 'Logarithmic', short: 'LOG', blurb: 'Equal percentages, equal height' },
+  { value: 'percent', label: 'Percent', short: '%', blurb: 'Change from the left edge' },
+  { value: 'indexed', label: 'Indexed to 100', short: '100', blurb: 'Every series starts at 100' },
+];
+
+const PRICE_SCALE_MODE: Record<PriceScale, PriceScaleMode> = {
+  normal: PriceScaleMode.Normal,
+  log: PriceScaleMode.Logarithmic,
+  percent: PriceScaleMode.Percentage,
+  indexed: PriceScaleMode.IndexedTo100,
+};
+
+/*
+  WHEN THE READER'S CHOICE DOES NOT GET TO WIN, and what is holding it.
+
+  A `percent` comparison rides the MAIN right scale. Both lines therefore have
+  to be read in the same units or the comparison is not one — so the axis goes
+  to percent whatever the picker says.
+
+  ONE GENERATOR. The chart applies this and the toolbar reports it, and if the
+  two derived it separately they would be one edit away from a picker that
+  says LOG over an axis in percent. Both call this.
+*/
+export const priceScaleLockedBy = (compares: readonly CompareEntry[]): { mode: PriceScale; reason: string } | null =>
+  compares.some(c => c.mode === 'percent')
+    ? { mode: 'percent', reason: 'A % comparison shares this axis' }
+    : null;
+
 export const DEFAULT_OVERLAYS: ChartOverlays = {
   trails: true,
   levels: true,
@@ -223,6 +340,14 @@ export const DEFAULT_OVERLAYS: ChartOverlays = {
   volDrift: false,
   /* Off because it costs the tape real height rather than sharing it. */
   dexStrike: false,
+  /* Off because seven more rules across a tape is a lot to hand somebody who
+     did not ask for them, and every stored setup written before T-6 comes
+     back with it false anyway (setups.ts: a key the reader never saw cannot
+     have been chosen by them). */
+  session: false,
+  /* Off for the same courtesy — an envelope plus a runway cone is a lot of
+     geometry to hand a reader who has not asked what the options charge. */
+  cone: false,
 };
 
 /*
@@ -297,6 +422,12 @@ interface StrikeChartProps {
   flowPrints?: readonly StampedFlowPrint[];
   /** Comparison symbols drawn as lines over/under the tape */
   compares?: CompareEntry[];
+  /** The main (right) price scale's mode — T-7. A `percent` comparison
+      overrides it; see `priceScaleLockedBy`. */
+  priceScale?: PriceScale;
+  /** Which opening range the session overlay draws — T-6. Ignored unless
+      `overlays.session` is on. */
+  sessionOr?: OpeningRange;
   /** The tape's shape — candles, bars, line, area… (theme-independent) */
   chartStyle?: ChartStyle;
   /** Indicator overlays computed from the same bars */
@@ -319,6 +450,11 @@ interface StrikeChartProps {
   /** Handed this chart's own "mark that moment" function on mount and null on
       unmount, so a host can call it when a DIFFERENT pane is hovered. */
   syncRegister?: (apply: CrosshairSync | null) => void;
+  /** This chart's OHLCV and indicator values at the hovered moment — T-8.
+      Fires for a pointer on this plot AND for a moment arriving from another
+      pane, so a synced desk reads values on every pane rather than only on
+      the one under the cursor. */
+  onReadout?: CrosshairReadout;
   /** Filled with this chart's live price projection on mount, nulled on
       unmount. A REF rather than a callback on purpose: a ref object's identity
       never changes, so it can sit in the mount effect's dep array without
@@ -360,6 +496,36 @@ interface StrikeChartProps {
 
 /** Mark a moment on this chart on another pane's behalf; null clears it. */
 export type CrosshairSync = (time: UTCTimestamp | null) => void;
+
+/*
+  WHAT THE HOVERED BAR SAYS — T-8.
+
+  A SECOND channel, not an extension of `CrosshairSync`, and the split is
+  deliberate. Sync carries a MOMENT between panes and nothing else ("no price
+  can cross a pane boundary here — two panes are usually two symbols"). The
+  readout is this chart reporting its OWN values at that moment to its OWN
+  host. Widening CrosshairSync to carry them would put one pane's prices into
+  another pane's hands, which is the thing that type exists to prevent.
+
+  EVERY FIELD IS NULLABLE EXCEPT `close`, because the tape has seven shapes.
+  A line, step, area or baseline chart draws closes; it has no high or low ON
+  SCREEN, and the readout reports what the chart is drawing rather than
+  re-deriving bars the reader did not ask to see. Volume is null when the
+  overlay is off, and `indicators` carries only the ones actually drawn.
+*/
+export interface CrosshairBar {
+  time: UTCTimestamp;
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  close: number;
+  volume: number | null;
+  /** Active indicators at that bar, in the chart's own order, with its inks. */
+  indicators: { key: keyof ChartIndicators; ink: string; value: number }[];
+}
+
+/** This chart's values at the hovered moment; null when nothing is hovered. */
+export type CrosshairReadout = (bar: CrosshairBar | null) => void;
 
 // Wall / flip / king overlay colors (independent of candle theme)
 import { BULL, CALL_WALL, PUT_WALL, FLIP, KING, FOCUS, DARK_POOL, ALERT as ALERT_INK } from './palette';
@@ -441,6 +607,8 @@ const StrikeChart = ({
   prints = [],
   flowPrints,
   compares = [],
+  priceScale = 'normal',
+  sessionOr = 15,
   chartStyle = 'candles',
   indicators = DEFAULT_INDICATORS,
   drawing = false,
@@ -450,6 +618,7 @@ const StrikeChart = ({
   priceTag = false,
   onCrosshair,
   syncRegister,
+  onReadout,
   projectionRef,
 }: StrikeChartProps) => {
   const themeKey = useCandleThemeKey();
@@ -527,6 +696,11 @@ const StrikeChart = ({
   const printLinesRef = useRef<IPriceLine[]>([]);
   const levelLinesRef = useRef<Partial<Record<'callWall' | 'putWall' | 'flip' | 'king', IPriceLine>>>({});
   const shownLevelsRef = useRef<KeyLevels | null>(null);
+  /** T-6's layer. One primitive for the life of the chart; what it draws is
+      swapped, never the primitive itself — see the session effect below. */
+  const sessionPrimRef = useRef<SessionLevelsPrimitive | null>(null);
+  /** T-9's layer, run the same way — see the cone effect below. */
+  const conePrimRef = useRef<ExpectedMovePrimitive | null>(null);
   const levelRafRef = useRef(0);
   /** Time of that bar, and the seconds one bar covers — what the runway is
       built from, kept in refs so the time-scale subscription can read them
@@ -555,6 +729,10 @@ const StrikeChart = ({
   onCrosshairRef.current = onCrosshair;
   const syncRegisterRef = useRef(syncRegister);
   syncRegisterRef.current = syncRegister;
+  const onReadoutRef = useRef(onReadout);
+  onReadoutRef.current = onReadout;
+  /** The last payload actually sent, as a string — see `emitReadout`. */
+  const readoutSigRef = useRef('');
   /** The moment this chart is currently marking for another pane, or null. */
   const syncedRef = useRef<UTCTimestamp | null>(null);
   /** Whether the horizontal crosshair arm is currently hidden because this
@@ -573,7 +751,32 @@ const StrikeChart = ({
   const drawingsRef = useRef<DrawingsPrimitive | null>(null);
   const shapesRef = useRef<Drawing[]>([]);
   const dragRef = useRef<Drawing | null>(null);
+  /** A committed BASE waiting for its third anchor — the channel's width,
+      the curve's bend. Which kinds owe one comes from the same KIND_SHAPE
+      table the validator reads (needsThirdAnchor). */
+  const pendingThirdRef = useRef<Drawing | null>(null);
+  /** Where a note is being typed, in both spaces: chart coords to commit,
+      client coords to float the input at. Null = no note in progress. */
+  const [noteAt, setNoteAt] = useState<{ time: number; price: number; x: number; y: number } | null>(null);
   const [drawTool, setDrawTool] = useState<DrawingKind>('trend');
+
+  /* Leaving draw mode, or the world changing under it, abandons whatever was
+     mid-gesture: a channel base with no width yet, a note not yet typed, a
+     draft mid-drag. Committing any of them would be finishing a gesture the
+     reader walked away from. */
+  useEffect(() => {
+    if (drawing) return;
+    dragRef.current = null;
+    pendingThirdRef.current = null;
+    setNoteAt(null);
+    drawingsRef.current?.setDraft(null);
+  }, [drawing]);
+  useEffect(() => {
+    dragRef.current = null;
+    pendingThirdRef.current = null;
+    setNoteAt(null);
+    drawingsRef.current?.setDraft(null);
+  }, [ticker, timeframe]);
 
   // ---- replay state ----
   const replayRef = useRef(false); // effect-visible mirror of the replay prop
@@ -738,6 +941,92 @@ const StrikeChart = ({
     });
   }, []);
 
+  /*
+    THE READOUT, BUILT FROM ONE PLACE — T-8.
+
+    Both doors into it hand over a LOGICAL INDEX and nothing else: the pointer
+    path has `param.logical`, and the sync path has already resolved the
+    incoming time to this chart's own bar index (`idx` in applySync, floored to
+    this pane's bucket so a 12:07 hover cannot land on a 15m neighbour's 12:15
+    bar). Reading `param.seriesData` on one path and `dataByIndex` on the other
+    would be two generators for one fact, and they would disagree exactly where
+    it matters — on a followed pane, whose seriesData the event never carries.
+
+    `dataByIndex` with no mismatch direction is an EXACT hit or null. A miss
+    reports nothing rather than the nearest bar, because "the values at the
+    moment you are pointing at" and "the values near it" are different claims.
+  */
+  const readoutAt = useCallback((idx: number | null | undefined): CrosshairBar | null => {
+    const main = candleSeriesRef.current;
+    if (main == null || idx == null) return null;
+    /* Structural rather than by the library's data types: the main series is
+       always handled as `ISeriesApi<'Candlestick'>` (see makeMain) whatever
+       shape is really under it, so the declared return type is a candle even
+       when the chart is drawing a line. Reading the fields that might be there
+       and testing each one is the honest shape of that. */
+    const d = main.dataByIndex(idx) as unknown as {
+      time?: unknown; open?: unknown; high?: unknown; low?: unknown; close?: unknown; value?: unknown;
+    } | null;
+    if (!d || typeof d.time !== 'number') return null;
+    const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+    /* A line/step/area/baseline tape carries `value`, a candle/bar tape
+       `close`. Either is the close; neither being present means there is
+       nothing to report and the row does not render at all. */
+    const close = num(d.close) ?? num(d.value);
+    if (close == null) return null;
+    const volSeries = volumeSeriesRef.current;
+    /* Asked of the SERIES, not of the `overlays` prop. The volume toggle hides
+       the series rather than unmounting it, so its data reads back perfectly
+       well while nothing is drawn — and a readout printing a figure the chart
+       is not showing is exactly the kind of number this codebase keeps ruling
+       out. One generator: whatever the toggle set is what is reported. */
+    const volumeDrawn = volSeries?.options().visible !== false;
+    const vol = volSeries?.dataByIndex(idx) as { value?: number } | null;
+    const indicatorValues: CrosshairBar['indicators'] = [];
+    for (const [key, series] of indicatorSeriesRef.current) {
+      const point = series.dataByIndex(idx) as { value?: number } | null;
+      const v = num(point?.value);
+      if (v != null) {
+        indicatorValues.push({ key: key as keyof ChartIndicators, ink: INDICATOR_INKS[key as keyof ChartIndicators], value: v });
+      }
+    }
+    return {
+      time: d.time as UTCTimestamp,
+      open: num(d.open),
+      high: num(d.high),
+      low: num(d.low),
+      close,
+      volume: volumeDrawn ? num(vol?.value) : null,
+      indicators: indicatorValues,
+    };
+  }, []);
+
+  /*
+    DEDUPED, and that is what makes it safe to fire on model echoes.
+
+    The library re-fires the crosshair handler on every `series.update()` while
+    a crosshair is live — twice per series, and this chart updates candles,
+    volume, indicators and compares on every 1500ms tick, so roughly ten fires
+    a tick land on whichever pane is hovered. The sync path drops them all
+    because a model echo is not a hover.
+
+    The READOUT cannot drop them: the bar under the pointer is usually the live
+    one, and ignoring its updates leaves a wrong price on screen for as long as
+    the reader holds still. So the echoes are honoured and the PAYLOAD is
+    compared instead — about one real change a tick gets through and the other
+    nine cost a string compare rather than a render.
+  */
+  const emitReadout = useCallback((bar: CrosshairBar | null) => {
+    const sig = bar
+      ? `${bar.time}|${bar.open}|${bar.high}|${bar.low}|${bar.close}|${bar.volume}|${bar.indicators
+          .map(i => `${i.key}:${i.value}`)
+          .join(',')}`
+      : '';
+    if (sig === readoutSigRef.current) return;
+    readoutSigRef.current = sig;
+    onReadoutRef.current?.(bar);
+  }, []);
+
   /* Mark a moment that belongs to ANOTHER pane. TIME ONLY, and that is forced
      rather than chosen: setCrosshairPosition demands a price, but crosshair
      mode defaults to Magnet and this chart never overrides it, so the magnet
@@ -761,6 +1050,7 @@ const StrikeChart = ({
     if (time === null || price == null) {
       chart.clearCrosshairPosition();
       setFollower(false);
+      emitReadout(null);
       return;
     }
     /* THIS chart's bucket, FLOORED — the bar the moment is inside of. The
@@ -779,11 +1069,20 @@ const StrikeChart = ({
     if (idx === null || vis === null || idx < vis.from || idx > vis.to) {
       chart.clearCrosshairPosition();
       setFollower(false);
+      /* This pane has no bar at that moment, or is not showing it. It draws
+         nothing, so it reports nothing — a readout beside a blank crosshair
+         would be values with no mark to attach them to. */
+      emitReadout(null);
       return;
     }
     setFollower(true);
     chart.setCrosshairPosition(price, target, series);
-  }, [setFollower]);
+    /* THE FOLLOWER'S OWN VALUES, at the bar this pane resolved the moment to —
+       which is the whole point of T-8 on a synced desk. `setCrosshairPosition`
+       never fires the crosshair event (it skips it internally), so nothing
+       else here would ever report them. */
+    emitReadout(readoutAt(idx));
+  }, [setFollower, readoutAt, emitReadout]);
 
   /* One datum mapper for every main-series write: OHLC styles get whole
      bars, value styles get closes. Typed `never` so the same call sites
@@ -947,6 +1246,16 @@ const StrikeChart = ({
     candles.attachPrimitive(trails);
     const drawingsPrim = new DrawingsPrimitive();
     candles.attachPrimitive(drawingsPrim);
+    /* T-6's session rules. Attached with the series like the two above, so it
+       lives as long as the chart does; what it draws is swapped by the
+       session effect. It renders at `bottom`, under the tape — the day's
+       furniture, not the subject. */
+    const sessionPrim = new SessionLevelsPrimitive();
+    candles.attachPrimitive(sessionPrim);
+
+    /* T-9's cone, run exactly the same way. */
+    const conePrim = new ExpectedMovePrimitive();
+    candles.attachPrimitive(conePrim);
 
     /* Zooming out reaches past the runway's end; extend it as they go. The
        handler reads refs rather than closing over the bar time, so it is
@@ -977,13 +1286,26 @@ const StrikeChart = ({
     const onCross = (param: MouseEventParams<Time>) => {
       if (!param.point) {              // the pointer left the plot
         onCrosshairRef.current?.(null);
+        emitReadout(null);
         return;
       }
-      if (!param.sourceEvent) return;  // a model echo, not a hover
-      // This pane owns its crosshair again — give the horizontal arm back.
-      syncedRef.current = null;
-      setFollower(false);
-      onCrosshairRef.current?.(typeof param.time === 'number' ? (param.time as UTCTimestamp) : null);
+      /*
+        THE ECHO FILTER APPLIES TO THE SYNC, NOT TO THE READOUT.
+
+        It used to be a bare early return, which was right while the moment was
+        the only thing this handler produced. The readout has the opposite
+        requirement: the bar under the pointer is usually the LIVE one, so the
+        updates that arrive without a `sourceEvent` are precisely the ones that
+        keep its close honest while the reader holds still. `emitReadout`
+        dedupes by payload, so honouring them costs a string compare.
+      */
+      if (param.sourceEvent) {
+        // This pane owns its crosshair again — give the horizontal arm back.
+        syncedRef.current = null;
+        setFollower(false);
+        onCrosshairRef.current?.(typeof param.time === 'number' ? (param.time as UTCTimestamp) : null);
+      }
+      emitReadout(readoutAt(param.logical));
     };
     chart.subscribeCrosshairMove(onCross);
     syncRegisterRef.current?.(applySync);
@@ -994,6 +1316,8 @@ const StrikeChart = ({
     runwaySeriesRef.current = runway;
     trailsRef.current = trails;
     drawingsRef.current = drawingsPrim;
+    sessionPrimRef.current = sessionPrim;
+    conePrimRef.current = conePrim;
 
     /* Reads candleSeriesRef rather than closing over `candles`: the style swap
        removes and replaces the main series in place, and a captured series
@@ -1026,6 +1350,8 @@ const StrikeChart = ({
       runwayRef.current = { from: 0, slots: 0 };
       trailsRef.current = null;
       drawingsRef.current = null;
+      sessionPrimRef.current = null;
+      conePrimRef.current = null;
       compareSeriesRef.current.clear();
       compareLoadedRef.current = '';
       indicatorSeriesRef.current.clear();
@@ -1039,7 +1365,7 @@ const StrikeChart = ({
     };
     // ensureRunway and applySync are stable useCallback([])s — listed so the
     // subscriptions installed here are never reading a stale one.
-  }, [makeMain, ensureRunway, applySync, setFollower, projectionRef]);
+  }, [makeMain, ensureRunway, applySync, setFollower, projectionRef, readoutAt, emitReadout]);
 
   /* Style swap (Noah, 2026-08-23): replace ONLY the main series in place —
      price lines and primitives die with the old one, so the nonce tells the
@@ -1053,10 +1379,18 @@ const StrikeChart = ({
     if (styleBuiltRef.current === chartStyle) return;
     const trails = trailsRef.current;
     const drawingsPrim = drawingsRef.current;
+    const sessionPrim = sessionPrimRef.current;
+    const conePrim = conePrimRef.current;
     chart.removeSeries(prev);
     const next = makeMain(chart, chartStyle, getCandleTheme());
     if (trails) next.attachPrimitive(trails);
     if (drawingsPrim) next.attachPrimitive(drawingsPrim);
+    /* A style swap replaces the SERIES, and a primitive is attached to the
+       series rather than to the chart — miss this and the session rules
+       vanish the first time the reader picks a line chart, with no error and
+       nothing to see. `mainNonce` then makes the session effect refill it. */
+    if (sessionPrim) next.attachPrimitive(sessionPrim);
+    if (conePrim) next.attachPrimitive(conePrim);
     candleSeriesRef.current = next;
     styleBuiltRef.current = chartStyle;
     levelLinesRef.current = {};
@@ -1463,33 +1797,17 @@ const StrikeChart = ({
     if (active.length === 0) return;
     const bars = aggregateCandles(Simulator.getCandles(ticker) ?? [], mins);
     if (bars.length === 0) return;
+    /* The formulas moved to data/indicators.ts — T-12's confluence strip has
+       to answer "is price above its EMA21 and its VWAP" on five timeframes at
+       once, and a second copy here would be a strip that can disagree with the
+       lines it summarises. This maps the shared numbers onto series points and
+       owns nothing else. */
     const pointsFor = (key: keyof ChartIndicators) => {
-      if (key === 'vwap') {
-        // Session-anchored: cumulative typical×volume over cumulative volume,
-        // reset at every overnight gap
-        const pts: { time: UTCTimestamp; value: number }[] = [];
-        let pv = 0;
-        let vol = 0;
-        for (let i = 0; i < bars.length; i++) {
-          const b = bars[i];
-          if (i > 0 && b.time - bars[i - 1].time > mins * 60 * 1.5) {
-            pv = 0;
-            vol = 0;
-          }
-          const typical = (b.high + b.low + b.close) / 3;
-          pv += typical * b.volume;
-          vol += b.volume;
-          pts.push({ time: b.time as UTCTimestamp, value: vol > 0 ? pv / vol : b.close });
-        }
-        return pts;
-      }
-      const period = key === 'ema9' ? 9 : key === 'ema21' ? 21 : 50;
-      const k = 2 / (period + 1);
-      let ema = bars[0].close;
-      return bars.map(b => {
-        ema = b.close * k + ema * (1 - k);
-        return { time: b.time as UTCTimestamp, value: ema };
-      });
+      const values =
+        key === 'vwap'
+          ? vwapSeries(bars, mins)
+          : emaSeries(bars, key === 'ema9' ? 9 : key === 'ema21' ? 21 : 50);
+      return bars.map((b, i) => ({ time: b.time as UTCTimestamp, value: values[i] }));
     };
     for (const key of active) {
       const s = indicatorSeriesRef.current.get(key);
@@ -1544,9 +1862,11 @@ const StrikeChart = ({
         );
         compareSeriesRef.current.set(`${c.ticker}:${c.mode}`, series);
       }
-      chart
-        .priceScale('right')
-        .applyOptions({ mode: compares.some(c => c.mode === 'percent') ? PriceScaleMode.Percentage : PriceScaleMode.Normal });
+      /* The MODE is not set here any more — it is the reader's choice now, so
+         it moved to its own effect below, which watches both inputs. Setting
+         it here as well would mean adding a comparison silently reset an axis
+         the reader had put in log, and only sometimes: this branch runs on the
+         compare signature, not on the picker. */
       chart.applyOptions({
         leftPriceScale: { visible: compares.some(c => c.mode === 'scale'), borderColor: '#1c1c1c' },
       });
@@ -1572,6 +1892,31 @@ const StrikeChart = ({
       }
     }
   }, [compares, ticker, revision, timeframe]);
+
+  /*
+    THE MAIN SCALE'S MODE — T-7, and it is its own effect on purpose.
+
+    It used to be one line inside the compare effect above, keyed on the
+    compare SIGNATURE. That was correct while the mode had exactly one input;
+    with the reader's picker as a second one it would have meant the axis only
+    changed when a comparison did — pick LOG and nothing happens until you also
+    add or remove a compare line, at which point it appears.
+
+    So it watches both inputs and computes the answer from both, and the lock
+    is asked for by name rather than re-tested here (`priceScaleLockedBy`) so
+    the toolbar's report and the axis cannot drift apart.
+
+    LOG IS SAFE ON THIS AXIS. Everything on the right scale is a price — the
+    tape and any `percent`/`pane`-free comparison — and prices are positive.
+    The volume histogram is on its own `vol` scale and the runway on `runway`,
+    neither of which this touches.
+  */
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    const lock = priceScaleLockedBy(compares);
+    chart.priceScale('right').applyOptions({ mode: PRICE_SCALE_MODE[lock?.mode ?? priceScale] });
+  }, [priceScale, compares, mainNonce]);
 
   // Recolor the candle series AND the chart surface in place when the theme
   // picker changes — gallery themes carry their own background tint.
@@ -1621,6 +1966,10 @@ const StrikeChart = ({
     const bars = aggregateCandles(base, mins);
     barCountRef.current = bars.length;
     drawingsRef.current?.setBarTimes(bars.map(b => b.time));
+    /* The measure counts BARS and annualizes off them, so the layer has to
+       know what a bar is worth here — set beside the times it belongs with,
+       so a timeframe change can never move one without the other. */
+    drawingsRef.current?.setBarMinutes(mins);
 
     const loaded = loadedRef.current;
     const changed = loaded.ticker !== ticker || loaded.timeframe !== timeframe || loaded.theme !== themeKey;
@@ -1740,6 +2089,84 @@ const StrikeChart = ({
     shownLevelsRef.current = { ...L };
     levelTickerRef.current = ticker;
   }, [ticker, overlays.levels, replay, mainNonce]);
+
+  /*
+    THE SESSION'S REFERENCE PRICES — T-6.
+
+    Computed from the RAW 1-minute base bars, never from the aggregated ones
+    this chart happens to be drawing: a 15-minute bar cannot answer what the
+    first five minutes did, and reading the levels off the visible series
+    would silently round every one of them to the pane's interval and give a
+    30-minute pane a 30-minute "opening range" whatever the picker said.
+
+    HIDDEN DURING REPLAY, exactly as the key levels are. These are levels of
+    the LIVE session, and drawing today's opening range across a historical
+    tape is a line that never existed at the moment being replayed.
+
+    DRAWN BY A PRIMITIVE rather than by `createPriceLine`, because a price
+    line can only be NAMED on the price axis and the house rule keeps names
+    off it — see sessionLevelsPrimitive.ts. The primitive is attached once
+    with the series and only its contents change, so a tick costs a compare
+    rather than seven removals and seven creations.
+  */
+  useEffect(() => {
+    const prim = sessionPrimRef.current;
+    if (!prim) return;
+    if (!overlays.session || replay) {
+      prim.setLines([]);
+      return;
+    }
+    prim.setLines(sessionLines(buildSessionLevels(Simulator.getCandles(ticker) ?? [], sessionOr)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ticker, revision, sessionOr, overlays.session, replay, mainNonce]);
+
+  /*
+    THE EXPECTED-MOVE CONE — T-9.
+
+    Computed on the DISPLAYED grid, unlike the session levels above: the
+    engine samples its envelope at whatever bars it is handed, and handing it
+    the pane's own aggregated session means every past point is an exact bar
+    hit and a crossing answers "did a close AT THIS TIMEFRAME leave the band"
+    — the question the tape on screen can actually show. The √t curve itself
+    is sampling-independent, so a 5-minute pane and a 1-minute pane draw the
+    same envelope, just sampled coarser.
+
+    σ IS THE FEED'S QUOTED VOL for the name — the same figure every options
+    surface quotes. The REMAINING MINUTES come from the tape's own session,
+    not from readSessionClock: the forward half is geometry BETWEEN the last
+    bar and the bell on this time axis, and the simulator's tape runs its own
+    accelerated clock (~15× wall speed — see seedCandles), so wall-clock
+    minutes would draw a cone whose tip lands hours past the session's last
+    possible bar. `RTH_MINUTES − elapsed` is readable off the same slice the
+    envelope uses, collapses to zero exactly at the tape's bell, and when a
+    real feed replaces the simulator the tape's clock IS the wall clock — the
+    two derivations converge on the P-0 day fraction with nothing to rewire.
+
+    HIDDEN DURING REPLAY, as the session levels are: the forward half is a
+    claim about the LIVE session's remaining minutes, and drawing it from the
+    middle of a historical tape would price a future that already happened.
+  */
+  useEffect(() => {
+    const prim = conePrimRef.current;
+    if (!prim) return;
+    if (!overlays.cone || replay) {
+      prim.setData(null);
+      return;
+    }
+    const mins = tfMinutes(timeframe);
+    const bars = aggregateCandles(Simulator.getCandles(ticker) ?? [], mins);
+    const starts = sessionStarts(bars, mins);
+    const sess = starts.length > 0 ? bars.slice(starts[starts.length - 1]) : [];
+    const iv = Simulator.TICKERS[Simulator.ensureTicker(ticker)]?.iv ?? 0;
+    /* Elapsed counts THROUGH the last bar — a bar covers its interval. */
+    const elapsed = sess.length > 0 ? (sess[sess.length - 1].time - sess[0].time) / 60 + mins : 0;
+    prim.setData({
+      cone: buildExpectedMoveCone(sess, iv, Math.max(0, RTH_MINUTES - elapsed), mins),
+      barTimes: bars.map(b => b.time),
+      barMinutes: mins,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ticker, timeframe, revision, overlays.cone, replay, mainNonce]);
 
   /*
     THE LIVE PRICE, as a card on the right scale.
@@ -2209,16 +2636,52 @@ const StrikeChart = ({
   const onDrawDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     const p = pointAt(e);
     if (!p) return;
-    if (drawTool === 'hline') {
-      commitDrawing({ kind: 'hline', p1: p });
+    /* A THIRD-ANCHOR KIND'S SECOND PHASE ends on the next press: the base
+       was drawn and released, the third anchor (the channel's width, the
+       curve's bend) has been tracking the pointer since, and this click is
+       the reader saying "there". */
+    if (pendingThirdRef.current) {
+      const base = pendingThirdRef.current;
+      pendingThirdRef.current = null;
+      drawingsRef.current?.setDraft(null);
+      commitDrawing({ ...base, p3: p });
+      return;
+    }
+    if (drawTool === 'hline' || drawTool === 'vline') {
+      commitDrawing({ kind: drawTool, p1: p });
+      return;
+    }
+    if (drawTool === 'note') {
+      /*
+        The words come from a floating input at the click; Enter commits it.
+
+        preventDefault, and it is load-bearing: React commits the input and
+        its autoFocus DURING this event's dispatch, and the pointerdown's
+        DEFAULT action — moving focus to the pressed element's focusable
+        ancestor, which is <body> here — runs after dispatch ends. Measured
+        with a focus listener: `focus 11977, blur 11978` — the input lived
+        one millisecond, and the blur handler read it as the reader walking
+        away. Cancelling the pointerdown cancels its compatibility mouse
+        events and their focus change with it.
+      */
+      e.preventDefault();
+      setNoteAt({ time: p.time, price: p.price, x: e.clientX, y: e.clientY });
       return;
     }
     e.currentTarget.setPointerCapture(e.pointerId);
-    dragRef.current = { kind: 'trend', p1: p, p2: p };
+    /* Every two-anchor kind takes the same gesture; only what gets drawn
+       between the anchors differs. */
+    dragRef.current = { kind: drawTool, p1: p, p2: p };
     drawingsRef.current?.setDraft(dragRef.current);
   };
 
   const onDrawMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    /* Width phase: the draft is the base plus a p3 riding the pointer. */
+    if (pendingThirdRef.current) {
+      const p = pointAt(e);
+      if (p) drawingsRef.current?.setDraft({ ...pendingThirdRef.current, p3: p });
+      return;
+    }
     if (!dragRef.current) return;
     const p = pointAt(e);
     if (!p) return;
@@ -2229,10 +2692,23 @@ const StrikeChart = ({
   const onDrawUp = () => {
     const d = dragRef.current;
     dragRef.current = null;
-    drawingsRef.current?.setDraft(null);
     if (!d || !d.p2) return;
     // a real segment, not a click
-    if (d.p1.time !== d.p2.time || Math.abs(d.p1.price - d.p2.price) > 1e-9) commitDrawing(d);
+    const real = d.p1.time !== d.p2.time || Math.abs(d.p1.price - d.p2.price) > 1e-9;
+    if (!real) {
+      drawingsRef.current?.setDraft(null);
+      return;
+    }
+    /* A three-anchor kind is not finished at release — the base is. The
+       draft STAYS, the third-anchor phase begins (the channel's width, the
+       curve's bend), and the next press commits (onDrawDown). */
+    if (needsThirdAnchor(d.kind)) {
+      pendingThirdRef.current = d;
+      drawingsRef.current?.setDraft(d);
+      return;
+    }
+    drawingsRef.current?.setDraft(null);
+    commitDrawing(d);
   };
 
   return (
@@ -2291,39 +2767,113 @@ const StrikeChart = ({
           />
         )}
         {drawing && (
-          <div className="absolute top-2 left-2 z-30 flex items-center gap-1 border border-borderMuted bg-panel/95 rounded-md p-1 shadow-xl shadow-black/50">
-            {(
-              [
-                { tool: 'trend' as DrawingKind, icon: <TrendingUp className="w-3.5 h-3.5" />, label: 'Trend' },
-                { tool: 'hline' as DrawingKind, icon: <Minus className="w-3.5 h-3.5" />, label: 'Level' },
-              ] as const
-            ).map(item => (
-              <button
-                key={item.tool}
-                onClick={() => setDrawTool(item.tool)}
-                className={`inline-flex items-center gap-1.5 px-2 py-1 rounded font-mono text-[10px] uppercase tracking-wider transition-colors ${
-                  drawTool === item.tool
-                    ? 'bg-select/15 text-select'
-                    : 'text-textSecondary hover:text-textPrimary hover:bg-white/[0.04]'
-                }`}
-              >
-                {item.icon}
-                {item.label}
-              </button>
+          /*
+            THE TOOL RAIL — vertical, docked centre-left (partner, 2026-08-27:
+            "we should have an entire toolbar").
+
+            Thirteen tools outgrew the labelled strip: at 15px a label, eight
+            already wrapped to two rows over the tape at pane widths, and five
+            more would have made the toolbar the widest thing on the chart. A
+            vertical rail is the chart-desk grammar for exactly this count, and
+            centre-LEFT is the emptiest region a pane has — the identity row
+            owns the top, the volume floor and the arrangement controls own the
+            bottom. It covers the session tags' inset while draw mode is on;
+            draw mode is a mode, and the tags come back when it ends.
+
+            Icon buttons with the names in tooltips AND the active tool's name
+            printed at the rail's head — icons alone would leave thirteen
+            unlabelled glyphs, and the house does not ship controls that refuse
+            to say their names.
+          */
+          <div className="absolute left-2 top-1/2 -translate-y-1/2 z-30 w-[104px] border border-borderMuted bg-panel/95 rounded-md p-1.5 shadow-xl shadow-black/50 select-none">
+            <div className="px-1 pb-1 font-mono text-[9px] font-semibold uppercase tracking-widest text-select truncate" aria-live="polite">
+              {DRAW_TOOL_GROUPS.flatMap(g => g.tools).find(t => t.tool === drawTool)?.label ?? drawTool}
+            </div>
+            {DRAW_TOOL_GROUPS.map(group => (
+              <div key={group.name}>
+                <div className="px-1 pt-1 pb-0.5 font-mono text-[8px] uppercase tracking-[0.16em] text-textMuted">{group.name}</div>
+                <div className="grid grid-cols-3 gap-0.5">
+                  {group.tools.map(item => (
+                    <button
+                      key={item.tool}
+                      onClick={() => setDrawTool(item.tool)}
+                      title={item.label}
+                      aria-label={item.label}
+                      aria-pressed={drawTool === item.tool}
+                      className={`inline-flex items-center justify-center h-[26px] rounded transition-colors ${
+                        drawTool === item.tool
+                          ? 'bg-select/15 text-select'
+                          : 'text-textSecondary hover:text-textPrimary hover:bg-white/[0.04]'
+                      }`}
+                    >
+                      {item.icon}
+                    </button>
+                  ))}
+                </div>
+              </div>
             ))}
-            <span className="w-px h-4 bg-borderMuted mx-0.5" />
-            <button
-              onClick={clearDrawings}
-              className="inline-flex items-center gap-1.5 px-2 py-1 rounded font-mono text-[10px] uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-white/[0.04] transition-colors"
-            >
-              <Eraser className="w-3.5 h-3.5" /> Clear
-            </button>
-            <button
-              onClick={onExitDraw}
-              className="inline-flex items-center gap-1.5 px-2 py-1 rounded font-mono text-[10px] uppercase tracking-wider text-select hover:bg-select/10 transition-colors"
-            >
-              <Check className="w-3.5 h-3.5" /> Done
-            </button>
+            <div className="my-1.5 h-px bg-borderMuted" />
+            <div className="grid grid-cols-2 gap-0.5">
+              <button
+                onClick={clearDrawings}
+                title="Clear all drawings"
+                className="inline-flex items-center justify-center gap-1 h-[26px] rounded font-mono text-[9px] uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-white/[0.04] transition-colors"
+              >
+                <Eraser className="w-3.5 h-3.5" /> Clear
+              </button>
+              <button
+                onClick={onExitDraw}
+                title="Done drawing"
+                className="inline-flex items-center justify-center gap-1 h-[26px] rounded font-mono text-[9px] uppercase tracking-wider text-select hover:bg-select/10 transition-colors"
+              >
+                <Check className="w-3.5 h-3.5" /> Done
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/*
+          THE NOTE'S WORDS — a floating input at the click, draw mode only.
+
+          An input rather than a prompt(), because a prompt steals focus from
+          the page and cannot be styled to say where the note will land. It
+          floats at the CLICKED point, so the reader types next to the bar
+          they are annotating; Enter commits, Escape abandons, and clicking
+          elsewhere abandons too (blur) — a half-typed note is a gesture
+          walked away from, same rule as the other tools.
+
+          Position is clamped into the container so a note clicked at the
+          right edge does not open an input the pane clips.
+        */}
+        {drawing && noteAt && (
+          <div
+            className="absolute z-40"
+            style={{
+              left: Math.max(4, Math.min(noteAt.x - (containerRef.current?.getBoundingClientRect().left ?? 0), (containerRef.current?.clientWidth ?? 400) - 190)),
+              top: Math.max(4, Math.min(noteAt.y - (containerRef.current?.getBoundingClientRect().top ?? 0) - 14, (containerRef.current?.clientHeight ?? 300) - 36)),
+            }}
+          >
+            <input
+              autoFocus
+              type="text"
+              maxLength={80}
+              placeholder="note, Enter to place"
+              aria-label="Note text — Enter places it on the bar you clicked"
+              className="w-[184px] px-2 py-1 rounded border border-select/60 bg-panel/95 font-mono text-[11px] text-textPrimary placeholder:text-textMuted shadow-xl shadow-black/50 outline-none"
+              onKeyDown={e => {
+                /* The desk's own keys (p, d, s, the arrows) must not fire
+                   while typing — the desk's guard checks the target, but
+                   stopping here keeps Escape from also collapsing a pane. */
+                e.stopPropagation();
+                if (e.key === 'Enter') {
+                  const text = (e.target as HTMLInputElement).value.trim();
+                  if (text) commitDrawing({ kind: 'note', p1: { time: noteAt.time, price: noteAt.price }, text });
+                  setNoteAt(null);
+                }
+                if (e.key === 'Escape') setNoteAt(null);
+              }}
+              onBlur={() => setNoteAt(null)}
+            />
           </div>
         )}
 

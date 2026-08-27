@@ -52,9 +52,22 @@ const MIN_INK = 1;
  * drawn from the same book stay comparable. A non-positive or non-finite scale
  * lays every bar out flat instead of dividing by it.
  */
-export function layoutBand(
-  rows: readonly { strike: number }[],
-  valueOf: (row: { strike: number }, index: number) => number,
+/*
+  GENERIC OVER THE ROW, not over `{ strike }` alone.
+
+  It took `readonly { strike: number }[]` and handed the accessor the same
+  narrowed type, so every caller whose rows carry a value had to cast inside
+  its own accessor — `r => (r as { v: number }).v`. A cast in the one place
+  that is supposed to READ the row is a cast that can be wrong silently, and
+  the band would then lay out zeros without complaining.
+
+  `T extends { strike: number }` keeps the constraint this function actually
+  relies on (it reads `strike` and nothing else) while letting the accessor
+  see the row it was given. Every existing call infers T and is unchanged.
+*/
+export function layoutBand<T extends { strike: number }>(
+  rows: readonly T[],
+  valueOf: (row: T, index: number) => number,
   maxAbs: number,
   width: number,
   height: number,

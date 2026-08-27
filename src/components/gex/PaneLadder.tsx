@@ -618,6 +618,25 @@ const PaneLadder = ({
             'absolute inset-x-0 h-[var(--row-h,13px)] flex items-center gap-1 px-1.5 overflow-hidden ' +
             (active ? 'bg-select/10' : '');
 
+          /*
+            BORN HIDDEN, revealed by the frame loop that places it.
+
+            A row's y lives in an inline transform the loop writes — React
+            never knows it. So when the chain recentres and a NEW strike
+            enters the set, React commits its element with NO transform, and
+            for the gap between that commit and the restarted loop's first
+            rAF tick the row is painted at the track's TOP, hundreds of px
+            from its price. One frame, invisible to a 60ms poll — which is
+            why a minute of polling for it found nothing — and caught twice
+            by the sweep's alignment check at its natural rate (~1 in 8
+            runs: "a row sits 211.9px from its price").
+
+            `place` clears the display; `drop` sets it. The loop owns
+            visibility completely, so the one state React can create — a row
+            that exists but has not been placed — no longer paints.
+          */
+          const born = { display: 'none' as const };
+
           /* A row is only a control when clicking it does something. Rendering
              a button either way would put a tab stop on every row of a column
              that cannot be actioned. */
@@ -632,6 +651,7 @@ const PaneLadder = ({
               aria-label={`Flash ${label} on the chart`}
               title={label}
               className={`${cls} text-left hover:bg-white/[0.05] transition-colors`}
+              style={born}
             >
               {body}
             </button>
@@ -642,6 +662,7 @@ const PaneLadder = ({
               data-tag={tags.length ? '1' : '0'}
               className={cls}
               title={label}
+              style={born}
             >
               {body}
             </div>

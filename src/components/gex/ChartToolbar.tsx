@@ -39,9 +39,18 @@ import {
   type CandleTheme,
   type CandleThemeKey,
 } from './candleTheme';
-import { CHART_STYLES, INDICATOR_INKS, type ChartIndicators, type ChartOverlays, type ChartStyle } from './StrikeChart';
+import {
+  CHART_STYLES,
+  INDICATOR_INKS,
+  PRICE_SCALES,
+  type ChartIndicators,
+  type ChartOverlays,
+  type ChartStyle,
+  type PriceScale,
+} from './StrikeChart';
 import AlertsMenu from './AlertsMenu';
 import { type MenuSide } from '../ui/menuPlacement';
+import { OPENING_RANGES, type OpeningRange } from '../../data/sessionLevels';
 
 interface ChartToolbarProps {
   timeframe: Timeframe;
@@ -93,6 +102,27 @@ interface ChartToolbarProps {
   /** Indicator overlays — EMAs, VWAP */
   indicators?: ChartIndicators;
   onIndicators?: (next: ChartIndicators) => void;
+  /** The main price scale's mode — linear / log / percent / indexed (T-7) */
+  priceScale?: PriceScale;
+  onPriceScale?: (s: PriceScale) => void;
+  /*
+    SOMETHING ELSE ON THE TAPE IS HOLDING THE AXIS, and what.
+
+    A `%` comparison rides the main right scale, so the axis has to be in
+    percent for the two lines to be comparable at all — the reader's pick
+    cannot win while one is up. Handed in rather than inferred here, from the
+    ONE place that decides it (`priceScaleLockedBy`), so this menu can never
+    report a mode the chart is not actually drawing.
+
+    A control that silently does nothing is the thing this desk keeps ruling
+    out; a control that SAYS why it is held is the alternative.
+  */
+  priceScaleLock?: { mode: PriceScale; reason: string } | null;
+  /** Which opening range the session-levels overlay draws — T-6. Rendered as
+      a choice ON that overlay's own row, so it is where the thing it changes
+      is rather than in a menu of its own. */
+  sessionOr?: OpeningRange;
+  onSessionOr?: (o: OpeningRange) => void;
   /* Shows the Alerts menu. Both are needed: the symbol the alerts belong to,
      and where the market is — which fixes the side a new alert has to be
      crossed from, and seeds the box near the price rather than at zero. */
@@ -224,6 +254,8 @@ const OVERLAY_ITEMS: { key: keyof ChartOverlays; label: string; hint: string }[]
   { key: 'netDrift', label: 'Net drift', hint: "Running call & put premium totals — the session's lean" },
   { key: 'volDrift', label: 'Vol drift', hint: 'Realised vol off these bars against the implied the feed reports' },
   { key: 'dexStrike', label: 'Exposure by strike', hint: 'Delta, gamma or vega across the chain — docked under the tape' },
+  { key: 'session', label: 'Session levels', hint: "Yesterday's high, low & close, the opening range and the first hour" },
+  { key: 'cone', label: 'Expected move', hint: "The ±1σ/±2σ band the options priced for today, and what's left of it" },
 ];
 
 /* Re-exported so every consumer keeps importing its menu vocabulary from the
@@ -354,6 +386,11 @@ const ChartToolbar = ({
   onChartStyle,
   indicators,
   onIndicators,
+  priceScale = 'normal',
+  onPriceScale,
+  priceScaleLock,
+  sessionOr = 15,
+  onSessionOr,
   alertTicker,
   alertSpot = 0,
   onTotalFullscreen,
@@ -486,22 +523,53 @@ const ChartToolbar = ({
           from the timeframes. Candles here is the tape's SHAPE
           (bars/line/area…), not the color theme; Alerts is an empty shell
           he's cooking on. The host only wires these in FULLSCREEN. */}
-      {(onToggleReplay || onIndicators || alertTicker || onChartStyle) && (
+      {(onToggleReplay || onIndicators || alertTicker || onChartStyle || onPriceScale) && (
         <span
           className={`flex gap-1 ${
             vertical ? 'flex-col items-stretch' : 'flex-wrap items-center justify-end'
           }`}
         >
-          {onToggleReplay && (
+          {/*
+            SHED IN COMPACT — the strip could afford one more control, not two.
+
+            Measured at 1280 with two panes, where the toolbar's column is
+            399px: the compact strip was 387 with T-1's pencil in it and 420
+            once this joined, so it took a second row over the tape at a width
+            this file records as won. Both new buttons are MODES rather than
+            settings, and only one of them can stay.
+
+            This is the one that goes, because it is the one with another door:
+            `p` toggles it on the active pane and announces, and a replaying
+            pane wears a REPLAY badge in its identity row that is never shed —
+            so the state stays visible even where the control is not. Draw mode
+            has no key at all; shedding the pencil would make the whole drawing
+            layer unreachable again at those widths.
+
+            The same rule the identity row and the heaviest read already
+            follow: when the column cannot pay, the strip sheds, and what it
+            sheds is what is still reachable another way.
+
+            Pulse only wires this in FULLSCREEN, where the strip is never
+            compact, so nothing there changes.
+          */}
+          {onToggleReplay && !compact && (
             <button
               onClick={onToggleReplay}
-              title={replay ? 'Exit replay' : 'Replay session history'}
+              title={replay ? 'Exit replay — P' : 'Replay session history — P'}
               className={`inline-flex items-center gap-1.5 px-2 py-1 rounded font-mono text-[10px] uppercase tracking-wider transition-colors ${
                 replay ? 'bg-select/10 text-select' : 'text-textMuted hover:text-textPrimary hover:bg-white/[0.03]'
               }`}
             >
               <Play className="w-3 h-3" />
-              {!vertical && 'Replay'}
+              {/* COMPACT DROPS THE WORD, like every other control in this
+                  strip. It read `!vertical` alone, so Replay was the one
+                  trigger here that kept its label at the size where the strip
+                  has none to spare — measured: with Terrain wiring both the
+                  pencil and this, the compact strip ran 418px into a 399px
+                  column at 1280 with two panes and took a second row over the
+                  tape. The `title` carries the word, as it does for
+                  Indicators, Alerts and Candles. */}
+              {!vertical && !compact && 'Replay'}
             </button>
           )}
           {onIndicators && indicators && (
@@ -565,17 +633,38 @@ const ChartToolbar = ({
               <AlertsMenu ticker={alertTicker} spot={alertSpot} />
             </Dropdown>
           )}
-          {onChartStyle && (
+          {(onChartStyle || onPriceScale) && (
             <Dropdown
               label={vertical || compact ? '' : 'Candles'}
               icon={<CandlestickChart className="w-3 h-3 text-[#30D158]" />}
-              title="Chart style"
+              title={onPriceScale ? 'Chart style & price scale' : 'Chart style'}
               open={openMenu === 'style'}
               onToggle={() => setOpenMenu(m => (m === 'style' ? null : 'style'))}
               menuSide={menuSide}
             >
+              {/*
+                TWO SECTIONS, ONE TRIGGER — the tape's SHAPE and the AXIS it
+                is drawn on. T-7's price scale lives here rather than in a
+                trigger of its own, and that was measured rather than chosen.
+
+                The compact strip is 346px of controls, and the narrowest
+                column it has to survive is 349 — three pixels of headroom, at
+                1180 in every layout and at 1760 in the three-up. A trigger of
+                its own is 69px with an icon and a caret and 39 stripped to
+                its label alone; both put the theme button onto a second row
+                over the tape at widths this file records as won ("four rows
+                become one at 1180/1280 in every layout"). Nothing in the
+                strip could pay for it without restyling controls that were
+                not part of this work.
+
+                It reads right here anyway: one menu for how this chart is
+                drawn. And nothing is hidden by folding it in — a percent axis
+                prints percentages on its own ticks and an indexed one prints
+                100, so the chart states its own mode without a chip repeating
+                it, which is the same rule that keeps names off the price axis.
+              */}
               <div className="p-1.5 flex flex-col gap-0.5">
-                {CHART_STYLES.map(opt => (
+                {onChartStyle && CHART_STYLES.map(opt => (
                   <button
                     key={opt.value}
                     onClick={() => {
@@ -596,6 +685,58 @@ const ChartToolbar = ({
                     {opt.value === chartStyle && <Check className="w-3 h-3 ml-auto text-select" />}
                   </button>
                 ))}
+                {onPriceScale && (
+                  <>
+                    <span className="mt-1 mb-0.5 px-2.5 pt-1.5 border-t border-borderSubtle font-mono text-[9px] uppercase tracking-widest text-textMuted">
+                      Price scale
+                    </span>
+                    {PRICE_SCALES.map(opt => {
+                      /* LIVE is what the axis is drawing; CHOSEN is what the
+                         reader picked. They differ only while a lock is up,
+                         and then both are shown — a lock that silently
+                         replaced their pick would read as the app forgetting
+                         it. */
+                      const live = (priceScaleLock?.mode ?? priceScale) === opt.value;
+                      const chosen = priceScale === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          disabled={!!priceScaleLock}
+                          onClick={() => {
+                            onPriceScale(opt.value);
+                            setOpenMenu(null);
+                          }}
+                          className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded font-mono text-[11px] text-left transition-colors ${
+                            priceScaleLock ? 'cursor-not-allowed opacity-60' : ''
+                          } ${
+                            live
+                              ? 'bg-white/[0.06] text-textPrimary font-semibold'
+                              : `text-textSecondary ${priceScaleLock ? '' : 'hover:text-textPrimary hover:bg-white/[0.03]'}`
+                          }`}
+                        >
+                          <span className="shrink-0 w-8 text-textPrimary tnum" aria-hidden>
+                            {opt.short}
+                          </span>
+                          <span className="flex flex-col min-w-0">
+                            <span className="truncate">{opt.label}</span>
+                            <span className="text-[9px] text-textMuted truncate">{opt.blurb}</span>
+                          </span>
+                          {live && <Check className="w-3 h-3 ml-auto shrink-0 text-select" />}
+                          {!live && chosen && (
+                            <span className="ml-auto shrink-0 font-mono text-[8px] uppercase tracking-wider text-textMuted">yours</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                    {priceScaleLock && (
+                      <p className="px-2.5 pt-1.5 mt-0.5 border-t border-borderSubtle font-mono text-[9px] leading-relaxed text-textMuted">
+                        {priceScaleLock.reason}, so the axis is held in{' '}
+                        {(PRICE_SCALES.find(o => o.value === priceScaleLock.mode) ?? PRICE_SCALES[0]).label.toLowerCase()}. Remove
+                        it and your pick comes back.
+                      </p>
+                    )}
+                  </>
+                )}
               </div>
             </Dropdown>
           )}
@@ -603,7 +744,7 @@ const ChartToolbar = ({
       )}
 
       {/* A hairline between the quartet and the standing controls */}
-      {(onToggleReplay || onIndicators || alertTicker || onChartStyle) && (
+      {(onToggleReplay || onIndicators || alertTicker || onChartStyle || onPriceScale) && (
         <span className={vertical ? 'h-px w-4 self-center bg-borderSubtle' : 'w-px h-4 bg-borderSubtle'} aria-hidden />
       )}
 
@@ -650,6 +791,41 @@ const ChartToolbar = ({
               </button>
             );
           })}
+          {/*
+            THE OPENING RANGE, on the row of the overlay it belongs to.
+
+            Not a trigger of its own: it is one setting of one overlay, and it
+            means nothing at all while that overlay is off. Here it is where
+            the thing it changes is, and it costs the control strip no width —
+            which the strip cannot spare (see Terrain's TOOLBAR_FULL_PX).
+
+            Rendered only when the overlay is ON, and disabled would be worse:
+            a live control that does nothing teaches a reader the desk is
+            broken, and this one has nothing to do until there are lines to
+            change.
+          */}
+          {onSessionOr && overlays.session && overlayItems.some(i => i.key === 'session') && (
+            <div className="flex items-center gap-2 pl-[26px] pr-2.5 pb-2 -mt-1">
+              <span className="font-mono text-[9px] uppercase tracking-wider text-textMuted shrink-0">Opening range</span>
+              <span role="group" aria-label="Opening range minutes" className="inline-flex items-center gap-0.5 rounded border border-borderMuted p-0.5">
+                {OPENING_RANGES.map(m => (
+                  <button
+                    key={m}
+                    onClick={() => onSessionOr(m)}
+                    aria-pressed={sessionOr === m}
+                    title={`The session's first ${m} minutes`}
+                    className={`px-1.5 py-0.5 rounded font-mono text-[10px] tnum transition-colors ${
+                      sessionOr === m
+                        ? 'bg-white/[0.16] text-textPrimary font-semibold'
+                        : 'text-textSecondary hover:text-textPrimary hover:bg-white/[0.06]'
+                    }`}
+                  >
+                    {m}m
+                  </button>
+                ))}
+              </span>
+            </div>
+          )}
         </div>
       </Dropdown>
 
@@ -708,21 +884,45 @@ const ChartToolbar = ({
       </Dropdown>
       )}
 
-      {!minimal && (
-        <>
-          <button
-            onClick={onToggleDrawing}
-            title={drawing ? 'Exit draw mode' : 'Draw on the chart'}
-            className={`inline-flex items-center gap-1.5 px-2 py-1 rounded font-mono text-[10px] uppercase tracking-wider transition-colors ${
-              drawing
-                ? 'bg-select/10 text-select'
-                : 'text-textMuted hover:text-textPrimary hover:bg-white/[0.03]'
-            }`}
-          >
-            <PencilLine className="w-3.5 h-3.5" />
-          </button>
+      {/*
+        GATED ON BEING WIRED, not on `minimal` — and shed in compact.
 
-        </>
+        It read `!minimal`, and NOTHING in the app passed `onToggleDrawing` —
+        so the button never rendered anywhere, and the drawing layer under it
+        (trendlines, levels, and T-1's measure) had no door at all. A mode flag
+        was standing in for "did the host ask for this", which is what every
+        other optional control here already tests directly.
+
+        SHED IN COMPACT, with Replay. The two of them are the strip's only
+        MODES, they were the only things T-1 and T-13 added to it, and
+        together they took the compact strip from 350px to 420 against columns
+        as narrow as 379 — a second row of chrome over the tape at ordinary
+        laptop widths. Shedding both puts it back at exactly the 350 it was
+        before either feature, so neither cost the narrow desk a pixel.
+
+        BOTH KEEP A DOOR, which is what makes shedding them honest rather than
+        hiding them: `d` toggles draw mode and `p` toggles replay, both on the
+        active pane, both announced. And both modes are VISIBLE once on — draw
+        mode raises its own tool strip, replay wears a badge in the identity
+        row that is never shed.
+
+        Terrain wires both per pane. The desks that pass no handler are
+        unchanged, because the button was not reaching them either way.
+      */}
+      {onToggleDrawing && !compact && (
+        <button
+          onClick={onToggleDrawing}
+          title={drawing ? 'Exit draw mode — D' : 'Draw on the chart — trend, level, measure — D'}
+          aria-pressed={drawing}
+          aria-label={drawing ? 'Exit draw mode' : 'Draw on the chart'}
+          className={`inline-flex items-center gap-1.5 px-2 py-1 rounded font-mono text-[10px] uppercase tracking-wider transition-colors ${
+            drawing
+              ? 'bg-select/10 text-select'
+              : 'text-textMuted hover:text-textPrimary hover:bg-white/[0.03]'
+          }`}
+        >
+          <PencilLine className="w-3.5 h-3.5" />
+        </button>
       )}
 
       {/* Renders whenever wired, minimal mode included — the desk's chart

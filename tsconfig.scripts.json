@@ -1,0 +1,26 @@
+/*
+  THE PROOF SCRIPTS WERE NOT TYPECHECKED BY ANYTHING.
+
+  `tsconfig.json` includes `src` only and `tsconfig.node.json` names three
+  files, so every script under `scripts/` — the acceptance tests this repo
+  leans on, the ones `npm test` runs — compiled nowhere. They run under `tsx`,
+  which strips types without checking them.
+
+  That is the safety net having no net. Found while adding a sixth field to
+  `SymbolSetup`: the compiler named every place in `src` that had to change,
+  and said nothing about the proof fixture that constructs one — so the proof
+  went on passing while writing `priceScale: undefined` into the record it was
+  asserting round-trips losslessly.
+
+  Extends the app config (same `strict`, same DOM lib — the proofs import real
+  components) and adds `src` so project references are resolved the same way
+  the app resolves them. `types: ["node"]` for `process.exit`, which the proofs
+  use to fail a build.
+*/
+{
+  "extends": "./tsconfig.json",
+  "include": ["scripts/**/*.ts", "src"],
+  "compilerOptions": {
+    "types": ["node"]
+  }
+}

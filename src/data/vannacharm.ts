@@ -9,7 +9,7 @@
 */
 
 import Simulator from '../core/simulator';
-import { pickWalls } from '../core/walls';
+import { pickFlip, pickWalls } from '../core/walls';
 import type { MarketSnapshot, StrikeNode } from '../types/market';
 import type {
   IvShift,
@@ -99,14 +99,17 @@ function levelsFrom(rows: { strike: number; value: number }[], spot: number): Le
       king = r.strike;
     }
   }
-  const asc = [...rows].sort((a, b) => a.strike - b.strike);
-  let flip = spot;
-  for (let i = 1; i < asc.length; i++) {
-    if (Math.sign(asc[i - 1].value) !== Math.sign(asc[i].value)) {
-      flip = (asc[i - 1].strike + asc[i].strike) / 2;
-      break;
-    }
-  }
+  /*
+    THE DIVERGENT COPY, FIXED. This walked up the chain and broke on the FIRST
+    sign change — the exact bug the other three copies were unified to remove
+    in 2026-08-18: a jitter crossing deep in the put tail named the regime
+    border while the structural flip sat at spot. Every migration map row,
+    level shift and wall-drift point read it, so this page's flip could
+    disagree with the Exposure page's off one book. Found when P-4 needed a
+    fifth reader of the rule; the rule lives in core/walls.ts now and this
+    file reads it like everybody else.
+  */
+  const flip = pickFlip(rows, spot, r => r.value) ?? spot;
   return { callWall, putWall, flip, king };
 }
 

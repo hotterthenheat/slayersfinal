@@ -9,7 +9,7 @@
 */
 
 import { fmtUsd } from './gex';
-import { pickWalls } from '../core/walls';
+import { pickFlip, pickWalls } from '../core/walls';
 import type { MarketSnapshot, StrikeNode } from '../types/market';
 import type {
   DealerBias,
@@ -122,22 +122,11 @@ export function buildExposureProfile(
   const picked = pickWalls(strikes, spot, s => s.gex.net);
   const callWall = picked.callWall ?? spot;
   const putWall = picked.putWall ?? spot;
-  // Nearest-to-spot crossing, same rule as the trade plan and buildLevelsFor
-  // (unified 2026-08-18) — first-from-the-bottom picked jitter crossings in
-  // the window's tail over the structural one at spot.
-  const asc = [...strikes].sort((a, b) => a.strike - b.strike);
-  let flip = spot;
-  let flipDist = Infinity;
-  for (let i = 1; i < asc.length; i++) {
-    if (Math.sign(asc[i - 1].gex.net) !== Math.sign(asc[i].gex.net)) {
-      const mid = (asc[i - 1].strike + asc[i].strike) / 2;
-      const d = Math.abs(mid - spot);
-      if (d < flipDist) {
-        flipDist = d;
-        flip = mid;
-      }
-    }
-  }
+  /* The flip from core/walls.ts, the ONE copy — this was one of three
+     hand-synced nearest-to-spot transcriptions (unified 2026-08-18), which is
+     the arrangement whose walls equivalent failed. `?? spot` keeps this
+     function's own no-crossing fallback exactly as it was. */
+  const flip = pickFlip(strikes, spot, s => s.gex.net) ?? spot;
 
   // The book's king — argmax |net gamma| over the FULL chain, not the window.
   // A windowed argmax answers "the biggest bar currently drawn", which moves
