@@ -144,6 +144,34 @@ const HEAD_BAND = 32;
    than a second one invented here. */
 const BADGE_CLEAR_PX = 14;
 
+/* HOW FAR LEFT OF A ROW'S STRIKE A RULE BADGE HAS TO START.
+
+   Both live in the same right-hand lane and neither knew it. A rule's badge is
+   `ml-auto mr-1`, so its right edge is 4px in from the track; a row's strike is
+   `text-right` inside `px-1.5`, so its right edge is 6px in. The badge is wider
+   than any strike it meets — 38px against 20-29.5px measured — so it did not
+   graze the number, it covered ALL of it, and the rules are rendered after
+   every row with no z-index, so the opaque chip won.
+
+   Measured on the shipped build at 1024x768 layout 4: 72 covers over 24
+   rail-samples, worst 10.0px, which is the badge's whole line box over the
+   whole glyph band of a 10px label. Seen: "476.03" over 476, "182.58" over
+   182.50, "117.43" over a strike carrying the K tag — the heaviest in the
+   book. At 1440x900 layout 1 the pitch is wide enough that the badge lands
+   between rows and there were none, which is why this went unnoticed.
+
+   So the badges are homed OUT of the strike lane rather than stepped out of it
+   when they happen to clash: a threshold measured against a spot price that
+   moves every tick would put the chip in one lane or the other depending on
+   the last print. 5px is the 2px between the two right edges plus 3px of air.
+
+   What they land on instead is the magnitude bar, which is `aria-hidden`
+   decoration whose value is its LENGTH — and they cover its tip, not its
+   origin, so a short bar stays whole and a long one still reads as long. The
+   file's own order of precedence: "the price is the one thing in this column
+   that must be readable". */
+const BADGE_STEP_PX = 5;
+
 /* THE LANE THE ▼ STUB SITS IN, reserved the way HEAD_BAND is reserved at the
    top — and it is the same fix the ▲ stub already got.
 
@@ -354,28 +382,79 @@ const PaneLadder = ({
         ruleY.set(el.dataset.rule ?? '', y);
       });
 
-      /* THE TWO RULES SHARE ONE LANE, and the flip spends most of its life
-         near spot — that is what a flip IS. Both badges are `ml-auto`, so at
-         any distance under a badge height they print on top of each other:
-         measured 37.6x9.2px of a 38x10 badge, spot "513.45" underneath flip
-         "513.50". Two DIFFERENT prices in the same 38 pixels is not a near
-         miss, it is an unreadable number.
+      /* WHERE THE TWO RULE BADGES GO. Two separate collisions, one pass.
 
-         The rows already avoid each other through `anchors` above; the rules
-         were the pair that never checked. So the FLIP steps aside — spot is
-         the reference a reader looks for, and it is the one that stays put —
-         moving left by its own measured width rather than a guessed constant,
-         so a restyle or a longer price cannot make the two touch again. The
-         rail is 132px against a ~38px badge, so the stepped-aside badge stays
-         inside the column. */
+         FIRST, NEITHER OF THEM SITS ON A STRIKE. Both are `ml-auto` in the
+         same right-hand lane the strikes are right-aligned in, and both are
+         wider than any strike they meet, so a rule crossing a row erased that
+         row's number outright — see BADGE_STEP_PX for the measurements. They
+         are homed left of the lane, always, rather than stepped out of it on a
+         threshold: spot moves every tick, and a chip that changes lanes on the
+         last print is its own kind of unreadable.
+
+         The lane is measured off a real strike rather than derived from
+         `priceLen` and a guessed character width — the labels are `Nch` of a
+         10px font and the badges an 8px one, so a `ch` computed here would be
+         the wrong unit. First row with a width: they all carry the same
+         `priceLen`, and a culled row measures 0.
+
+         SECOND, THE FLIP STILL STEPS PAST SPOT. It spends most of its life
+         near spot — that is what a flip IS — and at any distance under a badge
+         height they print on top of each other: measured 37.6x9.2px of a 38x10
+         badge, spot "513.45" underneath flip "513.50". Two DIFFERENT prices in
+         the same 38 pixels is not a near miss, it is an unreadable number. The
+         FLIP is the one that moves, because spot is the reference a reader
+         looks for, and it steps by SPOT's measured width — the thing it has to
+         clear — rather than by its own, which is only the same number while
+         the two prices have the same digit count.
+
+         WHAT THE STACK COSTS, stated rather than discovered. Two badges plus
+         their gaps want ~79px, and the room between the tag lane and the
+         strike lane is ~72px. So while the two rules are on each other the
+         stepped-aside flip reaches 9.1px into an ~18px tag column — measured
+         over 48 badge-samples at 1024x768 layout 4 — and since the tag glyphs
+         are left-aligned in that column, a tagged row there loses its first
+         characters. That is the trade: a tag is a 1-3 character marker on a
+         minority of rows and the row's `title` still carries its full text,
+         while a covered strike was a price with nothing behind it. The rail
+         was ALREADY in this state whenever the two rules met; it just used to
+         cost the number as well.
+
+         THE CLAMP is the same arithmetic at a longer price. An index quotes
+         seven characters (6100.00), which widens both badges and the lane they
+         start from, and unclamped the pair walks off the left edge of a track
+         that is `overflow-hidden` — the flip cut in half rather than merely
+         crowded. Clamped it stops 1px inside the edge, and because spot only
+         steps by the strike lane the two still land apart. */
       const ySpot = ruleY.get('spot');
       const yFlip = ruleY.get('flip');
+      const spotBadge = track.querySelector<HTMLElement>('[data-rule="spot"] [data-badge]');
       const flipBadge = track.querySelector<HTMLElement>('[data-rule="flip"] [data-badge]');
-      if (flipBadge) {
-        const clash = ySpot != null && yFlip != null && Math.abs(ySpot - yFlip) < BADGE_CLEAR_PX;
-        const shift = clash ? `translateX(${-(flipBadge.offsetWidth + 3)}px)` : '';
-        if (flipBadge.style.transform !== shift) flipBadge.style.transform = shift;
+
+      let lane = 0;
+      for (const el of track.querySelectorAll<HTMLElement>('[data-strike-label]')) {
+        const w = el.offsetWidth;
+        if (w > 0) {
+          lane = w + BADGE_STEP_PX;
+          break;
+        }
       }
+
+      /* No lane means every row is culled, and a badge cannot cover a number
+         that is not drawn — so leave it where the markup puts it. */
+      const park = (el: HTMLElement | null, extra: number) => {
+        if (!el) return;
+        const want = lane + extra;
+        /* `mr-1` is the 4px the badge already sits in from the right edge, and
+           1px keeps its left edge inside an `overflow-hidden` track. */
+        const cap = Math.max(0, track.clientWidth - 5 - el.offsetWidth);
+        const px = Math.min(want, cap);
+        const t = px > 0 ? `translateX(${-px}px)` : '';
+        if (el.style.transform !== t) el.style.transform = t;
+      };
+      park(spotBadge, 0);
+      const clash = ySpot != null && yFlip != null && Math.abs(ySpot - yFlip) < BADGE_CLEAR_PX;
+      park(flipBadge, clash ? (spotBadge?.offsetWidth ?? 0) + 3 : 0);
 
       /* Culled strikes must not vanish silently: a hidden row cannot be
          clicked, and clicking is exactly what brings it back — a click sets
@@ -515,7 +594,12 @@ const PaneLadder = ({
                   style={{ width: `${pct.toFixed(1)}%`, backgroundColor: `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${BAR_ALPHA})` }}
                 />
               </span>
+              {/* `data-strike-label` so the placement pass can measure the lane
+                  the rule badges have to clear. A hook rather than a class
+                  selector, for the same reason `data-badge` is one: a restyle
+                  must not silently move a badge back onto a number. */}
               <span
+                data-strike-label=""
                 className={`shrink-0 text-right font-mono text-[10px] font-semibold tnum ${
                   active ? 'text-select' : 'text-textSecondary'
                 }`}

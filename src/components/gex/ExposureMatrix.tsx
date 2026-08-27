@@ -1,4 +1,4 @@
-import { Fragment } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import HeatPill from './HeatPill';
 import { fmtUsd } from '../../data/gex';
 import SpotRule from '../ui/SpotRule';
@@ -66,17 +66,106 @@ const SpotRow = ({ ticker, spot }: { ticker: string; spot: number }) => (
  * with magnitude bars per cell. Spot marker embeds between strikes; the pin
  * strike is flagged in the rail.
  */
+/*
+  THE THREE GREEK GROUPS, and how many of them the box can actually hold.
+
+  Ten columns of currency — the strike, then GEX, DEX and VEX each split
+  put · call · net — need about 69px each to print a figure like `-$288.4K`
+  without touching its neighbour. That is 691px, and this table lives in the
+  5-of-12 slot on the exposure desk:
+
+    viewport 1280  ->  502px  needs 691  VEX entirely off the right edge
+    viewport 1440  ->  569px  needs 691  VEX entirely off the right edge
+    viewport 1760  ->  fits
+
+  It has always been `overflow-auto`, so nothing was unreachable in principle.
+  In practice a desktop scrollbar is invisible until you scroll, so the reader
+  saw a table that simply stopped after DEX, with no sign a third of it was
+  further right — and the header promised `GEX · DEX · VEX` above a body that
+  showed two of them.
+
+  So the table now asks how wide it is and shows the groups that FIT. What does
+  not fit is not hidden: the chips above name every group and say which are on,
+  so the reader can trade one for another instead of discovering the loss.
+*/
+const ALL_GROUPS: { key: 'gex' | 'dex' | 'vex'; label: string; unit: string }[] = [
+  { key: 'gex', label: 'GEX', unit: '1% move' },
+  { key: 'dex', label: 'DEX', unit: '1σ move' },
+  { key: 'vex', label: 'VEX', unit: '1% vol' },
+];
+
+/** Per-column room a currency figure needs before columns start colliding. */
+const COL_PX = 69;
+/** How many groups fit in `w`, given the strike column takes one column too. */
+const groupsThatFit = (w: number): number => {
+  if (w <= 0) return ALL_GROUPS.length; // pre-measurement: assume the desk is wide
+  return Math.max(1, Math.min(ALL_GROUPS.length, Math.floor((w / COL_PX - 1) / 3)));
+};
+
 const ExposureMatrix = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSelectStrike }: ExposureMatrixProps) => {
   const { ticker, strikes, maxAbs, spotAfterIndex, levels } = data;
 
-  const GROUPS: { key: 'gex' | 'dex' | 'vex'; label: string; unit: string }[] = [
-    { key: 'gex', label: 'GEX', unit: '1% move' },
-    { key: 'dex', label: 'DEX', unit: '1σ move' },
-    { key: 'vex', label: 'VEX', unit: '1% vol' },
-  ];
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  const [room, setRoom] = useState(0);
+  useEffect(() => {
+    const box = boxRef.current;
+    if (!box || typeof ResizeObserver === 'undefined') return;
+    const read = () => setRoom(box.clientWidth);
+    read();
+    const ro = new ResizeObserver(read);
+    ro.observe(box);
+    return () => ro.disconnect();
+  }, []);
+
+  const fit = groupsThatFit(room);
+  /* Which groups the reader has chosen. Null until they touch it, so the
+     default follows the width instead of freezing whatever fitted on mount —
+     a desk dragged wider should get VEX back without being asked. */
+  const [picked, setPicked] = useState<('gex' | 'dex' | 'vex')[] | null>(null);
+  const shown = picked ?? ALL_GROUPS.slice(0, fit).map(g => g.key);
+  const GROUPS = ALL_GROUPS.filter(g => shown.includes(g.key));
+  const hiding = GROUPS.length < ALL_GROUPS.length;
+
+  const toggle = (key: 'gex' | 'dex' | 'vex') => {
+    const on = shown.includes(key);
+    if (on && shown.length === 1) return; // never leave the table with no columns
+    const next = on ? shown.filter(k => k !== key) : [...shown, key];
+    // Keep the reader inside what the box can draw: turning one on turns the
+    // oldest one off rather than re-introducing the overflow this exists to fix.
+    const capped = next.length > fit ? next.slice(next.length - fit) : next;
+    setPicked(ALL_GROUPS.map(g => g.key).filter(k => capped.includes(k)));
+  };
 
   return (
-    <div className="overflow-auto h-full min-h-0">
+    <div className="flex h-full min-h-0 flex-col">
+      {hiding && (
+        /* Only when something is being left out. At a width that holds all
+           three this row would be three lit chips saying nothing. */
+        <div className="flex shrink-0 items-center gap-1 border-b border-borderSubtle px-2 py-1">
+          <span className="mr-0.5 font-mono text-[9px] uppercase tracking-widest text-textMuted">Greeks</span>
+          {ALL_GROUPS.map(g => {
+            const on = shown.includes(g.key);
+            return (
+              <button
+                key={g.key}
+                type="button"
+                aria-pressed={on}
+                onClick={() => toggle(g.key)}
+                title={`${g.label} · ${g.unit}${on ? '' : ` — ${GROUPS.length >= fit ? 'replaces the first shown' : 'show'}`}`}
+                className={`rounded px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-widest transition-colors ${
+                  on ? 'bg-white/[0.10] text-textPrimary' : 'text-textMuted hover:text-textPrimary hover:bg-white/[0.04]'
+                }`}
+              >
+                {g.label}
+              </button>
+            );
+          })}
+          <span className="ml-auto font-mono text-[9px] text-textMuted tnum">
+            {GROUPS.length} of {ALL_GROUPS.length} — the column is {room}px
+          </span>
+        </div>
+      )}
+      <div ref={boxRef} className="overflow-auto min-h-0 flex-1">
       <table className="w-full border-collapse">
         <thead className="sticky top-0 z-10">
           <tr className="bg-[#0c0c0c]">
@@ -146,6 +235,7 @@ const ExposureMatrix = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 };

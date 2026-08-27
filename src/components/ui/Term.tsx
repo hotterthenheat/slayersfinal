@@ -59,6 +59,20 @@ const Term = ({ k, children, className = '' }: TermProps) => {
       onMouseLeave={hide}
       onFocus={show}
       onBlur={hide}
+      onClick={e => {
+        /* THE SAME GUARD THE KEYBOARD ALREADY HAD. Enter and Space are stopped
+           just below, because "a Term can sit inside a sortable table header";
+           the card this portals stops clicks for the same reason. The ANCHOR
+           never did, so a mouse click on an explainer inside a clickable host
+           ran the host instead. Measured on /pinpoint/ranked-targets at both
+           1440x900 and 390x844: clicking "BPS" in a podium card left for
+           /pulse and showed no definition.
+
+           It matters most where there is no hover to fall back on — on a
+           phone, tapping the dotted word IS the only way to read it. */
+        e.stopPropagation();
+        show();
+      }}
       onKeyDown={e => {
         if (e.key === 'Escape' && pos) {
           // Escape closes the card without moving focus, per APG.

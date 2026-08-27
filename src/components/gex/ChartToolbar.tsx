@@ -10,7 +10,7 @@
 
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { useAnchoredMenu } from './useAnchoredMenu';
+import { useAnchoredMenu } from '../ui/useAnchoredMenu';
 import { motion } from 'framer-motion';
 import {
   Activity,
@@ -41,7 +41,7 @@ import {
 } from './candleTheme';
 import { CHART_STYLES, INDICATOR_INKS, type ChartIndicators, type ChartOverlays, type ChartStyle } from './StrikeChart';
 import AlertsMenu from './AlertsMenu';
-import { type MenuSide } from './menuPlacement';
+import { type MenuSide } from '../ui/menuPlacement';
 
 interface ChartToolbarProps {
   timeframe: Timeframe;

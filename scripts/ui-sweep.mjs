@@ -1072,6 +1072,10 @@ head('the strike rail never prints two prices in the same pixels, and its stubs 
           const m = /translateY\(([-0-9.]+)px\)/.exec(el ? el.style.transform || '' : '');
           return m ? parseFloat(m[1]) : null;
         };
+        const tx = el => {
+          const m = /translateX\(([-0-9.]+)px\)/.exec(el.style.transform || '');
+          return m ? parseFloat(m[1]) : 0;
+        };
         const bs = badge('spot');
         const bf = badge('flip');
         if (!bs || !bf) continue;
@@ -1128,7 +1132,13 @@ head('the strike rail never prints two prices in the same pixels, and its stubs 
           spot: (bs.textContent || '').trim(),
           flip: (bf.textContent || '').trim(),
           dy: ys != null && yf != null ? +Math.abs(ys - yf).toFixed(1) : null,
-          shifted: /translateX/.test(bf.style.transform || ''),
+          /* THE DISTANCE, NOT THE PRESENCE OF A translateX. Both badges now
+             carry one at rest — they are homed left of the strike lane so
+             neither prints on a strike — so "has a translateX" stopped telling
+             these two apart. What the step-aside means is that the flip ends up
+             FURTHER LEFT than spot, and that is what is read here. */
+          spotX: tx(bs),
+          flipX: tx(bf),
           covered,
           stolen,
         });
@@ -1153,11 +1163,14 @@ head('the strike rail never prints two prices in the same pixels, and its stubs 
       : bad(`${at} — ${hits.length} rail(s) print two prices in the same pixels, e.g. spot ${hits[0].spot} under flip ${hits[0].flip} overlapping ${hits[0].overlap}px`);
     /* Where the two ARE within a badge of each other, the step-aside must have
        been applied — otherwise the clean result above is luck, not the fix. */
-    const missed = near.filter(r => !r.shifted);
+    /* 1px rather than 0: these are subpixel transforms and equality on a float
+       is not a claim worth making. A real step is ~41px — the spot badge's own
+       width plus its gap — so the margin is not close to load-bearing. */
+    const missed = near.filter(r => !(r.flipX < r.spotX - 1));
     if (near.length) {
       missed.length === 0
-        ? ok(`${at} — ${near.length} rail(s) had the rules within a badge, and every one stepped aside`)
-        : bad(`${at} — ${missed.length} rail(s) had the rules within a badge and did NOT step aside`);
+        ? ok(`${at} — ${near.length} rail(s) had the rules within a badge, and every one stepped clear of spot`)
+        : bad(`${at} — ${missed.length} rail(s) had the rules within a badge and the flip did not step past spot (e.g. flip ${missed[0].flipX}px vs spot ${missed[0].spotX}px)`);
     }
     /* ASSERT THE INVARIANT, NOT THE SYMPTOM. Whether the stub actually STEALS
        a click depends on where the last row lands against a live price —
@@ -1384,6 +1397,887 @@ head('Terrain keeps its desk on a tablet');
     ? ok(`an iPad still builds four charts — ${n} plot canvases`)
     : bad(`an iPad built ${n} plot canvases, expected 8`);
   await ctx.close();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   NOTHING ACTS ON A RAIL THAT IS NOT ON SCREEN.
+
+   PaneLadder renders `hidden lg:flex`, so from 768px (where `useIsPhone` stops
+   taking over) to 1023.98px the rails are in the DOM at `display: none` while
+   every pane's stored `ladder` flag is still true. Three things went on
+   reading that flag as if it meant "visible":
+
+     · the arrangement bar reserved `right: 216px` — LADDER_WIDTH_PX 132 plus
+       the 76px price gutter plus 8 — for a rail 0px wide, which parked its
+       Rows3 icon and its 1/2 buttons ON the volume histogram with 135px of
+       empty runway between it and the price axis. Measured at 768, 900, 1023
+       and a coarse-pointer 820x1180.
+     · STRIKES rendered lit and `aria-pressed="true"`, titled "Hide every
+       strike rail". A real mouse click at 1023x800 rewrote all four panes'
+       flags to false in storage: 0 rails on screen before, 0 after.
+     · `r` and `R` did the same silently, and announced a rail that never came.
+
+   The premise is asserted first and separately. If the rails ever stop being
+   `display: none` here, every line below is measuring nothing, and it should
+   say so rather than going quiet.
+
+   1024 is checked from the other side in the same loop, because a guard that
+   just wants the chrome gone would pass by deleting it everywhere.
+   ───────────────────────────────────────────────────────────────────────── */
+head('below lg, nothing acts on the strike rail that is not drawn');
+{
+  /* `read` is the same measurement at every width — the point of the section
+     is that one expression is right on both sides of 1024, not that two
+     different ones each pass. */
+  const read = () => {
+    const rails = [...document.querySelectorAll('[aria-label$="exposure by strike"]')].map(el => ({
+      display: getComputedStyle(el).display,
+      w: Math.round(el.getBoundingClientRect().width),
+    }));
+    const btn = document.querySelector('[data-strikes-toggle]');
+    const bar = btn ? btn.closest('div.chrome-hover') : document.querySelector('[aria-label="How many charts"]')?.closest('div.chrome-hover');
+    const barBox = bar ? bar.getBoundingClientRect() : null;
+    /* The right price axis is the RIGHTMOST tall narrow canvas. Below lg the
+       panes stack into one column, so every pane's axis shares an x and any of
+       them gives the same gap; above lg the last pane's is the rightmost. */
+    const axis = [...document.querySelectorAll('canvas')]
+      .map(c => c.getBoundingClientRect())
+      .filter(b => b.height > 120 && b.width > 25 && b.width < 95)
+      .sort((a, b) => b.left - a.left)[0];
+    return {
+      railsOnScreen: rails.filter(r => r.display !== 'none' && r.w > 0).length,
+      railsInDom: rails.length,
+      strikes: !!btn,
+      /* The picker is NOT inert below lg — the panes stack and the page
+         scrolls, so 4 really does draw four charts. It has to survive. */
+      picker: !!document.querySelector('[aria-label="How many charts"]'),
+      gap: barBox && axis ? Math.round(axis.left - barBox.right) : null,
+      ladder: JSON.parse(localStorage.getItem('slayer_terrain_v1') || '{}').panes?.map(q => q.ladder),
+    };
+  };
+
+  for (const [w, h, layout, coarse] of [
+    [768, 900, 3, false],
+    [900, 800, 3, false],
+    [1023, 800, 1, false],
+    [820, 1180, 3, true],
+    [1024, 800, 1, false],
+    [1280, 800, 4, false],
+  ]) {
+    const belowLg = w < 1024;
+    const at = `${w}x${h} L${layout}${coarse ? ' coarse' : ''}`;
+    const ctx = await browser.newContext({
+      viewport: { width: w, height: h },
+      ...(coarse ? { hasTouch: true, isMobile: true } : {}),
+    });
+    await ctx.addInitScript(
+      `localStorage.setItem('slayer_terrain_v1', ${JSON.stringify(seed(layout, TICKERS))})`
+    );
+    const page = await ctx.newPage();
+    await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(BOOT_MS);
+
+    const g = await page.evaluate(read);
+
+    /* THE PREMISE. Everything below is about a rail that is not on screen
+       while its flag says it is, so prove that is the state first. */
+    if (g.railsInDom === 0) {
+      bad(`${at} — no rail in the DOM at all; the seed sets ladder:true on every pane`);
+      await ctx.close();
+      continue;
+    }
+    if (belowLg) {
+      g.railsOnScreen === 0
+        ? ok(`${at} — ${g.railsInDom} rails in the DOM, none drawn`)
+        : bad(`${at} — ${g.railsOnScreen} rails ARE drawn below lg; this section is measuring the wrong thing`);
+    } else {
+      g.railsOnScreen > 0
+        ? ok(`${at} — ${g.railsOnScreen} rails drawn`)
+        : bad(`${at} — the rail is not drawn at ${w}px, where it should be`);
+    }
+
+    /* The button, from both sides of the breakpoint. */
+    if (belowLg) {
+      !g.strikes
+        ? ok(`${at} — no STRIKES button over a rail nobody can see`)
+        : bad(`${at} — STRIKES is rendered while ${g.railsOnScreen} rails are on screen`);
+    } else {
+      g.strikes
+        ? ok(`${at} — STRIKES is here, where it does something`)
+        : bad(`${at} — STRIKES is missing at ${w}px, where the rail IS drawn`);
+    }
+
+    g.picker
+      ? ok(`${at} — the layout picker survives`)
+      : bad(`${at} — the layout picker went too; it is not inert here`);
+
+    /* THE OFFSET. 132px of clearance from a `display: none` element is 132px
+       of chart the bar sits on. Above lg the same expression must still hold
+       the real rail's width, which is what the 1024/1280 rows check. */
+    if (g.gap == null) bad(`${at} — could not find the bar or the price axis to measure the gap`);
+    else if (g.gap < 0) bad(`${at} — the bar overlaps the price axis by ${-g.gap}px`);
+    else if (g.gap > 20) bad(`${at} — the bar holds ${g.gap}px of clearance; the rail beside it is ${belowLg ? 'not drawn' : 'drawn'}`);
+    else ok(`${at} — the bar sits ${g.gap}px off the price axis`);
+
+    /* THE KEYS. Same control as the button — it titles itself "Shift R" — so
+       they have to come and go with it rather than half of it surviving. */
+    await page.keyboard.press('Shift+R');
+    await page.waitForTimeout(400);
+    const after = await page.evaluate(read);
+    const rewrote = JSON.stringify(g.ladder) !== JSON.stringify(after.ladder);
+    if (belowLg) {
+      !rewrote
+        ? ok(`${at} — Shift R leaves the stored preference alone`)
+        : bad(`${at} — Shift R rewrote ${JSON.stringify(g.ladder)} to ${JSON.stringify(after.ladder)} with no rail on screen`);
+    } else {
+      rewrote && after.railsOnScreen !== g.railsOnScreen
+        ? ok(`${at} — Shift R clears the rails it says it clears`)
+        : bad(`${at} — Shift R changed storage:${rewrote} rails:${g.railsOnScreen}->${after.railsOnScreen}`);
+    }
+
+    await ctx.close();
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   NO RULE BADGE PRINTS ON A STRIKE.
+
+   The rail's spot and flip rules carry an opaque price chip, `ml-auto` in the
+   same right-hand lane a row's strike is right-aligned in — and the chip is
+   wider than any strike it meets (38px against 20-29.5px measured), so a rule
+   crossing a row did not graze the number, it covered all of it. Rules render
+   after every row with no z-index, so the chip won.
+
+   Measured on the build before the fix, at 1024x768 layout 4: 72 covers over
+   24 rail-samples, worst 10.0px — the badge's whole line box over the whole
+   glyph band of a 10px label. "476.03" over 476. "182.58" over 182.50.
+   "117.43" over a strike carrying the K tag, the heaviest in the book.
+
+   SAMPLED OVER TIME, not once. Spot moves every tick and the rows re-fit with
+   it, so a single frame is one throw of the dice — at 1440x900 layout 1 the
+   pitch is wide enough that a badge often lands between rows, which is exactly
+   why this shipped. Layout 4 at 1024 is the dense end and it is where the
+   defect was total.
+
+   The premise is asserted first: if no badge or no strike is drawn, an
+   overlap count of zero means nothing and this says so instead of passing.
+   ───────────────────────────────────────────────────────────────────────── */
+head('no rule badge prints on a strike');
+{
+  const rails = () => {
+    const out = [];
+    for (const rail of document.querySelectorAll('[aria-label$="exposure by strike"]')) {
+      if (getComputedStyle(rail).display === 'none') continue;
+      /* The track is the row's own parent — NOT `closest('div')` from a label,
+         which walks past a row rendered as a <button> and lands a level up. */
+      const track = rail.querySelector('[data-strike]')?.parentElement;
+      const shown = el => el && getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().width > 0;
+      const labels = [...rail.querySelectorAll('[data-strike-label]')]
+        .filter(el => shown(el.parentElement))
+        .map(el => ({ text: el.textContent.trim(), box: el.getBoundingClientRect().toJSON() }));
+      const badges = [...rail.querySelectorAll('[data-rule]')]
+        .filter(shown)
+        .map(r => {
+          const b = r.querySelector('[data-badge]');
+          return b ? { kind: r.dataset.rule, text: b.textContent.trim(), box: b.getBoundingClientRect().toJSON() } : null;
+        })
+        .filter(Boolean);
+      out.push({ trackBox: (track || rail).getBoundingClientRect().toJSON(), labels, badges });
+    }
+    return out;
+  };
+
+  /* Two boxes overlap when they overlap on BOTH axes; the size of the smaller
+     crossing is what a reader loses. */
+  const cross = (a, b) => {
+    const x = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+    const y = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
+    return x > 0 && y > 0 ? Math.min(x, y) : 0;
+  };
+
+  for (const [w, h, layout] of [[1024, 768, 4], [1280, 800, 4], [1440, 900, 1]]) {
+    const at = `${w}x${h} L${layout}`;
+    const { ctx, page } = await openDesk(w, h, layout);
+
+    let samples = 0, withBadge = 0, withLabel = 0;
+    const onStrike = [], clipped = [], onEachOther = [];
+    for (let i = 0; i < 4; i++) {
+      const seen = await page.evaluate(rails);
+      for (const r of seen) {
+        samples++;
+        if (r.badges.length) withBadge++;
+        if (r.labels.length) withLabel++;
+        for (const b of r.badges) {
+          for (const l of r.labels) {
+            const ov = cross(b.box, l.box);
+            if (ov > 0) onStrike.push(`${b.kind} "${b.text}" over strike "${l.text}" by ${ov.toFixed(1)}px`);
+          }
+          /* The clamp: a badge stepped past a long price must stop inside an
+             `overflow-hidden` track rather than being cut in half. */
+          if (b.box.x < r.trackBox.x - 0.5) clipped.push(`${b.kind} "${b.text}" starts ${(r.trackBox.x - b.box.x).toFixed(1)}px outside the track`);
+        }
+        if (r.badges.length === 2) {
+          const ov = cross(r.badges[0].box, r.badges[1].box);
+          if (ov > 0) onEachOther.push(`${r.badges[0].text} and ${r.badges[1].text} overlap by ${ov.toFixed(1)}px`);
+        }
+      }
+      await page.waitForTimeout(1500);
+    }
+
+    /* THE PREMISE. */
+    if (!samples || !withBadge || !withLabel) {
+      bad(`${at} — ${samples} rail-samples, ${withBadge} with a rule badge, ${withLabel} with a strike: nothing to measure`);
+      await ctx.close();
+      continue;
+    }
+    ok(`${at} — ${samples} rail-samples, ${withBadge} carrying a rule badge`);
+
+    onStrike.length === 0
+      ? ok(`${at} — no badge lands on a strike`)
+      : bad(`${at} — ${onStrike.length} covers: ${onStrike.slice(0, 3).join(' | ')}`);
+    clipped.length === 0
+      ? ok(`${at} — every badge stays inside its track`)
+      : bad(`${at} — ${clipped.length} clipped: ${clipped.slice(0, 2).join(' | ')}`);
+    onEachOther.length === 0
+      ? ok(`${at} — spot and the flip stay off each other`)
+      : bad(`${at} — ${onEachOther.length} rule-on-rule: ${onEachOther.slice(0, 2).join(' | ')}`);
+
+    await ctx.close();
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   THE TICKER PICKER OPENS SOMEWHERE A READER CAN REACH.
+
+   It hung off its trigger with `absolute right-0 top-full`, which is only
+   correct while the trigger has the menu's 288px of room to its LEFT. On a
+   phone it does not: every page that renders the picker puts it in a header
+   row that WRAPS at a narrow width, and a wrapped row starts at the left edge,
+   so the trigger sits at x=16..120 and a right-hung menu is laid out from
+   x=-168.
+
+   Measured at 390x844 on the built app before the fix: the search input's left
+   edge at x=-134 — a reader could not see what they were typing — and 2 of the
+   first 8 symbol rows returned themselves from `document.elementFromPoint`.
+   The same two numbers on /pinpoint/exposure-profile and /trace/tracker, which
+   reach the picker through two different shells, which is what said the fault
+   was the component's rather than one page's.
+
+   BOTH HOSTS ARE SWEPT for that reason, and 1440 alongside 390 so a fix that
+   simply moved the problem to the desk would be caught.
+
+   AND IT MUST STILL PICK. The menu is portalled to <body> now, so it is no
+   longer inside the wrapper the outside-click handler watches; without the
+   matching change there, a mousedown on a row reads as a click outside, the
+   menu unmounts, and the row's own click never fires. A placement check alone
+   would call that green — so the last assertion clicks a row for real and
+   reads the trigger back.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the ticker picker opens somewhere a reader can reach');
+{
+  for (const route of ['/pinpoint/exposure-profile', '/trace/tracker']) {
+    for (const [w, h] of [[390, 844], [768, 900], [1440, 900]]) {
+      const at = `${route} @ ${w}`;
+      const phone = w < 500;
+      const ctx = await browser.newContext({ viewport: { width: w, height: h }, hasTouch: phone, isMobile: phone });
+      const page = await ctx.newPage();
+      await page.goto(`${BASE}${route}`, { waitUntil: 'networkidle' });
+      await page.waitForTimeout(BOOT_MS);
+
+      /* The picker is the only button on the page carrying `min-w-[104px]`.
+         Matching a search icon instead found the top bar's own button. */
+      const opened = await page.evaluate(async () => {
+        const btn = [...document.querySelectorAll('button')].find(b => getComputedStyle(b).minWidth === '104px');
+        if (!btn) return { missing: true };
+        const was = (btn.textContent || '').trim();
+        btn.click();
+        /* The ticker universe is a LAZY import, so the first open renders
+           "Loading tickers…" and the rows arrive later. Poll for a row rather
+           than sleeping a guessed interval — a fixed wait is either too long
+           every run or too short on a cold one, and too short here would read
+           as "0 rows reachable" and blame the placement. */
+        const until = async test => {
+          for (let i = 0; i < 60; i++) {
+            if (test()) return true;
+            await new Promise(r => setTimeout(r, 100));
+          }
+          return false;
+        };
+        await until(() => document.querySelector('input[placeholder^="Search all"]'));
+        const inp = document.querySelector('input[placeholder^="Search all"]');
+        if (!inp) return { was, noMenu: true };
+        await until(() => {
+          const m = inp.closest('div[style*="position: fixed"], div[class*="absolute"]');
+          return m && m.querySelector('button');
+        });
+        /* The menu is the input's own box, not the first div in the document
+           that happens to contain it — that ancestor is the page. */
+        const menu = inp.closest('div[style*="position: fixed"], div[class*="absolute"]');
+        const mb = (menu || inp).getBoundingClientRect();
+        const ib = inp.getBoundingClientRect();
+        const rows = [...(menu || document).querySelectorAll('button')].filter(b => b.getBoundingClientRect().width > 0);
+        let reach = 0;
+        const sample = rows.slice(0, 8);
+        for (const row of sample) {
+          const rb = row.getBoundingClientRect();
+          const t = document.elementFromPoint(Math.round(rb.left + rb.width / 2), Math.round(rb.top + rb.height / 2));
+          if (t && (t === row || row.contains(t))) reach++;
+        }
+        /* A row whose symbol differs from the current one, so the click has
+           something to prove. */
+        const target = sample.find(b => {
+          const sym = b.querySelector('span')?.textContent?.trim();
+          return sym && sym !== was;
+        });
+        const tb = target ? target.getBoundingClientRect() : null;
+        return {
+          was,
+          menu: { x: Math.round(mb.x), right: Math.round(mb.right), top: Math.round(mb.top), bottom: Math.round(mb.bottom) },
+          input: { x: Math.round(ib.x), right: Math.round(ib.right) },
+          vw: window.innerWidth,
+          vh: window.innerHeight,
+          rows: sample.length,
+          reach,
+          pick: tb ? { x: Math.round(tb.x + tb.width / 2), y: Math.round(tb.y + tb.height / 2), sym: target.querySelector('span').textContent.trim() } : null,
+        };
+      });
+
+      if (opened.missing) { bad(`${at} — no ticker picker on the page`); await ctx.close(); continue; }
+      if (opened.noMenu) { bad(`${at} — the picker did not open`); await ctx.close(); continue; }
+
+      const m = opened.menu;
+      const off = [];
+      if (m.x < 0) off.push(`${-m.x}px off the left`);
+      if (m.right > opened.vw) off.push(`${m.right - opened.vw}px off the right`);
+      if (m.top < 0) off.push(`${-m.top}px off the top`);
+      if (m.bottom > opened.vh) off.push(`${m.bottom - opened.vh}px below the fold`);
+      off.length === 0
+        ? ok(`${at} — the menu is inside the window (${m.x}..${m.right} of ${opened.vw})`)
+        : bad(`${at} — the menu hangs ${off.join(' and ')}`);
+
+      opened.input.x >= 0 && opened.input.right <= opened.vw
+        ? ok(`${at} — you can see what you type (input ${opened.input.x}..${opened.input.right})`)
+        : bad(`${at} — the search input runs ${opened.input.x}..${opened.input.right} of a ${opened.vw}px window`);
+
+      opened.rows > 0 && opened.reach === opened.rows
+        ? ok(`${at} — all ${opened.rows} sampled rows take their own click`)
+        : bad(`${at} — ${opened.reach} of ${opened.rows} sampled rows take their own click`);
+
+      /* AND IT STILL PICKS — a real mouse press, not `.click()`, because the
+         defect this guards against is a mousedown handler closing the menu. */
+      if (!opened.pick) bad(`${at} — no row with a different symbol to click`);
+      else {
+        await page.mouse.click(opened.pick.x, opened.pick.y);
+        await page.waitForTimeout(600);
+        const now = await page.evaluate(() => {
+          const btn = [...document.querySelectorAll('button')].find(b => getComputedStyle(b).minWidth === '104px');
+          return btn ? (btn.textContent || '').trim() : null;
+        });
+        now === opened.pick.sym
+          ? ok(`${at} — clicking ${opened.pick.sym} actually picks it`)
+          : bad(`${at} — clicked ${opened.pick.sym} and the picker still reads ${now} (was ${opened.was})`);
+      }
+
+      await ctx.close();
+    }
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   A JARGON EXPLAINER DOES NOT FIRE THE CONTROL IT SITS INSIDE.
+
+   `Term` renders a dotted word that reveals a definition. It stops Enter and
+   Space from bubbling — its own comment says why, "a Term can sit inside a
+   sortable table header" — and the card it portals stops clicks. The ANCHOR
+   never did, so a mouse click on an explainer inside a clickable host ran the
+   host instead.
+
+   Measured on /pinpoint/ranked-targets before the fix, where the podium cards
+   are `<motion.button>` that navigate on click: clicking "BPS" at 1440x900 and
+   again at 390x844 left the page for /pulse and showed no definition. The
+   phone case is the worse one — with no hover, tapping the word IS the only
+   way to read it, so the only affordance for a definition was a way off the
+   page.
+
+   BOTH HALVES ARE ASSERTED. "The URL did not change" alone would pass a Term
+   that swallowed the click and did nothing, which is a different bug wearing
+   the same green.
+   ───────────────────────────────────────────────────────────────────────── */
+head('a jargon explainer does not fire the control it sits inside');
+{
+  for (const [w, h] of [[1440, 900], [390, 844]]) {
+    const at = `${w}x${h}`;
+    const phone = w < 500;
+    const ctx = await browser.newContext({ viewport: { width: w, height: h }, hasTouch: phone, isMobile: phone });
+    const page = await ctx.newPage();
+    await page.goto(`${BASE}/pinpoint/ranked-targets`, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(BOOT_MS);
+
+    const spot = await page.evaluate(() => {
+      /* A Term inside a clickable ancestor — the case the guard is about. A
+         Term standing on its own has nothing to fire and proves nothing. */
+      for (const t of document.querySelectorAll('span[role="button"]')) {
+        const r = t.getBoundingClientRect();
+        if (!r.width) continue;
+        const host = t.parentElement?.closest('button,a');
+        if (!host) continue;
+        return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2), text: t.textContent.trim() };
+      }
+      return null;
+    });
+
+    if (!spot) { bad(`${at} — found no explainer inside a clickable host to test`); await ctx.close(); continue; }
+
+    const before = page.url();
+    await page.mouse.click(spot.x, spot.y);
+    await page.waitForTimeout(800);
+    const after = page.url();
+    const tip = await page.evaluate(() => !!document.querySelector('span[role="tooltip"]'));
+
+    after === before
+      ? ok(`${at} — clicking "${spot.text}" stays on the page`)
+      : bad(`${at} — clicking "${spot.text}" left ${before.replace(/^https?:\/\/[^/]+/, '')} for ${after.replace(/^https?:\/\/[^/]+/, '')}`);
+    tip
+      ? ok(`${at} — and shows the definition`)
+      : bad(`${at} — the click was swallowed and no definition appeared`);
+
+    await ctx.close();
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   THE SUB-TABS FIT THE WINDOW THEY ARE DRAWN IN.
+
+   `SubNav` is an `inline-flex` of `whitespace-nowrap` pills with neither wrap
+   nor scroll. The Pinpoint set — Exposure Profile, Ranked Targets, Vanna &
+   Charm — measures 415px against a 358px content area at 390px, so the last
+   tab ended 40px past the right edge and the desk slid 43px sideways. A route
+   a reader cannot see is a route they cannot reach.
+
+   The nav's OWN overflow is what is asserted, not just the page's: the shells
+   differ, and a nav that fits because its parent happens to scroll is still a
+   nav with a tab off the edge. Trace is swept too — it renders the same
+   component through a different shell, with two shorter tabs, and it must not
+   change.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the sub-tabs fit the window they are drawn in');
+{
+  for (const route of ['/pinpoint/exposure-profile', '/trace/tracker']) {
+    for (const [w, h] of [[390, 844], [768, 900], [1440, 900]]) {
+      const at = `${route} @ ${w}`;
+      const phone = w < 500;
+      const ctx = await browser.newContext({ viewport: { width: w, height: h }, hasTouch: phone, isMobile: phone });
+      const page = await ctx.newPage();
+      await page.goto(`${BASE}${route}`, { waitUntil: 'networkidle' });
+      await page.waitForTimeout(BOOT_MS);
+
+      const g = await page.evaluate(() => {
+        const nav = document.querySelector('nav[aria-label$="subpages"]');
+        if (!nav) return { missing: true };
+        const main = document.querySelector('main') || document.documentElement;
+        return {
+          tabs: nav.querySelectorAll('a').length,
+          navOver: nav.scrollWidth - nav.clientWidth,
+          offRight: [...nav.querySelectorAll('a')]
+            .filter(a => a.getBoundingClientRect().right > window.innerWidth)
+            .map(a => `${a.textContent.trim()} ends ${Math.round(a.getBoundingClientRect().right)}`),
+          slide: main.scrollWidth - main.clientWidth,
+          vw: window.innerWidth,
+        };
+      });
+
+      if (g.missing) { bad(`${at} — no sub-tab bar on the page`); await ctx.close(); continue; }
+      if (g.tabs === 0) { bad(`${at} — the sub-tab bar rendered no tabs`); await ctx.close(); continue; }
+
+      g.navOver <= 0
+        ? ok(`${at} — ${g.tabs} tabs fit their own bar`)
+        : bad(`${at} — the tab bar overflows itself by ${g.navOver}px`);
+      g.offRight.length === 0
+        ? ok(`${at} — no tab past the right edge`)
+        : bad(`${at} — off the ${g.vw}px window: ${g.offRight.join(', ')}`);
+      g.slide === 0
+        ? ok(`${at} — the desk does not slide sideways`)
+        : bad(`${at} — the desk slides ${g.slide}px sideways`);
+
+      await ctx.close();
+    }
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   THE HOVER READ-OUT PRINTS THE SAME NUMBER AS THE BAR IT POINTS AT.
+
+   The positioning map's card built its NET GAMMA headline from the raw
+   simulator history, while the band, the exposure matrix, the pinned detail
+   bar and the card's OWN C and P legs all print `row.gex.net` — the same value
+   after the expiry decay and per-strike jitter this view applies. The card
+   contradicted itself inside 200px.
+
+   Measured at 1440x900 before the fix: 14 of 14 hovered cards disagreed with
+   their own C+P legs, worst 534%, and one flipped the sign — a band drawn
+   green and labelled "dealer long gamma" under a headline in red reading
+   DEALER SHORT GAMMA.
+
+   C+P IS THE ORACLE, and it is a good one precisely because it is inside the
+   same card: net gamma is call gamma plus put gamma by definition, so any gap
+   is the card disagreeing with itself, with no tolerance argument about which
+   surface is right. Parsed to numbers rather than matched as strings, so a
+   formatting difference cannot fake agreement.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the hover read-out prints the same number as the bar it points at');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await ctx.newPage();
+  await page.goto(`${BASE}/pinpoint/exposure-profile`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+
+  const money = s => {
+    const m = /(-?)\$?([\d.]+)\s*([KMB])?/.exec((s || '').replace(/[+,]/g, ''));
+    if (!m) return null;
+    const mult = m[3] === 'B' ? 1e9 : m[3] === 'M' ? 1e6 : m[3] === 'K' ? 1e3 : 1;
+    return (m[1] ? -1 : 1) * parseFloat(m[2]) * mult;
+  };
+
+  const bands = await page.evaluate(() =>
+    [...document.querySelectorAll('[aria-label*="gamma"]')]
+      .map(el => ({ el, r: el.getBoundingClientRect() }))
+      .filter(o => o.r.width > 4 && o.r.height > 2)
+      .map(o => ({ x: Math.round(o.r.x + o.r.width / 2), y: Math.round(o.r.y + o.r.height / 2) }))
+  );
+
+  let read = 0;
+  const off = [];
+  for (const b of bands.slice(0, 12)) {
+    await page.mouse.move(b.x, b.y);
+    await page.waitForTimeout(280);
+    const card = await page.evaluate(() => {
+      const head = [...document.querySelectorAll('div')].find(d => (d.textContent || '').trim() === 'Net gamma');
+      if (!head) return null;
+      const box = head.parentElement;
+      const legs = box.parentElement.querySelector('div.mt-2.flex');
+      return { big: box.children[1]?.textContent?.trim(), legs: legs ? legs.textContent.trim() : null };
+    });
+    if (!card || !card.big || !card.legs) continue;
+    const c = /C\s*(-?\$[\d.]+[KMB]?)/.exec(card.legs);
+    const p = /P\s*(-?\$[\d.]+[KMB]?)/.exec(card.legs);
+    const headline = money(card.big);
+    if (!c || !p || headline == null) continue;
+    const sum = money(c[1]) + money(p[1]);
+    read++;
+    /* 2% absorbs the one-decimal rounding each figure is printed at; the
+       defect this guards against ran to 534%. */
+    const rel = Math.abs(sum) > 0 ? Math.abs(headline - sum) / Math.abs(sum) : 0;
+    if (rel > 0.02) off.push(`${card.big} vs C+P ${(sum / 1e6).toFixed(1)}M (${(rel * 100).toFixed(0)}%)`);
+  }
+
+  if (read < 4) bad(`only ${read} read-out cards could be read — the guard saw too little to mean anything`);
+  else {
+    ok(`${read} hovered cards read`);
+    off.length === 0
+      ? ok('every headline matches its own call and put legs')
+      : bad(`${off.length} of ${read} headlines disagree with their own legs: ${off.slice(0, 3).join(' | ')}`);
+  }
+  await ctx.close();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   THE MAP'S LEGEND NAMES THE ANCHOR THE RIBBON IS DRAWN FROM.
+
+   Clicking a band re-anchors the cumulative ribbon, and the panel header says
+   so — "CUM FROM 485" — while the legend strip below it went on reading
+   "CUMULATIVE FROM SPOT". Three surfaces describe one series (header, legend,
+   and the hover card's "FROM 485 TO 481"); this was the only one that could
+   be wrong, and it was.
+
+   THE PIN IS ASSERTED FIRST. If the click does not actually re-anchor
+   anything, both strings stay on "spot", they agree, and a guard that only
+   compared them would call that a pass.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the map legend names the anchor the ribbon is drawn from');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1760, height: 1000 } });
+  const page = await ctx.newPage();
+  await page.goto(`${BASE}/pinpoint/exposure-profile`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+
+  const read = () =>
+    page.evaluate(() => {
+      const t = document.body.innerText;
+      return {
+        header: (/CUM FROM ([^\s\n]+)/.exec(t) || [])[1] || null,
+        legend: (/CUMULATIVE FROM ([^\s\n·]+)/i.exec(t) || [])[1] || null,
+      };
+    });
+
+  const before = await read();
+  if (!before.header || !before.legend) bad(`could not find both the header and the legend (header ${before.header}, legend ${before.legend})`);
+  else {
+    const band = await page.evaluate(() => {
+      const el = [...document.querySelectorAll('[aria-label*="gamma"]')]
+        .map(e => ({ e, r: e.getBoundingClientRect() }))
+        .filter(o => o.r.width > 4 && o.r.height > 2)[5];
+      if (!el) return null;
+      return { x: Math.round(el.r.x + el.r.width / 2), y: Math.round(el.r.y + el.r.height / 2) };
+    });
+    if (!band) bad('found no band to pin');
+    else {
+      await page.mouse.click(band.x, band.y);
+      await page.waitForTimeout(900);
+      const after = await read();
+      /* THE PREMISE: the click re-anchored something. */
+      after.header && after.header !== 'SPOT'
+        ? ok(`clicking a band re-anchors the ribbon — header reads CUM FROM ${after.header}`)
+        : bad(`clicking a band did not re-anchor anything (header still ${after.header}); the comparison below would prove nothing`);
+      if (after.header && after.header !== 'SPOT') {
+        after.legend === after.header
+          ? ok(`and the legend agrees — CUMULATIVE FROM ${after.legend}`)
+          : bad(`the header says ${after.header} and the legend says ${after.legend}`);
+      }
+    }
+  }
+  await ctx.close();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   THE RANKED LADDER'S CLASS COLUMN FITS THE ROW IT JOINS.
+
+   It switched on at `sm` (640px) and the row needs 648, so across an 8px band
+   every row read "DOWNSIDE CUSHIO" / "UPSIDE RESISTAN" / "NEUTRA". A scroller
+   with `overflow-y-auto` gets `overflow-x: auto` for free, so the tail was not
+   clipped — it was scrolled out of sight behind a bar nothing tells you is
+   there. Measured before the fix: the scroller overflowed itself by 8px at
+   640, 4px at 644, 1px at 647, 0 from 648.
+
+   BOTH DIRECTIONS ARE ASSERTED. "Never overflows" alone is satisfied by a
+   ladder with no class column at any width, so above the threshold the column
+   must also BE there.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the ranked ladder fits the row it draws');
+{
+  /* 390 and 430 are here for the drift check — they are the only widths where
+     the ladder scrolls at all, so they are the only ones that can exercise it.
+     620 through 1024 carry the fit check across BOTH boundaries — 662 where
+     the class lane joins and 770 where the priority lane does — with the
+     width either side of each, so a threshold that drifts a pixel is caught
+     from whichever direction it drifts. */
+  for (const w of [390, 430, 620, 647, 661, 662, 769, 770, 1024]) {
+    const ctx = await browser.newContext({ viewport: { width: w, height: 900 } });
+    const page = await ctx.newPage();
+    await page.goto(`${BASE}/pinpoint/ranked-targets`, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(BOOT_MS);
+
+    const g = await page.evaluate(() => {
+      const sc = document.querySelector('[data-ladder]');
+      if (!sc) return { noScroller: true };
+      const row = [...sc.querySelectorAll('button')].find(b => /^#\d+/.test((b.textContent || '').trim()));
+      if (!row) return { noRow: true };
+      const kids = [...row.children];
+      const cls = kids[kids.length - 1];
+      /* THE CAPTIONS TRAVEL WITH THE ROWS. They used to live outside this box,
+         so the two scrolled independently: at 390 dragging the body 102px right
+         moved every row and left every caption behind, which put NET GEX under
+         somebody else's word. Drag it and measure both.
+
+         FOUND DOCUMENT-WIDE BY ITS OWN HOOK, not inside the scroller. The whole
+         defect is the caption row being somewhere else, so looking for it
+         inside is looking in the one place a broken build does not keep it —
+         the first version of this check searched the scroller, fell back to the
+         first ROW, compared that row against itself and passed against the
+         exact structure it exists to catch. */
+      const head = document.querySelector('[data-ladder-head]');
+      if (!head) return { noHead: true };
+      const before = { head: head.getBoundingClientRect().left, row: row.getBoundingClientRect().left };
+      sc.scrollLeft = 9999;
+      const moved = sc.scrollLeft;
+      const after = { head: head.getBoundingClientRect().left, row: row.getBoundingClientRect().left };
+      sc.scrollLeft = 0;
+      return {
+        over: sc.scrollWidth - sc.clientWidth,
+        classShown: getComputedStyle(cls).display !== 'none' && cls.getBoundingClientRect().width > 0,
+        moved: Math.round(moved),
+        drift: Math.round((before.head - after.head) - (before.row - after.row)),
+      };
+    });
+
+    if (g.noScroller || g.noRow) { bad(`ranked @ ${w} — no ladder to measure`); await ctx.close(); continue; }
+    if (g.noHead) { bad(`ranked @ ${w} — found no caption row; the drift check below would measure nothing`); await ctx.close(); continue; }
+
+    /* TWO DIFFERENT CLAIMS, and conflating them would have cost the first one.
+       From 560px up the row FITS, so any sideways travel there means a column
+       turned on before there was room for it — which is exactly the 640-647
+       band. Below 560 the row cannot fit at any breakpoint and scrolling is the
+       honest answer, so travel there is not a fault. */
+    if (w >= 560) {
+      g.over === 0
+        ? ok(`ranked @ ${w} — the ladder does not overflow itself`)
+        : bad(`ranked @ ${w} — the ladder overflows itself by ${g.over}px at a width where the row fits, so a column switched on early`);
+    } else {
+      ok(`ranked @ ${w} — the row cannot fit a phone; the ladder scrolls ${g.over}px`);
+    }
+    /* Whether it scrolls is a layout question and either answer can be right.
+       Whether the captions come WITH it is not. */
+    g.moved === 0
+      ? ok(`ranked @ ${w} — nothing to scroll, so nothing can drift`)
+      : g.drift === 0
+        ? ok(`ranked @ ${w} — scrolled ${g.moved}px and the captions came with the rows`)
+        : bad(`ranked @ ${w} — scrolled ${g.moved}px and the captions drifted ${g.drift}px from their columns`);
+    /* 662 is where the class lane fits — see the note on the lane itself for
+       why the first answer was 648 and why it was wrong. */
+    if (w >= 662) {
+      g.classShown
+        ? ok(`ranked @ ${w} — and the class column is drawn`)
+        : bad(`ranked @ ${w} — the class column is missing at a width where it fits`);
+    }
+    await ctx.close();
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   THE MIGRATION MAP'S HOVER CARD STAYS INSIDE ITS PANEL.
+
+   It was placed with `top: Math.max(4, y - 90)` — clamped at the ceiling and
+   silent about the floor — so hovering the lowest strikes pushed it out of the
+   panel entirely. Measured at 1440x900 before the fix: a 179px card in a 560px
+   panel, 20px past the bottom on the second-to-last row and 44px on the last,
+   landing on the Wall Drift panel's header and covering this map's own footer
+   legend. Two of the twenty-one strikes could not be read.
+
+   THE LOWEST ROWS ARE THE TEST. Hovering the middle of the map passes on the
+   broken build, so the sweep walks the last rows specifically.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the migration hover card stays inside its panel');
+{
+  for (const [w, h] of [[1440, 900], [1280, 800]]) {
+    const at = `${w}x${h}`;
+    const ctx = await browser.newContext({ viewport: { width: w, height: h } });
+    const page = await ctx.newPage();
+    await page.goto(`${BASE}/pinpoint/vanna-charm`, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(BOOT_MS);
+
+    const rows = await page.evaluate(() => {
+      const host = [...document.querySelectorAll('div')].find(
+        d => /net GEX/i.test(d.textContent || '') && typeof d.className === 'string' && d.className.includes('flex-col')
+      );
+      const body = host && host.querySelector('div[class*="overflow-y-auto"]');
+      if (!body) return null;
+      return [...body.children]
+        .filter(c => c.querySelector('span'))
+        .slice(-4)
+        .map(c => { const r = c.getBoundingClientRect(); return { x: Math.round(r.x + 40), y: Math.round(r.y + r.height / 2) }; });
+    });
+
+    if (!rows || rows.length === 0) { bad(`${at} — no migration map rows to hover`); await ctx.close(); continue; }
+
+    let hovered = 0;
+    let worst = -Infinity;
+    for (const p of rows) {
+      await page.mouse.move(p.x, p.y);
+      await page.waitForTimeout(320);
+      const g = await page.evaluate(() => {
+        const card = [...document.querySelectorAll('div')].find(
+          d => typeof d.className === 'string' && d.className.includes('w-60') && /Projected/.test(d.textContent || '')
+        );
+        if (!card || !card.parentElement) return null;
+        const cb = card.getBoundingClientRect();
+        const hb = card.parentElement.getBoundingClientRect();
+        return { over: Math.round(cb.bottom - hb.bottom), above: Math.round(hb.top - cb.top) };
+      });
+      if (!g) continue;
+      hovered++;
+      worst = Math.max(worst, g.over, g.above);
+    }
+
+    if (hovered === 0) bad(`${at} — hovering the lowest rows produced no read-out card`);
+    else {
+      ok(`${at} — ${hovered} of the lowest rows produced a card`);
+      worst <= 0
+        ? ok(`${at} — every one stayed inside the panel (closest edge ${-worst}px in)`)
+        : bad(`${at} — a card ran ${worst}px outside its panel`);
+    }
+    await ctx.close();
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   DOES THE CONTENT FIT ITS BOX?
+
+   Noah, 2026-08-26: "make things in their boxes fit perfectly, aspect ratio is
+   a serious thing visually."
+
+   Three faults, kept apart because they have different fixes:
+
+     CLIPPED    overflow:hidden with content bigger than the box — cut off with
+                no way to reach it. On a currency figure that is not a smaller
+                number, it is a WRONG one.
+     TRUNCATED  a horizontal scroller whose content is wider than it. Nothing is
+                unreachable in principle, but a desktop scrollbar is invisible
+                until you scroll, so the reader sees a table that simply stops.
+     SQUASHED   a canvas whose bitmap is a different aspect from its box — the
+                picture is stretched.
+
+   Deliberately not reported: a VERTICAL scroller with taller content (that is
+   what a scroller is for), and text with a real ellipsis (a considered
+   truncation, not a clip).
+
+   Found on the build this was written against: the Exposure Matrix needing
+   691px in a 502px column so VEX fell off entirely, and a Ranked Targets card
+   cut 20px short of its own Open Int figure.
+   ───────────────────────────────────────────────────────────────────────── */
+head('content fits the box it is drawn in');
+{
+  const SCAN = () => {
+    const bad = [];
+    const path = el => {
+      const bits = [];
+      for (let n = el; n && bits.length < 3; n = n.parentElement) {
+        const c = typeof n.className === 'string' ? n.className.split(/\s+/).slice(0, 2).join('.') : '';
+        bits.unshift(n.tagName.toLowerCase() + (c ? '.' + c : ''));
+      }
+      return bits.join(' > ').slice(0, 90);
+    };
+    for (const el of document.querySelectorAll('body *')) {
+      const r = el.getBoundingClientRect();
+      if (r.width < 8 || r.height < 8) continue;
+      const cs = getComputedStyle(el);
+      if (cs.visibility === 'hidden' || cs.display === 'none' || cs.opacity === '0') continue;
+
+      if (el.tagName === 'CANVAS' && el.width > 0 && el.height > 0 && r.width > 40 && r.height > 40) {
+        const skew = Math.abs(r.width / r.height - el.width / el.height) / (r.width / r.height);
+        if (skew > 0.02) bad.push(`SQUASH ${(skew * 100).toFixed(1)}% ${Math.round(r.width)}x${Math.round(r.height)} vs ${el.width}x${el.height} — ${path(el)}`);
+        continue;
+      }
+      const dx = el.scrollWidth - el.clientWidth;
+      const dy = el.scrollHeight - el.clientHeight;
+      const scrollsX = cs.overflowX === 'auto' || cs.overflowX === 'scroll';
+      const scrollsY = cs.overflowY === 'auto' || cs.overflowY === 'scroll';
+      if (scrollsX && dx > 8) bad.push(`TRUNC x by ${dx}px (box ${Math.round(r.width)}, content ${el.scrollWidth}) — ${path(el)}`);
+      if (cs.overflowX === 'hidden' && dx > 2 && cs.textOverflow !== 'ellipsis')
+        bad.push(`CLIP x by ${dx}px (box ${Math.round(r.width)}) — ${path(el)}`);
+      if (cs.overflowY === 'hidden' && dy > 2 && !scrollsY)
+        bad.push(`CLIP y by ${dy}px (box ${Math.round(r.height)}) — ${path(el)}`);
+    }
+    return [...new Set(bad)].slice(0, 6);
+  };
+
+  for (const [route, path] of [
+    ['terrain', '/terrain'],
+    ['exposure', '/pinpoint/exposure-profile'],
+    ['ranked', '/pinpoint/ranked-targets'],
+    ['vanna', '/pinpoint/vanna-charm'],
+    ['weigher', '/weigher'],
+  ]) {
+    for (const width of [1024, 1280, 1440, 1760]) {
+      const ctx = await browser.newContext({ viewport: { width, height: 900 } });
+      const page = await ctx.newPage();
+      await page.goto(`${BASE}${path}`, { waitUntil: 'networkidle' });
+      await page.waitForTimeout(BOOT_MS);
+      const found = await page.evaluate(SCAN);
+      found.length === 0
+        ? ok(`${route} @ ${width}`)
+        : bad(`${route} @ ${width}:\n         ${found.join('\n         ')}`);
+      await ctx.close();
+    }
+  }
 }
 
 console.log(`\n${fails} failing`);

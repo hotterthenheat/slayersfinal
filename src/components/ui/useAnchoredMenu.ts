@@ -4,7 +4,7 @@ import { placeMenu, type MenuBox, type MenuSide } from './menuPlacement';
 /*
 ==================================================
   SLAYER TERMINAL - KEEPING A MENU OFF ITS ANCHOR
-  (components/gex/useAnchoredMenu.ts)
+  (components/ui/useAnchoredMenu.ts)
 
   The React half of `menuPlacement.ts`: hold a ref on
   the trigger, and keep a fixed-position box for the

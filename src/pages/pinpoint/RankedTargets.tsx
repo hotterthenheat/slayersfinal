@@ -201,7 +201,7 @@ const PodiumCard = forwardRef<
       </div>
 
       {/* Stats — neutral ink; color is reserved for the verdict */}
-      <div className="px-3.5 mt-3 grid grid-cols-4 gap-2">
+      <div className="px-3.5 mt-3 grid grid-cols-4 gap-2 [&>*]:min-w-0">
         {[
           { label: 'BPS', term: 'BPS' as const, value: `${t.bps >= 0 ? '+' : ''}${t.bps}`, lens: 'proximity' as const },
           { label: 'NBR', term: 'NBR' as const, value: `${t.nbr.toFixed(2)}x`, strong: t.nbr >= 1.5, lens: 'nbr' as const },
@@ -269,7 +269,12 @@ const LadderRow = forwardRef<HTMLButtonElement, { t: RankedTarget; lens: RankLen
             </SignalBadge>
           ))}
         </span>
-        <span className="hidden md:flex items-center w-24 shrink-0">
+        {/* `min-[770px]`, not `md`. The priority lane joins at `md` (768) and
+            the row it joins needs 770: measured 736px of content against a
+            734px box at a 768px window. Two pixels is not much to look at,
+            but it is the difference between a ladder that fits and a ladder
+            that scrolls, and the guard does not grade on a curve. */}
+        <span className="hidden min-[770px]:flex items-center w-24 shrink-0">
           <ReasonBar t={t} />
         </span>
         <span className={`w-14 shrink-0 text-right font-mono text-[11px] tnum text-textPrimary ${lensCls('proximity')}`}>
@@ -291,7 +296,25 @@ const LadderRow = forwardRef<HTMLButtonElement, { t: RankedTarget; lens: RankLen
         <span className={`ml-auto w-24 shrink-0 text-right font-mono text-[11px] font-semibold tnum ${t.netGex > 0 ? 'text-bear' : 'text-bull'}`}>
           {fmtUsd(t.netGex)}
         </span>
-        <span className={`hidden sm:block w-36 shrink-0 text-right font-mono text-[9px] font-semibold uppercase tracking-wider ${CLASS_TEXT[t.hedgingClass]}`}>
+        {/* `min-[662px]` rather than `sm`, because `sm` is 640 and the row
+            needs 662. Every row inside that band read "DOWNSIDE CUSHIO",
+            "UPSIDE RESISTAN", "NEUTRA" — the tail of the widest column gone.
+
+            662 IS THE SECOND ANSWER, and the first one was wrong for an
+            instructive reason. Measured against the old markup the scroller
+            reported 8px of overflow at 640 and 0px from 648, which said the
+            threshold was 648. It was not: the caption row sat OUTSIDE the
+            scroller and the lanes spilled out of a row box that reported no
+            overflow at all — at 648 the lanes summed to 642 inside a 614px
+            box and `scrollWidth` still returned 614. The number was hiding
+            behind the same structure that let the captions drift.
+
+            With the row and its captions in one box the width is honest, and
+            it is 628px of content against a 614px box at a 648px window — so
+            the column needs 662. Threshold measured from the fixed lanes
+            rather than the text: every lane is `w-*` and `shrink-0`, so it is
+            identical whichever class word a row carries. */}
+        <span className={`hidden min-[662px]:block w-36 shrink-0 text-right font-mono text-[9px] font-semibold uppercase tracking-wider ${CLASS_TEXT[t.hedgingClass]}`}>
           {t.hedgingClass}
         </span>
       </motion.button>
@@ -302,10 +325,19 @@ LadderRow.displayName = 'LadderRow';
 
 /** Ladder column captions — one whisper, not one per row. */
 const LadderHead = () => (
-  <div className="flex items-center gap-3 px-3.5 h-7 border-b border-borderSubtle bg-[#0c0c0c] select-none">
+  <div
+    /* `data-ladder-head` so the sweep can find this row wherever it sits. It
+       used to live OUTSIDE the scroller, and a guard that looks for it inside
+       one would find nothing there and measure whatever it fell back to — which
+       is how the first version of that guard passed against the broken
+       structure it was written to catch. */
+    data-ladder-head=""
+    className="flex items-center gap-3 px-3.5 h-7 border-b border-borderSubtle bg-[#0c0c0c] select-none"
+  >
     <span className="w-7 shrink-0 font-mono text-[9px] uppercase tracking-widest text-textSecondary">Rank</span>
     <span className="w-40 shrink-0 font-mono text-[9px] uppercase tracking-widest text-textSecondary">Strike</span>
-    <span className="hidden md:block w-24 shrink-0 font-mono text-[9px] uppercase tracking-widest text-textSecondary">
+    {/* Same breakpoint as the rows' priority lane. */}
+    <span className="hidden min-[770px]:block w-24 shrink-0 font-mono text-[9px] uppercase tracking-widest text-textSecondary">
       <Term k="Priority" />
     </span>
     <span className="w-14 shrink-0 text-right font-mono text-[9px] uppercase tracking-widest text-textSecondary">
@@ -320,7 +352,9 @@ const LadderHead = () => (
     <span className="ml-auto w-24 shrink-0 text-right font-mono text-[9px] uppercase tracking-widest text-textSecondary">
       <Term k="Net GEX" />
     </span>
-    <span className="hidden sm:block w-36 shrink-0 text-right font-mono text-[9px] uppercase tracking-widest text-textSecondary">
+    {/* Same breakpoint as the rows' class cell — a caption that appears at a
+        width its column does not is a header for nothing. */}
+    <span className="hidden min-[662px]:block w-36 shrink-0 text-right font-mono text-[9px] uppercase tracking-widest text-textSecondary">
       <Term k="Class" />
     </span>
   </div>
@@ -407,7 +441,23 @@ const RankedTargets = () => {
         className="w-full"
       >
         <LayoutGroup>
-          <div className="p-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+          {/*
+            TWO up until there is room for three.
+
+            `md:grid-cols-3` put three cards across a 976px content area at a
+            1024 viewport — 309px each — and each card's four-stat row (BPS,
+            NBR, Volume, Open Int) needs 327px to print its figures. The card
+            is `overflow-hidden`, so the last 20px was simply cut off: at
+            1024 the Open Int column lost its final digits, which on a figure
+            like 57,200 is not a smaller number, it is a WRONG one.
+
+            Grid items default to `min-width: auto`, so the stats row could not
+            shrink to fit either — it forced the overflow rather than absorbing
+            it. `min-w-0` below lets it absorb; this breakpoint means it does
+            not have to. At 1024-1279 two cards get ~480px each and every
+            figure prints whole.
+          */}
+          <div className="p-3 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
             <AnimatePresence initial={false} mode="popLayout">
               {podium.map((t, i) => (
                 <PodiumCard key={t.strike} t={t} above={i > 0 ? podium[i - 1] : null} lens={lens} onFlash={() => flash(t)} />
@@ -415,9 +465,44 @@ const RankedTargets = () => {
             </AnimatePresence>
           </div>
           {ladder.length > 0 && (
-            <div className="border-t border-borderSubtle">
-              <LadderHead />
-              <div className="overflow-y-auto max-h-[480px]">
+            /*
+              THE CAPTIONS AND THE ROWS SCROLL AS ONE THING.
+
+              The caption row used to be a SIBLING of the scroller rather than
+              a child of it, so the two could move independently — and below
+              about 560px, where the row is wider than the panel, they did.
+              Measured at 390x844 on the built app: dragging the body 102px to
+              the right moved every row from x=17 to x=-85 while the captions
+              stayed at x=17. 102px of drift is two whole columns, so a reader
+              who scrolled across to read NET GEX found it sitting under the
+              caption for something else. At 430 the same drift was 62px; at
+              560 and 1440 the row fits and there is none.
+
+              It also pushed the PAGE: the caption row had no overflow of its
+              own, so its 472px of fixed lanes set the width of everything
+              above it and the desk slid 85px sideways at 390.
+
+              One scroller now owns both axes, with the captions `sticky` at
+              its top so they still hold still while the rows scroll UNDER
+              them — which is the half of the old arrangement that was right.
+              `min-w-max` makes the inner column as wide as the widest row when
+              the panel is narrower than that, and leaves it at the panel's own
+              width when it is not, so nothing changes from 560px up.
+
+              508 rather than 480 because the captions are `h-7` and now live
+              inside the box: the rows keep the same 480px of travel they had.
+            */
+            <div
+              /* A hook rather than a class selector: the sweep measures this
+                 box, and matching on `overflow-y-auto` is how the guard
+                 silently stopped finding it the moment the class changed. */
+              data-ladder=""
+              className="border-t border-borderSubtle overflow-auto max-h-[508px]"
+            >
+              <div className="min-w-max">
+                <div className="sticky top-0 z-10">
+                  <LadderHead />
+                </div>
                 <AnimatePresence initial={false} mode="popLayout">
                   {ladder.map(t => (
                     <LadderRow key={t.strike} t={t} lens={lens} onFlash={() => flash(t)} />

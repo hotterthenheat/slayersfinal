@@ -25,7 +25,7 @@ import {
   type AnchorRect,
   type MenuBox,
   type MenuSide,
-} from '../src/components/gex/menuPlacement';
+} from '../src/components/ui/menuPlacement';
 
 /*
   WHERE THE MENU'S OWN EDGES END UP, given the box and the window.

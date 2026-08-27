@@ -1002,8 +1002,11 @@ const Pane = ({
                 */
                 requestAnimationFrame(() => {
                   const undo = document.querySelector<HTMLElement>('[data-strikes-toggle]');
-                  // Below `lg` the arrangement chrome can be off screen; there
-                  // is nothing better to offer than leaving focus where it is.
+                  // Belt and braces. This × only exists where the rail does,
+                  // which is `lg` and up, and STRIKES is rendered across that
+                  // whole range — so the query should always find it. If a
+                  // resize ever lands between the two, leaving focus where it
+                  // is beats throwing on null.
                   if (undo?.isConnected) undo.focus();
                 });
               }}
@@ -1137,6 +1140,42 @@ const Terrain = () => {
   */
   const isPhone = useIsPhone();
 
+  /*
+    AND THE RAILS ARE NOT ON SCREEN BELOW `lg`.
+
+    PaneLadder renders with `className="hidden lg:flex"` (see the pane, below),
+    so between 768px and 1023.98px every pane's stored `ladder` flag is still
+    `true` while nothing is drawn. Measured at 900x800 layout 3: three rails
+    in the DOM, `display: "none"` and 0px wide, all three.
+
+    That is deliberate and it stays — the rail is 132px, and the comment at the
+    render site says why a narrow column cannot carry it. What was NOT
+    deliberate is that the flag went on being read as if it were visible:
+
+      · the arrangement bar held `right: 216px` (132 + the 76px price gutter +
+        8) for a rail that is `display: none`, which put its Rows3 icon and
+        its `1`/`2` buttons on the volume histogram with 135px of empty runway
+        beside them. Measured at 768, 900 and a coarse-pointer 820x1180; at
+        1024 the same expression is right and the gap is 3px.
+
+      · STRIKES rendered lit, `aria-pressed="true"`, titled "Hide every strike
+        rail". At 1023x800 a real mouse click on it rewrote all four panes'
+        flags to `false` in storage and changed NOTHING on screen — 0 rails
+        before, 0 after. The comment above the bar states the rule it broke:
+        "A control that visibly does nothing when pressed is worse than an
+        absent one."
+
+    So the breakpoint is read wherever the flag is acted on, not just where the
+    rail is drawn. The stored preference is still never touched by the window
+    — it comes back the moment the reader is wide enough, which is the whole
+    point of hiding by breakpoint rather than by config.
+  */
+  const belowLg = useIsBelowLg();
+  /* The key handler is installed once and must never read a stale closure —
+     the same mirror the config and the expanded pane already keep. */
+  const belowLgRef = useRef(false);
+  belowLgRef.current = belowLg;
+
   const panes = cfg.panes.slice(0, cfg.layout);
   const anyLadder = panes.some(p => p.ladder);
 
@@ -1231,11 +1270,21 @@ const Terrain = () => {
           e.preventDefault();
           patch(q => ({ timeframe: stepTf(q.timeframe, e.key === '=' ? 1 : -1) }), q => `${q.ticker} ${q.timeframe}`);
           return;
+        /* BOTH RAIL KEYS ARE UNBOUND BELOW `lg`, for the same reason the
+           STRIKES button is not rendered there: the rail is `hidden lg:flex`,
+           so the only thing a press could do is rewrite storage silently and
+           announce a rail that never appears. "Strike rail on every chart" read
+           out to a screen reader while no rail exists is worse than a key that
+           does nothing — it is a key that lies. They are the same control as
+           the button, which titles itself "Shift R", so they come and go with
+           it rather than half of it surviving. */
         case 'r':
+          if (belowLgRef.current) return;
           e.preventDefault();
           patch(q => ({ ladder: !q.ladder }), q => `${q.ticker} strike rail ${q.ladder ? 'shown' : 'hidden'}`);
           return;
         case 'R': {
+          if (belowLgRef.current) return;
           e.preventDefault();
           const any = cur.panes.slice(0, cur.layout).some(q => q.ladder);
           setCfg(prev => ({ ...prev, panes: prev.panes.map(q => ({ ...q, ladder: !any })) }));
@@ -1383,9 +1432,18 @@ const Terrain = () => {
            expanded — it is the only one on screen, and its rail is the only
            one this bar can land on. Reading the last pane's flag there put the
            clearance on the wrong pane's setting the moment the two differed. */
+        /* `&& !belowLg` because the rail is hidden by BREAKPOINT and kept in
+           config: below `lg` the flag reads true against a `display: none`
+           element, and the 132px it buys is clearance from nothing. Measured
+           at 900x800 layout 3 — bar at `right: 216px`, every rail 0px wide,
+           135px of dead runway between the bar and the price gutter while the
+           bar itself sat on the volume columns. At 1024 the flag and the rail
+           agree again and the gap is 3px. */
         style={{
           right:
-            ((expanded !== null ? panes[expanded] : panes[panes.length - 1])?.ladder ? LADDER_WIDTH_PX : 0) +
+            ((expanded !== null ? panes[expanded] : panes[panes.length - 1])?.ladder && !belowLg
+              ? LADDER_WIDTH_PX
+              : 0) +
             PRICE_GUTTER_PX +
             8,
           bottom: TIME_AXIS_PX + 12,
@@ -1449,7 +1507,17 @@ const Terrain = () => {
             its own flag: if any visible pane still shows a rail the button is
             lit and pressing it clears them all; with none showing it puts
             them all back. A button that can disagree with what is on screen
-            is a button nobody trusts. */}
+            is a button nobody trusts.
+
+            AND BELOW `lg` IT IS NOT HERE AT ALL, which is that same sentence
+            taken seriously. The rail is `hidden lg:flex`, so from 768px to
+            1023.98px this button disagreed with the screen in the strongest
+            way available: lit, `aria-pressed="true"`, titled "Hide every strike
+            rail", and clicking it at 1023x800 rewrote all four panes to
+            `false` with 0 rails on screen before and 0 after. The layout
+            picker beside it stays, because it is NOT inert there — the panes
+            stack and the page scrolls, so 4 really does draw four charts. */}
+        {!belowLg && (
         <button
           /* Named so a control that REMOVES itself can hand focus here — see
              the rail's × below. A data attribute rather than an id: a desk can
@@ -1465,6 +1533,7 @@ const Terrain = () => {
         >
           Strikes
         </button>
+        )}
 
         {expanded !== null && (
           <button
