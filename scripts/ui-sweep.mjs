@@ -4252,6 +4252,49 @@ head('a named layout saves the desk, and gives it back');
   await ctx.close();
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   T-20. LINK GROUPS — panes sharing a letter change symbols together.
+
+   The fan-out lives in the desk's one setPane reducer, so the browser is
+   the only honest place to prove it: link two panes, step one's symbol
+   with the ring, and the group-mate must land on the SAME symbol while the
+   unlinked pane stands still.
+   ───────────────────────────────────────────────────────────────────────── */
+head('a linked pane follows the symbol, an unlinked one stands still');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 1000);
+  const tickers = () => page.evaluate(() => JSON.parse(localStorage.getItem('slayer_terrain_v1')).panes.map(p => p.ticker));
+
+  const boxes = await page.$$('.grid > div > div');
+  boxes.length >= 3 ? ok('PREMISE: a multi-pane desk') : bad(`PREMISE: ${boxes.length} panes`);
+  const chip = async i => (await boxes[i].$$('button[aria-label^="Link"]'))[0];
+  await (await chip(0))?.click();
+  await (await chip(1))?.click();
+  await page.waitForTimeout(300);
+  const links = await page.evaluate(() => JSON.parse(localStorage.getItem('slayer_terrain_v1')).panes.map(p => p.link));
+  links[0] === 'A' && links[1] === 'A' && !links[2]
+    ? ok('two panes wear A, the third stands alone')
+    : bad(`links landed as ${JSON.stringify(links)}`);
+
+  const before = await tickers();
+  await boxes[0].click({ position: { x: 250, y: 300 } });
+  await page.waitForTimeout(250);
+  await page.keyboard.press('ArrowDown');
+  await page.waitForTimeout(800);
+  const after = await tickers();
+  after[0] !== before[0] ? ok(`the stepped pane changed symbol — ${before[0]} → ${after[0]}`) : bad('the ring never stepped');
+  after[1] === after[0] ? ok('its group-mate followed to the same symbol') : bad(`the mate sits on ${after[1]} against ${after[0]}`);
+  after[2] === before[2] ? ok('the unlinked pane did not move') : bad(`the unlinked pane moved to ${after[2]}`);
+
+  errs.length === 0 ? ok('no page errors through the follow') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
 console.log(`\n${fails} failing`);
 await browser.close();
 process.exit(fails ? 1 : 0);

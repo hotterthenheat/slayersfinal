@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Maximize2, Minimize2, Rows3, X } from 'lucide-react';
+import { Link2, Maximize2, Minimize2, Rows3, X } from 'lucide-react';
 import Simulator from '../../core/simulator';
 import { useMarketData } from '../../context/MarketDataContext';
 import DistanceUnitPicker from '../../components/ui/DistanceUnitPicker';
@@ -114,6 +114,10 @@ export type TerrainLayout = (typeof LAYOUTS)[number];
   why the rail in particular has to.
 */
 export interface PaneCfg {
+  /** T-20 — the pane's link group. Panes sharing a letter follow each
+      other's SYMBOL changes; null stands alone. Not a setup key: linking is
+      slot business, like the rail. */
+  link?: 'A' | 'B' | null;
   ticker: string;
   timeframe: Timeframe;
   overlays: ChartOverlays;
@@ -179,6 +183,7 @@ const defaultPanes = (): PaneCfg[] =>
     priceScale: 'normal' as PriceScale,
     sessionOr: 15 as OpeningRange,
     ladder: true,
+    link: null,
   }));
 
 /* The map starts EMPTY on a fresh install, deliberately. Seeding it from the
@@ -230,6 +235,7 @@ function readPane(raw: unknown, def: PaneCfg): PaneCfg {
     priceScale: typeof c.priceScale === 'string' && SCALES.has(c.priceScale) ? (c.priceScale as PriceScale) : def.priceScale,
     sessionOr: typeof c.sessionOr === 'number' && OR_VALUES.has(c.sessionOr) ? (c.sessionOr as OpeningRange) : def.sessionOr,
     ladder: typeof c.ladder === 'boolean' ? c.ladder : def.ladder,
+    link: c.link === 'A' || c.link === 'B' ? c.link : null,
   };
 }
 
@@ -1127,6 +1133,20 @@ const Pane = ({
                        moves is where it gets named. */
                     title="Switch ticker — S · ↑ ↓ step your symbols"
                   />
+                  {/* T-20's link chip: ∅ → A → B → ∅. Letters, not colours —
+                      the palette's inks all mean something already, and a
+                      letter reads at 9px where a fourth colour would need a
+                      legend. */}
+                  <button
+                    onClick={() => onCfg({ link: cfg.link === 'A' ? 'B' : cfg.link === 'B' ? null : 'A' })}
+                    aria-label={cfg.link ? `Link group ${cfg.link} — linked panes follow this pane's symbol` : 'Link this pane — panes sharing a letter follow each other\'s symbol'}
+                    title={cfg.link ? `Link group ${cfg.link} — panes sharing ${cfg.link} follow each other's symbol` : 'Link this pane to others — shared letters change symbols together'}
+                    className={`shrink-0 inline-flex items-center justify-center w-5 h-5 rounded-[3px] font-mono text-[9px] font-bold transition-colors ${
+                      cfg.link ? 'bg-white/[0.14] text-textPrimary' : 'text-textMuted hover:text-textPrimary hover:bg-white/[0.06]'
+                    }`}
+                  >
+                    {cfg.link ?? <Link2 className="w-3 h-3" />}
+                  </button>
                   {/* TradingView's "+" beside the symbol capsule — cross
                       another symbol onto this tape. Per pane, like the rest.
 
@@ -1480,8 +1500,26 @@ const Terrain = () => {
            behaviour that was here before any of this. `compares` is written
            explicitly every time, so a comparison can never leak across a
            symbol change. */
-        const next = { ...applySetup(cur, saved), ...patch, compares: saved?.compares ?? [] };
-        return put(next, saved ? { ...prev.setups, [key]: { ...saved, seen: now } } : prev.setups);
+        const setups = saved ? { ...prev.setups, [key]: { ...saved, seen: now } } : prev.setups;
+        /*
+          T-20 — LINKED PANES FOLLOW THE SYMBOL. Every pane sharing this
+          pane's group letter takes the same new symbol through the same
+          restore path (each keeps its own slot business — rail, link,
+          replay — because applySetup touches only setup keys). Symbol only,
+          deliberately: the directive offers timeframe linking as an option,
+          and a linked TIMEFRAME quietly overwriting a per-symbol setup's
+          interval would fight the earned-by-touch rule the setups are built
+          on. One follow rule, no surprises.
+        */
+        const group = cur.link ?? null;
+        const panes = prev.panes.map((q, j) => {
+          const inGroup = j === i || (group !== null && q.link === group);
+          if (!inGroup) return q;
+          const base = j === i ? cur : q;
+          const applied = { ...applySetup(base, saved), compares: saved?.compares ?? [] };
+          return j === i ? { ...applied, ...patch } : { ...applied, ticker: patch.ticker! };
+        });
+        return { ...prev, setups, panes };
       }
 
       // A CONTROL TOUCH — this is what earns the symbol its entry
