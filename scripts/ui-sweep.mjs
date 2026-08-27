@@ -3580,6 +3580,13 @@ head('thirteen tools on the rail, two of them take three anchors, the note takes
     await page.waitForTimeout(350);
   };
   const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem('slayer_chart_drawings_SPY') ?? '[]').map(d => d.kind));
+  /* The whole records, for the assertions that read a mark's PRICE rather
+     than just its kind. The editor block below filtered `stored()` — an
+     array of kind STRINGS — with `d => d.kind === 'hline'`, which is
+     undefined on a string, so it always found zero levels and reported the
+     product broken ("PREMISE: 0 levels stored", "the drag moved nothing")
+     when the fault was here. */
+  const storedRaw = () => page.evaluate(() => JSON.parse(localStorage.getItem('slayer_chart_drawings_SPY') ?? '[]'));
 
   await pick('Ray');
   await drag(0.15, 0.6, 0.3, 0.4);
@@ -3688,7 +3695,7 @@ head('thirteen tools on the rail, two of them take three anchors, the note takes
     await pick('Level');
     await page.mouse.click(bb2.x + bb2.width * 0.5, bb2.y + bb2.height * 0.28);
     await page.waitForTimeout(300);
-    const levels0 = (await stored()).filter(d => d.kind === 'hline');
+    const levels0 = (await storedRaw()).filter(d => d.kind === 'hline');
     levels0.length === 1 ? ok('PREMISE: one fresh level to edit') : bad(`PREMISE: ${levels0.length} levels stored`);
     (await deleteDisabled()) === true ? ok('Delete is disabled while nothing is selected') : bad('Delete armed with no selection');
     await pick('Select');
@@ -3700,13 +3707,13 @@ head('thirteen tools on the rail, two of them take three anchors, the note takes
     await page.mouse.move(bb2.x + bb2.width * 0.5, bb2.y + bb2.height * 0.45, { steps: 4 });
     await page.mouse.up();
     await page.waitForTimeout(350);
-    const levels1 = (await stored()).filter(d => d.kind === 'hline');
+    const levels1 = (await storedRaw()).filter(d => d.kind === 'hline');
     levels1[0] && levels0[0] && levels1[0].p1.price !== levels0[0].p1.price
       ? ok(`a body-drag moves the mark — ${levels0[0].p1.price.toFixed(2)} → ${levels1[0].p1.price.toFixed(2)}`)
       : bad('the drag moved nothing');
     for (const b of await page.$$('button[aria-label="Delete selected"]')) if (!(await b.isDisabled())) await b.click();
     await page.waitForTimeout(300);
-    const afterDel = await stored();
+    const afterDel = await storedRaw();
     afterDel.length === countBefore && !afterDel.some(d => d.kind === 'hline')
       ? ok('Delete removes exactly the selected mark; the rest survive')
       : bad(`after delete the store holds ${afterDel.map(d => d.kind).join(',')}`);
