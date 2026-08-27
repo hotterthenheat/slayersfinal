@@ -1072,6 +1072,10 @@ head('the strike rail never prints two prices in the same pixels, and its stubs 
           const m = /translateY\(([-0-9.]+)px\)/.exec(el ? el.style.transform || '' : '');
           return m ? parseFloat(m[1]) : null;
         };
+        const tx = el => {
+          const m = /translateX\(([-0-9.]+)px\)/.exec(el.style.transform || '');
+          return m ? parseFloat(m[1]) : 0;
+        };
         const bs = badge('spot');
         const bf = badge('flip');
         if (!bs || !bf) continue;
@@ -1128,7 +1132,13 @@ head('the strike rail never prints two prices in the same pixels, and its stubs 
           spot: (bs.textContent || '').trim(),
           flip: (bf.textContent || '').trim(),
           dy: ys != null && yf != null ? +Math.abs(ys - yf).toFixed(1) : null,
-          shifted: /translateX/.test(bf.style.transform || ''),
+          /* THE DISTANCE, NOT THE PRESENCE OF A translateX. Both badges now
+             carry one at rest — they are homed left of the strike lane so
+             neither prints on a strike — so "has a translateX" stopped telling
+             these two apart. What the step-aside means is that the flip ends up
+             FURTHER LEFT than spot, and that is what is read here. */
+          spotX: tx(bs),
+          flipX: tx(bf),
           covered,
           stolen,
         });
@@ -1153,11 +1163,14 @@ head('the strike rail never prints two prices in the same pixels, and its stubs 
       : bad(`${at} — ${hits.length} rail(s) print two prices in the same pixels, e.g. spot ${hits[0].spot} under flip ${hits[0].flip} overlapping ${hits[0].overlap}px`);
     /* Where the two ARE within a badge of each other, the step-aside must have
        been applied — otherwise the clean result above is luck, not the fix. */
-    const missed = near.filter(r => !r.shifted);
+    /* 1px rather than 0: these are subpixel transforms and equality on a float
+       is not a claim worth making. A real step is ~41px — the spot badge's own
+       width plus its gap — so the margin is not close to load-bearing. */
+    const missed = near.filter(r => !(r.flipX < r.spotX - 1));
     if (near.length) {
       missed.length === 0
-        ? ok(`${at} — ${near.length} rail(s) had the rules within a badge, and every one stepped aside`)
-        : bad(`${at} — ${missed.length} rail(s) had the rules within a badge and did NOT step aside`);
+        ? ok(`${at} — ${near.length} rail(s) had the rules within a badge, and every one stepped clear of spot`)
+        : bad(`${at} — ${missed.length} rail(s) had the rules within a badge and the flip did not step past spot (e.g. flip ${missed[0].flipX}px vs spot ${missed[0].spotX}px)`);
     }
     /* ASSERT THE INVARIANT, NOT THE SYMPTOM. Whether the stub actually STEALS
        a click depends on where the last row lands against a live price —
@@ -1384,6 +1397,253 @@ head('Terrain keeps its desk on a tablet');
     ? ok(`an iPad still builds four charts — ${n} plot canvases`)
     : bad(`an iPad built ${n} plot canvases, expected 8`);
   await ctx.close();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   NOTHING ACTS ON A RAIL THAT IS NOT ON SCREEN.
+
+   PaneLadder renders `hidden lg:flex`, so from 768px (where `useIsPhone` stops
+   taking over) to 1023.98px the rails are in the DOM at `display: none` while
+   every pane's stored `ladder` flag is still true. Three things went on
+   reading that flag as if it meant "visible":
+
+     · the arrangement bar reserved `right: 216px` — LADDER_WIDTH_PX 132 plus
+       the 76px price gutter plus 8 — for a rail 0px wide, which parked its
+       Rows3 icon and its 1/2 buttons ON the volume histogram with 135px of
+       empty runway between it and the price axis. Measured at 768, 900, 1023
+       and a coarse-pointer 820x1180.
+     · STRIKES rendered lit and `aria-pressed="true"`, titled "Hide every
+       strike rail". A real mouse click at 1023x800 rewrote all four panes'
+       flags to false in storage: 0 rails on screen before, 0 after.
+     · `r` and `R` did the same silently, and announced a rail that never came.
+
+   The premise is asserted first and separately. If the rails ever stop being
+   `display: none` here, every line below is measuring nothing, and it should
+   say so rather than going quiet.
+
+   1024 is checked from the other side in the same loop, because a guard that
+   just wants the chrome gone would pass by deleting it everywhere.
+   ───────────────────────────────────────────────────────────────────────── */
+head('below lg, nothing acts on the strike rail that is not drawn');
+{
+  /* `read` is the same measurement at every width — the point of the section
+     is that one expression is right on both sides of 1024, not that two
+     different ones each pass. */
+  const read = () => {
+    const rails = [...document.querySelectorAll('[aria-label$="exposure by strike"]')].map(el => ({
+      display: getComputedStyle(el).display,
+      w: Math.round(el.getBoundingClientRect().width),
+    }));
+    const btn = document.querySelector('[data-strikes-toggle]');
+    const bar = btn ? btn.closest('div.chrome-hover') : document.querySelector('[aria-label="How many charts"]')?.closest('div.chrome-hover');
+    const barBox = bar ? bar.getBoundingClientRect() : null;
+    /* The right price axis is the RIGHTMOST tall narrow canvas. Below lg the
+       panes stack into one column, so every pane's axis shares an x and any of
+       them gives the same gap; above lg the last pane's is the rightmost. */
+    const axis = [...document.querySelectorAll('canvas')]
+      .map(c => c.getBoundingClientRect())
+      .filter(b => b.height > 120 && b.width > 25 && b.width < 95)
+      .sort((a, b) => b.left - a.left)[0];
+    return {
+      railsOnScreen: rails.filter(r => r.display !== 'none' && r.w > 0).length,
+      railsInDom: rails.length,
+      strikes: !!btn,
+      /* The picker is NOT inert below lg — the panes stack and the page
+         scrolls, so 4 really does draw four charts. It has to survive. */
+      picker: !!document.querySelector('[aria-label="How many charts"]'),
+      gap: barBox && axis ? Math.round(axis.left - barBox.right) : null,
+      ladder: JSON.parse(localStorage.getItem('slayer_terrain_v1') || '{}').panes?.map(q => q.ladder),
+    };
+  };
+
+  for (const [w, h, layout, coarse] of [
+    [768, 900, 3, false],
+    [900, 800, 3, false],
+    [1023, 800, 1, false],
+    [820, 1180, 3, true],
+    [1024, 800, 1, false],
+    [1280, 800, 4, false],
+  ]) {
+    const belowLg = w < 1024;
+    const at = `${w}x${h} L${layout}${coarse ? ' coarse' : ''}`;
+    const ctx = await browser.newContext({
+      viewport: { width: w, height: h },
+      ...(coarse ? { hasTouch: true, isMobile: true } : {}),
+    });
+    await ctx.addInitScript(
+      `localStorage.setItem('slayer_terrain_v1', ${JSON.stringify(seed(layout, TICKERS))})`
+    );
+    const page = await ctx.newPage();
+    await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(BOOT_MS);
+
+    const g = await page.evaluate(read);
+
+    /* THE PREMISE. Everything below is about a rail that is not on screen
+       while its flag says it is, so prove that is the state first. */
+    if (g.railsInDom === 0) {
+      bad(`${at} — no rail in the DOM at all; the seed sets ladder:true on every pane`);
+      await ctx.close();
+      continue;
+    }
+    if (belowLg) {
+      g.railsOnScreen === 0
+        ? ok(`${at} — ${g.railsInDom} rails in the DOM, none drawn`)
+        : bad(`${at} — ${g.railsOnScreen} rails ARE drawn below lg; this section is measuring the wrong thing`);
+    } else {
+      g.railsOnScreen > 0
+        ? ok(`${at} — ${g.railsOnScreen} rails drawn`)
+        : bad(`${at} — the rail is not drawn at ${w}px, where it should be`);
+    }
+
+    /* The button, from both sides of the breakpoint. */
+    if (belowLg) {
+      !g.strikes
+        ? ok(`${at} — no STRIKES button over a rail nobody can see`)
+        : bad(`${at} — STRIKES is rendered while ${g.railsOnScreen} rails are on screen`);
+    } else {
+      g.strikes
+        ? ok(`${at} — STRIKES is here, where it does something`)
+        : bad(`${at} — STRIKES is missing at ${w}px, where the rail IS drawn`);
+    }
+
+    g.picker
+      ? ok(`${at} — the layout picker survives`)
+      : bad(`${at} — the layout picker went too; it is not inert here`);
+
+    /* THE OFFSET. 132px of clearance from a `display: none` element is 132px
+       of chart the bar sits on. Above lg the same expression must still hold
+       the real rail's width, which is what the 1024/1280 rows check. */
+    if (g.gap == null) bad(`${at} — could not find the bar or the price axis to measure the gap`);
+    else if (g.gap < 0) bad(`${at} — the bar overlaps the price axis by ${-g.gap}px`);
+    else if (g.gap > 20) bad(`${at} — the bar holds ${g.gap}px of clearance; the rail beside it is ${belowLg ? 'not drawn' : 'drawn'}`);
+    else ok(`${at} — the bar sits ${g.gap}px off the price axis`);
+
+    /* THE KEYS. Same control as the button — it titles itself "Shift R" — so
+       they have to come and go with it rather than half of it surviving. */
+    await page.keyboard.press('Shift+R');
+    await page.waitForTimeout(400);
+    const after = await page.evaluate(read);
+    const rewrote = JSON.stringify(g.ladder) !== JSON.stringify(after.ladder);
+    if (belowLg) {
+      !rewrote
+        ? ok(`${at} — Shift R leaves the stored preference alone`)
+        : bad(`${at} — Shift R rewrote ${JSON.stringify(g.ladder)} to ${JSON.stringify(after.ladder)} with no rail on screen`);
+    } else {
+      rewrote && after.railsOnScreen !== g.railsOnScreen
+        ? ok(`${at} — Shift R clears the rails it says it clears`)
+        : bad(`${at} — Shift R changed storage:${rewrote} rails:${g.railsOnScreen}->${after.railsOnScreen}`);
+    }
+
+    await ctx.close();
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   NO RULE BADGE PRINTS ON A STRIKE.
+
+   The rail's spot and flip rules carry an opaque price chip, `ml-auto` in the
+   same right-hand lane a row's strike is right-aligned in — and the chip is
+   wider than any strike it meets (38px against 20-29.5px measured), so a rule
+   crossing a row did not graze the number, it covered all of it. Rules render
+   after every row with no z-index, so the chip won.
+
+   Measured on the build before the fix, at 1024x768 layout 4: 72 covers over
+   24 rail-samples, worst 10.0px — the badge's whole line box over the whole
+   glyph band of a 10px label. "476.03" over 476. "182.58" over 182.50.
+   "117.43" over a strike carrying the K tag, the heaviest in the book.
+
+   SAMPLED OVER TIME, not once. Spot moves every tick and the rows re-fit with
+   it, so a single frame is one throw of the dice — at 1440x900 layout 1 the
+   pitch is wide enough that a badge often lands between rows, which is exactly
+   why this shipped. Layout 4 at 1024 is the dense end and it is where the
+   defect was total.
+
+   The premise is asserted first: if no badge or no strike is drawn, an
+   overlap count of zero means nothing and this says so instead of passing.
+   ───────────────────────────────────────────────────────────────────────── */
+head('no rule badge prints on a strike');
+{
+  const rails = () => {
+    const out = [];
+    for (const rail of document.querySelectorAll('[aria-label$="exposure by strike"]')) {
+      if (getComputedStyle(rail).display === 'none') continue;
+      /* The track is the row's own parent — NOT `closest('div')` from a label,
+         which walks past a row rendered as a <button> and lands a level up. */
+      const track = rail.querySelector('[data-strike]')?.parentElement;
+      const shown = el => el && getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().width > 0;
+      const labels = [...rail.querySelectorAll('[data-strike-label]')]
+        .filter(el => shown(el.parentElement))
+        .map(el => ({ text: el.textContent.trim(), box: el.getBoundingClientRect().toJSON() }));
+      const badges = [...rail.querySelectorAll('[data-rule]')]
+        .filter(shown)
+        .map(r => {
+          const b = r.querySelector('[data-badge]');
+          return b ? { kind: r.dataset.rule, text: b.textContent.trim(), box: b.getBoundingClientRect().toJSON() } : null;
+        })
+        .filter(Boolean);
+      out.push({ trackBox: (track || rail).getBoundingClientRect().toJSON(), labels, badges });
+    }
+    return out;
+  };
+
+  /* Two boxes overlap when they overlap on BOTH axes; the size of the smaller
+     crossing is what a reader loses. */
+  const cross = (a, b) => {
+    const x = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+    const y = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
+    return x > 0 && y > 0 ? Math.min(x, y) : 0;
+  };
+
+  for (const [w, h, layout] of [[1024, 768, 4], [1280, 800, 4], [1440, 900, 1]]) {
+    const at = `${w}x${h} L${layout}`;
+    const { ctx, page } = await openDesk(w, h, layout);
+
+    let samples = 0, withBadge = 0, withLabel = 0;
+    const onStrike = [], clipped = [], onEachOther = [];
+    for (let i = 0; i < 4; i++) {
+      const seen = await page.evaluate(rails);
+      for (const r of seen) {
+        samples++;
+        if (r.badges.length) withBadge++;
+        if (r.labels.length) withLabel++;
+        for (const b of r.badges) {
+          for (const l of r.labels) {
+            const ov = cross(b.box, l.box);
+            if (ov > 0) onStrike.push(`${b.kind} "${b.text}" over strike "${l.text}" by ${ov.toFixed(1)}px`);
+          }
+          /* The clamp: a badge stepped past a long price must stop inside an
+             `overflow-hidden` track rather than being cut in half. */
+          if (b.box.x < r.trackBox.x - 0.5) clipped.push(`${b.kind} "${b.text}" starts ${(r.trackBox.x - b.box.x).toFixed(1)}px outside the track`);
+        }
+        if (r.badges.length === 2) {
+          const ov = cross(r.badges[0].box, r.badges[1].box);
+          if (ov > 0) onEachOther.push(`${r.badges[0].text} and ${r.badges[1].text} overlap by ${ov.toFixed(1)}px`);
+        }
+      }
+      await page.waitForTimeout(1500);
+    }
+
+    /* THE PREMISE. */
+    if (!samples || !withBadge || !withLabel) {
+      bad(`${at} — ${samples} rail-samples, ${withBadge} with a rule badge, ${withLabel} with a strike: nothing to measure`);
+      await ctx.close();
+      continue;
+    }
+    ok(`${at} — ${samples} rail-samples, ${withBadge} carrying a rule badge`);
+
+    onStrike.length === 0
+      ? ok(`${at} — no badge lands on a strike`)
+      : bad(`${at} — ${onStrike.length} covers: ${onStrike.slice(0, 3).join(' | ')}`);
+    clipped.length === 0
+      ? ok(`${at} — every badge stays inside its track`)
+      : bad(`${at} — ${clipped.length} clipped: ${clipped.slice(0, 2).join(' | ')}`);
+    onEachOther.length === 0
+      ? ok(`${at} — spot and the flip stay off each other`)
+      : bad(`${at} — ${onEachOther.length} rule-on-rule: ${onEachOther.slice(0, 2).join(' | ')}`);
+
+    await ctx.close();
+  }
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
