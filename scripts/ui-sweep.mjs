@@ -1981,6 +1981,181 @@ head('the hover read-out prints the same number as the bar it points at');
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
+   THE MAP'S LEGEND NAMES THE ANCHOR THE RIBBON IS DRAWN FROM.
+
+   Clicking a band re-anchors the cumulative ribbon, and the panel header says
+   so — "CUM FROM 485" — while the legend strip below it went on reading
+   "CUMULATIVE FROM SPOT". Three surfaces describe one series (header, legend,
+   and the hover card's "FROM 485 TO 481"); this was the only one that could
+   be wrong, and it was.
+
+   THE PIN IS ASSERTED FIRST. If the click does not actually re-anchor
+   anything, both strings stay on "spot", they agree, and a guard that only
+   compared them would call that a pass.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the map legend names the anchor the ribbon is drawn from');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1760, height: 1000 } });
+  const page = await ctx.newPage();
+  await page.goto(`${BASE}/pinpoint/exposure-profile`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+
+  const read = () =>
+    page.evaluate(() => {
+      const t = document.body.innerText;
+      return {
+        header: (/CUM FROM ([^\s\n]+)/.exec(t) || [])[1] || null,
+        legend: (/CUMULATIVE FROM ([^\s\n·]+)/i.exec(t) || [])[1] || null,
+      };
+    });
+
+  const before = await read();
+  if (!before.header || !before.legend) bad(`could not find both the header and the legend (header ${before.header}, legend ${before.legend})`);
+  else {
+    const band = await page.evaluate(() => {
+      const el = [...document.querySelectorAll('[aria-label*="gamma"]')]
+        .map(e => ({ e, r: e.getBoundingClientRect() }))
+        .filter(o => o.r.width > 4 && o.r.height > 2)[5];
+      if (!el) return null;
+      return { x: Math.round(el.r.x + el.r.width / 2), y: Math.round(el.r.y + el.r.height / 2) };
+    });
+    if (!band) bad('found no band to pin');
+    else {
+      await page.mouse.click(band.x, band.y);
+      await page.waitForTimeout(900);
+      const after = await read();
+      /* THE PREMISE: the click re-anchored something. */
+      after.header && after.header !== 'SPOT'
+        ? ok(`clicking a band re-anchors the ribbon — header reads CUM FROM ${after.header}`)
+        : bad(`clicking a band did not re-anchor anything (header still ${after.header}); the comparison below would prove nothing`);
+      if (after.header && after.header !== 'SPOT') {
+        after.legend === after.header
+          ? ok(`and the legend agrees — CUMULATIVE FROM ${after.legend}`)
+          : bad(`the header says ${after.header} and the legend says ${after.legend}`);
+      }
+    }
+  }
+  await ctx.close();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   THE RANKED LADDER'S CLASS COLUMN FITS THE ROW IT JOINS.
+
+   It switched on at `sm` (640px) and the row needs 648, so across an 8px band
+   every row read "DOWNSIDE CUSHIO" / "UPSIDE RESISTAN" / "NEUTRA". A scroller
+   with `overflow-y-auto` gets `overflow-x: auto` for free, so the tail was not
+   clipped — it was scrolled out of sight behind a bar nothing tells you is
+   there. Measured before the fix: the scroller overflowed itself by 8px at
+   640, 4px at 644, 1px at 647, 0 from 648.
+
+   BOTH DIRECTIONS ARE ASSERTED. "Never overflows" alone is satisfied by a
+   ladder with no class column at any width, so above the threshold the column
+   must also BE there.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the ranked ladder fits the row it draws');
+{
+  for (const w of [620, 640, 647, 648, 700, 768, 1024]) {
+    const ctx = await browser.newContext({ viewport: { width: w, height: 900 } });
+    const page = await ctx.newPage();
+    await page.goto(`${BASE}/pinpoint/ranked-targets`, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(BOOT_MS);
+
+    const g = await page.evaluate(() => {
+      const sc = [...document.querySelectorAll('div')].find(
+        d => typeof d.className === 'string' && d.className.includes('overflow-y-auto') && d.className.includes('max-h-')
+      );
+      if (!sc) return { noScroller: true };
+      const row = [...sc.querySelectorAll('button')].find(b => /^#\d+/.test((b.textContent || '').trim()));
+      if (!row) return { noRow: true };
+      const kids = [...row.children];
+      const cls = kids[kids.length - 1];
+      return {
+        over: sc.scrollWidth - sc.clientWidth,
+        classShown: getComputedStyle(cls).display !== 'none' && cls.getBoundingClientRect().width > 0,
+      };
+    });
+
+    if (g.noScroller || g.noRow) { bad(`ranked @ ${w} — no ladder to measure`); await ctx.close(); continue; }
+
+    g.over === 0
+      ? ok(`ranked @ ${w} — the ladder does not overflow itself`)
+      : bad(`ranked @ ${w} — the ladder overflows itself by ${g.over}px, so the last column is scrolled out of sight`);
+    if (w >= 648) {
+      g.classShown
+        ? ok(`ranked @ ${w} — and the class column is drawn`)
+        : bad(`ranked @ ${w} — the class column is missing at a width where it fits`);
+    }
+    await ctx.close();
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   THE MIGRATION MAP'S HOVER CARD STAYS INSIDE ITS PANEL.
+
+   It was placed with `top: Math.max(4, y - 90)` — clamped at the ceiling and
+   silent about the floor — so hovering the lowest strikes pushed it out of the
+   panel entirely. Measured at 1440x900 before the fix: a 179px card in a 560px
+   panel, 20px past the bottom on the second-to-last row and 44px on the last,
+   landing on the Wall Drift panel's header and covering this map's own footer
+   legend. Two of the twenty-one strikes could not be read.
+
+   THE LOWEST ROWS ARE THE TEST. Hovering the middle of the map passes on the
+   broken build, so the sweep walks the last rows specifically.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the migration hover card stays inside its panel');
+{
+  for (const [w, h] of [[1440, 900], [1280, 800]]) {
+    const at = `${w}x${h}`;
+    const ctx = await browser.newContext({ viewport: { width: w, height: h } });
+    const page = await ctx.newPage();
+    await page.goto(`${BASE}/pinpoint/vanna-charm`, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(BOOT_MS);
+
+    const rows = await page.evaluate(() => {
+      const host = [...document.querySelectorAll('div')].find(
+        d => /net GEX/i.test(d.textContent || '') && typeof d.className === 'string' && d.className.includes('flex-col')
+      );
+      const body = host && host.querySelector('div[class*="overflow-y-auto"]');
+      if (!body) return null;
+      return [...body.children]
+        .filter(c => c.querySelector('span'))
+        .slice(-4)
+        .map(c => { const r = c.getBoundingClientRect(); return { x: Math.round(r.x + 40), y: Math.round(r.y + r.height / 2) }; });
+    });
+
+    if (!rows || rows.length === 0) { bad(`${at} — no migration map rows to hover`); await ctx.close(); continue; }
+
+    let hovered = 0;
+    let worst = -Infinity;
+    for (const p of rows) {
+      await page.mouse.move(p.x, p.y);
+      await page.waitForTimeout(320);
+      const g = await page.evaluate(() => {
+        const card = [...document.querySelectorAll('div')].find(
+          d => typeof d.className === 'string' && d.className.includes('w-60') && /Projected/.test(d.textContent || '')
+        );
+        if (!card || !card.parentElement) return null;
+        const cb = card.getBoundingClientRect();
+        const hb = card.parentElement.getBoundingClientRect();
+        return { over: Math.round(cb.bottom - hb.bottom), above: Math.round(hb.top - cb.top) };
+      });
+      if (!g) continue;
+      hovered++;
+      worst = Math.max(worst, g.over, g.above);
+    }
+
+    if (hovered === 0) bad(`${at} — hovering the lowest rows produced no read-out card`);
+    else {
+      ok(`${at} — ${hovered} of the lowest rows produced a card`);
+      worst <= 0
+        ? ok(`${at} — every one stayed inside the panel (closest edge ${-worst}px in)`)
+        : bad(`${at} — a card ran ${worst}px outside its panel`);
+    }
+    await ctx.close();
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
    DOES THE CONTENT FIT ITS BOX?
 
    Noah, 2026-08-26: "make things in their boxes fit perfectly, aspect ratio is

@@ -522,7 +522,14 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
       color: LONG_GAMMA,
     },
     {
-      label: rootW >= W_LEGEND_LONG ? 'cumulative from spot' : 'Cum',
+      /* THE ANCHOR, NOT THE WORD "SPOT". Clicking a band re-anchors the
+         ribbon, and the header above says so — "CUM FROM 485" — while this
+         line went on claiming spot. Three surfaces describe one series (the
+         header, this legend, and the hover card's "FROM 485 TO 481"), and
+         this was the only one that could be wrong. Measured at 1760x1000
+         after pinning: header "CUM FROM 488", legend "CUMULATIVE FROM SPOT".
+         `anchorWord` is already computed above for the header. */
+      label: rootW >= W_LEGEND_LONG ? `cumulative from ${anchorWord}` : 'Cum',
       kind: 'line' as const,
       swatchClass: 'bg-textPrimary/55',
     },

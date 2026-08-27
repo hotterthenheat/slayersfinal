@@ -18,7 +18,13 @@ jobs:
   verify:
     name: Typecheck · Test · Build
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 25, not 15. The sweep has grown from four sections to a dozen and the
+    # job crossed 15 minutes on 4da6245 — GitHub reports a timed-out job as
+    # CANCELLED, not failed, so two runs looked like someone had stopped them
+    # rather than like the budget being the problem. Raised with headroom
+    # instead of to the exact figure, because the number that matters is the
+    # one a slow runner needs, not the one a fast runner used.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v5
 
@@ -51,10 +57,17 @@ jobs:
       - name: Build
         run: npm run build
 
-      # The browser sweep drives the built desk in a real Chromium: geometry at
-      # eight widths x four layouts, the strike rail against the chart's own
-      # price scale, the crosshair crossing panes, and the two storage
-      # migrations. ~2 minutes.
+      # The browser sweep drives the built desk and the Pinpoint desks in a
+      # real Chromium: geometry at eight widths x four layouts, the strike rail
+      # against the chart's own price scale, the crosshair crossing panes, the
+      # two storage migrations, and — since the Pinpoint audit — menu
+      # placement, sub-tab overflow, explainer clicks and read-outs against the
+      # bars they point at.
+      #
+      # It is the long pole in this job and it is meant to be: every section
+      # opens its own browser context and waits out the launch splash, which is
+      # what makes the measurements real rather than optimistic. Budget for it
+      # in `timeout-minutes` above rather than trimming coverage to fit.
       #
       # `chromium` and NOT `chromium-headless-shell`: under the shell,
       # lightweight-charts never sizes its canvas bitmaps, so every geometry

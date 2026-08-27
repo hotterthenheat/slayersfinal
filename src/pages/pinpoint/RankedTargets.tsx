@@ -291,7 +291,20 @@ const LadderRow = forwardRef<HTMLButtonElement, { t: RankedTarget; lens: RankLen
         <span className={`ml-auto w-24 shrink-0 text-right font-mono text-[11px] font-semibold tnum ${t.netGex > 0 ? 'text-bear' : 'text-bull'}`}>
           {fmtUsd(t.netGex)}
         </span>
-        <span className={`hidden sm:block w-36 shrink-0 text-right font-mono text-[9px] font-semibold uppercase tracking-wider ${CLASS_TEXT[t.hedgingClass]}`}>
+        {/* `min-[648px]` rather than `sm`, because `sm` is 640 and the row
+            needs 648. Measured across the boundary on the built app — the
+            ladder scroller overflows itself by 8px at 640, 4px at 644, 1px at
+            647 and 0px from 648 — so the column switched on at the first
+            width where it does not fit, and every row read "DOWNSIDE CUSHIO".
+            A scroller with `overflow-y-auto` gets `overflow-x: auto` for
+            free, so the tail was not clipped, it was scrolled out of sight
+            behind a bar nothing tells you is there.
+
+            The threshold is a property of the row, not of the text: every
+            lane is a fixed `w-*` and `shrink-0`, so the width is the same
+            whichever class word a row carries. Above `md` the priority lane
+            joins and the row needs 736 — still inside a 768px window. */}
+        <span className={`hidden min-[648px]:block w-36 shrink-0 text-right font-mono text-[9px] font-semibold uppercase tracking-wider ${CLASS_TEXT[t.hedgingClass]}`}>
           {t.hedgingClass}
         </span>
       </motion.button>
@@ -320,7 +333,9 @@ const LadderHead = () => (
     <span className="ml-auto w-24 shrink-0 text-right font-mono text-[9px] uppercase tracking-widest text-textSecondary">
       <Term k="Net GEX" />
     </span>
-    <span className="hidden sm:block w-36 shrink-0 text-right font-mono text-[9px] uppercase tracking-widest text-textSecondary">
+    {/* Same breakpoint as the rows' class cell — a caption that appears at a
+        width its column does not is a header for nothing. */}
+    <span className="hidden min-[648px]:block w-36 shrink-0 text-right font-mono text-[9px] uppercase tracking-widest text-textSecondary">
       <Term k="Class" />
     </span>
   </div>

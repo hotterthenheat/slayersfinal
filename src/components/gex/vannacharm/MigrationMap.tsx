@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useRef, useState } from 'react';
+import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import Simulator from '../../../core/simulator';
 import { fmtUsd } from '../../../data/gex';
@@ -35,10 +35,14 @@ const ShiftHoverCard = ({
   row,
   data,
   y,
+  hostH,
 }: {
   row: ShiftBarRow;
   data: VannaCharmView;
   y: number;
+  /** The panel this card is absolutely positioned inside. It cannot place
+      itself against an edge it does not know about. */
+  hostH: number;
 }) => {
   const series = useMemo(() => {
     const snaps = Simulator.getGexHistory(data.ticker) ?? [];
@@ -56,12 +60,47 @@ const ShiftHoverCard = ({
   const strikeLabel = row.strike % 1 === 0 ? row.strike.toFixed(0) : row.strike.toFixed(2);
   const scenario = data.mode === 'CHARM' ? 'CHARM → CLOSE' : `VANNA ${data.ivShift > 0 ? '+' : ''}${data.ivShift} IV`;
 
+  /*
+    CLAMPED AT BOTH ENDS, NOT JUST THE TOP.
+
+    `Math.max(4, y - 90)` kept the card off the panel's ceiling and said
+    nothing about its floor, so hovering the lowest strikes pushed it straight
+    out of the panel. Measured at 1440x900 on the built app: a 179px card in a
+    560px panel, hanging 20px past the bottom on the second-to-last row and
+    44px on the last — landing on the Wall Drift panel's header, with its
+    title reading faintly through the card's 95% background, and covering this
+    map's own footer legend. At 390 wide the same card runs below the fold. Two
+    of the twenty-one strikes could not be read without it.
+
+    The height is MEASURED rather than assumed. 179px is what this card happens
+    to be today with this content; a row that adds a line would move it, and a
+    constant here would be a second copy of a number the DOM already knows.
+    Measured in a layout effect so the correction lands before paint rather
+    than as a visible jump — the same order `useAnchoredMenu` places its menus
+    in, and for the same reason.
+
+    If the card is ever taller than the panel, `Math.max(4, …)` keeps the top
+    edge in view and the overflow goes off the bottom, which is the better half
+    to lose: the strike and its two figures are at the top.
+  */
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const [top, setTop] = useState(() => Math.max(4, y - 90));
+  useLayoutEffect(() => {
+    const el = cardRef.current;
+    if (!el) return;
+    const want = Math.max(4, y - 90);
+    const floor = Math.max(4, hostH - el.offsetHeight - 4);
+    const next = Math.min(want, floor);
+    setTop(prev => (Math.abs(prev - next) < 0.5 ? prev : next));
+  }, [y, hostH, row.strike]);
+
   return (
     <div
+      ref={cardRef}
       className={`absolute z-20 w-60 pointer-events-none border border-borderSubtle bg-[#0c0c0c]/95 rounded-md shadow-lg p-3 animate-soft-in ${
         row.current >= 0 ? 'left-16' : 'right-4'
       }`}
-      style={{ top: Math.max(4, y - 90) }}
+      style={{ top }}
     >
       <div className="flex items-center justify-between gap-2">
         <span className="font-mono text-[11px] font-bold text-textPrimary tnum">
@@ -134,6 +173,22 @@ const MigrationMap = ({ data }: MigrationMapProps) => {
   const [hoverRow, setHoverRow] = useState<ShiftBarRow | null>(null);
   const [hoverY, setHoverY] = useState(0);
 
+  /* The hover card is `absolute` against THIS box, so this box's height is the
+     floor it has to stay above. Observed rather than read once: the panel is a
+     grid cell that changes height with the window and with the desk's own
+     layout, and a height captured on mount would be wrong after the first
+     resize. */
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const [hostH, setHostH] = useState(0);
+  useLayoutEffect(() => {
+    const el = hostRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => setHostH(el.clientHeight));
+    ro.observe(el);
+    setHostH(el.clientHeight);
+    return () => ro.disconnect();
+  }, []);
+
   const slotAfter = (level: number) => {
     let idx = rows.findIndex((row, i) => row.strike >= level && (rows[i + 1]?.strike ?? -Infinity) < level);
     if (idx === -1) idx = level > (rows[0]?.strike ?? 0) ? -0.5 : rows.length - 1;
@@ -143,7 +198,7 @@ const MigrationMap = ({ data }: MigrationMapProps) => {
   const flipProjAfter = flipProjected !== flipCurrent ? slotAfter(flipProjected) : -2;
 
   return (
-    <div className="flex flex-col h-full min-h-0 relative">
+    <div ref={hostRef} className="flex flex-col h-full min-h-0 relative">
       {/* Legend */}
       <div className="flex items-center gap-3 px-2 py-1.5 border-b border-borderSubtle flex-wrap select-none">
         {[
@@ -197,7 +252,7 @@ const MigrationMap = ({ data }: MigrationMapProps) => {
       </div>
 
       {/* Hover readout — opposite side of the bar, clear of the cursor */}
-      {hoverRow && <ShiftHoverCard row={hoverRow} data={data} y={hoverY} />}
+      {hoverRow && <ShiftHoverCard row={hoverRow} data={data} y={hoverY} hostH={hostH} />}
 
       <div className="px-2.5 py-1.5 border-t border-borderSubtle font-mono text-[9px] text-textMuted leading-relaxed select-none">
         Bright = positioning now · Dim = after {data.mode === 'CHARM' ? 'charm decay into the close' : `an IV ${data.ivShift > 0 ? '+' : ''}${data.ivShift} vol move`}
