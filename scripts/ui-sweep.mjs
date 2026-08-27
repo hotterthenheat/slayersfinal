@@ -4295,6 +4295,63 @@ head('a linked pane follows the symbol, an unlinked one stands still');
   await ctx.close();
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   T-23. EXPORT PNG — a pane leaves as a real image, named for what it is.
+
+   takeScreenshot captures every canvas layer, so the browser only has to
+   prove the door: the Candles menu carries the row, clicking it downloads a
+   real PNG, and the filename says ticker-interval-stamp. Seeded to one
+   pane at 1600 — the default 3-up desk runs the compact icon-only toolbar
+   and this section's text lookup would be aiming at labels that are not
+   there (the first probe's lesson).
+   ───────────────────────────────────────────────────────────────────────── */
+head('a pane exports as a PNG, named for what it is');
+{
+  const seed = JSON.stringify({
+    layout: 1,
+    panes: [{
+      ticker: 'SPY', timeframe: '15m',
+      overlays: { trails: true, levels: true, darkpool: false, volume: true, flow: false, netDrift: false, volDrift: false, dexStrike: false, session: false, cone: false, events: false },
+      indicators: { ema9: false, ema21: false, ema50: false, vwap: false },
+      chartStyle: 'candles', compares: [], priceScale: 'normal', sessionOr: 15, ladder: false, link: null,
+    }],
+    setups: {},
+  });
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 }, acceptDownloads: true });
+  await ctx.addInitScript(`localStorage.setItem('slayer_terrain_v1', ${JSON.stringify(seed)})`);
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 1000);
+  await page.mouse.move(600, 400);
+  await page.waitForTimeout(600);
+  let opened = false;
+  for (const b of await page.$$('[aria-haspopup="menu"][title^="Chart style"]')) {
+    if (await b.isVisible()) { await b.click(); opened = true; break; }
+  }
+  await page.waitForTimeout(400);
+  opened ? ok('PREMISE: the Candles menu opens') : bad('PREMISE: no Chart style trigger to open');
+  const row = await page.$('button:has-text("Export PNG")');
+  row ? ok('the menu carries the Export PNG row') : bad('no Export PNG row in the Candles menu');
+  if (row) {
+    const dl = page.waitForEvent('download', { timeout: 10000 }).catch(() => null);
+    await row.click();
+    const download = await dl;
+    if (!download) bad('the click downloaded nothing');
+    else {
+      const name = download.suggestedFilename();
+      /^SPY-15m-\d{12}\.png$/.test(name) ? ok(`the file says what it is — ${name}`) : bad(`the filename reads ${name}`);
+      const path = await download.path();
+      const { statSync } = await import('node:fs');
+      const size = path ? statSync(path).size : 0;
+      size > 20000 ? ok(`and it is a real image — ${(size / 1024).toFixed(0)}KB`) : bad(`the PNG is ${size} bytes`);
+    }
+  }
+  errs.length === 0 ? ok('no page errors through the export') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
 console.log(`\n${fails} failing`);
 await browser.close();
 process.exit(fails ? 1 : 0);

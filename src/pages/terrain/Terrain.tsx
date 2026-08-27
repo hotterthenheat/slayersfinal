@@ -863,6 +863,8 @@ const Pane = ({
      disagree. A ref, so it never re-renders anything: the rail reads it inside
      its own frame loop. */
   const projectionRef = useRef<PriceProjection | null>(null);
+  /** T-23 — the pane's PNG exporter, filled by the chart. */
+  const exportPngRef = useRef<(() => void) | null>(null);
 
   /* An expanded pane covers the desk, so the keyboard has to be inside it.
      Measured before this: thirteen Tabs from the expand button walked out of
@@ -994,6 +996,7 @@ const Pane = ({
               syncRegister={registerSync}
               onReadout={setReadout}
               projectionRef={projectionRef}
+              exportRef={exportPngRef}
               pageScroll={belowLg}
               frameless
             />
@@ -1308,6 +1311,7 @@ const Pane = ({
                   priceScale={priceScale}
                   onPriceScale={p => onCfg({ priceScale: p })}
                   priceScaleLock={scaleLock}
+                  onExportPng={() => exportPngRef.current?.()}
                   sessionOr={sessionOr}
                   onSessionOr={o => onCfg({ sessionOr: o })}
                   drawing={drawing}

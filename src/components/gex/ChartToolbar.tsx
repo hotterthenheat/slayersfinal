@@ -135,6 +135,10 @@ interface ChartToolbarProps {
   onTotalFullscreen?: () => void;
   /** Opens the 4-way board page — four charts, each with its own controls. */
   onOpenQuad?: () => void;
+  /** T-23 — export this pane as a PNG (levels, drawings, watermark). Lives
+      in the Candles menu: a menu row costs no toolbar width, and the strip's
+      one-row budget is measured to the pixel. */
+  onExportPng?: () => void;
 }
 
 const TIMEFRAME_OPTIONS = TIMEFRAMES.map(t => ({ value: t.value, label: t.label }));
@@ -402,6 +406,7 @@ const ChartToolbar = ({
   priceScale = 'normal',
   onPriceScale,
   priceScaleLock,
+  onExportPng,
   sessionOr = 15,
   onSessionOr,
   alertTicker,
@@ -767,6 +772,20 @@ const ChartToolbar = ({
                         it and your pick comes back.
                       </p>
                     )}
+                  </>
+                )}
+                {onExportPng && (
+                  <>
+                    <div className="mt-1 pt-1 border-t border-borderSubtle" />
+                    <button
+                      onClick={onExportPng}
+                      className="flex items-center gap-2 w-full px-2.5 py-1.5 rounded font-mono text-[11px] text-left text-textSecondary hover:text-textPrimary hover:bg-white/[0.03] transition-colors"
+                    >
+                      <span className="flex flex-col min-w-0">
+                        <span>Export PNG</span>
+                        <span className="text-[9px] text-textMuted">This pane as an image — levels, drawings, watermark</span>
+                      </span>
+                    </button>
                   </>
                 )}
               </div>

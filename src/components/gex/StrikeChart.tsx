@@ -568,6 +568,11 @@ interface StrikeChartProps {
       never changes, so it can sit in the mount effect's dep array without
       rebuilding the chart on every parent render. */
   projectionRef?: MutableRefObject<PriceProjection | null>;
+  /** T-23 — filled with the pane's PNG exporter (chart.takeScreenshot plus
+      an identity header and watermark, downloaded on call). Ref-based like
+      the projection: the chart owns its canvases, the host owns the
+      trigger. */
+  exportRef?: MutableRefObject<(() => void) | null>;
   /**
    * SHRINK THE PRICE-SCALE FURNITURE — for a chart on a phone.
    *
@@ -728,6 +733,7 @@ const StrikeChart = ({
   syncRegister,
   onReadout,
   projectionRef,
+  exportRef,
 }: StrikeChartProps) => {
   const themeKey = useCandleThemeKey();
   /* Read straight from the store rather than taken as a prop: alerts belong to
@@ -1491,12 +1497,61 @@ const StrikeChart = ({
       };
     }
 
+    /*
+      T-23 — THE EXPORTER. takeScreenshot captures every canvas layer the
+      pane draws — candles, levels, drawings, the cone, the event lane — at
+      device resolution. The frame adds what a shared image needs and the
+      live pane does not: whose chart this is (ticker · interval · when) and
+      whose terminal drew it. Reads refs at CALL time, so the header names
+      what is on screen at the click, not at mount.
+    */
+    if (exportRef) {
+      exportRef.current = () => {
+        const c = chartRef.current;
+        if (!c) return;
+        const shot = c.takeScreenshot();
+        const scale = Math.max(1, Math.round(shot.width / Math.max(1, containerRef.current?.clientWidth ?? shot.width)));
+        const pad = 30 * scale;
+        const out = document.createElement('canvas');
+        out.width = shot.width;
+        out.height = shot.height + pad;
+        const g = out.getContext('2d');
+        if (!g) return;
+        g.fillStyle = '#0a0a0a';
+        g.fillRect(0, 0, out.width, out.height);
+        const stampIso = new Date().toISOString();
+        const stamp = `${stampIso.slice(0, 10)} ${stampIso.slice(11, 16)}Z`;
+        g.font = `600 ${11 * scale}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+        g.textBaseline = 'middle';
+        g.fillStyle = 'rgba(255,255,255,0.85)';
+        g.fillText(`${ticker} · ${timeframeRef.current}`, 10 * scale, pad / 2);
+        const right = `${stamp} · SLAYER TERMINAL`;
+        g.fillStyle = 'rgba(255,255,255,0.4)';
+        g.fillText(right, out.width - g.measureText(right).width - 10 * scale, pad / 2);
+        g.drawImage(shot, 0, pad);
+        /* The in-plot watermark — faint, corner, the free distribution the
+           directive wants from every shared screenshot. */
+        g.font = `600 ${10 * scale}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+        g.fillStyle = 'rgba(255,255,255,0.28)';
+        g.fillText('slayer_terminal', 10 * scale, out.height - 12 * scale);
+        out.toBlob(blob => {
+          if (!blob) return;
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = `${ticker}-${timeframeRef.current}-${stampIso.slice(0, 16).replace(/[-T:]/g, '')}.png`;
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+        });
+      };
+    }
+
     return () => {
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRange);
       chart.unsubscribeCrosshairMove(onCross);
       syncRegisterRef.current?.(null);
       syncedRef.current = null;
       if (projectionRef) projectionRef.current = null;
+      if (exportRef) exportRef.current = null;
       chart.remove();
       chartRef.current = null;
       candleSeriesRef.current = null;
