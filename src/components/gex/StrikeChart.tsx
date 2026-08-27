@@ -37,7 +37,8 @@ import {
 import { GexTrailsPrimitive } from './gexNodesPrimitive';
 import { DrawingsPrimitive, loadDrawings, needsThirdAnchor, saveDrawings, type Drawing, type DrawingKind } from './drawingsPrimitive';
 import { getCandleTheme, useCandleThemeKey, candleSeriesOptions, chartSurface, type CandleTheme } from './candleTheme';
-import { markFired, useAlerts } from './alertStore';
+import { alertLabel, commitArm, evaluateAlert, markFired, useAlerts, type AlertContext, type IndicatorSource } from './alertStore';
+import { exposureNowFor } from '../../data/gex';
 import type { Candle } from '../../types/market';
 import type { DarkPoolPrint, KeyLevels } from '../../types/gex';
 import { bucketFlow, flowMaxLeg } from '../../data/flowBars';
@@ -2760,6 +2761,13 @@ const StrikeChart = ({
     because the toolbar is hidden until the cursor is over its own pane — a
     badge there would be invisible almost all the time, which would make
     "you'll see it fire" untrue.
+
+    ONLY THE PRICE KIND GETS A LINE (T-22). A level alert's level is already
+    on the field as the bead inks and the flip rule, and an indicator alert's
+    line is the indicator itself — a second line in alert orange on the same
+    price would be duplicate ink fighting the first. The exposure and flow
+    kinds have no single price at all. All of them live on the armed rail
+    instead.
   */
   useEffect(() => {
     const series = candleSeriesRef.current;
@@ -2774,6 +2782,7 @@ const StrikeChart = ({
     }
     live.clear();
     for (const a of alerts) {
+      if (a.kind !== 'price') continue;
       live.set(
         a.id,
         series.createPriceLine({
@@ -2807,17 +2816,64 @@ const StrikeChart = ({
 
     `markFired` is idempotent, so a close that sits past an alert for the rest
     of the session does not repaint every pane on every tick.
+
+    THE CONTEXT IS BUILT LAZILY (T-22). The rules live in `evaluateAlert`
+    (alertStore.ts, proven in alerts-proof); this effect's whole job is
+    handing them what they watch, and only what something armed actually
+    watches — the book is read only when an exposure or level kind is armed,
+    and an indicator series is recomputed only for an indicator alert on THIS
+    pane's timeframe. Two panes on one symbol both run this; every rule is
+    idempotent across evaluators the way `markFired` always was.
   */
   useEffect(() => {
     if (replay) return;
     const close = lastCloseRef.current;
     if (close == null) return;
-    const now = Date.now();
-    for (const a of alerts) {
-      if (a.firedAt) continue;
-      if (a.above ? close >= a.price : close <= a.price) markFired(ticker, a.id, now);
+    const waiting = alerts.filter(a => !a.firedAt);
+    if (waiting.length === 0) return;
+
+    const needsBook = waiting.some(a => a.kind === 'level' || a.kind === 'gexflip' || a.kind === 'newking' || a.kind === 'wallmove');
+    const exp = needsBook ? exposureNowFor(ticker) : null;
+
+    const values: Partial<Record<IndicatorSource, number | null>> = {};
+    const mins = tfMinutes(timeframe);
+    for (const a of waiting) {
+      if (a.kind !== 'indicator' || a.tf !== timeframe || a.source in values) continue;
+      const bars = displayBars(ticker, mins);
+      const last = (pts: readonly (number | null)[]) => {
+        const p = pts[pts.length - 1];
+        return typeof p === 'number' && Number.isFinite(p) ? p : null;
+      };
+      values[a.source] =
+        a.source === 'vwap' ? last(vwapSeries(bars, mins))
+        : a.source === 'rsi' ? last(rsiSeries(bars, 14))
+        : last(emaSeries(bars, a.source === 'ema9' ? 9 : a.source === 'ema21' ? 21 : 50));
     }
-  }, [alerts, ticker, revision, replay]);
+
+    const ctx: AlertContext = {
+      close,
+      tf: timeframe,
+      levels: {
+        callWall: exp?.callWall ?? null,
+        putWall: exp?.putWall ?? null,
+        flip: exp?.flip ?? null,
+        king: exp?.king ?? null,
+      },
+      netGex: exp ? exp.netGex : null,
+      step: exp?.step ?? 0,
+      values,
+      prints: waiting.some(a => a.kind === 'flow')
+        ? (flowPrints ?? []).filter(p => p.ticker === ticker).map(p => ({ at: p.at, premium: p.premium }))
+        : [],
+    };
+
+    const now = Date.now();
+    for (const a of waiting) {
+      const verdict = evaluateAlert(a, ctx);
+      if (verdict.fire) markFired(ticker, a.id, now);
+      else if (verdict.armed) commitArm(ticker, verdict.armed);
+    }
+  }, [alerts, ticker, revision, replay, timeframe, flowPrints]);
 
   /* The focus INK follows the strike's standing, re-read every scan: magenta
      while the focused strike is the king, lime otherwise. The focus itself
@@ -3196,6 +3252,40 @@ const StrikeChart = ({
             </span>
           );
         })}
+
+        {/*
+          THE ARMED RAIL (T-22) — what this pane is watching, visible without
+          opening a menu. Top-left is the emptiest corner a pane has (the
+          draw rail docks centre-left, the labels and the live chip own the
+          bottom), and the rail only exists while something is armed. A fired
+          row lights the alert ink and says "fired"; managing the set stays
+          in the menu, so the rail is pointer-transparent and the tape pans
+          straight through it.
+        */}
+        {!replay && alerts.length > 0 && (
+          <div
+            data-alert-rail
+            aria-label={`Alerts armed on ${ticker}`}
+            className="pointer-events-none absolute left-2 top-2 z-10 flex flex-col items-start gap-[3px]"
+          >
+            {alerts.map(a => (
+              <span
+                key={a.id}
+                className="font-mono text-[9px] leading-[13px] rounded border px-1.5 py-px bg-canvas/70"
+                style={
+                  a.firedAt
+                    ? { color: ALERT_INK, borderColor: `${ALERT_INK}80` }
+                    : undefined
+                }
+              >
+                <span className={a.firedAt ? '' : 'text-textMuted'}>
+                  {alertLabel(a)}
+                  {a.firedAt ? ' · fired' : ''}
+                </span>
+              </span>
+            ))}
+          </div>
+        )}
 
         {/* Pinned to the container's right edge and moved down it by
             transform, so it rides the price scale rather than being re-laid

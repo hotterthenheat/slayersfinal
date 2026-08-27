@@ -667,7 +667,7 @@ const ChartToolbar = ({
               onToggle={() => setOpenMenu(m => (m === 'alerts' ? null : 'alerts'))}
               menuSide={menuSide}
             >
-              <AlertsMenu ticker={alertTicker} spot={alertSpot} />
+              <AlertsMenu ticker={alertTicker} spot={alertSpot} tf={timeframe} />
             </Dropdown>
           )}
           {(onChartStyle || onPriceScale) && (

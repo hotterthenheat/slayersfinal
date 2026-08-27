@@ -100,6 +100,11 @@ export const TERMS = {
     'The move in implied one-day \u03c3 \u2014 how many of the moves the options are charging for. Past 1\u03c3, price has beaten what the options priced for the day.',
   // ---- the futures clock (T-16) ----
   Globex: 'The overnight futures session — Sunday 18:00 to Friday 17:00 New York, with a daily 17:00\u201318:00 break. The equity open is usually decided out here, while the cash tape this desk draws is closed.',
+  // ---- alert kinds (T-22) ----
+  'Alert kinds':
+    'What a pane can watch besides a typed price: a named level being crossed (the alert follows the wall, flip or king as the book moves them), price crossing VWAP or an EMA, RSI crossing a threshold, net GEX flipping sign, a new king, a wall migrating N strikes, or an option print over a premium floor. All of it in-session only — nothing runs when the tab is closed.',
+  'Armed rail':
+    'The list at a pane’s top-left of every alert armed on its symbol, so what’s watching is visible without opening a menu. A row lights orange when its alert fires.',
   // ---- volume profile (T-10) ----
   VPOC: 'The price where the session traded the most volume — the tape\u2019s own centre of gravity today. Price tends to return to it while value is being accepted.',
   'Value area': 'The band holding 70% of the session\u2019s volume, VAL to VAH. Inside it the market is trading acceptance; outside it, discovery.',
