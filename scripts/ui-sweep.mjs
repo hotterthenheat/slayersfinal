@@ -3481,6 +3481,113 @@ head('the total has a timeline and a rank, and each states its basis');
   await ctx.close();
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   T-2. THE DRAWING TOOLS — eight on the strip, and the two gestures that are
+   not a plain drag.
+
+   The persistence layer is proved headless (scripts/drawings-proof.ts). The
+   browser owns the gestures: the channel's two-phase flow (release does NOT
+   commit — the width is still owed, and the next press pays it) and the
+   note's floating input, which lived exactly one millisecond until the
+   pointerdown's default focus action was cancelled — the regression this
+   section exists to catch.
+
+   Storage is cleared by evaluate, never addInitScript: an init script runs
+   on EVERY navigation, so it wiped the store during the reload half of this
+   section and made survival untestable.
+   ───────────────────────────────────────────────────────────────────────── */
+head('eight tools draw, the channel takes three anchors, the note takes words');
+{
+  const { ctx, page, errs } = await openDesk(1600, 950, 1);
+  await page.evaluate(() => localStorage.removeItem('slayer_chart_drawings_SPY'));
+  const paneBox = async () => (await page.$$('.grid > div > div'))[0].boundingBox();
+  {
+    const b0 = await paneBox();
+    await page.mouse.click(b0.x + 200, b0.y + 300);
+    await page.waitForTimeout(200);
+  }
+  await page.keyboard.press('d');
+  await page.waitForTimeout(600);
+
+  const tools = await page.$$eval('button', bs =>
+    bs.map(b => b.textContent.trim()).filter(t => /^(Trend|Ray|Level|Box|Channel|Fib|Measure|Note)$/.test(t))
+  );
+  tools.length === 8 ? ok(`all eight tools are on the strip — ${tools.join(' · ')}`) : bad(`the strip carries ${tools.length} of 8 tools: ${tools.join(', ')}`);
+
+  const bb = await paneBox();
+  const pick = async name => {
+    for (const b of await page.$$('button')) if ((await b.textContent())?.trim() === name) { await b.click(); return; }
+  };
+  const drag = async (fx1, fy1, fx2, fy2) => {
+    await page.mouse.move(bb.x + bb.width * fx1, bb.y + bb.height * fy1);
+    await page.mouse.down();
+    await page.mouse.move(bb.x + bb.width * fx2, bb.y + bb.height * fy2, { steps: 4 });
+    await page.mouse.up();
+    await page.waitForTimeout(350);
+  };
+  const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem('slayer_chart_drawings_SPY') ?? '[]').map(d => d.kind));
+
+  await pick('Ray');
+  await drag(0.15, 0.6, 0.3, 0.4);
+  await pick('Box');
+  await drag(0.18, 0.35, 0.32, 0.55);
+  await pick('Fib');
+  await drag(0.2, 0.7, 0.35, 0.3);
+  JSON.stringify(await stored()) === JSON.stringify(['ray', 'rect', 'fib'])
+    ? ok('ray, box and fib each commit on release')
+    : bad(`after three drags the store holds ${(await stored()).join(',')}`);
+
+  await pick('Channel');
+  await drag(0.15, 0.5, 0.35, 0.35);
+  !(await stored()).includes('channel')
+    ? ok('a channel does not commit on release — the width is still owed')
+    : bad('the channel committed without its width anchor');
+  await page.mouse.move(bb.x + bb.width * 0.25, bb.y + bb.height * 0.62);
+  await page.waitForTimeout(200);
+  await page.mouse.down();
+  await page.mouse.up();
+  await page.waitForTimeout(400);
+  (await stored()).includes('channel') ? ok('and the next press sets the width and commits it') : bad('the width press never committed the channel');
+  const chan = await page.evaluate(() => JSON.parse(localStorage.getItem('slayer_chart_drawings_SPY')).find(d => d.kind === 'channel'));
+  chan?.p1 && chan?.p2 && chan?.p3 ? ok('with all three anchors stored') : bad(`the stored channel is missing anchors: ${JSON.stringify(chan)}`);
+
+  await pick('Note');
+  await page.mouse.move(bb.x + bb.width * 0.4, bb.y + bb.height * 0.5);
+  await page.mouse.down();
+  await page.mouse.up();
+  await page.waitForTimeout(400);
+  (await page.$('input[aria-label^="Note text"]'))
+    ? ok('a note click opens the floating input — and it survives the pointer’s own focus default')
+    : bad('the note input is not there — the 1ms-blur regression is back');
+  await page.keyboard.type('held twice pre-market');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(400);
+  const note = await page.evaluate(() => JSON.parse(localStorage.getItem('slayer_chart_drawings_SPY')).find(d => d.kind === 'note'));
+  note?.text === 'held twice pre-market' ? ok('Enter places the note with its words') : bad(`the note stored ${JSON.stringify(note)}`);
+
+  await page.mouse.move(bb.x + bb.width * 0.5, bb.y + bb.height * 0.5);
+  await page.mouse.down();
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+  await page.keyboard.type('abandoned');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  const notes = await page.evaluate(() => JSON.parse(localStorage.getItem('slayer_chart_drawings_SPY')).filter(d => d.kind === 'note').length);
+  notes === 1 ? ok('Escape abandons a half-typed note') : bad(`${notes} notes after an abandoned one`);
+  (await page.evaluate(() => !document.querySelector('[role="dialog"][aria-modal]')))
+    ? ok('and the Escape stayed in the input — nothing else on the desk moved')
+    : bad('the Escape leaked out of the note input');
+
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+  const after = await stored();
+  ['ray', 'rect', 'fib', 'channel', 'note'].every(k => after.includes(k))
+    ? ok('all five new kinds survive a reload')
+    : bad(`after a reload the store holds ${after.join(',')}`);
+  errs.length === 0 ? ok('no page errors through the tour') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
 console.log(`\n${fails} failing`);
 await browser.close();
 process.exit(fails ? 1 : 0);

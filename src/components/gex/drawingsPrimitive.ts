@@ -24,19 +24,48 @@ import { fmtElapsed, measureSpan } from '../../data/measure';
   rule that nothing else on this chart needs. The transient half is live
   DURING the drag, which is where a measure is read.
 */
-export type DrawingKind = 'trend' | 'hline' | 'measure';
+/*
+  T-2 GROWS THE UNION FROM THREE TO EIGHT. The five newcomers, and what each
+  is for:
+
+    ray      a trend that extends forward only — the line you draw once and
+             trade against for the rest of the day
+    rect     a marked consolidation or value area
+    channel  two parallel rays; the third anchor sets the width
+    fib      the one drawing that carries its own levels, labelled at the
+             right edge where a reader meets them
+    note     words anchored to a bar, so the reason for a level survives the
+             session the way the level does
+*/
+export type DrawingKind = 'trend' | 'hline' | 'measure' | 'ray' | 'rect' | 'channel' | 'fib' | 'note';
 
 /*
-  THE KINDS, AS DATA, and the validator reads THIS rather than a list of its
-  own. `loadDrawings` enumerated them inline — `kind === 'trend' || kind ===
-  'hline'` — so adding a third kind meant every stored one of it was dropped
-  on the next read, silently, with no error: exactly the shape of the bug
-  `setups.ts` was fixed for twice (T-0). Written as a `satisfies` map so a
-  kind added to the union and not to this list fails the BUILD.
+  THE KINDS' SHAPES, AS DATA, and the validator reads THIS rather than a list
+  of its own. `loadDrawings` enumerated kinds inline — `kind === 'trend' ||
+  kind === 'hline'` — so adding a third kind meant every stored one of it was
+  dropped on the next read, silently, with no error: exactly the shape of the
+  bug `setups.ts` was fixed for twice (T-0). A `satisfies` map, so a kind
+  added to the union and not described here fails the BUILD — and now it
+  carries the whole shape, because with eight kinds "which fields must a
+  stored one have" is no longer one boolean:
+
+    p2    the second anchor. A trend without one renders as nothing; a
+          measure DIVIDES by the span between them.
+    p3    the channel's width anchor. A channel without it is a zero-width
+          channel, which is a trend wearing the wrong name.
+    text  the note's words. A note without words is an anchor pointing at
+          nothing, and it would render as a bare square nobody can read.
 */
-const KIND_SET = new Set<string>(
-  Object.keys({ trend: 0, hline: 0, measure: 0 } satisfies Record<DrawingKind, number>)
-);
+const KIND_SHAPE = {
+  trend: { p2: true, p3: false, text: false },
+  hline: { p2: false, p3: false, text: false },
+  measure: { p2: true, p3: false, text: false },
+  ray: { p2: true, p3: false, text: false },
+  rect: { p2: true, p3: false, text: false },
+  channel: { p2: true, p3: true, text: false },
+  fib: { p2: true, p3: false, text: false },
+  note: { p2: false, p3: false, text: true },
+} as const satisfies Record<DrawingKind, { p2: boolean; p3: boolean; text: boolean }>;
 
 export interface DrawingPoint {
   time: number; // bar time (sec)
@@ -46,7 +75,12 @@ export interface DrawingPoint {
 export interface Drawing {
   kind: DrawingKind;
   p1: DrawingPoint;
-  p2?: DrawingPoint; // trend only
+  /** Second anchor — every two-point kind (see KIND_SHAPE). */
+  p2?: DrawingPoint;
+  /** The channel's width anchor. */
+  p3?: DrawingPoint;
+  /** The note's words. */
+  text?: string;
 }
 
 const LIME = '210,255,0';
@@ -185,6 +219,28 @@ class DrawingsPaneRenderer {
           return;
         }
 
+        if (d.kind === 'note') {
+          const xn = src.timeToX(d.p1.time);
+          if (xn === null) return;
+          const x1 = xn * hr;
+          /* The anchor first — the note POINTS at a bar, and the square is
+             the pointing. Words to the right of it, on a wash so they stay
+             readable over candles; the wash is sized to the text, so a short
+             note costs a short strip of tape. */
+          const a = 2.2 * vr;
+          ctx.fillRect(x1 - a, y1 - a, a * 2, a * 2);
+          const label = d.text ?? '';
+          ctx.font = `${10 * vr}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+          ctx.textBaseline = 'middle';
+          const tw = ctx.measureText(label).width;
+          const pad = 4 * hr;
+          ctx.fillStyle = 'rgba(10,10,10,0.72)';
+          ctx.fillRect(x1 + a + 2 * hr, y1 - 8 * vr, tw + pad * 2, 16 * vr);
+          ctx.fillStyle = `rgba(${LIME},${Math.min(1, alpha + 0.1)})`;
+          ctx.fillText(label, x1 + a + 2 * hr + pad, y1);
+          return;
+        }
+
         if (!d.p2) return;
 
         if (d.kind === 'measure') {
@@ -198,12 +254,138 @@ class DrawingsPaneRenderer {
         const x1 = x1m * hr;
         const x2 = x2m * hr;
         const y2 = y2c * vr;
+        // square anchors — terminal grammar, no circles
+        const a = 2.2 * vr;
+
+        if (d.kind === 'rect') {
+          const xa = Math.min(x1, x2);
+          const ya = Math.min(y1, y2);
+          const bw = Math.max(1, Math.abs(x2 - x1));
+          const bh = Math.max(1, Math.abs(y2 - y1));
+          /* A marked AREA, so it carries a wash — faint enough that candles
+             through it stay candles. The user's own ink, not a market one:
+             a rectangle is a claim about a region, not about direction. */
+          ctx.fillStyle = `rgba(${LIME},0.055)`;
+          ctx.fillRect(xa, ya, bw, bh);
+          ctx.strokeRect(xa, ya, bw, bh);
+          ctx.fillStyle = `rgba(${LIME},${alpha})`;
+          ctx.fillRect(x1 - a, y1 - a, a * 2, a * 2);
+          ctx.fillRect(x2 - a, y2 - a, a * 2, a * 2);
+          return;
+        }
+
+        if (d.kind === 'ray') {
+          /* Through the two anchors and on to the RIGHT edge only — the line
+             a reader draws once and trades against for the rest of the
+             session. A vertical pair degenerates to its segment rather than
+             inventing a direction. */
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          if (x2 !== x1) {
+            const slope = (y2 - y1) / (x2 - x1);
+            const xe = x2 >= x1 ? w : 0;
+            ctx.lineTo(xe, y1 + slope * (xe - x1));
+          } else {
+            ctx.lineTo(x2, y2);
+          }
+          ctx.stroke();
+          ctx.fillRect(x1 - a, y1 - a, a * 2, a * 2);
+          ctx.fillRect(x2 - a, y2 - a, a * 2, a * 2);
+          return;
+        }
+
+        if (d.kind === 'channel') {
+          /* Two rays, one vertical offset. The offset is p3's distance from
+             the BASE LINE at p3's own x — drag the third anchor and the
+             width follows it. Without p3 (the draft's first phase) only the
+             base draws, which is what the reader is still placing. */
+          const drawRay = (sx: number, sy: number) => {
+            ctx.beginPath();
+            ctx.moveTo(sx, sy);
+            if (x2 !== x1) {
+              const slope = (y2 - y1) / (x2 - x1);
+              const xe = x2 >= x1 ? w : 0;
+              ctx.lineTo(xe, sy + slope * (xe - sx));
+            } else {
+              ctx.lineTo(x2, sy + (y2 - y1));
+            }
+            ctx.stroke();
+          };
+          drawRay(x1, y1);
+          const p3x = d.p3 ? src.timeToX(d.p3.time) : null;
+          const p3yc = d.p3 ? series.priceToCoordinate(d.p3.price) : null;
+          if (d.p3 && p3x !== null && p3yc !== null) {
+            const x3 = p3x * hr;
+            const y3 = p3yc * vr;
+            const baseYat = (x: number) => (x2 !== x1 ? y1 + ((y2 - y1) / (x2 - x1)) * (x - x1) : y1);
+            const off = y3 - baseYat(x3);
+            /* The wash between the rails, drawn as the quad the two rays
+               bound — the channel IS the space, not the lines. */
+            const xe = x2 >= x1 ? w : 0;
+            const yeBase = baseYat(xe);
+            ctx.fillStyle = `rgba(${LIME},0.045)`;
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(xe, yeBase);
+            ctx.lineTo(xe, yeBase + off);
+            ctx.lineTo(x1, y1 + off);
+            ctx.closePath();
+            ctx.fill();
+            drawRay(x1, y1 + off);
+            ctx.fillStyle = `rgba(${LIME},${alpha})`;
+            ctx.fillRect(x3 - a, y3 - a, a * 2, a * 2);
+          }
+          ctx.fillStyle = `rgba(${LIME},${alpha})`;
+          ctx.fillRect(x1 - a, y1 - a, a * 2, a * 2);
+          ctx.fillRect(x2 - a, y2 - a, a * 2, a * 2);
+          return;
+        }
+
+        if (d.kind === 'fib') {
+          /*
+            THE ONE DRAWING THAT CARRIES ITS OWN LEVELS. Ratios of the leg
+            from p1 to p2, drawn from the leg's start to the RIGHT edge —
+            retracements are traded after the leg, not inside it — and each
+            labelled at the right edge with the ratio AND the price, because
+            a rule with no number sends the reader's eye to the axis this
+            chart deliberately keeps unlabelled.
+
+            0, ½ and 1 draw a step brighter: the endpoints anchor the eye and
+            the half is the one every reader checks first.
+          */
+          const RATIOS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
+          const xa = Math.min(x1, x2);
+          ctx.font = `${9 * vr}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+          ctx.textBaseline = 'bottom';
+          ctx.textAlign = 'right';
+          for (const r of RATIOS) {
+            const price = d.p1.price + (d.p2.price - d.p1.price) * r;
+            const yc = series.priceToCoordinate(price);
+            if (yc === null) continue;
+            const y = yc * vr;
+            const major = r === 0 || r === 0.5 || r === 1;
+            ctx.strokeStyle = `rgba(${LIME},${major ? alpha * 0.8 : alpha * 0.45})`;
+            ctx.lineWidth = 1 * vr;
+            ctx.beginPath();
+            ctx.moveTo(xa, y);
+            ctx.lineTo(w, y);
+            ctx.stroke();
+            ctx.fillStyle = `rgba(${LIME},${major ? alpha : alpha * 0.65})`;
+            ctx.fillText(`${r} — ${price.toFixed(2)}`, w - 4 * hr, y - 2 * vr);
+          }
+          ctx.textAlign = 'left';
+          ctx.strokeStyle = `rgba(${LIME},${alpha})`;
+          ctx.fillStyle = `rgba(${LIME},${alpha})`;
+          ctx.lineWidth = 1.4 * vr;
+          ctx.fillRect(x1 - a, y1 - a, a * 2, a * 2);
+          ctx.fillRect(x2 - a, y2 - a, a * 2, a * 2);
+          return;
+        }
+
         ctx.beginPath();
         ctx.moveTo(x1, y1);
         ctx.lineTo(x2, y2);
         ctx.stroke();
-        // square anchors — terminal grammar, no circles
-        const a = 2.2 * vr;
         ctx.fillRect(x1 - a, y1 - a, a * 2, a * 2);
         ctx.fillRect(x2 - a, y2 - a, a * 2, a * 2);
       };
@@ -327,17 +509,19 @@ export function loadDrawings(ticker: string): Drawing[] {
     if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (d): d is Drawing =>
-        typeof d === 'object' &&
-        d !== null &&
-        KIND_SET.has((d as Drawing).kind) &&
-        typeof (d as Drawing).p1?.price === 'number' &&
-        /* A trend and a measure are both two-point shapes; one stored without
-           its second point would render as nothing and, for a measure, would
-           divide by a span that is not there. */
-        ((d as Drawing).kind === 'hline' || typeof (d as Drawing).p2?.price === 'number')
-    );
+    return parsed.filter((d): d is Drawing => {
+      if (typeof d !== 'object' || d === null) return false;
+      const x = d as Drawing;
+      const shape = (KIND_SHAPE as Record<string, { p2: boolean; p3: boolean; text: boolean }>)[x.kind];
+      if (!shape) return false;
+      if (typeof x.p1?.price !== 'number' || typeof x.p1?.time !== 'number') return false;
+      if (shape.p2 && (typeof x.p2?.price !== 'number' || typeof x.p2?.time !== 'number')) return false;
+      if (shape.p3 && (typeof x.p3?.price !== 'number' || typeof x.p3?.time !== 'number')) return false;
+      /* Trimmed, because a note of pure whitespace is the empty note wearing
+         a length. */
+      if (shape.text && !(typeof x.text === 'string' && x.text.trim().length > 0)) return false;
+      return true;
+    });
   } catch {
     return [];
   }

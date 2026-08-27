@@ -2,7 +2,10 @@ import {
   useCallback, useEffect, useMemo, useRef, useState,
   type MutableRefObject, type PointerEvent as ReactPointerEvent,
 } from 'react';
-import { Check, Eraser, Minus, Pause, Play, Ruler, StepBack, StepForward, TrendingUp, X } from 'lucide-react';
+import {
+  AlignJustify, Check, Equal, Eraser, Minus, MoveUpRight, Pause, Play, Ruler, Square, StepBack, StepForward,
+  StickyNote, TrendingUp, X,
+} from 'lucide-react';
 import {
   createChart,
   AreaSeries,
@@ -695,7 +698,31 @@ const StrikeChart = ({
   const drawingsRef = useRef<DrawingsPrimitive | null>(null);
   const shapesRef = useRef<Drawing[]>([]);
   const dragRef = useRef<Drawing | null>(null);
+  /** A committed channel BASE waiting for its width anchor — phase two of the
+      only two-phase gesture on this chart. */
+  const channelRef = useRef<Drawing | null>(null);
+  /** Where a note is being typed, in both spaces: chart coords to commit,
+      client coords to float the input at. Null = no note in progress. */
+  const [noteAt, setNoteAt] = useState<{ time: number; price: number; x: number; y: number } | null>(null);
   const [drawTool, setDrawTool] = useState<DrawingKind>('trend');
+
+  /* Leaving draw mode, or the world changing under it, abandons whatever was
+     mid-gesture: a channel base with no width yet, a note not yet typed, a
+     draft mid-drag. Committing any of them would be finishing a gesture the
+     reader walked away from. */
+  useEffect(() => {
+    if (drawing) return;
+    dragRef.current = null;
+    channelRef.current = null;
+    setNoteAt(null);
+    drawingsRef.current?.setDraft(null);
+  }, [drawing]);
+  useEffect(() => {
+    dragRef.current = null;
+    channelRef.current = null;
+    setNoteAt(null);
+    drawingsRef.current?.setDraft(null);
+  }, [ticker, timeframe]);
 
   // ---- replay state ----
   const replayRef = useRef(false); // effect-visible mirror of the replay prop
@@ -2499,18 +2526,51 @@ const StrikeChart = ({
   const onDrawDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     const p = pointAt(e);
     if (!p) return;
+    /* THE CHANNEL'S SECOND PHASE ends on the next press: the base was drawn
+       and released, the width has been tracking the pointer since, and this
+       click is the reader saying "that wide". */
+    if (channelRef.current) {
+      const base = channelRef.current;
+      channelRef.current = null;
+      drawingsRef.current?.setDraft(null);
+      commitDrawing({ ...base, p3: p });
+      return;
+    }
     if (drawTool === 'hline') {
       commitDrawing({ kind: 'hline', p1: p });
       return;
     }
+    if (drawTool === 'note') {
+      /*
+        The words come from a floating input at the click; Enter commits it.
+
+        preventDefault, and it is load-bearing: React commits the input and
+        its autoFocus DURING this event's dispatch, and the pointerdown's
+        DEFAULT action — moving focus to the pressed element's focusable
+        ancestor, which is <body> here — runs after dispatch ends. Measured
+        with a focus listener: `focus 11977, blur 11978` — the input lived
+        one millisecond, and the blur handler read it as the reader walking
+        away. Cancelling the pointerdown cancels its compatibility mouse
+        events and their focus change with it.
+      */
+      e.preventDefault();
+      setNoteAt({ time: p.time, price: p.price, x: e.clientX, y: e.clientY });
+      return;
+    }
     e.currentTarget.setPointerCapture(e.pointerId);
-    /* Trend and measure take the same gesture and the same two anchors; only
-       what gets drawn between them differs. */
+    /* Every two-anchor kind takes the same gesture; only what gets drawn
+       between the anchors differs. */
     dragRef.current = { kind: drawTool, p1: p, p2: p };
     drawingsRef.current?.setDraft(dragRef.current);
   };
 
   const onDrawMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    /* Width phase: the draft is the base plus a p3 riding the pointer. */
+    if (channelRef.current) {
+      const p = pointAt(e);
+      if (p) drawingsRef.current?.setDraft({ ...channelRef.current, p3: p });
+      return;
+    }
     if (!dragRef.current) return;
     const p = pointAt(e);
     if (!p) return;
@@ -2521,10 +2581,22 @@ const StrikeChart = ({
   const onDrawUp = () => {
     const d = dragRef.current;
     dragRef.current = null;
-    drawingsRef.current?.setDraft(null);
     if (!d || !d.p2) return;
     // a real segment, not a click
-    if (d.p1.time !== d.p2.time || Math.abs(d.p1.price - d.p2.price) > 1e-9) commitDrawing(d);
+    const real = d.p1.time !== d.p2.time || Math.abs(d.p1.price - d.p2.price) > 1e-9;
+    if (!real) {
+      drawingsRef.current?.setDraft(null);
+      return;
+    }
+    /* A channel is not finished at release — the base is. The draft STAYS,
+       the width phase begins, and the next press commits (onDrawDown). */
+    if (d.kind === 'channel') {
+      channelRef.current = d;
+      drawingsRef.current?.setDraft(d);
+      return;
+    }
+    drawingsRef.current?.setDraft(null);
+    commitDrawing(d);
   };
 
   return (
@@ -2592,12 +2664,17 @@ const StrikeChart = ({
              left holds the volume histogram, which is texture, and the
              arrangement controls are bottom RIGHT. Lifted clear of the time
              axis. */
-          <div className="absolute bottom-8 left-2 z-30 flex items-center gap-1 border border-borderMuted bg-panel/95 rounded-md p-1 shadow-xl shadow-black/50">
+          <div className="absolute bottom-8 left-2 z-30 flex items-center gap-1 flex-wrap max-w-[calc(100%_-_90px)] border border-borderMuted bg-panel/95 rounded-md p-1 shadow-xl shadow-black/50">
             {(
               [
                 { tool: 'trend' as DrawingKind, icon: <TrendingUp className="w-3.5 h-3.5" />, label: 'Trend' },
+                { tool: 'ray' as DrawingKind, icon: <MoveUpRight className="w-3.5 h-3.5" />, label: 'Ray' },
                 { tool: 'hline' as DrawingKind, icon: <Minus className="w-3.5 h-3.5" />, label: 'Level' },
+                { tool: 'rect' as DrawingKind, icon: <Square className="w-3.5 h-3.5" />, label: 'Box' },
+                { tool: 'channel' as DrawingKind, icon: <Equal className="w-3.5 h-3.5" />, label: 'Channel' },
+                { tool: 'fib' as DrawingKind, icon: <AlignJustify className="w-3.5 h-3.5" />, label: 'Fib' },
                 { tool: 'measure' as DrawingKind, icon: <Ruler className="w-3.5 h-3.5" />, label: 'Measure' },
+                { tool: 'note' as DrawingKind, icon: <StickyNote className="w-3.5 h-3.5" />, label: 'Note' },
               ] as const
             ).map(item => (
               <button
@@ -2626,6 +2703,51 @@ const StrikeChart = ({
             >
               <Check className="w-3.5 h-3.5" /> Done
             </button>
+          </div>
+        )}
+
+        {/*
+          THE NOTE'S WORDS — a floating input at the click, draw mode only.
+
+          An input rather than a prompt(), because a prompt steals focus from
+          the page and cannot be styled to say where the note will land. It
+          floats at the CLICKED point, so the reader types next to the bar
+          they are annotating; Enter commits, Escape abandons, and clicking
+          elsewhere abandons too (blur) — a half-typed note is a gesture
+          walked away from, same rule as the other tools.
+
+          Position is clamped into the container so a note clicked at the
+          right edge does not open an input the pane clips.
+        */}
+        {drawing && noteAt && (
+          <div
+            className="absolute z-40"
+            style={{
+              left: Math.max(4, Math.min(noteAt.x - (containerRef.current?.getBoundingClientRect().left ?? 0), (containerRef.current?.clientWidth ?? 400) - 190)),
+              top: Math.max(4, Math.min(noteAt.y - (containerRef.current?.getBoundingClientRect().top ?? 0) - 14, (containerRef.current?.clientHeight ?? 300) - 36)),
+            }}
+          >
+            <input
+              autoFocus
+              type="text"
+              maxLength={80}
+              placeholder="note, Enter to place"
+              aria-label="Note text — Enter places it on the bar you clicked"
+              className="w-[184px] px-2 py-1 rounded border border-select/60 bg-panel/95 font-mono text-[11px] text-textPrimary placeholder:text-textMuted shadow-xl shadow-black/50 outline-none"
+              onKeyDown={e => {
+                /* The desk's own keys (p, d, s, the arrows) must not fire
+                   while typing — the desk's guard checks the target, but
+                   stopping here keeps Escape from also collapsing a pane. */
+                e.stopPropagation();
+                if (e.key === 'Enter') {
+                  const text = (e.target as HTMLInputElement).value.trim();
+                  if (text) commitDrawing({ kind: 'note', p1: { time: noteAt.time, price: noteAt.price }, text });
+                  setNoteAt(null);
+                }
+                if (e.key === 'Escape') setNoteAt(null);
+              }}
+              onBlur={() => setNoteAt(null)}
+            />
           </div>
         )}
 
