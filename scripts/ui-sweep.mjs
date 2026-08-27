@@ -4460,6 +4460,105 @@ head('alert kinds arm from the menu and stand on the rail');
   await ctx.close();
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   T-15. RULE BARS — the bar clock switches, draws, gates, and says why.
+
+   The folding rules are proof-covered (scripts/alt-bars-proof.ts); the
+   browser proves the doors: the Candles menu carries the Bar clock section,
+   picking Range $0.50 redraws the tape from the live seconds tape (the pane
+   wears T-14's live-only chip), the interval-bound overlay rows and VWAP
+   are HELD with words while bar-indexed indicators stay live, the clock
+   persists, and Time brings the ordinary tape back. Seeded to one pane —
+   the compact desk hides the worded triggers this section clicks.
+   ───────────────────────────────────────────────────────────────────────── */
+head('rule bars draw from the seconds tape and hold the clocked overlays');
+{
+  const seed = JSON.stringify({
+    layout: 1,
+    panes: [{
+      ticker: 'SPY', timeframe: '15m',
+      overlays: { trails: true, levels: true, darkpool: false, volume: true, flow: false, netDrift: false, volDrift: false, dexStrike: false, session: false, cone: false, events: false },
+      indicators: { ema9: true, ema21: false, ema50: false, vwap: false },
+      chartStyle: 'candles', compares: [], priceScale: 'normal', sessionOr: 15, ladder: false, link: null,
+    }],
+    setups: {},
+  });
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  await ctx.addInitScript(`localStorage.setItem('slayer_terrain_v1', ${JSON.stringify(seed)})`);
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 1500);
+
+  const openMenu = async sel => {
+    await page.mouse.move(600, 400);
+    await page.waitForTimeout(400);
+    for (const b of await page.$$(sel)) {
+      if (await b.isVisible()) { await b.click(); await page.waitForTimeout(400); return true; }
+    }
+    return false;
+  };
+  const clickRow = async prefix => {
+    for (const b of await page.$$('button')) {
+      const t = (await b.textContent())?.trim() ?? '';
+      if (t.startsWith(prefix) && (await b.isVisible())) { await b.click(); await page.waitForTimeout(300); return true; }
+    }
+    return false;
+  };
+
+  (await openMenu('[aria-haspopup="menu"][title^="Chart style"]')) ? ok('PREMISE: the Candles menu opens') : bad('PREMISE: no Chart style trigger');
+  const rows = await page.evaluate(() =>
+    [...document.querySelectorAll('button')].map(b => b.textContent?.trim() ?? '').filter(t => /^(Time|Range \$|Volume \d)/.test(t)).length);
+  rows === 5 ? ok('the Bar clock section offers Time, two ranges and two volumes') : bad(`${rows} bar-clock rows`);
+  (await clickRow('Range $0.50')) ? ok('Range $0.50 takes the click') : bad('no Range $0.50 row');
+  await page.waitForTimeout(1200);
+
+  const inkOn = await page.evaluate(() => {
+    const c = document.querySelector('canvas');
+    if (!c) return -1;
+    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    let n = 0;
+    for (let i = 0; i < d.length; i += 16) if (d[i + 3] > 0 && (d[i] > 24 || d[i + 1] > 24 || d[i + 2] > 24)) n++;
+    return n;
+  });
+  inkOn > 1000 ? ok(`the tape redrew as rule bars — ${inkOn} ink samples`) : bad(`ink after the switch: ${inkOn}`);
+  const chip = await page.evaluate(() => document.body.textContent?.match(/live only[^A-Z]*/)?.[0]?.trim() ?? null);
+  chip && /live only ·/.test(chip)
+    ? ok(`and wears T-14's chip — ${chip}`)
+    : bad(`no live-only chip on a rule clock: ${JSON.stringify(chip)}`);
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('slayer_terrain_v1')).panes[0].clock);
+  stored === 'r50' ? ok('the clock persists with the pane') : bad(`stored clock: ${stored}`);
+
+  (await openMenu('[aria-haspopup="menu"][title="Overlays"]')) ? ok('PREMISE: the Overlays menu opens') : bad('PREMISE: no Overlays trigger');
+  const held = await page.evaluate(() =>
+    [...document.querySelectorAll('button[role="checkbox"][disabled]')].length);
+  held === 7 ? ok('the seven interval overlays are held') : bad(`${held} overlay rows held (want 7)`);
+  const why = await page.evaluate(() => /Needs time bars/.test(document.body.textContent ?? ''));
+  why ? ok('and the rows say why') : bad('held rows carry no words');
+  await page.keyboard.press('Escape');
+
+  (await openMenu('[aria-haspopup="menu"][title="Indicators"]')) ? ok('PREMISE: the Indicators menu opens') : bad('PREMISE: no Indicators trigger');
+  const ind = await page.evaluate(() => {
+    const all = [...document.querySelectorAll('button[role="checkbox"]')];
+    const vwap = all.find(b => /VWAP/.test(b.textContent ?? '') && !/±/.test(b.textContent ?? ''));
+    const ema = all.find(b => /EMA 9/.test(b.textContent ?? ''));
+    return { vwap: vwap?.disabled ?? null, ema: ema?.disabled ?? null };
+  });
+  ind.vwap === true && ind.ema === false
+    ? ok('VWAP is held, the bar-indexed EMA stays live')
+    : bad(`vwap disabled: ${ind.vwap}, ema disabled: ${ind.ema}`);
+  await page.keyboard.press('Escape');
+
+  (await openMenu('[aria-haspopup="menu"][title^="Chart style"]')) || bad('the Candles menu would not reopen');
+  (await clickRow('Time')) ? ok('Time takes the pane back') : bad('no Time row');
+  await page.waitForTimeout(1200);
+  const chipBack = await page.evaluate(() => document.body.textContent?.match(/live only[^A-Z]*/)?.[0]?.trim() ?? null);
+  chipBack === null ? ok('and the chip retires with the rule clock') : bad(`chip survived Time: ${chipBack}`);
+  errs.length === 0 ? ok('no page errors through the clock tour') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
 console.log(`\n${fails} failing`);
 await browser.close();
 process.exit(fails ? 1 : 0);

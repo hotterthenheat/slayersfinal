@@ -85,15 +85,19 @@ export function measureSpan(
   const deltaAbs = p1 - p0;
   const deltaPct = p0 !== 0 ? (deltaAbs / Math.abs(p0)) * 100 : 0;
   const elapsedSec = Math.max(0, t1 - t0);
-  const step = Math.max(1, barMinutes) * 60;
+  /* barMinutes is taken AS GIVEN, fractions included — 0.25 is the 15s
+     tape, and clamping it up to 1 counted four of its bars as one. Zero
+     means the host has NO bar clock (T-15's rule bars): no step to count,
+     so the elapsed stamps carry the time directly. */
+  const step = barMinutes > 0 ? barMinutes * 60 : 0;
   /* FLOOR, not round: this counts bar steps COMPLETED, and half a bar is
      none of them. Rounding read a thirty-second drag on 1-minute bars as a
      whole bar and gave it an annualized rate off time that had not passed.
      Bar-snapped endpoints — which is every drag the chart actually produces —
      land on exact multiples either way, so this only ever decides the
      sub-bar case, and 0 is the honest answer there. */
-  const bars = Math.floor(elapsedSec / step);
-  const tradingMin = bars * Math.max(1, barMinutes);
+  const bars = step > 0 ? Math.floor(elapsedSec / step) : 0;
+  const tradingMin = step > 0 ? bars * barMinutes : elapsedSec / 60;
 
   const years = tradingMin / YEAR_MINUTES;
   const annualizedPct = years > 0 && Number.isFinite(deltaPct) ? Math.abs(deltaPct) / Math.sqrt(years) : null;

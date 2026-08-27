@@ -51,6 +51,7 @@ import {
   type PriceScale,
 } from './StrikeChart';
 import AlertsMenu from './AlertsMenu';
+import { BAR_CLOCKS } from '../../data/altBars';
 import { type MenuSide } from '../ui/menuPlacement';
 import { OPENING_RANGES, type OpeningRange } from '../../data/sessionLevels';
 
@@ -139,6 +140,11 @@ interface ChartToolbarProps {
       in the Candles menu: a menu row costs no toolbar width, and the strip's
       one-row budget is measured to the pixel. */
   onExportPng?: () => void;
+  /** T-15 — the bar CLOCK: 'time', or a range/volume key from
+      data/altBars.ts's BAR_CLOCKS. Same width budget as T-23: a section in
+      the Candles menu, not a trigger of its own. */
+  barClock?: string;
+  onBarClock?: (key: string) => void;
 }
 
 const TIMEFRAME_OPTIONS = TIMEFRAMES.map(t => ({ value: t.value, label: t.label }));
@@ -275,6 +281,15 @@ const OVERLAY_ITEMS: { key: keyof ChartOverlays; label: string; hint: string }[]
   { key: 'events', label: 'Events', hint: 'Earnings, FOMC/CPI/NFP and the biggest option prints, marked on the tape' },
 ];
 
+/* T-15 — the overlays a rule clock holds: each assumes a fixed bar interval
+   (bucketing, runway arithmetic or a time-anchored texture) that range and
+   volume bars do not have. StrikeChart gates the drawing; this set keeps the
+   MENU honest about it, and the two agree by construction because the chart
+   gates on the same idea — no interval, no interval-based layer. */
+const CLOCK_HELD_OVERLAYS = new Set<keyof ChartOverlays>([
+  'trails', 'flow', 'netDrift', 'volDrift', 'session', 'cone', 'events',
+]);
+
 /* Re-exported so every consumer keeps importing its menu vocabulary from the
    toolbar rather than reaching past it into the placement module. */
 export type { MenuSide };
@@ -405,6 +420,8 @@ const ChartToolbar = ({
   onIndicators,
   priceScale = 'normal',
   onPriceScale,
+  barClock,
+  onBarClock,
   priceScaleLock,
   onExportPng,
   sessionOr = 15,
@@ -609,7 +626,11 @@ const ChartToolbar = ({
                   /* The third sub-pane is refused, not shrunk into — the same
                      budget rule that caps Terrain at four panes. The row says
                      so instead of silently ignoring the click. */
-                  const capped = !!item.sub && !on && subsOn >= MAX_SUB_PANES;
+                  /* T-15 — session-anchored VWAP has no session cuts to
+                     find on a rule clock; the chart skips it and this row
+                     says why instead of ticking a line that is not there. */
+                  const heldByClock = (barClock ?? 'time') !== 'time' && (item.key === 'vwap' || item.key === 'vwapBands');
+                  const capped = (!!item.sub && !on && subsOn >= MAX_SUB_PANES) || heldByClock;
                   const firstSub = INDICATOR_ITEMS.findIndex(i => i.sub);
                   return (
                     <div key={item.key} className="contents">
@@ -625,8 +646,14 @@ const ChartToolbar = ({
                       role="checkbox"
                       aria-checked={on}
                       disabled={capped}
-                      title={capped ? 'Two sub-panes are the cap — turn one off first, or the tape shrinks past its floor' : undefined}
-                      onClick={() => onIndicators({ ...indicators, [item.key]: !on })}
+                      title={
+                        heldByClock
+                          ? 'Needs time bars — the pane is on a rule clock'
+                          : capped
+                            ? 'Two sub-panes are the cap — turn one off first, or the tape shrinks past its floor'
+                            : undefined
+                      }
+                      onClick={() => !capped && onIndicators({ ...indicators, [item.key]: !on })}
                       className={`flex items-start gap-2.5 px-2.5 py-2 rounded text-left transition-colors ${
                         capped ? 'opacity-40 cursor-default' : 'hover:bg-white/[0.03]'
                       }`}
@@ -774,6 +801,42 @@ const ChartToolbar = ({
                     )}
                   </>
                 )}
+                {onBarClock && (
+                  <>
+                    <span className="mt-1 mb-0.5 px-2.5 pt-1.5 border-t border-borderSubtle font-mono text-[9px] uppercase tracking-widest text-textMuted">
+                      Bar clock
+                    </span>
+                    {BAR_CLOCKS.map(opt => {
+                      const on = (barClock ?? 'time') === opt.key;
+                      return (
+                        <button
+                          key={opt.key}
+                          onClick={() => {
+                            onBarClock(opt.key);
+                            setOpenMenu(null);
+                          }}
+                          className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded font-mono text-[11px] text-left transition-colors ${
+                            on
+                              ? 'bg-white/[0.06] text-textPrimary font-semibold'
+                              : 'text-textSecondary hover:text-textPrimary hover:bg-white/[0.03]'
+                          }`}
+                        >
+                          <span className="flex flex-col min-w-0">
+                            <span className="truncate">{opt.label}</span>
+                            <span className="text-[9px] text-textMuted truncate">{opt.blurb}</span>
+                          </span>
+                          {on && <Check className="w-3 h-3 ml-auto shrink-0 text-select" />}
+                        </button>
+                      );
+                    })}
+                    {(barClock ?? 'time') !== 'time' && (
+                      <p className="px-2.5 pt-1 font-mono text-[9px] leading-relaxed text-textMuted">
+                        Rule bars fold the live seconds tape — no history before
+                        connect, and the interval-based overlays sit out.
+                      </p>
+                    )}
+                  </>
+                )}
                 {onExportPng && (
                   <>
                     <div className="mt-1 pt-1 border-t border-borderSubtle" />
@@ -813,6 +876,10 @@ const ChartToolbar = ({
         <div className="p-1.5 flex flex-col gap-0.5">
           {overlayItems.map(item => {
             const on = overlays[item.key];
+            /* T-15 — these read a fixed bar interval and the rule clock has
+               none; the chart gates them, and this row says so instead of
+               offering a toggle that would silently draw nothing. */
+            const heldByClock = (barClock ?? 'time') !== 'time' && CLOCK_HELD_OVERLAYS.has(item.key);
             return (
               <button
                 key={item.key}
@@ -823,21 +890,28 @@ const ChartToolbar = ({
                    is the pairing that matches what is already drawn. */
                 role="checkbox"
                 aria-checked={on}
-                onClick={() => onOverlays({ ...overlays, [item.key]: !on })}
-                className="flex items-start gap-2.5 px-2.5 py-2 rounded text-left hover:bg-white/[0.03] transition-colors"
+                aria-disabled={heldByClock}
+                disabled={heldByClock}
+                title={heldByClock ? 'Needs time bars — the pane is on a rule clock' : undefined}
+                onClick={() => !heldByClock && onOverlays({ ...overlays, [item.key]: !on })}
+                className={`flex items-start gap-2.5 px-2.5 py-2 rounded text-left transition-colors ${
+                  heldByClock ? 'opacity-40 cursor-default' : 'hover:bg-white/[0.03]'
+                }`}
               >
                 <span
                   className={`mt-px inline-flex w-3.5 h-3.5 shrink-0 items-center justify-center rounded-[3px] border ${
-                    on ? 'bg-select border-select' : 'border-borderMuted'
+                    on && !heldByClock ? 'bg-select border-select' : 'border-borderMuted'
                   }`}
                 >
-                  {on && <Check className="w-2.5 h-2.5 text-[#0a0a0a]" />}
+                  {on && !heldByClock && <Check className="w-2.5 h-2.5 text-[#0a0a0a]" />}
                 </span>
                 <span className="min-w-0">
-                  <span className={`block font-mono text-[11px] font-semibold ${on ? 'text-textPrimary' : 'text-textSecondary'}`}>
+                  <span className={`block font-mono text-[11px] font-semibold ${on && !heldByClock ? 'text-textPrimary' : 'text-textSecondary'}`}>
                     {item.label}
                   </span>
-                  <span className="block text-[10px] text-textSecondary leading-snug">{item.hint}</span>
+                  <span className="block text-[10px] text-textSecondary leading-snug">
+                    {heldByClock ? 'Needs time bars — held while the rule clock is on' : item.hint}
+                  </span>
                 </span>
               </button>
             );

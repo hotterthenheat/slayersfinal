@@ -36,6 +36,7 @@ import { CANDLE_THEMES, chartSurface, useCandleThemeKey } from '../../components
 import { TIMEFRAMES, type Timeframe } from '../../data/timeframe';
 import { TREND_GLYPH, buildConfluence, trendWords, type ConfluenceRow } from '../../data/confluence';
 import { OPENING_RANGES, type OpeningRange } from '../../data/sessionLevels';
+import { isBarClock } from '../../data/altBars';
 import {
   SETUP_KEYS, applySetup, captureSetup, evict, readSetups, symKey, type SetupMap,
 } from './setups';
@@ -123,6 +124,11 @@ export interface PaneCfg {
   overlays: ChartOverlays;
   indicators: ChartIndicators;
   chartStyle: ChartStyle;
+  /** T-15 — the bar CLOCK: 'time', or a range/volume key from
+      data/altBars.ts's BAR_CLOCKS. Rule bars fold the live seconds tape by
+      rule instead of by the timeframe. Per SLOT like sessionOr: it is a way
+      of reading a pane, not a fact about a symbol. */
+  clock: string;
   /** Symbols crossed onto this pane's tape — the compare overlay. Per pane,
       like everything else here, and persisted with it. */
   compares: CompareEntry[];
@@ -179,6 +185,7 @@ const defaultPanes = (): PaneCfg[] =>
     overlays: { ...DEFAULT_OVERLAYS },
     indicators: { ...DEFAULT_INDICATORS },
     chartStyle: 'candles' as ChartStyle,
+    clock: 'time',
     compares: [] as CompareEntry[],
     priceScale: 'normal' as PriceScale,
     sessionOr: 15 as OpeningRange,
@@ -218,6 +225,10 @@ function readPane(raw: unknown, def: PaneCfg): PaneCfg {
     overlays: { ...DEFAULT_OVERLAYS, ...(c.overlays && typeof c.overlays === 'object' ? c.overlays : {}) },
     indicators: { ...DEFAULT_INDICATORS, ...(c.indicators && typeof c.indicators === 'object' ? c.indicators : {}) },
     chartStyle: typeof c.chartStyle === 'string' && STYLES.has(c.chartStyle as ChartStyle) ? (c.chartStyle as ChartStyle) : def.chartStyle,
+    /* The clock list lives with the engine (data/altBars.ts) and is checked
+       through its own validator — not a second enumeration here (T-0's
+       lesson, same as the layouts module). */
+    clock: isBarClock(c.clock) ? c.clock : def.clock,
     /* Each entry validated on its own: a stored comparison whose symbol was
        renamed, or whose ink went missing, must not take the pane down. */
     compares: Array.isArray(c.compares)
@@ -684,7 +695,7 @@ const Pane = ({
   isActive, onActivate, paneCount, menuOpen, onMenu,
   boxRef, cell = '',
 }: PaneProps) => {
-  const { ticker, timeframe, overlays, indicators, chartStyle, compares, priceScale, sessionOr, ladder } = cfg;
+  const { ticker, timeframe, overlays, indicators, chartStyle, clock, compares, priceScale, sessionOr, ladder } = cfg;
   /* WHAT THE AXIS IS ACTUALLY DRAWING, from the one function that decides it.
      The chart asks the same question of the same list, so the picker's trigger
      and the price ticks can never disagree — a second `compares.some(...)`
@@ -984,6 +995,7 @@ const Pane = ({
               overlays={overlays}
               indicators={indicators}
               chartStyle={chartStyle}
+              barClock={clock}
               prints={prints}
               compares={compares}
               priceScale={priceScale}
@@ -1310,6 +1322,8 @@ const Pane = ({
                   onIndicators={i => onCfg({ indicators: i })}
                   chartStyle={chartStyle}
                   onChartStyle={s => onCfg({ chartStyle: s })}
+                  barClock={clock}
+                  onBarClock={k => onCfg({ clock: k })}
                   priceScale={priceScale}
                   onPriceScale={p => onCfg({ priceScale: p })}
                   priceScaleLock={scaleLock}

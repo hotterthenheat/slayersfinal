@@ -100,6 +100,13 @@ export const TERMS = {
     'The move in implied one-day \u03c3 \u2014 how many of the moves the options are charging for. Past 1\u03c3, price has beaten what the options priced for the day.',
   // ---- the futures clock (T-16) ----
   Globex: 'The overnight futures session — Sunday 18:00 to Friday 17:00 New York, with a daily 17:00\u201318:00 break. The equity open is usually decided out here, while the cash tape this desk draws is closed.',
+  // ---- bar clocks (T-15) ----
+  'Bar clock':
+    'What makes a bar close. Time bars close on the timeframe; range bars close when price has spanned a set distance; volume bars close when enough shares have traded. Rule bars are built from the live 15-second tape, so they start at connect and carry no history — and a violent quarter can overshoot the rule, which is what building from aggregates means.',
+  'Range bars':
+    'Bars that close on movement, not minutes — each one spans the same price distance. A quiet hour is one bar; a violent minute is several. The chop that smears across time bars becomes visible structure.',
+  'Volume bars':
+    'Bars that close on participation — each one holds the same traded volume. Time disappears from the axis: a bar is a unit of activity, wherever the clock was.',
   // ---- alert kinds (T-22) ----
   'Alert kinds':
     'What a pane can watch besides a typed price: a named level being crossed (the alert follows the wall, flip or king as the book moves them), price crossing VWAP or an EMA, RSI crossing a threshold, net GEX flipping sign, a new king, a wall migrating N strikes, or an option print over a premium floor. All of it in-session only — nothing runs when the tab is closed.',
