@@ -570,8 +570,28 @@ class DrawingsPaneRenderer {
         ctx.fillRect(x2 - a, y2 - a, a * 2, a * 2);
       };
 
-      for (const d of src.drawings) render(d, 0.8);
+      for (let i = 0; i < src.drawings.length; i++) render(src.drawings[i], i === src.selected ? 1 : 0.8);
       if (src.draft) render(src.draft, 0.45);
+
+      /* The selected mark wears hollow handles over its anchors — the same
+         squares it always had, enlarged and outlined, so "selected" reads as
+         "these corners are now yours to drag" rather than as a glow. */
+      if (src.selected !== null && src.drawings[src.selected]) {
+        const d = src.drawings[src.selected];
+        ctx.strokeStyle = `rgba(${LIME},1)`;
+        ctx.lineWidth = 1.4 * vr;
+        const handle = (pt?: DrawingPoint) => {
+          if (!pt) return;
+          const hx = src.timeToX(pt.time);
+          const hy = series.priceToCoordinate(pt.price);
+          if (hx === null || hy === null) return;
+          const r = 4.5 * vr;
+          ctx.strokeRect(hx * hr - r, hy * vr - r, r * 2, r * 2);
+        };
+        handle(d.p1);
+        handle(d.p2);
+        handle(d.p3);
+      }
     });
   }
 }
@@ -595,6 +615,8 @@ export class DrawingsPrimitive implements ISeriesPrimitive<Time> {
   requestUpdate?: () => void;
   drawings: Drawing[] = [];
   draft: Drawing | null = null;
+  /** Index of the mark the reader has selected with the Select tool. */
+  selected: number | null = null;
   /** Sorted bar times of the CURRENT aggregation — lets time↔x conversion
       snap to real bars, so drawings survive timeframe switches. */
   barTimes: number[] = [];
@@ -676,6 +698,163 @@ export class DrawingsPrimitive implements ISeriesPrimitive<Time> {
   setDraft(draft: Drawing | null): void {
     this.draft = draft;
     this.requestUpdate?.();
+  }
+
+  setSelected(index: number | null): void {
+    if (this.selected === index) return;
+    this.selected = index;
+    this.requestUpdate?.();
+  }
+
+  /** Bar index of a time on the CURRENT grid — the unit body-drags move in. */
+  barIndexOf(time: number): number | null {
+    return this.timeToLogical(time);
+  }
+
+  /** The grid's time at an index, clamped to the grid. */
+  timeAtBarIndex(idx: number): number | null {
+    if (this.barTimes.length === 0) return null;
+    return this.barTimes[Math.max(0, Math.min(this.barTimes.length - 1, idx))];
+  }
+
+  /*
+    WHICH MARK IS UNDER THE POINTER, in CSS px — the Select tool's question.
+
+    Anchors are tested FIRST and win over bodies: a press on a corner means
+    "move this corner", and only a press on the ink between corners means
+    "move the whole mark". Iteration runs newest-first so overlapping marks
+    resolve to the one drawn on top, which is the one the reader can see.
+
+    Tolerances: 7px around an anchor, 5px along a line — 8px for the two
+    axis-parallel kinds (hline, vline), because the tape's autoscale moves a
+    level a few px between the frame the reader aimed at and the frame the
+    press lands in.
+  */
+  hitTestAt(x: number, y: number): { index: number; anchor: 0 | 1 | 2 | null } | null {
+    const series = this.series;
+    if (!series) return null;
+    const ANCHOR = 7;
+    const BODY = 5;
+    const AXIS = 8;
+
+    const pt = (p?: DrawingPoint): [number, number] | null => {
+      if (!p) return null;
+      const px = this.timeToX(p.time);
+      const py = series.priceToCoordinate(p.price);
+      return px === null || py === null ? null : [px, py];
+    };
+    const distSeg = (ax: number, ay: number, bx: number, by: number): number => {
+      const dx = bx - ax;
+      const dy = by - ay;
+      const len2 = dx * dx + dy * dy;
+      const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / len2));
+      const cx = ax + t * dx;
+      const cy = ay + t * dy;
+      return Math.hypot(x - cx, y - cy);
+    };
+    const chart = this.chart;
+    const wCss = chart ? chart.timeScale().width() : 4000;
+
+    for (let i = this.drawings.length - 1; i >= 0; i--) {
+      const d = this.drawings[i];
+      const a1 = pt(d.p1);
+      const a2 = pt(d.p2);
+      const a3 = pt(d.p3);
+
+      /* Anchors first — but only the kinds that RENDER anchors offer them. */
+      if (d.kind !== 'hline' && d.kind !== 'vline') {
+        if (a3 && Math.hypot(x - a3[0], y - a3[1]) <= ANCHOR) return { index: i, anchor: 2 };
+        if (a2 && Math.hypot(x - a2[0], y - a2[1]) <= ANCHOR) return { index: i, anchor: 1 };
+        if (a1 && Math.hypot(x - a1[0], y - a1[1]) <= ANCHOR) return { index: i, anchor: 0 };
+      }
+
+      if (d.kind === 'hline') {
+        const py = series.priceToCoordinate(d.p1.price);
+        if (py !== null && Math.abs(y - py) <= AXIS) return { index: i, anchor: null };
+        continue;
+      }
+      if (d.kind === 'vline') {
+        const px = this.timeToX(d.p1.time);
+        if (px !== null && Math.abs(x - px) <= AXIS) return { index: i, anchor: null };
+        continue;
+      }
+      if (!a1) continue;
+
+      if (d.kind === 'note') {
+        /* The anchor square plus the words' wash. No canvas context here, so
+           the wash width is estimated at the mono face's ~6px per character —
+           a hit area, not a layout. */
+        const tw = (d.text?.length ?? 0) * 6 + 14;
+        if (x >= a1[0] - 5 && x <= a1[0] + 5 + tw && Math.abs(y - a1[1]) <= 10) return { index: i, anchor: null };
+        continue;
+      }
+      const p2v = d.p2;
+      if (!a2 || !p2v) continue;
+      const [x1, y1] = a1;
+      const [x2, y2] = a2;
+
+      let hit = false;
+      if (d.kind === 'rect' || d.kind === 'measure') {
+        const xa = Math.min(x1, x2), xb = Math.max(x1, x2);
+        const ya = Math.min(y1, y2), yb = Math.max(y1, y2);
+        hit =
+          distSeg(xa, ya, xb, ya) <= BODY || distSeg(xa, yb, xb, yb) <= BODY ||
+          distSeg(xa, ya, xa, yb) <= BODY || distSeg(xb, ya, xb, yb) <= BODY;
+      } else if (d.kind === 'ellipse') {
+        const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
+        const rx = Math.max(1, Math.abs(x2 - x1) / 2), ry = Math.max(1, Math.abs(y2 - y1) / 2);
+        const rn = Math.hypot((x - cx) / rx, (y - cy) / ry);
+        hit = Math.abs(rn - 1) * Math.min(rx, ry) <= BODY;
+      } else if (d.kind === 'ray') {
+        const xe = x2 >= x1 ? wCss : 0;
+        const ye = x2 !== x1 ? y1 + ((y2 - y1) / (x2 - x1)) * (xe - x1) : y2;
+        hit = x2 !== x1 ? distSeg(x1, y1, xe, ye) <= BODY : distSeg(x1, y1, x2, y2) <= BODY;
+      } else if (d.kind === 'extend') {
+        if (x2 !== x1) {
+          const slope = (y2 - y1) / (x2 - x1);
+          hit = distSeg(0, y1 - slope * x1, wCss, y1 + slope * (wCss - x1)) <= BODY;
+        } else {
+          hit = Math.abs(x - x1) <= BODY;
+        }
+      } else if (d.kind === 'channel') {
+        const rayHit = (sy: number): boolean => {
+          const xe = x2 >= x1 ? wCss : 0;
+          return x2 !== x1
+            ? distSeg(x1, sy, xe, sy + ((y2 - y1) / (x2 - x1)) * (xe - x1)) <= BODY
+            : distSeg(x1, sy, x2, sy + (y2 - y1)) <= BODY;
+        };
+        hit = rayHit(y1);
+        if (!hit && a3) {
+          const baseY = x2 !== x1 ? y1 + ((y2 - y1) / (x2 - x1)) * (a3[0] - x1) : y1;
+          hit = rayHit(y1 + (a3[1] - baseY));
+        }
+      } else if (d.kind === 'curve') {
+        if (a3) {
+          const cx = 2 * a3[0] - (x1 + x2) / 2;
+          const cy = 2 * a3[1] - (y1 + y2) / 2;
+          let px = x1, py = y1;
+          for (let t = 1; t <= 24 && !hit; t++) {
+            const u = t / 24;
+            const qx = (1 - u) * (1 - u) * x1 + 2 * (1 - u) * u * cx + u * u * x2;
+            const qy = (1 - u) * (1 - u) * y1 + 2 * (1 - u) * u * cy + u * u * y2;
+            hit = distSeg(px, py, qx, qy) <= BODY;
+            px = qx; py = qy;
+          }
+        } else {
+          hit = distSeg(x1, y1, x2, y2) <= BODY;
+        }
+      } else if (d.kind === 'fib') {
+        const xa = Math.min(x1, x2);
+        for (const r of [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1]) {
+          const py = series.priceToCoordinate(d.p1.price + (p2v.price - d.p1.price) * r);
+          if (py !== null && x >= xa - BODY && Math.abs(y - py) <= BODY) { hit = true; break; }
+        }
+      } else {
+        hit = distSeg(x1, y1, x2, y2) <= BODY;
+      }
+      if (hit) return { index: i, anchor: null };
+    }
+    return null;
   }
 }
 

@@ -256,6 +256,7 @@ const OVERLAY_ITEMS: { key: keyof ChartOverlays; label: string; hint: string }[]
   { key: 'dexStrike', label: 'Exposure by strike', hint: 'Delta, gamma or vega across the chain — docked under the tape' },
   { key: 'session', label: 'Session levels', hint: "Yesterday's high, low & close, the opening range and the first hour" },
   { key: 'cone', label: 'Expected move', hint: "The ±1σ/±2σ band the options priced for today, and what's left of it" },
+  { key: 'events', label: 'Events', hint: 'Earnings, FOMC/CPI/NFP and the biggest option prints, marked on the tape' },
 ];
 
 /* Re-exported so every consumer keeps importing its menu vocabulary from the

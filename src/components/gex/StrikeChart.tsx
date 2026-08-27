@@ -3,8 +3,8 @@ import {
   type MutableRefObject, type PointerEvent as ReactPointerEvent,
 } from 'react';
 import {
-  AlignJustify, ArrowUpRight, Check, Circle, Equal, Eraser, Minus, MoveDiagonal, MoveUpRight, MoveVertical,
-  Pause, Play, Ruler, Spline, Square, StepBack, StepForward, StickyNote, TrendingUp, X,
+  AlignJustify, ArrowUpRight, Check, Circle, Equal, Eraser, Minus, MousePointer2, MoveDiagonal, MoveUpRight,
+  MoveVertical, Pause, Play, Ruler, Spline, Square, StepBack, StepForward, StickyNote, Trash2, TrendingUp, X,
 } from 'lucide-react';
 import {
   createChart,
@@ -45,6 +45,9 @@ import { emaSeries, sessionStarts, vwapSeries } from '../../data/indicators';
 import { buildSessionLevels, type OpeningRange } from '../../data/sessionLevels';
 import { SessionLevelsPrimitive, sessionLines } from './sessionLevelsPrimitive';
 import { buildExpectedMoveCone } from '../../data/expectedMove';
+import { buildTapeEvents, macroWindow, type MarketEvent, type MacroDate } from '../../data/events';
+import { buildEarningsCalendar, type EarningsEvent } from '../../data/earnings';
+import { EventsPrimitive } from './eventsPrimitive';
 import { ExpectedMovePrimitive } from './expectedMovePrimitive';
 import { RTH_MINUTES } from '../../core/calendar';
 import { cumulativeDrift, driftPeak } from '../../data/driftSeries';
@@ -223,6 +226,12 @@ export interface ChartOverlays {
     none of the dealer palette's.
   */
   cone: boolean;
+  /*
+    Event markers — T-11. The calendar on the tape: this name's next report,
+    FOMC/CPI/NFP, and the session's largest option prints, as glyphs in a
+    lane above the time axis with a hover card each (data/events.ts).
+  */
+  events: boolean;
 }
 
 /* Chart styles, TradingView's picker (Noah, 2026-08-23: "notice how candles
@@ -348,6 +357,8 @@ export const DEFAULT_OVERLAYS: ChartOverlays = {
   /* Off for the same courtesy — an envelope plus a runway cone is a lot of
      geometry to hand a reader who has not asked what the options charge. */
   cone: false,
+  /* Off until asked for, like every other layer of context. */
+  events: false,
 };
 
 /*
@@ -701,6 +712,15 @@ const StrikeChart = ({
   const sessionPrimRef = useRef<SessionLevelsPrimitive | null>(null);
   /** T-9's layer, run the same way — see the cone effect below. */
   const conePrimRef = useRef<ExpectedMovePrimitive | null>(null);
+  /** T-11's layer, ditto. */
+  const eventsPrimRef = useRef<EventsPrimitive | null>(null);
+  /** The calendar half of the events data, cached per ticker+day — earnings
+      and macro dates move daily while the prints move every tick, and
+      rebuilding the whole earnings universe 40× a minute would be spend
+      without information. */
+  const eventsCalRef = useRef<{ key: string; earnings: EarningsEvent | null; macro: MacroDate[]; todayIso: string } | null>(null);
+  /** The hovered marker's card. */
+  const [eventCard, setEventCard] = useState<{ e: MarketEvent; x: number } | null>(null);
   const levelRafRef = useRef(0);
   /** Time of that bar, and the seconds one bar covers — what the runway is
       built from, kept in refs so the time-scale subscription can read them
@@ -758,7 +778,27 @@ const StrikeChart = ({
   /** Where a note is being typed, in both spaces: chart coords to commit,
       client coords to float the input at. Null = no note in progress. */
   const [noteAt, setNoteAt] = useState<{ time: number; price: number; x: number; y: number } | null>(null);
-  const [drawTool, setDrawTool] = useState<DrawingKind>('trend');
+  /* 'select' is the rail's pointer — not a DrawingKind, because it MAKES no
+     drawing: it picks one up. The default, so entering draw mode never
+     scribbles a trend on the first accidental drag. */
+  const [drawTool, setDrawTool] = useState<DrawingKind | 'select'>('select');
+  /** The selected mark's index in shapesRef — mirrored into the primitive
+      for its handles. */
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+  /** A drag in progress on the SELECTED mark: one anchor, or the whole body. */
+  const editRef = useRef<{
+    index: number;
+    anchor: 0 | 1 | 2 | null;
+    start: { time: number; price: number };
+    orig: Drawing;
+    moved: boolean;
+  } | null>(null);
+
+  const deselect = useCallback(() => {
+    setSelectedIdx(null);
+    drawingsRef.current?.setSelected(null);
+    editRef.current = null;
+  }, []);
 
   /* Leaving draw mode, or the world changing under it, abandons whatever was
      mid-gesture: a channel base with no width yet, a note not yet typed, a
@@ -770,13 +810,15 @@ const StrikeChart = ({
     pendingThirdRef.current = null;
     setNoteAt(null);
     drawingsRef.current?.setDraft(null);
-  }, [drawing]);
+    deselect();
+  }, [drawing, deselect]);
   useEffect(() => {
     dragRef.current = null;
     pendingThirdRef.current = null;
     setNoteAt(null);
     drawingsRef.current?.setDraft(null);
-  }, [ticker, timeframe]);
+    deselect();
+  }, [ticker, timeframe, deselect]);
 
   // ---- replay state ----
   const replayRef = useRef(false); // effect-visible mirror of the replay prop
@@ -1257,6 +1299,10 @@ const StrikeChart = ({
     const conePrim = new ExpectedMovePrimitive();
     candles.attachPrimitive(conePrim);
 
+    /* T-11's event lane. */
+    const eventsPrim = new EventsPrimitive();
+    candles.attachPrimitive(eventsPrim);
+
     /* Zooming out reaches past the runway's end; extend it as they go. The
        handler reads refs rather than closing over the bar time, so it is
        installed once with the chart and never re-subscribed. */
@@ -1318,6 +1364,7 @@ const StrikeChart = ({
     drawingsRef.current = drawingsPrim;
     sessionPrimRef.current = sessionPrim;
     conePrimRef.current = conePrim;
+    eventsPrimRef.current = eventsPrim;
 
     /* Reads candleSeriesRef rather than closing over `candles`: the style swap
        removes and replaces the main series in place, and a captured series
@@ -1352,6 +1399,7 @@ const StrikeChart = ({
       drawingsRef.current = null;
       sessionPrimRef.current = null;
       conePrimRef.current = null;
+      eventsPrimRef.current = null;
       compareSeriesRef.current.clear();
       compareLoadedRef.current = '';
       indicatorSeriesRef.current.clear();
@@ -1391,6 +1439,7 @@ const StrikeChart = ({
        nothing to see. `mainNonce` then makes the session effect refill it. */
     if (sessionPrim) next.attachPrimitive(sessionPrim);
     if (conePrim) next.attachPrimitive(conePrim);
+    if (eventsPrimRef.current) next.attachPrimitive(eventsPrimRef.current);
     candleSeriesRef.current = next;
     styleBuiltRef.current = chartStyle;
     levelLinesRef.current = {};
@@ -2169,6 +2218,54 @@ const StrikeChart = ({
   }, [ticker, timeframe, revision, overlays.cone, replay, mainNonce]);
 
   /*
+    THE EVENT MARKERS — T-11. The calendar half (this name's report, the
+    macro dates) is cached per ticker and day; the prints half is live. Both
+    hand the engine a clock-free input — the real "today" is read HERE, at
+    the seam, exactly as the cone reads the tape's session (data/events.ts
+    documents the sessions bridge).
+
+    HIDDEN DURING REPLAY: the markers say where the calendar sits against
+    the LIVE tape, and a replaying pane's moment is somewhere else entirely.
+  */
+  useEffect(() => {
+    const prim = eventsPrimRef.current;
+    if (!prim) return;
+    if (!overlays.events || replay) {
+      prim.setData(null);
+      setEventCard(null);
+      return;
+    }
+    const now = new Date();
+    const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const key = `${ticker}|${todayIso}`;
+    if (eventsCalRef.current?.key !== key) {
+      eventsCalRef.current = {
+        key,
+        earnings: buildEarningsCalendar().find(e => e.ticker === ticker.toUpperCase()) ?? null,
+        macro: macroWindow(now),
+        todayIso,
+      };
+    }
+    const cal = eventsCalRef.current;
+    const mins = tfMinutes(timeframe);
+    const bars = aggregateCandles(Simulator.getCandles(ticker) ?? [], mins);
+    // eslint-disable-next-line no-console
+    console.log('[events-debug]', JSON.stringify(buildTapeEvents({ bars: Simulator.getCandles(ticker) ?? [], prints: flowPrints ?? [], earnings: cal.earnings, macro: cal.macro, todayIso: cal.todayIso }).map(e => ({ k: e.kind, t: e.time, m: e.minutesAhead, l: e.label }))), 'cal', JSON.stringify({ e: cal.earnings?.ticker, macro: cal.macro.length }));
+    prim.setData({
+      events: buildTapeEvents({
+        bars: Simulator.getCandles(ticker) ?? [],
+        prints: flowPrints ?? [],
+        earnings: cal.earnings,
+        macro: cal.macro,
+        todayIso: cal.todayIso,
+      }),
+      barTimes: bars.map(b => b.time),
+      barMinutes: mins,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ticker, timeframe, revision, overlays.events, replay, mainNonce, flowPrints]);
+
+  /*
     THE LIVE PRICE, as a card on the right scale.
 
     The library draws a flat one-line tag for the last value. This replaces it
@@ -2619,7 +2716,8 @@ const StrikeChart = ({
     shapesRef.current = [];
     drawingsRef.current?.setDrawings([]);
     saveDrawings(ticker, []);
-  }, [ticker]);
+    deselect();
+  }, [ticker, deselect]);
 
   const pointAt = (e: ReactPointerEvent<HTMLDivElement>): { time: number; price: number } | null => {
     const container = containerRef.current;
@@ -2633,9 +2731,43 @@ const StrikeChart = ({
     return { time, price };
   };
 
+  const deleteSelected = useCallback(() => {
+    setSelectedIdx(idx => {
+      if (idx !== null && shapesRef.current[idx]) {
+        shapesRef.current = shapesRef.current.filter((_, i) => i !== idx);
+        drawingsRef.current?.setDrawings(shapesRef.current);
+        saveDrawings(ticker, shapesRef.current);
+      }
+      drawingsRef.current?.setSelected(null);
+      return null;
+    });
+    editRef.current = null;
+  }, [ticker]);
+
   const onDrawDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     const p = pointAt(e);
     if (!p) return;
+
+    /*
+      THE SELECT TOOL — the pointer that picks a mark up instead of making
+      one. A press on an anchor starts an anchor edit, a press on the ink
+      between anchors starts a whole-mark move, and a press on nothing puts
+      the selection down. Hit-testing is the primitive's (it owns the
+      geometry); this handler only decides what the press MEANS.
+    */
+    if (drawTool === 'select') {
+      const rect = containerRef.current?.getBoundingClientRect();
+      const hit = rect ? drawingsRef.current?.hitTestAt(e.clientX - rect.left, e.clientY - rect.top) ?? null : null;
+      if (!hit) {
+        deselect();
+        return;
+      }
+      e.currentTarget.setPointerCapture(e.pointerId);
+      setSelectedIdx(hit.index);
+      drawingsRef.current?.setSelected(hit.index);
+      editRef.current = { index: hit.index, anchor: hit.anchor, start: p, orig: shapesRef.current[hit.index], moved: false };
+      return;
+    }
     /* A THIRD-ANCHOR KIND'S SECOND PHASE ends on the next press: the base
        was drawn and released, the third anchor (the channel's width, the
        curve's bend) has been tracking the pointer since, and this click is
@@ -2675,7 +2807,54 @@ const StrikeChart = ({
     drawingsRef.current?.setDraft(dragRef.current);
   };
 
+  const applyEdit = (p: { time: number; price: number }) => {
+    const ed = editRef.current;
+    const prim = drawingsRef.current;
+    if (!ed || !prim) return;
+    let next: Drawing;
+    if (ed.anchor !== null) {
+      next = ed.anchor === 0 ? { ...ed.orig, p1: p } : ed.anchor === 1 ? { ...ed.orig, p2: p } : { ...ed.orig, p3: p };
+    } else {
+      /*
+        A BODY DRAG moves the whole mark in (bars, price): the price shift is
+        the pointer's own, and the time shift is a WHOLE NUMBER OF BARS on
+        the current grid — anchored times must land on bars to survive a
+        timeframe switch, so a mark slides along the grid rather than off it.
+        The shift is clamped so no point walks off the grid's ends, which
+        would fold the mark's shape against the edge.
+      */
+      const dPrice = p.price - ed.start.price;
+      const i0 = prim.barIndexOf(ed.start.time);
+      const i1 = prim.barIndexOf(p.time);
+      if (i0 === null || i1 === null) return;
+      let k = i1 - i0;
+      const pts = [ed.orig.p1, ed.orig.p2, ed.orig.p3].filter((q): q is NonNullable<typeof q> => q != null);
+      for (const q of pts) {
+        const bi = prim.barIndexOf(q.time);
+        if (bi === null) return;
+        k = Math.max(k, -bi);
+        k = Math.min(k, prim.barTimes.length - 1 - bi);
+      }
+      const shift = (q?: { time: number; price: number }) => {
+        if (!q) return undefined;
+        const bi = prim.barIndexOf(q.time);
+        const t = bi === null ? null : prim.timeAtBarIndex(bi + k);
+        return t === null ? q : { time: t, price: q.price + dPrice };
+      };
+      next = { ...ed.orig, p1: shift(ed.orig.p1)!, p2: shift(ed.orig.p2), p3: shift(ed.orig.p3) };
+    }
+    ed.moved = true;
+    shapesRef.current = shapesRef.current.map((d, i) => (i === ed.index ? next : d));
+    prim.setDrawings(shapesRef.current);
+  };
+
   const onDrawMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (drawTool === 'select') {
+      if (!editRef.current) return;
+      const p = pointAt(e);
+      if (p) applyEdit(p);
+      return;
+    }
     /* Width phase: the draft is the base plus a p3 riding the pointer. */
     if (pendingThirdRef.current) {
       const p = pointAt(e);
@@ -2690,6 +2869,12 @@ const StrikeChart = ({
   };
 
   const onDrawUp = () => {
+    if (editRef.current) {
+      /* An edit is already applied live; release just makes it stored. */
+      if (editRef.current.moved) saveDrawings(ticker, shapesRef.current);
+      editRef.current = null;
+      return;
+    }
     const d = dragRef.current;
     dragRef.current = null;
     if (!d || !d.p2) return;
@@ -2721,6 +2906,27 @@ const StrikeChart = ({
         }`}
         style={{ minHeight: height }}
         onDoubleClick={resetView}
+        onMouseMove={e => {
+          /* The event lane's hover — resolved here because canvas glyphs
+             cannot be hovered and the card wants real type. Cheap: one hit
+             test per move, state written only when the answer changes. */
+          const prim = eventsPrimRef.current;
+          if (!prim?.data) return;
+          const rect = e.currentTarget.getBoundingClientRect();
+          const plotH = chartRef.current?.paneSize(0).height ?? rect.height;
+          const hit = prim.eventAtX(e.clientX - rect.left, e.clientY - rect.top, plotH);
+          prim.setHovered(hit);
+          setEventCard(prev => {
+            if (hit === null) return prev === null ? prev : null;
+            const x = prim.xOf(hit);
+            if (x === null) return null;
+            return prev?.e === hit ? prev : { e: hit, x };
+          });
+        }}
+        onMouseLeave={() => {
+          eventsPrimRef.current?.setHovered(null);
+          setEventCard(null);
+        }}
       >
         <div ref={containerRef} className="absolute inset-0" />
         {/* Every band says its own name, the way the reference does. An
@@ -2787,7 +2993,34 @@ const StrikeChart = ({
           */
           <div className="absolute left-2 top-1/2 -translate-y-1/2 z-30 w-[104px] border border-borderMuted bg-panel/95 rounded-md p-1.5 shadow-xl shadow-black/50 select-none">
             <div className="px-1 pb-1 font-mono text-[9px] font-semibold uppercase tracking-widest text-select truncate" aria-live="polite">
-              {DRAW_TOOL_GROUPS.flatMap(g => g.tools).find(t => t.tool === drawTool)?.label ?? drawTool}
+              {drawTool === 'select' ? 'Select' : DRAW_TOOL_GROUPS.flatMap(g => g.tools).find(t => t.tool === drawTool)?.label ?? drawTool}
+            </div>
+            {/* The pointer and the single-mark eraser — the editing pair,
+                above the making tools. Delete stays disabled until a mark is
+                actually selected, and says so to a screen reader. */}
+            <div className="grid grid-cols-2 gap-0.5">
+              <button
+                onClick={() => setDrawTool('select')}
+                title="Select — click a drawing to move or delete it"
+                aria-label="Select"
+                aria-pressed={drawTool === 'select'}
+                className={`inline-flex items-center justify-center h-[26px] rounded transition-colors ${
+                  drawTool === 'select'
+                    ? 'bg-select/15 text-select'
+                    : 'text-textSecondary hover:text-textPrimary hover:bg-white/[0.04]'
+                }`}
+              >
+                <MousePointer2 className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={deleteSelected}
+                disabled={selectedIdx === null}
+                title="Delete the selected drawing"
+                aria-label="Delete selected"
+                className="inline-flex items-center justify-center h-[26px] rounded transition-colors text-textSecondary enabled:hover:text-textPrimary enabled:hover:bg-white/[0.04] disabled:opacity-30 disabled:cursor-default"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
             </div>
             {DRAW_TOOL_GROUPS.map(group => (
               <div key={group.name}>
@@ -2874,6 +3107,24 @@ const StrikeChart = ({
               }}
               onBlur={() => setNoteAt(null)}
             />
+          </div>
+        )}
+
+        {/* T-11's hover card — floats above the lane at the marker's x,
+            flipping to the left of it near the right edge. */}
+        {eventCard && (
+          <div
+            className="absolute bottom-9 z-30 pointer-events-none border border-borderMuted bg-panel/95 rounded px-2 py-1.5 shadow-xl shadow-black/50 max-w-[260px]"
+            style={
+              eventCard.x > (containerRef.current?.clientWidth ?? 400) - 270
+                ? { right: Math.max(4, (containerRef.current?.clientWidth ?? 400) - eventCard.x + 6) }
+                : { left: Math.max(4, eventCard.x + 6) }
+            }
+          >
+            <div className="font-mono text-[10px] font-semibold uppercase tracking-wider text-textPrimary whitespace-nowrap">
+              {eventCard.e.label}
+            </div>
+            <div className="font-mono text-[9px] text-textSecondary mt-0.5">{eventCard.e.detail}</div>
           </div>
         )}
 
