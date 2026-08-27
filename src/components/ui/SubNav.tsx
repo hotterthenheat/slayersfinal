@@ -23,7 +23,17 @@ const SubNav = ({ items, ariaLabel }: SubNavProps) => {
   return (
     <nav
       aria-label={ariaLabel}
-      className="inline-flex items-center gap-0.5 border border-borderSubtle bg-panel rounded-md p-0.5"
+      /* `flex-wrap` because three tabs do not fit a phone. The Pinpoint set
+         measures 415px of pills against a 358px content area at 390px, so
+         "Vanna & Charm" ended 40px past the right edge and the desk slid 43px
+         sideways. Wrapping rather than scrolling: a horizontal scroller hides
+         tabs behind a scrollbar that is invisible until you drag it, and a tab
+         a reader cannot see is a route they cannot reach.
+
+         It changes nothing above a phone, and nothing on Trace at any width —
+         that shell stretches this nav to the full column, which is already
+         wider than its two tabs need. */
+      className="inline-flex flex-wrap items-center gap-0.5 border border-borderSubtle bg-panel rounded-md p-0.5"
     >
       {items.map(item => (
         <NavLink

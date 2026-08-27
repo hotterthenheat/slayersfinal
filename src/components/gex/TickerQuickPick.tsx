@@ -14,7 +14,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useAnchoredMenu } from './useAnchoredMenu';
+import { useAnchoredMenu } from '../ui/useAnchoredMenu';
 
 /** Matches the `w-72` on the menu below. Passed to the placement so it can
     keep the menu's far edge on screen; assuming a narrower default put this

@@ -1647,6 +1647,340 @@ head('no rule badge prints on a strike');
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
+   THE TICKER PICKER OPENS SOMEWHERE A READER CAN REACH.
+
+   It hung off its trigger with `absolute right-0 top-full`, which is only
+   correct while the trigger has the menu's 288px of room to its LEFT. On a
+   phone it does not: every page that renders the picker puts it in a header
+   row that WRAPS at a narrow width, and a wrapped row starts at the left edge,
+   so the trigger sits at x=16..120 and a right-hung menu is laid out from
+   x=-168.
+
+   Measured at 390x844 on the built app before the fix: the search input's left
+   edge at x=-134 — a reader could not see what they were typing — and 2 of the
+   first 8 symbol rows returned themselves from `document.elementFromPoint`.
+   The same two numbers on /pinpoint/exposure-profile and /trace/tracker, which
+   reach the picker through two different shells, which is what said the fault
+   was the component's rather than one page's.
+
+   BOTH HOSTS ARE SWEPT for that reason, and 1440 alongside 390 so a fix that
+   simply moved the problem to the desk would be caught.
+
+   AND IT MUST STILL PICK. The menu is portalled to <body> now, so it is no
+   longer inside the wrapper the outside-click handler watches; without the
+   matching change there, a mousedown on a row reads as a click outside, the
+   menu unmounts, and the row's own click never fires. A placement check alone
+   would call that green — so the last assertion clicks a row for real and
+   reads the trigger back.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the ticker picker opens somewhere a reader can reach');
+{
+  for (const route of ['/pinpoint/exposure-profile', '/trace/tracker']) {
+    for (const [w, h] of [[390, 844], [768, 900], [1440, 900]]) {
+      const at = `${route} @ ${w}`;
+      const phone = w < 500;
+      const ctx = await browser.newContext({ viewport: { width: w, height: h }, hasTouch: phone, isMobile: phone });
+      const page = await ctx.newPage();
+      await page.goto(`${BASE}${route}`, { waitUntil: 'networkidle' });
+      await page.waitForTimeout(BOOT_MS);
+
+      /* The picker is the only button on the page carrying `min-w-[104px]`.
+         Matching a search icon instead found the top bar's own button. */
+      const opened = await page.evaluate(async () => {
+        const btn = [...document.querySelectorAll('button')].find(b => getComputedStyle(b).minWidth === '104px');
+        if (!btn) return { missing: true };
+        const was = (btn.textContent || '').trim();
+        btn.click();
+        /* The ticker universe is a LAZY import, so the first open renders
+           "Loading tickers…" and the rows arrive later. Poll for a row rather
+           than sleeping a guessed interval — a fixed wait is either too long
+           every run or too short on a cold one, and too short here would read
+           as "0 rows reachable" and blame the placement. */
+        const until = async test => {
+          for (let i = 0; i < 60; i++) {
+            if (test()) return true;
+            await new Promise(r => setTimeout(r, 100));
+          }
+          return false;
+        };
+        await until(() => document.querySelector('input[placeholder^="Search all"]'));
+        const inp = document.querySelector('input[placeholder^="Search all"]');
+        if (!inp) return { was, noMenu: true };
+        await until(() => {
+          const m = inp.closest('div[style*="position: fixed"], div[class*="absolute"]');
+          return m && m.querySelector('button');
+        });
+        /* The menu is the input's own box, not the first div in the document
+           that happens to contain it — that ancestor is the page. */
+        const menu = inp.closest('div[style*="position: fixed"], div[class*="absolute"]');
+        const mb = (menu || inp).getBoundingClientRect();
+        const ib = inp.getBoundingClientRect();
+        const rows = [...(menu || document).querySelectorAll('button')].filter(b => b.getBoundingClientRect().width > 0);
+        let reach = 0;
+        const sample = rows.slice(0, 8);
+        for (const row of sample) {
+          const rb = row.getBoundingClientRect();
+          const t = document.elementFromPoint(Math.round(rb.left + rb.width / 2), Math.round(rb.top + rb.height / 2));
+          if (t && (t === row || row.contains(t))) reach++;
+        }
+        /* A row whose symbol differs from the current one, so the click has
+           something to prove. */
+        const target = sample.find(b => {
+          const sym = b.querySelector('span')?.textContent?.trim();
+          return sym && sym !== was;
+        });
+        const tb = target ? target.getBoundingClientRect() : null;
+        return {
+          was,
+          menu: { x: Math.round(mb.x), right: Math.round(mb.right), top: Math.round(mb.top), bottom: Math.round(mb.bottom) },
+          input: { x: Math.round(ib.x), right: Math.round(ib.right) },
+          vw: window.innerWidth,
+          vh: window.innerHeight,
+          rows: sample.length,
+          reach,
+          pick: tb ? { x: Math.round(tb.x + tb.width / 2), y: Math.round(tb.y + tb.height / 2), sym: target.querySelector('span').textContent.trim() } : null,
+        };
+      });
+
+      if (opened.missing) { bad(`${at} — no ticker picker on the page`); await ctx.close(); continue; }
+      if (opened.noMenu) { bad(`${at} — the picker did not open`); await ctx.close(); continue; }
+
+      const m = opened.menu;
+      const off = [];
+      if (m.x < 0) off.push(`${-m.x}px off the left`);
+      if (m.right > opened.vw) off.push(`${m.right - opened.vw}px off the right`);
+      if (m.top < 0) off.push(`${-m.top}px off the top`);
+      if (m.bottom > opened.vh) off.push(`${m.bottom - opened.vh}px below the fold`);
+      off.length === 0
+        ? ok(`${at} — the menu is inside the window (${m.x}..${m.right} of ${opened.vw})`)
+        : bad(`${at} — the menu hangs ${off.join(' and ')}`);
+
+      opened.input.x >= 0 && opened.input.right <= opened.vw
+        ? ok(`${at} — you can see what you type (input ${opened.input.x}..${opened.input.right})`)
+        : bad(`${at} — the search input runs ${opened.input.x}..${opened.input.right} of a ${opened.vw}px window`);
+
+      opened.rows > 0 && opened.reach === opened.rows
+        ? ok(`${at} — all ${opened.rows} sampled rows take their own click`)
+        : bad(`${at} — ${opened.reach} of ${opened.rows} sampled rows take their own click`);
+
+      /* AND IT STILL PICKS — a real mouse press, not `.click()`, because the
+         defect this guards against is a mousedown handler closing the menu. */
+      if (!opened.pick) bad(`${at} — no row with a different symbol to click`);
+      else {
+        await page.mouse.click(opened.pick.x, opened.pick.y);
+        await page.waitForTimeout(600);
+        const now = await page.evaluate(() => {
+          const btn = [...document.querySelectorAll('button')].find(b => getComputedStyle(b).minWidth === '104px');
+          return btn ? (btn.textContent || '').trim() : null;
+        });
+        now === opened.pick.sym
+          ? ok(`${at} — clicking ${opened.pick.sym} actually picks it`)
+          : bad(`${at} — clicked ${opened.pick.sym} and the picker still reads ${now} (was ${opened.was})`);
+      }
+
+      await ctx.close();
+    }
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   A JARGON EXPLAINER DOES NOT FIRE THE CONTROL IT SITS INSIDE.
+
+   `Term` renders a dotted word that reveals a definition. It stops Enter and
+   Space from bubbling — its own comment says why, "a Term can sit inside a
+   sortable table header" — and the card it portals stops clicks. The ANCHOR
+   never did, so a mouse click on an explainer inside a clickable host ran the
+   host instead.
+
+   Measured on /pinpoint/ranked-targets before the fix, where the podium cards
+   are `<motion.button>` that navigate on click: clicking "BPS" at 1440x900 and
+   again at 390x844 left the page for /pulse and showed no definition. The
+   phone case is the worse one — with no hover, tapping the word IS the only
+   way to read it, so the only affordance for a definition was a way off the
+   page.
+
+   BOTH HALVES ARE ASSERTED. "The URL did not change" alone would pass a Term
+   that swallowed the click and did nothing, which is a different bug wearing
+   the same green.
+   ───────────────────────────────────────────────────────────────────────── */
+head('a jargon explainer does not fire the control it sits inside');
+{
+  for (const [w, h] of [[1440, 900], [390, 844]]) {
+    const at = `${w}x${h}`;
+    const phone = w < 500;
+    const ctx = await browser.newContext({ viewport: { width: w, height: h }, hasTouch: phone, isMobile: phone });
+    const page = await ctx.newPage();
+    await page.goto(`${BASE}/pinpoint/ranked-targets`, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(BOOT_MS);
+
+    const spot = await page.evaluate(() => {
+      /* A Term inside a clickable ancestor — the case the guard is about. A
+         Term standing on its own has nothing to fire and proves nothing. */
+      for (const t of document.querySelectorAll('span[role="button"]')) {
+        const r = t.getBoundingClientRect();
+        if (!r.width) continue;
+        const host = t.parentElement?.closest('button,a');
+        if (!host) continue;
+        return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2), text: t.textContent.trim() };
+      }
+      return null;
+    });
+
+    if (!spot) { bad(`${at} — found no explainer inside a clickable host to test`); await ctx.close(); continue; }
+
+    const before = page.url();
+    await page.mouse.click(spot.x, spot.y);
+    await page.waitForTimeout(800);
+    const after = page.url();
+    const tip = await page.evaluate(() => !!document.querySelector('span[role="tooltip"]'));
+
+    after === before
+      ? ok(`${at} — clicking "${spot.text}" stays on the page`)
+      : bad(`${at} — clicking "${spot.text}" left ${before.replace(/^https?:\/\/[^/]+/, '')} for ${after.replace(/^https?:\/\/[^/]+/, '')}`);
+    tip
+      ? ok(`${at} — and shows the definition`)
+      : bad(`${at} — the click was swallowed and no definition appeared`);
+
+    await ctx.close();
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   THE SUB-TABS FIT THE WINDOW THEY ARE DRAWN IN.
+
+   `SubNav` is an `inline-flex` of `whitespace-nowrap` pills with neither wrap
+   nor scroll. The Pinpoint set — Exposure Profile, Ranked Targets, Vanna &
+   Charm — measures 415px against a 358px content area at 390px, so the last
+   tab ended 40px past the right edge and the desk slid 43px sideways. A route
+   a reader cannot see is a route they cannot reach.
+
+   The nav's OWN overflow is what is asserted, not just the page's: the shells
+   differ, and a nav that fits because its parent happens to scroll is still a
+   nav with a tab off the edge. Trace is swept too — it renders the same
+   component through a different shell, with two shorter tabs, and it must not
+   change.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the sub-tabs fit the window they are drawn in');
+{
+  for (const route of ['/pinpoint/exposure-profile', '/trace/tracker']) {
+    for (const [w, h] of [[390, 844], [768, 900], [1440, 900]]) {
+      const at = `${route} @ ${w}`;
+      const phone = w < 500;
+      const ctx = await browser.newContext({ viewport: { width: w, height: h }, hasTouch: phone, isMobile: phone });
+      const page = await ctx.newPage();
+      await page.goto(`${BASE}${route}`, { waitUntil: 'networkidle' });
+      await page.waitForTimeout(BOOT_MS);
+
+      const g = await page.evaluate(() => {
+        const nav = document.querySelector('nav[aria-label$="subpages"]');
+        if (!nav) return { missing: true };
+        const main = document.querySelector('main') || document.documentElement;
+        return {
+          tabs: nav.querySelectorAll('a').length,
+          navOver: nav.scrollWidth - nav.clientWidth,
+          offRight: [...nav.querySelectorAll('a')]
+            .filter(a => a.getBoundingClientRect().right > window.innerWidth)
+            .map(a => `${a.textContent.trim()} ends ${Math.round(a.getBoundingClientRect().right)}`),
+          slide: main.scrollWidth - main.clientWidth,
+          vw: window.innerWidth,
+        };
+      });
+
+      if (g.missing) { bad(`${at} — no sub-tab bar on the page`); await ctx.close(); continue; }
+      if (g.tabs === 0) { bad(`${at} — the sub-tab bar rendered no tabs`); await ctx.close(); continue; }
+
+      g.navOver <= 0
+        ? ok(`${at} — ${g.tabs} tabs fit their own bar`)
+        : bad(`${at} — the tab bar overflows itself by ${g.navOver}px`);
+      g.offRight.length === 0
+        ? ok(`${at} — no tab past the right edge`)
+        : bad(`${at} — off the ${g.vw}px window: ${g.offRight.join(', ')}`);
+      g.slide === 0
+        ? ok(`${at} — the desk does not slide sideways`)
+        : bad(`${at} — the desk slides ${g.slide}px sideways`);
+
+      await ctx.close();
+    }
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   THE HOVER READ-OUT PRINTS THE SAME NUMBER AS THE BAR IT POINTS AT.
+
+   The positioning map's card built its NET GAMMA headline from the raw
+   simulator history, while the band, the exposure matrix, the pinned detail
+   bar and the card's OWN C and P legs all print `row.gex.net` — the same value
+   after the expiry decay and per-strike jitter this view applies. The card
+   contradicted itself inside 200px.
+
+   Measured at 1440x900 before the fix: 14 of 14 hovered cards disagreed with
+   their own C+P legs, worst 534%, and one flipped the sign — a band drawn
+   green and labelled "dealer long gamma" under a headline in red reading
+   DEALER SHORT GAMMA.
+
+   C+P IS THE ORACLE, and it is a good one precisely because it is inside the
+   same card: net gamma is call gamma plus put gamma by definition, so any gap
+   is the card disagreeing with itself, with no tolerance argument about which
+   surface is right. Parsed to numbers rather than matched as strings, so a
+   formatting difference cannot fake agreement.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the hover read-out prints the same number as the bar it points at');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await ctx.newPage();
+  await page.goto(`${BASE}/pinpoint/exposure-profile`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+
+  const money = s => {
+    const m = /(-?)\$?([\d.]+)\s*([KMB])?/.exec((s || '').replace(/[+,]/g, ''));
+    if (!m) return null;
+    const mult = m[3] === 'B' ? 1e9 : m[3] === 'M' ? 1e6 : m[3] === 'K' ? 1e3 : 1;
+    return (m[1] ? -1 : 1) * parseFloat(m[2]) * mult;
+  };
+
+  const bands = await page.evaluate(() =>
+    [...document.querySelectorAll('[aria-label*="gamma"]')]
+      .map(el => ({ el, r: el.getBoundingClientRect() }))
+      .filter(o => o.r.width > 4 && o.r.height > 2)
+      .map(o => ({ x: Math.round(o.r.x + o.r.width / 2), y: Math.round(o.r.y + o.r.height / 2) }))
+  );
+
+  let read = 0;
+  const off = [];
+  for (const b of bands.slice(0, 12)) {
+    await page.mouse.move(b.x, b.y);
+    await page.waitForTimeout(280);
+    const card = await page.evaluate(() => {
+      const head = [...document.querySelectorAll('div')].find(d => (d.textContent || '').trim() === 'Net gamma');
+      if (!head) return null;
+      const box = head.parentElement;
+      const legs = box.parentElement.querySelector('div.mt-2.flex');
+      return { big: box.children[1]?.textContent?.trim(), legs: legs ? legs.textContent.trim() : null };
+    });
+    if (!card || !card.big || !card.legs) continue;
+    const c = /C\s*(-?\$[\d.]+[KMB]?)/.exec(card.legs);
+    const p = /P\s*(-?\$[\d.]+[KMB]?)/.exec(card.legs);
+    const headline = money(card.big);
+    if (!c || !p || headline == null) continue;
+    const sum = money(c[1]) + money(p[1]);
+    read++;
+    /* 2% absorbs the one-decimal rounding each figure is printed at; the
+       defect this guards against ran to 534%. */
+    const rel = Math.abs(sum) > 0 ? Math.abs(headline - sum) / Math.abs(sum) : 0;
+    if (rel > 0.02) off.push(`${card.big} vs C+P ${(sum / 1e6).toFixed(1)}M (${(rel * 100).toFixed(0)}%)`);
+  }
+
+  if (read < 4) bad(`only ${read} read-out cards could be read — the guard saw too little to mean anything`);
+  else {
+    ok(`${read} hovered cards read`);
+    off.length === 0
+      ? ok('every headline matches its own call and put legs')
+      : bad(`${off.length} of ${read} headlines disagree with their own legs: ${off.slice(0, 3).join(' | ')}`);
+  }
+  await ctx.close();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
    DOES THE CONTENT FIT ITS BOX?
 
    Noah, 2026-08-26: "make things in their boxes fit perfectly, aspect ratio is

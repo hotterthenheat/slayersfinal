@@ -131,6 +131,31 @@ const StrikeReadout = ({
   cum: number;
   anchorWord: string;
 }) => {
+  /*
+    ON THIS VIEW'S SCALE, NOT THE SIMULATOR'S RAW ONE.
+
+    `getGexHistory` returns whole-book values. Everything else on this page
+    prints `row.gex.net`, which is that value after the expiry decay and the
+    per-strike jitter this view applies — the band, the pinned detail bar, the
+    exposure matrix, and the C and P legs printed one line below this headline.
+    Reading the raw series straight made the card contradict itself inside
+    200px.
+
+    Measured at 1440x900 on /pinpoint/exposure-profile, hovering the bands: 14
+    of 14 cards disagreed with their own C+P legs, worst 534%, and one flipped
+    the sign — a band drawn green with aria-label "dealer long gamma" under a
+    headline in red reading DEALER SHORT GAMMA. Strike 536: the band's own
+    label said -$9.6M, the headline said -$21.5M.
+
+    The correction is the one `prior` already documents 150 lines below —
+    rescale the raw series by the multiplier this view applied to the live
+    value, "so the ghost and the band are always on one scale, never a
+    raw-vs-scaled mismatch". Same rule, second caller.
+
+    The trend line rides the scaled series for the same reason. Rising/falling
+    is unaffected either way: it compares magnitudes, and a constant factor
+    divides out of both sides.
+  */
   const series = useMemo(() => {
     const snaps = Simulator.getGexHistory(ticker) ?? [];
     const out: number[] = [];
@@ -138,10 +163,16 @@ const StrikeReadout = ({
       const lvl = snaps[i].levels.find(l => l.strike === row.strike);
       if (lvl) out.push(lvl.value);
     }
-    return out;
-  }, [ticker, row.strike]);
+    const rawNow = out[out.length - 1];
+    if (!rawNow) return out;
+    const k = row.gex.net / rawNow;
+    return out.map(v => v * k);
+  }, [ticker, row.strike, row.gex.net]);
 
-  const now = series[series.length - 1] ?? row.gex.net;
+  /* The number the rest of the page is showing for this strike. By
+     construction it is also the last point of the scaled series, and the sum
+     of the C and P legs below. */
+  const now = row.gex.net;
   const recent = series.slice(-16);
   // Building/draining follows the MAGNITUDE of the exposure — a put wall
   // deepening from −$400M to −$800M is building, not draining.

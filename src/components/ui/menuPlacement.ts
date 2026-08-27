@@ -1,7 +1,7 @@
 /*
 ==================================================
   SLAYER TERMINAL - WHERE A MENU LANDS
-  (components/gex/menuPlacement.ts)
+  (components/ui/menuPlacement.ts)
 
   The arithmetic behind an anchored dropdown, kept
   out of the component so it can be tested.
