@@ -36,8 +36,23 @@ import { fmtElapsed, measureSpan } from '../../data/measure';
              right edge where a reader meets them
     note     words anchored to a bar, so the reason for a level survives the
              session the way the level does
+
+  AND THE PARTNER'S ROUND TAKES IT TO THIRTEEN (2026-08-27, "we should have
+  an entire toolbar … curves, squares etc"):
+
+    vline    a moment marked on the clock — news hit here, the break started
+             here. One click, like the level it is the vertical twin of
+    extend   the trend through BOTH edges — structure that was in force
+             before the leg the anchors sit on
+    arrow    a trend that says which way — the head is the claim
+    curve    three anchors, a bend through the third — rounded structure a
+             straight line misstates
+    ellipse  a circled area; the soft twin of the box for "around here",
+             where the box says "exactly this range"
 */
-export type DrawingKind = 'trend' | 'hline' | 'measure' | 'ray' | 'rect' | 'channel' | 'fib' | 'note';
+export type DrawingKind =
+  | 'trend' | 'hline' | 'measure' | 'ray' | 'rect' | 'channel' | 'fib' | 'note'
+  | 'vline' | 'extend' | 'arrow' | 'curve' | 'ellipse';
 
 /*
   THE KINDS' SHAPES, AS DATA, and the validator reads THIS rather than a list
@@ -65,7 +80,22 @@ const KIND_SHAPE = {
   channel: { p2: true, p3: true, text: false },
   fib: { p2: true, p3: false, text: false },
   note: { p2: false, p3: false, text: true },
+  /* vline anchors to a TIME; the point's price rides along unused so the
+     store keeps one point shape for every kind. */
+  vline: { p2: false, p3: false, text: false },
+  extend: { p2: true, p3: false, text: false },
+  arrow: { p2: true, p3: false, text: false },
+  curve: { p2: true, p3: true, text: false },
+  ellipse: { p2: true, p3: false, text: false },
 } as const satisfies Record<DrawingKind, { p2: boolean; p3: boolean; text: boolean }>;
+
+/**
+ * Whether a kind's gesture owes a THIRD anchor after release — the channel's
+ * width, the curve's bend. The GESTURE reads the same table the validator
+ * does, so a three-anchor kind added there is automatically drawn in two
+ * phases instead of committing half-made on release.
+ */
+export const needsThirdAnchor = (kind: DrawingKind): boolean => KIND_SHAPE[kind].p3;
 
 export interface DrawingPoint {
   time: number; // bar time (sec)
@@ -94,6 +124,43 @@ const LIME = '210,255,0';
 const MEASURE_RGB = '226,234,244';
 const MEASURE_FILL = 'rgba(226,234,244,0.07)';
 
+/*
+  ONE TYPE VOICE FOR EVERY LABEL THE LAYER PRINTS (partner, 2026-08-27:
+  "improve typography"). Before this, each renderer typed its own font
+  string — the fib ran 9px, the note and the measure 10px, all at regular
+  weight, and the fib's labels sat BARE on the field where a candle behind
+  them made the price unreadable. Now: one face at one size, medium weight
+  because thin monospace at 10px smears on non-retina panes, and every
+  label sits on its own wash.
+*/
+const LABEL_PX = 10;
+const labelFont = (vr: number, px = LABEL_PX) => `500 ${px * vr}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+
+/** A rounded dark wash behind a printed label — the reason every number this
+    layer writes stays readable over a candle. Falls back to square corners
+    where the canvas has no roundRect. */
+const wash = (
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+  fill: string,
+  stroke?: string
+) => {
+  ctx.beginPath();
+  if (typeof ctx.roundRect === 'function') ctx.roundRect(x, y, w, h, r);
+  else ctx.rect(x, y, w, h);
+  ctx.fillStyle = fill;
+  ctx.fill();
+  if (stroke) {
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+};
+
 interface BitmapScope {
   context: CanvasRenderingContext2D;
   horizontalPixelRatio: number;
@@ -118,6 +185,7 @@ class DrawingsPaneRenderer {
       const hr = scope.horizontalPixelRatio;
       const vr = scope.verticalPixelRatio;
       const w = scope.mediaSize.width * hr;
+      const h = scope.mediaSize.height * vr;
 
       /*
         THE MEASURE — a band across the span, and what it says.
@@ -174,12 +242,16 @@ class DrawingsPaneRenderer {
             : `annualized ${span.annualizedPct < 10 ? span.annualizedPct.toFixed(1) : span.annualizedPct.toFixed(0)}%`,
         ];
 
-        ctx.font = `${10 * vr}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+        /* The headline (the move itself) a step larger than its context
+           lines — the reader takes the delta first and the tenor after. */
+        ctx.font = labelFont(vr, 11);
+        const headW = ctx.measureText(lines[0]).width;
+        ctx.font = labelFont(vr);
         ctx.textBaseline = 'top';
-        const padX = 6 * hr;
-        const padY = 5 * vr;
-        const lineH = 13 * vr;
-        const boxW = Math.max(...lines.map(t => ctx.measureText(t).width)) + padX * 2;
+        const padX = 7 * hr;
+        const padY = 6 * vr;
+        const lineH = 14 * vr;
+        const boxW = Math.max(headW, ...lines.slice(1).map(t => ctx.measureText(t).width)) + padX * 2;
         const boxH = lines.length * lineH + padY * 2;
         /* ABOVE the band when price rose, below when it fell — the box sits on
            the side the move came FROM, so it never covers the leg the reader
@@ -190,26 +262,37 @@ class DrawingsPaneRenderer {
         if (by < 0) by = yb + 6 * vr;
         if (by + boxH > scope.mediaSize.height * vr) by = Math.max(0, ya - boxH - 6 * vr);
 
-        ctx.fillStyle = 'rgba(10,10,10,0.86)';
-        ctx.fillRect(bx, by, boxW, boxH);
-        ctx.strokeStyle = `rgba(${MEASURE_RGB},0.28)`;
-        ctx.lineWidth = 1 * vr;
-        ctx.strokeRect(bx, by, boxW, boxH);
+        wash(ctx, bx, by, boxW, boxH, 4 * vr, 'rgba(10,10,10,0.88)', `rgba(${MEASURE_RGB},0.28)`);
         lines.forEach((t, i) => {
+          ctx.font = labelFont(vr, i === 0 ? 11 : LABEL_PX);
           ctx.fillStyle =
-            i === 0 ? (rose ? 'rgba(48,209,88,0.95)' : 'rgba(255,59,48,0.95)') : `rgba(${MEASURE_RGB},0.72)`;
+            i === 0 ? (rose ? 'rgba(48,209,88,0.95)' : 'rgba(255,59,48,0.95)') : `rgba(${MEASURE_RGB},0.66)`;
           ctx.fillText(t, bx + padX, by + padY + i * lineH);
         });
       };
 
       const render = (d: Drawing, alpha: number) => {
-        const y1c = series.priceToCoordinate(d.p1.price);
-        if (y1c === null) return;
-        const y1 = y1c * vr;
         ctx.strokeStyle = `rgba(${LIME},${alpha})`;
         ctx.fillStyle = `rgba(${LIME},${alpha})`;
         ctx.lineWidth = 1.4 * vr;
         ctx.lineCap = 'round';
+
+        /* The moment-marker anchors to TIME alone — the one kind with no
+           price in its geometry, drawn before the price lookup the rest
+           need. */
+        if (d.kind === 'vline') {
+          const xv = src.timeToX(d.p1.time);
+          if (xv === null) return;
+          ctx.beginPath();
+          ctx.moveTo(xv * hr, 0);
+          ctx.lineTo(xv * hr, h);
+          ctx.stroke();
+          return;
+        }
+
+        const y1c = series.priceToCoordinate(d.p1.price);
+        if (y1c === null) return;
+        const y1 = y1c * vr;
 
         if (d.kind === 'hline') {
           ctx.beginPath();
@@ -230,13 +313,15 @@ class DrawingsPaneRenderer {
           const a = 2.2 * vr;
           ctx.fillRect(x1 - a, y1 - a, a * 2, a * 2);
           const label = d.text ?? '';
-          ctx.font = `${10 * vr}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+          ctx.font = labelFont(vr);
           ctx.textBaseline = 'middle';
           const tw = ctx.measureText(label).width;
-          const pad = 4 * hr;
-          ctx.fillStyle = 'rgba(10,10,10,0.72)';
-          ctx.fillRect(x1 + a + 2 * hr, y1 - 8 * vr, tw + pad * 2, 16 * vr);
-          ctx.fillStyle = `rgba(${LIME},${Math.min(1, alpha + 0.1)})`;
+          const pad = 5 * hr;
+          /* A hairline in the note's own ink around its wash — of all the
+             marks this is the one that is WORDS, and the frame is what says
+             "annotation" rather than "stray print". */
+          wash(ctx, x1 + a + 2 * hr, y1 - 9 * vr, tw + pad * 2, 18 * vr, 4 * vr, 'rgba(10,10,10,0.82)', `rgba(${LIME},0.35)`);
+          ctx.fillStyle = `rgba(${LIME},${Math.min(1, alpha + 0.15)})`;
           ctx.fillText(label, x1 + a + 2 * hr + pad, y1);
           return;
         }
@@ -269,6 +354,89 @@ class DrawingsPaneRenderer {
           ctx.fillRect(xa, ya, bw, bh);
           ctx.strokeRect(xa, ya, bw, bh);
           ctx.fillStyle = `rgba(${LIME},${alpha})`;
+          ctx.fillRect(x1 - a, y1 - a, a * 2, a * 2);
+          ctx.fillRect(x2 - a, y2 - a, a * 2, a * 2);
+          return;
+        }
+
+        if (d.kind === 'ellipse') {
+          /* The soft twin of the box — "around here" where the box says
+             "exactly this range". Same faint wash, same two corner anchors,
+             so the pair reads as one family. */
+          const cx = (x1 + x2) / 2;
+          const cy = (y1 + y2) / 2;
+          const rx = Math.max(1, Math.abs(x2 - x1) / 2);
+          const ry = Math.max(1, Math.abs(y2 - y1) / 2);
+          ctx.beginPath();
+          ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(${LIME},0.055)`;
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = `rgba(${LIME},${alpha})`;
+          ctx.fillRect(x1 - a, y1 - a, a * 2, a * 2);
+          ctx.fillRect(x2 - a, y2 - a, a * 2, a * 2);
+          return;
+        }
+
+        if (d.kind === 'extend') {
+          /* Through both plot edges — structure that was in force before the
+             leg the anchors sit on. A vertical pair is a moment, and the
+             vline owns moments: it degenerates to its segment. */
+          ctx.beginPath();
+          if (x2 !== x1) {
+            const slope = (y2 - y1) / (x2 - x1);
+            ctx.moveTo(0, y1 + slope * (0 - x1));
+            ctx.lineTo(w, y1 + slope * (w - x1));
+          } else {
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+          }
+          ctx.stroke();
+          ctx.fillRect(x1 - a, y1 - a, a * 2, a * 2);
+          ctx.fillRect(x2 - a, y2 - a, a * 2, a * 2);
+          return;
+        }
+
+        if (d.kind === 'arrow') {
+          /* A trend that says which way — the head is the claim, drawn as a
+             filled wedge at p2 along the segment's own angle. */
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.stroke();
+          const ang = Math.atan2(y2 - y1, x2 - x1);
+          const head = 9 * vr;
+          ctx.beginPath();
+          ctx.moveTo(x2, y2);
+          ctx.lineTo(x2 - head * Math.cos(ang - 0.42), y2 - head * Math.sin(ang - 0.42));
+          ctx.lineTo(x2 - head * Math.cos(ang + 0.42), y2 - head * Math.sin(ang + 0.42));
+          ctx.closePath();
+          ctx.fill();
+          ctx.fillRect(x1 - a, y1 - a, a * 2, a * 2);
+          return;
+        }
+
+        if (d.kind === 'curve') {
+          /* Three anchors, a bend through the third: a quadratic whose
+             control point is chosen so the curve PASSES THROUGH p3 at its
+             midpoint (c = 2·P3 − (P1+P2)/2) — the reader drags the bend
+             itself, never an abstract control handle. Before the bend is
+             placed (the draft's first phase) the base segment draws, which
+             is what is being placed. */
+          const p3x = d.p3 ? src.timeToX(d.p3.time) : null;
+          const p3yc = d.p3 ? series.priceToCoordinate(d.p3.price) : null;
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          if (d.p3 && p3x !== null && p3yc !== null) {
+            const x3 = p3x * hr;
+            const y3 = p3yc * vr;
+            ctx.quadraticCurveTo(2 * x3 - (x1 + x2) / 2, 2 * y3 - (y1 + y2) / 2, x2, y2);
+            ctx.stroke();
+            ctx.fillRect(x3 - a, y3 - a, a * 2, a * 2);
+          } else {
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+          }
           ctx.fillRect(x1 - a, y1 - a, a * 2, a * 2);
           ctx.fillRect(x2 - a, y2 - a, a * 2, a * 2);
           return;
@@ -355,9 +523,12 @@ class DrawingsPaneRenderer {
           */
           const RATIOS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
           const xa = Math.min(x1, x2);
-          ctx.font = `${9 * vr}px ui-monospace, SFMono-Regular, Menlo, monospace`;
-          ctx.textBaseline = 'bottom';
-          ctx.textAlign = 'right';
+          /* Labels sit ON A WASH now — bare 9px text over candles was the
+             partner's screenshot's least readable element — and the ratio
+             and the price get different weights of the same ink: the ratio
+             places the rule in the family, the PRICE is what gets traded. */
+          ctx.font = labelFont(vr);
+          ctx.textBaseline = 'middle';
           for (const r of RATIOS) {
             const price = d.p1.price + (d.p2.price - d.p1.price) * r;
             const yc = series.priceToCoordinate(price);
@@ -370,10 +541,19 @@ class DrawingsPaneRenderer {
             ctx.moveTo(xa, y);
             ctx.lineTo(w, y);
             ctx.stroke();
-            ctx.fillStyle = `rgba(${LIME},${major ? alpha : alpha * 0.65})`;
-            ctx.fillText(`${r} — ${price.toFixed(2)}`, w - 4 * hr, y - 2 * vr);
+            const ratio = String(r);
+            const priceTxt = ` ${price.toFixed(2)}`;
+            const rw = ctx.measureText(ratio).width;
+            const pw = ctx.measureText(priceTxt).width;
+            const pad = 4 * hr;
+            const bw = rw + pw + pad * 2;
+            const bx = w - bw - 3 * hr;
+            wash(ctx, bx, y - 8 * vr, bw, 16 * vr, 3 * vr, 'rgba(10,10,10,0.78)');
+            ctx.fillStyle = `rgba(${LIME},${(major ? alpha : alpha * 0.75) * 0.6})`;
+            ctx.fillText(ratio, bx + pad, y);
+            ctx.fillStyle = `rgba(${LIME},${major ? alpha : alpha * 0.75})`;
+            ctx.fillText(priceTxt, bx + pad + rw, y);
           }
-          ctx.textAlign = 'left';
           ctx.strokeStyle = `rgba(${LIME},${alpha})`;
           ctx.fillStyle = `rgba(${LIME},${alpha})`;
           ctx.lineWidth = 1.4 * vr;

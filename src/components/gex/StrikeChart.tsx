@@ -3,8 +3,8 @@ import {
   type MutableRefObject, type PointerEvent as ReactPointerEvent,
 } from 'react';
 import {
-  AlignJustify, Check, Equal, Eraser, Minus, MoveUpRight, Pause, Play, Ruler, Square, StepBack, StepForward,
-  StickyNote, TrendingUp, X,
+  AlignJustify, ArrowUpRight, Check, Circle, Equal, Eraser, Minus, MoveDiagonal, MoveUpRight, MoveVertical,
+  Pause, Play, Ruler, Spline, Square, StepBack, StepForward, StickyNote, TrendingUp, X,
 } from 'lucide-react';
 import {
   createChart,
@@ -35,7 +35,7 @@ import {
   type Timeframe,
 } from '../../data/timeframe';
 import { GexTrailsPrimitive } from './gexNodesPrimitive';
-import { DrawingsPrimitive, loadDrawings, saveDrawings, type Drawing, type DrawingKind } from './drawingsPrimitive';
+import { DrawingsPrimitive, loadDrawings, needsThirdAnchor, saveDrawings, type Drawing, type DrawingKind } from './drawingsPrimitive';
 import { getCandleTheme, useCandleThemeKey, candleSeriesOptions, chartSurface, type CandleTheme } from './candleTheme';
 import { markFired, useAlerts } from './alertStore';
 import type { Candle } from '../../types/market';
@@ -143,6 +143,42 @@ const PANE_LABEL_LOOK: Record<string, { text: string; bg: string; fg: string }> 
   netDrift: { text: 'Net drift', bg: 'rgba(40,90,60,0.35)', fg: '#CFE8D8' },
   volDrift: { text: 'Vol drift', bg: 'rgba(70,60,110,0.35)', fg: '#DCD6F0' },
 };
+
+/*
+  The rail's thirteen, grouped the way a reader thinks: the lines they trade
+  against, the shapes that mark areas, and the marks that carry their own
+  words or numbers. Order inside a group is reach-for frequency.
+*/
+const DRAW_TOOL_GROUPS: { name: string; tools: { tool: DrawingKind; icon: JSX.Element; label: string }[] }[] = [
+  {
+    name: 'Lines',
+    tools: [
+      { tool: 'trend', icon: <TrendingUp className="w-3.5 h-3.5" />, label: 'Trend' },
+      { tool: 'ray', icon: <MoveUpRight className="w-3.5 h-3.5" />, label: 'Ray' },
+      { tool: 'extend', icon: <MoveDiagonal className="w-3.5 h-3.5" />, label: 'Extended' },
+      { tool: 'arrow', icon: <ArrowUpRight className="w-3.5 h-3.5" />, label: 'Arrow' },
+      { tool: 'hline', icon: <Minus className="w-3.5 h-3.5" />, label: 'Level' },
+      { tool: 'vline', icon: <MoveVertical className="w-3.5 h-3.5" />, label: 'Moment' },
+    ],
+  },
+  {
+    name: 'Shapes',
+    tools: [
+      { tool: 'rect', icon: <Square className="w-3.5 h-3.5" />, label: 'Box' },
+      { tool: 'ellipse', icon: <Circle className="w-3.5 h-3.5" />, label: 'Ellipse' },
+      { tool: 'channel', icon: <Equal className="w-3.5 h-3.5" />, label: 'Channel' },
+      { tool: 'curve', icon: <Spline className="w-3.5 h-3.5" />, label: 'Curve' },
+    ],
+  },
+  {
+    name: 'Marks',
+    tools: [
+      { tool: 'fib', icon: <AlignJustify className="w-3.5 h-3.5" />, label: 'Fib' },
+      { tool: 'measure', icon: <Ruler className="w-3.5 h-3.5" />, label: 'Measure' },
+      { tool: 'note', icon: <StickyNote className="w-3.5 h-3.5" />, label: 'Note' },
+    ],
+  },
+];
 
 /** What the user chose to draw — every overlay is independent. */
 export interface ChartOverlays {
@@ -715,9 +751,10 @@ const StrikeChart = ({
   const drawingsRef = useRef<DrawingsPrimitive | null>(null);
   const shapesRef = useRef<Drawing[]>([]);
   const dragRef = useRef<Drawing | null>(null);
-  /** A committed channel BASE waiting for its width anchor — phase two of the
-      only two-phase gesture on this chart. */
-  const channelRef = useRef<Drawing | null>(null);
+  /** A committed BASE waiting for its third anchor — the channel's width,
+      the curve's bend. Which kinds owe one comes from the same KIND_SHAPE
+      table the validator reads (needsThirdAnchor). */
+  const pendingThirdRef = useRef<Drawing | null>(null);
   /** Where a note is being typed, in both spaces: chart coords to commit,
       client coords to float the input at. Null = no note in progress. */
   const [noteAt, setNoteAt] = useState<{ time: number; price: number; x: number; y: number } | null>(null);
@@ -730,13 +767,13 @@ const StrikeChart = ({
   useEffect(() => {
     if (drawing) return;
     dragRef.current = null;
-    channelRef.current = null;
+    pendingThirdRef.current = null;
     setNoteAt(null);
     drawingsRef.current?.setDraft(null);
   }, [drawing]);
   useEffect(() => {
     dragRef.current = null;
-    channelRef.current = null;
+    pendingThirdRef.current = null;
     setNoteAt(null);
     drawingsRef.current?.setDraft(null);
   }, [ticker, timeframe]);
@@ -2599,18 +2636,19 @@ const StrikeChart = ({
   const onDrawDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     const p = pointAt(e);
     if (!p) return;
-    /* THE CHANNEL'S SECOND PHASE ends on the next press: the base was drawn
-       and released, the width has been tracking the pointer since, and this
-       click is the reader saying "that wide". */
-    if (channelRef.current) {
-      const base = channelRef.current;
-      channelRef.current = null;
+    /* A THIRD-ANCHOR KIND'S SECOND PHASE ends on the next press: the base
+       was drawn and released, the third anchor (the channel's width, the
+       curve's bend) has been tracking the pointer since, and this click is
+       the reader saying "there". */
+    if (pendingThirdRef.current) {
+      const base = pendingThirdRef.current;
+      pendingThirdRef.current = null;
       drawingsRef.current?.setDraft(null);
       commitDrawing({ ...base, p3: p });
       return;
     }
-    if (drawTool === 'hline') {
-      commitDrawing({ kind: 'hline', p1: p });
+    if (drawTool === 'hline' || drawTool === 'vline') {
+      commitDrawing({ kind: drawTool, p1: p });
       return;
     }
     if (drawTool === 'note') {
@@ -2639,9 +2677,9 @@ const StrikeChart = ({
 
   const onDrawMove = (e: ReactPointerEvent<HTMLDivElement>) => {
     /* Width phase: the draft is the base plus a p3 riding the pointer. */
-    if (channelRef.current) {
+    if (pendingThirdRef.current) {
       const p = pointAt(e);
-      if (p) drawingsRef.current?.setDraft({ ...channelRef.current, p3: p });
+      if (p) drawingsRef.current?.setDraft({ ...pendingThirdRef.current, p3: p });
       return;
     }
     if (!dragRef.current) return;
@@ -2661,10 +2699,11 @@ const StrikeChart = ({
       drawingsRef.current?.setDraft(null);
       return;
     }
-    /* A channel is not finished at release — the base is. The draft STAYS,
-       the width phase begins, and the next press commits (onDrawDown). */
-    if (d.kind === 'channel') {
-      channelRef.current = d;
+    /* A three-anchor kind is not finished at release — the base is. The
+       draft STAYS, the third-anchor phase begins (the channel's width, the
+       curve's bend), and the next press commits (onDrawDown). */
+    if (needsThirdAnchor(d.kind)) {
+      pendingThirdRef.current = d;
       drawingsRef.current?.setDraft(d);
       return;
     }
@@ -2728,54 +2767,68 @@ const StrikeChart = ({
           />
         )}
         {drawing && (
-          /* BOTTOM left, not top left.
-             Top left is where every host floats its own chrome — on Terrain
-             that is the pane's identity row, and this toolbar sat straight
-             over it: measured in draw mode, the symbol capsule, the price and
-             the change were all covered, so a reader drawing on a four-pane
-             desk could not tell which chart they were drawing on. The bottom
-             left holds the volume histogram, which is texture, and the
-             arrangement controls are bottom RIGHT. Lifted clear of the time
-             axis. */
-          <div className="absolute bottom-8 left-2 z-30 flex items-center gap-1 flex-wrap max-w-[calc(100%_-_90px)] border border-borderMuted bg-panel/95 rounded-md p-1 shadow-xl shadow-black/50">
-            {(
-              [
-                { tool: 'trend' as DrawingKind, icon: <TrendingUp className="w-3.5 h-3.5" />, label: 'Trend' },
-                { tool: 'ray' as DrawingKind, icon: <MoveUpRight className="w-3.5 h-3.5" />, label: 'Ray' },
-                { tool: 'hline' as DrawingKind, icon: <Minus className="w-3.5 h-3.5" />, label: 'Level' },
-                { tool: 'rect' as DrawingKind, icon: <Square className="w-3.5 h-3.5" />, label: 'Box' },
-                { tool: 'channel' as DrawingKind, icon: <Equal className="w-3.5 h-3.5" />, label: 'Channel' },
-                { tool: 'fib' as DrawingKind, icon: <AlignJustify className="w-3.5 h-3.5" />, label: 'Fib' },
-                { tool: 'measure' as DrawingKind, icon: <Ruler className="w-3.5 h-3.5" />, label: 'Measure' },
-                { tool: 'note' as DrawingKind, icon: <StickyNote className="w-3.5 h-3.5" />, label: 'Note' },
-              ] as const
-            ).map(item => (
-              <button
-                key={item.tool}
-                onClick={() => setDrawTool(item.tool)}
-                className={`inline-flex items-center gap-1.5 px-2 py-1 rounded font-mono text-[10px] uppercase tracking-wider transition-colors ${
-                  drawTool === item.tool
-                    ? 'bg-select/15 text-select'
-                    : 'text-textSecondary hover:text-textPrimary hover:bg-white/[0.04]'
-                }`}
-              >
-                {item.icon}
-                {item.label}
-              </button>
+          /*
+            THE TOOL RAIL — vertical, docked centre-left (partner, 2026-08-27:
+            "we should have an entire toolbar").
+
+            Thirteen tools outgrew the labelled strip: at 15px a label, eight
+            already wrapped to two rows over the tape at pane widths, and five
+            more would have made the toolbar the widest thing on the chart. A
+            vertical rail is the chart-desk grammar for exactly this count, and
+            centre-LEFT is the emptiest region a pane has — the identity row
+            owns the top, the volume floor and the arrangement controls own the
+            bottom. It covers the session tags' inset while draw mode is on;
+            draw mode is a mode, and the tags come back when it ends.
+
+            Icon buttons with the names in tooltips AND the active tool's name
+            printed at the rail's head — icons alone would leave thirteen
+            unlabelled glyphs, and the house does not ship controls that refuse
+            to say their names.
+          */
+          <div className="absolute left-2 top-1/2 -translate-y-1/2 z-30 w-[104px] border border-borderMuted bg-panel/95 rounded-md p-1.5 shadow-xl shadow-black/50 select-none">
+            <div className="px-1 pb-1 font-mono text-[9px] font-semibold uppercase tracking-widest text-select truncate" aria-live="polite">
+              {DRAW_TOOL_GROUPS.flatMap(g => g.tools).find(t => t.tool === drawTool)?.label ?? drawTool}
+            </div>
+            {DRAW_TOOL_GROUPS.map(group => (
+              <div key={group.name}>
+                <div className="px-1 pt-1 pb-0.5 font-mono text-[8px] uppercase tracking-[0.16em] text-textMuted">{group.name}</div>
+                <div className="grid grid-cols-3 gap-0.5">
+                  {group.tools.map(item => (
+                    <button
+                      key={item.tool}
+                      onClick={() => setDrawTool(item.tool)}
+                      title={item.label}
+                      aria-label={item.label}
+                      aria-pressed={drawTool === item.tool}
+                      className={`inline-flex items-center justify-center h-[26px] rounded transition-colors ${
+                        drawTool === item.tool
+                          ? 'bg-select/15 text-select'
+                          : 'text-textSecondary hover:text-textPrimary hover:bg-white/[0.04]'
+                      }`}
+                    >
+                      {item.icon}
+                    </button>
+                  ))}
+                </div>
+              </div>
             ))}
-            <span className="w-px h-4 bg-borderMuted mx-0.5" />
-            <button
-              onClick={clearDrawings}
-              className="inline-flex items-center gap-1.5 px-2 py-1 rounded font-mono text-[10px] uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-white/[0.04] transition-colors"
-            >
-              <Eraser className="w-3.5 h-3.5" /> Clear
-            </button>
-            <button
-              onClick={onExitDraw}
-              className="inline-flex items-center gap-1.5 px-2 py-1 rounded font-mono text-[10px] uppercase tracking-wider text-select hover:bg-select/10 transition-colors"
-            >
-              <Check className="w-3.5 h-3.5" /> Done
-            </button>
+            <div className="my-1.5 h-px bg-borderMuted" />
+            <div className="grid grid-cols-2 gap-0.5">
+              <button
+                onClick={clearDrawings}
+                title="Clear all drawings"
+                className="inline-flex items-center justify-center gap-1 h-[26px] rounded font-mono text-[9px] uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-white/[0.04] transition-colors"
+              >
+                <Eraser className="w-3.5 h-3.5" /> Clear
+              </button>
+              <button
+                onClick={onExitDraw}
+                title="Done drawing"
+                className="inline-flex items-center justify-center gap-1 h-[26px] rounded font-mono text-[9px] uppercase tracking-wider text-select hover:bg-select/10 transition-colors"
+              >
+                <Check className="w-3.5 h-3.5" /> Done
+              </button>
+            </div>
           </div>
         )}
 

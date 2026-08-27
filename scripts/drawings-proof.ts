@@ -1,7 +1,7 @@
 /*
   Acceptance test for the drawings persistence layer — the validator that
   decides which stored marks survive a reload. It has been browser-tested
-  only since drawings existed; T-2 quadrupling the kinds is what earns it a
+  only since drawings existed; T-2 (then the partner's round to thirteen) multiplying the kinds is what earns it a
   headless proof, because the validator is exactly where a new kind silently
   loses a reader's work (the T-0 pattern — loadDrawings once enumerated its
   kinds inline and would have dropped every stored measure).
@@ -47,10 +47,15 @@ const T0 = 1_700_000_000;
     { kind: 'channel', p1: P(T0, 100), p2: P(T0 + 600, 104), p3: P(T0 + 300, 98) },
     { kind: 'fib', p1: P(T0, 95), p2: P(T0 + 600, 110) },
     { kind: 'note', p1: P(T0, 101), text: 'held here twice pre-market' },
+    { kind: 'vline', p1: P(T0 + 300, 100) },
+    { kind: 'extend', p1: P(T0, 100), p2: P(T0 + 600, 103) },
+    { kind: 'arrow', p1: P(T0, 100), p2: P(T0 + 600, 96) },
+    { kind: 'curve', p1: P(T0, 100), p2: P(T0 + 900, 104), p3: P(T0 + 450, 107) },
+    { kind: 'ellipse', p1: P(T0, 99), p2: P(T0 + 900, 103) },
   ];
   saveDrawings('AAPL', all);
   const back = loadDrawings('AAPL');
-  check('all eight kinds survive a save → load', back.length === all.length, `${back.length} of ${all.length}`);
+  check('all thirteen kinds survive a save → load', back.length === all.length, `${back.length} of ${all.length}`);
   check('byte-for-byte', JSON.stringify(back) === JSON.stringify(all));
 }
 
@@ -65,15 +70,19 @@ const T0 = 1_700_000_000;
     { kind: 'channel', p1: P(T0, 100), p2: P(T0 + 600, 104) }, // no width anchor
     { kind: 'note', p1: P(T0, 100) }, //            no words
     { kind: 'note', p1: P(T0, 100), text: '   ' }, // whitespace is not words
+    { kind: 'extend', p1: P(T0, 100) },
+    { kind: 'arrow', p1: P(T0, 100) },
+    { kind: 'ellipse', p1: P(T0, 100) },
+    { kind: 'curve', p1: P(T0, 100), p2: P(T0 + 600, 104) }, // no bend anchor
   ];
   saveDrawings('MSFT', bad as Drawing[]);
   const back = loadDrawings('MSFT');
   check('a mark missing what its kind requires is dropped', back.length === 0, `${back.length} kept`);
 
-  /* And an hline really is complete without a p2 — the rule is per kind, not
-     a blanket "two points or out". */
-  saveDrawings('MSFT', [{ kind: 'hline', p1: P(T0, 100) }]);
-  check('while an hline is whole with one point', loadDrawings('MSFT').length === 1);
+  /* And the one-anchor kinds really are complete without a p2 — the rule is
+     per kind, not a blanket "two points or out". */
+  saveDrawings('MSFT', [{ kind: 'hline', p1: P(T0, 100) }, { kind: 'vline', p1: P(T0, 100) }]);
+  check('while an hline and a vline are whole with one point', loadDrawings('MSFT').length === 2);
 }
 
 // ── 3. one bad mark does not cost the rest ────────────────────────────────

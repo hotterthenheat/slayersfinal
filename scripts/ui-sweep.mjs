@@ -3496,8 +3496,8 @@ head('the total has a timeline and a rank, and each states its basis');
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
-   T-2. THE DRAWING TOOLS — eight on the strip, and the two gestures that are
-   not a plain drag.
+   T-2 + THE PARTNER'S ROUND. THE DRAWING TOOLS — thirteen on the rail, and
+   the gestures that are not a plain drag.
 
    The persistence layer is proved headless (scripts/drawings-proof.ts). The
    browser owns the gestures: the channel's two-phase flow (release does NOT
@@ -3510,7 +3510,7 @@ head('the total has a timeline and a rank, and each states its basis');
    on EVERY navigation, so it wiped the store during the reload half of this
    section and made survival untestable.
    ───────────────────────────────────────────────────────────────────────── */
-head('eight tools draw, the channel takes three anchors, the note takes words');
+head('thirteen tools on the rail, two of them take three anchors, the note takes words');
 {
   const { ctx, page, errs } = await openDesk(1600, 950, 1);
   await page.evaluate(() => localStorage.removeItem('slayer_chart_drawings_SPY'));
@@ -3523,14 +3523,17 @@ head('eight tools draw, the channel takes three anchors, the note takes words');
   await page.keyboard.press('d');
   await page.waitForTimeout(600);
 
-  const tools = await page.$$eval('button', bs =>
-    bs.map(b => b.textContent.trim()).filter(t => /^(Trend|Ray|Level|Box|Channel|Fib|Measure|Note)$/.test(t))
-  );
-  tools.length === 8 ? ok(`all eight tools are on the strip — ${tools.join(' · ')}`) : bad(`the strip carries ${tools.length} of 8 tools: ${tools.join(', ')}`);
+  /* The rail's buttons are icon-only — the names live in aria-label (and the
+     tooltip), which is also what a screen reader gets. */
+  const RAIL = ['Trend', 'Ray', 'Extended', 'Arrow', 'Level', 'Moment', 'Box', 'Ellipse', 'Channel', 'Curve', 'Fib', 'Measure', 'Note'];
+  const tools = await page.$$eval('button[aria-label]', bs => bs.map(b => b.getAttribute('aria-label')));
+  RAIL.every(t => tools.includes(t))
+    ? ok(`all thirteen tools are on the rail — ${RAIL.join(' · ')}`)
+    : bad(`the rail is missing ${RAIL.filter(t => !tools.includes(t)).join(', ')}`);
 
   const bb = await paneBox();
   const pick = async name => {
-    for (const b of await page.$$('button')) if ((await b.textContent())?.trim() === name) { await b.click(); return; }
+    for (const b of await page.$$('button[aria-label]')) if ((await b.getAttribute('aria-label')) === name) { await b.click(); return; }
   };
   const drag = async (fx1, fy1, fx2, fy2) => {
     await page.mouse.move(bb.x + bb.width * fx1, bb.y + bb.height * fy1);
@@ -3547,9 +3550,21 @@ head('eight tools draw, the channel takes three anchors, the note takes words');
   await drag(0.18, 0.35, 0.32, 0.55);
   await pick('Fib');
   await drag(0.2, 0.7, 0.35, 0.3);
-  JSON.stringify(await stored()) === JSON.stringify(['ray', 'rect', 'fib'])
-    ? ok('ray, box and fib each commit on release')
-    : bad(`after three drags the store holds ${(await stored()).join(',')}`);
+  await pick('Extended');
+  await drag(0.4, 0.6, 0.55, 0.45);
+  await pick('Arrow');
+  await drag(0.4, 0.3, 0.55, 0.5);
+  await pick('Ellipse');
+  await drag(0.45, 0.4, 0.6, 0.6);
+  JSON.stringify(await stored()) === JSON.stringify(['ray', 'rect', 'fib', 'extend', 'arrow', 'ellipse'])
+    ? ok('ray, box, fib, extended, arrow and ellipse each commit on release')
+    : bad(`after six drags the store holds ${(await stored()).join(',')}`);
+  /* The moment-marker is one click, like the level it is the vertical twin
+     of. */
+  await pick('Moment');
+  await page.mouse.click(bb.x + bb.width * 0.62, bb.y + bb.height * 0.5);
+  await page.waitForTimeout(300);
+  (await stored()).includes('vline') ? ok('a moment commits on one click') : bad('the vline never stored');
 
   await pick('Channel');
   await drag(0.15, 0.5, 0.35, 0.35);
@@ -3564,6 +3579,21 @@ head('eight tools draw, the channel takes three anchors, the note takes words');
   (await stored()).includes('channel') ? ok('and the next press sets the width and commits it') : bad('the width press never committed the channel');
   const chan = await page.evaluate(() => JSON.parse(localStorage.getItem('slayer_chart_drawings_SPY')).find(d => d.kind === 'channel'));
   chan?.p1 && chan?.p2 && chan?.p3 ? ok('with all three anchors stored') : bad(`the stored channel is missing anchors: ${JSON.stringify(chan)}`);
+
+  /* The curve rides the same two-phase gesture — the shape table drives it,
+     so the sweep only needs to see that it does. */
+  await pick('Curve');
+  await drag(0.6, 0.7, 0.75, 0.55);
+  !(await stored()).includes('curve')
+    ? ok('a curve does not commit on release — the bend is still owed')
+    : bad('the curve committed without its bend anchor');
+  await page.mouse.move(bb.x + bb.width * 0.68, bb.y + bb.height * 0.5);
+  await page.waitForTimeout(200);
+  await page.mouse.down();
+  await page.mouse.up();
+  await page.waitForTimeout(400);
+  const curve = await page.evaluate(() => JSON.parse(localStorage.getItem('slayer_chart_drawings_SPY') ?? '[]').find(d => d.kind === 'curve'));
+  curve?.p1 && curve?.p2 && curve?.p3 ? ok('the bend press commits the curve with all three anchors') : bad(`the stored curve: ${JSON.stringify(curve)}`);
 
   await pick('Note');
   await page.mouse.move(bb.x + bb.width * 0.4, bb.y + bb.height * 0.5);
@@ -3595,8 +3625,8 @@ head('eight tools draw, the channel takes three anchors, the note takes words');
   await page.reload({ waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS);
   const after = await stored();
-  ['ray', 'rect', 'fib', 'channel', 'note'].every(k => after.includes(k))
-    ? ok('all five new kinds survive a reload')
+  ['ray', 'rect', 'fib', 'channel', 'note', 'vline', 'extend', 'arrow', 'ellipse', 'curve'].every(k => after.includes(k))
+    ? ok('all ten newer kinds survive a reload')
     : bad(`after a reload the store holds ${after.join(',')}`);
   errs.length === 0 ? ok('no page errors through the tour') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
