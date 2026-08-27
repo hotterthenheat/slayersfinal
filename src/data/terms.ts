@@ -78,6 +78,9 @@ export const TERMS = {
   'Prior day': 'Yesterday’s high, low and close. Price opening away from them and coming back is the most-watched move of the morning.',
   'Opening range': 'The high and low of the session’s first 5, 15 or 30 minutes — the day’s first agreed boundary. Breaking out of it is where most intraday setups start.',
   'Initial balance': 'The high and low of the first hour. A day that stays inside it is a range day; a day that leaves it usually keeps going.',
+  // ---- expected-move cone (T-9) ----
+  'Expected move cone':
+    'The band options priced for today, drawn on the chart: the envelope since the open, and the cone still left from here to the bell. Price leaving the band means the move has already beaten what the options charged; the cone shrinking into the close is normal — less day left, less move left.',
   // ---- multi-timeframe (T-12) ----
   'Timeframe trend':
     'Where price sits on each interval against its own EMA21 and VWAP. Above both reads up, below both reads down, and between them reads flat — the timeframes disagreeing is itself the signal.',

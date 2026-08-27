@@ -137,6 +137,10 @@ const CAMPAIGN_OVERLAY_DEFAULTS: ChartOverlays = {
      short tape is exactly the texture that drowns the one line it exists to
      show. Not in `overlayKeys` below either, so it is not offered. */
   session: false,
+  /* The cone joins the session levels in the diet, for the same reason: it is
+     the DAY'S general claim, not this campaign's, and it is geometry across
+     the whole tape. Not in `overlayKeys` below either. */
+  cone: false,
 };
 const loadChartPrefs = (): { timeframe: Timeframe; overlays: ChartOverlays } => {
   try {

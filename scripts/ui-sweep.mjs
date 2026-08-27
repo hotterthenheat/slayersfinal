@@ -1931,11 +1931,13 @@ head('the hover read-out prints the same number as the bar it points at');
   await page.goto(`${BASE}/pinpoint/exposure-profile`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS);
 
+  /* Value AND unit: the tolerance below is built from each figure's own
+     printed resolution, so the unit has to come along with the number. */
   const money = s => {
     const m = /(-?)\$?([\d.]+)\s*([KMB])?/.exec((s || '').replace(/[+,]/g, ''));
     if (!m) return null;
     const mult = m[3] === 'B' ? 1e9 : m[3] === 'M' ? 1e6 : m[3] === 'K' ? 1e3 : 1;
-    return (m[1] ? -1 : 1) * parseFloat(m[2]) * mult;
+    return { v: (m[1] ? -1 : 1) * parseFloat(m[2]) * mult, mult };
   };
 
   const bands = await page.evaluate(() =>
@@ -1958,16 +1960,28 @@ head('the hover read-out prints the same number as the bar it points at');
       return { big: box.children[1]?.textContent?.trim(), legs: legs ? legs.textContent.trim() : null };
     });
     if (!card || !card.big || !card.legs) continue;
-    const c = /C\s*(-?\$[\d.]+[KMB]?)/.exec(card.legs);
-    const p = /P\s*(-?\$[\d.]+[KMB]?)/.exec(card.legs);
+    const c = money((/C\s*(-?\$[\d.]+[KMB]?)/.exec(card.legs) ?? [])[1]);
+    const p = money((/P\s*(-?\$[\d.]+[KMB]?)/.exec(card.legs) ?? [])[1]);
     const headline = money(card.big);
-    if (!c || !p || headline == null) continue;
-    const sum = money(c[1]) + money(p[1]);
+    if (!c || !p || !headline) continue;
+    const sum = c.v + p.v;
     read++;
-    /* 2% absorbs the one-decimal rounding each figure is printed at; the
-       defect this guards against ran to 534%. */
-    const rel = Math.abs(sum) > 0 ? Math.abs(headline - sum) / Math.abs(sum) : 0;
-    if (rel > 0.02) off.push(`${card.big} vs C+P ${(sum / 1e6).toFixed(1)}M (${(rel * 100).toFixed(0)}%)`);
+    /*
+      THE TOLERANCE IS EACH FIGURE'S OWN PRINTED RESOLUTION, summed — not a
+      flat 2%. fmtUsd prints one decimal in the figure's own unit, so a leg
+      that crosses into $x.xB territory carries up to $50M of rounding on its
+      face while the headline stays at $0.05M resolution — and a flat 2% of a
+      ~$560M net (the CI flake this replaced: "+$560.0M vs C+P 522.7M (7%)",
+      push run 33087177732, one green twin apart) cannot absorb that. Half a
+      decimal step per figure absorbs exactly what rounding can do and nothing
+      more: for three M-scale figures the bound is $0.15M — far TIGHTER than
+      the 2% it replaces — and the 534% defect it guards against still trips
+      it at any unit mix.
+    */
+    const tol = 0.05 * (c.mult + p.mult + headline.mult) + 1;
+    if (Math.abs(headline.v - sum) > tol) {
+      off.push(`${card.big} vs C+P ${(sum / 1e6).toFixed(1)}M (Δ ${((headline.v - sum) / 1e6).toFixed(1)}M > tol ${(tol / 1e6).toFixed(1)}M)`);
+    }
   }
 
   if (read < 4) bad(`only ${read} read-out cards could be read — the guard saw too little to mean anything`);
@@ -3586,6 +3600,165 @@ head('eight tools draw, the channel takes three anchors, the note takes words');
     : bad(`after a reload the store holds ${after.join(',')}`);
   errs.length === 0 ? ok('no page errors through the tour') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   T-9. THE EXPECTED-MOVE CONE — the envelope on the tape, the forward half
+   on the runway, and the price axis left alone.
+
+   The engine is proved headless (scripts/expected-move-proof.ts) and the
+   session roll that keeps its forward half alive is proved too
+   (scripts/session-roll-proof.ts). The browser owns the geometry: that
+   toggling the overlay puts ink on the plot AND on the runway — the region
+   right of the last bar, where only the forward cone (and the dotted live
+   price line) can paint — and that none of it widens the price gutter.
+
+   THE RUNWAY IS THE REGRESSION THIS SECTION EXISTS TO CATCH. v5.2's
+   logicalToCoordinate returns 0 for a FRACTIONAL logical (measured: 610 →
+   x 1064, 610.263 → x 0), and the first cut handed it the exact-close tip's
+   fraction — which dragged the tip to the left edge and wrapped the ±1σ fill
+   across the entire tape as a full-width band. The primitive now interpolates
+   fractions itself; the far-left ink bound below is the tripwire that fails
+   if the wrap ever comes back.
+
+   MEASURED AFTER THE FIRST SESSION ROLL, deliberately: at boot the seeded
+   tape's last session is always complete (remaining = 0, cone collapsed), and
+   the first live bar (~6s in, four 1500ms ticks) rolls a fresh session with
+   the whole day still implied. BOOT_MS already covers that, so by the time
+   this section measures, the forward half has real width to draw.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the expected move draws its envelope and its runway cone, and leaves the axis alone');
+{
+  const coneSeed = cone =>
+    JSON.stringify({
+      layout: 1,
+      panes: [{
+        ticker: 'SPY', timeframe: '15m',
+        overlays: { trails: false, levels: false, darkpool: false, volume: false, flow: false, netDrift: false, volDrift: false, dexStrike: false, session: false, cone },
+        indicators: { ema9: false, ema21: false, ema50: false, vwap: false },
+        chartStyle: 'candles', compares: [], priceScale: 'normal', sessionOr: 15, ladder: false,
+      }],
+      setups: {},
+    });
+
+  const openCone = async cone => {
+    const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+    await ctx.addInitScript(`localStorage.setItem('slayer_terrain_v1', ${JSON.stringify(coneSeed(cone))})`);
+    const page = await ctx.newPage();
+    const errs = [];
+    page.on('pageerror', e => errs.push(String(e)));
+    await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(BOOT_MS + 2500);
+    return { ctx, page, errs };
+  };
+
+  /* Plot ink, split at the last heavy column (the live bar): left = tape and
+     envelope, right = runway. Plus the far-left band the wrap bug painted. */
+  const measure = page =>
+    page.evaluate(() => {
+      const plot = [...document.querySelectorAll('canvas')].find(
+        c => c.getBoundingClientRect().height > 200 && c.getBoundingClientRect().width > 200
+      );
+      if (!plot) return null;
+      const { width: w, height: h } = plot;
+      const d = plot.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, w, h).data;
+      const colInk = new Array(w).fill(0);
+      for (let y = 0; y < h; y += 2) {
+        for (let x = 0; x < w; x += 2) {
+          const k = (y * w + x) * 4;
+          if (Math.max(d[k], d[k + 1], d[k + 2]) > 40) colInk[x] += 1;
+        }
+      }
+      const heavy = Math.max(...colInk) * 0.35;
+      let lastHeavy = 0;
+      for (let x = 0; x < w; x += 2) if (colInk[x] > heavy) lastHeavy = x;
+      let total = 0, runway = 0, farLeft = 0;
+      for (let x = 0; x < w; x += 2) {
+        total += colInk[x];
+        if (x > lastHeavy + 12) runway += colInk[x];
+        if (x < 200) farLeft += colInk[x];
+      }
+      return { total, runway, farLeft, lastHeavy, w };
+    });
+
+  /*
+    TOGGLED INSIDE ONE PAGE LOAD — the same reasoning as the session-levels
+    section above: across loads the tape itself varies more than a thin
+    envelope is worth, and toggling in place removes the variance instead of
+    budgeting for it.
+  */
+  const toggleCone = async page => {
+    const menuOpen = async () => (await page.$$('[data-toolbar-menu] [role="checkbox"]')).length > 0;
+    if (!(await menuOpen())) {
+      for (const b of await page.$$('[aria-haspopup="menu"]')) {
+        if (/Overlays/.test((await b.textContent()) ?? '')) {
+          await b.click();
+          await page.waitForTimeout(400);
+          break;
+        }
+      }
+    }
+    for (const item of await page.$$('[data-toolbar-menu] [role="checkbox"]')) {
+      if (/Expected move/.test((await item.textContent()) ?? '')) {
+        await item.click();
+        await page.waitForTimeout(900);
+        return true;
+      }
+    }
+    return false;
+  };
+
+  {
+    const { ctx, page, errs } = await openCone(false);
+    const before = await measure(page);
+    const toggled = await toggleCone(page);
+    toggled ? ok('PREMISE: the Expected move row toggles from the Overlays menu') : bad('PREMISE: no Expected move row in the Overlays menu, so nothing below proves anything');
+    const after = await measure(page);
+    if (!before || !after) {
+      bad('PREMISE: no plot canvas to measure');
+    } else {
+      after.runway > before.runway + 300
+        ? ok(`the forward cone paints the runway — ${before.runway} → ${after.runway} sampled cells right of the live bar`)
+        : bad(`the runway gained no cone: ${before.runway} → ${after.runway}`);
+      after.total > before.total
+        ? ok(`and the overlay adds ink overall — ${before.total} → ${after.total}`)
+        : bad(`the overlay drew nothing: ${before.total} → ${after.total}`);
+      /* The fractional-logical wrap painted a full-width band: the far-left
+         200 columns ballooned by the fill's whole height. A cone anchored at
+         the live bar has no business out there. */
+      after.farLeft < before.farLeft * 2 + 300
+        ? ok(`no wrap band — far-left ink ${before.farLeft} → ${after.farLeft}`)
+        : bad(`far-left ink ballooned ${before.farLeft} → ${after.farLeft}: the fractional-logical wrap is back`);
+      const off = await toggleCone(page);
+      off ? ok('the row toggles a second time') : bad('the second toggle never found the row');
+      const back = await measure(page);
+      back && back.runway < after.runway && Math.abs(back.total - before.total) < Math.max(600, before.total * 0.08)
+        ? ok(`and turning it off takes it away — ${after.total} → ${back.total}`)
+        : bad(`turning the overlay off left ink behind: ${before.total} before, ${back?.total} after`);
+    }
+    errs.length === 0 ? ok('no page errors toggling the cone') : bad(`page errors: ${errs.join(' | ')}`);
+    await ctx.close();
+  }
+
+  /* THE PRICE AXIS IS LEFT ALONE — the tag rides the field, the tip prints
+     its claim in the plot, and the gutter must not learn any of it. */
+  {
+    const gutter = async cone => {
+      const { ctx, page } = await openCone(cone);
+      const w = await page.evaluate(() => {
+        const canvases = [...document.querySelectorAll('canvas')].filter(c => c.getBoundingClientRect().height > 200);
+        const widths = canvases.map(c => Math.round(c.getBoundingClientRect().width)).sort((a, b) => a - b);
+        return widths[0] ?? null;
+      });
+      await ctx.close();
+      return w;
+    };
+    const gOff = await gutter(false);
+    const gOn = await gutter(true);
+    gOff !== null && gOff === gOn
+      ? ok(`the price gutter is ${gOn}px with the cone on or off — nothing named on the axis`)
+      : bad(`the cone moved the price gutter: ${gOff}px off, ${gOn}px on`);
+  }
 }
 
 console.log(`\n${fails} failing`);

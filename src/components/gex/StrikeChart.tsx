@@ -41,9 +41,12 @@ import { markFired, useAlerts } from './alertStore';
 import type { Candle } from '../../types/market';
 import type { DarkPoolPrint, KeyLevels } from '../../types/gex';
 import { bucketFlow, flowMaxLeg } from '../../data/flowBars';
-import { emaSeries, vwapSeries } from '../../data/indicators';
+import { emaSeries, sessionStarts, vwapSeries } from '../../data/indicators';
 import { buildSessionLevels, type OpeningRange } from '../../data/sessionLevels';
 import { SessionLevelsPrimitive, sessionLines } from './sessionLevelsPrimitive';
+import { buildExpectedMoveCone } from '../../data/expectedMove';
+import { ExpectedMovePrimitive } from './expectedMovePrimitive';
+import { RTH_MINUTES } from '../../core/calendar';
 import { cumulativeDrift, driftPeak } from '../../data/driftSeries';
 import { impliedVolLine, realizedVol, volCeiling } from '../../data/volDrift';
 import type { FlowPrint } from '../../types/trace';
@@ -175,6 +178,15 @@ export interface ChartOverlays {
     and what leaves the palette meaning what it means.
   */
   session: boolean;
+  /*
+    The expected-move cone — T-9. What the options were charging for today,
+    drawn on the tape in the tape's own units: the ±1σ/±2σ envelope the book
+    claimed from the open, and the cone it still claims from here to the
+    bell, both off the feed's quoted vol (data/expectedMove.ts). White at
+    furniture alpha — it is a claim ABOUT spot, so it wears spot's ink and
+    none of the dealer palette's.
+  */
+  cone: boolean;
 }
 
 /* Chart styles, TradingView's picker (Noah, 2026-08-23: "notice how candles
@@ -297,6 +309,9 @@ export const DEFAULT_OVERLAYS: ChartOverlays = {
      back with it false anyway (setups.ts: a key the reader never saw cannot
      have been chosen by them). */
   session: false,
+  /* Off for the same courtesy — an envelope plus a runway cone is a lot of
+     geometry to hand a reader who has not asked what the options charge. */
+  cone: false,
 };
 
 /*
@@ -648,6 +663,8 @@ const StrikeChart = ({
   /** T-6's layer. One primitive for the life of the chart; what it draws is
       swapped, never the primitive itself — see the session effect below. */
   const sessionPrimRef = useRef<SessionLevelsPrimitive | null>(null);
+  /** T-9's layer, run the same way — see the cone effect below. */
+  const conePrimRef = useRef<ExpectedMovePrimitive | null>(null);
   const levelRafRef = useRef(0);
   /** Time of that bar, and the seconds one bar covers — what the runway is
       built from, kept in refs so the time-scale subscription can read them
@@ -1199,6 +1216,10 @@ const StrikeChart = ({
     const sessionPrim = new SessionLevelsPrimitive();
     candles.attachPrimitive(sessionPrim);
 
+    /* T-9's cone, run exactly the same way. */
+    const conePrim = new ExpectedMovePrimitive();
+    candles.attachPrimitive(conePrim);
+
     /* Zooming out reaches past the runway's end; extend it as they go. The
        handler reads refs rather than closing over the bar time, so it is
        installed once with the chart and never re-subscribed. */
@@ -1259,6 +1280,7 @@ const StrikeChart = ({
     trailsRef.current = trails;
     drawingsRef.current = drawingsPrim;
     sessionPrimRef.current = sessionPrim;
+    conePrimRef.current = conePrim;
 
     /* Reads candleSeriesRef rather than closing over `candles`: the style swap
        removes and replaces the main series in place, and a captured series
@@ -1292,6 +1314,7 @@ const StrikeChart = ({
       trailsRef.current = null;
       drawingsRef.current = null;
       sessionPrimRef.current = null;
+      conePrimRef.current = null;
       compareSeriesRef.current.clear();
       compareLoadedRef.current = '';
       indicatorSeriesRef.current.clear();
@@ -1320,6 +1343,7 @@ const StrikeChart = ({
     const trails = trailsRef.current;
     const drawingsPrim = drawingsRef.current;
     const sessionPrim = sessionPrimRef.current;
+    const conePrim = conePrimRef.current;
     chart.removeSeries(prev);
     const next = makeMain(chart, chartStyle, getCandleTheme());
     if (trails) next.attachPrimitive(trails);
@@ -1329,6 +1353,7 @@ const StrikeChart = ({
        vanish the first time the reader picks a line chart, with no error and
        nothing to see. `mainNonce` then makes the session effect refill it. */
     if (sessionPrim) next.attachPrimitive(sessionPrim);
+    if (conePrim) next.attachPrimitive(conePrim);
     candleSeriesRef.current = next;
     styleBuiltRef.current = chartStyle;
     levelLinesRef.current = {};
@@ -2057,6 +2082,54 @@ const StrikeChart = ({
     prim.setLines(sessionLines(buildSessionLevels(Simulator.getCandles(ticker) ?? [], sessionOr)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticker, revision, sessionOr, overlays.session, replay, mainNonce]);
+
+  /*
+    THE EXPECTED-MOVE CONE — T-9.
+
+    Computed on the DISPLAYED grid, unlike the session levels above: the
+    engine samples its envelope at whatever bars it is handed, and handing it
+    the pane's own aggregated session means every past point is an exact bar
+    hit and a crossing answers "did a close AT THIS TIMEFRAME leave the band"
+    — the question the tape on screen can actually show. The √t curve itself
+    is sampling-independent, so a 5-minute pane and a 1-minute pane draw the
+    same envelope, just sampled coarser.
+
+    σ IS THE FEED'S QUOTED VOL for the name — the same figure every options
+    surface quotes. The REMAINING MINUTES come from the tape's own session,
+    not from readSessionClock: the forward half is geometry BETWEEN the last
+    bar and the bell on this time axis, and the simulator's tape runs its own
+    accelerated clock (~15× wall speed — see seedCandles), so wall-clock
+    minutes would draw a cone whose tip lands hours past the session's last
+    possible bar. `RTH_MINUTES − elapsed` is readable off the same slice the
+    envelope uses, collapses to zero exactly at the tape's bell, and when a
+    real feed replaces the simulator the tape's clock IS the wall clock — the
+    two derivations converge on the P-0 day fraction with nothing to rewire.
+
+    HIDDEN DURING REPLAY, as the session levels are: the forward half is a
+    claim about the LIVE session's remaining minutes, and drawing it from the
+    middle of a historical tape would price a future that already happened.
+  */
+  useEffect(() => {
+    const prim = conePrimRef.current;
+    if (!prim) return;
+    if (!overlays.cone || replay) {
+      prim.setData(null);
+      return;
+    }
+    const mins = tfMinutes(timeframe);
+    const bars = aggregateCandles(Simulator.getCandles(ticker) ?? [], mins);
+    const starts = sessionStarts(bars, mins);
+    const sess = starts.length > 0 ? bars.slice(starts[starts.length - 1]) : [];
+    const iv = Simulator.TICKERS[Simulator.ensureTicker(ticker)]?.iv ?? 0;
+    /* Elapsed counts THROUGH the last bar — a bar covers its interval. */
+    const elapsed = sess.length > 0 ? (sess[sess.length - 1].time - sess[0].time) / 60 + mins : 0;
+    prim.setData({
+      cone: buildExpectedMoveCone(sess, iv, Math.max(0, RTH_MINUTES - elapsed), mins),
+      barTimes: bars.map(b => b.time),
+      barMinutes: mins,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ticker, timeframe, revision, overlays.cone, replay, mainNonce]);
 
   /*
     THE LIVE PRICE, as a card on the right scale.
