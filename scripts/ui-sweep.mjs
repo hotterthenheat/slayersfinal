@@ -2695,13 +2695,14 @@ head('the pane toolbar never wraps over the tape');
   /* The exclusion has to stay an exclusion. If the strip grows past the floor
      these columns are no longer "narrower than the strip has ever fitted" and
      the whole section above quietly stops testing anything. */
-  /* The full strip is 934px in this build (818 before T-1's pencil and T-13's
-     Replay joined it). The bound is the figure Terrain gates `compact` on,
-     less the padding it adds — past that the strip cannot fit the column the
-     constant promises it and the section above stops meaning anything. */
-  widest > 0 && widest <= 956 - 22
-    ? ok(`the widest strip measured is ${widest}px, inside the 934 the source records`)
-    : bad(`the widest strip measured is ${widest}px; the source records 934 and gates compact on 956`);
+  /* The full strip is 972px in this build (818 before T-1's pencil, 934
+     before T-14's 15s chip joined the picker). The bound is the figure
+     Terrain gates `compact` on, less the padding it adds — past that the
+     strip cannot fit the column the constant promises it and the section
+     above stops meaning anything. */
+  widest > 0 && widest <= 994 - 22
+    ? ok(`the widest strip measured is ${widest}px, inside the 972 the source records`)
+    : bad(`the widest strip measured is ${widest}px; the source records 972 and gates compact on 994`);
   narrowSeen > 0
     ? ok(`${narrowSeen} toolbars sat in columns under the ${NARROW_FLOOR_PX}px floor and were excluded, as recorded (compact strip is ${COMPACT_STRIP_PX}px)`)
     : bad('no narrow columns were seen at all — the excluded band has moved and this floor is now untested');
@@ -4169,6 +4170,11 @@ head('a 15s pane says live only, and the chip leaves with the timeframe');
 
   /* The picker: leaving 15s retires the chip, returning brings it back. */
   const pickTf = async label => {
+    /* Hover the pane first — the toolbar is hover-gated, and a chip clicked
+       while it is folded away gets intercepted by the plot canvas (this
+       exact call once timed out a whole sweep on that). */
+    await page.mouse.move(800, 420);
+    await page.waitForTimeout(350);
     for (const b of await page.$$('button')) {
       if ((await b.textContent())?.trim() === label) { await b.click(); await page.waitForTimeout(900); return true; }
     }
@@ -4349,6 +4355,108 @@ head('a pane exports as a PNG, named for what it is');
     }
   }
   errs.length === 0 ? ok('no page errors through the export') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   T-22. ALERT KINDS — chips arm what a pane can watch, the rail shows it.
+
+   The RULES are proof-covered (scripts/alerts-proof.ts, 67 checks); the
+   browser proves the doors: a level chip and a flow chip arm from the menu,
+   a typed price still arms from the input, the armed rail appears on the
+   pane with a row per alert, a live tick establishes the level alert's side
+   in storage (the lazy-arm round trip through commitArm), and Remove all
+   takes the rail and the storage key with it. Seeded to one pane — the
+   compact desk shortens the toolbar, and chips are matched by their text.
+   ───────────────────────────────────────────────────────────────────────── */
+head('alert kinds arm from the menu and stand on the rail');
+{
+  const seed = JSON.stringify({
+    layout: 1,
+    panes: [{
+      ticker: 'SPY', timeframe: '15m',
+      overlays: { trails: true, levels: true, darkpool: false, volume: true, flow: false, netDrift: false, volDrift: false, dexStrike: false, session: false, cone: false, events: false },
+      indicators: { ema9: false, ema21: false, ema50: false, vwap: false },
+      chartStyle: 'candles', compares: [], priceScale: 'normal', sessionOr: 15, ladder: false, link: null,
+    }],
+    setups: {},
+  });
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  await ctx.addInitScript(`localStorage.setItem('slayer_terrain_v1', ${JSON.stringify(seed)})`);
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 1000);
+  await page.mouse.move(600, 400);
+  await page.waitForTimeout(600);
+
+  let opened = false;
+  for (const b of await page.$$('button[title="Alerts"]')) {
+    if (await b.isVisible()) { await b.click(); opened = true; break; }
+  }
+  await page.waitForTimeout(400);
+  opened ? ok('PREMISE: the Alerts menu opens') : bad('PREMISE: no Alerts trigger to open');
+
+  const chip = async label => {
+    for (const b of await page.$$('button')) {
+      if ((await b.textContent())?.trim() === label && (await b.isVisible())) { await b.click(); await page.waitForTimeout(250); return true; }
+    }
+    return false;
+  };
+  (await chip('Call wall')) ? ok('the Call wall chip arms') : bad('no Call wall chip');
+  (await chip('$1M')) ? ok('the $1M flow chip arms') : bad('no $1M chip');
+  const honest = await page.evaluate(() => /Marks the pane while this tab is open\. Nothing is sent anywhere\./.test(document.body.textContent ?? ''));
+  honest ? ok('the menu still says it is in-session only, in as many words') : bad('the honesty line is gone');
+
+  const input = await page.$('input[aria-label^="Alert price"]');
+  if (!input) bad('no price input in the menu');
+  else {
+    const spotTxt = Number(await input.getAttribute('placeholder'));
+    await input.fill((spotTxt + 1).toFixed(2));
+    await input.press('Enter');
+    await page.waitForTimeout(300);
+  }
+  const armedChips = await page.evaluate(() => document.querySelectorAll('button[aria-pressed="true"]').length);
+  armedChips >= 2 ? ok(`${armedChips} chips show armed`) : bad(`only ${armedChips} chips read armed`);
+
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  const rail = await page.evaluate(() => {
+    const r = document.querySelector('[data-alert-rail]');
+    return r ? [...r.children].map(s => s.textContent?.trim() ?? '') : null;
+  });
+  rail && rail.length === 3
+    ? ok(`the rail stands with a row per alert — ${rail.join(' · ')}`)
+    : bad(`rail rows: ${JSON.stringify(rail)}`);
+  rail?.some(t => t === 'call wall cross') ? ok('and the level row says which level') : bad('no call-wall row on the rail');
+
+  /* The lazy arm: within a few ticks the level alert's side must land in
+     storage — the commitArm round trip, live. */
+  await page.waitForTimeout(6500);
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('slayer_price_alerts_SPY') ?? '[]'));
+  const lvl = stored.find(a => a.kind === 'level');
+  lvl && (lvl.side === 1 || lvl.side === -1)
+    ? ok(`a live tick established the level alert's side (${lvl.side})`)
+    : bad(`the level alert never armed its side: ${JSON.stringify(lvl)}`);
+
+  await page.mouse.move(600, 400);
+  await page.waitForTimeout(400);
+  for (const b of await page.$$('button[title="Alerts"]')) {
+    if (await b.isVisible()) { await b.click(); break; }
+  }
+  await page.waitForTimeout(400);
+  (await chip('Remove all')) ? ok('Remove all is offered') : bad('no Remove all with three armed');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  const gone = await page.evaluate(() => ({
+    rail: !document.querySelector('[data-alert-rail]'),
+    key: localStorage.getItem('slayer_price_alerts_SPY'),
+  }));
+  gone.rail && gone.key === null
+    ? ok('Remove all takes the rail and the storage key with it')
+    : bad(`after Remove all — rail gone: ${gone.rail}, key: ${gone.key}`);
+  errs.length === 0 ? ok('no page errors through the alerts tour') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
 }
 

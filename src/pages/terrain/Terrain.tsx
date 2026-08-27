@@ -364,19 +364,21 @@ const PRICE_GUTTER_PX = PRICE_SCALE_MIN_WIDTH + 2;
   gutter already taken off it.
 
   Measured against this build at 2560, where nothing can be forcing a wrap:
-  the un-compacted toolbar lays out at 934px on one line. The seven-button
-  timeframe strip is 251 of that, `Replay` 78, the three worded triggers
-  (Indicators 117 · Alerts 93 · Candles 102) another 311, `Overlays 3` 117,
-  `Theme` 89, and the rest gaps and dividers. Add the strip's 6px left pad and
-  the toolbar band's 16px of `px-2` and the column has to give it 956px past
-  the gutter.
+  the un-compacted toolbar lays out at 972px on one line. The timeframe strip
+  is 289 of that (eight chips now — T-14's `15s` is 36px of the move below),
+  `Replay` 78, the three worded triggers (Indicators 117 · Alerts 93 ·
+  Candles 102) another 311, `Overlays 3` 117, `Theme` 89, and the rest gaps
+  and dividers. Add the strip's 6px left pad and the toolbar band's 16px of
+  `px-2` and the column has to give it 994px past the gutter.
 
-  IT HAS MOVED TWICE, and both times the control that moved it was in another
-  file: 818 → 856 when T-1 wired the draw pencil, and → 934 when T-13 wired
-  Replay. That is the whole hazard of a measured constant, and it is why the
-  sweep asserts the PROPERTY — the toolbar occupies exactly one row at every
-  width and layout — rather than this figure. The number here is the gate; the
-  sweep is what notices when it is wrong.
+  IT HAS MOVED THREE TIMES, and every time the control that moved it was in
+  another file: 818 → 856 when T-1 wired the draw pencil, → 934 when T-13
+  wired Replay, and → 972 when T-14 put `15s` on the picker. That is the
+  whole hazard of a measured constant, and it is why the sweep asserts the
+  PROPERTY — the toolbar occupies exactly one row at every width and layout —
+  rather than this figure. The number here is the gate; the sweep is what
+  notices when it is wrong (it did: two panes at 1180 wrapped over the tape
+  for exactly the 38px the 15s chip is worth).
 
   T-7 ADDED NO WIDTH, and that was the deciding constraint rather than a happy
   accident: a price-scale trigger of its own is 39px at the very least, and the
@@ -398,7 +400,7 @@ const PRICE_GUTTER_PX = PRICE_SCALE_MIN_WIDTH + 2;
   It is a PANE width, not a window width: a four-pane desk at 1440px still
   gives each toolbar ~577px and still wraps.
 */
-const TOOLBAR_FULL_PX = 956;
+const TOOLBAR_FULL_PX = 994;
 
 /*
   THE STRIP'S OWN PADDING, when it is not clearing a price gutter (`p-1.5`).
