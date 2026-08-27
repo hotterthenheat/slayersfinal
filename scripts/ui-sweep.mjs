@@ -3652,10 +3652,19 @@ head('the expected move draws its envelope and its runway cone, and leaves the a
     return { ctx, page, errs };
   };
 
-  /* Plot ink, split at the last heavy column (the live bar): left = tape and
-     envelope, right = runway. Plus the far-left band the wrap bug painted. */
-  const measure = page =>
-    page.evaluate(() => {
+  /*
+    Plot ink, split into tape / runway at `splitX` — and the split is taken
+    from the OFF measurement and REUSED for the on one. The first cut derived
+    the boundary per-measure from "the last heavy column", which is circular:
+    the cone's own wash at the tip is the heaviest thing on the runway, so
+    with the overlay on the boundary slid out to the cone's far edge and the
+    runway read 0 with the cone plainly drawn. Off, the heavy columns really
+    are the candles, so that split is the live bar; the grid does not move
+    across a toggle (plot width asserted equal below), so it stays valid for
+    the on-state read. Plus the far-left band the wrap bug painted.
+  */
+  const measure = (page, splitX = null) =>
+    page.evaluate(split => {
       const plot = [...document.querySelectorAll('canvas')].find(
         c => c.getBoundingClientRect().height > 200 && c.getBoundingClientRect().width > 200
       );
@@ -3672,14 +3681,15 @@ head('the expected move draws its envelope and its runway cone, and leaves the a
       const heavy = Math.max(...colInk) * 0.35;
       let lastHeavy = 0;
       for (let x = 0; x < w; x += 2) if (colInk[x] > heavy) lastHeavy = x;
+      const boundary = split ?? lastHeavy;
       let total = 0, runway = 0, farLeft = 0;
       for (let x = 0; x < w; x += 2) {
         total += colInk[x];
-        if (x > lastHeavy + 12) runway += colInk[x];
+        if (x > boundary + 12) runway += colInk[x];
         if (x < 200) farLeft += colInk[x];
       }
       return { total, runway, farLeft, lastHeavy, w };
-    });
+    }, splitX);
 
   /*
     TOGGLED INSIDE ONE PAGE LOAD — the same reasoning as the session-levels
@@ -3688,6 +3698,13 @@ head('the expected move draws its envelope and its runway cone, and leaves the a
     budgeting for it.
   */
   const toggleCone = async page => {
+    /* The pane toolbar sits UNDER the plot canvas until the pane is hovered —
+       measured: every trigger's centre hit CANVAS until a mouse.move over the
+       pane, then BUTTON. The session-levels section above carries the same
+       hover for the same reason; without it the click retries into a 30s
+       TimeoutError and takes the whole sweep down (the ccfdb57 local run). */
+    await page.mouse.move(600, 400);
+    await page.waitForTimeout(600);
     const menuOpen = async () => (await page.$$('[data-toolbar-menu] [role="checkbox"]')).length > 0;
     if (!(await menuOpen())) {
       for (const b of await page.$$('[aria-haspopup="menu"]')) {
@@ -3713,7 +3730,7 @@ head('the expected move draws its envelope and its runway cone, and leaves the a
     const before = await measure(page);
     const toggled = await toggleCone(page);
     toggled ? ok('PREMISE: the Expected move row toggles from the Overlays menu') : bad('PREMISE: no Expected move row in the Overlays menu, so nothing below proves anything');
-    const after = await measure(page);
+    const after = await measure(page, before?.lastHeavy ?? null);
     if (!before || !after) {
       bad('PREMISE: no plot canvas to measure');
     } else {
@@ -3731,10 +3748,19 @@ head('the expected move draws its envelope and its runway cone, and leaves the a
         : bad(`far-left ink ballooned ${before.farLeft} → ${after.farLeft}: the fractional-logical wrap is back`);
       const off = await toggleCone(page);
       off ? ok('the row toggles a second time') : bad('the second toggle never found the row');
-      const back = await measure(page);
-      back && back.runway < after.runway && Math.abs(back.total - before.total) < Math.max(600, before.total * 0.08)
+      const back = await measure(page, before.lastHeavy);
+      /*
+        RELATIONAL, not absolute: the session is YOUNG here (the roll is ~6s
+        into boot) and paints a fresh candle every ~6s, so total ink grows a
+        few hundred cells between any two reads and a flat "back within 8% of
+        before" bound fails on honest drift (measured: 5431 → 6182 across two
+        toggle round-trips). The claim is that turning the cone off removes
+        MOST of what turning it on added; a stuck overlay leaves back ≈ after
+        and still trips this.
+      */
+      back && after.total - back.total > (after.total - before.total) * 0.7
         ? ok(`and turning it off takes it away — ${after.total} → ${back.total}`)
-        : bad(`turning the overlay off left ink behind: ${before.total} before, ${back?.total} after`);
+        : bad(`turning the overlay off left ink behind: ${before.total} before, ${after.total} on, ${back?.total} after`);
     }
     errs.length === 0 ? ok('no page errors toggling the cone') : bad(`page errors: ${errs.join(' | ')}`);
     await ctx.close();
