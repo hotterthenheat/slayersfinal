@@ -837,6 +837,21 @@ const Pane = ({
   const [readout, setReadout] = useState<CrosshairBar | null>(null);
   useEffect(() => setReadout(null), [ticker, timeframe]);
 
+  /*
+    DRAW MODE — per pane, and NOT persisted.
+
+    It is a mode rather than a setting: a reader who left a pane in draw mode
+    yesterday wants a chart today, not a pointer that pans nothing. The
+    drawings themselves are stored per ticker and come back either way.
+
+    Terrain is the first host in the app to wire this. The toolbar's pencil
+    was gated on `!minimal` and nothing anywhere passed a handler, so the
+    whole drawing layer — trendlines, levels, and T-1's measure — has been
+    reachable from nowhere.
+  */
+  const [drawing, setDrawing] = useState(false);
+  useEffect(() => setDrawing(false), [ticker]);
+
   /* One surface under the header AND the tape, so a pane is one continuous
      black inside its frame rather than two shades meeting at a seam. */
   const themeKey = useCandleThemeKey();
@@ -932,6 +947,8 @@ const Pane = ({
               compares={compares}
               priceScale={priceScale}
               sessionOr={sessionOr}
+              drawing={drawing}
+              onExitDraw={() => setDrawing(false)}
               focusPrice={focus}
               priceTag
               onCrosshair={onCrosshair}
@@ -1217,6 +1234,8 @@ const Pane = ({
                   priceScaleLock={scaleLock}
                   sessionOr={sessionOr}
                   onSessionOr={o => onCfg({ sessionOr: o })}
+                  drawing={drawing}
+                  onToggleDrawing={() => setDrawing(v => !v)}
                 />
               </div>
             </div>

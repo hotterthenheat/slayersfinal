@@ -1,4 +1,5 @@
 import type { ISeriesPrimitive, SeriesAttachedParameter, Time, IChartApi, ISeriesApi } from 'lightweight-charts';
+import { fmtElapsed, measureSpan } from '../../data/measure';
 
 /*
   User drawings layer — trendlines and horizontal levels, sketched directly on
@@ -7,7 +8,35 @@ import type { ISeriesPrimitive, SeriesAttachedParameter, Time, IChartApi, ISerie
   Interface color (lime) — these are the USER's marks, not engine data.
 */
 
-export type DrawingKind = 'trend' | 'hline';
+/*
+  THE MEASURE IS A THIRD KIND — T-1, and a third kind is all it is.
+
+  It carries the same two anchor points a trend does and lives in the same
+  per-ticker store, so it survives a pan, a zoom, a timeframe switch and a
+  reload exactly as the other two do, and the eraser clears it with them.
+
+  WHAT THE DIRECTIVE ASKED FOR AND WHAT THIS DOES. The sketch was "release to
+  dismiss, or click to pin it as a drawing" — a transient by default. This
+  commits on release like the other two instead, deliberately: drawings here
+  have ONE lifecycle (drawn, stored per ticker, cleared by the eraser), and
+  making measures the single kind that does not persist means a second
+  lifecycle in a store that has one, plus a pin affordance and a dismissal
+  rule that nothing else on this chart needs. The transient half is live
+  DURING the drag, which is where a measure is read.
+*/
+export type DrawingKind = 'trend' | 'hline' | 'measure';
+
+/*
+  THE KINDS, AS DATA, and the validator reads THIS rather than a list of its
+  own. `loadDrawings` enumerated them inline — `kind === 'trend' || kind ===
+  'hline'` — so adding a third kind meant every stored one of it was dropped
+  on the next read, silently, with no error: exactly the shape of the bug
+  `setups.ts` was fixed for twice (T-0). Written as a `satisfies` map so a
+  kind added to the union and not to this list fails the BUILD.
+*/
+const KIND_SET = new Set<string>(
+  Object.keys({ trend: 0, hline: 0, measure: 0 } satisfies Record<DrawingKind, number>)
+);
 
 export interface DrawingPoint {
   time: number; // bar time (sec)
@@ -21,6 +50,15 @@ export interface Drawing {
 }
 
 const LIME = '210,255,0';
+
+/*
+  The measure's own band. Steel rather than lime: lime marks the reader's
+  DECISIONS — a level they drew, a strike they picked — and a measure is a
+  question rather than a mark. It also has to sit under a readout that must
+  stay legible over candles.
+*/
+const MEASURE_RGB = '226,234,244';
+const MEASURE_FILL = 'rgba(226,234,244,0.07)';
 
 interface BitmapScope {
   context: CanvasRenderingContext2D;
@@ -47,6 +85,89 @@ class DrawingsPaneRenderer {
       const vr = scope.verticalPixelRatio;
       const w = scope.mediaSize.width * hr;
 
+      /*
+        THE MEASURE — a band across the span, and what it says.
+
+        The readout is drawn HERE rather than as floating DOM for the same
+        reason the session levels are (sessionLevelsPrimitive.ts): it has to
+        follow the band across a pan and a zoom, and a DOM chip would need its
+        own frame loop to keep up with a canvas that already has one.
+
+        The figures come from data/measure.ts, so the box and a proof cannot
+        disagree about what a span is worth.
+      */
+      const renderMeasure = (d: Drawing, alpha: number) => {
+        if (!d.p2) return;
+        const x1m = src.timeToX(d.p1.time);
+        const x2m = src.timeToX(d.p2.time);
+        const y2c = series.priceToCoordinate(d.p2.price);
+        const y1c2 = series.priceToCoordinate(d.p1.price);
+        if (x1m === null || x2m === null || y2c === null || y1c2 === null) return;
+        const xa = Math.min(x1m, x2m) * hr;
+        const xb = Math.max(x1m, x2m) * hr;
+        const ya = Math.min(y1c2, y2c) * vr;
+        const yb = Math.max(y1c2, y2c) * vr;
+
+        const span = measureSpan(d.p1.time, d.p1.price, d.p2.time, d.p2.price, src.barMinutes);
+        /* Direction is the market's — the band is tinted by whether price
+           ROSE across the span, which is the one place red and green belong
+           (they are price direction, and nothing else here is). */
+        const rose = span.deltaAbs >= 0;
+        ctx.fillStyle = rose ? 'rgba(48,209,88,0.10)' : 'rgba(255,59,48,0.10)';
+        ctx.fillRect(xa, ya, Math.max(1, xb - xa), Math.max(1, yb - ya));
+        ctx.strokeStyle = `rgba(${MEASURE_RGB},${alpha * 0.8})`;
+        ctx.lineWidth = 1 * vr;
+        ctx.strokeRect(xa, ya, Math.max(1, xb - xa), Math.max(1, yb - ya));
+        /* The two anchors, so a reader can see which corners were taken. */
+        ctx.fillStyle = `rgba(${MEASURE_RGB},${alpha})`;
+        const a = 2.2 * vr;
+        ctx.fillRect(x1m * hr - a, y1c2 * vr - a, a * 2, a * 2);
+        ctx.fillRect(x2m * hr - a, y2c * vr - a, a * 2, a * 2);
+
+        const sign = span.deltaAbs >= 0 ? '+' : '−';
+        const abs = Math.abs(span.deltaAbs);
+        const lines = [
+          `${sign}${abs.toFixed(2)}  ${sign}${Math.abs(span.deltaPct).toFixed(2)}%`,
+          `${span.bars} bar${span.bars === 1 ? '' : 's'} · ${fmtElapsed(span.tradingMin)}`,
+          /* Null while the drag has not left its bar — "not yet" rather than a
+             rate off time that has not passed (data/measure.ts). */
+          /* One decimal under 10, none above: a quiet multi-day span
+             annualizes to single digits where "3%" and "3.2%" are different
+             readings, and a ten-minute 0DTE move annualizes into the hundreds
+             where a decimal is noise. */
+          span.annualizedPct === null
+            ? 'annualized —'
+            : `annualized ${span.annualizedPct < 10 ? span.annualizedPct.toFixed(1) : span.annualizedPct.toFixed(0)}%`,
+        ];
+
+        ctx.font = `${10 * vr}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+        ctx.textBaseline = 'top';
+        const padX = 6 * hr;
+        const padY = 5 * vr;
+        const lineH = 13 * vr;
+        const boxW = Math.max(...lines.map(t => ctx.measureText(t).width)) + padX * 2;
+        const boxH = lines.length * lineH + padY * 2;
+        /* ABOVE the band when price rose, below when it fell — the box sits on
+           the side the move came FROM, so it never covers the leg the reader
+           is looking at. Clamped into the plot either way. */
+        let bx = xb + 8 * hr;
+        if (bx + boxW > scope.mediaSize.width * hr) bx = Math.max(0, xa - boxW - 8 * hr);
+        let by = rose ? ya - boxH - 6 * vr : yb + 6 * vr;
+        if (by < 0) by = yb + 6 * vr;
+        if (by + boxH > scope.mediaSize.height * vr) by = Math.max(0, ya - boxH - 6 * vr);
+
+        ctx.fillStyle = 'rgba(10,10,10,0.86)';
+        ctx.fillRect(bx, by, boxW, boxH);
+        ctx.strokeStyle = `rgba(${MEASURE_RGB},0.28)`;
+        ctx.lineWidth = 1 * vr;
+        ctx.strokeRect(bx, by, boxW, boxH);
+        lines.forEach((t, i) => {
+          ctx.fillStyle =
+            i === 0 ? (rose ? 'rgba(48,209,88,0.95)' : 'rgba(255,59,48,0.95)') : `rgba(${MEASURE_RGB},0.72)`;
+          ctx.fillText(t, bx + padX, by + padY + i * lineH);
+        });
+      };
+
       const render = (d: Drawing, alpha: number) => {
         const y1c = series.priceToCoordinate(d.p1.price);
         if (y1c === null) return;
@@ -65,6 +186,11 @@ class DrawingsPaneRenderer {
         }
 
         if (!d.p2) return;
+
+        if (d.kind === 'measure') {
+          renderMeasure(d, alpha);
+          return;
+        }
         const x1m = src.timeToX(d.p1.time);
         const x2m = src.timeToX(d.p2.time);
         const y2c = series.priceToCoordinate(d.p2.price);
@@ -110,6 +236,9 @@ export class DrawingsPrimitive implements ISeriesPrimitive<Time> {
   /** Sorted bar times of the CURRENT aggregation — lets time↔x conversion
       snap to real bars, so drawings survive timeframe switches. */
   barTimes: number[] = [];
+  /** The interval those bars were aggregated to — what a measure's bar count
+      and its annualization are computed against. */
+  barMinutes = 1;
   private _paneViews: DrawingsPaneView[];
 
   constructor() {
@@ -168,6 +297,10 @@ export class DrawingsPrimitive implements ISeriesPrimitive<Time> {
     return this.barTimes[idx];
   }
 
+  setBarMinutes(mins: number): void {
+    this.barMinutes = Math.max(1, mins);
+  }
+
   setBarTimes(times: number[]): void {
     this.barTimes = times;
     this.requestUpdate?.();
@@ -198,8 +331,12 @@ export function loadDrawings(ticker: string): Drawing[] {
       (d): d is Drawing =>
         typeof d === 'object' &&
         d !== null &&
-        ((d as Drawing).kind === 'trend' || (d as Drawing).kind === 'hline') &&
-        typeof (d as Drawing).p1?.price === 'number'
+        KIND_SET.has((d as Drawing).kind) &&
+        typeof (d as Drawing).p1?.price === 'number' &&
+        /* A trend and a measure are both two-point shapes; one stored without
+           its second point would render as nothing and, for a measure, would
+           divide by a span that is not there. */
+        ((d as Drawing).kind === 'hline' || typeof (d as Drawing).p2?.price === 'number')
     );
   } catch {
     return [];

@@ -80,6 +80,11 @@ export const TERMS = {
   // ---- multi-timeframe (T-12) ----
   'Timeframe trend':
     'Where price sits on each interval against its own EMA21 and VWAP. Above both reads up, below both reads down, and between them reads flat — the timeframes disagreeing is itself the signal.',
+  // ---- the measure (T-1) ----
+  Measure:
+    'Drag across the tape for the move it covers: dollars, percent, bars, elapsed, and the same move stated at an annual rate so it can be read against implied volatility.',
+  Annualized:
+    'A move restated as the yearly rate it implies, so a 20-minute move and a two-day one can be compared — and both compared against implied volatility, which is quoted the same way. Measured in trading time, so a weekend does not count against it.',
   // ---- price scale (T-7) ----
   'Price scale':
     'How the vertical axis is spaced. Linear gives equal dollars equal height; logarithmic gives equal percentages equal height, which is what you want comparing moves at different prices.',

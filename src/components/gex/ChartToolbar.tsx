@@ -852,21 +852,32 @@ const ChartToolbar = ({
       </Dropdown>
       )}
 
-      {!minimal && (
-        <>
-          <button
-            onClick={onToggleDrawing}
-            title={drawing ? 'Exit draw mode' : 'Draw on the chart'}
-            className={`inline-flex items-center gap-1.5 px-2 py-1 rounded font-mono text-[10px] uppercase tracking-wider transition-colors ${
-              drawing
-                ? 'bg-select/10 text-select'
-                : 'text-textMuted hover:text-textPrimary hover:bg-white/[0.03]'
-            }`}
-          >
-            <PencilLine className="w-3.5 h-3.5" />
-          </button>
+      {/*
+        GATED ON BEING WIRED, not on `minimal`.
 
-        </>
+        It read `!minimal`, and NOTHING in the app passed `onToggleDrawing` —
+        so the button never rendered anywhere, and the drawing layer under it
+        (trendlines, levels, and now T-1's measure) had no door at all. A mode
+        flag was standing in for "did the host ask for this", which is what
+        every other optional control here already tests directly.
+
+        Terrain wires it per pane. The desks that do not pass a handler are
+        unchanged, because the button was not reaching them either way.
+      */}
+      {onToggleDrawing && (
+        <button
+          onClick={onToggleDrawing}
+          title={drawing ? 'Exit draw mode' : 'Draw on the chart — trend, level, measure'}
+          aria-pressed={drawing}
+          aria-label={drawing ? 'Exit draw mode' : 'Draw on the chart'}
+          className={`inline-flex items-center gap-1.5 px-2 py-1 rounded font-mono text-[10px] uppercase tracking-wider transition-colors ${
+            drawing
+              ? 'bg-select/10 text-select'
+              : 'text-textMuted hover:text-textPrimary hover:bg-white/[0.03]'
+          }`}
+        >
+          <PencilLine className="w-3.5 h-3.5" />
+        </button>
       )}
 
       {/* Renders whenever wired, minimal mode included — the desk's chart

@@ -2933,19 +2933,32 @@ head('the session levels draw on the tape and leave the price axis alone');
     noise. Toggling in place removes the variance rather than budgeting for
     it: the same session, a second apart, with only the overlay changed.
   */
+  /*
+    OPENS THE MENU ONLY IF IT IS SHUT.
+
+    Clicking an overlay row does NOT close the menu — the rows are checkboxes
+    and a reader ticking three of them should not have to reopen it twice. So
+    a second call that clicked the trigger unconditionally CLOSED the menu and
+    then found no rows in it, and the "turn it off again" check read an
+    unchanged chart as an overlay that would not turn off. The app was fine;
+    the toggle was.
+  */
   const toggleSession = async page => {
-    for (const b of await page.$$('[aria-haspopup="menu"]')) {
-      if (/Overlays/.test((await b.textContent()) ?? '')) {
-        await b.click();
-        await page.waitForTimeout(400);
-        for (const item of await page.$$('[data-toolbar-menu] [role="checkbox"]')) {
-          if (/Session levels/.test((await item.textContent()) ?? '')) {
-            await item.click();
-            await page.waitForTimeout(900);
-            return true;
-          }
+    const menuOpen = async () => (await page.$$('[data-toolbar-menu] [role="checkbox"]')).length > 0;
+    if (!(await menuOpen())) {
+      for (const b of await page.$$('[aria-haspopup="menu"]')) {
+        if (/Overlays/.test((await b.textContent()) ?? '')) {
+          await b.click();
+          await page.waitForTimeout(400);
+          break;
         }
-        return false;
+      }
+    }
+    for (const item of await page.$$('[data-toolbar-menu] [role="checkbox"]')) {
+      if (/Session levels/.test((await item.textContent()) ?? '')) {
+        await item.click();
+        await page.waitForTimeout(900);
+        return true;
       }
     }
     return false;
@@ -2970,7 +2983,8 @@ head('the session levels draw on the tape and leave the price axis alone');
         : bad(`the overlay drew nothing: ${before.ink} pixels of ink off, ${after.ink} on`);
       /* And OFF again puts it back — an overlay that cannot be turned off is
          a different bug from one that never drew. */
-      await toggleSession(page);
+      const off = await toggleSession(page);
+      off ? ok('the Session levels row toggles a second time') : bad('the second toggle never found the row, so the check below proves nothing');
       const back = await measure(page);
       back && Math.abs(back.ink - before.ink) < before.ink * 0.05
         ? ok(`and turning it off again takes it away — ${after.ink} → ${back.ink}`)
@@ -3090,6 +3104,90 @@ head('the session levels draw on the tape and leave the price axis alone');
       ? ok('and is absent while the overlay is off, rather than live with nothing to change')
       : bad(`the picker was present with the overlay off: ${JSON.stringify(offRow.found)}`);
   }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   T-1. THE MEASURE — and the door the drawing layer did not have.
+
+   The figures are proved headless (scripts/measure-proof.ts) and the box is
+   drawn on canvas, so what a browser adds is the CHAIN: the pencil is
+   reachable from the pane strip, the toolbar under it offers three tools,
+   dragging with Measure picked commits a two-point measure, and it is in the
+   per-ticker store where a reload will find it.
+
+   That chain is the whole point of the section. Before this the toolbar's
+   pencil was gated on `!minimal` and no host in the app passed a handler, so
+   trendlines, levels and the measure were all unreachable — a layer with no
+   way in reads exactly like a layer that works, from the outside.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the measure is reachable, and what it draws is a stored measure');
+{
+  const { ctx, page, errs } = await openDesk(1600, 950, 1);
+  await page.mouse.move(600, 400);
+  await page.waitForTimeout(600);
+
+  const pencil = await page.$('button[aria-label="Draw on the chart"]');
+  pencil ? ok('PREMISE: the pane strip carries a draw button') : bad('PREMISE: no draw button in the pane strip — the drawing layer still has no door');
+
+  if (pencil) {
+    await pencil.click();
+    await page.waitForTimeout(500);
+    const tools = await page.$$eval('button', bs =>
+      bs.map(b => b.textContent.trim()).filter(t => /^(Trend|Level|Measure)$/.test(t))
+    );
+    tools.length === 3 && tools.includes('Measure')
+      ? ok(`draw mode offers three tools — ${tools.join(' · ')}`)
+      : bad(`draw mode offered ${JSON.stringify(tools)}`);
+
+    /* Pick Measure, then drag across the tape. A QUARTER in and a quarter
+       wide, so both ends land on real bars rather than in the runway the
+       chart holds open ahead of the last one. */
+    for (const b of await page.$$('button')) {
+      if ((await b.textContent())?.trim() === 'Measure') {
+        await b.click();
+        break;
+      }
+    }
+    await page.waitForTimeout(300);
+    const box = (await page.$$('.grid > div > div'))[0];
+    const bb = await box.boundingBox();
+    const y = bb.y + bb.height * 0.45;
+    await page.mouse.move(bb.x + bb.width * 0.2, y);
+    await page.mouse.down();
+    for (const f of [0.24, 0.28, 0.32, 0.36]) {
+      await page.mouse.move(bb.x + bb.width * f, y - bb.height * 0.08);
+      await page.waitForTimeout(80);
+    }
+    await page.mouse.up();
+    await page.waitForTimeout(700);
+
+    const stored = await page.evaluate(() => {
+      const raw = localStorage.getItem('slayer_chart_drawings_SPY');
+      return raw ? JSON.parse(raw) : null;
+    });
+    const measures = Array.isArray(stored) ? stored.filter(d => d.kind === 'measure') : [];
+    measures.length === 1
+      ? ok('a drag with Measure picked commits one measure')
+      : bad(`the drag stored ${JSON.stringify(stored)} — expected exactly one measure`);
+    measures[0]?.p1 && measures[0]?.p2 && measures[0].p1.time !== measures[0].p2.time
+      ? ok(`and it carries two anchors spanning real bars — ${measures[0].p1.time} → ${measures[0].p2.time}`)
+      : bad(`the stored measure has no span: ${JSON.stringify(measures[0] ?? null)}`);
+
+    /* It has to SURVIVE a reload, which is the half a kind-list validator
+       breaks silently — `loadDrawings` dropped any kind it did not enumerate. */
+    await page.reload({ waitUntil: 'networkidle' });
+    await page.waitForTimeout(BOOT_MS);
+    const after = await page.evaluate(() => {
+      const raw = localStorage.getItem('slayer_chart_drawings_SPY');
+      return raw ? JSON.parse(raw).filter(d => d.kind === 'measure').length : 0;
+    });
+    after === 1
+      ? ok('and it is still there after a reload — the validator keeps the kind')
+      : bad(`the measure did not survive a reload (${after} left) — loadDrawings is dropping the kind`);
+  }
+
+  errs.length === 0 ? ok('no page errors') : bad(`page errors: ${errs.join(' | ')}`);
+  await ctx.close();
 }
 
 console.log(`\n${fails} failing`);

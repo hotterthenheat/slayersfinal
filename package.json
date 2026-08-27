@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "serve": "tsx server.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.scripts.json",
-    "test": "tsx scripts/fixture-proof.ts && tsx scripts/replay-proof.ts && tsx scripts/weigher-query-proof.ts && tsx scripts/terrain-setups-proof.ts && tsx scripts/terrain-keys-proof.ts && tsx scripts/confluence-proof.ts && tsx scripts/session-levels-proof.ts && tsx scripts/vannacharm-clock-proof.ts && tsx scripts/flow-bars-proof.ts && tsx scripts/fold-strikes-proof.ts && tsx scripts/drift-series-proof.ts && tsx scripts/vol-drift-proof.ts && tsx scripts/strike-band-proof.ts && tsx scripts/menu-placement-proof.ts && tsx scripts/levels-proof.ts",
+    "test": "tsx scripts/fixture-proof.ts && tsx scripts/replay-proof.ts && tsx scripts/weigher-query-proof.ts && tsx scripts/terrain-setups-proof.ts && tsx scripts/terrain-keys-proof.ts && tsx scripts/confluence-proof.ts && tsx scripts/session-levels-proof.ts && tsx scripts/measure-proof.ts && tsx scripts/vannacharm-clock-proof.ts && tsx scripts/flow-bars-proof.ts && tsx scripts/fold-strikes-proof.ts && tsx scripts/drift-series-proof.ts && tsx scripts/vol-drift-proof.ts && tsx scripts/strike-band-proof.ts && tsx scripts/menu-placement-proof.ts && tsx scripts/levels-proof.ts",
     "test:ui": "node scripts/run-ui-sweep.mjs"
   },
   "dependencies": {

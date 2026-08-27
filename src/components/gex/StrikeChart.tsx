@@ -2,7 +2,7 @@ import {
   useCallback, useEffect, useMemo, useRef, useState,
   type MutableRefObject, type PointerEvent as ReactPointerEvent,
 } from 'react';
-import { Check, Eraser, Minus, Pause, Play, StepBack, StepForward, TrendingUp, X } from 'lucide-react';
+import { Check, Eraser, Minus, Pause, Play, Ruler, StepBack, StepForward, TrendingUp, X } from 'lucide-react';
 import {
   createChart,
   AreaSeries,
@@ -1877,6 +1877,10 @@ const StrikeChart = ({
     const bars = aggregateCandles(base, mins);
     barCountRef.current = bars.length;
     drawingsRef.current?.setBarTimes(bars.map(b => b.time));
+    /* The measure counts BARS and annualizes off them, so the layer has to
+       know what a bar is worth here — set beside the times it belongs with,
+       so a timeframe change can never move one without the other. */
+    drawingsRef.current?.setBarMinutes(mins);
 
     const loaded = loadedRef.current;
     const changed = loaded.ticker !== ticker || loaded.timeframe !== timeframe || loaded.theme !== themeKey;
@@ -2500,7 +2504,9 @@ const StrikeChart = ({
       return;
     }
     e.currentTarget.setPointerCapture(e.pointerId);
-    dragRef.current = { kind: 'trend', p1: p, p2: p };
+    /* Trend and measure take the same gesture and the same two anchors; only
+       what gets drawn between them differs. */
+    dragRef.current = { kind: drawTool, p1: p, p2: p };
     drawingsRef.current?.setDraft(dragRef.current);
   };
 
@@ -2577,11 +2583,21 @@ const StrikeChart = ({
           />
         )}
         {drawing && (
-          <div className="absolute top-2 left-2 z-30 flex items-center gap-1 border border-borderMuted bg-panel/95 rounded-md p-1 shadow-xl shadow-black/50">
+          /* BOTTOM left, not top left.
+             Top left is where every host floats its own chrome — on Terrain
+             that is the pane's identity row, and this toolbar sat straight
+             over it: measured in draw mode, the symbol capsule, the price and
+             the change were all covered, so a reader drawing on a four-pane
+             desk could not tell which chart they were drawing on. The bottom
+             left holds the volume histogram, which is texture, and the
+             arrangement controls are bottom RIGHT. Lifted clear of the time
+             axis. */
+          <div className="absolute bottom-8 left-2 z-30 flex items-center gap-1 border border-borderMuted bg-panel/95 rounded-md p-1 shadow-xl shadow-black/50">
             {(
               [
                 { tool: 'trend' as DrawingKind, icon: <TrendingUp className="w-3.5 h-3.5" />, label: 'Trend' },
                 { tool: 'hline' as DrawingKind, icon: <Minus className="w-3.5 h-3.5" />, label: 'Level' },
+                { tool: 'measure' as DrawingKind, icon: <Ruler className="w-3.5 h-3.5" />, label: 'Measure' },
               ] as const
             ).map(item => (
               <button
