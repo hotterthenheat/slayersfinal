@@ -38,6 +38,9 @@ import { placeMenu, type MenuBox, type MenuSide } from './menuPlacement';
  * `placed` is null until the first measurement, so a caller renders nothing
  * rather than painting a menu at the origin for one frame.
  */
+/** How many times one open menu may re-place itself on a wider reading. */
+const MAX_WIDTH_PASSES = 2;
+
 export function useAnchoredMenu<T extends HTMLElement, M extends HTMLElement = HTMLDivElement>(
   open: boolean,
   menuSide: MenuSide = 'bottom',
@@ -75,6 +78,9 @@ export function useAnchoredMenu<T extends HTMLElement, M extends HTMLElement = H
     from the edge, which never brings the scrollbar back.
   */
   const [measured, setMeasured] = useState<number | null>(null);
+  /* How many times the width has been allowed to grow during THIS open —
+     see the cap's reasoning at the re-read below. */
+  const passes = useRef(0);
   const width = menuWidth ?? measured ?? undefined;
 
   const measure = useCallback(() => {
@@ -93,6 +99,7 @@ export function useAnchoredMenu<T extends HTMLElement, M extends HTMLElement = H
     if (!open) {
       setPlaced(null);
       setMeasured(null); // the next open re-measures its own content
+      passes.current = 0;
       return;
     }
     measure();
@@ -118,7 +125,32 @@ export function useAnchoredMenu<T extends HTMLElement, M extends HTMLElement = H
     const el = menuRef.current;
     if (!el) return;
     const w = Math.round(el.getBoundingClientRect().width);
-    if (w > 0) setMeasured(prev => (prev == null || w > prev ? w : prev));
+    if (w > 0) {
+      setMeasured(prev => {
+        if (prev != null && w <= prev) return prev;
+        /* THE GROWTH IS CAPPED, because it does not always converge.
+
+           The reasoning here used to be "width can only grow a bounded
+           number of times for fixed content". That is false for a menu
+           whose content is FLUID and whose box is anchored by its RIGHT
+           edge: each wider reading places the menu further from the screen
+           edge, which hands its content more room, which reads wider again.
+           Measured at 1024x768 on a four-pane desk: the Overlays menu
+           walked 218 → 226 → 234 … 8px per pass, forever, until React threw
+           "Maximum update depth exceeded" and the whole desk stopped
+           rendering. The browser sweep caught it as a pane strip that
+           vanished mid-walk.
+
+           Two passes is what the real correction needs (the scrollbar
+           going away is one step); past that the widest seen stands and the
+           placement is simply clamped with it. A menu a few pixels narrower
+           than it could be is invisible; a desk that stops rendering is
+           not. */
+        if (passes.current >= MAX_WIDTH_PASSES) return prev;
+        passes.current += 1;
+        return w;
+      });
+    }
   }, [open, placed, menuWidth]);
 
   useEffect(() => {
