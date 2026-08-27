@@ -2280,6 +2280,818 @@ head('content fits the box it is drawn in');
   }
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   T-21. THE WATCHLIST FLIP — and the one band where the arrows are not ours.
+
+   The ring itself is proved headless (scripts/terrain-keys-proof.ts). What
+   only a browser can answer is WHO GETS THE KEY, and the answer changes with
+   the breakpoint: from `lg` up the desk fills the window and there is nothing
+   to scroll, but between `md` and `lg` the panes stack and the shell's
+   <main class="overflow-y-auto"> scrolls — so ↑/↓ there belong to the reader's
+   only way down a three-pane column.
+
+   The scroller is `main`, NOT the window. `window.scrollY` never moves on any
+   page of this app, so a section that measured it would report green whatever
+   the desk did. Measured cold, five ArrowDowns move `main` 0px; after one
+   click inside the desk they move it ~200. Clicking a pane is also how a pane
+   becomes ACTIVE, so that is the exact state the flip would be competing with.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the flip walks the ring, and gives the arrows back where the desk scrolls');
+{
+  const capsules = page => page.$$eval('button[title^="Switch ticker"]', bs => bs.map(b => b.textContent.trim()));
+
+  // ── from `lg` up: the desk owns the viewport, so the keys are the desk's ──
+  {
+    const { ctx, page, errs } = await openDesk(1440, 900, 3);
+    const before = await capsules(page);
+    before.length === 3
+      ? ok(`PREMISE: three panes, ${before.join(' · ')}`)
+      : bad(`PREMISE: expected three symbol capsules, saw ${JSON.stringify(before)}`);
+
+    /* The pane BOX, not the grid child — the grid's children are the panes'
+       `display: contents` wrappers, which generate no box to click. */
+    const boxes = await page.$$('.grid > div > div');
+    await boxes[0].click({ position: { x: 200, y: 300 } });
+    await page.waitForTimeout(200);
+
+    await page.keyboard.press('ArrowDown');
+    await page.waitForTimeout(900);
+    const down = await capsules(page);
+    down[0] !== before[0]
+      ? ok(`ArrowDown steps the active pane: ${before[0]} → ${down[0]}`)
+      : bad(`ArrowDown left pane 1 on ${before[0]}`);
+    down.slice(1).join() === before.slice(1).join()
+      ? ok('and the other panes are untouched')
+      : bad(`the flip moved another pane: ${before.slice(1).join()} → ${down.slice(1).join()}`);
+
+    await page.keyboard.press('ArrowUp');
+    await page.waitForTimeout(900);
+    const up = await capsules(page);
+    up[0] === before[0] ? ok('ArrowUp steps back') : bad(`ArrowUp landed on ${up[0]}, not ${before[0]}`);
+
+    /* A ring nobody can see has to say where in it you are. */
+    const said = await page.$eval('span.sr-only[aria-live]', el => el.textContent.trim());
+    /^[A-Z.\-0-9]+, \d+ of \d+$/.test(said)
+      ? ok(`announced with its place in the ring — ${JSON.stringify(said)}`)
+      : bad(`the flip announced ${JSON.stringify(said)}, which does not say where in the ring it is`);
+
+    /* Wrapping, not clamping — the opposite of what `-`/`=` do to intervals. */
+    const walk = [up[0]];
+    for (let i = 0; i < 5; i++) {
+      await page.keyboard.press('ArrowDown');
+      await page.waitForTimeout(700);
+      walk.push((await capsules(page))[0]);
+    }
+    walk.indexOf(walk[0], 1) > 0
+      ? ok(`the ring wraps — ${walk.join(' → ')}`)
+      : bad(`the ring stuck rather than wrapping — ${walk.join(' → ')}`);
+
+    /* The whole reason this key is nearly free: it goes through the reducer
+       that restores a symbol's setup, so the interval rides along with it. */
+    const parked = (await capsules(page))[0];
+    await page.keyboard.press('=');
+    await page.waitForTimeout(600);
+    const tfSet = await page.evaluate(() => JSON.parse(localStorage.getItem('slayer_terrain_v1')).panes[0].timeframe);
+    await page.keyboard.press('ArrowDown');
+    await page.waitForTimeout(700);
+    await page.keyboard.press('ArrowUp');
+    await page.waitForTimeout(900);
+    const backSym = (await capsules(page))[0];
+    const tfBack = await page.evaluate(() => JSON.parse(localStorage.getItem('slayer_terrain_v1')).panes[0].timeframe);
+    backSym === parked && tfBack === tfSet
+      ? ok(`flipping away and back restores the interval too — ${parked} @ ${tfBack}`)
+      : bad(`left ${parked} @ ${tfSet}, came back to ${backSym} @ ${tfBack}`);
+
+    errs.length === 0 ? ok('no page errors') : bad(`page errors: ${errs.join(' | ')}`);
+    await ctx.close();
+  }
+
+  // ── a menu is up: the arrows belong to the list being read ────────────────
+  {
+    const { ctx, page, errs } = await openDesk(1440, 900, 3);
+    const boxes = await page.$$('.grid > div > div');
+    await boxes[0].click({ position: { x: 200, y: 300 } });
+    await page.waitForTimeout(200);
+    const before = await capsules(page);
+    await page.keyboard.press('s');
+    await page.waitForTimeout(600);
+    const menuUp = await page.$$eval('[role="dialog"]', d => d.length > 0);
+    menuUp ? ok('PREMISE: `s` opens the symbol menu') : bad('PREMISE: `s` opened no menu, so the next check proves nothing');
+    await page.keyboard.press('ArrowDown');
+    await page.waitForTimeout(700);
+    const after = await capsules(page);
+    after.join() === before.join()
+      ? ok('with a menu up the arrows do not flip the pane behind it')
+      : bad(`the pane behind an open menu flipped: ${before.join()} → ${after.join()}`);
+    errs.length === 0 ? ok('no page errors with the menu open') : bad(`page errors: ${errs.join(' | ')}`);
+    await ctx.close();
+  }
+
+  // ── the stacked, scrolling band: the arrows are the reader's ──────────────
+  {
+    const { ctx, page, errs } = await openDesk(900, 800, 3);
+    const overflow = await page.$eval('main', m => m.scrollHeight - m.clientHeight);
+    overflow > 8
+      ? ok(`PREMISE: at 900x800 the desk overflows its scroller by ${overflow}px`)
+      : bad(`PREMISE: the desk does not overflow at 900x800 (${overflow}px), so there is no scroll to protect`);
+
+    const before = await capsules(page);
+    const boxes = await page.$$('.grid > div > div');
+    await boxes[0].click({ position: { x: 200, y: 300 } });
+    await page.waitForTimeout(200);
+    const top0 = await page.$eval('main', m => m.scrollTop);
+    for (let i = 0; i < 5; i++) {
+      await page.keyboard.press('ArrowDown');
+      await page.waitForTimeout(120);
+    }
+    await page.waitForTimeout(400);
+    const top1 = await page.$eval('main', m => m.scrollTop);
+    const after = await capsules(page);
+    top1 > top0
+      ? ok(`ArrowDown scrolls the desk there — main.scrollTop ${top0} → ${top1}`)
+      : bad(`ArrowDown scrolled nothing at 900x800 (${top0} → ${top1}) — the arrows were taken`);
+    after.join() === before.join()
+      ? ok('and no pane flipped')
+      : bad(`a pane flipped in the scrolling band: ${before.join()} → ${after.join()}`);
+    errs.length === 0 ? ok('no page errors in the stacked band') : bad(`page errors: ${errs.join(' | ')}`);
+    await ctx.close();
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   T-7. THE PRICE SCALE — and the proof that the mode reaches the AXIS.
+
+   The picker is easy to assert and easy to assert vacuously: a menu row can
+   mark itself live while the chart draws whatever it drew before. So the load
+   bearing check here is the MAPPING. The strike rail places its rows through
+   the chart's own `PriceProjection` (`candleSeries.priceToCoordinate`), so
+   equally-spaced strikes land at equally-spaced pixels under a linear scale
+   and at unequal ones under a log scale. Reading that spread out of the DOM
+   observes the axis itself.
+
+   Not a screenshot diff: the simulator moves the tape every tick, so two
+   captures always differ and an image comparison would pass no matter what
+   the mode did.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the price scale is the reader’s, and the mode reaches the axis');
+{
+  const scaleSeed = (over = {}) =>
+    JSON.stringify({
+      layout: 1,
+      panes: [
+        {
+          ticker: 'SPY', timeframe: '15m',
+          overlays: { trails: true, levels: true, darkpool: false, volume: true },
+          indicators: { ema9: false, ema21: false, ema50: false, vwap: false },
+          chartStyle: 'candles', compares: [], priceScale: 'normal', ladder: true,
+          ...over,
+        },
+      ],
+      setups: {},
+    });
+
+  const openScale = async (over = {}) => {
+    const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+    await ctx.addInitScript(`localStorage.setItem('slayer_terrain_v1', ${JSON.stringify(scaleSeed(over))})`);
+    const page = await ctx.newPage();
+    const errs = [];
+    page.on('pageerror', e => errs.push(String(e)));
+    await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(BOOT_MS + 1000);
+    return { ctx, page, errs };
+  };
+
+  /* px-per-dollar between neighbouring rail rows. Uniform = linear. */
+  const railSpread = async page => {
+    const rows = await page.evaluate(() =>
+      [...document.querySelectorAll('[data-strike-label]')]
+        .map(el => {
+          const row = el.closest('[style*="translate"]') || el.parentElement;
+          const r = (row || el).getBoundingClientRect();
+          return { strike: parseFloat(el.textContent.replace(/[^0-9.]/g, '')), y: r.top + r.height / 2 };
+        })
+        .filter(p => Number.isFinite(p.strike) && p.y > 0)
+    );
+    const sorted = rows.slice().sort((a, b) => a.strike - b.strike);
+    const gaps = [];
+    for (let i = 1; i < sorted.length; i++) {
+      const dK = sorted[i].strike - sorted[i - 1].strike;
+      if (dK > 0) gaps.push(Math.abs(sorted[i].y - sorted[i - 1].y) / dK);
+    }
+    if (gaps.length < 6) return null;
+    const lo = Math.min(...gaps);
+    const hi = Math.max(...gaps);
+    return { n: gaps.length, lo, hi, ratio: hi / lo, span: sorted[sorted.length - 1].strike / sorted[0].strike };
+  };
+
+  // ── the mapping, linear vs log ───────────────────────────────────────────
+  const linear = await (async () => {
+    const { ctx, page } = await openScale({ priceScale: 'normal' });
+    const r = await railSpread(page);
+    await ctx.close();
+    return r;
+  })();
+  const log = await (async () => {
+    const { ctx, page } = await openScale({ priceScale: 'log' });
+    const r = await railSpread(page);
+    await ctx.close();
+    return r;
+  })();
+
+  if (!linear || !log) {
+    bad(`PREMISE: the rail did not place enough rows to measure the mapping (linear ${linear?.n ?? 0}, log ${log?.n ?? 0})`);
+  } else {
+    /* Rounding alone moves this by well under a percent — the rail places on
+       whole pixels. Uniform to within 1% is "equal dollars, equal height". */
+    linear.ratio < 1.01
+      ? ok(`linear places equal dollars at equal heights — ${linear.lo.toFixed(2)}..${linear.hi.toFixed(2)} px/$ over ${linear.n} gaps`)
+      : bad(`linear px/$ ran ${linear.lo.toFixed(2)}..${linear.hi.toFixed(2)} (ratio ${linear.ratio.toFixed(4)}) — that is not a linear axis`);
+    /*
+      A log axis spends the same height on the same PERCENTAGE, so px-per-
+      dollar falls as price rises — and by a knowable amount: px/$ goes as
+      1/K, so the ratio of the widest gap to the narrowest is the ratio of the
+      highest strike to the lowest. That is a PHYSICAL check rather than a
+      threshold somebody picked, and it fails both ways — a mode that never
+      reached the axis measures flat, and one that reached it wrongly measures
+      the wrong bend.
+
+      This first shipped as `log.ratio > linear.ratio * 3`, which is the wrong
+      arithmetic: three times a RATIO of about 1.003 is about 3.01, so the
+      clause demanded a threefold bend rather than three times linear's
+      rounding, and a correctly-drawn log axis failed it. The deviations from
+      1 are what compare.
+    */
+    const bend = log.ratio - 1;
+    const expected = log.span - 1;
+    const overLinear = bend > (linear.ratio - 1) * 3;
+    const rightSize = expected > 0.005 && Math.abs(bend - expected) <= Math.max(0.01, expected * 0.25);
+    overLinear && rightSize
+      ? ok(
+          `log bends it by the price span — ${log.lo.toFixed(2)}..${log.hi.toFixed(2)} px/$ ` +
+            `(bend ${(bend * 100).toFixed(2)}% against a ${(expected * 100).toFixed(2)}% span)`
+        )
+      : bad(
+          `log px/$ ran ${log.lo.toFixed(2)}..${log.hi.toFixed(2)}: bend ${(bend * 100).toFixed(2)}% ` +
+            `against a ${(expected * 100).toFixed(2)}% price span, linear's own bend ${((linear.ratio - 1) * 100).toFixed(2)}%` +
+            `${overLinear ? '' : ' — flat, so the mode never reached the axis'}`
+        );
+  }
+
+  // ── the picker ───────────────────────────────────────────────────────────
+  {
+    const { ctx, page, errs } = await openScale();
+    await page.mouse.move(600, 400);
+    await page.waitForTimeout(600);
+    const trig = await page.$('button[title^="Chart style"]');
+    trig ? ok(`PREMISE: the trigger names it — "${await trig.getAttribute('title')}"`) : bad('PREMISE: no chart-style trigger, so nothing below proves anything');
+    if (trig) {
+      await trig.click();
+      await page.waitForTimeout(400);
+      const rows = await page.$$eval('[data-toolbar-menu] button', bs => bs.map(b => b.textContent.trim()));
+      const modes = rows.filter(t => /Linear|Logarithmic|Percent|Indexed/.test(t));
+      modes.length === 4 ? ok('the menu carries all four modes') : bad(`the menu carries ${modes.length} of 4 modes — ${JSON.stringify(modes)}`);
+
+      for (const b of await page.$$('[data-toolbar-menu] button')) {
+        if ((await b.textContent()).includes('Percent')) {
+          await b.click();
+          break;
+        }
+      }
+      await page.waitForTimeout(1200);
+      const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('slayer_terrain_v1')).panes[0].priceScale);
+      stored === 'percent' ? ok('picking a mode writes it to the pane') : bad(`picked Percent, stored ${JSON.stringify(stored)}`);
+    }
+    errs.length === 0 ? ok('no page errors') : bad(`page errors: ${errs.join(' | ')}`);
+    await ctx.close();
+  }
+
+  // ── the one case the reader's pick does not win, and it is named ────────
+  {
+    const { ctx, page, errs } = await openScale({ priceScale: 'log', compares: [{ ticker: 'QQQ', mode: 'percent', ink: '#5B9CF6' }] });
+    await page.mouse.move(600, 400);
+    await page.waitForTimeout(800);
+    const trig = await page.$('button[title^="Chart style"]');
+    if (!trig) bad('PREMISE: no chart-style trigger with a comparison up');
+    else {
+      await trig.click();
+      await page.waitForTimeout(400);
+      const marked = await page.$$eval('[data-toolbar-menu] button', bs =>
+        bs.filter(b => b.className.includes('font-semibold')).map(b => b.textContent.trim())
+      );
+      marked.some(t => t.includes('Percent')) && !marked.some(t => t.includes('Logarithmic'))
+        ? ok('a % comparison holds the axis in percent, over a stored log')
+        : bad(`the live mode with a % comparison up was ${JSON.stringify(marked)}`);
+      const yours = await page.$$eval('[data-toolbar-menu] button', bs =>
+        bs.filter(b => b.textContent.includes('yours')).map(b => b.textContent.trim())
+      );
+      yours.some(t => t.includes('Logarithmic'))
+        ? ok("and the reader's own pick is still shown as theirs")
+        : bad(`the held pick was not marked as the reader's — ${JSON.stringify(yours)}`);
+      const why = await page.$$eval('[data-toolbar-menu] p', ps => ps.map(p => p.textContent.trim()));
+      why.some(t => /% comparison/.test(t))
+        ? ok('and the menu says what is holding it')
+        : bad(`the menu offered no reason for the lock — ${JSON.stringify(why)}`);
+    }
+    errs.length === 0 ? ok('no page errors with a held axis') : bad(`page errors: ${errs.join(' | ')}`);
+    await ctx.close();
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   THE PANE TOOLBAR OCCUPIES ONE ROW — the property TOOLBAR_FULL_PX exists
+   to hold, asserted instead of the constant.
+
+   Terrain.tsx carries a measured breakdown of what the strip costs (818px
+   full, 350px compact) and gates `compact` on it. Nothing checked it, so a
+   control added three files away in ChartToolbar could push the strip onto a
+   second row over the tape and no build would notice. T-7 nearly did exactly
+   that.
+
+   ROWS ARE COUNTED BY CENTRE, not by `top`. The strip is `items-center`, so
+   children of different heights sit at different tops on the SAME line —
+   counting tops reports every one-row strip as two and makes this vacuous.
+
+   THE NARROW COLUMNS ARE EXCLUDED, with their numbers, because the strip has
+   never fitted them: the compact strip is 350px and those columns are 271,
+   272, 347 and 349. Verified against a clean build of the tree before T-7 —
+   identical at every cell. Excluding them silently would be the lie; the
+   floor below is what makes the exclusion checkable.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the pane toolbar never wraps over the tape');
+{
+  /* Below this the strip has never fitted — see the note above. The floor is
+     asserted too, so if a future change makes the strip WIDER these columns
+     stop being the known exception and the run says so. */
+  const COMPACT_STRIP_PX = 350;
+  const NARROW_FLOOR_PX = 360;
+  let narrowSeen = 0;
+  let widest = 0;
+
+  for (const layout of [1, 2, 3, 4]) {
+    const { ctx, page, errs } = await openDesk(1440, 1000, layout);
+    for (const width of [1024, 1180, 1280, 1440, 1536, 1760, 1920, 2560]) {
+      await page.setViewportSize({ width, height: 1000 });
+      await page.waitForTimeout(500);
+      await page.mouse.move(Math.min(400, Math.round(width / 3)), 300);
+      await page.waitForTimeout(400);
+      const bars = await page.evaluate(() => {
+        const out = [];
+        for (const root of document.querySelectorAll('div')) {
+          if (!root.className.includes('flex items-center gap-2 flex-wrap')) continue;
+          const kids = [...root.children].filter(c => c.getBoundingClientRect().width > 0);
+          const lanes = new Set(
+            kids.map(c => {
+              const b = c.getBoundingClientRect();
+              return Math.round((b.top + b.height / 2) / 4);
+            })
+          );
+          out.push({ rows: lanes.size, w: Math.round(root.getBoundingClientRect().width) });
+        }
+        return out;
+      });
+      if (bars.length === 0) {
+        bad(`layout ${layout} @ ${width}: no toolbar found — the strip may not be revealing on hover`);
+        continue;
+      }
+      for (const b of bars) widest = Math.max(widest, b.w);
+      const roomy = bars.filter(b => b.w >= NARROW_FLOOR_PX);
+      narrowSeen += bars.length - roomy.length;
+      const wrapped = roomy.filter(b => b.rows > 1);
+      wrapped.length === 0
+        ? ok(`layout ${layout} @ ${width}: ${roomy.length} of ${bars.length} toolbars have room, all one row`)
+        : bad(
+            `layout ${layout} @ ${width}: ${wrapped.length} toolbar(s) wrapped with room to spare — ${JSON.stringify(wrapped)}`
+          );
+    }
+    errs.length === 0 ? ok(`layout ${layout}: no page errors`) : bad(`layout ${layout} page errors: ${errs.join(' | ')}`);
+    await ctx.close();
+  }
+
+  /* The exclusion has to stay an exclusion. If the strip grows past the floor
+     these columns are no longer "narrower than the strip has ever fitted" and
+     the whole section above quietly stops testing anything. */
+  widest > 0 && widest <= 900
+    ? ok(`the widest strip measured is ${widest}px — the full strip is still ~818`)
+    : bad(`the widest strip measured is ${widest}px; the source records 818 and gates compact on it`);
+  narrowSeen > 0
+    ? ok(`${narrowSeen} toolbars sat in columns under the ${NARROW_FLOOR_PX}px floor and were excluded, as recorded (compact strip is ${COMPACT_STRIP_PX}px)`)
+    : bad('no narrow columns were seen at all — the excluded band has moved and this floor is now untested');
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   T-8. THE HOVERED BAR — reported by every pane, not only the one under the
+   pointer.
+
+   HOVER A QUARTER IN, NEVER THE MIDDLE. The chart holds a runway open ahead
+   of the last bar, by design, and at 1440 with two panes the last bar sits
+   near 45% of the pane — the middle of a narrow column lands in empty space,
+   where the honest answer is nothing and a probe reads it as a broken
+   feature. That was a real half hour; the premise below is asserted so it
+   cannot cost anyone else one.
+
+   The runway is then checked on purpose: past the last bar this reports
+   NOTHING rather than the nearest bar, because "the values at the moment you
+   are pointing at" and "the values near it" are different claims.
+   ───────────────────────────────────────────────────────────────────────── */
+head('every pane reports the hovered bar, and reports only what it is drawing');
+{
+  const barSeed = (layout, indicators, chartStyle = 'candles') =>
+    JSON.stringify({
+      layout,
+      panes: TICKERS.map(t => ({
+        ticker: t, timeframe: '15m',
+        overlays: { trails: true, levels: true, darkpool: false, volume: true },
+        indicators, chartStyle, compares: [], priceScale: 'normal', ladder: true,
+      })),
+      setups: {},
+    });
+
+  const openBars = async (layout, indicators, w, h, chartStyle) => {
+    const ctx = await browser.newContext({ viewport: { width: w, height: h } });
+    await ctx.addInitScript(`localStorage.setItem('slayer_terrain_v1', ${JSON.stringify(barSeed(layout, indicators, chartStyle))})`);
+    const page = await ctx.newPage();
+    const errs = [];
+    page.on('pageerror', e => errs.push(String(e)));
+    await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(BOOT_MS + 1000);
+    return { ctx, page, errs };
+  };
+
+  /* The readout rows on screen: a chrome box whose text opens with an O or a
+     C followed by a figure. `heavy` opens with the word Heaviest, so the two
+     that share this slot are told apart by content rather than by order. */
+  const readouts = page =>
+    page.evaluate(() =>
+      [...document.querySelectorAll('.chrome-hover')]
+        .filter(d => /^[OC][\d.]/.test(d.textContent.replace(/\s/g, '')))
+        .map(d => ({ w: Math.round(d.getBoundingClientRect().width), t: d.textContent.trim() }))
+    );
+
+  const hoverBar = async (page, i = 0, frac = 0.25) => {
+    const boxes = await page.$$('.grid > div > div');
+    const bb = await boxes[i].boundingBox();
+    await page.mouse.move(bb.x + bb.width * (frac - 0.05), bb.y + bb.height / 2);
+    await page.waitForTimeout(200);
+    await page.mouse.move(bb.x + bb.width * frac, bb.y + bb.height / 2);
+    await page.waitForTimeout(1200);
+    return bb;
+  };
+
+  const ALL_IND = { ema9: true, ema21: true, ema50: true, vwap: true };
+
+  // ── it appears on hover, carries everything at a wide column, and clears ──
+  {
+    const { ctx, page, errs } = await openBars(1, ALL_IND, 2200, 1000);
+    (await readouts(page)).length === 0
+      ? ok('PREMISE: nothing is reported before the pointer arrives')
+      : bad('a readout was on screen before anything was hovered');
+    await hoverBar(page);
+    const r = await readouts(page);
+    r.length === 1 ? ok(`hovering the plot reports the bar — ${r[0].t.slice(0, 44)}`) : bad(`${r.length} readouts after hovering one pane`);
+    const t = (r[0]?.t ?? '').replace(/\s/g, '');
+    /^O[\d.]/.test(t) && /V[\d.]/.test(t) && /vwap/.test(t)
+      ? ok(`a column this wide carries open, volume and indicators — ${r[0].w}px`)
+      : bad(`the widest column shed parts it could pay for — ${r[0]?.t}`);
+    await page.mouse.move(4, 4);
+    await page.waitForTimeout(900);
+    (await readouts(page)).length === 0 ? ok('and leaving the plot clears it') : bad('the readout survived the pointer leaving the plot');
+    errs.length === 0 ? ok('no page errors') : bad(`page errors: ${errs.join(' | ')}`);
+    await ctx.close();
+  }
+
+  // ── it sheds by width, and the close is the part that never goes ─────────
+  for (const [w, layout, expect] of [[1440, 2, 'shed'], [1024, 4, 'shed']]) {
+    const { ctx, page } = await openBars(layout, ALL_IND, w, 950);
+    await hoverBar(page);
+    const r = (await readouts(page))[0];
+    const t = (r?.t ?? '').replace(/\s/g, '');
+    /C[\d.]/.test(t)
+      ? ok(`${w} with ${layout} panes: the close is still there — ${r.w}px, ${r.t.slice(0, 40)}`)
+      : bad(`${w} with ${layout} panes: no close in the readout — ${JSON.stringify(r ?? null)}`);
+    expect === 'shed' && !/vwap|ema/.test(t)
+      ? ok('and the indicators have been shed, as the width budget says')
+      : bad(`${w} with ${layout} panes: the indicators did not shed — ${r?.t}`);
+    await ctx.close();
+  }
+
+  // ── the runway reports nothing rather than the nearest bar ───────────────
+  {
+    const { ctx, page } = await openBars(1, ALL_IND, 1600, 950);
+    const bb = await hoverBar(page);
+    (await readouts(page)).length === 1
+      ? ok('PREMISE: a quarter in, there is a bar to report')
+      : bad('PREMISE: nothing to report a quarter in, so the runway check below proves nothing');
+    await page.mouse.move(bb.x + bb.width - 150, bb.y + bb.height / 2);
+    await page.waitForTimeout(1200);
+    (await readouts(page)).length === 0
+      ? ok('and past the last bar it reports nothing rather than the nearest one')
+      : bad('the readout reported a bar in the runway ahead of the last one');
+    await ctx.close();
+  }
+
+  // ── THE POINT OF IT: a synced pane reports its OWN values ────────────────
+  {
+    const { ctx, page, errs } = await openBars(2, ALL_IND, 2200, 1000);
+    await hoverBar(page, 0);
+    const r = await readouts(page);
+    r.length === 2
+      ? ok('hovering one pane reports the moment on BOTH panes')
+      : bad(`${r.length} of 2 panes reported the hovered moment — a followed pane never fires the crosshair event, so it has to report from the sync`);
+    r.length === 2 && r[0].t !== r[1].t
+      ? ok(`and each reports its own prices — ${r[0].t.slice(0, 22)} vs ${r[1].t.slice(0, 22)}`)
+      : bad(`the two panes reported the same figures: ${JSON.stringify(r.map(x => x.t.slice(0, 30)))}`);
+    errs.length === 0 ? ok('no page errors on a synced desk') : bad(`page errors: ${errs.join(' | ')}`);
+    await ctx.close();
+  }
+
+  // ── a line tape has no high or low, and does not invent them ─────────────
+  {
+    const { ctx, page, errs } = await openBars(1, { ema9: false, ema21: false, ema50: false, vwap: false }, 2200, 1000, 'line');
+    await hoverBar(page);
+    const r = (await readouts(page))[0];
+    const t = (r?.t ?? '').replace(/\s/g, '');
+    /C[\d.]/.test(t) ? ok(`a line tape reports a close — ${r.t}`) : bad(`a line tape reported nothing — ${JSON.stringify(r ?? null)}`);
+    !/^O[\d.]/.test(t) && !/H[\d.]/.test(t)
+      ? ok('and does not invent an open, high or low it is not drawing')
+      : bad(`a line tape printed OHL it does not draw — ${r?.t}`);
+    errs.length === 0 ? ok('no page errors on a line tape') : bad(`page errors: ${errs.join(' | ')}`);
+    await ctx.close();
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   T-12. THE CONFLUENCE STRIP — at rest, in two forms, and never guessing.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the timeframes say whether they agree, at every width that can hold them');
+{
+  const strips = page =>
+    page.evaluate(() =>
+      [...document.querySelectorAll('[role="img"][aria-label^="Timeframe trend"]')].map(el => ({
+        w: Math.round(el.getBoundingClientRect().width),
+        text: el.textContent.trim(),
+        label: el.getAttribute('aria-label'),
+      }))
+    );
+
+  const { ctx, page, errs } = await openDesk(1920, 950, 2);
+  const seen = { full: 0, tight: 0, none: 0 };
+  for (const width of [1920, 1600, 1440, 1366, 1280, 1180, 1024]) {
+    await page.setViewportSize({ width, height: 950 });
+    await page.waitForTimeout(700);
+    const found = await strips(page);
+    if (found.length === 0) {
+      seen.none++;
+      continue;
+    }
+    /* FULL carries the timeframe names, TIGHT is glyphs only. Told apart by
+       whether a digit survives once the glyphs are stripped. */
+    const full = /\d/.test(found[0].text.replace(/[▲▼▬–]/g, ''));
+    full ? seen.full++ : seen.tight++;
+    found.every(f => [...f.text.replace(/[^▲▼▬–]/g, '')].length === 5)
+      ? ok(`${width}: ${found.length} strip(s), ${full ? 'full' : 'tight'}, five timeframes — ${found[0].text}`)
+      : bad(`${width}: a strip did not carry five glyphs — ${JSON.stringify(found.map(f => f.text))}`);
+    /* The tight form drops the labels from the SCREEN, never from the
+       accessible name — that is the whole basis for dropping them. */
+    found[0].label && /1m|5m|15m|1h|1D/.test(found[0].label) && /EMA21|not enough history/.test(found[0].label)
+      ? ok(`${width}: and names the timeframes and the rule to a screen reader`)
+      : bad(`${width}: the accessible name does not carry the timeframes and the rule — ${JSON.stringify(found[0].label)}`);
+  }
+  /* All three tiers have to be REACHED, or the two that were not are untested
+     and this section is a slow way of asserting one of them. */
+  seen.full > 0 && seen.tight > 0 && seen.none > 0
+    ? ok(`all three tiers were exercised — full ×${seen.full}, tight ×${seen.tight}, absent ×${seen.none}`)
+    : bad(`only some tiers were reached (full ${seen.full}, tight ${seen.tight}, absent ${seen.none}) — the widths here no longer straddle the thresholds`);
+  errs.length === 0 ? ok('no page errors') : bad(`page errors: ${errs.join(' | ')}`);
+  await ctx.close();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   T-6. SESSION LEVELS — off by default, on the field, and never on the axis.
+
+   The engine is proved headless (scripts/session-levels-proof.ts). What only
+   a browser can answer is whether the rules reach the tape, whether their
+   labels land on the FIELD rather than on the price axis (the house rule),
+   and whether the opening-range choice actually changes what is drawn.
+
+   The lines are canvas, so they cannot be counted from the DOM. What CAN be
+   read is the price scale's own width: the levels are created with
+   `axisLabelVisible: false`, so turning seven of them on must not add a
+   single tag to the gutter — and the gutter's width is what a pile of tags
+   would move.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the session levels draw on the tape and leave the price axis alone');
+{
+  const sessionSeed = (session, sessionOr) =>
+    JSON.stringify({
+      layout: 1,
+      panes: TICKERS.map(t => ({
+        ticker: t, timeframe: '15m',
+        overlays: { trails: false, levels: false, darkpool: false, volume: true, flow: false, netDrift: false, volDrift: false, dexStrike: false, session },
+        indicators: { ema9: false, ema21: false, ema50: false, vwap: false },
+        chartStyle: 'candles', compares: [], priceScale: 'normal', sessionOr, ladder: true,
+      })),
+      setups: {},
+    });
+
+  const openSession = async (session, sessionOr = 15) => {
+    const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+    await ctx.addInitScript(`localStorage.setItem('slayer_terrain_v1', ${JSON.stringify(sessionSeed(session, sessionOr))})`);
+    const page = await ctx.newPage();
+    const errs = [];
+    page.on('pageerror', e => errs.push(String(e)));
+    await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(BOOT_MS + 1000);
+    return { ctx, page, errs };
+  };
+
+  /* The plot's ink, and the price gutter's width. Seven rules put ink on the
+     plot; seven axis tags would widen the gutter. */
+  const measure = page =>
+    page.evaluate(() => {
+      /* THE FIRST wide canvas in DOM order, not the widest.
+         lightweight-charts stacks two same-sized canvases per pane and paints
+         on the lower one; taking "the widest" landed on the upper overlay,
+         which is empty — measured 0 pixels of ink with the tape plainly
+         drawn, which reads as a broken feature rather than a broken probe. */
+      const plot = [...document.querySelectorAll('canvas')].find(
+        c => c.getBoundingClientRect().height > 200 && c.getBoundingClientRect().width > 200
+      );
+      if (!plot) return null;
+      const d = plot.getContext('2d').getImageData(0, 0, plot.width, plot.height).data;
+      let ink = 0;
+      for (let k = 3; k < d.length; k += 4) if (d[k] > 8) ink++;
+      return { ink, plotW: Math.round(plot.getBoundingClientRect().width) };
+    });
+
+  /*
+    TOGGLED INSIDE ONE PAGE LOAD, not compared across two.
+
+    The first version loaded the desk twice and compared the plot's ink. The
+    tape moves between loads — measured across three loads with the overlay
+    OFF the ink ran 83,472 / 85,110 / 86,570, a ±2% band — and the levels are
+    worth about 12%, so the comparison worked but sat only six times its own
+    noise. Toggling in place removes the variance rather than budgeting for
+    it: the same session, a second apart, with only the overlay changed.
+  */
+  const toggleSession = async page => {
+    for (const b of await page.$$('[aria-haspopup="menu"]')) {
+      if (/Overlays/.test((await b.textContent()) ?? '')) {
+        await b.click();
+        await page.waitForTimeout(400);
+        for (const item of await page.$$('[data-toolbar-menu] [role="checkbox"]')) {
+          if (/Session levels/.test((await item.textContent()) ?? '')) {
+            await item.click();
+            await page.waitForTimeout(900);
+            return true;
+          }
+        }
+        return false;
+      }
+    }
+    return false;
+  };
+
+  {
+    const { ctx, page, errs } = await openSession(false);
+    await page.mouse.move(600, 400);
+    await page.waitForTimeout(600);
+    const before = await measure(page);
+    const toggled = await toggleSession(page);
+    toggled ? ok('PREMISE: the Session levels row toggles from the Overlays menu') : bad('PREMISE: no Session levels row in the Overlays menu, so nothing below proves anything');
+    const after = await measure(page);
+    if (!before || !after) {
+      bad('PREMISE: no plot canvas to measure');
+    } else {
+      after.plotW === before.plotW
+        ? ok(`PREMISE: the plot is the same ${after.plotW}px wide either way, so the ink is the levels`)
+        : bad(`the plot changed width across the toggle (${before.plotW} → ${after.plotW})`);
+      after.ink > before.ink * 1.05
+        ? ok(`turning the levels on puts ink on the tape — ${before.ink} → ${after.ink} (+${(((after.ink - before.ink) / before.ink) * 100).toFixed(1)}%)`)
+        : bad(`the overlay drew nothing: ${before.ink} pixels of ink off, ${after.ink} on`);
+      /* And OFF again puts it back — an overlay that cannot be turned off is
+         a different bug from one that never drew. */
+      await toggleSession(page);
+      const back = await measure(page);
+      back && Math.abs(back.ink - before.ink) < before.ink * 0.05
+        ? ok(`and turning it off again takes it away — ${after.ink} → ${back.ink}`)
+        : bad(`turning the overlay off left ink behind: ${before.ink} before, ${back?.ink} after`);
+    }
+    errs.length === 0 ? ok('no page errors toggling the overlay') : bad(`page errors: ${errs.join(' | ')}`);
+    await ctx.close();
+  }
+
+  /* THE PRICE AXIS IS LEFT ALONE — the house rule, and the reason these carry
+     their labels on the rule itself. */
+  {
+    const gutter = async session => {
+      const { ctx, page } = await openSession(session);
+      const w = await page.evaluate(() => {
+        const canvases = [...document.querySelectorAll('canvas')].filter(c => c.getBoundingClientRect().height > 200);
+        const widths = canvases.map(c => Math.round(c.getBoundingClientRect().width)).sort((a, b) => a - b);
+        return widths[0] ?? null; // the narrow one beside the plot is the scale
+      });
+      await ctx.close();
+      return w;
+    };
+    const a = await gutter(false);
+    const b = await gutter(true);
+    a !== null && b !== null && a === b
+      ? ok(`and the price gutter is untouched at ${b}px — nothing was named on the axis`)
+      : bad(`the price gutter moved with the overlay on (${a} → ${b}) — the levels are tagging the axis`);
+  }
+
+  /*
+    THE OPENING RANGE IS A CHOICE — asserted as WIRED AND PERSISTED, which is
+    what a browser can actually establish here.
+
+    The obvious check would be that 5 and 30 draw different pixels, and it is
+    not worth having: the labels are canvas text no selector can read, the two
+    ranges differ by two rules out of seven, and that delta sits inside the
+    tape's own between-load noise. `five.ink > 0 && thirty.ink > 0` was the
+    first version of it and it is vacuous — the plot has ink with the overlay
+    off entirely.
+
+    So the chain is split at the seam instead. That the ranges COMPUTE
+    differently is proved exactly, headless, against a fixture whose collapse
+    lands between the 15th and 30th minute (session-levels-proof.ts). What is
+    left for the browser is that the control reaches the pane and survives:
+    the pick lands in storage, and the chart still paints after it.
+  */
+  {
+    const { ctx, page, errs } = await openSession(true, 15);
+    await page.mouse.move(600, 400);
+    await page.waitForTimeout(600);
+    let opened = false;
+    for (const b of await page.$$('[aria-haspopup="menu"]')) {
+      if (/Overlays/.test((await b.textContent()) ?? '')) {
+        await b.click();
+        await page.waitForTimeout(400);
+        opened = true;
+        break;
+      }
+    }
+    opened ? ok('PREMISE: the Overlays menu opens') : bad('PREMISE: the Overlays menu never opened');
+    const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem('slayer_terrain_v1')).panes[0].sessionOr);
+    (await stored()) === 15 ? ok('PREMISE: the pane starts on the 15-minute range') : bad(`the pane started on ${await stored()}`);
+    let picked = false;
+    for (const b of await page.$$('[role="group"][aria-label="Opening range minutes"] button')) {
+      if ((await b.textContent())?.trim() === '5m') {
+        await b.click();
+        await page.waitForTimeout(900);
+        picked = true;
+        break;
+      }
+    }
+    picked ? ok('the 5-minute range can be picked') : bad('no 5m button in the opening-range picker');
+    (await stored()) === 5
+      ? ok('and the pick lands in the pane, where a reload will find it')
+      : bad(`picked 5m and the pane stored ${await stored()}`);
+    const after = await measure(page);
+    after && after.ink > 0
+      ? ok(`and the chart still paints after the change — ${after.ink} pixels of ink`)
+      : bad('the chart stopped painting after the opening range changed');
+    errs.length === 0 ? ok('no page errors changing the opening range') : bad(`page errors: ${errs.join(' | ')}`);
+    await ctx.close();
+  }
+
+  /* THE PICKER IS ON THE OVERLAY'S OWN ROW, and only while the overlay is on
+     — a live control with nothing to change is the thing this desk rules out. */
+  {
+    const rowState = async session => {
+      const { ctx, page } = await openSession(session);
+      await page.mouse.move(600, 400);
+      await page.waitForTimeout(600);
+      /* The Overlays trigger wears its COUNT rather than a fixed label
+         (`Overlays 3`), so it is found by the word inside it rather than by a
+         selector that would have to know the number. */
+      const buttons = await page.$$('[aria-haspopup="menu"]');
+      let opened = false;
+      for (const b of buttons) {
+        const t = (await b.textContent()) ?? '';
+        if (/Overlays/.test(t)) {
+          await b.click();
+          opened = true;
+          break;
+        }
+      }
+      const found = opened
+        ? await page.$$eval('[role="group"][aria-label="Opening range minutes"] button', bs => bs.map(x => x.textContent.trim()))
+        : null;
+      await ctx.close();
+      return { opened, found };
+    };
+    const onRow = await rowState(true);
+    onRow.opened ? ok('PREMISE: the Overlays menu opens') : bad('PREMISE: the Overlays menu never opened, so the picker check proves nothing');
+    onRow.found && onRow.found.length === 3
+      ? ok(`the opening-range picker sits on the overlay's row — ${onRow.found.join(' ')}`)
+      : bad(`the opening-range picker was not on the row: ${JSON.stringify(onRow.found)}`);
+    const offRow = await rowState(false);
+    offRow.found && offRow.found.length === 0
+      ? ok('and is absent while the overlay is off, rather than live with nothing to change')
+      : bad(`the picker was present with the overlay off: ${JSON.stringify(offRow.found)}`);
+  }
+}
+
 console.log(`\n${fails} failing`);
 await browser.close();
 process.exit(fails ? 1 : 0);

@@ -30,6 +30,12 @@ interface TickerQuickPickProps {
   squared?: boolean;
   ticker: string;
   onPick: (ticker: string) => void;
+  /* The button's tooltip. Defaulted, so every caller that has never thought
+     about it keeps the words it already had. A host with KEYS on this control
+     names them here — Terrain's `s` opens this menu and ↑/↓ step the symbol
+     without it, and the desk's convention is that a control's title names its
+     key (the expand button's "— F", the rail's "— R"). */
+  title?: string;
   /* OPTIONALLY CONTROLLED. Left alone the button owns its own open state, the
      way every other caller uses it. A host that has to open this from a
      keyboard passes both, and then owns it — there is no third state where
@@ -38,7 +44,7 @@ interface TickerQuickPickProps {
   onOpenChange?: (open: boolean) => void;
 }
 
-const TickerQuickPick = ({ ticker, onPick, open: openProp, onOpenChange, squared }: TickerQuickPickProps) => {
+const TickerQuickPick = ({ ticker, onPick, open: openProp, onOpenChange, squared, title = 'Switch ticker' }: TickerQuickPickProps) => {
   const [selfOpen, setSelfOpen] = useState(false);
   const open = openProp ?? selfOpen;
   const setOpen = (next: boolean) => {
@@ -110,7 +116,7 @@ const TickerQuickPick = ({ ticker, onPick, open: openProp, onOpenChange, squared
       <button
         ref={anchorRef}
         onClick={() => setOpen(!open)}
-        title="Switch ticker"
+        title={title}
         className={`inline-flex items-center justify-between gap-2 h-7 min-w-[112px] px-3 ${
           squared ? 'rounded-md' : 'rounded-full'
         } bg-white/[0.06] hover:bg-white/[0.10] font-mono text-[11px] font-bold text-textPrimary transition-colors`}

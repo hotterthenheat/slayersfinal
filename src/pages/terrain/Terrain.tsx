@@ -10,10 +10,14 @@ import StrikeChart, {
   type ChartIndicators,
   type ChartOverlays,
   type ChartStyle,
+  priceScaleLockedBy,
+  PRICE_SCALES,
+  type CrosshairBar,
   type CompareEntry,
   type CompareMode,
   type CrosshairSync,
   type PriceProjection,
+  type PriceScale,
 } from '../../components/gex/StrikeChart';
 import ChartToolbar from '../../components/gex/ChartToolbar';
 import CompareControl from '../../components/gex/CompareControl';
@@ -24,9 +28,12 @@ import TickerQuickPick from '../../components/gex/TickerQuickPick';
 import SpotPrice from '../../components/gex/SpotPrice';
 import { CANDLE_THEMES, chartSurface, useCandleThemeKey } from '../../components/gex/candleTheme';
 import { TIMEFRAMES, type Timeframe } from '../../data/timeframe';
+import { TREND_GLYPH, buildConfluence, trendWords, type ConfluenceRow } from '../../data/confluence';
+import { OPENING_RANGES, type OpeningRange } from '../../data/sessionLevels';
 import {
   SETUP_KEYS, applySetup, captureSetup, evict, readSetups, symKey, type SetupMap,
 } from './setups';
+import { flipRing, stepSymbol, stepTf } from './paneKeys';
 
 /*
 ==================================================
@@ -76,14 +83,10 @@ import {
 
 const TERRAIN_KEY = 'slayer_terrain_v1';
 
-/* One step along the interval list, CLAMPED at both ends. Wrapping would
-   turn one keypress on a 1-minute chart into a weekly chart, which is a
-   different instrument, not a smaller adjustment. */
-const stepTf = (tf: Timeframe, dir: 1 | -1): Timeframe => {
-  const i = TIMEFRAMES.findIndex(t => t.value === tf);
-  const j = Math.max(0, Math.min(TIMEFRAMES.length - 1, (i < 0 ? 2 : i) + dir));
-  return TIMEFRAMES[j].value;
-};
+/* `stepTf` and the symbol ring moved to ./paneKeys — pure, and therefore
+   provable by `npm test`, which this file can never be: it imports
+   StrikeChart, which imports the charting library. The clamp had been
+   unasserted since it was written. */
 
 /** How many panes are on screen. Four is the ceiling: at 1440 a fifth pane is
     260px wide, and a chart that narrow stops being a chart — the same finding
@@ -113,6 +116,19 @@ interface PaneCfg {
   /** Symbols crossed onto this pane's tape — the compare overlay. Per pane,
       like everything else here, and persisted with it. */
   compares: CompareEntry[];
+  /** The main price axis's mode — linear, log, percent or indexed (T-7).
+      Follows the SYMBOL, like the interval; see ./setups. */
+  priceScale: PriceScale;
+  /*
+    Which opening range the session overlay draws — T-6.
+
+    Per SLOT, not per symbol, and that is the opposite call from `timeframe`
+    on purpose. Which opening range a reader watches is a METHOD — some read
+    the first five minutes, some the first thirty — and a method does not
+    change because they looked at a different name. The interval does: NVDA at
+    1m and SPY at 15m is a normal pair of choices. Same reasoning as `ladder`.
+  */
+  sessionOr: OpeningRange;
   /** Whether this pane carries the strike rail down its right edge. Per pane
       too (Noah, 2026-08-25: "make sure the strike thing you added is
       removable") — the rail has its own × and the top button is a
@@ -138,6 +154,12 @@ const COMPARE_MODES = new Set<CompareMode>(['percent', 'scale', 'pane']);
    the interface's lime. Four, so a pane can cross four symbols at most. */
 const COMPARE_INKS = ['#5B9CF6', '#BBB2E8', '#EDE4CD', '#6BD3C7'];
 const STYLES = new Set<ChartStyle>(['candles', 'hollow', 'bars', 'line', 'step', 'area', 'baseline']);
+/* Derived from the picker's own list rather than typed a second time — a
+   fifth mode added there is accepted here without an edit, and one removed
+   stops validating here in the same commit. */
+const SCALES = new Set<string>(PRICE_SCALES.map(o => o.value));
+/* Same rule: derived from the engine's own list rather than typed twice. */
+const OR_VALUES = new Set<number>(OPENING_RANGES);
 
 /** The pane slots differ only by symbol at first; a reader sets the rest. */
 const defaultPanes = (): PaneCfg[] =>
@@ -148,6 +170,8 @@ const defaultPanes = (): PaneCfg[] =>
     indicators: { ...DEFAULT_INDICATORS },
     chartStyle: 'candles' as ChartStyle,
     compares: [] as CompareEntry[],
+    priceScale: 'normal' as PriceScale,
+    sessionOr: 15 as OpeningRange,
     ladder: true,
   }));
 
@@ -197,6 +221,8 @@ function readPane(raw: unknown, def: PaneCfg): PaneCfg {
           )
           .slice(0, COMPARE_INKS.length)
       : def.compares,
+    priceScale: typeof c.priceScale === 'string' && SCALES.has(c.priceScale) ? (c.priceScale as PriceScale) : def.priceScale,
+    sessionOr: typeof c.sessionOr === 'number' && OR_VALUES.has(c.sessionOr) ? (c.sessionOr as OpeningRange) : def.sessionOr,
     ladder: typeof c.ladder === 'boolean' ? c.ladder : def.ladder,
   };
 }
@@ -246,6 +272,8 @@ function loadCfg(): TerrainCfg {
       overlays: c.overlays && typeof c.overlays === 'object' ? (c.overlays as ChartOverlays) : undefined,
       indicators: c.indicators && typeof c.indicators === 'object' ? (c.indicators as ChartIndicators) : undefined,
       chartStyle: typeof c.chartStyle === 'string' && STYLES.has(c.chartStyle as ChartStyle) ? (c.chartStyle as ChartStyle) : undefined,
+      /* Not in the flat shape — it predates T-7 by a long way — so it is left
+         off and `readPane` gives the pane its default. */
     };
     const tickers = Array.isArray(c.tickers) ? (c.tickers as unknown[]) : [];
     const panes = def.panes.map((d, i) =>
@@ -330,6 +358,17 @@ const PRICE_GUTTER_PX = PRICE_SCALE_MIN_WIDTH + 2;
   and the toolbar band's 8px sides and the column has to give it 840px past
   the gutter.
 
+  T-7 ADDED NO WIDTH HERE, and that was the deciding constraint rather than a
+  happy accident. A price-scale trigger of its own costs 39px at the very
+  least, and the COMPACT strip — the one that has to survive a narrow pane —
+  is 346px of controls against a 349px column at 1180 in every layout. Three
+  pixels. So the scale folded into the Candles menu instead (see
+  ChartToolbar), and every number in this comment still holds.
+
+  The sweep asserts the PROPERTY as well as these figures: the toolbar
+  occupies exactly one row at every width and layout. The next control to land
+  in that strip fails a build rather than quietly wrapping it over the tape.
+
   Under that it does not clip or scroll, it WRAPS — the root is `flex-wrap`
   and the Indicators/Alerts/Candles span inside it wraps again. At 1024px with
   two grid columns the chart column is 369px, so 291px of line takes 818px of
@@ -406,6 +445,73 @@ const HEAVY_ENTRY_PX = 96; // the widest entry plus its gap
 const HEAVY_MAX = 3;
 
 /*
+  WHAT THE HOVERED-BAR READOUT COSTS — T-8, MEASURED in this build with all
+  four indicators drawn, at a width where nothing was forcing it to shed. Each
+  figure is the cell plus the row's own 10px gap:
+
+    O · H · L   46 each → 168 for the three
+    C           45 → 55, and it never goes; a readout with no close is not one
+    V 151.4K    45 → 55
+    EMA50       the widest indicator at 71 → 81; four of them is 324
+
+  The whole row with everything on measures 596px.
+
+  THE ORDER THINGS GO IN — what a reader loses least, first:
+
+    the INDICATORS  first, and they are the biggest single saving. Their lines
+                    are ON THE TAPE in their own inks a few pixels away, so
+                    the number is a precision the chart is already showing.
+    the VOLUME      next: the histogram is drawn along the floor of the same
+                    plot, so the bar's size is visible even unlabelled.
+    the OPEN,       last before the floor. They are the only parts with no
+    HIGH and LOW    second home on a line, step or area tape — but on those
+                    shapes they are null anyway and the row never carries
+                    them, so what is dropped here is only ever dropped from a
+                    candle or bar chart, where the wick and body draw them.
+
+  The floor is `C` alone at 55px, which every column on this desk can pay.
+*/
+/*
+  WHAT THE CONFLUENCE STRIP COSTS — T-12, MEASURED in this build at 1024–1920
+  with two panes, not estimated. Each figure is the strip plus the row's 8px
+  gap:
+
+    FULL   `1m▼ 5m▼ 15m▼ 1h▬ 1D▲`   140 → 148, the timeframes named
+    TIGHT  `▼▼▼▬▲`                    61 →  69, the SHAPE alone
+
+  TWO FORMS, NOT A SHED ORDER, because there is only one thing here and
+  dropping it leaves nothing. The tight form is not a degraded full one: what
+  a reader takes from this strip in the first instant is whether the arrows
+  AGREE, and five glyphs in a fixed order say that as well as five labelled
+  ones. Which timeframe is which stays in the hover title and the accessible
+  name — the same trade `compact` makes across the toolbar.
+
+  It is the FIRST thing the identity row gives up, and it is gated on the row
+  affording everything ELSE first: a strip that arrived by pushing the change
+  percentage off the row would be trading a measurement for a summary of
+  measurements.
+
+  ON THE MARGINS. At the width the full form first appears the row sits about
+  8px inside its box — thin, and deliberately not padded out. The box it would
+  overflow is the strip's CONTENT box, and the strip's right padding IS the
+  price-gutter clearance (PRICE_GUTTER_PX): a row that runs a few pixels long
+  grows into 76px of clearance, not onto the price ticks. What the sweep holds
+  is that geometry — nothing over an axis — rather than these figures, so a
+  symbol or a price wider than the ones measured here fails a build instead of
+  quietly printing on the ticks.
+
+  Measured tiers with two panes: full to 1440 · tight at 1366 and 1280 · gone
+  at 1180 and below, where the row is already shedding its own parts.
+*/
+const MTF_FULL_PX = 148;
+const MTF_TIGHT_PX = 69;
+
+const READOUT_C_PX = 55;
+const READOUT_OHL_PX = 168;
+const READOUT_VOL_PX = 55;
+const READOUT_IND_PX = 81;
+
+/*
   The heaviest strikes in the pane's window, signed — the one-line read of
   where the book is, and the same rows the rail draws.
 
@@ -419,6 +525,69 @@ const HEAVY_MAX = 3;
 */
 const heaviest = (rows: { strike: number; value: number }[], n: number) =>
   [...rows].sort((a, b) => Math.abs(b.value) - Math.abs(a.value)).slice(0, n);
+
+/* Share count, not dollars — `fmtUsd` would print a $ in front of a volume.
+   Same K/M/B ladder so the two reads scan alike. */
+const fmtVol = (v: number): string => {
+  const a = Math.abs(v);
+  if (a >= 1e9) return `${(v / 1e9).toFixed(1)}B`;
+  if (a >= 1e6) return `${(v / 1e6).toFixed(1)}M`;
+  if (a >= 1e3) return `${(v / 1e3).toFixed(1)}K`;
+  return v.toFixed(0);
+};
+
+/*
+  THE TIMEFRAMES, AND WHETHER THEY AGREE — T-12.
+
+  BULL AND BEAR INK, deliberately, and it is the one place on this desk where
+  that is not a violation: the house rule is "red/green is price direction
+  only", and price direction is exactly what these arrows are. Nothing here
+  touches the dealer palette.
+
+  ONE `title` AND ONE ACCESSIBLE NAME for the whole strip rather than per
+  glyph: five tooltips on five 20px targets is five things to hover, and in
+  the tight form the labels are the only way to know which is which.
+*/
+const ConfluenceStrip = ({ rows, form }: { rows: ConfluenceRow[]; form: 'full' | 'tight' }) => {
+  const words = rows.map(trendWords).join(' · ');
+  return (
+    <span
+      className="shrink-0 inline-flex items-center gap-1.5"
+      title={words}
+      role="img"
+      aria-label={`Timeframe trend — ${words}`}
+    >
+      {rows.map(r => (
+        <span key={r.tf} className="inline-flex items-baseline gap-0.5">
+          {form === 'full' && <span className="font-mono text-[9px] text-textMuted">{r.tf}</span>}
+          <span
+            aria-hidden
+            className={`font-mono text-[9px] leading-none ${
+              r.state === 'up' ? 'text-bull' : r.state === 'down' ? 'text-bear' : 'text-textMuted'
+            }`}
+          >
+            {/* A timeframe with too little history gets a dash, never a bar —
+                "no view" and "flat" are different claims (data/confluence.ts). */}
+            {r.state === null ? '–' : TREND_GLYPH[r.state]}
+          </span>
+        </span>
+      ))}
+    </span>
+  );
+};
+
+/* One labelled figure in the readout row. The key is quiet and the value is
+   not, so a row of six reads as values with keys rather than the other way
+   round. `ink` carries an indicator's own line colour, so the number and the
+   line it came from are the same colour a few pixels apart. */
+const ReadoutCell = ({ k, v, ink }: { k: string; v: string; ink?: string }) => (
+  <span className="shrink-0 whitespace-nowrap">
+    <span className="font-mono text-[9px] uppercase tracking-wider text-textMuted">{k}</span>
+    <span className="ml-1 font-mono text-[10px] tnum" style={ink ? { color: ink } : undefined}>
+      {v}
+    </span>
+  </span>
+);
 
 interface PaneProps {
   cfg: PaneCfg;
@@ -462,7 +631,13 @@ const Pane = ({
   onCrosshair, registerSync, isActive, onActivate, paneCount, menuOpen, onMenu,
   boxRef, cell = '',
 }: PaneProps) => {
-  const { ticker, timeframe, overlays, indicators, chartStyle, compares, ladder } = cfg;
+  const { ticker, timeframe, overlays, indicators, chartStyle, compares, priceScale, sessionOr, ladder } = cfg;
+  /* WHAT THE AXIS IS ACTUALLY DRAWING, from the one function that decides it.
+     The chart asks the same question of the same list, so the picker's trigger
+     and the price ticks can never disagree — a second `compares.some(...)`
+     here would be two generators for one fact, which is the bug this desk has
+     already paid for once (PRICE_GUTTER_PX). */
+  const scaleLock = priceScaleLockedBy(compares);
   /* An "Own scale" comparison gives the tape a SECOND price gutter, down the
      LEFT (StrikeChart's `leftPriceScale.visible`). Every piece of this pane's
      floating chrome is left-anchored, so it has to step aside for that axis
@@ -537,6 +712,12 @@ const Pane = ({
   const stripInner = stripW > 0 ? stripW - PRICE_GUTTER_PX - (ownScale ? PRICE_GUTTER_PX : STRIP_PAD_PX) : 0;
   const roomFor = (px: number) => stripInner === 0 || stripInner >= px;
   const showChangePct = roomFor(ID_ROW_FULL_PX);
+  /* Gated on the row affording everything else FIRST — see MTF_*_PX. */
+  const mtfForm: 'full' | 'tight' | 'none' = roomFor(ID_ROW_FULL_PX + MTF_FULL_PX)
+    ? 'full'
+    : roomFor(ID_ROW_FULL_PX + MTF_TIGHT_PX)
+      ? 'tight'
+      : 'none';
   const showBadge = paneCount > 1 && roomFor(ID_ROW_NO_PCT_PX);
   const showCompareAdd = roomFor(ID_ROW_NO_BADGE_PX);
   /* At least one entry: a HEAVIEST label with nothing after it is chrome that
@@ -599,6 +780,24 @@ const Pane = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [ticker, revision]
   );
+  /*
+    THE FIVE TIMEFRAMES' TREND STATE — T-12.
+
+    Off the SAME 1-minute base the tape is built from, aggregated per
+    timeframe inside the engine, so the strip and any pane showing one of
+    those intervals cannot disagree about where price sits.
+
+    Skipped entirely when there is no room for it. MEASURED against the
+    simulator's own buffer — 22 sessions of 390 one-minute bars, 8,580 of them
+    — the engine costs 1.45ms a call, so four panes at the desk's ten scans a
+    minute is about 58ms per minute of wall clock. Cheap, but not free, and a
+    pane at 1024 with three neighbours never renders the result.
+  */
+  const confluence = useMemo(
+    () => (mtfForm === 'none' ? [] : buildConfluence(Simulator.getCandles(ticker) ?? [])),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ticker, revision, mtfForm === 'none']
+  );
   /* The header's heaviest read comes off the NEAR-SPOT core, not the widened
      set the rail draws. `rows` now reaches the whole maintained book so the
      column can fill the price scale; pointing the header at it would have it
@@ -624,6 +823,20 @@ const Pane = ({
   const [focus, setFocus] = useState<number | null>(null);
   useEffect(() => setFocus(null), [ticker]);
 
+  /*
+    THE HOVERED BAR — T-8. The chart reports its own values at the crosshair,
+    for a pointer on this plot and for a moment arriving from another pane, so
+    a synced desk reads values on every pane rather than only under the cursor.
+
+    Cleared on a change of symbol or interval as well as on the chart's own
+    leave. The chart does emit null when the pointer goes, but a reload is not
+    a leave: switching symbol with the pointer still resting on the plot would
+    otherwise leave the last name's prices in this row under the new name's
+    tape. Same reason `focus` resets.
+  */
+  const [readout, setReadout] = useState<CrosshairBar | null>(null);
+  useEffect(() => setReadout(null), [ticker, timeframe]);
+
   /* One surface under the header AND the tape, so a pane is one continuous
      black inside its frame rather than two shades meeting at a seam. */
   const themeKey = useCandleThemeKey();
@@ -631,6 +844,20 @@ const Pane = ({
   const surface = themeBg === 'transparent' ? '#0a0a0a' : themeBg;
 
   const up = changePct >= 0;
+
+  /*
+    WHAT OF THE READOUT FITS — the same width budget the rows above spend, and
+    the same rule: the row does not wrap and it does not clip, so it sheds.
+
+    `stripInner === 0` is the frame before the first measurement, where the
+    honest default is everything — a shed row that then grows reads as a
+    glitch, a full row that then sheds reads as a fit.
+  */
+  const readoutInds = readout?.indicators.length ?? 0;
+  const roomForReadout = (px: number) => stripInner === 0 || stripInner >= px;
+  const showReadoutInds = readoutInds > 0 && roomForReadout(READOUT_C_PX + READOUT_OHL_PX + READOUT_VOL_PX + readoutInds * READOUT_IND_PX);
+  const showReadoutVol = readout?.volume != null && roomForReadout(READOUT_C_PX + READOUT_OHL_PX + READOUT_VOL_PX);
+  const showReadoutOhl = readout?.open != null && roomForReadout(READOUT_C_PX + READOUT_OHL_PX);
 
   return (
     <div
@@ -703,10 +930,13 @@ const Pane = ({
               chartStyle={chartStyle}
               prints={prints}
               compares={compares}
+              priceScale={priceScale}
+              sessionOr={sessionOr}
               focusPrice={focus}
               priceTag
               onCrosshair={onCrosshair}
               syncRegister={registerSync}
+              onReadout={setReadout}
               projectionRef={projectionRef}
               pageScroll={belowLg}
               frameless
@@ -820,6 +1050,9 @@ const Pane = ({
                     onPick={t => onCfg({ ticker: t })}
                     open={menuOpen === 'symbol'}
                     onOpenChange={o => onMenu(o ? 'symbol' : null)}
+                    /* The ring ↑/↓ walks is invisible, so the one control it
+                       moves is where it gets named. */
+                    title="Switch ticker — S · ↑ ↓ step your symbols"
                   />
                   {/* TradingView's "+" beside the symbol capsule — cross
                       another symbol onto this tape. Per pane, like the rest.
@@ -852,6 +1085,11 @@ const Pane = ({
                     {changePct.toFixed(2)}%
                   </span>
                 )}
+                {/* Do the timeframes agree — T-12. At rest, not on hover: the
+                    whole value of it is the glance. */}
+                {mtfForm !== 'none' && confluence.length > 0 && (
+                  <ConfluenceStrip rows={confluence} form={mtfForm} />
+                )}
 
                 <button
                   onClick={onToggleExpand}
@@ -874,7 +1112,45 @@ const Pane = ({
                 still a number. On its own full-width line, revealed with the
                 toolbar, there is room for every entry whole.
               */}
-              {heavy.length > 0 && (
+              {/*
+                THE HOVERED BAR TAKES THE BOOK'S LINE — T-8, and it shares the
+                slot rather than adding one.
+
+                A row of its own would push the toolbar and the compare legend
+                DOWN the moment the pointer crossed onto the plot — chrome
+                moving under the cursor that caused it, on a desk whose whole
+                premise is that the tape keeps still. Sharing costs nothing and
+                the two reads are never both wanted: the pointer is either over
+                the tape, where the question is what this bar did, or over the
+                chrome, where it is where the book is. Leaving the plot brings
+                the heaviest read straight back.
+
+                It is not `opacity-0` like the row it replaces, because it only
+                exists WHILE the pointer is on the plot — which is already the
+                hover state. Fading in something that is only ever created by a
+                hover would just make it late.
+              */}
+              {readout ? (
+                <div className="chrome-hover relative z-10 pointer-events-none hidden sm:block w-fit max-w-full rounded-md bg-canvas/25 backdrop-blur-[3px] px-2 py-1">
+                  <span className="flex items-center gap-2.5 whitespace-nowrap">
+                    {showReadoutOhl && (
+                      <>
+                        <ReadoutCell k="O" v={readout.open!.toFixed(2)} />
+                        <ReadoutCell k="H" v={readout.high!.toFixed(2)} />
+                        <ReadoutCell k="L" v={readout.low!.toFixed(2)} />
+                      </>
+                    )}
+                    {/* The one part that never goes. */}
+                    <ReadoutCell k="C" v={readout.close.toFixed(2)} />
+                    {showReadoutVol && <ReadoutCell k="V" v={fmtVol(readout.volume!)} />}
+                    {showReadoutInds &&
+                      readout.indicators.map(ind => (
+                        <ReadoutCell key={ind.key} k={ind.key} v={ind.value.toFixed(2)} ink={ind.ink} />
+                      ))}
+                  </span>
+                </div>
+              ) : (
+              heavy.length > 0 && (
                 <div className="chrome-hover relative z-10 pointer-events-none hidden sm:block w-fit max-w-full rounded-md bg-canvas/25 backdrop-blur-[3px] px-2 py-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
                   <span className="flex items-center gap-2.5 whitespace-nowrap">
                     <span className="shrink-0 font-mono text-[9px] uppercase tracking-widest text-textMuted">Heaviest</span>
@@ -890,6 +1166,7 @@ const Pane = ({
                     ))}
                   </span>
                 </div>
+              )
               )}
 
               {/* Its own, every one of them — and not there until you reach. */}
@@ -904,12 +1181,26 @@ const Pane = ({
                      icon, keeping the word as the hover/AT name.
 
                      Measured after: 818px of controls becomes 350px. Four
-                     rows become one at 1180/1280 in every layout (177px of
+                     rows become one at 1280 and up in every layout (177px of
                      chrome down to 112, 43% of the pane down to 27%), and two
                      at 1024 with 2+ panes, where the column is only 369px
                      (205px down to 145, 50% down to 35%). The single wide
                      pane beside a narrow one keeps its full labels, because
-                     the test is its own column's width. */
+                     the test is its own column's width.
+
+                     THE 1180 CLAIM WAS WRONG, and by one pixel. This read
+                     "one at 1180/1280 in every layout"; re-measured across
+                     the whole width × layout matrix, at 1180 with 2+ panes
+                     the toolbar's usable column is 349px and the compact
+                     strip is 350, so it takes two rows there and always has.
+                     The same 350-into-347 happens in the three-up at 1760,
+                     which the old note did not mention either. Verified
+                     against a clean build of the tree before T-7 — identical
+                     at every cell — so it is a stale claim rather than a
+                     regression, and the sweep now asserts what is true rather
+                     than what was written. Closing that pixel means shrinking
+                     a control that no current work touches; it is recorded
+                     here rather than quietly rounded away. */
                   compact={stripW > 0 && stripW - PRICE_GUTTER_PX < TOOLBAR_FULL_PX}
                   alertTicker={ticker}
                   alertSpot={levels.spot}
@@ -921,6 +1212,11 @@ const Pane = ({
                   onIndicators={i => onCfg({ indicators: i })}
                   chartStyle={chartStyle}
                   onChartStyle={s => onCfg({ chartStyle: s })}
+                  priceScale={priceScale}
+                  onPriceScale={p => onCfg({ priceScale: p })}
+                  priceScaleLock={scaleLock}
+                  sessionOr={sessionOr}
+                  onSessionOr={o => onCfg({ sessionOr: o })}
                 />
               </div>
             </div>
@@ -1205,6 +1501,32 @@ const Terrain = () => {
   /** Which pane has a menu open, and which menu — so `s` and `c` can open one
       without every pane growing its own piece of state. */
   const [menu, setMenu] = useState<{ pane: number; which: 'symbol' | 'compare' } | null>(null);
+  /* The key handler has to know a menu is up. `editable` already covers the
+     search box inside one — but the focus trap can put focus on the panel
+     itself, and ↑/↓ pressed there belong to the list being read, not to the
+     pane behind it. */
+  const menuOpenRef = useRef(false);
+  menuOpenRef.current = menu !== null;
+
+  /*
+    WHO OWNS ↑ AND ↓ — and it is not always this desk.
+
+    Every other Terrain key is an unmodified letter or digit, which the browser
+    does nothing with. The arrows scroll the page, and between `md` and `lg`
+    THIS PAGE SCROLLS: the panes stack and the root drops its height cap. A
+    desk that swallowed the arrows there would take a keyboard reader's only
+    way down a four-pane column — the keyboard version of "Below lg the page
+    could not be scrolled, because the charts ate the wheel", which is already
+    a fix in this file's history.
+
+    So the flip is bound exactly where the desk owns the viewport and there is
+    no scrolling left to steal: on a phone (one pane, `100dvh`), from `lg` up
+    (the grid fills the window), and while a pane is expanded at any width —
+    that overlay is `fixed inset-0` and pins `body { overflow: hidden }`, so
+    the arrows have nothing to scroll whatever the breakpoint says.
+  */
+  const deskOwnsViewportRef = useRef(false);
+  deskOwnsViewportRef.current = isPhone || !belowLg;
 
   /* A ring is feedback for people who can see it. Everything a key changes is
      also said out loud, or the whole layer is silent to a screen reader. */
@@ -1270,6 +1592,39 @@ const Terrain = () => {
           e.preventDefault();
           patch(q => ({ timeframe: stepTf(q.timeframe, e.key === '=' ? 1 : -1) }), q => `${q.ticker} ${q.timeframe}`);
           return;
+        /*
+          THE WATCHLIST FLIP — the active pane's symbol, without the picker.
+
+          Through the SAME reducer every other symbol change goes through, so
+          the name arrives with the setup the reader left it in: interval,
+          overlays, indicators, style and comparisons, all in one commit. That
+          is the whole reason this key is nearly free — see ./setups.
+
+          The ring is rebuilt from the live config on every press rather than
+          memoised into a ref. It is at most 64 short strings and this runs
+          once per keystroke; a stale ring after a symbol was configured would
+          be a real bug, and there is nothing here worth risking it for.
+
+          Announced with the POSITION, not just the name. The ring is a list
+          nobody can see, so "NVDA" alone leaves a reader with no idea whether
+          the next press wraps — `4 of 7` says it.
+        */
+        case 'ArrowUp': case 'ArrowDown': {
+          if (!deskOwnsViewportRef.current && expandedRef.current === null) return;
+          if (menuOpenRef.current) return;
+          const q = cur.panes[i];
+          if (!q) return;
+          e.preventDefault();
+          const ring = flipRing(Simulator.WATCHLIST, Object.keys(cur.setups));
+          const next = stepSymbol(ring, q.ticker, e.key === 'ArrowDown' ? 1 : -1);
+          const at = ring.indexOf(next);
+          /* A one-name ring steps onto itself. Announce it — silence on a
+             keypress reads as a broken key — but do not push a patch that the
+             reducer would turn into a no-op write of the whole config. */
+          if (next !== symKey(q.ticker)) setPaneRef.current(i, { ticker: next });
+          setAnnounce(at >= 0 ? `${next}, ${at + 1} of ${ring.length}` : next);
+          return;
+        }
         /* BOTH RAIL KEYS ARE UNBOUND BELOW `lg`, for the same reason the
            STRIKES button is not rendered there: the rail is `hidden lg:flex`,
            so the only thing a press could do is rewrite storage silently and

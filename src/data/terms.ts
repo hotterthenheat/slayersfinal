@@ -73,6 +73,16 @@ export const TERMS = {
   Gamma: 'How fast delta itself changes as the stock moves — the curvature.',
   Theta: 'What one day costs — the premium the option loses to time overnight.',
   Vega: 'How much the option’s price moves for a 1-point change in implied volatility.',
+  // ---- session levels (T-6) ----
+  'Prior day': 'Yesterday’s high, low and close. Price opening away from them and coming back is the most-watched move of the morning.',
+  'Opening range': 'The high and low of the session’s first 5, 15 or 30 minutes — the day’s first agreed boundary. Breaking out of it is where most intraday setups start.',
+  'Initial balance': 'The high and low of the first hour. A day that stays inside it is a range day; a day that leaves it usually keeps going.',
+  // ---- multi-timeframe (T-12) ----
+  'Timeframe trend':
+    'Where price sits on each interval against its own EMA21 and VWAP. Above both reads up, below both reads down, and between them reads flat — the timeframes disagreeing is itself the signal.',
+  // ---- price scale (T-7) ----
+  'Price scale':
+    'How the vertical axis is spaced. Linear gives equal dollars equal height; logarithmic gives equal percentages equal height, which is what you want comparing moves at different prices.',
 } as const;
 
 export type TermKey = keyof typeof TERMS;
