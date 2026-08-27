@@ -429,8 +429,12 @@ const STRIP_PAD_PX = 6;
   ticks. Measured at a 1024px viewport with the rail up, where the chart column
   is 369px and the usable width is 287:
 
-    padding 16 · badge 16 · symbol capsule 146 · price 47 · change 44 · expand 24
-    = 317 needed against 287 available, on ALL FOUR panes (315 on QQQ).
+    padding 16 · badge 16 · symbol capsule 146 · link chip 26 · price 47 ·
+    change 44 · expand 24 = 343 needed against 287 available, on ALL FOUR
+    panes (341 on QQQ). (The link chip joined with T-20 — and joined these
+    figures only after the sweep caught its 26px printing the row's tail on
+    the axis at 1024-1280: one overflowing button per pane, the exact width
+    of the part nobody had re-measured.)
 
   The 30px that did not fit was the EXPAND BUTTON, sitting on the price axis —
   in the shipped build, at a laptop width, with or without a second axis. The
@@ -448,6 +452,11 @@ const STRIP_PAD_PX = 6;
                   still possible from the legend's own x, and the menu comes
                   back the moment the column is wide enough. Costs 34, since
                   the button sits inside the capsule (146 = 112 + 6 + 28).
+    the LINK CHIP sheds with the compare tier — but ONLY while it is unlinked,
+                  when it is a convenience like the +. A pane that is LINKED
+                  wears its letter at every width, the replay badge's rule:
+                  a pane that follows another silently is a surprise, and
+                  state is never shed.
 
   Thresholds are the cost of the NEXT tier down plus room to spare, because
   the parts are not fixed: `min-w-[112px]` on the symbol button is a floor, so
@@ -456,9 +465,9 @@ const STRIP_PAD_PX = 6;
   — rather than these numbers, so a symbol that outgrows them fails the build
   instead of quietly printing on the ticks.
 */
-const ID_ROW_FULL_PX = 340;
-const ID_ROW_NO_PCT_PX = 285;
-const ID_ROW_NO_BADGE_PX = 260;
+const ID_ROW_FULL_PX = 366;
+const ID_ROW_NO_PCT_PX = 311;
+const ID_ROW_NO_BADGE_PX = 286;
 
 /*
   THE HEAVIEST READ'S ENTRIES, measured the same way: the HEAVIEST label is 50
@@ -1153,8 +1162,10 @@ const Pane = ({
                   {/* T-20's link chip: ∅ → A → B → ∅. Letters, not colours —
                       the palette's inks all mean something already, and a
                       letter reads at 9px where a fourth colour would need a
-                      legend. */}
-                  <button
+                      legend. Unlinked it is a convenience and sheds with the
+                      compare tier; LINKED it is state and stays at every
+                      width (ID_ROW_* above). */}
+                  {(cfg.link !== null && cfg.link !== undefined || showCompareAdd) && <button
                     onClick={() => onCfg({ link: cfg.link === 'A' ? 'B' : cfg.link === 'B' ? null : 'A' })}
                     aria-label={cfg.link ? `Link group ${cfg.link} — linked panes follow this pane's symbol` : 'Link this pane — panes sharing a letter follow each other\'s symbol'}
                     title={cfg.link ? `Link group ${cfg.link} — panes sharing ${cfg.link} follow each other's symbol` : 'Link this pane to others — shared letters change symbols together'}
@@ -1163,7 +1174,7 @@ const Pane = ({
                     }`}
                   >
                     {cfg.link ?? <Link2 className="w-3 h-3" />}
-                  </button>
+                  </button>}
                   {/* TradingView's "+" beside the symbol capsule — cross
                       another symbol onto this tape. Per pane, like the rest.
 
