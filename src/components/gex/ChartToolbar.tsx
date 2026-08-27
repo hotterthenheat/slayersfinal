@@ -528,16 +528,47 @@ const ChartToolbar = ({
             vertical ? 'flex-col items-stretch' : 'flex-wrap items-center justify-end'
           }`}
         >
-          {onToggleReplay && (
+          {/*
+            SHED IN COMPACT — the strip could afford one more control, not two.
+
+            Measured at 1280 with two panes, where the toolbar's column is
+            399px: the compact strip was 387 with T-1's pencil in it and 420
+            once this joined, so it took a second row over the tape at a width
+            this file records as won. Both new buttons are MODES rather than
+            settings, and only one of them can stay.
+
+            This is the one that goes, because it is the one with another door:
+            `p` toggles it on the active pane and announces, and a replaying
+            pane wears a REPLAY badge in its identity row that is never shed —
+            so the state stays visible even where the control is not. Draw mode
+            has no key at all; shedding the pencil would make the whole drawing
+            layer unreachable again at those widths.
+
+            The same rule the identity row and the heaviest read already
+            follow: when the column cannot pay, the strip sheds, and what it
+            sheds is what is still reachable another way.
+
+            Pulse only wires this in FULLSCREEN, where the strip is never
+            compact, so nothing there changes.
+          */}
+          {onToggleReplay && !compact && (
             <button
               onClick={onToggleReplay}
-              title={replay ? 'Exit replay' : 'Replay session history'}
+              title={replay ? 'Exit replay — P' : 'Replay session history — P'}
               className={`inline-flex items-center gap-1.5 px-2 py-1 rounded font-mono text-[10px] uppercase tracking-wider transition-colors ${
                 replay ? 'bg-select/10 text-select' : 'text-textMuted hover:text-textPrimary hover:bg-white/[0.03]'
               }`}
             >
               <Play className="w-3 h-3" />
-              {!vertical && 'Replay'}
+              {/* COMPACT DROPS THE WORD, like every other control in this
+                  strip. It read `!vertical` alone, so Replay was the one
+                  trigger here that kept its label at the size where the strip
+                  has none to spare — measured: with Terrain wiring both the
+                  pencil and this, the compact strip ran 418px into a 399px
+                  column at 1280 with two panes and took a second row over the
+                  tape. The `title` carries the word, as it does for
+                  Indicators, Alerts and Candles. */}
+              {!vertical && !compact && 'Replay'}
             </button>
           )}
           {onIndicators && indicators && (
@@ -853,21 +884,34 @@ const ChartToolbar = ({
       )}
 
       {/*
-        GATED ON BEING WIRED, not on `minimal`.
+        GATED ON BEING WIRED, not on `minimal` — and shed in compact.
 
         It read `!minimal`, and NOTHING in the app passed `onToggleDrawing` —
         so the button never rendered anywhere, and the drawing layer under it
-        (trendlines, levels, and now T-1's measure) had no door at all. A mode
-        flag was standing in for "did the host ask for this", which is what
-        every other optional control here already tests directly.
+        (trendlines, levels, and T-1's measure) had no door at all. A mode flag
+        was standing in for "did the host ask for this", which is what every
+        other optional control here already tests directly.
 
-        Terrain wires it per pane. The desks that do not pass a handler are
+        SHED IN COMPACT, with Replay. The two of them are the strip's only
+        MODES, they were the only things T-1 and T-13 added to it, and
+        together they took the compact strip from 350px to 420 against columns
+        as narrow as 379 — a second row of chrome over the tape at ordinary
+        laptop widths. Shedding both puts it back at exactly the 350 it was
+        before either feature, so neither cost the narrow desk a pixel.
+
+        BOTH KEEP A DOOR, which is what makes shedding them honest rather than
+        hiding them: `d` toggles draw mode and `p` toggles replay, both on the
+        active pane, both announced. And both modes are VISIBLE once on — draw
+        mode raises its own tool strip, replay wears a badge in the identity
+        row that is never shed.
+
+        Terrain wires both per pane. The desks that pass no handler are
         unchanged, because the button was not reaching them either way.
       */}
-      {onToggleDrawing && (
+      {onToggleDrawing && !compact && (
         <button
           onClick={onToggleDrawing}
-          title={drawing ? 'Exit draw mode' : 'Draw on the chart — trend, level, measure'}
+          title={drawing ? 'Exit draw mode — D' : 'Draw on the chart — trend, level, measure — D'}
           aria-pressed={drawing}
           aria-label={drawing ? 'Exit draw mode' : 'Draw on the chart'}
           className={`inline-flex items-center gap-1.5 px-2 py-1 rounded font-mono text-[10px] uppercase tracking-wider transition-colors ${

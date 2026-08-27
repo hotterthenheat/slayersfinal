@@ -2670,9 +2670,13 @@ head('the pane toolbar never wraps over the tape');
   /* The exclusion has to stay an exclusion. If the strip grows past the floor
      these columns are no longer "narrower than the strip has ever fitted" and
      the whole section above quietly stops testing anything. */
-  widest > 0 && widest <= 900
-    ? ok(`the widest strip measured is ${widest}px — the full strip is still ~818`)
-    : bad(`the widest strip measured is ${widest}px; the source records 818 and gates compact on it`);
+  /* The full strip is 934px in this build (818 before T-1's pencil and T-13's
+     Replay joined it). The bound is the figure Terrain gates `compact` on,
+     less the padding it adds — past that the strip cannot fit the column the
+     constant promises it and the section above stops meaning anything. */
+  widest > 0 && widest <= 956 - 22
+    ? ok(`the widest strip measured is ${widest}px, inside the 934 the source records`)
+    : bad(`the widest strip measured is ${widest}px; the source records 934 and gates compact on 956`);
   narrowSeen > 0
     ? ok(`${narrowSeen} toolbars sat in columns under the ${NARROW_FLOOR_PX}px floor and were excluded, as recorded (compact strip is ${COMPACT_STRIP_PX}px)`)
     : bad('no narrow columns were seen at all — the excluded band has moved and this floor is now untested');
@@ -3188,6 +3192,166 @@ head('the measure is reachable, and what it draws is a stored measure');
 
   errs.length === 0 ? ok('no page errors') : bad(`page errors: ${errs.join(' | ')}`);
   await ctx.close();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   T-13. REPLAY, WIRED — the door, the key, the badge, and whose moment may
+   travel.
+
+   The transport itself was already built and already good (play, pause, step,
+   speed, scrub). What it did not have on this desk was any way in: only
+   Pulse's LiveChartWidget passed `replay`, so the dedicated chart desk could
+   not reach it.
+
+   THE SYNC DECISION IS OBSERVED THROUGH T-8's READOUT, which is the only
+   surface that makes it visible from the DOM: a pane that RECEIVES a moment
+   reports its own values at it, so counting readouts counts marks. Four
+   cases, because the rule has two clauses and both have to bite.
+   ───────────────────────────────────────────────────────────────────────── */
+head('replay has a door, says so on the pane, and keeps its moment to itself');
+{
+  const replaySeed = tfs =>
+    JSON.stringify({
+      layout: 2,
+      panes: TICKERS.map((t, i) => ({
+        ticker: t, timeframe: tfs[i] ?? '15m',
+        overlays: { trails: true, levels: true, darkpool: false, volume: true, flow: false, netDrift: false, volDrift: false, dexStrike: false, session: false },
+        indicators: { ema9: false, ema21: false, ema50: false, vwap: false },
+        chartStyle: 'candles', compares: [], priceScale: 'normal', sessionOr: 15, ladder: true,
+      })),
+      setups: {},
+    });
+
+  const openReplay = async (tfs, w = 1600, h = 950, layout = 2) => {
+    const ctx = await browser.newContext({ viewport: { width: w, height: h } });
+    const seedStr = JSON.stringify({ ...JSON.parse(replaySeed(tfs)), layout });
+    await ctx.addInitScript(`localStorage.setItem('slayer_terrain_v1', ${JSON.stringify(seedStr)})`);
+    const page = await ctx.newPage();
+    const errs = [];
+    page.on('pageerror', e => errs.push(String(e)));
+    await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(BOOT_MS + 1000);
+    return { ctx, page, errs };
+  };
+
+  const badges = page => page.$$eval('[title="This pane is replaying history — it is not live"]', bs => bs.length);
+  /* The SCRUBBER, not a button titled "Exit replay": the toolbar's own replay
+     toggle wears that title too once a pane is replaying, so counting titles
+     counts the door as well as the transport. */
+  const transports = page => page.$$eval('input[type="range"]', bs => bs.length);
+  const readouts = page =>
+    page.$$eval('.chrome-hover', ds => ds.filter(d => /^[OC][\d.]/.test(d.textContent.replace(/\s/g, ''))).length);
+
+  // ── the door, and what it puts on screen ─────────────────────────────────
+  {
+    const { ctx, page, errs } = await openReplay(['15m'], 1600, 950, 1);
+    await page.mouse.move(600, 400);
+    await page.waitForTimeout(700);
+    (await badges(page)) === 0 ? ok('PREMISE: no replay badge before anything is toggled') : bad('a replay badge was up before replay was');
+    const btn = await page.$('button[title="Replay session history — P"]');
+    btn ? ok('the pane toolbar carries a replay button') : bad('no replay button in the pane toolbar — the desk still cannot reach replay');
+    if (btn) {
+      await btn.click();
+      await page.waitForTimeout(1500);
+      (await transports(page)) === 1 ? ok('clicking it puts the pane in replay') : bad(`${await transports(page)} transports after one click`);
+      (await badges(page)) === 1
+        ? ok('and the pane wears a REPLAY badge, so a historical chart cannot pass for a live one')
+        : bad(`${await badges(page)} badges with one pane replaying`);
+      await page.mouse.move(600, 400);
+      await page.waitForTimeout(500);
+      const xs = await page.$$('button[title="Exit replay"]');
+      await xs[xs.length - 1].click();
+      await page.waitForTimeout(1200);
+      (await transports(page)) === 0 && (await badges(page)) === 0
+        ? ok('and exiting takes both away')
+        : bad('exiting replay left the transport or the badge behind');
+    }
+    errs.length === 0 ? ok('no page errors') : bad(`page errors: ${errs.join(' | ')}`);
+    await ctx.close();
+  }
+
+  // ── the key, and what ends a replay ──────────────────────────────────────
+  {
+    const { ctx, page, errs } = await openReplay(['15m', '15m']);
+    const boxes = await page.$$('.grid > div > div');
+    await boxes[0].click({ position: { x: 200, y: 300 } });
+    await page.waitForTimeout(250);
+    await page.keyboard.press('p');
+    await page.waitForTimeout(1500);
+    (await badges(page)) === 1 ? ok('`p` puts the ACTIVE pane in replay') : bad(`${await badges(page)} panes replaying after one \`p\``);
+    const said = await page.$eval('span.sr-only[aria-live]', el => el.textContent.trim());
+    /replay on$/.test(said) ? ok(`and announces it — ${JSON.stringify(said)}`) : bad(`\`p\` announced ${JSON.stringify(said)}`);
+    /* A replay was recorded in another world; a symbol change has to end it. */
+    await page.keyboard.press('ArrowDown');
+    await page.waitForTimeout(1800);
+    (await badges(page)) === 0
+      ? ok('and a symbol change ends it — the replay was recorded in another world')
+      : bad(`the replay survived a symbol change (${await badges(page)} badges)`);
+    errs.length === 0 ? ok('no page errors') : bad(`page errors: ${errs.join(' | ')}`);
+    await ctx.close();
+  }
+
+  /*
+    SHED IN COMPACT, AND STILL REACHABLE — the trade T-1 and T-13 made to add
+    nothing to the narrow strip.
+
+    Both mode buttons come off at compact widths, which is only honest because
+    both keep a key. If a future change sheds one without its key, or renames
+    a title so the key stops being announced, this is what says so.
+  */
+  {
+    const { ctx, page, errs } = await openReplay(['15m', '15m', '15m', '15m'], 1280, 950, 4);
+    const pencil = await page.$('button[aria-label="Draw on the chart"]');
+    !pencil
+      ? ok('PREMISE: at 1280 with four panes both mode buttons are shed')
+      : bad('the pencil is still in the compact strip — the width budget above is not what it says');
+    const boxes = await page.$$('.grid > div > div');
+    await boxes[0].click({ position: { x: 150, y: 250 } });
+    await page.waitForTimeout(250);
+    await page.keyboard.press('d');
+    await page.waitForTimeout(900);
+    const tools = await page.$$eval('button', bs => bs.filter(b => b.textContent.trim() === 'Measure').length);
+    tools === 1 ? ok('`d` still opens draw mode where the pencil is shed') : bad(`\`d\` opened ${tools} tool strips at a compact width`);
+    const said = await page.$eval('span.sr-only[aria-live]', el => el.textContent.trim());
+    /draw mode on$/.test(said) ? ok(`and announces it — ${JSON.stringify(said)}`) : bad(`\`d\` announced ${JSON.stringify(said)}`);
+    await page.keyboard.press('p');
+    await page.waitForTimeout(1500);
+    (await badges(page)) === 1 ? ok('`p` still opens replay there too') : bad(`\`p\` put ${await badges(page)} panes in replay at a compact width`);
+    errs.length === 0 ? ok('no page errors') : bad(`page errors: ${errs.join(' | ')}`);
+    await ctx.close();
+  }
+
+  // ── whose moment may travel ──────────────────────────────────────────────
+  for (const [label, tfs, replayPanes, expect] of [
+    ['both live', ['15m', '15m'], [], 2],
+    ['one live, one replaying', ['15m', '15m'], [1], 1],
+    ['both replaying, same interval', ['15m', '15m'], [0, 1], 2],
+    ['both replaying, different intervals', ['15m', '5m'], [0, 1], 1],
+  ]) {
+    const { ctx, page, errs } = await openReplay(tfs, 2200, 1000);
+    const boxes = await page.$$('.grid > div > div');
+    for (const i of replayPanes) {
+      await boxes[i].click({ position: { x: 200, y: 300 } });
+      await page.waitForTimeout(250);
+      await page.keyboard.press('p');
+      await page.waitForTimeout(1600);
+    }
+    const b = await badges(page);
+    b === replayPanes.length
+      ? ok(`${label}: PREMISE — ${b} pane(s) in replay`)
+      : bad(`${label}: PREMISE — ${b} panes replaying, expected ${replayPanes.length}, so the count below proves nothing`);
+    const bb = await boxes[0].boundingBox();
+    await page.mouse.move(bb.x + bb.width * 0.2, bb.y + bb.height * 0.5);
+    await page.waitForTimeout(250);
+    await page.mouse.move(bb.x + bb.width * 0.25, bb.y + bb.height * 0.5);
+    await page.waitForTimeout(1500);
+    const n = await readouts(page);
+    n === expect
+      ? ok(`${label}: ${n} pane(s) report the moment`)
+      : bad(`${label}: ${n} panes reported the moment, expected ${expect}`);
+    errs.length === 0 ? ok(`${label}: no page errors`) : bad(`${label} page errors: ${errs.join(' | ')}`);
+    await ctx.close();
+  }
 }
 
 console.log(`\n${fails} failing`);

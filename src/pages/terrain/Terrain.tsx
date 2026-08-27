@@ -351,19 +351,26 @@ const PRICE_GUTTER_PX = PRICE_SCALE_MIN_WIDTH + 2;
   WHAT THE FULL CONTROL STRIP NEEDS — inside the chart column, with the price
   gutter already taken off it.
 
-  Measured against this build: the un-compacted toolbar lays out at 818px on
-  one line. The seven-button timeframe strip is 251 of that, the three worded
-  triggers (Indicators 117 · Alerts 93 · Candles 102) another 311, `Overlays 3`
-  117, `Theme` 89, and 42 of gaps and dividers. Add the strip's 6px left pad
-  and the toolbar band's 8px sides and the column has to give it 840px past
+  Measured against this build at 2560, where nothing can be forcing a wrap:
+  the un-compacted toolbar lays out at 934px on one line. The seven-button
+  timeframe strip is 251 of that, `Replay` 78, the three worded triggers
+  (Indicators 117 · Alerts 93 · Candles 102) another 311, `Overlays 3` 117,
+  `Theme` 89, and the rest gaps and dividers. Add the strip's 6px left pad and
+  the toolbar band's 16px of `px-2` and the column has to give it 956px past
   the gutter.
 
-  T-7 ADDED NO WIDTH HERE, and that was the deciding constraint rather than a
-  happy accident. A price-scale trigger of its own costs 39px at the very
-  least, and the COMPACT strip — the one that has to survive a narrow pane —
-  is 346px of controls against a 349px column at 1180 in every layout. Three
-  pixels. So the scale folded into the Candles menu instead (see
-  ChartToolbar), and every number in this comment still holds.
+  IT HAS MOVED TWICE, and both times the control that moved it was in another
+  file: 818 → 856 when T-1 wired the draw pencil, and → 934 when T-13 wired
+  Replay. That is the whole hazard of a measured constant, and it is why the
+  sweep asserts the PROPERTY — the toolbar occupies exactly one row at every
+  width and layout — rather than this figure. The number here is the gate; the
+  sweep is what notices when it is wrong.
+
+  T-7 ADDED NO WIDTH, and that was the deciding constraint rather than a happy
+  accident: a price-scale trigger of its own is 39px at the very least, and the
+  COMPACT strip has none to spare, so the scale folded into the Candles menu
+  (see ChartToolbar). T-13's Replay is SHED in compact for the same budget —
+  it has `p` and a badge, and the pencil has neither.
 
   The sweep asserts the PROPERTY as well as these figures: the toolbar
   occupies exactly one row at every width and layout. The next control to land
@@ -379,7 +386,7 @@ const PRICE_GUTTER_PX = PRICE_SCALE_MIN_WIDTH + 2;
   It is a PANE width, not a window width: a four-pane desk at 1440px still
   gives each toolbar ~577px and still wraps.
 */
-const TOOLBAR_FULL_PX = 840;
+const TOOLBAR_FULL_PX = 956;
 
 /*
   THE STRIP'S OWN PADDING, when it is not clearing a price gutter (`p-1.5`).
@@ -602,6 +609,36 @@ interface PaneProps {
   onCrosshair: CrosshairSync;
   /** Hand the desk this pane's "mark that moment" function, null on unmount. */
   registerSync: (apply: CrosshairSync | null) => void;
+  /*
+    REPLAY — T-13, and it lives in the DESK rather than in the pane, unlike
+    draw mode.
+
+    Because it has a key. `p` acts on whichever pane is active, and the key
+    handler is installed once at the desk; a flag inside the pane would need
+    to be reached through a ref per pane to be togglable from there. Draw mode
+    has no key, so it stays where it is used.
+
+    It also has to be desk-level for the CROSSHAIR decision below — one pane
+    cannot know whether another is replaying, and that is exactly the question
+    the sync has to answer before it marks a moment.
+  */
+  replay: boolean;
+  onToggleReplay: () => void;
+  onExitReplay: () => void;
+  /*
+    DRAW MODE, and it sits beside replay for the same two reasons.
+
+    It has a KEY now (`d`), so the desk has to own it — the handler is
+    installed once and toggles whichever pane is active. And both are MODES
+    rather than settings, so both are shed from the compact strip together and
+    both need a door that survives the shedding.
+
+    Neither is persisted: a reader who left a pane sketching or scrubbing
+    yesterday wants a chart today.
+  */
+  drawing: boolean;
+  onToggleDrawing: () => void;
+  onExitDraw: () => void;
   /** Whether the keys act on this pane, and how to make them. */
   isActive: boolean;
   onActivate: () => void;
@@ -628,7 +665,9 @@ interface PaneProps {
 
 const Pane = ({
   cfg, onCfg, revision, expanded, onToggleExpand, index, tall,
-  onCrosshair, registerSync, isActive, onActivate, paneCount, menuOpen, onMenu,
+  onCrosshair, registerSync, replay, onToggleReplay, onExitReplay,
+  drawing, onToggleDrawing, onExitDraw,
+  isActive, onActivate, paneCount, menuOpen, onMenu,
   boxRef, cell = '',
 }: PaneProps) => {
   const { ticker, timeframe, overlays, indicators, chartStyle, compares, priceScale, sessionOr, ladder } = cfg;
@@ -837,20 +876,6 @@ const Pane = ({
   const [readout, setReadout] = useState<CrosshairBar | null>(null);
   useEffect(() => setReadout(null), [ticker, timeframe]);
 
-  /*
-    DRAW MODE — per pane, and NOT persisted.
-
-    It is a mode rather than a setting: a reader who left a pane in draw mode
-    yesterday wants a chart today, not a pointer that pans nothing. The
-    drawings themselves are stored per ticker and come back either way.
-
-    Terrain is the first host in the app to wire this. The toolbar's pencil
-    was gated on `!minimal` and nothing anywhere passed a handler, so the
-    whole drawing layer — trendlines, levels, and T-1's measure — has been
-    reachable from nowhere.
-  */
-  const [drawing, setDrawing] = useState(false);
-  useEffect(() => setDrawing(false), [ticker]);
 
   /* One surface under the header AND the tape, so a pane is one continuous
      black inside its frame rather than two shades meeting at a seam. */
@@ -948,7 +973,9 @@ const Pane = ({
               priceScale={priceScale}
               sessionOr={sessionOr}
               drawing={drawing}
-              onExitDraw={() => setDrawing(false)}
+              onExitDraw={onExitDraw}
+              replay={replay}
+              onExitReplay={onExitReplay}
               focusPrice={focus}
               priceTag
               onCrosshair={onCrosshair}
@@ -1059,6 +1086,29 @@ const Pane = ({
                     }`}
                   >
                     {index + 1}
+                  </span>
+                )}
+                {/*
+                  THE REPLAY BADGE — T-13, and it is the reason the rest of
+                  this is safe to ship.
+
+                  A pane in replay looks exactly like a live one: the same
+                  candles, the same rail, the same symbol. The transport is at
+                  the BOTTOM of the pane and a reader glancing at the top of a
+                  four-pane desk cannot see it. A historical chart mistaken for
+                  a live one is the worst thing this desk could show.
+
+                  So it sits in the identity row, beside the symbol, and it is
+                  NOT shed at any width: everything else in this row can go,
+                  because everything else is a convenience. This one says which
+                  world you are looking at.
+                */}
+                {replay && (
+                  <span
+                    title="This pane is replaying history — it is not live"
+                    className="shrink-0 inline-flex items-center gap-1 px-1.5 h-4 rounded-[3px] bg-select text-[#0a0a0a] font-mono text-[9px] font-bold uppercase tracking-wider"
+                  >
+                    Replay
                   </span>
                 )}
                 <span className="shrink-0 inline-flex items-center gap-1.5">
@@ -1235,7 +1285,9 @@ const Pane = ({
                   sessionOr={sessionOr}
                   onSessionOr={o => onCfg({ sessionOr: o })}
                   drawing={drawing}
-                  onToggleDrawing={() => setDrawing(v => !v)}
+                  onToggleDrawing={onToggleDrawing}
+                  replay={replay}
+                  onToggleReplay={onToggleReplay}
                 />
               </div>
             </div>
@@ -1517,6 +1569,31 @@ const Terrain = () => {
   const cfgRef = useRef(cfg);
   cfgRef.current = cfg;
 
+  /*
+    WHICH PANES ARE REPLAYING — T-13.
+
+    Four flags rather than one index: nothing stops a reader replaying two
+    panes side by side, and that is arguably the point of a four-pane desk.
+    Held here rather than in the panes because `p` acts on the active one and
+    because the crosshair has to know (see `emitCrosshair`).
+
+    NOT PERSISTED. It is a mode, not a setting — a reader who left a pane
+    scrubbing yesterday wants a live chart today, not a frozen one. Same
+    reasoning as draw mode.
+  */
+  const [replaying, setReplaying] = useState<boolean[]>(() => [false, false, false, false]);
+  const replayingRef = useRef<boolean[]>(replaying);
+  replayingRef.current = replaying;
+  const setPaneReplay = (i: number, on: boolean) =>
+    setReplaying(prev => (prev[i] === on ? prev : prev.map((v, j) => (j === i ? on : v))));
+
+  /* Draw mode, the same shape and here for the same reasons — see PaneProps. */
+  const [drawingPanes, setDrawingPanes] = useState<boolean[]>(() => [false, false, false, false]);
+  const drawingRef = useRef<boolean[]>(drawingPanes);
+  drawingRef.current = drawingPanes;
+  const setPaneDrawing = (i: number, on: boolean) =>
+    setDrawingPanes(prev => (prev[i] === on ? prev : prev.map((v, j) => (j === i ? on : v))));
+
   /** Which pane has a menu open, and which menu — so `s` and `c` can open one
       without every pane growing its own piece of state. */
   const [menu, setMenu] = useState<{ pane: number; which: 'symbol' | 'compare' } | null>(null);
@@ -1665,6 +1742,24 @@ const Terrain = () => {
           setAnnounce(any ? 'Every strike rail hidden' : 'Strike rail on every chart');
           return;
         }
+        /* REPLAY — T-13. Acts on the active pane, like every other pane key.
+           The chart owns the transport once it is up; this is the door. */
+        case 'p': {
+          e.preventDefault();
+          const on = !(replayingRef.current[i] ?? false);
+          setPaneReplay(i, on);
+          setAnnounce(`${cur.panes[i]?.ticker ?? ''} replay ${on ? 'on' : 'off'}`);
+          return;
+        }
+        /* DRAW MODE — the pencil's key, so the strip can shed the pencil at
+           widths that cannot pay for it and the layer stays reachable. */
+        case 'd': {
+          e.preventDefault();
+          const on = !(drawingRef.current[i] ?? false);
+          setPaneDrawing(i, on);
+          setAnnounce(`${cur.panes[i]?.ticker ?? ''} draw mode ${on ? 'on' : 'off'}`);
+          return;
+        }
         case 'f':
           e.preventDefault();
           setExpanded(v => (v === i ? null : i));
@@ -1710,6 +1805,25 @@ const Terrain = () => {
     else sinks.delete(i);
   };
 
+  /*
+    WHOSE MOMENT MAY TRAVEL — the T-13 question, settled here.
+
+    A REPLAYING PANE'S MOMENT IS HISTORICAL. Marking it on a live pane says
+    "your cursor is at this time on this chart too", and it is not: the live
+    pane is showing today and the mark would land on a bar from a different
+    session entirely. The reverse is worse — a live hover jumping a replaying
+    pane's crosshair off the position the reader is scrubbing.
+
+    So a moment travels only between panes in the SAME MODE and on the SAME
+    INTERVAL. Two replaying panes at 1m and 15m are scrubbing independent
+    positions in history, and their bar grids do not line up; `applySync` would
+    refuse most of those marks anyway (it floors to the receiving pane's own
+    bucket and draws nothing outside its visible range), but "would refuse
+    most" is not a rule, and this is.
+
+    Live panes are unchanged: they sync to each other exactly as before,
+    whatever intervals they are on, because they are all showing NOW.
+  */
   const emitCrosshair = (i: number, time: Parameters<CrosshairSync>[0]) => {
     /* A LEAVE from a pane that is not the current source is stale. Dragging
        the pointer from one pane straight onto the next fires the old pane's
@@ -1718,7 +1832,18 @@ const Terrain = () => {
        on exactly the gesture this feature exists for. */
     if (time === null && sourcePane.current !== i) return;
     sourcePane.current = time === null ? null : i;
-    for (const [j, apply] of sinks) if (j !== i) apply(time);
+    const rep = replayingRef.current;
+    const panesNow = cfgRef.current.panes;
+    for (const [j, apply] of sinks) {
+      if (j === i) continue;
+      const sameMode = (rep[j] ?? false) === (rep[i] ?? false);
+      /* The interval clause applies only in replay — see the note above. */
+      const ok = rep[i] ? sameMode && panesNow[j]?.timeframe === panesNow[i]?.timeframe : sameMode;
+      if (ok) apply(time);
+      /* A pane that is NOT going to be marked has its old mark cleared, or a
+         stale crosshair sits on it for as long as the reader hovers elsewhere. */
+      else apply(null);
+    }
   };
 
   /* Nothing carries across a change of arrangement: a pane that has gone
@@ -1967,6 +2092,14 @@ const Terrain = () => {
             tall={cfg.layout === 1}
             onCrosshair={t => emitCrosshair(i, t)}
             registerSync={apply => registerSync(i, apply)}
+            replay={replaying[i] ?? false}
+            onToggleReplay={() => setPaneReplay(i, !(replaying[i] ?? false))}
+            /* The chart calls this itself on a ticker or timeframe change —
+               a replay was recorded in another world and cannot survive one. */
+            onExitReplay={() => setPaneReplay(i, false)}
+            drawing={drawingPanes[i] ?? false}
+            onToggleDrawing={() => setPaneDrawing(i, !(drawingPanes[i] ?? false))}
+            onExitDraw={() => setPaneDrawing(i, false)}
             isActive={i === active}
             onActivate={() => setActiveRaw(i)}
             paneCount={cfg.layout}
