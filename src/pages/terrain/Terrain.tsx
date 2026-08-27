@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Maximize2, Minimize2, Rows3, X } from 'lucide-react';
+import { Link2, Maximize2, Minimize2, Rows3, X } from 'lucide-react';
 import Simulator from '../../core/simulator';
 import { useMarketData } from '../../context/MarketDataContext';
 import DistanceUnitPicker from '../../components/ui/DistanceUnitPicker';
+import { futuresPhaseAt, FUTURES_PHASE_WORDS } from '../../core/calendar';
+import {
+  deleteNamedLayout, loadNamedLayouts, persistNamedLayouts, saveNamedLayout,
+  MAX_NAMED_LAYOUTS, type NamedLayoutEntry,
+} from './layouts';
 import { buildLadderFor, buildLevelsFor, buildPrints, fmtUsd, spotChangePct } from '../../data/gex';
 import StrikeChart, {
   PRICE_SCALE_MIN_WIDTH,
@@ -31,6 +36,7 @@ import { CANDLE_THEMES, chartSurface, useCandleThemeKey } from '../../components
 import { TIMEFRAMES, type Timeframe } from '../../data/timeframe';
 import { TREND_GLYPH, buildConfluence, trendWords, type ConfluenceRow } from '../../data/confluence';
 import { OPENING_RANGES, type OpeningRange } from '../../data/sessionLevels';
+import { isBarClock } from '../../data/altBars';
 import {
   SETUP_KEYS, applySetup, captureSetup, evict, readSetups, symKey, type SetupMap,
 } from './setups';
@@ -108,12 +114,21 @@ export type TerrainLayout = (typeof LAYOUTS)[number];
   `ticker` and `ladder` follow the SLOT, never the symbol; see ./setups for
   why the rail in particular has to.
 */
-interface PaneCfg {
+export interface PaneCfg {
+  /** T-20 — the pane's link group. Panes sharing a letter follow each
+      other's SYMBOL changes; null stands alone. Not a setup key: linking is
+      slot business, like the rail. */
+  link?: 'A' | 'B' | null;
   ticker: string;
   timeframe: Timeframe;
   overlays: ChartOverlays;
   indicators: ChartIndicators;
   chartStyle: ChartStyle;
+  /** T-15 — the bar CLOCK: 'time', or a range/volume key from
+      data/altBars.ts's BAR_CLOCKS. Rule bars fold the live seconds tape by
+      rule instead of by the timeframe. Per SLOT like sessionOr: it is a way
+      of reading a pane, not a fact about a symbol. */
+  clock: string;
   /** Symbols crossed onto this pane's tape — the compare overlay. Per pane,
       like everything else here, and persisted with it. */
   compares: CompareEntry[];
@@ -170,10 +185,12 @@ const defaultPanes = (): PaneCfg[] =>
     overlays: { ...DEFAULT_OVERLAYS },
     indicators: { ...DEFAULT_INDICATORS },
     chartStyle: 'candles' as ChartStyle,
+    clock: 'time',
     compares: [] as CompareEntry[],
     priceScale: 'normal' as PriceScale,
     sessionOr: 15 as OpeningRange,
     ladder: true,
+    link: null,
   }));
 
 /* The map starts EMPTY on a fresh install, deliberately. Seeding it from the
@@ -208,6 +225,10 @@ function readPane(raw: unknown, def: PaneCfg): PaneCfg {
     overlays: { ...DEFAULT_OVERLAYS, ...(c.overlays && typeof c.overlays === 'object' ? c.overlays : {}) },
     indicators: { ...DEFAULT_INDICATORS, ...(c.indicators && typeof c.indicators === 'object' ? c.indicators : {}) },
     chartStyle: typeof c.chartStyle === 'string' && STYLES.has(c.chartStyle as ChartStyle) ? (c.chartStyle as ChartStyle) : def.chartStyle,
+    /* The clock list lives with the engine (data/altBars.ts) and is checked
+       through its own validator — not a second enumeration here (T-0's
+       lesson, same as the layouts module). */
+    clock: isBarClock(c.clock) ? c.clock : def.clock,
     /* Each entry validated on its own: a stored comparison whose symbol was
        renamed, or whose ink went missing, must not take the pane down. */
     compares: Array.isArray(c.compares)
@@ -225,6 +246,7 @@ function readPane(raw: unknown, def: PaneCfg): PaneCfg {
     priceScale: typeof c.priceScale === 'string' && SCALES.has(c.priceScale) ? (c.priceScale as PriceScale) : def.priceScale,
     sessionOr: typeof c.sessionOr === 'number' && OR_VALUES.has(c.sessionOr) ? (c.sessionOr as OpeningRange) : def.sessionOr,
     ladder: typeof c.ladder === 'boolean' ? c.ladder : def.ladder,
+    link: c.link === 'A' || c.link === 'B' ? c.link : null,
   };
 }
 
@@ -353,19 +375,21 @@ const PRICE_GUTTER_PX = PRICE_SCALE_MIN_WIDTH + 2;
   gutter already taken off it.
 
   Measured against this build at 2560, where nothing can be forcing a wrap:
-  the un-compacted toolbar lays out at 934px on one line. The seven-button
-  timeframe strip is 251 of that, `Replay` 78, the three worded triggers
-  (Indicators 117 · Alerts 93 · Candles 102) another 311, `Overlays 3` 117,
-  `Theme` 89, and the rest gaps and dividers. Add the strip's 6px left pad and
-  the toolbar band's 16px of `px-2` and the column has to give it 956px past
-  the gutter.
+  the un-compacted toolbar lays out at 972px on one line. The timeframe strip
+  is 289 of that (eight chips now — T-14's `15s` is 36px of the move below),
+  `Replay` 78, the three worded triggers (Indicators 117 · Alerts 93 ·
+  Candles 102) another 311, `Overlays 3` 117, `Theme` 89, and the rest gaps
+  and dividers. Add the strip's 6px left pad and the toolbar band's 16px of
+  `px-2` and the column has to give it 994px past the gutter.
 
-  IT HAS MOVED TWICE, and both times the control that moved it was in another
-  file: 818 → 856 when T-1 wired the draw pencil, and → 934 when T-13 wired
-  Replay. That is the whole hazard of a measured constant, and it is why the
-  sweep asserts the PROPERTY — the toolbar occupies exactly one row at every
-  width and layout — rather than this figure. The number here is the gate; the
-  sweep is what notices when it is wrong.
+  IT HAS MOVED THREE TIMES, and every time the control that moved it was in
+  another file: 818 → 856 when T-1 wired the draw pencil, → 934 when T-13
+  wired Replay, and → 972 when T-14 put `15s` on the picker. That is the
+  whole hazard of a measured constant, and it is why the sweep asserts the
+  PROPERTY — the toolbar occupies exactly one row at every width and layout —
+  rather than this figure. The number here is the gate; the sweep is what
+  notices when it is wrong (it did: two panes at 1180 wrapped over the tape
+  for exactly the 38px the 15s chip is worth).
 
   T-7 ADDED NO WIDTH, and that was the deciding constraint rather than a happy
   accident: a price-scale trigger of its own is 39px at the very least, and the
@@ -387,7 +411,7 @@ const PRICE_GUTTER_PX = PRICE_SCALE_MIN_WIDTH + 2;
   It is a PANE width, not a window width: a four-pane desk at 1440px still
   gives each toolbar ~577px and still wraps.
 */
-const TOOLBAR_FULL_PX = 956;
+const TOOLBAR_FULL_PX = 994;
 
 /*
   THE STRIP'S OWN PADDING, when it is not clearing a price gutter (`p-1.5`).
@@ -405,8 +429,12 @@ const STRIP_PAD_PX = 6;
   ticks. Measured at a 1024px viewport with the rail up, where the chart column
   is 369px and the usable width is 287:
 
-    padding 16 · badge 16 · symbol capsule 146 · price 47 · change 44 · expand 24
-    = 317 needed against 287 available, on ALL FOUR panes (315 on QQQ).
+    padding 16 · badge 16 · symbol capsule 146 · link chip 26 · price 47 ·
+    change 44 · expand 24 = 343 needed against 287 available, on ALL FOUR
+    panes (341 on QQQ). (The link chip joined with T-20 — and joined these
+    figures only after the sweep caught its 26px printing the row's tail on
+    the axis at 1024-1280: one overflowing button per pane, the exact width
+    of the part nobody had re-measured.)
 
   The 30px that did not fit was the EXPAND BUTTON, sitting on the price axis —
   in the shipped build, at a laptop width, with or without a second axis. The
@@ -424,6 +452,11 @@ const STRIP_PAD_PX = 6;
                   still possible from the legend's own x, and the menu comes
                   back the moment the column is wide enough. Costs 34, since
                   the button sits inside the capsule (146 = 112 + 6 + 28).
+    the LINK CHIP sheds with the compare tier — but ONLY while it is unlinked,
+                  when it is a convenience like the +. A pane that is LINKED
+                  wears its letter at every width, the replay badge's rule:
+                  a pane that follows another silently is a surprise, and
+                  state is never shed.
 
   Thresholds are the cost of the NEXT tier down plus room to spare, because
   the parts are not fixed: `min-w-[112px]` on the symbol button is a floor, so
@@ -432,9 +465,9 @@ const STRIP_PAD_PX = 6;
   — rather than these numbers, so a symbol that outgrows them fails the build
   instead of quietly printing on the ticks.
 */
-const ID_ROW_FULL_PX = 340;
-const ID_ROW_NO_PCT_PX = 285;
-const ID_ROW_NO_BADGE_PX = 260;
+const ID_ROW_FULL_PX = 366;
+const ID_ROW_NO_PCT_PX = 311;
+const ID_ROW_NO_BADGE_PX = 286;
 
 /*
   THE HEAVIEST READ'S ENTRIES, measured the same way: the HEAVIEST label is 50
@@ -671,7 +704,7 @@ const Pane = ({
   isActive, onActivate, paneCount, menuOpen, onMenu,
   boxRef, cell = '',
 }: PaneProps) => {
-  const { ticker, timeframe, overlays, indicators, chartStyle, compares, priceScale, sessionOr, ladder } = cfg;
+  const { ticker, timeframe, overlays, indicators, chartStyle, clock, compares, priceScale, sessionOr, ladder } = cfg;
   /* WHAT THE AXIS IS ACTUALLY DRAWING, from the one function that decides it.
      The chart asks the same question of the same list, so the picker's trigger
      and the price ticks can never disagree — a second `compares.some(...)`
@@ -852,6 +885,8 @@ const Pane = ({
      disagree. A ref, so it never re-renders anything: the rail reads it inside
      its own frame loop. */
   const projectionRef = useRef<PriceProjection | null>(null);
+  /** T-23 — the pane's PNG exporter, filled by the chart. */
+  const exportPngRef = useRef<(() => void) | null>(null);
 
   /* An expanded pane covers the desk, so the keyboard has to be inside it.
      Measured before this: thirteen Tabs from the expand button walked out of
@@ -969,6 +1004,7 @@ const Pane = ({
               overlays={overlays}
               indicators={indicators}
               chartStyle={chartStyle}
+              barClock={clock}
               prints={prints}
               compares={compares}
               priceScale={priceScale}
@@ -983,6 +1019,7 @@ const Pane = ({
               syncRegister={registerSync}
               onReadout={setReadout}
               projectionRef={projectionRef}
+              exportRef={exportPngRef}
               pageScroll={belowLg}
               frameless
             />
@@ -1122,6 +1159,22 @@ const Pane = ({
                        moves is where it gets named. */
                     title="Switch ticker — S · ↑ ↓ step your symbols"
                   />
+                  {/* T-20's link chip: ∅ → A → B → ∅. Letters, not colours —
+                      the palette's inks all mean something already, and a
+                      letter reads at 9px where a fourth colour would need a
+                      legend. Unlinked it is a convenience and sheds with the
+                      compare tier; LINKED it is state and stays at every
+                      width (ID_ROW_* above). */}
+                  {(cfg.link !== null && cfg.link !== undefined || showCompareAdd) && <button
+                    onClick={() => onCfg({ link: cfg.link === 'A' ? 'B' : cfg.link === 'B' ? null : 'A' })}
+                    aria-label={cfg.link ? `Link group ${cfg.link} — linked panes follow this pane's symbol` : 'Link this pane — panes sharing a letter follow each other\'s symbol'}
+                    title={cfg.link ? `Link group ${cfg.link} — panes sharing ${cfg.link} follow each other's symbol` : 'Link this pane to others — shared letters change symbols together'}
+                    className={`shrink-0 inline-flex items-center justify-center w-5 h-5 rounded-[3px] font-mono text-[9px] font-bold transition-colors ${
+                      cfg.link ? 'bg-white/[0.14] text-textPrimary' : 'text-textMuted hover:text-textPrimary hover:bg-white/[0.06]'
+                    }`}
+                  >
+                    {cfg.link ?? <Link2 className="w-3 h-3" />}
+                  </button>}
                   {/* TradingView's "+" beside the symbol capsule — cross
                       another symbol onto this tape. Per pane, like the rest.
 
@@ -1280,9 +1333,12 @@ const Pane = ({
                   onIndicators={i => onCfg({ indicators: i })}
                   chartStyle={chartStyle}
                   onChartStyle={s => onCfg({ chartStyle: s })}
+                  barClock={clock}
+                  onBarClock={k => onCfg({ clock: k })}
                   priceScale={priceScale}
                   onPriceScale={p => onCfg({ priceScale: p })}
                   priceScaleLock={scaleLock}
+                  onExportPng={() => exportPngRef.current?.()}
                   sessionOr={sessionOr}
                   onSessionOr={o => onCfg({ sessionOr: o })}
                   drawing={drawing}
@@ -1396,6 +1452,43 @@ const Terrain = () => {
   const revision = useMemo(() => ++revRef.current, [marketData]);
 
   const [cfg, setCfg] = useState<TerrainCfg>(loadCfg);
+
+  /*
+    T-18 — the named-layouts shelf. Validation on load is the desk's OWN
+    readPane (injected — layouts.ts holds no second copy of the pane's
+    fields), and applying an entry NORMALIZES its pane count to the desk's
+    fixed four: stored panes fill from the front, defaults fill the rest, so
+    a two-pane snapshot recalled onto a four-slot desk leaves slots three
+    and four at their defaults instead of undefined.
+  */
+  const [namedLayouts, setNamedLayouts] = useState<Record<string, NamedLayoutEntry<PaneCfg>>>(() =>
+    loadNamedLayouts(readPane, defaultPanes()[0], LAYOUTS)
+  );
+  const [layoutsOpen, setLayoutsOpen] = useState(false);
+  const [layoutName, setLayoutName] = useState('');
+  const [layoutNote, setLayoutNote] = useState<string | null>(null);
+  const applyNamedLayout = (entry: NamedLayoutEntry<PaneCfg>) => {
+    const defs = defaultPanes();
+    const panes = defs.map((d, i) => entry.panes[i] ?? d);
+    setCfg(prev => ({ ...prev, layout: (LAYOUTS as readonly number[]).includes(entry.layout) ? (entry.layout as TerrainLayout) : prev.layout, panes }));
+    setLayoutsOpen(false);
+  };
+  const saveCurrentLayout = () => {
+    const next = saveNamedLayout(namedLayouts, layoutName, cfg.layout, cfg.panes, Date.now());
+    if (next === null) {
+      setLayoutNote(layoutName.trim() ? `the shelf holds ${MAX_NAMED_LAYOUTS} — delete one first` : 'give it a name');
+      return;
+    }
+    setNamedLayouts(next);
+    persistNamedLayouts(next);
+    setLayoutName('');
+    setLayoutNote(null);
+  };
+  const removeNamedLayout = (name: string) => {
+    const next = deleteNamedLayout(namedLayouts, name);
+    setNamedLayouts(next);
+    persistNamedLayouts(next);
+  };
   useEffect(() => {
     try {
       localStorage.setItem(TERRAIN_KEY, JSON.stringify(cfg));
@@ -1438,8 +1531,26 @@ const Terrain = () => {
            behaviour that was here before any of this. `compares` is written
            explicitly every time, so a comparison can never leak across a
            symbol change. */
-        const next = { ...applySetup(cur, saved), ...patch, compares: saved?.compares ?? [] };
-        return put(next, saved ? { ...prev.setups, [key]: { ...saved, seen: now } } : prev.setups);
+        const setups = saved ? { ...prev.setups, [key]: { ...saved, seen: now } } : prev.setups;
+        /*
+          T-20 — LINKED PANES FOLLOW THE SYMBOL. Every pane sharing this
+          pane's group letter takes the same new symbol through the same
+          restore path (each keeps its own slot business — rail, link,
+          replay — because applySetup touches only setup keys). Symbol only,
+          deliberately: the directive offers timeframe linking as an option,
+          and a linked TIMEFRAME quietly overwriting a per-symbol setup's
+          interval would fight the earned-by-touch rule the setups are built
+          on. One follow rule, no surprises.
+        */
+        const group = cur.link ?? null;
+        const panes = prev.panes.map((q, j) => {
+          const inGroup = j === i || (group !== null && q.link === group);
+          if (!inGroup) return q;
+          const base = j === i ? cur : q;
+          const applied = { ...applySetup(base, saved), compares: saved?.compares ?? [] };
+          return j === i ? { ...applied, ...patch } : { ...applied, ticker: patch.ticker! };
+        });
+        return { ...prev, setups, panes };
       }
 
       // A CONTROL TOUCH — this is what earns the symbol its entry
@@ -2040,6 +2151,107 @@ const Terrain = () => {
         <span className="pointer-events-auto inline-flex rounded-md border border-white/[0.08] bg-canvas/40 backdrop-blur-[3px] px-1 py-0.5">
           <DistanceUnitPicker dense />
         </span>
+
+        {/* T-18 — the named-layouts shelf, in the desk's own cluster. */}
+        <span className="relative pointer-events-auto">
+          <button
+            onClick={() => setLayoutsOpen(o => !o)}
+            aria-haspopup="dialog"
+            aria-expanded={layoutsOpen}
+            title="Named layouts — save this arrangement, recall another"
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-white/[0.08] backdrop-blur-[3px] font-mono text-[10px] uppercase tracking-wider transition-colors ${
+              layoutsOpen ? 'bg-white/[0.16] text-textPrimary' : 'bg-canvas/40 text-textSecondary hover:text-textPrimary'
+            }`}
+          >
+            <Rows3 className="w-3 h-3" /> Layouts
+          </button>
+          {layoutsOpen && (
+            <>
+              <span className="fixed inset-0 z-30" onClick={() => setLayoutsOpen(false)} aria-hidden />
+              <div
+                role="dialog"
+                aria-label="Named layouts"
+                onKeyDown={e => {
+                  /* Escape closes the shelf from anywhere inside it — a
+                     panel with a click-away backdrop and no key out is a
+                     trap for keyboard readers (and the probe that found
+                     this). Stopped, so the desk's own Escape does not also
+                     fire. */
+                  if (e.key === 'Escape') {
+                    e.stopPropagation();
+                    setLayoutsOpen(false);
+                  }
+                }}
+                className="absolute bottom-full right-0 mb-2 z-40 w-64 border border-borderMuted bg-panel/95 rounded-md p-2 shadow-xl shadow-black/50"
+              >
+                <div className="font-mono text-[9px] uppercase tracking-widest text-textMuted px-1 pb-1.5">
+                  Named layouts · {Object.keys(namedLayouts).length}/{MAX_NAMED_LAYOUTS}
+                </div>
+                {Object.entries(namedLayouts)
+                  .sort((a, b) => b[1].savedAt - a[1].savedAt)
+                  .map(([name, entry]) => (
+                    <div key={name} className="flex items-center gap-1 group">
+                      <button
+                        onClick={() => applyNamedLayout(entry)}
+                        title={`${entry.layout} pane${entry.layout === 1 ? '' : 's'} · ${entry.panes.slice(0, entry.layout).map(pn => pn.ticker).join(' ')}`}
+                        className="flex-1 min-w-0 text-left px-1.5 py-1 rounded font-mono text-[11px] text-textSecondary hover:text-textPrimary hover:bg-white/[0.05] truncate transition-colors"
+                      >
+                        {name}
+                        <span className="ml-1.5 text-[9px] text-textMuted tnum">
+                          {entry.layout}× {entry.panes.slice(0, entry.layout).map(pn => pn.ticker).join('·')}
+                        </span>
+                      </button>
+                      <button
+                        onClick={() => removeNamedLayout(name)}
+                        aria-label={`Delete the layout ${name}`}
+                        className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded text-textMuted opacity-0 group-hover:opacity-100 hover:text-textPrimary hover:bg-white/[0.08] transition-all"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                {Object.keys(namedLayouts).length === 0 && (
+                  <div className="px-1.5 py-1 font-mono text-[10px] text-textMuted">Nothing saved yet — name this desk below.</div>
+                )}
+                <div className="mt-1.5 pt-1.5 border-t border-borderSubtle/60 flex items-center gap-1">
+                  <input
+                    value={layoutName}
+                    onChange={e => { setLayoutName(e.target.value); setLayoutNote(null); }}
+                    onKeyDown={e => { if (e.key === 'Escape') { setLayoutsOpen(false); return; } e.stopPropagation(); if (e.key === 'Enter') saveCurrentLayout(); }}
+                    placeholder="name this arrangement"
+                    aria-label="Layout name"
+                    className="flex-1 min-w-0 px-1.5 py-1 rounded border border-borderSubtle bg-inset font-mono text-[11px] text-textPrimary placeholder:text-textMuted outline-none focus:border-borderMuted"
+                  />
+                  <button
+                    onClick={saveCurrentLayout}
+                    className="shrink-0 px-2 py-1 rounded font-mono text-[10px] uppercase tracking-wider text-select hover:bg-select/10 transition-colors"
+                  >
+                    Save
+                  </button>
+                </div>
+                {layoutNote && <div className="px-1.5 pt-1 font-mono text-[9px] text-textMuted">{layoutNote}</div>}
+              </div>
+            </>
+          )}
+        </span>
+
+        {/* T-16's first piece: WHERE IN THE GLOBEX WEEK the wall clock sits.
+            The session shading down the pane waits on the futures tape (MKT
+            Futures — there are no overnight bars to shade yet); the chip is
+            the real fact available today, re-read on every tick's render. */}
+        {(() => {
+          const words = FUTURES_PHASE_WORDS[futuresPhaseAt(new Date())];
+          return (
+            <span
+              title={`${words.blurb}. Session shading over the tape arrives with the futures feed.`}
+              className={`pointer-events-auto inline-flex items-center px-2 py-1.5 rounded-md border border-white/[0.08] bg-canvas/40 backdrop-blur-[3px] font-mono text-[10px] uppercase tracking-wider ${
+                words.label === 'RTH' ? 'text-textPrimary' : 'text-textSecondary'
+              }`}
+            >
+              {words.label}
+            </span>
+          );
+        })()}
 
         {expanded !== null && (
           <button

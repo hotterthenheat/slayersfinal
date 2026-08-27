@@ -38,7 +38,7 @@ import SpotPrice from '../../components/gex/SpotPrice';
 import { buildPrints } from '../../data/gex';
 import { buildExposureProfile } from '../../data/exposure';
 import StrikeExposureBand, { type BandMetric } from '../../components/gex/StrikeExposureBand';
-import { twinFamilyFor, twinPrice, fmtTwin } from '../../data/indexTwins';
+import { twinFamilyFor, twinMeasureFor, twinPrice, fmtTwin } from '../../data/indexTwins';
 import PulseBoard from '../PulseBoard';
 import { useFadeClose } from '../../components/ui/useFadeClose';
 import type { Timeframe } from '../../data/timeframe';
@@ -279,10 +279,11 @@ const LiveChartWidget = ({ ctx, soleChart = false }: LiveChartWidgetProps) => {
                 const fam = twinFamilyFor(ctx.ticker);
                 if (!fam) return null;
                 const s = Simulator.TICKERS[ctx.ticker]?.currentPrice ?? ctx.gex.levels.spot;
+                const tm = twinMeasureFor(fam);
                 return (
                   <span className="font-mono text-[10px] text-textMuted tnum">
-                    {fam.index} {fmtTwin(twinPrice(fam, 'index', s, s))} · {fam.futures}{' '}
-                    {fmtTwin(twinPrice(fam, 'futures', s, s))}
+                    {fam.index} {fmtTwin(twinPrice(fam, 'index', s, tm))} · {fam.futures}{' '}
+                    {fmtTwin(twinPrice(fam, 'futures', s, tm))}
                   </span>
                 );
               })()}

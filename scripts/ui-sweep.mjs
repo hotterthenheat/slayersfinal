@@ -2695,13 +2695,14 @@ head('the pane toolbar never wraps over the tape');
   /* The exclusion has to stay an exclusion. If the strip grows past the floor
      these columns are no longer "narrower than the strip has ever fitted" and
      the whole section above quietly stops testing anything. */
-  /* The full strip is 934px in this build (818 before T-1's pencil and T-13's
-     Replay joined it). The bound is the figure Terrain gates `compact` on,
-     less the padding it adds — past that the strip cannot fit the column the
-     constant promises it and the section above stops meaning anything. */
-  widest > 0 && widest <= 956 - 22
-    ? ok(`the widest strip measured is ${widest}px, inside the 934 the source records`)
-    : bad(`the widest strip measured is ${widest}px; the source records 934 and gates compact on 956`);
+  /* The full strip is 972px in this build (818 before T-1's pencil, 934
+     before T-14's 15s chip joined the picker). The bound is the figure
+     Terrain gates `compact` on, less the padding it adds — past that the
+     strip cannot fit the column the constant promises it and the section
+     above stops meaning anything. */
+  widest > 0 && widest <= 994 - 22
+    ? ok(`the widest strip measured is ${widest}px, inside the 972 the source records`)
+    : bad(`the widest strip measured is ${widest}px; the source records 972 and gates compact on 994`);
   narrowSeen > 0
     ? ok(`${narrowSeen} toolbars sat in columns under the ${NARROW_FLOOR_PX}px floor and were excluded, as recorded (compact strip is ${COMPACT_STRIP_PX}px)`)
     : bad('no narrow columns were seen at all — the excluded band has moved and this floor is now untested');
@@ -3579,6 +3580,13 @@ head('thirteen tools on the rail, two of them take three anchors, the note takes
     await page.waitForTimeout(350);
   };
   const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem('slayer_chart_drawings_SPY') ?? '[]').map(d => d.kind));
+  /* The whole records, for the assertions that read a mark's PRICE rather
+     than just its kind. The editor block below filtered `stored()` — an
+     array of kind STRINGS — with `d => d.kind === 'hline'`, which is
+     undefined on a string, so it always found zero levels and reported the
+     product broken ("PREMISE: 0 levels stored", "the drag moved nothing")
+     when the fault was here. */
+  const storedRaw = () => page.evaluate(() => JSON.parse(localStorage.getItem('slayer_chart_drawings_SPY') ?? '[]'));
 
   await pick('Ray');
   await drag(0.15, 0.6, 0.3, 0.4);
@@ -3687,7 +3695,7 @@ head('thirteen tools on the rail, two of them take three anchors, the note takes
     await pick('Level');
     await page.mouse.click(bb2.x + bb2.width * 0.5, bb2.y + bb2.height * 0.28);
     await page.waitForTimeout(300);
-    const levels0 = (await stored()).filter(d => d.kind === 'hline');
+    const levels0 = (await storedRaw()).filter(d => d.kind === 'hline');
     levels0.length === 1 ? ok('PREMISE: one fresh level to edit') : bad(`PREMISE: ${levels0.length} levels stored`);
     (await deleteDisabled()) === true ? ok('Delete is disabled while nothing is selected') : bad('Delete armed with no selection');
     await pick('Select');
@@ -3699,13 +3707,13 @@ head('thirteen tools on the rail, two of them take three anchors, the note takes
     await page.mouse.move(bb2.x + bb2.width * 0.5, bb2.y + bb2.height * 0.45, { steps: 4 });
     await page.mouse.up();
     await page.waitForTimeout(350);
-    const levels1 = (await stored()).filter(d => d.kind === 'hline');
+    const levels1 = (await storedRaw()).filter(d => d.kind === 'hline');
     levels1[0] && levels0[0] && levels1[0].p1.price !== levels0[0].p1.price
       ? ok(`a body-drag moves the mark — ${levels0[0].p1.price.toFixed(2)} → ${levels1[0].p1.price.toFixed(2)}`)
       : bad('the drag moved nothing');
     for (const b of await page.$$('button[aria-label="Delete selected"]')) if (!(await b.isDisabled())) await b.click();
     await page.waitForTimeout(300);
-    const afterDel = await stored();
+    const afterDel = await storedRaw();
     afterDel.length === countBefore && !afterDel.some(d => d.kind === 'hline')
       ? ok('Delete removes exactly the selected mark; the rest survive')
       : bad(`after delete the store holds ${afterDel.map(d => d.kind).join(',')}`);
@@ -4067,6 +4075,494 @@ head('two sub-panes stack under the tape, and the third is refused with its reas
     : bad(`menu rows missing: ${labels.join(' | ')}`);
 
   errs.length === 0 ? ok('no page errors with two sub-panes up') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   T-10. THE VOLUME PROFILE — the tape's traded volume on the rail's own
+   axis, under the exposure bars.
+
+   The engine is proved headless (scripts/volume-profile-proof.ts): binning,
+   VPOC ties, the 70% area, the session cut. The browser owns the overlay:
+   that the VOL chip really toggles paint into the rail's canvas, and that
+   toggling off clears it — the profile is texture UNDER the book's bars,
+   and texture that cannot be turned off is noise.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the rail takes a volume profile, and gives it back');
+{
+  const seed = JSON.stringify({
+    layout: 1,
+    panes: [{
+      ticker: 'SPY', timeframe: '15m',
+      overlays: { trails: false, levels: false, darkpool: false, volume: false, flow: false, netDrift: false, volDrift: false, dexStrike: false, session: false, cone: false, events: false },
+      indicators: { ema9: false, ema21: false, ema50: false, vwap: false },
+      chartStyle: 'candles', compares: [], priceScale: 'normal', sessionOr: 15, ladder: true,
+    }],
+    setups: {},
+  });
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  await ctx.addInitScript(`localStorage.setItem('slayer_terrain_v1', ${JSON.stringify(seed)})`);
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 1500);
+
+  const railInk = () => page.evaluate(() => {
+    const rail = document.querySelector('[aria-label$="exposure by strike"]');
+    const c = rail?.querySelector('canvas');
+    if (!c || c.width === 0) return -1;
+    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    let ink = 0;
+    for (let k = 3; k < d.length; k += 4) if (d[k] > 8) ink++;
+    return ink;
+  });
+  const chip = await page.$('button[title^="Volume profile"]');
+  chip ? ok('PREMISE: the rail header carries the VOL chip') : bad('PREMISE: no VOL chip on the rail');
+  if (chip) {
+    const before = await railInk();
+    before === 0 ? ok('the profile canvas starts clear — off by default') : bad(`the canvas already holds ${before} ink cells with the chip off`);
+    await chip.click();
+    await page.waitForTimeout(1200);
+    (await page.evaluate(() => document.querySelector('button[title^="Volume profile"]')?.getAttribute('aria-pressed'))) === 'true'
+      ? ok('the chip says it is on')
+      : bad('aria-pressed did not follow the toggle');
+    const after = await railInk();
+    after > 300
+      ? ok(`the profile paints — ${after} ink cells of bins, VPOC and value area`)
+      : bad(`the toggle painted ${after} cells`);
+    await chip.click();
+    await page.waitForTimeout(700);
+    const off = await railInk();
+    off === 0 ? ok('and toggling off clears every pixel of it') : bad(`toggle-off left ${off} cells`);
+  }
+  errs.length === 0 ? ok('no page errors through the toggle') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   T-14. THE SUB-MINUTE TAPE — live-only, and the pane says so.
+
+   The seconds tape is proved headless (scripts/seconds-tape-proof.ts):
+   live-only from connect, quarter-grid alignment, coherence with the minute
+   bars, the ring cap. The browser owns the honesty chip — a sub-minute pane
+   must SAY it shows only what has printed since connect — and the picker
+   round-trip: 15s is a real row, and leaving it retires the chip.
+   ───────────────────────────────────────────────────────────────────────── */
+head('a 15s pane says live only, and the chip leaves with the timeframe');
+{
+  const seed = JSON.stringify({
+    layout: 1,
+    panes: [{
+      ticker: 'SPY', timeframe: '15s',
+      overlays: { trails: false, levels: false, darkpool: false, volume: true, flow: false, netDrift: false, volDrift: false, dexStrike: false, session: false, cone: false, events: false },
+      indicators: { ema9: false, ema21: false, ema50: false, vwap: false },
+      chartStyle: 'candles', compares: [], priceScale: 'normal', sessionOr: 15, ladder: false,
+    }],
+    setups: {},
+  });
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  await ctx.addInitScript(`localStorage.setItem('slayer_terrain_v1', ${JSON.stringify(seed)})`);
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 1500);
+
+  const chipText = () => page.evaluate(() => document.body.textContent?.match(/live only · [^A-Z]*/)?.[0]?.trim() ?? null);
+  const t0 = await chipText();
+  t0 && /live only · (from \d{2}:\d{2}|awaiting first prints)/.test(t0)
+    ? ok(`the pane says what it shows — ${t0}`)
+    : bad(`no honesty chip on a 15s pane: ${JSON.stringify(t0)}`);
+
+  /* The picker: leaving 15s retires the chip, returning brings it back. */
+  const pickTf = async label => {
+    /* Hover the pane first — the toolbar is hover-gated, and a chip clicked
+       while it is folded away gets intercepted by the plot canvas (this
+       exact call once timed out a whole sweep on that). */
+    await page.mouse.move(800, 420);
+    await page.waitForTimeout(350);
+    for (const b of await page.$$('button')) {
+      if ((await b.textContent())?.trim() === label) { await b.click(); await page.waitForTimeout(900); return true; }
+    }
+    return false;
+  };
+  (await pickTf('1m')) ? ok('PREMISE: the 1m chip clicks') : bad('PREMISE: no 1m chip');
+  (await chipText()) === null ? ok('a minute pane carries no live-only chip') : bad('the chip survived leaving 15s');
+  (await pickTf('15s')) ? ok('the 15s row is on the picker') : bad('no 15s chip on the picker');
+  (await chipText()) !== null ? ok('and returning to 15s brings the chip back') : bad('no chip after returning to 15s');
+
+  /* T-16's chip rides the same desk — the phase model is proof-covered
+     (scripts/globex-proof.ts); the sweep asserts the desk WEARS it. */
+  const globex = await page.evaluate(() => {
+    const el = [...document.querySelectorAll('span')].find(sp => /^(GLOBEX · (ASIA|EUROPE|POST)|RTH|MAINTENANCE|CLOSED)$/.test(sp.textContent?.trim() ?? ''));
+    return el ? { text: el.textContent.trim(), titled: !!el.getAttribute('title') } : null;
+  });
+  globex && globex.titled
+    ? ok(`the desk says where the Globex week is — ${globex.text}, with its words on hover`)
+    : bad('no futures-clock chip on the desk cluster');
+
+  errs.length === 0 ? ok('no page errors across the sub-minute round-trip') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   T-18. NAMED LAYOUTS — the shelf saves a whole arrangement and gives it
+   back.
+
+   Storage, names and caps are proved headless (scripts/layouts-proof.ts).
+   The browser owns the round trip through the REAL desk: save the current
+   arrangement, deform the desk, recall the name, get the arrangement back —
+   and Escape must close the shelf, because its click-away backdrop
+   otherwise traps the keyboard (the regression the first probe hit).
+   ───────────────────────────────────────────────────────────────────────── */
+head('a named layout saves the desk, and gives it back');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 1000);
+  const layoutOf = () => page.evaluate(() => JSON.parse(localStorage.getItem('slayer_terrain_v1')).layout);
+
+  await page.click('button[title^="Named layouts"]');
+  await page.waitForTimeout(300);
+  await page.fill('input[aria-label="Layout name"]', 'sweep desk');
+  await page.click('div[role="dialog"] button:has-text("Save")');
+  await page.waitForTimeout(300);
+  const stored = await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('slayer_terrain_layouts_v1') ?? '{}')));
+  stored.includes('sweep desk') ? ok('the arrangement saves under its name') : bad(`the shelf holds ${stored.join(',')}`);
+
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  (await page.$('div[role="dialog"]')) === null ? ok('Escape closes the shelf — no backdrop trap') : bad('the shelf ignored Escape');
+
+  const before = await layoutOf();
+  const target = before === 1 ? 2 : 1;
+  await page.click(`button[aria-label="${target} chart${target === 1 ? '' : 's'}"]`);
+  await page.waitForTimeout(400);
+  (await layoutOf()) === target ? ok('PREMISE: the desk deformed') : bad('the desk never changed');
+
+  await page.click('button[title^="Named layouts"]');
+  await page.waitForTimeout(300);
+  await page.click('div[role="dialog"] button:has-text("sweep desk")');
+  await page.waitForTimeout(500);
+  (await layoutOf()) === before
+    ? ok(`recalling the name restores the arrangement — back to ${before} pane(s)`)
+    : bad(`recall landed on ${await layoutOf()}, saved from ${before}`);
+
+  await page.click('button[title^="Named layouts"]');
+  await page.waitForTimeout(300);
+  await page.hover('div[role="dialog"] button:has-text("sweep desk")');
+  await page.click('button[aria-label="Delete the layout sweep desk"]');
+  await page.waitForTimeout(300);
+  (await page.evaluate(() => localStorage.getItem('slayer_terrain_layouts_v1'))) === null
+    ? ok('deleting the last name clears the shelf key')
+    : bad('the empty shelf left its key behind');
+
+  errs.length === 0 ? ok('no page errors through the shelf') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   T-20. LINK GROUPS — panes sharing a letter change symbols together.
+
+   The fan-out lives in the desk's one setPane reducer, so the browser is
+   the only honest place to prove it: link two panes, step one's symbol
+   with the ring, and the group-mate must land on the SAME symbol while the
+   unlinked pane stands still.
+   ───────────────────────────────────────────────────────────────────────── */
+head('a linked pane follows the symbol, an unlinked one stands still');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 1000);
+  const tickers = () => page.evaluate(() => JSON.parse(localStorage.getItem('slayer_terrain_v1')).panes.map(p => p.ticker));
+
+  const boxes = await page.$$('.grid > div > div');
+  boxes.length >= 3 ? ok('PREMISE: a multi-pane desk') : bad(`PREMISE: ${boxes.length} panes`);
+  const chip = async i => (await boxes[i].$$('button[aria-label^="Link"]'))[0];
+  await (await chip(0))?.click();
+  await (await chip(1))?.click();
+  await page.waitForTimeout(300);
+  const links = await page.evaluate(() => JSON.parse(localStorage.getItem('slayer_terrain_v1')).panes.map(p => p.link));
+  links[0] === 'A' && links[1] === 'A' && !links[2]
+    ? ok('two panes wear A, the third stands alone')
+    : bad(`links landed as ${JSON.stringify(links)}`);
+
+  const before = await tickers();
+  await boxes[0].click({ position: { x: 250, y: 300 } });
+  await page.waitForTimeout(250);
+  await page.keyboard.press('ArrowDown');
+  await page.waitForTimeout(800);
+  const after = await tickers();
+  after[0] !== before[0] ? ok(`the stepped pane changed symbol — ${before[0]} → ${after[0]}`) : bad('the ring never stepped');
+  after[1] === after[0] ? ok('its group-mate followed to the same symbol') : bad(`the mate sits on ${after[1]} against ${after[0]}`);
+  after[2] === before[2] ? ok('the unlinked pane did not move') : bad(`the unlinked pane moved to ${after[2]}`);
+
+  errs.length === 0 ? ok('no page errors through the follow') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   T-23. EXPORT PNG — a pane leaves as a real image, named for what it is.
+
+   takeScreenshot captures every canvas layer, so the browser only has to
+   prove the door: the Candles menu carries the row, clicking it downloads a
+   real PNG, and the filename says ticker-interval-stamp. Seeded to one
+   pane at 1600 — the default 3-up desk runs the compact icon-only toolbar
+   and this section's text lookup would be aiming at labels that are not
+   there (the first probe's lesson).
+   ───────────────────────────────────────────────────────────────────────── */
+head('a pane exports as a PNG, named for what it is');
+{
+  const seed = JSON.stringify({
+    layout: 1,
+    panes: [{
+      ticker: 'SPY', timeframe: '15m',
+      overlays: { trails: true, levels: true, darkpool: false, volume: true, flow: false, netDrift: false, volDrift: false, dexStrike: false, session: false, cone: false, events: false },
+      indicators: { ema9: false, ema21: false, ema50: false, vwap: false },
+      chartStyle: 'candles', compares: [], priceScale: 'normal', sessionOr: 15, ladder: false, link: null,
+    }],
+    setups: {},
+  });
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 }, acceptDownloads: true });
+  await ctx.addInitScript(`localStorage.setItem('slayer_terrain_v1', ${JSON.stringify(seed)})`);
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 1000);
+  await page.mouse.move(600, 400);
+  await page.waitForTimeout(600);
+  let opened = false;
+  for (const b of await page.$$('[aria-haspopup="menu"][title^="Chart style"]')) {
+    if (await b.isVisible()) { await b.click(); opened = true; break; }
+  }
+  await page.waitForTimeout(400);
+  opened ? ok('PREMISE: the Candles menu opens') : bad('PREMISE: no Chart style trigger to open');
+  const row = await page.$('button:has-text("Export PNG")');
+  row ? ok('the menu carries the Export PNG row') : bad('no Export PNG row in the Candles menu');
+  if (row) {
+    const dl = page.waitForEvent('download', { timeout: 10000 }).catch(() => null);
+    await row.click();
+    const download = await dl;
+    if (!download) bad('the click downloaded nothing');
+    else {
+      const name = download.suggestedFilename();
+      /^SPY-15m-\d{12}\.png$/.test(name) ? ok(`the file says what it is — ${name}`) : bad(`the filename reads ${name}`);
+      const path = await download.path();
+      const { statSync } = await import('node:fs');
+      const size = path ? statSync(path).size : 0;
+      size > 20000 ? ok(`and it is a real image — ${(size / 1024).toFixed(0)}KB`) : bad(`the PNG is ${size} bytes`);
+    }
+  }
+  errs.length === 0 ? ok('no page errors through the export') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   T-22. ALERT KINDS — chips arm what a pane can watch, the rail shows it.
+
+   The RULES are proof-covered (scripts/alerts-proof.ts, 67 checks); the
+   browser proves the doors: a level chip and a flow chip arm from the menu,
+   a typed price still arms from the input, the armed rail appears on the
+   pane with a row per alert, a live tick establishes the level alert's side
+   in storage (the lazy-arm round trip through commitArm), and Remove all
+   takes the rail and the storage key with it. Seeded to one pane — the
+   compact desk shortens the toolbar, and chips are matched by their text.
+   ───────────────────────────────────────────────────────────────────────── */
+head('alert kinds arm from the menu and stand on the rail');
+{
+  const seed = JSON.stringify({
+    layout: 1,
+    panes: [{
+      ticker: 'SPY', timeframe: '15m',
+      overlays: { trails: true, levels: true, darkpool: false, volume: true, flow: false, netDrift: false, volDrift: false, dexStrike: false, session: false, cone: false, events: false },
+      indicators: { ema9: false, ema21: false, ema50: false, vwap: false },
+      chartStyle: 'candles', compares: [], priceScale: 'normal', sessionOr: 15, ladder: false, link: null,
+    }],
+    setups: {},
+  });
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  await ctx.addInitScript(`localStorage.setItem('slayer_terrain_v1', ${JSON.stringify(seed)})`);
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 1000);
+  await page.mouse.move(600, 400);
+  await page.waitForTimeout(600);
+
+  let opened = false;
+  for (const b of await page.$$('button[title="Alerts"]')) {
+    if (await b.isVisible()) { await b.click(); opened = true; break; }
+  }
+  await page.waitForTimeout(400);
+  opened ? ok('PREMISE: the Alerts menu opens') : bad('PREMISE: no Alerts trigger to open');
+
+  const chip = async label => {
+    for (const b of await page.$$('button')) {
+      if ((await b.textContent())?.trim() === label && (await b.isVisible())) { await b.click(); await page.waitForTimeout(250); return true; }
+    }
+    return false;
+  };
+  (await chip('Call wall')) ? ok('the Call wall chip arms') : bad('no Call wall chip');
+  (await chip('$1M')) ? ok('the $1M flow chip arms') : bad('no $1M chip');
+  const honest = await page.evaluate(() => /Marks the pane while this tab is open\. Nothing is sent anywhere\./.test(document.body.textContent ?? ''));
+  honest ? ok('the menu still says it is in-session only, in as many words') : bad('the honesty line is gone');
+
+  const input = await page.$('input[aria-label^="Alert price"]');
+  if (!input) bad('no price input in the menu');
+  else {
+    const spotTxt = Number(await input.getAttribute('placeholder'));
+    await input.fill((spotTxt + 1).toFixed(2));
+    await input.press('Enter');
+    await page.waitForTimeout(300);
+  }
+  const armedChips = await page.evaluate(() => document.querySelectorAll('button[aria-pressed="true"]').length);
+  armedChips >= 2 ? ok(`${armedChips} chips show armed`) : bad(`only ${armedChips} chips read armed`);
+
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  const rail = await page.evaluate(() => {
+    const r = document.querySelector('[data-alert-rail]');
+    return r ? [...r.children].map(s => s.textContent?.trim() ?? '') : null;
+  });
+  rail && rail.length === 3
+    ? ok(`the rail stands with a row per alert — ${rail.join(' · ')}`)
+    : bad(`rail rows: ${JSON.stringify(rail)}`);
+  rail?.some(t => t === 'call wall cross') ? ok('and the level row says which level') : bad('no call-wall row on the rail');
+
+  /* The lazy arm: within a few ticks the level alert's side must land in
+     storage — the commitArm round trip, live. */
+  await page.waitForTimeout(6500);
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('slayer_price_alerts_SPY') ?? '[]'));
+  const lvl = stored.find(a => a.kind === 'level');
+  lvl && (lvl.side === 1 || lvl.side === -1)
+    ? ok(`a live tick established the level alert's side (${lvl.side})`)
+    : bad(`the level alert never armed its side: ${JSON.stringify(lvl)}`);
+
+  await page.mouse.move(600, 400);
+  await page.waitForTimeout(400);
+  for (const b of await page.$$('button[title="Alerts"]')) {
+    if (await b.isVisible()) { await b.click(); break; }
+  }
+  await page.waitForTimeout(400);
+  (await chip('Remove all')) ? ok('Remove all is offered') : bad('no Remove all with three armed');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  const gone = await page.evaluate(() => ({
+    rail: !document.querySelector('[data-alert-rail]'),
+    key: localStorage.getItem('slayer_price_alerts_SPY'),
+  }));
+  gone.rail && gone.key === null
+    ? ok('Remove all takes the rail and the storage key with it')
+    : bad(`after Remove all — rail gone: ${gone.rail}, key: ${gone.key}`);
+  errs.length === 0 ? ok('no page errors through the alerts tour') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   T-15. RULE BARS — the bar clock switches, draws, gates, and says why.
+
+   The folding rules are proof-covered (scripts/alt-bars-proof.ts); the
+   browser proves the doors: the Candles menu carries the Bar clock section,
+   picking Range $0.50 redraws the tape from the live seconds tape (the pane
+   wears T-14's live-only chip), the interval-bound overlay rows and VWAP
+   are HELD with words while bar-indexed indicators stay live, the clock
+   persists, and Time brings the ordinary tape back. Seeded to one pane —
+   the compact desk hides the worded triggers this section clicks.
+   ───────────────────────────────────────────────────────────────────────── */
+head('rule bars draw from the seconds tape and hold the clocked overlays');
+{
+  const seed = JSON.stringify({
+    layout: 1,
+    panes: [{
+      ticker: 'SPY', timeframe: '15m',
+      overlays: { trails: true, levels: true, darkpool: false, volume: true, flow: false, netDrift: false, volDrift: false, dexStrike: false, session: false, cone: false, events: false },
+      indicators: { ema9: true, ema21: false, ema50: false, vwap: false },
+      chartStyle: 'candles', compares: [], priceScale: 'normal', sessionOr: 15, ladder: false, link: null,
+    }],
+    setups: {},
+  });
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  await ctx.addInitScript(`localStorage.setItem('slayer_terrain_v1', ${JSON.stringify(seed)})`);
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 1500);
+
+  const openMenu = async sel => {
+    await page.mouse.move(600, 400);
+    await page.waitForTimeout(400);
+    for (const b of await page.$$(sel)) {
+      if (await b.isVisible()) { await b.click(); await page.waitForTimeout(400); return true; }
+    }
+    return false;
+  };
+  const clickRow = async prefix => {
+    for (const b of await page.$$('button')) {
+      const t = (await b.textContent())?.trim() ?? '';
+      if (t.startsWith(prefix) && (await b.isVisible())) { await b.click(); await page.waitForTimeout(300); return true; }
+    }
+    return false;
+  };
+
+  (await openMenu('[aria-haspopup="menu"][title^="Chart style"]')) ? ok('PREMISE: the Candles menu opens') : bad('PREMISE: no Chart style trigger');
+  const rows = await page.evaluate(() =>
+    [...document.querySelectorAll('button')].map(b => b.textContent?.trim() ?? '').filter(t => /^(Time|Range \$|Volume \d)/.test(t)).length);
+  rows === 5 ? ok('the Bar clock section offers Time, two ranges and two volumes') : bad(`${rows} bar-clock rows`);
+  (await clickRow('Range $0.50')) ? ok('Range $0.50 takes the click') : bad('no Range $0.50 row');
+  await page.waitForTimeout(1200);
+
+  const inkOn = await page.evaluate(() => {
+    const c = document.querySelector('canvas');
+    if (!c) return -1;
+    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    let n = 0;
+    for (let i = 0; i < d.length; i += 16) if (d[i + 3] > 0 && (d[i] > 24 || d[i + 1] > 24 || d[i + 2] > 24)) n++;
+    return n;
+  });
+  inkOn > 1000 ? ok(`the tape redrew as rule bars — ${inkOn} ink samples`) : bad(`ink after the switch: ${inkOn}`);
+  const chip = await page.evaluate(() => document.body.textContent?.match(/live only[^A-Z]*/)?.[0]?.trim() ?? null);
+  chip && /live only ·/.test(chip)
+    ? ok(`and wears T-14's chip — ${chip}`)
+    : bad(`no live-only chip on a rule clock: ${JSON.stringify(chip)}`);
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('slayer_terrain_v1')).panes[0].clock);
+  stored === 'r50' ? ok('the clock persists with the pane') : bad(`stored clock: ${stored}`);
+
+  (await openMenu('[aria-haspopup="menu"][title="Overlays"]')) ? ok('PREMISE: the Overlays menu opens') : bad('PREMISE: no Overlays trigger');
+  const held = await page.evaluate(() =>
+    [...document.querySelectorAll('button[role="checkbox"][disabled]')].length);
+  held === 7 ? ok('the seven interval overlays are held') : bad(`${held} overlay rows held (want 7)`);
+  const why = await page.evaluate(() => /Needs time bars/.test(document.body.textContent ?? ''));
+  why ? ok('and the rows say why') : bad('held rows carry no words');
+  await page.keyboard.press('Escape');
+
+  (await openMenu('[aria-haspopup="menu"][title="Indicators"]')) ? ok('PREMISE: the Indicators menu opens') : bad('PREMISE: no Indicators trigger');
+  const ind = await page.evaluate(() => {
+    const all = [...document.querySelectorAll('button[role="checkbox"]')];
+    const vwap = all.find(b => /VWAP/.test(b.textContent ?? '') && !/±/.test(b.textContent ?? ''));
+    const ema = all.find(b => /EMA 9/.test(b.textContent ?? ''));
+    return { vwap: vwap?.disabled ?? null, ema: ema?.disabled ?? null };
+  });
+  ind.vwap === true && ind.ema === false
+    ? ok('VWAP is held, the bar-indexed EMA stays live')
+    : bad(`vwap disabled: ${ind.vwap}, ema disabled: ${ind.ema}`);
+  await page.keyboard.press('Escape');
+
+  (await openMenu('[aria-haspopup="menu"][title^="Chart style"]')) || bad('the Candles menu would not reopen');
+  (await clickRow('Time')) ? ok('Time takes the pane back') : bad('no Time row');
+  await page.waitForTimeout(1200);
+  const chipBack = await page.evaluate(() => document.body.textContent?.match(/live only[^A-Z]*/)?.[0]?.trim() ?? null);
+  chipBack === null ? ok('and the chip retires with the rule clock') : bad(`chip survived Time: ${chipBack}`);
+  errs.length === 0 ? ok('no page errors through the clock tour') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
 }
 

@@ -1,7 +1,9 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MutableRefObject } from 'react';
 import { X } from 'lucide-react';
+import Simulator from '../../core/simulator';
 import { fmtUsd } from '../../data/gex';
+import { sessionVolumeProfile, type VolumeProfile } from '../../data/volumeProfile';
 import { heatMagnitude, heatRgb } from './heatmap';
 import type { PriceProjection } from './StrikeChart';
 import type { GexLevel } from '../../types/market';
@@ -240,6 +242,95 @@ const PaneLadder = ({
   onSelectRef.current = onSelect;
 
   /*
+    T-10 — THE VOLUME PROFILE, overlaid on the same axis.
+
+    The rail's bars say where the BOOK is heavy; the profile says where the
+    TAPE has traded. The directive's point is reading the two against each
+    other, so the profile is an OVERLAY at reduced opacity rather than a
+    second mode — same projection, same rows, one axis that cannot disagree
+    with itself. Off by default; the VOL chip in the header turns it on.
+
+    Recomputed when the rows do (the host hands new rows every tick, so the
+    session's newest minute is always folded in) — one session cut plus one
+    O(bars×bins) spread, well under a millisecond.
+  */
+  const [showVol, setShowVol] = useState(false);
+  const vp = useMemo<VolumeProfile | null>(
+    () => (showVol ? sessionVolumeProfile(Simulator.getCandles(ticker) ?? []) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [showVol, ticker, rows]
+  );
+  const vpRef = useRef<VolumeProfile | null>(null);
+  vpRef.current = vp;
+  const vpCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  /* Painted from BOTH triggers that can move it: the frame loop (the mapping
+     moved) and this effect (the data moved). Reads refs, so the two callers
+     share one painter. */
+  const paintProfile = () => {
+    const canvas = vpCanvasRef.current;
+    const p = projection?.current;
+    if (!canvas) return;
+    const prof = vpRef.current;
+    const H = p?.plotHeight() ?? 0;
+    const dpr = window.devicePixelRatio || 1;
+    const W = canvas.clientWidth || 1;
+    if (canvas.width !== Math.round(W * dpr) || canvas.height !== Math.round(H * dpr)) {
+      canvas.width = Math.round(W * dpr);
+      canvas.height = Math.max(1, Math.round(H * dpr));
+    }
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (!prof || !p || H <= 0 || prof.totalVolume <= 0) return;
+    const maxV = Math.max(...prof.bins.map(b => b.volume));
+    if (!(maxV > 0)) return;
+    /* Neutral steel — traded volume carries no dealer meaning, so it takes
+       none of the palette's inks. Bars grow from the size edge like the
+       exposure bars they underlay, at an alpha that stays texture. */
+    const barMax = (W - 30) * dpr;
+    for (const b of prof.bins) {
+      const y = p.yFor(b.price);
+      const y2 = p.yFor(b.price + prof.binSize);
+      if (y == null || y2 == null) continue;
+      const top = Math.min(y, y2) * dpr;
+      const h = Math.max(1, Math.abs(y - y2) * dpr - 1);
+      const isPoc = prof.vpoc !== null && Math.abs(b.price - prof.vpoc) < prof.binSize / 2;
+      ctx.fillStyle = `rgba(226,234,244,${isPoc ? 0.2 : 0.09})`;
+      ctx.fillRect(0, top, (b.volume / maxV) * barMax, h);
+    }
+    /* The value area's edges and the VPOC, as hairlines on the same axis. */
+    const line = (price: number | null, alpha: number, dash: number[]) => {
+      if (price === null) return;
+      const y = p.yFor(price);
+      if (y == null) return;
+      ctx.strokeStyle = `rgba(226,234,244,${alpha})`;
+      ctx.lineWidth = dpr;
+      ctx.setLineDash(dash.map(d => d * dpr));
+      ctx.beginPath();
+      ctx.moveTo(0, Math.round(y * dpr) + 0.5);
+      ctx.lineTo(canvas.width, Math.round(y * dpr) + 0.5);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    };
+    line(prof.vah, 0.28, [3, 3]);
+    line(prof.val, 0.28, [3, 3]);
+    line(prof.vpoc, 0.4, []);
+    if (prof.vpoc !== null) {
+      const y = p.yFor(prof.vpoc);
+      if (y != null) {
+        ctx.font = `${7 * dpr}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+        ctx.fillStyle = 'rgba(226,234,244,0.55)';
+        ctx.fillText('VPOC', 2 * dpr, y * dpr - 2 * dpr);
+      }
+    }
+  };
+  useEffect(() => {
+    paintProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vp, showVol]);
+
+  /*
     THE FRAME LOOP.
 
     Same shape as the chart's own price card: rAF, read everything, then write
@@ -298,6 +389,10 @@ const PaneLadder = ({
          a second pane below — measured 227px out. Taking the plot's own height
          is the only version that survives both. */
       track.style.height = `${H}px`;
+      /* The profile follows the same mapping the rows do — repainted here on
+         exactly the frames the rows move, and from its own effect when the
+         DATA moves with the mapping still. */
+      paintProfile();
       track.style.opacity = '1';
 
       const rowH = Math.max(MIN_PITCH, Math.min(MAX_PITCH, Math.round(pitch) - 2));
@@ -530,6 +625,16 @@ const PaneLadder = ({
       <div className="absolute top-0 inset-x-0 z-10 pointer-events-none flex items-center gap-1 pl-2 pr-1 py-0.5 select-none bg-gradient-to-b from-canvas/70 to-transparent">
         <span className="font-mono text-[8px] font-semibold uppercase tracking-widest text-textMuted">Size</span>
         <span className="ml-auto font-mono text-[8px] font-semibold uppercase tracking-widest text-textMuted">Strike</span>
+        <button
+          onClick={() => setShowVol(v => !v)}
+          aria-pressed={showVol}
+          title="Volume profile — the session's traded volume by price, VPOC and value area, under the exposure bars"
+          className={`pointer-events-auto shrink-0 rounded px-1 font-mono text-[8px] font-bold uppercase tracking-widest transition-colors ${
+            showVol ? 'bg-white/[0.14] text-textPrimary' : 'text-textMuted hover:text-textPrimary hover:bg-white/[0.08]'
+          }`}
+        >
+          Vol
+        </button>
         {onClose && (
           <button
             onClick={onClose}
@@ -549,6 +654,10 @@ const PaneLadder = ({
           unplaced state: until the first successful pass the column is blank
           rather than showing every strike stacked on the top edge. */}
       <div ref={trackRef} className="absolute top-0 inset-x-0 overflow-hidden opacity-0" style={{ height: 0 }}>
+        {/* T-10's layer — behind the rows in DOM order, so the exposure bars
+            read OVER the traded-volume texture, which is the comparison the
+            overlay exists to offer. */}
+        <canvas ref={vpCanvasRef} aria-hidden className="absolute inset-0 w-full h-full pointer-events-none" />
         {rows.map(row => {
           const rgb = heatRgb(row.value, maxAbs);
           const pct = heatMagnitude(row.value, maxAbs) * 100;

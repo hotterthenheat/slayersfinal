@@ -37,7 +37,9 @@ import {
 import { GexTrailsPrimitive } from './gexNodesPrimitive';
 import { DrawingsPrimitive, loadDrawings, needsThirdAnchor, saveDrawings, type Drawing, type DrawingKind } from './drawingsPrimitive';
 import { getCandleTheme, useCandleThemeKey, candleSeriesOptions, chartSurface, type CandleTheme } from './candleTheme';
-import { markFired, useAlerts } from './alertStore';
+import { alertLabel, commitArm, evaluateAlert, markFired, useAlerts, type AlertContext, type IndicatorSource } from './alertStore';
+import { exposureNowFor } from '../../data/gex';
+import { barClockSpec, buildAltBars, type AltBarSpec } from '../../data/altBars';
 import type { Candle } from '../../types/market';
 import type { DarkPoolPrint, KeyLevels } from '../../types/gex';
 import { bucketFlow, flowMaxLeg } from '../../data/flowBars';
@@ -418,6 +420,21 @@ export const priceScaleLockedBy = (compares: readonly CompareEntry[]): { mode: P
     ? { mode: 'percent', reason: 'A % comparison shares this axis' }
     : null;
 
+/*
+  T-14 — WHICH TAPE A TIMEFRAME READS. At or above one minute the display is
+  the 1-minute history aggregated up; below it the display IS the live-only
+  seconds tape, never a resample — the sub-minute region before the app
+  connected stays honestly empty (see data/timeframe.ts).
+
+  T-15 — a non-time bar clock overrides the timeframe entirely: range and
+  volume bars fold the same live-only seconds tape by RULE instead of by
+  clock (data/altBars.ts), so they inherit T-14's honesty and its chip.
+*/
+export function displayBars(ticker: string, mins: number, alt?: AltBarSpec | null): Candle[] {
+  if (alt) return buildAltBars(Simulator.getSecondsBars(ticker), alt);
+  return mins < 1 ? Simulator.getSecondsBars(ticker) : aggregateCandles(Simulator.getCandles(ticker) ?? [], mins);
+}
+
 export const DEFAULT_OVERLAYS: ChartOverlays = {
   trails: true,
   levels: true,
@@ -528,6 +545,12 @@ interface StrikeChartProps {
   sessionOr?: OpeningRange;
   /** The tape's shape — candles, bars, line, area… (theme-independent) */
   chartStyle?: ChartStyle;
+  /** T-15 — the bar CLOCK, keyed into data/altBars.ts's BAR_CLOCKS. 'time'
+      is the ordinary timeframe; a range/volume key folds the live seconds
+      tape by rule instead. Overlays that assume a fixed bar interval (cone,
+      events, session, the flow family, trails, VWAP) are gated off while a
+      rule clock is on — their menu rows say why. */
+  barClock?: string;
   /** Indicator overlays computed from the same bars */
   indicators?: ChartIndicators;
   /** Draw mode — pointer sketches trendlines/levels instead of panning */
@@ -558,6 +581,11 @@ interface StrikeChartProps {
       never changes, so it can sit in the mount effect's dep array without
       rebuilding the chart on every parent render. */
   projectionRef?: MutableRefObject<PriceProjection | null>;
+  /** T-23 — filled with the pane's PNG exporter (chart.takeScreenshot plus
+      an identity header and watermark, downloaded on call). Ref-based like
+      the projection: the chart owns its canvases, the host owns the
+      trigger. */
+  exportRef?: MutableRefObject<(() => void) | null>;
   /**
    * SHRINK THE PRICE-SCALE FURNITURE — for a chart on a phone.
    *
@@ -708,6 +736,7 @@ const StrikeChart = ({
   priceScale = 'normal',
   sessionOr = 15,
   chartStyle = 'candles',
+  barClock = 'time',
   indicators = DEFAULT_INDICATORS,
   drawing = false,
   onExitDraw,
@@ -718,12 +747,16 @@ const StrikeChart = ({
   syncRegister,
   onReadout,
   projectionRef,
+  exportRef,
 }: StrikeChartProps) => {
   const themeKey = useCandleThemeKey();
   /* Read straight from the store rather than taken as a prop: alerts belong to
      the SYMBOL, and two panes showing the same symbol must draw the same set.
      The drawings store is read the same way, from this same component. */
   const alerts = useAlerts(ticker);
+  /* The rule clock's spec, or null on the ordinary timeframe — resolved once
+     per key so every effect gates on the same object. */
+  const altSpec = useMemo(() => barClockSpec(barClock), [barClock]);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   /* Read at CREATE time by the mount effect, which must not take `compact` as
@@ -791,6 +824,10 @@ const StrikeChart = ({
   styleRef.current = chartStyle;
   const styleBuiltRef = useRef<ChartStyle | null>(null);
   const [mainNonce, setMainNonce] = useState(0);
+  /* T-14: the sub-minute tape starts at connect, and the pane SAYS SO —
+     0 = connected but no prints yet, a time = the first live quarter,
+     null = not a sub-minute view. */
+  const [liveFrom, setLiveFrom] = useState<number | null>(null);
   const printLinesRef = useRef<IPriceLine[]>([]);
   const levelLinesRef = useRef<Partial<Record<'callWall' | 'putWall' | 'flip' | 'king', IPriceLine>>>({});
   const shownLevelsRef = useRef<KeyLevels | null>(null);
@@ -848,10 +885,16 @@ const StrikeChart = ({
       hanging that off "am I marking a time" loses it the moment the time
       goes null. */
   const followerRef = useRef(false);
-  const loadedRef = useRef<{ ticker: string; timeframe: Timeframe; theme: string }>({
+  /* Rule-clock bookkeeping: the bar counts last painted, so a pass can tell
+     "the forming bar grew" (cheap update) from "a bar completed and a new
+     one opened" (reload — update() cannot rewrite an older time). */
+  const altCountRef = useRef(0);
+  const indAltCountRef = useRef(0);
+  const loadedRef = useRef<{ ticker: string; timeframe: Timeframe; theme: string; clock: string }>({
     ticker: '',
     timeframe: '1m',
     theme: '',
+    clock: 'time',
   });
 
   // ---- drawing state ----
@@ -929,7 +972,7 @@ const StrikeChart = ({
      2026-08-22, tuned against his own screenshots): 5m reads right at ~4px,
      15m at ~6.5 — coarser bars earn more room, so a wider frame shows fewer
      of them and the recent structure stays legible. */
-  const DEFAULT_PITCH_PX: Record<Timeframe, number> = { '1m': 3.5, '5m': 4, '15m': 6.5, '30m': 8, '1h': 10, '1D': 14, '1W': 18 };
+  const DEFAULT_PITCH_PX: Record<Timeframe, number> = { '15s': 3, '1m': 3.5, '5m': 4, '15m': 6.5, '30m': 8, '1h': 10, '1D': 14, '1W': 18 };
   /* History takes ~64% of the width; the rest stays OPEN ahead of the last
      bar (Noah, 2026-08-22: "more spacious... pay more attention to what's
      ahead / current time" — a window crammed with five prior sessions put
@@ -943,7 +986,16 @@ const StrikeChart = ({
     const len = barCountRef.current;
     const width = containerRef.current?.clientWidth ?? 1200;
     const pitch = DEFAULT_PITCH_PX[timeframeRef.current] ?? 4;
-    const total = Math.max(90, Math.min(700, Math.round(width / pitch)));
+    let total = Math.max(90, Math.min(700, Math.round(width / pitch)));
+    /*
+      T-14: a live-only tape can be MINUTES old — twenty quarter-bars against
+      a 300-slot window rendered as a sliver at the left edge of 46 minutes
+      of runway (measured on the first 15s pane). When the data is smaller
+      than the window, the window shrinks to the data plus breathing room,
+      keeping the same history/runway split — the bars stay readable and the
+      runway stays a runway, not a prairie.
+    */
+    total = Math.min(total, Math.max(Math.ceil(len / HISTORY_SHARE) + 8, 48));
     const history = Math.round(total * HISTORY_SHARE);
     const ahead = total - history;
     chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, len - history), to: len + ahead });
@@ -1468,12 +1520,61 @@ const StrikeChart = ({
       };
     }
 
+    /*
+      T-23 — THE EXPORTER. takeScreenshot captures every canvas layer the
+      pane draws — candles, levels, drawings, the cone, the event lane — at
+      device resolution. The frame adds what a shared image needs and the
+      live pane does not: whose chart this is (ticker · interval · when) and
+      whose terminal drew it. Reads refs at CALL time, so the header names
+      what is on screen at the click, not at mount.
+    */
+    if (exportRef) {
+      exportRef.current = () => {
+        const c = chartRef.current;
+        if (!c) return;
+        const shot = c.takeScreenshot();
+        const scale = Math.max(1, Math.round(shot.width / Math.max(1, containerRef.current?.clientWidth ?? shot.width)));
+        const pad = 30 * scale;
+        const out = document.createElement('canvas');
+        out.width = shot.width;
+        out.height = shot.height + pad;
+        const g = out.getContext('2d');
+        if (!g) return;
+        g.fillStyle = '#0a0a0a';
+        g.fillRect(0, 0, out.width, out.height);
+        const stampIso = new Date().toISOString();
+        const stamp = `${stampIso.slice(0, 10)} ${stampIso.slice(11, 16)}Z`;
+        g.font = `600 ${11 * scale}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+        g.textBaseline = 'middle';
+        g.fillStyle = 'rgba(255,255,255,0.85)';
+        g.fillText(`${ticker} · ${timeframeRef.current}`, 10 * scale, pad / 2);
+        const right = `${stamp} · SLAYER TERMINAL`;
+        g.fillStyle = 'rgba(255,255,255,0.4)';
+        g.fillText(right, out.width - g.measureText(right).width - 10 * scale, pad / 2);
+        g.drawImage(shot, 0, pad);
+        /* The in-plot watermark — faint, corner, the free distribution the
+           directive wants from every shared screenshot. */
+        g.font = `600 ${10 * scale}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+        g.fillStyle = 'rgba(255,255,255,0.28)';
+        g.fillText('slayer_terminal', 10 * scale, out.height - 12 * scale);
+        out.toBlob(blob => {
+          if (!blob) return;
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = `${ticker}-${timeframeRef.current}-${stampIso.slice(0, 16).replace(/[-T:]/g, '')}.png`;
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+        });
+      };
+    }
+
     return () => {
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRange);
       chart.unsubscribeCrosshairMove(onCross);
       syncRegisterRef.current?.(null);
       syncedRef.current = null;
       if (projectionRef) projectionRef.current = null;
+      if (exportRef) exportRef.current = null;
       chart.remove();
       chartRef.current = null;
       candleSeriesRef.current = null;
@@ -1500,7 +1601,7 @@ const StrikeChart = ({
       levelLinesRef.current = {};
       shownLevelsRef.current = null;
       cancelAnimationFrame(levelRafRef.current);
-      loadedRef.current = { ticker: '', timeframe: '1m', theme: '' };
+      loadedRef.current = { ticker: '', timeframe: '1m', theme: '', clock: 'time' };
     };
     // ensureRunway and applySync are stable useCallback([])s — listed so the
     // subscriptions installed here are never reading a stale one.
@@ -1658,7 +1759,7 @@ const StrikeChart = ({
       chart that existed before this feature. A toggle nobody touches costs
       nothing.
     */
-    if (!overlays.flow) {
+    if (!overlays.flow || altSpec) {
       const oldCalls = flowCallsRef.current;
       const oldPuts = flowPutsRef.current;
       /* Refs cleared BEFORE the removals, not after: removing a series can
@@ -1730,7 +1831,7 @@ const StrikeChart = ({
     }
 
     remeasurePaneLabels();
-  }, [overlays.flow, flowPrints, timeframe, ticker, themeKey, remeasurePaneLabels]);
+  }, [overlays.flow, flowPrints, timeframe, ticker, themeKey, remeasurePaneLabels, altSpec]);
 
   /*
     THE NET DRIFT: the same premium the flow band bars, kept as a running total.
@@ -1750,7 +1851,7 @@ const StrikeChart = ({
        the same measured reason: a pane that is always present adds a separator
        and grows the time axis for every chart in the app, including charts
        whose reader never turns this on. */
-    if (!overlays.netDrift) {
+    if (!overlays.netDrift || altSpec) {
       const oldCalls = driftCallsRef.current;
       const oldPuts = driftPutsRef.current;
       driftCallsRef.current = null;
@@ -1814,7 +1915,7 @@ const StrikeChart = ({
     }
 
     remeasurePaneLabels();
-  }, [overlays.netDrift, flowPrints, timeframe, ticker, themeKey, remeasurePaneLabels]);
+  }, [overlays.netDrift, flowPrints, timeframe, ticker, themeKey, remeasurePaneLabels, altSpec]);
 
   /*
     THE VOLATILITY DRIFT: what the underlying is doing against what the option
@@ -1833,7 +1934,7 @@ const StrikeChart = ({
        is rewound would put two different clocks in one window. */
     if (replayRef.current) return;
 
-    if (!overlays.volDrift) {
+    if (!overlays.volDrift || altSpec) {
       const oldRv = rvRef.current;
       const oldIv = ivRef.current;
       rvRef.current = null;
@@ -1872,7 +1973,7 @@ const StrikeChart = ({
     }
 
     const mins = tfMinutes(timeframe);
-    const bars = aggregateCandles(Simulator.getCandles(ticker) ?? [], mins);
+    const bars = displayBars(ticker, mins);
     const rvPoints = realizedVol(bars, mins * 60);
     /* The implied line is drawn only where realised is, so the pane never shows
        a lone flat line hanging over an empty half — the two are read as a PAIR,
@@ -1895,7 +1996,7 @@ const StrikeChart = ({
     }
 
     remeasurePaneLabels();
-  }, [overlays.volDrift, revision, timeframe, ticker, themeKey, remeasurePaneLabels]);
+  }, [overlays.volDrift, revision, timeframe, ticker, themeKey, remeasurePaneLabels, altSpec]);
 
   /*
     THE INDICATOR SET — T-3/T-4 (grown from Noah's EMA/VWAP pair,
@@ -1922,10 +2023,16 @@ const StrikeChart = ({
     const mins = tfMinutes(timeframe);
     const allKeys = Object.keys(INDICATOR_PARTS) as (keyof ChartIndicators)[];
     const subsActive = SUB_PANE_ORDER.filter(k => indicators[k]).slice(0, MAX_SUB_PANES);
-    const active = allKeys.filter(k => indicators[k] && (INDICATOR_PARTS[k].pane === 'overlay' || subsActive.includes(k)));
+    /* On a rule clock the session-anchored pair is out: vwapSeries cuts
+       sessions by comparing bar gaps against the bar interval, and rule bars
+       have no interval — it would cut sessions mid-day and draw a VWAP of
+       nothing. The bar-indexed indicators (EMA/SMA/BB/RSI/MACD/ATR) are the
+       classic companions of range and volume bars and stay. */
+    const active = allKeys.filter(k => indicators[k] && (INDICATOR_PARTS[k].pane === 'overlay' || subsActive.includes(k)))
+      .filter(k => !(altSpec && (k === 'vwap' || k === 'vwapBands')));
     const paneCompareOn = compares.some(c => c.mode === 'pane');
     const subBase = paneCompareOn ? 2 : 1;
-    const sig = `${ticker}|${timeframe}|${active.join(',')}|${subBase}|${mainNonce}`;
+    const sig = `${ticker}|${timeframe}|${barClock}|${active.join(',')}|${subBase}|${mainNonce}`;
     const rebuild = indicatorLoadedRef.current !== sig;
     if (rebuild) {
       for (const s of indicatorSeriesRef.current.values()) {
@@ -1983,7 +2090,7 @@ const StrikeChart = ({
       indicatorLoadedRef.current = sig;
     }
     if (active.length === 0) return;
-    const bars = aggregateCandles(Simulator.getCandles(ticker) ?? [], mins);
+    const bars = displayBars(ticker, mins, altSpec);
     if (bars.length === 0) return;
     /* The formulas live in data/indicators.ts — one copy, shared with the
        confluence strip and every other summariser (the walls' lesson). This
@@ -2024,12 +2131,16 @@ const StrikeChart = ({
         const pts = bars.map((b, i) =>
           vals[i] === null ? { time: b.time as UTCTimestamp } : { time: b.time as UTCTimestamp, value: vals[i] as number }
         );
-        if (rebuild) s.setData(pts);
+        /* Same completed-bar rule as the candles: update() cannot rewrite
+           an older time, so a rule-clock pass that changed the bar count
+           reloads the series instead. */
+        if (rebuild || (altSpec && indAltCountRef.current !== bars.length)) s.setData(pts);
         else s.update(pts[pts.length - 1]);
       }
     }
+    indAltCountRef.current = bars.length;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [indicators, ticker, revision, timeframe, mainNonce, compares]);
+  }, [indicators, ticker, revision, timeframe, mainNonce, compares, altSpec, barClock]);
 
   /* Compare lines (Noah, 2026-08-23, TradingView's three flavors). Rebuilt
      when the roster/timeframe/ticker changes, ticked per revision otherwise —
@@ -2095,7 +2206,7 @@ const StrikeChart = ({
     for (const c of compares) {
       const s = compareSeriesRef.current.get(`${c.ticker}:${c.mode}`);
       if (!s) continue;
-      const bars = aggregateCandles(Simulator.getCandles(c.ticker) ?? [], mins);
+      const bars = displayBars(c.ticker, mins);
       if (bars.length === 0) continue;
       if (rebuild) {
         s.setData(bars.map(b => ({ time: b.time as UTCTimestamp, value: b.close })));
@@ -2176,13 +2287,17 @@ const StrikeChart = ({
 
     const theme = getCandleTheme();
     const mins = tfMinutes(timeframe);
-    const bars = aggregateCandles(base, mins);
+    const bars = displayBars(ticker, mins, altSpec);
     barCountRef.current = bars.length;
+    /* A rule clock reads the seconds tape, so it wears T-14's chip too. */
+    setLiveFrom(altSpec || mins < 1 ? bars[0]?.time ?? 0 : null);
     drawingsRef.current?.setBarTimes(bars.map(b => b.time));
     /* The measure counts BARS and annualizes off them, so the layer has to
        know what a bar is worth here — set beside the times it belongs with,
-       so a timeframe change can never move one without the other. */
-    drawingsRef.current?.setBarMinutes(mins);
+       so a timeframe change can never move one without the other. Rule bars
+       have no fixed worth; 0 tells the measure to read elapsed time off the
+       stamps instead of counting steps. */
+    drawingsRef.current?.setBarMinutes(altSpec ? 0 : mins);
     /* T-19's rulers ride the same load — one ATR fold per data pass, so the
        measure box and the flip strip cannot disagree about the day's range. */
     drawingsRef.current?.setDistanceScales({
@@ -2191,14 +2306,18 @@ const StrikeChart = ({
     });
 
     const loaded = loadedRef.current;
-    const changed = loaded.ticker !== ticker || loaded.timeframe !== timeframe || loaded.theme !== themeKey;
-    const newWorld = loaded.ticker !== ticker || loaded.timeframe !== timeframe;
+    const changed = loaded.ticker !== ticker || loaded.timeframe !== timeframe || loaded.theme !== themeKey || loaded.clock !== barClock;
+    const newWorld = loaded.ticker !== ticker || loaded.timeframe !== timeframe || loaded.clock !== barClock;
 
     lastCloseRef.current = bars.length ? bars[bars.length - 1].close : null;
     if (bars.length) {
       lastBarTimeRef.current = bars[bars.length - 1].time;
       bucketSecRef.current = mins * 60;
-      ensureRunway(lastBarTimeRef.current, bucketSecRef.current);
+      /* No runway on a rule clock: whitespace at timeframe spacing would be
+         a claim about when the next bar lands, and rule bars land when the
+         market says. Nothing needs it either — the cone and the event lane
+         are gated off with it. */
+      if (!altSpec) ensureRunway(lastBarTimeRef.current, bucketSecRef.current);
     }
 
 
@@ -2210,8 +2329,12 @@ const StrikeChart = ({
       // fall back to the buffer's first open)
       if (styleRef.current === 'baseline' && bars.length > 0) {
         let baseValue = bars[0].open;
+        /* Rule bars have no bar interval to scale — the overnight gap is
+           found on the seconds tape's own line (an hour dwarfs any quarter
+           spacing, see altBars.ts). */
+        const gapSec = altSpec ? 3600 : mins * 60 * 1.5;
         for (let i = bars.length - 1; i > 0; i--) {
-          if (bars[i].time - bars[i - 1].time > mins * 60 * 1.5) {
+          if (bars[i].time - bars[i - 1].time > gapSec) {
             baseValue = bars[i].open;
             break;
           }
@@ -2241,12 +2364,21 @@ const StrikeChart = ({
           window.setTimeout(lift, 40);
         }
       }
-      loadedRef.current = { ticker, timeframe, theme: themeKey };
+      loadedRef.current = { ticker, timeframe, theme: themeKey, clock: barClock };
+    } else if (altSpec && bars.length !== altCountRef.current) {
+      /* On a rule clock the tick that COMPLETES the forming bar also opens
+         the next, and update() refuses to rewrite an older time — so the
+         completed bar's closing quarter would be lost. A count change
+         reloads the whole (small, capped by the seconds ring) array; the
+         in-between ticks stay on the cheap update path below. */
+      candleSeries.setData(bars.map(toMain));
+      volumeSeries.setData(bars.map(b => toVolume(b, theme)));
     } else {
       const last = bars[bars.length - 1];
       candleSeries.update(toMain(last));
       volumeSeries.update(toVolume(last, theme));
     }
+    altCountRef.current = bars.length;
 
     // LED trails are intraday-only — dailies would smear the session structure.
     // The field keeps a FINER clock than the bars (Noah, 2026-08-22: one bead
@@ -2255,10 +2387,14 @@ const StrikeChart = ({
     // to an hour. More beads, same data.
     const baseGex = Simulator.getGexHistory(ticker);
     const snaps = aggregateSnapshots(baseGex ?? [], Math.min(mins, TRAIL_TEXTURE_MINUTES));
-    const showTrails = overlays.trails && mins <= INTRADAY_MAX_MINUTES;
+    /* Trails place their beads by TIME on a five-minute texture; a rule
+       clock's axis only carries the times its bars happened to start at, so
+       most beads would find no coordinate and the field would draw torn.
+       Gated, and the menu row says why. */
+    const showTrails = overlays.trails && mins <= INTRADAY_MAX_MINUTES && !altSpec;
     trails.labelPx = compact ? 8.5 : 9.5;
     trails.setData(snaps, snapshotsMaxAbs(snaps), showTrails, mins * 60);
-  }, [ticker, revision, timeframe, themeKey, overlays.trails, showRecent, reloadNonce, mainNonce, toMain, compact]);
+  }, [ticker, revision, timeframe, themeKey, overlays.trails, showRecent, reloadNonce, mainNonce, toMain, compact, altSpec, barClock]);
 
   /* `compact` can change without the chart being rebuilt — a desktop window
      dragged across the phone line, a handset rotated. The mount effect read it
@@ -2331,13 +2467,13 @@ const StrikeChart = ({
   useEffect(() => {
     const prim = sessionPrimRef.current;
     if (!prim) return;
-    if (!overlays.session || replay) {
+    if (!overlays.session || replay || altSpec) {
       prim.setLines([]);
       return;
     }
     prim.setLines(sessionLines(buildSessionLevels(Simulator.getCandles(ticker) ?? [], sessionOr)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ticker, revision, sessionOr, overlays.session, replay, mainNonce]);
+  }, [ticker, revision, sessionOr, overlays.session, replay, mainNonce, altSpec]);
 
   /*
     THE EXPECTED-MOVE CONE — T-9.
@@ -2368,12 +2504,12 @@ const StrikeChart = ({
   useEffect(() => {
     const prim = conePrimRef.current;
     if (!prim) return;
-    if (!overlays.cone || replay) {
+    if (!overlays.cone || replay || altSpec) {
       prim.setData(null);
       return;
     }
     const mins = tfMinutes(timeframe);
-    const bars = aggregateCandles(Simulator.getCandles(ticker) ?? [], mins);
+    const bars = displayBars(ticker, mins);
     const starts = sessionStarts(bars, mins);
     const sess = starts.length > 0 ? bars.slice(starts[starts.length - 1]) : [];
     const iv = Simulator.TICKERS[Simulator.ensureTicker(ticker)]?.iv ?? 0;
@@ -2385,7 +2521,7 @@ const StrikeChart = ({
       barMinutes: mins,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ticker, timeframe, revision, overlays.cone, replay, mainNonce]);
+  }, [ticker, timeframe, revision, overlays.cone, replay, mainNonce, altSpec]);
 
   /*
     THE EVENT MARKERS — T-11. The calendar half (this name's report, the
@@ -2400,7 +2536,7 @@ const StrikeChart = ({
   useEffect(() => {
     const prim = eventsPrimRef.current;
     if (!prim) return;
-    if (!overlays.events || replay) {
+    if (!overlays.events || replay || altSpec) {
       prim.setData(null);
       setEventCard(null);
       return;
@@ -2418,7 +2554,7 @@ const StrikeChart = ({
     }
     const cal = eventsCalRef.current;
     const mins = tfMinutes(timeframe);
-    const bars = aggregateCandles(Simulator.getCandles(ticker) ?? [], mins);
+    const bars = displayBars(ticker, mins);
     // eslint-disable-next-line no-console
     console.log('[events-debug]', JSON.stringify(buildTapeEvents({ bars: Simulator.getCandles(ticker) ?? [], prints: flowPrints ?? [], earnings: cal.earnings, macro: cal.macro, todayIso: cal.todayIso }).map(e => ({ k: e.kind, t: e.time, m: e.minutesAhead, l: e.label }))), 'cal', JSON.stringify({ e: cal.earnings?.ticker, macro: cal.macro.length }));
     prim.setData({
@@ -2433,7 +2569,7 @@ const StrikeChart = ({
       barMinutes: mins,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ticker, timeframe, revision, overlays.events, replay, mainNonce, flowPrints]);
+  }, [ticker, timeframe, revision, overlays.events, replay, mainNonce, flowPrints, altSpec]);
 
   /*
     THE LIVE PRICE, as a card on the right scale.
@@ -2550,7 +2686,9 @@ const StrikeChart = ({
         failed in seven places across layouts 1, 2 and 4.
       */
       let t = '';
-      if (period > 0) {
+      /* A rule bar closes when the market moves or trades enough — "time
+         left" is not a thing it has, so the card is price-only there. */
+      if (period > 0 && !altSpec) {
         const left = Math.max(0, Math.round((period - (Date.now() - barClockRef.current.at)) / 1000));
         const hh = Math.floor(left / 3600);
         t = hh > 0
@@ -2576,7 +2714,7 @@ const StrikeChart = ({
       cancelAnimationFrame(priceTagRafRef.current);
       candleSeriesRef.current?.applyOptions({ lastValueVisible: true });
     };
-  }, [priceTag, timeframe, replay, mainNonce]);
+  }, [priceTag, timeframe, replay, mainNonce, altSpec]);
 
   // Dark-pool whisper lines — same grammar as the flow board minis
   useEffect(() => {
@@ -2681,6 +2819,13 @@ const StrikeChart = ({
     because the toolbar is hidden until the cursor is over its own pane — a
     badge there would be invisible almost all the time, which would make
     "you'll see it fire" untrue.
+
+    ONLY THE PRICE KIND GETS A LINE (T-22). A level alert's level is already
+    on the field as the bead inks and the flip rule, and an indicator alert's
+    line is the indicator itself — a second line in alert orange on the same
+    price would be duplicate ink fighting the first. The exposure and flow
+    kinds have no single price at all. All of them live on the armed rail
+    instead.
   */
   useEffect(() => {
     const series = candleSeriesRef.current;
@@ -2695,6 +2840,7 @@ const StrikeChart = ({
     }
     live.clear();
     for (const a of alerts) {
+      if (a.kind !== 'price') continue;
       live.set(
         a.id,
         series.createPriceLine({
@@ -2728,17 +2874,67 @@ const StrikeChart = ({
 
     `markFired` is idempotent, so a close that sits past an alert for the rest
     of the session does not repaint every pane on every tick.
+
+    THE CONTEXT IS BUILT LAZILY (T-22). The rules live in `evaluateAlert`
+    (alertStore.ts, proven in alerts-proof); this effect's whole job is
+    handing them what they watch, and only what something armed actually
+    watches — the book is read only when an exposure or level kind is armed,
+    and an indicator series is recomputed only for an indicator alert on THIS
+    pane's timeframe. Two panes on one symbol both run this; every rule is
+    idempotent across evaluators the way `markFired` always was.
   */
   useEffect(() => {
     if (replay) return;
     const close = lastCloseRef.current;
     if (close == null) return;
-    const now = Date.now();
-    for (const a of alerts) {
-      if (a.firedAt) continue;
-      if (a.above ? close >= a.price : close <= a.price) markFired(ticker, a.id, now);
+    const waiting = alerts.filter(a => !a.firedAt);
+    if (waiting.length === 0) return;
+
+    const needsBook = waiting.some(a => a.kind === 'level' || a.kind === 'gexflip' || a.kind === 'newking' || a.kind === 'wallmove');
+    const exp = needsBook ? exposureNowFor(ticker) : null;
+
+    const values: Partial<Record<IndicatorSource, number | null>> = {};
+    const mins = tfMinutes(timeframe);
+    for (const a of waiting) {
+      if (a.kind !== 'indicator' || a.tf !== timeframe || a.source in values) continue;
+      /* Deliberately WITHOUT the pane's rule clock: the alert was armed on
+         this timeframe's TIME bars and keeps watching them, whatever the
+         pane is currently drawing. */
+      const bars = displayBars(ticker, mins);
+      const last = (pts: readonly (number | null)[]) => {
+        const p = pts[pts.length - 1];
+        return typeof p === 'number' && Number.isFinite(p) ? p : null;
+      };
+      values[a.source] =
+        a.source === 'vwap' ? last(vwapSeries(bars, mins))
+        : a.source === 'rsi' ? last(rsiSeries(bars, 14))
+        : last(emaSeries(bars, a.source === 'ema9' ? 9 : a.source === 'ema21' ? 21 : 50));
     }
-  }, [alerts, ticker, revision, replay]);
+
+    const ctx: AlertContext = {
+      close,
+      tf: timeframe,
+      levels: {
+        callWall: exp?.callWall ?? null,
+        putWall: exp?.putWall ?? null,
+        flip: exp?.flip ?? null,
+        king: exp?.king ?? null,
+      },
+      netGex: exp ? exp.netGex : null,
+      step: exp?.step ?? 0,
+      values,
+      prints: waiting.some(a => a.kind === 'flow')
+        ? (flowPrints ?? []).filter(p => p.ticker === ticker).map(p => ({ at: p.at, premium: p.premium }))
+        : [],
+    };
+
+    const now = Date.now();
+    for (const a of waiting) {
+      const verdict = evaluateAlert(a, ctx);
+      if (verdict.fire) markFired(ticker, a.id, now);
+      else if (verdict.armed) commitArm(ticker, verdict.armed);
+    }
+  }, [alerts, ticker, revision, replay, timeframe, flowPrints]);
 
   /* The focus INK follows the strike's standing, re-read every scan: magenta
      while the focused strike is the king, lime otherwise. The focus itself
@@ -2787,7 +2983,7 @@ const StrikeChart = ({
 
     if (replay) {
       const mins = tfMinutes(timeframe);
-      const bars = aggregateCandles(Simulator.getCandles(ticker) ?? [], mins);
+      const bars = displayBars(ticker, mins);
       const snaps = aggregateSnapshots(Simulator.getGexHistory(ticker) ?? [], Math.min(mins, TRAIL_TEXTURE_MINUTES));
       if (bars.length < 40) return;
       replayDataRef.current = { bars, snaps, maxAbs: snapshotsMaxAbs(snaps) };
@@ -2800,7 +2996,7 @@ const StrikeChart = ({
     } else {
       replayDataRef.current = null;
       setReplayPlaying(false);
-      loadedRef.current = { ticker: '', timeframe: '1m', theme: '' };
+      loadedRef.current = { ticker: '', timeframe: '1m', theme: '', clock: 'time' };
       setReloadNonce(n => n + 1);
     }
   }, [replay]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -3118,6 +3314,40 @@ const StrikeChart = ({
           );
         })}
 
+        {/*
+          THE ARMED RAIL (T-22) — what this pane is watching, visible without
+          opening a menu. Top-left is the emptiest corner a pane has (the
+          draw rail docks centre-left, the labels and the live chip own the
+          bottom), and the rail only exists while something is armed. A fired
+          row lights the alert ink and says "fired"; managing the set stays
+          in the menu, so the rail is pointer-transparent and the tape pans
+          straight through it.
+        */}
+        {!replay && alerts.length > 0 && (
+          <div
+            data-alert-rail
+            aria-label={`Alerts armed on ${ticker}`}
+            className="pointer-events-none absolute left-2 top-2 z-10 flex flex-col items-start gap-[3px]"
+          >
+            {alerts.map(a => (
+              <span
+                key={a.id}
+                className="font-mono text-[9px] leading-[13px] rounded border px-1.5 py-px bg-canvas/70"
+                style={
+                  a.firedAt
+                    ? { color: ALERT_INK, borderColor: `${ALERT_INK}80` }
+                    : undefined
+                }
+              >
+                <span className={a.firedAt ? '' : 'text-textMuted'}>
+                  {alertLabel(a)}
+                  {a.firedAt ? ' · fired' : ''}
+                </span>
+              </span>
+            ))}
+          </div>
+        )}
+
         {/* Pinned to the container's right edge and moved down it by
             transform, so it rides the price scale rather than being re-laid
             out. The soft slate fill and the hairline are the reference's. */}
@@ -3278,6 +3508,17 @@ const StrikeChart = ({
               onBlur={() => setNoteAt(null)}
             />
           </div>
+        )}
+
+        {/* T-14's honesty chip: a sub-minute pane shows only what has
+            actually printed since the app connected, and the empty region
+            to the left is explained rather than silently blank. */}
+        {liveFrom !== null && (
+          <span className="absolute bottom-12 left-2 z-10 pointer-events-none font-mono text-[9px] uppercase tracking-wider text-textMuted bg-canvas/60 border border-borderSubtle/60 rounded px-1.5 py-0.5">
+            {liveFrom === 0
+              ? 'live only · awaiting first prints'
+              : `live only · from ${new Date(liveFrom * 1000).toLocaleTimeString('en-GB', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit' })}`}
+          </span>
         )}
 
         {/* T-11's hover card — floats above the lane at the marker's x,

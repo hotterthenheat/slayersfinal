@@ -16,7 +16,7 @@
 import { useMemo, useState } from 'react';
 import KeyLevelsRail from '../../components/gex/KeyLevelsRail';
 import GhostStrip from '../../components/ui/GhostStrip';
-import { twinBasis, twinFamilyFor, twinLabel, twinPrice, fmtTwin, type TwinLensKey } from '../../data/indexTwins';
+import { twinFamilyFor, twinLabel, twinMeasureFor, twinPrice, fmtTwin, type TwinLensKey } from '../../data/indexTwins';
 import type { WorkspaceCtx } from './registry';
 
 const KeyLevelsWidget = ({ ctx }: { ctx: WorkspaceCtx }) => {
@@ -27,19 +27,22 @@ const KeyLevelsWidget = ({ ctx }: { ctx: WorkspaceCtx }) => {
   const rows = ctx.pulse.keyLevels;
   const maxPressure = rows.reduce((a, l) => Math.max(a, l.pressure), 1);
   const etfSpot = rows.find(r => r.kind === 'spot')?.price ?? ctx.gex.levels.spot;
+  /* T-17: the lens stands on a MEASUREMENT of the pair series, refreshed
+     with the rows (they move per tick, so the last hour's pairs do too). */
+  const tm = useMemo(() => (fam ? twinMeasureFor(fam) : null), [fam, rows]);
 
   const shown = useMemo(() => {
-    if (!fam || active === 'etf') return rows;
-    const spotTwin = twinPrice(fam, active, etfSpot, etfSpot);
+    if (!fam || !tm || active === 'etf') return rows;
+    const spotTwin = twinPrice(fam, active, etfSpot, tm);
     return rows.map(r => {
-      const price = twinPrice(fam, active, r.price, etfSpot);
+      const price = twinPrice(fam, active, r.price, tm);
       return {
         ...r,
         price,
         distPct: r.kind === 'spot' ? 0 : ((price - spotTwin) / (spotTwin || 1)) * 100,
       };
     });
-  }, [rows, fam, active, etfSpot]);
+  }, [rows, fam, tm, active, etfSpot]);
 
   return (
     <div className="h-full min-h-0 flex flex-col">
@@ -52,9 +55,12 @@ const KeyLevelsWidget = ({ ctx }: { ctx: WorkspaceCtx }) => {
             onChange={setLens}
           />
           {/* The conversion state is itself a read — the carry, spoken. */}
-          <span className="ml-auto font-mono text-[9px] text-textMuted tnum">
-            {fam.futures} {fmtTwin(twinPrice(fam, 'futures', etfSpot, etfSpot))} · +{fmtTwin(twinBasis(fam, etfSpot))} over {fam.index}
-          </span>
+          {tm && (
+            <span className="ml-auto font-mono text-[9px] text-textMuted tnum">
+              {fam.futures} {fmtTwin(twinPrice(fam, 'futures', etfSpot, tm))} · +{fmtTwin(tm.basis)} over {fam.index}{' '}
+              {tm.sampled > 0 ? `· measured ${tm.sampled}m` : '· inferred'}
+            </span>
+          )}
         </div>
       )}
       <div className="flex-1 min-h-0 overflow-y-auto">

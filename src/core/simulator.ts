@@ -93,6 +93,21 @@ const Simulator = (() => {
      live roll when a session has run its SESSION_BARS and the next bar
      belongs to tomorrow. Set by seeding, advanced by the roll. */
   const sessionOpenTime: Record<string, number> = {};
+  /*
+    T-14 — THE SECONDS TAPE, live-only by construction.
+
+    Each tick is one real price observation, and in tape time one tick is a
+    quarter of a minute — so every tick appends exactly one 15-second bar,
+    aligned to the minute grid (offsets 0/15/30/45). Seeding adds NONE: the
+    region before boot has no sub-minute truth to offer, which is the same
+    shape a real per-second WebSocket feed has (history starts at connect),
+    and the honest design T-14 asks for — no backfill resampled from 1m
+    bars wearing a sub-minute label.
+  */
+  const secondsHistory: Record<string, Candle[]> = {};
+  /* Two sessions of quarters (4 per minute × 390 × 2) — written as the
+     number because the constants it derives from are declared below. */
+  const SECONDS_LIMIT = 3120;
   const BAR_SECONDS = 60; // 1-minute base bars
   const TICKS_PER_BAR = 4; // each simulated bar aggregates 4 ticks
   const SESSION_BARS = 390; // ~6.5h session at 1-min bars
@@ -400,15 +415,17 @@ const Simulator = (() => {
         open = last.close;
       }
       const barClose = TICKERS[sym].currentPrice;
+      const rollVolume = Math.round(1500 + Math.random() * 9000);
       bars.push({
         time,
         open,
         high: Math.max(open, barClose),
         low: Math.min(open, barClose),
         close: barClose,
-        volume: Math.round(1500 + Math.random() * 9000),
+        volume: rollVolume,
       });
       if (bars.length > CANDLE_LIMIT) bars.shift();
+      pushSecondsBar(sym, time, open, barClose, rollVolume);
 
       evolveBook(sym, barClose); // the book keeps living as new bars roll
 
@@ -417,16 +434,27 @@ const Simulator = (() => {
         if (gh.length > GEX_LIMIT) gh.shift();
       }
     } else {
+      const prevClose = last.close;
+      const foldVolume = Math.round(500 + Math.random() * 4000);
       last.close = price;
       last.high = Math.max(last.high, price);
       last.low = Math.min(last.low, price);
-      last.volume += Math.round(500 + Math.random() * 4000);
+      last.volume += foldVolume;
+      /* The fold's quarter: offsets 15/30/45 into the forming minute. */
+      pushSecondsBar(sym, last.time + (count % TICKS_PER_BAR) * 15, prevClose, price, foldVolume);
 
       // Keep the forming bar's node snapshot live — only for the visible (active) ticker
       if (gh && gh.length && sym === activeTicker) {
         gh[gh.length - 1] = computeGexSnapshot(sym, price, gh[gh.length - 1].time);
       }
     }
+  }
+
+  /** One tick, one 15-second bar — see the seconds-tape note above. */
+  function pushSecondsBar(sym: string, time: number, open: number, close: number, volume: number): void {
+    const ring = (secondsHistory[sym] ??= []);
+    ring.push({ time, open, high: Math.max(open, close), low: Math.min(open, close), close, volume });
+    if (ring.length > SECONDS_LIMIT) ring.shift();
   }
 
   /** Register a config for any symbol on demand (synthesized for non-core tickers). */
@@ -761,6 +789,12 @@ const Simulator = (() => {
       return activeTicker;
     },
     getActiveTicker: (): string => activeTicker,
+    /** T-14's live-only 15-second bars — empty until the app has ticked,
+        exactly as a per-second feed is empty before it connects. */
+    getSecondsBars: (sym: string): Candle[] => {
+      ensureTicker(sym);
+      return (secondsHistory[sym] ??= []);
+    },
     /** Live intraday OHLC bars (mutated in place each tick — treat as read-only). */
     getCandles: (sym: string): Candle[] => {
       const key = ensureTicker(sym);

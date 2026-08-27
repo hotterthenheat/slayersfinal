@@ -98,6 +98,23 @@ export const TERMS = {
     'Average true range \u2014 how far this name typically travels in a session, gaps included. A wall 0.4 ATR away is the same distance on SPY and on NVDA.',
   '\u03c3 distance':
     'The move in implied one-day \u03c3 \u2014 how many of the moves the options are charging for. Past 1\u03c3, price has beaten what the options priced for the day.',
+  // ---- the futures clock (T-16) ----
+  Globex: 'The overnight futures session — Sunday 18:00 to Friday 17:00 New York, with a daily 17:00\u201318:00 break. The equity open is usually decided out here, while the cash tape this desk draws is closed.',
+  // ---- bar clocks (T-15) ----
+  'Bar clock':
+    'What makes a bar close. Time bars close on the timeframe; range bars close when price has spanned a set distance; volume bars close when enough shares have traded. Rule bars are built from the live 15-second tape, so they start at connect and carry no history — and a violent quarter can overshoot the rule, which is what building from aggregates means.',
+  'Range bars':
+    'Bars that close on movement, not minutes — each one spans the same price distance. A quiet hour is one bar; a violent minute is several. The chop that smears across time bars becomes visible structure.',
+  'Volume bars':
+    'Bars that close on participation — each one holds the same traded volume. Time disappears from the axis: a bar is a unit of activity, wherever the clock was.',
+  // ---- alert kinds (T-22) ----
+  'Alert kinds':
+    'What a pane can watch besides a typed price: a named level being crossed (the alert follows the wall, flip or king as the book moves them), price crossing VWAP or an EMA, RSI crossing a threshold, net GEX flipping sign, a new king, a wall migrating N strikes, or an option print over a premium floor. All of it in-session only — nothing runs when the tab is closed.',
+  'Armed rail':
+    'The list at a pane’s top-left of every alert armed on its symbol, so what’s watching is visible without opening a menu. A row lights orange when its alert fires.',
+  // ---- volume profile (T-10) ----
+  VPOC: 'The price where the session traded the most volume — the tape\u2019s own centre of gravity today. Price tends to return to it while value is being accepted.',
+  'Value area': 'The band holding 70% of the session\u2019s volume, VAL to VAH. Inside it the market is trading acceptance; outside it, discovery.',
   // ---- multi-timeframe (T-12) ----
   'Timeframe trend':
     'Where price sits on each interval against its own EMA21 and VWAP. Above both reads up, below both reads down, and between them reads flat — the timeframes disagreeing is itself the signal.',

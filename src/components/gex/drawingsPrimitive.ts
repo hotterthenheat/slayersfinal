@@ -232,7 +232,11 @@ class DrawingsPaneRenderer {
         const abs = Math.abs(span.deltaAbs);
         const lines = [
           `${sign}${abs.toFixed(2)}  ${sign}${Math.abs(span.deltaPct).toFixed(2)}%`,
-          `${span.bars} bar${span.bars === 1 ? '' : 's'} · ${fmtElapsed(span.tradingMin)}`,
+          /* On a rule clock (barMinutes 0) there is no bar count worth
+             claiming — the elapsed time off the stamps is the true part. */
+          src.barMinutes > 0
+            ? `${span.bars} bar${span.bars === 1 ? '' : 's'} · ${fmtElapsed(span.tradingMin)}`
+            : fmtElapsed(span.tradingMin),
           /* Null while the drag has not left its bar — "not yet" rather than a
              rate off time that has not passed (data/measure.ts). */
           /* One decimal under 10, none above: a quiet multi-day span
@@ -696,7 +700,12 @@ export class DrawingsPrimitive implements ISeriesPrimitive<Time> {
   }
 
   setBarMinutes(mins: number): void {
-    this.barMinutes = Math.max(1, mins);
+    /* 0 is a STATEMENT, not a missing value: the host is on a rule clock
+       (T-15) and there is no fixed bar worth — the measure reads elapsed
+       time off the stamps instead of counting steps. Fractions are real
+       too: 0.25 is the 15s tape (clamping it to 1 quadrupled the measure's
+       bar maths there). */
+    this.barMinutes = Math.max(0, mins);
   }
 
   setDistanceScales(scales: DistanceScales): void {

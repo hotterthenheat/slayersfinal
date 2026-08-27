@@ -328,6 +328,73 @@ export function buildLevelsFor(ticker: string): KeyLevels {
 }
 
 /*
+  ══ THE BOOK AS AN ALERT SEES IT (T-22) ═════════════════════════════════════
+
+  `buildLevelsFor` is for the RAIL, and the rail's fallbacks are wrong for an
+  alert: an unnamed wall parked at `spot` moves every tick, so an exposure
+  alert reading it would fire on the fallback's motion, not the wall's. This
+  reader keeps core/walls.ts's real nulls — "no call wall qualifies" is a
+  state, and an alert waits on it.
+
+  `readExposureNow` is pure over a handed-in chain so the proof can stage a
+  book; `exposureNowFor` is the one-line wrapper over the simulator's latest
+  snapshot. Null from the wrapper means the book is unreadable, which every
+  alert also waits on.
+*/
+export interface ExposureNow {
+  /** Signed total of the chain's net GEX. */
+  netGex: number;
+  king: number | null;
+  callWall: number | null;
+  putWall: number | null;
+  flip: number | null;
+  /** The chain's strike spacing — smallest gap actually present (the ladder's
+      own rule); 0 when the chain is too thin to say. */
+  step: number;
+}
+
+export function readExposureNow(
+  chain: readonly { strike: number; value: number }[],
+  spot: number
+): ExposureNow {
+  let netGex = 0;
+  let king: number | null = null;
+  let kingAbs = 0;
+  for (const l of chain) {
+    netGex += l.value;
+    const a = Math.abs(l.value);
+    if (a > kingAbs) {
+      kingAbs = a;
+      king = l.strike;
+    }
+  }
+  const w = pickWalls(chain, spot, l => l.value);
+  const flip = pickFlip(chain, spot, l => l.value);
+  const sorted = [...chain].sort((a, b) => a.strike - b.strike);
+  let step = Infinity;
+  for (let i = 1; i < sorted.length; i++) {
+    const d = sorted[i].strike - sorted[i - 1].strike;
+    if (d > 1e-9) step = Math.min(step, d);
+  }
+  return {
+    netGex,
+    king,
+    callWall: w.callWall,
+    putWall: w.putWall,
+    flip,
+    step: Number.isFinite(step) ? step : 0,
+  };
+}
+
+export function exposureNowFor(ticker: string): ExposureNow | null {
+  const sym = Simulator.ensureTicker(ticker);
+  const snaps = Simulator.getGexHistory(sym);
+  const latest = snaps?.[snaps.length - 1];
+  if (!latest || latest.levels.length === 0) return null;
+  return readExposureNow(latest.levels, Simulator.TICKERS[sym].currentPrice);
+}
+
+/*
   The strike rows BESIDE a chart — the very snapshot `buildLevelsFor` reduces,
   handed back row by row instead of collapsed to four prices.
 

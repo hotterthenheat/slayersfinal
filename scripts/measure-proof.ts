@@ -48,6 +48,11 @@ const near = (a: number, b: number, eps = 1e-9) => Math.abs(a - b) < eps;
   check('the same hour on 15m bars is four', measureSpan(T0, 100, T0 + 60 * 60, 100, 15).bars === 4);
   check('a drag inside one bar is zero bars, not one', measureSpan(T0, 100, T0 + 20, 101, 1).bars === 0, `${measureSpan(T0, 100, T0 + 20, 101, 1).bars}`);
   check('and trading minutes follow the bars', measureSpan(T0, 100, T0 + 60 * 60, 100, 15).tradingMin === 60);
+  /* T-14/T-15 — the fractional and the absent clock. */
+  check('a minute of 15s bars is FOUR bars, not one (0.25 taken as given)', measureSpan(T0, 100, T0 + 60, 100, 0.25).bars === 4);
+  const noClock = measureSpan(T0, 100, T0 + 90, 101, 0);
+  check('no bar clock counts no bars', noClock.bars === 0);
+  check('— but the stamps still carry the time', Math.abs(noClock.tradingMin - 1.5) < 1e-9, String(noClock.tradingMin));
 }
 
 // ── 3. the annualization is TRADING time ──────────────────────────────────
