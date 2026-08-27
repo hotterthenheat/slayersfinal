@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useMarketData } from '../../context/MarketDataContext';
 import TickerSearch from '../../components/ui/TickerSearch';
 import SubNav from '../../components/ui/SubNav';
+import FlipGaugeStrip from '../../components/gex/FlipGaugeStrip';
 import { GEX_SUBPAGES } from './subnav';
 
 /*
@@ -69,6 +70,12 @@ const PinpointLayout = () => {
           time — one muted line rather than a heading block. It says what THIS
           desk measures, which the pill's two words cannot. */}
       <p className="-mt-1 text-[11px] leading-snug text-textMuted">{active.subtitle}</p>
+
+      {/* P-4 — the flip, answered before any desk renders. In the SHELL
+          rather than a page, because the directive's ask is "a persistent
+          header strip on every Pinpoint tab" and the shell is the one thing
+          every tab shares. */}
+      <FlipGaugeStrip />
 
       <AnimatePresence mode="wait" initial={false}>
         <motion.div

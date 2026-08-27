@@ -19,7 +19,7 @@ import type {
 } from '../types/market';
 import { blackScholesGreeks } from './greeks';
 import { dayKey } from './rng';
-import { pickWalls } from './walls';
+import { pickFlip, pickWalls } from './walls';
 import type { UniverseQuote } from '../types/compass';
 
 const Simulator = (() => {
@@ -566,22 +566,11 @@ const Simulator = (() => {
     const supportWall = picked.putWall ?? spot - config.step * 4;
     const resistanceWall = picked.callWall ?? spot + config.step * 4;
 
-    // The crossing NEAREST SPOT, not the first one walking up the chain: a
-    // noisy book can carry a jitter crossing deep in a tail, and breaking on
-    // the first hit labeled THAT as the regime border while the structural
-    // flip sat at spot. Matches data/gex.ts buildLevelsFor (Noah, 2026-08-18).
-    let flipStrike = spot;
-    let flipDist = Infinity;
-    for (let i = 1; i < chain.length; i++) {
-      if (Math.sign(chain[i - 1].netGex) !== Math.sign(chain[i].netGex)) {
-        const mid = (chain[i - 1].strike + chain[i].strike) / 2;
-        const d = Math.abs(mid - spot);
-        if (d < flipDist) {
-          flipDist = d;
-          flipStrike = mid;
-        }
-      }
-    }
+    /* The flip from core/walls.ts, beside the walls it already reads from
+       there. The comment this replaces said "Matches data/gex.ts
+       buildLevelsFor" — a request to keep two copies in step by hand, which
+       is the arrangement that failed for the walls in this same function. */
+    const flipStrike = pickFlip(chain, spot, n => n.netGex) ?? spot;
 
     let score = 50;
     const isEmaAligned = (indicators.ema9 > indicators.ema21) && (indicators.ema21 > indicators.ema50);

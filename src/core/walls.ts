@@ -95,3 +95,51 @@ export function pickWalls<T extends Struck>(
 
   return { callWall, putWall };
 }
+
+/**
+ * The gamma flip: the sign-change midpoint NEAREST SPOT.
+ *
+ * ---------------------------------------------------------------------------
+ * THE WALLS' STORY, A SECOND TIME — caught before it finished happening
+ * ---------------------------------------------------------------------------
+ * This rule was written four times: `buildExposureProfile` (data/exposure.ts),
+ * `buildLevelsFor` (data/gex.ts), `generateTradePlan` (core/simulator.ts) —
+ * all three nearest-to-spot, hand-synced by comments asking the next reader to
+ * keep them in step — and `levelsFrom` (data/vannacharm.ts), which walked up
+ * the chain and BROKE ON THE FIRST crossing it met.
+ *
+ * First-from-the-bottom is the exact bug the other three were unified to fix
+ * (2026-08-18): a noisy book can carry a jitter crossing deep in the put tail,
+ * and breaking on the first hit names THAT the regime border while the
+ * structural flip sits at spot. Every migration map, level-shift row and wall
+ * drift timeline read the divergent copy, so the flip the Vanna & Charm page
+ * projected could disagree with the flip the Exposure page drew, off one book.
+ *
+ * The fourth copy was found when P-4 needed a FIFTH reader of the rule. Same
+ * decision as the walls above: the rule moves here, every caller points at it,
+ * and the next surface that needs a flip cannot write its own.
+ *
+ * @returns the crossing nearest spot, or `null` when the field never changes
+ *          sign — a one-sided book has no flip, and "no flip" is a real state
+ *          the caller has to render deliberately rather than inherit as spot.
+ */
+export function pickFlip<T extends Struck>(
+  points: readonly T[],
+  spot: number,
+  valueOf: (p: T) => number
+): number | null {
+  const asc = [...points].sort((a, b) => a.strike - b.strike);
+  let flip: number | null = null;
+  let flipDist = Infinity;
+  for (let i = 1; i < asc.length; i++) {
+    if (Math.sign(valueOf(asc[i - 1])) !== Math.sign(valueOf(asc[i]))) {
+      const mid = (asc[i - 1].strike + asc[i].strike) / 2;
+      const d = Math.abs(mid - spot);
+      if (d < flipDist) {
+        flipDist = d;
+        flip = mid;
+      }
+    }
+  }
+  return flip;
+}
