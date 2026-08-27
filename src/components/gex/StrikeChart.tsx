@@ -41,7 +41,7 @@ import { markFired, useAlerts } from './alertStore';
 import type { Candle } from '../../types/market';
 import type { DarkPoolPrint, KeyLevels } from '../../types/gex';
 import { bucketFlow, flowMaxLeg } from '../../data/flowBars';
-import { emaSeries, sessionStarts, vwapSeries } from '../../data/indicators';
+import { atrBarSeries, bollingerSeries, emaSeries, macdSeries, rsiSeries, sessionStarts, smaSeries, vwapSeries, vwapSigmaSeries } from '../../data/indicators';
 import { buildSessionLevels, type OpeningRange } from '../../data/sessionLevels';
 import { SessionLevelsPrimitive, sessionLines } from './sessionLevelsPrimitive';
 import { buildExpectedMoveCone } from '../../data/expectedMove';
@@ -257,18 +257,104 @@ export interface ChartIndicators {
   ema21: boolean;
   ema50: boolean;
   vwap: boolean;
+  /* T-4's growth of the set. Overlays ride the tape's own scale: */
+  /** Bollinger bands — SMA20 ± 2σ, basis and both bands. */
+  bb: boolean;
+  /** ±1σ/±2σ around the session VWAP — the vwap line's own family. */
+  vwapBands: boolean;
+  /** SMA 200 — the long classic the EMA trio does not cover. */
+  sma: boolean;
+  /* Sub-panes share the time axis below the tape (T-3, capped at two): */
+  rsi: boolean;
+  macd: boolean;
+  /** ATR of THIS pane's bars — distinct from T-19's session-ATR ruler. */
+  atrPane: boolean;
 }
 
-export const DEFAULT_INDICATORS: ChartIndicators = { ema9: false, ema21: false, ema50: false, vwap: false };
+export const DEFAULT_INDICATORS: ChartIndicators = {
+  ema9: false, ema21: false, ema50: false, vwap: false,
+  bb: false, vwapBands: false, sma: false, rsi: false, macd: false, atrPane: false,
+};
 
 /* One categorical ink family for auxiliary lines (indicators here, compare
-   lines in the widget) — hues that carry no house meaning. */
+   lines in the widget) — hues that carry no house meaning. Each key's LEAD
+   ink; multi-line indicators carry their parts in INDICATOR_PARTS below. */
 export const INDICATOR_INKS: Record<keyof ChartIndicators, string> = {
   ema9: '#5B9CF6',
   ema21: '#BBB2E8',
   ema50: '#EDE4CD',
   vwap: '#6BD3C7',
+  bb: '#C7A9CF',
+  vwapBands: '#6BD3C7',
+  sma: '#D8BC8F',
+  rsi: '#A9C77F',
+  macd: '#8FB8D8',
+  atrPane: '#C0C7CF',
 };
+
+/*
+  T-3/T-4 — WHAT EACH INDICATOR DRAWS, AND WHERE, as data.
+
+  `pane: 'overlay'` rides the tape's own scale; `'sub'` takes a stacked pane
+  below it sharing the time axis — the dexStrike dock's pattern, generalised
+  through lightweight-charts' native panes instead of a second hand-rolled
+  canvas. SUB_PANE_ORDER is both the allocation order and the CAP: at most
+  two sub-panes draw (the directive's rule — refuse the third rather than
+  shrink the tape below a floor), enforced in the menu and again here so a
+  hand-edited setup cannot smuggle a third in.
+*/
+export const SUB_PANE_ORDER: (keyof ChartIndicators)[] = ['rsi', 'macd', 'atrPane'];
+export const MAX_SUB_PANES = 2;
+
+interface IndicatorPartSpec {
+  part: string;
+  kind: 'line' | 'hist';
+  ink: string;
+  dashed?: boolean;
+  faint?: boolean;
+}
+const INDICATOR_PARTS: Record<keyof ChartIndicators, { pane: 'overlay' | 'sub'; parts: IndicatorPartSpec[] }> = {
+  ema9: { pane: 'overlay', parts: [{ part: 'line', kind: 'line', ink: INDICATOR_INKS.ema9 }] },
+  ema21: { pane: 'overlay', parts: [{ part: 'line', kind: 'line', ink: INDICATOR_INKS.ema21 }] },
+  ema50: { pane: 'overlay', parts: [{ part: 'line', kind: 'line', ink: INDICATOR_INKS.ema50 }] },
+  vwap: { pane: 'overlay', parts: [{ part: 'line', kind: 'line', ink: INDICATOR_INKS.vwap }] },
+  bb: {
+    pane: 'overlay',
+    parts: [
+      { part: 'basis', kind: 'line', ink: INDICATOR_INKS.bb },
+      { part: 'upper', kind: 'line', ink: INDICATOR_INKS.bb, dashed: true, faint: true },
+      { part: 'lower', kind: 'line', ink: INDICATOR_INKS.bb, dashed: true, faint: true },
+    ],
+  },
+  vwapBands: {
+    pane: 'overlay',
+    parts: [
+      { part: 'up1', kind: 'line', ink: INDICATOR_INKS.vwapBands, faint: true },
+      { part: 'dn1', kind: 'line', ink: INDICATOR_INKS.vwapBands, faint: true },
+      { part: 'up2', kind: 'line', ink: INDICATOR_INKS.vwapBands, dashed: true, faint: true },
+      { part: 'dn2', kind: 'line', ink: INDICATOR_INKS.vwapBands, dashed: true, faint: true },
+    ],
+  },
+  sma: { pane: 'overlay', parts: [{ part: 'line', kind: 'line', ink: INDICATOR_INKS.sma }] },
+  rsi: { pane: 'sub', parts: [{ part: 'line', kind: 'line', ink: INDICATOR_INKS.rsi }] },
+  macd: {
+    pane: 'sub',
+    parts: [
+      /* The histogram draws FIRST so the lines read over it. One steel wash
+         for its bars, not red/green — the sign of momentum is not the price
+         direction the pair is reserved for. */
+      { part: 'hist', kind: 'hist', ink: 'rgba(226,234,244,0.30)' },
+      { part: 'line', kind: 'line', ink: INDICATOR_INKS.macd },
+      { part: 'signal', kind: 'line', ink: '#D8A6A6' },
+    ],
+  },
+  atrPane: { pane: 'sub', parts: [{ part: 'line', kind: 'line', ink: INDICATOR_INKS.atrPane }] },
+};
+
+/** The keys the T-8 readout prints — single-line overlays only: a
+    five-line band pair would blow the readout row's measured width budget,
+    and a sub-pane's value is in its own units, not the tape's. */
+const READOUT_INDICATOR_KEYS = new Set<keyof ChartIndicators>(['ema9', 'ema21', 'ema50', 'vwap', 'sma']);
 
 /* Compare symbols, TradingView's three flavors (Noah, 2026-08-23):
    percent = ride the SAME pane with the whole right scale in % change;
@@ -696,7 +782,7 @@ const StrikeChart = ({
   const trailsRef = useRef<GexTrailsPrimitive | null>(null);
   const compareSeriesRef = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
   const compareLoadedRef = useRef('');
-  const indicatorSeriesRef = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
+  const indicatorSeriesRef = useRef<Map<string, ISeriesApi<'Line'> | ISeriesApi<'Histogram'>>>(new Map());
   const indicatorLoadedRef = useRef('');
   /* The main series' style — a ref for the one-time creation effect, a
      nonce so every effect that hangs price lines off the main series knows
@@ -1026,11 +1112,15 @@ const StrikeChart = ({
     const volumeDrawn = volSeries?.options().visible !== false;
     const vol = volSeries?.dataByIndex(idx) as { value?: number } | null;
     const indicatorValues: CrosshairBar['indicators'] = [];
-    for (const [key, series] of indicatorSeriesRef.current) {
+    for (const [id, series] of indicatorSeriesRef.current) {
+      /* Map ids are `${key}:${part}` since T-4; the readout reports only the
+         single-line overlays (READOUT_INDICATOR_KEYS says which and why). */
+      const [key, part] = id.split(':') as [keyof ChartIndicators, string];
+      if (part !== 'line' || !READOUT_INDICATOR_KEYS.has(key)) continue;
       const point = series.dataByIndex(idx) as { value?: number } | null;
       const v = num(point?.value);
       if (v != null) {
-        indicatorValues.push({ key: key as keyof ChartIndicators, ink: INDICATOR_INKS[key as keyof ChartIndicators], value: v });
+        indicatorValues.push({ key, ink: INDICATOR_INKS[key], value: v });
       }
     }
     return {
@@ -1807,18 +1897,35 @@ const StrikeChart = ({
     remeasurePaneLabels();
   }, [overlays.volDrift, revision, timeframe, ticker, themeKey, remeasurePaneLabels]);
 
-  /* Indicator overlays (Noah, 2026-08-23) — EMAs and a session-anchored
-     VWAP, computed from the SAME aggregated bars the tape draws so they
-     agree on every timeframe. Full rebuild when the set/world changes; per
-     revision the math re-runs (O(n), trivial) but only the last point is
-     pushed to the series. */
+  /*
+    THE INDICATOR SET — T-3/T-4 (grown from Noah's EMA/VWAP pair,
+    2026-08-23). Everything is computed from the SAME aggregated bars the
+    tape draws, in data/indicators.ts, so a strip summarising these lines
+    cannot disagree with them. Full rebuild when the set or the world
+    changes; per revision only the last point is pushed.
+
+    SUB-PANES are lightweight-charts' native panes, allocated AFTER the
+    compare pane when one is up (compares hold pane 1 by an older contract):
+    the first active sub-indicator in SUB_PANE_ORDER takes the base index,
+    the second the next. The third is REFUSED — the cap is enforced in the
+    menu and again here, so a hand-edited setup cannot shrink the tape below
+    its floor. Stretch factors put roughly two thirds of the height on the
+    tape and split the rest.
+
+    WARMUP NULLS map to WHITESPACE points — a gap on the left edge where the
+    window does not exist yet, never a zero.
+  */
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
     if (replayRef.current) return; // frozen during replay, like compares
     const mins = tfMinutes(timeframe);
-    const active = (Object.keys(INDICATOR_INKS) as (keyof ChartIndicators)[]).filter(k => indicators[k]);
-    const sig = `${ticker}|${timeframe}|${active.join(',')}|${mainNonce}`;
+    const allKeys = Object.keys(INDICATOR_PARTS) as (keyof ChartIndicators)[];
+    const subsActive = SUB_PANE_ORDER.filter(k => indicators[k]).slice(0, MAX_SUB_PANES);
+    const active = allKeys.filter(k => indicators[k] && (INDICATOR_PARTS[k].pane === 'overlay' || subsActive.includes(k)));
+    const paneCompareOn = compares.some(c => c.mode === 'pane');
+    const subBase = paneCompareOn ? 2 : 1;
+    const sig = `${ticker}|${timeframe}|${active.join(',')}|${subBase}|${mainNonce}`;
     const rebuild = indicatorLoadedRef.current !== sig;
     if (rebuild) {
       for (const s of indicatorSeriesRef.current.values()) {
@@ -1830,43 +1937,99 @@ const StrikeChart = ({
       }
       indicatorSeriesRef.current.clear();
       for (const key of active) {
-        indicatorSeriesRef.current.set(
-          key,
-          chart.addSeries(LineSeries, {
-            color: INDICATOR_INKS[key],
-            lineWidth: 1,
-            priceScaleId: 'right',
-            priceLineVisible: false,
-            lastValueVisible: false,
-            crosshairMarkerVisible: false,
-          })
-        );
+        const spec = INDICATOR_PARTS[key];
+        const paneIndex = spec.pane === 'overlay' ? 0 : subBase + subsActive.indexOf(key);
+        for (const part of spec.parts) {
+          const series =
+            part.kind === 'hist'
+              ? chart.addSeries(HistogramSeries, { color: part.ink, priceLineVisible: false, lastValueVisible: false, priceFormat: { type: 'price', precision: 2, minMove: 0.01 } }, paneIndex)
+              : chart.addSeries(
+                  LineSeries,
+                  {
+                    color: part.ink,
+                    lineWidth: 1,
+                    lineStyle: part.dashed ? 2 : 0,
+                    ...(part.faint ? { color: part.ink + '99' } : {}),
+                    ...(spec.pane === 'overlay' ? { priceScaleId: 'right' } : {}),
+                    priceLineVisible: false,
+                    lastValueVisible: spec.pane === 'sub' && part.part !== 'signal',
+                    crosshairMarkerVisible: false,
+                  },
+                  paneIndex
+                );
+          indicatorSeriesRef.current.set(`${key}:${part.part}`, series);
+          /* The RSI pane's 30/70 rails — the two numbers the oscillator is
+             read against, drawn once with the series. Unlabelled on the
+             axis; the levels are the pane's grammar, not its data. */
+          if (key === 'rsi' && part.part === 'line') {
+            for (const lvl of [30, 70]) {
+              (series as ISeriesApi<'Line'>).createPriceLine({
+                price: lvl,
+                color: 'rgba(226,234,244,0.25)',
+                lineWidth: 1,
+                lineStyle: 3,
+                axisLabelVisible: false,
+                title: '',
+              });
+            }
+          }
+        }
+      }
+      /* Two thirds to the tape, the rest split — only while subs exist. */
+      if (subsActive.length > 0) {
+        const panes = chart.panes();
+        panes.forEach((p, i) => p.setStretchFactor(i === 0 ? 64 : Math.max(10, 36 / (panes.length - 1))));
       }
       indicatorLoadedRef.current = sig;
     }
     if (active.length === 0) return;
     const bars = aggregateCandles(Simulator.getCandles(ticker) ?? [], mins);
     if (bars.length === 0) return;
-    /* The formulas moved to data/indicators.ts — T-12's confluence strip has
-       to answer "is price above its EMA21 and its VWAP" on five timeframes at
-       once, and a second copy here would be a strip that can disagree with the
-       lines it summarises. This maps the shared numbers onto series points and
-       owns nothing else. */
-    const pointsFor = (key: keyof ChartIndicators) => {
-      const values =
-        key === 'vwap'
-          ? vwapSeries(bars, mins)
-          : emaSeries(bars, key === 'ema9' ? 9 : key === 'ema21' ? 21 : 50);
-      return bars.map((b, i) => ({ time: b.time as UTCTimestamp, value: values[i] }));
+    /* The formulas live in data/indicators.ts — one copy, shared with the
+       confluence strip and every other summariser (the walls' lesson). This
+       maps numbers onto series points and owns nothing else. */
+    const seriesFor = (key: keyof ChartIndicators): Record<string, (number | null)[]> => {
+      switch (key) {
+        case 'vwap':
+          return { line: vwapSeries(bars, mins) };
+        case 'bb': {
+          const b = bollingerSeries(bars, 20, 2);
+          return { basis: b.basis, upper: b.upper, lower: b.lower };
+        }
+        case 'vwapBands': {
+          const vw = vwapSeries(bars, mins);
+          const sg = vwapSigmaSeries(bars, mins);
+          const band = (k: number) => vw.map((v, i) => (sg[i] === null ? null : v + k * (sg[i] as number)));
+          return { up1: band(1), dn1: band(-1), up2: band(2), dn2: band(-2) };
+        }
+        case 'sma':
+          return { line: smaSeries(bars, 200) };
+        case 'rsi':
+          return { line: rsiSeries(bars, 14) };
+        case 'macd': {
+          const m = macdSeries(bars, 12, 26, 9);
+          return { line: m.macd, signal: m.signal, hist: m.hist };
+        }
+        case 'atrPane':
+          return { line: atrBarSeries(bars, 14) };
+        default:
+          return { line: emaSeries(bars, key === 'ema9' ? 9 : key === 'ema21' ? 21 : 50) };
+      }
     };
     for (const key of active) {
-      const s = indicatorSeriesRef.current.get(key);
-      if (!s) continue;
-      const pts = pointsFor(key);
-      if (rebuild) s.setData(pts);
-      else s.update(pts[pts.length - 1]);
+      const values = seriesFor(key);
+      for (const [part, vals] of Object.entries(values)) {
+        const s = indicatorSeriesRef.current.get(`${key}:${part}`);
+        if (!s) continue;
+        const pts = bars.map((b, i) =>
+          vals[i] === null ? { time: b.time as UTCTimestamp } : { time: b.time as UTCTimestamp, value: vals[i] as number }
+        );
+        if (rebuild) s.setData(pts);
+        else s.update(pts[pts.length - 1]);
+      }
     }
-  }, [indicators, ticker, revision, timeframe, mainNonce]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [indicators, ticker, revision, timeframe, mainNonce, compares]);
 
   /* Compare lines (Noah, 2026-08-23, TradingView's three flavors). Rebuilt
      when the roster/timeframe/ticker changes, ticked per revision otherwise —

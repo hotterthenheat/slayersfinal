@@ -42,7 +42,9 @@ import {
 import {
   CHART_STYLES,
   INDICATOR_INKS,
+  MAX_SUB_PANES,
   PRICE_SCALES,
+  SUB_PANE_ORDER,
   type ChartIndicators,
   type ChartOverlays,
   type ChartStyle,
@@ -238,11 +240,21 @@ const STYLE_GLYPHS: Record<ChartStyle, ReactNode> = {
   ),
 };
 
-const INDICATOR_ITEMS: { key: keyof ChartIndicators; label: string; hint: string }[] = [
+/* Two sections, because the two families cost the reader differently: an
+   overlay rides the tape, a sub-pane takes height OFF it — which is also why
+   the sub-panes carry T-3's cap (MAX_SUB_PANES, refused in place with the
+   reason printed rather than a row that silently does nothing). */
+const INDICATOR_ITEMS: { key: keyof ChartIndicators; label: string; hint: string; sub?: boolean }[] = [
   { key: 'ema9', label: 'EMA 9', hint: '9-bar exponential moving average' },
   { key: 'ema21', label: 'EMA 21', hint: '21-bar exponential moving average' },
   { key: 'ema50', label: 'EMA 50', hint: '50-bar exponential moving average' },
+  { key: 'sma', label: 'SMA 200', hint: 'The long classic the EMA trio does not cover' },
   { key: 'vwap', label: 'VWAP', hint: 'Volume-weighted average price, session-anchored' },
+  { key: 'vwapBands', label: 'VWAP bands', hint: '±1σ and ±2σ around the session VWAP, volume-weighted' },
+  { key: 'bb', label: 'Bollinger', hint: 'SMA 20 ± 2σ — the squeeze and the stretch' },
+  { key: 'rsi', label: 'RSI 14', hint: 'Wilder momentum, 30/70 rails — its own pane below the tape', sub: true },
+  { key: 'macd', label: 'MACD', hint: '12/26 EMAs and their 9-EMA signal, with the histogram', sub: true },
+  { key: 'atrPane', label: 'ATR 14', hint: "This pane's bar-to-bar range — its own pane below the tape", sub: true },
 ];
 
 const OVERLAY_ITEMS: { key: keyof ChartOverlays; label: string; hint: string }[] = [
@@ -586,15 +598,33 @@ const ChartToolbar = ({
               menuSide={menuSide}
             >
               <div className="p-1.5 flex flex-col gap-0.5">
-                {INDICATOR_ITEMS.map(item => {
+                {INDICATOR_ITEMS.map((item, idx) => {
                   const on = indicators[item.key];
+                  const subsOn = SUB_PANE_ORDER.filter(k => indicators[k]).length;
+                  /* The third sub-pane is refused, not shrunk into — the same
+                     budget rule that caps Terrain at four panes. The row says
+                     so instead of silently ignoring the click. */
+                  const capped = !!item.sub && !on && subsOn >= MAX_SUB_PANES;
+                  const firstSub = INDICATOR_ITEMS.findIndex(i => i.sub);
                   return (
+                    <div key={item.key} className="contents">
+                    {idx === 0 && (
+                      <div className="px-2.5 pt-1 font-mono text-[9px] uppercase tracking-widest text-textMuted">On the tape</div>
+                    )}
+                    {idx === firstSub && (
+                      <div className="px-2.5 pt-2 font-mono text-[9px] uppercase tracking-widest text-textMuted">
+                        Own pane — two at most{capped ? '' : ''}
+                      </div>
+                    )}
                     <button
-                      key={item.key}
                       role="checkbox"
                       aria-checked={on}
+                      disabled={capped}
+                      title={capped ? 'Two sub-panes are the cap — turn one off first, or the tape shrinks past its floor' : undefined}
                       onClick={() => onIndicators({ ...indicators, [item.key]: !on })}
-                      className="flex items-start gap-2.5 px-2.5 py-2 rounded text-left hover:bg-white/[0.03] transition-colors"
+                      className={`flex items-start gap-2.5 px-2.5 py-2 rounded text-left transition-colors ${
+                        capped ? 'opacity-40 cursor-default' : 'hover:bg-white/[0.03]'
+                      }`}
                     >
                       <span
                         className={`mt-px inline-flex w-3.5 h-3.5 shrink-0 items-center justify-center rounded-[3px] border ${
@@ -617,6 +647,7 @@ const ChartToolbar = ({
                         <span className="block text-[10px] text-textSecondary leading-snug">{item.hint}</span>
                       </span>
                     </button>
+                    </div>
                   );
                 })}
               </div>

@@ -1251,14 +1251,25 @@ head('no menu hangs off the edge of the window');
     });
     const offEdge = [];
     for (let i = 0; i < count; i++) {
-      await page.evaluate(i => {
+      /* The strip is hover-revealed furniture: if a re-render swaps it out
+         between iterations, that is a legible FAIL for this run, not a crash
+         that takes the other forty sections down with it (a run died exactly
+         this way on 2026-08-27 — TypeError mid-loop, everything after lost). */
+      const clicked = await page.evaluate(i => {
         const s = [...document.querySelectorAll('div')].find(
           e => typeof e.className === 'string' && e.className.includes('inset-x-0') && e.className.includes('z-20')
         );
+        if (!s) return false;
         const bs = [...s.querySelectorAll('button[aria-haspopup="menu"]')];
+        if (!bs[i]) return false;
         bs.forEach(b => { if (b.getAttribute('aria-expanded') === 'true') b.click(); });
         bs[i].click();
+        return true;
       }, i);
+      if (!clicked) {
+        bad(`${w}x${h}: the pane strip vanished mid-walk at trigger ${i} of ${count}`);
+        continue;
+      }
       await page.waitForTimeout(450); // let the width feed back into the placement
       const r = await page.evaluate(() => {
         const m =
@@ -3977,6 +3988,85 @@ head('the event lane draws, and a glyph answers with its card');
   hasRow ? ok('the Overlays menu offers the Events row') : bad('no Events row in the Overlays menu');
 
   errs.length === 0 ? ok('no page errors with the lane on') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   T-3/T-4. SUB-PANES AND THE GROWN INDICATOR SET.
+
+   The math is proved headless (scripts/oscillators-proof.ts — Wilder RSI and
+   bar-ATR, MACD off the tape's own seeded EMAs, Bollinger, the VWAP σ). The
+   browser owns the FRAMEWORK: that enabling RSI and MACD really stacks two
+   panes under the tape with the tape keeping the lion's share of the height,
+   and that the THIRD sub-pane is refused in place — a disabled row with the
+   reason in its tooltip — rather than shrinking the tape past its floor.
+   ───────────────────────────────────────────────────────────────────────── */
+head('two sub-panes stack under the tape, and the third is refused with its reason');
+{
+  const seed = JSON.stringify({
+    layout: 1,
+    panes: [{
+      ticker: 'SPY', timeframe: '15m',
+      overlays: { trails: false, levels: false, darkpool: false, volume: true, flow: false, netDrift: false, volDrift: false, dexStrike: false, session: false, cone: false, events: false },
+      indicators: { ema9: false, ema21: true, ema50: false, vwap: true, bb: true, vwapBands: false, sma: false, rsi: true, macd: true, atrPane: false },
+      chartStyle: 'candles', compares: [], priceScale: 'normal', sessionOr: 15, ladder: false,
+    }],
+    setups: {},
+  });
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  await ctx.addInitScript(`localStorage.setItem('slayer_terrain_v1', ${JSON.stringify(seed)})`);
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 1500);
+
+  /* Pane heights read straight off the stacked canvases: each pane paints a
+     pair, the time axis a short pair at the bottom. */
+  const heights = await page.evaluate(() =>
+    [...new Set(
+      [...document.querySelectorAll('canvas')]
+        .map(c => c.getBoundingClientRect())
+        .filter(r => r.width > 400 && r.height > 40)
+        .map(r => Math.round(r.height))
+    )].sort((a, b) => b - a)
+  );
+  heights.length === 3
+    ? ok(`RSI and MACD each take a pane — three plots stacked (${heights.join(' / ')}px)`)
+    : bad(`expected 3 stacked plots, found heights ${JSON.stringify(heights)}`);
+  heights.length === 3 && heights[0] > (heights[1] + heights[2]) * 1.2
+    ? ok('and the tape keeps the lion\u2019s share of the height')
+    : bad(`the tape lost its floor: ${JSON.stringify(heights)}`);
+
+  /* The cap: with two sub-panes up, the third row is disabled and says why. */
+  const bb2 = await (await page.$$('.grid > div > div'))[0].boundingBox();
+  await page.mouse.move(bb2.x + 600, bb2.y + 400);
+  await page.waitForTimeout(500);
+  for (const b of await page.$$('[aria-haspopup="menu"]')) {
+    if (/Indicators/.test((await b.textContent()) ?? '')) { await b.click(); await page.waitForTimeout(400); break; }
+  }
+  let atrRow = null;
+  for (const item of await page.$$('[data-toolbar-menu] [role="checkbox"]')) {
+    if (/ATR 14/.test((await item.textContent()) ?? '')) atrRow = item;
+  }
+  atrRow ? ok('PREMISE: the ATR sub-pane row is offered') : bad('PREMISE: no ATR 14 row in the Indicators menu');
+  if (atrRow) {
+    (await atrRow.isDisabled())
+      ? ok('the third sub-pane is refused while two are up')
+      : bad('the cap did not disable the third sub-pane row');
+    const reason = (await atrRow.getAttribute('title')) ?? '';
+    reason.includes('cap')
+      ? ok('with the reason in the row\u2019s own tooltip')
+      : bad(`the refused row carries no reason — title ${JSON.stringify(reason)}`);
+  }
+  /* And the new overlays are offered alongside. */
+  const labels = [];
+  for (const item of await page.$$('[data-toolbar-menu] [role="checkbox"]')) labels.push(((await item.textContent()) ?? '').slice(0, 30));
+  ['SMA 200', 'VWAP bands', 'Bollinger', 'RSI 14', 'MACD'].every(l => labels.some(t => t.includes(l)))
+    ? ok('the grown set is on the menu — SMA 200, VWAP bands, Bollinger, RSI, MACD')
+    : bad(`menu rows missing: ${labels.join(' | ')}`);
+
+  errs.length === 0 ? ok('no page errors with two sub-panes up') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
 }
 
