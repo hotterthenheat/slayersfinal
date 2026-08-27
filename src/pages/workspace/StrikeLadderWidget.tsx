@@ -26,7 +26,7 @@ import { useFadeClose } from '../../components/ui/useFadeClose';
 import { buildExposureProfile, STRIKE_WINDOWS, type StrikeWindow } from '../../data/exposure';
 import { readHeatPattern } from '../../data/gex';
 import { netSinceOpenRatio } from '../../data/levelview';
-import { twinFamilyFor, twinLabel, twinPrice, twinBasis, fmtTwin, type TwinLensKey } from '../../data/indexTwins';
+import { twinFamilyFor, twinLabel, twinMeasureFor, twinPrice, fmtTwin, type TwinLensKey } from '../../data/indexTwins';
 import type { Tone } from '../../components/ui/tones';
 import type { ExposureExpiry, HeatPatternRead } from '../../types/gex';
 import type { WorkspaceCtx } from './registry';
@@ -126,11 +126,14 @@ const StrikeLadderWidget = ({ ctx }: { ctx: WorkspaceCtx }) => {
   // The engine names the book's configuration — the strip above the ladder
   // is its voice. Under a lens the levels convert FIRST, so the read prints
   // the instrument's prices.
+  /* T-17: one measurement per scan tick backs every conversion below. */
+  const tm = useMemo(() => (fam ? twinMeasureFor(fam) : null), [fam, data]);
+
   const pattern = useMemo(() => {
     if (!data) return null;
     const { levels } = data;
-    if (!fam || activeLens === 'etf') return readHeatPattern(levels);
-    const c = (v: number) => twinPrice(fam, activeLens, v, levels.spot);
+    if (!fam || !tm || activeLens === 'etf') return readHeatPattern(levels);
+    const c = (v: number) => twinPrice(fam, activeLens, v, tm);
     return readHeatPattern({
       spot: c(levels.spot),
       flip: c(levels.flip),
@@ -138,7 +141,7 @@ const StrikeLadderWidget = ({ ctx }: { ctx: WorkspaceCtx }) => {
       putWall: c(levels.putWall),
       king: c(levels.king),
     });
-  }, [data, fam, activeLens]);
+  }, [data, fam, tm, activeLens]);
 
   // The ghost spine's data — net at the open vs now, per strike — on the
   // same scan clock as the ladder.
@@ -150,10 +153,9 @@ const StrikeLadderWidget = ({ ctx }: { ctx: WorkspaceCtx }) => {
 
   // Strike column in the lens's terms — the ladder itself stays the ETF book.
   const strikeFormat = useMemo(() => {
-    if (!fam || activeLens === 'etf' || !data) return undefined;
-    const spot = data.levels.spot;
-    return (s: number) => fmtTwin(twinPrice(fam, activeLens, s, spot));
-  }, [fam, activeLens, data]);
+    if (!fam || !tm || activeLens === 'etf' || !data) return undefined;
+    return (s: number) => fmtTwin(twinPrice(fam, activeLens, s, tm));
+  }, [fam, tm, activeLens, data]);
 
   const body = (
     <div className="h-full min-h-0 flex flex-col">
@@ -179,10 +181,10 @@ const StrikeLadderWidget = ({ ctx }: { ctx: WorkspaceCtx }) => {
               options={(['etf', 'index', 'futures'] as TwinLensKey[]).map(k => ({ value: k, label: twinLabel(fam, k) }))}
               onChange={setLens}
             />
-            {data && (
+            {data && tm && (
               <span className="font-mono text-[9px] text-textMuted tnum">
-                {fam.futures} {fmtTwin(twinPrice(fam, 'futures', data.levels.spot, data.levels.spot))} · +
-                {fmtTwin(twinBasis(fam, data.levels.spot))} over {fam.index}
+                {fam.futures} {fmtTwin(twinPrice(fam, 'futures', data.levels.spot, tm))} · +
+                {fmtTwin(tm.basis)} over {fam.index} {tm.sampled > 0 ? `· measured ${tm.sampled}m` : '· inferred'}
               </span>
             )}
           </>
