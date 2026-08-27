@@ -81,6 +81,23 @@ export const TERMS = {
   // ---- expected-move cone (T-9) ----
   'Expected move cone':
     'The band options priced for today, drawn on the chart: the envelope since the open, and the cone still left from here to the bell. Price leaving the band means the move has already beaten what the options charged; the cone shrinking into the close is normal — less day left, less move left.',
+  // ---- event markers (T-11) ----
+  'Event markers':
+    'The calendar drawn on the chart: this name\u2019s next earnings, FOMC/CPI/NFP, and the session\u2019s biggest option prints, each marked at its bar. Hover a mark for the details.',
+  // ---- the indicator set (T-4) ----
+  'RSI 14':
+    'Wilder\u2019s momentum gauge, 0\u2013100. Above 70 the move is stretched, below 30 it\u2019s washed out \u2014 and staying pinned there is itself the signal on a trend day.',
+  MACD:
+    'Two EMAs\u2019 distance (12 vs 26) with its own 9-EMA signal. The histogram is the gap between them \u2014 momentum building or fading before price shows it.',
+  Bollinger:
+    'A 20-bar average with bands 2\u03c3 out. Tight bands mean the tape is coiling; a close outside them means it\u2019s stretched.',
+  'VWAP bands':
+    '\u00b11\u03c3 and \u00b12\u03c3 around the session VWAP, volume-weighted \u2014 how far price sits from where the day\u2019s money actually traded.',
+  // ---- distance units (T-19) ----
+  ATR:
+    'Average true range \u2014 how far this name typically travels in a session, gaps included. A wall 0.4 ATR away is the same distance on SPY and on NVDA.',
+  '\u03c3 distance':
+    'The move in implied one-day \u03c3 \u2014 how many of the moves the options are charging for. Past 1\u03c3, price has beaten what the options priced for the day.',
   // ---- multi-timeframe (T-12) ----
   'Timeframe trend':
     'Where price sits on each interval against its own EMA21 and VWAP. Above both reads up, below both reads down, and between them reads flat — the timeframes disagreeing is itself the signal.',

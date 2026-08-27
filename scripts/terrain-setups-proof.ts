@@ -47,7 +47,7 @@ const check = (name: string, ok: boolean, extra = '') => {
 const pane = (): SymbolSetup => ({
   timeframe: '1h',
   overlays: { ...DEFAULT_OVERLAYS, trails: true, levels: true, darkpool: false, volume: true },
-  indicators: { ema9: false, ema21: true, ema50: false, vwap: false },
+  indicators: { ...DEFAULT_INDICATORS, ema21: true },
   chartStyle: 'candles',
   compares: [],
   priceScale: 'normal',
@@ -193,8 +193,11 @@ check(
   JSON.stringify(legacyInd?.indicators)
 );
 /* Junk still yields nothing rather than a full set of invented values — the
-   floor that keeps the relaxed gate from accepting anything at all. */
-const poisonedInd = readSetup({ seen: 1, indicators: { ema9: 'yes', rsi: true } }, 'SPY');
+   floor that keeps the relaxed gate from accepting anything at all. The junk
+   key was `rsi` until T-4 promoted it to a real indicator (the exact
+   growth-path this validator exists for); the stand-in junk is one nothing
+   should ever promote. */
+const poisonedInd = readSetup({ seen: 1, indicators: { ema9: 'yes', hologram: true } }, 'SPY');
 check(
   'a half-typed indicators object yields no indicators at all',
   !!poisonedInd && !('indicators' in poisonedInd),

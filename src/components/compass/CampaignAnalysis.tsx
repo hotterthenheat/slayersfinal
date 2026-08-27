@@ -141,6 +141,9 @@ const CAMPAIGN_OVERLAY_DEFAULTS: ChartOverlays = {
      the DAY'S general claim, not this campaign's, and it is geometry across
      the whole tape. Not in `overlayKeys` below either. */
   cone: false,
+  /* The calendar lane joins the diet too — the campaign chart marks ITS OWN
+     entries and exits, and a second row of glyphs under them is clutter. */
+  events: false,
 };
 const loadChartPrefs = (): { timeframe: Timeframe; overlays: ChartOverlays } => {
   try {

@@ -1251,14 +1251,25 @@ head('no menu hangs off the edge of the window');
     });
     const offEdge = [];
     for (let i = 0; i < count; i++) {
-      await page.evaluate(i => {
+      /* The strip is hover-revealed furniture: if a re-render swaps it out
+         between iterations, that is a legible FAIL for this run, not a crash
+         that takes the other forty sections down with it (a run died exactly
+         this way on 2026-08-27 — TypeError mid-loop, everything after lost). */
+      const clicked = await page.evaluate(i => {
         const s = [...document.querySelectorAll('div')].find(
           e => typeof e.className === 'string' && e.className.includes('inset-x-0') && e.className.includes('z-20')
         );
+        if (!s) return false;
         const bs = [...s.querySelectorAll('button[aria-haspopup="menu"]')];
+        if (!bs[i]) return false;
         bs.forEach(b => { if (b.getAttribute('aria-expanded') === 'true') b.click(); });
         bs[i].click();
+        return true;
       }, i);
+      if (!clicked) {
+        bad(`${w}x${h}: the pane strip vanished mid-walk at trigger ${i} of ${count}`);
+        continue;
+      }
       await page.waitForTimeout(450); // let the width feed back into the placement
       const r = await page.evaluate(() => {
         const m =
@@ -3150,18 +3161,21 @@ head('the measure is reachable, and what it draws is a stored measure');
   if (pencil) {
     await pencil.click();
     await page.waitForTimeout(500);
-    const tools = await page.$$eval('button', bs =>
-      bs.map(b => b.textContent.trim()).filter(t => /^(Trend|Level|Measure)$/.test(t))
+    /* The rail's buttons are icon-only since the partner's round — names
+       ride aria-label. This section only cares that its three founding tools
+       are still offered and that Measure still measures. */
+    const tools = await page.$$eval('button[aria-label]', bs =>
+      bs.map(b => b.getAttribute('aria-label')).filter(t => /^(Trend|Level|Measure)$/.test(t))
     );
     tools.length === 3 && tools.includes('Measure')
-      ? ok(`draw mode offers three tools — ${tools.join(' · ')}`)
+      ? ok(`draw mode offers the founding three — ${tools.join(' · ')}`)
       : bad(`draw mode offered ${JSON.stringify(tools)}`);
 
     /* Pick Measure, then drag across the tape. A QUARTER in and a quarter
        wide, so both ends land on real bars rather than in the runway the
        chart holds open ahead of the last one. */
-    for (const b of await page.$$('button')) {
-      if ((await b.textContent())?.trim() === 'Measure') {
+    for (const b of await page.$$('button[aria-label]')) {
+      if ((await b.getAttribute('aria-label')) === 'Measure') {
         await b.click();
         break;
       }
@@ -3324,8 +3338,8 @@ head('replay has a door, says so on the pane, and keeps its moment to itself');
     await page.waitForTimeout(250);
     await page.keyboard.press('d');
     await page.waitForTimeout(900);
-    const tools = await page.$$eval('button', bs => bs.filter(b => b.textContent.trim() === 'Measure').length);
-    tools === 1 ? ok('`d` still opens draw mode where the pencil is shed') : bad(`\`d\` opened ${tools} tool strips at a compact width`);
+    const tools = await page.$$eval('button[aria-label="Measure"]', bs => bs.length);
+    tools === 1 ? ok('`d` still opens draw mode where the pencil is shed') : bad(`\`d\` opened ${tools} tool rails at a compact width`);
     const said = await page.$eval('span.sr-only[aria-live]', el => el.textContent.trim());
     /draw mode on$/.test(said) ? ok(`and announces it — ${JSON.stringify(said)}`) : bad(`\`d\` announced ${JSON.stringify(said)}`);
     await page.keyboard.press('p');
@@ -3421,6 +3435,28 @@ head('every Pinpoint tab opens with the flip already answered');
       ? ok(`${path}: the accessible name explains the regime, not just names it`)
       : bad(`${path}: the aria-label does not carry the mechanism — ${label.slice(0, 90)}`);
   }
+  /* T-19 rides the strip: the desk-wide unit picker is ON it, and choosing
+     ATR re-words the lead distance in that ruler (or as its honest em-dash
+     while the warmup holds — either way the unit's mark appears). */
+  {
+    const picker = await page.$('[role="group"][aria-label="Distance unit — desk-wide"]');
+    picker ? ok('the distance-unit picker rides the strip') : bad('no unit picker on the flip strip');
+    if (picker) {
+      for (const b of await picker.$$('button')) {
+        if (((await b.textContent()) ?? '').trim() === 'ATR') { await b.click(); break; }
+      }
+      await page.waitForTimeout(600);
+      const strip2 = await page.$('[role="status"][aria-label*="GAMMA"]');
+      const text2 = strip2 ? ((await strip2.textContent()) ?? '') : '';
+      /ATR/.test(text2)
+        ? ok('choosing ATR re-words the distance in the new ruler')
+        : bad(`the strip ignored the unit choice — ${text2.slice(0, 100)}`);
+      /%/.test(text2)
+        ? ok('with percent still riding second for the cross-check')
+        : bad('the constant second read vanished');
+    }
+  }
+
   errs.length === 0 ? ok('no page errors across the three tabs') : bad(`page errors: ${errs.join(' | ')}`);
   await ctx.close();
 }
@@ -3525,10 +3561,10 @@ head('thirteen tools on the rail, two of them take three anchors, the note takes
 
   /* The rail's buttons are icon-only — the names live in aria-label (and the
      tooltip), which is also what a screen reader gets. */
-  const RAIL = ['Trend', 'Ray', 'Extended', 'Arrow', 'Level', 'Moment', 'Box', 'Ellipse', 'Channel', 'Curve', 'Fib', 'Measure', 'Note'];
+  const RAIL = ['Select', 'Trend', 'Ray', 'Extended', 'Arrow', 'Level', 'Moment', 'Box', 'Ellipse', 'Channel', 'Curve', 'Fib', 'Measure', 'Note'];
   const tools = await page.$$eval('button[aria-label]', bs => bs.map(b => b.getAttribute('aria-label')));
   RAIL.every(t => tools.includes(t))
-    ? ok(`all thirteen tools are on the rail — ${RAIL.join(' · ')}`)
+    ? ok(`the pointer and all thirteen tools are on the rail — ${RAIL.join(' · ')}`)
     : bad(`the rail is missing ${RAIL.filter(t => !tools.includes(t)).join(', ')}`);
 
   const bb = await paneBox();
@@ -3628,6 +3664,56 @@ head('thirteen tools on the rail, two of them take three anchors, the note takes
   ['ray', 'rect', 'fib', 'channel', 'note', 'vline', 'extend', 'arrow', 'ellipse', 'curve'].every(k => after.includes(k))
     ? ok('all ten newer kinds survive a reload')
     : bad(`after a reload the store holds ${after.join(',')}`);
+
+  /*
+    THE EDITOR — select, move, delete ONE. Driven on a fresh level drawn
+    after the reload, because the pre-reload marks' pixel positions belong
+    to the pre-reload autoscale and aiming at them is aiming at a memory.
+    The level is the drag target of choice here: it spans the full width, so
+    the click only has to be right about the PRICE, and the axis-parallel
+    hit tolerance (8px) covers the tape's drift between frames.
+  */
+  {
+    const bb2 = await paneBox();
+    await page.mouse.click(bb2.x + 200, bb2.y + 300);
+    await page.waitForTimeout(200);
+    await page.keyboard.press('d');
+    await page.waitForTimeout(600);
+    const countBefore = (await stored()).length;
+    const deleteDisabled = async () => {
+      for (const b of await page.$$('button[aria-label="Delete selected"]')) return await b.isDisabled();
+      return null;
+    };
+    await pick('Level');
+    await page.mouse.click(bb2.x + bb2.width * 0.5, bb2.y + bb2.height * 0.28);
+    await page.waitForTimeout(300);
+    const levels0 = (await stored()).filter(d => d.kind === 'hline');
+    levels0.length === 1 ? ok('PREMISE: one fresh level to edit') : bad(`PREMISE: ${levels0.length} levels stored`);
+    (await deleteDisabled()) === true ? ok('Delete is disabled while nothing is selected') : bad('Delete armed with no selection');
+    await pick('Select');
+    await page.mouse.click(bb2.x + bb2.width * 0.5, bb2.y + bb2.height * 0.28);
+    await page.waitForTimeout(250);
+    (await deleteDisabled()) === false ? ok('clicking a mark selects it — Delete arms') : bad('the click selected nothing');
+    await page.mouse.move(bb2.x + bb2.width * 0.5, bb2.y + bb2.height * 0.28);
+    await page.mouse.down();
+    await page.mouse.move(bb2.x + bb2.width * 0.5, bb2.y + bb2.height * 0.45, { steps: 4 });
+    await page.mouse.up();
+    await page.waitForTimeout(350);
+    const levels1 = (await stored()).filter(d => d.kind === 'hline');
+    levels1[0] && levels0[0] && levels1[0].p1.price !== levels0[0].p1.price
+      ? ok(`a body-drag moves the mark — ${levels0[0].p1.price.toFixed(2)} → ${levels1[0].p1.price.toFixed(2)}`)
+      : bad('the drag moved nothing');
+    for (const b of await page.$$('button[aria-label="Delete selected"]')) if (!(await b.isDisabled())) await b.click();
+    await page.waitForTimeout(300);
+    const afterDel = await stored();
+    afterDel.length === countBefore && !afterDel.some(d => d.kind === 'hline')
+      ? ok('Delete removes exactly the selected mark; the rest survive')
+      : bad(`after delete the store holds ${afterDel.map(d => d.kind).join(',')}`);
+    await page.mouse.click(bb2.x + bb2.width * 0.8, bb2.y + bb2.height * 0.06);
+    await page.waitForTimeout(250);
+    (await deleteDisabled()) === true ? ok('an empty click puts the selection down') : bad('the selection survived an empty click');
+  }
+
   errs.length === 0 ? ok('no page errors through the tour') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
 }
@@ -3815,6 +3901,173 @@ head('the expected move draws its envelope and its runway cone, and leaves the a
       ? ok(`the price gutter is ${gOn}px with the cone on or off — nothing named on the axis`)
       : bad(`the cone moved the price gutter: ${gOff}px off, ${gOn}px on`);
   }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   T-11. EVENT MARKERS — the calendar on the tape, with a card on hover.
+
+   The engine is proved headless (scripts/events-proof.ts): placement, the
+   sessions bridge, the print floor and cap. The browser owns two things —
+   that the lane's glyphs are really there to hover, and that hovering one
+   opens a card naming a real event kind.
+
+   ZOOMED OUT FIRST, deliberately: the macro dates nearest "now" sit days to
+   weeks from the last bar, so at the default ~5-day view the lane is often
+   legitimately empty — the first cut of this probe read that emptiness as a
+   broken overlay. Ten wheel-notches pull the buffer's weeks into view, where
+   the monthly CPI/NFP cadence guarantees at least one mark on screen.
+
+   THE SCAN STAYS IN THE LEFT HALF: the pane's bottom-right corner carries
+   the arrangement cluster as a sibling of the chart wrapper, so hovers
+   there never reach the handler (documented in eventsPrimitive.ts) — a
+   sweep that scanned into it would flake on geometry, not on the feature.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the event lane draws, and a glyph answers with its card');
+{
+  const seed = JSON.stringify({
+    layout: 1,
+    panes: [{
+      ticker: 'NVDA', timeframe: '15m',
+      overlays: { trails: false, levels: false, darkpool: false, volume: false, flow: false, netDrift: false, volDrift: false, dexStrike: false, session: false, cone: false, events: true },
+      indicators: { ema9: false, ema21: false, ema50: false, vwap: false },
+      chartStyle: 'candles', compares: [], priceScale: 'normal', sessionOr: 15, ladder: false,
+    }],
+    setups: {},
+  });
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  await ctx.addInitScript(`localStorage.setItem('slayer_terrain_v1', ${JSON.stringify(seed)})`);
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 1500);
+
+  const bb = await (await page.$$('.grid > div > div'))[0].boundingBox();
+  await page.mouse.move(bb.x + bb.width * 0.5, bb.y + bb.height * 0.5);
+  for (let i = 0; i < 10; i++) { await page.mouse.wheel(0, 480); await page.waitForTimeout(120); }
+  await page.waitForTimeout(600);
+
+  /* Walk the lane until a card opens. 6px steps against a ±7px hit window,
+     left half only. */
+  let card = null;
+  const laneY = bb.y + bb.height - 38;
+  for (let x = bb.x + 30; x < bb.x + bb.width * 0.55 && !card; x += 6) {
+    await page.mouse.move(x, laneY);
+    await page.waitForTimeout(30);
+    card = await page.evaluate(() => {
+      const el = [...document.querySelectorAll('div')].find(d => typeof d.className === 'string' && d.className.includes('bottom-9'));
+      return el ? el.textContent : null;
+    });
+  }
+  card !== null
+    ? ok(`a glyph answers with its card — ${String(card).slice(0, 60)}`)
+    : bad('no hover card anywhere along the lane');
+  card !== null && /(CPI|NFP|FOMC|earnings|print)/i.test(String(card))
+    ? ok('and the card names a real event kind')
+    : bad(`the card says ${JSON.stringify(String(card ?? '').slice(0, 80))}`);
+  /* Off the lane, the card closes — the readout row above must not fight a
+     phantom card. */
+  await page.mouse.move(bb.x + bb.width * 0.4, bb.y + bb.height * 0.3);
+  await page.waitForTimeout(300);
+  const gone = await page.evaluate(() => ![...document.querySelectorAll('div')].some(d => typeof d.className === 'string' && d.className.includes('bottom-9')));
+  gone ? ok('and closes once the pointer leaves the lane') : bad('the card survived leaving the lane');
+
+  /* The toolbar offers the row. */
+  const menuOpen = async () => (await page.$$('[data-toolbar-menu] [role="checkbox"]')).length > 0;
+  await page.mouse.move(bb.x + 600, bb.y + 400);
+  await page.waitForTimeout(500);
+  if (!(await menuOpen())) {
+    for (const b of await page.$$('[aria-haspopup="menu"]')) {
+      if (/Overlays/.test((await b.textContent()) ?? '')) { await b.click(); await page.waitForTimeout(400); break; }
+    }
+  }
+  let hasRow = false;
+  for (const item of await page.$$('[data-toolbar-menu] [role="checkbox"]')) {
+    if (/Events/.test((await item.textContent()) ?? '')) hasRow = true;
+  }
+  hasRow ? ok('the Overlays menu offers the Events row') : bad('no Events row in the Overlays menu');
+
+  errs.length === 0 ? ok('no page errors with the lane on') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   T-3/T-4. SUB-PANES AND THE GROWN INDICATOR SET.
+
+   The math is proved headless (scripts/oscillators-proof.ts — Wilder RSI and
+   bar-ATR, MACD off the tape's own seeded EMAs, Bollinger, the VWAP σ). The
+   browser owns the FRAMEWORK: that enabling RSI and MACD really stacks two
+   panes under the tape with the tape keeping the lion's share of the height,
+   and that the THIRD sub-pane is refused in place — a disabled row with the
+   reason in its tooltip — rather than shrinking the tape past its floor.
+   ───────────────────────────────────────────────────────────────────────── */
+head('two sub-panes stack under the tape, and the third is refused with its reason');
+{
+  const seed = JSON.stringify({
+    layout: 1,
+    panes: [{
+      ticker: 'SPY', timeframe: '15m',
+      overlays: { trails: false, levels: false, darkpool: false, volume: true, flow: false, netDrift: false, volDrift: false, dexStrike: false, session: false, cone: false, events: false },
+      indicators: { ema9: false, ema21: true, ema50: false, vwap: true, bb: true, vwapBands: false, sma: false, rsi: true, macd: true, atrPane: false },
+      chartStyle: 'candles', compares: [], priceScale: 'normal', sessionOr: 15, ladder: false,
+    }],
+    setups: {},
+  });
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  await ctx.addInitScript(`localStorage.setItem('slayer_terrain_v1', ${JSON.stringify(seed)})`);
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 1500);
+
+  /* Pane heights read straight off the stacked canvases: each pane paints a
+     pair, the time axis a short pair at the bottom. */
+  const heights = await page.evaluate(() =>
+    [...new Set(
+      [...document.querySelectorAll('canvas')]
+        .map(c => c.getBoundingClientRect())
+        .filter(r => r.width > 400 && r.height > 40)
+        .map(r => Math.round(r.height))
+    )].sort((a, b) => b - a)
+  );
+  heights.length === 3
+    ? ok(`RSI and MACD each take a pane — three plots stacked (${heights.join(' / ')}px)`)
+    : bad(`expected 3 stacked plots, found heights ${JSON.stringify(heights)}`);
+  heights.length === 3 && heights[0] > (heights[1] + heights[2]) * 1.2
+    ? ok('and the tape keeps the lion\u2019s share of the height')
+    : bad(`the tape lost its floor: ${JSON.stringify(heights)}`);
+
+  /* The cap: with two sub-panes up, the third row is disabled and says why. */
+  const bb2 = await (await page.$$('.grid > div > div'))[0].boundingBox();
+  await page.mouse.move(bb2.x + 600, bb2.y + 400);
+  await page.waitForTimeout(500);
+  for (const b of await page.$$('[aria-haspopup="menu"]')) {
+    if (/Indicators/.test((await b.textContent()) ?? '')) { await b.click(); await page.waitForTimeout(400); break; }
+  }
+  let atrRow = null;
+  for (const item of await page.$$('[data-toolbar-menu] [role="checkbox"]')) {
+    if (/ATR 14/.test((await item.textContent()) ?? '')) atrRow = item;
+  }
+  atrRow ? ok('PREMISE: the ATR sub-pane row is offered') : bad('PREMISE: no ATR 14 row in the Indicators menu');
+  if (atrRow) {
+    (await atrRow.isDisabled())
+      ? ok('the third sub-pane is refused while two are up')
+      : bad('the cap did not disable the third sub-pane row');
+    const reason = (await atrRow.getAttribute('title')) ?? '';
+    reason.includes('cap')
+      ? ok('with the reason in the row\u2019s own tooltip')
+      : bad(`the refused row carries no reason — title ${JSON.stringify(reason)}`);
+  }
+  /* And the new overlays are offered alongside. */
+  const labels = [];
+  for (const item of await page.$$('[data-toolbar-menu] [role="checkbox"]')) labels.push(((await item.textContent()) ?? '').slice(0, 30));
+  ['SMA 200', 'VWAP bands', 'Bollinger', 'RSI 14', 'MACD'].every(l => labels.some(t => t.includes(l)))
+    ? ok('the grown set is on the menu — SMA 200, VWAP bands, Bollinger, RSI, MACD')
+    : bad(`menu rows missing: ${labels.join(' | ')}`);
+
+  errs.length === 0 ? ok('no page errors with two sub-panes up') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
 }
 
 console.log(`\n${fails} failing`);

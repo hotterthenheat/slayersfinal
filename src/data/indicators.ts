@@ -4,7 +4,7 @@ import type { Candle } from '../types/market';
 ==================================================
   SLAYER TERMINAL - INDICATOR SERIES (data/indicators.ts)
 
-  The two curves the tape draws, as plain numbers.
+  Every indicator the tape draws, as plain numbers.
 ==================================================
 
   WHY THEY LEFT THE CHART.
@@ -101,6 +101,183 @@ export function vwapSeries(bars: readonly Candle[], barMinutes: number): number[
     pv += typical * b.volume;
     vol += b.volume;
     out.push(vol > 0 ? pv / vol : b.close);
+  }
+  return out;
+}
+
+/*
+  ──────────────────────────────────────────────────────────────────────────
+  THE T-4 SET. Two conventions live in this file now, and the difference is
+  deliberate:
+
+  · emaSeries / vwapSeries are SEEDED — full-length, no nulls — because that
+    is what the tape has always drawn and moving those lines would move
+    something readers already read.
+  · Everything below is WARMED UP — null until the window it claims to
+    summarise actually exists. An RSI printed off three bars is a number the
+    app cannot source, and the chart maps a null to whitespace, not to zero.
+  ──────────────────────────────────────────────────────────────────────────
+*/
+
+/**
+ * Wilder's RSI. Null through index `period` − the first value sits ON the
+ * bar that completes the seed window (period changes need period+1 bars).
+ * A lossless window reads 100 and a gainless one 0, per Wilder.
+ */
+export function rsiSeries(bars: readonly Candle[], period = 14): (number | null)[] {
+  const out: (number | null)[] = new Array(bars.length).fill(null);
+  if (period < 1 || bars.length <= period) return out;
+  let g = 0;
+  let l = 0;
+  for (let i = 1; i <= period; i++) {
+    const ch = bars[i].close - bars[i - 1].close;
+    if (ch >= 0) g += ch;
+    else l -= ch;
+  }
+  g /= period;
+  l /= period;
+  const rsiOf = () => (l === 0 ? (g === 0 ? 50 : 100) : 100 - 100 / (1 + g / l));
+  out[period] = rsiOf();
+  for (let i = period + 1; i < bars.length; i++) {
+    const ch = bars[i].close - bars[i - 1].close;
+    g = (g * (period - 1) + Math.max(0, ch)) / period;
+    l = (l * (period - 1) + Math.max(0, -ch)) / period;
+    out[i] = rsiOf();
+  }
+  return out;
+}
+
+export interface MacdSeries {
+  macd: (number | null)[];
+  signal: (number | null)[];
+  /** macd − signal, the bars under the lines. */
+  hist: (number | null)[];
+}
+
+/**
+ * MACD off the SAME seeded EMAs the tape draws (emaSeries), nulled through
+ * each part's own warmup: the macd line until the slow EMA has settled
+ * (emaWarmup(slow)), the signal until its own EMA of the macd has settled on
+ * top of that. Two warmups, because the signal cannot be older than the line
+ * it smooths.
+ */
+export function macdSeries(bars: readonly Candle[], fast = 12, slow = 26, signal = 9): MacdSeries {
+  const n = bars.length;
+  const macd: (number | null)[] = new Array(n).fill(null);
+  const sig: (number | null)[] = new Array(n).fill(null);
+  const hist: (number | null)[] = new Array(n).fill(null);
+  if (n === 0) return { macd, signal: sig, hist };
+  const ef = emaSeries(bars, fast);
+  const es = emaSeries(bars, slow);
+  const from = emaWarmup(slow);
+  const k = 2 / (signal + 1);
+  let s: number | null = null;
+  for (let i = from; i < n; i++) {
+    const m = ef[i] - es[i];
+    macd[i] = m;
+    s = s === null ? m : m * k + s * (1 - k);
+    if (i >= from + emaWarmup(signal)) {
+      sig[i] = s;
+      hist[i] = m - s;
+    }
+  }
+  return { macd, signal: sig, hist };
+}
+
+export interface BollingerSeries {
+  basis: (number | null)[];
+  upper: (number | null)[];
+  lower: (number | null)[];
+}
+
+/**
+ * Bollinger bands: SMA(period) ± k·σ, population σ over the same window.
+ * Null until a full window exists.
+ */
+export function bollingerSeries(bars: readonly Candle[], period = 20, k = 2): BollingerSeries {
+  const n = bars.length;
+  const basis: (number | null)[] = new Array(n).fill(null);
+  const upper: (number | null)[] = new Array(n).fill(null);
+  const lower: (number | null)[] = new Array(n).fill(null);
+  for (let i = period - 1; i < n; i++) {
+    let sum = 0;
+    for (let j = i - period + 1; j <= i; j++) sum += bars[j].close;
+    const mid = sum / period;
+    let v = 0;
+    for (let j = i - period + 1; j <= i; j++) v += (bars[j].close - mid) ** 2;
+    const sd = Math.sqrt(v / period);
+    basis[i] = mid;
+    upper[i] = mid + k * sd;
+    lower[i] = mid - k * sd;
+  }
+  return { basis, upper, lower };
+}
+
+/** Plain SMA of closes, null until a full window exists. */
+export function smaSeries(bars: readonly Candle[], period: number): (number | null)[] {
+  const out: (number | null)[] = new Array(bars.length).fill(null);
+  if (period < 1) return out;
+  let sum = 0;
+  for (let i = 0; i < bars.length; i++) {
+    sum += bars[i].close;
+    if (i >= period) sum -= bars[i - period].close;
+    if (i >= period - 1) out[i] = sum / period;
+  }
+  return out;
+}
+
+/**
+ * The volume-weighted σ around the session VWAP, per bar — the ruler the
+ * VWAP bands are k of. Same anchor rule as the VWAP itself (sessionStarts),
+ * computed off the same typical prices, so the band and its centre line
+ * cannot disagree about where the session began. σ is null on a bar with no
+ * volume behind it yet — a band of width zero would claim certainty, not
+ * absence.
+ */
+export function vwapSigmaSeries(bars: readonly Candle[], barMinutes: number): (number | null)[] {
+  const out: (number | null)[] = new Array(bars.length).fill(null);
+  if (bars.length === 0) return out;
+  const starts = new Set(sessionStarts(bars, barMinutes));
+  let cumV = 0;
+  let cumPV = 0;
+  let cumP2V = 0;
+  for (let i = 0; i < bars.length; i++) {
+    if (starts.has(i)) {
+      cumV = 0;
+      cumPV = 0;
+      cumP2V = 0;
+    }
+    const typ = (bars[i].high + bars[i].low + bars[i].close) / 3;
+    cumV += bars[i].volume;
+    cumPV += typ * bars[i].volume;
+    cumP2V += typ * typ * bars[i].volume;
+    if (cumV > 0) {
+      const vwap = cumPV / cumV;
+      out[i] = Math.sqrt(Math.max(0, cumP2V / cumV - vwap * vwap));
+    }
+  }
+  return out;
+}
+
+/**
+ * Wilder's ATR over the DISPLAYED bars — the sub-pane's line, in this
+ * pane's own interval, distinct from data/atr.ts's session ATR (T-19's
+ * ruler): a 5-minute pane's ATR sub-pane answers "how big are 5-minute
+ * bars lately", the ruler answers "how big is a day". Null through the
+ * seed window.
+ */
+export function atrBarSeries(bars: readonly Candle[], period = 14): (number | null)[] {
+  const out: (number | null)[] = new Array(bars.length).fill(null);
+  if (period < 1 || bars.length <= period) return out;
+  const tr = (i: number) =>
+    Math.max(bars[i].high - bars[i].low, Math.abs(bars[i].high - bars[i - 1].close), Math.abs(bars[i].low - bars[i - 1].close));
+  let atr = 0;
+  for (let i = 1; i <= period; i++) atr += tr(i);
+  atr /= period;
+  out[period] = atr;
+  for (let i = period + 1; i < bars.length; i++) {
+    atr = (atr * (period - 1) + tr(i)) / period;
+    out[i] = atr;
   }
   return out;
 }
