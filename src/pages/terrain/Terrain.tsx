@@ -3,6 +3,7 @@ import { Maximize2, Minimize2, Rows3, X } from 'lucide-react';
 import Simulator from '../../core/simulator';
 import { useMarketData } from '../../context/MarketDataContext';
 import DistanceUnitPicker from '../../components/ui/DistanceUnitPicker';
+import { futuresPhaseAt, FUTURES_PHASE_WORDS } from '../../core/calendar';
 import { buildLadderFor, buildLevelsFor, buildPrints, fmtUsd, spotChangePct } from '../../data/gex';
 import StrikeChart, {
   PRICE_SCALE_MIN_WIDTH,
@@ -2040,6 +2041,24 @@ const Terrain = () => {
         <span className="pointer-events-auto inline-flex rounded-md border border-white/[0.08] bg-canvas/40 backdrop-blur-[3px] px-1 py-0.5">
           <DistanceUnitPicker dense />
         </span>
+
+        {/* T-16's first piece: WHERE IN THE GLOBEX WEEK the wall clock sits.
+            The session shading down the pane waits on the futures tape (MKT
+            Futures — there are no overnight bars to shade yet); the chip is
+            the real fact available today, re-read on every tick's render. */}
+        {(() => {
+          const words = FUTURES_PHASE_WORDS[futuresPhaseAt(new Date())];
+          return (
+            <span
+              title={`${words.blurb}. Session shading over the tape arrives with the futures feed.`}
+              className={`pointer-events-auto inline-flex items-center px-2 py-1.5 rounded-md border border-white/[0.08] bg-canvas/40 backdrop-blur-[3px] font-mono text-[10px] uppercase tracking-wider ${
+                words.label === 'RTH' ? 'text-textPrimary' : 'text-textSecondary'
+              }`}
+            >
+              {words.label}
+            </span>
+          );
+        })()}
 
         {expanded !== null && (
           <button

@@ -145,3 +145,67 @@ export function expiryFor(dte: number, from: Date = today()): Expiry {
 */
 export const RTH_HOURS = 6.5;
 export const RTH_MINUTES = RTH_HOURS * 60;
+
+/*
+  ══ T-16 — THE FUTURES CLOCK ══════════════════════════════════════════════
+
+  The equity tape this desk draws stops at 16:00; the futures market that
+  decides the next open barely stops at all. This model knows WHERE IN THE
+  GLOBEX WEEK a wall-clock instant sits — the first piece of T-16, and the
+  piece that is pure calendar. The overnight TAPE (session shading down the
+  pane, the overnight high/low carried into the open) waits on MKT Futures:
+  there is no honest way to shade an Asia session over bars that do not
+  exist, so the chip ships now and the shading ships with the feed.
+
+  THE WEEK, in New York wall time (DST rides free — every read goes through
+  America/New_York, never a fixed UTC offset):
+
+    Sunday 18:00 the week opens · Mon–Thu 17:00→18:00 daily maintenance ·
+    Friday 17:00 the week closes. Inside a trading day:
+      18:00 → 03:00  GLOBEX · ASIA
+      03:00 → 09:30  GLOBEX · EUROPE   (London at the desk's 03:00)
+      09:30 → 16:00  RTH               (the cash session this desk draws)
+      16:00 → 17:00  GLOBEX · POST     (the hour after the cash close)
+
+  HOLIDAYS ARE AN APPROXIMATION, and say so here: CME trades shortened
+  hours on most equity holidays, but the desk's holiday table is the cash
+  market's — a holiday reads CLOSED until the futures feed carries the real
+  product calendar. Early closes (day-after-Thanksgiving et al.) are out of
+  scope for the same reason.
+*/
+export type FuturesPhase = 'GLOBEX_ASIA' | 'GLOBEX_EUROPE' | 'RTH' | 'GLOBEX_POST' | 'MAINTENANCE' | 'CLOSED';
+
+export const FUTURES_PHASE_WORDS: Record<FuturesPhase, { label: string; blurb: string }> = {
+  GLOBEX_ASIA: { label: 'GLOBEX · ASIA', blurb: 'The overnight session, Asia hours — the open is being decided out here' },
+  GLOBEX_EUROPE: { label: 'GLOBEX · EUROPE', blurb: 'The overnight session, European hours — London is trading the same book' },
+  RTH: { label: 'RTH', blurb: 'The cash session — the hours every tape on this desk draws' },
+  GLOBEX_POST: { label: 'GLOBEX · POST', blurb: 'Futures still trading in the hour after the cash close' },
+  MAINTENANCE: { label: 'MAINTENANCE', blurb: 'The daily 17:00–18:00 ET Globex break — no futures trade in it' },
+  CLOSED: { label: 'CLOSED', blurb: 'The futures week runs Sunday 18:00 to Friday 17:00 ET — this is outside it' },
+};
+
+const ET_FMT = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York',
+  weekday: 'short',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+});
+
+/** Where a wall-clock instant sits in the Globex week. */
+export function futuresPhaseAt(now: Date): FuturesPhase {
+  const parts = Object.fromEntries(ET_FMT.formatToParts(now).map(pt => [pt.type, pt.value]));
+  const weekday = String(parts.weekday ?? '');
+  const mins = (Number(parts.hour) % 24) * 60 + Number(parts.minute);
+
+  if (MARKET_HOLIDAYS.has(isoDate(new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }))))) return 'CLOSED';
+  if (weekday === 'Sat') return 'CLOSED';
+  if (weekday === 'Sun') return mins >= 18 * 60 ? 'GLOBEX_ASIA' : 'CLOSED';
+  if (weekday === 'Fri' && mins >= 17 * 60) return 'CLOSED';
+  if (mins >= 18 * 60) return 'GLOBEX_ASIA';
+  if (mins >= 17 * 60) return 'MAINTENANCE';
+  if (mins >= 16 * 60) return 'GLOBEX_POST';
+  if (mins >= 9 * 60 + 30) return 'RTH';
+  if (mins >= 3 * 60) return 'GLOBEX_EUROPE';
+  return 'GLOBEX_ASIA';
+}

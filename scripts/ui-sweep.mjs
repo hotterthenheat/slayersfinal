@@ -4179,6 +4179,16 @@ head('a 15s pane says live only, and the chip leaves with the timeframe');
   (await pickTf('15s')) ? ok('the 15s row is on the picker') : bad('no 15s chip on the picker');
   (await chipText()) !== null ? ok('and returning to 15s brings the chip back') : bad('no chip after returning to 15s');
 
+  /* T-16's chip rides the same desk — the phase model is proof-covered
+     (scripts/globex-proof.ts); the sweep asserts the desk WEARS it. */
+  const globex = await page.evaluate(() => {
+    const el = [...document.querySelectorAll('span')].find(sp => /^(GLOBEX · (ASIA|EUROPE|POST)|RTH|MAINTENANCE|CLOSED)$/.test(sp.textContent?.trim() ?? ''));
+    return el ? { text: el.textContent.trim(), titled: !!el.getAttribute('title') } : null;
+  });
+  globex && globex.titled
+    ? ok(`the desk says where the Globex week is — ${globex.text}, with its words on hover`)
+    : bad('no futures-clock chip on the desk cluster');
+
   errs.length === 0 ? ok('no page errors across the sub-minute round-trip') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
 }
