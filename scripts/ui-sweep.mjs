@@ -3469,6 +3469,14 @@ head('the total has a timeline and a rank, and each states its basis');
     ? ok('and the gap reads as which mass leans where')
     : bad('the gap is a bare number with no read');
 
+  /* P-9 — three flips, and the spread stated as a sentence. */
+  /The Flip, By Expiry/i.test(body2) && /Whole book/i.test(body2) && /Weekly/i.test(body2)
+    ? ok('the flip is answered per expiry — 0DTE, weekly, whole book')
+    : bad('the by-expiry flip panel is missing');
+  /(Spread \d|The lenses agree|No spread)/.test(body2)
+    ? ok('with the spread read out, agreement and no-flip included')
+    : bad('the spread line is missing its sentence');
+
   errs.length === 0 ? ok('no page errors on either landing') : bad(`page errors: ${errs.join(' | ')}`);
   await ctx.close();
 }

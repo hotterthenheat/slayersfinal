@@ -17,7 +17,7 @@
   6. The regime is the SIDE of the flip, and thin history reports null, not 0
 */
 import { pickFlip } from '../src/core/walls';
-import { GAUGE_MIN_BARS, REGIME_WORDS, buildFlipGauge, countFlipCrossings } from '../src/data/flipGauge';
+import { GAUGE_MIN_BARS, REGIME_WORDS, buildExpiryFlips, buildFlipGauge, countFlipCrossings } from '../src/data/flipGauge';
 import { buildExposureProfile } from '../src/data/exposure';
 import { buildLevelsFor } from '../src/data/gex';
 import { buildVannaCharm } from '../src/data/vannacharm';
@@ -169,6 +169,40 @@ const stage = (rows: { bar: Candle; snap: GexSnapshot }[]) => ({
   }
   check(`a full session reports a crossing COUNT (bars ${g.bars} ≥ ${GAUGE_MIN_BARS})`, g.crossings !== null && g.crossings >= 0, String(g.crossings));
   check('both regimes have words, and the words name the mechanism', REGIME_WORDS.SHORT.blurb.includes('amplif') && REGIME_WORDS.LONG.blurb.includes('absorb'));
+}
+
+// ── P-9. the flip, by expiry ──────────────────────────────────────────────
+{
+  /*
+    THE SEAM CLAIM: each lens's flip is the shared rule over THAT LENS'S OWN
+    windowed profile — the same numbers the map and the matrix draw for it.
+    A "0DTE flip" computed off anything else could disagree with the page it
+    sits on, which is the failure this feature exists to avoid.
+  */
+  const snap = Simulator.snapshotFor('SPY');
+  const f = buildExpiryFlips(snap);
+  for (const [key, expiry] of [['d0', '0DTE'], ['weekly', '7D'], ['book', 'ALL']] as const) {
+    const prof = buildExposureProfile(snap, expiry, 15);
+    const expect = pickFlip(prof.strikes, snap.spot, s => s.gex.net);
+    check(`the ${key} flip is the shared rule over the ${expiry} lens's own profile`, f[key] === expect, `${f[key]} vs ${expect}`);
+  }
+  check('the spread is book − 0DTE', f.d0 !== null && f.book !== null ? Math.abs((f.spread ?? NaN) - (f.book - f.d0)) < 1e-9 : f.spread === null, String(f.spread));
+
+  /*
+    AND THE LENSES REALLY CAN DISAGREE — the whole reason three numbers beat
+    one. Scanned across the roster rather than staged: the divergence comes
+    from the expiry-seeded jitter tilting near-balanced strikes, and across
+    sixty books some strikes are always near balance (measured 4/10 on the
+    watchlist alone; the chance of a 60-name scan finding none is ~(0.6)^60).
+  */
+  const roster = ['SPY','QQQ','AAPL','NVDA','TSLA','META','MSFT','AMZN','GOOGL','AMD','NFLX','AVGO','COIN','PLTR','JPM','ORCL','CRM','UBER','MU','BA','DIS','INTC'];
+  let diverging = 0;
+  for (const t of roster) {
+    const x = buildExpiryFlips(Simulator.snapshotFor(t));
+    const set = new Set([x.d0, x.weekly, x.book].map(v => (v === null ? 'null' : v.toFixed(2))));
+    if (set.size > 1) diverging++;
+  }
+  check(`the lenses disagree somewhere on the roster — three numbers, not one number three times (${diverging}/${roster.length} names)`, diverging >= 1);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

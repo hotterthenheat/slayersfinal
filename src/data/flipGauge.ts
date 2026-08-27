@@ -1,5 +1,6 @@
 import Simulator from '../core/simulator';
 import { pickFlip } from '../core/walls';
+import { buildExposureProfile } from './exposure';
 import type { Candle, GexSnapshot, MarketSnapshot } from '../types/market';
 
 /*
@@ -137,3 +138,49 @@ export const REGIME_WORDS: Record<GammaRegime, { label: string; blurb: string }>
   SHORT: { label: 'SHORT GAMMA', blurb: 'below the flip — dealer hedging amplifies moves' },
   LONG: { label: 'LONG GAMMA', blurb: 'above the flip — dealer hedging absorbs moves' },
 };
+
+/*
+  THE FLIP, BY EXPIRY — P-9.
+
+  Three answers to one question, because the books are different books: the
+  0DTE lens is what evaporates at today's bell, the weekly is the trade the
+  street is carrying, and the whole book is the structure underneath both.
+  They routinely disagree, and the disagreement is the read — a 0DTE flip
+  below spot under a whole-book flip above it is a pinned morning and a
+  directional afternoon.
+
+  EACH LENS'S OWN WINDOWED PROFILE, through buildExposureProfile — the same
+  seam, the same EXPIRY_DECAY model, the same numbers the map and the matrix
+  draw for that lens. Computing a "0DTE flip" off anything other than what
+  the 0DTE view shows would let this row disagree with the page it sits on.
+
+  THE SPREAD IS BOOK − 0DTE: how far the structure sits from today's
+  artifact. Null unless both exist, because a spread against a book with no
+  flip is not a number.
+*/
+
+export interface ExpiryFlips {
+  d0: number | null;
+  weekly: number | null;
+  book: number | null;
+  /** book − d0. Positive = the structural flip sits above today's. */
+  spread: number | null;
+}
+
+/* The wider of the two windows the Exposure page offers — flips live near
+   spot, and ±15 strikes is far more room than one ever needs. */
+const FLIP_WINDOW = 15 as const;
+
+export function buildExpiryFlips(snapshot: MarketSnapshot): ExpiryFlips {
+  const flipOf = (expiry: '0DTE' | '7D' | 'ALL') =>
+    pickFlip(buildExposureProfile(snapshot, expiry, FLIP_WINDOW).strikes, snapshot.spot, s => s.gex.net);
+  const d0 = flipOf('0DTE');
+  const weekly = flipOf('7D');
+  const book = flipOf('ALL');
+  return {
+    d0,
+    weekly,
+    book,
+    spread: d0 !== null && book !== null ? book - d0 : null,
+  };
+}
