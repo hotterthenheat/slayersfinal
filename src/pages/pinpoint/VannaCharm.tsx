@@ -10,6 +10,8 @@ import { fmtUsd } from '../../data/gex';
 import MigrationMap from '../../components/gex/vannacharm/MigrationMap';
 import LevelShiftList from '../../components/gex/vannacharm/LevelShiftList';
 import WallDrift from '../../components/gex/vannacharm/WallDrift';
+import NetGexDrift from '../../components/gex/vannacharm/NetGexDrift';
+import { buildNetGexSeries } from '../../data/gexSeries';
 import type { MarketSnapshot } from '../../types/market';
 import type { IvShift, ShiftMode } from '../../types/gex';
 
@@ -83,6 +85,13 @@ const VannaCharm = () => {
         ? buildVannaCharm(scanSnapshot, mode, Number(ivKey) as IvShift, 10, hoursToClose)
         : null,
     [scanSnapshot, mode, ivKey, hoursToClose]
+  );
+
+  /* P-3's series, on the page's own scan tier — keyed on the snapshot so the
+     two timelines below always show the same session at the same moment. */
+  const netSeries = useMemo(
+    () => (scanSnapshot ? buildNetGexSeries(scanSnapshot.ticker) : null),
+    [scanSnapshot]
   );
 
   if (!data) {
@@ -184,15 +193,35 @@ const VannaCharm = () => {
         </div>
       </div>
 
-      {/* Wall drift timeline */}
-      <Panel
-        title="Wall Drift"
-        subtitle="session timeline — walls, flip & spot"
-        className="w-full"
-        bodyClassName="h-[240px]"
-      >
-        <WallDrift drift={data.drift} />
-      </Panel>
+      {/* The session, twice over: WHERE the levels moved, and whether the
+          gamma behind them GREW or DRAINED — different facts (a pin can turn
+          into a trend with nothing moving on the drift at all), so they sit
+          side by side over one time axis. Stacked below xl, like the panels
+          above them. */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <Panel
+          title="Wall Drift"
+          subtitle="session timeline — walls, flip & spot"
+          className="w-full min-w-0"
+          bodyClassName="h-[240px]"
+        >
+          <WallDrift drift={data.drift} />
+        </Panel>
+        {/* P-3 — the total through the session. Its own scan-tier build off
+            the SAME cadence as the page's (the memo keys on scanSnapshot), so
+            the two timelines can never show different sessions. */}
+        <Panel
+          title="Net GEX"
+          subtitle="session timeline — the whole book's total, and its sign"
+          className="w-full min-w-0"
+          bodyClassName="h-[240px]"
+        >
+          {/* netSeries is null only while `data` is too, and that state returns
+              above — but the guard stays local rather than relying on the
+              ordering of two memos. */}
+          {netSeries && <NetGexDrift series={netSeries} />}
+        </Panel>
+      </div>
     </>
   );
 };

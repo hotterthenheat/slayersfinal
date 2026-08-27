@@ -4,6 +4,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowUpRight, X } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildExposureProfile } from '../../data/exposure';
+import { buildGexPercentile, buildNetGexSeries, ordinal } from '../../data/gexSeries';
+import { buildPins } from '../../data/pins';
 import { fmtUsd } from '../../data/gex';
 import type { MarketSnapshot } from '../../types/market';
 import type { ExposureExpiry } from '../../types/gex';
@@ -69,6 +71,32 @@ const ExposureProfile = () => {
   const data = useMemo(
     () => (scanSnapshot ? buildExposureProfile(scanSnapshot, expiry, Number(windowHalf) as 10 | 15) : null),
     [scanSnapshot, expiry, windowHalf]
+  );
+
+  /*
+    P-7 — today's total against its own history, AND ITS OWN BASIS.
+
+    Deliberately NOT a rank of `data.netGex`: that figure is the ±10/±15
+    window under the expiry lens's decay weighting, while the history store
+    holds full-book per-bar sums — ranking one against the other would print
+    a plausible number comparing two different quantities. So the rank is of
+    the WHOLE BOOK's current total (the same series the history is made of),
+    and the label says so. Keyed on the scan snapshot like everything else on
+    this page.
+  */
+  const pctile = useMemo(() => {
+    if (!scanSnapshot) return null;
+    const series = buildNetGexSeries(scanSnapshot.ticker);
+    const now = series.points[series.points.length - 1];
+    return now ? buildGexPercentile(scanSnapshot.ticker, now.netGex) : null;
+  }, [scanSnapshot]);
+
+  /* P-10 — both pins, off the WHOLE chain rather than the ±10/±15 window:
+     max pain is a settlement question and settlement does not care which
+     strikes the panel happens to be drawing. Same scan tier as the page. */
+  const pins = useMemo(
+    () => (scanSnapshot ? buildPins(scanSnapshot.chain, scanSnapshot.spot) : null),
+    [scanSnapshot]
   );
 
   if (!data) {
@@ -175,7 +203,7 @@ const ExposureProfile = () => {
           {/* The book's totals, as facts — not boxes. Positive net GEX =
               put-dominant = short gamma = amplifying (sim side-coding,
               unified 2026-08-18). */}
-          <div className="shrink-0 border-t border-borderSubtle px-3 py-2 grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-1">
+          <div className="shrink-0 border-t border-borderSubtle px-3 py-2 grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-4 gap-x-6 gap-y-1">
             <Fact
               label={<Term k="Net GEX" />}
               value={
@@ -190,6 +218,21 @@ const ExposureProfile = () => {
             />
             <Fact label={<Term k="Net DEX" />} value={<AnimatedNumber value={data.netDex} format={fmtUsd} />} />
             <Fact label={<Term k="Net VEX" />} value={<AnimatedNumber value={data.netVex} format={fmtUsd} />} />
+            {/* P-7. Null while the store is too thin for a rank to mean
+                anything — the fact is absent then, not a dash pretending. */}
+            {pctile && (
+              <Fact
+                label={<Term k="GEX percentile" />}
+                value={
+                  <>
+                    {ordinal(pctile.pctile)}
+                    <span className="ml-1.5 font-normal text-[10px] text-textSecondary">
+                      whole book · {pctile.sessions} sessions
+                    </span>
+                  </>
+                }
+              />
+            )}
           </div>
         </Panel>
         <Panel
@@ -207,6 +250,54 @@ const ExposureProfile = () => {
             onSelectStrike={toggleStrike}
           />
         </Panel>
+        {/*
+          P-10 — BOTH PINS, and the gap. The desk carried ONE `pin` (max
+          total OI) silently standing in for two definitions that routinely
+          disagree; showing both named, with the gap, is the honest form —
+          and the gap is itself a read: a book whose OI mass and gamma mass
+          sit apart is a book where "the pin" is not one place.
+
+          This slot was empty: the insight card spans 5 of the second row's
+          12 and nothing claimed the other 7.
+        */}
+        {pins && (
+          <Panel
+            title="Both Pins"
+            subtitle="OI-weighted vs gamma-weighted — whole book"
+            className="xl:col-span-7 min-w-0"
+            bodyClassName="flex flex-col justify-center gap-2"
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-1">
+              <Fact
+                label={<Term k="Max pain" />}
+                value={pins.maxPain !== null ? (pins.maxPain % 1 === 0 ? pins.maxPain.toFixed(0) : pins.maxPain.toFixed(2)) : '—'}
+              />
+              <Fact
+                label={<Term k="Gamma pin" />}
+                value={pins.gammaPin !== null ? pins.gammaPin.toFixed(2) : '—'}
+              />
+              <Fact
+                label="Gap"
+                value={
+                  pins.gap !== null ? (
+                    <>
+                      {Math.abs(pins.gap).toFixed(2)}
+                      <span className="ml-1.5 font-normal text-[10px] text-textSecondary">
+                        gamma mass {pins.gap > 0 ? 'above' : pins.gap < 0 ? 'below' : 'on'} the OI mass
+                      </span>
+                    </>
+                  ) : (
+                    '—'
+                  )
+                }
+              />
+            </div>
+            <p className="pt-2 border-t border-borderSubtle/60 font-mono text-[10px] leading-relaxed text-textMuted">
+              Two defensible answers to “where does the book pin”, shown together because they disagree —
+              a wide gap says the OI is parked at strikes the hedging flow is not.
+            </p>
+          </Panel>
+        )}
         <div className="xl:col-span-5 min-w-0">
           <ExposureInsight bias={data.bias} biasNote={data.biasNote} insights={data.insights} />
         </div>

@@ -52,7 +52,8 @@ export const TERMS = {
   Class: 'What dealer hedging does at this strike — a cushion under price, resistance above it, or a magnet that pins.',
   'Call wall': 'The heaviest call-gamma strike above price. Dealer hedging supplies stock there, so rallies often stall at it.',
   'Put wall': 'The heaviest put-gamma strike below price. Dealer hedging bids stock there, so dips often hold it.',
-  'Gamma flip': 'The price where dealer hedging switches sides — above it moves get absorbed, below it they get amplified.',
+  'Gamma flip':
+    'The price where dealer hedging switches sides — above it moves get absorbed (dealers long gamma), below it they get amplified (dealers short gamma). The regime label reads which side spot is on right now.',
   Pin: 'The max-open-interest strike that price tends to gravitate toward into expiry.',
   King: 'The single largest gamma strike on the whole book — the level that matters most today.',
   // ---- contracts driving the setup ----
@@ -80,6 +81,12 @@ export const TERMS = {
   // ---- multi-timeframe (T-12) ----
   'Timeframe trend':
     'Where price sits on each interval against its own EMA21 and VWAP. Above both reads up, below both reads down, and between them reads flat — the timeframes disagreeing is itself the signal.',
+  'Max pain':
+    'The settlement price that pays option holders the least in total — the OI-weighted pin. The theory: the price with the least to pay out is the one the book drifts toward into expiry.',
+  'Gamma pin':
+    'Where the book’s hedging mass centres — every strike’s gamma dollars, magnitude-weighted, averaged into one price. Different from max pain because gamma and open interest can sit on different strikes.',
+  'GEX percentile':
+    'Where today’s whole-book net gamma ranks against this name’s own history — toward 0 the book is about as call-heavy (absorbing) as it gets, toward 100 as put-heavy (amplifying). The label says how much history the rank is against.',
   // ---- the measure (T-1) ----
   Measure:
     'Drag across the tape for the move it covers: dollars, percent, bars, elapsed, and the same move stated at an annual rate so it can be read against implied volatility.',

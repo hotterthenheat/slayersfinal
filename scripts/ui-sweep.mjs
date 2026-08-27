@@ -3354,6 +3354,125 @@ head('replay has a door, says so on the pane, and keeps its moment to itself');
   }
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   P-4. THE FLIP, ANSWERED — one strip on every Pinpoint tab.
+
+   The engine is proved headless (scripts/flip-gauge-proof.ts), including the
+   crossing counter and the one-flip-rule unification behind it. What a
+   browser establishes is that the strip is really on every tab, that it
+   carries the whole answer, and that the flip it prints is a price the desk
+   below could be drawing — read from the aria-label, which the component
+   builds from the same gauge as the visible text.
+
+   NO cross-surface equality assertion, deliberately: the strip reads the
+   FULL chain and each desk reads its own window, and "everyone reads
+   pickFlip" — the real claim — is pinned per module in the proof. Asserting
+   strip-flip === page-flip here would fail honestly whenever the nearest
+   crossing to spot sits outside a ±10 window, which is a state of the book
+   rather than a bug.
+   ───────────────────────────────────────────────────────────────────────── */
+head('every Pinpoint tab opens with the flip already answered');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  for (const path of ['/pinpoint/exposure-profile', '/pinpoint/ranked-targets', '/pinpoint/vanna-charm']) {
+    await page.goto(`${BASE}${path}`, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(path.endsWith('exposure-profile') ? BOOT_MS + 1000 : 2500);
+    const strip = await page.$('[role="status"][aria-label*="GAMMA"], [role="status"][aria-label*="No gamma flip"]');
+    strip ? ok(`${path}: the strip is on the tab`) : bad(`${path}: no flip strip — the shell is not carrying it here`);
+    if (!strip) continue;
+    const label = (await strip.getAttribute('aria-label')) ?? '';
+    const text = ((await strip.textContent()) ?? '').trim();
+    if (/No gamma flip/.test(label)) {
+      /* A real state; the strip saying so IS the pass. The simulator's books
+         essentially always cross, so reaching this line is itself unusual —
+         noted in the message so a run that lands here is legible. */
+      ok(`${path}: a one-sided book, and the strip says so rather than hiding`);
+      continue;
+    }
+    /(SHORT|LONG) GAMMA/.test(text)
+      ? ok(`${path}: it names the regime`)
+      : bad(`${path}: no regime in the strip — ${text.slice(0, 80)}`);
+    /spot/.test(text) && /flip/.test(text) && /%/.test(text)
+      ? ok(`${path}: with spot, the flip, and the distance in two units`)
+      : bad(`${path}: the strip is missing parts — ${text.slice(0, 110)}`);
+    /crossed \d+× today/.test(text)
+      ? ok(`${path}: and how many times it was crossed today`)
+      : bad(`${path}: no crossing count — ${text.slice(0, 110)}`);
+    /* The label a screen reader gets carries the same answer AND the
+       mechanism, which the visible strip teaches through the Term card. */
+    /amplifies|absorbs/.test(label)
+      ? ok(`${path}: the accessible name explains the regime, not just names it`)
+      : bad(`${path}: the aria-label does not carry the mechanism — ${label.slice(0, 90)}`);
+  }
+  errs.length === 0 ? ok('no page errors across the three tabs') : bad(`page errors: ${errs.join(' | ')}`);
+  await ctx.close();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   P-3 / P-7. THE TOTAL, THROUGH TIME AND AGAINST HISTORY.
+
+   Both engines are proved headless (scripts/gex-series-proof.ts) — the sums,
+   the crossings, the rank and its tie behaviour. The browser establishes the
+   landings: the Net GEX timeline sits beside Wall Drift on Vanna & Charm
+   with its zero line NAMED, and the percentile fact on Exposure Profile
+   carries its own basis — the whole book, and the store's real depth — since
+   a rank of one quantity printed beside a different quantity was the exact
+   dishonesty the fact was designed around.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the total has a timeline and a rank, and each states its basis');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+
+  await page.goto(`${BASE}/pinpoint/vanna-charm`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 1000);
+  const body = await page.evaluate(() => document.body.textContent ?? '');
+  /Wall Drift/i.test(body) && /THE WHOLE BOOK/i.test(body)
+    ? ok('Vanna & Charm carries both timelines — where the levels went, and whether the gamma behind them grew')
+    : bad('the Net GEX timeline is not beside Wall Drift');
+  /Zero — the book flips/.test(body)
+    ? ok('and the zero line is named as what it is — the whole book changing sign')
+    : bad('the zero line is unnamed');
+  /Net GEX \+/.test(body) && /Net GEX −/.test(body)
+    ? ok('with the regime pair on the legend')
+    : bad('the sign pair is missing from the legend');
+
+  await page.goto(`${BASE}/pinpoint/exposure-profile`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 1000);
+  const body2 = await page.evaluate(() => document.body.textContent ?? '');
+  const m = body2.match(/(\d+)(st|nd|rd|th)whole book · (\d+) sessions/);
+  m
+    ? ok(`the percentile fact states its basis — ${m[1]}${m[2]}, whole book, ${m[3]} sessions`)
+    : bad('no percentile fact with its basis on Exposure Profile');
+  if (m) {
+    /* The depth is the store's own. The simulator seeds 22 sessions; the day
+       the seam is swapped to a real 2yr feed this number moves WITH the data
+       and the bound here moves with it — what it must never do is exceed
+       what any store could have held, which is what a hardcoded "2yr" label
+       would have done from day one. */
+    Number(m[3]) >= 1 && Number(m[3]) <= 30
+      ? ok('and the depth is the store’s own, not a borrowed period')
+      : bad(`the label claims ${m[3]} sessions against a 22-session store`);
+  }
+  /* P-10 rides the same page — both pins, named, with the gap read as which
+     mass leans where. The engine (max pain really minimising payout, the
+     centroid, the disagreement case) is pins-proof.ts's job. */
+  /Both Pins/i.test(body2) && /Max pain/i.test(body2) && /Gamma pin/i.test(body2)
+    ? ok('both pins are on the page, named')
+    : bad('the Both Pins panel is missing from Exposure Profile');
+  /gamma mass (above|below|on) the OI mass/.test(body2)
+    ? ok('and the gap reads as which mass leans where')
+    : bad('the gap is a bare number with no read');
+
+  errs.length === 0 ? ok('no page errors on either landing') : bad(`page errors: ${errs.join(' | ')}`);
+  await ctx.close();
+}
+
 console.log(`\n${fails} failing`);
 await browser.close();
 process.exit(fails ? 1 : 0);
