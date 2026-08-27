@@ -418,6 +418,16 @@ export const priceScaleLockedBy = (compares: readonly CompareEntry[]): { mode: P
     ? { mode: 'percent', reason: 'A % comparison shares this axis' }
     : null;
 
+/*
+  T-14 — WHICH TAPE A TIMEFRAME READS. At or above one minute the display is
+  the 1-minute history aggregated up; below it the display IS the live-only
+  seconds tape, never a resample — the sub-minute region before the app
+  connected stays honestly empty (see data/timeframe.ts).
+*/
+export function displayBars(ticker: string, mins: number): Candle[] {
+  return mins < 1 ? Simulator.getSecondsBars(ticker) : aggregateCandles(Simulator.getCandles(ticker) ?? [], mins);
+}
+
 export const DEFAULT_OVERLAYS: ChartOverlays = {
   trails: true,
   levels: true,
@@ -791,6 +801,10 @@ const StrikeChart = ({
   styleRef.current = chartStyle;
   const styleBuiltRef = useRef<ChartStyle | null>(null);
   const [mainNonce, setMainNonce] = useState(0);
+  /* T-14: the sub-minute tape starts at connect, and the pane SAYS SO —
+     0 = connected but no prints yet, a time = the first live quarter,
+     null = not a sub-minute view. */
+  const [liveFrom, setLiveFrom] = useState<number | null>(null);
   const printLinesRef = useRef<IPriceLine[]>([]);
   const levelLinesRef = useRef<Partial<Record<'callWall' | 'putWall' | 'flip' | 'king', IPriceLine>>>({});
   const shownLevelsRef = useRef<KeyLevels | null>(null);
@@ -929,7 +943,7 @@ const StrikeChart = ({
      2026-08-22, tuned against his own screenshots): 5m reads right at ~4px,
      15m at ~6.5 — coarser bars earn more room, so a wider frame shows fewer
      of them and the recent structure stays legible. */
-  const DEFAULT_PITCH_PX: Record<Timeframe, number> = { '1m': 3.5, '5m': 4, '15m': 6.5, '30m': 8, '1h': 10, '1D': 14, '1W': 18 };
+  const DEFAULT_PITCH_PX: Record<Timeframe, number> = { '15s': 3, '1m': 3.5, '5m': 4, '15m': 6.5, '30m': 8, '1h': 10, '1D': 14, '1W': 18 };
   /* History takes ~64% of the width; the rest stays OPEN ahead of the last
      bar (Noah, 2026-08-22: "more spacious... pay more attention to what's
      ahead / current time" — a window crammed with five prior sessions put
@@ -943,7 +957,16 @@ const StrikeChart = ({
     const len = barCountRef.current;
     const width = containerRef.current?.clientWidth ?? 1200;
     const pitch = DEFAULT_PITCH_PX[timeframeRef.current] ?? 4;
-    const total = Math.max(90, Math.min(700, Math.round(width / pitch)));
+    let total = Math.max(90, Math.min(700, Math.round(width / pitch)));
+    /*
+      T-14: a live-only tape can be MINUTES old — twenty quarter-bars against
+      a 300-slot window rendered as a sliver at the left edge of 46 minutes
+      of runway (measured on the first 15s pane). When the data is smaller
+      than the window, the window shrinks to the data plus breathing room,
+      keeping the same history/runway split — the bars stay readable and the
+      runway stays a runway, not a prairie.
+    */
+    total = Math.min(total, Math.max(Math.ceil(len / HISTORY_SHARE) + 8, 48));
     const history = Math.round(total * HISTORY_SHARE);
     const ahead = total - history;
     chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, len - history), to: len + ahead });
@@ -1872,7 +1895,7 @@ const StrikeChart = ({
     }
 
     const mins = tfMinutes(timeframe);
-    const bars = aggregateCandles(Simulator.getCandles(ticker) ?? [], mins);
+    const bars = displayBars(ticker, mins);
     const rvPoints = realizedVol(bars, mins * 60);
     /* The implied line is drawn only where realised is, so the pane never shows
        a lone flat line hanging over an empty half — the two are read as a PAIR,
@@ -1983,7 +2006,7 @@ const StrikeChart = ({
       indicatorLoadedRef.current = sig;
     }
     if (active.length === 0) return;
-    const bars = aggregateCandles(Simulator.getCandles(ticker) ?? [], mins);
+    const bars = displayBars(ticker, mins);
     if (bars.length === 0) return;
     /* The formulas live in data/indicators.ts — one copy, shared with the
        confluence strip and every other summariser (the walls' lesson). This
@@ -2095,7 +2118,7 @@ const StrikeChart = ({
     for (const c of compares) {
       const s = compareSeriesRef.current.get(`${c.ticker}:${c.mode}`);
       if (!s) continue;
-      const bars = aggregateCandles(Simulator.getCandles(c.ticker) ?? [], mins);
+      const bars = displayBars(c.ticker, mins);
       if (bars.length === 0) continue;
       if (rebuild) {
         s.setData(bars.map(b => ({ time: b.time as UTCTimestamp, value: b.close })));
@@ -2176,8 +2199,9 @@ const StrikeChart = ({
 
     const theme = getCandleTheme();
     const mins = tfMinutes(timeframe);
-    const bars = aggregateCandles(base, mins);
+    const bars = displayBars(ticker, mins);
     barCountRef.current = bars.length;
+    setLiveFrom(mins < 1 ? bars[0]?.time ?? 0 : null);
     drawingsRef.current?.setBarTimes(bars.map(b => b.time));
     /* The measure counts BARS and annualizes off them, so the layer has to
        know what a bar is worth here — set beside the times it belongs with,
@@ -2373,7 +2397,7 @@ const StrikeChart = ({
       return;
     }
     const mins = tfMinutes(timeframe);
-    const bars = aggregateCandles(Simulator.getCandles(ticker) ?? [], mins);
+    const bars = displayBars(ticker, mins);
     const starts = sessionStarts(bars, mins);
     const sess = starts.length > 0 ? bars.slice(starts[starts.length - 1]) : [];
     const iv = Simulator.TICKERS[Simulator.ensureTicker(ticker)]?.iv ?? 0;
@@ -2418,7 +2442,7 @@ const StrikeChart = ({
     }
     const cal = eventsCalRef.current;
     const mins = tfMinutes(timeframe);
-    const bars = aggregateCandles(Simulator.getCandles(ticker) ?? [], mins);
+    const bars = displayBars(ticker, mins);
     // eslint-disable-next-line no-console
     console.log('[events-debug]', JSON.stringify(buildTapeEvents({ bars: Simulator.getCandles(ticker) ?? [], prints: flowPrints ?? [], earnings: cal.earnings, macro: cal.macro, todayIso: cal.todayIso }).map(e => ({ k: e.kind, t: e.time, m: e.minutesAhead, l: e.label }))), 'cal', JSON.stringify({ e: cal.earnings?.ticker, macro: cal.macro.length }));
     prim.setData({
@@ -2787,7 +2811,7 @@ const StrikeChart = ({
 
     if (replay) {
       const mins = tfMinutes(timeframe);
-      const bars = aggregateCandles(Simulator.getCandles(ticker) ?? [], mins);
+      const bars = displayBars(ticker, mins);
       const snaps = aggregateSnapshots(Simulator.getGexHistory(ticker) ?? [], Math.min(mins, TRAIL_TEXTURE_MINUTES));
       if (bars.length < 40) return;
       replayDataRef.current = { bars, snaps, maxAbs: snapshotsMaxAbs(snaps) };
@@ -3278,6 +3302,17 @@ const StrikeChart = ({
               onBlur={() => setNoteAt(null)}
             />
           </div>
+        )}
+
+        {/* T-14's honesty chip: a sub-minute pane shows only what has
+            actually printed since the app connected, and the empty region
+            to the left is explained rather than silently blank. */}
+        {liveFrom !== null && (
+          <span className="absolute bottom-12 left-2 z-10 pointer-events-none font-mono text-[9px] uppercase tracking-wider text-textMuted bg-canvas/60 border border-borderSubtle/60 rounded px-1.5 py-0.5">
+            {liveFrom === 0
+              ? 'live only · awaiting first prints'
+              : `live only · from ${new Date(liveFrom * 1000).toLocaleTimeString('en-GB', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit' })}`}
+          </span>
         )}
 
         {/* T-11's hover card — floats above the lane at the marker's x,

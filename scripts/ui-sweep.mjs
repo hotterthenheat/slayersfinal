@@ -4132,6 +4132,57 @@ head('the rail takes a volume profile, and gives it back');
   await ctx.close();
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   T-14. THE SUB-MINUTE TAPE — live-only, and the pane says so.
+
+   The seconds tape is proved headless (scripts/seconds-tape-proof.ts):
+   live-only from connect, quarter-grid alignment, coherence with the minute
+   bars, the ring cap. The browser owns the honesty chip — a sub-minute pane
+   must SAY it shows only what has printed since connect — and the picker
+   round-trip: 15s is a real row, and leaving it retires the chip.
+   ───────────────────────────────────────────────────────────────────────── */
+head('a 15s pane says live only, and the chip leaves with the timeframe');
+{
+  const seed = JSON.stringify({
+    layout: 1,
+    panes: [{
+      ticker: 'SPY', timeframe: '15s',
+      overlays: { trails: false, levels: false, darkpool: false, volume: true, flow: false, netDrift: false, volDrift: false, dexStrike: false, session: false, cone: false, events: false },
+      indicators: { ema9: false, ema21: false, ema50: false, vwap: false },
+      chartStyle: 'candles', compares: [], priceScale: 'normal', sessionOr: 15, ladder: false,
+    }],
+    setups: {},
+  });
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  await ctx.addInitScript(`localStorage.setItem('slayer_terrain_v1', ${JSON.stringify(seed)})`);
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 1500);
+
+  const chipText = () => page.evaluate(() => document.body.textContent?.match(/live only · [^A-Z]*/)?.[0]?.trim() ?? null);
+  const t0 = await chipText();
+  t0 && /live only · (from \d{2}:\d{2}|awaiting first prints)/.test(t0)
+    ? ok(`the pane says what it shows — ${t0}`)
+    : bad(`no honesty chip on a 15s pane: ${JSON.stringify(t0)}`);
+
+  /* The picker: leaving 15s retires the chip, returning brings it back. */
+  const pickTf = async label => {
+    for (const b of await page.$$('button')) {
+      if ((await b.textContent())?.trim() === label) { await b.click(); await page.waitForTimeout(900); return true; }
+    }
+    return false;
+  };
+  (await pickTf('1m')) ? ok('PREMISE: the 1m chip clicks') : bad('PREMISE: no 1m chip');
+  (await chipText()) === null ? ok('a minute pane carries no live-only chip') : bad('the chip survived leaving 15s');
+  (await pickTf('15s')) ? ok('the 15s row is on the picker') : bad('no 15s chip on the picker');
+  (await chipText()) !== null ? ok('and returning to 15s brings the chip back') : bad('no chip after returning to 15s');
+
+  errs.length === 0 ? ok('no page errors across the sub-minute round-trip') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
 console.log(`\n${fails} failing`);
 await browser.close();
 process.exit(fails ? 1 : 0);

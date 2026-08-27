@@ -6,9 +6,25 @@
 
 import type { Candle, GexSnapshot } from '../types/market';
 
-export type Timeframe = '1m' | '5m' | '15m' | '30m' | '1h' | '1D' | '1W';
+export type Timeframe = '15s' | '1m' | '5m' | '15m' | '30m' | '1h' | '1D' | '1W';
 
+/*
+  T-14 — SUB-MINUTE, honestly. `minutes` goes FRACTIONAL below one minute
+  (15s = 0.25) so every consumer that multiplies by 60 keeps working in
+  seconds without a second unit system. The 15s row is served from the
+  simulator's live-only seconds tape (one tick = one quarter-bar), never by
+  resampling 1m history — a sub-minute label on resampled minutes would be
+  a different instrument wearing the same name, the exact thing the
+  directive rules out. The region before the app connected is EMPTY and the
+  pane says so.
+
+  1s AND 5s WAIT FOR THE FEED, deliberately: the seam's finest real
+  observation is one tick per quarter-minute, so a 1s row today would be
+  invention, and this desk does not ship pickers whose data cannot exist.
+  When the per-second WebSocket lands they are one row each here.
+*/
 export const TIMEFRAMES: { value: Timeframe; label: string; minutes: number }[] = [
+  { value: '15s', label: '15s', minutes: 0.25 },
   { value: '1m', label: '1m', minutes: 1 },
   { value: '5m', label: '5m', minutes: 5 },
   { value: '15m', label: '15m', minutes: 15 },
@@ -25,7 +41,10 @@ export function tfMinutes(tf: Timeframe): number {
   return TIMEFRAMES.find(t => t.value === tf)?.minutes ?? 1;
 }
 
-/** Aggregate 1m OHLC bars into buckets of `minutes`. */
+/** Aggregate 1m OHLC bars into buckets of `minutes`. The base contract is
+    ONE-MINUTE bars: sub-minute timeframes never come through here — they
+    read the seconds tape directly (see the T-14 note above), so `<= 1`
+    correctly means "already at or below the base grid". */
 export function aggregateCandles(base: Candle[], minutes: number): Candle[] {
   if (minutes <= 1 || base.length === 0) return base;
   const bucketSec = minutes * 60;
