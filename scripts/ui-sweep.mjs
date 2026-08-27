@@ -2054,33 +2054,76 @@ head('the map legend names the anchor the ribbon is drawn from');
    ───────────────────────────────────────────────────────────────────────── */
 head('the ranked ladder fits the row it draws');
 {
-  for (const w of [620, 640, 647, 648, 700, 768, 1024]) {
+  /* 390 and 430 are here for the drift check — they are the only widths where
+     the ladder scrolls at all, so they are the only ones that can exercise it.
+     620 through 1024 carry the fit check across BOTH boundaries — 662 where
+     the class lane joins and 770 where the priority lane does — with the
+     width either side of each, so a threshold that drifts a pixel is caught
+     from whichever direction it drifts. */
+  for (const w of [390, 430, 620, 647, 661, 662, 769, 770, 1024]) {
     const ctx = await browser.newContext({ viewport: { width: w, height: 900 } });
     const page = await ctx.newPage();
     await page.goto(`${BASE}/pinpoint/ranked-targets`, { waitUntil: 'networkidle' });
     await page.waitForTimeout(BOOT_MS);
 
     const g = await page.evaluate(() => {
-      const sc = [...document.querySelectorAll('div')].find(
-        d => typeof d.className === 'string' && d.className.includes('overflow-y-auto') && d.className.includes('max-h-')
-      );
+      const sc = document.querySelector('[data-ladder]');
       if (!sc) return { noScroller: true };
       const row = [...sc.querySelectorAll('button')].find(b => /^#\d+/.test((b.textContent || '').trim()));
       if (!row) return { noRow: true };
       const kids = [...row.children];
       const cls = kids[kids.length - 1];
+      /* THE CAPTIONS TRAVEL WITH THE ROWS. They used to live outside this box,
+         so the two scrolled independently: at 390 dragging the body 102px right
+         moved every row and left every caption behind, which put NET GEX under
+         somebody else's word. Drag it and measure both.
+
+         FOUND DOCUMENT-WIDE BY ITS OWN HOOK, not inside the scroller. The whole
+         defect is the caption row being somewhere else, so looking for it
+         inside is looking in the one place a broken build does not keep it —
+         the first version of this check searched the scroller, fell back to the
+         first ROW, compared that row against itself and passed against the
+         exact structure it exists to catch. */
+      const head = document.querySelector('[data-ladder-head]');
+      if (!head) return { noHead: true };
+      const before = { head: head.getBoundingClientRect().left, row: row.getBoundingClientRect().left };
+      sc.scrollLeft = 9999;
+      const moved = sc.scrollLeft;
+      const after = { head: head.getBoundingClientRect().left, row: row.getBoundingClientRect().left };
+      sc.scrollLeft = 0;
       return {
         over: sc.scrollWidth - sc.clientWidth,
         classShown: getComputedStyle(cls).display !== 'none' && cls.getBoundingClientRect().width > 0,
+        moved: Math.round(moved),
+        drift: Math.round((before.head - after.head) - (before.row - after.row)),
       };
     });
 
     if (g.noScroller || g.noRow) { bad(`ranked @ ${w} — no ladder to measure`); await ctx.close(); continue; }
+    if (g.noHead) { bad(`ranked @ ${w} — found no caption row; the drift check below would measure nothing`); await ctx.close(); continue; }
 
-    g.over === 0
-      ? ok(`ranked @ ${w} — the ladder does not overflow itself`)
-      : bad(`ranked @ ${w} — the ladder overflows itself by ${g.over}px, so the last column is scrolled out of sight`);
-    if (w >= 648) {
+    /* TWO DIFFERENT CLAIMS, and conflating them would have cost the first one.
+       From 560px up the row FITS, so any sideways travel there means a column
+       turned on before there was room for it — which is exactly the 640-647
+       band. Below 560 the row cannot fit at any breakpoint and scrolling is the
+       honest answer, so travel there is not a fault. */
+    if (w >= 560) {
+      g.over === 0
+        ? ok(`ranked @ ${w} — the ladder does not overflow itself`)
+        : bad(`ranked @ ${w} — the ladder overflows itself by ${g.over}px at a width where the row fits, so a column switched on early`);
+    } else {
+      ok(`ranked @ ${w} — the row cannot fit a phone; the ladder scrolls ${g.over}px`);
+    }
+    /* Whether it scrolls is a layout question and either answer can be right.
+       Whether the captions come WITH it is not. */
+    g.moved === 0
+      ? ok(`ranked @ ${w} — nothing to scroll, so nothing can drift`)
+      : g.drift === 0
+        ? ok(`ranked @ ${w} — scrolled ${g.moved}px and the captions came with the rows`)
+        : bad(`ranked @ ${w} — scrolled ${g.moved}px and the captions drifted ${g.drift}px from their columns`);
+    /* 662 is where the class lane fits — see the note on the lane itself for
+       why the first answer was 648 and why it was wrong. */
+    if (w >= 662) {
       g.classShown
         ? ok(`ranked @ ${w} — and the class column is drawn`)
         : bad(`ranked @ ${w} — the class column is missing at a width where it fits`);
