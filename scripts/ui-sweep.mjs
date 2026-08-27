@@ -4193,6 +4193,65 @@ head('a 15s pane says live only, and the chip leaves with the timeframe');
   await ctx.close();
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   T-18. NAMED LAYOUTS — the shelf saves a whole arrangement and gives it
+   back.
+
+   Storage, names and caps are proved headless (scripts/layouts-proof.ts).
+   The browser owns the round trip through the REAL desk: save the current
+   arrangement, deform the desk, recall the name, get the arrangement back —
+   and Escape must close the shelf, because its click-away backdrop
+   otherwise traps the keyboard (the regression the first probe hit).
+   ───────────────────────────────────────────────────────────────────────── */
+head('a named layout saves the desk, and gives it back');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 1000);
+  const layoutOf = () => page.evaluate(() => JSON.parse(localStorage.getItem('slayer_terrain_v1')).layout);
+
+  await page.click('button[title^="Named layouts"]');
+  await page.waitForTimeout(300);
+  await page.fill('input[aria-label="Layout name"]', 'sweep desk');
+  await page.click('div[role="dialog"] button:has-text("Save")');
+  await page.waitForTimeout(300);
+  const stored = await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('slayer_terrain_layouts_v1') ?? '{}')));
+  stored.includes('sweep desk') ? ok('the arrangement saves under its name') : bad(`the shelf holds ${stored.join(',')}`);
+
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  (await page.$('div[role="dialog"]')) === null ? ok('Escape closes the shelf — no backdrop trap') : bad('the shelf ignored Escape');
+
+  const before = await layoutOf();
+  const target = before === 1 ? 2 : 1;
+  await page.click(`button[aria-label="${target} chart${target === 1 ? '' : 's'}"]`);
+  await page.waitForTimeout(400);
+  (await layoutOf()) === target ? ok('PREMISE: the desk deformed') : bad('the desk never changed');
+
+  await page.click('button[title^="Named layouts"]');
+  await page.waitForTimeout(300);
+  await page.click('div[role="dialog"] button:has-text("sweep desk")');
+  await page.waitForTimeout(500);
+  (await layoutOf()) === before
+    ? ok(`recalling the name restores the arrangement — back to ${before} pane(s)`)
+    : bad(`recall landed on ${await layoutOf()}, saved from ${before}`);
+
+  await page.click('button[title^="Named layouts"]');
+  await page.waitForTimeout(300);
+  await page.hover('div[role="dialog"] button:has-text("sweep desk")');
+  await page.click('button[aria-label="Delete the layout sweep desk"]');
+  await page.waitForTimeout(300);
+  (await page.evaluate(() => localStorage.getItem('slayer_terrain_layouts_v1'))) === null
+    ? ok('deleting the last name clears the shelf key')
+    : bad('the empty shelf left its key behind');
+
+  errs.length === 0 ? ok('no page errors through the shelf') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
 console.log(`\n${fails} failing`);
 await browser.close();
 process.exit(fails ? 1 : 0);

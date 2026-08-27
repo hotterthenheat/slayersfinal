@@ -4,6 +4,10 @@ import Simulator from '../../core/simulator';
 import { useMarketData } from '../../context/MarketDataContext';
 import DistanceUnitPicker from '../../components/ui/DistanceUnitPicker';
 import { futuresPhaseAt, FUTURES_PHASE_WORDS } from '../../core/calendar';
+import {
+  deleteNamedLayout, loadNamedLayouts, persistNamedLayouts, saveNamedLayout,
+  MAX_NAMED_LAYOUTS, type NamedLayoutEntry,
+} from './layouts';
 import { buildLadderFor, buildLevelsFor, buildPrints, fmtUsd, spotChangePct } from '../../data/gex';
 import StrikeChart, {
   PRICE_SCALE_MIN_WIDTH,
@@ -109,7 +113,7 @@ export type TerrainLayout = (typeof LAYOUTS)[number];
   `ticker` and `ladder` follow the SLOT, never the symbol; see ./setups for
   why the rail in particular has to.
 */
-interface PaneCfg {
+export interface PaneCfg {
   ticker: string;
   timeframe: Timeframe;
   overlays: ChartOverlays;
@@ -1397,6 +1401,43 @@ const Terrain = () => {
   const revision = useMemo(() => ++revRef.current, [marketData]);
 
   const [cfg, setCfg] = useState<TerrainCfg>(loadCfg);
+
+  /*
+    T-18 — the named-layouts shelf. Validation on load is the desk's OWN
+    readPane (injected — layouts.ts holds no second copy of the pane's
+    fields), and applying an entry NORMALIZES its pane count to the desk's
+    fixed four: stored panes fill from the front, defaults fill the rest, so
+    a two-pane snapshot recalled onto a four-slot desk leaves slots three
+    and four at their defaults instead of undefined.
+  */
+  const [namedLayouts, setNamedLayouts] = useState<Record<string, NamedLayoutEntry<PaneCfg>>>(() =>
+    loadNamedLayouts(readPane, defaultPanes()[0], LAYOUTS)
+  );
+  const [layoutsOpen, setLayoutsOpen] = useState(false);
+  const [layoutName, setLayoutName] = useState('');
+  const [layoutNote, setLayoutNote] = useState<string | null>(null);
+  const applyNamedLayout = (entry: NamedLayoutEntry<PaneCfg>) => {
+    const defs = defaultPanes();
+    const panes = defs.map((d, i) => entry.panes[i] ?? d);
+    setCfg(prev => ({ ...prev, layout: (LAYOUTS as readonly number[]).includes(entry.layout) ? (entry.layout as TerrainLayout) : prev.layout, panes }));
+    setLayoutsOpen(false);
+  };
+  const saveCurrentLayout = () => {
+    const next = saveNamedLayout(namedLayouts, layoutName, cfg.layout, cfg.panes, Date.now());
+    if (next === null) {
+      setLayoutNote(layoutName.trim() ? `the shelf holds ${MAX_NAMED_LAYOUTS} — delete one first` : 'give it a name');
+      return;
+    }
+    setNamedLayouts(next);
+    persistNamedLayouts(next);
+    setLayoutName('');
+    setLayoutNote(null);
+  };
+  const removeNamedLayout = (name: string) => {
+    const next = deleteNamedLayout(namedLayouts, name);
+    setNamedLayouts(next);
+    persistNamedLayouts(next);
+  };
   useEffect(() => {
     try {
       localStorage.setItem(TERRAIN_KEY, JSON.stringify(cfg));
@@ -2040,6 +2081,89 @@ const Terrain = () => {
             chips the flip strip carries on Pinpoint, one store behind both. */}
         <span className="pointer-events-auto inline-flex rounded-md border border-white/[0.08] bg-canvas/40 backdrop-blur-[3px] px-1 py-0.5">
           <DistanceUnitPicker dense />
+        </span>
+
+        {/* T-18 — the named-layouts shelf, in the desk's own cluster. */}
+        <span className="relative pointer-events-auto">
+          <button
+            onClick={() => setLayoutsOpen(o => !o)}
+            aria-haspopup="dialog"
+            aria-expanded={layoutsOpen}
+            title="Named layouts — save this arrangement, recall another"
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-white/[0.08] backdrop-blur-[3px] font-mono text-[10px] uppercase tracking-wider transition-colors ${
+              layoutsOpen ? 'bg-white/[0.16] text-textPrimary' : 'bg-canvas/40 text-textSecondary hover:text-textPrimary'
+            }`}
+          >
+            <Rows3 className="w-3 h-3" /> Layouts
+          </button>
+          {layoutsOpen && (
+            <>
+              <span className="fixed inset-0 z-30" onClick={() => setLayoutsOpen(false)} aria-hidden />
+              <div
+                role="dialog"
+                aria-label="Named layouts"
+                onKeyDown={e => {
+                  /* Escape closes the shelf from anywhere inside it — a
+                     panel with a click-away backdrop and no key out is a
+                     trap for keyboard readers (and the probe that found
+                     this). Stopped, so the desk's own Escape does not also
+                     fire. */
+                  if (e.key === 'Escape') {
+                    e.stopPropagation();
+                    setLayoutsOpen(false);
+                  }
+                }}
+                className="absolute bottom-full right-0 mb-2 z-40 w-64 border border-borderMuted bg-panel/95 rounded-md p-2 shadow-xl shadow-black/50"
+              >
+                <div className="font-mono text-[9px] uppercase tracking-widest text-textMuted px-1 pb-1.5">
+                  Named layouts · {Object.keys(namedLayouts).length}/{MAX_NAMED_LAYOUTS}
+                </div>
+                {Object.entries(namedLayouts)
+                  .sort((a, b) => b[1].savedAt - a[1].savedAt)
+                  .map(([name, entry]) => (
+                    <div key={name} className="flex items-center gap-1 group">
+                      <button
+                        onClick={() => applyNamedLayout(entry)}
+                        title={`${entry.layout} pane${entry.layout === 1 ? '' : 's'} · ${entry.panes.slice(0, entry.layout).map(pn => pn.ticker).join(' ')}`}
+                        className="flex-1 min-w-0 text-left px-1.5 py-1 rounded font-mono text-[11px] text-textSecondary hover:text-textPrimary hover:bg-white/[0.05] truncate transition-colors"
+                      >
+                        {name}
+                        <span className="ml-1.5 text-[9px] text-textMuted tnum">
+                          {entry.layout}× {entry.panes.slice(0, entry.layout).map(pn => pn.ticker).join('·')}
+                        </span>
+                      </button>
+                      <button
+                        onClick={() => removeNamedLayout(name)}
+                        aria-label={`Delete the layout ${name}`}
+                        className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded text-textMuted opacity-0 group-hover:opacity-100 hover:text-textPrimary hover:bg-white/[0.08] transition-all"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                {Object.keys(namedLayouts).length === 0 && (
+                  <div className="px-1.5 py-1 font-mono text-[10px] text-textMuted">Nothing saved yet — name this desk below.</div>
+                )}
+                <div className="mt-1.5 pt-1.5 border-t border-borderSubtle/60 flex items-center gap-1">
+                  <input
+                    value={layoutName}
+                    onChange={e => { setLayoutName(e.target.value); setLayoutNote(null); }}
+                    onKeyDown={e => { if (e.key === 'Escape') { setLayoutsOpen(false); return; } e.stopPropagation(); if (e.key === 'Enter') saveCurrentLayout(); }}
+                    placeholder="name this arrangement"
+                    aria-label="Layout name"
+                    className="flex-1 min-w-0 px-1.5 py-1 rounded border border-borderSubtle bg-inset font-mono text-[11px] text-textPrimary placeholder:text-textMuted outline-none focus:border-borderMuted"
+                  />
+                  <button
+                    onClick={saveCurrentLayout}
+                    className="shrink-0 px-2 py-1 rounded font-mono text-[10px] uppercase tracking-wider text-select hover:bg-select/10 transition-colors"
+                  >
+                    Save
+                  </button>
+                </div>
+                {layoutNote && <div className="px-1.5 pt-1 font-mono text-[9px] text-textMuted">{layoutNote}</div>}
+              </div>
+            </>
+          )}
         </span>
 
         {/* T-16's first piece: WHERE IN THE GLOBEX WEEK the wall clock sits.
