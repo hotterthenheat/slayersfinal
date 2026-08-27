@@ -84,6 +84,11 @@ export const TERMS = {
   // ---- event markers (T-11) ----
   'Event markers':
     'The calendar drawn on the chart: this name\u2019s next earnings, FOMC/CPI/NFP, and the session\u2019s biggest option prints, each marked at its bar. Hover a mark for the details.',
+  // ---- distance units (T-19) ----
+  ATR:
+    'Average true range \u2014 how far this name typically travels in a session, gaps included. A wall 0.4 ATR away is the same distance on SPY and on NVDA.',
+  '\u03c3 distance':
+    'The move in implied one-day \u03c3 \u2014 how many of the moves the options are charging for. Past 1\u03c3, price has beaten what the options priced for the day.',
   // ---- multi-timeframe (T-12) ----
   'Timeframe trend':
     'Where price sits on each interval against its own EMA21 and VWAP. Above both reads up, below both reads down, and between them reads flat — the timeframes disagreeing is itself the signal.',

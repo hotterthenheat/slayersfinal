@@ -1,5 +1,7 @@
 import type { ISeriesPrimitive, SeriesAttachedParameter, Time, IChartApi, ISeriesApi } from 'lightweight-charts';
 import { fmtElapsed, measureSpan } from '../../data/measure';
+import { fmtDistance, type DistanceScales } from '../../data/atr';
+import { getDistanceUnit } from '../../data/distanceUnits';
 
 /*
   User drawings layer — trendlines and horizontal levels, sketched directly on
@@ -241,6 +243,15 @@ class DrawingsPaneRenderer {
             ? 'annualized —'
             : `annualized ${span.annualizedPct < 10 ? span.annualizedPct.toFixed(1) : span.annualizedPct.toFixed(0)}%`,
         ];
+        /* T-19: when the desk's ruler is ATR or σ, the measure reads in it
+           too — the headline's $ and % are the measure's identity and stay,
+           the chosen ruler joins as its own line. An unmeasurable ruler
+           prints its em-dash rather than hiding the line: the reader chose
+           the unit, and silence would read as the tool ignoring them. */
+        const unit = getDistanceUnit();
+        if (unit === 'ATR' || unit === 'σ') {
+          lines.splice(1, 0, fmtDistance(span.deltaAbs, d.p1.price, unit, src.distanceScales));
+        }
 
         /* The headline (the move itself) a step larger than its context
            lines — the reader takes the delta first and the tenor after. */
@@ -623,6 +634,9 @@ export class DrawingsPrimitive implements ISeriesPrimitive<Time> {
   /** The interval those bars were aggregated to — what a measure's bar count
       and its annualization are computed against. */
   barMinutes = 1;
+  /** T-19's rulers for the measure's ATR/σ line — set by the host per
+      ticker, null until measurable. */
+  distanceScales: DistanceScales = { atr: null, sigma: null };
   private _paneViews: DrawingsPaneView[];
 
   constructor() {
@@ -683,6 +697,10 @@ export class DrawingsPrimitive implements ISeriesPrimitive<Time> {
 
   setBarMinutes(mins: number): void {
     this.barMinutes = Math.max(1, mins);
+  }
+
+  setDistanceScales(scales: DistanceScales): void {
+    this.distanceScales = scales;
   }
 
   setBarTimes(times: number[]): void {

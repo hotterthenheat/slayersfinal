@@ -1,8 +1,12 @@
 import { useMemo } from 'react';
 import { useMarketData } from '../../context/MarketDataContext';
+import Simulator from '../../core/simulator';
 import { REGIME_WORDS, buildFlipGauge } from '../../data/flipGauge';
+import { fmtDistance, impliedDaySigma, sessionAtr, type DistanceScales } from '../../data/atr';
+import { useDistanceUnit } from '../../data/distanceUnits';
 import { FLIP, LONG_GAMMA, SHORT_GAMMA } from './palette';
 import Term from '../ui/Term';
+import DistanceUnitPicker from '../ui/DistanceUnitPicker';
 
 /*
 ==================================================
@@ -21,10 +25,12 @@ import Term from '../ui/Term';
   legend. The flip PRICE is in the flip's own blue, as it is everywhere the
   line is drawn.
 
-  DISTANCE IN DOLLARS AND PERCENT, and not in ATR or σ: the directive's
-  sketch shows those units, and they arrive with T-19's desk-wide unit toggle
-  — printing an ATR here before an ATR engine exists would be a number the
-  app cannot source.
+  DISTANCE IN THE DESK'S CHOSEN UNIT, leading, with percent as the constant
+  second read (or dollars, when percent IS the choice) — T-19. The lead slot
+  is the reader's ruler ($ · % · ATR · σ, one store for the whole desk); the
+  second stays fixed so two surfaces can always be cross-checked at a
+  glance. An ATR or σ the engine cannot measure yet renders as an em-dash,
+  never as a number (data/atr.ts).
 
   NO FLIP IS A RENDERED STATE, not a hidden one. A one-sided book has no
   crossing, and the strip SAYS so — a gauge that vanished would read as
@@ -43,9 +49,22 @@ const FlipGaugeStrip = () => {
     rebuilds; this line is not one.
   */
   const gauge = useMemo(() => (marketData ? buildFlipGauge(marketData) : null), [marketData]);
+  const unit = useDistanceUnit();
+  /* The two rulers, off the same stores every other surface reads. */
+  const scales = useMemo<DistanceScales>(() => {
+    if (!marketData) return { atr: null, sigma: null };
+    return {
+      atr: sessionAtr(Simulator.getCandles(marketData.ticker) ?? []),
+      sigma: impliedDaySigma(marketData.spot, Simulator.TICKERS[marketData.ticker]?.iv ?? 0),
+    };
+  }, [marketData]);
   if (!gauge) return null;
 
   const words = gauge.regime ? REGIME_WORDS[gauge.regime] : null;
+  const dist = gauge.distAbs === null ? null : Math.abs(gauge.distAbs);
+  const unsigned = (v: string) => v.replace(/^[+−]/, '');
+  const lead = dist === null ? '' : unit === '%' ? `${Math.abs(gauge.distPct!).toFixed(2)}%` : unsigned(fmtDistance(dist, gauge.spot, unit, scales));
+  const second = dist === null ? '' : unit === '%' ? `$${dist.toFixed(2)}` : `${Math.abs(gauge.distPct!).toFixed(2)}%`;
 
   return (
     <div
@@ -54,7 +73,7 @@ const FlipGaugeStrip = () => {
       aria-label={
         words
           ? `${words.label} — ${words.blurb}. Spot ${fmt(gauge.spot)}, flip ${fmt(gauge.flip!)}, ` +
-            `${Math.abs(gauge.distAbs!).toFixed(2)} away` +
+            `${lead} away (${second})` +
             (gauge.crossings !== null ? `, crossed ${gauge.crossings} times today` : '')
           : 'No gamma flip — the book does not change sign'
       }
@@ -80,7 +99,7 @@ const FlipGaugeStrip = () => {
             </span>
           </span>
           <span className="font-mono text-[11px] tnum text-textPrimary">
-            {Math.abs(gauge.distAbs!).toFixed(2)} · {Math.abs(gauge.distPct!).toFixed(2)}%{' '}
+            {lead} · {second}{' '}
             <span className="text-textSecondary">{gauge.distAbs! > 0 ? 'overhead' : 'below'}</span>
           </span>
           {/* Null while the session is too young for a zero to be a
@@ -96,6 +115,7 @@ const FlipGaugeStrip = () => {
           No gamma flip — the book holds one sign across every strike. Dealer hedging leans one way at every level.
         </span>
       )}
+      <DistanceUnitPicker />
     </div>
   );
 };

@@ -3424,6 +3424,28 @@ head('every Pinpoint tab opens with the flip already answered');
       ? ok(`${path}: the accessible name explains the regime, not just names it`)
       : bad(`${path}: the aria-label does not carry the mechanism — ${label.slice(0, 90)}`);
   }
+  /* T-19 rides the strip: the desk-wide unit picker is ON it, and choosing
+     ATR re-words the lead distance in that ruler (or as its honest em-dash
+     while the warmup holds — either way the unit's mark appears). */
+  {
+    const picker = await page.$('[role="group"][aria-label="Distance unit — desk-wide"]');
+    picker ? ok('the distance-unit picker rides the strip') : bad('no unit picker on the flip strip');
+    if (picker) {
+      for (const b of await picker.$$('button')) {
+        if (((await b.textContent()) ?? '').trim() === 'ATR') { await b.click(); break; }
+      }
+      await page.waitForTimeout(600);
+      const strip2 = await page.$('[role="status"][aria-label*="GAMMA"]');
+      const text2 = strip2 ? ((await strip2.textContent()) ?? '') : '';
+      /ATR/.test(text2)
+        ? ok('choosing ATR re-words the distance in the new ruler')
+        : bad(`the strip ignored the unit choice — ${text2.slice(0, 100)}`);
+      /%/.test(text2)
+        ? ok('with percent still riding second for the cross-check')
+        : bad('the constant second read vanished');
+    }
+  }
+
   errs.length === 0 ? ok('no page errors across the three tabs') : bad(`page errors: ${errs.join(' | ')}`);
   await ctx.close();
 }

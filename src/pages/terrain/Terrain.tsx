@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Maximize2, Minimize2, Rows3, X } from 'lucide-react';
 import Simulator from '../../core/simulator';
 import { useMarketData } from '../../context/MarketDataContext';
+import DistanceUnitPicker from '../../components/ui/DistanceUnitPicker';
 import { buildLadderFor, buildLevelsFor, buildPrints, fmtUsd, spotChangePct } from '../../data/gex';
 import StrikeChart, {
   PRICE_SCALE_MIN_WIDTH,
@@ -2033,6 +2034,12 @@ const Terrain = () => {
           Strikes
         </button>
         )}
+
+        {/* T-19's desk-wide ruler, in the desk's own cluster — the same four
+            chips the flip strip carries on Pinpoint, one store behind both. */}
+        <span className="pointer-events-auto inline-flex rounded-md border border-white/[0.08] bg-canvas/40 backdrop-blur-[3px] px-1 py-0.5">
+          <DistanceUnitPicker dense />
+        </span>
 
         {expanded !== null && (
           <button

@@ -46,6 +46,7 @@ import { buildSessionLevels, type OpeningRange } from '../../data/sessionLevels'
 import { SessionLevelsPrimitive, sessionLines } from './sessionLevelsPrimitive';
 import { buildExpectedMoveCone } from '../../data/expectedMove';
 import { buildTapeEvents, macroWindow, type MarketEvent, type MacroDate } from '../../data/events';
+import { impliedDaySigma, sessionAtr } from '../../data/atr';
 import { buildEarningsCalendar, type EarningsEvent } from '../../data/earnings';
 import { EventsPrimitive } from './eventsPrimitive';
 import { ExpectedMovePrimitive } from './expectedMovePrimitive';
@@ -2019,6 +2020,12 @@ const StrikeChart = ({
        know what a bar is worth here — set beside the times it belongs with,
        so a timeframe change can never move one without the other. */
     drawingsRef.current?.setBarMinutes(mins);
+    /* T-19's rulers ride the same load — one ATR fold per data pass, so the
+       measure box and the flip strip cannot disagree about the day's range. */
+    drawingsRef.current?.setDistanceScales({
+      atr: sessionAtr(base),
+      sigma: impliedDaySigma(base.length ? base[base.length - 1].close : 0, Simulator.TICKERS[ticker]?.iv ?? 0),
+    });
 
     const loaded = loadedRef.current;
     const changed = loaded.ticker !== ticker || loaded.timeframe !== timeframe || loaded.theme !== themeKey;
