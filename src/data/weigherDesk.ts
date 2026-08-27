@@ -63,6 +63,25 @@ export interface DeskContract {
   breakeven: number;
   /** Strike distance from spot, signed percent */
   fromSpotPct: number;
+  /* The column-catalog facts (Noah, 2026-08-26, the customize-columns ask):
+     everything below is derived from the same pricing above — no new model,
+     just more of its faces. */
+  /** Day-stable resting size on each side of the quote, contracts */
+  bidSize: number;
+  askSize: number;
+  /** Last print against yesterday's close — dollars, then percent */
+  netChange: number;
+  netChangePct: number;
+  /** The move the stock needs to reach this contract's breakeven, signed % */
+  toBreakevenPct: number;
+  /** The mark split at parity: already-in-the-money value, and the rest */
+  intrinsic: number;
+  extrinsic: number;
+  /** Odds the tape touches this strike before expiry (2× the finish odds) */
+  touchOdds: number;
+  /** Odds the contract closes past its breakeven (long) — short is the rest */
+  profitOddsLong: number;
+  profitOddsShort: number;
 }
 
 export interface DeskChainRow {
@@ -200,6 +219,33 @@ export function buildDeskChain(ticker: string, dte: number, depth = 10): DeskCha
     const rho = Number(
       (((right === 'C' ? 1 : -1) * strike * t * Math.exp(-r * t) * (right === 'C' ? nd2 : 1 - nd2)) / 100).toFixed(4)
     );
+
+    // ---- the column-catalog facts, all from the machinery already here ----
+    const itm = (right === 'C' ? nd2 : 1 - nd2) * 100;
+    const breakeven = Number((right === 'C' ? strike + mark : strike - mark).toFixed(2));
+    // Size leans toward the money like volume does, on its own hash lane
+    const sizeDecay = Math.exp(-Math.abs(strike - spot) / (spot * 0.1));
+    const bidSize = Math.round(h01(`${seed}-bsz`) * 380 * sizeDecay + 3);
+    const askSize = Math.round(h01(`${seed}-asz`) * 380 * sizeDecay + 3);
+    const netChange = Number((last - prevClose).toFixed(2));
+    const netChangePct = prevClose > 0 ? Number(((netChange / prevClose) * 100).toFixed(1)) : 0;
+    const intrinsic = Number(Math.max(0, right === 'C' ? spot - strike : strike - spot).toFixed(2));
+    const extrinsic = Number(Math.max(0, mark - intrinsic).toFixed(2));
+    /* Touch: the classic first-passage approximation — an OTM strike gets
+       touched about twice as often as it gets finished beyond; a strike the
+       tape is already past has been touched by definition. */
+    const touchOdds = (right === 'C' ? spot >= strike : spot <= strike) ? 100 : Number(Math.min(99, 2 * itm).toFixed(2));
+    /* Profit odds: the same N(d2) read, taken at the BREAKEVEN instead of the
+       strike — the odds the contract closes worth more than its mark. A put
+       whose breakeven falls through zero can never get there. */
+    let profitOddsLong = 0;
+    if (breakeven > 0) {
+      const dBe1 = (Math.log(spot / breakeven) + (r + (iv * iv) / 2) * t) / (iv * Math.sqrt(t));
+      const pBeyond = normalCDF(dBe1 - iv * Math.sqrt(t));
+      profitOddsLong = Number(((right === 'C' ? pBeyond : 1 - pBeyond) * 100).toFixed(2));
+    }
+    const profitOddsShort = Number((100 - profitOddsLong).toFixed(2));
+
     return {
       strike,
       right,
@@ -219,8 +265,18 @@ export function buildDeskChain(ticker: string, dte: number, depth = 10): DeskCha
       last,
       volume,
       oi,
-      breakeven: Number((right === 'C' ? strike + mark : strike - mark).toFixed(2)),
+      breakeven,
       fromSpotPct: Number((((strike - spot) / spot) * 100).toFixed(2)),
+      bidSize,
+      askSize,
+      netChange,
+      netChangePct,
+      toBreakevenPct: Number((((breakeven - spot) / spot) * 100).toFixed(2)),
+      intrinsic,
+      extrinsic,
+      touchOdds,
+      profitOddsLong,
+      profitOddsShort,
     };
   };
 

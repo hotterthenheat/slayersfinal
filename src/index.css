@@ -60,6 +60,17 @@
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
 }
 
+
+/* The Weigher's glass goes OPAQUE while a card is in flight (Noah,
+   2026-08-27: mid-drag the chart bled straight through the chain and
+   neither card could be read). Translucency over the wash is depth;
+   translucency over another card is noise. The glass returns on landing.
+   Scoped to the desk — Pulse's panels are already opaque. */
+.desk-grid .react-grid-item.react-draggable-dragging > div,
+.desk-grid .react-grid-item.resizing > div {
+  background: #101114 !important;
+  backdrop-filter: none !important;
+}
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;

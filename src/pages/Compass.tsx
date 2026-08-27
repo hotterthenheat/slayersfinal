@@ -18,35 +18,21 @@ import {
 } from '../types/compass';
 import { expiryFor } from '../core/calendar';
 import PageHeader from '../components/ui/PageHeader';
-import TickerSearch from '../components/ui/TickerSearch';
 import Panel from '../components/ui/Panel';
 import type { DossierVariant } from '../components/compass/DossierFeed';
 import CampaignAnalysis from '../components/compass/CampaignAnalysis';
 import ImpactLeaderboard from '../components/compass/ImpactLeaderboard';
-import ContractWeigher from '../components/compass/ContractWeigher';
 import SetupScanBoard from '../components/compass/SetupScanBoard';
-import SegmentedControl from '../components/ui/SegmentedControl';
 
-type CompassMode = 'setups' | 'weigher';
-
-const MODE_OPTIONS = [
-  { value: 'setups', label: 'Setups' },
-  { value: 'weigher', label: 'Weigher' },
-] as const;
-
-/** Each mode names itself in the header — no nested ternaries. */
-const MODE_META: Record<CompassMode, { crumb: string; title: string; subtitle: string }> = {
-  setups: {
-    crumb: 'Setups',
-    title: 'Trade Setups',
-    subtitle: 'Setups graded on structure — ACTIVE while the thesis works, WATCH while it proves itself',
-  },
-  weigher: {
-    crumb: 'Weigher',
-    title: 'Contract Weigher',
-    subtitle:
-      'The whole chain on the scale — pick any strike and expiry and the desk weighs it: math, flow, dark pool and news',
-  },
+/* ONE job again (Noah, 2026-08-26: "weigher should be its own page instead of
+   a subsection of compass") — the desk moved to /weigher, and the mode switch
+   that used to pick between the two went with it. Compass sweeps and grades;
+   that is the whole page, so its header states one set of facts rather than
+   looking them up per mode. */
+const PAGE_META = {
+  crumb: 'Setups',
+  title: 'Trade Setups',
+  subtitle: 'Setups graded on structure — ACTIVE while the thesis works, WATCH while it proves itself',
 };
 
 interface MonitorTarget {
@@ -71,7 +57,6 @@ const Compass = () => {
   const [scanner, setScanner] = useState<ScannerKey>('top-setups');
   /** The tenor axis — every scanner runs on every sleeve. */
   const [sleeve, setSleeve] = useState<SleeveKey>('odte');
-  const [mode, setMode] = useState<CompassMode>('setups');
 
   // Phase 1 (browse): the full-width board — the preview card moved to the
   // campaign page (Noah, 2026-08-17), so a click goes straight to review.
@@ -173,10 +158,6 @@ const Compass = () => {
       changeTicker(incoming.ticker);
       setTrail([{ ticker: incoming.ticker, strike: incoming.strike, right: incoming.right }]);
       window.history.replaceState({}, ''); // consume so refresh doesn't re-enter
-    } else if (state?.weigh) {
-      changeTicker(state.weigh.ticker);
-      setMode('weigher');
-      window.history.replaceState({}, '');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -245,11 +226,12 @@ const Compass = () => {
   // Compute counts per scanner tab (scan tier — stable between sweeps).
   // Counts follow the ACTIVE SLEEVE and only its ELIGIBLE lenses — a tenor's
   // "All" sums exactly the tabs it shows, nothing hidden.
-  // SETUPS-ONLY: this is five full board builds — running them while the
-  // Weigher is up stalled every ticker switch there for nothing (the tabs
-  // they feed aren't even mounted). Noah felt it as "a buffer".
+  // Five full board builds a sweep — the reason the Weigher was never allowed
+  // to run them (Noah felt it as "a buffer" on every ticker switch), and the
+  // reason it is now a page of its own. The guard that used to hold them back
+  // went with the mode: on this page they always run.
   const scannerCounts = useMemo(() => {
-    if (!scanSnapshot || mode !== 'setups') return {} as Record<ScannerKey, number>;
+    if (!scanSnapshot) return {} as Record<ScannerKey, number>;
     const counts: Record<string, number> = {};
     let allCount = 0;
     for (const s of SCANNERS) {
@@ -261,7 +243,7 @@ const Compass = () => {
     }
     counts['all'] = allCount;
     return counts as Record<ScannerKey, number>;
-  }, [scanSnapshot, universe, sleeve, mode]);
+  }, [scanSnapshot, universe, sleeve]);
 
   // Real expiry per sleeve, through the clock-aware calendar — recomputed with
   // each sweep so a session rollover moves the chips.
@@ -390,36 +372,16 @@ const Compass = () => {
     `${t.ticker} ${t.strike % 1 === 0 ? t.strike.toFixed(0) : t.strike.toFixed(2)}${t.right}`;
   const backLabel = trail.length > 1 ? contractLabel(trail[trail.length - 2]) : 'Board';
 
-  const modeSwitch = (
-    <SegmentedControl
-      ariaLabel="Compass mode"
-      options={MODE_OPTIONS}
-      value={mode}
-      onChange={v => setMode(v as CompassMode)}
-    />
-  );
-
   /* ONE header for Setups, browse and review alike (Noah, 2026-08-09: the
      review page's ticker search "serves no purpose"). It never did: the
      analysis page is pinned to the CONTRACT that was opened — repointing the
      desk underneath it only risked pricing one name's setup against another's
      book. The Weigher keeps its search; that mode really is ticker-driven. */
-  const meta = MODE_META[mode];
   const browseHeader = (
     <PageHeader
-      breadcrumb={['Terminal', 'Compass', meta.crumb]}
-      title={meta.title}
-      subtitle={meta.subtitle}
-      actions={
-        mode === 'setups' ? (
-          modeSwitch
-        ) : (
-          <span className="inline-flex items-center gap-2">
-            {modeSwitch}
-            <TickerSearch value={activeTicker} onChange={changeTicker} />
-          </span>
-        )
-      }
+      breadcrumb={['Terminal', 'Compass', PAGE_META.crumb]}
+      title={PAGE_META.title}
+      subtitle={PAGE_META.subtitle}
     />
   );
 
@@ -449,11 +411,7 @@ const Compass = () => {
           nothing to stall. It also lands faster, which a tab click wants.
           The wrapper re-states the page's flex-col gap-4, since it now sits
           between the shell and the children that were relying on it. */}
-      <div key={mode} className="flex flex-col gap-4 animate-soft-in">
-      {mode === 'weigher' ? (
-        <ContractWeigher snapshot={marketData} />
-      ) : (
-        <>
+      <div className="flex flex-col gap-4 animate-soft-in">
 
       {/* Tenor axis — the sleeve strip. UNIFORM boxes (an equal-width grid,
           not content-sized buttons) and ONE voice: tenor is terminal hardware,
@@ -658,8 +616,6 @@ const Compass = () => {
           </div>
         </div>
       </div>
-      )}
-        </>
       )}
       </div>
     </>
