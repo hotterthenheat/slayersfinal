@@ -18,6 +18,7 @@ import Fact from '../../components/ui/Fact';
 import Term from '../../components/ui/Term';
 import ProvenanceChip from '../../components/ui/ProvenanceChip';
 import SpotScenarioPanel from '../../components/gex/SpotScenarioPanel';
+import OiHeatPanel from '../../components/gex/OiHeatPanel';
 import StrikeAttributionPanel from '../../components/gex/StrikeAttributionPanel';
 import Simulator from '../../core/simulator';
 import { LONG_GAMMA, SHORT_GAMMA } from '../../components/gex/palette';
@@ -314,6 +315,23 @@ const ExposureProfile = () => {
             className="w-full"
           >
             <SpotScenarioPanel snapshot={scanSnapshot} />
+          </Panel>
+        )}
+        {/* P-8. The flow behind the snapshot: which strikes are being built
+            and unwound right now. Reads the same GEX history the percentile
+            and the conviction panel do — the OI rides on those snapshots, so
+            a ΔOI reading can never be timestamped away from the gamma it
+            explains. */}
+        {scanSnapshot && (
+          <Panel
+            title="ΔOI Through The Session"
+            subtitle="Is that wall growing or dying — change, not level"
+            className="w-full"
+          >
+            <OiHeatPanel
+              snaps={Simulator.getGexHistory(scanSnapshot.ticker) ?? []}
+              bars={Simulator.getCandles(scanSnapshot.ticker) ?? []}
+            />
           </Panel>
         )}
         {/* P-6. A wall at 5,880 that is 2.4× its runner-up and unbroken for

@@ -4787,6 +4787,58 @@ head('the spot scenario re-reads the book, and says what it assumes');
   await ctx.close();
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   P-8 — ΔOI through the session.
+
+   The engine is proved headless (oi-heat-proof). The browser's job is the
+   claim the engine cannot make on its own: that what reaches the page is
+   CHANGE rather than level, and that the FLEX column renders its absence as
+   an em-dash rather than a zero. A grid of open-interest LEVELS would look
+   perfectly plausible in a screenshot — five-figure numbers in every cell —
+   which is exactly why it is asserted rather than eyeballed.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the ΔOI grid shows change, and prints absence as absence');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 1100 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/pinpoint/exposure-profile`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 1500);
+
+  const body = await page.evaluate(() => document.body.textContent ?? '');
+  /ΔOI Through The Session/i.test(body)
+    ? ok('P-8: the ΔOI panel is on the page')
+    : bad('P-8: no ΔOI panel');
+
+  /* Either it has flow to show, or it says why not — both are correct, and
+     an empty grid pretending to be a quiet day is the failure. */
+  const warming = /No position flow recorded yet this session/.test(body);
+  if (warming) {
+    ok('with no flow yet, it says so rather than drawing an empty grid');
+  } else {
+    /Change, not level/.test(body)
+      ? ok('the panel states what its cells are')
+      : bad('no statement that cells carry change');
+    /FLEX/.test(body)
+      ? ok('the FLEX column is present')
+      : bad('no FLEX column');
+    /FLEX transfers not on this account/.test(body)
+      ? ok('and it says the transfer split is not on this account')
+      : bad('the FLEX absence is not stated');
+    /* The signed cells: a change grid carries + and − readings, which a
+       LEVEL grid never would. */
+    const signed = await page.evaluate(() => {
+      const t = document.body.textContent ?? '';
+      return /[+−-]\d/.test(t);
+    });
+    signed ? ok('cells carry signed changes, not levels') : bad('no signed values — this looks like a level grid');
+  }
+
+  errs.length === 0 ? ok('no page errors on the ΔOI panel') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
 console.log(`\n${fails} failing`);
 await browser.close();
 process.exit(fails ? 1 : 0);

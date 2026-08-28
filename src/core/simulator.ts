@@ -369,7 +369,13 @@ const Simulator = (() => {
   // Net GEX (all-expiry proxy) per strike at a given price, captured as one snapshot
   function computeGexSnapshot(sym: string, spot: number, time: number): GexSnapshot {
     const chain = generateOptionsChain(sym, spot);
-    return { time, levels: chain.map(n => ({ strike: n.strike, value: n.netGex })) };
+    /* OI rides along with the gamma it explains (P-8) — same instant, same
+       chain, so a ΔOI reading can never be timestamped away from the level
+       it is meant to account for. */
+    return {
+      time,
+      levels: chain.map(n => ({ strike: n.strike, value: n.netGex, callOI: n.callOI, putOI: n.putOI })),
+    };
   }
 
   // Fold the latest tick into the current bar; roll a new bar every TICKS_PER_BAR ticks

@@ -81,6 +81,9 @@ export const TERMS = {
   // ---- expected-move cone (T-9) ----
   'Expected move cone':
     'The band options priced for today, drawn on the chart: the envelope since the open, and the cone still left from here to the bell. Price leaving the band means the move has already beaten what the options charged; the cone shrinking into the close is normal — less day left, less move left.',
+  // ---- \u0394OI heat (P-8) ----
+  '\u0394OI heat':
+    'Which strikes are being BUILT and UNWOUND through the session. Every other exposure surface here is a snapshot of a stock; this is the flow \u2014 it answers whether a wall is growing or dying, which the static map cannot.',
   // ---- spot scenario & attribution (P-17, P-18, P-19) ----
   'Spot scenario':
     'The book re-read at a price it has not reached yet. Open interest is held exactly as it stands \u2014 this answers where the LEVELS would be if price were there, not how the book would have re-formed on the way.',
