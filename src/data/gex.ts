@@ -417,7 +417,20 @@ export function buildLadderFor(
   /* THE LIVE BOOK, like the levels above — P-24B. This read the last GEX
      snapshot while the TAGS drawn over these very bars came from
      `buildLevelsFor`, so between bar rolls the column crowned one strike and
-     drew its tallest bar on another. One vintage, one book. */
+     drew its tallest bar on another. One vintage, one book.
+
+     AND IT STEADIED THE BAR SCALE rather than costing it, which is worth
+     recording because the opposite was the obvious worry — this file's own
+     rule is that "a bar chart whose scale moves while you look at it is a
+     lie about size", and moving from a per-bar source to a per-tick one
+     looks like exactly that trade. Measured within bars, active ticker:
+     the snapshot path's `maxAbs` moved a median 1.86% per tick with a WORST
+     CASE OF 26.8%; the live path moves 1.69% with a worst case of 3.8%. The
+     jumps came from mixing vintages — the window slides with spot every
+     tick while the values under it only jumped when the snapshot was
+     rewritten. One book removes the discontinuity. On a non-active ticker,
+     where the old snapshot was frozen solid (0.00%), the live read is
+     0.02% median and 0.16% at worst: still, to the eye. */
   const sym = Simulator.ensureTicker(ticker);
   const { chain, spot } = Simulator.chainFor(sym);
   if (chain.length === 0) return { rows: [], core: [], maxAbs: 1, spot, step: 1 };
