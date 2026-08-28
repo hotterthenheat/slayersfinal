@@ -19,6 +19,8 @@ import GreekSurfaces from './pages/pinpoint/GreekSurfaces';
 import ExposureCompare from './pages/pinpoint/ExposureCompare';
 import GexHistory from './pages/pinpoint/GexHistory';
 import ModelError from './pages/pinpoint/ModelError';
+import OiHeatScreen from './pages/pinpoint/OiHeatScreen';
+import PainMap from './pages/pinpoint/PainMap';
 import TraceLayout from './pages/trace/TraceLayout';
 import LiveTape from './pages/trace/LiveTape';
 import FlowTracker from './pages/trace/FlowTracker';
@@ -76,6 +78,8 @@ const App = () => {
                   unrouted — pages kept on disk, engines still feed widgets */}
               <Route path="vol-lab" element={<Navigate to="/pinpoint/exposure-profile" replace />} />
               <Route path="history" element={<GexHistory />} />
+              <Route path="pain-map" element={<PainMap />} />
+              <Route path="oi-heat" element={<OiHeatScreen />} />
               <Route path="model-error" element={<ModelError />} />
             </Route>
             <Route path="/trace" element={<TraceLayout />}>

@@ -16,6 +16,18 @@ interface GexMatrixProps {
   /** Re-denominate the strike column (the instrument lens) — default prints
       the native strike. */
   strikeFormat?: (strike: number) => string;
+  /**
+   * A muted trailing column of row-level words — the expiry ladder's
+   * composition read. Lives HERE rather than in a fork of the table so
+   * every strike×column heat surface stays one component: the ladder that
+   * first needed it shipped its own grid in a foreign design, and this prop
+   * is what made deleting that fork possible.
+   */
+  rowNotes?: (string | null)[];
+  rowNotesLabel?: string;
+  /** First column in warn ink — the 0DTE emphasis. A time-bucketed surface
+      (the time machine) turns it off: its first column is just a moment. */
+  warnFirstColumn?: boolean;
 }
 
 /**
@@ -23,7 +35,7 @@ interface GexMatrixProps {
  * (mono or diverging mode); values are always printed and the digit color
  * flips by cell luminance, so color is never the only channel.
  */
-const GexMatrix = ({ data, fill = false, strikeFormat }: GexMatrixProps) => {
+const GexMatrix = ({ data, fill = false, strikeFormat, rowNotes, rowNotesLabel = 'Composition', warnFirstColumn = true }: GexMatrixProps) => {
   const { expiries, strikes, cells, maxAbs, spotRowIndex, callWallIndex, putWallIndex } = data;
 
   /*
@@ -64,12 +76,17 @@ const GexMatrix = ({ data, fill = false, strikeFormat }: GexMatrixProps) => {
                 <th
                   key={exp}
                   className={`px-2 py-1.5 text-right font-mono text-[9px] font-semibold uppercase tracking-widest border-b border-borderSubtle ${
-                    i === 0 ? 'text-warn' : 'text-textMuted'
+                    warnFirstColumn && i === 0 ? 'text-warn' : 'text-textMuted'
                   }`}
                 >
                   {exp}
                 </th>
               ))}
+              {rowNotes && (
+                <th className="px-2 py-1.5 text-left font-mono text-[9px] font-semibold uppercase tracking-widest text-textMuted border-b border-borderSubtle">
+                  {rowNotesLabel}
+                </th>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -77,7 +94,7 @@ const GexMatrix = ({ data, fill = false, strikeFormat }: GexMatrixProps) => {
               if (entry.kind === 'hidden') {
                 return (
                   <tr key={`hidden-${k}`}>
-                    <td colSpan={expiries.length + 1} className="p-0">
+                    <td colSpan={expiries.length + 1 + (rowNotes ? 1 : 0)} className="p-0">
                       <HiddenStrikes count={entry.count} />
                     </td>
                   </tr>
@@ -140,6 +157,11 @@ const GexMatrix = ({ data, fill = false, strikeFormat }: GexMatrixProps) => {
                       </HeatPill>
                     </td>
                   ))}
+                  {rowNotes && (
+                    <td className="px-2 py-1 font-mono text-[9px] text-textMuted whitespace-nowrap">
+                      {rowNotes[r] ?? ''}
+                    </td>
+                  )}
                 </tr>
               );
             })}

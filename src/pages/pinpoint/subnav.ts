@@ -1,4 +1,4 @@
-import { Clock, Columns2, Gauge, Grid3x3, Layers, Map, Target, Waves, type LucideIcon } from 'lucide-react';
+import { Activity, Clock, Columns2, Flame, Gauge, Grid3x3, Layers, Map, Target, Waves, type LucideIcon } from 'lucide-react';
 
 /** Pinpoint subpage registry — drives the sub-tab bar and command palette. */
 export interface GexSubpage {
@@ -38,6 +38,18 @@ export const GEX_SUBPAGES: GexSubpage[] = [
     label: 'Greek Surfaces',
     subtitle: 'Color · vomma · speed · veta · zomma — the derivatives behind the levels',
     icon: Layers,
+  },
+  {
+    path: '/pinpoint/pain-map',
+    label: 'Pain Map',
+    subtitle: 'Where today\u2019s buyers got in, strike by strike \u2014 and the spot that flips them',
+    icon: Flame,
+  },
+  {
+    path: '/pinpoint/oi-heat',
+    label: '\u0394OI Heat',
+    subtitle: 'Strikes being built and unwound through the session \u2014 the flow behind the snapshot',
+    icon: Activity,
   },
   {
     path: '/pinpoint/compare',

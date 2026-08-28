@@ -1,11 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildExpiryLadder, rowWords, wallOwnership, LADDER_COLUMNS } from '../../data/expiryLadder';
-import { fmtUsd } from '../../data/gex';
-import { heatCellStyle, heatPoles } from '../../components/gex/heatmap';
-import { SPOT } from '../../components/gex/palette';
+import GexMatrix from '../../components/gex/GexMatrix';
 import ProvenanceChip from '../../components/ui/ProvenanceChip';
 import Term from '../../components/ui/Term';
+import type { GexMatrixData } from '../../types/gex';
 
 /*
 ==================================================
@@ -13,39 +12,78 @@ import Term from '../../components/ui/Term';
   (pages/pinpoint/ExpiryLadder.tsx)
 ==================================================
 
-  Strikes down, expiries across. The one question the Exposure Profile
-  cannot answer: is this wall a 0DTE artifact that evaporates at the bell,
-  or a monthly shelf that will still be there tomorrow?
+  Which expiry owns this strike — is this wall a 0DTE artifact that
+  evaporates at the bell, or structure that outlives the week?
 
-  THE HEAT IS THE HOUSE HEAT — heatCellStyle from heatmap.ts, the steel/gold
-  ramp Noah landed on in palette round 3, with the measured gamma curve that
-  keeps a heavy-tailed book from rendering as a black grid and the solved
-  ink crossover that keeps every cell legible. The first cut of this page
-  hand-rolled red/green alpha washes — the industry-standard GEX heatmap
-  this desk deliberately moved OFF, rebuilt as if the change never happened.
-  A heat surface on this desk derives from heatmap.ts or it is wrong.
+  THE GRID IS GexMatrix, NOT A GRID OF ITS OWN. This page shipped twice
+  with a hand-built table — first in red/green washes, then in the right
+  ramp but the wrong chrome — while the desk already owned a strike×expiry
+  heat surface with the pills, the quiet-run fold, the spot rule, the wall
+  chips and the scale rail. The third cut is an ADAPTER: the ladder engine
+  supplies the data and its composition sentences ride GexMatrix's notes
+  column. One heat surface, one design; this file can no longer drift from
+  it because it no longer draws anything.
 
-  ALL IS SET APART because it is the aggregate, not a seventh lens. It
-  carries a divider and never competes in the dominance read — a column
-  that wins every row says nothing.
+  WHAT THIS PAGE ADDS OVER THE RAW MATRIX is P-2's actual product: the
+  dominance read. The headline names which expiry owns each WALL — the two
+  strikes the desk is watching — and every row carries its composition
+  sentence, so "spread across expiries" and "evaporates at the bell" stay
+  words, not colors.
 */
 
 const ExpiryLadder = () => {
   const { marketData } = useMarketData();
-  const [hovered, setHovered] = useState<number | null>(null);
 
   const ladder = useMemo(() => (marketData ? buildExpiryLadder(marketData, 10) : null), [marketData]);
 
-  if (!ladder || ladder.rows.length === 0) {
+  const view = useMemo(() => {
+    if (!ladder || ladder.rows.length === 0) return null;
+    const walls = wallOwnership(ladder);
+
+    /* The ALL-column heavyweight is the book's king — the same meaning the
+       matrix's magenta ring carries everywhere else. */
+    let kingRow = -1;
+    let kingMag = 0;
+    ladder.rows.forEach((r, i) => {
+      const all = Math.abs(r.cells.find(c => c.expiry === 'ALL')?.netGex ?? 0);
+      if (all > kingMag) {
+        kingMag = all;
+        kingRow = i;
+      }
+    });
+    const allCol = ladder.columns.indexOf('ALL');
+
+    let spotRowIndex = 0;
+    let spotD = Infinity;
+    ladder.rows.forEach((r, i) => {
+      const d = Math.abs(r.strike - ladder.spot);
+      if (d < spotD) {
+        spotD = d;
+        spotRowIndex = i;
+      }
+    });
+
+    const data: GexMatrixData = {
+      expiries: [...LADDER_COLUMNS],
+      strikes: ladder.rows.map(r => r.strike),
+      cells: ladder.rows.map((r, i) =>
+        r.cells.map((c, j) => ({ value: c.netGex, king: i === kingRow && j === allCol }))
+      ),
+      maxAbs: ladder.maxAbs,
+      spotRowIndex,
+      callWallIndex: walls.call ? ladder.rows.findIndex(r => r.strike === walls.call!.strike) : -1,
+      putWallIndex: walls.put ? ladder.rows.findIndex(r => r.strike === walls.put!.strike) : -1,
+    };
+    return { data, walls, notes: ladder.rows.map(rowWords) };
+  }, [ladder]);
+
+  if (!ladder || !view) {
     return (
       <div className="flex items-center justify-center h-64 font-mono text-[11px] uppercase tracking-widest text-textMuted">
         Awaiting the book…
       </div>
     );
   }
-
-  const hoveredRow = hovered === null ? null : ladder.rows.find(r => r.strike === hovered) ?? null;
-  const walls = wallOwnership(ladder);
 
   return (
     <div className="flex flex-col gap-3">
@@ -54,94 +92,35 @@ const ExpiryLadder = () => {
           <Term k="Expiry ladder">Which expiry owns this strike</Term>
         </h2>
         <ProvenanceChip sources={['chain', 'exposure']} />
-        <span className="ml-auto font-mono text-[10px] uppercase tracking-wider text-textMuted">
-          <span style={{ color: heatPoles.pos }}>gold amplifies</span> · <span style={{ color: heatPoles.neg }}>steel absorbs</span> · spot{' '}
-          <span style={{ color: SPOT }}>{ladder.spot.toFixed(2)}</span>
-        </span>
       </div>
 
       {/* The headline: which expiry owns the WALLS. Nobody scans twenty rows
           — they came to ask about the two strikes the desk is watching. */}
-      {(walls.call || walls.put) && (
+      {(view.walls.call || view.walls.put) && (
         <div className="flex flex-col gap-0.5">
-          {walls.call && (
+          {view.walls.call && (
             <p className="font-mono text-[11px] leading-relaxed text-textPrimary">
-              Call wall <span className="font-bold tnum">{walls.call.strike}</span>{' '}
-              <span className="text-textSecondary">— {walls.call.words}</span>
+              Call wall <span className="font-bold tnum">{view.walls.call.strike}</span>{' '}
+              <span className="text-textSecondary">— {view.walls.call.words}</span>
             </p>
           )}
-          {walls.put && (
+          {view.walls.put && (
             <p className="font-mono text-[11px] leading-relaxed text-textPrimary">
-              Put wall <span className="font-bold tnum">{walls.put.strike}</span>{' '}
-              <span className="text-textSecondary">— {walls.put.words}</span>
+              Put wall <span className="font-bold tnum">{view.walls.put.strike}</span>{' '}
+              <span className="text-textSecondary">— {view.walls.put.words}</span>
             </p>
           )}
         </div>
       )}
 
-      <div className="border border-borderSubtle bg-panel rounded-md overflow-x-auto">
-        <table className="w-full border-collapse">
-          <thead>
-            <tr>
-              <th className="sticky left-0 bg-panel px-2 py-1.5 text-left font-mono text-[9px] uppercase tracking-widest text-textMuted">
-                Strike
-              </th>
-              {LADDER_COLUMNS.map(e => (
-                <th
-                  key={e}
-                  className={`px-2 py-1.5 text-right font-mono text-[9px] uppercase tracking-widest text-textMuted ${
-                    e === 'ALL' ? 'border-l border-borderMuted' : ''
-                  }`}
-                >
-                  {e}
-                </th>
-              ))}
-              <th className="px-2 py-1.5 text-left font-mono text-[9px] uppercase tracking-widest text-textMuted">
-                Composition
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {ladder.rows.map(row => (
-              <tr
-                key={row.strike}
-                onMouseEnter={() => setHovered(row.strike)}
-                onMouseLeave={() => setHovered(null)}
-                className={hovered === row.strike ? 'bg-white/[0.04]' : ''}
-              >
-                <td className="sticky left-0 bg-panel px-2 py-1 font-mono text-[10px] tnum text-textPrimary whitespace-nowrap">
-                  {row.strike}
-                  {/* The spot marker rides the first row at or below spot —
-                      the same anchor the profile's own marker uses. */}
-                  {!row.aboveSpot && ladder.rows.find(r => !r.aboveSpot)?.strike === row.strike && (
-                    <span className="ml-1.5 font-bold" style={{ color: SPOT }} title={`Spot ${ladder.spot.toFixed(2)}`}>
-                      ◀
-                    </span>
-                  )}
-                </td>
-                {row.cells.map(c => (
-                  <td
-                    key={c.expiry}
-                    style={heatCellStyle(c.netGex, ladder.maxAbs)}
-                    title={`${row.strike} · ${c.expiry} · ${fmtUsd(c.netGex)}`}
-                    className={`px-2 py-1 text-right font-mono text-[10px] tnum ${
-                      c.expiry === 'ALL' ? 'border-l border-borderMuted' : ''
-                    }`}
-                  >
-                    {c.netGex === 0 ? '—' : fmtUsd(c.netGex)}
-                  </td>
-                ))}
-                <td className="px-2 py-1 font-mono text-[9px] text-textMuted whitespace-nowrap">{rowWords(row)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="border border-borderSubtle bg-panel rounded-md p-2 max-h-[640px] flex min-h-0">
+        <GexMatrix data={view.data} spot={ladder.spot} rowNotes={view.notes} />
       </div>
 
       <p className="font-mono text-[10px] leading-relaxed text-textSecondary">
-        {hoveredRow
-          ? `${hoveredRow.strike}: ${rowWords(hoveredRow)}.`
-          : 'A strike whose gamma is concentrated in 0DTE is a level that will not survive the bell; one spread across the dated lenses is structure. ALL is the aggregate, not a seventh expiry — it is set apart and never competes for the composition read.'}
+        A strike whose gamma is concentrated in 0DTE is a level that will not survive the bell; one spread across
+        the dated lenses is structure. ALL is the aggregate, not a seventh expiry — it never competes for the
+        composition read, and its heavyweight wears the king's ring.
       </p>
     </div>
   );

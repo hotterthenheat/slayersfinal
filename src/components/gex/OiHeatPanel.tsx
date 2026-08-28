@@ -1,5 +1,7 @@
 import { useMemo } from 'react';
+import { Fragment } from 'react';
 import { buildOiHeat, rowWords } from '../../data/oiHeat';
+import SpotRule from '../ui/SpotRule';
 import Term from '../ui/Term';
 import type { Candle, GexSnapshot } from '../../types/market';
 
@@ -35,10 +37,18 @@ const OiHeatPanel = ({
   snaps,
   bars,
   buckets = 8,
+  maxRows = 12,
+  ticker,
+  spot,
 }: {
   snaps: GexSnapshot[];
   bars: Candle[];
   buckets?: number;
+  /** Page-hosted, the grid can afford more rows than a side panel could. */
+  maxRows?: number;
+  /** Both present → the spot rule embeds between rows, the matrix idiom. */
+  ticker?: string;
+  spot?: number;
 }) => {
   const heat = useMemo(() => buildOiHeat(snaps, bars, buckets), [snaps, bars, buckets]);
 
@@ -69,8 +79,11 @@ const OiHeatPanel = ({
 
   /* The busiest strikes first — a grid of every strike is unreadable, and
      the rows worth showing are the ones where something HAPPENED. */
-  const rows = [...heat.rows].sort((a, b) => Math.abs(b.netToday) - Math.abs(a.netToday)).slice(0, 12);
-
+  const rows = [...heat.rows]
+    .sort((a, b) => Math.abs(b.netToday) - Math.abs(a.netToday))
+    .slice(0, maxRows)
+    .sort((a, b) => b.strike - a.strike);
+  const spotAfter = spot !== undefined ? rows.findIndex((r, i) => r.strike >= spot && (rows[i + 1]?.strike ?? -Infinity) < spot) : -1;
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-baseline gap-2 flex-wrap">
@@ -84,28 +97,36 @@ const OiHeatPanel = ({
 
       <div className="overflow-x-auto">
         <table className="w-full border-collapse">
-          <thead>
-            <tr>
-              <th className="px-1.5 py-0.5 text-left font-mono text-[9px] uppercase tracking-wider text-textMuted">
+          <thead className="sticky top-0 z-10">
+            <tr className="bg-[#0c0c0c]">
+              <th className="w-px px-2 py-1.5 text-left font-mono text-[9px] font-semibold uppercase tracking-widest text-textMuted border-b border-borderSubtle whitespace-nowrap">
                 Strike
               </th>
               {heat.columns.map(c => (
-                <th key={c} className="px-1.5 py-0.5 text-right font-mono text-[9px] tnum text-textMuted">
+                <th key={c} className="px-2 py-1.5 text-right font-mono text-[9px] font-semibold uppercase tracking-widest text-textMuted border-b border-borderSubtle tnum">
                   {hhmm(c)}
                 </th>
               ))}
-              <th className="px-1.5 py-0.5 text-right font-mono text-[9px] uppercase tracking-wider text-textMuted">
+              <th className="px-2 py-1.5 text-right font-mono text-[9px] font-semibold uppercase tracking-widest text-textPrimary border-b border-l border-borderSubtle">
                 Net
               </th>
-              <th className="px-1.5 py-0.5 text-right font-mono text-[9px] uppercase tracking-wider text-textMuted">
+              <th className="px-2 py-1.5 text-right font-mono text-[9px] font-semibold uppercase tracking-widest text-textMuted border-b border-borderSubtle">
                 FLEX
               </th>
             </tr>
           </thead>
           <tbody>
-            {rows.map(r => (
-              <tr key={r.strike} title={rowWords(r)}>
-                <td className="px-1.5 py-0.5 font-mono text-[10px] tnum text-textPrimary">{r.strike}</td>
+            {spot !== undefined && ticker && spotAfter === -1 && rows.length > 0 && spot > rows[0].strike && (
+              <tr>
+                <td colSpan={heat.columns.length + 3} className="px-2 py-1">
+                  <SpotRule ticker={ticker} price={spot} />
+                </td>
+              </tr>
+            )}
+            {rows.map((r, i) => (
+              <Fragment key={r.strike}>
+              <tr title={rowWords(r)} className="border-b border-borderSubtle/40 last:border-0">
+                <td className="w-px px-2 py-1 font-mono text-[11px] font-semibold tnum text-textPrimary whitespace-nowrap">{r.strike}</td>
                 {r.cells.map(c => (
                   <td
                     key={c.time}
@@ -115,7 +136,7 @@ const OiHeatPanel = ({
                     {c.deltaOi === 0 ? '·' : `${c.deltaOi > 0 ? '↑' : '↓'}${Math.abs(c.deltaOi).toLocaleString()}`}
                   </td>
                 ))}
-                <td className="px-1.5 py-0.5 text-right font-mono text-[10px] font-semibold tnum text-textPrimary">
+                <td className="px-1.5 py-0.5 text-right font-mono text-[10px] font-semibold tnum text-textPrimary border-l border-borderSubtle/40">
                   {r.netToday > 0 ? '+' : ''}
                   {r.netToday.toLocaleString()}
                 </td>
@@ -127,6 +148,14 @@ const OiHeatPanel = ({
                     : r.cells.reduce((a, c) => a + (c.flexTransfer ?? 0), 0).toLocaleString()}
                 </td>
               </tr>
+              {i === spotAfter && spot !== undefined && ticker && (
+                <tr>
+                  <td colSpan={heat.columns.length + 3} className="px-2 py-1">
+                    <SpotRule ticker={ticker} price={spot} />
+                  </td>
+                </tr>
+              )}
+              </Fragment>
             ))}
           </tbody>
         </table>

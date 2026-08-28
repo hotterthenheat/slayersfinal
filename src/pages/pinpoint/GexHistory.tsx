@@ -7,8 +7,7 @@ import {
   snapshotAt,
   strikeTimeHeat,
 } from '../../data/timeMachine';
-import { fmtUsd } from '../../data/gex';
-import { heatCellStyle, heatPoles } from '../../components/gex/heatmap';
+import GexMatrix from '../../components/gex/GexMatrix';
 import { CALL_WALL, FLIP, KING, PUT_WALL, SPOT } from '../../components/gex/palette';
 import Panel from '../../components/ui/Panel';
 import ProvenanceChip from '../../components/ui/ProvenanceChip';
@@ -82,10 +81,21 @@ const GexHistory = () => {
   }
 
 
-  const heatRows = [...heat.rows]
-    .sort((a, b) => Math.max(...b.cells.map(c => Math.abs(c.netGex))) - Math.max(...a.cells.map(c => Math.abs(c.netGex))))
-    .slice(0, 12)
-    .sort((a, b) => b.strike - a.strike);
+  /* HIST_02 as the house matrix: time buckets for expiries, the fold doing
+     the row triage the hand-sorted top-12 used to fake. warnFirstColumn off
+     — the first bucket is a moment, not a 0DTE emphasis. */
+  const heatData = useMemo(() => {
+    if (heat.rows.length === 0) return null;
+    return {
+      expiries: heat.columns.map(hhmm),
+      strikes: heat.rows.map(r => r.strike),
+      cells: heat.rows.map(r => r.cells.map(c => ({ value: c.netGex }))),
+      maxAbs: heat.maxAbs,
+      spotRowIndex: -1,
+      callWallIndex: -1,
+      putWallIndex: -1,
+    };
+  }, [heat]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -150,44 +160,11 @@ const GexHistory = () => {
 
       {/* HIST_02 */}
       <Panel title="Strike × Time Heatmap" subtitle="HIST_02 — exposure building and decaying through the day" className="w-full">
-        <p className="font-mono text-[9px] uppercase tracking-wider text-textMuted mb-1.5">
-          <span style={{ color: heatPoles.pos }}>gold amplifies</span> · <span style={{ color: heatPoles.neg }}>steel absorbs</span> · brighter is heavier
-        </p>
-        {heat.rows.length === 0 ? (
+        {heatData === null ? (
           <span className="font-mono text-[10px] text-textMuted">No snapshots recorded for this session.</span>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
-              <thead>
-                <tr>
-                  <th className="px-1.5 py-0.5 text-left font-mono text-[9px] uppercase tracking-wider text-textMuted">
-                    Strike
-                  </th>
-                  {heat.columns.map(c => (
-                    <th key={c} className="px-1.5 py-0.5 text-right font-mono text-[9px] tnum text-textMuted">
-                      {hhmm(c)}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {heatRows.map(r => (
-                  <tr key={r.strike}>
-                    <td className="px-1.5 py-0.5 font-mono text-[10px] tnum text-textPrimary">{r.strike}</td>
-                    {r.cells.map(c => (
-                      <td
-                        key={c.time}
-                        style={heatCellStyle(c.netGex, heat.maxAbs)}
-                        title={`${r.strike} · ${hhmm(c.time)} · ${fmtUsd(c.netGex)}`}
-                        className="px-1.5 py-0.5 text-right font-mono text-[9px] tnum"
-                      >
-                        {c.netGex === 0 ? '·' : fmtUsd(c.netGex)}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="max-h-[560px] flex min-h-0">
+            <GexMatrix data={heatData} spot={0} warnFirstColumn={false} />
           </div>
         )}
       </Panel>

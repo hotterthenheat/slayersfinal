@@ -4691,10 +4691,24 @@ head('the substance round reaches its surfaces, and the chip tells the truth');
   /(evaporates at the bell|sits in|spread across expiries|no gamma at this strike)/.test(ladderBody)
     ? ok('and each row says what its gamma is made of')
     : bad('no composition sentence on any row');
-  const cells = await page.$$eval('tbody tr:first-child td', tds => tds.length);
+  /*
+    THE GRID IS GexMatrix — the house heatmap, not a table of its own. The
+    fold can make the first tbody row a hidden-run marker, so the check
+    walks to the first DATA row: strike + seven lens cells + composition.
+  */
+  const cells = await page.$$eval('tbody tr', trs => {
+    for (const tr of trs) {
+      if (tr.children.length > 1) return tr.children.length;
+    }
+    return 0;
+  });
   cells === 9
-    ? ok('each row is strike + seven lenses + composition')
-    : bad(`a row carries ${cells} cells, expected 9`);
+    ? ok('each data row is strike + seven lenses + composition, on the house matrix')
+    : bad(`a data row carries ${cells} cells, expected 9`);
+  /* The scale rail — the matrix's own legend, which the first two cuts of
+     this page lacked because they were not the matrix. */
+  const rail = await page.$$eval('div', ds => ds.some(d => (d.getAttribute('style') || '').includes('linear-gradient')));
+  rail ? ok('and the diverging scale rail rides beside it') : bad('no scale rail — this is not the house matrix');
 
   errs.length === 0 ? ok('no page errors across the round') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
@@ -4803,13 +4817,16 @@ head('the ΔOI grid shows change, and prints absence as absence');
   const page = await ctx.newPage();
   const errs = [];
   page.on('pageerror', e => errs.push(String(e)));
-  await page.goto(`${BASE}/pinpoint/exposure-profile`, { waitUntil: 'networkidle' });
+  /* The directive assigns P-8 as a SCREEN ("Rows = strikes, columns =
+     time"); it lived as a profile side panel first, against the spec, and
+     now has the page the spec named. */
+  await page.goto(`${BASE}/pinpoint/oi-heat`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS + 1500);
 
   const body = await page.evaluate(() => document.body.textContent ?? '');
   /ΔOI Through The Session/i.test(body)
-    ? ok('P-8: the ΔOI panel is on the page')
-    : bad('P-8: no ΔOI panel');
+    ? ok('P-8: the ΔOI screen exists, as the spec assigned')
+    : bad('P-8: no ΔOI screen');
 
   /* Either it has flow to show, or it says why not — both are correct, and
      an empty grid pretending to be a quiet day is the failure. */
@@ -4959,17 +4976,26 @@ head('the last three surfaces carry the sentences that make them honest');
   const errs = [];
   page.on('pageerror', e => errs.push(String(e)));
 
-  /* P-16 — on Exposure Profile. */
-  await page.goto(`${BASE}/pinpoint/exposure-profile`, { waitUntil: 'networkidle' });
+  /* P-16 — its own SCREEN now, as the directive assigned ("Strike
+     Pressure Ladder geometry, two new bars per row"): bands on top, the
+     per-strike ladder with P&L glow under them, spot rule embedded. */
+  await page.goto(`${BASE}/pinpoint/pain-map`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS + 1000);
   const profile = await page.evaluate(() => document.body.textContent ?? '');
-  /Pain Map/i.test(profile) ? ok('P-16: the pain map is on the page') : bad('P-16: no pain map');
+  /Pain Map/i.test(profile) ? ok('P-16: the pain map screen exists') : bad('P-16: no pain map screen');
   /(turn green at|already green above|No aggressive)/.test(profile)
     ? ok('with a flip level or an honest absence')
     : bad('the pain map states neither a level nor an absence');
   /AGGRESSIVE LONGS|aggressive longs/i.test(profile)
     ? ok('and it names the population it tracks — the load-bearing assumption')
     : bad('the pain map does not say WHOSE basis it is');
+  const painRows = await page.$$eval('tbody tr', trs => trs.length);
+  painRows > 10
+    ? ok(`and the ladder the spec asked for — ${painRows} strike rows with P&L glow`)
+    : bad(`the per-strike ladder is missing — ${painRows} rows`);
+  /Unrealized P&L/i.test(profile)
+    ? ok('with the unrealized P&L column')
+    : bad('no P&L column on the ladder');
 
   /* P-22 — the compare page. */
   await page.goto(`${BASE}/pinpoint/compare`, { waitUntil: 'networkidle' });

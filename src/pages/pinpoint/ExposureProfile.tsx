@@ -18,9 +18,7 @@ import Fact from '../../components/ui/Fact';
 import Term from '../../components/ui/Term';
 import ProvenanceChip from '../../components/ui/ProvenanceChip';
 import SpotScenarioPanel from '../../components/gex/SpotScenarioPanel';
-import OiHeatPanel from '../../components/gex/OiHeatPanel';
 import StabilityGauge from '../../components/gex/StabilityGauge';
-import PainMapPanel from '../../components/gex/PainMapPanel';
 import StrikeAttributionPanel from '../../components/gex/StrikeAttributionPanel';
 import Simulator from '../../core/simulator';
 import { LONG_GAMMA, SHORT_GAMMA } from '../../components/gex/palette';
@@ -306,13 +304,11 @@ const ExposureProfile = () => {
           12 and nothing claimed the other 7.
         */}
         <div className="xl:col-span-7 min-w-0 flex flex-col gap-4">
-        {/* P-11 + P-16 SHARE A ROW — the fit-more-on-screen rule this desk
-            applies everywhere else. Both are compact sentence-first reads,
-            and stacking four full-width panels made the page a scroll of
-            headers (the first cut did exactly that; the renders showed it).
-            Stability leads because it qualifies everything under it: a wall
-            a vol tick would dissolve is not the same object as one that
-            survives, and every other GEX product draws them identically. */}
+        {/* P-11 + P-17/18 SHARE A ROW — the two reads the directive assigns
+            to THIS page (stability at its head, the scenario on the map).
+            The pain map and the ΔOI grid used to stack under them as side
+            panels; the directive assigns both as SCREENS, and they have
+            their own pages now. */}
         {scanSnapshot && (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-stretch">
             <Panel
@@ -325,53 +321,14 @@ const ExposureProfile = () => {
                 iv={Simulator.TICKERS[scanSnapshot.ticker]?.iv ?? 0.2}
               />
             </Panel>
-            {/* P-16. What the HOLDERS will do, beside what the dealers must.
-                Reads the same flowTape the attribution panel does, so the
-                basis and the prints behind a strike cannot disagree. */}
             <Panel
-              title="Pain Map"
-              subtitle="Where today's buyers got in — and the spot that flips them"
+              title="Spot Scenario"
+              subtitle="Drag spot — the levels re-pick, and the flow that move forces"
               className="w-full"
             >
-              <PainMapPanel
-                prints={flowTape}
-                spot={scanSnapshot.spot}
-                dteYears={30 / 365}
-                iv={Simulator.TICKERS[scanSnapshot.ticker]?.iv ?? 0.2}
-              />
+              <SpotScenarioPanel snapshot={scanSnapshot} />
             </Panel>
           </div>
-        )}
-        {/* P-17 / P-18. Vanna & Charm already do time and vol; nobody does
-            SPOT, and it is the scenario a trader runs in their head all day.
-            The forced-flow sentence under it is the translation layer that
-            makes the page legible without greek. Full width — the ruler
-            wants the room. */}
-        {scanSnapshot && (
-          <Panel
-            title="Spot Scenario"
-            subtitle="Drag spot — the levels re-pick, and the flow that move forces"
-            className="w-full"
-          >
-            <SpotScenarioPanel snapshot={scanSnapshot} />
-          </Panel>
-        )}
-        {/* P-8. The flow behind the snapshot: which strikes are being built
-            and unwound right now. Reads the same GEX history the percentile
-            and the conviction panel do — the OI rides on those snapshots, so
-            a ΔOI reading can never be timestamped away from the gamma it
-            explains. */}
-        {scanSnapshot && (
-          <Panel
-            title="ΔOI Through The Session"
-            subtitle="Is that wall growing or dying — change, not level"
-            className="w-full"
-          >
-            <OiHeatPanel
-              snaps={Simulator.getGexHistory(scanSnapshot.ticker) ?? []}
-              bars={Simulator.getCandles(scanSnapshot.ticker) ?? []}
-            />
-          </Panel>
         )}
         {/* P-6. A wall at 5,880 that is 2.4× its runner-up and unbroken for
             four sessions is a different object from a marginal winner that
