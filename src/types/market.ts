@@ -23,6 +23,9 @@ export interface Greeks {
   vanna: number;
   charmCall: number;
   charmPut: number;
+  /** Per one POINT of rate, like vega is per one point of vol — P-24A. */
+  rhoCall: number;
+  rhoPut: number;
 }
 
 export interface Candle {
