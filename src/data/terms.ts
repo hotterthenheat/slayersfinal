@@ -81,6 +81,13 @@ export const TERMS = {
   // ---- expected-move cone (T-9) ----
   'Expected move cone':
     'The band options priced for today, drawn on the chart: the envelope since the open, and the cone still left from here to the bell. Price leaving the band means the move has already beaten what the options charged; the cone shrinking into the close is normal — less day left, less move left.',
+  // ---- spot scenario & attribution (P-17, P-18, P-19) ----
+  'Spot scenario':
+    'The book re-read at a price it has not reached yet. Open interest is held exactly as it stands \u2014 this answers where the LEVELS would be if price were there, not how the book would have re-formed on the way.',
+  'Expected hedging flow':
+    'The dollars of stock dealers must trade to stay hedged as price crosses the gamma between here and there. Positive is buying. It assumes continuous hedging at the modelled dealer sign \u2014 real desks hedge in bands.',
+  Attribution:
+    'The prints that built the exposure at a strike today. It answers whether the level is one institution\u2019s single order or four hundred small ones \u2014 the same wall on the map, a different thing to trade against.',
   // ---- air pockets & conviction (P-5, P-6) ----
   'Air pocket':
     'A run of strikes between two shelves with almost no dealer gamma in them. A wall says where price stops; this says where it does NOT \u2014 there is no hedging flow in the gap to slow anything down, which is why price can cross it in seconds.',

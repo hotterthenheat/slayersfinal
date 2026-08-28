@@ -17,6 +17,8 @@ import AnimatedNumber from '../../components/ui/AnimatedNumber';
 import Fact from '../../components/ui/Fact';
 import Term from '../../components/ui/Term';
 import ProvenanceChip from '../../components/ui/ProvenanceChip';
+import SpotScenarioPanel from '../../components/gex/SpotScenarioPanel';
+import StrikeAttributionPanel from '../../components/gex/StrikeAttributionPanel';
 import Simulator from '../../core/simulator';
 import { LONG_GAMMA, SHORT_GAMMA } from '../../components/gex/palette';
 import { buildWallConviction, convictionGrade, convictionWords } from '../../data/wallConviction';
@@ -43,7 +45,7 @@ const WINDOW_OPTIONS = [
 ] as const;
 
 const ExposureProfile = () => {
-  const { marketData } = useMarketData();
+  const { marketData, flowTape } = useMarketData();
   const navigate = useNavigate();
   const [expiry, setExpiry] = useState<ExposureExpiry>('0DTE');
   const [windowHalf, setWindowHalf] = useState<'10' | '15'>('10');
@@ -133,6 +135,11 @@ const ExposureProfile = () => {
   }
 
   const selectedRow = selectedStrike != null ? data.strikes.find(s => s.strike === selectedStrike) : undefined;
+  /* The grid step sets P-19's match tolerance — a print lands on a contract,
+     a map row on the profile's own grid, and half a step is the gap between
+     them. Read off the rendered rows so it cannot drift from what is drawn. */
+  const strikeStep =
+    data.strikes.length > 1 ? Math.abs(data.strikes[0].strike - data.strikes[1].strike) : 1;
 
   return (
     <>
@@ -167,8 +174,9 @@ const ExposureProfile = () => {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-            className="flex items-center gap-4 flex-wrap border border-white/20 bg-white/[0.03] rounded-md px-3 py-2"
+            className="flex flex-col gap-2 border border-white/20 bg-white/[0.03] rounded-md px-3 py-2"
           >
+            <div className="flex items-center gap-4 flex-wrap">
             <span className="inline-flex items-center rounded-full border border-white/40 bg-white/[0.08] px-2 py-0.5 font-mono text-[11px] font-semibold text-textPrimary tnum">
               {data.ticker} {selectedRow.strike % 1 === 0 ? selectedRow.strike.toFixed(0) : selectedRow.strike.toFixed(2)}
             </span>
@@ -197,6 +205,13 @@ const ExposureProfile = () => {
                 <X className="w-3.5 h-3.5" />
               </button>
             </span>
+            </div>
+            {/* P-19. The wall stops being a number and becomes a list of
+                trades — off the same flowTape the tape desk reads, so the two
+                desks cannot disagree about what traded. */}
+            <div className="border-t border-borderSubtle/60 pt-2">
+              <StrikeAttributionPanel prints={flowTape} strike={selectedRow.strike} step={strikeStep} />
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -288,6 +303,19 @@ const ExposureProfile = () => {
           12 and nothing claimed the other 7.
         */}
         <div className="xl:col-span-7 min-w-0 flex flex-col gap-4">
+        {/* P-17 / P-18. Vanna & Charm already do time and vol; nobody does
+            SPOT, and it is the scenario a trader runs in their head all day.
+            The forced-flow sentence under it is the translation layer that
+            makes the page legible without greek. */}
+        {scanSnapshot && (
+          <Panel
+            title="Spot Scenario"
+            subtitle="Drag spot — the levels re-pick, and the flow that move forces"
+            className="w-full"
+          >
+            <SpotScenarioPanel snapshot={scanSnapshot} />
+          </Panel>
+        )}
         {/* P-6. A wall at 5,880 that is 2.4× its runner-up and unbroken for
             four sessions is a different object from a marginal winner that
             flips at the next tick — and the map draws them identically. This

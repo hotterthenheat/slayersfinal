@@ -4700,6 +4700,93 @@ head('the substance round reaches its surfaces, and the chip tells the truth');
   await ctx.close();
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   P-17 · P-18 · P-19 — the scenario, the dollars, and the trades behind a
+   level.
+
+   The engines are proved headless (scenario-attribution-proof). What only a
+   browser can show is that the slider REALLY RE-READS the book — a panel
+   that rendered the live levels and ignored its own control would look
+   identical in a screenshot — and that P-18's sentence and its assumption
+   arrive together, since a forced-flow figure without its caveat is the
+   failure mode the directive names.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the spot scenario re-reads the book, and says what it assumes');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/pinpoint/exposure-profile`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 1000);
+
+  const slider = await page.$('input[type="range"][aria-label^="Hypothetical spot"]');
+  slider ? ok('P-17: the spot ruler is on the page') : bad('P-17: no spot scenario slider');
+
+  if (slider) {
+    const panel = await page.$('input[type="range"][aria-label^="Hypothetical spot"] >> xpath=ancestor::div[contains(@class,"flex-col")][1]');
+    const readPanel = async () => (panel ? ((await panel.textContent()) ?? '') : '');
+    const before = await readPanel();
+
+    /* Drive the range to its maximum — the top of the book. A panel that
+       ignores its own control reads identically after this. */
+    const max = await slider.evaluate(el => el.max);
+    await slider.evaluate((el, v) => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(el, v);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    }, max);
+    await page.waitForTimeout(500);
+    const after = await readPanel();
+
+    after !== before
+      ? ok('dragging it re-reads the book — the panel changes')
+      : bad('the panel ignored the slider — it is rendering live levels, not the scenario');
+    /at the top of the book|—/.test(after) && /%/.test(after)
+      ? ok('and it states the move it is pricing')
+      : bad(`no move stated — ${after.slice(0, 120)}`);
+    /Reset to spot/.test(after)
+      ? ok('with a way back to the live spot')
+      : bad('no reset — a reader can get stranded in a scenario');
+
+    /* P-18: the sentence AND its assumption. */
+    /forces roughly \$|No move, no forced flow/.test(after)
+      ? ok('P-18: the forced-flow sentence is printed in dollars')
+      : bad(`no forced-flow sentence — ${after.slice(0, 140)}`);
+    /continuous delta hedging/i.test(after)
+      ? ok('and its load-bearing assumption rides directly with it')
+      : bad('the flow figure is printed WITHOUT its assumption');
+    /(SHORT|LONG) GAMMA there/.test(after)
+      ? ok('and the regime the scenario spot would sit in')
+      : bad('no regime read at the scenario spot');
+
+    await page.click('text=Reset to spot').catch(() => {});
+    await page.waitForTimeout(300);
+  }
+
+  /* P-19 — click a strike, get the trades. */
+  const rows = await page.$$('[role="row"], tbody tr');
+  let opened = false;
+  for (const r of rows.slice(0, 14)) {
+    await r.click().catch(() => {});
+    await page.waitForTimeout(250);
+    if (/Built by/.test(await page.evaluate(() => document.body.textContent ?? ''))) { opened = true; break; }
+  }
+  const body = await page.evaluate(() => document.body.textContent ?? '');
+  opened || /Built by/.test(body)
+    ? ok('P-19: selecting a strike opens what built it')
+    : bad('P-19: no attribution appeared on any strike');
+  if (opened || /Built by/.test(body)) {
+    /(built by the crowd|one participant|carry-over positioning)/.test(body)
+      ? ok('and it reads the composition, not just a count')
+      : bad('the attribution has no composition read');
+  }
+
+  errs.length === 0 ? ok('no page errors across the scenario round') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
 console.log(`\n${fails} failing`);
 await browser.close();
 process.exit(fails ? 1 : 0);
