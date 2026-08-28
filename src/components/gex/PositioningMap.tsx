@@ -44,6 +44,11 @@ const ZONE_STYLE: Record<ZoneKind, { rail: string; text: string }> = {
   'call-wall': { rail: 'bg-bull/80', text: 'text-bull' },
   'put-wall': { rail: 'bg-bear/70', text: 'text-bear' },
   friction: { rail: 'bg-textMuted/40', text: 'text-textMuted' },
+  /* P-5. HOLLOW, and that is the whole design: every other zone marks
+     something PRESENT and wears a filled rail for it; an air pocket marks an
+     ABSENCE, so it gets an outline with nothing inside. A reader scanning
+     the rail column sees the gap as a gap. */
+  'air-pocket': { rail: 'border border-textMuted/50 bg-transparent', text: 'text-textMuted' },
 };
 
 /* Row rails and selection, inline (this is the only consumer):

@@ -115,7 +115,9 @@ export interface StrikeExposure {
   volume: number;
 }
 
-export type ZoneKind = 'call-wall' | 'put-wall' | 'friction';
+/* P-5 adds `air-pocket`: a run of strikes with almost no dealer gamma
+   between two shelves — where price does NOT stop. */
+export type ZoneKind = 'call-wall' | 'put-wall' | 'friction' | 'air-pocket';
 
 /** Contiguous strike band annotated on the positioning map (strikes descending: from ≥ to). */
 export interface ZoneBand {

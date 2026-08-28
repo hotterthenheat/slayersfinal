@@ -1,24 +1,208 @@
+import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useMarketData } from '../../context/MarketDataContext';
+import {
+  levelMigration,
+  migrationWords,
+  sessionSpans,
+  snapshotAt,
+  strikeTimeHeat,
+} from '../../data/timeMachine';
+import GexMatrix from '../../components/gex/GexMatrix';
+import WallDrift from '../../components/gex/vannacharm/WallDrift';
+import { CALL_WALL, FLIP, KING, PUT_WALL, SPOT } from '../../components/gex/palette';
 import Panel from '../../components/ui/Panel';
+import ProvenanceChip from '../../components/ui/ProvenanceChip';
+import Term from '../../components/ui/Term';
+import Simulator from '../../core/simulator';
 
-const PLANNED = [
-  { title: 'Level Migration Timeline', code: 'HIST_01', detail: 'Call wall, put wall, flip & king moving through the session' },
-  { title: 'Strike × Time Heatmap', code: 'HIST_02', detail: 'Watch exposure walls build and decay intraday' },
-  { title: 'Session Snapshots + Replay', code: 'HIST_03', detail: 'Scrubbable snapshot table with a replay slider' },
-];
+/*
+==================================================
+  SLAYER TERMINAL - THE TIME MACHINE — P-20
+  (pages/pinpoint/GexHistory.tsx)
+==================================================
+
+  This page carried three "module scheduled" placeholders since launch.
+  Everything they needed was already in the buffer. They are built.
+
+  ONE SESSION PICKER DRIVES ALL THREE, because they are three views of the
+  same day and letting each carry its own would be three ways to be looking
+  at different afternoons. Sessions with no snapshots are still listed and
+  still selectable — and say they are empty, which is more useful than
+  hiding them and leaving a reader wondering where Tuesday went.
+
+  NOTHING IS INTERPOLATED anywhere on this page. The scrubber lands on
+  snapshots that were actually recorded, the heat cells are real readings
+  rather than averages, and a session with no data draws no line.
+
+  TWO INK CORRECTIONS from the first cut, both of the same species. The
+  migration table drew the call wall RED and the put wall GREEN — exactly
+  inverted against CALL_WALL/PUT_WALL in palette.ts, which every zone rail
+  and badge on the desk has followed since 2026-08-18; the king now wears
+  its magenta too. And HIST_02's heat was a hand-rolled red/green wash where
+  net GEX heat on this desk has exactly one rendering: heatCellStyle. Level
+  inks come from palette.ts, heat comes from heatmap.ts — nothing on this
+  page invents either any more.
+*/
+
+const hhmm = (t: number) => {
+  const d = new Date(t * 1000);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
+const dayLabel = (t: number) => new Date(t * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
 const GexHistory = () => {
+  const { marketData } = useMarketData();
+  const navigate = useNavigate();
+  const ticker = marketData?.ticker;
+
+  const { snaps, bars } = useMemo(
+    () => ({
+      snaps: ticker ? (Simulator.getGexHistory(ticker) ?? []) : [],
+      bars: ticker ? (Simulator.getCandles(ticker) ?? []) : [],
+    }),
+    [ticker]
+  );
+
+  const spans = useMemo(() => sessionSpans(bars, snaps), [bars, snaps]);
+  const [pick, setPick] = useState<number | null>(null);
+  const span = spans.length > 0 ? (spans.find(s => s.index === pick) ?? spans[spans.length - 1]) : undefined;
+
+  const migration = useMemo(() => levelMigration(snaps, bars, span), [snaps, bars, span]);
+  const heat = useMemo(() => strikeTimeHeat(snaps, span, 10), [snaps, span]);
+
+  /* HIST_01 rides Wall Drift's chart — the same grammar the live session
+     already reads, pointed at a past one. Points where the book was
+     one-sided (a null wall) cannot be drawn on it and fall back to words. */
+  const drift = useMemo(
+    () =>
+      migration
+        .filter(p => p.callWall !== null && p.putWall !== null && p.flip !== null)
+        .map(p => ({ time: p.time, spot: p.spot, callWall: p.callWall as number, putWall: p.putWall as number, flip: p.flip as number })),
+    [migration]
+  );
+
+  const [scrub, setScrub] = useState<number | null>(null);
+  const scrubTime = scrub ?? (migration.length > 0 ? migration[migration.length - 1].time : null);
+  const scrubbed = scrubTime !== null ? snapshotAt(migration.length > 0 ? snaps.filter(s => span && s.time >= span.from && s.time <= span.to) : [], scrubTime) : null;
+
+  /*
+    HIST_02 as the house matrix — and this memo sits ABOVE the early return
+    on purpose. Its first placement was below it, which is React error #310
+    waiting for data to arrive: the empty-buffer render mounts N hooks, the
+    populated one mounts N+1, and the page dies at exactly the moment it
+    first has something to show. The sweep caught it on the navigation path
+    where the page mounts before the sim settles; a hand screenshot, mounted
+    after, never would have. Hooks live above every return, always.
+  */
+  const heatData = useMemo(() => {
+    if (heat.rows.length === 0) return null;
+    return {
+      expiries: heat.columns.map(hhmm),
+      strikes: heat.rows.map(r => r.strike),
+      cells: heat.rows.map(r => r.cells.map(c => ({ value: c.netGex }))),
+      maxAbs: heat.maxAbs,
+      spotRowIndex: -1,
+      callWallIndex: -1,
+      putWallIndex: -1,
+    };
+  }, [heat]);
+
+  if (spans.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64 font-mono text-[11px] uppercase tracking-widest text-textMuted">
+        No sessions in the buffer yet…
+      </div>
+    );
+  }
+
+
+
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-      {PLANNED.map(mod => (
-        <Panel key={mod.code} title={mod.title} subtitle={mod.code} className="w-full">
-          <div className="h-32 flex flex-col items-center justify-center gap-2 border border-dashed border-borderSubtle rounded-md px-4 text-center">
-            <span className="font-mono text-[10px] text-textMuted uppercase tracking-widest">
-              Module scheduled — next build
-            </span>
-            <span className="text-[11px] text-textSecondary leading-snug">{mod.detail}</span>
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center gap-3 flex-wrap">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">
+          <Term k="Time machine">Session</Term>
+        </span>
+        <select
+          aria-label="Session"
+          value={span?.index ?? ''}
+          onChange={e => {
+            setPick(Number(e.target.value));
+            setScrub(null);
+          }}
+          className="bg-panel border border-borderSubtle rounded px-2 py-1 font-mono text-[10px] text-textPrimary"
+        >
+          {spans.map(s => (
+            <option key={s.index} value={s.index}>
+              {dayLabel(s.from)} — {s.snapshots} snapshot{s.snapshots === 1 ? '' : 's'}
+            </option>
+          ))}
+        </select>
+        <ProvenanceChip sources={['chain', 'exposure']} />
+      </div>
+
+      {/* HIST_01 */}
+      <Panel title="Level Migration Timeline" subtitle="HIST_01 — walls, flip and king through the session" className="w-full">
+        <p className="font-mono text-[11px] leading-relaxed text-textPrimary mb-2">{migrationWords(migration)}</p>
+        {drift.length >= 2 ? (
+          <div className="h-64 min-h-0">
+            <WallDrift drift={drift} />
           </div>
-        </Panel>
-      ))}
+        ) : migration.length > 0 ? (
+          <span className="font-mono text-[10px] text-textMuted">
+            The book was one-sided for most of this session — not enough two-sided moments to draw the drift.
+          </span>
+        ) : null}
+      </Panel>
+
+      {/* HIST_02 */}
+      <Panel title="Strike × Time Heatmap" subtitle="HIST_02 — exposure building and decaying through the day" className="w-full">
+        {heatData === null ? (
+          <span className="font-mono text-[10px] text-textMuted">No snapshots recorded for this session.</span>
+        ) : (
+          <div className="max-h-[560px] flex min-h-0">
+            <GexMatrix
+              data={heatData}
+              spot={0}
+              warnFirstColumn={false}
+              onSelectStrike={s => navigate('/pulse', { state: { focusPrice: s } })}
+            />
+          </div>
+        )}
+      </Panel>
+
+      {/* HIST_03 */}
+      <Panel title="Session Snapshots + Replay" subtitle="HIST_03 — scrub the session, land on real readings" className="w-full">
+        {migration.length === 0 ? (
+          <span className="font-mono text-[10px] text-textMuted">No snapshots to scrub for this session.</span>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <input
+              type="range"
+              aria-label="Scrub the session"
+              min={migration[0].time}
+              max={migration[migration.length - 1].time}
+              step={1}
+              value={scrubTime ?? migration[0].time}
+              onChange={e => setScrub(Number(e.target.value))}
+              className="w-full accent-white"
+            />
+            <div className="flex items-baseline gap-3 flex-wrap">
+              <span className="font-mono text-[11px] font-bold tnum" style={{ color: SPOT }}>
+                {scrubbed ? hhmm(scrubbed.time) : '—'}
+              </span>
+              <span className="font-mono text-[10px] text-textMuted">
+                {scrubbed ? `${scrubbed.levels.length} strikes recorded at this moment` : 'no reading'}
+              </span>
+            </div>
+            <p className="font-mono text-[9px] leading-relaxed text-textMuted">
+              The scrubber lands on snapshots that were actually recorded — never between two. A time machine that
+              interpolates the past is a worse tool than one that admits its gaps.
+            </p>
+          </div>
+        )}
+      </Panel>
     </div>
   );
 };

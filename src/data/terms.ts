@@ -81,6 +81,44 @@ export const TERMS = {
   // ---- expected-move cone (T-9) ----
   'Expected move cone':
     'The band options priced for today, drawn on the chart: the envelope since the open, and the cone still left from here to the bell. Price leaving the band means the move has already beaten what the options charged; the cone shrinking into the close is normal — less day left, less move left.',
+  // ---- model error (P-23) ----
+  'Model error':
+    'How far the textbook GEX computation \u2014 open interest \u00d7 a sign assumption, the one every vendor uses \u2014 sits from actualized dealer gamma. Positive error means the textbook overstates. A desk holding the actualized reference can audit the whole category; one inferring from OI cannot even ask the question.',
+  // ---- time machine (P-20) ----
+  'Time machine':
+    'Any past session in the buffer, replayed: where the walls and the flip actually sat through that day, which strikes were building, and the book as it stood at any recorded moment. Nothing is interpolated \u2014 a scrub lands on a reading that happened.',
+  // ---- two-ticker compare (P-22) ----
+  'Structural divergence':
+    'Two correlated names positioned differently. Both books are placed on percent-from-spot and normalized to a share of their own gamma, so what is compared is the SHAPE of the positioning \u2014 a bucket where one is call-heavy and the other put-heavy is the two books disagreeing about where the level is.',
+  // ---- cost basis (P-16) ----
+  'Cost basis':
+    'The volume-weighted price today\u2019s aggressive buyers actually paid, expressed as the SPOT that would put them back at break-even. When price crosses it, every one of those holders flips from red to green at once \u2014 a supply event you can watch approaching.',
+  // ---- charm clock (P-15) ----
+  'Charm clock':
+    'How much of today\u2019s delta decay has actually been paid, against how much of the session has passed. The two are not the same: charm accelerates into the bell, so at lunchtime half the day is gone but only a third of the decay has happened.',
+  // ---- map stability (P-11) ----
+  'Map stability':
+    'Whether these levels survive a change in vol. Every GEX product shows its walls as fixed; they are a function of implied volatility, and a two-point move can relocate the flip or hand the wall to a different strike. This says which of the two you are looking at.',
+  // ---- \u0394OI heat (P-8) ----
+  '\u0394OI heat':
+    'Which strikes are being BUILT and UNWOUND through the session. Every other exposure surface here is a snapshot of a stock; this is the flow \u2014 it answers whether a wall is growing or dying, which the static map cannot.',
+  // ---- spot scenario & attribution (P-17, P-18, P-19) ----
+  'Spot scenario':
+    'The book re-read at a price it has not reached yet. Open interest is held exactly as it stands \u2014 this answers where the LEVELS would be if price were there, not how the book would have re-formed on the way.',
+  'Expected hedging flow':
+    'The dollars of stock dealers must trade to stay hedged as price crosses the gamma between here and there. Positive is buying. It assumes continuous hedging at the modelled dealer sign \u2014 real desks hedge in bands.',
+  Attribution:
+    'The prints that built the exposure at a strike today. It answers whether the level is one institution\u2019s single order or four hundred small ones \u2014 the same wall on the map, a different thing to trade against.',
+  // ---- air pockets & conviction (P-5, P-6) ----
+  'Air pocket':
+    'A run of strikes between two shelves with almost no dealer gamma in them. A wall says where price stops; this says where it does NOT \u2014 there is no hedging flow in the gap to slow anything down, which is why price can cross it in seconds.',
+  'Wall conviction':
+    'How much the level deserves to be leaned on: how far it dominates the runner-up shelf on its side, how many sessions it has held the title, and how it has been tested today. A 2.4\u00d7 shelf unbroken for four days and a marginal winner look identical on a map \u2014 they are not the same object.',
+  // ---- expiry ladder (P-2) ----
+  'Expiry ladder':
+    'The same strikes read through each expiry at once. A wall built almost entirely of 0DTE gamma disappears at the bell; one spread across dated expiries is real structure that will still be there tomorrow \u2014 the same level on screen, opposite trades.',
+  Provenance:
+    'What a number on this page is standing on: measured came from a feed as-is, derived was computed here from measured inputs, modelled came from the simulator with no market consulted.',
   // ---- event markers (T-11) ----
   'Event markers':
     'The calendar drawn on the chart: this name\u2019s next earnings, FOMC/CPI/NFP, and the session\u2019s biggest option prints, each marked at its bar. Hover a mark for the details.',
@@ -94,6 +132,8 @@ export const TERMS = {
   'VWAP bands':
     '\u00b11\u03c3 and \u00b12\u03c3 around the session VWAP, volume-weighted \u2014 how far price sits from where the day\u2019s money actually traded.',
   // ---- distance units (T-19) ----
+  'Distance unit':
+    'The ruler every distance on the desk is measured with. Dollars and percent are literal; ATR is average true range, so 0.4 ATR means the same size of move on SPY as on NVDA; \u03c3 is implied one-day moves \u2014 how many the options are pricing.',
   ATR:
     'Average true range \u2014 how far this name typically travels in a session, gaps included. A wall 0.4 ATR away is the same distance on SPY and on NVDA.',
   '\u03c3 distance':

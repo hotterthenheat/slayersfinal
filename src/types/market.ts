@@ -23,6 +23,9 @@ export interface Greeks {
   vanna: number;
   charmCall: number;
   charmPut: number;
+  /** Per one POINT of rate, like vega is per one point of vol — P-24A. */
+  rhoCall: number;
+  rhoPut: number;
 }
 
 export interface Candle {
@@ -39,6 +42,17 @@ export interface GexLevel {
   strike: number;
   /** Net GEX at this strike (summed across expiries), signed dollars */
   value: number;
+  /*
+    OPEN INTEREST AT THE SAME INSTANT — P-8's ΔOI heat.
+
+    Carried on the GEX snapshot rather than in a store of its own so the two
+    can never drift apart: a ΔOI reading timestamped differently from the
+    gamma it explains would be worse than no reading. Optional because
+    snapshots recorded before P-8 exist in replay fixtures, and a consumer
+    must render their absence rather than treat it as zero change.
+  */
+  callOI?: number;
+  putOI?: number;
 }
 
 /** Net GEX across strikes captured at one bar-aligned moment. */
