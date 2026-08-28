@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildModelError, inferredSeries, modelErrorWords, simulatedReference } from '../../data/modelError';
-import { fmtUsd } from '../../data/gex';
 import { ALERT } from '../../components/gex/palette';
+import ErrorDrift from '../../components/gex/ErrorDrift';
 import Panel from '../../components/ui/Panel';
 import ProvenanceChip from '../../components/ui/ProvenanceChip';
 import Term from '../../components/ui/Term';
@@ -32,8 +32,6 @@ import Simulator from '../../core/simulator';
   25% the row's ink saturates; under it the bar stays muted.
 */
 
-const BIG_MISS = 0.25;
-
 const ModelError = () => {
   const { marketData } = useMarketData();
 
@@ -56,8 +54,6 @@ const ModelError = () => {
     const d = new Date(t * 1000);
     return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   };
-  const tail = read.points.slice(-14);
-  const maxPct = Math.max(...tail.map(p => Math.abs(p.errorPct ?? 0)), 1e-9);
 
   return (
     <div className="flex flex-col gap-3 flex-grow min-h-0">
@@ -100,45 +96,7 @@ const ModelError = () => {
       </div>
 
       <Panel title="Error Through The Session" subtitle="inferred vs the reference, moment by moment" className="w-full flex-1 min-h-0 xl:order-1" bodyClassName="flex min-h-0">
-        <div className="overflow-auto w-full min-h-0">
-          <table className="w-full h-full border-collapse">
-            <thead>
-              <tr>
-                {['Time', 'Inferred', 'Reference', 'Error', ''].map(h => (
-                  <th
-                    key={h}
-                    className="px-2 py-1 text-right first:text-left font-mono text-[9px] uppercase tracking-wider text-textMuted"
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {tail.map(p => {
-                const pct = p.errorPct;
-                const big = pct !== null && Math.abs(pct) >= BIG_MISS;
-                const w = pct === null ? 0 : (Math.abs(pct) / maxPct) * 100;
-                return (
-                  <tr key={p.time}>
-                    <td className="px-2 py-0.5 font-mono text-[10px] tnum text-textMuted">{hhmm(p.time)}</td>
-                    <td className="px-2 py-0.5 text-right font-mono text-[10px] tnum text-textSecondary">{fmtUsd(p.inferred)}</td>
-                    <td className="px-2 py-0.5 text-right font-mono text-[10px] tnum text-textSecondary">{fmtUsd(p.actualized)}</td>
-                    <td className={`px-2 py-0.5 text-right font-mono text-[10px] tnum ${big ? 'font-semibold' : ''}`} style={big ? { color: ALERT } : undefined}>
-                      {pct === null ? '—' : `${pct > 0 ? '+' : ''}${(pct * 100).toFixed(1)}%`}
-                    </td>
-                    <td className="px-2 py-0.5 w-[30%]">
-                      <div
-                        className="h-1.5 rounded-sm"
-                        style={{ width: `${w}%`, background: ALERT, opacity: big ? 0.9 : 0.35 }}
-                      />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <ErrorDrift points={read.points.slice(-90)} />
       </Panel>
 
       </div>

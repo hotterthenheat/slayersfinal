@@ -1,6 +1,7 @@
 import { Fragment, useMemo } from 'react';
 import { useMarketData } from '../../context/MarketDataContext';
-import { buildStrikeBasis } from '../../data/costBasis';
+import { buildBasisBand, buildStrikeBasis } from '../../data/costBasis';
+import BasisDrift from '../../components/gex/BasisDrift';
 import { fmtUsd } from '../../data/gex';
 import PainMapPanel from '../../components/gex/PainMapPanel';
 import ProvenanceChip from '../../components/ui/ProvenanceChip';
@@ -54,7 +55,12 @@ const PainMap = () => {
     });
     const maxAbsPnl = Math.max(...rows.map(r => Math.abs(r.pnl ?? 0)), 1e-9);
     const spotAfter = rows.findIndex((r, i) => r.strike >= marketData.spot && (rows[i + 1]?.strike ?? -Infinity) < marketData.spot);
-    return { rows, maxAbsPnl, spotAfter, iv };
+    /* The companion chart's inputs — the same band inversion the panel
+       words, plus the session tape to watch price approach them on. */
+    const callBe = buildBasisBand(flowTape, 'C', marketData.spot, DTE_YEARS, iv).breakevenSpot;
+    const putBe = buildBasisBand(flowTape, 'P', marketData.spot, DTE_YEARS, iv).breakevenSpot;
+    const tape = (Simulator.getCandles(marketData.ticker) ?? []).slice(-240);
+    return { rows, maxAbsPnl, spotAfter, iv, callBe, putBe, tape };
   }, [marketData, flowTape]);
 
   if (!marketData || !ladder) {
@@ -79,8 +85,11 @@ const PainMap = () => {
           each with a void beside both. */}
       <div className="flex-1 flex flex-col xl:flex-row gap-4 min-h-0">
       {/* The bands — where today's buyers collectively flip. */}
-      <div className="border border-borderSubtle bg-panel rounded-md p-3 xl:order-2 xl:w-[380px] shrink-0 self-start">
+      <div className="border border-borderSubtle bg-panel rounded-md p-3 xl:order-2 xl:w-[380px] shrink-0 self-start flex flex-col gap-3">
         <PainMapPanel prints={flowTape} spot={marketData.spot} dteYears={DTE_YEARS} iv={ladder.iv} />
+        {/* The directive's companion chart: the bands ON the tape, so the
+            flip is a level you watch price approach, not a sentence. */}
+        <BasisDrift bars={ladder.tape} callBe={ladder.callBe} putBe={ladder.putBe} />
       </div>
 
       {/* The ladder — the same read, strike by strike. */}
