@@ -436,7 +436,7 @@ const ExposureProfile = () => {
               {expiryFlips.spread === null
                 ? 'No spread — at least one lens holds a single sign across its window.'
                 : expiryFlips.spread === 0
-                  ? 'The lenses agree — today’s flip is the structural one.'
+                  ? 'The lenses agree, and on this feed they must: the expiry view scales the whole book by one factor, which cannot move where it changes sign. A chain with real per-expiry open interest can separate them.'
                   : `Spread ${Math.abs(expiryFlips.spread).toFixed(2)}: the structural flip sits ${
                       expiryFlips.spread > 0 ? 'above' : 'below'
                     } today’s — what pins this morning is not what governs after the bell.`}

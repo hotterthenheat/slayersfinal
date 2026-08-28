@@ -789,6 +789,19 @@ const Simulator = (() => {
     TICKERS,
     WATCHLIST,
     snapshotFor,
+    /**
+     * The LIVE book alone — P-24B's canonical input.
+     *
+     * `snapshotFor` also builds indicators and a trade plan, which a surface
+     * that only wants "where are the walls right now" pays for and throws
+     * away. Measured: the chain is most of the cost either way, but the
+     * levels rail runs once per pane per tick and had no reason to build
+     * four trade plans a second to answer a question about strikes.
+     */
+    chainFor: (symbolRaw: string): { chain: StrikeNode[]; spot: number } => {
+      const sym = ensureTicker(symbolRaw);
+      return { chain: generateOptionsChain(sym), spot: TICKERS[sym].currentPrice };
+    },
     ensureTicker,
     setActiveTicker: (t: string): string => {
       activeTicker = ensureTicker(t);
