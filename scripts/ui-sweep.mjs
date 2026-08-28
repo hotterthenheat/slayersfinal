@@ -3533,7 +3533,7 @@ head('the total has a timeline and a rank, and each states its basis');
   /The Flip, By Expiry/i.test(body2) && /Whole book/i.test(body2) && /Weekly/i.test(body2)
     ? ok('the flip is answered per expiry — 0DTE, weekly, whole book')
     : bad('the by-expiry flip panel is missing');
-  /(Spread \d|The lenses agree|No spread)/.test(body2)
+  /(Spread \d|The lenses agree, and on this feed they must|No spread)/.test(body2)
     ? ok('with the spread read out, agreement and no-flip included')
     : bad('the spread line is missing its sentence');
 

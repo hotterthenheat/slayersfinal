@@ -293,38 +293,35 @@ function buildBoard(tickers?: string[]): BoardTicker[] {
 
 /** Key levels for ANY ticker, derived from its latest GEX snapshot — the same
     book the trails draw, so an expanded board chart agrees with its heatmap. */
+/*
+  THE RAIL'S LEVELS, off the LIVE book — P-24B.
+
+  This read the last GEX SNAPSHOT, which is the book as it stood when the last
+  bar rolled. The Exposure Profile reads the live chain. Same question, two
+  vintages, and between bar rolls they answered differently — one half of the
+  measured disagreement (six of eight names) this was written to end.
+
+  Both now read the same input through the same reader: `readExposureNow`,
+  over `chainFor`'s live book. `chainFor` rather than `snapshotFor` because
+  the rail wants strikes, not a trade plan — see the simulator's note.
+
+  The FALLBACKS stay this function's own. `readExposureNow` returns honest
+  nulls ("no call wall qualifies" is a state an alert waits on); the rail
+  cannot draw a null, so an unnamed level parks at spot and the rail simply
+  draws no tag — the behaviour every caller here already had.
+*/
 export function buildLevelsFor(ticker: string): KeyLevels {
   const sym = Simulator.ensureTicker(ticker);
-  const spot = Simulator.TICKERS[sym].currentPrice;
-  const snaps = Simulator.getGexHistory(sym);
-  const latest = snaps?.[snaps.length - 1];
-  if (!latest) return { spot, callWall: spot, putWall: spot, flip: spot, king: spot };
-
-  let king = spot;
-  let kingAbs = 0;
-  for (const l of latest.levels) {
-    const a = Math.abs(l.value);
-    if (a > kingAbs) {
-      kingAbs = a;
-      king = l.strike;
-    }
-  }
-
-  /* Walls come from core/walls.ts, which is the ONE copy of this rule. It used
-     to live inline here and again in `generateTradePlan`; only this one got
-     the sign fix, so the GEX page and Terrain named different walls off the
-     same book. Unnamed stays at SPOT here — the rail draws no tag rather than
-     a tag pointing at a wall that is not there. */
-  const w = pickWalls(latest.levels, spot, l => l.value);
-  const callWall = w.callWall ?? spot;
-  const putWall = w.putWall ?? spot;
-
-  /* One copy, core/walls.ts — see pickFlip's header for the four this
-     replaced. `?? spot` keeps the rail's own fallback: no crossing, no tag
-     pointing anywhere new. */
-  const flip = pickFlip(latest.levels, spot, l => l.value) ?? spot;
-
-  return { spot, callWall, putWall, flip, king };
+  const { chain, spot } = Simulator.chainFor(sym);
+  if (chain.length === 0) return { spot, callWall: spot, putWall: spot, flip: spot, king: spot };
+  const now = readExposureNow(chain.map(n => ({ strike: n.strike, value: n.netGex })), spot);
+  return {
+    spot,
+    callWall: now.callWall ?? spot,
+    putWall: now.putWall ?? spot,
+    flip: now.flip ?? spot,
+    king: now.king ?? spot,
+  };
 }
 
 /*
@@ -417,13 +414,17 @@ export function buildLadderFor(
   depth = 30,
   scaleDepth = 10
 ): { rows: GexLevel[]; core: GexLevel[]; maxAbs: number; spot: number; step: number } {
+  /* THE LIVE BOOK, like the levels above — P-24B. This read the last GEX
+     snapshot while the TAGS drawn over these very bars came from
+     `buildLevelsFor`, so between bar rolls the column crowned one strike and
+     drew its tallest bar on another. One vintage, one book. */
   const sym = Simulator.ensureTicker(ticker);
-  const spot = Simulator.TICKERS[sym].currentPrice;
-  const snaps = Simulator.getGexHistory(sym);
-  const latest = snaps?.[snaps.length - 1];
-  if (!latest || latest.levels.length === 0) return { rows: [], core: [], maxAbs: 1, spot, step: 1 };
+  const { chain, spot } = Simulator.chainFor(sym);
+  if (chain.length === 0) return { rows: [], core: [], maxAbs: 1, spot, step: 1 };
 
-  const sorted = [...latest.levels].sort((a, b) => a.strike - b.strike);
+  const sorted = chain
+    .map(n => ({ strike: n.strike, value: n.netGex }))
+    .sort((a, b) => a.strike - b.strike);
   const spotIdx = Math.max(0, sorted.findIndex(n => n.strike >= spot));
 
   /*

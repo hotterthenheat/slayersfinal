@@ -87,16 +87,28 @@ const T0 = 1_700_000_000;
     `${vc.flipCurrent} vs ${vcExpected}`
   );
 
+  /*
+    BOTH OF THESE USED TO NAME THE WRONG SOURCE, and P-24B moved them.
+
+    The first asserted the profile picked over "its own window"; the second
+    asserted the rail picked over "the latest snapshot". Those were the two
+    halves of the divergence P-24B closed — a window that changes the answer
+    when the reader resizes it, and a book one bar stale. The second one
+    FAILED the moment the rail went live (486.5 against a snapshot's 485.5),
+    which is the assertion doing its job: it was pinned to a vintage that no
+    longer exists.
+
+    Both now expect the canonical source — the full live chain — which is
+    also what exposure-canon-proof.ts pins across every surface.
+  */
   const exp = buildExposureProfile(snap, '0DTE', 10);
-  const expExpected = pickFlip(exp.strikes, snap.spot, s => s.gex.net);
-  check('exposure’s flip is the shared rule over its own window', exp.levels.flip === (expExpected ?? snap.spot), `${exp.levels.flip} vs ${expExpected}`);
+  const expExpected = pickFlip(snap.chain, snap.spot, n => n.netGex);
+  check('exposure’s flip is the shared rule over the FULL book', exp.levels.flip === (expExpected ?? snap.spot), `${exp.levels.flip} vs ${expExpected}`);
 
   const lv = buildLevelsFor('SPY');
-  const latest = Simulator.getGexHistory('SPY');
-  const lvExpected = latest?.length
-    ? pickFlip(latest[latest.length - 1].levels, lv.spot, l => l.value)
-    : null;
-  check('buildLevelsFor’s flip is the shared rule over the latest snapshot', lv.flip === (lvExpected ?? lv.spot), `${lv.flip} vs ${lvExpected}`);
+  const live = Simulator.chainFor('SPY');
+  const lvExpected = pickFlip(live.chain, live.spot, n => n.netGex);
+  check('buildLevelsFor’s flip is the shared rule over the LIVE book', lv.flip === (lvExpected ?? lv.spot), `${lv.flip} vs ${lvExpected}`);
 }
 
 // ── 4 & 5. the crossing counter ───────────────────────────────────────────
@@ -189,11 +201,28 @@ const stage = (rows: { bar: Candle; snap: GexSnapshot }[]) => ({
   check('the spread is book − 0DTE', f.d0 !== null && f.book !== null ? Math.abs((f.spread ?? NaN) - (f.book - f.d0)) < 1e-9 : f.spread === null, String(f.spread));
 
   /*
-    AND THE LENSES REALLY CAN DISAGREE — the whole reason three numbers beat
-    one. Scanned across the roster rather than staged: the divergence comes
-    from the expiry-seeded jitter tilting near-balanced strikes, and across
-    sixty books some strikes are always near balance (measured 4/10 on the
-    watchlist alone; the chance of a 60-name scan finding none is ~(0.6)^60).
+    WHAT THE THREE LENSES CAN SAY ON THIS FEED, and what they cannot.
+
+    THIS ASSERTION USED TO DEMAND THE OPPOSITE. It scanned the roster for
+    names where the three lenses disagreed and required at least one — and it
+    passed, on 6 of 22 names, which is why the feature shipped looking
+    differentiated. Its own comment named the mechanism without drawing the
+    conclusion: "the divergence comes from the expiry-seeded jitter". The
+    profile's per-strike jitter was seeded with the expiry NAME, so a hash of
+    the string "7D" was tilting near-balanced strikes. Three numbers off one
+    book and one hash is fake differentiation, and P-24B removed the tilt by
+    making the split net-preserving.
+
+    So the true property, asserted in both directions:
+
+      ON THIS FEED THEY MUST AGREE. The expiry view is one positive scalar
+      over the whole book, and scaling by a positive constant cannot move a
+      sign change. Every name, every time — no roster luck involved.
+
+      GIVEN A REAL PER-EXPIRY BOOK THEY SEPARATE. Staged below, because the
+      simulator has no per-expiry open interest to stage it for us: two books
+      whose sign changes sit at different strikes really do yield different
+      flips through this same function.
   */
   const roster = ['SPY','QQQ','AAPL','NVDA','TSLA','META','MSFT','AMZN','GOOGL','AMD','NFLX','AVGO','COIN','PLTR','JPM','ORCL','CRM','UBER','MU','BA','DIS','INTC'];
   let diverging = 0;
@@ -202,7 +231,24 @@ const stage = (rows: { bar: Candle; snap: GexSnapshot }[]) => ({
     const set = new Set([x.d0, x.weekly, x.book].map(v => (v === null ? 'null' : v.toFixed(2))));
     if (set.size > 1) diverging++;
   }
-  check(`the lenses disagree somewhere on the roster — three numbers, not one number three times (${diverging}/${roster.length} names)`, diverging >= 1);
+  check(
+    `a scalar expiry lens CANNOT move the flip — all three agree on every name (${roster.length} checked)`,
+    diverging === 0,
+    `${diverging} names disagreed, which means a lens is perturbing the book`
+  );
+
+  /* And the shape still differentiates when the data can. Two staged books,
+     one flipping at +4 and one at −6 off the same spot, read through the
+     same picker the lenses use. */
+  const stagedFlip = (crossAt: number): number | null => {
+    const spot = 100;
+    const strikes = [];
+    for (let i = -15; i <= 15; i++) strikes.push({ strike: spot + i, gex: { net: i >= crossAt ? -1e8 : 1e8, put: 0, call: 0 } });
+    return pickFlip(strikes, spot, s => s.gex.net);
+  };
+  const a = stagedFlip(4);
+  const b = stagedFlip(-6);
+  check('given books that really differ, the shared rule separates them', a !== null && b !== null && a !== b, `${a} vs ${b}`);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

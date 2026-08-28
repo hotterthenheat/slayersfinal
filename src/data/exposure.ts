@@ -48,10 +48,33 @@ const EXPIRY_DECAY: Record<ExposureExpiry, number> = {
   ALL: 3.13,
 };
 
+/*
+  THE SPLIT IS NET-PRESERVING, and that is P-24B's first half.
+
+  This used to scale each leg by its own jittered multiplier —
+  `put·f·(0.82+0.36j)` against `call·f·(1.18−0.36j)` — which changes the SUM
+  by up to 18% of the gap between the legs. That sum is `gex.net`, and
+  `gex.net` is what picks the call wall, the put wall and the flip on the
+  flagship map. So an undocumented per-strike jitter was quietly relocating
+  the levels: measured across eight names, six disagreed with the levels rail
+  and three named a different KING (META by 25 points, TSLA by 12.5).
+
+  The jitter earns its keep as leg TEXTURE — a book where every strike splits
+  identically looks synthetic — so it stays, moved to where it cannot lie: it
+  shifts weight BETWEEN the legs, bounded by the smaller of the two, and the
+  sum is exactly `(put + call) · factor`. A bounded transfer also cannot flip
+  a leg's sign, so a put shelf never renders as a call one.
+
+  The consequence the proof pins: because every strike's net is now the raw
+  net times ONE POSITIVE constant, argmax|net| and the sign changes are the
+  same strikes they are on the raw book. The expiry lens moves magnitudes and
+  never levels.
+*/
 function scaleSplit(put: number, call: number, factor: number, jitter: number): GreekSplit {
-  const p = put * factor * (0.82 + jitter * 0.36);
-  const c = call * factor * (0.82 + (1 - jitter) * 0.36);
-  return { put: p, call: c, net: p + c };
+  const P = put * factor;
+  const C = call * factor;
+  const shift = (jitter - 0.5) * 0.36 * Math.min(Math.abs(P), Math.abs(C));
+  return { put: P + shift, call: C - shift, net: P + C };
 }
 
 /** Strikes shown each side of spot. 30 is the whole book. */
@@ -119,15 +142,24 @@ export function buildExposureProfile(
 
      Unnamed stays at SPOT, which is what this function already did when a side
      held nothing — measured 0 times in 6480 sampled states, so it stays a
-     defensive floor rather than a branch anything renders today. */
-  const picked = pickWalls(strikes, spot, s => s.gex.net);
+     defensive floor rather than a branch anything renders today.
+
+     AND THE PICK READS THE FULL BOOK, not the drawn window — P-24B's second
+     half, and the same argument the KING below has always carried. A windowed
+     pick answers "the heaviest bar currently drawn", which changes when the
+     reader resizes the window: SPY's call wall moved 4 strikes and META's 5
+     between this surface and the levels rail purely because they looked at
+     different slices. The window is a drawing choice; it must not be an
+     answer. When a wall lands outside the slice its band simply is not on
+     screen, exactly as an off-window king crowns no row. */
+  const picked = pickWalls(chain, spot, n => n.netGex);
   const callWall = picked.callWall ?? spot;
   const putWall = picked.putWall ?? spot;
   /* The flip from core/walls.ts, the ONE copy — this was one of three
      hand-synced nearest-to-spot transcriptions (unified 2026-08-18), which is
      the arrangement whose walls equivalent failed. `?? spot` keeps this
      function's own no-crossing fallback exactly as it was. */
-  const flip = pickFlip(strikes, spot, s => s.gex.net) ?? spot;
+  const flip = pickFlip(chain, spot, n => n.netGex) ?? spot;
 
   // The book's king — argmax |net gamma| over the FULL chain, not the window.
   // A windowed argmax answers "the biggest bar currently drawn", which moves
