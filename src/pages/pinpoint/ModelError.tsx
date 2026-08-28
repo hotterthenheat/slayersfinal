@@ -76,24 +76,30 @@ const ModelError = () => {
 
       <p className="font-mono text-[13px] leading-relaxed text-textPrimary">{modelErrorWords(read)}</p>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-1">
-        {[
-          {
-            k: 'Error now',
-            v: read.now.errorPct === null ? '—' : `${read.now.errorPct > 0 ? '+' : ''}${(read.now.errorPct * 100).toFixed(1)}%`,
-          },
-          { k: 'Rolling accuracy', v: read.accuracy === null ? '—' : `${Math.round(read.accuracy * 100)}%` },
-          { k: 'Bias', v: read.bias },
-          { k: 'Worst moment', v: read.worst ? hhmm(read.worst.time) : '—' },
-        ].map(f => (
-          <div key={f.k} className="flex flex-col">
-            <span className="font-mono text-[9px] uppercase tracking-wider text-textMuted">{f.k}</span>
-            <span className="font-mono text-[14px] font-bold tnum text-textPrimary">{f.v}</span>
-          </div>
-        ))}
+      {/* Table left, verdict rail right at xl — the four facts and the
+          confession are the page's second column, not a strip above a
+          half-width table in a void. */}
+      <div className="flex-1 flex flex-col xl:flex-row gap-4 min-h-0">
+      <div className="xl:order-2 xl:w-[320px] shrink-0 flex flex-col gap-4">
+        <div className="border border-borderSubtle bg-panel rounded-md p-3 grid grid-cols-2 xl:grid-cols-1 gap-x-6 gap-y-2">
+          {[
+            {
+              k: 'Error now',
+              v: read.now.errorPct === null ? '—' : `${read.now.errorPct > 0 ? '+' : ''}${(read.now.errorPct * 100).toFixed(1)}%`,
+            },
+            { k: 'Rolling accuracy', v: read.accuracy === null ? '—' : `${Math.round(read.accuracy * 100)}%` },
+            { k: 'Bias', v: read.bias },
+            { k: 'Worst moment', v: read.worst ? hhmm(read.worst.time) : '—' },
+          ].map(f => (
+            <div key={f.k} className="flex flex-col">
+              <span className="font-mono text-[9px] uppercase tracking-wider text-textMuted">{f.k}</span>
+              <span className="font-mono text-[16px] font-bold tnum text-textPrimary">{f.v}</span>
+            </div>
+          ))}
+        </div>
       </div>
 
-      <Panel title="Error Through The Session" subtitle="inferred vs the reference, moment by moment" className="w-full flex-1 min-h-0" bodyClassName="flex min-h-0">
+      <Panel title="Error Through The Session" subtitle="inferred vs the reference, moment by moment" className="w-full flex-1 min-h-0 xl:order-1" bodyClassName="flex min-h-0">
         <div className="overflow-auto w-full min-h-0">
           <table className="w-full h-full border-collapse">
             <thead>
@@ -134,6 +140,8 @@ const ModelError = () => {
           </table>
         </div>
       </Panel>
+
+      </div>
 
       <p className="font-mono text-[9px] leading-relaxed text-textMuted">
         The reference below is SIMULATED — Periscope actualized gamma is not connected, so the gauge is

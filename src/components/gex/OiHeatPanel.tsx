@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Fragment } from 'react';
-import { buildOiHeat, rowWords } from '../../data/oiHeat';
+import { buildOiHeat, rowWords, type OiHeat } from '../../data/oiHeat';
 import SpotRule from '../ui/SpotRule';
 import Term from '../ui/Term';
 import type { Candle, GexSnapshot } from '../../types/market';
@@ -41,6 +41,7 @@ const OiHeatPanel = ({
   ticker,
   spot,
   fill = false,
+  heat: heatProp,
 }: {
   snaps: GexSnapshot[];
   bars: Candle[];
@@ -52,8 +53,22 @@ const OiHeatPanel = ({
   spot?: number;
   /** Page-hosted: stretch rows to the container, the matrix's fill trick. */
   fill?: boolean;
+  /**
+   * A precomputed grid, so a host can derive OTHER surfaces from the SAME
+   * result. Two separate buildOiHeat calls at different render moments can
+   * straddle a session roll (the sim mutates its arrays in place) —
+   * measured as the rail honestly reporting a fresh session beside a grid
+   * still drawing the previous one. One result, passed down, cannot
+   * disagree with itself.
+   */
+  heat?: OiHeat;
 }) => {
-  const heat = useMemo(() => buildOiHeat(snaps, bars, buckets), [snaps, bars, buckets]);
+  /* The self-computed grid keys on array IDENTITY, and the sim mutates its
+     arrays in place — so this memo freezes at first compute. Fine for a
+     side panel alone; a host deriving sibling surfaces passes `heat` so
+     everything reads ONE result (see the prop note). */
+  const computed = useMemo(() => buildOiHeat(snaps, bars, buckets), [snaps, bars, buckets]);
+  const heat = heatProp ?? computed;
 
   if (!heat.hasOi || heat.rows.length === 0) {
     return (

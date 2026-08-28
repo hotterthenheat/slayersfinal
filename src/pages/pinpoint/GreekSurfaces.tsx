@@ -87,7 +87,8 @@ const GreekSurfaces = () => {
         </span>
       </div>
 
-      <div className="flex flex-col gap-1">
+      <div className="flex-1 flex flex-col xl:flex-row gap-4 min-h-0">
+      <div className="xl:order-2 xl:w-[340px] shrink-0 self-start border border-borderSubtle bg-panel rounded-md p-3 flex flex-col gap-2">
         <p className="font-mono text-[11px] leading-relaxed text-textSecondary">{meta.question}</p>
         <p className="font-mono text-[12px] leading-relaxed text-textPrimary">{surfaceWords(surface)}</p>
         {heaviest && (
@@ -98,7 +99,7 @@ const GreekSurfaces = () => {
         )}
       </div>
 
-      <div className="border border-borderSubtle bg-panel rounded-md overflow-auto flex-1 min-h-0">
+      <div className="border border-borderSubtle bg-panel rounded-md overflow-auto flex-1 min-h-0 xl:order-1">
         <table className="w-full h-full border-collapse">
           <thead>
             <tr>
@@ -137,6 +138,8 @@ const GreekSurfaces = () => {
             })}
           </tbody>
         </table>
+      </div>
+
       </div>
 
       <p className="font-mono text-[9px] leading-relaxed text-textMuted">

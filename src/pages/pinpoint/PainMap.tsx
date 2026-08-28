@@ -74,13 +74,17 @@ const PainMap = () => {
         <ProvenanceChip sources={['prints', 'carry']} />
       </div>
 
+      {/* Ladder and bands share the row at xl — the ladder is tall and
+          narrow, the bands are prose; stacked they were a strip of page
+          each with a void beside both. */}
+      <div className="flex-1 flex flex-col xl:flex-row gap-4 min-h-0">
       {/* The bands — where today's buyers collectively flip. */}
-      <div className="border border-borderSubtle bg-panel rounded-md p-3">
+      <div className="border border-borderSubtle bg-panel rounded-md p-3 xl:order-2 xl:w-[380px] shrink-0 self-start">
         <PainMapPanel prints={flowTape} spot={marketData.spot} dteYears={DTE_YEARS} iv={ladder.iv} />
       </div>
 
       {/* The ladder — the same read, strike by strike. */}
-      <div className="border border-borderSubtle bg-panel rounded-md p-2 overflow-auto flex-1 min-h-0">
+      <div className="border border-borderSubtle bg-panel rounded-md p-2 overflow-auto flex-1 min-h-0 xl:order-1">
         <table className="w-full h-full border-collapse">
           <thead className="sticky top-0 z-10">
             <tr className="bg-[#0c0c0c]">
@@ -144,6 +148,8 @@ const PainMap = () => {
             })}
           </tbody>
         </table>
+      </div>
+
       </div>
 
       <p className="font-mono text-[9px] leading-relaxed text-textMuted">

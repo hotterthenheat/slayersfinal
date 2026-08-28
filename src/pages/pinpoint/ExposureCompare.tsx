@@ -101,7 +101,8 @@ const ExposureCompare = () => {
 
       <p className="font-mono text-[12px] leading-relaxed text-textPrimary">{compareWords(compare)}</p>
 
-      <div className="border border-borderSubtle bg-panel rounded-md overflow-auto flex-1 min-h-0">
+      <div className="flex-1 flex flex-col xl:flex-row gap-4 min-h-0">
+      <div className="border border-borderSubtle bg-panel rounded-md overflow-auto flex-1 min-h-0 xl:order-1">
         <table className="w-full h-full border-collapse">
           <thead>
             <tr>
@@ -159,7 +160,8 @@ const ExposureCompare = () => {
         </table>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="xl:order-2 xl:w-[340px] shrink-0 flex flex-col gap-4 self-start">
+      <div className="border border-borderSubtle bg-panel rounded-md p-3 grid grid-cols-2 gap-4">
         {([['a', compare.tickerA], ['b', compare.tickerB]] as const).map(([k, name]) => (
           <div key={k} className="flex flex-col gap-0.5">
             <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted">{name} levels</span>
@@ -179,6 +181,8 @@ const ExposureCompare = () => {
         <span style={{ color: heatPoles.pos }}>gold amplifies</span>,{' '}
         <span style={{ color: heatPoles.neg }}>steel absorbs</span> — and ◀ marks where the books disagree most.
       </p>
+      </div>
+      </div>
     </div>
   );
 };

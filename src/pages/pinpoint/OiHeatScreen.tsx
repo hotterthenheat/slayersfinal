@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
 import { useMarketData } from '../../context/MarketDataContext';
+import { buildOiHeat, rowWords } from '../../data/oiHeat';
 import OiHeatPanel from '../../components/gex/OiHeatPanel';
+import Panel from '../../components/ui/Panel';
 import ProvenanceChip from '../../components/ui/ProvenanceChip';
 import Term from '../../components/ui/Term';
 import Simulator from '../../core/simulator';
@@ -26,9 +28,24 @@ const OiHeatScreen = () => {
 
   const feed = useMemo(() => {
     if (!marketData) return null;
+    const snaps = Simulator.getGexHistory(marketData.ticker) ?? [];
+    const bars = Simulator.getCandles(marketData.ticker) ?? [];
+    /*
+      ONE buildOiHeat for the whole page. The grid and the rail lists both
+      derive from THIS result — computed fresh each tick (marketData is a
+      new object per tick) and handed to the panel, because two separate
+      computations against in-place-mutated arrays can straddle a session
+      roll: measured as a rail honestly saying "nothing yet this session"
+      beside a grid still drawing the previous one.
+    */
+    const heat = buildOiHeat(snaps, bars, 10);
+    const byNet = [...heat.rows].sort((a, b) => b.netToday - a.netToday);
     return {
-      snaps: Simulator.getGexHistory(marketData.ticker) ?? [],
-      bars: Simulator.getCandles(marketData.ticker) ?? [],
+      snaps,
+      bars,
+      heat,
+      builders: byNet.filter(r => r.netToday > 0).slice(0, 5),
+      bleeders: byNet.filter(r => r.netToday < 0).slice(-5).reverse(),
     };
   }, [marketData]);
 
@@ -52,16 +69,44 @@ const OiHeatScreen = () => {
         </span>
       </div>
 
-      <div className="border border-borderSubtle bg-panel rounded-md p-2 flex-1 min-h-0 flex">
-        <OiHeatPanel
-          fill
-          snaps={feed.snaps}
-          bars={feed.bars}
-          buckets={10}
-          maxRows={18}
-          ticker={marketData.ticker}
-          spot={marketData.spot}
-        />
+      <div className="flex-1 flex flex-col xl:flex-row gap-4 min-h-0">
+        <div className="border border-borderSubtle bg-panel rounded-md p-2 flex-1 min-h-0 flex">
+          <OiHeatPanel
+            fill
+            heat={feed.heat}
+            snaps={feed.snaps}
+            bars={feed.bars}
+            buckets={10}
+            maxRows={18}
+            ticker={marketData.ticker}
+            spot={marketData.spot}
+          />
+        </div>
+
+        {/* The verdict lists — the grid answers "what moved when", these
+            answer "so which walls are growing and which are dying". */}
+        <div className="xl:w-[320px] shrink-0 flex flex-col gap-4 min-h-0">
+          {([
+            ['Building', feed.builders, 'text-bull', '↑'],
+            ['Bleeding', feed.bleeders, 'text-bear', '↓'],
+          ] as const).map(([title, rows, ink, arrow]) => (
+            <Panel key={title} title={title} subtitle={title === 'Building' ? 'the shelves being added to' : 'the shelves draining'} className="w-full flex-1" bodyClassName="flex flex-col gap-1.5">
+              {rows.length === 0 ? (
+                <span className="font-mono text-[10px] text-textMuted">Nothing yet this session.</span>
+              ) : (
+                rows.map(r => (
+                  <div key={r.strike} className="flex items-baseline gap-2" title={rowWords(r)}>
+                    <span className="font-mono text-[11px] font-semibold tnum text-textPrimary">{r.strike}</span>
+                    <span className={`font-mono text-[10px] font-semibold tnum ${ink}`}>
+                      {arrow}{Math.abs(r.netToday).toLocaleString()}
+                    </span>
+                    <span className="ml-auto font-mono text-[9px] text-textMuted">contracts</span>
+                  </div>
+                ))
+              )}
+            </Panel>
+          ))}
+        </div>
       </div>
     </div>
   );

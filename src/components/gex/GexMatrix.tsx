@@ -61,7 +61,11 @@ const GexMatrix = ({ data, fill = false, strikeFormat, rowNotes, rowNotesLabel =
     // container the block hugs the table, so the scale bar stops running past
     // the last row into empty space. Taller than the container and it still
     // scrolls. `fill` flips both: the table stretches to the box instead.
-    <div className={`flex gap-2 min-h-0 ${fill ? 'h-full' : 'max-h-full'}`}>
+    /* w-full: in a block host this changes nothing, but as a FLEX child the
+       root used to shrink to the table's content width — the scale rail
+       stranded mid-panel with a dead band to its right. A surface claims
+       its container. */
+    <div className={`flex gap-2 min-h-0 w-full ${fill ? 'h-full' : 'max-h-full'}`}>
       <div className="flex-grow overflow-auto min-w-0">
         <table className={`w-full border-collapse ${fill ? 'h-full' : ''}`}>
           <thead className="sticky top-0 z-10">

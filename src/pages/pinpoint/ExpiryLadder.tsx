@@ -1,7 +1,10 @@
 import { useMemo } from 'react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildExpiryLadder, rowWords, wallOwnership, LADDER_COLUMNS } from '../../data/expiryLadder';
+import { fmtUsd } from '../../data/gex';
 import GexMatrix from '../../components/gex/GexMatrix';
+import HeatPill from '../../components/gex/HeatPill';
+import Panel from '../../components/ui/Panel';
 import ProvenanceChip from '../../components/ui/ProvenanceChip';
 import Term from '../../components/ui/Term';
 import type { GexMatrixData } from '../../types/gex';
@@ -74,7 +77,38 @@ const ExpiryLadder = () => {
       callWallIndex: walls.call ? ladder.rows.findIndex(r => r.strike === walls.call!.strike) : -1,
       putWallIndex: walls.put ? ladder.rows.findIndex(r => r.strike === walls.put!.strike) : -1,
     };
-    return { data, walls, notes: ladder.rows.map(rowWords) };
+    /*
+      THE SIDE RAIL'S TWO COMPANION SURFACES, from the same rows.
+
+      LENS TOTALS — the whole book summed per lens, as one pill each: the
+      one-glance answer to "where does this book's gamma LIVE" before any
+      strike is read. Shares are of the DATED lenses only, the ladder's own
+      dominance rule.
+
+      THE WALL ROWS — each wall's full lens row lifted out as a 1×7 pill
+      strip beside its ownership sentence, so the headline is visual as
+      well as worded. Same cells, same maxAbs, so a wall strip can never
+      disagree with the row it came from.
+    */
+    const lensTotals = ladder.columns.map((expiry, j) => ({
+      expiry,
+      total: ladder.rows.reduce((a, r) => a + (r.cells[j]?.netGex ?? 0), 0),
+    }));
+    const datedAbs = lensTotals.filter(t => t.expiry !== 'ALL').reduce((a, t) => a + Math.abs(t.total), 0);
+    const maxLens = Math.max(...lensTotals.map(t => Math.abs(t.total)), 1e-9);
+    const wallRow = (strike: number | undefined) =>
+      strike === undefined ? null : (ladder.rows.find(r => r.strike === strike) ?? null);
+
+    return {
+      data,
+      walls,
+      notes: ladder.rows.map(rowWords),
+      lensTotals,
+      datedAbs,
+      maxLens,
+      callRow: wallRow(walls.call?.strike),
+      putRow: wallRow(walls.put?.strike),
+    };
   }, [ladder]);
 
   if (!ladder || !view) {
@@ -113,11 +147,63 @@ const ExpiryLadder = () => {
         </div>
       )}
 
-      {/* flex-1, not a pixel cap: the page owns the rest of the viewport
-          and the matrix's fill mode shares it across rows — the same
-          premium-ladder trick the fullscreen takeover uses. */}
-      <div className="border border-borderSubtle bg-panel rounded-md p-2 flex-1 flex min-h-0">
-        <GexMatrix data={view.data} spot={ladder.spot} rowNotes={view.notes} fill />
+      {/* THE PAGE IS A ROW, NOT A COLUMN: the matrix takes the width it
+          needs and the side rail's companion surfaces take the rest — one
+          big heatmap floating in a void is half a product on a screen that
+          paid for a whole one. Below xl the rail folds under. */}
+      <div className="flex-1 flex flex-col xl:flex-row gap-4 min-h-0">
+        <div className="border border-borderSubtle bg-panel rounded-md p-2 flex-1 flex min-h-0">
+          <GexMatrix data={view.data} spot={ladder.spot} rowNotes={view.notes} fill />
+        </div>
+
+        <div className="xl:w-[340px] shrink-0 flex flex-col gap-4 min-h-0">
+          <Panel title="Book By Lens" subtitle="whole-book gamma" className="w-full" bodyClassName="flex flex-col gap-1">
+            {view.lensTotals.map(t => (
+              <div key={t.expiry} className="flex items-center gap-2">
+                <span className={`w-10 shrink-0 font-mono text-[9px] font-semibold uppercase tracking-widest ${t.expiry === '0DTE' ? 'text-warn' : 'text-textMuted'}`}>
+                  {t.expiry}
+                </span>
+                <HeatPill value={t.total} maxAbs={view.maxLens} className="h-[19px] flex-1">
+                  {fmtUsd(t.total)}
+                </HeatPill>
+                <span className="w-9 shrink-0 text-right font-mono text-[9px] tnum text-textMuted">
+                  {t.expiry === 'ALL' || view.datedAbs === 0 ? '' : `${Math.round((Math.abs(t.total) / view.datedAbs) * 100)}%`}
+                </span>
+              </div>
+            ))}
+          </Panel>
+
+          {(view.callRow || view.putRow) && (
+            <Panel title="The Walls" subtitle="each wall's lens row" className="w-full" bodyClassName="flex flex-col gap-3">
+              {([
+                ['Call wall', view.walls.call, view.callRow],
+                ['Put wall', view.walls.put, view.putRow],
+              ] as const).map(([label, wall, row]) =>
+                wall && row ? (
+                  <div key={label} className="flex flex-col gap-1">
+                    <p className="font-mono text-[10px] leading-snug text-textPrimary">
+                      {label} <span className="font-bold tnum">{wall.strike}</span>{' '}
+                      <span className="text-textMuted">— {wall.words}</span>
+                    </p>
+                    <div className="flex gap-1">
+                      {row.cells.map(c => (
+                        <HeatPill
+                          key={c.expiry}
+                          value={c.netGex}
+                          maxAbs={ladder.maxAbs}
+                          className="h-[17px] flex-1"
+                          title={`${wall.strike} · ${c.expiry} · ${fmtUsd(c.netGex)}`}
+                        >
+                          <span className="text-[8px]">{c.expiry}</span>
+                        </HeatPill>
+                      ))}
+                    </div>
+                  </div>
+                ) : null
+              )}
+            </Panel>
+          )}
+        </div>
       </div>
 
       <p className="font-mono text-[10px] leading-relaxed text-textSecondary">
