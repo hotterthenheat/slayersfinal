@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { attributionWords, buildStrikeAttribution } from '../../data/attribution';
 import { fmtUsd } from '../../data/gex';
-import { LONG_GAMMA, SHORT_GAMMA } from './palette';
+import { CALL_SIDE, PUT_SIDE } from './palette';
 import Term from '../ui/Term';
 import type { FlowPrint } from '../../types/trace';
 
@@ -54,10 +54,10 @@ const StrikeAttributionPanel = ({
         <>
           <div className="flex items-baseline gap-3 flex-wrap font-mono text-[10px] tnum">
             <span className="text-textMuted">
-              calls <span style={{ color: SHORT_GAMMA }}>{fmtUsd(attr.callPremium)}</span>
+              calls <span style={{ color: CALL_SIDE }}>{fmtUsd(attr.callPremium)}</span>
             </span>
             <span className="text-textMuted">
-              puts <span style={{ color: LONG_GAMMA }}>{fmtUsd(attr.putPremium)}</span>
+              puts <span style={{ color: PUT_SIDE }}>{fmtUsd(attr.putPremium)}</span>
             </span>
             <span className="text-textMuted">
               {attr.contracts.toLocaleString()} contracts
@@ -84,7 +84,7 @@ const StrikeAttributionPanel = ({
                     <td className="px-1.5 py-0.5 font-mono text-[10px] tnum text-textSecondary">{p.time}</td>
                     <td
                       className="px-1.5 py-0.5 font-mono text-[10px] font-bold"
-                      style={{ color: p.right === 'C' ? SHORT_GAMMA : LONG_GAMMA }}
+                      style={{ color: p.right === 'C' ? CALL_SIDE : PUT_SIDE }}
                     >
                       {p.right}
                     </td>

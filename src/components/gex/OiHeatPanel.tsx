@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { buildOiHeat, rowWords } from '../../data/oiHeat';
-import { LONG_GAMMA, SHORT_GAMMA } from './palette';
+import { CALL_SIDE, PUT_SIDE } from './palette';
 import Term from '../ui/Term';
 import type { Candle, GexSnapshot } from '../../types/market';
 
@@ -13,11 +13,17 @@ import type { Candle, GexSnapshot } from '../../types/market';
   Rows = strikes, columns = time, cells = CHANGE. The map is a snapshot of
   a stock; this is the flow that answers "is that wall growing or dying".
 
-  THE INK IS THE REGIME PAIR AGAIN, and deliberately so: building reads in
-  the same steel the call side wears and unwinding in the same gold, so a
-  reader who knows the Positioning Map already knows this. Alpha carries
-  magnitude against the grid's largest cell, symmetric around zero, because
-  building and unwinding are opposite readings of one ruler.
+  STEEL BUILDS, GOLD UNWINDS — the desk's SIDE pair, not its regime pair.
+
+  That distinction is the fix for a real defect: this panel's caption told
+  the reader "steel is building, gold is unwinding" while the code drew red
+  and green. Red/green on this desk means amplifying or absorbing, which is
+  a regime read and not what a ΔOI cell carries — a strike gaining open
+  interest has not changed the regime, it has changed its size. The caption
+  was right and the ink was wrong.
+
+  Alpha carries magnitude against the grid's largest cell, symmetric around
+  zero, because building and unwinding are opposite readings of one ruler.
 
   WHEN THERE IS NOTHING TO SHOW IT SAYS SO. A session that has not recorded
   two snapshots yet has no flow to report, and the panel says exactly that
@@ -47,7 +53,7 @@ const OiHeatPanel = ({
   const ink = (v: number) => {
     if (heat.maxAbs === 0 || v === 0) return 'transparent';
     const a = Math.min(0.85, 0.1 + (Math.abs(v) / heat.maxAbs) * 0.75);
-    const rgb = v > 0 ? SHORT_GAMMA : LONG_GAMMA;
+    const rgb = v > 0 ? CALL_SIDE : PUT_SIDE;
     return `${rgb}${Math.round(a * 255).toString(16).padStart(2, '0')}`;
   };
 

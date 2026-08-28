@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { buildBasisBand, bandWords } from '../../data/costBasis';
-import { LONG_GAMMA, SHORT_GAMMA, SPOT as SPOT_INK } from './palette';
+import { CALL_SIDE, PUT_SIDE, SPOT as SPOT_INK } from './palette';
 import Term from '../ui/Term';
 import type { FlowPrint } from '../../types/trace';
 
@@ -42,8 +42,9 @@ const PainMapPanel = ({
   const puts = useMemo(() => buildBasisBand(prints, 'P', spot, dteYears, iv), [prints, spot, dteYears, iv]);
 
   const bands = [
-    { band: calls, label: 'Call buyers', ink: SHORT_GAMMA },
-    { band: puts, label: 'Put buyers', ink: LONG_GAMMA },
+    /* The side pair — these rows name a RIGHT, not a regime. */
+    { band: calls, label: 'Call buyers', ink: CALL_SIDE },
+    { band: puts, label: 'Put buyers', ink: PUT_SIDE },
   ];
 
   return (

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildGreekSurface, surfaceWords, GREEK_LENSES, LENS_META, type GreekLens } from '../../data/greekSurfaces';
 import { fmtUsd } from '../../data/gex';
-import { LONG_GAMMA, SHORT_GAMMA, SPOT } from '../../components/gex/palette';
+import { CALL_SIDE, LONG_GAMMA, PUT_SIDE, SHORT_GAMMA, SPOT } from '../../components/gex/palette';
 import ProvenanceChip from '../../components/ui/ProvenanceChip';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import Simulator from '../../core/simulator';
@@ -25,9 +25,17 @@ import Simulator from '../../core/simulator';
   is, and the unit is what stops them reading a per-day figure as a
   per-year one.
 
-  SAME INK AS EVERY OTHER EXPOSURE — steel for the call side's sign, gold
-  for the put's — because these ARE exposures, and a new palette would
-  imply a new kind of thing.
+  TWO INK PAIRS, AND THEY MEAN DIFFERENT THINGS. The Calls and Puts columns
+  are a SIDE read, so they wear the desk's side pair — steel for calls, gold
+  for puts, exactly as the strike ladder and the glossary already promise.
+  The Net bar is a SIGNED read, so it wears the regime pair — red amplifies,
+  green absorbs.
+
+  The first cut of this page used the regime pair for all three, which drew
+  the Calls column in red and the Puts column in green: two columns that are
+  never a regime, coloured as though they were. The screenshots caught it,
+  and the side pair now lives in palette.ts so the next surface reaches for
+  the right one rather than the nearest one.
 */
 
 const GreekSurfaces = () => {
@@ -96,10 +104,10 @@ const GreekSurfaces = () => {
               return (
                 <tr key={r.strike}>
                   <td className="px-2 py-1 font-mono text-[10px] tnum text-textPrimary">{r.strike}</td>
-                  <td className="px-2 py-1 text-right font-mono text-[10px] tnum" style={{ color: SHORT_GAMMA }}>
+                  <td className="px-2 py-1 text-right font-mono text-[10px] tnum" style={{ color: CALL_SIDE }}>
                     {fmtUsd(r.call)}
                   </td>
-                  <td className="px-2 py-1 text-right font-mono text-[10px] tnum" style={{ color: LONG_GAMMA }}>
+                  <td className="px-2 py-1 text-right font-mono text-[10px] tnum" style={{ color: PUT_SIDE }}>
                     {fmtUsd(r.put)}
                   </td>
                   <td className="px-2 py-1 text-right font-mono text-[10px] font-semibold tnum text-textPrimary">
@@ -116,9 +124,10 @@ const GreekSurfaces = () => {
       </div>
 
       <p className="font-mono text-[9px] leading-relaxed text-textMuted">
-        Dealer-signed on the same convention as every other exposure here. Vol lenses read per vol point, clock
-        lenses per trading day — the unit is in the column heading because these are not figures to read in the
-        wrong one.
+        Dealer-signed on the same convention as every other exposure here. Steel is the call side and gold the put
+        side; the net bar is red where the book amplifies and green where it absorbs. Vol lenses read per vol
+        point, clock lenses per trading day — the unit is in the column heading because these are not figures to
+        read in the wrong one.
       </p>
     </div>
   );

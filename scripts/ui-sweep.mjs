@@ -4906,6 +4906,35 @@ head('the map says whether it holds, and every greek names its unit');
   const rows = await page.$$eval('tbody tr', trs => trs.length);
   rows > 5 ? ok(`the surface lists ${rows} strikes`) : bad(`only ${rows} strike rows`);
 
+  /*
+    THE SIDE PAIR IS NOT THE REGIME PAIR. This page's first cut drew its
+    Calls column in the regime red and its Puts column in the regime green —
+    two columns that are never a regime, wearing regime ink. Nothing caught
+    it until the surface was screenshotted, so it is asserted here: the
+    Calls and Puts cells must carry the steel/gold side inks, and the Net
+    bar keeps the regime pair because a signed net genuinely IS one.
+  */
+  const inks = await page.evaluate(() => {
+    const tr = document.querySelector('tbody tr');
+    if (!tr) return null;
+    const tds = [...tr.children];
+    return {
+      call: getComputedStyle(tds[1]).color,
+      put: getComputedStyle(tds[2]).color,
+      bar: tds[4] && tds[4].firstElementChild ? getComputedStyle(tds[4].firstElementChild).backgroundColor : '',
+    };
+  });
+  if (!inks) bad('no strike row to read inks from');
+  else {
+    const REGIME = ['rgb(255, 59, 48)', 'rgb(48, 209, 88)'];
+    !REGIME.includes(inks.call) && !REGIME.includes(inks.put)
+      ? ok(`Calls and Puts wear the side pair, not the regime pair — ${inks.call} / ${inks.put}`)
+      : bad(`a side column is drawn in REGIME ink — call ${inks.call}, put ${inks.put}`);
+    REGIME.includes(inks.bar)
+      ? ok('and the net bar keeps the regime pair, because a signed net is one')
+      : bad(`the net bar is not regime ink — ${inks.bar}`);
+  }
+
   errs.length === 0 ? ok('no page errors across the greek round') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
 }

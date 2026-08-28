@@ -41,5 +41,20 @@ export const ALERT = '#FF9500';
 // (dealer hedging amplifies the move), green = LONG gamma (dips absorbed).
 // Same values as bull/bear — named by regime so a dealer-inventory surface
 // doesn't import "BULL" to paint an absorbing book.
+/*
+  THE SIDE PAIR, distinct from the regime pair below.
+
+  A CALL/PUT distinction is not a regime read, and this desk has always
+  drawn them differently: red/green says "amplifying or absorbing", steel
+  and gold say "call side or put side". StrikePressureLadder has carried
+  these two literals privately since 2026-08-22 and the glossary already
+  promises them by name ("in gold", "in steel"); they live here now so a new
+  surface reaches for the right pair instead of the nearest one. P-12's
+  first cut used the regime ink for its Calls and Puts columns — the
+  screenshots caught it.
+*/
+export const CALL_SIDE = '#AAB6C6'; // platinum steel — the call side
+export const PUT_SIDE = '#F5C542'; // honey gold — the put side
+
 export const SHORT_GAMMA = '#FF3B30'; // red — amplifying regime
 export const LONG_GAMMA = BULL; // green — absorbing regime
