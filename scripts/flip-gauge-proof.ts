@@ -87,16 +87,28 @@ const T0 = 1_700_000_000;
     `${vc.flipCurrent} vs ${vcExpected}`
   );
 
+  /*
+    BOTH OF THESE USED TO NAME THE WRONG SOURCE, and P-24B moved them.
+
+    The first asserted the profile picked over "its own window"; the second
+    asserted the rail picked over "the latest snapshot". Those were the two
+    halves of the divergence P-24B closed — a window that changes the answer
+    when the reader resizes it, and a book one bar stale. The second one
+    FAILED the moment the rail went live (486.5 against a snapshot's 485.5),
+    which is the assertion doing its job: it was pinned to a vintage that no
+    longer exists.
+
+    Both now expect the canonical source — the full live chain — which is
+    also what exposure-canon-proof.ts pins across every surface.
+  */
   const exp = buildExposureProfile(snap, '0DTE', 10);
-  const expExpected = pickFlip(exp.strikes, snap.spot, s => s.gex.net);
-  check('exposure’s flip is the shared rule over its own window', exp.levels.flip === (expExpected ?? snap.spot), `${exp.levels.flip} vs ${expExpected}`);
+  const expExpected = pickFlip(snap.chain, snap.spot, n => n.netGex);
+  check('exposure’s flip is the shared rule over the FULL book', exp.levels.flip === (expExpected ?? snap.spot), `${exp.levels.flip} vs ${expExpected}`);
 
   const lv = buildLevelsFor('SPY');
-  const latest = Simulator.getGexHistory('SPY');
-  const lvExpected = latest?.length
-    ? pickFlip(latest[latest.length - 1].levels, lv.spot, l => l.value)
-    : null;
-  check('buildLevelsFor’s flip is the shared rule over the latest snapshot', lv.flip === (lvExpected ?? lv.spot), `${lv.flip} vs ${lvExpected}`);
+  const live = Simulator.chainFor('SPY');
+  const lvExpected = pickFlip(live.chain, live.spot, n => n.netGex);
+  check('buildLevelsFor’s flip is the shared rule over the LIVE book', lv.flip === (lvExpected ?? lv.spot), `${lv.flip} vs ${lvExpected}`);
 }
 
 // ── 4 & 5. the crossing counter ───────────────────────────────────────────

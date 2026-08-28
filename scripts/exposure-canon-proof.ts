@@ -30,6 +30,7 @@
 import Simulator from '../src/core/simulator';
 import { buildExposureProfile } from '../src/data/exposure';
 import { buildLadderFor, buildLevelsFor, readExposureNow } from '../src/data/gex';
+import { buildFlipGauge } from '../src/data/flipGauge';
 import type { ExposureExpiry } from '../src/types/gex';
 import type { StrikeWindow } from '../src/data/exposure';
 
@@ -116,6 +117,30 @@ for (const t of NAMES) Simulator.ensureTicker(t);
     if ((now.king ?? rail.spot) !== rail.king) ladderOff++;
   }
   check('and the ladder\'s own book crowns the strike the rail tags', ladderOff === 0, `${ladderOff} of ${NAMES.length} off`);
+
+  /*
+    THE FLIP STRIP READS THE SAME BOOK AS THE MAP UNDER IT.
+
+    Measured on screen after this landed: the Exposure Profile's strip said
+    495.50 while the map below it said 496.50. That is NOT a second
+    derivation — it is the scan tier, which the map stamps in its own header
+    ("SCAN hh:mm:ss · 10S"): heavy surfaces recalibrate every ten seconds so
+    they do not flicker per tick, while the strip is live, and in ten seconds
+    the price moves and the flip moves with it.
+
+    Handed ONE snapshot, they must agree exactly — and that is what this
+    pins. It cannot see a tier delay and is not meant to; what it catches is
+    the thing that would actually be a bug: somebody re-deriving the strip's
+    flip a second way.
+  */
+  let stripOff = 0;
+  for (const t of NAMES) {
+    const snap = Simulator.snapshotFor(t);
+    const gauge = buildFlipGauge(snap);
+    const prof = buildExposureProfile(snap, 'ALL', 10);
+    if ((gauge.flip ?? snap.spot) !== prof.levels.flip) stripOff++;
+  }
+  check('one snapshot, one flip — the strip and the map cannot re-derive it apart', stripOff === 0, `${stripOff} of ${NAMES.length} off`);
 }
 
 // ── 4. the lens moves magnitudes, not levels ──────────────────────────────
@@ -244,6 +269,25 @@ for (const t of NAMES) Simulator.ensureTicker(t);
     'PREMISE: the drawn window really does hold one sign throughout',
     farFlip.strikes.every(r => r.gex.net > 0),
     `${farFlip.strikes.filter(r => r.gex.net <= 0).length} non-positive rows drawn`
+  );
+
+  /*
+    AND THE STRIP AGREES ON THE SAME STAGED BOOK — the case the live-name
+    check above cannot reach.
+
+    That check compares the strip and the map on real names, where the flip
+    sits within a few strikes of spot by construction (the picker takes the
+    NEAREST sign change), so a windowed re-derivation would agree with a
+    full-book one by luck and the mutation survived. Here the only crossing
+    is fifteen strikes out, past any window the map draws: a strip that
+    re-derived its flip through a windowed profile would report NO FLIP and
+    fall back to spot, while the book plainly has one.
+  */
+  const stagedGauge = buildFlipGauge({ ...staged, spot, chain: flipChain });
+  check(
+    'the strip finds the far flip too — it reads the book, not a window of it',
+    stagedGauge.flip !== null && Math.abs(stagedGauge.flip - (spot + 14.5)) < 1e-9,
+    `strip ${stagedGauge.flip}, map ${farFlip.levels.flip}`
   );
 }
 
