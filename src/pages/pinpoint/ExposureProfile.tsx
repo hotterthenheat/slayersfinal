@@ -20,6 +20,7 @@ import ProvenanceChip from '../../components/ui/ProvenanceChip';
 import SpotScenarioPanel from '../../components/gex/SpotScenarioPanel';
 import OiHeatPanel from '../../components/gex/OiHeatPanel';
 import StabilityGauge from '../../components/gex/StabilityGauge';
+import PainMapPanel from '../../components/gex/PainMapPanel';
 import StrikeAttributionPanel from '../../components/gex/StrikeAttributionPanel';
 import Simulator from '../../core/simulator';
 import { LONG_GAMMA, SHORT_GAMMA } from '../../components/gex/palette';
@@ -332,6 +333,23 @@ const ExposureProfile = () => {
             className="w-full"
           >
             <SpotScenarioPanel snapshot={scanSnapshot} />
+          </Panel>
+        )}
+        {/* P-16. What the HOLDERS will do, beside what the dealers must.
+            Reads the same flowTape the attribution panel does, so the basis
+            and the prints behind a strike cannot disagree. */}
+        {scanSnapshot && (
+          <Panel
+            title="Pain Map"
+            subtitle="Where today's buyers got in — and the spot that flips them"
+            className="w-full"
+          >
+            <PainMapPanel
+              prints={flowTape}
+              spot={scanSnapshot.spot}
+              dteYears={30 / 365}
+              iv={Simulator.TICKERS[scanSnapshot.ticker]?.iv ?? 0.2}
+            />
           </Panel>
         )}
         {/* P-8. The flow behind the snapshot: which strikes are being built
