@@ -19,6 +19,7 @@ import Term from '../../components/ui/Term';
 import ProvenanceChip from '../../components/ui/ProvenanceChip';
 import SpotScenarioPanel from '../../components/gex/SpotScenarioPanel';
 import OiHeatPanel from '../../components/gex/OiHeatPanel';
+import StabilityGauge from '../../components/gex/StabilityGauge';
 import StrikeAttributionPanel from '../../components/gex/StrikeAttributionPanel';
 import Simulator from '../../core/simulator';
 import { LONG_GAMMA, SHORT_GAMMA } from '../../components/gex/palette';
@@ -304,6 +305,22 @@ const ExposureProfile = () => {
           12 and nothing claimed the other 7.
         */}
         <div className="xl:col-span-7 min-w-0 flex flex-col gap-4">
+        {/* P-11. At the HEAD of the column, because it qualifies everything
+            under it: a wall a vol tick would dissolve is not the same object
+            as one that survives, and every other GEX product draws them
+            identically. */}
+        {scanSnapshot && (
+          <Panel
+            title="Map Stability"
+            subtitle="Do these levels survive a vol move — P-11"
+            className="w-full"
+          >
+            <StabilityGauge
+              snapshot={scanSnapshot}
+              iv={Simulator.TICKERS[scanSnapshot.ticker]?.iv ?? 0.2}
+            />
+          </Panel>
+        )}
         {/* P-17 / P-18. Vanna & Charm already do time and vol; nobody does
             SPOT, and it is the scenario a trader runs in their head all day.
             The forced-flow sentence under it is the translation layer that

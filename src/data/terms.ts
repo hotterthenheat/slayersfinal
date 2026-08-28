@@ -81,6 +81,9 @@ export const TERMS = {
   // ---- expected-move cone (T-9) ----
   'Expected move cone':
     'The band options priced for today, drawn on the chart: the envelope since the open, and the cone still left from here to the bell. Price leaving the band means the move has already beaten what the options charged; the cone shrinking into the close is normal — less day left, less move left.',
+  // ---- map stability (P-11) ----
+  'Map stability':
+    'Whether these levels survive a change in vol. Every GEX product shows its walls as fixed; they are a function of implied volatility, and a two-point move can relocate the flip or hand the wall to a different strike. This says which of the two you are looking at.',
   // ---- \u0394OI heat (P-8) ----
   '\u0394OI heat':
     'Which strikes are being BUILT and UNWOUND through the session. Every other exposure surface here is a snapshot of a stock; this is the flow \u2014 it answers whether a wall is growing or dying, which the static map cannot.',
