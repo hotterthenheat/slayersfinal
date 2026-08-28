@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMarketData } from '../../context/MarketDataContext';
+import CharmClockStrip from '../../components/gex/CharmClockStrip';
+import { RTH_MINUTES } from '../../core/calendar';
 import { buildVannaCharm } from '../../data/vannacharm';
 import { readSessionClock } from '../../data/moc';
 import Fact from '../../components/ui/Fact';
@@ -119,6 +121,13 @@ const VannaCharm = () => {
           scan {lastScanAt} · 10s
         </span>
       </div>
+
+      {/* P-15. The strip reads the SAME hoursToClose the migration map is
+          projected through, so the two cannot disagree about what time it
+          is — which was the whole point of P-0 making the clock real. */}
+      <Panel title="Charm Clock" subtitle="How much of today's decay has actually been paid" className="w-full">
+        <CharmClockStrip elapsedMinutes={RTH_MINUTES - hoursToClose * 60} />
+      </Panel>
 
       {/* Migration map + shifts/narrative */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-stretch">

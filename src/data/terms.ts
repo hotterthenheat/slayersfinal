@@ -81,6 +81,9 @@ export const TERMS = {
   // ---- expected-move cone (T-9) ----
   'Expected move cone':
     'The band options priced for today, drawn on the chart: the envelope since the open, and the cone still left from here to the bell. Price leaving the band means the move has already beaten what the options charged; the cone shrinking into the close is normal — less day left, less move left.',
+  // ---- charm clock (P-15) ----
+  'Charm clock':
+    'How much of today\u2019s delta decay has actually been paid, against how much of the session has passed. The two are not the same: charm accelerates into the bell, so at lunchtime half the day is gone but only a third of the decay has happened.',
   // ---- map stability (P-11) ----
   'Map stability':
     'Whether these levels survive a change in vol. Every GEX product shows its walls as fixed; they are a function of implied volatility, and a two-point move can relocate the flip or hand the wall to a different strike. This says which of the two you are looking at.',
