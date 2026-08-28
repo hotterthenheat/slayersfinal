@@ -1,4 +1,4 @@
-import { Grid3x3, Layers, Map, Target, Waves, type LucideIcon } from 'lucide-react';
+import { Columns2, Grid3x3, Layers, Map, Target, Waves, type LucideIcon } from 'lucide-react';
 
 /** Pinpoint subpage registry — drives the sub-tab bar and command palette. */
 export interface GexSubpage {
@@ -38,6 +38,12 @@ export const GEX_SUBPAGES: GexSubpage[] = [
     label: 'Greek Surfaces',
     subtitle: 'Color · vomma · speed · veta · zomma — the derivatives behind the levels',
     icon: Layers,
+  },
+  {
+    path: '/pinpoint/compare',
+    label: 'Compare',
+    subtitle: 'Two books on one normalized axis — where their positioning diverges',
+    icon: Columns2,
   },
   // Launch trim (Noah, 2026-08-17): Volatility Lab + History & Replay pulled
   // from the first launch — pages kept on disk, routes redirect.

@@ -81,6 +81,9 @@ export const TERMS = {
   // ---- expected-move cone (T-9) ----
   'Expected move cone':
     'The band options priced for today, drawn on the chart: the envelope since the open, and the cone still left from here to the bell. Price leaving the band means the move has already beaten what the options charged; the cone shrinking into the close is normal — less day left, less move left.',
+  // ---- two-ticker compare (P-22) ----
+  'Structural divergence':
+    'Two correlated names positioned differently. Both books are placed on percent-from-spot and normalized to a share of their own gamma, so what is compared is the SHAPE of the positioning \u2014 a bucket where one is call-heavy and the other put-heavy is the two books disagreeing about where the level is.',
   // ---- cost basis (P-16) ----
   'Cost basis':
     'The volume-weighted price today\u2019s aggressive buyers actually paid, expressed as the SPOT that would put them back at break-even. When price crosses it, every one of those holders flips from red to green at once \u2014 a supply event you can watch approaching.',
