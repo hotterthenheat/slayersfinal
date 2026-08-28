@@ -72,7 +72,7 @@ const GreekSurfaces = () => {
     .sort((a, b) => b.strike - a.strike);
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3 flex-grow min-h-0">
       <div className="flex items-center gap-3 flex-wrap">
         <SegmentedControl
           ariaLabel="Greek lens"
@@ -98,8 +98,8 @@ const GreekSurfaces = () => {
         )}
       </div>
 
-      <div className="border border-borderSubtle bg-panel rounded-md overflow-x-auto">
-        <table className="w-full border-collapse">
+      <div className="border border-borderSubtle bg-panel rounded-md overflow-auto flex-1 min-h-0">
+        <table className="w-full h-full border-collapse">
           <thead>
             <tr>
               {['Strike', `Calls (${meta.unit})`, `Puts (${meta.unit})`, 'Net', ''].map(h => (

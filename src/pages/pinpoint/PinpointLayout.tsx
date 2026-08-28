@@ -84,7 +84,20 @@ const PinpointLayout = () => {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -4 }}
           transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-          className="flex flex-col gap-4"
+          /*
+            THE DESK OWNS ITS FIRST SCREEN. flex-grow alone still left short
+            pages sharing the viewport with the site footer — the shell's
+            min-h-full pins the footer to the FLOOR of screen one, so a page
+            using 60% of it read as half a page with a footer riding up.
+            Terrain's answer is a viewport-height desk (h-[calc(100vh-3.5rem)]);
+            this is the same contract minus this shell's own chrome: top bar
+            56 + pt 20 + subnav ~40 + subtitle 16 + flip strip ~52 + three
+            16px gaps ≈ 232, rounded to 220 so no height ever spawns a
+            needless scrollbar. Short pages stretch to a full first screen
+            (pages opt in with flex-1 surfaces) and the footer starts below
+            the fold, where a data desk's footer belongs.
+          */
+          className="flex flex-col gap-4 flex-grow min-h-[calc(100vh-220px)]"
         >
           {outlet}
         </motion.div>

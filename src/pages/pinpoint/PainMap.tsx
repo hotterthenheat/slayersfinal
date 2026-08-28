@@ -66,7 +66,7 @@ const PainMap = () => {
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3 flex-grow min-h-0">
       <div className="flex items-center gap-3 flex-wrap">
         <h2 className="font-mono text-[12px] font-bold uppercase tracking-widest text-textPrimary">
           <Term k="Cost basis">Pain Map</Term>
@@ -80,8 +80,8 @@ const PainMap = () => {
       </div>
 
       {/* The ladder — the same read, strike by strike. */}
-      <div className="border border-borderSubtle bg-panel rounded-md p-2 overflow-x-auto">
-        <table className="w-full border-collapse">
+      <div className="border border-borderSubtle bg-panel rounded-md p-2 overflow-auto flex-1 min-h-0">
+        <table className="w-full h-full border-collapse">
           <thead className="sticky top-0 z-10">
             <tr className="bg-[#0c0c0c]">
               {['Strike', 'Call basis', 'Put basis', 'Contracts', 'Unrealized P&L', ''].map((h, i) => (

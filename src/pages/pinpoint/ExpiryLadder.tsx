@@ -86,7 +86,7 @@ const ExpiryLadder = () => {
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3 flex-grow min-h-0">
       <div className="flex items-center gap-3 flex-wrap">
         <h2 className="font-mono text-[12px] font-bold uppercase tracking-widest text-textPrimary">
           <Term k="Expiry ladder">Which expiry owns this strike</Term>
@@ -113,8 +113,11 @@ const ExpiryLadder = () => {
         </div>
       )}
 
-      <div className="border border-borderSubtle bg-panel rounded-md p-2 max-h-[640px] flex min-h-0">
-        <GexMatrix data={view.data} spot={ladder.spot} rowNotes={view.notes} />
+      {/* flex-1, not a pixel cap: the page owns the rest of the viewport
+          and the matrix's fill mode shares it across rows — the same
+          premium-ladder trick the fullscreen takeover uses. */}
+      <div className="border border-borderSubtle bg-panel rounded-md p-2 flex-1 flex min-h-0">
+        <GexMatrix data={view.data} spot={ladder.spot} rowNotes={view.notes} fill />
       </div>
 
       <p className="font-mono text-[10px] leading-relaxed text-textSecondary">

@@ -60,7 +60,7 @@ const ModelError = () => {
   const maxPct = Math.max(...tail.map(p => Math.abs(p.errorPct ?? 0)), 1e-9);
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3 flex-grow min-h-0">
       <div className="flex items-center gap-3 flex-wrap">
         <h2 className="font-mono text-[12px] font-bold uppercase tracking-widest text-textPrimary">
           <Term k="Model error">How wrong is textbook GEX</Term>
@@ -93,9 +93,9 @@ const ModelError = () => {
         ))}
       </div>
 
-      <Panel title="Error Through The Session" subtitle="inferred vs the reference, moment by moment" className="w-full">
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
+      <Panel title="Error Through The Session" subtitle="inferred vs the reference, moment by moment" className="w-full flex-1 min-h-0" bodyClassName="flex min-h-0">
+        <div className="overflow-auto w-full min-h-0">
+          <table className="w-full h-full border-collapse">
             <thead>
               <tr>
                 {['Time', 'Inferred', 'Reference', 'Error', ''].map(h => (

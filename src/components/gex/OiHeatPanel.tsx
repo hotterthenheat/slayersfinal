@@ -40,6 +40,7 @@ const OiHeatPanel = ({
   maxRows = 12,
   ticker,
   spot,
+  fill = false,
 }: {
   snaps: GexSnapshot[];
   bars: Candle[];
@@ -49,6 +50,8 @@ const OiHeatPanel = ({
   /** Both present → the spot rule embeds between rows, the matrix idiom. */
   ticker?: string;
   spot?: number;
+  /** Page-hosted: stretch rows to the container, the matrix's fill trick. */
+  fill?: boolean;
 }) => {
   const heat = useMemo(() => buildOiHeat(snaps, bars, buckets), [snaps, bars, buckets]);
 
@@ -85,7 +88,7 @@ const OiHeatPanel = ({
     .sort((a, b) => b.strike - a.strike);
   const spotAfter = spot !== undefined ? rows.findIndex((r, i) => r.strike >= spot && (rows[i + 1]?.strike ?? -Infinity) < spot) : -1;
   return (
-    <div className="flex flex-col gap-2">
+    <div className={`flex flex-col gap-2 ${fill ? 'flex-grow min-h-0' : ''}`}>
       <div className="flex items-baseline gap-2 flex-wrap">
         <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">
           <Term k="ΔOI heat">Built and unwound</Term>
@@ -95,8 +98,8 @@ const OiHeatPanel = ({
         </span>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse">
+      <div className={`overflow-auto ${fill ? 'flex-1 min-h-0' : ''}`}>
+        <table className={`w-full border-collapse ${fill ? 'h-full' : ''}`}>
           <thead className="sticky top-0 z-10">
             <tr className="bg-[#0c0c0c]">
               <th className="w-px px-2 py-1.5 text-left font-mono text-[9px] font-semibold uppercase tracking-widest text-textMuted border-b border-borderSubtle whitespace-nowrap">

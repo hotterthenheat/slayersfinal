@@ -41,7 +41,7 @@ const OiHeatScreen = () => {
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3 flex-grow min-h-0">
       <div className="flex items-center gap-3 flex-wrap">
         <h2 className="font-mono text-[12px] font-bold uppercase tracking-widest text-textPrimary">
           <Term k="ΔOI heat">ΔOI Through The Session</Term>
@@ -52,8 +52,9 @@ const OiHeatScreen = () => {
         </span>
       </div>
 
-      <div className="border border-borderSubtle bg-panel rounded-md p-2">
+      <div className="border border-borderSubtle bg-panel rounded-md p-2 flex-1 min-h-0 flex">
         <OiHeatPanel
+          fill
           snaps={feed.snaps}
           bars={feed.bars}
           buckets={10}

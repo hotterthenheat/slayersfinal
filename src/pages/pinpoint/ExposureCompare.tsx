@@ -68,7 +68,7 @@ const ExposureCompare = () => {
   const maxShare = Math.max(...compare.buckets.map(b => Math.max(Math.abs(b.a), Math.abs(b.b))), 1e-9);
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3 flex-grow min-h-0">
       <div className="flex items-center gap-3 flex-wrap">
         <span className="font-mono text-[12px] font-bold uppercase tracking-widest text-textPrimary">
           <Term k="Structural divergence">{compare.tickerA} vs {compare.tickerB}</Term>
@@ -101,8 +101,8 @@ const ExposureCompare = () => {
 
       <p className="font-mono text-[12px] leading-relaxed text-textPrimary">{compareWords(compare)}</p>
 
-      <div className="border border-borderSubtle bg-panel rounded-md overflow-x-auto">
-        <table className="w-full border-collapse">
+      <div className="border border-borderSubtle bg-panel rounded-md overflow-auto flex-1 min-h-0">
+        <table className="w-full h-full border-collapse">
           <thead>
             <tr>
               {['% from spot', compare.tickerA, compare.tickerB, 'divergence'].map(h => (
