@@ -1,4 +1,5 @@
 import { Fragment, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildBasisBand, buildStrikeBasis } from '../../data/costBasis';
 import BasisDrift from '../../components/gex/BasisDrift';
@@ -36,6 +37,7 @@ const DTE_YEARS = 30 / 365;
 
 const PainMap = () => {
   const { marketData, flowTape } = useMarketData();
+  const navigate = useNavigate();
 
   const ladder = useMemo(() => {
     if (!marketData || marketData.chain.length === 0) return null;
@@ -116,7 +118,11 @@ const PainMap = () => {
               const w = r.pnl === null ? 0 : (Math.abs(r.pnl) / ladder.maxAbsPnl) * 100;
               return (
                 <Fragment key={r.strike}>
-                  <tr className="border-b border-borderSubtle/40 last:border-0">
+                  <tr
+                    onClick={() => navigate('/pulse', { state: { focusPrice: r.strike } })}
+                    title="Flash on chart"
+                    className="cursor-pointer hover:bg-white/[0.02] transition-colors border-b border-borderSubtle/40 last:border-0"
+                  >
                     <td className="w-px px-2 py-1 font-mono text-[11px] font-semibold tnum text-textPrimary whitespace-nowrap">
                       {r.strike}
                     </td>

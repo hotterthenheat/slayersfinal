@@ -28,6 +28,9 @@ interface GexMatrixProps {
   /** First column in warn ink — the 0DTE emphasis. A time-bucketed surface
       (the time machine) turns it off: its first column is just a moment. */
   warnFirstColumn?: boolean;
+  /** A strike row was clicked — hosts wire this to the chart's focus flash,
+      the same door every ladder on the desk opens. Absent, rows stay inert. */
+  onSelectStrike?: (strike: number) => void;
 }
 
 /**
@@ -35,7 +38,7 @@ interface GexMatrixProps {
  * (mono or diverging mode); values are always printed and the digit color
  * flips by cell luminance, so color is never the only channel.
  */
-const GexMatrix = ({ data, fill = false, strikeFormat, rowNotes, rowNotesLabel = 'Composition', warnFirstColumn = true }: GexMatrixProps) => {
+const GexMatrix = ({ data, fill = false, strikeFormat, rowNotes, rowNotesLabel = 'Composition', warnFirstColumn = true, onSelectStrike }: GexMatrixProps) => {
   const { expiries, strikes, cells, maxAbs, spotRowIndex, callWallIndex, putWallIndex } = data;
 
   /*
@@ -112,9 +115,11 @@ const GexMatrix = ({ data, fill = false, strikeFormat, rowNotes, rowNotesLabel =
               return (
                 <tr
                   key={strike}
+                  onClick={onSelectStrike ? () => onSelectStrike(strike) : undefined}
+                  title={onSelectStrike ? 'Flash on chart' : undefined}
                   className={`border-b border-borderSubtle/40 last:border-0 ${
                     isSpot ? 'shadow-[inset_2px_0_0_0_rgba(237,237,237,0.6)]' : ''
-                  }`}
+                  } ${onSelectStrike ? 'cursor-pointer hover:bg-white/[0.02] transition-colors' : ''}`}
                 >
                   <td className="w-px px-2 py-1 font-mono text-[11px] whitespace-nowrap">
                     <span className={isSpot ? 'text-textPrimary font-bold' : 'text-textPrimary font-semibold'}>

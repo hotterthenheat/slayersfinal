@@ -40,6 +40,9 @@ import type { Candle, GexSnapshot } from '../types/market';
 
 export interface MigrationPoint {
   time: number;
+  /** The spot each level was picked against — emitted so HIST_01 can ride
+      Wall Drift's own chart, which draws spot alongside the levels. */
+  spot: number;
   callWall: number | null;
   putWall: number | null;
   flip: number | null;
@@ -115,6 +118,7 @@ export function levelMigration(
     }
     return {
       time: s.time,
+      spot,
       callWall: w.callWall ?? null,
       putWall: w.putWall ?? null,
       flip: pickFlip(book, spot, n => n.netGex),

@@ -42,6 +42,7 @@ const OiHeatPanel = ({
   spot,
   fill = false,
   heat: heatProp,
+  onSelectStrike,
 }: {
   snaps: GexSnapshot[];
   bars: Candle[];
@@ -62,6 +63,9 @@ const OiHeatPanel = ({
    * disagree with itself.
    */
   heat?: OiHeat;
+  /** A strike cell was clicked — hosts wire this to the chart's focus
+      flash, the same door every ladder on the desk opens. */
+  onSelectStrike?: (strike: number) => void;
 }) => {
   /* The self-computed grid keys on array IDENTITY, and the sim mutates its
      arrays in place — so this memo freezes at first compute. Fine for a
@@ -144,7 +148,15 @@ const OiHeatPanel = ({
             {rows.map((r, i) => (
               <Fragment key={r.strike}>
               <tr title={rowWords(r)} className="border-b border-borderSubtle/40 last:border-0">
-                <td className="w-px px-2 py-1 font-mono text-[11px] font-semibold tnum text-textPrimary whitespace-nowrap">{r.strike}</td>
+                <td
+                  onClick={onSelectStrike ? () => onSelectStrike(r.strike) : undefined}
+                  title={onSelectStrike ? 'Flash on chart' : undefined}
+                  className={`w-px px-2 py-1 font-mono text-[11px] font-semibold tnum text-textPrimary whitespace-nowrap ${
+                    onSelectStrike ? 'cursor-pointer hover:text-white' : ''
+                  }`}
+                >
+                  {r.strike}
+                </td>
                 {r.cells.map(c => (
                   <td
                     key={c.time}

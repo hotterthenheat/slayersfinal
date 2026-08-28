@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildOiHeat, rowWords } from '../../data/oiHeat';
 import OiHeatPanel from '../../components/gex/OiHeatPanel';
@@ -25,6 +26,7 @@ import Simulator from '../../core/simulator';
 
 const OiHeatScreen = () => {
   const { marketData } = useMarketData();
+  const navigate = useNavigate();
 
   const feed = useMemo(() => {
     if (!marketData) return null;
@@ -80,6 +82,7 @@ const OiHeatScreen = () => {
             maxRows={18}
             ticker={marketData.ticker}
             spot={marketData.spot}
+            onSelectStrike={s => navigate('/pulse', { state: { focusPrice: s } })}
           />
         </div>
 
@@ -95,7 +98,12 @@ const OiHeatScreen = () => {
                 <span className="font-mono text-[10px] text-textMuted">Nothing yet this session.</span>
               ) : (
                 rows.map(r => (
-                  <div key={r.strike} className="flex items-baseline gap-2" title={rowWords(r)}>
+                  <div
+                    key={r.strike}
+                    title={rowWords(r)}
+                    onClick={() => navigate('/pulse', { state: { focusPrice: r.strike } })}
+                    className="flex items-baseline gap-2 cursor-pointer hover:bg-white/[0.02] transition-colors rounded-sm"
+                  >
                     <span className="font-mono text-[11px] font-semibold tnum text-textPrimary">{r.strike}</span>
                     <span className={`font-mono text-[10px] font-semibold tnum ${ink}`}>
                       {arrow}{Math.abs(r.netToday).toLocaleString()}

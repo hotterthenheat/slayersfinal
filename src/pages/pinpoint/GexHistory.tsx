@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMarketData } from '../../context/MarketDataContext';
 import {
   levelMigration,
@@ -8,6 +9,7 @@ import {
   strikeTimeHeat,
 } from '../../data/timeMachine';
 import GexMatrix from '../../components/gex/GexMatrix';
+import WallDrift from '../../components/gex/vannacharm/WallDrift';
 import { CALL_WALL, FLIP, KING, PUT_WALL, SPOT } from '../../components/gex/palette';
 import Panel from '../../components/ui/Panel';
 import ProvenanceChip from '../../components/ui/ProvenanceChip';
@@ -51,6 +53,7 @@ const dayLabel = (t: number) => new Date(t * 1000).toLocaleDateString(undefined,
 
 const GexHistory = () => {
   const { marketData } = useMarketData();
+  const navigate = useNavigate();
   const ticker = marketData?.ticker;
 
   const { snaps, bars } = useMemo(
@@ -67,6 +70,17 @@ const GexHistory = () => {
 
   const migration = useMemo(() => levelMigration(snaps, bars, span), [snaps, bars, span]);
   const heat = useMemo(() => strikeTimeHeat(snaps, span, 10), [snaps, span]);
+
+  /* HIST_01 rides Wall Drift's chart — the same grammar the live session
+     already reads, pointed at a past one. Points where the book was
+     one-sided (a null wall) cannot be drawn on it and fall back to words. */
+  const drift = useMemo(
+    () =>
+      migration
+        .filter(p => p.callWall !== null && p.putWall !== null && p.flip !== null)
+        .map(p => ({ time: p.time, spot: p.spot, callWall: p.callWall as number, putWall: p.putWall as number, flip: p.flip as number })),
+    [migration]
+  );
 
   const [scrub, setScrub] = useState<number | null>(null);
   const scrubTime = scrub ?? (migration.length > 0 ? migration[migration.length - 1].time : null);
@@ -131,38 +145,15 @@ const GexHistory = () => {
       {/* HIST_01 */}
       <Panel title="Level Migration Timeline" subtitle="HIST_01 — walls, flip and king through the session" className="w-full">
         <p className="font-mono text-[11px] leading-relaxed text-textPrimary mb-2">{migrationWords(migration)}</p>
-        {migration.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
-              <thead>
-                <tr>
-                  {['Time', 'Call wall', 'Put wall', 'Flip', 'King'].map(h => (
-                    <th key={h} className="px-2 py-0.5 text-left font-mono text-[9px] uppercase tracking-wider text-textMuted">
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {migration.slice(-12).map(p => (
-                  <tr key={p.time}>
-                    <td className="px-2 py-0.5 font-mono text-[10px] tnum text-textMuted">{hhmm(p.time)}</td>
-                    <td className="px-2 py-0.5 font-mono text-[10px] tnum" style={{ color: CALL_WALL }}>
-                      {p.callWall?.toFixed(2) ?? '—'}
-                    </td>
-                    <td className="px-2 py-0.5 font-mono text-[10px] tnum" style={{ color: PUT_WALL }}>
-                      {p.putWall?.toFixed(2) ?? '—'}
-                    </td>
-                    <td className="px-2 py-0.5 font-mono text-[10px] tnum" style={{ color: FLIP }}>
-                      {p.flip?.toFixed(2) ?? '—'}
-                    </td>
-                    <td className="px-2 py-0.5 font-mono text-[10px] tnum" style={{ color: KING }}>{p.king?.toFixed(2) ?? '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {drift.length >= 2 ? (
+          <div className="h-64 min-h-0">
+            <WallDrift drift={drift} />
           </div>
-        )}
+        ) : migration.length > 0 ? (
+          <span className="font-mono text-[10px] text-textMuted">
+            The book was one-sided for most of this session — not enough two-sided moments to draw the drift.
+          </span>
+        ) : null}
       </Panel>
 
       {/* HIST_02 */}
@@ -171,7 +162,12 @@ const GexHistory = () => {
           <span className="font-mono text-[10px] text-textMuted">No snapshots recorded for this session.</span>
         ) : (
           <div className="max-h-[560px] flex min-h-0">
-            <GexMatrix data={heatData} spot={0} warnFirstColumn={false} />
+            <GexMatrix
+              data={heatData}
+              spot={0}
+              warnFirstColumn={false}
+              onSelectStrike={s => navigate('/pulse', { state: { focusPrice: s } })}
+            />
           </div>
         )}
       </Panel>

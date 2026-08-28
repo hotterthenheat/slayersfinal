@@ -4942,14 +4942,20 @@ head('the map says whether it holds, and every greek names its unit');
     the doctrine behind it. Now: side pair on the call/put cells, a ramp
     colour (never regime red/green) on the bar.
   */
+  /* The profile is MIRRORED now — Strike | Calls | centered bar | Puts |
+     Net — so the guard reads the new geometry: the bar is the [data-bar]
+     span inside the middle cell, anchored to the 50% spine on whichever
+     side its sign owns. */
   const inks = await page.evaluate(() => {
     const tr = document.querySelector('tbody tr');
     if (!tr) return null;
     const tds = [...tr.children];
+    const bar = tds[2] ? tds[2].querySelector('[data-bar]') : null;
     return {
       call: getComputedStyle(tds[1]).color,
-      put: getComputedStyle(tds[2]).color,
-      bar: tds[4] && tds[4].firstElementChild ? getComputedStyle(tds[4].firstElementChild).backgroundColor : '',
+      put: getComputedStyle(tds[3]).color,
+      bar: bar ? getComputedStyle(bar).backgroundColor : '',
+      anchored: bar ? (bar.style.left === '50%' || bar.style.right === '50%') : false,
     };
   });
   if (!inks) bad('no strike row to read inks from');
@@ -4961,7 +4967,17 @@ head('the map says whether it holds, and every greek names its unit');
     !REGIME.includes(inks.bar) && inks.bar !== '' && inks.bar !== 'rgba(0, 0, 0, 0)'
       ? ok(`and the net bar is house heat, never the regime pair — ${inks.bar}`)
       : bad(`the net bar is regime ink or empty — ${inks.bar}`);
+    inks.anchored
+      ? ok('the bar grows from the zero spine — the mirrored profile')
+      : bad('the bar is not anchored to the 50% spine');
   }
+
+  /* The profile's rows are doors, not just readings — every strike ladder
+     on the desk clicks through to the chart's focus flash. */
+  const clickable = await page.$$eval('tbody tr[title="Flash on chart"]', trs => trs.length);
+  clickable > 5
+    ? ok(`${clickable} strike rows click through to the chart`)
+    : bad(`only ${clickable} rows carry the click-through`);
 
   errs.length === 0 ? ok('no page errors across the greek round') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();

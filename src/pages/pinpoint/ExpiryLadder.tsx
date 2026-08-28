@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildExpiryLadder, rowWords, wallOwnership, LADDER_COLUMNS } from '../../data/expiryLadder';
 import { fmtUsd } from '../../data/gex';
@@ -36,6 +37,7 @@ import type { GexMatrixData } from '../../types/gex';
 
 const ExpiryLadder = () => {
   const { marketData } = useMarketData();
+  const navigate = useNavigate();
 
   const ladder = useMemo(() => (marketData ? buildExpiryLadder(marketData, 10) : null), [marketData]);
 
@@ -153,7 +155,13 @@ const ExpiryLadder = () => {
           paid for a whole one. Below xl the rail folds under. */}
       <div className="flex-1 flex flex-col xl:flex-row gap-4 min-h-0">
         <div className="border border-borderSubtle bg-panel rounded-md p-2 flex-1 flex min-h-0">
-          <GexMatrix data={view.data} spot={ladder.spot} rowNotes={view.notes} fill />
+          <GexMatrix
+            data={view.data}
+            spot={ladder.spot}
+            rowNotes={view.notes}
+            fill
+            onSelectStrike={s => navigate('/pulse', { state: { focusPrice: s } })}
+          />
         </div>
 
         <div className="xl:w-[340px] shrink-0 flex flex-col gap-4 min-h-0">
