@@ -1,4 +1,4 @@
-import { Columns2, Grid3x3, Layers, Map, Target, Waves, type LucideIcon } from 'lucide-react';
+import { Clock, Columns2, Grid3x3, Layers, Map, Target, Waves, type LucideIcon } from 'lucide-react';
 
 /** Pinpoint subpage registry — drives the sub-tab bar and command palette. */
 export interface GexSubpage {
@@ -44,6 +44,12 @@ export const GEX_SUBPAGES: GexSubpage[] = [
     label: 'Compare',
     subtitle: 'Two books on one normalized axis — where their positioning diverges',
     icon: Columns2,
+  },
+  {
+    path: '/pinpoint/history',
+    label: 'Time Machine',
+    subtitle: 'Any past session replayed — level migration, strike × time, and a real scrubber',
+    icon: Clock,
   },
   // Launch trim (Noah, 2026-08-17): Volatility Lab + History & Replay pulled
   // from the first launch — pages kept on disk, routes redirect.

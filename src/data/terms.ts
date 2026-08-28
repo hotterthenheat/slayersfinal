@@ -81,6 +81,9 @@ export const TERMS = {
   // ---- expected-move cone (T-9) ----
   'Expected move cone':
     'The band options priced for today, drawn on the chart: the envelope since the open, and the cone still left from here to the bell. Price leaving the band means the move has already beaten what the options charged; the cone shrinking into the close is normal — less day left, less move left.',
+  // ---- time machine (P-20) ----
+  'Time machine':
+    'Any past session in the buffer, replayed: where the walls and the flip actually sat through that day, which strikes were building, and the book as it stood at any recorded moment. Nothing is interpolated \u2014 a scrub lands on a reading that happened.',
   // ---- two-ticker compare (P-22) ----
   'Structural divergence':
     'Two correlated names positioned differently. Both books are placed on percent-from-spot and normalized to a share of their own gamma, so what is compared is the SHAPE of the positioning \u2014 a bucket where one is call-heavy and the other put-heavy is the two books disagreeing about where the level is.',

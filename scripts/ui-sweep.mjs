@@ -4910,6 +4910,74 @@ head('the map says whether it holds, and every greek names its unit');
   await ctx.close();
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   P-16 · P-20 · P-22 — the pain map, the time machine, and two-ticker
+   compare.
+
+   Three surfaces whose engines are proved headless. What the browser owns
+   is that each ships with the sentence that makes it honest: the pain map's
+   population (aggressive longs, not all holders), the time machine's refusal
+   to interpolate, and the compare page's normalization. Each of those is a
+   claim about what the numbers mean, and a number without it is a number a
+   reader will over-trust.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the last three surfaces carry the sentences that make them honest');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 1100 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+
+  /* P-16 — on Exposure Profile. */
+  await page.goto(`${BASE}/pinpoint/exposure-profile`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 1000);
+  const profile = await page.evaluate(() => document.body.textContent ?? '');
+  /Pain Map/i.test(profile) ? ok('P-16: the pain map is on the page') : bad('P-16: no pain map');
+  /(turn green at|already green above|No aggressive)/.test(profile)
+    ? ok('with a flip level or an honest absence')
+    : bad('the pain map states neither a level nor an absence');
+  /AGGRESSIVE LONGS|aggressive longs/i.test(profile)
+    ? ok('and it names the population it tracks — the load-bearing assumption')
+    : bad('the pain map does not say WHOSE basis it is');
+
+  /* P-22 — the compare page. */
+  await page.goto(`${BASE}/pinpoint/compare`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 500);
+  const cmp = await page.evaluate(() => document.body.textContent ?? '');
+  /vs/.test(cmp) ? ok('P-22: the compare page names both books') : bad('P-22: no compare header');
+  /% from spot/.test(cmp) ? ok('and puts them on percent-from-spot') : bad('no percent axis');
+  /share of their own total gamma/i.test(cmp)
+    ? ok('stating the normalization that makes the comparison mean anything')
+    : bad('the normalization is not stated');
+  /(positioned the same shape|carries materially more)/.test(cmp)
+    ? ok('with a divergence read in words')
+    : bad('no divergence read');
+  const cmpSelect = await page.$('select[aria-label="Compare against"]');
+  cmpSelect ? ok('and a partner picker') : bad('no partner picker');
+
+  /* P-20 — the time machine, replacing three placeholders. */
+  await page.goto(`${BASE}/pinpoint/history`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 500);
+  const hist = await page.evaluate(() => document.body.textContent ?? '');
+  !/Module scheduled/.test(hist)
+    ? ok('P-20: the "module scheduled" placeholders are gone')
+    : bad('P-20: the page still shows scheduled placeholders');
+  ['HIST_01', 'HIST_02', 'HIST_03'].every(h => hist.includes(h))
+    ? ok('all three modules are on the page')
+    : bad('a module is missing from the history page');
+  /(The flip migrated|The flip held at|No snapshots recorded|snapshots — the book was one-sided)/.test(hist)
+    ? ok('HIST_01 reports what the levels did, or that it has nothing')
+    : bad('no migration read');
+  const sessionPick = await page.$('select[aria-label="Session"]');
+  sessionPick ? ok('one session picker drives all three') : bad('no session picker');
+  /never between two|admits its gaps/.test(hist)
+    ? ok('and HIST_03 states that it does not interpolate')
+    : bad('the no-interpolation guarantee is not stated');
+
+  errs.length === 0 ? ok('no page errors across the last three') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
 console.log(`\n${fails} failing`);
 await browser.close();
 process.exit(fails ? 1 : 0);
