@@ -94,6 +94,8 @@ export const TERMS = {
   'VWAP bands':
     '\u00b11\u03c3 and \u00b12\u03c3 around the session VWAP, volume-weighted \u2014 how far price sits from where the day\u2019s money actually traded.',
   // ---- distance units (T-19) ----
+  'Distance unit':
+    'The ruler every distance on the desk is measured with. Dollars and percent are literal; ATR is average true range, so 0.4 ATR means the same size of move on SPY as on NVDA; \u03c3 is implied one-day moves \u2014 how many the options are pricing.',
   ATR:
     'Average true range \u2014 how far this name typically travels in a session, gaps included. A wall 0.4 ATR away is the same distance on SPY and on NVDA.',
   '\u03c3 distance':

@@ -4566,6 +4566,68 @@ head('rule bars draw from the seconds tape and hold the clocked overlays');
   await ctx.close();
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   T-19, THE HALF THE STRIP CANNOT SHOW — that the ruler is DESK-WIDE.
+
+   The P-4 section above proves the picker rides the flip strip and re-words
+   its distance. That is one component reading its own store, which is also
+   exactly what a unit that only LOOKED shared would do. The directive's
+   claim is stronger: the surfaces switch together, and the choice is the
+   reader's tomorrow as well as now. Both halves are cross-cutting, so
+   neither can be observed from inside one component.
+
+   Same context throughout, deliberately — a browser context is its own
+   localStorage, so choosing on one page and reading on another is the only
+   way the persistence half means anything.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the distance unit is one ruler, on every desk and after a reload');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/pinpoint/exposure-profile`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 500);
+
+  const pressedUnit = () =>
+    page.evaluate(() => {
+      const g = document.querySelector('[role="group"][aria-label="Distance unit — desk-wide"]');
+      if (!g) return null;
+      return [...g.querySelectorAll('button')].find(b => b.getAttribute('aria-pressed') === 'true')?.textContent?.trim() ?? null;
+    });
+  const pick = async u => {
+    const g = await page.$('[role="group"][aria-label="Distance unit — desk-wide"]');
+    if (!g) return false;
+    for (const b of await g.$$('button')) {
+      if (((await b.textContent()) ?? '').trim() === u) { await b.click(); await page.waitForTimeout(400); return true; }
+    }
+    return false;
+  };
+
+  (await pressedUnit()) !== null ? ok('PREMISE: a unit is selected on Pinpoint') : bad('PREMISE: no unit picker on the Pinpoint strip');
+  (await pick('σ')) ? ok('PREMISE: the σ chip takes the click') : bad('PREMISE: no σ chip in the picker');
+  (await pressedUnit()) === 'σ' ? ok('the picker marks the chosen ruler') : bad(`the picker shows ${JSON.stringify(await pressedUnit())} after choosing σ`);
+
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+  (await pressedUnit()) === 'σ' ? ok('and the choice survives a reload') : bad('the unit reset on reload');
+
+  await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+  (await pressedUnit()) === 'σ'
+    ? ok('Terrain opens on the ruler Pinpoint chose — one store, two desks')
+    : bad(`Terrain shows ${JSON.stringify(await pressedUnit())} where Pinpoint chose σ`);
+
+  /* And changing it HERE is the same store in the other direction. */
+  (await pick('$')) ? ok('Terrain can set it too') : bad('no picker in the Terrain cluster');
+  await page.goto(`${BASE}/pinpoint/exposure-profile`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+  (await pressedUnit()) === '$' ? ok('and Pinpoint follows it back') : bad('the store is one-way');
+
+  errs.length === 0 ? ok('no page errors switching rulers') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
 console.log(`\n${fails} failing`);
 await browser.close();
 process.exit(fails ? 1 : 0);
