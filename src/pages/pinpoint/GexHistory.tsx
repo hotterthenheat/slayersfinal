@@ -72,18 +72,15 @@ const GexHistory = () => {
   const scrubTime = scrub ?? (migration.length > 0 ? migration[migration.length - 1].time : null);
   const scrubbed = scrubTime !== null ? snapshotAt(migration.length > 0 ? snaps.filter(s => span && s.time >= span.from && s.time <= span.to) : [], scrubTime) : null;
 
-  if (spans.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-64 font-mono text-[11px] uppercase tracking-widest text-textMuted">
-        No sessions in the buffer yet…
-      </div>
-    );
-  }
-
-
-  /* HIST_02 as the house matrix: time buckets for expiries, the fold doing
-     the row triage the hand-sorted top-12 used to fake. warnFirstColumn off
-     — the first bucket is a moment, not a 0DTE emphasis. */
+  /*
+    HIST_02 as the house matrix — and this memo sits ABOVE the early return
+    on purpose. Its first placement was below it, which is React error #310
+    waiting for data to arrive: the empty-buffer render mounts N hooks, the
+    populated one mounts N+1, and the page dies at exactly the moment it
+    first has something to show. The sweep caught it on the navigation path
+    where the page mounts before the sim settles; a hand screenshot, mounted
+    after, never would have. Hooks live above every return, always.
+  */
   const heatData = useMemo(() => {
     if (heat.rows.length === 0) return null;
     return {
@@ -96,6 +93,16 @@ const GexHistory = () => {
       putWallIndex: -1,
     };
   }, [heat]);
+
+  if (spans.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64 font-mono text-[11px] uppercase tracking-widest text-textMuted">
+        No sessions in the buffer yet…
+      </div>
+    );
+  }
+
+
 
   return (
     <div className="flex flex-col gap-4">

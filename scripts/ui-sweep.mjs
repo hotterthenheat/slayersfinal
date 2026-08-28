@@ -2185,10 +2185,19 @@ head('the migration hover card stays inside its panel');
       );
       const body = host && host.querySelector('div[class*="overflow-y-auto"]');
       if (!body) return null;
+      /* SCROLL THE LIST TO ITS OWN BOTTOM FIRST. The claim under test is
+         "the card stays inside the panel on the lowest rows", but the old
+         sampling took the lowest rows' coordinates without scrolling them
+         into view — so at short viewports the pointer was sent below the
+         fold and the check reported "no card" about rows nobody could
+         hover. The list is its own scroll container; bring the rows to the
+         pointer, then measure. */
+      body.scrollTop = body.scrollHeight;
       return [...body.children]
         .filter(c => c.querySelector('span'))
         .slice(-4)
-        .map(c => { const r = c.getBoundingClientRect(); return { x: Math.round(r.x + 40), y: Math.round(r.y + r.height / 2) }; });
+        .map(c => { const r = c.getBoundingClientRect(); return { x: Math.round(r.x + 40), y: Math.round(r.y + r.height / 2) }; })
+        .filter(p => p.y > 0 && p.y < window.innerHeight);
     });
 
     if (!rows || rows.length === 0) { bad(`${at} — no migration map rows to hover`); await ctx.close(); continue; }
