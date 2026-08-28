@@ -122,13 +122,6 @@ const VannaCharm = () => {
         </span>
       </div>
 
-      {/* P-15. The strip reads the SAME hoursToClose the migration map is
-          projected through, so the two cannot disagree about what time it
-          is — which was the whole point of P-0 making the clock real. */}
-      <Panel title="Charm Clock" subtitle="How much of today's decay has actually been paid" className="w-full">
-        <CharmClockStrip elapsedMinutes={RTH_MINUTES - hoursToClose * 60} />
-      </Panel>
-
       {/* Migration map + shifts/narrative */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-stretch">
         <Panel
@@ -142,6 +135,22 @@ const VannaCharm = () => {
         </Panel>
 
         <div className="xl:col-span-5 min-w-0 flex flex-col gap-4">
+          {/*
+            P-15. IN THE READ COLUMN, not above the map — and that placement
+            is a measured constraint, not a preference. Sat above the grid it
+            pushed the migration map's lowest rows below the fold at 1440x900
+            and 1280x800, and the sweep caught it: hovering those rows
+            produced no read-out card because the pointer was moving to a
+            coordinate off-screen. Here it costs the map no vertical space at
+            all, and it sits with the other things this column measures.
+
+            It reads the SAME hoursToClose the map is projected through, so
+            the two cannot disagree about what time it is — which was the
+            whole point of P-0 making the clock real.
+          */}
+          <Panel title="Charm Clock" subtitle="how much of today's decay has been paid" className="w-full">
+            <CharmClockStrip elapsedMinutes={RTH_MINUTES - hoursToClose * 60} />
+          </Panel>
           <Panel title="Level Shifts" subtitle="where the structure moves" flush className="w-full">
             <LevelShiftList shifts={data.shifts} />
           </Panel>
