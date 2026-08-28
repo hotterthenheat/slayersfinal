@@ -306,26 +306,47 @@ const ExposureProfile = () => {
           12 and nothing claimed the other 7.
         */}
         <div className="xl:col-span-7 min-w-0 flex flex-col gap-4">
-        {/* P-11. At the HEAD of the column, because it qualifies everything
-            under it: a wall a vol tick would dissolve is not the same object
-            as one that survives, and every other GEX product draws them
-            identically. */}
+        {/* P-11 + P-16 SHARE A ROW — the fit-more-on-screen rule this desk
+            applies everywhere else. Both are compact sentence-first reads,
+            and stacking four full-width panels made the page a scroll of
+            headers (the first cut did exactly that; the renders showed it).
+            Stability leads because it qualifies everything under it: a wall
+            a vol tick would dissolve is not the same object as one that
+            survives, and every other GEX product draws them identically. */}
         {scanSnapshot && (
-          <Panel
-            title="Map Stability"
-            subtitle="Do these levels survive a vol move — P-11"
-            className="w-full"
-          >
-            <StabilityGauge
-              snapshot={scanSnapshot}
-              iv={Simulator.TICKERS[scanSnapshot.ticker]?.iv ?? 0.2}
-            />
-          </Panel>
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-stretch">
+            <Panel
+              title="Map Stability"
+              subtitle="Do these levels survive a vol move — P-11"
+              className="w-full"
+            >
+              <StabilityGauge
+                snapshot={scanSnapshot}
+                iv={Simulator.TICKERS[scanSnapshot.ticker]?.iv ?? 0.2}
+              />
+            </Panel>
+            {/* P-16. What the HOLDERS will do, beside what the dealers must.
+                Reads the same flowTape the attribution panel does, so the
+                basis and the prints behind a strike cannot disagree. */}
+            <Panel
+              title="Pain Map"
+              subtitle="Where today's buyers got in — and the spot that flips them"
+              className="w-full"
+            >
+              <PainMapPanel
+                prints={flowTape}
+                spot={scanSnapshot.spot}
+                dteYears={30 / 365}
+                iv={Simulator.TICKERS[scanSnapshot.ticker]?.iv ?? 0.2}
+              />
+            </Panel>
+          </div>
         )}
         {/* P-17 / P-18. Vanna & Charm already do time and vol; nobody does
             SPOT, and it is the scenario a trader runs in their head all day.
             The forced-flow sentence under it is the translation layer that
-            makes the page legible without greek. */}
+            makes the page legible without greek. Full width — the ruler
+            wants the room. */}
         {scanSnapshot && (
           <Panel
             title="Spot Scenario"
@@ -333,23 +354,6 @@ const ExposureProfile = () => {
             className="w-full"
           >
             <SpotScenarioPanel snapshot={scanSnapshot} />
-          </Panel>
-        )}
-        {/* P-16. What the HOLDERS will do, beside what the dealers must.
-            Reads the same flowTape the attribution panel does, so the basis
-            and the prints behind a strike cannot disagree. */}
-        {scanSnapshot && (
-          <Panel
-            title="Pain Map"
-            subtitle="Where today's buyers got in — and the spot that flips them"
-            className="w-full"
-          >
-            <PainMapPanel
-              prints={flowTape}
-              spot={scanSnapshot.spot}
-              dteYears={30 / 365}
-              iv={Simulator.TICKERS[scanSnapshot.ticker]?.iv ?? 0.2}
-            />
           </Panel>
         )}
         {/* P-8. The flow behind the snapshot: which strikes are being built

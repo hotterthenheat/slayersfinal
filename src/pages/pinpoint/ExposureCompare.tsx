@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildExposureCompare, compareWords } from '../../data/exposureCompare';
-import { LONG_GAMMA, SHORT_GAMMA, SPOT } from '../../components/gex/palette';
+import { heatMagnitude, heatPoles, heatRgb } from '../../components/gex/heatmap';
+import { SPOT } from '../../components/gex/palette';
+import { twinFamilyFor } from '../../data/indexTwins';
 import ProvenanceChip from '../../components/ui/ProvenanceChip';
 import Term from '../../components/ui/Term';
 import Simulator from '../../core/simulator';
@@ -28,10 +30,27 @@ import Simulator from '../../core/simulator';
 
 const ExposureCompare = () => {
   const { marketData } = useMarketData();
-  const tickers = useMemo(() => Object.keys(Simulator.TICKERS).slice(0, 12), []);
+  /*
+    THE PICKER LEADS WITH THE PAIRS THE READ IS FOR. The directive's cases
+    are SPX vs SPY and SPY vs QQQ — an instrument against its correlated
+    sibling, where a divergence is a signal. T-17's twin families are the
+    desk's own registry of who is correlated with whom, so the correlated
+    group is derived from it: the OTHER families' ETFs (their cash indices
+    and futures have no simulated book yet — they join the group the day
+    their chains exist). Everything else stays available under a divider,
+    because a reader may want an uncorrelated look — but the page no longer
+    opens on SPY vs a random single name as though that were the product.
+  */
+  const { correlated, rest } = useMemo(() => {
+    const all = Object.keys(Simulator.TICKERS).slice(0, 12);
+    const mine = marketData?.ticker ?? '';
+    const fams = ['SPY', 'QQQ', 'IWM'];
+    const corr = fams.filter(t => t !== mine && all.includes(t) && twinFamilyFor(t) !== null);
+    return { correlated: corr, rest: all.filter(t => t !== mine && !corr.includes(t)) };
+  }, [marketData?.ticker]);
   const [other, setOther] = useState<string>('');
 
-  const partner = other || tickers.find(t => t !== marketData?.ticker) || '';
+  const partner = other || correlated[0] || rest[0] || '';
   const compare = useMemo(() => {
     if (!marketData || !partner) return null;
     const b = Simulator.snapshotFor(partner as Parameters<typeof Simulator.snapshotFor>[0]);
@@ -60,13 +79,22 @@ const ExposureCompare = () => {
           onChange={e => setOther(e.target.value)}
           className="bg-panel border border-borderSubtle rounded px-2 py-1 font-mono text-[10px] text-textPrimary"
         >
-          {tickers
-            .filter(t => t !== compare.tickerA)
-            .map(t => (
+          {correlated.length > 0 && (
+            <optgroup label="Correlated books — the read this page is for">
+              {correlated.map(t => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </optgroup>
+          )}
+          <optgroup label="Everything else">
+            {rest.map(t => (
               <option key={t} value={t}>
                 {t}
               </option>
             ))}
+          </optgroup>
         </select>
         <ProvenanceChip sources={['chain', 'exposure']} />
       </div>
@@ -89,11 +117,16 @@ const ExposureCompare = () => {
           </thead>
           <tbody>
             {[...compare.buckets].reverse().map(b => {
-              const wa = (Math.abs(b.a) / maxShare) * 100;
-              const wb = (Math.abs(b.b) / maxShare) * 100;
+              /* House heat for both books — colour AND length off the ramp,
+                 like every other exposure bar on the desk. */
+              const [ar, ag, ab] = heatRgb(b.a, maxShare);
+              const [br2, bg2, bb2] = heatRgb(b.b, maxShare);
+              const wa = heatMagnitude(b.a, maxShare) * 100;
+              const wb = heatMagnitude(b.b, maxShare) * 100;
               const atSpot = Math.abs(b.pct) < 1e-9;
+              const widest = compare.widest !== null && b.pct === compare.widest.pct && Math.abs(b.divergence) > 0.02;
               return (
-                <tr key={b.pct} className={atSpot ? 'bg-white/[0.04]' : ''}>
+                <tr key={b.pct} className={atSpot ? 'bg-white/[0.04]' : widest ? 'bg-white/[0.02]' : ''}>
                   <td
                     className="px-2 py-0.5 font-mono text-[10px] tnum"
                     style={{ color: atSpot ? SPOT : undefined }}
@@ -105,18 +138,19 @@ const ExposureCompare = () => {
                     <div className="flex justify-end">
                       <div
                         className="h-1.5 rounded-sm"
-                        style={{ width: `${wa}%`, background: b.a >= 0 ? SHORT_GAMMA : LONG_GAMMA }}
+                        style={{ width: `${b.a === 0 ? 0 : wa}%`, background: `rgb(${ar},${ag},${ab})` }}
                       />
                     </div>
                   </td>
                   <td className="px-2 py-0.5">
                     <div
                       className="h-1.5 rounded-sm"
-                      style={{ width: `${wb}%`, background: b.b >= 0 ? SHORT_GAMMA : LONG_GAMMA }}
+                      style={{ width: `${b.b === 0 ? 0 : wb}%`, background: `rgb(${br2},${bg2},${bb2})` }}
                     />
                   </td>
-                  <td className="px-2 py-0.5 font-mono text-[10px] tnum text-textSecondary">
+                  <td className={`px-2 py-0.5 font-mono text-[10px] tnum ${widest ? 'text-textPrimary font-semibold' : 'text-textSecondary'}`}>
                     {b.divergence === 0 ? '·' : `${b.divergence > 0 ? '+' : ''}${(b.divergence * 100).toFixed(1)}`}
+                    {widest ? ' ◀' : ''}
                   </td>
                 </tr>
               );
@@ -141,7 +175,9 @@ const ExposureCompare = () => {
       <p className="font-mono text-[9px] leading-relaxed text-textMuted">
         Both books are placed on percent-from-spot and normalized to a share of their own total gamma, so what is
         compared is the SHAPE of the positioning rather than its size. Without both, the bigger book would appear
-        to diverge everywhere and nothing would ever align.
+        to diverge everywhere and nothing would ever align. The bars are the house heat —{' '}
+        <span style={{ color: heatPoles.pos }}>gold amplifies</span>,{' '}
+        <span style={{ color: heatPoles.neg }}>steel absorbs</span> — and ◀ marks where the books disagree most.
       </p>
     </div>
   );

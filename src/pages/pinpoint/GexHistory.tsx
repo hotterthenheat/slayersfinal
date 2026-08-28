@@ -8,7 +8,8 @@ import {
   strikeTimeHeat,
 } from '../../data/timeMachine';
 import { fmtUsd } from '../../data/gex';
-import { LONG_GAMMA, SHORT_GAMMA, FLIP, SPOT } from '../../components/gex/palette';
+import { heatCellStyle, heatPoles } from '../../components/gex/heatmap';
+import { CALL_WALL, FLIP, KING, PUT_WALL, SPOT } from '../../components/gex/palette';
 import Panel from '../../components/ui/Panel';
 import ProvenanceChip from '../../components/ui/ProvenanceChip';
 import Term from '../../components/ui/Term';
@@ -32,6 +33,15 @@ import Simulator from '../../core/simulator';
   NOTHING IS INTERPOLATED anywhere on this page. The scrubber lands on
   snapshots that were actually recorded, the heat cells are real readings
   rather than averages, and a session with no data draws no line.
+
+  TWO INK CORRECTIONS from the first cut, both of the same species. The
+  migration table drew the call wall RED and the put wall GREEN — exactly
+  inverted against CALL_WALL/PUT_WALL in palette.ts, which every zone rail
+  and badge on the desk has followed since 2026-08-18; the king now wears
+  its magenta too. And HIST_02's heat was a hand-rolled red/green wash where
+  net GEX heat on this desk has exactly one rendering: heatCellStyle. Level
+  inks come from palette.ts, heat comes from heatmap.ts — nothing on this
+  page invents either any more.
 */
 
 const hhmm = (t: number) => {
@@ -71,12 +81,6 @@ const GexHistory = () => {
     );
   }
 
-  const ink = (v: number) => {
-    if (heat.maxAbs === 0 || v === 0) return 'transparent';
-    const a = Math.min(0.85, 0.08 + (Math.abs(v) / heat.maxAbs) * 0.77);
-    const rgb = v > 0 ? SHORT_GAMMA : LONG_GAMMA;
-    return `${rgb}${Math.round(a * 255).toString(16).padStart(2, '0')}`;
-  };
 
   const heatRows = [...heat.rows]
     .sort((a, b) => Math.max(...b.cells.map(c => Math.abs(c.netGex))) - Math.max(...a.cells.map(c => Math.abs(c.netGex))))
@@ -126,16 +130,16 @@ const GexHistory = () => {
                 {migration.slice(-12).map(p => (
                   <tr key={p.time}>
                     <td className="px-2 py-0.5 font-mono text-[10px] tnum text-textMuted">{hhmm(p.time)}</td>
-                    <td className="px-2 py-0.5 font-mono text-[10px] tnum" style={{ color: SHORT_GAMMA }}>
+                    <td className="px-2 py-0.5 font-mono text-[10px] tnum" style={{ color: CALL_WALL }}>
                       {p.callWall?.toFixed(2) ?? '—'}
                     </td>
-                    <td className="px-2 py-0.5 font-mono text-[10px] tnum" style={{ color: LONG_GAMMA }}>
+                    <td className="px-2 py-0.5 font-mono text-[10px] tnum" style={{ color: PUT_WALL }}>
                       {p.putWall?.toFixed(2) ?? '—'}
                     </td>
                     <td className="px-2 py-0.5 font-mono text-[10px] tnum" style={{ color: FLIP }}>
                       {p.flip?.toFixed(2) ?? '—'}
                     </td>
-                    <td className="px-2 py-0.5 font-mono text-[10px] tnum text-textPrimary">{p.king?.toFixed(2) ?? '—'}</td>
+                    <td className="px-2 py-0.5 font-mono text-[10px] tnum" style={{ color: KING }}>{p.king?.toFixed(2) ?? '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -146,6 +150,9 @@ const GexHistory = () => {
 
       {/* HIST_02 */}
       <Panel title="Strike × Time Heatmap" subtitle="HIST_02 — exposure building and decaying through the day" className="w-full">
+        <p className="font-mono text-[9px] uppercase tracking-wider text-textMuted mb-1.5">
+          <span style={{ color: heatPoles.pos }}>gold amplifies</span> · <span style={{ color: heatPoles.neg }}>steel absorbs</span> · brighter is heavier
+        </p>
         {heat.rows.length === 0 ? (
           <span className="font-mono text-[10px] text-textMuted">No snapshots recorded for this session.</span>
         ) : (
@@ -170,9 +177,9 @@ const GexHistory = () => {
                     {r.cells.map(c => (
                       <td
                         key={c.time}
-                        style={{ background: ink(c.netGex) }}
+                        style={heatCellStyle(c.netGex, heat.maxAbs)}
                         title={`${r.strike} · ${hhmm(c.time)} · ${fmtUsd(c.netGex)}`}
-                        className="px-1.5 py-0.5 text-right font-mono text-[9px] tnum text-textSecondary"
+                        className="px-1.5 py-0.5 text-right font-mono text-[9px] tnum"
                       >
                         {c.netGex === 0 ? '·' : fmtUsd(c.netGex)}
                       </td>

@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
 import { useMarketData } from '../../context/MarketDataContext';
-import { buildExpiryLadder, rowWords, LADDER_COLUMNS } from '../../data/expiryLadder';
+import { buildExpiryLadder, rowWords, wallOwnership, LADDER_COLUMNS } from '../../data/expiryLadder';
 import { fmtUsd } from '../../data/gex';
-import { SHORT_GAMMA, LONG_GAMMA, SPOT } from '../../components/gex/palette';
+import { heatCellStyle, heatPoles } from '../../components/gex/heatmap';
+import { SPOT } from '../../components/gex/palette';
 import ProvenanceChip from '../../components/ui/ProvenanceChip';
 import Term from '../../components/ui/Term';
 
@@ -16,11 +17,13 @@ import Term from '../../components/ui/Term';
   cannot answer: is this wall a 0DTE artifact that evaporates at the bell,
   or a monthly shelf that will still be there tomorrow?
 
-  THE HEAT IS THE REGIME PAIR, not a new palette. A cell's ink is the same
-  red/green Noah fixed for net GEX (palette.ts) — put-dominant amplifies,
-  call-dominant absorbs — and its ALPHA is the magnitude against the whole
-  grid's largest cell. So the ladder teaches nothing new: a reader who
-  knows the Positioning Map already reads this.
+  THE HEAT IS THE HOUSE HEAT — heatCellStyle from heatmap.ts, the steel/gold
+  ramp Noah landed on in palette round 3, with the measured gamma curve that
+  keeps a heavy-tailed book from rendering as a black grid and the solved
+  ink crossover that keeps every cell legible. The first cut of this page
+  hand-rolled red/green alpha washes — the industry-standard GEX heatmap
+  this desk deliberately moved OFF, rebuilt as if the change never happened.
+  A heat surface on this desk derives from heatmap.ts or it is wrong.
 
   ALL IS SET APART because it is the aggregate, not a seventh lens. It
   carries a divider and never competes in the dominance read — a column
@@ -41,16 +44,8 @@ const ExpiryLadder = () => {
     );
   }
 
-  const cellInk = (v: number) => {
-    if (ladder.maxAbs === 0 || v === 0) return 'transparent';
-    const a = Math.min(0.85, 0.08 + (Math.abs(v) / ladder.maxAbs) * 0.77);
-    const rgb = v > 0 ? SHORT_GAMMA : LONG_GAMMA;
-    /* palette entries are hex; a wash needs alpha, so it is composed here
-       rather than duplicating the colour as an rgb triple. */
-    return `${rgb}${Math.round(a * 255).toString(16).padStart(2, '0')}`;
-  };
-
   const hoveredRow = hovered === null ? null : ladder.rows.find(r => r.strike === hovered) ?? null;
+  const walls = wallOwnership(ladder);
 
   return (
     <div className="flex flex-col gap-3">
@@ -60,9 +55,29 @@ const ExpiryLadder = () => {
         </h2>
         <ProvenanceChip sources={['chain', 'exposure']} />
         <span className="ml-auto font-mono text-[10px] uppercase tracking-wider text-textMuted">
-          spot <span style={{ color: SPOT }}>{ladder.spot.toFixed(2)}</span>
+          <span style={{ color: heatPoles.pos }}>gold amplifies</span> · <span style={{ color: heatPoles.neg }}>steel absorbs</span> · spot{' '}
+          <span style={{ color: SPOT }}>{ladder.spot.toFixed(2)}</span>
         </span>
       </div>
+
+      {/* The headline: which expiry owns the WALLS. Nobody scans twenty rows
+          — they came to ask about the two strikes the desk is watching. */}
+      {(walls.call || walls.put) && (
+        <div className="flex flex-col gap-0.5">
+          {walls.call && (
+            <p className="font-mono text-[11px] leading-relaxed text-textPrimary">
+              Call wall <span className="font-bold tnum">{walls.call.strike}</span>{' '}
+              <span className="text-textSecondary">— {walls.call.words}</span>
+            </p>
+          )}
+          {walls.put && (
+            <p className="font-mono text-[11px] leading-relaxed text-textPrimary">
+              Put wall <span className="font-bold tnum">{walls.put.strike}</span>{' '}
+              <span className="text-textSecondary">— {walls.put.words}</span>
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="border border-borderSubtle bg-panel rounded-md overflow-x-auto">
         <table className="w-full border-collapse">
@@ -107,9 +122,9 @@ const ExpiryLadder = () => {
                 {row.cells.map(c => (
                   <td
                     key={c.expiry}
-                    style={{ background: cellInk(c.netGex) }}
+                    style={heatCellStyle(c.netGex, ladder.maxAbs)}
                     title={`${row.strike} · ${c.expiry} · ${fmtUsd(c.netGex)}`}
-                    className={`px-2 py-1 text-right font-mono text-[10px] tnum text-textSecondary ${
+                    className={`px-2 py-1 text-right font-mono text-[10px] tnum ${
                       c.expiry === 'ALL' ? 'border-l border-borderMuted' : ''
                     }`}
                   >

@@ -1,6 +1,5 @@
 import { useMemo } from 'react';
 import { buildOiHeat, rowWords } from '../../data/oiHeat';
-import { CALL_SIDE, PUT_SIDE } from './palette';
 import Term from '../ui/Term';
 import type { Candle, GexSnapshot } from '../../types/market';
 
@@ -13,17 +12,19 @@ import type { Candle, GexSnapshot } from '../../types/market';
   Rows = strikes, columns = time, cells = CHANGE. The map is a snapshot of
   a stock; this is the flow that answers "is that wall growing or dying".
 
-  STEEL BUILDS, GOLD UNWINDS — the desk's SIDE pair, not its regime pair.
+  ΔOI HAS A HOUSE PATTERN AND THIS PANEL NOW FOLLOWS IT. PressureMatrix has
+  drawn open-interest change the same way since the desk existed: an ↑ or ↓
+  arrow with the number, bull green for building and bear red for unwinding,
+  and INK ONLY ON THE DELTAS THAT MATTER — the top quintile by magnitude —
+  because forty red/green arrows is noise and a handful is signal.
 
-  That distinction is the fix for a real defect: this panel's caption told
-  the reader "steel is building, gold is unwinding" while the code drew red
-  and green. Red/green on this desk means amplifying or absorbing, which is
-  a regime read and not what a ΔOI cell carries — a strike gaining open
-  interest has not changed the regime, it has changed its size. The caption
-  was right and the ink was wrong.
-
-  Alpha carries magnitude against the grid's largest cell, symmetric around
-  zero, because building and unwinding are opposite readings of one ruler.
+  It took two wrong rounds to land here, which is why the rule is written
+  out. Round one painted red/green background washes (the generic heatmap
+  this desk moved off). Round two "fixed" that to steel/gold washes — but
+  steel/gold mean CALL SIDE and PUT SIDE everywhere else, and a strike
+  gaining open interest has not picked a side, it has changed size. The
+  house already had the answer; neither round looked for it. A surface that
+  wants an established meaning derives from the component that owns it.
 
   WHEN THERE IS NOTHING TO SHOW IT SAYS SO. A session that has not recorded
   two snapshots yet has no flow to report, and the panel says exactly that
@@ -50,11 +51,15 @@ const OiHeatPanel = ({
     );
   }
 
-  const ink = (v: number) => {
-    if (heat.maxAbs === 0 || v === 0) return 'transparent';
-    const a = Math.min(0.85, 0.1 + (Math.abs(v) / heat.maxAbs) * 0.75);
-    const rgb = v > 0 ? CALL_SIDE : PUT_SIDE;
-    return `${rgb}${Math.round(a * 255).toString(16).padStart(2, '0')}`;
+  /* PressureMatrix's significance rule, verbatim in spirit: the top
+     quintile of |ΔOI| across the grid carries ink, everything else stays
+     quiet. */
+  const magnitudes = heat.rows.flatMap(r => r.cells.map(c => Math.abs(c.deltaOi))).sort((a, b) => a - b);
+  const significantAbs = magnitudes.length ? magnitudes[Math.floor(magnitudes.length * 0.8)] : 0;
+  const cellClass = (v: number) => {
+    if (v === 0) return 'text-textMuted';
+    const significant = significantAbs > 0 && Math.abs(v) >= significantAbs;
+    return significant ? (v > 0 ? 'text-bull font-semibold' : 'text-bear font-semibold') : 'text-textSecondary';
   };
 
   const hhmm = (t: number) => {
@@ -104,11 +109,10 @@ const OiHeatPanel = ({
                 {r.cells.map(c => (
                   <td
                     key={c.time}
-                    style={{ background: ink(c.deltaOi) }}
                     title={`${r.strike} · ${hhmm(c.time)} · calls ${c.deltaCall >= 0 ? '+' : ''}${c.deltaCall} · puts ${c.deltaPut >= 0 ? '+' : ''}${c.deltaPut}`}
-                    className="px-1.5 py-0.5 text-right font-mono text-[10px] tnum text-textSecondary"
+                    className={`px-1.5 py-0.5 text-right font-mono text-[10px] tnum ${cellClass(c.deltaOi)}`}
                   >
-                    {c.deltaOi === 0 ? '·' : c.deltaOi > 0 ? `+${c.deltaOi.toLocaleString()}` : c.deltaOi.toLocaleString()}
+                    {c.deltaOi === 0 ? '·' : `${c.deltaOi > 0 ? '↑' : '↓'}${Math.abs(c.deltaOi).toLocaleString()}`}
                   </td>
                 ))}
                 <td className="px-1.5 py-0.5 text-right font-mono text-[10px] font-semibold tnum text-textPrimary">
@@ -130,7 +134,8 @@ const OiHeatPanel = ({
 
       <p className="font-mono text-[9px] leading-relaxed text-textMuted">
         Change, not level: a strike parked at the same open interest all day is blank here, and should be.
-        Steel is building, gold is unwinding.
+        ↑ builds in green, ↓ unwinds in red — and only the deltas that matter carry ink, the same
+        top-quintile rule the pressure matrix uses.
       </p>
     </div>
   );

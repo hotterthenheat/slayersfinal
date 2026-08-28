@@ -1,4 +1,5 @@
 import { buildExposureProfile } from './exposure';
+import { pickWalls } from '../core/walls';
 import type { ExposureExpiry } from '../types/gex';
 import type { MarketSnapshot } from '../types/market';
 
@@ -127,6 +128,32 @@ export function buildExpiryLadder(snapshot: MarketSnapshot, half: 10 | 15 | 20 |
  * cannot word the same row differently.
  */
 export const CONCENTRATED = 0.5;
+
+/*
+  THE LADDER'S HEADLINE — which expiry owns the WALLS. A reader does not
+  scan twenty rows; they came to ask about the two strikes the whole desk
+  is watching, and the answer belongs at the top in words. The walls are
+  picked from the ladder's own ALL column through the shared pickWalls, so
+  this cannot name a different strike than the map does.
+*/
+export interface WallOwnership {
+  call: { strike: number; words: string } | null;
+  put: { strike: number; words: string } | null;
+}
+
+export function wallOwnership(ladder: ExpiryLadder): WallOwnership {
+  const book = ladder.rows.map(r => ({
+    strike: r.strike,
+    netGex: r.cells.find(c => c.expiry === 'ALL')?.netGex ?? 0,
+  }));
+  const w = pickWalls(book, ladder.spot, n => n.netGex);
+  const mk = (strike: number | null | undefined) => {
+    if (strike == null) return null;
+    const row = ladder.rows.find(r => r.strike === strike);
+    return row ? { strike, words: rowWords(row) } : null;
+  };
+  return { call: mk(w.callWall), put: mk(w.putWall) };
+}
 
 export function rowWords(row: LadderRow): string {
   if (row.dominant === null || row.dominantShare === null) return 'no gamma at this strike';

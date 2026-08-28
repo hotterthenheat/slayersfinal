@@ -18,6 +18,7 @@ import ExpiryLadder from './pages/pinpoint/ExpiryLadder';
 import GreekSurfaces from './pages/pinpoint/GreekSurfaces';
 import ExposureCompare from './pages/pinpoint/ExposureCompare';
 import GexHistory from './pages/pinpoint/GexHistory';
+import ModelError from './pages/pinpoint/ModelError';
 import TraceLayout from './pages/trace/TraceLayout';
 import LiveTape from './pages/trace/LiveTape';
 import FlowTracker from './pages/trace/FlowTracker';
@@ -75,6 +76,7 @@ const App = () => {
                   unrouted — pages kept on disk, engines still feed widgets */}
               <Route path="vol-lab" element={<Navigate to="/pinpoint/exposure-profile" replace />} />
               <Route path="history" element={<GexHistory />} />
+              <Route path="model-error" element={<ModelError />} />
             </Route>
             <Route path="/trace" element={<TraceLayout />}>
               <Route index element={<Navigate to="/trace/live-tape" replace />} />

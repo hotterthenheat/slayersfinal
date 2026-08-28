@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildGreekSurface, surfaceWords, GREEK_LENSES, LENS_META, type GreekLens } from '../../data/greekSurfaces';
 import { fmtUsd } from '../../data/gex';
-import { CALL_SIDE, LONG_GAMMA, PUT_SIDE, SHORT_GAMMA, SPOT } from '../../components/gex/palette';
+import { heatMagnitude, heatPoles, heatRgb } from '../../components/gex/heatmap';
+import { CALL_SIDE, PUT_SIDE, SPOT } from '../../components/gex/palette';
 import ProvenanceChip from '../../components/ui/ProvenanceChip';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import Simulator from '../../core/simulator';
@@ -25,17 +26,17 @@ import Simulator from '../../core/simulator';
   is, and the unit is what stops them reading a per-day figure as a
   per-year one.
 
-  TWO INK PAIRS, AND THEY MEAN DIFFERENT THINGS. The Calls and Puts columns
-  are a SIDE read, so they wear the desk's side pair — steel for calls, gold
-  for puts, exactly as the strike ladder and the glossary already promise.
-  The Net bar is a SIGNED read, so it wears the regime pair — red amplifies,
-  green absorbs.
-
-  The first cut of this page used the regime pair for all three, which drew
-  the Calls column in red and the Puts column in green: two columns that are
-  never a regime, coloured as though they were. The screenshots caught it,
-  and the side pair now lives in palette.ts so the next surface reaches for
-  the right one rather than the nearest one.
+  THE INKS, learned the hard way over two rounds. The Calls and Puts columns
+  are a SIDE read — steel for calls, gold for puts, as the strike ladder and
+  the glossary promise. The NET bar is dealer exposure by strike, which on
+  this desk has exactly one rendering: the house heat from heatmap.ts —
+  colour from heatRgb, LENGTH from heatMagnitude, because sizing a bar
+  linearly while the book is heavy-tailed gives rows that are visibly hot
+  and visibly empty at once (PaneLadder's comment says why, and it was
+  measured). Round one drew all three columns in regime red/green; round two
+  kept the bar on the regime pair and even asserted it in the sweep. Both
+  rounds invented ink instead of deriving it from the component that owns
+  the meaning.
 */
 
 const GreekSurfaces = () => {
@@ -57,6 +58,12 @@ const GreekSurfaces = () => {
   }
 
   const meta = LENS_META[lens];
+  /* The whole book's heaviest strike — the one-line answer a reader scans
+     for before any table. */
+  const heaviest = surface.rows.reduce<(typeof surface.rows)[number] | null>(
+    (best, r) => (best === null || Math.abs(r.net) > Math.abs(best.net) ? r : best),
+    null
+  );
   /* The window a reader can actually use — the strikes nearest spot, which
      is where every one of these greeks is largest anyway. */
   const rows = [...surface.rows]
@@ -75,13 +82,20 @@ const GreekSurfaces = () => {
         />
         <ProvenanceChip sources={['chain', 'carry']} />
         <span className="ml-auto font-mono text-[10px] uppercase tracking-wider text-textMuted">
-          spot <span style={{ color: SPOT }}>{marketData?.spot.toFixed(2)}</span>
+          <span style={{ color: heatPoles.pos }}>gold amplifies</span> · <span style={{ color: heatPoles.neg }}>steel absorbs</span> · spot{' '}
+          <span style={{ color: SPOT }}>{marketData?.spot.toFixed(2)}</span>
         </span>
       </div>
 
       <div className="flex flex-col gap-1">
         <p className="font-mono text-[11px] leading-relaxed text-textSecondary">{meta.question}</p>
         <p className="font-mono text-[12px] leading-relaxed text-textPrimary">{surfaceWords(surface)}</p>
+        {heaviest && (
+          <p className="font-mono text-[10px] leading-relaxed text-textMuted">
+            Concentration: strike <span className="tnum text-textSecondary">{heaviest.strike}</span> carries the
+            heaviest {meta.label.toLowerCase()} exposure on the book — {fmtUsd(heaviest.net)}.
+          </p>
+        )}
       </div>
 
       <div className="border border-borderSubtle bg-panel rounded-md overflow-x-auto">
@@ -100,7 +114,9 @@ const GreekSurfaces = () => {
           </thead>
           <tbody>
             {rows.map(r => {
-              const w = surface.maxAbs > 0 ? (Math.abs(r.net) / surface.maxAbs) * 100 : 0;
+              /* Colour AND length off the house ramp — see the header. */
+              const [hr, hg, hb] = heatRgb(r.net, surface.maxAbs);
+              const w = heatMagnitude(r.net, surface.maxAbs) * 100;
               return (
                 <tr key={r.strike}>
                   <td className="px-2 py-1 font-mono text-[10px] tnum text-textPrimary">{r.strike}</td>
@@ -114,7 +130,7 @@ const GreekSurfaces = () => {
                     {fmtUsd(r.net)}
                   </td>
                   <td className="px-2 py-1 w-[30%]">
-                    <div className="h-1.5 rounded-sm" style={{ width: `${w}%`, background: r.net >= 0 ? SHORT_GAMMA : LONG_GAMMA }} />
+                    <div className="h-1.5 rounded-sm" style={{ width: `${w}%`, background: `rgb(${hr},${hg},${hb})` }} />
                   </td>
                 </tr>
               );
@@ -124,10 +140,11 @@ const GreekSurfaces = () => {
       </div>
 
       <p className="font-mono text-[9px] leading-relaxed text-textMuted">
-        Dealer-signed on the same convention as every other exposure here. Steel is the call side and gold the put
-        side; the net bar is red where the book amplifies and green where it absorbs. Vol lenses read per vol
-        point, clock lenses per trading day — the unit is in the column heading because these are not figures to
-        read in the wrong one.
+        Dealer-signed on the same convention as every other exposure here. Steel is the call side and gold the
+        put side; the net bar is the house heat — gold climbs where the book amplifies, steel where it absorbs,
+        on the same ramp and the same magnitude curve as the pressure matrix. Vol lenses read per vol point,
+        clock lenses per trading day — the unit is in the column heading because these are not figures to read
+        in the wrong one.
       </p>
     </div>
   );

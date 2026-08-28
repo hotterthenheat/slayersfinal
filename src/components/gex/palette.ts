@@ -42,16 +42,34 @@ export const ALERT = '#FF9500';
 // Same values as bull/bear — named by regime so a dealer-inventory surface
 // doesn't import "BULL" to paint an absorbing book.
 /*
-  THE SIDE PAIR, distinct from the regime pair below.
+  WHICH INK MEANS WHAT — the whole doctrine, because getting it half-right
+  twice is what wrote this comment.
 
-  A CALL/PUT distinction is not a regime read, and this desk has always
-  drawn them differently: red/green says "amplifying or absorbing", steel
-  and gold say "call side or put side". StrikePressureLadder has carried
-  these two literals privately since 2026-08-22 and the glossary already
-  promises them by name ("in gold", "in steel"); they live here now so a new
-  surface reaches for the right pair instead of the nearest one. P-12's
-  first cut used the regime ink for its Calls and Puts columns — the
-  screenshots caught it.
+    HEAT (net exposure by strike, any grid or bar of it) — NOT from this
+    file at all. heatmap.ts owns it: heatCellStyle for cells, heatRgb +
+    heatMagnitude for bars, heatPoles for legends. Steel/gold house ramp,
+    Noah's palette round 3, gamma-curved for heavy-tailed books, WCAG-solved
+    cell ink. Its own header says "legends must derive from these, never
+    hardcode" — that goes for the cells too.
+
+    THE SIDE PAIR (below) — text ink for a CALL/PUT distinction: steel
+    calls, gold puts. StrikePressureLadder carried these privately since
+    2026-08-22; the glossary promises them by name.
+
+    THE REGIME PAIR (SHORT_GAMMA/LONG_GAMMA) — the WORD on the flip strip
+    and regime badges: red amplifying, green absorbing. Not for grids, not
+    for bars, not for call/put columns.
+
+    LEVELS — CALL_WALL green, PUT_WALL red, FLIP sky, KING magenta, SPOT
+    white, above. A wall keeps its colour on every surface, including
+    historical tables.
+
+    ΔOI — no pair of its own: PressureMatrix's pattern, ↑/↓ in bull/bear
+    text on significant deltas only.
+
+  The failure mode this prevents: a new surface imports whatever pair is
+  nearest and ships an industry-standard heatmap on a desk that spent three
+  palette rounds moving off it.
 */
 export const CALL_SIDE = '#AAB6C6'; // platinum steel — the call side
 export const PUT_SIDE = '#F5C542'; // honey gold — the put side

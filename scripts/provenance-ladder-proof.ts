@@ -26,8 +26,9 @@
 */
 import Simulator from '../src/core/simulator';
 import { buildExposureProfile } from '../src/data/exposure';
-import { buildExpiryLadder, rowWords, CONCENTRATED, LADDER_COLUMNS, LADDER_EXPIRIES, type LadderRow } from '../src/data/expiryLadder';
+import { buildExpiryLadder, rowWords, wallOwnership, CONCENTRATED, LADDER_COLUMNS, LADDER_EXPIRIES, type LadderRow } from '../src/data/expiryLadder';
 import { getProvenance, resetProvenance, setProvenance, weakest, type ProvenanceKey } from '../src/data/provenance';
+import { pickWalls } from '../src/core/walls';
 import { resetCarry, setCarry } from '../src/core/carry';
 
 let pass = 0, fail = 0;
@@ -122,6 +123,25 @@ const ALL_KEYS: ProvenanceKey[] = ['chain', 'exposure', 'tape', 'prints', 'candl
   const best = Math.max(...dated.map(c => Math.abs(c.netGex)));
   check('and the share is that lens over the dated total', Math.abs((row.dominantShare ?? 0) - best / total) < 1e-12, String(row.dominantShare));
   check('a share is a share — never above 1', ladder.rows.every(r => r.dominantShare === null || (r.dominantShare > 0 && r.dominantShare <= 1)));
+}
+
+// ── 7b. the headline: which expiry owns the walls ─────────────────────────
+{
+  /* The ownership read must name the SAME strikes pickWalls names over the
+     ladder's own ALL column — a headline that disagreed with the map about
+     what a wall is would be the one thing worse than no headline. */
+  const snap = Simulator.snapshotFor('SPY');
+  const ladder = buildExpiryLadder(snap, 10);
+  const own = wallOwnership(ladder);
+  const book = ladder.rows.map(r => ({ strike: r.strike, netGex: r.cells.find(c => c.expiry === 'ALL')?.netGex ?? 0 }));
+  const w = pickWalls(book, ladder.spot, n => n.netGex);
+  check('the ownership headline names pickWalls\' own call wall', own.call?.strike === w.callWall, `${own.call?.strike} vs ${w.callWall}`);
+  check('and its put wall', own.put?.strike === w.putWall, `${own.put?.strike} vs ${w.putWall}`);
+  /* And the words are that row's own composition read — not a new opinion. */
+  const callRow = ladder.rows.find(r => r.strike === own.call?.strike);
+  check('the words are the wall row\'s own composition', callRow !== undefined && own.call?.words === rowWords(callRow));
+  const empty = wallOwnership(buildExpiryLadder({ ...snap, chain: [] }, 10));
+  check('an empty ladder owns nothing, not a throw', empty.call === null && empty.put === null);
 }
 
 // ── 8. the words ──────────────────────────────────────────────────────────

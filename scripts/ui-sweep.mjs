@@ -4907,12 +4907,14 @@ head('the map says whether it holds, and every greek names its unit');
   rows > 5 ? ok(`the surface lists ${rows} strikes`) : bad(`only ${rows} strike rows`);
 
   /*
-    THE SIDE PAIR IS NOT THE REGIME PAIR. This page's first cut drew its
-    Calls column in the regime red and its Puts column in the regime green —
-    two columns that are never a regime, wearing regime ink. Nothing caught
-    it until the surface was screenshotted, so it is asserted here: the
-    Calls and Puts cells must carry the steel/gold side inks, and the Net
-    bar keeps the regime pair because a signed net genuinely IS one.
+    NO REGIME INK ON THIS TABLE, ANYWHERE. Round one drew the Calls column
+    in regime red and Puts in regime green. Round two moved those to the
+    side pair but kept the NET BAR on the regime pair — and this very guard
+    ENFORCED that, which is the sharpest lesson in it: net exposure by
+    strike on this desk has exactly one rendering, the steel/gold house
+    heat from heatmap.ts, and a hand-written assertion is only as right as
+    the doctrine behind it. Now: side pair on the call/put cells, a ramp
+    colour (never regime red/green) on the bar.
   */
   const inks = await page.evaluate(() => {
     const tr = document.querySelector('tbody tr');
@@ -4930,9 +4932,9 @@ head('the map says whether it holds, and every greek names its unit');
     !REGIME.includes(inks.call) && !REGIME.includes(inks.put)
       ? ok(`Calls and Puts wear the side pair, not the regime pair — ${inks.call} / ${inks.put}`)
       : bad(`a side column is drawn in REGIME ink — call ${inks.call}, put ${inks.put}`);
-    REGIME.includes(inks.bar)
-      ? ok('and the net bar keeps the regime pair, because a signed net is one')
-      : bad(`the net bar is not regime ink — ${inks.bar}`);
+    !REGIME.includes(inks.bar) && inks.bar !== '' && inks.bar !== 'rgba(0, 0, 0, 0)'
+      ? ok(`and the net bar is house heat, never the regime pair — ${inks.bar}`)
+      : bad(`the net bar is regime ink or empty — ${inks.bar}`);
   }
 
   errs.length === 0 ? ok('no page errors across the greek round') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
@@ -5004,6 +5006,53 @@ head('the last three surfaces carry the sentences that make them honest');
     : bad('the no-interpolation guarantee is not stated');
 
   errs.length === 0 ? ok('no page errors across the last three') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   P-23 — the model error gauge, and the honesty that makes it shippable.
+
+   The metrics are proved headless (model-error-proof). What the browser
+   owns is the disclosure: the reference is SIMULATED until Periscope
+   connects, and a gauge that measures error against an invented truth
+   without saying so — loudly, on the page — would be the exact dishonesty
+   it exists to expose. So the disclosure is asserted like a feature,
+   because it is one.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the model error gauge audits, and confesses its reference');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/pinpoint/model-error`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 1000);
+  const body = await page.evaluate(() => document.body.textContent ?? '');
+
+  /How wrong is textbook GEX/i.test(body)
+    ? ok('P-23: the gauge is on the page, asking its question')
+    : bad('P-23: no model error page');
+  /Simulated reference/i.test(body) && /SIMULATED/.test(body)
+    ? ok('and it confesses the simulated reference, twice — badge and caption')
+    : bad('the simulated reference is not disclosed');
+  /(overstating|understating|matches the reference)/.test(body)
+    ? ok('a live error read in words')
+    : bad('no error verdict');
+  /% accurate over the session|Rolling accuracy/.test(body)
+    ? ok('with the rolling accuracy')
+    : bad('no accuracy figure');
+  /(OVERSTATES|UNDERSTATES|CENTERED)/.test(body)
+    ? ok('and the bias verdict')
+    : bad('no bias read');
+  /only the series swaps/.test(body)
+    ? ok('and the swap contract: the day the feed lands, only the series changes')
+    : bad('the swap contract is not stated');
+  const chip = await page.$('[aria-label^="Data provenance"]');
+  chip && /modelled/.test((await chip.getAttribute('aria-label')) ?? '')
+    ? ok('the provenance chip reads modelled, as it must')
+    : bad('no modelled provenance chip');
+
+  errs.length === 0 ? ok('no page errors on the gauge') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
 }
 
