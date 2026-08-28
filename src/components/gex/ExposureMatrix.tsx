@@ -160,8 +160,11 @@ const ExposureMatrix = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
               </button>
             );
           })}
-          <span className="ml-auto font-mono text-[9px] text-textMuted tnum">
-            {GROUPS.length} of {ALL_GROUPS.length} — the column is {room}px
+          {/* What is missing and why, in the reader's words — the first cut
+              printed the raw column width here, which is a measurement the
+              DEVELOPER needed once and the reader never does. */}
+          <span className="ml-auto font-mono text-[9px] uppercase tracking-wider text-textMuted">
+            width holds {GROUPS.length} — tap a greek to swap
           </span>
         </div>
       )}

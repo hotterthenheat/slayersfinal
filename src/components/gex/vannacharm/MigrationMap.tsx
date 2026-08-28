@@ -15,18 +15,44 @@ interface MigrationMapProps {
  * Center-out bar that glides between scans / scenario switches.
  * Projection is a dimmer SOLID — opacity contrast survives 4px bars, outlines don't.
  */
-const Bar = ({ value, max, top, ghost }: { value: number; max: number; top: boolean; ghost: boolean }) => {
+const Bar = ({ value, max, top, ghost, label }: { value: number; max: number; top: boolean; ghost: boolean; label?: string }) => {
   const pct = Math.min(48, (Math.abs(value) / (max || 1)) * 48);
   const neg = value < 0;
   const [r, g, b] = heatRgb(value, max);
   return (
-    <motion.span
-      className={`absolute ${top ? 'top-[2px]' : 'bottom-[2px]'} h-[4px] rounded-sm`}
-      initial={false}
-      animate={{ left: `${neg ? 50 - pct : 50}%`, width: `${pct}%`, opacity: pct < 0.5 ? 0 : 1 }}
-      transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-      style={{ background: `rgba(${r},${g},${b},${ghost ? 0.35 : 0.95})` }}
-    />
+    <>
+      <motion.span
+        className={`absolute ${top ? 'top-[3px]' : 'bottom-[3px]'} h-[5px] rounded-sm`}
+        initial={false}
+        animate={{ left: `${neg ? 50 - pct : 50}%`, width: `${pct}%`, opacity: pct < 0.5 ? 0 : 1 }}
+        transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+        style={{ background: `rgba(${r},${g},${b},${ghost ? 0.35 : 0.95})` }}
+      />
+      {/* The heaviest strikes print their number at the bar's end — the
+          Positioning Map's grammar, so the two maps read as one product.
+          Only the CURRENT bar labels (the ghost is a projection riding
+          under it) and only the few that matter, or the field is a table. */}
+      {label !== undefined && !ghost && pct >= 0.5 && (
+        /* A near-full bar has no runway past its end — its label steps
+           INSIDE the bar's tip instead of clipping at the panel edge. */
+        <motion.span
+          className="absolute top-1/2 -translate-y-1/2 font-mono text-[8px] tnum text-textSecondary whitespace-nowrap pointer-events-none"
+          initial={false}
+          animate={
+            neg
+              ? pct > 38
+                ? { left: '1%', x: '0%' }
+                : { left: `${50 - pct - 0.5}%`, x: '-100%' }
+              : pct > 38
+                ? { left: '99%', x: '-100%' }
+                : { left: `${50 + pct + 0.5}%`, x: '0%' }
+          }
+          transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+        >
+          {label}
+        </motion.span>
+      )}
+    </>
   );
 };
 
@@ -189,6 +215,12 @@ const MigrationMap = ({ data }: MigrationMapProps) => {
     return () => ro.disconnect();
   }, []);
 
+  /* The six heaviest |current| rows carry their number on the field. */
+  const labelled = useMemo(() => {
+    const top = [...rows].sort((a, b) => Math.abs(b.current) - Math.abs(a.current)).slice(0, 6);
+    return new Set(top.map(r => r.strike));
+  }, [rows]);
+
   const slotAfter = (level: number) => {
     let idx = rows.findIndex((row, i) => row.strike >= level && (rows[i + 1]?.strike ?? -Infinity) < level);
     if (idx === -1) idx = level > (rows[0]?.strike ?? 0) ? -0.5 : rows.length - 1;
@@ -237,11 +269,11 @@ const MigrationMap = ({ data }: MigrationMapProps) => {
                 {row.strike % 1 === 0 ? row.strike.toFixed(0) : row.strike.toFixed(2)}
                 {row.pin && <span className="ml-1 font-mono text-[7px] font-bold uppercase text-textPrimary">pin</span>}
               </span>
-              <div className="relative flex-1 h-[15px]">
+              <div className="relative flex-1 h-[18px]">
                 <span className="absolute left-1/4 top-0 bottom-0 w-px bg-white/[0.04]" />
                 <span className="absolute left-3/4 top-0 bottom-0 w-px bg-white/[0.04]" />
                 <span className="absolute left-1/2 top-0 bottom-0 w-px bg-borderMuted" />
-                <Bar value={row.current} max={maxAbs} top ghost={false} />
+                <Bar value={row.current} max={maxAbs} top ghost={false} label={labelled.has(row.strike) ? fmtUsd(row.current) : undefined} />
                 <Bar value={row.projected} max={maxAbs} top={false} ghost />
               </div>
             </div>

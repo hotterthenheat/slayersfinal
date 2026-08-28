@@ -5,6 +5,7 @@ import { buildBasisBand, buildStrikeBasis } from '../../data/costBasis';
 import BasisDrift from '../../components/gex/BasisDrift';
 import { fmtUsd } from '../../data/gex';
 import PainMapPanel from '../../components/gex/PainMapPanel';
+import { HiddenStrikes } from '../../components/gex/HeatPill';
 import ProvenanceChip from '../../components/ui/ProvenanceChip';
 import SpotRule from '../../components/ui/SpotRule';
 import Term from '../../components/ui/Term';
@@ -57,12 +58,40 @@ const PainMap = () => {
     });
     const maxAbsPnl = Math.max(...rows.map(r => Math.abs(r.pnl ?? 0)), 1e-9);
     const spotAfter = rows.findIndex((r, i) => r.strike >= marketData.spot && (rows[i + 1]?.strike ?? -Infinity) < marketData.spot);
+    /*
+      QUIET RUNS FOLD — the Time Machine's own grammar (HiddenStrikes). On a
+      quiet morning most strikes have no aggressive longs at all, and a
+      ladder that is four-fifths em-dashes buries the four rows that ARE the
+      product. A contiguous run of three or more empty rows becomes one line
+      that says the count; runs of one or two stay, because a lone gap reads
+      fine and a fold line costs the same height it saves. Runs never cross
+      the spot rule — the rows beside spot are the ones a reader locates
+      themselves by, whatever they hold.
+    */
+    const isEmpty = (r: (typeof rows)[number]) => r.pnl === null && r.call.basis === null && r.put.basis === null;
+    type RenderItem = { kind: 'row'; row: (typeof rows)[number]; index: number } | { kind: 'fold'; count: number };
+    const items: RenderItem[] = [];
+    let run: number[] = [];
+    const flush = () => {
+      if (run.length >= 3) items.push({ kind: 'fold', count: run.length });
+      else for (const idx of run) items.push({ kind: 'row', row: rows[idx], index: idx });
+      run = [];
+    };
+    rows.forEach((r, i) => {
+      if (isEmpty(r)) run.push(i);
+      else {
+        flush();
+        items.push({ kind: 'row', row: r, index: i });
+      }
+      if (i === spotAfter) flush(); // the rule lands here — a fold must not swallow it
+    });
+    flush();
     /* The companion chart's inputs — the same band inversion the panel
        words, plus the session tape to watch price approach them on. */
     const callBe = buildBasisBand(flowTape, 'C', marketData.spot, DTE_YEARS, iv).breakevenSpot;
     const putBe = buildBasisBand(flowTape, 'P', marketData.spot, DTE_YEARS, iv).breakevenSpot;
     const tape = (Simulator.getCandles(marketData.ticker) ?? []).slice(-240);
-    return { rows, maxAbsPnl, spotAfter, iv, callBe, putBe, tape };
+    return { rows, items, maxAbsPnl, spotAfter, iv, callBe, putBe, tape };
   }, [marketData, flowTape]);
 
   if (!marketData || !ladder) {
@@ -112,7 +141,18 @@ const PainMap = () => {
             </tr>
           </thead>
           <tbody>
-            {ladder.rows.map((r, i) => {
+            {ladder.items.map((item, k) => {
+              if (item.kind === 'fold') {
+                return (
+                  <tr key={`fold-${k}`}>
+                    <td colSpan={6} className="p-0">
+                      <HiddenStrikes count={item.count} />
+                    </td>
+                  </tr>
+                );
+              }
+              const r = item.row;
+              const i = item.index;
               const underwater = r.pnl !== null && r.pnl < 0;
               const green = r.pnl !== null && r.pnl > 0;
               const w = r.pnl === null ? 0 : (Math.abs(r.pnl) / ladder.maxAbsPnl) * 100;

@@ -1,7 +1,9 @@
-import { useRef, useState } from 'react';
+import { useId } from 'react';
+import { ComposedChart, CartesianGrid, Line, ReferenceDot, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { FLIP, LONG_GAMMA, SHORT_GAMMA, SPOT } from '../palette';
 import { fmtUsd } from '../../../data/gex';
-import type { NetGexSeries } from '../../../data/gexSeries';
+import { AXIS_TICK, AwaitingState, CURSOR_INK, GRID_INK, LegendKey, TipCard, TipRow, fiveTicks, timeTick } from '../driftKit';
+import type { NetGexSeries, NetGexPoint } from '../../../data/gexSeries';
 
 /*
 ==================================================
@@ -15,106 +17,74 @@ import type { NetGexSeries } from '../../../data/gexSeries';
   hold position all day while the book behind them empties, which is a pin
   turning into a trend with nothing moving on the drift at all.
 
-  WALL DRIFT'S GRAMMAR THROUGHOUT — same 100×40 viewBox, same hover, same
-  card — because the two sit stacked on one page reading the same session,
-  and a reader moving between them should not have to learn a second chart.
+  WALL DRIFT'S GRAMMAR THROUGHOUT — the shared kit, the same card — because
+  the two sit stacked on one page reading the same session, and a reader
+  moving between them should not have to learn a second chart.
 
   THE LINE WEARS THE REGIME'S OWN INKS: red while the total is positive
   (put-dominant, dealers short, amplifying) and green while negative — the
-  pair Noah fixed for exactly this number (palette.ts), already on the
-  Positioning Map's headline. The ZERO LINE is the flip's blue: crossing it
-  is the WHOLE BOOK changing sign — the aggregate flip event, rarer and
-  heavier than spot crossing the flip line — and each crossing is marked on
-  it. Spot rides along in white on its own scale, so "the book drained WHILE
-  price climbed" is one glance rather than two charts.
+  pair Noah fixed for exactly this number (palette.ts). Drawn as ONE line
+  under a vertical gradient with a hard stop at zero, which is the same
+  statement the old sign-run segments made ("above the zero line = short
+  gamma") with the crossing pixel exact instead of snapped to a sample. The
+  ZERO LINE is the flip's blue: crossing it is the WHOLE BOOK changing sign
+  — and each crossing is marked ON it. Spot rides along in white on its own
+  hidden scale, so "the book drained WHILE price climbed" is one glance;
+  its numbers live in the hover card, never on an axis.
 */
-
-const W = 100;
-const H = 40;
 
 interface NetGexDriftProps {
   series: NetGexSeries;
 }
 
+interface TipProps {
+  active?: boolean;
+  payload?: { payload?: NetGexPoint }[];
+}
+
+const NetTip = ({ active, payload }: TipProps) => {
+  const p = payload?.[0]?.payload;
+  if (!active || !p) return null;
+  const ink = p.netGex >= 0 ? SHORT_GAMMA : LONG_GAMMA;
+  return (
+    <TipCard title={timeTick(p.time)}>
+      <TipRow
+        ink={ink}
+        label={p.netGex >= 0 ? 'amplifying' : 'absorbing'}
+        value={fmtUsd(p.netGex)}
+        valueInk={ink}
+      />
+      <TipRow ink={SPOT} label="Spot" value={p.spot.toFixed(2)} />
+    </TipCard>
+  );
+};
+
 const NetGexDrift = ({ series }: NetGexDriftProps) => {
-  const areaRef = useRef<HTMLDivElement | null>(null);
-  const [hover, setHover] = useState<number | null>(null);
+  const gradId = useId().replace(/[:]/g, '');
   const { points, zeroCrossings } = series;
 
   if (points.length < 2) {
-    return (
-      <div className="h-40 flex items-center justify-center font-mono text-[11px] text-textMuted uppercase tracking-widest">
-        Awaiting session history…
-      </div>
-    );
+    return <AwaitingState>Awaiting session history…</AwaitingState>;
   }
 
   /* The gamma scale MUST hold zero — the whole point is which side of it the
-     session ran — so the domain is symmetric-capable rather than tight. */
+     session ran — so the domain is forced to include it. The gradient's hard
+     stop sits where zero falls inside that domain, so the ink changes side
+     exactly at the line it is about. */
   const pad = (series.max - series.min) * 0.08 || 1;
   const gMin = Math.min(series.min, 0) - pad;
   const gMax = Math.max(series.max, 0) + pad;
-  const gSpan = gMax - gMin;
-  const yOf = (v: number) => H - ((v - gMin) / gSpan) * H;
-  const xOf = (i: number) => (i / (points.length - 1)) * W;
-  const zeroY = yOf(0);
-
-  /* One path per SIGN RUN, so each stretch wears its own regime ink. The
-     boundary point between runs is drawn into both, so the line is continuous
-     through the crossing rather than gapped at it. */
-  const segments: { d: string; positive: boolean }[] = [];
-  let d = `M${xOf(0).toFixed(2)},${yOf(points[0].netGex).toFixed(2)}`;
-  let positive = points[0].netGex >= 0;
-  for (let i = 1; i < points.length; i++) {
-    const p = (points[i].netGex >= 0) === positive;
-    if (!p) {
-      d += ` L${xOf(i).toFixed(2)},${yOf(points[i].netGex).toFixed(2)}`;
-      segments.push({ d, positive });
-      d = `M${xOf(i).toFixed(2)},${yOf(points[i].netGex).toFixed(2)}`;
-      positive = !positive;
-    } else {
-      d += ` L${xOf(i).toFixed(2)},${yOf(points[i].netGex).toFixed(2)}`;
-    }
-  }
-  segments.push({ d, positive });
-
-  /* Spot on its own scale — context, not the subject, so it is thin and
-     unlabelled here; its numbers live in the hover card. */
-  let sMin = Infinity;
-  let sMax = -Infinity;
-  for (const p of points) {
-    if (p.spot < sMin) sMin = p.spot;
-    if (p.spot > sMax) sMax = p.spot;
-  }
-  const sPad = (sMax - sMin) * 0.08 || 1;
-  sMin -= sPad;
-  sMax += sPad;
-  const spotPath = points
-    .map((p, i) => `${i === 0 ? 'M' : 'L'}${xOf(i).toFixed(2)},${(H - ((p.spot - sMin) / (sMax - sMin)) * H).toFixed(2)}`)
-    .join(' ');
-
-  const timeLabel = (t: number) =>
-    new Date(t * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  const zeroOffset = Math.min(1, Math.max(0, gMax / (gMax - gMin)));
 
   return (
     <div className="flex flex-col gap-2 h-full min-h-0">
       <div className="flex items-center gap-3 flex-wrap select-none">
-        <span className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-wider text-textSecondary">
-          <span className="inline-block w-3 h-0" style={{ borderTop: `2px solid ${SHORT_GAMMA}` }} />
-          Net GEX +
-        </span>
-        <span className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-wider text-textSecondary">
-          <span className="inline-block w-3 h-0" style={{ borderTop: `2px solid ${LONG_GAMMA}` }} />
-          Net GEX −
-        </span>
-        <span className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-wider text-textSecondary">
-          <span className="inline-block w-3 h-0" style={{ borderTop: `2px dashed ${FLIP}` }} />
+        <LegendKey ink={SHORT_GAMMA}>Net GEX +</LegendKey>
+        <LegendKey ink={LONG_GAMMA}>Net GEX −</LegendKey>
+        <LegendKey ink={FLIP} dash>
           Zero — the book flips
-        </span>
-        <span className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-wider text-textSecondary">
-          <span className="inline-block w-3 h-0" style={{ borderTop: `2px solid ${SPOT}` }} />
-          Spot
-        </span>
+        </LegendKey>
+        <LegendKey ink={SPOT}>Spot</LegendKey>
         {zeroCrossings.length > 0 && (
           <span className="ml-auto font-mono text-[9px] uppercase tracking-wider text-textMuted tnum">
             flipped {zeroCrossings.length}× today
@@ -122,64 +92,81 @@ const NetGexDrift = ({ series }: NetGexDriftProps) => {
         )}
       </div>
 
-      <div
-        ref={areaRef}
-        className="flex-grow min-h-0 relative cursor-crosshair"
-        onMouseMove={e => {
-          const rect = areaRef.current?.getBoundingClientRect();
-          if (!rect || rect.width === 0) return;
-          const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
-          setHover(Math.round(ratio * (points.length - 1)));
-        }}
-        onMouseLeave={() => setHover(null)}
-      >
-        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-full">
-          {[0.25, 0.5, 0.75].map(f => (
-            <line key={f} x1="0" y1={H * f} x2={W} y2={H * f} stroke="rgba(255,255,255,0.04)" strokeWidth="0.3" />
-          ))}
-          <line x1="0" y1={zeroY} x2={W} y2={zeroY} stroke={FLIP} strokeWidth="0.5" strokeDasharray="2 2" strokeOpacity="0.55" vectorEffect="non-scaling-stroke" />
-          <path d={spotPath} fill="none" stroke={SPOT} strokeWidth="0.6" strokeOpacity="0.5" vectorEffect="non-scaling-stroke" />
-          {segments.map((s, i) => (
-            <path
-              key={i}
-              d={s.d}
-              fill="none"
-              stroke={s.positive ? SHORT_GAMMA : LONG_GAMMA}
-              strokeWidth="0.9"
-              strokeOpacity="0.9"
-              vectorEffect="non-scaling-stroke"
+      <div className="flex-grow min-h-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={points as NetGexPoint[]} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+            <defs>
+              <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stopColor={SHORT_GAMMA} />
+                <stop offset={zeroOffset} stopColor={SHORT_GAMMA} />
+                <stop offset={zeroOffset} stopColor={LONG_GAMMA} />
+                <stop offset="1" stopColor={LONG_GAMMA} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid stroke={GRID_INK} vertical={false} />
+            <XAxis
+              dataKey="time"
+              ticks={fiveTicks(points.map(p => p.time))}
+              tickFormatter={timeTick}
+              tick={AXIS_TICK}
+              tickLine={false}
+              axisLine={false}
+              minTickGap={24}
+              height={16}
             />
-          ))}
-          {/* The book's own flips, marked ON the zero line where they happened. */}
-          {zeroCrossings.map(i => (
-            <circle key={i} cx={xOf(i)} cy={zeroY} r="0.9" fill={FLIP} fillOpacity="0.9" />
-          ))}
-        </svg>
-        <span className="absolute left-0 top-0 font-mono text-[8px] tnum text-textMuted">{fmtUsd(gMax)}</span>
-        <span className="absolute left-0 bottom-0 font-mono text-[8px] tnum text-textMuted">{fmtUsd(gMin)}</span>
-
-        {hover != null &&
-          (() => {
-            const p = points[hover];
-            const xPct = (hover / (points.length - 1)) * 100;
-            const flipSide = xPct > 58;
-            return (
-              <>
-                <span className="absolute top-0 bottom-0 w-px bg-white/20 pointer-events-none" style={{ left: `${xPct}%` }} />
-                <div
-                  className="absolute top-1 pointer-events-none border border-borderMuted bg-panel/95 rounded px-2 py-1.5 shadow-xl shadow-black/50"
-                  style={flipSide ? { right: `${100 - xPct + 1.5}%` } : { left: `${xPct + 1.5}%` }}
-                >
-                  <div className="font-mono text-[9px] text-textMuted tnum mb-0.5">{timeLabel(p.time)}</div>
-                  <div className="font-mono text-[10px] tnum font-semibold" style={{ color: p.netGex >= 0 ? SHORT_GAMMA : LONG_GAMMA }}>
-                    {fmtUsd(p.netGex)}
-                    <span className="ml-1 font-normal text-textSecondary">{p.netGex >= 0 ? 'amplifying' : 'absorbing'}</span>
-                  </div>
-                  <div className="font-mono text-[10px] tnum text-textSecondary">spot {p.spot.toFixed(2)}</div>
-                </div>
-              </>
-            );
-          })()}
+            <YAxis
+              yAxisId="gex"
+              domain={[gMin, gMax]}
+              /* Zero is a labelled tick, always — it is the line the whole
+                 chart is about. The ends stay exact rather than niced, so
+                 the extremes read at a glance too. */
+              ticks={[gMin, gMin / 2, 0, gMax / 2, gMax].filter((v, i, a) => a.indexOf(v) === i)}
+              tick={AXIS_TICK}
+              tickFormatter={(v: number) => (v === 0 ? '0' : fmtUsd(v))}
+              tickLine={false}
+              axisLine={false}
+              width={52}
+            />
+            {/* Spot is context, not the subject — thin, unlabelled, its own
+                hidden scale; its numbers live in the hover card. */}
+            <YAxis yAxisId="spot" domain={['auto', 'auto']} hide />
+            <Tooltip content={<NetTip />} isAnimationActive={false} cursor={{ stroke: CURSOR_INK, strokeWidth: 1 }} />
+            <ReferenceLine yAxisId="gex" y={0} stroke={FLIP} strokeOpacity={0.55} strokeDasharray="4 3" />
+            <Line
+              yAxisId="spot"
+              dataKey="spot"
+              stroke={SPOT}
+              strokeWidth={1.2}
+              strokeOpacity={0.5}
+              dot={false}
+              activeDot={false}
+              isAnimationActive={false}
+            />
+            <Line
+              yAxisId="gex"
+              dataKey="netGex"
+              stroke={`url(#${gradId})`}
+              strokeWidth={1.8}
+              strokeOpacity={0.9}
+              dot={false}
+              activeDot={{ r: 3.5, strokeWidth: 1, stroke: '#0c0c0c' }}
+              isAnimationActive={false}
+            />
+            {/* The book's own flips, marked ON the zero line where they happened. */}
+            {zeroCrossings.map(i => (
+              <ReferenceDot
+                key={points[i].time}
+                yAxisId="gex"
+                x={points[i].time}
+                y={0}
+                r={2.5}
+                fill={FLIP}
+                fillOpacity={0.9}
+                stroke="none"
+              />
+            ))}
+          </ComposedChart>
+        </ResponsiveContainer>
       </div>
     </div>
   );

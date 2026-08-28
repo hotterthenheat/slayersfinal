@@ -8,6 +8,7 @@ import Fact from '../../components/ui/Fact';
 import Panel from '../../components/ui/Panel';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import Term from '../../components/ui/Term';
+import ProvenanceChip from '../../components/ui/ProvenanceChip';
 import { fmtUsd } from '../../data/gex';
 import MigrationMap from '../../components/gex/vannacharm/MigrationMap';
 import LevelShiftList from '../../components/gex/vannacharm/LevelShiftList';
@@ -117,7 +118,11 @@ const VannaCharm = () => {
         <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted">
           <Term k={mode === 'CHARM' ? 'Charm' : 'Vanna'}>what is {mode === 'CHARM' ? 'charm' : 'vanna'}?</Term>
         </span>
-        <span className="ml-auto font-mono text-[10px] text-textMuted uppercase tracking-widest tnum">
+        {/* P-1's chip — the last tab that stated no basis. Chain + exposure,
+            same pair the Exposure Profile wears: every number here is the
+            modelled book re-priced under a vanna/charm shift. */}
+        <ProvenanceChip sources={['chain', 'exposure']} className="ml-auto" />
+        <span className="font-mono text-[10px] text-textMuted uppercase tracking-widest tnum">
           scan {lastScanAt} · 10s
         </span>
       </div>

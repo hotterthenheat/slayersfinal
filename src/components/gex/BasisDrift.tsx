@@ -1,5 +1,6 @@
-import { useRef, useState } from 'react';
+import { ComposedChart, CartesianGrid, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { CALL_SIDE, PUT_SIDE, SPOT } from './palette';
+import { AXIS_TICK, AwaitingState, CURSOR_INK, GRID_INK, LegendKey, TipCard, TipRow, fiveTicks, timeTick } from './driftKit';
 import type { Candle } from '../../types/market';
 
 /*
@@ -14,46 +15,66 @@ import type { Candle } from '../../types/market';
   red→green at once — a mechanical supply event you can watch approach."
 
   The first cut shipped the bands as SENTENCES. This is the watching:
-  Wall Drift's grammar (fourth sibling), the tape in the desk's white and
-  each band as a dashed rule in its SIDE'S ink — steel for the call
-  buyers' break-even, gold for the put buyers' — because whose basis it
-  is IS a side read. The hover card carries the distance to each band,
-  which is the number a reader is tracking as price walks toward one.
+  Wall Drift's grammar (fourth sibling, on the shared kit), the tape in
+  the desk's white and each band as a dashed rule in its SIDE'S ink —
+  steel for the call buyers' break-even, gold for the put buyers' —
+  because whose basis it is IS a side read. The hover card carries the
+  distance to each band, which is the number a reader is tracking as
+  price walks toward one.
+
+  THE FRAME BELONGS TO THE TAPE. A basis parked 147 points below spot
+  once flattened the whole session into one pixel of line — the subject
+  destroyed to keep a far level visible. A band within half the tape's
+  own range of the frame is worth stretching for; one further out draws
+  as an EDGE MARKER carrying its distance, which is the number a reader
+  actually wants about a far level anyway.
 */
 
-const W = 100;
-const H = 40;
-
-const BasisDrift = ({
-  bars,
-  callBe,
-  putBe,
-}: {
+interface BasisDriftProps {
   bars: Candle[];
   /** Break-even SPOTS, from the band inversion — null when unreadable. */
   callBe: number | null;
   putBe: number | null;
-}) => {
-  const areaRef = useRef<HTMLDivElement | null>(null);
-  const [hover, setHover] = useState<number | null>(null);
+}
 
+interface TipProps {
+  active?: boolean;
+  payload?: { payload?: Candle }[];
+  callBe: number | null;
+  putBe: number | null;
+}
+
+const BasisTip = ({ active, payload, callBe, putBe }: TipProps) => {
+  const b = payload?.[0]?.payload;
+  if (!active || !b) return null;
+  return (
+    <TipCard title={timeTick(b.time)}>
+      <TipRow ink={SPOT} label="Price" value={b.close.toFixed(2)} />
+      {callBe !== null && (
+        <TipRow ink={CALL_SIDE} label="to call flip" value={Math.abs(b.close - callBe).toFixed(2)} valueInk={CALL_SIDE} />
+      )}
+      {putBe !== null && (
+        <TipRow ink={PUT_SIDE} label="to put flip" value={Math.abs(b.close - putBe).toFixed(2)} valueInk={PUT_SIDE} />
+      )}
+    </TipCard>
+  );
+};
+
+const BasisDrift = ({ bars, callBe, putBe }: BasisDriftProps) => {
   if (bars.length < 2) {
-    return (
-      <div className="h-36 flex items-center justify-center font-mono text-[11px] text-textMuted uppercase tracking-widest">
-        Awaiting the tape…
-      </div>
-    );
+    return <AwaitingState tall={false}>Awaiting the tape…</AwaitingState>;
   }
 
   /*
-    THE FRAME BELONGS TO THE TAPE. The first cut held the bands in frame
-    unconditionally, and a basis parked 147 points below spot flattened the
-    whole session into one pixel of line — the subject destroyed to keep a
-    far level visible. A band within reach of the frame is worth stretching
-    for (up to half the tape's own range beyond it); one further out draws
-    as an EDGE MARKER carrying its distance, which is the number a reader
-    actually wants about a far level anyway.
+    COPIES, NOT THE LIVE BARS. Recharts freezes the rows it is handed (its
+    state runs on immer), and the first cut passed the simulator's own
+    candle array — whose LAST BAR the simulator mutates every tick. The
+    freeze made those objects read-only and the SIM crashed four times a
+    second trying to update its own tape. Anything recharts draws must own
+    its rows.
   */
+  const rows = bars.map(b => ({ ...b }));
+
   let tMin = Infinity;
   let tMax = -Infinity;
   for (const b of bars) {
@@ -80,95 +101,74 @@ const BasisDrift = ({
   ] as [string, number | null, string][]) {
     if (band !== null && (band < vMin || band > vMax)) edgeBands.push({ side, band, ink });
   }
-  const yOf = (v: number) => H - ((v - vMin) / (vMax - vMin)) * H;
-  const xOf = (i: number) => (i / (bars.length - 1)) * W;
-  const path = bars.map((b, i) => `${i === 0 ? 'M' : 'L'}${xOf(i).toFixed(2)},${yOf(b.close).toFixed(2)}`).join(' ');
-
-  const timeLabel = (t: number) =>
-    new Date(t * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  const inFrame = (band: number | null): band is number => band !== null && band >= vMin && band <= vMax;
 
   return (
     <div className="w-full flex flex-col gap-2">
       <div className="flex items-center gap-3 flex-wrap select-none">
-        <span className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-wider text-textSecondary">
-          <span className="inline-block w-3 h-0" style={{ borderTop: `2px solid ${SPOT}` }} />
-          Price
-        </span>
-        <span className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-wider text-textSecondary">
-          <span className="inline-block w-3 h-0" style={{ borderTop: `2px dashed ${CALL_SIDE}` }} />
+        <LegendKey ink={SPOT}>Price</LegendKey>
+        <LegendKey ink={CALL_SIDE} dash>
           Call buyers flip
-        </span>
-        <span className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-wider text-textSecondary">
-          <span className="inline-block w-3 h-0" style={{ borderTop: `2px dashed ${PUT_SIDE}` }} />
+        </LegendKey>
+        <LegendKey ink={PUT_SIDE} dash>
           Put buyers flip
-        </span>
+        </LegendKey>
       </div>
 
-      <div
-        ref={areaRef}
-        className="h-36 relative cursor-crosshair"
-        onMouseMove={e => {
-          const rect = areaRef.current?.getBoundingClientRect();
-          if (!rect || rect.width === 0) return;
-          const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
-          setHover(Math.round(ratio * (bars.length - 1)));
-        }}
-        onMouseLeave={() => setHover(null)}
-      >
-        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-full">
-          {[0.25, 0.5, 0.75].map(f => (
-            <line key={f} x1="0" y1={H * f} x2={W} y2={H * f} stroke="rgba(255,255,255,0.04)" strokeWidth="0.3" />
-          ))}
-          {callBe !== null && callBe >= vMin && callBe <= vMax && (
-            <line x1="0" y1={yOf(callBe)} x2={W} y2={yOf(callBe)} stroke={CALL_SIDE} strokeWidth="0.6" strokeDasharray="2 2" strokeOpacity="0.75" vectorEffect="non-scaling-stroke" />
-          )}
-          {putBe !== null && putBe >= vMin && putBe <= vMax && (
-            <line x1="0" y1={yOf(putBe)} x2={W} y2={yOf(putBe)} stroke={PUT_SIDE} strokeWidth="0.6" strokeDasharray="2 2" strokeOpacity="0.75" vectorEffect="non-scaling-stroke" />
-          )}
-          <path d={path} fill="none" stroke={SPOT} strokeWidth="0.8" strokeOpacity="0.9" vectorEffect="non-scaling-stroke" />
-        </svg>
-        <span className="absolute left-0 top-0 font-mono text-[8px] tnum text-textMuted">{vMax.toFixed(2)}</span>
-        <span className="absolute left-0 bottom-0 font-mono text-[8px] tnum text-textMuted">{vMin.toFixed(2)}</span>
+      <div className="h-36 relative">
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={rows} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+            <CartesianGrid stroke={GRID_INK} vertical={false} />
+            <XAxis
+              dataKey="time"
+              ticks={fiveTicks(rows.map(b => b.time))}
+              tickFormatter={timeTick}
+              tick={AXIS_TICK}
+              tickLine={false}
+              axisLine={false}
+              minTickGap={24}
+              height={16}
+            />
+            <YAxis
+              domain={[vMin, vMax]}
+              tick={AXIS_TICK}
+              tickFormatter={(v: number) => v.toFixed(2)}
+              tickLine={false}
+              axisLine={false}
+              width={48}
+              tickCount={4}
+            />
+            <Tooltip
+              content={<BasisTip callBe={callBe} putBe={putBe} />}
+              isAnimationActive={false}
+              cursor={{ stroke: CURSOR_INK, strokeWidth: 1 }}
+            />
+            {inFrame(callBe) && (
+              <ReferenceLine y={callBe} stroke={CALL_SIDE} strokeOpacity={0.75} strokeDasharray="3 3" />
+            )}
+            {inFrame(putBe) && <ReferenceLine y={putBe} stroke={PUT_SIDE} strokeOpacity={0.75} strokeDasharray="3 3" />}
+            <Line
+              dataKey="close"
+              stroke={SPOT}
+              strokeWidth={1.6}
+              strokeOpacity={0.9}
+              dot={false}
+              activeDot={{ r: 3.5, strokeWidth: 1, stroke: '#0c0c0c' }}
+              isAnimationActive={false}
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
         {/* Far bands: an edge marker with the distance — the frame stays the
             tape's. */}
         {edgeBands.map(e => (
           <span
             key={e.side}
-            className={`absolute right-0 font-mono text-[8px] tnum ${e.band > vMax ? 'top-0' : 'bottom-0'}`}
+            className={`absolute right-1 font-mono text-[8px] tnum ${e.band > vMax ? 'top-0' : 'bottom-4'}`}
             style={{ color: e.ink }}
           >
             {e.band > vMax ? '↑' : '↓'} {e.side} flip {e.band.toFixed(2)} · {Math.abs(last - e.band).toFixed(2)} away
           </span>
         ))}
-
-        {hover != null &&
-          (() => {
-            const b = bars[hover];
-            const xPct = (hover / (bars.length - 1)) * 100;
-            const flipSide = xPct > 58;
-            return (
-              <>
-                <span className="absolute top-0 bottom-0 w-px bg-white/20 pointer-events-none" style={{ left: `${xPct}%` }} />
-                <div
-                  className="absolute top-1 pointer-events-none border border-borderMuted bg-panel/95 rounded px-2 py-1.5 shadow-xl shadow-black/50"
-                  style={flipSide ? { right: `${100 - xPct + 1.5}%` } : { left: `${xPct + 1.5}%` }}
-                >
-                  <div className="font-mono text-[9px] text-textMuted tnum mb-0.5">{timeLabel(b.time)}</div>
-                  <div className="font-mono text-[10px] tnum text-textPrimary">{b.close.toFixed(2)}</div>
-                  {callBe !== null && (
-                    <div className="font-mono text-[10px] tnum" style={{ color: CALL_SIDE }}>
-                      {Math.abs(b.close - callBe).toFixed(2)} to call flip
-                    </div>
-                  )}
-                  {putBe !== null && (
-                    <div className="font-mono text-[10px] tnum" style={{ color: PUT_SIDE }}>
-                      {Math.abs(b.close - putBe).toFixed(2)} to put flip
-                    </div>
-                  )}
-                </div>
-              </>
-            );
-          })()}
       </div>
     </div>
   );
