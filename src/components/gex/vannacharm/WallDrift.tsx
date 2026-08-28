@@ -1,157 +1,98 @@
-import { useRef, useState } from 'react';
+import { ComposedChart, CartesianGrid, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { BULL, PUT_WALL, FLIP, SPOT } from '../palette';
+import { AXIS_TICK, AwaitingState, CURSOR_INK, GRID_INK, LegendKey, TipCard, TipRow, fiveTicks, timeTick } from '../driftKit';
 import type { WallDriftPoint } from '../../../types/gex';
+
+/*
+  Session timeline of the walls, flip and spot — proof the levels move.
+  Wall Drift's grammar, drawn by recharts on the shared kit (driftKit.tsx);
+  the inks, the DOM legend and the hover card are the house's own.
+*/
 
 interface WallDriftProps {
   drift: WallDriftPoint[];
 }
 
-const W = 100;
-const H = 40;
-
-function linePath(points: WallDriftPoint[], pick: (p: WallDriftPoint) => number, min: number, span: number): string {
-  return points
-    .map((p, i) => {
-      const x = (i / (points.length - 1)) * W;
-      const y = H - ((pick(p) - min) / span) * H;
-      return `${i === 0 ? 'M' : 'L'}${x.toFixed(2)},${y.toFixed(2)}`;
-    })
-    .join(' ');
-}
-
-const SERIES: { label: string; color: string; pick: (p: WallDriftPoint) => number; dash?: string; width: number }[] = [
-  { label: 'Call wall', color: BULL, pick: p => p.callWall, width: 0.6 },
-  { label: 'Put wall', color: PUT_WALL, pick: p => p.putWall, width: 0.6 },
-  { label: 'Flip', color: FLIP, pick: p => p.flip, dash: '2 2', width: 0.7 },
-  { label: 'Spot', color: SPOT, pick: p => p.spot, width: 0.9 },
+const SERIES: { key: keyof WallDriftPoint & string; label: string; color: string; dash?: string; width: number }[] = [
+  { key: 'callWall', label: 'Call wall', color: BULL, width: 1.4 },
+  { key: 'putWall', label: 'Put wall', color: PUT_WALL, width: 1.4 },
+  { key: 'flip', label: 'Flip', color: FLIP, dash: '4 3', width: 1.6 },
+  { key: 'spot', label: 'Spot', color: SPOT, width: 2 },
 ];
 
-/** Session timeline of the walls, flip and spot — proof the levels move. */
+interface TipProps {
+  active?: boolean;
+  payload?: { payload?: WallDriftPoint }[];
+}
+
+const WallTip = ({ active, payload }: TipProps) => {
+  const p = payload?.[0]?.payload;
+  if (!active || !p) return null;
+  /* Rows ordered the way the lines stack at this moment. */
+  const rows = SERIES.map(s => ({ ...s, v: p[s.key] as number })).sort((a, b) => b.v - a.v);
+  return (
+    <TipCard title={timeTick(p.time)}>
+      {rows.map(r => (
+        <TipRow key={r.label} ink={r.color} label={r.label} value={r.v.toFixed(2)} />
+      ))}
+    </TipCard>
+  );
+};
+
 const WallDrift = ({ drift }: WallDriftProps) => {
-  const areaRef = useRef<HTMLDivElement | null>(null);
-  const [hover, setHover] = useState<number | null>(null);
-
   if (drift.length < 2) {
-    return (
-      <div className="h-40 flex items-center justify-center font-mono text-[11px] text-textMuted uppercase tracking-widest">
-        Awaiting session history…
-      </div>
-    );
+    return <AwaitingState>Awaiting session history…</AwaitingState>;
   }
-
-  let min = Infinity;
-  let max = -Infinity;
-  for (const p of drift) {
-    for (const s of SERIES) {
-      const v = s.pick(p);
-      if (v < min) min = v;
-      if (v > max) max = v;
-    }
-  }
-  const pad = (max - min) * 0.08 || 1;
-  min -= pad;
-  max += pad;
-  const span = max - min;
-
-  const timeLabel = (t: number) =>
-    new Date(t * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-  const ticks = [0, 0.25, 0.5, 0.75, 1].map(f => drift[Math.min(drift.length - 1, Math.round(f * (drift.length - 1)))]);
 
   return (
     <div className="flex flex-col gap-2 h-full min-h-0">
-      {/* Legend */}
       <div className="flex items-center gap-3 flex-wrap select-none">
         {SERIES.map(s => (
-          <span key={s.label} className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-wider text-textSecondary">
-            <span
-              className="inline-block w-3 h-0"
-              style={{ borderTop: `2px ${s.dash ? 'dashed' : 'solid'} ${s.color}` }}
-            />
+          <LegendKey key={s.label} ink={s.color} dash={!!s.dash}>
             {s.label}
-          </span>
+          </LegendKey>
         ))}
       </div>
 
-      {/* Timeline */}
-      <div
-        ref={areaRef}
-        className="flex-grow min-h-0 relative cursor-crosshair"
-        onMouseMove={e => {
-          const rect = areaRef.current?.getBoundingClientRect();
-          if (!rect || rect.width === 0) return;
-          const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
-          setHover(Math.round(ratio * (drift.length - 1)));
-        }}
-        onMouseLeave={() => setHover(null)}
-      >
-        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-full">
-          {[0.25, 0.5, 0.75].map(f => (
-            <line key={f} x1="0" y1={H * f} x2={W} y2={H * f} stroke="rgba(255,255,255,0.04)" strokeWidth="0.3" />
-          ))}
-          {SERIES.map(s => (
-            <path
-              key={s.label}
-              d={linePath(drift, s.pick, min, span)}
-              fill="none"
-              stroke={s.color}
-              strokeWidth={s.width}
-              strokeDasharray={s.dash}
-              strokeOpacity={s.label === 'Spot' ? 0.9 : 0.85}
-              vectorEffect="non-scaling-stroke"
+      <div className="flex-grow min-h-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={drift} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+            <CartesianGrid stroke={GRID_INK} vertical={false} />
+            <XAxis
+              dataKey="time"
+              ticks={fiveTicks(drift.map(p => p.time))}
+              tickFormatter={timeTick}
+              tick={AXIS_TICK}
+              tickLine={false}
+              axisLine={false}
+              minTickGap={24}
+              height={16}
             />
-          ))}
-        </svg>
-        <span className="absolute left-0 top-0 font-mono text-[8px] tnum text-textMuted">{max.toFixed(0)}</span>
-        <span className="absolute left-0 bottom-0 font-mono text-[8px] tnum text-textMuted">{min.toFixed(0)}</span>
-
-        {/* Crosshair + reading card */}
-        {hover != null &&
-          (() => {
-            const p = drift[hover];
-            const xPct = (hover / (drift.length - 1)) * 100;
-            const flipSide = xPct > 58;
-            // Rows ordered the way the lines stack at this moment
-            const rows = SERIES.map(s => ({ label: s.label, color: s.color, v: s.pick(p) })).sort((a, b) => b.v - a.v);
-            return (
-              <>
-                <span
-                  className="absolute top-0 bottom-0 w-px bg-white/20 pointer-events-none"
-                  style={{ left: `${xPct}%` }}
-                />
-                {rows.map(r => (
-                  <span
-                    key={r.label}
-                    className="absolute w-[7px] h-[7px] rounded-full border border-canvas pointer-events-none -translate-x-1/2 -translate-y-1/2"
-                    style={{ left: `${xPct}%`, top: `${(1 - (r.v - min) / span) * 100}%`, background: r.color }}
-                  />
-                ))}
-                <div
-                  className="absolute top-1 z-10 pointer-events-none border border-borderSubtle bg-[#0c0c0c]/95 rounded-md px-2.5 py-2 shadow-lg min-w-[132px]"
-                  style={flipSide ? { right: `${100 - xPct + 1.5}%` } : { left: `${xPct + 1.5}%` }}
-                >
-                  <div className="font-mono text-[9px] uppercase tracking-widest text-textMuted tnum mb-1.5">
-                    {timeLabel(p.time)}
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    {rows.map(r => (
-                      <div key={r.label} className="flex items-center gap-2">
-                        <span className="inline-block w-2 h-[2px] rounded-full shrink-0" style={{ background: r.color }} />
-                        <span className="font-mono text-[9px] uppercase tracking-wider text-textSecondary">{r.label}</span>
-                        <span className="ml-auto pl-3 font-mono text-[10px] font-semibold tnum text-textPrimary">
-                          {r.v.toFixed(2)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </>
-            );
-          })()}
-      </div>
-      <div className="flex justify-between font-mono text-[8px] tnum text-textMuted select-none">
-        {ticks.map((p, i) => (
-          <span key={`${p.time}-${i}`}>{timeLabel(p.time)}</span>
-        ))}
+            <YAxis
+              domain={['auto', 'auto']}
+              tick={AXIS_TICK}
+              tickFormatter={(v: number) => v.toFixed(0)}
+              tickLine={false}
+              axisLine={false}
+              width={38}
+              tickCount={4}
+            />
+            <Tooltip content={<WallTip />} isAnimationActive={false} cursor={{ stroke: CURSOR_INK, strokeWidth: 1 }} />
+            {SERIES.map(s => (
+              <Line
+                key={s.key}
+                dataKey={s.key}
+                stroke={s.color}
+                strokeWidth={s.width}
+                strokeDasharray={s.dash}
+                strokeOpacity={s.key === 'spot' ? 0.9 : 0.85}
+                dot={false}
+                activeDot={{ r: 3.5, strokeWidth: 1, stroke: '#0c0c0c' }}
+                isAnimationActive={false}
+              />
+            ))}
+          </ComposedChart>
+        </ResponsiveContainer>
       </div>
     </div>
   );

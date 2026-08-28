@@ -9,6 +9,7 @@ import Panel from '../../components/ui/Panel';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import SignalBadge from '../../components/ui/SignalBadge';
 import Term from '../../components/ui/Term';
+import ProvenanceChip from '../../components/ui/ProvenanceChip';
 import type { MarketSnapshot } from '../../types/market';
 import type { HedgingClass, RankLens, RankedTarget, TargetTag } from '../../types/gex';
 import type { Tone } from '../../components/ui/tones';
@@ -427,7 +428,9 @@ const RankedTargets = () => {
             <ArrowUpRight className="w-3 h-3 text-textSecondary" />
           </button>
         )}
-        <span className="ml-auto font-mono text-[10px] text-textMuted uppercase tracking-widest tnum">
+        {/* P-1's chip — the ladder ranks the modelled book, and says so. */}
+        <ProvenanceChip sources={['chain', 'exposure']} className="ml-auto" />
+        <span className="font-mono text-[10px] text-textMuted uppercase tracking-widest tnum">
           {ranked.length} strikes · <Term k="Ranked by">ranked by</Term> {lensLabel} · scan {lastScanAt} · 10s
         </span>
       </div>

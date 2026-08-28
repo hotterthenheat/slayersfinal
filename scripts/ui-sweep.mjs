@@ -5008,16 +5008,29 @@ head('the last three surfaces carry the sentences that make them honest');
   await page.waitForTimeout(BOOT_MS + 1000);
   const profile = await page.evaluate(() => document.body.textContent ?? '');
   /Pain Map/i.test(profile) ? ok('P-16: the pain map screen exists') : bad('P-16: no pain map screen');
-  /(turn green at|already green above|No aggressive)/.test(profile)
+  /* All four of bandWords' states — the first cut covered three and read
+     the fourth honest absence ("outside what the model can mark") as a
+     missing sentence. */
+  /(turn green at|already green above|No aggressive|outside what the model can mark)/.test(profile)
     ? ok('with a flip level or an honest absence')
     : bad('the pain map states neither a level nor an absence');
   /AGGRESSIVE LONGS|aggressive longs/i.test(profile)
     ? ok('and it names the population it tracks — the load-bearing assumption')
     : bad('the pain map does not say WHOSE basis it is');
-  const painRows = await page.$$eval('tbody tr', trs => trs.length);
-  painRows > 10
-    ? ok(`and the ladder the spec asked for — ${painRows} strike rows with P&L glow`)
-    : bad(`the per-strike ladder is missing — ${painRows} rows`);
+  /* The ladder folds its quiet runs now (HiddenStrikes) — coverage is the
+     visible data rows PLUS what the fold lines say they hold. */
+  const painCover = await page.evaluate(() => {
+    let data = 0, hidden = 0;
+    for (const r of document.querySelectorAll('tbody tr')) {
+      const m = (r.textContent ?? '').match(/(\d+) strikes? hidden/);
+      if (m) hidden += Number(m[1]);
+      else data++;
+    }
+    return { data, hidden };
+  });
+  painCover.data + painCover.hidden > 10
+    ? ok(`and the ladder the spec asked for — ${painCover.data} rows shown, ${painCover.hidden} folded`)
+    : bad(`the per-strike ladder is missing — ${painCover.data} rows, ${painCover.hidden} folded`);
   /Unrealized P&L/i.test(profile)
     ? ok('with the unrealized P&L column')
     : bad('no P&L column on the ladder');
@@ -5185,7 +5198,10 @@ head('a strike row is a door that says so, and lands focused');
     await page.waitForTimeout(2000);
     const landed = await page.evaluate(() => location.pathname);
     landed === '/pulse' ? ok('and it lands on the chart desk') : bad(`the door led to ${landed}`);
-    const focus = await page.evaluate(() => document.body.textContent.includes('FOCUS'));
+    /* The chip's letters are uppercased by CSS — its DOM text is "Focus".
+       The first cut grepped for the literal capitals and read a working
+       door as silent. */
+    const focus = await page.evaluate(() => !!document.querySelector('.animate-soft-in') && /Focus/.test(document.body.textContent ?? ''));
     focus ? ok('with the strike arriving FOCUSED, not just a page change') : bad('the strike did not arrive focused');
   }
 
