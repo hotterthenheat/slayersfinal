@@ -81,6 +81,16 @@ export const TERMS = {
   // ---- expected-move cone (T-9) ----
   'Expected move cone':
     'The band options priced for today, drawn on the chart: the envelope since the open, and the cone still left from here to the bell. Price leaving the band means the move has already beaten what the options charged; the cone shrinking into the close is normal — less day left, less move left.',
+  // ---- air pockets & conviction (P-5, P-6) ----
+  'Air pocket':
+    'A run of strikes between two shelves with almost no dealer gamma in them. A wall says where price stops; this says where it does NOT \u2014 there is no hedging flow in the gap to slow anything down, which is why price can cross it in seconds.',
+  'Wall conviction':
+    'How much the level deserves to be leaned on: how far it dominates the runner-up shelf on its side, how many sessions it has held the title, and how it has been tested today. A 2.4\u00d7 shelf unbroken for four days and a marginal winner look identical on a map \u2014 they are not the same object.',
+  // ---- expiry ladder (P-2) ----
+  'Expiry ladder':
+    'The same strikes read through each expiry at once. A wall built almost entirely of 0DTE gamma disappears at the bell; one spread across dated expiries is real structure that will still be there tomorrow \u2014 the same level on screen, opposite trades.',
+  Provenance:
+    'What a number on this page is standing on: measured came from a feed as-is, derived was computed here from measured inputs, modelled came from the simulator with no market consulted.',
   // ---- event markers (T-11) ----
   'Event markers':
     'The calendar drawn on the chart: this name\u2019s next earnings, FOMC/CPI/NFP, and the session\u2019s biggest option prints, each marked at its bar. Hover a mark for the details.',

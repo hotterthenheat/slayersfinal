@@ -1,4 +1,4 @@
-import { Map, Target, Waves, type LucideIcon } from 'lucide-react';
+import { Grid3x3, Map, Target, Waves, type LucideIcon } from 'lucide-react';
 
 /** Pinpoint subpage registry — drives the sub-tab bar and command palette. */
 export interface GexSubpage {
@@ -26,6 +26,12 @@ export const GEX_SUBPAGES: GexSubpage[] = [
     label: 'Vanna & Charm',
     subtitle: 'Where dealer exposure migrates as vol and time shift',
     icon: Waves,
+  },
+  {
+    path: '/pinpoint/expiry-ladder',
+    label: 'Expiry Ladder',
+    subtitle: 'Which expiry owns each strike — is this wall 0DTE, or structure?',
+    icon: Grid3x3,
   },
   // Launch trim (Noah, 2026-08-17): Volatility Lab + History & Replay pulled
   // from the first launch — pages kept on disk, routes redirect.

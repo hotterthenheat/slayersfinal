@@ -10,6 +10,7 @@
 
 import { fmtUsd } from './gex';
 import { pickFlip, pickWalls } from '../core/walls';
+import { airPocketZones, findAirPockets } from './airPockets';
 import type { MarketSnapshot, StrikeNode } from '../types/market';
 import type {
   DealerBias,
@@ -154,6 +155,10 @@ export function buildExposureProfile(
   if (callWall - putWall > 3 * step) {
     zones.push({ from: callWall - step * 2, to: putWall + step * 2, kind: 'friction', label: 'FRICTION' });
   }
+  /* P-5. The empty runs between shelves, found over the SAME window these
+     zones annotate — pushed after the walls so a pocket never displaces a
+     wall's band in a renderer that takes the first match. */
+  zones.push(...airPocketZones(findAirPockets(strikes)));
 
   // Dealer bias from net gamma positioning.
   // SIGN NOTE: the sim codes the call side NEGATIVE and the put side POSITIVE

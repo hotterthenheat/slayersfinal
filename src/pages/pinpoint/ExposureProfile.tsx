@@ -16,6 +16,10 @@ import SegmentedControl from '../../components/ui/SegmentedControl';
 import AnimatedNumber from '../../components/ui/AnimatedNumber';
 import Fact from '../../components/ui/Fact';
 import Term from '../../components/ui/Term';
+import ProvenanceChip from '../../components/ui/ProvenanceChip';
+import Simulator from '../../core/simulator';
+import { LONG_GAMMA, SHORT_GAMMA } from '../../components/gex/palette';
+import { buildWallConviction, convictionGrade, convictionWords } from '../../data/wallConviction';
 import ExposureMatrix from '../../components/gex/ExposureMatrix';
 import PositioningMap from '../../components/gex/PositioningMap';
 import ExposureInsight from '../../components/gex/ExposureInsight';
@@ -86,6 +90,19 @@ const ExposureProfile = () => {
     and the label says so. Keyed on the scan snapshot like everything else on
     this page.
   */
+  /* P-6: both sides' conviction, off the same stores the map reads. Keyed
+     on the scan snapshot like the percentile beside it — the facts move on
+     the scan tier, not on every tick. */
+  const conviction = useMemo(() => {
+    if (!scanSnapshot) return { call: null, put: null };
+    const snaps = Simulator.getGexHistory(scanSnapshot.ticker) ?? [];
+    const bars = Simulator.getCandles(scanSnapshot.ticker) ?? [];
+    return {
+      call: buildWallConviction(snaps, bars, scanSnapshot.spot, 'call'),
+      put: buildWallConviction(snaps, bars, scanSnapshot.spot, 'put'),
+    };
+  }, [scanSnapshot]);
+
   const pctile = useMemo(() => {
     if (!scanSnapshot) return null;
     const series = buildNetGexSeries(scanSnapshot.ticker);
@@ -133,7 +150,11 @@ const ExposureProfile = () => {
           value={windowHalf}
           onChange={v => setWindowHalf(v as '10' | '15')}
         />
-        <span className="ml-auto font-mono text-[10px] text-textMuted uppercase tracking-widest tnum">
+        {/* P-1: what this page is standing on. Everything here is computed
+            from the chain, so the chip reads the weakest of the two — and
+            when the exposure feed lands it changes by itself. */}
+        <ProvenanceChip sources={['chain', 'exposure']} className="ml-auto" />
+        <span className="font-mono text-[10px] text-textMuted uppercase tracking-widest tnum">
           scan {lastScanAt} · 10s
         </span>
       </div>
@@ -267,6 +288,34 @@ const ExposureProfile = () => {
           12 and nothing claimed the other 7.
         */}
         <div className="xl:col-span-7 min-w-0 flex flex-col gap-4">
+        {/* P-6. A wall at 5,880 that is 2.4× its runner-up and unbroken for
+            four sessions is a different object from a marginal winner that
+            flips at the next tick — and the map draws them identically. This
+            panel is the difference, in the four facts that carry it. */}
+        {(conviction.call || conviction.put) && (
+          <Panel
+            title="Wall Conviction"
+            subtitle="A level, or a guess — margin, persistence, and today's record"
+            className="w-full"
+            bodyClassName="flex flex-col justify-center gap-2"
+          >
+            {([conviction.call, conviction.put].filter(Boolean) as NonNullable<typeof conviction.call>[]).map(c => (
+              <div key={c.side} className="flex items-baseline gap-2 flex-wrap">
+                <span className="font-mono text-[10px] font-bold uppercase tracking-wider" style={{ color: c.side === 'call' ? SHORT_GAMMA : LONG_GAMMA }}>
+                  {c.side === 'call' ? 'Call wall' : 'Put wall'}
+                </span>
+                <span className="font-mono text-[13px] font-bold tnum text-textPrimary">{c.strike}</span>
+                <span
+                  className="font-mono text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border border-borderSubtle text-textSecondary"
+                  title="STRONG needs both dominance over the runner-up and an unbroken record today"
+                >
+                  {convictionGrade(c)}
+                </span>
+                <span className="font-mono text-[10px] text-textSecondary">{convictionWords(c)}</span>
+              </div>
+            ))}
+          </Panel>
+        )}
         {pins && (
           <Panel
             title="Both Pins"

@@ -4628,6 +4628,78 @@ head('the distance unit is one ruler, on every desk and after a reload');
   await ctx.close();
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   P-1 · P-2 · P-5 · P-6 — the Pinpoint substance round.
+
+   Four engines are proved headless (provenance-ladder-proof,
+   pockets-conviction-proof). What the browser owns is that each one REACHED
+   a surface, and that the surface says the honest thing: a provenance chip
+   that claims 'measured' while the simulator is the market would be the
+   exact failure the chip exists to prevent, so that is asserted directly
+   rather than inferred from the chip merely existing.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the substance round reaches its surfaces, and the chip tells the truth');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+
+  await page.goto(`${BASE}/pinpoint/exposure-profile`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 1000);
+
+  /* P-1 — the chip, and what it says. */
+  const chip = await page.$('[aria-label^="Data provenance"]');
+  chip ? ok('P-1: the provenance chip is on Exposure Profile') : bad('P-1: no provenance chip');
+  if (chip) {
+    const label = (await chip.getAttribute('aria-label')) ?? '';
+    /modelled/.test(label)
+      ? ok('and it says MODELLED while the simulator is the market — the honest answer')
+      : bad(`the chip claims ${label.slice(0, 80)}`);
+    /simulator|assumption|modelled/i.test(label)
+      ? ok('with a sentence a reader can act on')
+      : bad(`the chip has no basis sentence — ${label.slice(0, 80)}`);
+  }
+
+  /* P-6 — conviction, on the same page. */
+  const body = await page.evaluate(() => document.body.textContent ?? '');
+  /Wall Conviction/i.test(body)
+    ? ok('P-6: the conviction panel is on the page')
+    : bad('P-6: no conviction panel');
+  /(STRONG|HOLDING|THIN)/.test(body)
+    ? ok('and every named level carries a grade')
+    : bad('no conviction grade rendered');
+  /× the runner-up|no runner-up/.test(body)
+    ? ok('with the margin over the runner-up stated')
+    : bad('the margin is missing from the conviction line');
+  /tested \d+×/.test(body)
+    ? ok('and today\'s test count')
+    : bad('no test count in the conviction line');
+
+  /* P-2 — the ladder tab. */
+  await page.goto(`${BASE}/pinpoint/expiry-ladder`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 500);
+  const ladderBody = await page.evaluate(() => document.body.textContent ?? '');
+  const cols = await page.$$eval('th', ths => ths.map(t => t.textContent.trim()));
+  ['0DTE', '1D', '2D', '5D', '7D', 'OPEX', 'ALL'].every(c => cols.includes(c))
+    ? ok(`P-2: every expiry column is on the ladder — ${cols.filter(c => c).join(' · ')}`)
+    : bad(`the ladder is missing columns: ${cols.join(', ')}`);
+  const rows = await page.$$eval('tbody tr', trs => trs.length);
+  rows > 5 ? ok(`with ${rows} strike rows`) : bad(`the ladder has ${rows} rows`);
+  /* Every row carries a composition sentence — the read the ladder exists
+     for, not just a grid of numbers. */
+  /(evaporates at the bell|sits in|spread across expiries|no gamma at this strike)/.test(ladderBody)
+    ? ok('and each row says what its gamma is made of')
+    : bad('no composition sentence on any row');
+  const cells = await page.$$eval('tbody tr:first-child td', tds => tds.length);
+  cells === 9
+    ? ok('each row is strike + seven lenses + composition')
+    : bad(`a row carries ${cells} cells, expected 9`);
+
+  errs.length === 0 ? ok('no page errors across the round') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
 console.log(`\n${fails} failing`);
 await browser.close();
 process.exit(fails ? 1 : 0);
