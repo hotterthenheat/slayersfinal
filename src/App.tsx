@@ -15,6 +15,7 @@ import ExposureProfile from './pages/pinpoint/ExposureProfile';
 import RankedTargets from './pages/pinpoint/RankedTargets';
 import VannaCharm from './pages/pinpoint/VannaCharm';
 import ExpiryLadder from './pages/pinpoint/ExpiryLadder';
+import GreekSurfaces from './pages/pinpoint/GreekSurfaces';
 import TraceLayout from './pages/trace/TraceLayout';
 import LiveTape from './pages/trace/LiveTape';
 import FlowTracker from './pages/trace/FlowTracker';
@@ -66,6 +67,7 @@ const App = () => {
               <Route path="strike-profile" element={<Navigate to="/pinpoint/exposure-profile" replace />} />
               <Route path="vanna-charm" element={<VannaCharm />} />
               <Route path="expiry-ladder" element={<ExpiryLadder />} />
+              <Route path="greek-surfaces" element={<GreekSurfaces />} />
               {/* Launch trim (Noah, 2026-08-17): Vol Lab + History & Replay
                   unrouted — pages kept on disk, engines still feed widgets */}
               <Route path="vol-lab" element={<Navigate to="/pinpoint/exposure-profile" replace />} />

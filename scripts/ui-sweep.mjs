@@ -4839,6 +4839,77 @@ head('the ΔOI grid shows change, and prints absence as absence');
   await ctx.close();
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   P-11 · P-12 · P-13 · P-14 — the stability gauge and the greek surfaces.
+
+   The maths is proved headless against finite differences. The browser owns
+   two claims it cannot make: that the stability gauge reports the LEVELS
+   under a bump rather than a decoration, and that every greek lens carries
+   its UNIT on screen. The second is not a nicety — these are figures most
+   readers have never traded against, and a per-day number read as per-year
+   is off by 252×.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the map says whether it holds, and every greek names its unit');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 1100 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+
+  await page.goto(`${BASE}/pinpoint/exposure-profile`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 1000);
+  const body = await page.evaluate(() => document.body.textContent ?? '');
+
+  /Map Stability/i.test(body) ? ok('P-11: the stability gauge is on the page') : bad('P-11: no stability gauge');
+  /(holds at current vol|these levels are a function of vol)/.test(body)
+    ? ok('and it delivers a verdict in words, not a badge')
+    : bad('no stability verdict in words');
+  /±2 vol/.test(body) ? ok('naming the bump it is about') : bad('the bump is not named');
+  /* The before/after table: a gauge that showed only a verdict could not be
+     checked by a reader, so the levels under each bump are on screen. */
+  const volCols = await page.$$eval('th', ths => ths.map(t => (t.textContent ?? '').trim()));
+  volCols.some(c => /^[−-]2 vol$/.test(c)) && volCols.some(c => /^\+2 vol$/.test(c))
+    ? ok('with the levels under each bump shown, not just the verdict')
+    : bad(`no bump columns — ${volCols.filter(Boolean).slice(0, 12).join(' · ')}`);
+
+  /* P-12/13/14 — the lens page. */
+  await page.goto(`${BASE}/pinpoint/greek-surfaces`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 500);
+
+  const lensGroup = await page.$('[role="group"][aria-label="Greek lens"]');
+  lensGroup ? ok('P-12/13/14: the lens picker is on the page') : bad('no greek lens picker');
+
+  const lenses = ['Color', 'Vomma', 'Speed', 'Veta', 'Zomma'];
+  const labels = lensGroup ? await lensGroup.$$eval('button', bs => bs.map(b => (b.textContent ?? '').trim())) : [];
+  lenses.every(l => labels.includes(l))
+    ? ok(`all five lenses are offered — ${labels.join(' · ')}`)
+    : bad(`missing lenses: ${labels.join(', ')}`);
+
+  /* Each lens must bring its own unit and its own question. Switching is the
+     only way to see that they are not one hard-coded pair. */
+  const units = { Color: /gamma per day/, Vomma: /vega per vol point/, Speed: /gamma per \$1/, Veta: /vega per day/, Zomma: /gamma per vol point/ };
+  for (const name of lenses) {
+    if (!lensGroup) break;
+    for (const b of await lensGroup.$$('button')) {
+      if (((await b.textContent()) ?? '').trim() === name) { await b.click(); break; }
+    }
+    await page.waitForTimeout(350);
+    const t = await page.evaluate(() => document.body.textContent ?? '');
+    units[name].test(t)
+      ? ok(`${name} carries its unit on screen`)
+      : bad(`${name} does not state its unit`);
+    /Net (color|vomma|speed|veta|zomma) is/i.test(t)
+      ? ok(`— and its book-level read`)
+      : bad(`${name} has no book read`);
+  }
+
+  const rows = await page.$$eval('tbody tr', trs => trs.length);
+  rows > 5 ? ok(`the surface lists ${rows} strikes`) : bad(`only ${rows} strike rows`);
+
+  errs.length === 0 ? ok('no page errors across the greek round') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
 console.log(`\n${fails} failing`);
 await browser.close();
 process.exit(fails ? 1 : 0);

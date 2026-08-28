@@ -1,4 +1,4 @@
-import { Grid3x3, Map, Target, Waves, type LucideIcon } from 'lucide-react';
+import { Grid3x3, Layers, Map, Target, Waves, type LucideIcon } from 'lucide-react';
 
 /** Pinpoint subpage registry — drives the sub-tab bar and command palette. */
 export interface GexSubpage {
@@ -32,6 +32,12 @@ export const GEX_SUBPAGES: GexSubpage[] = [
     label: 'Expiry Ladder',
     subtitle: 'Which expiry owns each strike — is this wall 0DTE, or structure?',
     icon: Grid3x3,
+  },
+  {
+    path: '/pinpoint/greek-surfaces',
+    label: 'Greek Surfaces',
+    subtitle: 'Color · vomma · speed · veta · zomma — the derivatives behind the levels',
+    icon: Layers,
   },
   // Launch trim (Noah, 2026-08-17): Volatility Lab + History & Replay pulled
   // from the first launch — pages kept on disk, routes redirect.
