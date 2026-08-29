@@ -1,12 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link2, Maximize2, Minimize2, Rows3, X } from 'lucide-react';
+import { Link2, Maximize2, Minimize2, Rows3, X,
+  Star,
+  Pencil,
+  Copy
+} from 'lucide-react';
 import Simulator from '../../core/simulator';
 import { useMarketData } from '../../context/MarketDataContext';
 import DistanceUnitPicker from '../../components/ui/DistanceUnitPicker';
 import { futuresPhaseAt, FUTURES_PHASE_WORDS } from '../../core/calendar';
 import {
   deleteNamedLayout, loadNamedLayouts, persistNamedLayouts, saveNamedLayout,
-  MAX_NAMED_LAYOUTS, type NamedLayoutEntry,
+  MAX_NAMED_LAYOUTS,
+  LAYOUT_NAME_MAX, type NamedLayoutEntry,
 } from './layouts';
 import { buildLadderFor, buildLevelsFor, buildPrints, fmtUsd, spotChangePct } from '../../data/gex';
 import StrikeChart, {
@@ -1489,6 +1494,54 @@ const Terrain = () => {
     setNamedLayouts(next);
     persistNamedLayouts(next);
   };
+
+  /*
+    §20 — rename, duplicate and favourite.
+
+    All three operate on the SHELF OBJECT rather than re-saving the current
+    desk, which matters: duplicating a layout must copy the SAVED
+    arrangement, not whatever happens to be on screen. A reader who set up a
+    layout last week and duplicates it today expects last week's panes.
+
+    Rename is delete-then-set rather than a key edit, so the shelf's own
+    cap and name rules apply to the new name exactly as they would to a
+    fresh save — a rename cannot smuggle in a 200-character name.
+  */
+  const renameNamedLayout = (from: string, to: string) => {
+    const clean = to.trim().slice(0, LAYOUT_NAME_MAX);
+    if (!clean || clean === from || namedLayouts[clean]) return;
+    const entry = namedLayouts[from];
+    if (!entry) return;
+    const next = { ...namedLayouts };
+    delete next[from];
+    next[clean] = entry;
+    setNamedLayouts(next);
+    persistNamedLayouts(next);
+  };
+  const duplicateNamedLayout = (name: string) => {
+    const entry = namedLayouts[name];
+    if (!entry) return;
+    if (Object.keys(namedLayouts).length >= MAX_NAMED_LAYOUTS) {
+      setLayoutNote(`the shelf holds ${MAX_NAMED_LAYOUTS} — delete one first`);
+      return;
+    }
+    /* "name copy", then "name copy 2" — never silently overwriting. */
+    let copy = `${name} copy`.slice(0, LAYOUT_NAME_MAX);
+    let n = 2;
+    while (namedLayouts[copy]) copy = `${name} copy ${n++}`.slice(0, LAYOUT_NAME_MAX);
+    const next = { ...namedLayouts, [copy]: { ...entry, savedAt: Date.now() } };
+    setNamedLayouts(next);
+    persistNamedLayouts(next);
+  };
+  const toggleFavourite = (name: string) => {
+    const entry = namedLayouts[name];
+    if (!entry) return;
+    const next = { ...namedLayouts, [name]: { ...entry, favourite: !entry.favourite } };
+    setNamedLayouts(next);
+    persistNamedLayouts(next);
+  };
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState('');
   useEffect(() => {
     try {
       localStorage.setItem(TERRAIN_KEY, JSON.stringify(cfg));
@@ -2187,24 +2240,72 @@ const Terrain = () => {
                 <div className="font-mono text-[9px] uppercase tracking-widest text-textMuted px-1 pb-1.5">
                   Named layouts · {Object.keys(namedLayouts).length}/{MAX_NAMED_LAYOUTS}
                 </div>
+                {/* §20 — favourites pin to the top, then newest first. The
+                    pin is the only reordering a reader needs: a shelf of
+                    twelve is short enough that anything more would be
+                    ceremony. */}
                 {Object.entries(namedLayouts)
-                  .sort((a, b) => b[1].savedAt - a[1].savedAt)
+                  .sort((a, b) => {
+                    if (!!a[1].favourite !== !!b[1].favourite) return a[1].favourite ? -1 : 1;
+                    return b[1].savedAt - a[1].savedAt;
+                  })
                   .map(([name, entry]) => (
                     <div key={name} className="flex items-center gap-1 group">
+                      {renaming === name ? (
+                        <input
+                          autoFocus
+                          value={renameDraft}
+                          onChange={e => setRenameDraft(e.target.value)}
+                          onBlur={() => { renameNamedLayout(name, renameDraft); setRenaming(null); }}
+                          onKeyDown={e => {
+                            e.stopPropagation();
+                            if (e.key === 'Enter') { renameNamedLayout(name, renameDraft); setRenaming(null); }
+                            if (e.key === 'Escape') setRenaming(null);
+                          }}
+                          aria-label={`Rename ${name}`}
+                          className="flex-1 min-w-0 px-1.5 py-1 rounded border border-borderMuted bg-inset font-mono text-[11px] text-textPrimary outline-none"
+                        />
+                      ) : (
+                        <button
+                          onClick={() => applyNamedLayout(entry)}
+                          title={`${entry.layout} pane${entry.layout === 1 ? '' : 's'} · ${entry.panes.slice(0, entry.layout).map(pn => pn.ticker).join(' ')}`}
+                          className="flex-1 min-w-0 text-left px-1.5 py-1 rounded font-mono text-[11px] text-textSecondary hover:text-textPrimary hover:bg-white/[0.05] truncate transition-colors"
+                        >
+                          {entry.favourite && <span className="text-select mr-1" aria-hidden>★</span>}
+                          {name}
+                          <span className="ml-1.5 text-[9px] text-textMuted tnum">
+                            {entry.layout}× {entry.panes.slice(0, entry.layout).map(pn => pn.ticker).join('·')}
+                          </span>
+                        </button>
+                      )}
                       <button
-                        onClick={() => applyNamedLayout(entry)}
-                        title={`${entry.layout} pane${entry.layout === 1 ? '' : 's'} · ${entry.panes.slice(0, entry.layout).map(pn => pn.ticker).join(' ')}`}
-                        className="flex-1 min-w-0 text-left px-1.5 py-1 rounded font-mono text-[11px] text-textSecondary hover:text-textPrimary hover:bg-white/[0.05] truncate transition-colors"
+                        onClick={() => toggleFavourite(name)}
+                        aria-label={entry.favourite ? `Unpin ${name}` : `Pin ${name}`}
+                        aria-pressed={!!entry.favourite}
+                        className={`shrink-0 inline-flex items-center justify-center w-5 h-5 rounded transition-all hover:bg-white/[0.08] ${
+                          entry.favourite ? 'text-select opacity-100' : 'text-textMuted opacity-0 group-hover:opacity-100 hover:text-textPrimary'
+                        }`}
                       >
-                        {name}
-                        <span className="ml-1.5 text-[9px] text-textMuted tnum">
-                          {entry.layout}× {entry.panes.slice(0, entry.layout).map(pn => pn.ticker).join('·')}
-                        </span>
+                        <Star className="w-3 h-3" fill={entry.favourite ? 'currentColor' : 'none'} />
+                      </button>
+                      <button
+                        onClick={() => { setRenaming(name); setRenameDraft(name); }}
+                        aria-label={`Rename the layout ${name}`}
+                        className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded text-textMuted opacity-0 group-hover:opacity-100 hover:text-textPrimary hover:bg-white/[0.08] transition-all"
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </button>
+                      <button
+                        onClick={() => duplicateNamedLayout(name)}
+                        aria-label={`Duplicate the layout ${name}`}
+                        className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded text-textMuted opacity-0 group-hover:opacity-100 hover:text-textPrimary hover:bg-white/[0.08] transition-all"
+                      >
+                        <Copy className="w-3 h-3" />
                       </button>
                       <button
                         onClick={() => removeNamedLayout(name)}
                         aria-label={`Delete the layout ${name}`}
-                        className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded text-textMuted opacity-0 group-hover:opacity-100 hover:text-textPrimary hover:bg-white/[0.08] transition-all"
+                        className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded text-textMuted opacity-0 group-hover:opacity-100 hover:text-bear hover:bg-white/[0.08] transition-all"
                       >
                         <X className="w-3 h-3" />
                       </button>
