@@ -45,7 +45,13 @@ const exps = listExpiries(FROM);
   /* Dense at the front, sparse behind — the shape the Expiry Ladder's
      question depends on. */
   const gapsFront = exps.slice(1, 4).map((e, i) => e.dte - exps[i].dte);
-  const gapsBack = exps.slice(-2).map((e, i) => e.dte - exps[exps.length - 2 + i - 1]?.dte ?? 0);
+  /* `a - b?.c ?? 0` parses as `(a - b?.c) ?? 0` — subtraction binds tighter
+     than ??, so the fallback is unreachable and an out-of-range index yields
+     NaN instead of 0. TS2869 flags exactly this. Read the neighbour first. */
+  const gapsBack = exps.slice(-2).map((e, i) => {
+    const prev = exps[exps.length - 3 + i];
+    return prev ? e.dte - prev.dte : 0;
+  });
   check('the front is dense and the back is sparse',
     Math.max(...gapsFront) <= 4 && Math.max(...gapsBack) >= 30,
     `front gaps ${gapsFront.join(',')} · back gap ${gapsBack.join(',')}`);
