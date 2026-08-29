@@ -302,6 +302,64 @@ head('the strike rail and the chart agree about where a price is');
         : bad(`layout ${layout}: both print ${r.cardText} but ${dy.toFixed(0)}px apart`);
     }
   }
+
+  /*
+    THE SIDED READ, and the switch between the two encodings.
+
+    The rail draws a strike into ONE of two lanes and the side is the sign:
+    call-dominant reaches left, put-dominant right. Two ways that goes wrong
+    without throwing — every row landing in the same lane (the sign test
+    inverted or constant, which reads as a one-sided book), and the heat
+    encoding failing to fill (a heat rail of half-length bars is just the bar
+    rail with the length encoding silently still on).
+  */
+  const lanes = () =>
+    page.evaluate(() => {
+      const rail = document.querySelector('[aria-label$="exposure by strike"]');
+      if (!rail) return null;
+      const out = { call: 0, put: 0, full: 0, partial: 0 };
+      for (const row of rail.querySelectorAll('[data-strike]')) {
+        if (row.style.display === 'none') continue;
+        const lane = row.querySelector('[data-lane]');
+        if (!lane) continue;
+        const [side] = (lane.dataset.lane || '').split(':');
+        if (side === 'call') out.call++;
+        else if (side === 'put') out.put++;
+        const w = lane.getBoundingClientRect().width;
+        const box = lane.parentElement.getBoundingClientRect().width;
+        if (box > 0 && w / box > 0.98) out.full++;
+        else out.partial++;
+      }
+      return out;
+    });
+
+  await page.locator('[title^="1 chart"]').first().click();
+  await page.waitForTimeout(900);
+  const bars = await lanes();
+  if (!bars) bad('the rail vanished before the encoding could be read');
+  else {
+    bars.call > 0 && bars.put > 0
+      ? ok(`the rail is genuinely two-sided — ${bars.call} calls left, ${bars.put} puts right`)
+      : bad(`every row landed on ONE side — ${bars.call} calls, ${bars.put} puts`);
+    bars.partial > 0
+      ? ok(`and in bars mode the length still carries the value — ${bars.partial} of ${bars.partial + bars.full} rows are short of full`)
+      : bad('every bar drew full width in BARS mode — the length encoding is gone');
+  }
+
+  const toggle = page.locator('button[data-ladder-encoding]').first();
+  await toggle.click({ force: true }).catch(() => {});
+  await page.waitForTimeout(500);
+  const heat = await lanes();
+  if (!heat) bad('the rail vanished after switching to heat');
+  else {
+    heat.partial === 0 && heat.full > 0
+      ? ok(`heat fills every cell — ${heat.full} rows edge to edge, colour carrying the whole value`)
+      : bad(`heat left ${heat.partial} of ${heat.partial + heat.full} rows short of full width`);
+    heat.call > 0 && heat.put > 0
+      ? ok('and the sides survive the switch')
+      : bad(`the switch collapsed the sides — ${heat.call} calls, ${heat.put} puts`);
+  }
+
   await ctx.close();
 }
 
@@ -707,10 +765,35 @@ head('every toolbar menu is reachable inside a pane that clips its overflow');
     [1280, 800, 3],
   ]) {
     const { ctx, page, errs } = await openDesk(w, h, layout);
-    /* The toolbar only appears on hover — it is deliberately not there until
-       you reach for it. */
-    const pane = page.locator('[role="group"], canvas').first();
-    await pane.hover().catch(() => {});
+    /*
+      THE TOOLBAR APPEARS ON REACH, NOT ON PRESENCE, and this probe used to
+      hover the CENTRE of the pane and then wonder why no menu opened.
+
+      `useTopEdgeReveal` replaced the old whole-pane `group-hover` precisely
+      so the chrome stops sitting over the tape while somebody is reading
+      it: the strip comes up within 56px of the pane's top edge and goes
+      away again past 104px. A centre hover is the gesture that now means
+      "get out of the way", so every trigger stayed `pointer-events: none`,
+      every `click({force:true})` landed on the canvas underneath, and the
+      section reported `only 0 pane menus opened` — its own premise check
+      catching it, which is what that check is for.
+
+      So the pointer goes where a reader's would: the top band.
+    */
+    /* AND IT HAS TO BE THE PANE THAT HOLDS THE TRIGGERS. `[role="group"],
+       canvas` matched a control group in the desk's bottom bar at
+       (587, 832) — not a pane at all — so even the corrected reach was
+       aimed at the wrong element. The reveal container is found from a
+       trigger instead, which cannot point anywhere else. */
+    const spot = await page.evaluate(() => {
+      const b = [...document.querySelectorAll('button')].find(x => (x.title || '').startsWith('Overlays'));
+      const host = b?.closest('.group.relative');
+      if (!host) return null;
+      const r = host.getBoundingClientRect();
+      return { x: r.x + Math.min(80, r.width / 2), y: r.y + 18 };
+    });
+    if (spot) await page.mouse.move(spot.x, spot.y);
+    else bad(`${w}x${h} L${layout}: no pane toolbar to reach for`);
     await page.waitForTimeout(500);
 
     let checked = 0;

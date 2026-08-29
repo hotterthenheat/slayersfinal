@@ -4,7 +4,7 @@ import { X } from 'lucide-react';
 import Simulator from '../../core/simulator';
 import { fmtUsd } from '../../data/gex';
 import { sessionVolumeProfile, type VolumeProfile } from '../../data/volumeProfile';
-import { heatMagnitude, heatRgb } from './heatmap';
+import { heatCellStyle, heatMagnitude, heatRgb } from './heatmap';
 import type { PriceProjection } from './StrikeChart';
 import type { GexLevel } from '../../types/market';
 import type { KeyLevels } from '../../types/gex';
@@ -114,6 +114,74 @@ interface PaneLadderProps {
 */
 const BAR_ALPHA = 0.5;
 
+/*
+  THE SAME ROWS, READ TWO WAYS (Noah, 2026-08-29: "can you make the strikes
+  interchangeable with our gex heatmap? only one row tho").
+
+  `bars` is what this rail has always drawn: length AND colour off the same
+  curve, so the eye catches brightness scanning and reads length once it
+  stops.
+
+  `heat` is the matrix's own cell, one column of it — every row filled edge
+  to edge and COLOUR CARRYING THE WHOLE VALUE. That is not a decoration of
+  the bar mode, it answers a different question. A bar rail is read by
+  comparing lengths, so a strike two-thirds as heavy as its neighbour is
+  obvious and a field of near-equal strikes looks flat. A heat rail is read
+  as a continuous surface, so a band of adjacent hot strikes reads as ONE
+  wall rather than as five bars of similar length — which is the thing a
+  heatmap is better at and the reason to have both.
+
+  ONE COLUMN, not a grid. The strike x expiry matrix already exists on its
+  own desk (`GexMatrix`); what belongs beside a chart is a single column on
+  the chart's own price axis, because the whole justification for this rail
+  is that every row sits at the height the tape puts that price.
+
+  FULL STRENGTH IN HEAT, unlike the bars. The note above holds the bars at
+  half alpha so a column of solid blocks does not pull the eye off the
+  candles — but a heat cell IS its colour, and dimming it would flatten the
+  one channel the mode has left. The mode is off by default and one click
+  away in both directions, so a reader who wants the quieter rail keeps it.
+
+  THE PRICE STAYS OFF THE CELL either way. It sits in its own lane on the
+  bare surface, which is the contrast fix this file already measured at
+  1.27:1 over the platinum pole. Filling the lane edge to edge would have
+  put it back on top of exactly that.
+*/
+export type LadderEncoding = 'bars' | 'heat';
+
+/*
+  SIDED_LADDER — why the strikes sit in the MIDDLE now.
+
+  Noah handed over a depth ladder and said "that ladder is how I want the
+  strikes to look". What that screen actually does, stripped of its broker:
+  one column of prices down the centre, and at the levels carrying size, a
+  solid block reaching OUT from that column — left on one side of the book,
+  right on the other, with the live price marked by a filled capsule.
+
+  So the side is a channel, and it was one this rail was throwing away. The
+  sign of `netGex` is the call/put split (calls land negative in this
+  simulator, puts positive — heatmap.ts carries the measurement), and it was
+  encoded only in the bar's COLOUR. A reader had to know the palette to read
+  it. Now a call-dominant strike reaches left and a put-dominant strike
+  reaches right, and the split is legible before any colour is decoded — the
+  same way a book's two sides are.
+
+  WHAT IT COSTS, said plainly. One lane of ~57px became two of ~32px, so a
+  bar has a little over half the length resolution it had. That is the trade
+  for the sided read, and it is bounded: both lanes are reserved on every
+  row whether or not the row draws into them, so lengths stay comparable
+  across the whole rail, which is the property this file has already broken
+  once and will not break again.
+
+  WHAT WE DID NOT COPY. That ladder prints the resting size at the end of
+  each block. Ours is 132px wide against a phone's full width, and a dollar
+  figure wide enough to be worth reading would take most of a lane; the
+  value stays in the row's title and its aria-label. And it is a BOOK, with
+  bids under the market and offers over it — this is an options chain, and
+  inventing resting size to complete the resemblance is the one thing this
+  rail's opening note refuses to do.
+*/
+
 /** The rail's width, in px. Exported because a host that floats controls over
     the top-right of a pane has to clear it, and two places guessing the same
     number is how they end up disagreeing after one of them is edited. */
@@ -196,9 +264,6 @@ const BADGE_STEP_PX = 5;
    was lost. */
 const FOOT_BAND = 14;
 
-/** Strikes print whole when they are whole — the rule every strike list uses. */
-const fmtStrike = (v: number): string => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
-
 /*
   The named levels that land ON a strike get a tag; the flip lands BETWEEN them
   far more often than not, so it is drawn as a rule instead.
@@ -255,6 +320,12 @@ const PaneLadder = ({
     O(bars×bins) spread, well under a millisecond.
   */
   const [showVol, setShowVol] = useState(false);
+
+  /* Which read the rail is showing. Local, like `showVol` above and for the
+     same reason: it is a way of LOOKING at one pane's rail, not a setting a
+     reader would expect to find waiting for them on a fresh desk. */
+  const [encoding, setEncoding] = useState<LadderEncoding>('bars');
+  const heat = encoding === 'heat';
   const vp = useMemo<VolumeProfile | null>(
     () => (showVol ? sessionVolumeProfile(Simulator.getCandles(ticker) ?? []) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -567,30 +638,81 @@ const PaneLadder = ({
       const spotBadge = track.querySelector<HTMLElement>('[data-rule="spot"] [data-badge]');
       const flipBadge = track.querySelector<HTMLElement>('[data-rule="flip"] [data-badge]');
 
-      let lane = 0;
+      /*
+        THE PILL SITS ON THE PRICE COLUMN, which is where the reference
+        ladder puts it — and with the strikes centred (see SIDED_LADDER)
+        that is finally possible.
+
+        It used to be homed to one side of the strike lane, because the
+        lane ran hard against the track's right edge and a badge on it
+        covered the number outright. Parked left of a CENTRED column the
+        badge lands on the tag lane instead: measured on the built page it
+        printed over a `CW` tag with the spot pill's own opaque background.
+        Trading one cover for another is not a fix.
+
+        So the badge is centred on the column, and the ROW it lands on
+        gives up its number instead — see the visibility pass below. That
+        is the reference's own behaviour and it loses nothing: the pill at
+        that height prints a live price to the cent, which is strictly more
+        than the strike it replaces.
+
+        `centre` is the column's middle, measured off a real label rather
+        than derived from `priceLen` and a guessed character width — the
+        labels are a 10px font and the badges an 8px one, so a `ch`
+        computed here would be the wrong unit. First row with a width: they
+        all carry the same lane, and a culled row measures 0.
+      */
+      let centre = 0;
       for (const el of track.querySelectorAll<HTMLElement>('[data-strike-label]')) {
-        const w = el.offsetWidth;
-        if (w > 0) {
-          lane = w + BADGE_STEP_PX;
+        if (el.offsetWidth > 0) {
+          centre = el.offsetLeft + el.offsetWidth / 2;
           break;
         }
       }
 
-      /* No lane means every row is culled, and a badge cannot cover a number
-         that is not drawn — so leave it where the markup puts it. */
+      /* No column means every row is culled, and a badge cannot cover a
+         number that is not drawn — so leave it where the markup puts it. */
       const park = (el: HTMLElement | null, extra: number) => {
-        if (!el) return;
-        const want = lane + extra;
-        /* `mr-1` is the 4px the badge already sits in from the right edge, and
-           1px keeps its left edge inside an `overflow-hidden` track. */
+        if (!el || centre <= 0) return;
+        /* The badge is right-anchored by `ml-auto mr-1`, so moving it is a
+           leftward shift: from its right edge at `clientWidth - 4` to the
+           right edge it wants, `centre + width/2`. */
+        const want = track.clientWidth - 4 - (centre + el.offsetWidth / 2) + extra;
+        /* 1px keeps its left edge inside an `overflow-hidden` track. */
         const cap = Math.max(0, track.clientWidth - 5 - el.offsetWidth);
-        const px = Math.min(want, cap);
+        const px = Math.min(Math.max(want, 0), cap);
         const t = px > 0 ? `translateX(${-px}px)` : '';
         if (el.style.transform !== t) el.style.transform = t;
       };
       park(spotBadge, 0);
       const clash = ySpot != null && yFlip != null && Math.abs(ySpot - yFlip) < BADGE_CLEAR_PX;
       park(flipBadge, clash ? (spotBadge?.offsetWidth ?? 0) + 3 : 0);
+
+      /*
+        AND THE ROW UNDER A PILL GIVES UP ITS NUMBER.
+
+        Two prices in the same 14 pixels is one unreadable smear, and the
+        pill is the one a reader wants: it is live, to the cent, and it is
+        the thing they are looking for. So a row whose centre falls inside a
+        rule's band hides its LABEL only — the bar still draws, the row is
+        still clickable, and it comes straight back when price moves on.
+
+        `visibility`, not `display`: the label still occupies its lane, so
+        the bars either side of it do not jump a few pixels wider on the one
+        row a rule happens to be crossing.
+      */
+      const ruleYs = [...ruleY.values()];
+      for (const el of track.querySelectorAll<HTMLElement>('[data-strike]')) {
+        const label = el.querySelector<HTMLElement>('[data-strike-label]');
+        if (!label) continue;
+        let hide = false;
+        if (el.style.display !== 'none') {
+          const y = p.yFor(Number(el.dataset.strike));
+          if (y != null) hide = ruleYs.some(r => Math.abs(r - y) < BADGE_CLEAR_PX);
+        }
+        const want = hide ? 'hidden' : '';
+        if (label.style.visibility !== want) label.style.visibility = want;
+      }
 
       /* Culled strikes must not vanish silently: a hidden row cannot be
          clicked, and clicking is exactly what brings it back — a click sets
@@ -639,7 +761,21 @@ const PaneLadder = ({
   const tagLen = rows.length
     ? Math.max(0, ...rows.map(r => tagsFor(r.strike, levels).map(t => t.text).join('·').length))
     : 0;
-  const priceLen = rows.length ? Math.max(...rows.map(r => fmtStrike(r.strike).length)) : 0;
+  /*
+    ONE FORMAT FOR THE WHOLE RAIL, not per row.
+
+    The house rule elsewhere — print a whole number whole — is right in a
+    list and wrong in a centred column: a chain carrying both 480 and 482.50 puts
+    the decimal point in a different place on every other row, and the eye
+    reading down the column has nothing to track. The reference ladder is
+    legible partly BECAUSE every one of its prices is the same width.
+
+    So the rail asks once whether any strike is fractional and prints them
+    all the same way. Integer chains are untouched.
+  */
+  const anyFraction = rows.some(r => r.strike % 1 !== 0);
+  const fmtRail = (v: number) => (anyFraction ? v.toFixed(2) : v.toFixed(0));
+  const priceLen = rows.length ? Math.max(...rows.map(r => fmtRail(r.strike).length)) : 0;
 
   if (rows.length === 0) return null;
 
@@ -664,7 +800,26 @@ const PaneLadder = ({
         highest rows, which are exactly the ones a reader reaches for.
       */}
       <div className="absolute top-0 inset-x-0 z-10 pointer-events-none flex items-center gap-1 pl-2 pr-1 py-0.5 select-none bg-gradient-to-b from-canvas/70 to-transparent">
-        <span className="font-mono text-[8px] font-semibold uppercase tracking-widest text-textMuted">Size</span>
+        {/* THE CAPTION IS THE SWITCH. This word already names what the lane
+            beside it draws, so making it the control costs no width in a
+            132px rail and leaves nothing unlabelled — the reader is told
+            which read they are looking at by the same glyph that changes
+            it. `aria-pressed` carries the state for anyone not seeing the
+            word. */}
+        <button
+          onClick={() => setEncoding(e => (e === 'bars' ? 'heat' : 'bars'))}
+          aria-pressed={heat}
+          aria-label={heat ? 'Exposure as heat — switch to bars' : 'Exposure as bars — switch to heat'}
+          title={heat
+            ? 'Heat: every strike filled, colour carrying the whole value — a band of hot strikes reads as one wall. Click for bars.'
+            : 'Bars: length and colour both carrying the value. Click for the heatmap read.'}
+          data-ladder-encoding={encoding}
+          className={`pointer-events-auto shrink-0 rounded px-1 font-mono text-[8px] font-semibold uppercase tracking-widest transition-colors ${
+            heat ? 'bg-white/[0.14] text-textPrimary' : 'text-textMuted hover:text-textPrimary hover:bg-white/[0.08]'
+          }`}
+        >
+          {heat ? 'Heat' : 'Size'}
+        </button>
         <span className="ml-auto font-mono text-[8px] font-semibold uppercase tracking-widest text-textMuted">Strike</span>
         <button
           onClick={() => setShowVol(v => !v)}
@@ -705,7 +860,12 @@ const PaneLadder = ({
           const tags = tagsFor(row.strike, levels);
           const active = focusPrice != null && Math.abs(focusPrice - row.strike) < 1e-9;
           const named = tags.map(t => t.text).join('·');
-          const label = `${fmtStrike(row.strike)}, ${fmtUsd(row.value)}${named ? ` — ${named}` : ''}`;
+          /* WHICH SIDE THIS ROW REACHES OUT ON. `netGex` is an option-side
+             code in this simulator — calls land negative, puts positive (the
+             sign note in heatmap.ts has the measurement) — so the sign is
+             exactly the call/put split, and nothing here re-derives it. */
+          const putSide = row.value >= 0;
+          const label = `${fmtRail(row.strike)}, ${fmtUsd(row.value)}${named ? ` — ${named}` : ''}`;
 
           const body = (
             <>
@@ -730,19 +890,39 @@ const PaneLadder = ({
                   so a 7-character index strike shortens the bar instead of
                   truncating the number.
 
-                  It grows from the chart's side, so it reads as size reaching
-                  out of the tape rather than as a bar chart pinned to an axis.
+                  IT GROWS AWAY FROM THE PRICE COLUMN — outward on whichever
+                  side the row is on, not always leftward. That was one
+                  direction while there was one lane; with two it has to be
+                  the outward one or the two sides would read as one bar
+                  chart with a gap in the middle.
                   The transition is on width ALONE — animating the colour too
                   made quiet rows strobe on every tick, and animating POSITION
                   would make the whole column swim behind the candles on every
                   autoscale re-fit. The chart tweens level prices; this is the
                   coordinate side and it has to be exact and instant. */}
+              {/* THE TWO SIDES. A row draws into exactly one of them, and
+                  which one is the sign — so a reader sees call-dominant from
+                  put-dominant by POSITION, before reading a colour. See the
+                  note on SIDED_LADDER above. Both lanes are always present
+                  and always the same width, so the strike column stays put
+                  and a bar's pixel length still tracks its value across
+                  every row — the thing this rail exists to get right. */}
               <span className="relative flex-1 min-w-0 self-stretch my-px">
-                <span
-                  aria-hidden
-                  className="absolute inset-y-0 left-0 rounded-[2px] transition-[width] duration-700"
-                  style={{ width: `${pct.toFixed(1)}%`, backgroundColor: `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${BAR_ALPHA})` }}
-                />
+                {!putSide && (
+                  <span
+                    aria-hidden
+                    data-lane={`call:${encoding}`}
+                    /* The width transition is a BARS affordance: it exists so
+                       a strike growing through the session is seen to grow.
+                       In heat the width never moves — the value rides the
+                       colour — so tweening a constant would only cost a
+                       compositor pass per row per tick. */
+                    className={`absolute inset-y-0 right-0 ${heat ? '' : 'transition-[width] duration-700'}`}
+                    style={heat
+                      ? { width: '100%', backgroundColor: heatCellStyle(row.value, maxAbs).backgroundColor }
+                      : { width: `${pct.toFixed(1)}%`, backgroundColor: `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${BAR_ALPHA})` }}
+                  />
+                )}
               </span>
               {/* `data-strike-label` so the placement pass can measure the lane
                   the rule badges have to clear. A hook rather than a class
@@ -750,12 +930,24 @@ const PaneLadder = ({
                   must not silently move a badge back onto a number. */}
               <span
                 data-strike-label=""
-                className={`shrink-0 text-right font-mono text-[10px] font-semibold tnum ${
+                className={`shrink-0 text-center font-mono text-[10px] font-semibold tnum ${
                   active ? 'text-select' : 'text-textSecondary'
                 }`}
                 style={{ width: `${priceLen}ch` }}
               >
-                {fmtStrike(row.strike)}
+                {fmtRail(row.strike)}
+              </span>
+              <span className="relative flex-1 min-w-0 self-stretch my-px">
+                {putSide && (
+                  <span
+                    aria-hidden
+                    data-lane={`put:${encoding}`}
+                    className={`absolute inset-y-0 left-0 ${heat ? '' : 'transition-[width] duration-700'}`}
+                    style={heat
+                      ? { width: '100%', backgroundColor: heatCellStyle(row.value, maxAbs).backgroundColor }
+                      : { width: `${pct.toFixed(1)}%`, backgroundColor: `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${BAR_ALPHA})` }}
+                  />
+                )}
               </span>
             </>
           );
@@ -853,10 +1045,22 @@ const Rule = ({ ticker, price, tone }: { ticker: string; price: number; tone: 's
       {/* `data-badge` so the placement pass can step this aside when the two
           rules land on top of each other — a stable hook rather than a class
           selector that a restyle would silently break. */}
+      {/* A CAPSULE, not a tab. The reference ladder marks the live price
+          with a dark rounded pill carrying bright text, and it is the one
+          thing on that screen the eye finds first — every other row is bare
+          numerals on black, so the filled shape is the marker.
+
+          Ours stays DARK with bright text rather than the inverted white
+          chip it used to be: the chip was the brightest object in the rail
+          by a distance, and it sits over the bars, so it read as a piece of
+          data rather than as a cursor. The ring is what keeps it legible
+          where it crosses a hot bar. */}
       <span
         data-badge=""
-        className={`relative ml-auto mr-1 rounded-[2px] px-1 font-mono text-[8px] font-bold tnum leading-[10px] ${
-          spot ? 'bg-textPrimary text-[#0a0a0a]' : 'bg-flip text-[#0a0a0a]'
+        className={`relative ml-auto mr-1 rounded-full px-1.5 font-mono text-[8px] font-bold tnum leading-[12px] ring-1 ${
+          spot
+            ? 'bg-[#141414] text-textPrimary ring-white/25'
+            : 'bg-[#141414] text-flip ring-flip/40'
         }`}
       >
         {price.toFixed(2)}
