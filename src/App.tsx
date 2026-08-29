@@ -9,6 +9,8 @@ import Weigher from './pages/Weigher';
 import OptionChain from './pages/weigher/OptionChain';
 import IndexFutures from './pages/IndexFutures';
 import MacroDesk from './pages/MacroDesk';
+import Journal from './pages/Journal';
+import AlertsPage from './pages/Alerts';
 import Tracker from './pages/Tracker';
 import PinpointLayout from './pages/pinpoint/PinpointLayout';
 import Pulse from './pages/workspace/Pulse';
@@ -72,6 +74,10 @@ const App = () => {
             <Route path="/index-futures" element={<IndexFutures />} />
             {/* §14 + §16 — what decided the open overnight, and what is about to */}
             <Route path="/macro" element={<MacroDesk />} />
+            {/* §18 — the journal: what was taken, why, and how it went */}
+            <Route path="/journal" element={<Journal />} />
+            {/* §17 — every armed alert, and everything that has fired */}
+            <Route path="/alerts" element={<AlertsPage />} />
             <Route path="/skys-vision" element={<Navigate to="/compass" replace />} />
             <Route path="/stocks" element={<Stocks />} />
             <Route path="/news" element={<News />} />
