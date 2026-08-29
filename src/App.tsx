@@ -40,6 +40,7 @@ import EarningsHub from './pages/EarningsHub';
 import EarningsDossier from './pages/EarningsDossier';
 import ProveIt from './pages/proveit/ProveIt';
 import Landing from './pages/landing/Landing';
+import NotFound from './pages/NotFound';
 import CommunityLayout from './pages/community/CommunityLayout';
 import Ideas from './pages/community/Ideas';
 import Requests from './pages/community/Requests';
@@ -134,6 +135,12 @@ const App = () => {
               <Route path="member/:handle" element={<MemberProfile />} />
             </Route>
             <Route path="/auditor-log" element={<Navigate to="/tracker" replace />} />
+            {/* LAST, and inside the shell on purpose. Before this, an address
+                that matched nothing rendered an empty page: no message, no
+                console error, indistinguishable from the desk having broken.
+                Keeping it inside AppShell means a lost reader still has the
+                nav and the command palette. */}
+            <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
         </LaunchProvider>
