@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import { Bookmark, Trash2, X } from 'lucide-react';
+import { Trash2, X } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildContractFlow, type ContractRef } from '../../data/contractflow';
 import { fmtUsd } from '../../data/gex';
@@ -14,6 +14,7 @@ import DataTable, { type Column } from '../../components/ui/DataTable';
 import StatCard from '../../components/ui/StatCard';
 import MetricGrid from '../../components/ui/MetricGrid';
 import Term from '../../components/ui/Term';
+import DataState from '../../components/ui/DataState';
 
 /*
 ==================================================
@@ -41,14 +42,6 @@ import Term from '../../components/ui/Term';
 
 const useWatch = <T,>(read: () => T): T =>
   useSyncExternalStore(subscribeWatch, read, read);
-
-const Empty = ({ title, body }: { title: string; body: string }) => (
-  <div className="h-40 flex flex-col items-center justify-center gap-2 px-6 text-center">
-    <Bookmark size={18} className="text-textMuted" strokeWidth={1.5} />
-    <span className="font-mono text-[11px] text-textSecondary uppercase tracking-widest">{title}</span>
-    <span className="text-[11px] text-textMuted leading-snug max-w-[46ch]">{body}</span>
-  </div>
-);
 
 const FlowTracker = () => {
   const { activeTicker, marketData, flowTape } = useMarketData();
@@ -236,7 +229,8 @@ const FlowTracker = () => {
           )}
         >
           {prints.length === 0 ? (
-            <Empty
+            <DataState
+              kind="empty"
               title="No prints bookmarked"
               body="Bookmark a print from the Live Tape and it lands here — with what the contract did after you saved it."
             />
@@ -280,7 +274,8 @@ const FlowTracker = () => {
           }
         >
           {contracts.length === 0 ? (
-            <Empty
+            <DataState
+              kind="empty"
               title="No contracts watched"
               body="Watch a contract from the Scanner or the tape to follow its volume, open interest and side through the session."
             />
@@ -305,7 +300,7 @@ const FlowTracker = () => {
         className="w-full"
       >
         {!drill ? (
-          <Empty title="Nothing selected" body="Pick a bookmarked print or a watched contract above to open its session — flow, net premium and the vol/OI ledger." />
+          <DataState kind="empty" title="Nothing selected" body="Pick a bookmarked print or a watched contract above to open its session — flow, net premium and the vol/OI ledger." />
         ) : (
           <div className="flex flex-col gap-4">
             <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">

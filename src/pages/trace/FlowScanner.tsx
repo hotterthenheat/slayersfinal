@@ -154,7 +154,11 @@ const FlowScanner = () => {
         className="w-full"
         actions={
           <div className="flex items-center gap-2">
-            <ProvenanceChip sources={['tape', 'prints']} />
+            <ProvenanceChip
+              sources={['tape', 'prints']}
+              state={session ? 'stale' : 'ok'}
+              note={session ? 'A replayed session, regenerated deterministically — not a recording of that day.' : undefined}
+            />
             <SegmentedControl
               value={rightFilter}
               onChange={v => setRightFilter(v as 'ALL' | 'C' | 'P')}
