@@ -7,6 +7,7 @@ import { LaunchProvider } from './components/layout/LaunchTransition';
 import Compass from './pages/Compass';
 import Weigher from './pages/Weigher';
 import OptionChain from './pages/weigher/OptionChain';
+import IndexFutures from './pages/IndexFutures';
 import Tracker from './pages/Tracker';
 import PinpointLayout from './pages/pinpoint/PinpointLayout';
 import Pulse from './pages/workspace/Pulse';
@@ -63,6 +64,9 @@ const App = () => {
             {/* §3 — the multi-expiry chain, the layout every options reader
                 already knows. Its own route so it can be linked to. */}
             <Route path="/chain" element={<OptionChain />} />
+            {/* §12 + §13 — one desk, because they are one question: what is
+                the underlying really doing, including while the cash is shut */}
+            <Route path="/index-futures" element={<IndexFutures />} />
             <Route path="/skys-vision" element={<Navigate to="/compass" replace />} />
             <Route path="/stocks" element={<Stocks />} />
             <Route path="/news" element={<News />} />
