@@ -688,6 +688,9 @@ export interface PriceProjection {
 }
 
 interface StrikeChartProps {
+  /** Horizontal pitch of a bar, in pixels. The pane's own choice — see
+      Terrain's BAR_SIZES. Omitted, the chart keeps its historic 7. */
+  barSize?: number;
   ticker: string;
   /** Bumped every simulator tick so the chart folds in the newest bar */
   revision: number;
@@ -926,7 +929,17 @@ const StrikeChart = ({
   onReadout,
   projectionRef,
   exportRef,
+  barSize = 7,
 }: StrikeChartProps) => {
+  /* HELD IN A REF AS WELL AS A PROP, on purpose. The chart is created once
+     in an effect that must NOT re-run when the pitch changes — tearing the
+     whole chart down to widen a candle would drop the drawings, the scroll
+     position and every series. So creation reads the ref for its opening
+     value, and a separate small effect below applies later changes through
+     `applyOptions`, which is what the engine offers for exactly this. */
+  const barSizeRef = useRef(barSize);
+  barSizeRef.current = barSize;
+
   const themeKey = useCandleThemeKey();
   /* Read straight from the store rather than taken as a prop: alerts belong to
      the SYMBOL, and two panes showing the same symbol must draw the same set.
@@ -1577,7 +1590,7 @@ const StrikeChart = ({
       // price-line titles, and ate the date off every dark-pool print near spot.
       // 68 + 4 + 2 clear. Charts without the capsule keep the default 0.
       rightPriceScale: { borderColor: '#1c1c1c', minimumWidth: priceTag ? PRICE_SCALE_MIN_WIDTH : 0 },
-      timeScale: { borderColor: '#1c1c1c', timeVisible: true, secondsVisible: false, rightOffset: 6, barSpacing: 7 },
+      timeScale: { borderColor: '#1c1c1c', timeVisible: true, secondsVisible: false, rightOffset: 6, barSpacing: barSizeRef.current },
       crosshair: {
         vertLine: { color: 'rgba(255,255,255,0.3)', labelBackgroundColor: '#262626' },
         horzLine: { color: 'rgba(255,255,255,0.3)', labelBackgroundColor: '#262626' },
@@ -2464,6 +2477,36 @@ const StrikeChart = ({
     const lock = priceScaleLockedBy(compares);
     chart.priceScale('right').applyOptions({ mode: PRICE_SCALE_MODE[lock?.mode ?? priceScale] });
   }, [priceScale, compares, mainNonce]);
+
+  /*
+    BAR PITCH, applied in place. Same rule as the price-scale mode above:
+    the pane's preference changes an option on the live chart rather than
+    rebuilding it, so the reader keeps their pan, their drawings and their
+    sub-panes.
+
+    AND THEN RE-ANCHOR THE RIGHT EDGE, which is the part a screenshot
+    caught and the first set of assertions did not. `barSpacing` changes the
+    pixel width of a bar while the engine holds its LOGICAL range — the same
+    from/to bar indices — so widening walks the tape off the left and leaves
+    the pane close to bare. The probe was perfectly happy: the pitch had
+    changed and the canvas pixels had changed, both true and both beside the
+    point. Looking at the picture was what found it.
+
+    `scripts/_probe-barsize.mjs` now measures the painted fraction of the
+    pane's own bitmap, and deleting the `scrollToRealTime` line below is
+    enough to fail it: ink 8.73% -> 1.88% at 18px without, 8.73% -> 13.67%
+    with. Wider candles cover MORE canvas, which is the shape of the claim.
+
+    Scrolling to real time keeps the newest bar where it already was, so
+    widening zooms about the right edge — where a reader is looking, and
+    what every reference terminal does.
+  */
+  useEffect(() => {
+    const ts = chartRef.current?.timeScale();
+    if (!ts) return;
+    ts.applyOptions({ barSpacing: barSize });
+    ts.scrollToRealTime();
+  }, [barSize, mainNonce]);
 
   // Recolor the candle series AND the chart surface in place when the theme
   // picker changes — gallery themes carry their own background tint.
