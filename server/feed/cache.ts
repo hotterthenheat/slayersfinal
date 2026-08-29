@@ -116,6 +116,19 @@ export class RestCache {
     return this.map.size;
   }
 
+  /**
+   * The keys currently held.
+   *
+   * For an ops readout — and for the assertion that keeps a CREDENTIAL out
+   * of them. A secret in a cache key is three problems: it sits in memory as
+   * a map key, it splits the cache per-credential and so defeats the whole
+   * "many readers, one call" property, and it leaks the moment anything
+   * surfaces this list. The route keys on the fact, never on the key.
+   */
+  keys(): string[] {
+    return [...this.map.keys()];
+  }
+
   readStats(): Readonly<CacheStats> {
     return { ...this.stats };
   }
