@@ -45,7 +45,7 @@ const MemberProfile = () => {
     <div className="flex flex-col gap-4">
       <Link
         to="/community/leaderboard"
-        className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-textMuted hover:text-textSecondary w-fit focus:outline-none focus-visible:ring-1 focus-visible:ring-accent rounded"
+        className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-textMuted hover:text-textSecondary w-fit focus:outline-none focus-visible:ring-1 focus-visible:ring-select rounded"
       >
         <ArrowLeft size={11} /> Leaderboard
       </Link>
@@ -59,7 +59,7 @@ const MemberProfile = () => {
               <button
                 onClick={() => toggleFollow(handle)}
                 aria-pressed={on}
-                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border font-mono text-[9px] uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-accent ${
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border font-mono text-[9px] uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-select ${
                   on ? 'border-select/50 text-select' : 'border-borderSubtle text-textMuted hover:text-textSecondary'
                 }`}
               >

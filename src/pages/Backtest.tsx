@@ -91,7 +91,7 @@ const Backtest = () => {
             setLogged(l => new Set(l).add(`${t.date}-${t.scanner}-${t.i}`));
           }}
           disabled={logged.has(`${t.date}-${t.scanner}-${t.i}`)}
-          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border font-mono text-[9px] uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-accent ${
+          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border font-mono text-[9px] uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-select ${
             logged.has(`${t.date}-${t.scanner}-${t.i}`)
               ? 'border-borderSubtle/50 text-textMuted/50 cursor-default'
               : 'border-borderSubtle text-textMuted hover:text-textPrimary'
@@ -128,7 +128,7 @@ const Backtest = () => {
             role="tab"
             aria-selected={scanner === k}
             onClick={() => setScanner(k as ScannerKey | 'ALL')}
-            className={`px-2.5 py-1 rounded font-mono text-[10px] uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-accent ${
+            className={`px-2.5 py-1 rounded font-mono text-[10px] uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-select ${
               scanner === k ? 'bg-white/[0.07] text-textPrimary' : 'text-textMuted hover:text-textSecondary'
             }`}
           >

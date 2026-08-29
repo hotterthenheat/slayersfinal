@@ -145,7 +145,7 @@ const OptionChain = () => {
             role="tab"
             aria-selected={i === expIdx}
             onClick={() => { setExpIdx(i); setSelected(null); }}
-            className={`shrink-0 px-2.5 py-1 rounded font-mono text-[10px] uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-accent ${
+            className={`shrink-0 px-2.5 py-1 rounded font-mono text-[10px] uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-select ${
               i === expIdx ? 'bg-white/[0.07] text-textPrimary' : 'text-textMuted hover:text-textSecondary'
             }`}
           >
@@ -218,7 +218,7 @@ const OptionChain = () => {
                       r.atm ? 'text-textPrimary font-bold' : 'text-textSecondary'
                     }`}>
                       {r.strike}
-                      {r.atm && <span className="ml-1 text-[8px] text-accent uppercase tracking-wider">atm</span>}
+                      {r.atm && <span className="ml-1 text-[8px] text-select uppercase tracking-wider">atm</span>}
                     </td>
                     {legCells(r.put, 'put')}
                   </tr>

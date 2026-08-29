@@ -124,7 +124,7 @@ const Journal = () => {
         actions={
           <button
             onClick={() => setAdding(true)}
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-borderSubtle font-mono text-[10px] uppercase tracking-wider text-textSecondary hover:text-textPrimary focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-borderSubtle font-mono text-[10px] uppercase tracking-wider text-textSecondary hover:text-textPrimary focus:outline-none focus-visible:ring-1 focus-visible:ring-select"
           >
             <Plus size={11} /> Log a trade
           </button>
@@ -201,31 +201,31 @@ const Journal = () => {
                 <input
                   value={form[k]} placeholder={ph}
                   onChange={e => setForm(f => ({ ...f, [k]: e.target.value }))}
-                  className="bg-inset border border-borderSubtle rounded px-2 py-1 text-[12px] text-textPrimary focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+                  className="bg-inset border border-borderSubtle rounded px-2 py-1 text-[12px] text-textPrimary focus:outline-none focus-visible:ring-1 focus-visible:ring-select"
                 />
               </label>
             ))}
             <label className="flex flex-col gap-1">
               <span className="font-mono text-[9px] uppercase tracking-wider text-textMuted">Side</span>
               <select value={form.side} onChange={e => setForm(f => ({ ...f, side: e.target.value as 'LONG' }))}
-                className="bg-inset border border-borderSubtle rounded px-2 py-1 text-[12px] text-textPrimary focus:outline-none focus-visible:ring-1 focus-visible:ring-accent">
+                className="bg-inset border border-borderSubtle rounded px-2 py-1 text-[12px] text-textPrimary focus:outline-none focus-visible:ring-1 focus-visible:ring-select">
                 <option value="LONG">LONG</option><option value="SHORT">SHORT</option>
               </select>
             </label>
             <label className="flex flex-col gap-1">
               <span className="font-mono text-[9px] uppercase tracking-wider text-textMuted">Tags (comma separated)</span>
               <input value={form.tags} onChange={e => setForm(f => ({ ...f, tags: e.target.value }))} placeholder="0dte, gamma"
-                className="bg-inset border border-borderSubtle rounded px-2 py-1 text-[12px] text-textPrimary focus:outline-none focus-visible:ring-1 focus-visible:ring-accent" />
+                className="bg-inset border border-borderSubtle rounded px-2 py-1 text-[12px] text-textPrimary focus:outline-none focus-visible:ring-1 focus-visible:ring-select" />
             </label>
             <label className="col-span-2 flex flex-col gap-1">
               <span className="font-mono text-[9px] uppercase tracking-wider text-textMuted">Thesis — written now, frozen after</span>
               <textarea value={form.thesis} onChange={e => setForm(f => ({ ...f, thesis: e.target.value }))} rows={3}
                 placeholder="Why this trade, before you know how it goes."
-                className="bg-inset border border-borderSubtle rounded px-2 py-1 text-[12px] text-textPrimary focus:outline-none focus-visible:ring-1 focus-visible:ring-accent" />
+                className="bg-inset border border-borderSubtle rounded px-2 py-1 text-[12px] text-textPrimary focus:outline-none focus-visible:ring-1 focus-visible:ring-select" />
             </label>
             <div className="col-span-2 flex justify-end gap-2">
-              <button onClick={() => setAdding(false)} className="px-3 py-1 font-mono text-[10px] uppercase tracking-wider text-textMuted hover:text-textSecondary focus:outline-none focus-visible:ring-1 focus-visible:ring-accent rounded">Cancel</button>
-              <button onClick={submit} className="px-3 py-1 rounded border border-select/50 text-select font-mono text-[10px] uppercase tracking-wider hover:bg-select/10 focus:outline-none focus-visible:ring-1 focus-visible:ring-accent">Log it</button>
+              <button onClick={() => setAdding(false)} className="px-3 py-1 font-mono text-[10px] uppercase tracking-wider text-textMuted hover:text-textSecondary focus:outline-none focus-visible:ring-1 focus-visible:ring-select rounded">Cancel</button>
+              <button onClick={submit} className="px-3 py-1 rounded border border-select/50 text-select font-mono text-[10px] uppercase tracking-wider hover:bg-select/10 focus:outline-none focus-visible:ring-1 focus-visible:ring-select">Log it</button>
             </div>
           </div>
         </Modal>
@@ -257,7 +257,7 @@ const Journal = () => {
                   value={open.review} rows={3}
                   onChange={e => { updateTrade(open.id, { review: e.target.value }); setOpen({ ...open, review: e.target.value }); }}
                   placeholder="What actually happened, and what you would do again."
-                  className="bg-inset border border-borderSubtle rounded px-2 py-1 text-[12px] text-textPrimary focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+                  className="bg-inset border border-borderSubtle rounded px-2 py-1 text-[12px] text-textPrimary focus:outline-none focus-visible:ring-1 focus-visible:ring-select"
                 />
               </label>
 
@@ -305,17 +305,17 @@ const Journal = () => {
                   <div className="flex items-center gap-2">
                     <input
                       value={closing} onChange={e => setClosing(e.target.value)} placeholder="exit price"
-                      className="w-28 bg-inset border border-borderSubtle rounded px-2 py-1 text-[12px] text-textPrimary focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+                      className="w-28 bg-inset border border-borderSubtle rounded px-2 py-1 text-[12px] text-textPrimary focus:outline-none focus-visible:ring-1 focus-visible:ring-select"
                     />
                     <button
                       onClick={() => { const v = Number(closing); if (Number.isFinite(v)) { closeTrade(open.id, v); setOpen(null); } }}
-                      className="px-3 py-1 rounded border border-select/50 text-select font-mono text-[10px] uppercase tracking-wider hover:bg-select/10 focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+                      className="px-3 py-1 rounded border border-select/50 text-select font-mono text-[10px] uppercase tracking-wider hover:bg-select/10 focus:outline-none focus-visible:ring-1 focus-visible:ring-select"
                     >Close trade</button>
                   </div>
                 ) : <span className="font-mono text-[10px] text-textMuted uppercase tracking-wider">Closed {open.closedAt?.slice(0, 16).replace('T', ' ')}</span>}
                 <button
                   onClick={() => { removeTrade(open.id); setOpen(null); }}
-                  className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-textMuted hover:text-bear focus:outline-none focus-visible:ring-1 focus-visible:ring-accent rounded"
+                  className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-textMuted hover:text-bear focus:outline-none focus-visible:ring-1 focus-visible:ring-select rounded"
                 ><Trash2 size={11} /> Delete</button>
               </div>
             </div>
