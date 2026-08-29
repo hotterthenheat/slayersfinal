@@ -43,7 +43,15 @@ import { barClockSpec, buildAltBars, type AltBarSpec } from '../../data/altBars'
 import type { Candle } from '../../types/market';
 import type { DarkPoolPrint, KeyLevels } from '../../types/gex';
 import { bucketFlow, flowMaxLeg } from '../../data/flowBars';
-import { atrBarSeries, bollingerSeries, emaSeries, macdSeries, rsiSeries, sessionStarts, smaSeries, vwapSeries, vwapSigmaSeries } from '../../data/indicators';
+import {
+  atrBarSeries, bollingerSeries, emaSeries, macdSeries, rsiSeries, sessionStarts, smaSeries,
+  vwapSeries, vwapSigmaSeries,
+  /* The second set (2026-08-29). Same rule as the first: the formulas live
+     in data/indicators.ts so the chart and every summariser read one copy. */
+  stochasticSeries, stochRsiSeries, adxSeries, obvSeries, cciSeries, williamsRSeries,
+  mfiSeries, keltnerSeries, donchianSeries, supertrendSeries, rocSeries, aroonSeries, cmfSeries,
+  parabolicSarSeries,
+} from '../../data/indicators';
 import { buildSessionLevels, type OpeningRange } from '../../data/sessionLevels';
 import { SessionLevelsPrimitive, sessionLines } from './sessionLevelsPrimitive';
 import { buildExpectedMoveCone } from '../../data/expectedMove';
@@ -271,11 +279,45 @@ export interface ChartIndicators {
   macd: boolean;
   /** ATR of THIS pane's bars — distinct from T-19's session-ATR ruler. */
   atrPane: boolean;
+  /* ── THE SECOND SET ────────────────────────────────────────────────
+     Four more that ride the tape's own scale, because they are prices: */
+  /** EMA with ATR shoulders — the channel a trend trade is managed in. */
+  keltner: boolean;
+  /** The plain high/low envelope breakouts are read off. */
+  donchian: boolean;
+  /** An ATR stop that only ever moves in the trend's favour. */
+  supertrend: boolean;
+  /** Parabolic SAR — the trailing stop as dots under/over the tape. */
+  psar: boolean;
+  /* And ten in their own panes, because their units are not dollars: */
+  /** %K/%D — where the close sits inside the recent range. */
+  stoch: boolean;
+  /** The stochastic OF the RSI, not of price. */
+  stochRsi: boolean;
+  /** Trend STRENGTH with its DI pair — direction lives in the DIs. */
+  adx: boolean;
+  /** Typical price against its own mean deviation. */
+  cci: boolean;
+  /** The stochastic's mirror, 0 to -100. */
+  williamsR: boolean;
+  /** RSI weighted by volume. */
+  mfi: boolean;
+  /** Volume signed by the close's direction — slope, never level. */
+  obv: boolean;
+  /** Where the close sat in each bar, volume-weighted. */
+  cmf: boolean;
+  /** Percent move over N bars. */
+  roc: boolean;
+  /** How recently the window's high and low were made. */
+  aroon: boolean;
 }
 
 export const DEFAULT_INDICATORS: ChartIndicators = {
   ema9: false, ema21: false, ema50: false, vwap: false,
   bb: false, vwapBands: false, sma: false, rsi: false, macd: false, atrPane: false,
+  keltner: false, donchian: false, supertrend: false, psar: false,
+  stoch: false, stochRsi: false, adx: false, cci: false, williamsR: false,
+  mfi: false, obv: false, cmf: false, roc: false, aroon: false,
 };
 
 /* One categorical ink family for auxiliary lines (indicators here, compare
@@ -292,6 +334,23 @@ export const INDICATOR_INKS: Record<keyof ChartIndicators, string> = {
   rsi: '#A9C77F',
   macd: '#8FB8D8',
   atrPane: '#C0C7CF',
+  /* The second set. Same rule: categorical hues carrying no house meaning,
+     kept clear of bull/bear/warn/select so an indicator can never be
+     mistaken for a direction or a level. */
+  keltner: '#7FB5A6',
+  donchian: '#9AA8C4',
+  supertrend: '#C99A6B',
+  psar: '#B8A0D0',
+  stoch: '#89C4A8',
+  stochRsi: '#A8B9D9',
+  adx: '#D0A97F',
+  cci: '#C9A0C0',
+  williamsR: '#9FC4B0',
+  mfi: '#C4B98F',
+  obv: '#8FA9C9',
+  cmf: '#B0C48F',
+  roc: '#D9B0A0',
+  aroon: '#A9C9C4',
 };
 
 /*
@@ -305,8 +364,17 @@ export const INDICATOR_INKS: Record<keyof ChartIndicators, string> = {
   shrink the tape below a floor), enforced in the menu and again here so a
   hand-edited setup cannot smuggle a third in.
 */
-export const SUB_PANE_ORDER: (keyof ChartIndicators)[] = ['rsi', 'macd', 'atrPane'];
-export const MAX_SUB_PANES = 2;
+export const SUB_PANE_ORDER: (keyof ChartIndicators)[] = [
+  'rsi', 'macd', 'atrPane',
+  'stoch', 'stochRsi', 'adx', 'cci', 'williamsR', 'mfi', 'obv', 'cmf', 'roc', 'aroon',
+];
+/* RAISED FROM TWO TO THREE with the second set (2026-08-29). The cap exists
+   to stop the tape being shrunk below a floor, and that reason is unchanged
+   — but with thirteen sub-pane indicators to choose from, two was rationing
+   the wrong thing. Three still leaves the tape the majority of the pane.
+   The refusal behaviour is untouched: the menu says no in place with the
+   reason printed, rather than silently ignoring the fourth. */
+export const MAX_SUB_PANES = 3;
 
 interface IndicatorPartSpec {
   part: string;
@@ -351,6 +419,70 @@ const INDICATOR_PARTS: Record<keyof ChartIndicators, { pane: 'overlay' | 'sub'; 
     ],
   },
   atrPane: { pane: 'sub', parts: [{ part: 'line', kind: 'line', ink: INDICATOR_INKS.atrPane }] },
+
+  /* ── THE SECOND SET ──────────────────────────────────────────────────
+     The four price overlays. Each draws its envelope faint and dashed and
+     its centre solid, the same grammar bb and vwapBands already use, so a
+     reader does not have to learn a second one. */
+  keltner: {
+    pane: 'overlay',
+    parts: [
+      { part: 'middle', kind: 'line', ink: INDICATOR_INKS.keltner },
+      { part: 'upper', kind: 'line', ink: INDICATOR_INKS.keltner, dashed: true, faint: true },
+      { part: 'lower', kind: 'line', ink: INDICATOR_INKS.keltner, dashed: true, faint: true },
+    ],
+  },
+  donchian: {
+    pane: 'overlay',
+    parts: [
+      { part: 'upper', kind: 'line', ink: INDICATOR_INKS.donchian },
+      { part: 'lower', kind: 'line', ink: INDICATOR_INKS.donchian },
+      { part: 'middle', kind: 'line', ink: INDICATOR_INKS.donchian, dashed: true, faint: true },
+    ],
+  },
+  supertrend: { pane: 'overlay', parts: [{ part: 'line', kind: 'line', ink: INDICATOR_INKS.supertrend }] },
+  psar: { pane: 'overlay', parts: [{ part: 'line', kind: 'line', ink: INDICATOR_INKS.psar, faint: true }] },
+
+  /* And the ten sub-panes. Where an indicator has a signal line, the signal
+     is the faint one — the reader is watching the fast line cross it. */
+  stoch: {
+    pane: 'sub',
+    parts: [
+      { part: 'k', kind: 'line', ink: INDICATOR_INKS.stoch },
+      { part: 'd', kind: 'line', ink: INDICATOR_INKS.stoch, faint: true },
+    ],
+  },
+  stochRsi: {
+    pane: 'sub',
+    parts: [
+      { part: 'k', kind: 'line', ink: INDICATOR_INKS.stochRsi },
+      { part: 'd', kind: 'line', ink: INDICATOR_INKS.stochRsi, faint: true },
+    ],
+  },
+  adx: {
+    pane: 'sub',
+    parts: [
+      /* ADX solid, the DIs faint: the strength reading is the headline and
+         the pair beneath it says which way. Drawing all three at equal
+         weight is how ADX gets misread as a direction. */
+      { part: 'adx', kind: 'line', ink: INDICATOR_INKS.adx },
+      { part: 'plusDi', kind: 'line', ink: '#8FC49A', faint: true },
+      { part: 'minusDi', kind: 'line', ink: '#C99A9A', faint: true },
+    ],
+  },
+  cci: { pane: 'sub', parts: [{ part: 'line', kind: 'line', ink: INDICATOR_INKS.cci }] },
+  williamsR: { pane: 'sub', parts: [{ part: 'line', kind: 'line', ink: INDICATOR_INKS.williamsR }] },
+  mfi: { pane: 'sub', parts: [{ part: 'line', kind: 'line', ink: INDICATOR_INKS.mfi }] },
+  obv: { pane: 'sub', parts: [{ part: 'line', kind: 'line', ink: INDICATOR_INKS.obv }] },
+  cmf: { pane: 'sub', parts: [{ part: 'hist', kind: 'hist', ink: 'rgba(176,196,143,0.45)' }] },
+  roc: { pane: 'sub', parts: [{ part: 'line', kind: 'line', ink: INDICATOR_INKS.roc }] },
+  aroon: {
+    pane: 'sub',
+    parts: [
+      { part: 'up', kind: 'line', ink: '#8FC49A' },
+      { part: 'down', kind: 'line', ink: '#C99A9A' },
+    ],
+  },
 };
 
 /** The keys the T-8 readout prints — single-line overlays only: a
@@ -2119,6 +2251,51 @@ const StrikeChart = ({
         }
         case 'atrPane':
           return { line: atrBarSeries(bars, 14) };
+
+        /* ── THE SECOND SET ─────────────────────────────────────────────
+           Periods are the conventional defaults a reader arriving from
+           another terminal expects, so a line here matches the one they
+           are used to rather than being subtly differently tuned. */
+        case 'keltner': {
+          const k = keltnerSeries(bars, 20, 10, 2);
+          return { upper: k.upper, middle: k.middle, lower: k.lower };
+        }
+        case 'donchian': {
+          const d = donchianSeries(bars, 20);
+          return { upper: d.upper, middle: d.middle, lower: d.lower };
+        }
+        case 'supertrend':
+          return { line: supertrendSeries(bars, 10, 3).line };
+        case 'psar':
+          return { line: parabolicSarSeries(bars, 0.02, 0.2) };
+        case 'stoch': {
+          const st = stochasticSeries(bars, 14, 3, 3);
+          return { k: st.k, d: st.d };
+        }
+        case 'stochRsi': {
+          const sr = stochRsiSeries(bars, 14, 14, 3, 3);
+          return { k: sr.k, d: sr.d };
+        }
+        case 'adx': {
+          const a = adxSeries(bars, 14);
+          return { adx: a.adx, plusDi: a.plusDi, minusDi: a.minusDi };
+        }
+        case 'cci':
+          return { line: cciSeries(bars, 20) };
+        case 'williamsR':
+          return { line: williamsRSeries(bars, 14) };
+        case 'mfi':
+          return { line: mfiSeries(bars, 14) };
+        case 'obv':
+          return { line: obvSeries(bars) };
+        case 'cmf':
+          return { hist: cmfSeries(bars, 20) };
+        case 'roc':
+          return { line: rocSeries(bars, 12) };
+        case 'aroon': {
+          const ar = aroonSeries(bars, 25);
+          return { up: ar.up, down: ar.down };
+        }
         default:
           return { line: emaSeries(bars, key === 'ema9' ? 9 : key === 'ema21' ? 21 : 50) };
       }
