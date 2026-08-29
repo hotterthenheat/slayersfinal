@@ -156,7 +156,30 @@ export interface PaneCfg {
       removable") — the rail has its own × and the top button is a
       convenience that sets every pane at once, not the only way out. */
   ladder: boolean;
+  /*
+    HOW WIDE A BAR IS DRAWN, in pixels of horizontal pitch. Noah asked for
+    the candles to be sizeable — "make the bars smaller or bigger on the
+    charts if the person wants".
+
+    PER SLOT, not per symbol, and for the same reason as `sessionOr`: how
+    densely a reader wants their tape drawn is a preference about looking,
+    not a fact about a name. Somebody who reads wide candles reads wide
+    candles whatever is loaded.
+
+    It is a STARTING pitch, not a lock. The chart's own zoom still works
+    normally afterwards; this sets where the pane opens and what the ± steps
+    move, exactly as the reference terminals do.
+  */
+  barSize: number;
 }
+
+/** The pitches the control steps through, narrowest first. `barSpacing`
+    bottoms out around 0.5 in the engine, and past ~18 a normal pane holds
+    so few bars that the tape stops being a chart; these are the useful
+    range rather than the possible one. */
+export const BAR_SIZES = [3, 5, 7, 10, 14, 18] as const;
+/** 7 — what every pane was hard-coded to before this was a choice. */
+export const DEFAULT_BAR_SIZE = 7;
 
 interface TerrainCfg {
   layout: TerrainLayout;
@@ -196,6 +219,7 @@ const defaultPanes = (): PaneCfg[] =>
     priceScale: 'normal' as PriceScale,
     sessionOr: 15 as OpeningRange,
     ladder: true,
+    barSize: DEFAULT_BAR_SIZE,
     link: null,
   }));
 
@@ -252,6 +276,14 @@ function readPane(raw: unknown, def: PaneCfg): PaneCfg {
     priceScale: typeof c.priceScale === 'string' && SCALES.has(c.priceScale) ? (c.priceScale as PriceScale) : def.priceScale,
     sessionOr: typeof c.sessionOr === 'number' && OR_VALUES.has(c.sessionOr) ? (c.sessionOr as OpeningRange) : def.sessionOr,
     ladder: typeof c.ladder === 'boolean' ? c.ladder : def.ladder,
+    /* VALIDATED AGAINST THE LIST, not merely type-checked. A stored setup
+       is reader-editable JSON, and a barSize of 0 or 4000 would hand the
+       engine a pitch it cannot draw. Anything off the ladder falls back to
+       the default rather than being clamped, on this file's usual rule: a
+       value we did not offer was not chosen by them. */
+    barSize: typeof c.barSize === 'number' && (BAR_SIZES as readonly number[]).includes(c.barSize)
+      ? c.barSize
+      : def.barSize,
     link: c.link === 'A' || c.link === 'B' ? c.link : null,
   };
 }
@@ -1009,6 +1041,7 @@ const Pane = ({
         <div className="absolute inset-0 flex">
           <div className="group relative flex-1 min-w-0" {...chromeReveal.bind}>
             <StrikeChart
+              barSize={cfg.barSize}
               ticker={ticker}
               revision={revision}
               levels={levels}
@@ -1315,6 +1348,46 @@ const Pane = ({
               <div className={`chrome-hover chrome-tap relative z-10 max-w-full rounded-md bg-canvas/25 backdrop-blur-[3px] px-2 py-1 transition-opacity duration-200 ${
                 chromeReveal.shown ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0 focus-within:pointer-events-auto focus-within:opacity-100'
               }`}>
+                {/* BAR PITCH — Noah: "make the bars smaller or bigger on the
+                    charts if the person wants". A stepper rather than a
+                    slider: the six pitches in BAR_SIZES are the useful
+                    range, and a continuous control would let a reader park
+                    on a value that draws badly. Sits beside the toolbar
+                    rather than inside its menus because it is a thing you
+                    nudge while looking at the tape, not a setting you go
+                    and find. */}
+                <span className="inline-flex items-center gap-0.5 rounded-md border border-white/[0.08] bg-canvas/40 px-1 py-0.5 mr-1">
+                  <button
+                    onClick={() => {
+                      const i = BAR_SIZES.indexOf(cfg.barSize as typeof BAR_SIZES[number]);
+                      if (i > 0) onCfg({ barSize: BAR_SIZES[i - 1] });
+                    }}
+                    disabled={BAR_SIZES.indexOf(cfg.barSize as typeof BAR_SIZES[number]) <= 0}
+                    title="Narrower bars — fit more of the session on screen"
+                    aria-label="Narrower bars"
+                    className="px-1.5 py-0.5 rounded font-mono text-[11px] leading-none text-textSecondary hover:text-textPrimary disabled:opacity-30 disabled:hover:text-textSecondary focus:outline-none focus-visible:ring-1 focus-visible:ring-select"
+                  >
+                    −
+                  </button>
+                  <span
+                    className="font-mono text-[9px] tnum uppercase tracking-wider text-textMuted select-none"
+                    title={`Bar pitch ${cfg.barSize}px`}
+                  >
+                    {cfg.barSize}px
+                  </span>
+                  <button
+                    onClick={() => {
+                      const i = BAR_SIZES.indexOf(cfg.barSize as typeof BAR_SIZES[number]);
+                      if (i >= 0 && i < BAR_SIZES.length - 1) onCfg({ barSize: BAR_SIZES[i + 1] });
+                    }}
+                    disabled={BAR_SIZES.indexOf(cfg.barSize as typeof BAR_SIZES[number]) >= BAR_SIZES.length - 1}
+                    title="Wider bars — read each candle more clearly"
+                    aria-label="Wider bars"
+                    className="px-1.5 py-0.5 rounded font-mono text-[11px] leading-none text-textSecondary hover:text-textPrimary disabled:opacity-30 disabled:hover:text-textSecondary focus:outline-none focus-visible:ring-1 focus-visible:ring-select"
+                  >
+                    +
+                  </button>
+                </span>
                 <ChartToolbar
                   minimal
                   candles

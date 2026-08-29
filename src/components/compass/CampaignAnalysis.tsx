@@ -41,7 +41,7 @@ import RichRead from '../ui/RichRead';
 import GreeksRow from './GreeksRow';
 import VerdictBadge from './VerdictBadge';
 import ContractFacts from './ContractFacts';
-import ContractTrack from './ContractTrack';
+import ContractNodeChart from './ContractNodeChart';
 import SetupDrivers from './SetupDrivers';
 import { buildSetupDrivers, estimatePremium } from '../../data/compass';
 import { spotForPremium } from './trackModel';
@@ -652,7 +652,7 @@ const CampaignAnalysis = ({
   /* The chart slot has two instruments (Noah, 2026-08-17: "i want a button
      ... that allows us to go to that chart"): Stock = the underlying's tape
      (the campaign map), Premium = the contract's modeled premium track
-     (ContractTrack, resurrected). Same toggle rides on both panels. */
+     (ContractNodeChart). Same toggle rides on both panels. */
   const [chartView, setChartView] = useState<'stock' | 'premium'>('stock');
   useEffect(() => {
     if (!chartFull) return;
@@ -800,14 +800,19 @@ const CampaignAnalysis = ({
         {/* The chart slot — 60/40 with the card (Noah, 2026-08-17). Two
             instruments share it: the STOCK view is the campaign map on the
             underlying's tape; the PREMIUM view is the contract's own modeled
-            premium track (ContractTrack, back from the 08-09 retirement by
-            request). The same CardTabs toggle rides on whichever panel is
-            up, so the way back is always in the same place. */}
+            premium track. The same CardTabs toggle rides on whichever panel
+            is up, so the way back is always in the same place.
+
+            THE PREMIUM VIEW IS NOW ContractNodeChart — the Weigher's
+            lightweight-charts engine with the plan drawn on it twice, as
+            price lines on the tape and as a node chain of reasons beside
+            it. It replaces ContractTrack, which was the app's only Recharts
+            premium chart and could not say WHY a rung was where it was. */}
         {chartView === 'premium' ? (
           /* View-level swap → the slow soft-in clock (house rule), so the
              chart change breathes instead of hard-cutting. */
           <div className="xl:col-span-7 min-w-0 flex flex-col animate-soft-in-slow">
-            <ContractTrack
+            <ContractNodeChart
               setup={c}
               revision={revision}
               retired={retired}

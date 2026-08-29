@@ -354,6 +354,121 @@ export const INDICATOR_INKS: Record<keyof ChartIndicators, string> = {
 };
 
 /*
+  THE MACD HISTOGRAM'S FOUR STATES — see the note in INDICATOR_PARTS.
+
+  Hue is the sign; alpha is whether the bar is growing away from zero or
+  falling back toward it. A bar that is still positive but shrinking is the
+  first thing to turn, and a single-alpha histogram cannot say it.
+*/
+const MACD_HIST_INKS = {
+  upStrong: 'rgba(48,209,88,0.55)',
+  upFade: 'rgba(48,209,88,0.22)',
+  downStrong: 'rgba(255,59,48,0.55)',
+  downFade: 'rgba(255,59,48,0.22)',
+} as const;
+
+/*
+  WHAT EACH SUB-PANE CALLS ITSELF, and with which periods.
+
+  Every band on a TradingView chart names itself in its own top-left corner
+  with the parameters it was built from, and that is not decoration: two
+  oscillators in adjacent bands look alike at a glance, and an RSI 14 and an
+  RSI 2 look identical. This app already labelled its three PRODUCT bands
+  (flow, net drift, vol drift) and none of the thirteen indicator bands — so
+  the panes a reader adds themselves were the unlabelled ones.
+
+  ONE SOURCE FOR THE PERIODS. The first cut wrote the numbers into the
+  legend strings by hand, next to a `seriesFor` that passes its own literals
+  to the same formulas — two places to change and no way to notice when only
+  one of them was. `params` is now what BOTH read: the legend renders it and
+  the series call spreads it. A legend that names a period the series does
+  not use is no longer a thing that can be written, and
+  `scripts/indicator-legend-proof.ts` holds the rest (every sub-pane has a
+  spec, every spec is a sub-pane, and the periods are the conventional
+  defaults rather than whatever was typed).
+*/
+export const SUB_PANE_SPEC: Partial<Record<keyof ChartIndicators, { name: string; params: number[] }>> = {
+  rsi: { name: 'RSI', params: [14] },
+  macd: { name: 'MACD', params: [12, 26, 9] },
+  atrPane: { name: 'ATR', params: [14] },
+  stoch: { name: 'Stoch', params: [14, 3, 3] },
+  stochRsi: { name: 'Stoch RSI', params: [14, 14, 3, 3] },
+  adx: { name: 'ADX', params: [14] },
+  cci: { name: 'CCI', params: [20] },
+  williamsR: { name: 'Williams %R', params: [14] },
+  mfi: { name: 'MFI', params: [14] },
+  obv: { name: 'OBV', params: [] },
+  cmf: { name: 'CMF', params: [20] },
+  roc: { name: 'ROC', params: [12] },
+  aroon: { name: 'Aroon', params: [25] },
+};
+
+/** The legend a band wears — "RSI 14", "Stoch RSI 14 14 3 3", "OBV". */
+export const subPaneLegend = (key: keyof ChartIndicators): string | null => {
+  const spec = SUB_PANE_SPEC[key];
+  if (!spec) return null;
+  return spec.params.length ? `${spec.name} ${spec.params.join(' ')}` : spec.name;
+};
+
+/** Periods for one sub-pane indicator, for spreading into its formula. */
+const P = (key: keyof ChartIndicators): number[] => SUB_PANE_SPEC[key]?.params ?? [];
+
+/*
+  THE RAILS AN OSCILLATOR IS READ AGAINST.
+
+  RSI's 30 and 70 were already drawn; nothing else had any, which left
+  twelve panes where the reader had to know from memory that a stochastic
+  turns at 20 and 80, that CCI's band is +/-100, or where a MACD's zero
+  sits. Those numbers are the pane's GRAMMAR — an oscillator without them is
+  a squiggle — and they are the same numbers every other terminal draws.
+
+  `strong` marks the line a reader actually watches for a cross (a zero, or
+  the ADX's trend threshold); the rest are the band edges and sit fainter.
+  None of them take an axis label: labelling the grammar would crowd out the
+  value, which is the number that changes.
+*/
+/*
+  THE RANGE A BOUNDED OSCILLATOR'S AXIS IS ALLOWED TO SHOW.
+
+  Autoscale is right for a price and wrong for a stochastic. Left to itself
+  the library padded the data and printed a 120.00 tick on a pane whose
+  series cannot exceed 100 — an axis label for a value that does not exist,
+  which is worse than a wasted pixel. Every terminal draws these panes on
+  their own fixed scale for exactly this reason, and it also means the 20
+  and 80 rails sit in the same place from one symbol to the next instead of
+  sliding around with the data.
+
+  Only the genuinely bounded ones are here. CCI, MACD, ROC, OBV and ATR have
+  no ceiling, and pinning them would be inventing one.
+*/
+export const OSC_BOUNDS: Partial<Record<keyof ChartIndicators, [number, number]>> = {
+  rsi: [0, 100],
+  stoch: [0, 100],
+  stochRsi: [0, 100],
+  mfi: [0, 100],
+  aroon: [0, 100],
+  adx: [0, 100],
+  williamsR: [-100, 0],
+};
+
+export const OSC_LEVELS: Partial<Record<keyof ChartIndicators, { price: number; strong?: boolean }[]>> = {
+  rsi: [{ price: 70 }, { price: 30 }],
+  stoch: [{ price: 80 }, { price: 20 }],
+  stochRsi: [{ price: 80 }, { price: 20 }],
+  /* Williams %R runs 0 down to -100, so its band is the mirror of the
+     stochastic's and NOT 20/80 — a copied pair here would have drawn two
+     rails outside the series' own range and read as a broken pane. */
+  williamsR: [{ price: -20 }, { price: -80 }],
+  cci: [{ price: 100 }, { price: -100 }, { price: 0, strong: true }],
+  mfi: [{ price: 80 }, { price: 20 }],
+  adx: [{ price: 25, strong: true }, { price: 20 }],
+  macd: [{ price: 0, strong: true }],
+  roc: [{ price: 0, strong: true }],
+  cmf: [{ price: 0, strong: true }],
+  aroon: [{ price: 70 }, { price: 30 }],
+};
+
+/*
   T-3/T-4 — WHAT EACH INDICATOR DRAWS, AND WHERE, as data.
 
   `pane: 'overlay'` rides the tape's own scale; `'sub'` takes a stacked pane
@@ -410,9 +525,26 @@ const INDICATOR_PARTS: Record<keyof ChartIndicators, { pane: 'overlay' | 'sub'; 
   macd: {
     pane: 'sub',
     parts: [
-      /* The histogram draws FIRST so the lines read over it. One steel wash
-         for its bars, not red/green — the sign of momentum is not the price
-         direction the pair is reserved for. */
+      /* The histogram draws FIRST so the lines read over it.
+
+         FOUR STATES, AND THIS REVERSES AN EARLIER CALL OF MINE. The bars
+         used to be one flat steel wash, on the reasoning that the bull/bear
+         pair is reserved for PRICE direction and momentum is not that. The
+         owner has since asked for these panes to read like TradingView, and
+         the four-state histogram is the single most recognisable thing that
+         surface does: sign gives the hue, and whether the bar is growing or
+         shrinking gives the strength, so a reader sees momentum turning a
+         bar before the lines cross.
+
+         The reservation argument was also weaker than it looked. A MACD
+         histogram's sign is a directional read ON PRICE — it is the same
+         semantic family the pair marks, not a different one — and a flat
+         wash threw away the second channel entirely. The house tokens are
+         used rather than TradingView's own teal/red so the pane still
+         belongs to this app.
+
+         `ink` here is only the fallback for a point with no colour of its
+         own; MACD_HIST_INKS below is what actually paints. */
       { part: 'hist', kind: 'hist', ink: 'rgba(226,234,244,0.30)' },
       { part: 'line', kind: 'line', ink: INDICATOR_INKS.macd },
       { part: 'signal', kind: 'line', ink: '#D8A6A6' },
@@ -484,6 +616,20 @@ const INDICATOR_PARTS: Record<keyof ChartIndicators, { pane: 'overlay' | 'sub'; 
     ],
   },
 };
+
+/*
+  WHERE EACH INDICATOR DRAWS, as a map anything outside this file can read.
+
+  `INDICATOR_PARTS` stays private — it carries inks, dash patterns and part
+  names that are this component's business. The pane KIND is not: a proof
+  that every sub-pane band is labelled has to know which keys are bands, and
+  deriving it from the same object the renderer uses is the only version of
+  that check which cannot go stale.
+*/
+export const INDICATOR_PANE_KIND: Record<keyof ChartIndicators, 'overlay' | 'sub'> =
+  Object.fromEntries(
+    (Object.keys(INDICATOR_PARTS) as (keyof ChartIndicators)[]).map(k => [k, INDICATOR_PARTS[k].pane])
+  ) as Record<keyof ChartIndicators, 'overlay' | 'sub'>;
 
 /** The keys the T-8 readout prints — single-line overlays only: a
     five-line band pair would blow the readout row's measured width budget,
@@ -688,6 +834,9 @@ export interface PriceProjection {
 }
 
 interface StrikeChartProps {
+  /** Horizontal pitch of a bar, in pixels. The pane's own choice — see
+      Terrain's BAR_SIZES. Omitted, the chart keeps its historic 7. */
+  barSize?: number;
   ticker: string;
   /** Bumped every simulator tick so the chart folds in the newest bar */
   revision: number;
@@ -926,7 +1075,17 @@ const StrikeChart = ({
   onReadout,
   projectionRef,
   exportRef,
+  barSize = 7,
 }: StrikeChartProps) => {
+  /* HELD IN A REF AS WELL AS A PROP, on purpose. The chart is created once
+     in an effect that must NOT re-run when the pitch changes — tearing the
+     whole chart down to widen a candle would drop the drawings, the scroll
+     position and every series. So creation reads the ref for its opening
+     value, and a separate small effect below applies later changes through
+     `applyOptions`, which is what the engine offers for exactly this. */
+  const barSizeRef = useRef(barSize);
+  barSizeRef.current = barSize;
+
   const themeKey = useCandleThemeKey();
   /* Read straight from the store rather than taken as a prop: alerts belong to
      the SYMBOL, and two panes showing the same symbol must draw the same set.
@@ -962,7 +1121,7 @@ const StrikeChart = ({
      reader can drag the separators, the time axis's height is the library's to
      decide, and with three optional panes the offsets depend on which of them
      happen to be open. */
-  const [paneLabels, setPaneLabels] = useState<{ key: string; bottom: number }[]>([]);
+  const [paneLabels, setPaneLabels] = useState<{ key: string; pane: number; bottom: number }[]>([]);
   /*
     THE RUNWAY — a series that draws nothing and holds only WHITESPACE.
 
@@ -1577,7 +1736,7 @@ const StrikeChart = ({
       // price-line titles, and ate the date off every dark-pool print near spot.
       // 68 + 4 + 2 clear. Charts without the capsule keep the default 0.
       rightPriceScale: { borderColor: '#1c1c1c', minimumWidth: priceTag ? PRICE_SCALE_MIN_WIDTH : 0 },
-      timeScale: { borderColor: '#1c1c1c', timeVisible: true, secondsVisible: false, rightOffset: 6, barSpacing: 7 },
+      timeScale: { borderColor: '#1c1c1c', timeVisible: true, secondsVisible: false, rightOffset: 6, barSpacing: barSizeRef.current },
       crosshair: {
         vertLine: { color: 'rgba(255,255,255,0.3)', labelBackgroundColor: '#262626' },
         horzLine: { color: 'rgba(255,255,255,0.3)', labelBackgroundColor: '#262626' },
@@ -1877,7 +2036,19 @@ const StrikeChart = ({
       { key: 'netDrift', series: driftCallsRef.current },
       { key: 'volDrift', series: rvRef.current },
     ];
-    let next: { key: string; bottom: number }[] = [];
+    /* AND EVERY INDICATOR BAND, which had no name at all until now — the
+       three above are the PRODUCT bands, and the thirteen a reader adds
+       themselves were the unlabelled ones. One entry per key (the first
+       part carries it), read off the live series map rather than off the
+       `indicators` prop, so a band that failed to build cannot leave a
+       label floating over the pane below it. */
+    for (const [id, series] of indicatorSeriesRef.current) {
+      const key = id.slice(0, id.indexOf(':')) as keyof ChartIndicators;
+      if (!subPaneLegend(key)) continue;
+      if (wanted.some(w => w.key === key)) continue;
+      wanted.push({ key, series });
+    }
+    let next: { key: string; pane: number; bottom: number }[] = [];
     if (chart) {
       try {
         const panes = chart.panes();
@@ -1894,7 +2065,17 @@ const StrikeChart = ({
           if (heights[idx] <= 8) continue;
           let up = axisH;
           for (let j = idx; j < heights.length; j++) up += heights[j];
-          next.push({ key: w.key, bottom: up - PANE_LABEL_H - PANE_LABEL_INSET });
+          /* STACKED WHEN TWO LAND IN ONE BAND. Pane allocation is not a
+             partition — a product band and an indicator band can end up
+             sharing an index — and two chips written to the same `bottom`
+             print on top of each other, which is one unreadable word rather
+             than two names. Each later chip steps down by its own height. */
+          const share = next.filter(n => n.pane === idx).length;
+          next.push({
+            key: w.key,
+            pane: idx,
+            bottom: up - PANE_LABEL_H - PANE_LABEL_INSET - share * (PANE_LABEL_H + 2),
+          });
         }
       } catch {
         /* the chart is mid-teardown; no chips rather than a thrown render */
@@ -2243,16 +2424,36 @@ const StrikeChart = ({
                   paneIndex
                 );
           indicatorSeriesRef.current.set(`${key}:${part.part}`, series);
-          /* The RSI pane's 30/70 rails — the two numbers the oscillator is
-             read against, drawn once with the series. Unlabelled on the
-             axis; the levels are the pane's grammar, not its data. */
-          if (key === 'rsi' && part.part === 'line') {
-            for (const lvl of [30, 70]) {
-              (series as ISeriesApi<'Line'>).createPriceLine({
-                price: lvl,
-                color: 'rgba(226,234,244,0.25)',
+          /* THE PANE'S RAILS, drawn once with the series that owns them.
+             Hung on the FIRST part only — every series in a sub-pane shares
+             that pane's right scale, so one set of price lines covers the
+             pane, and hanging them on each part would stack two or three
+             identical lines on the same pixel and darken them. */
+          /* Every series in the pane takes the same fixed range, not just the
+             first: two series on one pane with different providers is two
+             scales drawn as one, and the %D would drift off the %K. */
+          const bounds = OSC_BOUNDS[key];
+          if (bounds) {
+            const range = () => ({ priceRange: { minValue: bounds[0], maxValue: bounds[1] } });
+            series.applyOptions({ autoscaleInfoProvider: range });
+            /* AND THE MARGINS HAVE TO COME IN WITH IT. The provider sets the
+               range; the price scale then pads it by its own margins — the
+               library's defaults are 20% above and 10% below — so a pinned
+               0..100 pane rendered a visible span of roughly -10..120 and
+               printed a 120.00 tick anyway. Measured on the built page
+               before this line existed: the first pin made the RSI axis
+               WORSE than the autoscale it replaced, which read 20..80.
+               Four percent is enough that the 0 and 100 rails are not
+               sitting on the pane's edges. */
+            series.priceScale().applyOptions({ scaleMargins: { top: 0.04, bottom: 0.04 } });
+          }
+          if (part === spec.parts[0]) {
+            for (const lvl of OSC_LEVELS[key] ?? []) {
+              series.createPriceLine({
+                price: lvl.price,
+                color: lvl.strong ? 'rgba(226,234,244,0.34)' : 'rgba(226,234,244,0.18)',
                 lineWidth: 1,
-                lineStyle: 3,
+                lineStyle: lvl.strong ? 2 : 3,
                 axisLabelVisible: false,
                 title: '',
               });
@@ -2266,6 +2467,10 @@ const StrikeChart = ({
         panes.forEach((p, i) => p.setStretchFactor(i === 0 ? 64 : Math.max(10, 36 / (panes.length - 1))));
       }
       indicatorLoadedRef.current = sig;
+      /* The bands only exist after this rebuild, so the chips have to be
+         measured after it — none of the three product effects run when an
+         indicator is what changed. */
+      remeasurePaneLabels();
     }
     if (active.length === 0) return;
     const bars = displayBars(ticker, mins, altSpec);
@@ -2290,13 +2495,14 @@ const StrikeChart = ({
         case 'sma':
           return { line: smaSeries(bars, 200) };
         case 'rsi':
-          return { line: rsiSeries(bars, 14) };
+          return { line: rsiSeries(bars, P('rsi')[0]) };
         case 'macd': {
-          const m = macdSeries(bars, 12, 26, 9);
+          const [f, sl, sg2] = P('macd');
+          const m = macdSeries(bars, f, sl, sg2);
           return { line: m.macd, signal: m.signal, hist: m.hist };
         }
         case 'atrPane':
-          return { line: atrBarSeries(bars, 14) };
+          return { line: atrBarSeries(bars, P('atrPane')[0]) };
 
         /* ── THE SECOND SET ─────────────────────────────────────────────
            Periods are the conventional defaults a reader arriving from
@@ -2315,31 +2521,33 @@ const StrikeChart = ({
         case 'psar':
           return { line: parabolicSarSeries(bars, 0.02, 0.2) };
         case 'stoch': {
-          const st = stochasticSeries(bars, 14, 3, 3);
+          const [sk, sd, ss] = P('stoch');
+          const st = stochasticSeries(bars, sk, sd, ss);
           return { k: st.k, d: st.d };
         }
         case 'stochRsi': {
-          const sr = stochRsiSeries(bars, 14, 14, 3, 3);
+          const [rp, sp, kp, dp] = P('stochRsi');
+          const sr = stochRsiSeries(bars, rp, sp, kp, dp);
           return { k: sr.k, d: sr.d };
         }
         case 'adx': {
-          const a = adxSeries(bars, 14);
+          const a = adxSeries(bars, P('adx')[0]);
           return { adx: a.adx, plusDi: a.plusDi, minusDi: a.minusDi };
         }
         case 'cci':
-          return { line: cciSeries(bars, 20) };
+          return { line: cciSeries(bars, P('cci')[0]) };
         case 'williamsR':
-          return { line: williamsRSeries(bars, 14) };
+          return { line: williamsRSeries(bars, P('williamsR')[0]) };
         case 'mfi':
-          return { line: mfiSeries(bars, 14) };
+          return { line: mfiSeries(bars, P('mfi')[0]) };
         case 'obv':
           return { line: obvSeries(bars) };
         case 'cmf':
-          return { hist: cmfSeries(bars, 20) };
+          return { hist: cmfSeries(bars, P('cmf')[0]) };
         case 'roc':
-          return { line: rocSeries(bars, 12) };
+          return { line: rocSeries(bars, P('roc')[0]) };
         case 'aroon': {
-          const ar = aroonSeries(bars, 25);
+          const ar = aroonSeries(bars, P('aroon')[0]);
           return { up: ar.up, down: ar.down };
         }
         default:
@@ -2351,9 +2559,28 @@ const StrikeChart = ({
       for (const [part, vals] of Object.entries(values)) {
         const s = indicatorSeriesRef.current.get(`${key}:${part}`);
         if (!s) continue;
-        const pts = bars.map((b, i) =>
-          vals[i] === null ? { time: b.time as UTCTimestamp } : { time: b.time as UTCTimestamp, value: vals[i] as number }
-        );
+        /* THE HISTOGRAM'S FOUR STATES ARE PER-POINT, which is the only place
+           they can be: one series carries every bar, and lightweight-charts
+           takes a `color` on the point. Sign picks the hue, and the step
+           against the previous NON-NULL bar picks the strength — comparing
+           against `vals[i-1]` straight would treat the first bar after the
+           warmup gap as a fall from nothing. */
+        const macdHist = key === 'macd' && part === 'hist';
+        let prevHist: number | null = null;
+        const pts = bars.map((b, i) => {
+          const v = vals[i];
+          if (v === null) return { time: b.time as UTCTimestamp };
+          if (!macdHist) return { time: b.time as UTCTimestamp, value: v };
+          const rising = prevHist === null ? true : v > prevHist;
+          prevHist = v;
+          return {
+            time: b.time as UTCTimestamp,
+            value: v,
+            color: v >= 0
+              ? (rising ? MACD_HIST_INKS.upStrong : MACD_HIST_INKS.upFade)
+              : (rising ? MACD_HIST_INKS.downFade : MACD_HIST_INKS.downStrong),
+          };
+        });
         /* Same completed-bar rule as the candles: update() cannot rewrite
            an older time, so a rule-clock pass that changed the bar count
            reloads the series instead. */
@@ -2464,6 +2691,36 @@ const StrikeChart = ({
     const lock = priceScaleLockedBy(compares);
     chart.priceScale('right').applyOptions({ mode: PRICE_SCALE_MODE[lock?.mode ?? priceScale] });
   }, [priceScale, compares, mainNonce]);
+
+  /*
+    BAR PITCH, applied in place. Same rule as the price-scale mode above:
+    the pane's preference changes an option on the live chart rather than
+    rebuilding it, so the reader keeps their pan, their drawings and their
+    sub-panes.
+
+    AND THEN RE-ANCHOR THE RIGHT EDGE, which is the part a screenshot
+    caught and the first set of assertions did not. `barSpacing` changes the
+    pixel width of a bar while the engine holds its LOGICAL range — the same
+    from/to bar indices — so widening walks the tape off the left and leaves
+    the pane close to bare. The probe was perfectly happy: the pitch had
+    changed and the canvas pixels had changed, both true and both beside the
+    point. Looking at the picture was what found it.
+
+    `scripts/_probe-barsize.mjs` now measures the painted fraction of the
+    pane's own bitmap, and deleting the `scrollToRealTime` line below is
+    enough to fail it: ink 8.73% -> 1.88% at 18px without, 8.73% -> 13.67%
+    with. Wider candles cover MORE canvas, which is the shape of the claim.
+
+    Scrolling to real time keeps the newest bar where it already was, so
+    widening zooms about the right edge — where a reader is looking, and
+    what every reference terminal does.
+  */
+  useEffect(() => {
+    const ts = chartRef.current?.timeScale();
+    if (!ts) return;
+    ts.applyOptions({ barSpacing: barSize });
+    ts.scrollToRealTime();
+  }, [barSize, mainNonce]);
 
   // Recolor the candle series AND the chart surface in place when the theme
   // picker changes — gallery themes carry their own background tint.
@@ -3523,13 +3780,27 @@ const StrikeChart = ({
             the tape still pans straight through them. Positions are measured
             off the live layout — see remeasurePaneLabels. */}
         {paneLabels.map(l => {
-          const look = PANE_LABEL_LOOK[l.key];
+          /* Product bands carry a hand-tuned wash of their own subject; an
+             indicator band takes its own line's ink over a plain dark chip,
+             which is how the reference prints its legends — the name is the
+             same colour as the thing it names. */
+          const legend = subPaneLegend(l.key as keyof ChartIndicators);
+          const look = PANE_LABEL_LOOK[l.key]
+            ?? (legend
+              ? { text: legend, bg: 'rgba(10,10,10,0.55)', fg: INDICATOR_INKS[l.key as keyof ChartIndicators] }
+              : null);
           if (!look) return null;
           return (
             <span
               key={l.key}
               aria-hidden
-              className="pointer-events-none absolute left-2 z-10 rounded px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-widest"
+              className={`pointer-events-none absolute left-2 z-10 rounded px-1.5 py-0.5 font-mono text-[9px] font-semibold ${
+                /* A product band's name is a CATEGORY and wears the house's
+                   tracked caps; an indicator's legend is a formula with its
+                   periods in it, and letter-spacing a string like
+                   "Stoch RSI 14 14 3 3" makes it a paragraph. */
+                subPaneLegend(l.key as keyof ChartIndicators) ? 'tnum tracking-tight' : 'uppercase tracking-widest'
+              }`}
               style={{ bottom: l.bottom, background: look.bg, color: look.fg }}
             >
               {look.text}

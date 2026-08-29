@@ -29,7 +29,7 @@ import {
 } from 'lightweight-charts';
 import Simulator from '../../core/simulator';
 import { aggregateCandles, tfMinutes, type Timeframe } from '../../data/timeframe';
-import { estimatePremium } from '../../data/compass';
+import { contractCandles } from '../../data/contractCandles';
 import { contractIvFor } from '../../data/weigherDesk';
 import { candleSeriesOptions, chartSurface, getCandleTheme, useCandleThemeKey } from '../../components/gex/candleTheme';
 import type { OptionRight } from '../../types/compass';
@@ -103,20 +103,10 @@ const ContractPremiumPane = ({ ticker, strike, right, tYears, timeframe, revisio
     const bars = aggregateCandles(Simulator.getCandles(ticker) ?? [], mins);
     if (bars.length === 0) return;
     const iv = contractIvFor(ticker, strike, right);
-    const px = (spot: number) => estimatePremium(spot, strike, right, iv, tYears);
-    const pts = bars.map(b => {
-      const o = px(b.open);
-      const c = px(b.close);
-      const a = px(b.high);
-      const z = px(b.low);
-      return {
-        time: b.time as UTCTimestamp,
-        open: Number(o.toFixed(2)),
-        close: Number(c.toFixed(2)),
-        high: Number(Math.max(o, c, a, z).toFixed(2)),
-        low: Number(Math.min(o, c, a, z).toFixed(2)),
-      };
-    });
+    /* The derivation moved to data/contractCandles.ts when the Compass
+       started drawing the same candles — see the note in that file. */
+    const pts = contractCandles(bars, strike, right, iv, tYears)
+      .map(b => ({ ...b, time: b.time as UTCTimestamp }));
     const sig = `${ticker}|${strike}|${right}|${timeframe}|${tYears.toFixed(4)}|${themeKey}`;
     if (loadedRef.current !== sig) {
       series.setData(pts);

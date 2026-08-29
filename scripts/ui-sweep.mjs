@@ -105,6 +105,42 @@ const seed = (layout, panes) =>
 
 const TICKERS = ['SPY', 'QQQ', 'AAPL', 'NVDA'];
 
+/*
+  REACH FOR THE PANE CHROME, the way a reader does.
+
+  Every section that opens a pane menu used to do it by hovering the middle
+  of the chart — `page.mouse.move(600, 400)` or `.hover()` on a canvas — and
+  since `useTopEdgeReveal` landed that is the gesture that means the
+  OPPOSITE. The strip reveals within 56px of the pane's top edge and hides
+  again past 104px, precisely so it stops sitting over the tape while
+  somebody is reading it. A centre hover leaves every trigger
+  `pointer-events: none`.
+
+  It broke this file in two ways, and only the second was loud: the menu
+  section reported `only 0 pane menus opened` from its own premise check,
+  and the price-scale section died on a 30s click timeout with the canvas
+  named as the element intercepting the click.
+
+  So one helper, used everywhere, that puts the pointer in the reveal
+  container's own top band. It finds that container from the DOM rather than
+  taking a coordinate, because the first repair of the menu section aimed at
+  a corrected offset from `[role="group"], canvas` — which matched a control
+  group in the desk's BOTTOM BAR at (587, 832), not a pane at all.
+*/
+async function reachForChrome(page) {
+  const spot = await page.evaluate(() => {
+    const hosts = [...document.querySelectorAll('.group.relative')].filter(el => {
+      const r = el.getBoundingClientRect();
+      return r.width > 200 && r.height > 150 && el.querySelector('canvas');
+    });
+    if (!hosts.length) return null;
+    const r = hosts[0].getBoundingClientRect();
+    return { x: r.x + Math.min(80, r.width / 2), y: r.y + 18 };
+  });
+  if (spot) await page.mouse.move(spot.x, spot.y);
+  return spot;
+}
+
 const browser = await launch();
 
 async function openDesk(width, height, layout) {
@@ -302,6 +338,64 @@ head('the strike rail and the chart agree about where a price is');
         : bad(`layout ${layout}: both print ${r.cardText} but ${dy.toFixed(0)}px apart`);
     }
   }
+
+  /*
+    THE SIDED READ, and the switch between the two encodings.
+
+    The rail draws a strike into ONE of two lanes and the side is the sign:
+    call-dominant reaches left, put-dominant right. Two ways that goes wrong
+    without throwing — every row landing in the same lane (the sign test
+    inverted or constant, which reads as a one-sided book), and the heat
+    encoding failing to fill (a heat rail of half-length bars is just the bar
+    rail with the length encoding silently still on).
+  */
+  const lanes = () =>
+    page.evaluate(() => {
+      const rail = document.querySelector('[aria-label$="exposure by strike"]');
+      if (!rail) return null;
+      const out = { call: 0, put: 0, full: 0, partial: 0 };
+      for (const row of rail.querySelectorAll('[data-strike]')) {
+        if (row.style.display === 'none') continue;
+        const lane = row.querySelector('[data-lane]');
+        if (!lane) continue;
+        const [side] = (lane.dataset.lane || '').split(':');
+        if (side === 'call') out.call++;
+        else if (side === 'put') out.put++;
+        const w = lane.getBoundingClientRect().width;
+        const box = lane.parentElement.getBoundingClientRect().width;
+        if (box > 0 && w / box > 0.98) out.full++;
+        else out.partial++;
+      }
+      return out;
+    });
+
+  await page.locator('[title^="1 chart"]').first().click();
+  await page.waitForTimeout(900);
+  const bars = await lanes();
+  if (!bars) bad('the rail vanished before the encoding could be read');
+  else {
+    bars.call > 0 && bars.put > 0
+      ? ok(`the rail is genuinely two-sided — ${bars.call} calls left, ${bars.put} puts right`)
+      : bad(`every row landed on ONE side — ${bars.call} calls, ${bars.put} puts`);
+    bars.partial > 0
+      ? ok(`and in bars mode the length still carries the value — ${bars.partial} of ${bars.partial + bars.full} rows are short of full`)
+      : bad('every bar drew full width in BARS mode — the length encoding is gone');
+  }
+
+  const toggle = page.locator('button[data-ladder-encoding]').first();
+  await toggle.click({ force: true }).catch(() => {});
+  await page.waitForTimeout(500);
+  const heat = await lanes();
+  if (!heat) bad('the rail vanished after switching to heat');
+  else {
+    heat.partial === 0 && heat.full > 0
+      ? ok(`heat fills every cell — ${heat.full} rows edge to edge, colour carrying the whole value`)
+      : bad(`heat left ${heat.partial} of ${heat.partial + heat.full} rows short of full width`);
+    heat.call > 0 && heat.put > 0
+      ? ok('and the sides survive the switch')
+      : bad(`the switch collapsed the sides — ${heat.call} calls, ${heat.put} puts`);
+  }
+
   await ctx.close();
 }
 
@@ -707,10 +801,22 @@ head('every toolbar menu is reachable inside a pane that clips its overflow');
     [1280, 800, 3],
   ]) {
     const { ctx, page, errs } = await openDesk(w, h, layout);
-    /* The toolbar only appears on hover — it is deliberately not there until
-       you reach for it. */
-    const pane = page.locator('[role="group"], canvas').first();
-    await pane.hover().catch(() => {});
+    /*
+      THE TOOLBAR APPEARS ON REACH, NOT ON PRESENCE, and this probe used to
+      hover the CENTRE of the pane and then wonder why no menu opened.
+
+      `useTopEdgeReveal` replaced the old whole-pane `group-hover` precisely
+      so the chrome stops sitting over the tape while somebody is reading
+      it: the strip comes up within 56px of the pane's top edge and goes
+      away again past 104px. A centre hover is the gesture that now means
+      "get out of the way", so every trigger stayed `pointer-events: none`,
+      every `click({force:true})` landed on the canvas underneath, and the
+      section reported `only 0 pane menus opened` — its own premise check
+      catching it, which is what that check is for.
+
+      So the pointer goes where a reader's would: the top band.
+    */
+    if (!(await reachForChrome(page))) bad(`${w}x${h} L${layout}: no pane to reach into for its chrome`);
     await page.waitForTimeout(500);
 
     let checked = 0;
@@ -1583,8 +1689,13 @@ head('no rule badge prints on a strike');
          which walks past a row rendered as a <button> and lands a level up. */
       const track = rail.querySelector('[data-strike]')?.parentElement;
       const shown = el => el && getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().width > 0;
+      /* AND THE LABEL ITSELF HAS TO BE PAINTING. The rail now hides the
+         number on the row a rule's pill lands on — that IS the fix for this
+         section's finding, and a `visibility: hidden` element keeps its box,
+         so measuring it would report the cover it just prevented. A number
+         nobody can see cannot be covered. */
       const labels = [...rail.querySelectorAll('[data-strike-label]')]
-        .filter(el => shown(el.parentElement))
+        .filter(el => shown(el.parentElement) && getComputedStyle(el).visibility !== 'hidden')
         .map(el => ({ text: el.textContent.trim(), box: el.getBoundingClientRect().toJSON() }));
       const badges = [...rail.querySelectorAll('[data-rule]')]
         .filter(shown)
@@ -2601,7 +2712,7 @@ head('the price scale is the reader’s, and the mode reaches the axis');
   // ── the picker ───────────────────────────────────────────────────────────
   {
     const { ctx, page, errs } = await openScale();
-    await page.mouse.move(600, 400);
+    await reachForChrome(page);
     await page.waitForTimeout(600);
     const trig = await page.$('button[title^="Chart style"]');
     trig ? ok(`PREMISE: the trigger names it — "${await trig.getAttribute('title')}"`) : bad('PREMISE: no chart-style trigger, so nothing below proves anything');
@@ -2629,7 +2740,7 @@ head('the price scale is the reader’s, and the mode reaches the axis');
   // ── the one case the reader's pick does not win, and it is named ────────
   {
     const { ctx, page, errs } = await openScale({ priceScale: 'log', compares: [{ ticker: 'QQQ', mode: 'percent', ink: '#5B9CF6' }] });
-    await page.mouse.move(600, 400);
+    await reachForChrome(page);
     await page.waitForTimeout(800);
     const trig = await page.$('button[title^="Chart style"]');
     if (!trig) bad('PREMISE: no chart-style trigger with a comparison up');
@@ -2693,7 +2804,9 @@ head('the pane toolbar never wraps over the tape');
     for (const width of [1024, 1180, 1280, 1440, 1536, 1760, 1920, 2560]) {
       await page.setViewportSize({ width, height: 1000 });
       await page.waitForTimeout(500);
-      await page.mouse.move(Math.min(400, Math.round(width / 3)), 300);
+      /* The strip only exists while the chrome is up, so this has to reach
+         for it like the rest — measuring a hidden strip is measuring zero. */
+      await reachForChrome(page);
       await page.waitForTimeout(400);
       const bars = await page.evaluate(() => {
         const out = [];
@@ -3032,7 +3145,7 @@ head('the session levels draw on the tape and leave the price axis alone');
 
   {
     const { ctx, page, errs } = await openSession(false);
-    await page.mouse.move(600, 400);
+    await reachForChrome(page);
     await page.waitForTimeout(600);
     const before = await measure(page);
     const toggled = await toggleSession(page);
@@ -3099,7 +3212,7 @@ head('the session levels draw on the tape and leave the price axis alone');
   */
   {
     const { ctx, page, errs } = await openSession(true, 15);
-    await page.mouse.move(600, 400);
+    await reachForChrome(page);
     await page.waitForTimeout(600);
     let opened = false;
     for (const b of await page.$$('[aria-haspopup="menu"]')) {
@@ -3139,7 +3252,7 @@ head('the session levels draw on the tape and leave the price axis alone');
   {
     const rowState = async session => {
       const { ctx, page } = await openSession(session);
-      await page.mouse.move(600, 400);
+      await reachForChrome(page);
       await page.waitForTimeout(600);
       /* The Overlays trigger wears its COUNT rather than a fixed label
          (`Overlays 3`), so it is found by the word inside it rather than by a
@@ -3189,7 +3302,7 @@ head('the session levels draw on the tape and leave the price axis alone');
 head('the measure is reachable, and what it draws is a stored measure');
 {
   const { ctx, page, errs } = await openDesk(1600, 950, 1);
-  await page.mouse.move(600, 400);
+  await reachForChrome(page);
   await page.waitForTimeout(600);
 
   const pencil = await page.$('button[aria-label="Draw on the chart"]');
@@ -3310,7 +3423,7 @@ head('replay has a door, says so on the pane, and keeps its moment to itself');
   // ── the door, and what it puts on screen ─────────────────────────────────
   {
     const { ctx, page, errs } = await openReplay(['15m'], 1600, 950, 1);
-    await page.mouse.move(600, 400);
+    await reachForChrome(page);
     await page.waitForTimeout(700);
     (await badges(page)) === 0 ? ok('PREMISE: no replay badge before anything is toggled') : bad('a replay badge was up before replay was');
     const btn = await page.$('button[title="Replay session history — P"]');
@@ -3322,7 +3435,7 @@ head('replay has a door, says so on the pane, and keeps its moment to itself');
       (await badges(page)) === 1
         ? ok('and the pane wears a REPLAY badge, so a historical chart cannot pass for a live one')
         : bad(`${await badges(page)} badges with one pane replaying`);
-      await page.mouse.move(600, 400);
+      await reachForChrome(page);
       await page.waitForTimeout(500);
       const xs = await page.$$('button[title="Exit replay"]');
       await xs[xs.length - 1].click();
@@ -3863,7 +3976,7 @@ head('the expected move draws its envelope and its runway cone, and leaves the a
        pane, then BUTTON. The session-levels section above carries the same
        hover for the same reason; without it the click retries into a 30s
        TimeoutError and takes the whole sweep down (the ccfdb57 local run). */
-    await page.mouse.move(600, 400);
+    await reachForChrome(page);
     await page.waitForTimeout(600);
     const menuOpen = async () => (await page.$$('[data-toolbar-menu] [role="checkbox"]')).length > 0;
     if (!(await menuOpen())) {
@@ -4373,7 +4486,7 @@ head('a pane exports as a PNG, named for what it is');
   page.on('pageerror', e => errs.push(String(e)));
   await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS + 1000);
-  await page.mouse.move(600, 400);
+  await reachForChrome(page);
   await page.waitForTimeout(600);
   let opened = false;
   for (const b of await page.$$('[aria-haspopup="menu"][title^="Chart style"]')) {
@@ -4431,7 +4544,7 @@ head('alert kinds arm from the menu and stand on the rail');
   page.on('pageerror', e => errs.push(String(e)));
   await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS + 1000);
-  await page.mouse.move(600, 400);
+  await reachForChrome(page);
   await page.waitForTimeout(600);
 
   let opened = false;
@@ -4483,7 +4596,7 @@ head('alert kinds arm from the menu and stand on the rail');
     ? ok(`a live tick established the level alert's side (${lvl.side})`)
     : bad(`the level alert never armed its side: ${JSON.stringify(lvl)}`);
 
-  await page.mouse.move(600, 400);
+  await reachForChrome(page);
   await page.waitForTimeout(400);
   for (const b of await page.$$('button[title="Alerts"]')) {
     if (await b.isVisible()) { await b.click(); break; }
@@ -4535,7 +4648,7 @@ head('rule bars draw from the seconds tape and hold the clocked overlays');
   await page.waitForTimeout(BOOT_MS + 1500);
 
   const openMenu = async sel => {
-    await page.mouse.move(600, 400);
+    await reachForChrome(page);
     await page.waitForTimeout(400);
     for (const b of await page.$$(sel)) {
       if (await b.isVisible()) { await b.click(); await page.waitForTimeout(400); return true; }
