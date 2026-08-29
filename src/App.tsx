@@ -41,6 +41,7 @@ import EarningsDossier from './pages/EarningsDossier';
 import ProveIt from './pages/proveit/ProveIt';
 import Landing from './pages/landing/Landing';
 import NotFound from './pages/NotFound';
+import Screeners from './pages/Screeners';
 import CommunityLayout from './pages/community/CommunityLayout';
 import Ideas from './pages/community/Ideas';
 import Requests from './pages/community/Requests';
@@ -72,6 +73,9 @@ const App = () => {
             {/* §3 — the multi-expiry chain, the layout every options reader
                 already knows. Its own route so it can be linked to. */}
             <Route path="/chain" element={<OptionChain />} />
+            {/* The board for when you do not have a name yet — nine
+                questions asked of the whole universe rather than of one. */}
+            <Route path="/screeners" element={<Screeners />} />
             {/* §12 + §13 — one desk, because they are one question: what is
                 the underlying really doing, including while the cash is shut */}
             <Route path="/index-futures" element={<IndexFutures />} />
