@@ -167,6 +167,7 @@ const IndexFutures = () => {
 
       {/* §13 — the session the cash tape never sees */}
       <Panel
+        poppable
         title="Overnight session"
         subtitle={`18:00 ET → 09:30 · ${session.bars.length} bars · range ${range.toFixed(2)}`}
         className="w-full"

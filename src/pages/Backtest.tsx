@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { NotebookPen } from 'lucide-react';
+import { addTrade } from '../data/journal';
 import { MIN_BACKTEST_TRADES, runBacktest, type BacktestTrade } from '../data/backtest';
 import { SCANNERS, type ScannerKey } from '../types/compass';
 import PageHeader from '../components/ui/PageHeader';
@@ -50,6 +52,7 @@ const Backtest = () => {
   const [scanner, setScanner] = useState<ScannerKey | 'ALL'>('ALL');
   const [win, setWin] = useState<'60' | '120' | '250'>('120');
   const run = useMemo(() => runBacktest(scanner, Number(win)), [scanner, win]);
+  const [logged, setLogged] = useState<Set<string>>(new Set());
   const s = run.stats;
 
   const cols: Column<BacktestTrade>[] = [
@@ -63,6 +66,41 @@ const Backtest = () => {
       render: t => <span className={`font-mono text-[11px] ${t.r >= 0 ? 'text-bull' : 'text-bear'}`}>{t.r >= 0 ? '+' : ''}{t.r.toFixed(2)}</span> },
     { key: 'eq', header: 'Equity', align: 'right', width: '100px', sortValue: t => t.equity,
       render: t => <span className="font-mono text-[11px] text-textSecondary">{t.equity >= 0 ? '+' : ''}{t.equity.toFixed(2)}R</span> },
+    {
+      /*
+        §9's journal integration, in the only direction that is honest.
+
+        A backtest trade is a MODELLED outcome; the journal is a record of
+        what a person actually did. Pushing one into the other as a closed
+        trade would put fiction into the ledger the desk's own statistics are
+        computed from — so this copies the SETUP across and leaves it OPEN,
+        with the backtest named in the thesis. The reader fills in the fills.
+      */
+      key: 'log', header: '', align: 'right', width: '90px',
+      render: t => (
+        <button
+          onClick={e => {
+            e.stopPropagation();
+            addTrade({
+              openedAt: new Date().toISOString(), closedAt: null,
+              ticker: t.ticker, instrument: `${t.ticker} (from backtest)`,
+              side: t.r >= 0 ? 'LONG' : 'SHORT', size: 1, entry: 0, exit: null, stop: null,
+              thesis: `Taken from the ${t.scanner} backtest, session ${t.date}, which modelled ${t.r >= 0 ? '+' : ''}${t.r.toFixed(2)}R. Fill in the real entry and stop.`,
+              review: '', setup: t.scanner, tags: ['backtest', t.scanner], shots: [],
+            });
+            setLogged(l => new Set(l).add(`${t.date}-${t.scanner}-${t.i}`));
+          }}
+          disabled={logged.has(`${t.date}-${t.scanner}-${t.i}`)}
+          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border font-mono text-[9px] uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-accent ${
+            logged.has(`${t.date}-${t.scanner}-${t.i}`)
+              ? 'border-borderSubtle/50 text-textMuted/50 cursor-default'
+              : 'border-borderSubtle text-textMuted hover:text-textPrimary'
+          }`}
+        >
+          <NotebookPen size={9} /> {logged.has(`${t.date}-${t.scanner}-${t.i}`) ? 'Logged' : 'Journal'}
+        </button>
+      ),
+    },
   ];
 
   return (
@@ -121,6 +159,7 @@ const Backtest = () => {
       </MetricGrid>
 
       <Panel
+        poppable
         title="Equity, in R"
         subtitle={`${run.sessions} sessions · ${scanner === 'ALL' ? 'every scanner' : scanner}`}
         className="w-full"
@@ -164,7 +203,7 @@ const Backtest = () => {
         </p>
       </Panel>
 
-      <Panel title="Trades" subtitle={`${run.trades.length} in this window`} className="w-full" flush>
+      <Panel title="Trades" subtitle={`${run.trades.length} in this window`} className="w-full" flush collapsible id="backtest-trades">
         <DataTable columns={cols} rows={run.trades} rowKey={t => `${t.date}-${t.scanner}-${t.i}`}
           initialSort={{ key: 'date', dir: 'desc' }} maxHeight="380px" emptyText="No trades." />
       </Panel>

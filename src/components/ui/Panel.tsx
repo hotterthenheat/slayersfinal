@@ -1,4 +1,7 @@
 import React from 'react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { ChevronDown, Maximize2, Minimize2 } from 'lucide-react';
 import type { Tone } from './tones';
 
 interface PanelProps {
@@ -12,6 +15,29 @@ interface PanelProps {
   className?: string;
   bodyClassName?: string;
   children: React.ReactNode;
+
+  /*
+    §20 — COLLAPSE AND POP OUT, as capabilities of the panel rather than
+    per-page furniture.
+
+    A desk of eight panels on a laptop is a scroll; collapsing the three a
+    reader is not using right now is how the other five fit. And a panel
+    worth staring at — a chart, a dense table — wants the whole screen for a
+    moment without navigating away and losing every other panel's state.
+
+    Both are OPT-IN. A panel that is one stat card does not need a collapse
+    control, and giving every panel a header full of chrome would cost more
+    than the two that need it gain. `collapsible` and `poppable` are the
+    caller saying this one is worth it.
+  */
+  /** Adds a chevron that folds the body away. Remembered per `id`. */
+  collapsible?: boolean;
+  /** Adds a control that lifts the panel to full screen. */
+  poppable?: boolean;
+  /** Stable key for remembering the collapsed state. Required by `collapsible`. */
+  id?: string;
+  /** Start folded — for panels that are reference rather than the point. */
+  defaultCollapsed?: boolean;
 }
 
 // Full class strings kept static so Tailwind JIT picks them up
@@ -38,6 +64,16 @@ const toneDivider: Record<Tone, string> = {
 };
 
 /** The base dark surface every widget sits in. */
+const COLLAPSE_KEY = 'slayer_panel_collapsed_v1';
+
+const readCollapsed = (): Record<string, boolean> => {
+  try {
+    return JSON.parse(localStorage.getItem(COLLAPSE_KEY) ?? '{}') as Record<string, boolean>;
+  } catch {
+    return {};
+  }
+};
+
 const Panel = ({
   title,
   subtitle,
@@ -47,9 +83,44 @@ const Panel = ({
   className = '',
   bodyClassName = '',
   children,
+  collapsible = false,
+  poppable = false,
+  id,
+  defaultCollapsed = false,
 }: PanelProps) => {
-  return (
-    <section className={`border ${toneSurface[tone]} rounded-lg flex flex-col min-w-0 ${className}`}>
+  const [collapsed, setCollapsed] = useState(() =>
+    collapsible && id ? (readCollapsed()[id] ?? defaultCollapsed) : false
+  );
+  const [popped, setPopped] = useState(false);
+
+  const toggleCollapsed = () => {
+    const next = !collapsed;
+    setCollapsed(next);
+    if (id) {
+      try {
+        localStorage.setItem(COLLAPSE_KEY, JSON.stringify({ ...readCollapsed(), [id]: next }));
+      } catch {
+        /* A remembered fold is a convenience, never a reason to fail. */
+      }
+    }
+  };
+
+  /* Escape leaves the popped-out view — a full-screen panel with no key out
+     is the same trap as a modal without one. */
+  useEffect(() => {
+    if (!popped) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setPopped(false); };
+    window.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [popped]);
+
+  const body = (
+    <section className={`border ${toneSurface[tone]} rounded-lg flex flex-col min-w-0 ${popped ? 'w-full h-full' : className}`}>
       {(title || actions) && (
         <header className={`flex items-center justify-between gap-3 px-4 h-10 border-b ${toneDivider[tone]} shrink-0`}>
           <div className="flex items-baseline gap-2 min-w-0">
@@ -62,11 +133,48 @@ const Panel = ({
               <span className="font-mono text-[10px] text-textSecondary uppercase tracking-wider truncate">{subtitle}</span>
             )}
           </div>
-          {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
+          <div className="flex items-center gap-2 shrink-0">
+            {actions}
+            {poppable && (
+              <button
+                onClick={() => setPopped(v => !v)}
+                aria-label={popped ? `Close ${typeof title === 'string' ? title : 'panel'}` : `Expand ${typeof title === 'string' ? title : 'panel'}`}
+                aria-pressed={popped}
+                className="p-1 -m-1 rounded text-textMuted hover:text-textPrimary hover:bg-white/[0.05] transition-colors"
+              >
+                {popped ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+              </button>
+            )}
+            {collapsible && !popped && (
+              <button
+                onClick={toggleCollapsed}
+                aria-label={collapsed ? `Expand ${typeof title === 'string' ? title : 'panel'}` : `Collapse ${typeof title === 'string' ? title : 'panel'}`}
+                aria-expanded={!collapsed}
+                className="p-1 -m-1 rounded text-textMuted hover:text-textPrimary hover:bg-white/[0.05] transition-colors"
+              >
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${collapsed ? '-rotate-90' : ''}`} />
+              </button>
+            )}
+          </div>
         </header>
       )}
-      <div className={`${flush ? '' : 'p-4'} flex-grow min-h-0 ${bodyClassName}`}>{children}</div>
+      {/* A collapsed panel keeps its header — that is the affordance to open
+          it again — and drops only its body. */}
+      {!collapsed && (
+        <div className={`${flush ? '' : 'p-4'} flex-grow min-h-0 ${bodyClassName}`}>{children}</div>
+      )}
     </section>
+  );
+
+  if (!popped) return body;
+
+  /* Popped out: the same panel, over everything, with the desk still behind
+     it — so a reader knows they have not navigated away. */
+  return createPortal(
+    <div className="fixed inset-0 z-[80] p-4 flex bg-black/70 backdrop-blur-[2px]">
+      {body}
+    </div>,
+    document.body
   );
 };
 

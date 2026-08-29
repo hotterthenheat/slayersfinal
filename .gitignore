@@ -47,3 +47,4 @@ _shot.mjs
 _scratch*
 _probe*
 _audit*
+.probe/

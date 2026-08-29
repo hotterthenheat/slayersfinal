@@ -128,7 +128,7 @@ const TickerOverview = () => {
 
       {/* The three statements */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <Panel title="Income statement" subtitle="trailing twelve months" className="w-full">
+        <Panel title="Income statement" subtitle="trailing twelve months" className="w-full" collapsible id="fin-income">
           <Line label="Revenue" value={i.revenue} />
           <Line label="Cost of revenue" value={-i.costOfRevenue} indent />
           <Line label="Gross profit" value={i.grossProfit} strong />
@@ -143,7 +143,7 @@ const TickerOverview = () => {
           </div>
         </Panel>
 
-        <Panel title="Balance sheet" subtitle="assets = liabilities + equity" className="w-full">
+        <Panel title="Balance sheet" subtitle="assets = liabilities + equity" className="w-full" collapsible id="fin-balance">
           <Line label="Cash" value={b.cash} indent />
           <Line label="Receivables" value={b.receivables} indent />
           <Line label="Inventory" value={b.inventory} indent />
@@ -159,7 +159,7 @@ const TickerOverview = () => {
           <Line label="Shareholders' equity" value={b.equity} strong />
         </Panel>
 
-        <Panel title="Cash flow" subtitle="where the cash actually went" className="w-full">
+        <Panel title="Cash flow" subtitle="where the cash actually went" className="w-full" collapsible id="fin-cash">
           <Line label="Cash from operations" value={c.operating} />
           <Line label="Capital expenditure" value={c.capex} indent />
           <Line label="Free cash flow" value={c.freeCashFlow} strong />
