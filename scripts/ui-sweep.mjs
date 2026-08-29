@@ -2179,33 +2179,60 @@ head('the migration hover card stays inside its panel');
     await page.goto(`${BASE}/pinpoint/vanna-charm`, { waitUntil: 'networkidle' });
     await page.waitForTimeout(BOOT_MS);
 
-    const rows = await page.evaluate(() => {
+    /* HOW MANY ROWS THERE ARE, which is a different question from how many
+       are on screen — see the note below. */
+    const rowCount = await page.evaluate(() => {
       const host = [...document.querySelectorAll('div')].find(
         d => /net GEX/i.test(d.textContent || '') && typeof d.className === 'string' && d.className.includes('flex-col')
       );
       const body = host && host.querySelector('div[class*="overflow-y-auto"]');
-      if (!body) return null;
-      /* SCROLL THE LIST TO ITS OWN BOTTOM FIRST. The claim under test is
-         "the card stays inside the panel on the lowest rows", but the old
-         sampling took the lowest rows' coordinates without scrolling them
-         into view — so at short viewports the pointer was sent below the
-         fold and the check reported "no card" about rows nobody could
-         hover. The list is its own scroll container; bring the rows to the
-         pointer, then measure. */
-      body.scrollTop = body.scrollHeight;
-      return [...body.children]
-        .filter(c => c.querySelector('span'))
-        .slice(-4)
-        .map(c => { const r = c.getBoundingClientRect(); return { x: Math.round(r.x + 40), y: Math.round(r.y + r.height / 2) }; })
-        .filter(p => p.y > 0 && p.y < window.innerHeight);
+      if (!body) return 0;
+      return [...body.children].filter(c => c.querySelector('span')).length;
     });
 
-    if (!rows || rows.length === 0) { bad(`${at} — no migration map rows to hover`); await ctx.close(); continue; }
+    if (rowCount === 0) { bad(`${at} — the migration map drew no rows at all`); await ctx.close(); continue; }
 
     let hovered = 0;
     let worst = -Infinity;
-    for (const p of rows) {
-      await page.mouse.move(p.x, p.y);
+    /* BRING EACH ROW TO THE POINTER, ONE AT A TIME, AND MEASURE IT THERE.
+       
+       THE BUG THIS REPLACES was in the sweep, not the desk. The old sampling
+       scrolled the list to its own bottom and then dropped any row whose y
+       fell outside the viewport. That is a viewport-dependent sample of a
+       claim that has nothing to do with the viewport: at 1440x900 the panel
+       ends at y=897 and four rows survived the filter, at 1280x800 it ends
+       at y=930 and ALL FOUR were filtered away — so the run reported "no
+       migration map rows to hover" and failed, about rows that render fine.
+       
+       They were never unreachable. The desk scrolls in `main` (`flex-grow
+       overflow-y-auto`), not in the document, so `document.scrollHeight`
+       says nothing about it and the earlier read of "the page cannot
+       scroll" was wrong. Scrolled into view and hovered, every one of those
+       rows produces a card 4px INSIDE its panel at both sizes.
+       
+       So the row is scrolled into view first and measured second, which is
+       what the claim actually needs. The previous fix here learned to
+       scroll the inner list; it did not learn that the panel itself can sit
+       below the fold. */
+    for (let i = 1; i <= 4; i++) {
+      const pt = await page.evaluate(idx => {
+        const host = [...document.querySelectorAll('div')].find(
+          d => /net GEX/i.test(d.textContent || '') && typeof d.className === 'string' && d.className.includes('flex-col')
+        );
+        const body = host && host.querySelector('div[class*="overflow-y-auto"]');
+        if (!body) return null;
+        body.scrollTop = body.scrollHeight;
+        const kids = [...body.children].filter(c => c.querySelector('span'));
+        const el = kids[kids.length - idx];
+        if (!el) return null;
+        el.scrollIntoView({ block: 'center' });
+        body.scrollTop = body.scrollHeight;
+        const r = el.getBoundingClientRect();
+        return { x: Math.round(r.x + 40), y: Math.round(r.y + r.height / 2), inView: r.y > 0 && r.bottom < window.innerHeight };
+      }, i);
+      if (!pt) continue;
+      if (!pt.inView) { bad(`${at} — row -${i} could not be brought on screen to hover`); continue; }
+      await page.mouse.move(pt.x, pt.y);
       await page.waitForTimeout(320);
       const g = await page.evaluate(() => {
         const card = [...document.querySelectorAll('div')].find(
@@ -4662,10 +4689,31 @@ head('the substance round reaches its surfaces, and the chip tells the truth');
   chip ? ok('P-1: the provenance chip is on Exposure Profile') : bad('P-1: no provenance chip');
   if (chip) {
     const label = (await chip.getAttribute('aria-label')) ?? '';
-    /modelled/.test(label)
-      ? ok('and it says MODELLED while the simulator is the market — the honest answer')
-      : bad(`the chip claims ${label.slice(0, 80)}`);
-    /simulator|assumption|modelled/i.test(label)
+    /* THE CLAIM IS ABOUT WHAT THE CHIP MUST NOT SAY, and it is asserted that
+       way round on purpose.
+       
+       This read `/modelled/` until the provenance vocabulary split `model`
+       from `simulated` (see the header of data/provenance.ts: a simulated
+       number becomes real when a feed lands, a modelled one never does —
+       conflating them hid the most important distinction on the desk).
+       Exposure is registered `simulated`, so the chip now reads "simulated —
+       The simulator produced this. No market was consulted", and the old
+       assertion failed on a page that had got MORE honest, not less. An
+       assertion pinned to a retired word tests the vintage, not the claim.
+       
+       The claim itself never changed: the failure this chip exists to
+       prevent is exposure passing itself off as sourced. So that is what is
+       checked — the chip must not say `live` or `measured`, and it must name
+       which of the two unsourced kinds it is. Both halves have teeth: a chip
+       that silently upgraded itself to `measured` fails the first, and one
+       that went blank fails the second. */
+    !/\b(live|measured)\b/i.test(label)
+      ? ok('and it does NOT claim live or measured while the simulator is the market')
+      : bad(`the chip claims sourced data it does not have — ${label.slice(0, 80)}`);
+    /\b(simulated|modelled)\b/i.test(label)
+      ? ok('it names itself simulated — the honest answer for a simulator-fed surface')
+      : bad(`the chip names no unsourced kind — ${label.slice(0, 80)}`);
+    /simulator|assumption|modelled|no market/i.test(label)
       ? ok('with a sentence a reader can act on')
       : bad(`the chip has no basis sentence — ${label.slice(0, 80)}`);
   }
@@ -5108,9 +5156,28 @@ head('the model error gauge audits, and confesses its reference');
   /(OVERSTATES|UNDERSTATES|CENTERED)/.test(body)
     ? ok('and the bias verdict')
     : bad('no bias read');
-  /only the series swaps/.test(body)
-    ? ok('and the swap contract: the day the feed lands, only the series changes')
-    : bad('the swap contract is not stated');
+  /* WHAT THE PAGE OWES THE READER, minus the promise it cannot keep.
+     
+     This read `/only the series swaps/` — the page used to carry "The day
+     the feed lands, only the series swaps", naming a vendor product and
+     what would happen when it connected. That sentence was removed
+     deliberately: this build has no backend and no vendor integration, so a
+     promise about the day a feed lands is a claim about software that does
+     not exist. Keeping the assertion would have forced the copy back.
+     
+     The honesty requirement it was protecting has not moved, and is not
+     weakened here — it is checked more directly. The page must say the
+     reference is a seeded stand-in rather than a real reading, AND must not
+     claim a connection it does not have. That second half is a guard the
+     original did not have: under the old assertion a page boasting "live
+     vendor feed connected" would have passed as long as it also mentioned
+     the swap. */
+  /seeded stand-in/i.test(body) && /rather than an actualized reading/i.test(body)
+    ? ok('and it says what the reference actually is — a seeded stand-in, not a reading')
+    : bad('the page does not say its reference is a stand-in for a real measurement');
+  !/(feed (is )?connected|live feed|vendor connected|now connected)/i.test(body)
+    ? ok('and claims no feed it does not have — there is no backend in this build')
+    : bad('the page claims a connected feed, and this build has none');
   const chip = await page.$('[aria-label^="Data provenance"]');
   chip && /modelled/.test((await chip.getAttribute('aria-label')) ?? '')
     ? ok('the provenance chip reads modelled, as it must')
