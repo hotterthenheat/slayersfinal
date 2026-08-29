@@ -19,7 +19,7 @@
   ThetaData is out. The measured feed is:
 
     cash indices (SPX / NDX / RUT)  → MKT Indices
-    futures (ES / NQ / RTY)         → MKT Futures,
+    futures (ES / NQ / RTY)         → a futures feed,
       which also carries settlement and open interest
 
   Corrected here rather than in a planning document

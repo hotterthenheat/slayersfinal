@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
+import DataState from '../../components/ui/DataState';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import { ArrowUpRight } from 'lucide-react';
@@ -394,10 +395,8 @@ const RankedTargets = () => {
 
   if (!view) {
     return (
-      <Panel className="h-64" bodyClassName="flex items-center justify-center">
-        <span className="font-mono text-[11px] text-textMuted uppercase tracking-widest">
-          Awaiting feed initialization…
-        </span>
+      <Panel className="w-full">
+        <DataState kind="loading" title="Ranking the strikes" body="The first tick has not arrived yet." />
       </Panel>
     );
   }

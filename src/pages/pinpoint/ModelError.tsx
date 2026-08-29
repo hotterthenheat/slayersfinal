@@ -101,10 +101,14 @@ const ModelError = () => {
 
       </div>
 
+      {/* §23 — the honesty stays, the plumbing talk goes. What a reader
+          needs is that the reference is simulated and how to read the sign;
+          which vendor product would supply it, and what happens on the day
+          it does, is our problem rather than theirs. The provenance chip
+          carries the "simulated" claim in the desk's shared vocabulary. */}
       <p className="font-mono text-[9px] leading-relaxed text-textMuted">
-        The reference below is SIMULATED — Periscope actualized gamma is not connected, so the gauge is
-        exercising its own machinery against a seeded stand-in. The day the feed lands, only the series swaps:
-        the join, the metrics and this page do not change. Positive error = the textbook computation OVERSTATES
+        The reference below is SIMULATED: the gauge is measuring its own machinery against a seeded
+        stand-in rather than an actualized reading. Positive error = the textbook computation OVERSTATES
         dealer gamma. Accuracy is mean-absolute, so errors in opposite directions cannot cancel into a
         flattering average.
       </p>

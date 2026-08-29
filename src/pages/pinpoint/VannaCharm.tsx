@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import DataState from '../../components/ui/DataState';
 import { useMarketData } from '../../context/MarketDataContext';
 import CharmClockStrip from '../../components/gex/CharmClockStrip';
 import { RTH_MINUTES } from '../../core/calendar';
@@ -99,10 +100,8 @@ const VannaCharm = () => {
 
   if (!data) {
     return (
-      <Panel className="h-64" bodyClassName="flex items-center justify-center">
-        <span className="font-mono text-[11px] text-textMuted uppercase tracking-widest">
-          Awaiting feed initialization…
-        </span>
+      <Panel className="w-full">
+        <DataState kind="loading" title="Reading the book" body="The first tick has not arrived yet." />
       </Panel>
     );
   }
