@@ -8,6 +8,7 @@ import Compass from './pages/Compass';
 import Weigher from './pages/Weigher';
 import OptionChain from './pages/weigher/OptionChain';
 import IndexFutures from './pages/IndexFutures';
+import MacroDesk from './pages/MacroDesk';
 import Tracker from './pages/Tracker';
 import PinpointLayout from './pages/pinpoint/PinpointLayout';
 import Pulse from './pages/workspace/Pulse';
@@ -67,6 +68,8 @@ const App = () => {
             {/* §12 + §13 — one desk, because they are one question: what is
                 the underlying really doing, including while the cash is shut */}
             <Route path="/index-futures" element={<IndexFutures />} />
+            {/* §14 + §16 — what decided the open overnight, and what is about to */}
+            <Route path="/macro" element={<MacroDesk />} />
             <Route path="/skys-vision" element={<Navigate to="/compass" replace />} />
             <Route path="/stocks" element={<Stocks />} />
             <Route path="/news" element={<News />} />
