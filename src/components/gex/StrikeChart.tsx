@@ -562,9 +562,55 @@ export const priceScaleLockedBy = (compares: readonly CompareEntry[]): { mode: P
   volume bars fold the same live-only seconds tape by RULE instead of by
   clock (data/altBars.ts), so they inherit T-14's honesty and its chip.
 */
+/*
+  MEMOISED, AND THE REASON IS A MEASUREMENT.
+
+  The site's jitter was traced to a long task landing on every simulator
+  tick — gaps of 1511/1502/1498/1500/1497ms against a 1500ms interval, so
+  the tick was the cause beyond doubt. But the tick's OWN work is trivial:
+  instrumented, the simulation ran 0.6ms median and everything synchronous
+  after it 0.3ms, against a long task of 187-408ms. The cost was never the
+  simulating; it was the re-render the state change triggers, and it scaled
+  with pane count (three panes to one took the worst task 195ms -> 115ms
+  and the frame rate 44 -> 55).
+
+  This function was a large part of that. It re-aggregates the whole candle
+  history from scratch on EVERY call, it is called from several effects in
+  each pane, and it returned a brand-new array each time — so three panes
+  meant nine-plus full rebuilds per tick, and every one of them handed its
+  dependents a new identity, re-running effects that then `setData` entire
+  series that had not changed.
+
+  The cache fixes both halves: the aggregation runs once per distinct
+  (ticker, interval, clock) per tick, and an unchanged bar set comes back as
+  the SAME REFERENCE, so dependents comparing identity can skip entirely.
+
+  KEYED ON CONTENT, NOT ON A CLOCK. The source array is mutated in place by
+  the simulator, so its identity says nothing; the signature is its length
+  plus the last bar's time and close, which is exactly what changes when a
+  bar forms or updates. A stale read is therefore impossible — any edit the
+  chart could draw moves one of those three.
+*/
+const barsCache = new Map<string, { sig: string; bars: Candle[] }>();
+
 export function displayBars(ticker: string, mins: number, alt?: AltBarSpec | null): Candle[] {
-  if (alt) return buildAltBars(Simulator.getSecondsBars(ticker), alt);
-  return mins < 1 ? Simulator.getSecondsBars(ticker) : aggregateCandles(Simulator.getCandles(ticker) ?? [], mins);
+  const src = mins < 1 || alt ? Simulator.getSecondsBars(ticker) : (Simulator.getCandles(ticker) ?? []);
+  const last = src[src.length - 1];
+  const key = `${ticker}|${mins}|${alt ? `${alt.kind}:${alt.size}` : '-'}`;
+  const sig = `${src.length}|${last?.time ?? 0}|${last?.close ?? 0}`;
+  const hit = barsCache.get(key);
+  if (hit && hit.sig === sig) return hit.bars;
+
+  const bars = alt
+    ? buildAltBars(src, alt)
+    : mins < 1
+      ? src
+      : aggregateCandles(src, mins);
+  barsCache.set(key, { sig, bars });
+  /* Bounded: a reader flipping through tickers and intervals would otherwise
+     grow this forever. Twenty-four is four panes' worth of every interval. */
+  if (barsCache.size > 24) barsCache.delete(barsCache.keys().next().value as string);
+  return bars;
 }
 
 export const DEFAULT_OVERLAYS: ChartOverlays = {
