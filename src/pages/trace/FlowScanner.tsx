@@ -169,7 +169,7 @@ const FlowScanner = () => {
               aria-label="Session"
               value={session}
               onChange={e => { setSession(e.target.value); setSelected(null); }}
-              className="bg-transparent border border-borderSubtle rounded px-2 py-1 font-mono text-[10px] text-textSecondary uppercase tracking-wider focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+              className="bg-transparent border border-borderSubtle rounded px-2 py-1 font-mono text-[10px] text-textSecondary uppercase tracking-wider focus:outline-none focus-visible:ring-1 focus-visible:ring-select"
             >
               <option value="">Today · live</option>
               {sessions.slice(1).map(d => <option key={d} value={d}>Replay {d}</option>)}

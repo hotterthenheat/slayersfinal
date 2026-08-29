@@ -82,13 +82,13 @@ const Alerts = () => {
             <button
               aria-label="Re-arm"
               onClick={e => { e.stopPropagation(); rearmAlert(activeTicker, a.id, marketData.spot, Date.now()); }}
-              className="p-1 rounded text-textMuted hover:text-textPrimary focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+              className="p-1 rounded text-textMuted hover:text-textPrimary focus:outline-none focus-visible:ring-1 focus-visible:ring-select"
             ><RotateCcw size={12} /></button>
           )}
           <button
             aria-label="Delete alert"
             onClick={e => { e.stopPropagation(); removeAlert(activeTicker, a.id); }}
-            className="p-1 rounded text-textMuted hover:text-bear focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+            className="p-1 rounded text-textMuted hover:text-bear focus:outline-none focus-visible:ring-1 focus-visible:ring-select"
           ><Trash2 size={12} /></button>
         </div>
       ) },
@@ -132,7 +132,7 @@ const Alerts = () => {
                 <button
                   key={t} role="tab" aria-selected={tab === t}
                   onClick={() => setTab(t)}
-                  className={`px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-accent ${
+                  className={`px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-select ${
                     tab === t ? 'bg-white/[0.07] text-textPrimary' : 'text-textMuted hover:text-textSecondary'
                   }`}
                 >{t} · {t === 'armed' ? armed.length : fired.length}</button>
@@ -141,7 +141,7 @@ const Alerts = () => {
             {rows.length > 0 && (
               <button
                 onClick={() => clearAlerts(activeTicker)}
-                className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-textMuted hover:text-bear focus:outline-none focus-visible:ring-1 focus-visible:ring-accent rounded px-1"
+                className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-textMuted hover:text-bear focus:outline-none focus-visible:ring-1 focus-visible:ring-select rounded px-1"
               ><Trash2 size={11} /> Clear</button>
             )}
           </div>

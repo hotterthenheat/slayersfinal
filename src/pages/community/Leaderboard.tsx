@@ -30,7 +30,7 @@ const Leaderboard = () => {
     {
       key: 'who', header: 'Member', width: '220px', sortValue: r => r.handle,
       render: r => (
-        <Link to={`/community/member/${r.handle}`} className="flex items-center gap-2 hover:text-textPrimary focus:outline-none focus-visible:ring-1 focus-visible:ring-accent rounded">
+        <Link to={`/community/member/${r.handle}`} className="flex items-center gap-2 hover:text-textPrimary focus:outline-none focus-visible:ring-1 focus-visible:ring-select rounded">
           <Avatar handle={r.handle} size="sm" />
           <span className="font-mono text-[11px] text-textSecondary">{r.handle}</span>
         </Link>
@@ -65,7 +65,7 @@ const Leaderboard = () => {
           <button
             onClick={e => { e.stopPropagation(); toggleFollow(r.handle); }}
             aria-pressed={on}
-            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border font-mono text-[9px] uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-accent ${
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border font-mono text-[9px] uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-select ${
               on ? 'border-select/50 text-select' : 'border-borderSubtle text-textMuted hover:text-textSecondary'
             }`}
           >

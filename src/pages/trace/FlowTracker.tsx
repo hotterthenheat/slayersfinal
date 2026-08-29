@@ -139,13 +139,13 @@ const FlowTracker = () => {
               if (e.key === 'Escape') { e.stopPropagation(); setNoteFor(null); }
             }}
             onClick={e => e.stopPropagation()}
-            className="w-full bg-transparent border-b border-accent/60 text-[11px] text-textPrimary focus:outline-none"
+            className="w-full bg-transparent border-b border-select/60 text-[11px] text-textPrimary focus:outline-none"
             placeholder="why this one…"
           />
         ) : (
           <button
             onClick={e => { e.stopPropagation(); setNoteFor(printKey(w.print)); setNoteDraft(w.note ?? ''); }}
-            className="text-left text-[11px] text-textMuted hover:text-textPrimary truncate w-full focus:outline-none focus-visible:ring-1 focus-visible:ring-accent rounded"
+            className="text-left text-[11px] text-textMuted hover:text-textPrimary truncate w-full focus:outline-none focus-visible:ring-1 focus-visible:ring-select rounded"
           >
             {w.note ?? '+ note'}
           </button>
@@ -156,7 +156,7 @@ const FlowTracker = () => {
         <button
           aria-label="Remove bookmark"
           onClick={e => { e.stopPropagation(); togglePrint(w.print); }}
-          className="text-textMuted hover:text-bear focus:outline-none focus-visible:ring-1 focus-visible:ring-accent rounded p-0.5"
+          className="text-textMuted hover:text-bear focus:outline-none focus-visible:ring-1 focus-visible:ring-select rounded p-0.5"
         >
           <X size={12} />
         </button>
@@ -204,7 +204,7 @@ const FlowTracker = () => {
         <button
           aria-label="Stop watching"
           onClick={e => { e.stopPropagation(); toggleContract(c); }}
-          className="text-textMuted hover:text-bear focus:outline-none focus-visible:ring-1 focus-visible:ring-accent rounded p-0.5"
+          className="text-textMuted hover:text-bear focus:outline-none focus-visible:ring-1 focus-visible:ring-select rounded p-0.5"
         >
           <X size={12} />
         </button>
@@ -222,7 +222,7 @@ const FlowTracker = () => {
           actions={prints.length > 0 && (
             <button
               onClick={() => clearWatch('prints')}
-              className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-textMuted hover:text-bear focus:outline-none focus-visible:ring-1 focus-visible:ring-accent rounded px-1"
+              className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-textMuted hover:text-bear focus:outline-none focus-visible:ring-1 focus-visible:ring-select rounded px-1"
             >
               <Trash2 size={11} /> Clear
             </button>
@@ -257,7 +257,7 @@ const FlowTracker = () => {
               {marketData && (
                 <button
                   onClick={() => toggleContract({ ticker: activeTicker, strike: Math.round(spot), right: 'C', expiry: rollups[0]?.expiry ?? '—' })}
-                  className="font-mono text-[10px] uppercase tracking-wider text-textMuted hover:text-textPrimary focus:outline-none focus-visible:ring-1 focus-visible:ring-accent rounded px-1"
+                  className="font-mono text-[10px] uppercase tracking-wider text-textMuted hover:text-textPrimary focus:outline-none focus-visible:ring-1 focus-visible:ring-select rounded px-1"
                 >
                   + ATM call
                 </button>
@@ -265,7 +265,7 @@ const FlowTracker = () => {
               {contracts.length > 0 && (
                 <button
                   onClick={() => clearWatch('contracts')}
-                  className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-textMuted hover:text-bear focus:outline-none focus-visible:ring-1 focus-visible:ring-accent rounded px-1"
+                  className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-textMuted hover:text-bear focus:outline-none focus-visible:ring-1 focus-visible:ring-select rounded px-1"
                 >
                   <Trash2 size={11} /> Clear
                 </button>

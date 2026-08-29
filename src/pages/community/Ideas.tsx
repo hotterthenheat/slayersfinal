@@ -152,7 +152,7 @@ const Ideas = () => {
                     ) : (
                       <Link
                         to={`/community/member/${idea.author}`}
-                        className="flex items-center gap-1.5 hover:text-textSecondary focus:outline-none focus-visible:ring-1 focus-visible:ring-accent rounded"
+                        className="flex items-center gap-1.5 hover:text-textSecondary focus:outline-none focus-visible:ring-1 focus-visible:ring-select rounded"
                       >
                         <Avatar handle={idea.author} size="sm" />
                         {idea.author}
@@ -173,7 +173,7 @@ const Ideas = () => {
                       <button
                         onClick={() => setOpenThread(open ? null : idea.id)}
                         aria-expanded={open}
-                        className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-textMuted hover:text-textSecondary focus:outline-none focus-visible:ring-1 focus-visible:ring-accent rounded"
+                        className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-textMuted hover:text-textSecondary focus:outline-none focus-visible:ring-1 focus-visible:ring-select rounded"
                       >
                         <MessageSquare size={11} />
                         {comments.length === 0

@@ -141,7 +141,7 @@ const MacroDesk = () => {
                 <button
                   key={`${c.iso}-${c.kind}`}
                   onClick={() => setOpen(c)}
-                  className={`text-left border rounded-md p-3 transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-accent ${
+                  className={`text-left border rounded-md p-3 transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-select ${
                     c.past ? 'border-borderSubtle bg-inset/30 hover:bg-white/[0.03]' : 'border-borderSubtle/70 bg-inset/60 hover:bg-white/[0.04]'
                   }`}
                 >

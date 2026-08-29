@@ -198,7 +198,7 @@ const TickerOverview = () => {
               <Link
                 key={rt}
                 to={`/stocks/${rt}`}
-                className="inline-flex items-center gap-1 px-2 py-1 rounded border border-borderSubtle font-mono text-[11px] text-textSecondary hover:text-textPrimary hover:bg-white/[0.03] focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+                className="inline-flex items-center gap-1 px-2 py-1 rounded border border-borderSubtle font-mono text-[11px] text-textSecondary hover:text-textPrimary hover:bg-white/[0.03] focus:outline-none focus-visible:ring-1 focus-visible:ring-select"
               >
                 <CompanyLogo ticker={rt} size={14} /> {rt}
               </Link>
@@ -216,7 +216,7 @@ const TickerOverview = () => {
           </div>
           <Link
             to={`/earnings/${p.ticker}`}
-            className="mt-3 inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-textMuted hover:text-textPrimary focus:outline-none focus-visible:ring-1 focus-visible:ring-accent rounded"
+            className="mt-3 inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-textMuted hover:text-textPrimary focus:outline-none focus-visible:ring-1 focus-visible:ring-select rounded"
           >
             Earnings dossier <ArrowUpRight size={11} />
           </Link>

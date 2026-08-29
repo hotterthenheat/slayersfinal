@@ -135,7 +135,7 @@ const Stocks = () => {
         <Link
           to={`/stocks/${p.ticker}`}
           onClick={e => e.stopPropagation()}
-          className="flex flex-col group focus:outline-none focus-visible:ring-1 focus-visible:ring-accent rounded"
+          className="flex flex-col group focus:outline-none focus-visible:ring-1 focus-visible:ring-select rounded"
         >
           <span className="font-mono text-[13px] font-bold text-textPrimary group-hover:underline decoration-dotted">{p.ticker}</span>
           <span className="text-[11px] text-textSecondary truncate">{p.name}</span>
@@ -353,7 +353,7 @@ const Stocks = () => {
                       if (next.has(c.key)) next.delete(c.key); else next.add(c.key);
                       return next;
                     })}
-                    className={`px-1.5 py-0.5 rounded font-mono text-[9px] uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-accent ${
+                    className={`px-1.5 py-0.5 rounded font-mono text-[9px] uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-select ${
                       on ? 'bg-white/[0.07] text-textSecondary' : 'text-textMuted hover:text-textSecondary'
                     }`}
                   >
