@@ -318,6 +318,20 @@
   to { opacity: 1; }
 }
 
+/*
+  §22 — THE PHONE'S VERSION OF A DRAWER.
+
+  A centred card is a desktop shape: on a 390px screen it either fills the
+  viewport with margins nobody wanted or floats awkwardly above the fold.
+  The convention every phone reader already has is a SHEET that rises from
+  the bottom edge, and a sheet slides rather than scales — scaling a
+  full-width surface reads as a glitch.
+*/
+@keyframes modal-sheet-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 @keyframes modal-card-in {
   from { opacity: 0; transform: translateY(8px) scale(0.97); }
   to { opacity: 1; transform: translateY(0) scale(1); }
@@ -420,4 +434,11 @@
   .touch-reveal {
     display: flex !important;
   }
+}
+
+.animate-modal-sheet {
+  animation: modal-sheet-in 190ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-modal-sheet { animation: none; }
 }
