@@ -265,6 +265,26 @@ const INDICATOR_ITEMS: { key: keyof ChartIndicators; label: string; hint: string
   { key: 'rsi', label: 'RSI 14', hint: 'Wilder momentum, 30/70 rails — its own pane below the tape', sub: true },
   { key: 'macd', label: 'MACD', hint: '12/26 EMAs and their 9-EMA signal, with the histogram', sub: true },
   { key: 'atrPane', label: 'ATR 14', hint: "This pane's bar-to-bar range — its own pane below the tape", sub: true },
+
+  /* ── THE SECOND SET (2026-08-29) ──────────────────────────────────────
+     Hints say what the line MEANS, not what it is called: a reader who
+     already knows Donchian does not need this menu, and one who does not
+     is served by "the plain high/low envelope breakouts are read off"
+     rather than by the word repeated back at them. */
+  { key: 'keltner', label: 'Keltner', hint: 'EMA 20 with ATR shoulders — the channel a trend trade is managed in' },
+  { key: 'donchian', label: 'Donchian', hint: 'The 20-bar high/low envelope — the one breakouts are read off' },
+  { key: 'supertrend', label: 'Supertrend', hint: 'An ATR stop that only ever moves in the trend’s favour, and flips when price closes through it' },
+  { key: 'psar', label: 'Parabolic SAR', hint: 'The trailing stop as dots — under the tape while long, over it while short' },
+  { key: 'stoch', label: 'Stochastic', hint: 'Where the close sits inside the 14-bar range, with its %D signal', sub: true },
+  { key: 'stochRsi', label: 'Stoch RSI', hint: 'The stochastic OF the RSI — faster, and noisier, than either alone', sub: true },
+  { key: 'adx', label: 'ADX + DI', hint: 'How STRONG the move is, with the DI pair that says which way — ADX itself has no direction', sub: true },
+  { key: 'cci', label: 'CCI 20', hint: 'Typical price against its own mean deviation — crosses zero', sub: true },
+  { key: 'williamsR', label: 'Williams %R', hint: 'The stochastic’s mirror: 0 at the range high, −100 at its low', sub: true },
+  { key: 'mfi', label: 'MFI 14', hint: 'RSI weighted by volume — momentum that has to be paid for', sub: true },
+  { key: 'obv', label: 'OBV', hint: 'Volume signed by direction. Read its SLOPE and its divergence from price; the level means nothing', sub: true },
+  { key: 'cmf', label: 'CMF 20', hint: 'Where the close sat in each bar, volume-weighted — accumulation above zero', sub: true },
+  { key: 'roc', label: 'ROC 12', hint: 'Percent move over twelve bars', sub: true },
+  { key: 'aroon', label: 'Aroon', hint: 'How recently the 25-bar high and low were made — the pair crossing is the turn', sub: true },
 ];
 
 const OVERLAY_ITEMS: { key: keyof ChartOverlays; label: string; hint: string }[] = [

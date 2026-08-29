@@ -19,7 +19,8 @@ export const LIME = '#D2FF00';
 
 export const CALL_WALL = BULL; // green, not mint — reversed by Noah 2026-08-18
 export const PUT_WALL = '#FF3B30'; // bear (hot red)
-export const FLIP = '#7DD3FC'; // baby blue — the regime border (cool against green/red)
+export const FLIP = '#9CA3AF'; // grey — the regime BORDER, deliberately quieter than direction
+export const MOON = '#7DD3FC'; // baby blue — the overnight / after-hours voice
 // The magenta `king` token — one king color everywhere. The chart line wore
 // holo silver for a while, but silver didn't stand out (Noah, 2026-08-18),
 // and it now collides with the heatmap's platinum steel pole. Magenta matches
@@ -60,7 +61,7 @@ export const ALERT = '#FF9500';
     and regime badges: red amplifying, green absorbing. Not for grids, not
     for bars, not for call/put columns.
 
-    LEVELS — CALL_WALL green, PUT_WALL red, FLIP sky, KING magenta, SPOT
+    LEVELS — CALL_WALL green, PUT_WALL red, FLIP grey, KING magenta, SPOT
     white, above. A wall keeps its colour on every surface, including
     historical tables.
 

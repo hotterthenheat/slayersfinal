@@ -80,6 +80,11 @@ const OVERLAY_KEYS = Object.keys({
 
 const INDICATOR_KEYS = Object.keys({
   ema9: 0, ema21: 0, ema50: 0, vwap: 0, bb: 0, vwapBands: 0, sma: 0, rsi: 0, macd: 0, atrPane: 0,
+  /* The second set. This list failing to compile is the guard above doing
+     its job — without these entries the new indicators would draw fine and
+     then quietly vanish from every saved layout. */
+  keltner: 0, donchian: 0, supertrend: 0, psar: 0,
+  stoch: 0, stochRsi: 0, adx: 0, cci: 0, williamsR: 0, mfi: 0, obv: 0, cmf: 0, roc: 0, aroon: 0,
 } satisfies Record<keyof ChartIndicators, number>) as (keyof ChartIndicators)[];
 
 const STYLE_KEYS = Object.keys({

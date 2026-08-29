@@ -398,14 +398,39 @@ const PaneLadder = ({
       const rowH = Math.max(MIN_PITCH, Math.min(MAX_PITCH, Math.round(pitch) - 2));
       track.style.setProperty('--row-h', `${rowH}px`);
 
-      /* Crowding is answered by STRIDE, never by scrolling: any scroll offset
-         breaks the y contract outright, and a column that has to be scrolled
-         to be compared with the chart beside it is not aligned at all.
+      /* Crowding is answered by SPACING ON SCREEN, never by scrolling: any
+         scroll offset breaks the y contract outright, and a column that has
+         to be scrolled to be compared with the chart beside it is not
+         aligned at all.
 
-         Anchored on the strike VALUE rather than the array index. The chain
-         recentres on spot every tick, so an index-anchored stride would
-         reshuffle which strikes survive from frame to frame. */
-      const stride = Math.max(1, Math.ceil(MIN_PITCH / pitch));
+         THIS WAS A STRIDE OVER STRIKE VALUES — `round(strike/step) % stride`
+         — and it had two holes that measured badly at 1600x950.
+
+         It culled by ARITHMETIC while the rows are placed by GEOMETRY. The
+         stride assumed one uniform `step` across the chain, so wherever the
+         real spacing differs from it the survivors are not evenly spaced on
+         screen even though the arithmetic says they are.
+
+         And collision was only ever checked against TAGGED rows. Two
+         ordinary survivors could land on top of each other and both were
+         placed: measured gaps ran 0px and 1px between neighbours at default
+         zoom, which is two prices drawn over one another.
+
+         Zooming out made it worse rather than better — 47 visible rows
+         became 64, because a wider price window admits more strikes while
+         the stride, computed off `step`, barely moved.
+
+         So culling is now a GREEDY MINIMUM-SPACING SWEEP over the placed
+         positions, which cannot have either bug: a row is drawn only if it
+         clears every row already drawn by a full row height, whatever the
+         chain's spacing or the chart's zoom is doing.
+
+         SWEPT OUTWARD FROM SPOT, not down from the top. Two reasons: it puts
+         the density where the reader is looking and thins away from it, and
+         it is stable — the strikes nearest spot always survive, so the
+         surviving set does not reshuffle as price drifts and rows shift a
+         pixel. A top-down sweep is equally correct about overlap and picks a
+         different, drifting set every tick. */
 
       const els = track.querySelectorAll<HTMLElement>('[data-strike]');
       const place = (el: HTMLElement, y: number) => {
@@ -455,14 +480,30 @@ const PaneLadder = ({
         }
       });
 
+      /* Anchors are placed first and unconditionally — king, the walls and
+         whatever the reader has flashed are the rows this column exists to
+         show, so they claim their space before anything competes for it. */
+      const taken: number[] = [...anchors];
+      const clears = (y: number) => {
+        for (const t of taken) if (Math.abs(t - y) < rowH) return false;
+        return true;
+      };
+
+      /* Everything else, nearest to spot outward. */
+      const spotY = p.yFor(levels.spot);
+      const ordinary: { el: HTMLElement; y: number; d: number }[] = [];
       els.forEach((el, i) => {
         const y = ys[i];
         if (y == null || !fits(y)) return drop(el);
         if (el.dataset.tag === '1') return place(el, y);
-        if (Math.round(Number(el.dataset.strike) / step) % stride !== 0) return drop(el);
-        for (const a of anchors) if (Math.abs(a - y) < rowH) return drop(el);
-        place(el, y);
+        ordinary.push({ el, y, d: spotY == null ? y : Math.abs(y - spotY) });
       });
+      ordinary.sort((a, b) => a.d - b.d);
+      for (const { el, y } of ordinary) {
+        if (!clears(y)) { drop(el); continue; }
+        taken.push(y);
+        place(el, y);
+      }
 
       /* Spot and the flip are PRICES, not strikes — they almost never equal
          one. Placed by their own price, hidden when the plot is not showing
