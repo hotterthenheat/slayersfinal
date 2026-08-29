@@ -487,6 +487,55 @@ const Simulator = (() => {
     return sym;
   }
 
+  /* DECLARED BEFORE THE SEED LOOP BELOW, and that is load-bearing rather
+     than tidy. `WATCHLIST.forEach(seedHistory)` runs at module
+     initialisation and reaches generateOptionsChain, so a `const` declared
+     further down is still in its temporal dead zone when the chain is first
+     built — "Cannot access 'qGreek' before initialization", which
+     type-checks perfectly and throws the moment the module loads. The
+     proofs caught it; tsc could not. */
+  /*
+    QUANTISATION AND STRUCTURAL SHARING, and both halves are needed.
+
+    THE MEASUREMENT THAT PROMPTED THIS. The site's jitter traces to a long
+    task on every 1500ms tick; the tick's own work is 0.6ms, so the cost is
+    the repaint the new snapshot forces. The snapshot's chain was measured
+    changing on 7 ticks in 8 — but look at what was changing:
+
+      475:1.3096195226730748e-13 -> 475:1.4021...e-13
+
+    A gamma of 1.3e-13 at a far strike is numerically zero. It cannot move
+    a pixel, it cannot move a dollar of exposure, and no reader will ever
+    see it. Yet it made the strike "different", which made the chain
+    different, which invalidated every layer downstream of it.
+
+    QUANTISING ALONE WOULD NOT HAVE HELPED. A chart handed a fresh array
+    redraws whether or not its contents match. So the two go together:
+    round to a precision far finer than anything displayed, and then REUSE
+    THE PREVIOUS OBJECT for any strike whose rounded values are identical.
+    Unchanged strikes keep their reference, so a memoised consumer can bail
+    out on identity, and when NO strike moved the whole array comes back as
+    the same array.
+
+    THE PRECISIONS ARE CHOSEN AGAINST WHAT IS DRAWN, with several orders of
+    magnitude to spare. Per-share greeks are shown to four decimals and kept
+    to ten; dollar exposures run to millions and are kept to the cent.
+    Nothing that could change a rendered figure is rounded away — a strike
+    whose gamma genuinely moves still reports a new object, every tick.
+  */
+  const qGreek = (v: number) => Math.round(v * 1e10) / 1e10;
+  const qMoney = (v: number) => Math.round(v * 100) / 100;
+  /** Last chain per ticker, so unchanged strikes can keep their identity. */
+  const chainMemo = new Map<string, StrikeNode[]>();
+
+  function sameStrike(a: StrikeNode, b: StrikeNode): boolean {
+    return a.strike === b.strike && a.callOI === b.callOI && a.putOI === b.putOI
+      && a.gamma === b.gamma && a.netGex === b.netGex && a.callGex === b.callGex
+      && a.putGex === b.putGex && a.netDex === b.netDex && a.callDex === b.callDex
+      && a.putDex === b.putDex && a.netVex === b.netVex && a.callVex === b.callVex
+      && a.putVex === b.putVex && a.vanna === b.vanna && a.charm === b.charm;
+  }
+
   // Seed the core watchlist
   WATCHLIST.forEach(seedHistory);
 
@@ -612,7 +661,52 @@ const Simulator = (() => {
       });
     }
 
-    return strikes;
+    /* Quantise, then share. The key carries the spot override so a chain
+       asked for at a hypothetical price never overwrites the live one. */
+    /* THE NETS ARE DERIVED FROM THE ROUNDED LEGS, NEVER ROUNDED THEMSELVES.
+
+       The first cut rounded all three of call/put/net independently, and
+       exposure-canon-proof failed it immediately: `round(a) + round(b)` is
+       not `round(a + b)`, so the net drifted from its own legs by up to
+       1.92e-2 — two cents of pure rounding error. The proof's claim is that
+       the split PRESERVES the net, and it is right to insist: a rail and a
+       profile reading the same strike would have disagreed by cents that
+       came from nowhere.
+
+       Rounding the legs and summing them keeps the identity exact at any
+       precision. */
+    const rounded = strikes.map(n => {
+      const callGex = qMoney(n.callGex), putGex = qMoney(n.putGex);
+      const callDex = qMoney(n.callDex), putDex = qMoney(n.putDex);
+      const callVex = qMoney(n.callVex), putVex = qMoney(n.putVex);
+      return {
+        ...n,
+        gamma: qGreek(n.gamma),
+        vanna: qGreek(n.vanna),
+        charm: qGreek(n.charm),
+        callGex, putGex, netGex: callGex + putGex,
+        callDex, putDex, netDex: callDex + putDex,
+        callVex, putVex, netVex: callVex + putVex,
+      };
+    });
+
+    const key = `${tickerKey}|${spotOverride ?? ''}`;
+    const prev = chainMemo.get(key);
+    if (!prev || prev.length !== rounded.length) {
+      chainMemo.set(key, rounded);
+      return rounded;
+    }
+    let moved = 0;
+    const shared = rounded.map((n, i) => {
+      if (sameStrike(n, prev[i])) return prev[i];
+      moved++;
+      return n;
+    });
+    /* Nothing moved at all: hand back the SAME array, so an identity check
+       upstream skips the whole chain rather than walking it. */
+    const out = moved === 0 ? prev : shared;
+    chainMemo.set(key, out);
+    return out;
   }
 
   // Generate Compass plan
