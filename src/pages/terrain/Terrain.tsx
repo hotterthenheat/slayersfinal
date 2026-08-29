@@ -31,6 +31,7 @@ import StrikeChart, {
   type PriceScale,
 } from '../../components/gex/StrikeChart';
 import ChartToolbar from '../../components/gex/ChartToolbar';
+import useTopEdgeReveal from '../../components/gex/useTopEdgeReveal';
 import CompareControl from '../../components/gex/CompareControl';
 import PaneLadder, { LADDER_WIDTH_PX } from '../../components/gex/PaneLadder';
 import useFocusTrap from '../../components/ui/useFocusTrap';
@@ -728,6 +729,14 @@ const Pane = ({
   /* Read here rather than threaded down: this component already takes fourteen
      props, and it is the same one-line media query the page reads. */
   const isPhone = useIsPhone();
+  /* THE PANE'S CHROME FOLLOWS REACH. Declared here, with the other
+     top-level hooks and above every guard in this component — a hook below
+     an early return type-checks clean and throws React #310 the first time
+     the guard fires, which this file has already paid for once.
+
+     `keepOpen` on a coarse pointer because a finger has no hover to reach
+     with: phones keep the strip, exactly as `chrome-tap` already assumed. */
+  const chromeReveal = useTopEdgeReveal(isPhone);
 
   /*
     ══ THE COMPARE LEGEND HAS TO START BELOW THE STRIP, NOT AT 46px ═════════
@@ -998,7 +1007,7 @@ const Pane = ({
             spills, and a chart's natural width is whatever its container was
             last tick. */}
         <div className="absolute inset-0 flex">
-          <div className="group relative flex-1 min-w-0">
+          <div className="group relative flex-1 min-w-0" {...chromeReveal.bind}>
             <StrikeChart
               ticker={ticker}
               revision={revision}
@@ -1296,7 +1305,16 @@ const Pane = ({
               )}
 
               {/* Its own, every one of them — and not there until you reach. */}
-              <div className="chrome-hover chrome-tap relative z-10 pointer-events-none max-w-full rounded-md bg-canvas/25 backdrop-blur-[3px] px-2 py-1 opacity-0 transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+              {/* REVEALED BY REACH, NOT BY PRESENCE. This was `group-hover`,
+                  which fired the moment the pointer entered the pane — so the
+                  strip sat over the top of the tape for the whole time anyone
+                  was actually reading the chart. `shown` asks the narrower
+                  question: is the pointer climbing toward the top edge, or
+                  focused/menu-open in here. Working mid-chart gives the pixels
+                  back. See useTopEdgeReveal for why this is not CSS. */}
+              <div className={`chrome-hover chrome-tap relative z-10 max-w-full rounded-md bg-canvas/25 backdrop-blur-[3px] px-2 py-1 transition-opacity duration-200 ${
+                chromeReveal.shown ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0 focus-within:pointer-events-auto focus-within:opacity-100'
+              }`}>
                 <ChartToolbar
                   minimal
                   candles

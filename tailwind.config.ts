@@ -47,7 +47,16 @@ export default {
 
         // GEX structural levels
         // Flip = baby blue (the cool regime border against lime/red direction)
-        flip: '#7DD3FC',
+        /* FLIP IS GREY, AND `moon` KEEPS THE BLUE (adopted from the
+           partner's revamp-1 palette, 2026-08-29). The flip is a
+           STRUCTURAL boundary, not a direction, and a saturated baby blue
+           read as loud as bull/bear beside it — grey lets the regime border
+           sit behind the direction colours instead of competing with them.
+           The blue did not go to waste: `moon` carries it for the overnight
+           / after-hours voice, which is the one place a cool accent means
+           something on its own. */
+        flip: '#9CA3AF',
+        moon: '#7DD3FC',
         // King = magenta — the engine's-standout family (TOP PICK, NET, king).
         // Exception: the king LINE on charts is silver (palette.ts KING).
         king: '#EA00FF',
