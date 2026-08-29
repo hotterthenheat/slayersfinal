@@ -3555,10 +3555,25 @@ head('every Pinpoint tab opens with the flip already answered');
   const page = await ctx.newPage();
   const errs = [];
   page.on('pageerror', e => errs.push(String(e)));
+  /*
+    WAIT FOR THE STRIP, do not sleep at it.
+
+    Two tabs used a flat 2500ms and the third BOOT_MS+1000, and the short one
+    is marginal: measured on an idle machine the strip is up at 2500ms on all
+    three, but under this file's own load — dozens of contexts, a browser per
+    section — it is not, and the run reported "no flip strip — the shell is
+    not carrying it here" about a strip the shell was carrying perfectly. A
+    sleep long enough for a busy machine is wasted on every other run; the
+    element itself is the signal.
+
+    The bound stays generous, and a timeout still fails the check, so a strip
+    that genuinely never arrives is a red run rather than a slow one.
+  */
+  const STRIP = '[role="status"][aria-label*="GAMMA"], [role="status"][aria-label*="No gamma flip"]';
   for (const path of ['/pinpoint/exposure-profile', '/pinpoint/ranked-targets', '/pinpoint/vanna-charm']) {
     await page.goto(`${BASE}${path}`, { waitUntil: 'networkidle' });
-    await page.waitForTimeout(path.endsWith('exposure-profile') ? BOOT_MS + 1000 : 2500);
-    const strip = await page.$('[role="status"][aria-label*="GAMMA"], [role="status"][aria-label*="No gamma flip"]');
+    await page.waitForSelector(STRIP, { timeout: BOOT_MS + 12000 }).catch(() => {});
+    const strip = await page.$(STRIP);
     strip ? ok(`${path}: the strip is on the tab`) : bad(`${path}: no flip strip — the shell is not carrying it here`);
     if (!strip) continue;
     const label = (await strip.getAttribute('aria-label')) ?? '';
@@ -4131,7 +4146,7 @@ head('the event lane draws, and a glyph answers with its card');
 
   /* The toolbar offers the row. */
   const menuOpen = async () => (await page.$$('[data-toolbar-menu] [role="checkbox"]')).length > 0;
-  await page.mouse.move(bb.x + 600, bb.y + 400);
+  await reachForChrome(page);
   await page.waitForTimeout(500);
   if (!(await menuOpen())) {
     for (const b of await page.$$('[aria-haspopup="menu"]')) {
@@ -4197,7 +4212,7 @@ head('two sub-panes stack under the tape, and the third is refused with its reas
 
   /* The cap: with two sub-panes up, the third row is disabled and says why. */
   const bb2 = await (await page.$$('.grid > div > div'))[0].boundingBox();
-  await page.mouse.move(bb2.x + 600, bb2.y + 400);
+  await reachForChrome(page);
   await page.waitForTimeout(500);
   for (const b of await page.$$('[aria-haspopup="menu"]')) {
     if (/Indicators/.test((await b.textContent()) ?? '')) { await b.click(); await page.waitForTimeout(400); break; }
