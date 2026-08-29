@@ -40,6 +40,8 @@ import CommunityLayout from './pages/community/CommunityLayout';
 import Ideas from './pages/community/Ideas';
 import Requests from './pages/community/Requests';
 import Feedback from './pages/community/Feedback';
+import Leaderboard from './pages/community/Leaderboard';
+import MemberProfile from './pages/community/MemberProfile';
 
 const App = () => {
   return (
@@ -115,6 +117,9 @@ const App = () => {
               <Route path="ideas" element={<Ideas />} />
               <Route path="requests" element={<Requests />} />
               <Route path="feedback" element={<Feedback />} />
+              {/* §19 — the record, and the person behind it */}
+              <Route path="leaderboard" element={<Leaderboard />} />
+              <Route path="member/:handle" element={<MemberProfile />} />
             </Route>
             <Route path="/auditor-log" element={<Navigate to="/tracker" replace />} />
           </Route>

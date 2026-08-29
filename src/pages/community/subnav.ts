@@ -1,4 +1,4 @@
-import { Lightbulb, Hammer, MessageSquare, type LucideIcon } from 'lucide-react';
+import { Trophy, Lightbulb, Hammer, MessageSquare, type LucideIcon } from 'lucide-react';
 
 /** Community subpage registry — drives the sub-tab bar and command palette. */
 export interface CommunitySubpage {
@@ -26,5 +26,11 @@ export const COMMUNITY_SUBPAGES: CommunitySubpage[] = [
     label: 'Feedback',
     subtitle: 'What should we improve? Every note gets read',
     icon: MessageSquare,
+  },
+  {
+    path: '/community/leaderboard',
+    label: 'Leaderboard',
+    subtitle: 'Who has been right, and over how many resolved ideas',
+    icon: Trophy,
   },
 ];
