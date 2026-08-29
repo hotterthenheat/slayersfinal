@@ -672,8 +672,8 @@ const PaneLadder = ({
 
       /* No column means every row is culled, and a badge cannot cover a
          number that is not drawn — so leave it where the markup puts it. */
-      const park = (el: HTMLElement | null, extra: number) => {
-        if (!el || centre <= 0) return;
+      const park = (el: HTMLElement | null, y: number | undefined, extra: number) => {
+        if (!el || centre <= 0 || y == null) return null;
         /* The badge is right-anchored by `ml-auto mr-1`, so moving it is a
            leftward shift: from its right edge at `clientWidth - 4` to the
            right edge it wants, `centre + width/2`. */
@@ -683,32 +683,50 @@ const PaneLadder = ({
         const px = Math.min(Math.max(want, 0), cap);
         const t = px > 0 ? `translateX(${-px}px)` : '';
         if (el.style.transform !== t) el.style.transform = t;
+        /* WHERE IT ACTUALLY LANDED, handed back so the pass below can test
+           the real box rather than a threshold standing in for one. */
+        const right = track.clientWidth - 4 - px;
+        return { left: right - el.offsetWidth, right, y, h: el.offsetHeight };
       };
-      park(spotBadge, 0);
+      const spotBox = park(spotBadge, ySpot, 0);
       const clash = ySpot != null && yFlip != null && Math.abs(ySpot - yFlip) < BADGE_CLEAR_PX;
-      park(flipBadge, clash ? (spotBadge?.offsetWidth ?? 0) + 3 : 0);
+      const flipBox = park(flipBadge, yFlip, clash ? (spotBadge?.offsetWidth ?? 0) + 3 : 0);
+      const pills = [spotBox, flipBox].filter(Boolean) as { left: number; right: number; y: number; h: number }[];
 
       /*
         AND THE ROW UNDER A PILL GIVES UP ITS NUMBER.
 
-        Two prices in the same 14 pixels is one unreadable smear, and the
-        pill is the one a reader wants: it is live, to the cent, and it is
-        the thing they are looking for. So a row whose centre falls inside a
-        rule's band hides its LABEL only — the bar still draws, the row is
-        still clickable, and it comes straight back when price moves on.
+        Two prices in the same pixels is one unreadable smear, and the pill
+        is the one a reader wants: it is live, to the cent, and it is the
+        thing they are looking for. So a row a pill lands on hides its LABEL
+        only — the bar still draws, the row is still clickable, and the
+        number comes straight back when price moves on.
 
-        `visibility`, not `display`: the label still occupies its lane, so
-        the bars either side of it do not jump a few pixels wider on the one
-        row a rule happens to be crossing.
+        TESTED AGAINST THE PILL'S REAL BOX, on both axes. The first cut used
+        a fixed 14px of vertical distance, and the sweep caught it on the
+        build: 23 covers at 1024x768 layout 4, the worst of them spot
+        "501.06" over strike "501" by 12.0px. A row can be 22px tall against
+        a 14px pill, so their boxes still cross at 16px of centre-to-centre
+        distance — a threshold two pixels narrower than the geometry it was
+        standing in for. Horizontally it matters too: a flip pill stepped
+        aside from spot can clear the column entirely, and hiding a number
+        it no longer touches would be its own small lie.
+
+        `visibility`, not `display`: the label keeps its lane, so the bars
+        either side of it do not jump wider on the one row a rule crosses.
       */
-      const ruleYs = [...ruleY.values()];
       for (const el of track.querySelectorAll<HTMLElement>('[data-strike]')) {
         const label = el.querySelector<HTMLElement>('[data-strike-label]');
         if (!label) continue;
         let hide = false;
-        if (el.style.display !== 'none') {
+        if (el.style.display !== 'none' && pills.length) {
           const y = p.yFor(Number(el.dataset.strike));
-          if (y != null) hide = ruleYs.some(r => Math.abs(r - y) < BADGE_CLEAR_PX);
+          if (y != null) {
+            const lLeft = label.offsetLeft;
+            const lRight = lLeft + label.offsetWidth;
+            hide = pills.some(b =>
+              Math.abs(b.y - y) < (b.h + rowH) / 2 && b.left < lRight && b.right > lLeft);
+          }
         }
         const want = hide ? 'hidden' : '';
         if (label.style.visibility !== want) label.style.visibility = want;
