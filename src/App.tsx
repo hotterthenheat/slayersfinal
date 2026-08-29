@@ -6,6 +6,7 @@ import AppShell from './components/layout/AppShell';
 import { LaunchProvider } from './components/layout/LaunchTransition';
 import Compass from './pages/Compass';
 import Weigher from './pages/Weigher';
+import OptionChain from './pages/weigher/OptionChain';
 import Tracker from './pages/Tracker';
 import PinpointLayout from './pages/pinpoint/PinpointLayout';
 import Pulse from './pages/workspace/Pulse';
@@ -59,6 +60,9 @@ const App = () => {
             <Route path="/workspace" element={<Navigate to="/pulse" replace />} />
             <Route path="/compass" element={<Compass />} />
             <Route path="/weigher" element={<Weigher />} />
+            {/* §3 — the multi-expiry chain, the layout every options reader
+                already knows. Its own route so it can be linked to. */}
+            <Route path="/chain" element={<OptionChain />} />
             <Route path="/skys-vision" element={<Navigate to="/compass" replace />} />
             <Route path="/stocks" element={<Stocks />} />
             <Route path="/news" element={<News />} />
