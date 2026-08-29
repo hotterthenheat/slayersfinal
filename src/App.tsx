@@ -11,6 +11,7 @@ import IndexFutures from './pages/IndexFutures';
 import MacroDesk from './pages/MacroDesk';
 import Journal from './pages/Journal';
 import AlertsPage from './pages/Alerts';
+import Backtest from './pages/Backtest';
 import Tracker from './pages/Tracker';
 import PinpointLayout from './pages/pinpoint/PinpointLayout';
 import Pulse from './pages/workspace/Pulse';
@@ -78,6 +79,8 @@ const App = () => {
             <Route path="/journal" element={<Journal />} />
             {/* §17 — every armed alert, and everything that has fired */}
             <Route path="/alerts" element={<AlertsPage />} />
+            {/* §9 — whether the scanners have ever been worth anything */}
+            <Route path="/backtest" element={<Backtest />} />
             <Route path="/skys-vision" element={<Navigate to="/compass" replace />} />
             <Route path="/stocks" element={<Stocks />} />
             <Route path="/news" element={<News />} />
