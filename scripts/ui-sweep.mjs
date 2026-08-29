@@ -5254,9 +5254,26 @@ head('a strike row is a door that says so, and lands focused');
 
   await page.goto(`${BASE}/pinpoint/pain-map`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS);
-  const row = await page.$('tr[class*="cursor-pointer"]');
+  /* WAIT FOR THE DOOR, DO NOT SAMPLE FOR IT.
+     
+     A clickable row exists only where the strike has a cost basis, and the
+     basis is built from `flowTape` — prints that accumulate live after the
+     page loads. So the row count STARTS AT ZERO and grows: measured here at
+     1-2 rows by 2s, 4-7 by 8s, 6-8 by 20s. Sampling once at BOOT_MS asks
+     the question at whichever point the runner happens to have reached.
+     
+     That is what failed CI on a loaded runner while passing locally: fewer
+     timers fire, fewer prints land, and the single sample caught the table
+     while every strike was still empty — and an all-empty ladder folds its
+     rows away entirely, so there was no `cursor-pointer` row to find. The
+     premise was reported as a defect in the desk; the desk was fine.
+     
+     Waiting keeps every tooth: a door that never appears still fails, and
+     the assertions below are unchanged. It only stops the check from
+     depending on how fast the machine is. */
+  const row = await page.waitForSelector('tr[class*="cursor-pointer"]', { timeout: 25000 }).catch(() => null);
   if (!row) {
-    bad('PREMISE: no strike row on the pain map to click');
+    bad('PREMISE: no strike row on the pain map to click within 25s');
   } else {
     (await row.getAttribute('title'))
       ? ok(`the door says where it leads — title ${JSON.stringify(await row.getAttribute('title'))}`)
