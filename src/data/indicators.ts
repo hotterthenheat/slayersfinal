@@ -281,3 +281,434 @@ export function atrBarSeries(bars: readonly Candle[], period = 14): (number | nu
   }
   return out;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   THE SECOND SET (2026-08-29).
+
+   The eight above cover trend and a little momentum. What a reader coming
+   from TradingView reaches for and did not find here: the oscillators that
+   bound themselves (Stochastic, CCI, Williams %R, MFI), the trend-STRENGTH
+   family that answers "is this move worth trading" rather than "which way"
+   (ADX/DMI, Aroon), the volume-confirmation pair (OBV, CMF), and the
+   channel/stop family a plan is actually built on (Keltner, Donchian,
+   Supertrend, Parabolic SAR).
+
+   TWO RULES THIS SET KEEPS, both of which are easy to get wrong.
+
+   WILDER SMOOTHING IS NOT AN SMA, and ADX, MFI's cousins and ATR all want
+   Wilder's. The recurrence is `next = (prev*(n-1) + x)/n`, seeded with a
+   simple mean of the first n. Substituting an SMA gives a curve that looks
+   plausible, tracks the same turns, and is wrong by a few percent forever —
+   the kind of error nobody catches by eye, so `rma` exists once here rather
+   than being re-derived per indicator.
+
+   NULL MEANS "NOT YET", NEVER ZERO. Every series is bar-aligned with nulls
+   through its warm-up. A zero would be a legitimate reading for most of
+   these (CCI, ROC, OBV and CMF all cross zero), so filling warm-up with 0
+   invents signal at exactly the moment there is none.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/** Wilder's running mean — the recurrence behind ATR, ADX and RSI. */
+function rma(values: readonly (number | null)[], period: number): (number | null)[] {
+  const out: (number | null)[] = new Array(values.length).fill(null);
+  let acc = 0;
+  let seeded = -1;
+  let count = 0;
+  for (let i = 0; i < values.length; i++) {
+    const v = values[i];
+    if (v === null) continue;
+    if (seeded < 0) {
+      acc += v;
+      count++;
+      if (count === period) {
+        acc /= period;
+        out[i] = acc;
+        seeded = i;
+      }
+    } else {
+      acc = (acc * (period - 1) + v) / period;
+      out[i] = acc;
+    }
+  }
+  return out;
+}
+
+const highest = (bars: readonly Candle[], i: number, n: number) => {
+  let h = -Infinity;
+  for (let k = i - n + 1; k <= i; k++) if (bars[k].high > h) h = bars[k].high;
+  return h;
+};
+const lowest = (bars: readonly Candle[], i: number, n: number) => {
+  let l = Infinity;
+  for (let k = i - n + 1; k <= i; k++) if (bars[k].low < l) l = bars[k].low;
+  return l;
+};
+
+export interface StochasticSeries {
+  k: (number | null)[];
+  d: (number | null)[];
+}
+
+/**
+ * Stochastic oscillator — where the close sits inside the recent range,
+ * 0-100. %D is the smoothing of %K that the crossover is read from.
+ */
+export function stochasticSeries(
+  bars: readonly Candle[],
+  period = 14,
+  smoothK = 3,
+  smoothD = 3,
+): StochasticSeries {
+  const raw: (number | null)[] = new Array(bars.length).fill(null);
+  for (let i = period - 1; i < bars.length; i++) {
+    const hh = highest(bars, i, period);
+    const ll = lowest(bars, i, period);
+    /* A FLAT RANGE IS 50, NOT A DIVIDE BY ZERO. hh === ll happens on a
+       halted or thinly-printed name; the close is neither high nor low in
+       its range because the range has no width, and 50 says exactly that. */
+    raw[i] = hh === ll ? 50 : ((bars[i].close - ll) / (hh - ll)) * 100;
+  }
+  const k = smaOf(raw, smoothK);
+  const d = smaOf(k, smoothD);
+  return { k, d };
+}
+
+/** Simple mean over a nullable series, null until it has `period` values. */
+function smaOf(values: readonly (number | null)[], period: number): (number | null)[] {
+  const out: (number | null)[] = new Array(values.length).fill(null);
+  if (period < 1) return out;
+  for (let i = 0; i < values.length; i++) {
+    let sum = 0;
+    let n = 0;
+    for (let k = i - period + 1; k <= i; k++) {
+      if (k < 0) break;
+      const v = values[k];
+      if (v === null) break;
+      sum += v;
+      n++;
+    }
+    if (n === period) out[i] = sum / period;
+  }
+  return out;
+}
+
+/** Stochastic RSI — the stochastic OF the RSI, not of price. 0-100. */
+export function stochRsiSeries(
+  bars: readonly Candle[],
+  rsiPeriod = 14,
+  stochPeriod = 14,
+  smoothK = 3,
+  smoothD = 3,
+): StochasticSeries {
+  const rsi = rsiSeries(bars, rsiPeriod);
+  const raw: (number | null)[] = new Array(bars.length).fill(null);
+  for (let i = 0; i < bars.length; i++) {
+    if (rsi[i] === null) continue;
+    let hh = -Infinity;
+    let ll = Infinity;
+    let ok = true;
+    for (let k = i - stochPeriod + 1; k <= i; k++) {
+      if (k < 0) { ok = false; break; }
+      const v = rsi[k];
+      if (v === null) { ok = false; break; }
+      if (v > hh) hh = v;
+      if (v < ll) ll = v;
+    }
+    if (!ok) continue;
+    raw[i] = hh === ll ? 50 : ((rsi[i] as number) - ll) / (hh - ll) * 100;
+  }
+  const k = smaOf(raw, smoothK);
+  const d = smaOf(k, smoothD);
+  return { k, d };
+}
+
+export interface AdxSeries {
+  adx: (number | null)[];
+  plusDi: (number | null)[];
+  minusDi: (number | null)[];
+}
+
+/**
+ * ADX with its DMI pair. ADX is DIRECTIONLESS — it says how strong the move
+ * is, not which way; +DI over −DI is the direction. Reading ADX alone as
+ * bullish is the classic misuse, so both DIs are returned with it.
+ */
+export function adxSeries(bars: readonly Candle[], period = 14): AdxSeries {
+  const n = bars.length;
+  const empty = (): (number | null)[] => new Array(n).fill(null);
+  if (n < 2) return { adx: empty(), plusDi: empty(), minusDi: empty() };
+
+  const tr: (number | null)[] = empty();
+  const plusDm: (number | null)[] = empty();
+  const minusDm: (number | null)[] = empty();
+  for (let i = 1; i < n; i++) {
+    const up = bars[i].high - bars[i - 1].high;
+    const down = bars[i - 1].low - bars[i].low;
+    /* ONLY THE LARGER MOVE COUNTS, AND ONLY IF IT IS POSITIVE. A bar that
+       is both higher-high and lower-low is an expansion, not a direction. */
+    plusDm[i] = up > down && up > 0 ? up : 0;
+    minusDm[i] = down > up && down > 0 ? down : 0;
+    tr[i] = Math.max(
+      bars[i].high - bars[i].low,
+      Math.abs(bars[i].high - bars[i - 1].close),
+      Math.abs(bars[i].low - bars[i - 1].close),
+    );
+  }
+  const trN = rma(tr, period);
+  const plusN = rma(plusDm, period);
+  const minusN = rma(minusDm, period);
+
+  const plusDi = empty();
+  const minusDi = empty();
+  const dx: (number | null)[] = empty();
+  for (let i = 0; i < n; i++) {
+    const t = trN[i];
+    if (t === null || t === 0 || plusN[i] === null || minusN[i] === null) continue;
+    const p = ((plusN[i] as number) / t) * 100;
+    const m = ((minusN[i] as number) / t) * 100;
+    plusDi[i] = p;
+    minusDi[i] = m;
+    dx[i] = p + m === 0 ? 0 : (Math.abs(p - m) / (p + m)) * 100;
+  }
+  return { adx: rma(dx, period), plusDi, minusDi };
+}
+
+/**
+ * On-Balance Volume — volume signed by the close's direction. The LEVEL is
+ * meaningless (it depends where the series started); only its slope and its
+ * divergence from price carry information.
+ */
+export function obvSeries(bars: readonly Candle[]): number[] {
+  const out = new Array(bars.length).fill(0);
+  for (let i = 1; i < bars.length; i++) {
+    const d = bars[i].close - bars[i - 1].close;
+    out[i] = out[i - 1] + (d > 0 ? bars[i].volume : d < 0 ? -bars[i].volume : 0);
+  }
+  return out;
+}
+
+/** Commodity Channel Index — typical price against its own mean deviation. */
+export function cciSeries(bars: readonly Candle[], period = 20): (number | null)[] {
+  const out: (number | null)[] = new Array(bars.length).fill(null);
+  const tp = bars.map(b => (b.high + b.low + b.close) / 3);
+  for (let i = period - 1; i < bars.length; i++) {
+    let mean = 0;
+    for (let k = i - period + 1; k <= i; k++) mean += tp[k];
+    mean /= period;
+    let dev = 0;
+    for (let k = i - period + 1; k <= i; k++) dev += Math.abs(tp[k] - mean);
+    dev /= period;
+    /* 0.015 is Lambert's constant, chosen so roughly 70-80% of readings fall
+       inside ±100. It is a convention, not a derivation. */
+    out[i] = dev === 0 ? 0 : (tp[i] - mean) / (0.015 * dev);
+  }
+  return out;
+}
+
+/** Williams %R — the stochastic's mirror, 0 at the high to −100 at the low. */
+export function williamsRSeries(bars: readonly Candle[], period = 14): (number | null)[] {
+  const out: (number | null)[] = new Array(bars.length).fill(null);
+  for (let i = period - 1; i < bars.length; i++) {
+    const hh = highest(bars, i, period);
+    const ll = lowest(bars, i, period);
+    out[i] = hh === ll ? -50 : ((hh - bars[i].close) / (hh - ll)) * -100;
+  }
+  return out;
+}
+
+/** Money Flow Index — RSI weighted by volume. 0-100. */
+export function mfiSeries(bars: readonly Candle[], period = 14): (number | null)[] {
+  const out: (number | null)[] = new Array(bars.length).fill(null);
+  const tp = bars.map(b => (b.high + b.low + b.close) / 3);
+  for (let i = period; i < bars.length; i++) {
+    let pos = 0;
+    let neg = 0;
+    for (let k = i - period + 1; k <= i; k++) {
+      const flow = tp[k] * bars[k].volume;
+      if (tp[k] > tp[k - 1]) pos += flow;
+      else if (tp[k] < tp[k - 1]) neg += flow;
+    }
+    /* NO NEGATIVE FLOW IS 100, the same convention RSI uses for no losses:
+       the ratio is undefined, and the reading it stands for is "entirely
+       one-sided". */
+    out[i] = neg === 0 ? 100 : 100 - 100 / (1 + pos / neg);
+  }
+  return out;
+}
+
+export interface BandSeries {
+  upper: (number | null)[];
+  middle: (number | null)[];
+  lower: (number | null)[];
+}
+
+/** Keltner Channels — an EMA with ATR shoulders, not standard deviations. */
+export function keltnerSeries(
+  bars: readonly Candle[],
+  period = 20,
+  atrPeriod = 10,
+  mult = 2,
+): BandSeries {
+  const mid = emaSeries(bars, period);
+  const atr = atrBarSeries(bars, atrPeriod);
+  const upper: (number | null)[] = new Array(bars.length).fill(null);
+  const lower: (number | null)[] = new Array(bars.length).fill(null);
+  const middle: (number | null)[] = new Array(bars.length).fill(null);
+  for (let i = 0; i < bars.length; i++) {
+    if (atr[i] === null) continue;
+    middle[i] = mid[i];
+    upper[i] = mid[i] + (atr[i] as number) * mult;
+    lower[i] = mid[i] - (atr[i] as number) * mult;
+  }
+  return { upper, middle, lower };
+}
+
+/** Donchian Channels — the plain high/low envelope breakouts are read off. */
+export function donchianSeries(bars: readonly Candle[], period = 20): BandSeries {
+  const upper: (number | null)[] = new Array(bars.length).fill(null);
+  const lower: (number | null)[] = new Array(bars.length).fill(null);
+  const middle: (number | null)[] = new Array(bars.length).fill(null);
+  for (let i = period - 1; i < bars.length; i++) {
+    const hh = highest(bars, i, period);
+    const ll = lowest(bars, i, period);
+    upper[i] = hh;
+    lower[i] = ll;
+    middle[i] = (hh + ll) / 2;
+  }
+  return { upper, middle, lower };
+}
+
+export interface SupertrendSeries {
+  /** The stop line itself. */
+  line: (number | null)[];
+  /** +1 while the trend is up, −1 while down, null before it starts. */
+  dir: (number | null)[];
+}
+
+/**
+ * Supertrend — an ATR stop that only ever moves in the trend's favour and
+ * flips when price closes through it. The RATCHET is the whole indicator:
+ * a band recomputed from scratch each bar would loosen on a quiet bar and
+ * hand back ground the trade already earned.
+ */
+export function supertrendSeries(bars: readonly Candle[], period = 10, mult = 3): SupertrendSeries {
+  const n = bars.length;
+  const atr = atrBarSeries(bars, period);
+  const line: (number | null)[] = new Array(n).fill(null);
+  const dir: (number | null)[] = new Array(n).fill(null);
+  let upper = 0;
+  let lower = 0;
+  let trend = 1;
+  let started = false;
+  for (let i = 0; i < n; i++) {
+    if (atr[i] === null) continue;
+    const mid = (bars[i].high + bars[i].low) / 2;
+    const a = (atr[i] as number) * mult;
+    const rawUpper = mid + a;
+    const rawLower = mid - a;
+    if (!started) {
+      upper = rawUpper;
+      lower = rawLower;
+      trend = 1;
+      started = true;
+    } else {
+      upper = rawUpper < upper || bars[i - 1].close > upper ? rawUpper : upper;
+      lower = rawLower > lower || bars[i - 1].close < lower ? rawLower : lower;
+      if (trend === 1 && bars[i].close < lower) trend = -1;
+      else if (trend === -1 && bars[i].close > upper) trend = 1;
+    }
+    dir[i] = trend;
+    line[i] = trend === 1 ? lower : upper;
+  }
+  return { line, dir };
+}
+
+/** Rate of Change — percent move over `period` bars. Crosses zero. */
+export function rocSeries(bars: readonly Candle[], period = 12): (number | null)[] {
+  const out: (number | null)[] = new Array(bars.length).fill(null);
+  for (let i = period; i < bars.length; i++) {
+    const prev = bars[i - period].close;
+    out[i] = prev === 0 ? 0 : ((bars[i].close - prev) / prev) * 100;
+  }
+  return out;
+}
+
+export interface AroonSeries {
+  up: (number | null)[];
+  down: (number | null)[];
+}
+
+/** Aroon — how recently the window's high and low were made, as 0-100. */
+export function aroonSeries(bars: readonly Candle[], period = 25): AroonSeries {
+  const up: (number | null)[] = new Array(bars.length).fill(null);
+  const down: (number | null)[] = new Array(bars.length).fill(null);
+  for (let i = period; i < bars.length; i++) {
+    let hi = -Infinity;
+    let lo = Infinity;
+    let hiAt = i;
+    let loAt = i;
+    for (let k = i - period; k <= i; k++) {
+      if (bars[k].high >= hi) { hi = bars[k].high; hiAt = k; }
+      if (bars[k].low <= lo) { lo = bars[k].low; loAt = k; }
+    }
+    up[i] = ((period - (i - hiAt)) / period) * 100;
+    down[i] = ((period - (i - loAt)) / period) * 100;
+  }
+  return up.length ? { up, down } : { up, down };
+}
+
+/** Chaikin Money Flow — where the close sat in each bar, volume-weighted. */
+export function cmfSeries(bars: readonly Candle[], period = 20): (number | null)[] {
+  const out: (number | null)[] = new Array(bars.length).fill(null);
+  for (let i = period - 1; i < bars.length; i++) {
+    let mfv = 0;
+    let vol = 0;
+    for (let k = i - period + 1; k <= i; k++) {
+      const range = bars[k].high - bars[k].low;
+      /* A ZERO-RANGE BAR CONTRIBUTES NOTHING rather than dividing by zero:
+         the close was simultaneously at the high and the low, which carries
+         no information about who won the bar. */
+      const m = range === 0 ? 0 : ((bars[k].close - bars[k].low) - (bars[k].high - bars[k].close)) / range;
+      mfv += m * bars[k].volume;
+      vol += bars[k].volume;
+    }
+    out[i] = vol === 0 ? 0 : mfv / vol;
+  }
+  return out;
+}
+
+/**
+ * Parabolic SAR. The acceleration factor is the fiddly part: it steps up
+ * only when the extreme point makes a NEW extreme, caps at `maxAf`, and
+ * resets on every flip. Letting it step every bar makes a SAR that catches
+ * up to price and flips constantly.
+ */
+export function parabolicSarSeries(bars: readonly Candle[], step = 0.02, maxAf = 0.2): (number | null)[] {
+  const n = bars.length;
+  const out: (number | null)[] = new Array(n).fill(null);
+  if (n < 2) return out;
+  let up = bars[1].close >= bars[0].close;
+  let sar = up ? bars[0].low : bars[0].high;
+  let ep = up ? bars[1].high : bars[1].low;
+  let af = step;
+  out[1] = sar;
+  for (let i = 2; i < n; i++) {
+    sar = sar + af * (ep - sar);
+    /* The SAR may never sit inside the last two bars' range — that would be
+       a stop already touched before it was placed. */
+    if (up) sar = Math.min(sar, bars[i - 1].low, bars[i - 2].low);
+    else sar = Math.max(sar, bars[i - 1].high, bars[i - 2].high);
+
+    if (up && bars[i].low < sar) {
+      up = false; sar = ep; ep = bars[i].low; af = step;
+    } else if (!up && bars[i].high > sar) {
+      up = true; sar = ep; ep = bars[i].high; af = step;
+    } else if (up && bars[i].high > ep) {
+      ep = bars[i].high; af = Math.min(af + step, maxAf);
+    } else if (!up && bars[i].low < ep) {
+      ep = bars[i].low; af = Math.min(af + step, maxAf);
+    }
+    out[i] = sar;
+  }
+  return out;
+}
