@@ -12,6 +12,7 @@ import MacroDesk from './pages/MacroDesk';
 import Journal from './pages/Journal';
 import AlertsPage from './pages/Alerts';
 import Backtest from './pages/Backtest';
+import TickerOverview from './pages/TickerOverview';
 import Tracker from './pages/Tracker';
 import PinpointLayout from './pages/pinpoint/PinpointLayout';
 import Pulse from './pages/workspace/Pulse';
@@ -83,6 +84,8 @@ const App = () => {
             <Route path="/backtest" element={<Backtest />} />
             <Route path="/skys-vision" element={<Navigate to="/compass" replace />} />
             <Route path="/stocks" element={<Stocks />} />
+            {/* §2 — the company behind the ticker */}
+            <Route path="/stocks/:ticker" element={<TickerOverview />} />
             <Route path="/news" element={<News />} />
             <Route path="/earnings" element={<EarningsHub />} />
             <Route path="/earnings/:ticker" element={<EarningsDossier />} />

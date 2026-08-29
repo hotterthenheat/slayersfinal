@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Layers3, TrendingUp } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import Panel from '../components/ui/Panel';
@@ -129,10 +130,16 @@ const Stocks = () => {
       header: 'Name',
       sortValue: p => p.ticker,
       render: p => (
-        <span className="flex flex-col">
-          <span className="font-mono text-[13px] font-bold text-textPrimary">{p.ticker}</span>
+        /* §2 — the ticker is a door to the company behind it. The row's own
+           click still opens the thesis inline; this opens the business. */
+        <Link
+          to={`/stocks/${p.ticker}`}
+          onClick={e => e.stopPropagation()}
+          className="flex flex-col group focus:outline-none focus-visible:ring-1 focus-visible:ring-accent rounded"
+        >
+          <span className="font-mono text-[13px] font-bold text-textPrimary group-hover:underline decoration-dotted">{p.ticker}</span>
           <span className="text-[11px] text-textSecondary truncate">{p.name}</span>
-        </span>
+        </Link>
       ),
     },
     {
