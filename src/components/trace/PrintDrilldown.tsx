@@ -135,7 +135,7 @@ interface PrintDrilldownProps {
   snapshot: MarketSnapshot | null;
   onClose: () => void;
   isMarked: boolean;
-  onToggleMark: (id: number) => void;
+  onToggleMark: (p: FlowPrint) => void;
   onStep: (dir: -1 | 1) => void;
   hasPrev: boolean;
   hasNext: boolean;
@@ -418,7 +418,7 @@ const PrintDrilldown = ({ print, snapshot, onClose, isMarked, onToggleMark, onSt
         <div className="flex items-center gap-0.5 shrink-0">
           {print && (
             <button
-              onClick={() => onToggleMark(print.id)}
+              onClick={() => onToggleMark(print)}
               aria-pressed={isMarked}
               title={isMarked ? 'Tracking this print' : 'Track this print'}
               className={`p-1 rounded transition-colors ${isMarked ? 'text-select' : 'text-textMuted hover:text-textPrimary hover:bg-white/[0.05]'}`}
@@ -711,7 +711,7 @@ const PrintDrilldown = ({ print, snapshot, onClose, isMarked, onToggleMark, onSt
               <Scale className="w-3.5 h-3.5" /> Weigh it
             </button>
             <button
-              onClick={() => onToggleMark(print.id)}
+              onClick={() => onToggleMark(print)}
               aria-pressed={isMarked}
               className={`inline-flex items-center justify-center gap-1.5 px-2.5 py-2 rounded border font-mono text-[10px] uppercase tracking-wider transition-colors ${
                 isMarked

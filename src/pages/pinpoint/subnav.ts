@@ -1,4 +1,4 @@
-import { Activity, Clock, Columns2, Flame, Gauge, Grid3x3, Layers, Map, Target, Waves, type LucideIcon } from 'lucide-react';
+import { Activity, Clock, Columns2, Flame, Gauge, Grid3x3, Layers, Map, Target, Waves, Wind, type LucideIcon } from 'lucide-react';
 
 /** Pinpoint subpage registry — drives the sub-tab bar and command palette. */
 export interface GexSubpage {
@@ -69,6 +69,10 @@ export const GEX_SUBPAGES: GexSubpage[] = [
     subtitle: 'How wrong is textbook GEX right now — the audit of the whole category',
     icon: Gauge,
   },
-  // Launch trim (Noah, 2026-08-17): Volatility Lab + History & Replay pulled
-  // from the first launch — pages kept on disk, routes redirect.
+  {
+    path: '/pinpoint/vol-lab',
+    label: 'Vol Lab',
+    subtitle: 'The surface, the term structure, and what the market pays for vol',
+    icon: Wind,
+  },
 ];

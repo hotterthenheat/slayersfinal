@@ -24,6 +24,9 @@ import PainMap from './pages/pinpoint/PainMap';
 import TraceLayout from './pages/trace/TraceLayout';
 import LiveTape from './pages/trace/LiveTape';
 import FlowTracker from './pages/trace/FlowTracker';
+import FlowScanner from './pages/trace/FlowScanner';
+import DarkPool from './pages/trace/DarkPool';
+import VolLab from './pages/pinpoint/VolLab';
 import Stocks from './pages/Stocks';
 import News from './pages/News';
 import EarningsHub from './pages/EarningsHub';
@@ -76,7 +79,7 @@ const App = () => {
               <Route path="compare" element={<ExposureCompare />} />
               {/* Launch trim (Noah, 2026-08-17): Vol Lab + History & Replay
                   unrouted — pages kept on disk, engines still feed widgets */}
-              <Route path="vol-lab" element={<Navigate to="/pinpoint/exposure-profile" replace />} />
+              <Route path="vol-lab" element={<VolLab />} />
               <Route path="history" element={<GexHistory />} />
               <Route path="pain-map" element={<PainMap />} />
               <Route path="oi-heat" element={<OiHeatScreen />} />
@@ -87,9 +90,9 @@ const App = () => {
               <Route path="live-tape" element={<LiveTape />} />
               {/* Launch trim (Noah, 2026-08-17): Dark Pool + Scanner unrouted —
                   dark-pool prints still stream on the tape and the charts */}
-              <Route path="dark-pool" element={<Navigate to="/trace/live-tape" replace />} />
+              <Route path="dark-pool" element={<DarkPool />} />
               <Route path="dark-feed" element={<Navigate to="/trace/live-tape" replace />} />
-              <Route path="scanner" element={<Navigate to="/trace/live-tape" replace />} />
+              <Route path="scanner" element={<FlowScanner />} />
               <Route path="tracker" element={<FlowTracker />} />
             </Route>
             <Route path="/liquidity" element={<Navigate to="/trace" replace />} />
