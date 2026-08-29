@@ -1,5 +1,6 @@
 ﻿import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
+import DataState from '../components/ui/DataState';
 import { motion } from 'framer-motion';
 import { Filter } from 'lucide-react';
 import { useMarketData } from '../context/MarketDataContext';
@@ -389,11 +390,9 @@ const Compass = () => {
     return (
       <>
         {browseHeader}
-        <Panel className="h-64" bodyClassName="flex items-center justify-center">
-          <span className="font-mono text-[11px] text-textMuted uppercase tracking-widest">
-            Awaiting feed initialization…
-          </span>
-        </Panel>
+        <Panel className="w-full">
+        <DataState kind="loading" title="Reading the board" body="The first tick has not arrived yet." />
+      </Panel>
       </>
     );
   }

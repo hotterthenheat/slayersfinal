@@ -153,7 +153,7 @@ export const RTH_MINUTES = RTH_HOURS * 60;
   decides the next open barely stops at all. This model knows WHERE IN THE
   GLOBEX WEEK a wall-clock instant sits — the first piece of T-16, and the
   piece that is pure calendar. The overnight TAPE (session shading down the
-  pane, the overnight high/low carried into the open) waits on MKT Futures:
+  pane, the overnight high/low carried into the open) waits on a futures feed:
   there is no honest way to shade an Asia session over bars that do not
   exist, so the chip ships now and the shading ships with the feed.
 

@@ -2,7 +2,7 @@
   Acceptance test for P-1's provenance registry and P-2's expiry ladder.
 
   Both are honesty machinery as much as they are features: the registry is
-  what stops a modelled number from LOOKING sourced, and the ladder is what
+  what stops a simulated number from LOOKING sourced, and the ladder is what
   stops a 0DTE artifact from looking like structure. So the assertions are
   about the claims each makes, not about the figures underneath.
 
@@ -13,7 +13,7 @@
      real carry flips it to measured and a reset flips it back, with no
      second call into the registry
   3. weakest() really is the weakest link, in both orders, and an empty
-     source list is modelled rather than measured
+     source list is simulated rather than measured
   4. The swap's one call works, and an unknown family is refused
   5. The ladder is rectangular — every row carries every column — and its
      rows are the profile's own window, descending
@@ -45,25 +45,33 @@ const ALL_KEYS: ProvenanceKey[] = ['chain', 'exposure', 'tape', 'prints', 'candl
   resetCarry();
   check('every family reports a state and a sentence', ALL_KEYS.every(k => {
     const e = getProvenance(k);
-    return ['measured', 'derived', 'modelled'].includes(e.kind) && e.note.length > 10;
+    return ['live', 'measured', 'derived', 'model', 'simulated'].includes(e.kind) && e.note.length > 10;
   }));
   check(
     'and NOTHING claims to be measured while the simulator is the market',
     ALL_KEYS.every(k => getProvenance(k).kind !== 'measured'),
     ALL_KEYS.map(k => `${k}:${getProvenance(k).kind}`).join(' ')
   );
-  check('the macro calendar is derived, not modelled — its dates are real rules', getProvenance('macro').kind === 'derived');
+  check('the macro calendar is derived, not simulated — its dates are real rules', getProvenance('macro').kind === 'derived');
 }
 
 // ── 2. the carry family reads the seam itself ─────────────────────────────
 {
   resetCarry();
-  check('PREMISE: carry starts modelled', getProvenance('carry').kind === 'modelled');
+  /*
+     THE WORDS MOVED, and these assertions moved with them (section 21).
+     `modelled` used to mean two different things — "the simulator made this
+     up" and "our own model judged this" — and conflating them hid the most
+     important distinction on the desk: a SIMULATED number becomes real when
+     a feed lands, a MODEL one never does. The registry's defaults are all
+     the simulator today, so every one of these now reads `simulated`.
+  */
+  check('PREMISE: carry starts simulated', getProvenance('carry').kind === 'simulated');
   setCarry({ r: 0.0375, q: 0.0131 });
   check('a real carry makes the family measured, with no second call', getProvenance('carry').kind === 'measured');
   check('and the note carries the figures', /3\.75|0\.0375/.test(getProvenance('carry').note), getProvenance('carry').note);
   resetCarry();
-  check('a reset puts it back to modelled', getProvenance('carry').kind === 'modelled');
+  check('a reset puts it back to simulated', getProvenance('carry').kind === 'simulated');
 }
 
 // ── 3. weakest link ───────────────────────────────────────────────────────
@@ -71,13 +79,13 @@ const ALL_KEYS: ProvenanceKey[] = ['chain', 'exposure', 'tape', 'prints', 'candl
   resetProvenance();
   setProvenance('exposure', { kind: 'measured', note: 'feed' });
   setProvenance('tape', { kind: 'derived', note: 'computed here' });
-  check('a mixture reports its weakest part', weakest(['exposure', 'tape', 'chain']).kind === 'modelled');
-  check('— and order does not matter', weakest(['chain', 'tape', 'exposure']).kind === 'modelled');
-  check('derived beats modelled but loses to measured', weakest(['exposure', 'tape']).kind === 'derived');
+  check('a mixture reports its weakest part', weakest(['exposure', 'tape', 'chain']).kind === 'simulated');
+  check('— and order does not matter', weakest(['chain', 'tape', 'exposure']).kind === 'simulated');
+  check('derived beats simulated but loses to measured', weakest(['exposure', 'tape']).kind === 'derived');
   check('one measured family alone is measured', weakest(['exposure']).kind === 'measured');
-  check('naming no source is modelled, not measured', weakest([]).kind === 'modelled');
+  check('naming no source is simulated, not measured', weakest([]).kind === 'simulated');
   resetProvenance();
-  check('and a reset restores the defaults', getProvenance('exposure').kind === 'modelled');
+  check('and a reset restores the defaults', getProvenance('exposure').kind === 'simulated');
 }
 
 // ── 4. the swap's call ────────────────────────────────────────────────────

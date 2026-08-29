@@ -90,6 +90,9 @@ const SleeveBar = ({ label, value }: { label: string; value: number }) => (
 );
 
 const Stocks = () => {
+  /* The default board is what a reader looks at first; the position
+     columns are one click away rather than always on. */
+  const [visibleCols, setVisibleCols] = useState<Set<string>>(new Set(['ticker', 'price', 'trend', 'sleeves', 'short', 'verdict']));
   const picks = useMemo(() => buildStockBoard(), []);
   const sectors = useMemo(() => buildSectorBoard(picks), [picks]);
   const [view, setView] = useState<ViewFilter>('ALL');
@@ -120,7 +123,7 @@ const Stocks = () => {
   // One board-level read instead of ten near-identical card sentences.
   // Key tokens echo the ladder's color code: leader = magenta, laggards = bear.
 
-  const columns: Column<StockPick>[] = [
+  const allColumns: Column<StockPick>[] = [
     {
       key: 'ticker',
       header: 'Name',
@@ -171,6 +174,52 @@ const Stocks = () => {
         </span>
       ),
     },
+    /*
+      §2's POSITION columns. The sleeves above score the name; these four
+      answer a different question — what happens if it moves. They are
+      opt-in because a board carrying every column at once is unreadable on
+      a laptop, and a reader screening on momentum is not also screening on
+      float.
+    */
+    {
+      key: 'short',
+      header: 'Short %',
+      align: 'right',
+      width: '110px',
+      sortValue: p => p.shortInterestPct,
+      render: p => (
+        <span className="font-mono text-[11px]">
+          <span className={p.shortInterestPct >= 15 ? 'text-warn' : 'text-textSecondary'}>
+            {p.shortInterestPct.toFixed(1)}%
+          </span>
+          <span className="text-textMuted ml-1.5">{p.daysToCover.toFixed(1)}d</span>
+        </span>
+      ),
+    },
+    {
+      key: 'insider',
+      header: 'Insider 90d',
+      align: 'right',
+      width: '110px',
+      sortValue: p => p.insiderNet90d,
+      render: p => (
+        <span className={`font-mono text-[11px] ${p.insiderNet90d > 0 ? 'text-bull' : p.insiderNet90d < 0 ? 'text-bear' : 'text-textMuted'}`}>
+          {p.insiderNet90d >= 0 ? '+' : '−'}${(Math.abs(p.insiderNet90d) / 1e6).toFixed(0)}M
+        </span>
+      ),
+    },
+    {
+      key: 'float',
+      header: 'Float',
+      align: 'right',
+      width: '96px',
+      sortValue: p => p.floatShares,
+      render: p => (
+        <span className="font-mono text-[11px] text-textSecondary">
+          {p.floatShares >= 1e9 ? `${(p.floatShares / 1e9).toFixed(1)}B` : `${(p.floatShares / 1e6).toFixed(0)}M`}
+        </span>
+      ),
+    },
     {
       key: 'verdict',
       header: 'Screen',
@@ -178,6 +227,14 @@ const Stocks = () => {
       render: p => <StateTag verdict={p.verdict} />,
     },
   ];
+
+  /* Column visibility — the list asks for it, and the board needs it once
+     the position columns are in: eleven columns is a horizontal scroll on
+     anything smaller than a desk monitor. */
+  const shownColumns = useMemo(
+    () => allColumns.filter(c => visibleCols.has(c.key)),
+    [allColumns, visibleCols]
+  );
 
   return (
     <>
@@ -272,7 +329,35 @@ const Stocks = () => {
           </span>
         }
         subtitle="screen states — the data's read, you make the call · click a row for the why"
-        actions={<FilterTabs ariaLabel="Screen filter" options={VIEW_OPTIONS} value={view} onChange={setView} />}
+        actions={
+          <div className="flex items-center gap-2">
+            {/* Column visibility — the position columns are one click away
+                rather than always on, because eleven columns is a horizontal
+                scroll on anything smaller than a desk monitor. */}
+            <div className="flex items-center gap-1" role="group" aria-label="Columns">
+              {allColumns.filter(c => c.key !== 'ticker').map(c => {
+                const on = visibleCols.has(c.key);
+                return (
+                  <button
+                    key={c.key}
+                    aria-pressed={on}
+                    onClick={() => setVisibleCols(prev => {
+                      const next = new Set(prev);
+                      if (next.has(c.key)) next.delete(c.key); else next.add(c.key);
+                      return next;
+                    })}
+                    className={`px-1.5 py-0.5 rounded font-mono text-[9px] uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-accent ${
+                      on ? 'bg-white/[0.07] text-textSecondary' : 'text-textMuted hover:text-textSecondary'
+                    }`}
+                  >
+                    {c.key}
+                  </button>
+                );
+              })}
+            </div>
+            <FilterTabs ariaLabel="Screen filter" options={VIEW_OPTIONS} value={view} onChange={setView} />
+          </div>
+        }
         flush
       >
         {selected && (
@@ -286,7 +371,7 @@ const Stocks = () => {
         {/* keyed by filter so the swap fades up softly instead of blinking */}
         <div key={view} className="animate-soft-in">
           <DataTable
-            columns={columns}
+            columns={shownColumns}
             rows={rows}
             rowKey={p => p.ticker}
             onRowClick={p => setSelectedTicker(prev => (prev === p.ticker ? null : p.ticker))}

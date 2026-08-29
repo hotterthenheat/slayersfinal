@@ -1,4 +1,7 @@
 import { useMemo } from 'react';
+import { listExpiries, summariseExpiries, type ExpirySummary } from '../../data/optionChain';
+import Simulator from '../../core/simulator';
+import DataTable, { type Column } from '../../components/ui/DataTable';
 import { useNavigate } from 'react-router-dom';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildExpiryLadder, rowWords, wallOwnership, LADDER_COLUMNS } from '../../data/expiryLadder';
@@ -113,6 +116,20 @@ const ExpiryLadder = () => {
     };
   }, [ladder]);
 
+  /*
+    §6's per-expiry rows, off the real listed board.
+
+    THE HOOK SITS ABOVE THE GUARD, deliberately. Dropped below the early
+    return it becomes a CONDITIONAL hook — React #310, the same crash this
+    desk already shipped once on the Time Machine's memo and caught in the
+    sweep. The columns underneath are plain data and may live anywhere.
+  */
+  const expirySummaries = useMemo(() => {
+    if (!marketData) return [];
+    const iv = Simulator.TICKERS[marketData.ticker]?.iv ?? 0.2;
+    return summariseExpiries(marketData.ticker, marketData.spot, iv, listExpiries(), 12);
+  }, [marketData?.ticker, marketData?.spot]);
+
   if (!ladder || !view) {
     return (
       <div className="flex items-center justify-center h-64 font-mono text-[11px] uppercase tracking-widest text-textMuted">
@@ -120,6 +137,36 @@ const ExpiryLadder = () => {
       </div>
     );
   }
+
+  const expiryCols: Column<ExpirySummary>[] = [
+    { key: 'exp', header: 'Expiry', width: '170px', sortValue: r => r.expiry.dte,
+      render: r => (
+        <span className="font-mono text-[11px]">
+          <span className={r.expiry.dte === 0 ? 'text-warn' : 'text-textPrimary'}>
+            {r.expiry.dte === 0 ? '0DTE' : `${r.expiry.dte}d`}
+          </span>
+          <span className="text-textMuted ml-2">{r.expiry.weekday} {r.expiry.label}</span>
+        </span>
+      ) },
+    { key: 'oi', header: 'Open interest', align: 'right', width: '150px', sortValue: r => r.totalOi,
+      render: r => (
+        <span className="font-mono text-[11px] text-textSecondary">
+          {r.totalOi.toLocaleString()}
+          <span className="text-textMuted ml-1.5">{r.oiSharePct.toFixed(0)}%</span>
+        </span>
+      ) },
+    { key: 'vol', header: 'Volume', align: 'right', width: '120px', sortValue: r => r.totalVolume,
+      render: r => <span className="font-mono text-[11px] text-textSecondary">{r.totalVolume.toLocaleString()}</span> },
+    { key: 'net', header: 'Net premium', align: 'right', width: '130px', sortValue: r => r.netPremium,
+      render: r => (
+        <span className={`font-mono text-[11px] ${r.netPremium >= 0 ? 'text-bull' : 'text-bear'}`}>
+          {r.netPremium >= 0 ? '+' : '−'}${(Math.abs(r.netPremium) / 1e6).toFixed(1)}M
+        </span>
+      ) },
+    { key: 'iv', header: 'ATM IV', align: 'right', width: '100px', sortValue: r => r.atmIv,
+      render: r => <span className="font-mono text-[11px] text-textSecondary">{r.atmIv.toFixed(1)}%</span> },
+  ];
+
 
   return (
     <div className="flex flex-col gap-3 flex-grow min-h-0">
@@ -213,6 +260,29 @@ const ExpiryLadder = () => {
           )}
         </div>
       </div>
+
+      {/* §6 — HOW BIG IS EACH EXPIRY IN THE FIRST PLACE. The grid above
+          answers "which expiry owns this strike"; a strike can look dominant
+          there while sitting on an expiry carrying two percent of the
+          board's open interest, and the grid alone cannot say so. Built off
+          the real listed board (data/optionChain.ts), so these are dated
+          contracts rather than lens weightings. */}
+      <Panel
+        title="By expiry"
+        subtitle="open interest, volume and net premium on each listed date"
+        className="w-full"
+        flush
+        actions={<ProvenanceChip sources={['chain']} note="Per-expiry sums from the modelled multi-expiry chain." />}
+      >
+        <DataTable
+          columns={expiryCols}
+          rows={expirySummaries}
+          rowKey={r => r.expiry.label}
+          initialSort={{ key: 'oi', dir: 'desc' }}
+          maxHeight="300px"
+          emptyText="No listed expiries."
+        />
+      </Panel>
 
       <p className="font-mono text-[10px] leading-relaxed text-textSecondary">
         A strike whose gamma is concentrated in 0DTE is a level that will not survive the bell; one spread across

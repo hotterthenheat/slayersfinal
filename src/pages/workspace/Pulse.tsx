@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import DataState from '../../components/ui/DataState';
 import { useLocation } from 'react-router-dom';
 import RGL, { WidthProvider, type Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
@@ -426,11 +427,7 @@ const Pulse = () => {
             soleChart
           />
         ) : (
-          <div className="flex h-full items-center justify-center">
-            <span className="font-mono text-[11px] uppercase tracking-widest text-textMuted">
-              Awaiting feed initialization…
-            </span>
-          </div>
+          <DataState kind="loading" title="Reading the tape" body="The first tick has not arrived yet." />
         )}
       </div>
     );
@@ -632,11 +629,9 @@ const Pulse = () => {
       {/* The grid — fades out on a switch, then the next desk mounts under a
           fresh key and breathes in slowly */}
       {!pulsedCtx ? (
-        <Panel className="h-64" bodyClassName="flex items-center justify-center">
-          <span className="font-mono text-[11px] text-textMuted uppercase tracking-widest">
-            Awaiting feed initialization…
-          </span>
-        </Panel>
+        <Panel className="w-full">
+        <DataState kind="loading" title="Reading the tape" body="The first tick has not arrived yet." />
+      </Panel>
       ) : instances.length === 0 ? (
         <Panel className="h-64" bodyClassName="flex flex-col items-center justify-center gap-2">
           <span className="font-mono text-[11px] text-textMuted uppercase tracking-widest">Empty desk</span>

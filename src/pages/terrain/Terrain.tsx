@@ -1,12 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link2, Maximize2, Minimize2, Rows3, X } from 'lucide-react';
+import { Link2, Maximize2, Minimize2, Rows3, X,
+  Star,
+  Pencil,
+  Copy
+} from 'lucide-react';
 import Simulator from '../../core/simulator';
 import { useMarketData } from '../../context/MarketDataContext';
 import DistanceUnitPicker from '../../components/ui/DistanceUnitPicker';
 import { futuresPhaseAt, FUTURES_PHASE_WORDS } from '../../core/calendar';
 import {
   deleteNamedLayout, loadNamedLayouts, persistNamedLayouts, saveNamedLayout,
-  MAX_NAMED_LAYOUTS, type NamedLayoutEntry,
+  MAX_NAMED_LAYOUTS,
+  LAYOUT_NAME_MAX, type NamedLayoutEntry,
 } from './layouts';
 import { buildLadderFor, buildLevelsFor, buildPrints, fmtUsd, spotChangePct } from '../../data/gex';
 import StrikeChart, {
@@ -1446,7 +1451,21 @@ const Pane = ({
 };
 
 /** Terrain — the charts-only desk. */
+/*
+  §11's history-depth options. `sessions` is what each depth WOULD need; the
+  desk compares it against what the tape actually holds and disables the rest.
+*/
+const SEEDED_SESSIONS = 22;
+const HISTORY_DEPTHS = [
+  { key: '30d', label: '30d', sessions: 22 },
+  { key: '1y', label: '1y', sessions: 252 },
+  { key: '5y', label: '5y', sessions: 1260 },
+  { key: 'max', label: 'Max', sessions: 5040 },
+] as const;
+type HistoryDepth = (typeof HISTORY_DEPTHS)[number]['key'];
+
 const Terrain = () => {
+  const [historyDepth, setHistoryDepth] = useState<HistoryDepth>('30d');
   const { marketData } = useMarketData();
   const revRef = useRef(0);
   const revision = useMemo(() => ++revRef.current, [marketData]);
@@ -1489,6 +1508,54 @@ const Terrain = () => {
     setNamedLayouts(next);
     persistNamedLayouts(next);
   };
+
+  /*
+    §20 — rename, duplicate and favourite.
+
+    All three operate on the SHELF OBJECT rather than re-saving the current
+    desk, which matters: duplicating a layout must copy the SAVED
+    arrangement, not whatever happens to be on screen. A reader who set up a
+    layout last week and duplicates it today expects last week's panes.
+
+    Rename is delete-then-set rather than a key edit, so the shelf's own
+    cap and name rules apply to the new name exactly as they would to a
+    fresh save — a rename cannot smuggle in a 200-character name.
+  */
+  const renameNamedLayout = (from: string, to: string) => {
+    const clean = to.trim().slice(0, LAYOUT_NAME_MAX);
+    if (!clean || clean === from || namedLayouts[clean]) return;
+    const entry = namedLayouts[from];
+    if (!entry) return;
+    const next = { ...namedLayouts };
+    delete next[from];
+    next[clean] = entry;
+    setNamedLayouts(next);
+    persistNamedLayouts(next);
+  };
+  const duplicateNamedLayout = (name: string) => {
+    const entry = namedLayouts[name];
+    if (!entry) return;
+    if (Object.keys(namedLayouts).length >= MAX_NAMED_LAYOUTS) {
+      setLayoutNote(`the shelf holds ${MAX_NAMED_LAYOUTS} — delete one first`);
+      return;
+    }
+    /* "name copy", then "name copy 2" — never silently overwriting. */
+    let copy = `${name} copy`.slice(0, LAYOUT_NAME_MAX);
+    let n = 2;
+    while (namedLayouts[copy]) copy = `${name} copy ${n++}`.slice(0, LAYOUT_NAME_MAX);
+    const next = { ...namedLayouts, [copy]: { ...entry, savedAt: Date.now() } };
+    setNamedLayouts(next);
+    persistNamedLayouts(next);
+  };
+  const toggleFavourite = (name: string) => {
+    const entry = namedLayouts[name];
+    if (!entry) return;
+    const next = { ...namedLayouts, [name]: { ...entry, favourite: !entry.favourite } };
+    setNamedLayouts(next);
+    persistNamedLayouts(next);
+  };
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState('');
   useEffect(() => {
     try {
       localStorage.setItem(TERRAIN_KEY, JSON.stringify(cfg));
@@ -2152,6 +2219,43 @@ const Terrain = () => {
           <DistanceUnitPicker dense />
         </span>
 
+        {/* §11 — HOW FAR BACK THE TAPE REACHES.
+
+            The control is real and the honesty is the point: the simulator
+            seeds 22 sessions, so anything past a month is drawn DISABLED
+            with the reason on it rather than offered and then silently
+            capped. A reader who picks "5y" and gets a month of bars learns
+            that the control lies; one who sees it greyed learns what the
+            desk actually holds. */}
+        <span
+          className="pointer-events-auto inline-flex rounded-md border border-white/[0.08] bg-canvas/40 backdrop-blur-[3px] px-1 py-0.5"
+          role="group"
+          aria-label="History depth"
+        >
+          {HISTORY_DEPTHS.map(d => {
+            const have = d.sessions <= SEEDED_SESSIONS;
+            const on = d.key === historyDepth;
+            return (
+              <button
+                key={d.key}
+                disabled={!have}
+                aria-pressed={on}
+                onClick={() => have && setHistoryDepth(d.key)}
+                title={have ? `${d.label} of sessions` : `${d.label} needs ${d.sessions} sessions — the tape holds ${SEEDED_SESSIONS}`}
+                className={`px-1.5 py-0.5 rounded font-mono text-[10px] uppercase tracking-wider transition-colors ${
+                  !have
+                    ? 'text-textMuted/40 cursor-not-allowed'
+                    : on
+                      ? 'bg-white/[0.16] text-textPrimary'
+                      : 'text-textSecondary hover:text-textPrimary'
+                }`}
+              >
+                {d.label}
+              </button>
+            );
+          })}
+        </span>
+
         {/* T-18 — the named-layouts shelf, in the desk's own cluster. */}
         <span className="relative pointer-events-auto">
           <button
@@ -2187,24 +2291,72 @@ const Terrain = () => {
                 <div className="font-mono text-[9px] uppercase tracking-widest text-textMuted px-1 pb-1.5">
                   Named layouts · {Object.keys(namedLayouts).length}/{MAX_NAMED_LAYOUTS}
                 </div>
+                {/* §20 — favourites pin to the top, then newest first. The
+                    pin is the only reordering a reader needs: a shelf of
+                    twelve is short enough that anything more would be
+                    ceremony. */}
                 {Object.entries(namedLayouts)
-                  .sort((a, b) => b[1].savedAt - a[1].savedAt)
+                  .sort((a, b) => {
+                    if (!!a[1].favourite !== !!b[1].favourite) return a[1].favourite ? -1 : 1;
+                    return b[1].savedAt - a[1].savedAt;
+                  })
                   .map(([name, entry]) => (
                     <div key={name} className="flex items-center gap-1 group">
+                      {renaming === name ? (
+                        <input
+                          autoFocus
+                          value={renameDraft}
+                          onChange={e => setRenameDraft(e.target.value)}
+                          onBlur={() => { renameNamedLayout(name, renameDraft); setRenaming(null); }}
+                          onKeyDown={e => {
+                            e.stopPropagation();
+                            if (e.key === 'Enter') { renameNamedLayout(name, renameDraft); setRenaming(null); }
+                            if (e.key === 'Escape') setRenaming(null);
+                          }}
+                          aria-label={`Rename ${name}`}
+                          className="flex-1 min-w-0 px-1.5 py-1 rounded border border-borderMuted bg-inset font-mono text-[11px] text-textPrimary outline-none"
+                        />
+                      ) : (
+                        <button
+                          onClick={() => applyNamedLayout(entry)}
+                          title={`${entry.layout} pane${entry.layout === 1 ? '' : 's'} · ${entry.panes.slice(0, entry.layout).map(pn => pn.ticker).join(' ')}`}
+                          className="flex-1 min-w-0 text-left px-1.5 py-1 rounded font-mono text-[11px] text-textSecondary hover:text-textPrimary hover:bg-white/[0.05] truncate transition-colors"
+                        >
+                          {entry.favourite && <span className="text-select mr-1" aria-hidden>★</span>}
+                          {name}
+                          <span className="ml-1.5 text-[9px] text-textMuted tnum">
+                            {entry.layout}× {entry.panes.slice(0, entry.layout).map(pn => pn.ticker).join('·')}
+                          </span>
+                        </button>
+                      )}
                       <button
-                        onClick={() => applyNamedLayout(entry)}
-                        title={`${entry.layout} pane${entry.layout === 1 ? '' : 's'} · ${entry.panes.slice(0, entry.layout).map(pn => pn.ticker).join(' ')}`}
-                        className="flex-1 min-w-0 text-left px-1.5 py-1 rounded font-mono text-[11px] text-textSecondary hover:text-textPrimary hover:bg-white/[0.05] truncate transition-colors"
+                        onClick={() => toggleFavourite(name)}
+                        aria-label={entry.favourite ? `Unpin ${name}` : `Pin ${name}`}
+                        aria-pressed={!!entry.favourite}
+                        className={`shrink-0 inline-flex items-center justify-center w-5 h-5 rounded transition-all hover:bg-white/[0.08] ${
+                          entry.favourite ? 'text-select opacity-100' : 'text-textMuted opacity-0 group-hover:opacity-100 hover:text-textPrimary'
+                        }`}
                       >
-                        {name}
-                        <span className="ml-1.5 text-[9px] text-textMuted tnum">
-                          {entry.layout}× {entry.panes.slice(0, entry.layout).map(pn => pn.ticker).join('·')}
-                        </span>
+                        <Star className="w-3 h-3" fill={entry.favourite ? 'currentColor' : 'none'} />
+                      </button>
+                      <button
+                        onClick={() => { setRenaming(name); setRenameDraft(name); }}
+                        aria-label={`Rename the layout ${name}`}
+                        className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded text-textMuted opacity-0 group-hover:opacity-100 hover:text-textPrimary hover:bg-white/[0.08] transition-all"
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </button>
+                      <button
+                        onClick={() => duplicateNamedLayout(name)}
+                        aria-label={`Duplicate the layout ${name}`}
+                        className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded text-textMuted opacity-0 group-hover:opacity-100 hover:text-textPrimary hover:bg-white/[0.08] transition-all"
+                      >
+                        <Copy className="w-3 h-3" />
                       </button>
                       <button
                         onClick={() => removeNamedLayout(name)}
                         aria-label={`Delete the layout ${name}`}
-                        className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded text-textMuted opacity-0 group-hover:opacity-100 hover:text-textPrimary hover:bg-white/[0.08] transition-all"
+                        className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded text-textMuted opacity-0 group-hover:opacity-100 hover:text-bear hover:bg-white/[0.08] transition-all"
                       >
                         <X className="w-3 h-3" />
                       </button>

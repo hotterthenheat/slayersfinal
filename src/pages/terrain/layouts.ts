@@ -28,6 +28,8 @@ export interface NamedLayoutEntry<P> {
   layout: number;
   panes: P[];
   savedAt: number;
+  /** Pinned to the top of the shelf. Optional so older saves still load. */
+  favourite?: boolean;
 }
 
 export const NAMED_LAYOUTS_KEY = 'slayer_terrain_layouts_v1';

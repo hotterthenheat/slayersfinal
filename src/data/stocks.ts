@@ -37,6 +37,20 @@ export interface StockPick {
   thesis: string;
   /** 30 points of relative-strength history for the sparkline */
   trend: number[];
+
+  /*
+    §2's named columns. All four are POSITION context rather than price —
+    they answer "what happens if this moves", which is the question the
+    sleeves above cannot.
+  */
+  /** Short interest as a percent of float — the squeeze denominator. */
+  shortInterestPct: number;
+  /** Days to cover at average volume. Above ~5 a squeeze has fuel. */
+  daysToCover: number;
+  /** Net insider dollars over 90 days; negative is selling. */
+  insiderNet90d: number;
+  /** Free float in shares — what short interest is a percent OF. */
+  floatShares: number;
 }
 
 export interface SectorRow {
@@ -124,6 +138,15 @@ export function buildStockBoard(): StockPick[] {
       verdict,
       thesis: thesisFor(u.name, sl, verdict),
       trend,
+
+      /* §2's position columns. Float scales with the name's price band —
+         a $400 stock has fewer shares out than a $20 one at similar cap —
+         and short interest is a percent OF that float, so the two move
+         together the way a real pair does. */
+      floatShares: Math.round(hRange(`${u.ticker}-${day}|float`, 40e6, 3.2e9) * (u.px > 200 ? 0.35 : 1)),
+      shortInterestPct: Number(hRange(`${u.ticker}-${day}|si`, 0.4, 24).toFixed(2)),
+      daysToCover: Number(hRange(`${u.ticker}-${day}|dtc`, 0.3, 9.5).toFixed(1)),
+      insiderNet90d: Math.round(hRange(`${u.ticker}-${day}|ins`, -180e6, 90e6)),
     };
   }).sort((a, b) => b.composite - a.composite);
 }

@@ -5,6 +5,7 @@ import CatTag, { CAT_COLOR } from '../components/news/CatTag';
 import PageHeader from '../components/ui/PageHeader';
 import Panel from '../components/ui/Panel';
 import RichRead from '../components/ui/RichRead';
+import ProvenanceChip from '../components/ui/ProvenanceChip';
 import SegmentedControl from '../components/ui/SegmentedControl';
 import FilterTabs from '../components/ui/FilterTabs';
 import AnimatedNumber from '../components/ui/AnimatedNumber';
@@ -292,6 +293,17 @@ const News = () => {
                   two views cross-fade into each other. */}
               {tab === 'outcome' ? (
                 <div key="outcome" className="flex flex-col gap-4 animate-soft-in">
+                  {/* §15 — THIS IS OURS, AND IT SAYS SO. The headline is a
+                      source; the probability, the expected move, the analog
+                      and the playbook underneath it are this desk's model.
+                      No vendor supplies them and no quote can confirm them,
+                      which is exactly what the `model` badge exists to mark
+                      — and the distinction the old single word for
+                      "simulated" hid. */}
+                  <div className="flex items-center gap-2">
+                    <ProvenanceChip sources={['macro']} kind="model" note="Probability, expected move, analog and playbook are this desk's own model — not a vendor figure." />
+                    <span className="text-[10px] text-textMuted">Our read, not a source's.</span>
+                  </div>
                   <OddsBar probUp={selected.prediction.probUpPct} />
 
                   <div className="grid grid-cols-3 gap-2">

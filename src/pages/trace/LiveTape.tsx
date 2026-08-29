@@ -1,7 +1,8 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useSyncExternalStore, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowUp, Bookmark, Check, ChevronDown, Filter, Pause, Play, Search, SlidersHorizontal, X } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
+import { getWatchedPrints, printKey, subscribeWatch, togglePrint } from '../../data/flowWatch';
 import { enrichPrint, rankNotable, sentimentOf, summarizeTape } from '../../data/tape';
 import { buildGexView, fmtUsd } from '../../data/gex';
 import Chip from '../../components/ui/Chip';
@@ -94,7 +95,7 @@ const TapeRow = memo(
     shownColumns: TapeColumn[];
     firstInGroup: Set<string>;
     onOpen: (p: FlowPrint) => void;
-    onMark: (id: number) => void;
+    onMark: (p: FlowPrint) => void;
   }) => {
     const sent = sentimentOf(r);
     return (
@@ -113,7 +114,7 @@ const TapeRow = memo(
                 // The star is its own control — bookmarking must
                 // not also open the drilldown.
                 e.stopPropagation();
-                onMark(r.id);
+                onMark(r);
               }}
               className={`transition-colors ${isMarked ? 'text-select' : 'text-textMuted/40 hover:text-textSecondary'}`}
               aria-label="Track print"
@@ -842,7 +843,15 @@ const LiveTape = () => {
   */
   const [frozen, setFrozen] = useState<FlowPrint[] | null>(null);
   const [paused, setPaused] = useState(false);
-  const [marked, setMarked] = useState<Set<number>>(new Set());
+  /* BOOKMARKS PERSIST, and they persist as WHOLE PRINTS.
+
+     This was a Set of print ids held in component state: lost on reload, and
+     keyed on an id the rolling tape reuses, so a bookmark could silently come
+     to mean a different print. The Tracker could never see them at all.
+     data/flowWatch.ts stores the record itself and every surface watching the
+     store re-renders together. */
+  const marked = useSyncExternalStore(subscribeWatch, getWatchedPrints, getWatchedPrints);
+  const markedKeys = useMemo(() => new Set(marked.map(w => printKey(w.print))), [marked]);
   const [read, setRead] = useState('Awaiting prints…');
   const [flowFilter, setFlowFilter] = useState<FlowFilter>('ALL');
   const [sentFilter, setSentFilter] = useState<SentFilter>('ALL');
@@ -1074,16 +1083,7 @@ const LiveTape = () => {
 
   // Stable identity — TapeRow is memoized, and a fresh callback per render
   // would defeat every row's bail-out.
-  const toggleMark = useCallback(
-    (id: number) =>
-      setMarked(prev => {
-        const next = new Set(prev);
-        if (next.has(id)) next.delete(id);
-        else next.add(id);
-        return next;
-      }),
-    []
-  );
+  const toggleMark = useCallback((p: FlowPrint) => togglePrint(p), []);
 
   // Drilldown navigation — stepping moves through the FILTERED view, so ↑/↓
   // walks exactly the rows the user is looking at. Once the open print has aged
@@ -1220,7 +1220,7 @@ const LiveTape = () => {
             onNone={() => setVisibleCols(new Set())}
           />
           <span className="font-mono text-[10px] text-textMuted uppercase tracking-wider tnum whitespace-nowrap">
-            {filtered.length} of {rows.length} prints · {marked.size} marked
+            {filtered.length} of {rows.length} prints · {marked.length} marked
           </span>
         </div>
       </div>
@@ -1310,7 +1310,7 @@ const LiveTape = () => {
                       r={r}
                       rank={view === 'STREAM' ? undefined : i + 1}
                       isOpen={r.id === openPrint?.id}
-                      isMarked={marked.has(r.id)}
+                      isMarked={markedKeys.has(printKey(r))}
                       shownColumns={shownColumns}
                       firstInGroup={firstInGroup}
                       onOpen={setOpenPrint}
@@ -1433,7 +1433,7 @@ const LiveTape = () => {
         print={openPrint}
         snapshot={marketData}
         onClose={() => setOpenPrint(null)}
-        isMarked={openPrint ? marked.has(openPrint.id) : false}
+        isMarked={openPrint ? markedKeys.has(printKey(openPrint)) : false}
         onToggleMark={toggleMark}
         onStep={stepPrint}
         hasPrev={openIdx > 0}

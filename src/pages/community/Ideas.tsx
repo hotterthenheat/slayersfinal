@@ -1,5 +1,8 @@
 import { useMemo, useState } from 'react';
-import { ChevronUp, Send } from 'lucide-react';
+import { ChevronUp, MessageSquare, Send } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import Avatar from '../../components/community/Avatar';
+import { commentsFor } from '../../data/communitySocial';
 import Panel from '../../components/ui/Panel';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import SignalBadge from '../../components/ui/SignalBadge';
@@ -26,6 +29,7 @@ const POST_DIR_OPTIONS = [
 ] as const;
 
 const Ideas = () => {
+  const [openThread, setOpenThread] = useState<string | null>(null);
   const [state, setState] = useState(loadCommunity);
   const [dirFilter, setDirFilter] = useState<DirectionFilter>('ALL');
   const [sort, setSort] = useState<SortKey>('NEW');
@@ -142,11 +146,62 @@ const Ideas = () => {
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-mono text-[12px] font-bold text-textPrimary">{idea.ticker}</span>
                   <SignalBadge tone={idea.direction === 'BULLISH' ? 'bull' : 'bear'}>{idea.direction}</SignalBadge>
-                  <span className="ml-auto font-mono text-[10px] text-textMuted tnum">
-                    {idea.author === 'you' ? <span className="text-select">you</span> : idea.author} · {timeAgo(idea.createdAt)}
+                  <span className="ml-auto flex items-center gap-1.5 font-mono text-[10px] text-textMuted tnum">
+                    {idea.author === 'you' ? (
+                      <span className="text-select">you</span>
+                    ) : (
+                      <Link
+                        to={`/community/member/${idea.author}`}
+                        className="flex items-center gap-1.5 hover:text-textSecondary focus:outline-none focus-visible:ring-1 focus-visible:ring-accent rounded"
+                      >
+                        <Avatar handle={idea.author} size="sm" />
+                        {idea.author}
+                      </Link>
+                    )}
+                    <span>· {timeAgo(idea.createdAt)}</span>
                   </span>
                 </div>
                 <p className="mt-1.5 text-[12px] text-textSecondary leading-relaxed">“{idea.thesis}”</p>
+
+                {/* The thread. Collapsed by default — a feed of open threads
+                    is a wall of text, and the reply count is the affordance. */}
+                {(() => {
+                  const comments = commentsFor(idea);
+                  const open = openThread === idea.id;
+                  return (
+                    <div className="mt-2">
+                      <button
+                        onClick={() => setOpenThread(open ? null : idea.id)}
+                        aria-expanded={open}
+                        className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-textMuted hover:text-textSecondary focus:outline-none focus-visible:ring-1 focus-visible:ring-accent rounded"
+                      >
+                        <MessageSquare size={11} />
+                        {comments.length === 0
+                          ? 'No replies'
+                          : `${comments.length} ${comments.length === 1 ? 'reply' : 'replies'}`}
+                      </button>
+                      {open && comments.length > 0 && (
+                        <div className="mt-2 flex flex-col gap-2 border-l border-borderSubtle pl-3">
+                          {comments.map(c => (
+                            <div key={c.id} className="flex items-start gap-2">
+                              <Avatar handle={c.author} size="sm" />
+                              <div className="min-w-0">
+                                <div className="font-mono text-[10px] text-textMuted">
+                                  <Link to={`/community/member/${c.author}`} className="hover:text-textSecondary">{c.author}</Link>
+                                  {' · '}{timeAgo(c.createdAt)}{' · '}{c.votes} votes
+                                </div>
+                                <p className="text-[11px] text-textSecondary leading-snug">{c.body}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {open && comments.length === 0 && (
+                        <p className="mt-2 text-[11px] text-textMuted">Nobody has replied to this yet.</p>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           );
