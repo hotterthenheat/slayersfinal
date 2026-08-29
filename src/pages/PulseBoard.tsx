@@ -14,6 +14,7 @@
 */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import MarketTide from '../components/gex/MarketTide';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Minimize2 } from 'lucide-react';
 import Simulator from '../core/simulator';
@@ -213,6 +214,11 @@ const PulseBoard = ({ onBack }: { onBack?: () => void }) => {
           </button>
         )}
       </div>
+
+      {/* §10 — the market-wide read, above the per-ticker cells. Every other
+          flow surface on this desk is one ticker; this is the question a
+          reader asks first in the morning. */}
+      <MarketTide />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {cells.map((cfg, i) => (
