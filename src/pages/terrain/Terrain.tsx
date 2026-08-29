@@ -1451,7 +1451,21 @@ const Pane = ({
 };
 
 /** Terrain — the charts-only desk. */
+/*
+  §11's history-depth options. `sessions` is what each depth WOULD need; the
+  desk compares it against what the tape actually holds and disables the rest.
+*/
+const SEEDED_SESSIONS = 22;
+const HISTORY_DEPTHS = [
+  { key: '30d', label: '30d', sessions: 22 },
+  { key: '1y', label: '1y', sessions: 252 },
+  { key: '5y', label: '5y', sessions: 1260 },
+  { key: 'max', label: 'Max', sessions: 5040 },
+] as const;
+type HistoryDepth = (typeof HISTORY_DEPTHS)[number]['key'];
+
 const Terrain = () => {
+  const [historyDepth, setHistoryDepth] = useState<HistoryDepth>('30d');
   const { marketData } = useMarketData();
   const revRef = useRef(0);
   const revision = useMemo(() => ++revRef.current, [marketData]);
@@ -2203,6 +2217,43 @@ const Terrain = () => {
             chips the flip strip carries on Pinpoint, one store behind both. */}
         <span className="pointer-events-auto inline-flex rounded-md border border-white/[0.08] bg-canvas/40 backdrop-blur-[3px] px-1 py-0.5">
           <DistanceUnitPicker dense />
+        </span>
+
+        {/* §11 — HOW FAR BACK THE TAPE REACHES.
+
+            The control is real and the honesty is the point: the simulator
+            seeds 22 sessions, so anything past a month is drawn DISABLED
+            with the reason on it rather than offered and then silently
+            capped. A reader who picks "5y" and gets a month of bars learns
+            that the control lies; one who sees it greyed learns what the
+            desk actually holds. */}
+        <span
+          className="pointer-events-auto inline-flex rounded-md border border-white/[0.08] bg-canvas/40 backdrop-blur-[3px] px-1 py-0.5"
+          role="group"
+          aria-label="History depth"
+        >
+          {HISTORY_DEPTHS.map(d => {
+            const have = d.sessions <= SEEDED_SESSIONS;
+            const on = d.key === historyDepth;
+            return (
+              <button
+                key={d.key}
+                disabled={!have}
+                aria-pressed={on}
+                onClick={() => have && setHistoryDepth(d.key)}
+                title={have ? `${d.label} of sessions` : `${d.label} needs ${d.sessions} sessions — the tape holds ${SEEDED_SESSIONS}`}
+                className={`px-1.5 py-0.5 rounded font-mono text-[10px] uppercase tracking-wider transition-colors ${
+                  !have
+                    ? 'text-textMuted/40 cursor-not-allowed'
+                    : on
+                      ? 'bg-white/[0.16] text-textPrimary'
+                      : 'text-textSecondary hover:text-textPrimary'
+                }`}
+              >
+                {d.label}
+              </button>
+            );
+          })}
         </span>
 
         {/* T-18 — the named-layouts shelf, in the desk's own cluster. */}

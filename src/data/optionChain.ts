@@ -213,3 +213,57 @@ export function buildChain(ticker: string, spot: number, baseIv: number, expiry:
 
   return { ticker, spot, expiry, t, rows, atmIv: Number((skewIv(baseIv, spot, atmStrike, t) * 100).toFixed(1)) };
 }
+
+/*
+  ONE EXPIRY, SUMMED — §6's per-expiry row.
+
+  The ladder answers "which expiry owns this strike"; this answers the
+  question underneath it: how big is each expiry in the first place. A
+  strike can look dominant on the heat grid while sitting on an expiry that
+  carries two percent of the book's open interest, and the grid alone cannot
+  say so.
+
+  NET PREMIUM IS CALL LESS PUT DOLLARS AT THE MARK — the same sign
+  convention the tape's own drift uses, so a reader moving between them is
+  not re-learning which way up it goes.
+*/
+export interface ExpirySummary {
+  expiry: Expiry;
+  t: number;
+  atmIv: number;
+  callOi: number;
+  putOi: number;
+  totalOi: number;
+  callVolume: number;
+  putVolume: number;
+  totalVolume: number;
+  /** Dollars, call marks less put marks across the drawn strikes. */
+  netPremium: number;
+  /** Sum of |gamma| x OI — the expiry's weight on the map. */
+  gammaWeight: number;
+  /** Share of the whole board's open interest, 0-100. */
+  oiSharePct: number;
+}
+
+/** Every listed expiry, summed. `oiSharePct` is filled across the set. */
+export function summariseExpiries(ticker: string, spot: number, baseIv: number, expiries: readonly Expiry[], half = 12): ExpirySummary[] {
+  const rows = expiries.map(e => {
+    const chain = buildChain(ticker, spot, baseIv, e, half);
+    let callOi = 0, putOi = 0, cv = 0, pv = 0, net = 0, gw = 0;
+    for (const r of chain.rows) {
+      callOi += r.call.oi; putOi += r.put.oi;
+      cv += r.call.volume; pv += r.put.volume;
+      net += (r.call.mark * r.call.volume - r.put.mark * r.put.volume) * 100;
+      gw += r.call.gamma * r.call.oi + r.put.gamma * r.put.oi;
+    }
+    return {
+      expiry: e, t: chain.t, atmIv: chain.atmIv,
+      callOi, putOi, totalOi: callOi + putOi,
+      callVolume: cv, putVolume: pv, totalVolume: cv + pv,
+      netPremium: net, gammaWeight: gw, oiSharePct: 0,
+    };
+  });
+  const board = rows.reduce((a, r) => a + r.totalOi, 0);
+  for (const r of rows) r.oiSharePct = board > 0 ? (r.totalOi / board) * 100 : 0;
+  return rows;
+}

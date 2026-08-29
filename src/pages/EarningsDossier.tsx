@@ -1,4 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
+import StatCard from '../components/ui/StatCard';
+import MetricGrid from '../components/ui/MetricGrid';
+import { buildStockBoard } from '../data/stocks';
+import { hPick } from '../core/rng';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { ArrowLeft, LayoutGrid, Moon, Sunrise } from 'lucide-react';
 
@@ -239,7 +243,35 @@ const ActiveRow = ({ c, maxVol }: { c: ActiveContract; maxVol: number }) => (
 
 // ---- page -------------------------------------------------------------------
 const EarningsDossier = () => {
+
   const { ticker = '' } = useParams();
+
+  /* §8's "into this print" facts, off the Stocks board's own position
+     columns so the two desks cannot disagree about the same company. Null
+     where the name is not on the board — drawn as an em-dash, never as a
+     zero that would read as "no insider activity". */
+  const { insiderNet, shortPct, daysToCover } = useMemo(() => {
+    const pick = buildStockBoard().find(p => p.ticker === (ticker ?? '').toUpperCase());
+    return pick
+      ? { insiderNet: pick.insiderNet90d, shortPct: pick.shortInterestPct, daysToCover: pick.daysToCover }
+      : { insiderNet: null as number | null, shortPct: null as number | null, daysToCover: null as number | null };
+  }, [ticker]);
+
+  /* The transcript summary is OURS — a stand-in for the call, written from
+     the same seed as the rest of the dossier so it does not reshuffle. */
+  const lastCallQuarter = useMemo(() => {
+    const d = new Date();
+    return `Q${Math.max(1, Math.ceil((d.getMonth() + 1) / 3) - 1)} ${d.getFullYear()}`;
+  }, []);
+  const lastCallSummary = useMemo(() => {
+    const t = (ticker ?? '').toUpperCase();
+    return hPick(`${t}|call`, [
+      'Management guided the coming quarter slightly ahead of consensus and spent most of the call on margin discipline rather than growth.',
+      'Guidance came in below the street and the questions afterwards were almost entirely about pricing pressure.',
+      'The quarter beat but management declined to raise the full-year outlook, which the call spent twenty minutes on.',
+      'A clean beat and raise; the call was short and the questions were about capacity rather than demand.',
+    ]);
+  }, [ticker]);
   // The actives refresh on the scan tier (10s, the house engine cadence);
   // everything structural in the dossier is tick-stable, so only volume,
   // mid and IV actually move between scans.
@@ -438,7 +470,32 @@ const EarningsDossier = () => {
           </p>
         </Panel>
 
-        <Panel title="Past moves" subtitle="the stock's reaction to each of its last 8 reports">
+        {/* §8 — two rows the dossier was missing: who inside the company
+            has been buying or selling into this print, and what the last
+            call actually said. Both are context a reader weighs BEFORE the
+            implied move, not after. */}
+        <Panel title="Into this print" subtitle="insider activity and the last call" className="mb-3">
+          <MetricGrid min="150px">
+            <StatCard
+              label="Insider net · 90d"
+              value={insiderNet === null ? '—' : `${insiderNet >= 0 ? '+' : '−'}$${(Math.abs(insiderNet) / 1e6).toFixed(1)}M`}
+              sub={insiderNet === null ? 'no filings on this name' : insiderNet >= 0 ? 'net buying into the report' : 'net selling into the report'}
+              tone={insiderNet === null ? 'neutral' : insiderNet > 0 ? 'bull' : 'bear'}
+            />
+            <StatCard
+              label="Short interest"
+              value={shortPct === null ? '—' : `${shortPct.toFixed(1)}%`}
+              sub={shortPct === null ? 'not reported' : `${daysToCover?.toFixed(1)}d to cover — squeeze fuel`}
+              tone={shortPct !== null && shortPct >= 15 ? 'warn' : 'neutral'}
+            />
+            <StatCard label="Last call" value={lastCallQuarter} sub="the transcript below is a summary, not a verbatim record" />
+          </MetricGrid>
+          <p className="mt-3 text-[12px] text-textSecondary leading-snug border-t border-borderSubtle pt-3">
+            {lastCallSummary}
+          </p>
+        </Panel>
+
+        <Panel title="Past moves" subtitle="the stock\'s reaction to each of its last 8 reports">
           <div className="h-[132px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={moveData} margin={{ top: 4, right: 8, bottom: 0, left: 8 }}>
