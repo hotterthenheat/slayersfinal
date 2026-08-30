@@ -5,6 +5,8 @@ import Simulator from '../../core/simulator';
 import { fmtUsd } from '../../data/gex';
 import { sessionVolumeProfile, type VolumeProfile } from '../../data/volumeProfile';
 import { heatCellStyle, heatMagnitude, heatRgb } from './heatmap';
+import { RAIL_METRICS, type RailMetric } from '../../data/gex';
+import { useAnchoredMenu } from '../ui/useAnchoredMenu';
 import type { PriceProjection } from './StrikeChart';
 import type { GexLevel } from '../../types/market';
 import type { KeyLevels } from '../../types/gex';
@@ -70,6 +72,17 @@ interface PaneLadderProps {
   /** The chain's own strike spacing, used to work out what one strike is worth
       in pixels and therefore how crowded the column is. */
   step: number;
+  /*
+    WHICH NET THE RAIL IS SHOWING — gamma, delta, vega, vanna or charm.
+
+    Held by the HOST rather than here, unlike `encoding` and `showVol` below.
+    Those two are ways of LOOKING at one number; this one changes WHICH
+    number, which means it changes what `rows` and `maxAbs` are — the host
+    builds those — and it is a choice a reader expects to still be there
+    tomorrow, so it rides the pane's saved config.
+  */
+  metric: RailMetric;
+  onMetric: (m: RailMetric) => void;
   /** The pane's own named levels — never re-derived here, see the note above */
   levels: KeyLevels;
   /** Currently flashed on the chart, so the column can show which row it is */
@@ -291,6 +304,8 @@ const PaneLadder = ({
   rows,
   maxAbs,
   step,
+  metric,
+  onMetric,
   levels,
   focusPrice = null,
   onSelect,
@@ -325,6 +340,12 @@ const PaneLadder = ({
      same reason: it is a way of LOOKING at one pane's rail, not a setting a
      reader would expect to find waiting for them on a fresh desk. */
   const [encoding, setEncoding] = useState<LadderEncoding>('bars');
+  /* The metric menu. Anchored through the shared hook because this rail sits
+     inside a pane that clips its overflow — the same reason the compare and
+     quick-pick popovers use it. */
+  const [metricOpen, setMetricOpen] = useState(false);
+  const { anchorRef: metricBtnRef, placed: metricPlaced, menuRef: metricMenuRef } =
+    useAnchoredMenu<HTMLButtonElement>(metricOpen, 'bottom');
   const heat = encoding === 'heat';
   const vp = useMemo<VolumeProfile | null>(
     () => (showVol ? sessionVolumeProfile(Simulator.getCandles(ticker) ?? []) : null),
@@ -844,7 +865,55 @@ const PaneLadder = ({
         >
           {heat ? 'Heat' : 'Size'}
         </button>
-        <span className="ml-auto font-mono text-[8px] font-semibold uppercase tracking-widest text-textMuted">Strike</span>
+        {/* THE CENTRE CAPTION IS THE METRIC, and the same glyph switches it.
+
+            It used to read "Strike", naming the column of numbers beside it
+            — which a column of prices does not need — while the thing that
+            genuinely needed naming went unnamed: nothing on this rail said
+            whether the bars were gamma or delta or vega. A reader could not
+            tell one from another, and now the word both says which and
+            changes it. Same principle as the Size/Heat caption to its left,
+            which this rail already states. */}
+        <span className="ml-auto pointer-events-auto relative">
+          <button
+            ref={metricBtnRef}
+            onClick={() => setMetricOpen(o => !o)}
+            aria-haspopup="menu"
+            aria-expanded={metricOpen}
+            title={RAIL_METRICS.find(x => x.key === metric)?.hint}
+            className={`rounded px-1 font-mono text-[8px] font-semibold uppercase tracking-widest transition-colors ${
+              metricOpen ? 'bg-white/[0.14] text-textPrimary' : 'text-textMuted hover:text-textPrimary hover:bg-white/[0.08]'
+            }`}
+          >
+            {RAIL_METRICS.find(x => x.key === metric)?.label ?? 'GEX'}
+          </button>
+          {metricOpen && metricPlaced && (
+            <div
+              role="menu"
+              ref={metricMenuRef}
+              className="fixed z-50 rounded-md border border-borderSubtle bg-panel shadow-xl py-1"
+              style={{ left: metricPlaced.box.left, top: metricPlaced.box.top, minWidth: 168 }}
+            >
+              {RAIL_METRICS.map(o => (
+                <button
+                  key={o.key}
+                  role="menuitemradio"
+                  aria-checked={o.key === metric}
+                  onClick={() => {
+                    onMetric(o.key);
+                    setMetricOpen(false);
+                  }}
+                  className={`block w-full text-left px-2.5 py-1 font-mono text-[10px] transition-colors ${
+                    o.key === metric ? 'text-textPrimary bg-white/[0.06]' : 'text-textSecondary hover:bg-white/[0.04]'
+                  }`}
+                >
+                  <span className="font-semibold tracking-widest">{o.label}</span>
+                  <span className="block text-[8px] leading-tight text-textMuted normal-case tracking-normal">{o.hint}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </span>
         <button
           onClick={() => setShowVol(v => !v)}
           aria-pressed={showVol}
@@ -891,6 +960,30 @@ const PaneLadder = ({
           const putSide = row.value >= 0;
           const label = `${fmtRail(row.strike)}, ${fmtUsd(row.value)}${named ? ` — ${named}` : ''}`;
 
+          /* THE FIGURE FOR HEAT MODE, built once and dropped into WHICHEVER
+             lane this row actually draws in.
+
+             The rail is SIDED — calls reach left of the strike column, puts
+             reach right — so there are two lanes and a row fills exactly
+             one. The first cut put this in the call lane unconditionally,
+             which was invisibly wrong: every put row rendered its number on
+             the empty dark half while its gold cell sat unlabelled on the
+             other side of the price. Caught by looking at the rail, not by
+             the typechecker. */
+          const heatValue =
+            heat && row.value !== 0 ? (
+              <span
+                aria-hidden
+                className="absolute inset-0 z-[1] flex items-center justify-center font-mono text-[7.5px] font-semibold tnum leading-none"
+                /* The ink flips with the cell's own brightness: a dark cell
+                   takes light text, a hot one takes dark. Measured on the
+                   ice-gold ramp, both poles cross over around 0.5. */
+                style={{ color: heatMagnitude(row.value, maxAbs) > 0.5 ? 'rgba(6,7,10,0.92)' : 'rgba(226,234,244,0.88)' }}
+              >
+                {fmtUsd(row.value)}
+              </span>
+            ) : null;
+
           const body = (
             <>
               <span
@@ -932,6 +1025,7 @@ const PaneLadder = ({
                   and a bar's pixel length still tracks its value across
                   every row — the thing this rail exists to get right. */}
               <span className="relative flex-1 min-w-0 self-stretch my-px">
+                {!putSide && heatValue}
                 {!putSide && (
                   <span
                     aria-hidden
@@ -962,6 +1056,7 @@ const PaneLadder = ({
                 {fmtRail(row.strike)}
               </span>
               <span className="relative flex-1 min-w-0 self-stretch my-px">
+                {putSide && heatValue}
                 {putSide && (
                   <span
                     aria-hidden
