@@ -12,6 +12,7 @@ import DataState from '../components/ui/DataState';
 import CompanyLogo from '../components/ui/CompanyLogo';
 import ProvenanceChip from '../components/ui/ProvenanceChip';
 import SeasonalityPanel from '../components/gex/SeasonalityPanel';
+import EtfExposurePanel from '../components/gex/EtfExposurePanel';
 
 /*
 ==================================================
@@ -133,6 +134,12 @@ const TickerOverview = () => {
           asking "is this a month this name usually does well in" is asking
           it before they read a balance sheet. */}
       <SeasonalityPanel ticker={p.ticker} className="w-full" />
+
+      {/* Who actually owns it, and how much of today's tape was never a view
+          on the company at all. This sits above the statements on purpose:
+          a reader deciding how much weight to put on an earnings line wants
+          to know first whether the name trades on its own account. */}
+      <EtfExposurePanel ticker={p.ticker} className="w-full" />
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         <Panel title="Income statement" subtitle="trailing twelve months" className="w-full" collapsible id="fin-income">
