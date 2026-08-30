@@ -109,6 +109,11 @@ export interface StrikeExposure {
   gex: GreekSplit;
   dex: GreekSplit;
   vex: GreekSplit;
+  /* The two second-order nets, per strike and dollarised the same way as
+     the three above — so the band can draw any of the five on one scale
+     and a reader compares like with like. */
+  vanna: GreekSplit;
+  charm: GreekSplit;
   /** Contracts outstanding at the strike, both sides */
   oi: number;
   /** Session volume at the strike — the same figure Ranked Targets ranks by */
@@ -147,10 +152,12 @@ export interface ExposureProfileData {
   /** Strikes descending, window around spot */
   strikes: StrikeExposure[];
   /** Per-greek scaling for bars (max |leg| across the window) */
-  maxAbs: { gex: number; dex: number; vex: number };
+  maxAbs: { gex: number; dex: number; vex: number; vanna: number; charm: number };
   netGex: number;
   netDex: number;
   netVex: number;
+  netVanna: number;
+  netCharm: number;
   levels: ExposureLevels;
   zones: ZoneBand[];
   bias: DealerBias;

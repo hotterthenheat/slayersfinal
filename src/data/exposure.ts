@@ -106,26 +106,35 @@ export function buildExposureProfile(
     }
   }
 
-  const maxAbs = { gex: 1, dex: 1, vex: 1 };
+  const maxAbs = { gex: 1, dex: 1, vex: 1, vanna: 1, charm: 1 };
   const strikes: StrikeExposure[] = window.map((n: StrikeNode) => {
     const jitter = h01(`${ticker}-${n.strike}-${expiry}-exp`);
     const gex = scaleSplit(n.putGex, n.callGex, factor, jitter);
     const dex = scaleSplit(n.putDex, n.callDex, factor, jitter);
     const vex = scaleSplit(n.putVex * 40, n.callVex * 40, factor, jitter); // dollar-comparable
+    /* Vanna and charm arrive already dollarised and direction-applied off
+       the node — the simulator does that once, so this does not repeat the
+       convention and cannot disagree with it. */
+    const vanna = scaleSplit(n.putVanna, n.callVanna, factor, jitter);
+    const charm = scaleSplit(n.putCharm, n.callCharm, factor, jitter);
     maxAbs.gex = Math.max(maxAbs.gex, Math.abs(gex.put), Math.abs(gex.call), Math.abs(gex.net));
     maxAbs.dex = Math.max(maxAbs.dex, Math.abs(dex.put), Math.abs(dex.call), Math.abs(dex.net));
     maxAbs.vex = Math.max(maxAbs.vex, Math.abs(vex.put), Math.abs(vex.call), Math.abs(vex.net));
+    maxAbs.vanna = Math.max(maxAbs.vanna, Math.abs(vanna.put), Math.abs(vanna.call), Math.abs(vanna.net));
+    maxAbs.charm = Math.max(maxAbs.charm, Math.abs(charm.put), Math.abs(charm.call), Math.abs(charm.net));
     const oi = n.callOI + n.putOI;
     // SAME seed and formula as rankedtargets.ts — one volume per strike across
     // the terminal, until a real tape replaces both (placeholder, OI-anchored)
     const volume = Math.round(oi * (0.2 + h01(`${ticker}-${n.strike}-tvol`) * 0.7));
-    return { strike: n.strike, pin: n.strike === pinStrike, gex, dex, vex, oi, volume };
+    return { strike: n.strike, pin: n.strike === pinStrike, gex, dex, vex, vanna, charm, oi, volume };
   });
 
   // Aggregates
   const netGex = strikes.reduce((a, s) => a + s.gex.net, 0);
   const netDex = strikes.reduce((a, s) => a + s.dex.net, 0);
   const netVex = strikes.reduce((a, s) => a + s.vex.net, 0);
+  const netVanna = strikes.reduce((a, s) => a + s.vanna.net, 0);
+  const netCharm = strikes.reduce((a, s) => a + s.charm.net, 0);
 
   /* Walls come from core/walls.ts, the ONE copy of this rule — the third
      place it was written. This picked by |net GEX| plus side of spot, which
@@ -247,6 +256,8 @@ export function buildExposureProfile(
     netGex,
     netDex,
     netVex,
+    netVanna,
+    netCharm,
     levels,
     zones,
     bias,

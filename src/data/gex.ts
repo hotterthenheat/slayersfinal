@@ -423,29 +423,21 @@ export function exposureNowFor(ticker: string): ExposureNow | null {
   half-height bars that say less than one whole one. What a reader wants off
   the edge of a chart is which way the strike leans and how hard.
 */
-export type RailMetric = 'gex' | 'dex' | 'vex' | 'vanna' | 'charm';
+/*
+  THE LADDER IS GAMMA, AND ONLY GAMMA.
 
-export const RAIL_METRICS: { key: RailMetric; label: string; hint: string }[] = [
-  { key: 'gex', label: 'GEX', hint: 'Net gamma — where hedging absorbs or amplifies a move' },
-  { key: 'dex', label: 'DEX', hint: 'Net delta — the directional share risk dealers carry' },
-  { key: 'vex', label: 'VEX', hint: 'Net vega — how the book swings when implied vol moves' },
-  { key: 'vanna', label: 'VANNA', hint: 'Net vanna — how dealer DELTA re-prices when vol moves' },
-  { key: 'charm', label: 'CHARM', hint: 'Net charm — what the clock alone does to dealer delta' },
-];
-
-const RAIL_FIELD: Record<RailMetric, (n: StrikeNode) => number> = {
-  gex: n => n.netGex,
-  dex: n => n.netDex,
-  vex: n => n.netVex,
-  vanna: n => n.netVanna,
-  charm: n => n.netCharm,
-};
-
+  This briefly took a `metric` parameter with a five-net picker over it. That
+  was the wrong home: the strike rail's job is what is trading at each strike
+  right now, and hanging five greeks behind a dropdown on it buried that
+  question under a menu. The nets belong on StrikeExposureBand, which is
+  already a tall column of strikes with one net drawn across it, and that is
+  where all five live. The parameter is gone rather than left defaulted —
+  an argument no caller passes is an argument nobody has tested.
+*/
 export function buildLadderFor(
   ticker: string,
   depth = 30,
-  scaleDepth = 10,
-  metric: RailMetric = 'gex'
+  scaleDepth = 10
 ): { rows: GexLevel[]; core: GexLevel[]; maxAbs: number; spot: number; step: number } {
   /* THE LIVE BOOK, like the levels above — P-24B. This read the last GEX
      snapshot while the TAGS drawn over these very bars came from
@@ -468,9 +460,8 @@ export function buildLadderFor(
   const { chain, spot } = Simulator.chainFor(sym);
   if (chain.length === 0) return { rows: [], core: [], maxAbs: 1, spot, step: 1 };
 
-  const read = RAIL_FIELD[metric] ?? RAIL_FIELD.gex;
   const sorted = chain
-    .map(n => ({ strike: n.strike, value: read(n) }))
+    .map(n => ({ strike: n.strike, value: n.netGex }))
     .sort((a, b) => a.strike - b.strike);
   const spotIdx = Math.max(0, sorted.findIndex(n => n.strike >= spot));
 
