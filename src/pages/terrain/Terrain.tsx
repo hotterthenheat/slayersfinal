@@ -1201,10 +1201,22 @@ const Pane = ({
               sessionOr={sessionOr}
               drawing={drawing}
               onExitDraw={onExitDraw}
-              /* The persistent rail's way in — a tool clicked at rest arms
-                 draw mode with that tool in hand (guarded in the chart, so
-                 clicking tools WHILE drawing never toggles it off). */
-              onEnterDraw={onToggleDrawing}
+              /*
+                THE WAY IN, OFFERED TO ONE PANE.
+
+                A tool clicked at rest arms draw mode with that tool in hand
+                (guarded in the chart, so clicking tools WHILE drawing never
+                toggles it off). The chart shows its rail whenever this
+                callback is present, so handing it to every pane stood four
+                rails open on a four-up desk — four columns of tools eating
+                chart, for one reader who can only be drawing in one of them.
+
+                The active pane is the one the reader is in and the one `d`
+                acts on, so it is the one that gets the door. A pane already
+                drawing keeps its rail regardless, which is the chart's own
+                condition.
+              */
+              onEnterDraw={isActive ? onToggleDrawing : undefined}
               /* Only the takeover has a top band to spare. */
               railTopOk={expanded}
               replay={replay}

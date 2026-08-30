@@ -3880,12 +3880,19 @@ const StrikeChart = ({
             onPointerUp={onDrawUp}
           />
         )}
-        {/* PERSISTENT WHEN THERE IS A WAY IN. This rail used to render only
-            while `drawing`, which left no door: the host's pane strip no
-            longer carries a pencil, so a reader in a docked pane had no way
-            to start. It now shows whenever the host offers `onEnterDraw`,
-            and picking a tool is what arms the mode. Without that callback
-            it behaves exactly as before. */}
+        {/* PERSISTENT WHERE THERE IS A WAY IN — WHICH IS ONE PANE.
+
+            This rail used to render only while `drawing`, and that left no
+            door: the host's pane strip no longer carries a pencil, so a
+            reader in a docked pane had no way to start. So it shows whenever
+            the host offers `onEnterDraw`, and picking a tool arms the mode.
+
+            The host decides who gets that callback, and it must be ONE pane.
+            Handed to every pane it stood four rails open on a four-up desk —
+            four columns of tools eating chart for a reader who can only draw
+            in one of them. Terrain gives it to the active pane. A pane
+            already drawing keeps its rail either way, which is the first
+            half of this condition. */}
         {(drawing || !!onEnterDraw) && (
           /*
             THE TOOL RAIL — vertical, docked centre-left (partner, 2026-08-27:
