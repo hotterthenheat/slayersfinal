@@ -38,6 +38,7 @@ import Chip from '../../components/ui/Chip';
 import CompanyLogo from '../../components/ui/CompanyLogo';
 import CatTag from '../../components/news/CatTag';
 import Simulator from '../../core/simulator';
+import { readAllClocks, fmtGap } from '../../data/worldClocks';
 import {
   buildEconCalendar,
   buildGeoNews,
@@ -195,6 +196,15 @@ const NewsRoom = () => {
   useEffect(() => {
     if (!selectedId && events.length > 0) setSelectedId(events[0].id);
   }, [selectedId, events]);
+
+  /* THE WORLD CLOCKS, re-read every 30s. A minute would be enough for the
+     digits, but a centre that opens between ticks should light up promptly
+     rather than up to a minute late. */
+  const [clocks, setClocks] = useState(() => readAllClocks());
+  useEffect(() => {
+    const id = setInterval(() => setClocks(readAllClocks()), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   /* SITUATION MODE — the room walks the day's stories on a clock, camera
      touring each. Any manual pick hands the wheel back to the reader. */
@@ -752,17 +762,53 @@ const NewsRoom = () => {
           Situation mode
         </button>
 
-        {/* Where to look — camera presets, a look never a selection */}
+        {/* THE TRADING DAY AROUND THE PLANET — and the camera presets, which
+            these replace.
+
+            The three chips (Americas / Europe / Asia) flew the camera and
+            said nothing else. Each centre here does the same flight AND
+            carries the two facts a reader actually wants off a globe: what
+            time it is there, and whether that market is awake. An open
+            centre is lit and named; a closed one is quiet and counts down
+            to its bell. The globe's terminator shows daylight — this shows
+            the SESSION, which is not the same thing and is the one that
+            matters on this desk. */}
         <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 hidden lg:flex items-center gap-1">
-          <Chip active={false} onClick={() => lookAt(32, -95)} title="Fly to the Americas">
-            Americas
-          </Chip>
-          <Chip active={false} onClick={() => lookAt(48, 8)} title="Fly to Europe">
-            Europe
-          </Chip>
-          <Chip active={false} onClick={() => lookAt(28, 115)} title="Fly to Asia">
-            Asia
-          </Chip>
+          {clocks.map(c => (
+            <button
+              key={c.city}
+              onClick={() => lookAt(c.lat, c.lng)}
+              title={
+                c.open
+                  ? `${c.city} is open — closes in ${fmtGap(c.minutesToEdge)}. Click to fly there.`
+                  : `${c.city} is closed — opens in ${fmtGap(c.minutesToEdge)}. Click to fly there.`
+              }
+              className={`group flex items-center gap-1.5 rounded-md border px-2 py-1 transition-colors ${
+                c.open
+                  ? 'border-bull/30 bg-bull/[0.07] hover:bg-bull/[0.12]'
+                  : 'border-borderSubtle bg-panel/60 hover:bg-white/[0.05]'
+              }`}
+            >
+              <span
+                aria-hidden
+                className={`w-1 h-1 rounded-full ${c.open ? 'bg-bull' : 'bg-textMuted/50'}`}
+              />
+              <span
+                className={`font-mono text-[9px] uppercase tracking-widest ${
+                  c.open ? 'text-textPrimary' : 'text-textMuted'
+                }`}
+              >
+                {c.city}
+              </span>
+              <span
+                className={`font-mono text-[10px] tnum font-semibold ${
+                  c.open ? 'text-bull' : 'text-textSecondary'
+                }`}
+              >
+                {c.time}
+              </span>
+            </button>
+          ))}
         </div>
 
         {/* Grade legend — whisper, bottom left */}

@@ -268,10 +268,14 @@ const GlobePane = ({ events, selectedId, onSelect, onCityOpen, focusRegion, onRe
     const loader = new THREE.TextureLoader();
     let dead = false;
     Promise.all([
-      /* day-dark: the muted-earth day texture (Noah, 2026-08-29: "swap the
-         day side to the darker texture") — day.jpg (blue marble) stays on
-         disk for a future theme toggle. */
-      loader.loadAsync('/globe/day-dark.jpg'),
+      /* THE REAL EARTH. day.jpg is the blue marble; day-dark.jpg is the
+         muted version this used to run (Noah, 2026-08-29: "swap the day
+         side to the darker texture"), superseded on 2026-08-30 — "make the
+         globe like an apple maps globe where it's real... i dont like the
+         full black". The muted texture is what made the planet read as a
+         silhouette; the real one gives it land, ocean and ice. day-dark
+         stays on disk behind a one-word swap. */
+      loader.loadAsync('/globe/day.jpg'),
       loader.loadAsync('/globe/night.jpg'),
     ]).then(([day, night]) => {
       if (dead) return;
@@ -337,9 +341,37 @@ const GlobePane = ({ events, selectedId, onSelect, onCityOpen, focusRegion, onRe
   useEffect(() => {
     const g = globeRef.current;
     if (!g) return;
-    const controls = g.controls() as { autoRotate: boolean; autoRotateSpeed: number };
+    /*
+      SMOOTHER TO DRIVE (Noah, 2026-08-30: "make the interaction smoother").
+
+      Damping is what separates a globe that feels like an object with weight from
+      one that stops dead the instant the mouse does — the drag carries a
+      little momentum and eases out instead of snapping. `zoomSpeed` and
+      `rotateSpeed` come down from the library defaults, which are tuned for
+      a full-window globe; this one shares a page with a headline list and a
+      story panel, and at default speed one wheel notch crossed half the
+      altitude range.
+
+      `update()` has to be called for damping to advance, and react-globe.gl
+      drives its own animation loop — so this hooks the controls' own change
+      handler rather than starting a second rAF beside the library's.
+    */
+    const controls = g.controls() as {
+      autoRotate: boolean;
+      autoRotateSpeed: number;
+      enableDamping: boolean;
+      dampingFactor: number;
+      zoomSpeed: number;
+      rotateSpeed: number;
+      minDistance: number;
+      maxDistance: number;
+    };
     controls.autoRotate = !selected;
     controls.autoRotateSpeed = 0.32;
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.zoomSpeed = 0.55;
+    controls.rotateSpeed = 0.62;
     if (!selected) g.pointOfView({ lat: 30, lng: -60, altitude: 2.1 }, 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [material, !!selected]);
@@ -441,6 +473,17 @@ const GlobePane = ({ events, selectedId, onSelect, onCityOpen, focusRegion, onRe
 
   return (
     <div ref={hostRef} className="absolute inset-0">
+      {/* SPACE, NOT A VOID. A very faint radial wash so the globe's dark
+          limb has something to sit against instead of ending in the page.
+          Pointer-events off — it must never eat a drag on the sphere. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            'radial-gradient(ellipse 70% 60% at 50% 46%, rgba(56,86,124,0.16) 0%, rgba(24,38,58,0.10) 42%, rgba(0,0,0,0) 72%)',
+        }}
+      />
       {size.w > 0 && material && (
         <Globe
           ref={globeRef}
@@ -449,8 +492,15 @@ const GlobePane = ({ events, selectedId, onSelect, onCityOpen, focusRegion, onRe
           backgroundColor="rgba(0,0,0,0)"
           globeMaterial={material}
           showAtmosphere
-          atmosphereColor="#7E96B8"
-          atmosphereAltitude={0.12}
+          /* A WIDER, WARMER HALO. The planet used to sit on pure black with
+             a thin rim, which is the "full black" Noah called out: nothing
+             separated the globe's dark limb from the page behind it, so the
+             sphere lost its edge and read as a hole. A taller atmosphere at
+             a lighter blue gives the limb somewhere to end. The page behind
+             it carries a faint radial wash for the same reason — see the
+             backdrop under this element. */
+          atmosphereColor="#8FB3D9"
+          atmosphereAltitude={0.18}
           /* country + state borders — one merged line batch per atlas */
           customLayerData={borders}
           customThreeObject={buildBorderBatch}
