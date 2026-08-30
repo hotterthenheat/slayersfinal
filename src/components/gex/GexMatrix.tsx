@@ -2,7 +2,7 @@ import { fmtUsd } from '../../data/gex';
 import { heatPoles, heatScaleGradient, heatScaleLabels, heatScaleLabelStyle } from './heatmap';
 import HeatPill, { HiddenStrikes } from './HeatPill';
 import { foldQuietStrikes } from './foldStrikes';
-import { KING } from './palette';
+import { SUPREME } from './palette';
 import type { GexMatrixData } from '../../types/gex';
 
 interface GexMatrixProps {
@@ -154,11 +154,11 @@ const GexMatrix = ({ data, fill = false, strikeFormat, rowNotes, rowNotesLabel =
                       <HeatPill
                         value={cell.value}
                         maxAbs={maxAbs}
-                        selected={cell.king}
-                        /* Magenta, matching the king LINE on the chart — a
+                        selected={cell.supreme}
+                        /* Magenta, matching the supreme LINE on the chart — a
                            property of the book, not of what the reader
                            clicked, so it does not wear the selection lime. */
-                        ringColor={KING}
+                        ringColor={SUPREME}
                         className="h-[19px]"
                         title={`${strike} · ${expiries[c]} · ${fmtUsd(cell.value)}`}
                       >

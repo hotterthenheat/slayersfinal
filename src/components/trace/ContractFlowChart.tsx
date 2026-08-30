@@ -50,7 +50,7 @@ import Chip from '../ui/Chip';
 import RichRead from '../ui/RichRead';
 import { flowAxisLabel, flowClock, sessionDate, type ContractFlow, type ContractPrintPoint } from '../../data/contractflow';
 import { fmtUsd } from '../../data/gex';
-import { BULL, KING } from '../gex/palette';
+import { BULL, SUPREME } from '../gex/palette';
 
 const ASK = BULL; // lifted the offer — the market's bull colour
 const BID = '#FF3B30';
@@ -255,7 +255,7 @@ const LedgerLayer = ({ bins, intervalMin, whale }: {
             y={wTop}
             width={w * 0.7}
             height={Math.max(MIN_BRICK, y(-whale.premium / 2) - wTop)}
-            fill={KING}
+            fill={SUPREME}
             fillOpacity={0.95}
           />
         );
@@ -267,7 +267,7 @@ const LedgerLayer = ({ bins, intervalMin, whale }: {
       const yTop = y(cum + p.premium);
       const h = Math.max(MIN_BRICK, y(cum) - yTop - BRICK_GAP);
       rects.push(
-        <rect key={`u${b.min}-${cum}`} x={left} y={yTop} width={w} height={h} fill={p === whale ? KING : ASK} fillOpacity={p === whale ? 0.95 : 0.85} />
+        <rect key={`u${b.min}-${cum}`} x={left} y={yTop} width={w} height={h} fill={p === whale ? SUPREME : ASK} fillOpacity={p === whale ? 0.95 : 0.85} />
       );
       cum += p.premium;
     }
@@ -277,7 +277,7 @@ const LedgerLayer = ({ bins, intervalMin, whale }: {
       const yTop = y(cum);
       const h = Math.max(MIN_BRICK, y(cum - p.premium) - yTop - BRICK_GAP);
       rects.push(
-        <rect key={`d${b.min}-${cum}`} x={left} y={yTop + BRICK_GAP} width={w} height={h} fill={p === whale ? KING : BID} fillOpacity={p === whale ? 0.95 : 0.8} />
+        <rect key={`d${b.min}-${cum}`} x={left} y={yTop + BRICK_GAP} width={w} height={h} fill={p === whale ? SUPREME : BID} fillOpacity={p === whale ? 0.95 : 0.8} />
       );
       cum -= p.premium;
     }
@@ -300,7 +300,7 @@ const LedgerLayer = ({ bins, intervalMin, whale }: {
           x={tx}
           y={isUp ? colEdge - 5 : colEdge + 11}
           textAnchor="middle"
-          fill={KING}
+          fill={SUPREME}
           fontSize={9}
           fontWeight={600}
           fontFamily="'SF Pro', sans-serif"
@@ -335,7 +335,7 @@ const LedgerTooltip = ({ active, payload }: LedgerTipProps) => {
       {(p.up ?? 0) > 0 && <div style={{ color: ASK }}>paid the offer {fmtUsd(p.up as number)}</div>}
       {(p.down ?? 0) > 0 && <div style={{ color: BID }}>hit the bid {fmtUsd(p.down as number)}</div>}
       {(p.mid ?? 0) > 0 && <div className="text-textMuted">on the fence {fmtUsd(p.mid as number)}</div>}
-      {p.whaleHere && <div style={{ color: KING }}>the window's largest print landed here</div>}
+      {p.whaleHere && <div style={{ color: SUPREME }}>the window's largest print landed here</div>}
     </Box>
   );
 };
@@ -498,7 +498,7 @@ export const FlowPanel = ({ cf, showAvg, onShowAvg, showIv, onShowIv, dayOffset,
           <span className="w-2 h-2" style={{ background: FENCE }} /> Mid · on the fence
         </span>
         <span className="inline-flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-wider text-textSecondary">
-          <span className="w-2 h-2" style={{ background: KING }} /> Largest print
+          <span className="w-2 h-2" style={{ background: SUPREME }} /> Largest print
         </span>
         {printMin !== null && (
           <span className="inline-flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-wider text-textSecondary">

@@ -490,7 +490,7 @@ const PrintDrilldown = ({ print, snapshot, onClose, isMarked, onToggleMark, onSt
             <div className="lg:col-span-4 bg-inset px-3.5 py-3 flex flex-col gap-2.5 min-w-0">
               <span className="font-mono text-[9px] uppercase tracking-widest text-textMuted">The print</span>
               <div className="flex items-baseline gap-2.5 flex-wrap">
-                <span className={`font-mono text-2xl font-bold tnum leading-none ${print.premium >= 1_000_000 ? 'text-king' : 'text-textPrimary'}`}>
+                <span className={`font-mono text-2xl font-bold tnum leading-none ${print.premium >= 1_000_000 ? 'text-supreme' : 'text-textPrimary'}`}>
                   {usd(print.premium)}
                 </span>
                 <span className={`font-mono text-sm font-bold ${sideTone}`}>{sideLabel}</span>

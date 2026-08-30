@@ -2,7 +2,7 @@ import { heatInk } from './heatmap';
 /*
   Canonical GEX chart colors — single source for JS-API consumers
   (lightweight-charts price lines, canvas primitives). The same values live in
-  tailwind.config.ts as `flip` / `king` / `darkpool` tokens for class usage.
+  tailwind.config.ts as `flip` / `supreme` / `darkpool` tokens for class usage.
   Change here + there together, never one alone.
 */
 
@@ -22,11 +22,11 @@ export const CALL_WALL = BULL; // green, not mint — reversed by Noah 2026-08-1
 export const PUT_WALL = '#FF3B30'; // bear (hot red)
 export const FLIP = '#9CA3AF'; // grey — the regime BORDER, deliberately quieter than direction
 export const MOON = '#7DD3FC'; // baby blue — the overnight / after-hours voice
-// The magenta `king` token — one king color everywhere. The chart line wore
+// The magenta `supreme` token — one supreme color everywhere. The chart line wore
 // holo silver for a while, but silver didn't stand out (Noah, 2026-08-18),
 // and it now collides with the heatmap's platinum steel pole. Magenta matches
-// the KING badges, ranked-target tags and the positioning map's king rail.
-export const KING = '#EA00FF';
+// the SUPREME badges, ranked-target tags and the positioning map's supreme rail.
+export const SUPREME = '#EA00FF';
 export const DARK_POOL = '#2dd4bf'; // teal — institutional reference prints
 export const SPOT = '#ededed'; // white — where the market is
 export const FOCUS = LIME; // neon lime — what the user clicked (selection language)
@@ -62,7 +62,7 @@ export const ALERT = '#FF9500';
     and regime badges: red amplifying, green absorbing. Not for grids, not
     for bars, not for call/put columns.
 
-    LEVELS — CALL_WALL green, PUT_WALL red, FLIP grey, KING magenta, SPOT
+    LEVELS — CALL_WALL green, PUT_WALL red, FLIP grey, SUPREME magenta, SPOT
     white, above. A wall keeps its colour on every surface, including
     historical tables.
 

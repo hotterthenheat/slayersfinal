@@ -39,9 +39,9 @@ const SetupsFeed = ({ groups, selectedSetupId, onSelectSetup, onOpenAnalysis }: 
             {/* Group header */}
             <div className="flex items-center gap-3 px-3 h-11 border-b border-borderSubtle">
               <span className="font-mono text-xs font-bold text-textPrimary tracking-wide">{group.ticker}</span>
-              {/* Holo, not magenta: a count is terminal hardware, and it was
-                  competing with TOP PICK's magenta two rows down — magenta is
-                  the engine-standout family and only the pick should wear it. */}
+              {/* Flat holo: a count is terminal hardware. TOP PICK two rows
+                  down wears the filled sky crown (2026-08-29) — hardware
+                  silver vs the engine's blue is the rank difference. */}
               <SignalBadge tone="holo">{group.found} found</SignalBadge>
               <Sparkline data={group.sparkline} up={up} />
               <span className="font-mono text-xs font-semibold text-textPrimary tnum">

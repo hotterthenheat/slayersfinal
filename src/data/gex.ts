@@ -67,12 +67,12 @@ function metricValue(node: StrikeNode, metric: GexMetric): number {
 // ---- levels & nodes ---------------------------------------------------------
 function buildLevels(snapshot: MarketSnapshot): KeyLevels {
   const { chain, spot, plan } = snapshot;
-  let king = spot;
+  let supreme = spot;
   let maxAbs = 0;
   for (const node of chain) {
     if (Math.abs(node.netGex) > maxAbs) {
       maxAbs = Math.abs(node.netGex);
-      king = node.strike;
+      supreme = node.strike;
     }
   }
   return {
@@ -80,7 +80,7 @@ function buildLevels(snapshot: MarketSnapshot): KeyLevels {
     callWall: plan.resistanceWall,
     putWall: plan.supportWall,
     flip: plan.flipZone,
-    king,
+    supreme,
   };
 }
 
@@ -183,8 +183,8 @@ function buildMatrix(snapshot: MarketSnapshot, metric: GexMetric, range: StrikeR
       const value = base * exp.decay * (0.55 + noise * 0.9) * flip;
       const abs = Math.abs(value);
       if (abs > maxAbs) maxAbs = abs;
-      // King crowns the 0DTE cell at the book's max-exposure strike (matches the chart level)
-      return { value, king: c === 0 && node.strike === kingStrike };
+      // Supreme crowns the 0DTE cell at the book's max-exposure strike (matches the chart level)
+      return { value, supreme: c === 0 && node.strike === kingStrike };
     });
   });
 
@@ -238,7 +238,7 @@ function buildLadder(ticker: string, spot: number, step: number): { ladder: Ladd
     rows.push({ strike, value });
   }
 
-  rows[kingIdx] = { ...rows[kingIdx], king: true };
+  rows[kingIdx] = { ...rows[kingIdx], supreme: true };
   return { ladder: rows, maxAbs };
 }
 
@@ -313,14 +313,14 @@ function buildBoard(tickers?: string[]): BoardTicker[] {
 export function buildLevelsFor(ticker: string): KeyLevels {
   const sym = Simulator.ensureTicker(ticker);
   const { chain, spot } = Simulator.chainFor(sym);
-  if (chain.length === 0) return { spot, callWall: spot, putWall: spot, flip: spot, king: spot };
+  if (chain.length === 0) return { spot, callWall: spot, putWall: spot, flip: spot, supreme: spot };
   const now = readExposureNow(chain.map(n => ({ strike: n.strike, value: n.netGex })), spot);
   return {
     spot,
     callWall: now.callWall ?? spot,
     putWall: now.putWall ?? spot,
     flip: now.flip ?? spot,
-    king: now.king ?? spot,
+    supreme: now.supreme ?? spot,
   };
 }
 
@@ -341,7 +341,7 @@ export function buildLevelsFor(ticker: string): KeyLevels {
 export interface ExposureNow {
   /** Signed total of the chain's net GEX. */
   netGex: number;
-  king: number | null;
+  supreme: number | null;
   callWall: number | null;
   putWall: number | null;
   flip: number | null;
@@ -355,14 +355,14 @@ export function readExposureNow(
   spot: number
 ): ExposureNow {
   let netGex = 0;
-  let king: number | null = null;
+  let supreme: number | null = null;
   let kingAbs = 0;
   for (const l of chain) {
     netGex += l.value;
     const a = Math.abs(l.value);
     if (a > kingAbs) {
       kingAbs = a;
-      king = l.strike;
+      supreme = l.strike;
     }
   }
   const w = pickWalls(chain, spot, l => l.value);
@@ -375,7 +375,7 @@ export function readExposureNow(
   }
   return {
     netGex,
-    king,
+    supreme,
     callWall: w.callWall,
     putWall: w.putWall,
     flip,
@@ -397,7 +397,7 @@ export function exposureNowFor(ticker: string): ExposureNow | null {
 
   That sourcing is the whole point and it is not an implementation detail. A
   rail that read its own generator would drift from the chart it sits against:
-  the pane would draw a KING line at one strike while the column beside it
+  the pane would draw a SUPREME line at one strike while the column beside it
   printed the heaviest bar at another, and both would look right on their own.
   `buildLadder` (the 4-way board's column) is exactly that second generator,
   which is why it is NOT what this returns.
@@ -406,7 +406,7 @@ export function exposureNowFor(ticker: string): ExposureNow | null {
   windows the rows around spot — the same centring `buildNodes` uses for the
   chart's own nodes — and reports the largest magnitude in that window so a
   bar can be drawn as a fraction of it. The named levels stay the caller's:
-  it already holds `KeyLevels` and passes them in, so wall, flip and king
+  it already holds `KeyLevels` and passes them in, so wall, flip and supreme
   agree with the lines by construction rather than by coincidence.
 */
 /*
@@ -423,29 +423,21 @@ export function exposureNowFor(ticker: string): ExposureNow | null {
   half-height bars that say less than one whole one. What a reader wants off
   the edge of a chart is which way the strike leans and how hard.
 */
-export type RailMetric = 'gex' | 'dex' | 'vex' | 'vanna' | 'charm';
+/*
+  THE LADDER IS GAMMA, AND ONLY GAMMA.
 
-export const RAIL_METRICS: { key: RailMetric; label: string; hint: string }[] = [
-  { key: 'gex', label: 'GEX', hint: 'Net gamma — where hedging absorbs or amplifies a move' },
-  { key: 'dex', label: 'DEX', hint: 'Net delta — the directional share risk dealers carry' },
-  { key: 'vex', label: 'VEX', hint: 'Net vega — how the book swings when implied vol moves' },
-  { key: 'vanna', label: 'VANNA', hint: 'Net vanna — how dealer DELTA re-prices when vol moves' },
-  { key: 'charm', label: 'CHARM', hint: 'Net charm — what the clock alone does to dealer delta' },
-];
-
-const RAIL_FIELD: Record<RailMetric, (n: StrikeNode) => number> = {
-  gex: n => n.netGex,
-  dex: n => n.netDex,
-  vex: n => n.netVex,
-  vanna: n => n.netVanna,
-  charm: n => n.netCharm,
-};
-
+  This briefly took a `metric` parameter with a five-net picker over it. That
+  was the wrong home: the strike rail's job is what is trading at each strike
+  right now, and hanging five greeks behind a dropdown on it buried that
+  question under a menu. The nets belong on StrikeExposureBand, which is
+  already a tall column of strikes with one net drawn across it, and that is
+  where all five live. The parameter is gone rather than left defaulted —
+  an argument no caller passes is an argument nobody has tested.
+*/
 export function buildLadderFor(
   ticker: string,
   depth = 30,
-  scaleDepth = 10,
-  metric: RailMetric = 'gex'
+  scaleDepth = 10
 ): { rows: GexLevel[]; core: GexLevel[]; maxAbs: number; spot: number; step: number } {
   /* THE LIVE BOOK, like the levels above — P-24B. This read the last GEX
      snapshot while the TAGS drawn over these very bars came from
@@ -468,9 +460,8 @@ export function buildLadderFor(
   const { chain, spot } = Simulator.chainFor(sym);
   if (chain.length === 0) return { rows: [], core: [], maxAbs: 1, spot, step: 1 };
 
-  const read = RAIL_FIELD[metric] ?? RAIL_FIELD.gex;
   const sorted = chain
-    .map(n => ({ strike: n.strike, value: read(n) }))
+    .map(n => ({ strike: n.strike, value: n.netGex }))
     .sort((a, b) => a.strike - b.strike);
   const spotIdx = Math.max(0, sorted.findIndex(n => n.strike >= spot));
 
@@ -589,7 +580,7 @@ export function buildGexView(
     levels,
     nodes,
     nodesMaxAbs: maxAbs,
-    matrix: buildMatrix(snapshot, metric, range, levels.king),
+    matrix: buildMatrix(snapshot, metric, range, levels.supreme),
     board: buildBoard(boardTickers),
   };
 }

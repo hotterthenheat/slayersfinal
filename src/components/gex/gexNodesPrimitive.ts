@@ -17,13 +17,13 @@ import { heatPoleRgb } from './heatmap';
   height, never in desaturation.
 
   The level view rides on top: a focused strike's beads wear the focus ink
-  (lime, or magenta while it is the king) at full strength, and the rest of
+  (lime, or magenta while it is the supreme) at full strength, and the rest of
   the field steps back.
 */
 
 /* THE FIELD'S OWN INKS (Noah, 2026-08-22): the house heatmap's steel-gold
    poles — gold = put-dominant / amplifying, steel = call-dominant /
-   absorbing — and magenta on the king strike, as everywhere else. Not the
+   absorbing — and magenta on the supreme strike, as everywhere else. Not the
    market red/green: on THIS surface those belong to the candles, and a
    field in the tape's ink can't be told from the tape. The legend above the
    chart teaches the pair. Strength lives in height and alpha, never in
@@ -50,8 +50,8 @@ const PW_RGB: readonly [number, number, number] = [255, 59, 48]; // bear red
 const FLIP_RGBA = 'rgba(125,211,252,0.55)'; // baby blue — the regime border
 
 /* WHEN TWO IDENTITIES SHARE A STRIKE, THE INKS MIX (Noah, 2026-08-22, with
-   the paint chart): a put wall that IS the king paints wine (red+magenta),
-   a call wall that is the king a violet, a flip on the king purple — both
+   the paint chart): a put wall that IS the supreme paints wine (red+magenta),
+   a call wall that is the supreme a violet, a flip on the supreme purple — both
    facts visible in one band, neither swallowed. 50/50 blends. */
 const mix = (a: readonly [number, number, number], b: readonly [number, number, number]): [number, number, number] => [
   Math.round((a[0] + b[0]) / 2),
@@ -60,7 +60,7 @@ const mix = (a: readonly [number, number, number], b: readonly [number, number, 
 ];
 const PWK_RGB = mix(PW_RGB, KING_RGB); // wine  (245, 30, 152)
 const CWK_RGB = mix(CW_RGB, KING_RGB); // violet (141, 105, 172)
-const FLIPK_RGBA = 'rgba(180,106,254,0.7)'; // purple — flip on the king
+const FLIPK_RGBA = 'rgba(180,106,254,0.7)'; // purple — flip on the supreme
 
 /* A dozen strikes per column, steep falloff; below the floor, nothing. The
    ranking happens ONCE, when the data arrives — a frame must never sort. */
@@ -84,12 +84,12 @@ interface Column {
   all: Map<number, Bead>;
 }
 
-/** The focused level's ink: the focus lime — or the king's magenta while the
-    focused strike IS the king. Mirrors palette FOCUS/KING. */
-export type FocusInk = 'focus' | 'king';
+/** The focused level's ink: the focus lime — or the supreme's magenta while the
+    focused strike IS the supreme. Mirrors palette FOCUS/SUPREME. */
+export type FocusInk = 'focus' | 'supreme';
 const INK_RGB: Record<FocusInk, readonly [number, number, number]> = {
   focus: [210, 255, 0],
-  king: [234, 0, 255],
+  supreme: [234, 0, 255],
 };
 
 interface BitmapScope {
@@ -125,7 +125,7 @@ class TrailsPaneRenderer {
     const A_MIN = 0.45;
     const A_MAX = Math.max(3, Math.min(barSpacing * 0.6, 9));
     const focus = src.focusStrike;
-    const king = src.kingStrike;
+    const supreme = src.kingStrike;
     const ink = INK_RGB[src.focusInk];
     const inkCss = `rgba(${ink[0]},${ink[1]},${ink[2]},0.95)`;
 
@@ -218,20 +218,20 @@ class TrailsPaneRenderer {
             halo *= 0.3;
           }
           /* Ink precedence: the focus wins, then TODAY'S walls — ABOVE the
-             king, because the put wall often IS the king and magenta was
+             supreme, because the put wall often IS the supreme and magenta was
              swallowing the red entirely (Noah, 2026-08-22: "I don't even see
-             any put wall"); the king keeps its chip, axis line and label —
-             then the king's magenta, then the side. */
-          const isKing = king != null && bead.strike === king;
+             any put wall"); the supreme keeps its chip, axis line and label —
+             then the supreme's magenta, then the side. */
+          const isKing = supreme != null && bead.strike === supreme;
           const inkKey = isFocus
             ? 'f'
             : bead.strike === src.cwStrike
               ? isKing
-                ? 'cwk' // call wall AND king — violet
+                ? 'cwk' // call wall AND supreme — violet
                 : 'cw'
               : bead.strike === src.pwStrike
                 ? isKing
-                  ? 'pwk' // put wall AND king — wine
+                  ? 'pwk' // put wall AND supreme — wine
                   : 'pw'
                 : isKing
                   ? 'k'
@@ -276,8 +276,8 @@ class TrailsPaneRenderer {
         }
       };
       if (flipDrawn) {
-        // Flip sitting ON the king → purple, both facts in one line
-        const flipOnKing = king != null && src.flipPrice != null && Math.abs(src.flipPrice - king) < 1e-6;
+        // Flip sitting ON the supreme → purple, both facts in one line
+        const flipOnKing = supreme != null && src.flipPrice != null && Math.abs(src.flipPrice - supreme) < 1e-6;
         ctx.fillStyle = flipOnKing ? FLIPK_RGBA : FLIP_RGBA;
         ctx.fill(flipPath);
       }
@@ -328,7 +328,7 @@ class TrailsPaneRenderer {
 
       for (const lvl of top) {
         if (focus != null && lvl.strike === focus) continue; // drawn below, in its own ink
-        const rgb = king != null && lvl.strike === king ? KING_RGB : lvl.value >= 0 ? PUT_RGB : CALL_RGB;
+        const rgb = supreme != null && lvl.strike === supreme ? KING_RGB : lvl.value >= 0 ? PUT_RGB : CALL_RGB;
         drawLabel(lvl, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${focus != null ? 0.55 : 0.95})`);
       }
       // The focused level is always labelled — its share of the book, in its ink
@@ -380,11 +380,11 @@ export class GexTrailsPrimitive implements ISeriesPrimitive<Time> {
   stepSec = 60;
   /** The level view's strike — its beads lead, the field steps back. */
   focusStrike: number | null = null;
-  /** Its ink: lime, or magenta while the focused strike is the king. The
-      focus never follows the king — the strike you clicked is the strike
+  /** Its ink: lime, or magenta while the focused strike is the supreme. The
+      focus never follows the supreme — the strike you clicked is the strike
       you're watching; the ink reports its standing (Noah, 2026-08-22). */
   focusInk: FocusInk = 'focus';
-  /** The book's king strike — its band wears magenta (re-read every scan) */
+  /** The book's supreme strike — its band wears magenta (re-read every scan) */
   kingStrike: number | null = null;
   /** TODAY'S levels — ONE green band, ONE red band, ONE blue flip line, all
       re-read every scan so they move with the math (Noah, 2026-08-22) */

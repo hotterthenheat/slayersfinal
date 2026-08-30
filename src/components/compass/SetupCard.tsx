@@ -35,7 +35,7 @@ const SetupCard = ({ setup, expanded, isSelected, isTop, onToggle, onSelect, onO
         <span className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[11px] font-semibold ${pillTone}`}>
           {setup.contract}
         </span>
-        {isTop && <SignalBadge tone="magenta">TOP PICK</SignalBadge>}
+        {isTop && <SignalBadge tone="crown">TOP PICK</SignalBadge>}
 
         <span className="ml-auto flex items-center gap-3">
           {/* Only the EXCEPTIONS get a badge — TARGET HIT, BUILDING, FADED.

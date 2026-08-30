@@ -442,3 +442,37 @@
 @media (prefers-reduced-motion: reduce) {
   .animate-modal-sheet { animation: none; }
 }
+
+/*
+  THE ACTIVE PANE'S FOIL RING — a gradient border drawn as a masked padding
+  box, ported with Terrain's active-pane treatment.
+
+  `pointer-events: none` IS THE FIRST LINE FOR A REASON. The ring is
+  `absolute inset-0 z-30`, so it covers its whole pane; without this it
+  swallows every click in that pane, and the symptom is bizarre — the
+  toolbar reveals on hover, looks live, and does nothing. Measured on the
+  merged desk before the rule landed: 24 menu triggers present, 0 of them
+  actionable, `elementFromPoint` returning the ring at every coordinate.
+*/
+.holo-ring {
+  pointer-events: none;
+  padding: 1px;
+  background: var(--holo-gradient);
+  background-size: 250% 250%;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  animation: holo-pan 4.5s ease-in-out infinite alternate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .holo-bg,
+  .holo-text,
+  .holo-bar,
+  .holo-border,
+  .holo-ring,
+  .holo-glow {
+    animation: none;
+  }
+}

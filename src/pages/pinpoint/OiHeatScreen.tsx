@@ -7,6 +7,7 @@ import Panel from '../../components/ui/Panel';
 import ProvenanceChip from '../../components/ui/ProvenanceChip';
 import Term from '../../components/ui/Term';
 import Simulator from '../../core/simulator';
+import OvernightOiPanel from '../../components/gex/OvernightOiPanel';
 
 /*
 ==================================================
@@ -116,6 +117,15 @@ const OiHeatScreen = () => {
           ))}
         </div>
       </div>
+
+      {/* THE OTHER VINTAGE. Everything above is the SESSION — snapshot
+          against snapshot, which strikes are being built right now. Open
+          interest itself is only published once a day, after the close, so
+          the overnight change is the one version of this number that is a
+          published fact rather than an inference. Two surfaces, two
+          vintages, and they sit together because a reader comparing "being
+          built now" with "settled last night" is doing the actual work. */}
+      <OvernightOiPanel ticker={marketData.ticker} className="w-full" />
     </div>
   );
 };

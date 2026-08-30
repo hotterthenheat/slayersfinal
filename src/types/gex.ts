@@ -19,7 +19,7 @@ export interface KeyLevels {
   putWall: number;
   flip: number;
   /** Strike holding the largest absolute exposure */
-  king: number;
+  supreme: number;
 }
 
 /** The heat field read as ONE regime — the engine names the configuration
@@ -41,7 +41,7 @@ export interface NodeLevel {
 
 export interface MatrixCell {
   value: number;
-  king?: boolean;
+  supreme?: boolean;
 }
 
 export interface GexMatrixData {
@@ -71,7 +71,7 @@ export interface DarkPoolPrint {
 export interface LadderRow {
   strike: number;
   value: number;
-  king?: boolean;
+  supreme?: boolean;
 }
 
 export interface BoardTicker {
@@ -109,6 +109,11 @@ export interface StrikeExposure {
   gex: GreekSplit;
   dex: GreekSplit;
   vex: GreekSplit;
+  /* The two second-order nets, per strike and dollarised the same way as
+     the three above — so the band can draw any of the five on one scale
+     and a reader compares like with like. */
+  vanna: GreekSplit;
+  charm: GreekSplit;
   /** Contracts outstanding at the strike, both sides */
   oi: number;
   /** Session volume at the strike — the same figure Ranked Targets ranks by */
@@ -138,7 +143,7 @@ export interface ExposureLevels {
   /** Largest |net gamma| strike on the FULL book — may sit outside the
       rendered window, in which case the map crowns nothing rather than
       promoting a runner-up. */
-  king: number;
+  supreme: number;
 }
 
 export interface ExposureProfileData {
@@ -147,10 +152,12 @@ export interface ExposureProfileData {
   /** Strikes descending, window around spot */
   strikes: StrikeExposure[];
   /** Per-greek scaling for bars (max |leg| across the window) */
-  maxAbs: { gex: number; dex: number; vex: number };
+  maxAbs: { gex: number; dex: number; vex: number; vanna: number; charm: number };
   netGex: number;
   netDex: number;
   netVex: number;
+  netVanna: number;
+  netCharm: number;
   levels: ExposureLevels;
   zones: ZoneBand[];
   bias: DealerBias;
@@ -181,7 +188,7 @@ export interface PressureRow {
   net: number;
 }
 
-export type KeyLevelKind = 'call-wall' | 'spot' | 'put-wall' | 'pin' | 'flip' | 'king';
+export type KeyLevelKind = 'call-wall' | 'spot' | 'put-wall' | 'pin' | 'flip' | 'supreme';
 
 export interface KeyLevelRow {
   kind: KeyLevelKind;
@@ -363,7 +370,7 @@ export interface WallDriftPoint {
 
 export type HedgingClass = 'DOWNSIDE CUSHION' | 'UPSIDE RESISTANCE' | 'MAGNET' | 'NEUTRAL';
 
-export type TargetTag = 'WALL' | 'PIN' | 'KING' | 'SPOT TARGET';
+export type TargetTag = 'WALL' | 'PIN' | 'SUPREME' | 'SPOT TARGET';
 
 /** What earns a strike its priority — the five reasons, in bar order (Mo,
     2026-08-19: "I want to know exactly why #1 beat #2 — NBR + OI + volume +

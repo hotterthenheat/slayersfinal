@@ -35,7 +35,7 @@ import type { StrikeNode } from '../types/market';
   call-dominant and a put-dominant shelf anchor hedging flow at their strike;
   signing the weights would let the two sides cancel and put the "pin" in
   empty space between them. A centroid rather than an argmax, because the
-  argmax is already on screen with its own name — the KING — and a second
+  argmax is already on screen with its own name — the SUPREME — and a second
   surface for the same number wearing a different name is how vocabularies
   rot.
 

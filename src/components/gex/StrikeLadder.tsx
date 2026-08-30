@@ -1,7 +1,7 @@
 import { fmtUsd } from '../../data/gex';
 import SpotRule from '../ui/SpotRule';
 import HeatPill from './HeatPill';
-import { KING } from './palette';
+import { SUPREME } from './palette';
 import type { BoardTicker } from '../../types/gex';
 
 interface StrikeLadderProps {
@@ -46,8 +46,8 @@ const StrikeLadder = ({ board }: StrikeLadderProps) => {
                 <HeatPill
                   value={row.value}
                   maxAbs={ladderMaxAbs}
-                  selected={row.king}
-                  ringColor={KING}
+                  selected={row.supreme}
+                  ringColor={SUPREME}
                   className="h-[19px]"
                   title={`${row.strike} · ${fmtUsd(row.value)}`}
                 >

@@ -3,7 +3,7 @@
   SLAYER TERMINAL - PULSE DESK · KEY LEVELS
   The structural ladder with the INSTRUMENT LENS
   (Noah, 2026-08-18): on index-family names the
-  walls, flip, pin and king re-denominate into the
+  walls, flip, pin and supreme re-denominate into the
   cash index or the futures — SPY · SPX · ES — so
   the map reads in the instrument you trade.
   Distances recompute against the converted spot

@@ -11,7 +11,7 @@
   Proves:
   1. Moving spot RE-PICKS the levels, and the picks equal the shared
      pickWalls / pickFlip the live map uses — no second opinion
-  2. The book is held fixed: the king (a whole-book argmax) does not move
+  2. The book is held fixed: the supreme (a whole-book argmax) does not move
      with spot, and read at today's spot the scenario IS today's map
   3. The flow is signed by the book's own convention — a put-dominant book
      forces BUYING up and SELLING down, a call-dominant one the reverse
@@ -59,7 +59,7 @@ const node = (strike: number, netGex: number): StrikeNode =>
   const above = buildSpotScenario(snap.chain, snap.spot, high);
   check('moved above the whole book, nothing is left to be a call wall', above?.callWall === null, String(above?.callWall));
   check('and the scenario agrees with pickWalls at that spot', above?.putWall === (pickWalls(snap.chain, high, n => n.netGex).putWall ?? null));
-  check('the king does not move with spot — the book is held fixed', here?.king === above?.king, `${here?.king} vs ${above?.king}`);
+  check('the supreme does not move with spot — the book is held fixed', here?.supreme === above?.supreme, `${here?.supreme} vs ${above?.supreme}`);
 }
 
 // ── 3+4. the flow, and its sign ───────────────────────────────────────────

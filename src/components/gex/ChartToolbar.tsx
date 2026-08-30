@@ -143,6 +143,12 @@ interface ChartToolbarProps {
   /** T-15 — the bar CLOCK: 'time', or a range/volume key from
       data/altBars.ts's BAR_CLOCKS. Same width budget as T-23: a section in
       the Candles menu, not a trigger of its own. */
+  /* THE CANDLE THEME, OWNED BY THE HOST WHEN IT WANTS TO BE. Omitted, this
+     reads and writes the global store exactly as before; supplied, the pane
+     owns its own theme and the store is left alone — which is what lets two
+     panes on one desk wear different tapes. */
+  themeKey?: CandleThemeKey;
+  onThemeKey?: (key: CandleThemeKey) => void;
   barClock?: string;
   onBarClock?: (key: string) => void;
 }
@@ -294,7 +300,7 @@ const INDICATOR_ITEMS: { key: keyof ChartIndicators; label: string; hint: string
 
 const OVERLAY_ITEMS: { key: keyof ChartOverlays; label: string; hint: string }[] = [
   { key: 'trails', label: 'Exposure trails', hint: 'LED strike bands — strength & fade' },
-  { key: 'levels', label: 'Key levels', hint: 'Call & put walls, flip and king, marked on the field' },
+  { key: 'levels', label: 'Key levels', hint: 'Call & put walls, flip and supreme, marked on the field' },
   { key: 'darkpool', label: 'Dark pool', hint: 'Off-exchange print lines' },
   { key: 'volume', label: 'Volume', hint: 'Session bars along the floor' },
   { key: 'flow', label: 'Flow', hint: 'Option premium from the tape — calls up, puts down' },
@@ -446,6 +452,8 @@ const ChartToolbar = ({
   priceScale = 'normal',
   onPriceScale,
   barClock,
+  themeKey: themeKeyProp,
+  onThemeKey,
   onBarClock,
   priceScaleLock,
   onExportPng,
@@ -456,7 +464,8 @@ const ChartToolbar = ({
   onTotalFullscreen,
   onOpenQuad,
 }: ChartToolbarProps) => {
-  const themeKey = useCandleThemeKey();
+  const storeThemeKey = useCandleThemeKey();
+  const themeKey = themeKeyProp ?? storeThemeKey;
   const [openMenu, setOpenMenu] = useState<
     'overlays' | 'candles' | 'style' | 'indicators' | 'alerts' | 'timeframe' | null
   >(null);
@@ -1013,7 +1022,8 @@ const ChartToolbar = ({
               <button
                 key={opt.value}
                 onClick={() => {
-                  setCandleTheme(opt.value as CandleThemeKey);
+                  if (onThemeKey) onThemeKey(opt.value as CandleThemeKey);
+                  else setCandleTheme(opt.value as CandleThemeKey);
                   setOpenMenu(null);
                 }}
                 className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded font-mono text-[11px] transition-colors ${

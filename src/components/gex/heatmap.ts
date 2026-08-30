@@ -169,7 +169,7 @@ const RAMPS: Record<
      not their schematic yellow-purple, not the fintech-default blue/orange.
      Ice pole #3DD6E8 is bluer than darkpool teal #2DD4BF and far more
      saturated than flip's pale sky #7DD3FC; plasma pole #FF5EA8 is pink —
-     not bear red, not king purple. Colorblindness is covered by a built-in
+     not bear red, not supreme purple. Colorblindness is covered by a built-in
      POLE LUMINANCE OFFSET (ice L=0.55 vs plasma L=0.32) so brightness
      separates the sides even where hue can't. One hue per side, luminance
      walk, ARC-LENGTH EVEN stops (OKLab, generated — delta spread

@@ -3305,8 +3305,17 @@ head('the measure is reachable, and what it draws is a stored measure');
   await reachForChrome(page);
   await page.waitForTimeout(600);
 
-  const pencil = await page.$('button[aria-label="Draw on the chart"]');
-  pencil ? ok('PREMISE: the pane strip carries a draw button') : bad('PREMISE: no draw button in the pane strip — the drawing layer still has no door');
+  /* THE DOOR MOVED, and this premise moved with it. Draw mode used to be a
+     pencil in the pane's toolbar strip; the desk now carries a PERSISTENT
+     tool rail on the chart, and picking a tool is what arms the mode. That
+     is the more discoverable arrangement — a toggle hidden behind a hover
+     is a door nobody finds — so the check follows the door rather than
+     asking for the old one back. The toolbar pencil is still accepted
+     where a surface mounts one. */
+  const pencil =
+    (await page.$('button[aria-label="Trend"]')) ??
+    (await page.$('button[aria-label="Draw on the chart"]'));
+  pencil ? ok('PREMISE: the chart carries a way into draw mode') : bad('PREMISE: no draw tool on the chart — the drawing layer has no door');
 
   if (pencil) {
     await pencil.click();
@@ -4403,9 +4412,29 @@ head('the rail takes a volume profile, and gives it back');
       ? ok('the chip says it is on')
       : bad('aria-pressed did not follow the toggle');
     const after = await railInk();
-    after > 300
-      ? ok(`the profile paints — ${after} ink cells of bins, VPOC and value area`)
-      : bad(`the toggle painted ${after} cells`);
+    /*
+      A SHARE OF THE CANVAS, NOT A PIXEL COUNT.
+
+      This asserted `> 300` ink pixels, a number tuned to the rail when it
+      was a fixed 132px wide. The rail is draggable now and its canvas is
+      whatever the reader left it at, so the same correctly-painted profile
+      measured 295 and failed — a layout change reported as a product
+      regression.
+
+      What actually has to be true is that the profile COVERS ground rather
+      than leaving a few stray pixels, so the floor is a fraction of the
+      canvas it is drawn on. The pair below is the real contract: it paints
+      when on, and clears completely when off.
+    */
+    const canvasArea = await page.evaluate(() => {
+      const rail = document.querySelector('[aria-label$="exposure by strike"]');
+      const c = rail?.querySelector('canvas');
+      return c ? c.width * c.height : 0;
+    });
+    const floor = Math.max(80, Math.round(canvasArea * 0.001));
+    after > floor
+      ? ok(`the profile paints — ${after} ink cells of bins, VPOC and value area (floor ${floor})`)
+      : bad(`the toggle painted ${after} cells, under the ${floor} floor for a ${canvasArea}px canvas`);
     await chip.click();
     await page.waitForTimeout(700);
     const off = await railInk();
@@ -5544,6 +5573,276 @@ head('a strike row is a door that says so, and lands focused');
   }
 
   errs.length === 0 ? ok('no page errors through the doors') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
+  await ctx.close();
+}
+
+head('the desk does not cover its own chrome');
+{
+  /*
+    A REGRESSION WITH NO PIXELS.
+
+    The strike rail's resize grip runs the full height of its pane at z-30,
+    and the desk floats its control strips over the panes on the SAME layer
+    in the same stacking context. Three panes put three full-height grips
+    down a 1600px desk; the strip carrying the layout picker floats at the
+    bottom centre, and one grip lands exactly across it. DOM order decided,
+    the grip won, and the layout buttons stopped taking clicks — invisibly,
+    because the grip is transparent until hovered. Nothing looked wrong in
+    a screenshot; the desk had simply stopped working.
+
+    So this asks the only question that catches that class of bug: is every
+    control the reader can SEE the thing that a click at its centre would
+    actually hit.
+  */
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 800);
+
+  const panes = await page.evaluate(() => JSON.parse(localStorage.getItem('slayer_terrain_v1') ?? '{}').layout);
+  panes >= 2
+    ? ok(`PREMISE: the desk opens multi-pane, so grips run down it — ${panes} panes`)
+    : bad(`the desk opened with ${panes} pane(s) — no grip crosses the chrome`);
+  const grips = await page.$$('[role="separator"][aria-orientation="vertical"]');
+  grips.length === panes
+    ? ok(`one resize grip per pane — ${grips.length}`)
+    : bad(`${grips.length} grips for ${panes} panes`);
+
+  /* Only chrome that is actually SHOWING. The per-pane header rides an
+     opacity-0 strip that appears when the pointer enters its pane, and a
+     hidden-by-design control failing a hit test is not a finding — counting
+     it would drown the one that matters. */
+  const blocked = await page.evaluate(() =>
+    [...document.querySelectorAll('.chrome-hover button')]
+      .filter(el => {
+        const r = el.getBoundingClientRect();
+        if (r.width === 0) return false;
+        if (!el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return false;
+        const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+        return !(top === el || el.contains(top));
+      })
+      .map(el => el.getAttribute('aria-label') || el.textContent?.trim())
+  );
+  blocked.length === 0
+    ? ok('every visible control on the desk is what a click at its centre hits')
+    : bad(`covered: ${blocked.join(', ')}`);
+
+  /* And the exact path that first exposed it. */
+  await page.click('button[title^="Named layouts"]');
+  await page.waitForTimeout(300);
+  await page.fill('input[aria-label="Layout name"]', 'chrome probe');
+  await page.click('div[role="dialog"] button:has-text("Save")');
+  await page.waitForTimeout(300);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+  let took = true;
+  try {
+    await page.click('button[aria-label="1 chart"]', { timeout: 6000 });
+  } catch {
+    took = false;
+  }
+  took ? ok('the layout picker still takes a click once the shelf closes') : bad('the layout picker was unreachable');
+  await page.waitForTimeout(400);
+  (await page.evaluate(() => JSON.parse(localStorage.getItem('slayer_terrain_v1')).layout)) === 1
+    ? ok('and the desk became one chart')
+    : bad('the click landed nowhere');
+
+  /* The grip must still do the job it exists for. */
+  const grip = await page.$('[role="separator"][aria-orientation="vertical"]');
+  if (grip) {
+    const railW = () => grip.evaluate(el => el.parentElement.getBoundingClientRect().width);
+    const before = await railW();
+    const gb = await grip.boundingBox();
+    await page.mouse.move(gb.x + gb.width / 2, gb.y + gb.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(gb.x - 80, gb.y + gb.height / 2, { steps: 8 });
+    await page.mouse.up();
+    await page.waitForTimeout(500);
+    const after = await railW();
+    after > before + 20
+      ? ok(`the grip still widens the rail — ${Math.round(before)}px to ${Math.round(after)}px`)
+      : bad(`the grip stopped resizing — ${Math.round(before)}px to ${Math.round(after)}px`);
+  } else {
+    bad('PREMISE: no grip left to drag');
+  }
+
+  errs.length === 0 ? ok('no page errors on the desk') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
+  await ctx.close();
+}
+
+head('any point on the planet answers, not just the ones with a story on them');
+{
+  /*
+    The globe used to speak only where a city ping sat. Everything else —
+    most of the sphere — was decoration. A click anywhere now reads the
+    place: nearest centre, its local clock, what came out of it and what is
+    aimed at it.
+
+    The two failure modes worth guarding are opposite: a globe that answers
+    nothing, and a globe that answers every drag. Both are checked.
+  */
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/news`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 3000);
+
+  const zone = page.locator('div.lg\\:left-4').first();
+  /* Exact name, not :has-text — that is a case-insensitive SUBSTRING match
+     and it found "backlog" in a headline the first time this was written. */
+  const back = zone.getByRole('button', { name: 'Back', exact: true });
+  const open = async () => (await back.count()) > 0;
+
+  const canvas = await page.$('canvas');
+  const box = canvas && (await canvas.boundingBox());
+  if (!box || box.width < 400) {
+    bad('PREMISE: the globe never drew');
+  } else {
+    ok(`the globe drew — ${Math.round(box.width)}x${Math.round(box.height)}`);
+    (await open()) ? bad('a drill was already open at rest') : ok('no place is open at rest');
+
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    await page.mouse.click(cx, cy);
+    await page.waitForTimeout(1400);
+    const opened = await open();
+    opened ? ok('clicking the planet opens that place') : bad('clicking the planet did nothing');
+
+    const first = await zone.innerText();
+    /\d{2}:\d{2} local/.test(first)
+      ? ok(`it carries the place's own clock — ${(first.match(/\d{2}:\d{2} local/) ?? [''])[0]}`)
+      : bad('the place reported no local time');
+    /(Out of here|Aimed at here|Nothing here today|Nothing is happening here|is quiet)/.test(first)
+      ? ok('and says what is going on there')
+      : bad('the place said nothing about its news');
+
+    if (opened) {
+      await back.first().click();
+      await page.waitForTimeout(700);
+      (await open()) ? bad('Back left the drill open') : ok('Back closes it');
+      (await zone.getByRole('button', { name: 'Headlines' }).count()) > 0
+        ? ok('and the field goes back to its pages')
+        : bad('the pages did not come back');
+    }
+
+    /* Spinning the globe is not clicking it. */
+    await page.mouse.move(cx, cy);
+    await page.mouse.down();
+    for (let i = 1; i <= 12; i++) {
+      await page.mouse.move(cx + i * 15, cy + i * 5);
+      await page.waitForTimeout(16);
+    }
+    await page.mouse.up();
+    await page.waitForTimeout(900);
+    (await open()) ? bad('a drag opened a panel — the globe cannot be spun') : ok('spinning the globe opens nothing');
+
+    /* A different point is a different answer. */
+    await page.mouse.click(cx - 150, cy + 80);
+    await page.waitForTimeout(1400);
+    if (await open()) {
+      const second = await zone.innerText();
+      ok('a second point opens its own');
+      (second.split('\n')[1] ?? '') !== (first.split('\n')[1] ?? '')
+        ? ok(`and it is somewhere else — ${(first.split('\n')[1] ?? '').slice(0, 28)} then ${(second.split('\n')[1] ?? '').slice(0, 28)}`)
+        : bad('the second click reported the first place');
+    } else {
+      bad('a second point on the planet answered nothing');
+    }
+  }
+
+  errs.length === 0 ? ok('no page errors in the room') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
+  await ctx.close();
+}
+
+head('the ticker page answers who is actually trading the name');
+{
+  /*
+    The two surfaces that answer it from opposite ends: PASSIVE OWNERSHIP —
+    the money moving the name with no view on it — and INSIDER
+    TRANSACTIONS, the people with the most view of all.
+
+    And one page-wide invariant that belongs to no single panel: NO TEXT MAY
+    RENDER COLOURLESS. A Tailwind colour built from a runtime template
+    string never reaches the stylesheet, so the class lands in the DOM with
+    no rule behind it and the text paints as nothing — present in the
+    accessibility tree, invisible on screen, and silent in every other
+    check. That has shipped twice on this desk. Text painted by a background
+    clipped to its glyphs is exempt: the foil headings do that deliberately.
+  */
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/stocks/AAPL`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+
+  const body = () => page.evaluate(() => document.body.innerText.toLowerCase());
+  const seen = await body();
+  for (const phrase of [
+    'passive ownership',
+    'passive share of volume',
+    'net through funds',
+    'insider transactions',
+    'reads as',
+    'of that, on a schedule',
+  ]) {
+    /* innerText comes back as RENDERED, so an uppercase label arrives
+       uppercased — compare with the case folded. */
+    seen.includes(phrase) ? ok(`the page says "${phrase}"`) : bad(`the page never says "${phrase}"`);
+  }
+
+  const funds = await page.evaluate(() =>
+    [...document.querySelectorAll('table tbody tr td:first-child')].map(td => td.textContent?.trim() ?? '')
+  );
+  funds.some(f => /^SPY/.test(f))
+    ? ok('a broad fund is named among the holders')
+    : bad(`no broad fund on the board — ${funds.slice(0, 3).join(', ')}`);
+
+  const plans = await page.$$('span[title^="A 10b5-1 plan"]');
+  plans.length > 0
+    ? ok(`a scheduled sale wears its badge on the row — ${plans.length}`)
+    : bad('no plan badge — a scheduled sale is indistinguishable from a decision');
+
+  const colourless = await page.evaluate(() => {
+    const out = [];
+    for (const el of document.querySelectorAll('td, th, div, span, p, a, button')) {
+      const t = el.childElementCount === 0 ? el.textContent?.trim() : '';
+      if (!t || t.length < 2) continue;
+      const cs = getComputedStyle(el);
+      if (cs.color !== 'rgba(0, 0, 0, 0)' && cs.color !== 'transparent') continue;
+      const clipped =
+        (cs.webkitBackgroundClip === 'text' || cs.backgroundClip === 'text') && cs.backgroundImage !== 'none';
+      if (!clipped) out.push(`"${t.slice(0, 24)}"`);
+    }
+    return out.slice(0, 6);
+  });
+  colourless.length === 0
+    ? ok('no text renders colourless — every colour class reached the stylesheet')
+    : bad(`colourless: ${colourless.join(', ')}`);
+
+  const spill = await page.evaluate(() => {
+    const out = [];
+    for (const t of document.querySelectorAll('table')) {
+      const box = t.parentElement;
+      if (box && box.scrollWidth > box.clientWidth + 2 && getComputedStyle(box).overflowX === 'visible')
+        out.push(`a table overflows by ${box.scrollWidth - box.clientWidth}px with no scroller`);
+    }
+    if (document.documentElement.scrollWidth > document.documentElement.clientWidth + 2)
+      out.push(`the page scrolls sideways by ${document.documentElement.scrollWidth - document.documentElement.clientWidth}px`);
+    return out;
+  });
+  spill.length === 0 ? ok('every board fits its box') : bad(spill.join(' | '));
+
+  /* The window control has to actually move the board. */
+  const before = await body();
+  await page.click('button:has-text("30d")');
+  await page.waitForTimeout(700);
+  (await body()) !== before ? ok('the insider window re-reads the filings') : bad('30d changed nothing');
+
+  errs.length === 0 ? ok('no page errors on the ticker page') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
   await ctx.close();
 }
 

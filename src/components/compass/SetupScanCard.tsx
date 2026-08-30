@@ -68,7 +68,7 @@ const SetupScanCard = ({ setup, rank, selected, onSelect, onAnalysis, expiryChip
         <span className="font-mono text-[10px] text-textSecondary border border-borderSubtle rounded px-1.5 py-0.5">
           {setup.expiry} · {expiryChip}
         </span>
-        {rank === 1 && <SignalBadge tone="magenta">Top pick</SignalBadge>}
+        {rank === 1 && <SignalBadge tone="crown">Top pick</SignalBadge>}
         <span className="ml-auto flex items-center gap-1.5">
           {tpHit != null && <SignalBadge tone="bull">TP{tpHit} HIT</SignalBadge>}
           <SignalBadge tone={meta.tone} dot pulse={meta.pulse}>

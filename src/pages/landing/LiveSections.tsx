@@ -478,7 +478,7 @@ const ChartShowcase = ({ ctx }: { ctx: LandingCtx | null }) => (
         The chart that knows where dealers stand.
       </h2>
       <p className="mt-4 text-[14px] text-textSecondary leading-relaxed max-w-xl mx-auto">
-        Walls, the gamma flip, the king strike — drawn straight on the candles and repriced as the
+        Walls, the gamma flip, the supreme strike — drawn straight on the candles and repriced as the
         session moves. This isn't a screenshot; it's the terminal's chart, running on the live feed.
       </p>
     </Reveal>
@@ -490,7 +490,7 @@ const ChartShowcase = ({ ctx }: { ctx: LandingCtx | null }) => (
         <>
           <FloatChip label="Dealer walls" dot="#30D158" className="top-5 right-6" />
           <FloatChip label="Gamma flip" dot="#7DD3FC" className="top-1/2 -left-2 md:left-4" delay={1.4} />
-          <FloatChip label="King strike" dot="#EA00FF" className="bottom-8 right-10" delay={2.6} />
+          <FloatChip label="Supreme strike" dot="#EA00FF" className="bottom-8 right-10" delay={2.6} />
           <TiltBox maxTilt={2} glare={false} className="p-3">
             <StrikeChart
               ticker={ctx.ticker}
@@ -515,7 +515,7 @@ const TERMS = [
   'Call wall',
   'Put wall',
   'Gamma flip',
-  'King strike',
+  'Supreme strike',
   'Net GEX',
   'DEX',
   'VEX',
@@ -668,7 +668,7 @@ const LiveSections = () => {
               <div className="h-[340px]">
                 <EngineBox
                   name="Pulse"
-                  line="Walls, pin, flip & king — with distance"
+                  line="Walls, pin, flip & supreme — with distance"
                   accent="bg-flip"
                   to="/pulse"
                 >

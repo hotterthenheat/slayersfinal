@@ -1,4 +1,4 @@
-import { Radio, Bookmark, Layers, Scan, type LucideIcon } from 'lucide-react';
+import { Radio, Bookmark, Layers, Scan, Boxes, type LucideIcon } from 'lucide-react';
 
 /** Trace subpage registry — drives the sub-tab bar and command palette. */
 export interface TraceSubpage {
@@ -14,6 +14,12 @@ export const TRACE_SUBPAGES: TraceSubpage[] = [
     label: 'Live Tape',
     subtitle: 'Streaming options prints, dark-pool crosses & session flow',
     icon: Radio,
+  },
+  {
+    path: '/trace/interval',
+    label: 'Interval',
+    subtitle: 'What is being assembled quietly, and how much of the tape is structure',
+    icon: Boxes,
   },
   {
     path: '/trace/scanner',

@@ -25,12 +25,13 @@ import {
   type Time,
   type UTCTimestamp,
 } from 'lightweight-charts';
-import { AlertTriangle, ArrowLeft, Bookmark, Check, Droplets, Info, LayoutGrid, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowUpRight, Bookmark, Check, Droplets, Info, LayoutGrid, ShieldAlert } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import Simulator from '../../core/simulator';
 import { getCandleTheme, useCandleThemeKey, candleSeriesOptions, chartSurface } from '../gex/candleTheme';
 import ChartToolbar from '../gex/ChartToolbar';
-import type { ChartOverlays } from '../gex/StrikeChart';
-import { CALL_WALL, PUT_WALL, FLIP, KING } from '../gex/palette';
+import { DEFAULT_OVERLAYS, type ChartOverlays } from '../gex/StrikeChart';
+import { CALL_WALL, PUT_WALL, FLIP, SUPREME } from '../gex/palette';
 import { TIMEFRAMES, tfMinutes, aggregateCandles, type Timeframe } from '../../data/timeframe';
 import { buildLevelsFor } from '../../data/gex';
 import Panel from '../ui/Panel';
@@ -41,10 +42,11 @@ import RichRead from '../ui/RichRead';
 import GreeksRow from './GreeksRow';
 import VerdictBadge from './VerdictBadge';
 import ContractFacts from './ContractFacts';
-import ContractNodeChart from './ContractNodeChart';
+import ContractTrack from './ContractTrack';
 import SetupDrivers from './SetupDrivers';
 import { buildSetupDrivers, estimatePremium } from '../../data/compass';
 import { spotForPremium } from './trackModel';
+import { useFadeClose } from '../ui/useFadeClose';
 import { useTracker } from '../../context/TrackerContext';
 import { CampaignLevelsPrimitive, type CampaignLevel } from './campaignLevelsPrimitive';
 import {
@@ -113,6 +115,9 @@ interface CampaignChartProps {
   brk: CampaignBreak | null;
   timeframe: Timeframe;
   overlays: ChartOverlays;
+  /** Fraction of the pane the plot leaves clear at the TOP — the floating
+      chrome strip lives there. Measured by the caller; default engine 0.2. */
+  topMargin?: number;
 }
 
 /** Campaign chart preferences — persisted like Pulse's ('slayer_chart_overlays'
@@ -120,30 +125,20 @@ interface CampaignChartProps {
     are deliberately NOT offered here: whole-market texture drowns a one-trade
     story. Volume is on by default; structural levels are opt-in axis chips. */
 const CAMPAIGN_CHART_LS = 'slayer_campaign_chart';
-/* `flow` joins the diet's exclusions rather than its menu (see overlayKeys
-   below): this chart tells one trade's story, and the whole tape's premium is
-   exactly the market-wide texture that drowns it. */
+/* Built FROM the chart's own defaults so a new overlay cannot silently
+   arrive switched on here — the campaign map keeps its narrow diet. */
 const CAMPAIGN_OVERLAY_DEFAULTS: ChartOverlays = {
-  trails: false, levels: false, darkpool: false, volume: true, flow: false,
-  /* Off for the same reason the flow band is: the drift lines are the whole
-     tape's premium summed, which is exactly the market-wide texture that
-     drowns one campaign's story. The vol pane is off because this chart is
-     already short — a third band would leave the tape a strip. */
-  netDrift: false, volDrift: false,
-  /* And this one costs the tape height outright, on a chart already short. */
+  ...DEFAULT_OVERLAYS,
+  trails: false,
+  levels: false,
+  darkpool: false,
+  volume: true,
+  flow: false,
+  netDrift: false,
+  volDrift: false,
   dexStrike: false,
-  /* Session levels join the same diet. This chart tells ONE campaign's story
-     against the strikes that bear on it; yesterday's high and the opening
-     range are the day's general furniture, and seven more rules across a
-     short tape is exactly the texture that drowns the one line it exists to
-     show. Not in `overlayKeys` below either, so it is not offered. */
   session: false,
-  /* The cone joins the session levels in the diet, for the same reason: it is
-     the DAY'S general claim, not this campaign's, and it is geometry across
-     the whole tape. Not in `overlayKeys` below either. */
   cone: false,
-  /* The calendar lane joins the diet too — the campaign chart marks ITS OWN
-     entries and exits, and a second row of glyphs under them is clutter. */
   events: false,
 };
 const loadChartPrefs = (): { timeframe: Timeframe; overlays: ChartOverlays } => {
@@ -163,23 +158,27 @@ const loadChartPrefs = (): { timeframe: Timeframe; overlays: ChartOverlays } => 
 };
 
 /** Candles with the campaign's levels: TP milestones (lime), floor (red). */
-const CampaignChart = ({ setup, revision, entry, hits, brk, timeframe, overlays }: CampaignChartProps) => {
+const CampaignChart = ({ setup, revision, entry, hits, brk, timeframe, overlays, topMargin }: CampaignChartProps) => {
   const themeKey = useCandleThemeKey();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const volumeRef = useRef<ISeriesApi<'Histogram'> | null>(null);
   const linesRef = useRef<IPriceLine[]>([]);
-  /* T-CAMPAIGN — the targets/floor/strike layer. A primitive rather than
-     price lines, so the levels are NAMED ON THE FIELD instead of down the
-     price axis. */
+  /* The targets/floor/strike layer. A primitive rather than price lines, so
+     the levels are NAMED ON THE FIELD instead of down the price axis. */
   const levelsPrimRef = useRef<CampaignLevelsPrimitive | null>(null);
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
-  /** Structural level chips (CW/PW/flip/king) — separate from the campaign's
+  /** Structural level chips (CW/PW/flip/supreme) — separate from the campaign's
       own TP/floor lines so the two layers never fight over one ref. */
   const structLinesRef = useRef<IPriceLine[]>([]);
-  /** Levels the OPENING view must include (TP1 + the floor) — read by the
-      candle series' autoscale provider, updated when the setup changes. */
+  /** Levels the OPENING view must include — read by the candle series'
+      autoscale provider, updated when the setup changes. EVERY campaign
+      line rides here (all TPs + the floor), not just TP1: a price line
+      above the fitted range lands in the top margin — the exact band the
+      floating chrome reserves — so TP3's label was riding the toolbar
+      (Noah's screenshot, 2026-08-30). Inside the range, the measured
+      headroom keeps the topmost line below the chrome. */
   const scaleLevelsRef = useRef<number[]>([]);
   /** Which setup the chart last framed itself for — the ONLY trigger that
       may re-engage autoscale. Values drift per tick; identity doesn't. */
@@ -200,7 +199,10 @@ const CampaignChart = ({ setup, revision, entry, hits, brk, timeframe, overlays 
         fontSize: 10,
         attributionLogo: false,
       },
-      grid: { vertLines: { visible: false }, horzLines: { color: s0.grid } },
+      /* No grid at all (Noah, 2026-08-29: "remove the tradingview like
+         horizontal lines... that look like a grid layout") — the tape's
+         only lines are the campaign's own rules. */
+      grid: { vertLines: { visible: false }, horzLines: { visible: false } },
       rightPriceScale: { borderColor: '#1c1c1c' },
       timeScale: { borderColor: '#1c1c1c', timeVisible: true, secondsVisible: false, rightOffset: 4, barSpacing: 6 },
       crosshair: {
@@ -214,7 +216,7 @@ const CampaignChart = ({ setup, revision, entry, hits, brk, timeframe, overlays 
       /* The opening view must SHOW the campaign: TP1 and the floor join the
          visible range (Noah, 2026-08-10 — "I have to scroll out quite a bit
          to see the tp and floor lines"). Same pattern as StrikeChart's
-         walls/king. The user still pans and zooms freely from there — manual
+         walls/supreme. The user still pans and zooms freely from there — manual
          interaction suspends autoscale as usual. */
       autoscaleInfoProvider: (original: () => { priceRange: { minValue: number; maxValue: number } } | null) => {
         const base = original();
@@ -271,16 +273,21 @@ const CampaignChart = ({ setup, revision, entry, hits, brk, timeframe, overlays 
     };
   }, []);
 
+  // The caller's reserved headroom, applied live (it changes on resize/wrap).
+  // Margins only steer autoscale, so a frame the user froze stays theirs.
+  useEffect(() => {
+    chartRef.current?.priceScale('right').applyOptions({
+      scaleMargins: { top: Math.min(0.5, Math.max(0.05, topMargin ?? 0.2)), bottom: 0.1 },
+    });
+  }, [topMargin]);
+
   // Theme swap: recolor the candle series in place and repaint volume bars in
   // the new palette — without touching load bookkeeping, so the view never jumps.
   useEffect(() => {
     const t = getCandleTheme();
     candleRef.current?.applyOptions(candleSeriesOptions(t));
     const s = chartSurface(t);
-    chartRef.current?.applyOptions({
-      layout: { background: { color: s.bg } },
-      grid: { horzLines: { color: s.grid } },
-    });
+    chartRef.current?.applyOptions({ layout: { background: { color: s.bg } } });
     const bars = aggregateCandles(Simulator.getCandles(setup.ticker) ?? [], tfMinutes(timeframe));
     if (bars.length > 0 && volumeRef.current) {
       volumeRef.current.setData(
@@ -298,7 +305,7 @@ const CampaignChart = ({ setup, revision, entry, hits, brk, timeframe, overlays 
     volumeRef.current?.applyOptions({ visible: overlays.volume });
   }, [overlays.volume]);
 
-  // Structural levels (CW/PW/flip/king) as QUIET AXIS CHIPS — lineVisible off,
+  // Structural levels (CW/PW/flip/supreme) as QUIET AXIS CHIPS — lineVisible off,
   // label on. The campaign's own TP/floor lines keep the chart's ink; these
   // let the user check the thesis against the structure without a second
   // layer of full-width lines fighting it. Redrawn per tick while enabled
@@ -326,7 +333,7 @@ const CampaignChart = ({ setup, revision, entry, hits, brk, timeframe, overlays 
       chip(lv.callWall, 'CW', CALL_WALL),
       chip(lv.putWall, 'PW', PUT_WALL),
       chip(lv.flip, 'FLIP', FLIP),
-      chip(lv.king, 'KING', KING),
+      chip(lv.supreme, 'SUPREME', SUPREME),
     ];
   }, [overlays.levels, setup.ticker, revision]);
 
@@ -429,17 +436,16 @@ const CampaignChart = ({ setup, revision, entry, hits, brk, timeframe, overlays 
   useEffect(() => {
     const candleSeries = candleRef.current;
     if (!candleSeries) return;
-    /* THE LEVELS ARE NODES NOW, not price lines — see
-       campaignLevelsPrimitive for why (a price line can only be named on
-       the price AXIS, and nothing here is named on the axis). The old
-       `linesRef` sweep stays for one more line so any lines a previous
-       render left behind are still cleaned up. */
     for (const line of linesRef.current) candleSeries.removePriceLine(line);
     const lines: IPriceLine[] = [];
+    /* THE LEVELS ARE NODES, not price lines — see campaignLevelsPrimitive
+       for why (a price line can only be named on the price AXIS, and nothing
+       here is named on the axis). `lines` survives for the other furniture
+       this effect still draws. */
+    const levels: CampaignLevel[] = [];
     const banked = new Set(hits.map(h => h.level));
 
-    const levels: CampaignLevel[] = [];
-    // A retired campaign draws NO future business: un-banked targets come
+    // A retired campaign draws NO future business: un-banked TP lines come
     // down with the thesis; what was banked already lives on its candles.
     if (!brk) {
       setup.priceTargets.forEach((price, i) => {
@@ -447,13 +453,21 @@ const CampaignChart = ({ setup, revision, entry, hits, brk, timeframe, overlays 
         levels.push({ price, kind: 'target', label: `TP${i + 1}` });
       });
     }
+
     // Broken: the floor freezes where it broke (the live value drifts with
-    // spot, but the post-mortem must show the line that ended the campaign).
-    levels.push({
-      price: brk ? brk.floor : setup.invalidationPrice,
-      kind: 'floor',
-      label: brk ? 'FLOOR \u2717' : 'FLOOR',
-    });
+    // spot, but the post-mortem must show the line that ended the setup).
+    // NO RUNGS, NO FLOOR (Noah, 2026-08-30): a fading low-confidence thesis
+    // earned zero TPs, and a floor under a trade nobody is in is furniture —
+    // the chart stays bare. A broken floor still shows: post-mortems keep
+    // their evidence.
+    if (setup.takeProfits.length > 0 || brk) {
+      levels.push({
+        price: brk ? brk.floor : setup.invalidationPrice,
+        kind: 'floor',
+        label: brk ? 'FLOOR \u2717' : 'FLOOR',
+      });
+    }
+
     levels.push({ price: setup.strike, kind: 'strike', label: 'STRIKE' });
     levelsPrimRef.current?.setData({ levels });
 
@@ -466,7 +480,7 @@ const CampaignChart = ({ setup, revision, entry, hits, brk, timeframe, overlays 
        (invalidation/targets derive from it), so comparing values re-framed
        every second and yanked the user's zoom (Noah caught it live). After
        the first frame, the view belongs to the user. */
-    scaleLevelsRef.current = [setup.priceTargets[0], setup.invalidationPrice];
+    scaleLevelsRef.current = [...setup.priceTargets, ...(setup.takeProfits.length > 0 ? [setup.invalidationPrice] : [])];
     if (framedForRef.current !== setup.id) {
       framedForRef.current = setup.id;
       chartRef.current?.priceScale('right').applyOptions({ autoScale: true });
@@ -489,7 +503,12 @@ const CampaignAnalysis = ({
   onOpenContract,
 }: CampaignAnalysisProps) => {
   const { trackSetup, untrackSetup, isTracked } = useTracker();
+  const navigate = useNavigate();
   const tracked = isTracked(setup.id);
+  /* Untrack plays the door's unfold BACKWARDS before the unmount (Noah,
+     2026-08-29: "the reverse of the entry"). useFadeClose so the removal is
+     a timer, never an animation-completion wait — the wedge law. */
+  const { closing: doorClosing, close: closeDoor } = useFadeClose(() => {}, 340);
   const active = setup.verdict === 'ENTER';
 
   /* ENTRY = the bar on the tape when this review opened — and with it, THE
@@ -585,7 +604,7 @@ const CampaignAnalysis = ({
   }, [entry, c, setup.id, setup.right, setup.ticker, revision]);
   const retired = floorBreak != null;
 
-  /* The contracts driving THIS setup — its own strike, the walls, king, pin,
+  /* The contracts driving THIS setup — its own strike, the walls, supreme, pin,
      and the heaviest hedging between spot and the final target — read off
      the name's live book on the scan clock (a 1s rebuild would make the
      table vibrate), re-read at once when the contract changes. */
@@ -639,8 +658,30 @@ const CampaignAnalysis = ({
   /* The chart slot has two instruments (Noah, 2026-08-17: "i want a button
      ... that allows us to go to that chart"): Stock = the underlying's tape
      (the campaign map), Premium = the contract's modeled premium track
-     (ContractNodeChart). Same toggle rides on both panels. */
+     (ContractTrack, resurrected). Same toggle rides on both panels. */
   const [chartView, setChartView] = useState<'stock' | 'premium'>('stock');
+
+  /* The stock map's chrome floats over its tape now (same grammar as the
+     premium card), so its real height — strip can wrap — becomes the plot's
+     reserved headroom. Keyed on chartView: the refs only exist while the
+     stock branch is mounted. */
+  const stockTapeRef = useRef<HTMLDivElement | null>(null);
+  const stockChromeRef = useRef<HTMLDivElement | null>(null);
+  const [stockTopMargin, setStockTopMargin] = useState(0.2);
+  useEffect(() => {
+    if (chartView !== 'stock') return;
+    const measure = () => {
+      const tape = stockTapeRef.current?.clientHeight ?? 0;
+      const chrome = stockChromeRef.current?.clientHeight ?? 0;
+      if (tape > 0 && chrome > 0) setStockTopMargin(Math.min(0.4, Math.max(0.1, (chrome + 16) / tape)));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (stockTapeRef.current) ro.observe(stockTapeRef.current);
+    if (stockChromeRef.current) ro.observe(stockChromeRef.current);
+    return () => ro.disconnect();
+  }, [chartView]);
+
   useEffect(() => {
     if (!chartFull) return;
     const onKey = (e: KeyboardEvent) => {
@@ -668,10 +709,10 @@ const CampaignAnalysis = ({
     scanner === 'quick-scalp'
       ? "Through it the scalp is over — and the scalp's own clock retires it well before the contract's expiry does."
       : sleeve === 'odte'
-        ? "A close through it retires the campaign — and nothing here outlives today's close anyway."
+        ? "A close through it retires the setup — and nothing here outlives today's close anyway."
         : sleeve === 'weekly'
-          ? 'A close through it retires the campaign — otherwise it runs into Friday.'
-          : 'The only exit clock this trade has: a close through it and the campaign retires.';
+          ? 'A close through it retires the setup — otherwise it runs into Friday.'
+          : 'The only exit clock this trade has: a close through it and the setup retires.';
 
   return (
     <div className="flex flex-col gap-4">
@@ -754,7 +795,7 @@ const CampaignAnalysis = ({
           sweep that surfaced the row is named. */}
       {gradedAt != null && (
         <p className="-mt-1 font-mono text-[11px] text-textSecondary">
-          Surfaced on the <span className="text-textPrimary tnum">{gradedAt}</span> sweep · reading live since
+          Found on the <span className="text-textPrimary tnum">{gradedAt}</span> scan · watching live since
         </p>
       )}
 
@@ -787,22 +828,28 @@ const CampaignAnalysis = ({
         {/* The chart slot — 60/40 with the card (Noah, 2026-08-17). Two
             instruments share it: the STOCK view is the campaign map on the
             underlying's tape; the PREMIUM view is the contract's own modeled
-            premium track. The same CardTabs toggle rides on whichever panel
-            is up, so the way back is always in the same place.
-
-            THE PREMIUM VIEW IS NOW ContractNodeChart — the Weigher's
-            lightweight-charts engine with the plan drawn on it twice, as
-            price lines on the tape and as a node chain of reasons beside
-            it. It replaces ContractTrack, which was the app's only Recharts
-            premium chart and could not say WHY a rung was where it was. */}
+            premium track (ContractTrack, back from the 08-09 retirement by
+            request). The same CardTabs toggle rides on whichever panel is
+            up, so the way back is always in the same place. */}
         {chartView === 'premium' ? (
           /* View-level swap → the slow soft-in clock (house rule), so the
-             chart change breathes instead of hard-cutting. */
-          <div className="xl:col-span-7 min-w-0 flex flex-col animate-soft-in-slow">
-            <ContractNodeChart
+             chart change breathes instead of hard-cutting. Fullscreen rides
+             the SAME chartFull as the stock view (Esc + scroll lock come
+             with it) — only the wrapper's classes change, so the pane keeps
+             its view across the lift. */
+          <div
+            className={
+              chartFull
+                ? 'fixed inset-0 z-[80] bg-canvas flex flex-col'
+                : 'xl:col-span-7 min-w-0 flex flex-col animate-soft-in-slow'
+            }
+          >
+            <ContractTrack
               setup={c}
               revision={revision}
               retired={retired}
+              fullscreen={chartFull}
+              onToggleFullscreen={() => setChartFull(f => !f)}
               actions={
                 <CardTabs
                   ariaLabel="Chart view"
@@ -817,52 +864,25 @@ const CampaignAnalysis = ({
             />
           </div>
         ) : (
-        <div className={chartFull ? 'fixed inset-0 z-[80] bg-canvas p-3 flex flex-col' : 'contents'}>
+        <div className={chartFull ? 'fixed inset-0 z-[80] bg-canvas flex flex-col' : 'contents'}>
+          {/* The Pulse fullscreen grammar, no deviations (Noah, 2026-08-29:
+              "many problem that we prev had with the terrain and pulse
+              pages... padding on the sides... columns for the top section
+              when there should only be one") — the wrapper has NO padding,
+              the panel header is GONE, and everything that lived on its two
+              rows rides ONE transparent strip floating on the tape. */}
           <Panel
-            title={`${setup.ticker} — campaign map`}
-            subtitle="TP milestones & floor on the live tape"
             flush
             /* Docked re-entry from Premium soft-fades in (from-only keyframes
                + backwards fill — nothing retained, so fullscreen's fixed
                positioning stays safe per the containing-block law). */
-            className={chartFull ? 'flex-1 w-full flex flex-col min-h-0' : 'xl:col-span-7 min-w-0 animate-soft-in-slow'}
-            /* Docked: the body STRETCHES with the grid row (min 500 — toolbar
-               strip + chart) so the chart always ends on the rails' bottom
-               line — a fixed height left a void under the shorter rail. */
+            className={chartFull ? 'flex-1 w-full flex flex-col min-h-0' : 'xl:col-span-7 min-w-0 animate-soft-in-slow flex flex-col'}
+            /* Docked: the body STRETCHES with the grid row (min 500) so the
+               chart always ends on the rails' bottom line — a fixed height
+               left a void under the shorter rail. */
             bodyClassName={chartFull ? 'flex flex-col flex-grow min-h-0' : 'flex flex-col min-h-[500px]'}
           >
-            {/* The Pulse control kit, campaign diet: timeframes, overlays
-                (levels + volume only), candles, fullscreen. Its own strip —
-                the panel header can't hold it at half-row width. Timeframes
-                pinned left, everything else right with Expand furthest right
-                (Noah, 2026-08-09). The Stock/Premium toggle leads the strip. */}
-            <div className="px-3 py-1.5 border-b border-borderSubtle flex items-center gap-3">
-              <CardTabs
-                ariaLabel="Chart view"
-                options={[
-                  { value: 'stock', label: 'Stock' },
-                  { value: 'premium', label: 'Premium' },
-                ]}
-                value={chartView}
-                onChange={setChartView}
-              />
-              <span className="h-4 w-px bg-borderSubtle shrink-0" />
-              <div className="flex-1 min-w-0">
-                <ChartToolbar
-                  minimal
-                  candles
-                  spread
-                  overlayKeys={['levels', 'volume']}
-                  timeframe={timeframe}
-                  onTimeframe={setTimeframe}
-                  overlays={overlays}
-                  onOverlays={setOverlays}
-                  fullscreen={chartFull}
-                  onToggleFullscreen={() => setChartFull(f => !f)}
-                />
-              </div>
-            </div>
-            <div className="relative flex-1 min-h-0">
+            <div ref={stockTapeRef} className="relative flex-1 min-h-0 rounded-lg overflow-hidden">
               <CampaignChart
                 setup={c}
                 revision={revision}
@@ -871,7 +891,45 @@ const CampaignAnalysis = ({
                 brk={floorBreak}
                 timeframe={timeframe}
                 overlays={overlays}
+                topMargin={stockTopMargin}
               />
+              {/* ONE strip + its whisper, one flow block (the premium card's
+                  chrome, verbatim): identity capsule, the Stock/Premium door,
+                  then the campaign-diet toolbar. pr-14 keeps the far-right
+                  expand door off the price axis. */}
+              <div ref={stockChromeRef} className="absolute top-0 inset-x-0 z-20">
+                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 pl-2 pr-14 py-1 select-none">
+                  <span className="inline-flex items-center h-7 px-3 rounded-full bg-white/[0.06] font-mono text-[11px] font-bold text-textPrimary shrink-0">
+                    {setup.ticker} — setup map
+                  </span>
+                  <CardTabs
+                    ariaLabel="Chart view"
+                    options={[
+                      { value: 'stock', label: 'Stock' },
+                      { value: 'premium', label: 'Premium' },
+                    ]}
+                    value={chartView}
+                    onChange={setChartView}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <ChartToolbar
+                      minimal
+                      candles
+                      spread
+                      overlayKeys={['levels', 'volume']}
+                      timeframe={timeframe}
+                      onTimeframe={setTimeframe}
+                      overlays={overlays}
+                      onOverlays={setOverlays}
+                      fullscreen={chartFull}
+                      onToggleFullscreen={() => setChartFull(f => !f)}
+                    />
+                  </div>
+                </div>
+                <div className="pl-3 pr-16 pointer-events-none">
+                  <span className="font-mono text-[10px] text-textMuted">TP milestones & floor on the live tape</span>
+                </div>
+              </div>
             </div>
           </Panel>
         </div>
@@ -895,12 +953,14 @@ const CampaignAnalysis = ({
             subtitle={
               retired
                 ? `retired — ${hitCount}/${c.takeProfits.length} banked`
-                : `${hitCount}/${c.takeProfits.length} milestones hit`
+                : c.takeProfits.length === 0
+                  ? 'no milestones — thesis fading'
+                  : `${hitCount}/${c.takeProfits.length} milestones hit`
             }
             actions={
               <CardTabs
                 options={[
-                  { value: 'campaign', label: 'Campaign' },
+                  { value: 'campaign', label: 'Setup' },
                   { value: 'contract', label: 'Contract' },
                 ]}
                 value={cardTab}
@@ -972,7 +1032,9 @@ const CampaignAnalysis = ({
               >
                 <div className="border border-borderSubtle rounded-md overflow-hidden">
                   <div className="px-3 py-1.5 border-b border-borderSubtle bg-inset">
-                    <span className="font-mono text-[9px] uppercase tracking-widest text-textMuted">Premium ladder</span>
+                    <span className="font-mono text-[9px] uppercase tracking-widest text-textMuted">
+                      {setup.takeProfits.length > 0 ? 'Premium ladder' : 'Premium ladder — no rungs, thesis fading'}
+                    </span>
                   </div>
                   {/* The strict table (Noah, 2026-08-09, decoration stripped
                       2026-08-17 — the pulsing dot, edge insets and row tints
@@ -1072,7 +1134,7 @@ const CampaignAnalysis = ({
                   <p className="px-3 py-2 border-t border-borderSubtle text-[10px] leading-snug text-textSecondary">
                     {c.invalidationReason}.{' '}
                     {retired
-                      ? 'A close through it retired the campaign — what remains is the post-mortem.'
+                      ? 'A close through it retired the setup — what remains is the post-mortem.'
                       : clockCopy}
                   </p>
                 </div>
@@ -1084,7 +1146,7 @@ const CampaignAnalysis = ({
                 <div className="flex items-start gap-2 border border-borderSubtle bg-inset rounded-md px-3 py-2.5">
                   <Info className="w-3.5 h-3.5 text-[#C7D3E8] shrink-0 mt-0.5" />
                   <div className="flex flex-col gap-1.5 min-w-0">
-                    <span className="font-mono text-[9px] uppercase tracking-widest text-[#C7D3E8] font-semibold">Why this is on the board</span>
+                    <span className="font-mono text-[9px] uppercase tracking-widest text-select font-semibold">Why this is on the board</span>
                     <p key={setup.id} className="text-[11px] text-textSecondary leading-relaxed animate-soft-in">
                       <RichRead text={setup.whyText} />
                     </p>
@@ -1170,19 +1232,46 @@ const CampaignAnalysis = ({
             </div>
 
             {/* Track Campaign — docked as the panel's footer: the action
-                belongs to the campaign it acts on, never floating under it. */}
-            <div className="border-t border-borderSubtle p-2">
+                belongs to the campaign it acts on, never floating under it.
+                Tracking UNFOLDS a second door beside it (Noah, 2026-08-29:
+                "a button should appear next to the track campaign button but
+                only after user decides to track it... moves over to the left
+                and makes space") — the Track button slides left as the
+                "Open in Tracker" door widens in (the drill unfold, sideways).
+                Untrack unmounts the door on the spot, per the house rule. */}
+            <div className="border-t border-borderSubtle p-2 flex items-stretch">
               <button
-                onClick={() => (tracked ? untrackSetup(setup.id) : trackSetup(setup, scanner))}
-                className={`w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-md font-mono text-[11px] font-semibold uppercase tracking-wider transition-colors ${
+                onClick={() => {
+                  if (tracked) {
+                    untrackSetup(setup.id);
+                    closeDoor();
+                  } else {
+                    trackSetup(setup, scanner);
+                  }
+                }}
+                className={`flex-1 min-w-0 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-md font-mono text-[11px] font-semibold uppercase tracking-wider transition-colors ${
                   tracked
                     ? 'border border-bear/40 text-bear hover:bg-bear/[0.06]'
                     : 'text-[#0a0a0a] holo-bg hover:brightness-105'
                 }`}
               >
                 <Bookmark className="w-3.5 h-3.5" />
-                {tracked ? 'Untrack campaign' : 'Track campaign'}
+                {tracked ? 'Untrack setup' : 'Track setup'}
               </button>
+              {(tracked || doorClosing) && (
+                <div className={doorClosing && !tracked ? 'animate-track-close pointer-events-none' : 'animate-track-open'}>
+                  <div className="overflow-hidden min-w-0 flex items-stretch">
+                    <button
+                      onClick={() => navigate('/tracker', { state: { focus: setup.id } })}
+                      title="Jump to this setup on the Tracker"
+                      className="ml-2 h-full whitespace-nowrap inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-md border border-borderSubtle bg-white/[0.03] hover:bg-white/[0.06] font-mono text-[11px] font-semibold uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
+                    >
+                      <ArrowUpRight className="w-3.5 h-3.5" />
+                      Open in Tracker
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </Panel>
         </div>

@@ -58,7 +58,7 @@ export interface SpotScenario {
   callWall: number | null;
   putWall: number | null;
   flip: number | null;
-  king: number | null;
+  supreme: number | null;
   /** Signed dealer flow the move forces, in dollars. Positive = buying. */
   hedgingFlow: number;
   /** The whole book's net — the regime the scenario spot would sit in. */
@@ -86,16 +86,16 @@ export function buildSpotScenario(chain: readonly StrikeNode[], from: number, to
   const picked = pickWalls(chain, to, n => n.netGex);
   const flip = pickFlip(chain, to, n => n.netGex);
 
-  /* The king is the whole book's argmax |gamma| — spot-independent, so it is
+  /* The supreme is the whole book's argmax |gamma| — spot-independent, so it is
      reported rather than recomputed against `to`. A scenario that "moved"
-     the king would be inventing a book change. */
-  let king: number | null = null;
+     the supreme would be inventing a book change. */
+  let supreme: number | null = null;
   let kingMag = 0;
   for (const n of chain) {
     const m = Math.abs(n.netGex);
     if (m > kingMag) {
       kingMag = m;
-      king = n.strike;
+      supreme = n.strike;
     }
   }
 
@@ -117,7 +117,7 @@ export function buildSpotScenario(chain: readonly StrikeNode[], from: number, to
     callWall: picked.callWall ?? null,
     putWall: picked.putWall ?? null,
     flip,
-    king,
+    supreme,
     hedgingFlow,
     netGex,
     regime: flip !== null && to >= flip ? 'LONG' : 'SHORT',

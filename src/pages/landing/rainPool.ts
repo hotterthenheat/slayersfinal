@@ -14,7 +14,7 @@ const BASE_POOL: string[] = [
   'NET GEX +1.42bn · FLIP 498.50',
   'CALL WALL 505 · held 3x',
   'PUT WALL 490 · defended',
-  'KING 500 · 37% of book',
+  'SUPREME 500 · 37% of book',
   'dealer hedge -212M/1%',
   'gamma regime: dampening',
   'vanna +86M per 1% IV',
@@ -83,7 +83,7 @@ export const RAIN_POOL: string[] = [...BASE_POOL, ...GENERATED_POOL].filter(l =>
 
 // Deliberately narrow — the field should be mostly quiet gray, with tinted
 // lines landing like the occasional meaningful print, not a highlighter pass.
-const STRUCT_RE = /\bgex\b|wall|flip|king|dealer|vanna|charm|gamma/i;
+const STRUCT_RE = /\bgex\b|wall|flip|supreme|dealer|vanna|charm|gamma/i;
 const ENGINE_RE = /compass|pulse|trace|pinpoint|screens|qualifies|rejected|expectancy|overpriced/i;
 const BRIGHT_RE = /^>|sweep|block|dp \$|dark pool|metaorder/i;
 

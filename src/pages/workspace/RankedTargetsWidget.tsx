@@ -22,7 +22,7 @@ import Strip from './Strip';
 const TAG_TONE: Record<TargetTag, Tone> = {
   WALL: 'warn',
   PIN: 'neutral',
-  KING: 'magenta',
+  SUPREME: 'supreme',
   'SPOT TARGET': 'select',
 };
 
@@ -74,7 +74,7 @@ const RankedTargetsWidget = ({ ctx }: { ctx: WorkspaceCtx }) => {
               onClick={() => ctx.focusStrike?.(t.strike)}
               title={`${t.reason} — click to see ${fmtStrike(t.strike)} on the chart`}
               className={`w-full grid grid-cols-[28px_minmax(0,1fr)_64px_56px_76px] items-center gap-x-2 px-2.5 h-8 border-b border-borderSubtle/30 text-left transition-colors hover:bg-white/[0.03] ${
-                primary ? 'bg-king/[0.06]' : ''
+                primary ? 'bg-supreme/[0.06]' : ''
               }`}
             >
               <span className="font-mono text-[10px] tnum text-textSecondary">#{t.rank}</span>

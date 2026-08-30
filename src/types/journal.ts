@@ -136,7 +136,7 @@ export interface FeatureSnapshot {
   baseIvPct: number;
   rsi: number;
   /** The dealer-positioning levels the engine saw */
-  gex: { callWall: number; putWall: number; flip: number; king: number; netGex: number };
+  gex: { callWall: number; putWall: number; flip: number; supreme: number; netGex: number };
   /** Dark-pool read: posture −100 (distributing) .. +100 (accumulating) */
   darkPool: { posture: number };
   /** News read: lean −1 (bearish) .. +1 (bullish), and how loud the tape was */

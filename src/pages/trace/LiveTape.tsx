@@ -1115,15 +1115,15 @@ const LiveTape = () => {
   }: {
     print: FlowPrint;
     label: string;
-    ink: 'king' | 'bull' | 'bear';
+    ink: 'supreme' | 'bull' | 'bear';
   }) => {
     const tone =
-      ink === 'king'
+      ink === 'supreme'
         ? 'border-[#EA00FF]/40 bg-[#EA00FF]/[0.06] hover:bg-[#EA00FF]/[0.12]'
         : ink === 'bull'
           ? 'border-bull/40 bg-bull/[0.05] hover:bg-bull/[0.1]'
           : 'border-bear/40 bg-bear/[0.05] hover:bg-bear/[0.1]';
-    const labelInk = ink === 'king' ? 'text-[#EA00FF]' : ink === 'bull' ? 'text-bull' : 'text-bear';
+    const labelInk = ink === 'supreme' ? 'text-[#EA00FF]' : ink === 'bull' ? 'text-bull' : 'text-bear';
     return (
       <button
         onClick={() => setOpenPrint(print)}
@@ -1175,7 +1175,7 @@ const LiveTape = () => {
         <span className="ml-auto flex items-center gap-2 flex-wrap">
           {whales.bull && whales.bull !== whales.all && <WhaleChip print={whales.bull} label="Top bull" ink="bull" />}
           {whales.bear && whales.bear !== whales.all && <WhaleChip print={whales.bear} label="Top bear" ink="bear" />}
-          {whales.all && <WhaleChip print={whales.all} label="Largest print" ink="king" />}
+          {whales.all && <WhaleChip print={whales.all} label="Largest print" ink="supreme" />}
         </span>
       </div>
 
@@ -1342,7 +1342,7 @@ const LiveTape = () => {
                 >
                   <span
                     className={`w-12 shrink-0 font-mono text-[11px] font-semibold transition-colors ${
-                      searchQuery === t.ticker ? 'text-select' : i === 0 ? 'text-king' : 'text-textPrimary'
+                      searchQuery === t.ticker ? 'text-select' : i === 0 ? 'text-supreme' : 'text-textPrimary'
                     } group-hover:text-select`}
                   >
                     {t.ticker}

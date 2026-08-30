@@ -106,7 +106,10 @@ export function placeMenu(
    * did. A caller that knows its width passes it; one that does not is no
    * worse off than before.
    */
-  menuWidth: number = MENU_MIN_WIDTH
+  menuWidth: number = MENU_MIN_WIDTH,
+  /** Which edge the menu pins to — see `hAnchor` below. Defaults to 'end',
+      so every existing caller places exactly as it did. */
+  align: 'start' | 'end' = 'end'
 ): { box: MenuBox; side: MenuSide } {
   let s = side;
   const below = vh - rect.bottom - MENU_OFFSET - MENU_EDGE;

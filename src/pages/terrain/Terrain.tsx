@@ -1,17 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link2, Maximize2, Minimize2, Rows3, X,
-  Star,
-  Pencil,
-  Copy
-} from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link2, Maximize2, Minimize2, Rows3, X } from 'lucide-react';
 import Simulator from '../../core/simulator';
 import { useMarketData } from '../../context/MarketDataContext';
 import DistanceUnitPicker from '../../components/ui/DistanceUnitPicker';
 import { futuresPhaseAt, FUTURES_PHASE_WORDS } from '../../core/calendar';
 import {
   deleteNamedLayout, loadNamedLayouts, persistNamedLayouts, saveNamedLayout,
-  MAX_NAMED_LAYOUTS,
-  LAYOUT_NAME_MAX, type NamedLayoutEntry,
+  MAX_NAMED_LAYOUTS, type NamedLayoutEntry,
 } from './layouts';
 import { buildLadderFor, buildLevelsFor, buildPrints, fmtUsd, spotChangePct } from '../../data/gex';
 import StrikeChart, {
@@ -31,14 +26,20 @@ import StrikeChart, {
   type PriceScale,
 } from '../../components/gex/StrikeChart';
 import ChartToolbar from '../../components/gex/ChartToolbar';
-import useTopEdgeReveal from '../../components/gex/useTopEdgeReveal';
+import { useFadeClose } from '../../components/ui/useFadeClose';
 import CompareControl from '../../components/gex/CompareControl';
 import PaneLadder, { LADDER_WIDTH_PX, FLOW_WINDOW_MS } from '../../components/gex/PaneLadder';
 import useFocusTrap from '../../components/ui/useFocusTrap';
 import { useIsBelowLg, useIsPhone } from '../../components/ui/useMediaQuery';
 import TickerQuickPick from '../../components/gex/TickerQuickPick';
 import SpotPrice from '../../components/gex/SpotPrice';
-import { CANDLE_THEMES, chartSurface, useCandleThemeKey } from '../../components/gex/candleTheme';
+import {
+  CANDLE_THEMES,
+  chartSurface,
+  getCandleThemeKey,
+  useCandleThemeKey,
+  type CandleThemeKey,
+} from '../../components/gex/candleTheme';
 import { TIMEFRAMES, type Timeframe } from '../../data/timeframe';
 import { TREND_GLYPH, buildConfluence, trendWords, type ConfluenceRow } from '../../data/confluence';
 import { OPENING_RANGES, type OpeningRange } from '../../data/sessionLevels';
@@ -47,8 +48,8 @@ import {
   SETUP_KEYS, applySetup, captureSetup, evict, readSetups, symKey, type SetupMap,
 } from './setups';
 import { flipRing, stepSymbol, stepTf } from './paneKeys';
-import { CALL_SIDE, PUT_SIDE } from '../../components/gex/palette';
 import { strikeFlow } from '../../data/strikeFlow';
+import { CALL_SIDE, PUT_SIDE } from '../../components/gex/palette';
 
 /*
 ==================================================
@@ -158,30 +159,14 @@ export interface PaneCfg {
       removable") — the rail has its own × and the top button is a
       convenience that sets every pane at once, not the only way out. */
   ladder: boolean;
-  /*
-    HOW WIDE A BAR IS DRAWN, in pixels of horizontal pitch. Noah asked for
-    the candles to be sizeable — "make the bars smaller or bigger on the
-    charts if the person wants".
-
-    PER SLOT, not per symbol, and for the same reason as `sessionOr`: how
-    densely a reader wants their tape drawn is a preference about looking,
-    not a fact about a name. Somebody who reads wide candles reads wide
-    candles whatever is loaded.
-
-    It is a STARTING pitch, not a lock. The chart's own zoom still works
-    normally afterwards; this sets where the pane opens and what the ± steps
-    move, exactly as the reference terminals do.
-  */
-  barSize: number;
+  /** The strike rail's width in px. Absent = the house default. */
+  ladderW?: number;
+  /** This pane's candle theme (Noah, 2026-08-25: "if i change the theme for
+      1 chart it should NOT change for all the others"). A SLOT field like
+      the rail: the arrangement's look, not the symbol's memory. Ours, kept
+      through the port — the partner tree paints every pane from one store. */
+  theme: CandleThemeKey;
 }
-
-/** The pitches the control steps through, narrowest first. `barSpacing`
-    bottoms out around 0.5 in the engine, and past ~18 a normal pane holds
-    so few bars that the tape stops being a chart; these are the useful
-    range rather than the possible one. */
-export const BAR_SIZES = [3, 5, 7, 10, 14, 18] as const;
-/** 7 — what every pane was hard-coded to before this was a choice. */
-export const DEFAULT_BAR_SIZE = 7;
 
 interface TerrainCfg {
   layout: TerrainLayout;
@@ -221,7 +206,7 @@ const defaultPanes = (): PaneCfg[] =>
     priceScale: 'normal' as PriceScale,
     sessionOr: 15 as OpeningRange,
     ladder: true,
-    barSize: DEFAULT_BAR_SIZE,
+    theme: getCandleThemeKey(),
     link: null,
   }));
 
@@ -278,14 +263,9 @@ function readPane(raw: unknown, def: PaneCfg): PaneCfg {
     priceScale: typeof c.priceScale === 'string' && SCALES.has(c.priceScale) ? (c.priceScale as PriceScale) : def.priceScale,
     sessionOr: typeof c.sessionOr === 'number' && OR_VALUES.has(c.sessionOr) ? (c.sessionOr as OpeningRange) : def.sessionOr,
     ladder: typeof c.ladder === 'boolean' ? c.ladder : def.ladder,
-    /* VALIDATED AGAINST THE LIST, not merely type-checked. A stored setup
-       is reader-editable JSON, and a barSize of 0 or 4000 would hand the
-       engine a pitch it cannot draw. Anything off the ladder falls back to
-       the default rather than being clamped, on this file's usual rule: a
-       value we did not offer was not chosen by them. */
-    barSize: typeof c.barSize === 'number' && (BAR_SIZES as readonly number[]).includes(c.barSize)
-      ? c.barSize
-      : def.barSize,
+    ladderW:
+      typeof c.ladderW === 'number' && c.ladderW >= LADDER_WIDTH_PX && c.ladderW < 4000 ? c.ladderW : def.ladderW,
+    theme: typeof c.theme === 'string' && c.theme in CANDLE_THEMES ? (c.theme as CandleThemeKey) : def.theme,
     link: c.link === 'A' || c.link === 'B' ? c.link : null,
   };
 }
@@ -719,6 +699,8 @@ interface PaneProps {
   /** How many panes are on the desk — a number badge on the only pane on
       screen is chrome that says nothing. */
   paneCount: number;
+  /** Mid-fade on the way out of the takeover — see the desk's `closeExpanded`. */
+  closing?: boolean;
   /** Which of this pane's menus a key has opened, if any. */
   menuOpen: 'symbol' | 'compare' | null;
   onMenu: (which: 'symbol' | 'compare' | null) => void;
@@ -741,10 +723,10 @@ const Pane = ({
   cfg, onCfg, revision, expanded, onToggleExpand, index, tall,
   onCrosshair, registerSync, replay, onToggleReplay, onExitReplay,
   drawing, onToggleDrawing, onExitDraw,
-  isActive, onActivate, paneCount, menuOpen, onMenu,
+  isActive, onActivate, paneCount, closing = false, menuOpen, onMenu,
   boxRef, cell = '',
 }: PaneProps) => {
-  const { ticker, timeframe, overlays, indicators, chartStyle, clock, compares, priceScale, sessionOr, ladder } = cfg;
+  const { ticker, timeframe, overlays, indicators, chartStyle, clock, compares, priceScale, sessionOr, ladder, theme } = cfg;
   /* WHAT THE AXIS IS ACTUALLY DRAWING, from the one function that decides it.
      The chart asks the same question of the same list, so the picker's trigger
      and the price ticks can never disagree — a second `compares.some(...)`
@@ -763,14 +745,6 @@ const Pane = ({
   /* Read here rather than threaded down: this component already takes fourteen
      props, and it is the same one-line media query the page reads. */
   const isPhone = useIsPhone();
-  /* THE PANE'S CHROME FOLLOWS REACH. Declared here, with the other
-     top-level hooks and above every guard in this component — a hook below
-     an early return type-checks clean and throws React #310 the first time
-     the guard fires, which this file has already paid for once.
-
-     `keepOpen` on a coarse pointer because a finger has no hover to reach
-     with: phones keep the strip, exactly as `chrome-tap` already assumed. */
-  const chromeReveal = useTopEdgeReveal(isPhone);
 
   /*
     ══ THE COMPARE LEGEND HAS TO START BELOW THE STRIP, NOT AT 46px ═════════
@@ -901,17 +875,14 @@ const Pane = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [ticker, revision]
   );
-  /* Contracts by strike over the last few minutes, off the live tape. Keyed
-     on the tape's own length as well as the revision, so it rebuilds when
-     prints land rather than only when the bar rolls. */
+
+  /* Contracts by strike over the last few minutes, off the live tape — what
+     the rail shows beside each strike while `Vol` is on. Keyed on the tape
+     ITSELF, never its length: the tape is capped, so once full its length
+     stops changing while its contents keep turning over, and a length key
+     would freeze this at the moment the cap was reached. */
   const railFlow = useMemo(
     () => (ladder ? strikeFlow(flowTape, ticker, FLOW_WINDOW_MS) : null),
-    /* Keyed on the tape ITSELF, not on its length. The tape is capped and
-       aged, so once it is full its length stops changing while its contents
-       keep turning over — a length key would freeze this at the moment the
-       cap was reached and go on reporting the flow of ten minutes ago. The
-       context replaces the array on every absorb, so the identity check is
-       both correct and cheap. */
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [ticker, ladder, flowTape, revision]
   );
@@ -997,10 +968,160 @@ const Pane = ({
   const showReadoutVol = readout?.volume != null && roomForReadout(READOUT_C_PX + READOUT_OHL_PX + READOUT_VOL_PX);
   const showReadoutOhl = readout?.open != null && roomForReadout(READOUT_C_PX + READOUT_OHL_PX);
 
+  /* COMPACT WHEN THE STRIP WOULD NOT FIT ON ONE LINE — the mode the phone
+     already uses (ChartToolbar's `compact`): the seven timeframes collapse
+     into the current interval as a trigger, and every dropdown trades its
+     word for its icon, keeping the word as the hover/AT name.
+
+     Measured after: 818px of controls becomes 350px. Four rows become one at
+     1280 and up in every layout (177px of chrome down to 112, 43% of the
+     pane down to 27%), and two at 1024 with 2+ panes, where the column is
+     only 369px (205px down to 145, 50% down to 35%). The single wide pane
+     beside a narrow one keeps its full labels, because the test is its own
+     column's width.
+
+     THE 1180 CLAIM WAS WRONG, and by one pixel. This read "one at 1180/1280
+     in every layout"; re-measured across the whole width × layout matrix, at
+     1180 with 2+ panes the toolbar's usable column is 349px and the compact
+     strip is 350, so it takes two rows there and always has. The same
+     350-into-347 happens in the three-up at 1760, which the old note did not
+     mention either. Verified against a clean build of the tree before T-7 —
+     identical at every cell — so it is a stale claim rather than a
+     regression, and the sweep now asserts what is true rather than what was
+     written. Closing that pixel means shrinking a control that no current
+     work touches; it is recorded here rather than quietly rounded away. */
+  const toolbarCompact = stripW > 0 && stripW - PRICE_GUTTER_PX < TOOLBAR_FULL_PX;
+
+  /* ONE TOOLBAR, TWO MOUNTS (Noah, 2026-08-28: "make the row ... sit up top
+     like how the fullscreen of the pulse page does"). Docked it is the
+     hover-revealed chip floating over the tape; expanded it is the always-on
+     strip pinned across the pane's top, the Pulse fullscreen grammar. A
+     render function rather than two prop lists, so a control added later
+     cannot exist in one mount and not the other. */
+  /*
+    THE IDENTITY CONTROLS, hoisted (Noah, 2026-08-29: fullscreen "should look
+    like the pulse top section with the ticker on the most top section far
+    left then followed by the rest"). One definition, two homes: EXPANDED
+    they lead the pinned strip, exactly as Pulse's takeover leads with its
+    symbol capsule; DOCKED they stay in the floating chip over the tape.
+  */
+  const identityControls = (
+    <>
+      {showBadge && (
+        <span
+          aria-hidden
+          className={`shrink-0 w-4 h-4 rounded-[3px] font-mono text-[9px] font-bold tnum inline-flex items-center justify-center ${
+            isActive ? 'holo-bg text-[#0a0a0a]' : 'bg-white/[0.08] text-textPrimary'
+          }`}
+        >
+          {index + 1}
+        </span>
+      )}
+      {/*
+        THE REPLAY BADGE — T-13, and it is the reason the rest of this is
+        safe to ship. A pane in replay looks exactly like a live one, and the
+        transport sits at the BOTTOM where a glance never reaches. It is NOT
+        shed at any width: everything else here is a convenience; this one
+        says which world you are looking at.
+      */}
+      {replay && (
+        <span
+          title="This pane is replaying history — it is not live"
+          className="shrink-0 inline-flex items-center gap-1 px-1.5 h-4 rounded-[3px] bg-select text-[#0a0a0a] font-mono text-[9px] font-bold uppercase tracking-wider"
+        >
+          Replay
+        </span>
+      )}
+      <span className="shrink-0 inline-flex items-center gap-1.5">
+        <TickerQuickPick
+          ticker={ticker}
+          onPick={t => onCfg({ ticker: t })}
+          open={menuOpen === 'symbol'}
+          onOpenChange={o => onMenu(o ? 'symbol' : null)}
+          /* The ring ↑/↓ walks is invisible, so the one control it moves is
+             where it gets named. */
+          title="Switch ticker — S · ↑ ↓ step your symbols"
+        />
+        {/* T-20's link chip: ∅ → A → B → ∅. Letters, not colours — the
+            palette's inks all mean something already. */}
+        {(cfg.link !== null && cfg.link !== undefined || showCompareAdd || expanded) && <button
+          onClick={() => onCfg({ link: cfg.link === 'A' ? 'B' : cfg.link === 'B' ? null : 'A' })}
+          aria-label={cfg.link ? `Link group ${cfg.link} — linked panes follow this pane's symbol` : 'Link this pane — panes sharing a letter follow each other\'s symbol'}
+          title={cfg.link ? `Link group ${cfg.link} — panes sharing ${cfg.link} follow each other's symbol` : 'Link this pane to others — shared letters change symbols together'}
+          className={`shrink-0 inline-flex items-center justify-center w-5 h-5 rounded-[3px] font-mono text-[9px] font-bold transition-colors ${
+            cfg.link ? 'bg-white/[0.14] text-textPrimary' : 'text-textMuted hover:text-textPrimary hover:bg-white/[0.06]'
+          }`}
+        >
+          {cfg.link ?? <Link2 className="w-3 h-3" />}
+        </button>}
+        {/* TradingView's "+" beside the symbol capsule — cross another
+            symbol onto this tape. Fullscreen always has room for it. */}
+        {(showCompareAdd || expanded) && (
+          <CompareControl
+            current={ticker}
+            compares={compares}
+            onAdd={addCompare}
+            onRemove={removeCompare}
+            open={menuOpen === 'compare'}
+            onOpenChange={o => onMenu(o ? 'compare' : null)}
+          />
+        )}
+      </span>
+    </>
+  );
+
+  const paneToolbar = (spread: boolean) => (
+    <ChartToolbar
+      minimal
+      candles
+      compact={toolbarCompact}
+      spread={spread}
+      alertTicker={ticker}
+      alertSpot={levels.spot}
+      timeframe={timeframe}
+      onTimeframe={tf => onCfg({ timeframe: tf })}
+      overlays={overlays}
+      onOverlays={o => onCfg({ overlays: o })}
+      /* Everything EXCEPT the strike band: that band docks under the Pulse
+         chart only (no Terrain surface mounts it — his tree included), and a
+         switch that cannot turn anything on is a lie in a menu. Inherited
+         dead toggle, caught 2026-08-28. */
+      overlayKeys={['trails', 'levels', 'darkpool', 'volume', 'flow', 'netDrift', 'volDrift', 'session', 'cone', 'events']}
+      indicators={indicators}
+      onIndicators={i => onCfg({ indicators: i })}
+      chartStyle={chartStyle}
+      onChartStyle={st => onCfg({ chartStyle: st })}
+      themeKey={theme}
+      onThemeKey={t => onCfg({ theme: t })}
+      barClock={clock}
+      onBarClock={k => onCfg({ clock: k })}
+      priceScale={priceScale}
+      onPriceScale={ps => onCfg({ priceScale: ps })}
+      priceScaleLock={scaleLock}
+      onExportPng={() => exportPngRef.current?.()}
+      sessionOr={sessionOr}
+      onSessionOr={o => onCfg({ sessionOr: o })}
+      replay={replay}
+      onToggleReplay={onToggleReplay}
+    />
+  );
+
   return (
     <div
       ref={overlayRef}
-      className={expanded ? 'fixed inset-0 z-[80] flex flex-col' : 'contents'}
+      /* IN AND OUT ON A FADE, the Pulse takeover's own grammar (Noah,
+         2026-08-28: "the full screen enter and exit for terrain ... the pulse
+         has a nice smoothness to it"). Enter is the house soft-in; exit is a
+         200ms opacity fade that the desk's `closeExpanded` holds the unmount
+         open for. Opacity only — a transform on a fixed layer would become
+         the containing block for anything fixed inside it. */
+      className={
+        expanded
+          ? `fixed inset-0 z-[80] flex flex-col animate-soft-in transition-opacity duration-200 ease-out ${
+              closing ? 'opacity-0' : ''
+            }`
+          : 'contents'
+      }
       {...(expanded
         ? { role: 'dialog' as const, 'aria-modal': true, tabIndex: -1, 'aria-label': `${ticker} expanded` }
         : {})}
@@ -1042,11 +1163,17 @@ const Pane = ({
               overflow it, which is the floor doing the opposite of its job.
             */
             : `${isPhone ? 'min-h-0' : 'min-h-[420px]'} lg:min-h-0 border rounded-md ${cell} ${
-                isActive && paneCount > 1 ? 'border-select' : 'border-borderSubtle'
+                /* Active wears the FOIL — border-transparent holds the
+                   layout slot, the .holo-ring overlay paints the silver
+                   (Noah, 2026-08-30; the lime border retired here). */
+                isActive && paneCount > 1 ? 'border-transparent' : 'border-borderSubtle'
               }`
         }`}
         style={{ animationDelay: `${index * 60}ms`, background: surface }}
       >
+        {!expanded && isActive && paneCount > 1 && (
+          <span aria-hidden className="holo-ring absolute inset-0 rounded-md z-30" />
+        )}
         {/* Chart and rail on ONE line, and that line is the WHOLE pane —
             `absolute inset-0`, not a flex row under a header. The header
             floats on top of the chart instead of sitting above it, so the
@@ -1055,9 +1182,8 @@ const Pane = ({
             spills, and a chart's natural width is whatever its container was
             last tick. */}
         <div className="absolute inset-0 flex">
-          <div className="group relative flex-1 min-w-0" {...chromeReveal.bind}>
+          <div className="group relative flex-1 min-w-0">
             <StrikeChart
-              barSize={cfg.barSize}
               ticker={ticker}
               revision={revision}
               levels={levels}
@@ -1067,6 +1193,7 @@ const Pane = ({
               overlays={overlays}
               indicators={indicators}
               chartStyle={chartStyle}
+              themeKey={theme}
               barClock={clock}
               prints={prints}
               compares={compares}
@@ -1074,6 +1201,24 @@ const Pane = ({
               sessionOr={sessionOr}
               drawing={drawing}
               onExitDraw={onExitDraw}
+              /*
+                THE WAY IN, OFFERED TO ONE PANE.
+
+                A tool clicked at rest arms draw mode with that tool in hand
+                (guarded in the chart, so clicking tools WHILE drawing never
+                toggles it off). The chart shows its rail whenever this
+                callback is present, so handing it to every pane stood four
+                rails open on a four-up desk — four columns of tools eating
+                chart, for one reader who can only be drawing in one of them.
+
+                The active pane is the one the reader is in and the one `d`
+                acts on, so it is the one that gets the door. A pane already
+                drawing keeps its rail regardless, which is the chart's own
+                condition.
+              */
+              onEnterDraw={isActive ? onToggleDrawing : undefined}
+              /* Only the takeover has a top band to spare. */
+              railTopOk={expanded}
               replay={replay}
               onExitReplay={onExitReplay}
               focusPrice={focus}
@@ -1129,18 +1274,65 @@ const Pane = ({
               cannot reach. Keyboard focus brings the strip up exactly as the
               cursor does.
             */}
+            {!expanded && (
+              /* ── THE EXPAND BUTTON, FAR RIGHT (Noah, 2026-08-28: "push the
+                 fullscreen button ... to the far right on both small chart
+                 view and full chart view") — its own chip pinned to the
+                 pane's top-right corner, clear of the price ticks, out of
+                 the identity row it used to ride at the end of. Same
+                 rest-dim as the rest of the chrome, always tappable, and
+                 `chrome-hover` keeps it visible on a screen with no hover
+                 to give. */
+              <div
+                className="chrome-hover absolute top-1.5 z-30 pointer-events-auto select-none rounded-md bg-canvas/25 backdrop-blur-[3px] p-0.5 opacity-55 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100"
+                style={{ right: PRICE_GUTTER_PX + 6 }}
+              >
+                <button
+                  onClick={onToggleExpand}
+                  aria-pressed={expanded}
+                  aria-label={`Expand ${ticker} to the full screen`}
+                  title="Expand this pane — F"
+                  className="inline-flex items-center justify-center w-6 h-6 rounded text-textMuted hover:text-textPrimary hover:bg-white/[0.05] transition-colors"
+                >
+                  <Maximize2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+            {expanded && (
+              /* ── THE FULLSCREEN TOP STRIP (Noah, 2026-08-28) ──
+                 The Pulse takeover's grammar exactly: full width, always
+                 visible, translucent over the tape with the same 55% surface
+                 wash and blur, controls spread edge to edge. The floating
+                 identity chrome below steps down out of its way. */
+              <div
+                className="absolute top-0 inset-x-0 z-30 select-none flex flex-wrap items-center px-3 py-2 gap-3 backdrop-blur-md backdrop-saturate-150"
+                style={{ background: `${surface}8C` }}
+              >
+                {/* The symbol leads, Pulse-style — then a hairline, then
+                    everything else spread to the far edge. */}
+                <span className="shrink-0 flex items-center gap-2 pointer-events-auto">{identityControls}</span>
+                {mtfForm !== 'none' && confluence.length > 0 && (
+                  <span className="shrink-0 hidden xl:inline-flex pointer-events-auto">
+                    <ConfluenceStrip rows={confluence} form={mtfForm} />
+                  </span>
+                )}
+                <span className="shrink-0 w-px h-4 bg-borderSubtle" aria-hidden />
+                <div className="flex-1 min-w-0">{paneToolbar(true)}</div>
+                {/* The way back out, at the far right end of the strip — the
+                    mirror of the docked corner chip. */}
+                <button
+                  onClick={onToggleExpand}
+                  aria-pressed={expanded}
+                  aria-label={`Collapse ${ticker}`}
+                  title="Collapse — Esc"
+                  className="shrink-0 inline-flex items-center justify-center w-6 h-6 rounded text-textMuted hover:text-textPrimary hover:bg-white/[0.05] transition-colors"
+                >
+                  <Minimize2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
             <div
-              /* TWO READERS, ONE ELEMENT. The strip measurer wants it to size
-                 the row, and the reveal watches it as its keep-open band:
-                 while the pointer is inside this band the chrome stays up,
-                 whatever the distance rule says. Without that, the toolbar
-                 hid itself as a reader moved ONTO it — its controls sit
-                 113-146px below the pane's top edge and the hide threshold
-                 is 104. See useTopEdgeReveal. */
-              ref={el => {
-                stripRef.current = el;
-                chromeReveal.bandRef.current = el;
-              }}
+              ref={stripRef}
               /* Padding clears the price gutter, so nothing floating ever
                  lands on a price tick — BOTH gutters whenever there is a left
                  one, with no width condition on it.
@@ -1158,7 +1350,7 @@ const Pane = ({
                 paddingLeft: ownScale ? PRICE_GUTTER_PX : undefined,
                 paddingRight: PRICE_GUTTER_PX,
               }}
-              className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-col items-start gap-1 p-1.5"
+              className={`pointer-events-none absolute inset-x-0 ${expanded ? 'top-11' : 'top-0'} z-20 flex flex-col items-start gap-1 p-1.5`}
             >
               {/*
                 ONE ROW, ALWAYS — it does not wrap, it clips.
@@ -1186,6 +1378,23 @@ const Pane = ({
                 only narrow enough because it now sheds parts — ID_ROW_* above,
                 and the sweep section that measures it in a real browser.
               */}
+              {expanded ? (
+                /* FULLSCREEN'S SECOND LINE (Noah, 2026-08-29: "right below it
+                   is simply the ticker, timeframe, and tick price") — the
+                   Pulse takeover's own legend: facts on the tape, no chip, no
+                   controls; the controls all moved up into the strip. */
+                <div className="pointer-events-none select-none flex items-baseline gap-1.5 font-mono">
+                  <span className="text-[11px] font-semibold text-textPrimary">{ticker}</span>
+                  <span className="text-[10px] text-textMuted" aria-hidden>·</span>
+                  <span className="text-[10px] text-textMuted">{timeframe}</span>
+                  <span className="text-[10px] text-textMuted" aria-hidden>·</span>
+                  <SpotPrice value={levels.spot} className="font-mono text-[11px] font-semibold tnum text-textPrimary" />
+                  <span className={`text-[10px] font-semibold tnum ${up ? 'text-bull' : 'text-bear'}`}>
+                    {up ? '+' : ''}
+                    {changePct.toFixed(2)}%
+                  </span>
+                </div>
+              ) : (
               <div className="chrome-hover relative z-30 pointer-events-auto w-fit max-w-full select-none flex items-center gap-2 rounded-md bg-canvas/25 backdrop-blur-[3px] px-2 py-1 opacity-55 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
                 {/* This strip is the one row visible at rest, so the number
                     is legible without a pointer ever touching the desk. */}
@@ -1193,7 +1402,7 @@ const Pane = ({
                   <span
                     aria-hidden
                     className={`shrink-0 w-4 h-4 rounded-[3px] font-mono text-[9px] font-bold tnum inline-flex items-center justify-center ${
-                      isActive ? 'bg-select text-[#0a0a0a]' : 'bg-white/[0.08] text-textPrimary'
+                      isActive ? 'holo-bg text-[#0a0a0a]' : 'bg-white/[0.08] text-textPrimary'
                     }`}
                   >
                     {index + 1}
@@ -1285,16 +1494,8 @@ const Pane = ({
                   <ConfluenceStrip rows={confluence} form={mtfForm} />
                 )}
 
-                <button
-                  onClick={onToggleExpand}
-                  aria-pressed={expanded}
-                  aria-label={expanded ? `Collapse ${ticker}` : `Expand ${ticker} to the full screen`}
-                  title={expanded ? 'Collapse — Esc' : 'Expand this pane — F'}
-                  className="shrink-0 inline-flex items-center justify-center w-6 h-6 rounded text-textMuted hover:text-textPrimary hover:bg-white/[0.05] transition-colors"
-                >
-                  {expanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-                </button>
               </div>
+              )}
 
               {/*
                 THE BOOK, on its own line and only while you are looking.
@@ -1353,7 +1554,7 @@ const Pane = ({
                         <span className="text-textSecondary">
                           {row.strike % 1 === 0 ? row.strike.toFixed(0) : row.strike.toFixed(2)}
                         </span>
-                        {/* The two sides come from the ramp, as a STYLE.
+                        {/* The two sides come from the RAMP, as a style.
                             These were literal hexes of the old steel-gold
                             poles, so this strip kept printing gold-on-grey
                             after the ramp went ice — and a Tailwind class
@@ -1371,112 +1572,15 @@ const Pane = ({
               )
               )}
 
-              {/* Its own, every one of them — and not there until you reach. */}
-              {/* REVEALED BY REACH, NOT BY PRESENCE. This was `group-hover`,
-                  which fired the moment the pointer entered the pane — so the
-                  strip sat over the top of the tape for the whole time anyone
-                  was actually reading the chart. `shown` asks the narrower
-                  question: is the pointer climbing toward the top edge, or
-                  focused/menu-open in here. Working mid-chart gives the pixels
-                  back. See useTopEdgeReveal for why this is not CSS. */}
-              <div className={`chrome-hover chrome-tap relative z-10 max-w-full rounded-md bg-canvas/25 backdrop-blur-[3px] px-2 py-1 transition-opacity duration-200 ${
-                chromeReveal.shown ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0 focus-within:pointer-events-auto focus-within:opacity-100'
-              }`}>
-                {/* BAR PITCH — Noah: "make the bars smaller or bigger on the
-                    charts if the person wants". A stepper rather than a
-                    slider: the six pitches in BAR_SIZES are the useful
-                    range, and a continuous control would let a reader park
-                    on a value that draws badly. Sits beside the toolbar
-                    rather than inside its menus because it is a thing you
-                    nudge while looking at the tape, not a setting you go
-                    and find. */}
-                <span className="inline-flex items-center gap-0.5 rounded-md border border-white/[0.08] bg-canvas/40 px-1 py-0.5 mr-1">
-                  <button
-                    onClick={() => {
-                      const i = BAR_SIZES.indexOf(cfg.barSize as typeof BAR_SIZES[number]);
-                      if (i > 0) onCfg({ barSize: BAR_SIZES[i - 1] });
-                    }}
-                    disabled={BAR_SIZES.indexOf(cfg.barSize as typeof BAR_SIZES[number]) <= 0}
-                    title="Narrower bars — fit more of the session on screen"
-                    aria-label="Narrower bars"
-                    className="px-1.5 py-0.5 rounded font-mono text-[11px] leading-none text-textSecondary hover:text-textPrimary disabled:opacity-30 disabled:hover:text-textSecondary focus:outline-none focus-visible:ring-1 focus-visible:ring-select"
-                  >
-                    −
-                  </button>
-                  <span
-                    className="font-mono text-[9px] tnum uppercase tracking-wider text-textMuted select-none"
-                    title={`Bar pitch ${cfg.barSize}px`}
-                  >
-                    {cfg.barSize}px
-                  </span>
-                  <button
-                    onClick={() => {
-                      const i = BAR_SIZES.indexOf(cfg.barSize as typeof BAR_SIZES[number]);
-                      if (i >= 0 && i < BAR_SIZES.length - 1) onCfg({ barSize: BAR_SIZES[i + 1] });
-                    }}
-                    disabled={BAR_SIZES.indexOf(cfg.barSize as typeof BAR_SIZES[number]) >= BAR_SIZES.length - 1}
-                    title="Wider bars — read each candle more clearly"
-                    aria-label="Wider bars"
-                    className="px-1.5 py-0.5 rounded font-mono text-[11px] leading-none text-textSecondary hover:text-textPrimary disabled:opacity-30 disabled:hover:text-textSecondary focus:outline-none focus-visible:ring-1 focus-visible:ring-select"
-                  >
-                    +
-                  </button>
-                </span>
-                <ChartToolbar
-                  minimal
-                  candles
-                  /* COMPACT WHEN THE STRIP WOULD NOT FIT ON ONE LINE — the
-                     mode the phone already uses (ChartToolbar's `compact`):
-                     the seven timeframes collapse into the current interval
-                     as a trigger, and every dropdown trades its word for its
-                     icon, keeping the word as the hover/AT name.
-
-                     Measured after: 818px of controls becomes 350px. Four
-                     rows become one at 1280 and up in every layout (177px of
-                     chrome down to 112, 43% of the pane down to 27%), and two
-                     at 1024 with 2+ panes, where the column is only 369px
-                     (205px down to 145, 50% down to 35%). The single wide
-                     pane beside a narrow one keeps its full labels, because
-                     the test is its own column's width.
-
-                     THE 1180 CLAIM WAS WRONG, and by one pixel. This read
-                     "one at 1180/1280 in every layout"; re-measured across
-                     the whole width × layout matrix, at 1180 with 2+ panes
-                     the toolbar's usable column is 349px and the compact
-                     strip is 350, so it takes two rows there and always has.
-                     The same 350-into-347 happens in the three-up at 1760,
-                     which the old note did not mention either. Verified
-                     against a clean build of the tree before T-7 — identical
-                     at every cell — so it is a stale claim rather than a
-                     regression, and the sweep now asserts what is true rather
-                     than what was written. Closing that pixel means shrinking
-                     a control that no current work touches; it is recorded
-                     here rather than quietly rounded away. */
-                  compact={stripW > 0 && stripW - PRICE_GUTTER_PX < TOOLBAR_FULL_PX}
-                  alertTicker={ticker}
-                  alertSpot={levels.spot}
-                  timeframe={timeframe}
-                  onTimeframe={tf => onCfg({ timeframe: tf })}
-                  overlays={overlays}
-                  onOverlays={o => onCfg({ overlays: o })}
-                  indicators={indicators}
-                  onIndicators={i => onCfg({ indicators: i })}
-                  chartStyle={chartStyle}
-                  onChartStyle={s => onCfg({ chartStyle: s })}
-                  barClock={clock}
-                  onBarClock={k => onCfg({ clock: k })}
-                  priceScale={priceScale}
-                  onPriceScale={p => onCfg({ priceScale: p })}
-                  priceScaleLock={scaleLock}
-                  onExportPng={() => exportPngRef.current?.()}
-                  sessionOr={sessionOr}
-                  onSessionOr={o => onCfg({ sessionOr: o })}
-                  drawing={drawing}
-                  onToggleDrawing={onToggleDrawing}
-                  replay={replay}
-                  onToggleReplay={onToggleReplay}
-                />
-              </div>
+              {/* Its own, every one of them — and not there until you
+                  reach. DOCKED ONLY: the expanded pane pins the same toolbar
+                  to the top strip instead, where it does not need a hover to
+                  exist. */}
+              {!expanded && (
+                <div className="chrome-hover chrome-tap relative z-10 pointer-events-none max-w-full rounded-md bg-canvas/25 backdrop-blur-[3px] px-2 py-1 opacity-0 transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+                  {paneToolbar(false)}
+                </div>
+              )}
             </div>
 
             {/* ── the crossed symbols, under the floating header ───────────
@@ -1488,7 +1592,7 @@ const Pane = ({
               <div
                 /* Unconditional, unlike the strip above: the legend rows are
                    ~106px, so even at a 369px column they clear both gutters. */
-                style={{ top: stripH + 4, left: ownScale ? PRICE_GUTTER_PX : undefined }}
+                style={{ top: stripH + 4 + (expanded ? 44 : 0), left: ownScale ? PRICE_GUTTER_PX : undefined }}
                 className="pointer-events-none absolute left-3 z-10 flex flex-col gap-0.5 opacity-70 transition-opacity duration-200 group-hover:opacity-100"
               >
                 {compares.map(c => (
@@ -1531,12 +1635,14 @@ const Pane = ({
           */}
           {ladder && rail.rows.length > 0 && (
             <PaneLadder
+              width={cfg.ladderW}
+              onWidth={w => onCfg({ ladderW: w })}
               ticker={ticker}
               rows={rail.rows}
               maxAbs={rail.maxAbs}
               step={rail.step}
-              levels={levels}
               flow={railFlow}
+              levels={levels}
               focusPrice={focus}
               projection={projectionRef}
               onClose={() => {
@@ -1577,26 +1683,27 @@ const Pane = ({
 };
 
 /** Terrain — the charts-only desk. */
-/*
-  §11's history-depth options. `sessions` is what each depth WOULD need; the
-  desk compares it against what the tape actually holds and disables the rest.
-*/
-const SEEDED_SESSIONS = 22;
-const HISTORY_DEPTHS = [
-  { key: '30d', label: '30d', sessions: 22 },
-  { key: '1y', label: '1y', sessions: 252 },
-  { key: '5y', label: '5y', sessions: 1260 },
-  { key: 'max', label: 'Max', sessions: 5040 },
-] as const;
-type HistoryDepth = (typeof HISTORY_DEPTHS)[number]['key'];
-
 const Terrain = () => {
-  const [historyDepth, setHistoryDepth] = useState<HistoryDepth>('30d');
   const { marketData } = useMarketData();
   const revRef = useRef(0);
   const revision = useMemo(() => ++revRef.current, [marketData]);
 
-  const [cfg, setCfg] = useState<TerrainCfg>(loadCfg);
+  const [cfg, setCfg] = useState<TerrainCfg>(() => {
+    const c = loadCfg();
+    /* The candles' one-time flip to the baby-blue tape (2026-08-29, "yes it
+       should be baby blue"; supersedes the same-day foil flip) — pane themes
+       are stored EXPLICITLY, so the store-level migration alone would leave
+       every existing pane wearing its old metal. Same flag discipline: once. */
+    try {
+      if (!localStorage.getItem('slayer_terrain_sky1')) {
+        localStorage.setItem('slayer_terrain_sky1', '1');
+        return { ...c, panes: c.panes.map(p => ({ ...p, theme: 'glacier' as const })) };
+      }
+    } catch {
+      /* storage unavailable — panes keep their stored themes */
+    }
+    return c;
+  });
 
   /*
     T-18 — the named-layouts shelf. Validation on load is the desk's OWN
@@ -1615,7 +1722,11 @@ const Terrain = () => {
   const applyNamedLayout = (entry: NamedLayoutEntry<PaneCfg>) => {
     const defs = defaultPanes();
     const panes = defs.map((d, i) => entry.panes[i] ?? d);
-    setCfg(prev => ({ ...prev, layout: (LAYOUTS as readonly number[]).includes(entry.layout) ? (entry.layout as TerrainLayout) : prev.layout, panes }));
+    /* Through the dissolve as well — recalling a shelf layout is the biggest
+       reflow the desk does. */
+    dissolve(() =>
+      setCfg(prev => ({ ...prev, layout: (LAYOUTS as readonly number[]).includes(entry.layout) ? (entry.layout as TerrainLayout) : prev.layout, panes }))
+    );
     setLayoutsOpen(false);
   };
   const saveCurrentLayout = () => {
@@ -1634,54 +1745,6 @@ const Terrain = () => {
     setNamedLayouts(next);
     persistNamedLayouts(next);
   };
-
-  /*
-    §20 — rename, duplicate and favourite.
-
-    All three operate on the SHELF OBJECT rather than re-saving the current
-    desk, which matters: duplicating a layout must copy the SAVED
-    arrangement, not whatever happens to be on screen. A reader who set up a
-    layout last week and duplicates it today expects last week's panes.
-
-    Rename is delete-then-set rather than a key edit, so the shelf's own
-    cap and name rules apply to the new name exactly as they would to a
-    fresh save — a rename cannot smuggle in a 200-character name.
-  */
-  const renameNamedLayout = (from: string, to: string) => {
-    const clean = to.trim().slice(0, LAYOUT_NAME_MAX);
-    if (!clean || clean === from || namedLayouts[clean]) return;
-    const entry = namedLayouts[from];
-    if (!entry) return;
-    const next = { ...namedLayouts };
-    delete next[from];
-    next[clean] = entry;
-    setNamedLayouts(next);
-    persistNamedLayouts(next);
-  };
-  const duplicateNamedLayout = (name: string) => {
-    const entry = namedLayouts[name];
-    if (!entry) return;
-    if (Object.keys(namedLayouts).length >= MAX_NAMED_LAYOUTS) {
-      setLayoutNote(`the shelf holds ${MAX_NAMED_LAYOUTS} — delete one first`);
-      return;
-    }
-    /* "name copy", then "name copy 2" — never silently overwriting. */
-    let copy = `${name} copy`.slice(0, LAYOUT_NAME_MAX);
-    let n = 2;
-    while (namedLayouts[copy]) copy = `${name} copy ${n++}`.slice(0, LAYOUT_NAME_MAX);
-    const next = { ...namedLayouts, [copy]: { ...entry, savedAt: Date.now() } };
-    setNamedLayouts(next);
-    persistNamedLayouts(next);
-  };
-  const toggleFavourite = (name: string) => {
-    const entry = namedLayouts[name];
-    if (!entry) return;
-    const next = { ...namedLayouts, [name]: { ...entry, favourite: !entry.favourite } };
-    setNamedLayouts(next);
-    persistNamedLayouts(next);
-  };
-  const [renaming, setRenaming] = useState<string | null>(null);
-  const [renameDraft, setRenameDraft] = useState('');
   useEffect(() => {
     try {
       localStorage.setItem(TERRAIN_KEY, JSON.stringify(cfg));
@@ -1757,6 +1820,56 @@ const Terrain = () => {
   const [expanded, setExpanded] = useState<number | null>(null);
   const expandedRef = useRef<number | null>(null);
   expandedRef.current = expanded;
+  /* The takeover leaves on a fade instead of vanishing — the same hook the
+     Pulse fullscreen uses, so the two desks feel like one product. Every
+     reader-initiated close routes through `closeExpanded`; the layout guard
+     below still drops it instantly, because that is a correctness reset
+     rather than someone leaving. */
+  const { closing: expClosing, close: closeExpanded } = useFadeClose(() => setExpanded(null));
+  const closeExpandedRef = useRef(closeExpanded);
+  closeExpandedRef.current = closeExpanded;
+  /* Expand is instant, collapse fades. */
+  const toggleExpand = useCallback((i: number) => {
+    if (expandedRef.current === i) closeExpandedRef.current();
+    else setExpanded(i);
+  }, []);
+  const toggleExpandRef = useRef(toggleExpand);
+  toggleExpandRef.current = toggleExpand;
+
+  /*
+    THE PANE-COUNT SWAP DISSOLVES (Noah, 2026-08-28: "the transition between 1
+    pane, 2 pane, 3 and 4 pane is not smooth its very rapid").
+
+    No CSS transition can carry this reflow, and that is not a matter of
+    picking the right duration: grid track COUNTS do not interpolate —
+    `repeat(2,1fr)` to `repeat(3,1fr)` has no halfway value — so the panes
+    teleport into their new widths however the property is animated.
+
+    So the desk carries it instead. It fades down, the layout changes while
+    nobody can see it, and it fades back up; the charts' own resize storm
+    lands inside that gap, which is the part that read as "rapid" in the first
+    place. Same opacity grammar as the takeover above, on purpose.
+
+    On a TIMER, never on an animation event — the house law that keeps a
+    dropped frame from stranding the desk at zero opacity.
+  */
+  const [swapping, setSwapping] = useState(false);
+  const dissolve = useCallback((apply: () => void) => {
+    setSwapping(true);
+    window.setTimeout(() => {
+      apply();
+      setSwapping(false);
+    }, 130);
+  }, []);
+  const changeLayout = useCallback(
+    (n: TerrainLayout) => {
+      if (cfgRef.current.layout === n) return; // a no-op should not blink
+      dissolve(() => setCfg(prev => ({ ...prev, layout: n })));
+    },
+    [dissolve]
+  );
+  const changeLayoutRef = useRef(changeLayout);
+  changeLayoutRef.current = changeLayout;
 
   /*
     AN EXPANDED PANE CANNOT OUTLIVE THE PANE IT POINTS AT.
@@ -1784,7 +1897,7 @@ const Terrain = () => {
   useEffect(() => {
     if (expanded === null) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setExpanded(null);
+      if (e.key === 'Escape') closeExpandedRef.current();
     };
     window.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
@@ -1974,7 +2087,7 @@ const Terrain = () => {
         case '1': case '2': case '3': case '4': {
           e.preventDefault();
           const n = Number(e.key) as TerrainLayout;
-          setCfg(prev => ({ ...prev, layout: n }));
+          changeLayoutRef.current(n);
           setAnnounce(n === 1 ? 'One chart' : `${n} charts`);
           return;
         }
@@ -2067,7 +2180,7 @@ const Terrain = () => {
         }
         case 'f':
           e.preventDefault();
-          setExpanded(v => (v === i ? null : i));
+          toggleExpandRef.current(i);
           setAnnounce(`${cur.panes[i]?.ticker ?? ''} ${expandedRef.current === i ? 'collapsed' : 'expanded'}`);
           return;
         case 's':
@@ -2246,7 +2359,7 @@ const Terrain = () => {
         style={{
           right:
             ((expanded !== null ? panes[expanded] : panes[panes.length - 1])?.ladder && !belowLg
-              ? LADDER_WIDTH_PX
+              ? (expanded !== null ? panes[expanded] : panes[panes.length - 1])?.ladderW ?? LADDER_WIDTH_PX
               : 0) +
             PRICE_GUTTER_PX +
             8,
@@ -2292,7 +2405,7 @@ const Terrain = () => {
             return (
               <button
                 key={n}
-                onClick={() => setCfg(prev => ({ ...prev, layout: n }))}
+                onClick={() => changeLayout(n)}
                 aria-pressed={active}
                 aria-label={`${n} ${n === 1 ? 'chart' : 'charts'}`}
                 title={`${n} ${n === 1 ? 'chart' : 'charts'} — press ${n}`}
@@ -2345,43 +2458,6 @@ const Terrain = () => {
           <DistanceUnitPicker dense />
         </span>
 
-        {/* §11 — HOW FAR BACK THE TAPE REACHES.
-
-            The control is real and the honesty is the point: the simulator
-            seeds 22 sessions, so anything past a month is drawn DISABLED
-            with the reason on it rather than offered and then silently
-            capped. A reader who picks "5y" and gets a month of bars learns
-            that the control lies; one who sees it greyed learns what the
-            desk actually holds. */}
-        <span
-          className="pointer-events-auto inline-flex rounded-md border border-white/[0.08] bg-canvas/40 backdrop-blur-[3px] px-1 py-0.5"
-          role="group"
-          aria-label="History depth"
-        >
-          {HISTORY_DEPTHS.map(d => {
-            const have = d.sessions <= SEEDED_SESSIONS;
-            const on = d.key === historyDepth;
-            return (
-              <button
-                key={d.key}
-                disabled={!have}
-                aria-pressed={on}
-                onClick={() => have && setHistoryDepth(d.key)}
-                title={have ? `${d.label} of sessions` : `${d.label} needs ${d.sessions} sessions — the tape holds ${SEEDED_SESSIONS}`}
-                className={`px-1.5 py-0.5 rounded font-mono text-[10px] uppercase tracking-wider transition-colors ${
-                  !have
-                    ? 'text-textMuted/40 cursor-not-allowed'
-                    : on
-                      ? 'bg-white/[0.16] text-textPrimary'
-                      : 'text-textSecondary hover:text-textPrimary'
-                }`}
-              >
-                {d.label}
-              </button>
-            );
-          })}
-        </span>
-
         {/* T-18 — the named-layouts shelf, in the desk's own cluster. */}
         <span className="relative pointer-events-auto">
           <button
@@ -2417,72 +2493,24 @@ const Terrain = () => {
                 <div className="font-mono text-[9px] uppercase tracking-widest text-textMuted px-1 pb-1.5">
                   Named layouts · {Object.keys(namedLayouts).length}/{MAX_NAMED_LAYOUTS}
                 </div>
-                {/* §20 — favourites pin to the top, then newest first. The
-                    pin is the only reordering a reader needs: a shelf of
-                    twelve is short enough that anything more would be
-                    ceremony. */}
                 {Object.entries(namedLayouts)
-                  .sort((a, b) => {
-                    if (!!a[1].favourite !== !!b[1].favourite) return a[1].favourite ? -1 : 1;
-                    return b[1].savedAt - a[1].savedAt;
-                  })
+                  .sort((a, b) => b[1].savedAt - a[1].savedAt)
                   .map(([name, entry]) => (
                     <div key={name} className="flex items-center gap-1 group">
-                      {renaming === name ? (
-                        <input
-                          autoFocus
-                          value={renameDraft}
-                          onChange={e => setRenameDraft(e.target.value)}
-                          onBlur={() => { renameNamedLayout(name, renameDraft); setRenaming(null); }}
-                          onKeyDown={e => {
-                            e.stopPropagation();
-                            if (e.key === 'Enter') { renameNamedLayout(name, renameDraft); setRenaming(null); }
-                            if (e.key === 'Escape') setRenaming(null);
-                          }}
-                          aria-label={`Rename ${name}`}
-                          className="flex-1 min-w-0 px-1.5 py-1 rounded border border-borderMuted bg-inset font-mono text-[11px] text-textPrimary outline-none"
-                        />
-                      ) : (
-                        <button
-                          onClick={() => applyNamedLayout(entry)}
-                          title={`${entry.layout} pane${entry.layout === 1 ? '' : 's'} · ${entry.panes.slice(0, entry.layout).map(pn => pn.ticker).join(' ')}`}
-                          className="flex-1 min-w-0 text-left px-1.5 py-1 rounded font-mono text-[11px] text-textSecondary hover:text-textPrimary hover:bg-white/[0.05] truncate transition-colors"
-                        >
-                          {entry.favourite && <span className="text-select mr-1" aria-hidden>★</span>}
-                          {name}
-                          <span className="ml-1.5 text-[9px] text-textMuted tnum">
-                            {entry.layout}× {entry.panes.slice(0, entry.layout).map(pn => pn.ticker).join('·')}
-                          </span>
-                        </button>
-                      )}
                       <button
-                        onClick={() => toggleFavourite(name)}
-                        aria-label={entry.favourite ? `Unpin ${name}` : `Pin ${name}`}
-                        aria-pressed={!!entry.favourite}
-                        className={`shrink-0 inline-flex items-center justify-center w-5 h-5 rounded transition-all hover:bg-white/[0.08] ${
-                          entry.favourite ? 'text-select opacity-100' : 'text-textMuted opacity-0 group-hover:opacity-100 hover:text-textPrimary'
-                        }`}
+                        onClick={() => applyNamedLayout(entry)}
+                        title={`${entry.layout} pane${entry.layout === 1 ? '' : 's'} · ${entry.panes.slice(0, entry.layout).map(pn => pn.ticker).join(' ')}`}
+                        className="flex-1 min-w-0 text-left px-1.5 py-1 rounded font-mono text-[11px] text-textSecondary hover:text-textPrimary hover:bg-white/[0.05] truncate transition-colors"
                       >
-                        <Star className="w-3 h-3" fill={entry.favourite ? 'currentColor' : 'none'} />
-                      </button>
-                      <button
-                        onClick={() => { setRenaming(name); setRenameDraft(name); }}
-                        aria-label={`Rename the layout ${name}`}
-                        className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded text-textMuted opacity-0 group-hover:opacity-100 hover:text-textPrimary hover:bg-white/[0.08] transition-all"
-                      >
-                        <Pencil className="w-3 h-3" />
-                      </button>
-                      <button
-                        onClick={() => duplicateNamedLayout(name)}
-                        aria-label={`Duplicate the layout ${name}`}
-                        className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded text-textMuted opacity-0 group-hover:opacity-100 hover:text-textPrimary hover:bg-white/[0.08] transition-all"
-                      >
-                        <Copy className="w-3 h-3" />
+                        {name}
+                        <span className="ml-1.5 text-[9px] text-textMuted tnum">
+                          {entry.layout}× {entry.panes.slice(0, entry.layout).map(pn => pn.ticker).join('·')}
+                        </span>
                       </button>
                       <button
                         onClick={() => removeNamedLayout(name)}
                         aria-label={`Delete the layout ${name}`}
-                        className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded text-textMuted opacity-0 group-hover:opacity-100 hover:text-bear hover:bg-white/[0.08] transition-all"
+                        className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded text-textMuted opacity-0 group-hover:opacity-100 hover:text-textPrimary hover:bg-white/[0.08] transition-all"
                       >
                         <X className="w-3 h-3" />
                       </button>
@@ -2533,7 +2561,7 @@ const Terrain = () => {
 
         {expanded !== null && (
           <button
-            onClick={() => setExpanded(null)}
+            onClick={() => closeExpanded()}
             className="pointer-events-auto inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-borderSubtle bg-canvas/70 backdrop-blur-[2px] font-mono text-[10px] uppercase tracking-wider text-textSecondary hover:text-textPrimary"
           >
             <X className="w-3.5 h-3.5" /> Esc
@@ -2561,7 +2589,7 @@ const Terrain = () => {
            note on Pane's own wrapper for why a rule here does nothing. */
         className={`grid ${isPhone ? COLS[1] : COLS[cfg.layout]} ${
           isPhone ? ROWS[1] : ROWS[cfg.layout]
-        } gap-1.5 flex-1 min-h-0`}
+        } gap-1.5 flex-1 min-h-0 transition-opacity duration-200 ease-out ${swapping ? 'opacity-0' : ''}`}
       >
         {panes.map((pane, i) =>
           /*
@@ -2584,7 +2612,8 @@ const Terrain = () => {
             onCfg={patch => setPane(i, patch)}
             revision={revision}
             expanded={expanded === i}
-            onToggleExpand={() => setExpanded(cur => (cur === i ? null : i))}
+            onToggleExpand={() => toggleExpand(i)}
+            closing={expClosing}
             index={i}
             tall={cfg.layout === 1}
             onCrosshair={t => emitCrosshair(i, t)}

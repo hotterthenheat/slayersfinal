@@ -7,7 +7,7 @@
   synthesizes unknowns), its own timeframe, its own
   overlays, the candle picker, and a fullscreen
   takeover — the same controls the main Pulse chart
-  carries. Each chart derives its walls/flip/king
+  carries. Each chart derives its walls/flip/supreme
   and dark-pool prints from its OWN book. The back
   arrow returns to Pulse; the whole layout persists.
 ==================================================

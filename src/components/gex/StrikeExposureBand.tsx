@@ -42,13 +42,32 @@ import type { ExposureProfileData } from '../../types/gex';
 ==================================================
 */
 
-/** Which greek the band draws. The same three the exposure matrix carries. */
-export type BandMetric = 'gex' | 'dex' | 'vex';
+/*
+  WHICH GREEK THE BAND DRAWS — all five nets, on the surface built for
+  reading a net by strike.
+
+  It carried three. Vanna and charm were the two the desk had exposures for
+  and nowhere to put them: a rail picker was tried and pulled, because the
+  strike ladder answers a different question (what is trading at each strike
+  right now) and cramming five greeks behind a dropdown there would have
+  buried it. This band is already a tall column of strikes with one net
+  drawn across it, which is exactly the shape those two want, so they join
+  the three that were here rather than getting a fourth vocabulary of their
+  own.
+
+  THE UNIT LINE IS NOT DECORATION. Gamma per 1% and charm per day are not
+  comparable quantities, and a reader flicking between them needs the
+  denominator to change in front of them or they will read the second number
+  in the first one's units.
+*/
+export type BandMetric = 'gex' | 'dex' | 'vex' | 'vanna' | 'charm';
 
 export const BAND_METRICS: { key: BandMetric; label: string; unit: string }[] = [
   { key: 'dex', label: 'Net delta exposure', unit: 'per $1 move' },
   { key: 'gex', label: 'Net gamma exposure', unit: 'per 1% move' },
   { key: 'vex', label: 'Net vega exposure', unit: 'per 1% vol' },
+  { key: 'vanna', label: 'Net vanna exposure', unit: 'delta per 1% vol' },
+  { key: 'charm', label: 'Net charm exposure', unit: 'delta per day' },
 ];
 
 export interface StrikeExposureBandProps {
@@ -65,10 +84,26 @@ const AXIS_H = 14;
 /* The narrowest two strike labels may sit at before they touch. */
 const LABEL_MIN_PX = 42;
 
-const NET_KEY: Record<BandMetric, 'netGex' | 'netDex' | 'netVex'> = {
-  gex: 'netGex',
-  dex: 'netDex',
-  vex: 'netVex',
+/*
+  WHERE EACH METRIC READS FROM — the per-strike split and the headline net,
+  named together in ONE table.
+
+  These were two separate maps: one here for the headline, one implied by
+  whatever key the plot indexed strikes with. Nothing tied them, so pointing
+  a metric's headline at the wrong net produced a band that drew the right
+  bars under the wrong number — perfectly plausible on screen, and a lie.
+  A proof of the data alone cannot catch that; it has to check the mapping,
+  and it can only check a mapping that is written down once.
+*/
+export const BAND_FIELDS: Record<
+  BandMetric,
+  { split: 'gex' | 'dex' | 'vex' | 'vanna' | 'charm'; net: 'netGex' | 'netDex' | 'netVex' | 'netVanna' | 'netCharm' }
+> = {
+  gex: { split: 'gex', net: 'netGex' },
+  dex: { split: 'dex', net: 'netDex' },
+  vex: { split: 'vex', net: 'netVex' },
+  vanna: { split: 'vanna', net: 'netVanna' },
+  charm: { split: 'charm', net: 'netCharm' },
 };
 
 const StrikeExposureBand = ({
@@ -116,17 +151,18 @@ const StrikeExposureBand = ({
 
   /* Proportional air, not two fixed pixels — see barGap. At desk width the
      fixed gap left the bars touching, and a row of touching bars is a block. */
+  const field = BAND_FIELDS[metric];
   const bars = layoutBand(
     rows,
-    r => (r as (typeof rows)[number])[metric].net,
-    data.maxAbs[metric],
+    r => (r as (typeof rows)[number])[field.split].net,
+    data.maxAbs[field.split],
     width,
     plotHeight,
     barGap(width, rows.length)
   );
   const stride = labelStride(rows.length, width, LABEL_MIN_PX);
   const rule = spotX(spotIndex, rows.length, width);
-  const net = data[NET_KEY[metric]];
+  const net = data[field.net];
   const meta = BAND_METRICS.find(m => m.key === metric) ?? BAND_METRICS[0];
 
   return (
@@ -142,8 +178,8 @@ const StrikeExposureBand = ({
         >
           {fmtUsd(net)}
         </span>
-        {/* The other two greeks are one click away — the same three the
-            exposure matrix carries, on the surface where they are read live. */}
+        {/* Every other net is one click away, on the surface where they are
+            read live. */}
         {onMetric && (
           <span className="ml-auto flex items-center gap-1">
             {BAND_METRICS.map(m => (

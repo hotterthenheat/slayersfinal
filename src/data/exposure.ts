@@ -57,7 +57,7 @@ const EXPIRY_DECAY: Record<ExposureExpiry, number> = {
   `gex.net` is what picks the call wall, the put wall and the flip on the
   flagship map. So an undocumented per-strike jitter was quietly relocating
   the levels: measured across eight names, six disagreed with the levels rail
-  and three named a different KING (META by 25 points, TSLA by 12.5).
+  and three named a different SUPREME (META by 25 points, TSLA by 12.5).
 
   The jitter earns its keep as leg TEXTURE — a book where every strike splits
   identically looks synthetic — so it stays, moved to where it cannot lie: it
@@ -106,26 +106,35 @@ export function buildExposureProfile(
     }
   }
 
-  const maxAbs = { gex: 1, dex: 1, vex: 1 };
+  const maxAbs = { gex: 1, dex: 1, vex: 1, vanna: 1, charm: 1 };
   const strikes: StrikeExposure[] = window.map((n: StrikeNode) => {
     const jitter = h01(`${ticker}-${n.strike}-${expiry}-exp`);
     const gex = scaleSplit(n.putGex, n.callGex, factor, jitter);
     const dex = scaleSplit(n.putDex, n.callDex, factor, jitter);
     const vex = scaleSplit(n.putVex * 40, n.callVex * 40, factor, jitter); // dollar-comparable
+    /* Vanna and charm arrive already dollarised and direction-applied off
+       the node — the simulator does that once, so this does not repeat the
+       convention and cannot disagree with it. */
+    const vanna = scaleSplit(n.putVanna, n.callVanna, factor, jitter);
+    const charm = scaleSplit(n.putCharm, n.callCharm, factor, jitter);
     maxAbs.gex = Math.max(maxAbs.gex, Math.abs(gex.put), Math.abs(gex.call), Math.abs(gex.net));
     maxAbs.dex = Math.max(maxAbs.dex, Math.abs(dex.put), Math.abs(dex.call), Math.abs(dex.net));
     maxAbs.vex = Math.max(maxAbs.vex, Math.abs(vex.put), Math.abs(vex.call), Math.abs(vex.net));
+    maxAbs.vanna = Math.max(maxAbs.vanna, Math.abs(vanna.put), Math.abs(vanna.call), Math.abs(vanna.net));
+    maxAbs.charm = Math.max(maxAbs.charm, Math.abs(charm.put), Math.abs(charm.call), Math.abs(charm.net));
     const oi = n.callOI + n.putOI;
     // SAME seed and formula as rankedtargets.ts — one volume per strike across
     // the terminal, until a real tape replaces both (placeholder, OI-anchored)
     const volume = Math.round(oi * (0.2 + h01(`${ticker}-${n.strike}-tvol`) * 0.7));
-    return { strike: n.strike, pin: n.strike === pinStrike, gex, dex, vex, oi, volume };
+    return { strike: n.strike, pin: n.strike === pinStrike, gex, dex, vex, vanna, charm, oi, volume };
   });
 
   // Aggregates
   const netGex = strikes.reduce((a, s) => a + s.gex.net, 0);
   const netDex = strikes.reduce((a, s) => a + s.dex.net, 0);
   const netVex = strikes.reduce((a, s) => a + s.vex.net, 0);
+  const netVanna = strikes.reduce((a, s) => a + s.vanna.net, 0);
+  const netCharm = strikes.reduce((a, s) => a + s.charm.net, 0);
 
   /* Walls come from core/walls.ts, the ONE copy of this rule — the third
      place it was written. This picked by |net GEX| plus side of spot, which
@@ -145,13 +154,13 @@ export function buildExposureProfile(
      defensive floor rather than a branch anything renders today.
 
      AND THE PICK READS THE FULL BOOK, not the drawn window — P-24B's second
-     half, and the same argument the KING below has always carried. A windowed
+     half, and the same argument the SUPREME below has always carried. A windowed
      pick answers "the heaviest bar currently drawn", which changes when the
      reader resizes the window: SPY's call wall moved 4 strikes and META's 5
      between this surface and the levels rail purely because they looked at
      different slices. The window is a drawing choice; it must not be an
      answer. When a wall lands outside the slice its band simply is not on
-     screen, exactly as an off-window king crowns no row. */
+     screen, exactly as an off-window supreme crowns no row. */
   const picked = pickWalls(chain, spot, n => n.netGex);
   const callWall = picked.callWall ?? spot;
   const putWall = picked.putWall ?? spot;
@@ -161,21 +170,21 @@ export function buildExposureProfile(
      function's own no-crossing fallback exactly as it was. */
   const flip = pickFlip(chain, spot, n => n.netGex) ?? spot;
 
-  // The book's king — argmax |net gamma| over the FULL chain, not the window.
+  // The book's supreme — argmax |net gamma| over the FULL chain, not the window.
   // A windowed argmax answers "the biggest bar currently drawn", which moves
   // when the panel resizes and can disagree with the levels rail; when the
-  // real king sits outside the window, no row is crowned.
-  let king = spot;
+  // real supreme sits outside the window, no row is crowned.
+  let supreme = spot;
   let kingAbs = 0;
   for (const n of chain) {
     const a = Math.abs(n.putGex + n.callGex);
     if (a > kingAbs) {
       kingAbs = a;
-      king = n.strike;
+      supreme = n.strike;
     }
   }
 
-  const levels: ExposureLevels = { spot, callWall, putWall, pin: pinStrike, flip, king };
+  const levels: ExposureLevels = { spot, callWall, putWall, pin: pinStrike, flip, supreme };
 
   // Zone bands (strikes descending: from ≥ to). One row of breathing room per wall.
   const strikeList = strikes.map(s => s.strike);
@@ -247,6 +256,8 @@ export function buildExposureProfile(
     netGex,
     netDex,
     netVex,
+    netVanna,
+    netCharm,
     levels,
     zones,
     bias,

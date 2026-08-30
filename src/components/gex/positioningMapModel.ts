@@ -86,16 +86,16 @@ export function netMaxOf(strikes: StrikeExposure[]): number {
 }
 
 /*
-  There is deliberately no king derivation here.
+  There is deliberately no supreme derivation here.
 
   This module only ever sees `StrikeExposure[]` — a WINDOWED, expiry-decayed,
   per-strike-jittered view of the book — so an argmax over it answers "the
   biggest bar currently drawn", which is a different question from "the book's
-  king" and moves when the panel is resized.
+  supreme" and moves when the panel is resized.
 
-  `ExposureLevels.king` carries the book's answer from exposure.ts
+  `ExposureLevels.supreme` carries the book's answer from exposure.ts
   `buildExposureProfile` (full-chain argmax), and PositioningMap.tsx reads it.
-  If the king falls outside the rendered window, no row is crowned — the
+  If the supreme falls outside the rendered window, no row is crowned — the
   honest outcome, and the one the type makes easy.
 */
 

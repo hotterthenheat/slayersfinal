@@ -33,7 +33,7 @@ import { useCallback, useSyncExternalStore } from 'react';
 
   THE KINDS (T-22). A fixed price is only one thing worth watching:
     price     — close reaches a price you typed          (crossed toward)
-    level     — close crosses a NAMED level: call wall, put wall, flip, king.
+    level     — close crosses a NAMED level: call wall, put wall, flip, supreme.
                 The level moves with the book, so the alert follows the level
                 rather than freezing the price it had when armed.
     indicator — close crosses VWAP or an EMA, or RSI crosses a threshold.
@@ -62,7 +62,7 @@ import { useCallback, useSyncExternalStore } from 'react';
   is building the context from data it already holds.
 */
 
-export type LevelName = 'callWall' | 'putWall' | 'flip' | 'king';
+export type LevelName = 'callWall' | 'putWall' | 'flip' | 'supreme';
 export type IndicatorSource = 'vwap' | 'ema9' | 'ema21' | 'ema50' | 'rsi';
 
 interface AlertBase {
@@ -109,7 +109,7 @@ export interface GexFlipAlert extends AlertBase {
 
 export interface NewKingAlert extends AlertBase {
   kind: 'newking';
-  /** The king strike when first evaluated; 0 until seen (no strike is 0). */
+  /** The supreme strike when first evaluated; 0 until seen (no strike is 0). */
   strike: number;
 }
 
@@ -146,7 +146,7 @@ export type Alert =
 
 export type AlertKind = Alert['kind'];
 
-const LEVEL_NAMES: readonly LevelName[] = ['callWall', 'putWall', 'flip', 'king'];
+const LEVEL_NAMES: readonly LevelName[] = ['callWall', 'putWall', 'flip', 'supreme'];
 const INDICATOR_SOURCES: readonly IndicatorSource[] = ['vwap', 'ema9', 'ema21', 'ema50', 'rsi'];
 const isSide = (v: unknown): v is -1 | 0 | 1 => v === -1 || v === 0 || v === 1;
 const isFin = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
@@ -388,7 +388,7 @@ export interface AlertContext {
   /** Named levels with REAL nulls (core/walls.ts rules), not spot fallbacks:
       "no call wall qualifies" must read as absent here, or a level alert
       would chase the fallback around the tape. */
-  levels: { callWall: number | null; putWall: number | null; flip: number | null; king: number | null };
+  levels: { callWall: number | null; putWall: number | null; flip: number | null; supreme: number | null };
   /** Signed total of the book's net GEX; null when the book is unreadable. */
   netGex: number | null;
   /** The chain's strike spacing; 0 when unknown. */
@@ -457,7 +457,7 @@ export function evaluateAlert(a: Alert, ctx: AlertContext): AlertVerdict {
     }
 
     case 'newking': {
-      const k = ctx.levels.king;
+      const k = ctx.levels.supreme;
       if (k === null) return NONE;
       if (a.strike === 0) return { fire: false, armed: { ...a, strike: k } };
       return { fire: Math.abs(k - a.strike) > 1e-9 };
@@ -491,7 +491,7 @@ export function alertLabel(a: Alert): string {
     case 'price':
       return `${a.price.toFixed(2)} ${a.above ? 'above' : 'below'}`;
     case 'level':
-      return `${{ callWall: 'call wall', putWall: 'put wall', flip: 'flip', king: 'king' }[a.level]} cross`;
+      return `${{ callWall: 'call wall', putWall: 'put wall', flip: 'flip', supreme: 'supreme' }[a.level]} cross`;
     case 'indicator':
       return a.source === 'rsi'
         ? `RSI ${a.threshold} · ${a.tf}`
@@ -499,7 +499,7 @@ export function alertLabel(a: Alert): string {
     case 'gexflip':
       return 'net GEX flips sign';
     case 'newking':
-      return 'new king';
+      return 'new supreme';
     case 'wallmove':
       return `wall moves ${a.strikes}+ strikes`;
     case 'flow':

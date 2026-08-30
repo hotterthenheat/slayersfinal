@@ -155,7 +155,7 @@ const bad = (msg: string) => { failed++; console.log(`  FAIL ${msg}`); };
 console.log('\nevery colour utility names a token that exists\n');
 
 ok(`the palette resolved — ${COLOURS.size} colour names, house tokens included`);
-['bull', 'bear', 'select', 'flip', 'king', 'darkpool', 'panelHover', 'textMuted']
+['bull', 'bear', 'select', 'flip', 'supreme', 'darkpool', 'panelHover', 'textMuted']
   .forEach(t => (COLOURS.has(t) ? ok(`  house token present: ${t}`) : bad(`house token missing: ${t}`)));
 
 /* The check itself. */

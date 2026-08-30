@@ -52,7 +52,7 @@ const ZONE_STYLE: Record<ZoneKind, { rail: string; text: string }> = {
 };
 
 /* Row rails and selection, inline (this is the only consumer):
-   king rail = magenta (badge/bar family — charts wear silver, rails don't),
+   supreme rail = magenta (badge/bar family — charts wear silver, rails don't),
    pin rail = white, selection = the house lime, same classes the old ladder
    and the exposure matrix use. */
 const RAIL_KING = 'shadow-[inset_2px_0_0_0_rgba(234,0,255,0.75)]';
@@ -308,12 +308,12 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
   };
 
   const netMax = useMemo(() => netMaxOf(strikes), [strikes]);
-  // The book's king, not the heaviest bar in this window. Crowning whatever is
+  // The book's supreme, not the heaviest bar in this window. Crowning whatever is
   // biggest on screen has this panel and the levels rail naming different kings
   // on the same instrument, and it moves as the window resizes. When the real
-  // king sits outside the rendered range no row is crowned, which is the honest
+  // supreme sits outside the rendered range no row is crowned, which is the honest
   // answer rather than promoting a runner-up.
-  const king = levels.king;
+  const supreme = levels.supreme;
   const scale = useMemo(() => priceScale(strikes, plot.h), [strikes, plot.h]);
   const bandList = useMemo(() => buildBands(strikes, plot.h), [strikes, plot.h]);
 
@@ -368,7 +368,7 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
   const activeBand = bandList.find(b => b.strike === activeStrike);
 
   const significant = useMemo(() => {
-    const set = new Set<number>([levels.callWall, levels.putWall, levels.pin, king]);
+    const set = new Set<number>([levels.callWall, levels.putWall, levels.pin, supreme]);
     let above: number | null = null;
     let below: number | null = null;
     for (const s of strikes) {
@@ -378,17 +378,17 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
     if (above != null) set.add(above);
     if (below != null) set.add(below);
     return set;
-  }, [strikes, levels.callWall, levels.putWall, levels.pin, levels.spot, king]);
+  }, [strikes, levels.callWall, levels.putWall, levels.pin, levels.spot, supreme]);
 
   const roleOf = useCallback(
     (row: StrikeExposure): { tone: Tone; label: string } => {
-      if (row.strike === king) return { tone: 'magenta', label: 'KING' };
+      if (row.strike === supreme) return { tone: 'supreme', label: 'SUPREME' };
       if (row.strike === levels.callWall) return { tone: 'bull', label: 'CALL WALL' };
       if (row.strike === levels.putWall) return { tone: 'bear', label: 'PUT WALL' };
       const callHeavy = Math.abs(row.gex.call) >= Math.abs(row.gex.put);
       return { tone: callHeavy ? 'bull' : 'bear', label: callHeavy ? 'CALL-HEAVY' : 'PUT-HEAVY' };
     },
-    [king, levels.callWall, levels.putWall]
+    [supreme, levels.callWall, levels.putWall]
   );
 
   const bandLabel = useCallback(
@@ -397,13 +397,13 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
       if (row.pin) tags.push('pin');
       if (row.strike === levels.callWall) tags.push('call wall');
       if (row.strike === levels.putWall) tags.push('put wall');
-      if (row.strike === king) tags.push('largest exposure');
+      if (row.strike === supreme) tags.push('largest exposure');
       const net = row.gex.net;
       return `Strike ${fmtStrike(row.strike)}, net gamma ${net < 0 ? 'negative' : 'positive'} ${fmtUsd(
         Math.abs(net)
       )}, dealer ${net > 0 ? 'short' : 'long'} gamma${tags.length ? `, ${tags.join(', ')}` : ''}`;
     },
-    [king, levels.callWall, levels.putWall]
+    [supreme, levels.callWall, levels.putWall]
   );
 
   const moveTo = useCallback(
@@ -513,7 +513,7 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
     } spot. Dealers ${levels.spot >= levels.flip ? 'long' : 'short'} gamma at spot. ` +
     `Call wall ${fmtStrike(levels.callWall)}, put wall ${fmtStrike(levels.putWall)}, pin ${fmtStrike(
       levels.pin
-    )}, largest exposure ${fmtStrike(king)}.`;
+    )}, largest exposure ${fmtStrike(supreme)}.`;
 
   const legend = [
     {
@@ -579,7 +579,7 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
               const row = strikes[i];
               const show =
                 bandH >= 14 || significant.has(b.strike) || activeStrike === b.strike || selectedStrike === b.strike;
-              const rail = b.strike === king ? RAIL_KING : row.pin ? RAIL_NEUTRAL : '';
+              const rail = b.strike === supreme ? RAIL_KING : row.pin ? RAIL_NEUTRAL : '';
               return (
                 <React.Fragment key={b.strike}>
                   {rail && (

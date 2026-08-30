@@ -34,14 +34,13 @@ export function processState(setup: Setup): ProcessState {
   return 'WATCH';
 }
 
-/* HOLO, not lime (Noah, 2026-08-05: "too much neon green"): the board already
-   speaks green three ways that EARN it — bull scores, call pills, TP HIT.
-   Process states are the terminal talking about itself, which is silver's
-   job. Flat tinted holo chip (toneBadge.holo), never the animated foil —
-   foil stays reserved for nav/CTAs per the Weigher count-chip ruling. */
+/* WHITE (Noah, 2026-08-29, kept by name through the baby-blue re-crowning:
+   "keep the white active and moving cards on the compass though"): process
+   chips are a clear rank above WATCH/FADING's muted neutral, and they stay
+   OUT of the engine's blue so the TOP PICK crown two rows up owns it. */
 export const PROCESS_META: Record<ProcessState, { tone: Tone; pulse: boolean; hint: string }> = {
   WATCH: { tone: 'neutral', pulse: false, hint: 'On the board, thesis not proven yet' },
-  ACTIVE: { tone: 'holo', pulse: false, hint: 'Thesis working — the level structure is in place' },
-  MOVING: { tone: 'holo', pulse: true, hint: 'The contract now trades like its thesis (delta ≥ 0.50)' },
+  ACTIVE: { tone: 'white', pulse: false, hint: 'Thesis working — the level structure is in place' },
+  MOVING: { tone: 'white', pulse: true, hint: 'The contract now trades like its thesis (delta ≥ 0.50)' },
   FADING: { tone: 'neutral', pulse: false, hint: 'Thesis degrading — the setup is retiring' },
 };

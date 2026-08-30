@@ -48,7 +48,7 @@ const ExpiryLadder = () => {
     if (!ladder || ladder.rows.length === 0) return null;
     const walls = wallOwnership(ladder);
 
-    /* The ALL-column heavyweight is the book's king — the same meaning the
+    /* The ALL-column heavyweight is the book's supreme — the same meaning the
        matrix's magenta ring carries everywhere else. */
     let kingRow = -1;
     let kingMag = 0;
@@ -75,7 +75,7 @@ const ExpiryLadder = () => {
       expiries: [...LADDER_COLUMNS],
       strikes: ladder.rows.map(r => r.strike),
       cells: ladder.rows.map((r, i) =>
-        r.cells.map((c, j) => ({ value: c.netGex, king: i === kingRow && j === allCol }))
+        r.cells.map((c, j) => ({ value: c.netGex, supreme: i === kingRow && j === allCol }))
       ),
       maxAbs: ladder.maxAbs,
       spotRowIndex,
@@ -287,7 +287,7 @@ const ExpiryLadder = () => {
       <p className="font-mono text-[10px] leading-relaxed text-textSecondary">
         A strike whose gamma is concentrated in 0DTE is a level that will not survive the bell; one spread across
         the dated lenses is structure. ALL is the aggregate, not a seventh expiry — it never competes for the
-        composition read, and its heavyweight wears the king's ring.
+        composition read, and its heavyweight wears the supreme's ring.
       </p>
     </div>
   );

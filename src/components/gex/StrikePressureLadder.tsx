@@ -11,7 +11,7 @@
   net, distance from spot, open interest, volume,
   and the part the strike plays. Spot and the flip
   run THROUGH the ladder as rules; walls, pin and
-  king are named on their rows.
+  supreme are named on their rows.
 
   THE SPINE (Noah, 2026-08-22): a contour drawn over
   the bars — at every row it leans toward the side
@@ -55,7 +55,7 @@ import { fmtUsd } from '../../data/gex';
 import HoverReadout from '../ui/HoverReadout';
 import SpotRule from '../ui/SpotRule';
 import Term from '../ui/Term';
-import { CALL_WALL, FLIP, KING, PUT_WALL } from './palette';
+import { CALL_WALL, FLIP, SUPREME, PUT_WALL } from './palette';
 import type { ExposureProfileData, StrikeExposure } from '../../types/gex';
 import { heatInk, heatPoleRgb } from './heatmap';
 
@@ -130,7 +130,7 @@ const TAIL_DIST_PCT = 3;
 /** The part a strike plays, in the order that matters if it plays several. */
 const rolesOf = (row: StrikeExposure, levels: ExposureProfileData['levels'], tails: Set<number>): Role[] => {
   const out: Role[] = [];
-  if (row.strike === levels.king) out.push({ label: 'KING', color: KING });
+  if (row.strike === levels.supreme) out.push({ label: 'SUPREME', color: SUPREME });
   if (row.strike === levels.callWall) out.push({ label: 'CALL WALL', color: CALL_WALL });
   if (row.strike === levels.putWall) out.push({ label: 'PUT WALL', color: PUT_WALL });
   if (tails.has(row.strike)) out.push({ label: 'TAIL', color: TAIL });
@@ -359,8 +359,8 @@ const StrikePressureLadder = ({ data, strikeFormat = fmtStrikeDefault, fill = fa
           />
         )}
         <LegendItem
-          glyph={<span aria-hidden="true" className="inline-block w-[9px] h-[9px] rounded-[2px]" style={{ background: KING }} />}
-          name={<span style={{ color: KING }}>King</span>}
+          glyph={<span aria-hidden="true" className="inline-block w-[9px] h-[9px] rounded-[2px]" style={{ background: SUPREME }} />}
+          name={<span style={{ color: SUPREME }}>Supreme</span>}
           text="heaviest strike, washed across its row"
           compact={compact}
         />
@@ -440,12 +440,12 @@ const StrikePressureLadder = ({ data, strikeFormat = fmtStrikeDefault, fill = fa
           const distPct = ((row.strike - levels.spot) / levels.spot) * 100;
           const roles = rolesOf(row, levels, tails);
           const edge = roles[0]?.color;
-          const isKing = row.strike === levels.king;
+          const isKing = row.strike === levels.supreme;
           return (
             <Fragment key={row.strike}>
               <div
-                data-king={isKing || undefined}
-                /* The king's row wears a constant magenta wash end to end (Noah,
+                data-supreme={isKing || undefined}
+                /* The supreme's row wears a constant magenta wash end to end (Noah,
                    2026-08-22) — the book's heaviest strike is findable from
                    across the room, not just by its tag. */
                 /* Keyed by strike: a window change keeps the rows that stay

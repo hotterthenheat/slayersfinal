@@ -194,12 +194,20 @@ const pingLabel = (d: object) => {
   </div>`;
 };
 const arcInk = (d: object) => ['rgba(237,237,237,0.9)', (d as { ink: string }).ink];
+/* A ring is either a story landing or the reader's own click. The mark
+   gets the desk's select blue so it never reads as a grade — a white ripple
+   on a place the reader chose would look like a WATCH headline they did
+   not send. */
 const ringInk = (d: object) => (t: number) => {
-  const r = d as { grade: NewsGrade; strong: boolean };
+  const r = d as { grade: NewsGrade; strong: boolean; mark?: boolean };
   const a = Math.max(0, (r.strong ? 0.7 : 0.3) * (1 - t));
+  if (r.mark) return `rgba(120,170,255,${Math.max(0, 0.85 * (1 - t))})`;
   return r.grade === 'ALLY' ? `rgba(48,209,88,${a})` : r.grade === 'THREAT' ? `rgba(255,59,48,${a})` : `rgba(237,237,237,${a})`;
 };
-const ringRadius = (d: object) => ((d as { strong: boolean }).strong ? 5.5 : 3.2);
+const ringRadius = (d: object) => {
+  const r = d as { strong: boolean; mark?: boolean };
+  return r.mark ? 4.4 : r.strong ? 5.5 : 3.2;
+};
 const labelSizeOf = (d: object) => (d as { size: number }).size;
 const labelInk = () => 'rgba(237,237,237,0.6)';
 
@@ -213,13 +221,20 @@ interface GlobePaneProps {
   /** Camera preset — a LOOK, not a selection; `n` bumps so repeating the
       same region still flies. */
   focusRegion?: { lat: number; lng: number; alt?: number; n: number } | null;
+  /** A click on the SPHERE ITSELF rather than on a ping — the reader
+      pointed at a place. Every point on the planet answers now; before
+      this only the cities that happened to have a story did. */
+  onPlaceClick?: (lat: number, lng: number) => void;
+  /** Where the reader last clicked, so the planet marks the spot it is
+      answering about. Null clears the mark. */
+  placeMark?: { lat: number; lng: number } | null;
   /** Fires ONCE, two frames after the textured globe has real pixels — the
       boot overlay holds until this (with its own failsafe timer upstream,
       per the wedge law: no overlay may depend solely on a callback). */
   onReady?: () => void;
 }
 
-const GlobePane = ({ events, selectedId, onSelect, onCityOpen, focusRegion, onReady }: GlobePaneProps) => {
+const GlobePane = ({ events, selectedId, onSelect, onCityOpen, onPlaceClick, placeMark, focusRegion, onReady }: GlobePaneProps) => {
   const globeRef = useRef<GlobeMethods | undefined>(undefined);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
@@ -446,7 +461,7 @@ const GlobePane = ({ events, selectedId, onSelect, onCityOpen, focusRegion, onRe
   /* Fresh stories ripple even unselected — the planet shows what just
      landed; the selected story keeps its ripple at full voice regardless. */
   const rings = useMemo(() => {
-    const out = events
+    const out: { lat: number; lng: number; grade: NewsGrade; strong: boolean; mark?: boolean }[] = events
       .filter(e => freshnessOf(e) === 'fresh' || e.id === selectedId)
       .map(e => ({
         lat: e.origin.lat,
@@ -454,8 +469,12 @@ const GlobePane = ({ events, selectedId, onSelect, onCityOpen, focusRegion, onRe
         grade: e.grade,
         strong: e.id === selectedId,
       }));
+    /* The reader's own click ripples too — on a sphere you have just spun,
+       a panel that changed without the planet acknowledging where you
+       pointed leaves you hunting for the spot. */
+    if (placeMark) out.push({ ...placeMark, grade: 'WATCH', strong: false, mark: true });
     return out;
-  }, [events, selectedId]);
+  }, [events, selectedId, placeMark]);
   const arcs = useMemo(
     () =>
       selected
@@ -534,6 +553,14 @@ const GlobePane = ({ events, selectedId, onSelect, onCityOpen, focusRegion, onRe
             if (onCityOpen) onCityOpen(p.city, p.topId);
             else onSelect(p.topId);
           }}
+          /* ANY POINT ON THE PLANET ANSWERS. A ping click is handled above
+             and never reaches here — globe.gl dispatches one object type
+             per click — so this is exactly "the reader pointed at a place
+             with no story on it", which is most of the sphere and used to
+             be dead. A drag past the library's threshold is not a click
+             (clickAfterDrag is false), so spinning the globe never opens a
+             panel. */
+          onGlobeClick={({ lat, lng }: { lat: number; lng: number }) => onPlaceClick?.(lat, lng)}
           pointLabel={pingLabel}
           /* the selected story's trajectories */
           arcsData={arcs}

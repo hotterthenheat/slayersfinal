@@ -40,7 +40,7 @@ const SetupDrivers = ({ ticker, rows, onOpen }: SetupDriversProps) => {
           Contracts driving this setup
         </>
       }
-      subtitle={`${ticker} book · ${expiry} · the hedging this campaign trades through`}
+      subtitle={`${ticker} book · ${expiry} · the hedging this setup trades through`}
       flush
       className="w-full"
     >

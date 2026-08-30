@@ -25,9 +25,16 @@ import TickerLookup from '../ui/TickerLookup';
 import useFocusTrap from '../ui/useFocusTrap';
 
 interface TickerQuickPickProps {
-  /* The chain card wears the squared cut (Noah, 2026-08-25: "make the chain
-     one more squared") — same button, corner radius only. */
-  squared?: boolean;
+  /* The chain card wears the SLIM cut (Noah, 2026-08-26: "make it blend in
+     with its background more and thinner... it just doesnt look like it
+     belongs there") — the capsule's pill is the chart toolbar's grammar,
+     where the name is the subject and earns a surface. In a strip of quiet
+     text chips it speaks chip instead: no fill, chip-height, hover reveal. */
+  slim?: boolean;
+  /** What the capsule SAYS when that is more than the ticker — the Weigher's
+      contract lens prints the whole contract ("SPY 507 Call") while the
+      button stays the same ticker door it always was. */
+  label?: string;
   ticker: string;
   onPick: (ticker: string) => void;
   /* The button's tooltip. Defaulted, so every caller that has never thought
@@ -44,7 +51,7 @@ interface TickerQuickPickProps {
   onOpenChange?: (open: boolean) => void;
 }
 
-const TickerQuickPick = ({ ticker, onPick, open: openProp, onOpenChange, squared, title = 'Switch ticker' }: TickerQuickPickProps) => {
+const TickerQuickPick = ({ ticker, onPick, open: openProp, onOpenChange, slim, label, title = 'Switch ticker' }: TickerQuickPickProps) => {
   const [selfOpen, setSelfOpen] = useState(false);
   const open = openProp ?? selfOpen;
   const setOpen = (next: boolean) => {
@@ -54,7 +61,9 @@ const TickerQuickPick = ({ ticker, onPick, open: openProp, onOpenChange, squared
   const rootRef = useRef<HTMLDivElement | null>(null);
   /* Portalled and placed, same as the toolbar's menus — see useAnchoredMenu
      for why this could not stay `absolute` inside the pane. */
-  const { anchorRef, placed } = useAnchoredMenu<HTMLButtonElement>(open, 'bottom', MENU_W);
+  /* 'start': the capsule lives at a pane's LEFT edge, so the menu opens
+     rightward INTO that pane instead of reaching back over its neighbour. */
+  const { anchorRef, placed } = useAnchoredMenu<HTMLButtonElement>(open, 'bottom', MENU_W, 'start');
   const menuRef = useRef<HTMLDivElement | null>(null);
   /*
     The menu covers the pane's own controls, and without a trap Tab walked
@@ -117,11 +126,13 @@ const TickerQuickPick = ({ ticker, onPick, open: openProp, onOpenChange, squared
         ref={anchorRef}
         onClick={() => setOpen(!open)}
         title={title}
-        className={`inline-flex items-center justify-between gap-2 h-7 min-w-[112px] px-3 ${
-          squared ? 'rounded-md' : 'rounded-full'
-        } bg-white/[0.06] hover:bg-white/[0.10] font-mono text-[11px] font-bold text-textPrimary transition-colors`}
+        className={
+          slim
+            ? 'inline-flex items-center gap-1 px-2 py-0.5 rounded font-mono text-[10px] font-semibold text-textPrimary hover:bg-white/[0.04] transition-colors'
+            : 'inline-flex items-center justify-between gap-2 h-7 min-w-[112px] px-3 rounded-full bg-white/[0.06] hover:bg-white/[0.10] font-mono text-[11px] font-bold text-textPrimary transition-colors'
+        }
       >
-        {ticker}
+        {label ?? ticker}
         <ChevronDown className={`w-3 h-3 text-textSecondary transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && placed && createPortal(
@@ -130,7 +141,7 @@ const TickerQuickPick = ({ ticker, onPick, open: openProp, onOpenChange, squared
           role="dialog"
           aria-label={`Change symbol — currently ${ticker}`}
           style={{ position: 'fixed', ...placed.box }}
-          className="z-[120] w-72 border border-borderMuted bg-panel rounded-md shadow-2xl shadow-black/60 overflow-x-hidden overflow-y-auto overscroll-contain animate-slide-in"
+          className="z-[120] w-72 border border-borderMuted bg-panel/80 backdrop-blur-xl backdrop-saturate-150 rounded-md shadow-2xl shadow-black/60 overflow-x-hidden overflow-y-auto overscroll-contain animate-slide-in"
         >
           <TickerLookup active={ticker} onPick={pick} />
         </div>,

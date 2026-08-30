@@ -10,7 +10,7 @@
 */
 
 import { dayKey, h01, hPick, hRange } from '../core/rng';
-import { UNIVERSE, lookup, type UniverseName } from './universe';
+import { UNIVERSE, lookup, type UniverseName, type Sector } from './universe';
 
 export type NewsCategory = 'Earnings' | 'Guidance' | 'Analyst' | 'Macro' | 'M&A' | 'Product' | 'Regulatory';
 
@@ -48,10 +48,18 @@ export interface NewsItem {
 const SOURCES = ['Bloomberg', 'Reuters', 'WSJ', 'CNBC', 'Barrons', 'FT'];
 const BANKS = ['Morgan Stanley', 'Goldman', 'JPMorgan', 'Citi', 'UBS', 'Barclays'];
 
+/* A headline is only credible if it could be written about THIS company.
+   "Broadcom unveils next-gen enterprise suite" is fine; the same line under
+   Exxon is not, and a reader who catches the feed writing it stops trusting
+   every other number on the desk. So a template may name the sectors it
+   belongs to; one that names none is universal — an upgrade, a miss, a
+   regulator's letter happen to everybody. */
 interface Template {
   category: NewsCategory;
   sentiment: number;
   magnitude: number;
+  /** Sectors this line fits. Omitted = fits every name. */
+  sectors?: Sector[];
   make: (u: UniverseName, h: (tag: string) => number) => string;
 }
 
@@ -86,6 +94,7 @@ const TICKER_TEMPLATES: Template[] = [
     category: 'Product',
     sentiment: 0.45,
     magnitude: 0.35,
+    sectors: ['Technology', 'Communication', 'Consumer Discretionary'],
     make: (u, h) =>
       `${u.name} unveils next-gen ${hPickStr(h('prod'), ['AI platform', 'flagship product line', 'enterprise suite'])}; early reviews positive`,
   },
@@ -93,7 +102,8 @@ const TICKER_TEMPLATES: Template[] = [
     category: 'M&A',
     sentiment: 0.6,
     magnitude: 0.75,
-    make: (u, h) => `${u.name} in advanced talks to acquire ${hPickStr(h('tgt'), ['a private AI startup', 'a logistics rival', 'a fintech platform'])}, sources say`,
+    make: (u, h) =>
+      `${u.name} in advanced talks to acquire ${hPickStr(h('tgt'), SECTOR_TARGETS[u.sector])}, sources say`,
   },
   {
     category: 'Regulatory',
@@ -114,7 +124,154 @@ const TICKER_TEMPLATES: Template[] = [
     magnitude: 0.8,
     make: (u, h) => `${u.name} misses revenue estimates; ${hPickStr(h('kpi'), ['inventory build', 'churn', 'cost inflation'])} weighs`,
   },
+
+  /* ── the sector shelves ────────────────────────────────────────────────
+     Lines that only make sense for the businesses they name. These are what
+     stop the feed reading like one company's news with the ticker swapped:
+     a chip name gets a foundry line, a bank gets a net-interest-margin
+     line, an energy name gets a barrel. Each still carries its own
+     sentiment and magnitude, so the outcome model treats them as first
+     class rather than as flavour text. */
+  {
+    category: 'Product',
+    sentiment: 0.6,
+    magnitude: 0.55,
+    sectors: ['Technology'],
+    make: (u, h) =>
+      `${u.name} says ${hPickStr(h('node'), ['3nm', '2nm', 'next-node'])} capacity is sold out through ${hPickStr(h('when'), ['next quarter', 'year end', 'the first half'])}`,
+  },
+  {
+    category: 'Guidance',
+    sentiment: -0.6,
+    magnitude: 0.6,
+    sectors: ['Technology'],
+    make: (u, h) =>
+      `${u.name} flags ${hPickStr(h('what'), ['foundry allocation', 'memory pricing', 'export-licence'])} pressure into next quarter`,
+  },
+  {
+    category: 'Guidance',
+    sentiment: 0.5,
+    magnitude: 0.6,
+    sectors: ['Financials'],
+    make: (u, h) =>
+      `${u.name} lifts net-interest-income outlook; ${hPickStr(h('why'), ['deposit costs ease', 'loan growth holds', 'credit stays clean'])}`,
+  },
+  {
+    category: 'Guidance',
+    sentiment: -0.6,
+    magnitude: 0.62,
+    sectors: ['Financials'],
+    make: (u, h) =>
+      `${u.name} builds reserves as ${hPickStr(h('book'), ['card', 'commercial real-estate', 'small-business'])} charge-offs tick up`,
+  },
+  {
+    /* Guidance, not Macro: it is this company's own production outlook, and
+       tagging it Macro would file a single name's news under the shelf a
+       reader keeps for CPI prints. */
+    category: 'Guidance',
+    sentiment: 0.55,
+    magnitude: 0.6,
+    sectors: ['Energy'],
+    make: (u, h) =>
+      `${u.name} lifts production guidance as ${hPickStr(h('basin'), ['Permian', 'Gulf', 'offshore'])} output beats plan`,
+  },
+  {
+    category: 'Guidance',
+    sentiment: -0.55,
+    magnitude: 0.58,
+    sectors: ['Energy'],
+    make: (u, h) =>
+      `${u.name} takes ${hPickStr(h('unit'), ['refining', 'chemicals', 'upstream'])} margin hit on weaker crack spreads`,
+  },
+  {
+    category: 'Regulatory',
+    sentiment: 0.75,
+    magnitude: 0.8,
+    sectors: ['Health Care'],
+    make: (u, h) =>
+      `FDA clears ${u.name}'s ${hPickStr(h('drug'), ['lead candidate', 'label expansion', 'combination therapy'])} ahead of schedule`,
+  },
+  {
+    category: 'Regulatory',
+    sentiment: -0.8,
+    magnitude: 0.85,
+    sectors: ['Health Care'],
+    make: (u, h) =>
+      `${u.name} trial misses primary endpoint in ${hPickStr(h('ph'), ['Phase II', 'Phase III'])}; programme under review`,
+  },
+  {
+    category: 'Product',
+    sentiment: -0.55,
+    magnitude: 0.6,
+    sectors: ['Consumer Discretionary'],
+    make: (u, h) =>
+      `${u.name} recalls ${hPickStr(h('n'), ['a production batch', 'several model years'])} over a ${hPickStr(h('fault'), ['software', 'supplier', 'assembly'])} fault`,
+  },
+  {
+    category: 'Guidance',
+    sentiment: 0.5,
+    magnitude: 0.5,
+    sectors: ['Consumer Discretionary', 'Consumer Staples'],
+    make: (u, h) =>
+      `${u.name} reports ${(1 + h('comp') * 5).toFixed(1)}% same-store sales growth; traffic leads ticket`,
+  },
+  {
+    category: 'Guidance',
+    sentiment: -0.5,
+    magnitude: 0.52,
+    sectors: ['Consumer Staples'],
+    make: (u, h) =>
+      `${u.name} says ${hPickStr(h('in'), ['input costs', 'freight', 'packaging'])} will outrun pricing into next year`,
+  },
+  {
+    category: 'Guidance',
+    sentiment: 0.55,
+    magnitude: 0.58,
+    sectors: ['Industrials', 'Materials'],
+    make: (u, h) =>
+      `${u.name} books a ${hPickStr(h('sz'), ['multi-year', 'record'])} order backlog in ${hPickStr(h('seg'), ['aerospace', 'defence', 'infrastructure'])}`,
+  },
+  {
+    category: 'Guidance',
+    sentiment: -0.5,
+    magnitude: 0.55,
+    sectors: ['Industrials', 'Materials'],
+    make: (u, h) =>
+      `${u.name} warns on ${hPickStr(h('seg'), ['destocking', 'freight rates', 'input inflation'])}; orders slip quarter on quarter`,
+  },
+  {
+    category: 'Regulatory',
+    sentiment: -0.5,
+    magnitude: 0.55,
+    sectors: ['Utilities'],
+    make: (u, h) =>
+      `Regulator defers ${u.name}'s rate case; ${hPickStr(h('spend'), ['grid hardening', 'capex recovery', 'storm cost'])} recovery slips`,
+  },
+  {
+    category: 'Product',
+    sentiment: 0.5,
+    magnitude: 0.5,
+    sectors: ['Communication'],
+    make: (u, h) =>
+      `${u.name} posts record ${hPickStr(h('eng'), ['engagement', 'paid subscribers', 'ad impressions'])}; monetisation ahead of plan`,
+  },
 ];
+
+/* What a company in each sector would plausibly be buying — the M&A line
+   used to offer every name the same three targets, which is how a utility
+   ended up bidding for a fintech platform. */
+const SECTOR_TARGETS: Record<Sector, string[]> = {
+  Technology: ['a private AI startup', 'a chip-design house', 'an observability vendor'],
+  Communication: ['a games studio', 'a streaming catalogue', 'an ad-tech platform'],
+  'Consumer Discretionary': ['a direct-to-consumer brand', 'a logistics rival', 'a last-mile delivery network'],
+  'Consumer Staples': ['a premium label', 'a regional bottler', 'a private-label manufacturer'],
+  Financials: ['a fintech platform', 'a regional lender', 'a wealth-management book'],
+  'Health Care': ['a clinical-stage biotech', 'a diagnostics business', 'a specialty pharma portfolio'],
+  Energy: ['a Permian acreage package', 'a midstream operator', 'a renewables developer'],
+  Industrials: ['an automation supplier', 'an aerospace parts maker', 'a rail logistics operator'],
+  Materials: ['a specialty chemicals unit', 'a lithium project', 'a packaging business'],
+  Utilities: ['a regional grid operator', 'a solar portfolio', 'a storage developer'],
+};
 
 const MACRO_TEMPLATES: Array<{ sentiment: number; magnitude: number; text: string }> = [
   { sentiment: 0.5, magnitude: 0.7, text: 'CPI cools to 2.4% y/y vs 2.6% est — rate-cut odds firm up' },
@@ -127,6 +284,15 @@ const MACRO_TEMPLATES: Array<{ sentiment: number; magnitude: number; text: strin
 
 function hPickStr(v: number, arr: string[]): string {
   return arr[Math.floor(v * arr.length) % arr.length];
+}
+
+/**
+ * The templates a given sector may draw on: the universal ones plus its own
+ * shelf. Exported so the acceptance test can prove no name is ever handed a
+ * headline about a business it is not in.
+ */
+export function templatesFor(sector: Sector): Template[] {
+  return TICKER_TEMPLATES.filter(t => !t.sectors || t.sectors.includes(sector));
 }
 
 // ---- outcome model ------------------------------------------------------------
@@ -344,7 +510,12 @@ export function buildNewsFeed(): NewsItem[] {
       });
     } else {
       const u = UNIVERSE[Math.floor(h('tk') * UNIVERSE.length)];
-      const t = TICKER_TEMPLATES[Math.floor(h('tpl') * TICKER_TEMPLATES.length)];
+      /* Only lines that could be written about THIS company. The pool is
+         rebuilt per name rather than filtered from a pre-picked template,
+         because rejecting-and-retrying would bias the feed toward whatever
+         the universal templates are and quietly starve the sector shelves. */
+      const pool = templatesFor(u.sector);
+      const t = pool[Math.floor(h('tpl') * pool.length)];
       const sentiment = t.sentiment * (0.8 + h('sj') * 0.4);
       const magnitude = t.magnitude * (0.8 + h('mj') * 0.4);
       items.push({

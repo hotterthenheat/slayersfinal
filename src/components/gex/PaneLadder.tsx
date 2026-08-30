@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import type { MutableRefObject } from 'react';
 import { X } from 'lucide-react';
 import Simulator from '../../core/simulator';
@@ -30,8 +30,8 @@ import type { KeyLevels } from '../../types/gex';
 
   That sourcing is the whole design. `buildLadderFor` hands back the rows of
   the very snapshot `buildLevelsFor` reduces to four prices, and the named
-  levels arrive as a prop from the pane that already holds them. So the KING
-  bar in this column is at the KING line on the chart beside it, always, and
+  levels arrive as a prop from the pane that already holds them. So the SUPREME
+  bar in this column is at the SUPREME line on the chart beside it, always, and
   not because two generators happened to agree.
 
   IT IS PLACED BY PRICE, NOT BY INDEX — and that is a correctness fix.
@@ -83,6 +83,16 @@ interface PaneLadderProps {
     the tape, and one rail should not start its own subscription.
   */
   flow?: StrikeFlow | null;
+  /*
+    A DRAGGABLE WIDTH, held by the host so it survives a remount.
+
+    132px is the right default beside a docked chart and far too narrow in
+    fullscreen, which is where a reader actually wants to open the column up.
+    The grip never lets it past 60% of the surface it shares — a rail that
+    swallows its own chart is a rail with nothing to sit beside.
+  */
+  width?: number;
+  onWidth?: (px: number) => void;
   /** The pane's own named levels — never re-derived here, see the note above */
   levels: KeyLevels;
   /** Currently flashed on the chart, so the column can show which row it is */
@@ -286,7 +296,7 @@ const FOOT_BAND = 14;
   far more often than not, so it is drawn as a rule instead.
 
   A ROW IS REGULARLY MORE THAN ONE THING, and returning only the first is a
-  quiet lie. `buildLevelsFor` takes king as the heaviest strike anywhere and
+  quiet lie. `buildLevelsFor` takes supreme as the heaviest strike anywhere and
   putWall as the heaviest below spot, so whenever the book's weight sits under
   the market they are THE SAME STRIKE by construction — not a coincidence, and
   not rare: measured across the watchlist just now it was 6 names out of 6.
@@ -297,7 +307,7 @@ const FOOT_BAND = 14;
 const tagsFor = (strike: number, levels: KeyLevels): { text: string; ink: string }[] => {
   const at = (v: number) => Math.abs(strike - v) < 1e-9;
   const out: { text: string; ink: string }[] = [];
-  if (at(levels.king)) out.push({ text: 'K', ink: 'text-king' });
+  if (at(levels.supreme)) out.push({ text: 'K', ink: 'text-supreme' });
   if (at(levels.callWall)) out.push({ text: 'CW', ink: 'text-bull' });
   if (at(levels.putWall)) out.push({ text: 'PW', ink: 'text-bear' });
   return out;
@@ -309,6 +319,8 @@ const PaneLadder = ({
   maxAbs,
   step,
   flow = null,
+  width,
+  onWidth,
   levels,
   focusPrice = null,
   onSelect,
@@ -342,6 +354,53 @@ const PaneLadder = ({
   /* Which read the rail is showing. Local, like `showVol` above and for the
      same reason: it is a way of LOOKING at one pane's rail, not a setting a
      reader would expect to find waiting for them on a fresh desk. */
+  /** The rail's own root, measured by the grip so a drag knows its start. */
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  /** Live width WHILE dragging; committed to the host on release, so a
+      re-render mid-drag cannot fight the pointer. */
+  const [dragW, setDragW] = useState<number | null>(null);
+  const [hostW, setHostW] = useState(0);
+  useEffect(() => {
+    const host = rootRef.current?.parentElement;
+    if (!host) return;
+    setHostW(host.getBoundingClientRect().width);
+    const ro = new ResizeObserver(entries => {
+      for (const e of entries) setHostW(e.contentRect.width);
+    });
+    ro.observe(host);
+    return () => ro.disconnect();
+  }, []);
+  const maxW = hostW > 0 ? Math.max(LADDER_WIDTH_PX, Math.round(hostW * 0.6)) : Number.POSITIVE_INFINITY;
+  const shownW = Math.min(dragW ?? width ?? LADDER_WIDTH_PX, maxW);
+
+  const onGripDown = (e: ReactPointerEvent<HTMLSpanElement>) => {
+    if (!onWidth) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const root = rootRef.current;
+    if (!root) return;
+    const startX = e.clientX;
+    const startW = root.getBoundingClientRect().width;
+    /* Never past 60% of the surface it shares — a rail that swallows its own
+       chart is a rail with nothing to sit beside. In a docked pane that is a
+       tight ceiling; fullscreen is where it can really open up, which is
+       exactly where it was asked for. */
+    const host = root.parentElement?.getBoundingClientRect().width ?? startW * 3;
+    const max = Math.max(LADDER_WIDTH_PX, Math.round(host * 0.6));
+    let last = startW;
+    const move = (ev: PointerEvent) => {
+      last = Math.round(Math.min(max, Math.max(LADDER_WIDTH_PX, startW + (startX - ev.clientX))));
+      setDragW(last);
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      setDragW(null);
+      onWidth(last);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up, { once: true });
+  };
+
   const [encoding, setEncoding] = useState<LadderEncoding>('bars');
   const heat = encoding === 'heat';
   const vp = useMemo<VolumeProfile | null>(
@@ -531,7 +590,7 @@ const PaneLadder = ({
         if (el.style.display !== 'none') el.style.display = 'none';
       };
 
-      /* Two passes. Tagged rows — king, the walls, whatever the reader has
+      /* Two passes. Tagged rows — supreme, the walls, whatever the reader has
          flashed — are kept whatever the stride says, and then claim their
          space: a strided neighbour landing within a row's height of one is
          dropped so the named strike stays readable. */
@@ -569,7 +628,7 @@ const PaneLadder = ({
         }
       });
 
-      /* Anchors are placed first and unconditionally — king, the walls and
+      /* Anchors are placed first and unconditionally — supreme, the walls and
          whatever the reader has flashed are the rows this column exists to
          show, so they claim their space before anything competes for it. */
       const taken: number[] = [...anchors];
@@ -788,7 +847,7 @@ const PaneLadder = ({
 
     Letting the tag and the strike take their natural widths made the lane
     between them a different size on every row, so a bar's PIXEL length no
-    longer tracked its value. Measured on the built page: the KING row — the
+    longer tracked its value. Measured on the built page: the SUPREME row — the
     heaviest strike in the book, and the one wearing two tags — drew a bar at
     55% of its row while a lighter neighbour with no tag drew 56%. Scanning
     the column for the longest bar found the wrong strike. That is the one
@@ -823,10 +882,40 @@ const PaneLadder = ({
 
   return (
     <div
-      style={{ width: LADDER_WIDTH_PX }}
+      ref={rootRef}
+      style={{ width: shownW }}
       className={`shrink-0 relative min-h-0 border-l border-borderSubtle/70 ${className}`}
       aria-label={`${ticker} exposure by strike`}
     >
+      {onWidth && (
+        <span
+          onPointerDown={onGripDown}
+          onDoubleClick={() => onWidth(LADDER_WIDTH_PX)}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Drag to resize the strike rail — double-click to reset"
+          title="Drag to resize · double-click to reset"
+          /*
+            THE GRIP SITS UNDER THE DESK'S FLOATING CHROME.
+
+            It was z-30, which is the layer the desk's own floating strips
+            live on, and it runs the full height of its pane. Three panes
+            put three full-height grips down the desk; the strip that
+            carries the layout picker floats at the bottom centre, and at
+            1600px one of those grips lands exactly across it. Equal z with
+            a shared stacking context means DOM order decides, the grip won,
+            and the layout buttons became unclickable — invisibly, since the
+            grip is transparent until hovered.
+
+            z-20 keeps it above every row in the rail, which is all it ever
+            needed to be above, and below the chrome a reader has to be able
+            to reach. It also drops the 4px overhang (-ml-1) it used to have
+            for the same reason: a resize handle must not reach outside the
+            pane it resizes.
+          */
+          className="absolute left-0 inset-y-0 w-2 z-20 cursor-col-resize hover:bg-white/[0.10] transition-colors"
+        />
+      )}
       {/*
         THE HEADER FLOATS, because y=0 is now the top of the plot and anything
         in flow above it would push the whole column off the price it is

@@ -52,11 +52,11 @@ export interface HeatPillProps {
    * one cell that no longer says what it holds.
    */
   selected?: boolean;
-  /** Override the ring's colour — the king strike wears magenta, not the
+  /** Override the ring's colour — the supreme strike wears magenta, not the
       selection lime, because it is a property of the BOOK rather than of what
       the reader clicked. */
   ringColor?: string;
-  /** A mark at the leading edge — the king strike, a held position. Sits in its
+  /** A mark at the leading edge — the supreme strike, a held position. Sits in its
       own lane so it never collides with the number. */
   marker?: ReactNode;
   /** Height of the capsule. The row owns its rhythm; this only fills it. */
@@ -74,7 +74,7 @@ export interface HeatPillProps {
 const SELECTION_INK = '#D2FF00';
 /* Two rings, not one: the accent alone vanishes against the ramp's bright
    platinum pole, so a dark outer ring gives it an edge to sit on at both ends
-   of the scale. Same trick the old king cell used. */
+   of the scale. Same trick the old supreme cell used. */
 const ring = (ink: string) => `inset 0 0 0 1.5px ${ink}, inset 0 0 0 3px rgba(10,10,10,0.8)`;
 
 const HeatPill = ({
