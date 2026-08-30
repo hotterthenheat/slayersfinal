@@ -1,5 +1,6 @@
 import type { ISeriesPrimitive, SeriesAttachedParameter, Time, IChartApi, ISeriesApi } from 'lightweight-charts';
 import type { GexSnapshot } from '../../types/market';
+import { heatPoleRgb } from './heatmap';
 
 /*
   Exposure nodes — the ORIGINAL trail form, back by request (Noah,
@@ -27,8 +28,16 @@ import type { GexSnapshot } from '../../types/market';
    field in the tape's ink can't be told from the tape. The legend above the
    chart teaches the pair. Strength lives in height and alpha, never in
    desaturation. */
-const PUT_RGB: readonly [number, number, number] = [245, 197, 66]; // honey gold
-const CALL_RGB: readonly [number, number, number] = [226, 234, 244]; // platinum steel
+/* DERIVED, not copied — these carry exactly the heat ramp's two meanings
+   (amplify / absorb) and used to be literals of the old steel-gold poles, so
+   a ramp change left the dealer nodes painting the previous palette while
+   the ladders and matrices moved. */
+const triple = (rgb: string): readonly [number, number, number] => {
+  const [r, g, b] = rgb.split(',').map(Number);
+  return [r, g, b] as const;
+};
+const PUT_RGB = triple(heatPoleRgb.pos);
+const CALL_RGB = triple(heatPoleRgb.neg);
 const KING_RGB: readonly [number, number, number] = [234, 0, 255];
 /* THE WALLS LIVE HERE (Noah, 2026-08-22: "I hate how they look on the side
    line"): each moment's call wall beads ink green, its put wall red, and the

@@ -47,6 +47,7 @@ import {
   SETUP_KEYS, applySetup, captureSetup, evict, readSetups, symKey, type SetupMap,
 } from './setups';
 import { flipRing, stepSymbol, stepTf } from './paneKeys';
+import { CALL_SIDE, PUT_SIDE } from '../../components/gex/palette';
 
 /*
 ==================================================
@@ -1337,7 +1338,15 @@ const Pane = ({
                         <span className="text-textSecondary">
                           {row.strike % 1 === 0 ? row.strike.toFixed(0) : row.strike.toFixed(2)}
                         </span>
-                        <span className={`ml-1.5 font-semibold ${row.value >= 0 ? 'text-[#F5C542]' : 'text-[#AAB6C6]'}`}>
+                        {/* The two sides come from the ramp, as a STYLE.
+                            These were literal hexes of the old steel-gold
+                            poles, so this strip kept printing gold-on-grey
+                            after the ramp went ice — and a Tailwind class
+                            cannot carry a runtime colour anyway. */}
+                        <span
+                          className="ml-1.5 font-semibold"
+                          style={{ color: row.value >= 0 ? PUT_SIDE : CALL_SIDE }}
+                        >
                           {fmtUsd(row.value)}
                         </span>
                       </span>

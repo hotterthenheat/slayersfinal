@@ -1,3 +1,4 @@
+import { heatInk } from './heatmap';
 /*
   Canonical GEX chart colors — single source for JS-API consumers
   (lightweight-charts price lines, canvas primitives). The same values live in
@@ -72,8 +73,13 @@ export const ALERT = '#FF9500';
   nearest and ships an industry-standard heatmap on a desk that spent three
   palette rounds moving off it.
 */
-export const CALL_SIDE = '#AAB6C6'; // platinum steel — the call side
-export const PUT_SIDE = '#F5C542'; // honey gold — the put side
+/* DERIVED FROM THE ACTIVE HEAT RAMP. These were literals of steel-gold's
+   two poles, which made this file a SECOND generator of the pair it exists
+   to be the single source of — the exact failure its own header warns
+   about. `heatInk` is the text-legible step of each pole, which is what
+   these two are for. */
+export const CALL_SIDE = heatInk.neg; // the absorb side, as text
+export const PUT_SIDE = heatInk.pos; // the amplify side, as text
 
 export const SHORT_GAMMA = '#FF3B30'; // red — amplifying regime
 export const LONG_GAMMA = BULL; // green — absorbing regime
