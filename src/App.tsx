@@ -32,6 +32,7 @@ import TraceLayout from './pages/trace/TraceLayout';
 import LiveTape from './pages/trace/LiveTape';
 import FlowTracker from './pages/trace/FlowTracker';
 import FlowScanner from './pages/trace/FlowScanner';
+import IntervalFlowPage from './pages/trace/IntervalFlow';
 import DarkPool from './pages/trace/DarkPool';
 import VolLab from './pages/pinpoint/VolLab';
 import Stocks from './pages/Stocks';
@@ -125,6 +126,7 @@ const App = () => {
               <Route path="dark-feed" element={<Navigate to="/trace/live-tape" replace />} />
               <Route path="scanner" element={<FlowScanner />} />
               <Route path="tracker" element={<FlowTracker />} />
+              <Route path="interval" element={<IntervalFlowPage />} />
             </Route>
             <Route path="/liquidity" element={<Navigate to="/trace" replace />} />
             {/* Legacy section paths from before the rebrand */}
