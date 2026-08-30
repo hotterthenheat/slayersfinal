@@ -298,54 +298,21 @@ export function buildDeskChain(ticker: string, dte: number, depth = 10): DeskCha
 
 // ---- the scanner ------------------------------------------------------------
 
-export type ScanPreset = 'gainers' | 'losers' | 'voliv';
+/*
+  THE SCANNER HAS NO ENGINE OF ITS OWN ANY MORE.
 
-export const SCAN_PRESETS: { key: ScanPreset; label: string; hint: string }[] = [
-  { key: 'gainers', label: 'Daily gainers', hint: 'Largest session gains first' },
-  { key: 'losers', label: 'Daily losers', hint: 'Largest session losses first' },
-  { key: 'voliv', label: 'Options volume · IV', hint: 'Busiest option tapes, priciest vol first' },
-];
+  It used to carry `SCAN_PRESETS` and `buildScan` — three boards (gainers,
+  losers, options volume x IV) built here — while `data/screeners.ts` carried
+  nine boards answering the SAME question for a page of its own. Two engines,
+  one question, and they could disagree about which names were up today: this
+  one read `spotChangePct` for seeded names and a day-stable hash for the
+  rest, that one read `sessionChangePct` for everything.
 
-export interface ScanRow {
-  ticker: string;
-  last: number;
-  changePct: number;
-  /** Contracts traded today across the name's chain */
-  optVolume: number;
-  ivPct: number;
-}
+  The Screeners page is gone and its engine is the survivor, so the desk's
+  scanner now runs `runScreener` and inherits all nine boards. One generator,
+  one answer, and six boards the desk never had.
+*/
 
-export function buildScan(preset: ScanPreset, active: string): ScanRow[] {
-  const quotes = Simulator.universeQuotes(active);
-  const rows: ScanRow[] = quotes.map(q => {
-    const seeded = !!Simulator.TICKERS[q.ticker];
-    /* Seeded names report their real simulated session; roster names not yet
-       clicked awake get a day-stable read, the same contract their scan
-       quote already keeps. */
-    const changePct = seeded
-      ? Number(spotChangePct(q.ticker).toFixed(2))
-      : Number(((h01(`${q.ticker}-${dayKey()}-chg`) - 0.5) * 6.4).toFixed(2));
-    const optVolume = Math.round(
-      (h01(`${q.ticker}-${dayKey()}-ovol`) * 0.7 + q.iv * 0.9) * 900_000 + 40_000
-    );
-    return {
-      ticker: q.ticker,
-      last: Number(q.price.toFixed(2)),
-      changePct,
-      optVolume,
-      ivPct: Number((q.iv * 100).toFixed(1)),
-    };
-  });
-
-  switch (preset) {
-    case 'gainers':
-      return rows.filter(r => r.changePct > 0).sort((a, b) => b.changePct - a.changePct).slice(0, 14);
-    case 'losers':
-      return rows.filter(r => r.changePct < 0).sort((a, b) => a.changePct - b.changePct).slice(0, 14);
-    case 'voliv':
-      return [...rows].sort((a, b) => b.optVolume * b.ivPct - a.optVolume * a.ivPct).slice(0, 14);
-  }
-}
 
 // ---- the market's mood ------------------------------------------------------
 

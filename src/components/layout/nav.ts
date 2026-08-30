@@ -1,5 +1,4 @@
 import {
-  ListFilter,
   Activity,
   Crosshair,
   Compass,
@@ -50,15 +49,7 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Weigher',
     code: '02',
     icon: Scale,
-    description: 'The weigh station — chart, chain, scanner and what a contract has to clear',
-    group: 'Discover',
-  },
-  {
-    path: '/screeners',
-    label: 'Screeners',
-    code: '03',
-    icon: ListFilter,
-    description: 'What moved, what reports, what is expensive to own',
+    description: 'The weigh station — chart, chain, nine screening boards and what a contract has to clear',
     group: 'Discover',
   },
   {
