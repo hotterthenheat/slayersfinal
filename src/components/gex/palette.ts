@@ -81,5 +81,18 @@ export const ALERT = '#FF9500';
 export const CALL_SIDE = heatInk.neg; // the absorb side, as text
 export const PUT_SIDE = heatInk.pos; // the amplify side, as text
 
+/*
+  THE NEUTRAL STEEL THE FURNITURE IS DRAWN IN — measure tools, session
+  rules, event glyphs, campaign strike markers.
+
+  It is not the call side. It shares a value with the OLD steel pole by
+  history rather than by meaning, which is exactly why it needs a name: when
+  the ramp went ice-gold, the surfaces holding this value had to be sorted
+  into "moved with the ramp" and "stayed", and the only way to tell them
+  apart was to read each one. Chrome imports this and stays put; anything
+  carrying the ramp's meaning derives from `heatPoleRgb`.
+*/
+export const CHROME_STEEL_RGB = '226,234,244';
+
 export const SHORT_GAMMA = '#FF3B30'; // red — amplifying regime
 export const LONG_GAMMA = BULL; // green — absorbing regime

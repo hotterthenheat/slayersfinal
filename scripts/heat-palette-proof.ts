@@ -75,6 +75,14 @@ const check = (name: string, ok: boolean, extra = '') => {
          share the old platinum value; they are CHROME, not the call side,
          and a ramp change should not move them. Anything else matching a
          pole is a second copy of a meaning and fails here. */
+      /* palette.ts names the furniture steel (CHROME_STEEL_RGB); that
+         definition is the one allowed site for the literal. */
+      if (/palette\.ts$/.test(f) && /226/.test(m[0])) continue;
+      /* LEGACY CHROME, pending the same treatment: these predate the named
+         constant and still spell the value out. They are furniture — the
+         measure tool, session rules, event glyphs, the charm clock's
+         progress bar — so a ramp change must NOT move them, but they should
+         import the name. New chrome has no excuse and fails here. */
       if (/drawingsPrimitive|StrikeChart|PaneLadder|eventsPrimitive|expectedMovePrimitive|CharmClockStrip|sessionLevelsPrimitive/.test(f) && /226|E2EAF4/i.test(m[0])) continue;
       offenders.push(`${f.replace('src/', '')} :: ${m[0]}`);
     }

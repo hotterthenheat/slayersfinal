@@ -35,7 +35,7 @@ import FlowScanner from './pages/trace/FlowScanner';
 import DarkPool from './pages/trace/DarkPool';
 import VolLab from './pages/pinpoint/VolLab';
 import Stocks from './pages/Stocks';
-import News from './pages/News';
+import NewsRoom from './pages/newsroom/NewsRoom';
 import EarningsHub from './pages/EarningsHub';
 import EarningsDossier from './pages/EarningsDossier';
 import ProveIt from './pages/proveit/ProveIt';
@@ -89,7 +89,10 @@ const App = () => {
             <Route path="/stocks" element={<Stocks />} />
             {/* §2 — the company behind the ticker */}
             <Route path="/stocks/:ticker" element={<TickerOverview />} />
-            <Route path="/news" element={<News />} />
+            {/* T-NEWS — the globe room replaces the wire list; /newsroom was
+                its spike URL and follows here so old links still land. */}
+            <Route path="/news" element={<NewsRoom />} />
+            <Route path="/newsroom" element={<Navigate to="/news" replace />} />
             <Route path="/earnings" element={<EarningsHub />} />
             <Route path="/earnings/:ticker" element={<EarningsDossier />} />
             <Route path="/prove-it" element={<ProveIt />} />
