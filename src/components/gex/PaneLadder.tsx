@@ -895,7 +895,25 @@ const PaneLadder = ({
           aria-orientation="vertical"
           aria-label="Drag to resize the strike rail — double-click to reset"
           title="Drag to resize · double-click to reset"
-          className="absolute left-0 inset-y-0 -ml-1 w-2 z-30 cursor-col-resize hover:bg-white/[0.10] transition-colors"
+          /*
+            THE GRIP SITS UNDER THE DESK'S FLOATING CHROME.
+
+            It was z-30, which is the layer the desk's own floating strips
+            live on, and it runs the full height of its pane. Three panes
+            put three full-height grips down the desk; the strip that
+            carries the layout picker floats at the bottom centre, and at
+            1600px one of those grips lands exactly across it. Equal z with
+            a shared stacking context means DOM order decides, the grip won,
+            and the layout buttons became unclickable — invisibly, since the
+            grip is transparent until hovered.
+
+            z-20 keeps it above every row in the rail, which is all it ever
+            needed to be above, and below the chrome a reader has to be able
+            to reach. It also drops the 4px overhang (-ml-1) it used to have
+            for the same reason: a resize handle must not reach outside the
+            pane it resizes.
+          */
+          className="absolute left-0 inset-y-0 w-2 z-20 cursor-col-resize hover:bg-white/[0.10] transition-colors"
         />
       )}
       {/*

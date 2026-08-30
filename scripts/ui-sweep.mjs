@@ -5576,6 +5576,187 @@ head('a strike row is a door that says so, and lands focused');
   await ctx.close();
 }
 
+head('the desk does not cover its own chrome');
+{
+  /*
+    A REGRESSION WITH NO PIXELS.
+
+    The strike rail's resize grip runs the full height of its pane at z-30,
+    and the desk floats its control strips over the panes on the SAME layer
+    in the same stacking context. Three panes put three full-height grips
+    down a 1600px desk; the strip carrying the layout picker floats at the
+    bottom centre, and one grip lands exactly across it. DOM order decided,
+    the grip won, and the layout buttons stopped taking clicks — invisibly,
+    because the grip is transparent until hovered. Nothing looked wrong in
+    a screenshot; the desk had simply stopped working.
+
+    So this asks the only question that catches that class of bug: is every
+    control the reader can SEE the thing that a click at its centre would
+    actually hit.
+  */
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 800);
+
+  const panes = await page.evaluate(() => JSON.parse(localStorage.getItem('slayer_terrain_v1') ?? '{}').layout);
+  panes >= 2
+    ? ok(`PREMISE: the desk opens multi-pane, so grips run down it — ${panes} panes`)
+    : bad(`the desk opened with ${panes} pane(s) — no grip crosses the chrome`);
+  const grips = await page.$$('[role="separator"][aria-orientation="vertical"]');
+  grips.length === panes
+    ? ok(`one resize grip per pane — ${grips.length}`)
+    : bad(`${grips.length} grips for ${panes} panes`);
+
+  /* Only chrome that is actually SHOWING. The per-pane header rides an
+     opacity-0 strip that appears when the pointer enters its pane, and a
+     hidden-by-design control failing a hit test is not a finding — counting
+     it would drown the one that matters. */
+  const blocked = await page.evaluate(() =>
+    [...document.querySelectorAll('.chrome-hover button')]
+      .filter(el => {
+        const r = el.getBoundingClientRect();
+        if (r.width === 0) return false;
+        if (!el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return false;
+        const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+        return !(top === el || el.contains(top));
+      })
+      .map(el => el.getAttribute('aria-label') || el.textContent?.trim())
+  );
+  blocked.length === 0
+    ? ok('every visible control on the desk is what a click at its centre hits')
+    : bad(`covered: ${blocked.join(', ')}`);
+
+  /* And the exact path that first exposed it. */
+  await page.click('button[title^="Named layouts"]');
+  await page.waitForTimeout(300);
+  await page.fill('input[aria-label="Layout name"]', 'chrome probe');
+  await page.click('div[role="dialog"] button:has-text("Save")');
+  await page.waitForTimeout(300);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+  let took = true;
+  try {
+    await page.click('button[aria-label="1 chart"]', { timeout: 6000 });
+  } catch {
+    took = false;
+  }
+  took ? ok('the layout picker still takes a click once the shelf closes') : bad('the layout picker was unreachable');
+  await page.waitForTimeout(400);
+  (await page.evaluate(() => JSON.parse(localStorage.getItem('slayer_terrain_v1')).layout)) === 1
+    ? ok('and the desk became one chart')
+    : bad('the click landed nowhere');
+
+  /* The grip must still do the job it exists for. */
+  const grip = await page.$('[role="separator"][aria-orientation="vertical"]');
+  if (grip) {
+    const railW = () => grip.evaluate(el => el.parentElement.getBoundingClientRect().width);
+    const before = await railW();
+    const gb = await grip.boundingBox();
+    await page.mouse.move(gb.x + gb.width / 2, gb.y + gb.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(gb.x - 80, gb.y + gb.height / 2, { steps: 8 });
+    await page.mouse.up();
+    await page.waitForTimeout(500);
+    const after = await railW();
+    after > before + 20
+      ? ok(`the grip still widens the rail — ${Math.round(before)}px to ${Math.round(after)}px`)
+      : bad(`the grip stopped resizing — ${Math.round(before)}px to ${Math.round(after)}px`);
+  } else {
+    bad('PREMISE: no grip left to drag');
+  }
+
+  errs.length === 0 ? ok('no page errors on the desk') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
+  await ctx.close();
+}
+
+head('any point on the planet answers, not just the ones with a story on them');
+{
+  /*
+    The globe used to speak only where a city ping sat. Everything else —
+    most of the sphere — was decoration. A click anywhere now reads the
+    place: nearest centre, its local clock, what came out of it and what is
+    aimed at it.
+
+    The two failure modes worth guarding are opposite: a globe that answers
+    nothing, and a globe that answers every drag. Both are checked.
+  */
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/news`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 3000);
+
+  const zone = page.locator('div.lg\\:left-4').first();
+  /* Exact name, not :has-text — that is a case-insensitive SUBSTRING match
+     and it found "backlog" in a headline the first time this was written. */
+  const back = zone.getByRole('button', { name: 'Back', exact: true });
+  const open = async () => (await back.count()) > 0;
+
+  const canvas = await page.$('canvas');
+  const box = canvas && (await canvas.boundingBox());
+  if (!box || box.width < 400) {
+    bad('PREMISE: the globe never drew');
+  } else {
+    ok(`the globe drew — ${Math.round(box.width)}x${Math.round(box.height)}`);
+    (await open()) ? bad('a drill was already open at rest') : ok('no place is open at rest');
+
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    await page.mouse.click(cx, cy);
+    await page.waitForTimeout(1400);
+    const opened = await open();
+    opened ? ok('clicking the planet opens that place') : bad('clicking the planet did nothing');
+
+    const first = await zone.innerText();
+    /\d{2}:\d{2} local/.test(first)
+      ? ok(`it carries the place's own clock — ${(first.match(/\d{2}:\d{2} local/) ?? [''])[0]}`)
+      : bad('the place reported no local time');
+    /(Out of here|Aimed at here|Nothing here today|Nothing is happening here|is quiet)/.test(first)
+      ? ok('and says what is going on there')
+      : bad('the place said nothing about its news');
+
+    if (opened) {
+      await back.first().click();
+      await page.waitForTimeout(700);
+      (await open()) ? bad('Back left the drill open') : ok('Back closes it');
+      (await zone.getByRole('button', { name: 'Headlines' }).count()) > 0
+        ? ok('and the field goes back to its pages')
+        : bad('the pages did not come back');
+    }
+
+    /* Spinning the globe is not clicking it. */
+    await page.mouse.move(cx, cy);
+    await page.mouse.down();
+    for (let i = 1; i <= 12; i++) {
+      await page.mouse.move(cx + i * 15, cy + i * 5);
+      await page.waitForTimeout(16);
+    }
+    await page.mouse.up();
+    await page.waitForTimeout(900);
+    (await open()) ? bad('a drag opened a panel — the globe cannot be spun') : ok('spinning the globe opens nothing');
+
+    /* A different point is a different answer. */
+    await page.mouse.click(cx - 150, cy + 80);
+    await page.waitForTimeout(1400);
+    if (await open()) {
+      const second = await zone.innerText();
+      ok('a second point opens its own');
+      (second.split('\n')[1] ?? '') !== (first.split('\n')[1] ?? '')
+        ? ok(`and it is somewhere else — ${(first.split('\n')[1] ?? '').slice(0, 28)} then ${(second.split('\n')[1] ?? '').slice(0, 28)}`)
+        : bad('the second click reported the first place');
+    } else {
+      bad('a second point on the planet answered nothing');
+    }
+  }
+
+  errs.length === 0 ? ok('no page errors in the room') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
+  await ctx.close();
+}
+
 console.log(`\n${fails} failing`);
 await browser.close();
 process.exit(fails ? 1 : 0);
