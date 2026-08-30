@@ -409,10 +409,43 @@ export function exposureNowFor(ticker: string): ExposureNow | null {
   it already holds `KeyLevels` and passes them in, so wall, flip and king
   agree with the lines by construction rather than by coincidence.
 */
+/*
+  THE FIVE NETS THE RAIL CAN SHOW.
+
+  One rail, one ruler, five questions — where dealer hedging bites (gamma),
+  which way their shares lean (delta), what a vol move re-prices (vega),
+  what a vol move does to their DELTA (vanna), and what the clock alone does
+  to it (charm).
+
+  NET ONLY, on purpose. The split into put and call legs is the Strike
+  Pressure Ladder's job and it has the width for two bars a row; this column
+  is one bar wide beside a chart, and a put/call pair drawn there is two
+  half-height bars that say less than one whole one. What a reader wants off
+  the edge of a chart is which way the strike leans and how hard.
+*/
+export type RailMetric = 'gex' | 'dex' | 'vex' | 'vanna' | 'charm';
+
+export const RAIL_METRICS: { key: RailMetric; label: string; hint: string }[] = [
+  { key: 'gex', label: 'GEX', hint: 'Net gamma — where hedging absorbs or amplifies a move' },
+  { key: 'dex', label: 'DEX', hint: 'Net delta — the directional share risk dealers carry' },
+  { key: 'vex', label: 'VEX', hint: 'Net vega — how the book swings when implied vol moves' },
+  { key: 'vanna', label: 'VANNA', hint: 'Net vanna — how dealer DELTA re-prices when vol moves' },
+  { key: 'charm', label: 'CHARM', hint: 'Net charm — what the clock alone does to dealer delta' },
+];
+
+const RAIL_FIELD: Record<RailMetric, (n: StrikeNode) => number> = {
+  gex: n => n.netGex,
+  dex: n => n.netDex,
+  vex: n => n.netVex,
+  vanna: n => n.netVanna,
+  charm: n => n.netCharm,
+};
+
 export function buildLadderFor(
   ticker: string,
   depth = 30,
-  scaleDepth = 10
+  scaleDepth = 10,
+  metric: RailMetric = 'gex'
 ): { rows: GexLevel[]; core: GexLevel[]; maxAbs: number; spot: number; step: number } {
   /* THE LIVE BOOK, like the levels above — P-24B. This read the last GEX
      snapshot while the TAGS drawn over these very bars came from
@@ -435,8 +468,9 @@ export function buildLadderFor(
   const { chain, spot } = Simulator.chainFor(sym);
   if (chain.length === 0) return { rows: [], core: [], maxAbs: 1, spot, step: 1 };
 
+  const read = RAIL_FIELD[metric] ?? RAIL_FIELD.gex;
   const sorted = chain
-    .map(n => ({ strike: n.strike, value: n.netGex }))
+    .map(n => ({ strike: n.strike, value: read(n) }))
     .sort((a, b) => a.strike - b.strike);
   const spotIdx = Math.max(0, sorted.findIndex(n => n.strike >= spot));
 

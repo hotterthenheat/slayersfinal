@@ -36,17 +36,15 @@ import { buildLevelsFor, buildPrints, fmtUsd, spotChangePct } from '../../data/g
 import { estimatePremium } from '../../data/compass';
 import {
   DESK_DTES,
-  SCAN_PRESETS,
   buildDeskChain,
-  buildScan,
   contractIvFor,
   deskExpiries,
   marketMood,
   marketSession,
   type DeskChain,
   type DeskContract,
-  type ScanPreset,
 } from '../../data/weigherDesk';
+import { SCREENERS, runScreener, type ScreenerKey } from '../../data/screeners';
 import StrikeChart, {
   DEFAULT_INDICATORS,
   DEFAULT_OVERLAYS,
@@ -63,6 +61,7 @@ import { useFadeClose } from '../../components/ui/useFadeClose';
 import Term from '../../components/ui/Term';
 import { TIMEFRAMES, type Timeframe } from '../../data/timeframe';
 import type { OptionRight } from '../../types/compass';
+import { useAnchoredMenu } from '../../components/ui/useAnchoredMenu';
 
 const Grid = WidthProvider(RGL);
 
@@ -102,7 +101,7 @@ interface DeskState {
   dte: number;
   lens: 'stock' | 'contract';
   right: OptionRight;
-  preset: ScanPreset;
+  preset: ScreenerKey;
   depth: number;
   /** Which catalog columns the chain shows, in catalog order */
   cols: string[];
@@ -134,7 +133,16 @@ function loadDesk(): DeskState {
       dte: typeof c.dte === 'number' && (DESK_DTES as readonly number[]).includes(c.dte) ? c.dte : def.dte,
       lens: c.lens === 'contract' ? 'contract' : 'stock',
       right: c.right === 'P' ? 'P' : 'C',
-      preset: c.preset === 'losers' || c.preset === 'voliv' ? c.preset : 'gainers',
+      /* A stored preset is now a ScreenerKey. 'voliv' was the old desk-only
+         board (options volume x IV); its nearest survivor is the volume
+         board, so a reader who left the desk on it lands somewhere that
+         still means what they picked rather than being reset to gainers. */
+      preset:
+        (c.preset as string) === 'voliv'
+          ? 'optionsVolume'
+          : SCREENERS.some(x => x.key === c.preset)
+            ? (c.preset as ScreenerKey)
+            : 'gainers',
       depth: typeof c.depth === 'number' && (DESK_DEPTHS as readonly number[]).includes(c.depth) ? c.depth : def.depth,
       cols: cols.length ? cols : [...def.cols],
       layout,
@@ -1022,7 +1030,23 @@ const WeigherDesk = ({ incomingTicker }: { incomingTicker?: string | null }) => 
   const mood = useMemo(() => marketMood(), [tick]);
   const session = useMemo(() => marketSession(), [tick]);
   const chain = useMemo(() => buildDeskChain(ticker, dte, depth), [ticker, dte, depth, scanTick]); // eslint-disable-line react-hooks/exhaustive-deps
-  const scan = useMemo(() => buildScan(preset, ticker), [preset, ticker, scanTick]); // eslint-disable-line react-hooks/exhaustive-deps
+  const board = SCREENERS.find(b => b.key === preset) ?? SCREENERS[0];
+  const [boardOpen, setBoardOpen] = useState(false);
+  const { anchorRef: boardBtnRef, placed: boardPlaced, menuRef: boardMenuRef } =
+    useAnchoredMenu<HTMLButtonElement>(boardOpen, 'bottom');
+  const scan = useMemo(() => runScreener(preset, 60), [preset, scanTick]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* Gainers and losers ARE sorted by change, and the change column already
+     shows it — so those two boards drop the metric column instead of
+     printing the same number twice. */
+  const showMetric = board.metricLabel !== 'Change';
+  /* AN INLINE STYLE, NOT A TAILWIND CLASS. `grid-cols-[...]` built from a
+     template string never reaches the stylesheet: Tailwind generates only
+     the class names it can see LITERALLY in the source, so a runtime one
+     resolves to nothing and the grid collapses to a single column. Caught
+     on the rendered desk — the header stacked LAST over CHANGE down the
+     right edge — and it typechecks perfectly either way, which is exactly
+     why this note is here. */
+  const scanCols = showMetric ? 'minmax(0,1.2fr) 1fr 1fr 1fr' : 'minmax(0,1.4fr) 1fr 1fr';
   const levels = useMemo(() => buildLevelsFor(ticker), [ticker, tick]);
   const changePct = useMemo(() => spotChangePct(ticker), [ticker, tick]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1435,12 +1459,60 @@ const WeigherDesk = ({ incomingTicker }: { incomingTicker?: string | null }) => 
           <DeskCard
             title="Scanner"
             actions={
-              <span className="flex items-center gap-0.5">
-                {SCAN_PRESETS.map(p => (
-                  <Chip key={p.key} active={preset === p.key} onClick={() => patch({ preset: p.key })} title={p.hint}>
-                    {p.label}
-                  </Chip>
-                ))}
+              /*
+                NINE BOARDS BEHIND ONE TRIGGER, not nine chips.
+
+                The first cut laid all nine out as chips and let the row
+                scroll when it did not fit. The sweep caught that at 1024:
+                "TRUNC x by 59px (box 375, content 434)" — the desk's rule
+                is that content fits the box it is drawn in, and a strip
+                that scrolls sideways hides boards behind a gesture nobody
+                is told about. Three chips fit that header; nine never will.
+
+                So the caption names the current board and opens the rest,
+                which is the same shape the Terrain rail's metric picker
+                takes. Costs one trigger's width at every viewport.
+              */
+              <span className="relative">
+                <button
+                  ref={boardBtnRef}
+                  onClick={() => setBoardOpen(o => !o)}
+                  aria-haspopup="menu"
+                  aria-expanded={boardOpen}
+                  title={board.blurb}
+                  className={`flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-widest transition-colors ${
+                    boardOpen ? 'bg-white/[0.12] text-textPrimary' : 'text-textSecondary hover:text-textPrimary hover:bg-white/[0.06]'
+                  }`}
+                >
+                  {board.short}
+                  <ChevronDown className="w-3 h-3 opacity-60" />
+                </button>
+                {boardOpen && boardPlaced && (
+                  <div
+                    role="menu"
+                    ref={boardMenuRef}
+                    className="fixed z-50 rounded-md border border-borderSubtle bg-panel shadow-xl py-1"
+                    style={{ left: boardPlaced.box.left, top: boardPlaced.box.top, minWidth: 232 }}
+                  >
+                    {SCREENERS.map(b => (
+                      <button
+                        key={b.key}
+                        role="menuitemradio"
+                        aria-checked={b.key === preset}
+                        onClick={() => {
+                          patch({ preset: b.key });
+                          setBoardOpen(false);
+                        }}
+                        className={`block w-full text-left px-2.5 py-1 transition-colors ${
+                          b.key === preset ? 'bg-white/[0.06] text-textPrimary' : 'text-textSecondary hover:bg-white/[0.04]'
+                        }`}
+                      >
+                        <span className="font-mono text-[10px] font-semibold">{b.label}</span>
+                        <span className="block text-[9px] leading-tight text-textMuted">{b.blurb}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </span>
             }
           >
@@ -1453,10 +1525,10 @@ const WeigherDesk = ({ incomingTicker }: { incomingTicker?: string | null }) => 
             <div className="h-full overflow-y-auto">
               <div className="min-h-full flex flex-col">
                 <div
-                  className="sticky top-0 z-10 grid grid-cols-[minmax(0,1.2fr)_1fr_1fr_1fr_0.7fr] border-b border-white/[0.06]"
-                  style={{ background: 'rgba(13,14,17,0.92)' }}
+                  className="sticky top-0 z-10 grid border-b border-white/[0.06]"
+                  style={{ background: 'rgba(13,14,17,0.92)', gridTemplateColumns: scanCols }}
                 >
-                  {['Ticker', 'Last', 'Change', 'Opt vol', 'IV'].map((h, i) => (
+                  {(showMetric ? ['Ticker', 'Last', 'Change', board.metricLabel] : ['Ticker', 'Last', 'Change']).map((h, i) => (
                     <span
                       key={h}
                       className={`px-2.5 py-1.5 font-mono text-[9px] font-semibold uppercase tracking-widest text-textSecondary ${
@@ -1467,30 +1539,35 @@ const WeigherDesk = ({ incomingTicker }: { incomingTicker?: string | null }) => 
                     </span>
                   ))}
                 </div>
+                {/* An empty board is a real answer — "nothing made a new
+                    52-week low today" is information — so it says which
+                    board came back empty rather than a generic blank. */}
                 {scan.length === 0 && (
-                  <div className="flex-1 flex items-center justify-center font-mono text-[10px] uppercase tracking-widest text-textMuted">
-                    {preset === 'losers' ? 'No names down today' : preset === 'gainers' ? 'No names up today' : 'Nothing on the tape'}
+                  <div className="flex-1 flex items-center justify-center px-3 text-center font-mono text-[10px] uppercase tracking-widest text-textMuted">
+                    Nothing on {board.short.toLowerCase()} today
                   </div>
                 )}
                 {scan.map(r => (
                   <div
                     key={r.ticker}
                     onClick={() => pickTicker(r.ticker)}
-                    className={`flex-1 min-h-[30px] grid grid-cols-[minmax(0,1.2fr)_1fr_1fr_1fr_0.7fr] items-center cursor-pointer transition-colors ${
+                    className={`flex-1 min-h-[30px] grid items-center cursor-pointer transition-colors ${
                       r.ticker === ticker ? 'bg-select/[0.06]' : 'hover:bg-white/[0.03]'
                     }`}
-                    title={`Put ${r.ticker} on the desk`}
+                    style={{ gridTemplateColumns: scanCols }}
+                    title={`${r.name} — ${r.note}. Put ${r.ticker} on the desk`}
                   >
                     <span className={`px-2.5 font-mono text-[11px] font-semibold ${r.ticker === ticker ? 'text-select' : 'text-textPrimary'}`}>
                       {r.ticker}
                     </span>
-                    <span className="px-2.5 text-right font-mono text-[11px] tnum text-textPrimary">${r.last.toFixed(2)}</span>
+                    <span className="px-2.5 text-right font-mono text-[11px] tnum text-textPrimary">${r.price.toFixed(2)}</span>
                     <span className={`px-2.5 text-right font-mono text-[11px] font-semibold tnum ${r.changePct >= 0 ? 'text-bull' : 'text-bear'}`}>
                       {r.changePct >= 0 ? '+' : ''}
                       {r.changePct.toFixed(2)}%
                     </span>
-                    <span className="px-2.5 text-right font-mono text-[10px] tnum text-textSecondary">{fmtUsd(r.optVolume).replace('$', '')}</span>
-                    <span className="px-2.5 text-right font-mono text-[10px] tnum text-textSecondary">{r.ivPct.toFixed(0)}%</span>
+                    {showMetric && (
+                      <span className="px-2.5 text-right font-mono text-[10px] tnum text-textSecondary truncate">{r.metric}</span>
+                    )}
                   </div>
                 ))}
               </div>

@@ -1,3 +1,4 @@
+import { heatInk } from './heatmap';
 /*
   Canonical GEX chart colors — single source for JS-API consumers
   (lightweight-charts price lines, canvas primitives). The same values live in
@@ -72,8 +73,26 @@ export const ALERT = '#FF9500';
   nearest and ships an industry-standard heatmap on a desk that spent three
   palette rounds moving off it.
 */
-export const CALL_SIDE = '#AAB6C6'; // platinum steel — the call side
-export const PUT_SIDE = '#F5C542'; // honey gold — the put side
+/* DERIVED FROM THE ACTIVE HEAT RAMP. These were literals of steel-gold's
+   two poles, which made this file a SECOND generator of the pair it exists
+   to be the single source of — the exact failure its own header warns
+   about. `heatInk` is the text-legible step of each pole, which is what
+   these two are for. */
+export const CALL_SIDE = heatInk.neg; // the absorb side, as text
+export const PUT_SIDE = heatInk.pos; // the amplify side, as text
+
+/*
+  THE NEUTRAL STEEL THE FURNITURE IS DRAWN IN — measure tools, session
+  rules, event glyphs, campaign strike markers.
+
+  It is not the call side. It shares a value with the OLD steel pole by
+  history rather than by meaning, which is exactly why it needs a name: when
+  the ramp went ice-gold, the surfaces holding this value had to be sorted
+  into "moved with the ramp" and "stayed", and the only way to tell them
+  apart was to read each one. Chrome imports this and stays put; anything
+  carrying the ramp's meaning derives from `heatPoleRgb`.
+*/
+export const CHROME_STEEL_RGB = '226,234,244';
 
 export const SHORT_GAMMA = '#FF3B30'; // red — amplifying regime
 export const LONG_GAMMA = BULL; // green — absorbing regime

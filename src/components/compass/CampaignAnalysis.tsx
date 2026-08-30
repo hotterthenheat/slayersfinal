@@ -46,6 +46,7 @@ import SetupDrivers from './SetupDrivers';
 import { buildSetupDrivers, estimatePremium } from '../../data/compass';
 import { spotForPremium } from './trackModel';
 import { useTracker } from '../../context/TrackerContext';
+import { CampaignLevelsPrimitive, type CampaignLevel } from './campaignLevelsPrimitive';
 import {
   VERDICT_LABEL,
   type DriverRow,
@@ -169,6 +170,10 @@ const CampaignChart = ({ setup, revision, entry, hits, brk, timeframe, overlays 
   const candleRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const volumeRef = useRef<ISeriesApi<'Histogram'> | null>(null);
   const linesRef = useRef<IPriceLine[]>([]);
+  /* T-CAMPAIGN — the targets/floor/strike layer. A primitive rather than
+     price lines, so the levels are NAMED ON THE FIELD instead of down the
+     price axis. */
+  const levelsPrimRef = useRef<CampaignLevelsPrimitive | null>(null);
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   /** Structural level chips (CW/PW/flip/king) — separate from the campaign's
       own TP/floor lines so the two layers never fight over one ref. */
@@ -234,6 +239,9 @@ const CampaignChart = ({ setup, revision, entry, hits, brk, timeframe, overlays 
 
     chartRef.current = chart;
     candleRef.current = candles;
+    const levelsPrim = new CampaignLevelsPrimitive();
+    candles.attachPrimitive(levelsPrim);
+    levelsPrimRef.current = levelsPrim;
     volumeRef.current = volume;
     markersRef.current = createSeriesMarkers(candles);
 
@@ -253,6 +261,7 @@ const CampaignChart = ({ setup, revision, entry, hits, brk, timeframe, overlays 
       container.removeEventListener('pointerdown', freezeScale);
       chart.remove();
       chartRef.current = null;
+      levelsPrimRef.current = null;
       candleRef.current = null;
       volumeRef.current = null;
       markersRef.current = null;
@@ -420,55 +429,33 @@ const CampaignChart = ({ setup, revision, entry, hits, brk, timeframe, overlays 
   useEffect(() => {
     const candleSeries = candleRef.current;
     if (!candleSeries) return;
+    /* THE LEVELS ARE NODES NOW, not price lines — see
+       campaignLevelsPrimitive for why (a price line can only be named on
+       the price AXIS, and nothing here is named on the axis). The old
+       `linesRef` sweep stays for one more line so any lines a previous
+       render left behind are still cleaned up. */
     for (const line of linesRef.current) candleSeries.removePriceLine(line);
     const lines: IPriceLine[] = [];
     const banked = new Set(hits.map(h => h.level));
 
-    // A retired campaign draws NO future business: un-banked TP lines come
+    const levels: CampaignLevel[] = [];
+    // A retired campaign draws NO future business: un-banked targets come
     // down with the thesis; what was banked already lives on its candles.
     if (!brk) {
       setup.priceTargets.forEach((price, i) => {
         if (banked.has(i + 1)) return;
-        lines.push(
-          candleSeries.createPriceLine({
-            price,
-            color: 'rgba(48,209,88,0.55)',
-            title: `TP${i + 1}`,
-            lineStyle: LineStyle.Dashed,
-            lineWidth: 1,
-            axisLabelVisible: true,
-            axisLabelColor: 'rgba(48,209,88,0.6)',
-            axisLabelTextColor: '#0a0a0a',
-          })
-        );
+        levels.push({ price, kind: 'target', label: `TP${i + 1}` });
       });
     }
-
     // Broken: the floor freezes where it broke (the live value drifts with
     // spot, but the post-mortem must show the line that ended the campaign).
-    lines.push(
-      candleSeries.createPriceLine({
-        price: brk ? brk.floor : setup.invalidationPrice,
-        color: 'rgba(255,59,48,0.9)',
-        title: brk ? 'FLOOR ✗' : 'FLOOR',
-        lineStyle: LineStyle.Solid,
-        lineWidth: 2,
-        axisLabelVisible: true,
-        axisLabelColor: '#FF3B30',
-        axisLabelTextColor: '#0a0a0a',
-      })
-    );
-
-    lines.push(
-      candleSeries.createPriceLine({
-        price: setup.strike,
-        color: 'rgba(237,237,237,0.35)',
-        title: 'STRIKE',
-        lineStyle: LineStyle.Dotted,
-        lineWidth: 1,
-        axisLabelVisible: false,
-      })
-    );
+    levels.push({
+      price: brk ? brk.floor : setup.invalidationPrice,
+      kind: 'floor',
+      label: brk ? 'FLOOR \u2717' : 'FLOOR',
+    });
+    levels.push({ price: setup.strike, kind: 'strike', label: 'STRIKE' });
+    levelsPrimRef.current?.setData({ levels });
 
     linesRef.current = lines;
 

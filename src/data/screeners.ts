@@ -52,6 +52,10 @@ export interface ScreenerRow {
 export interface Screener {
   key: ScreenerKey;
   label: string;
+  /** The label for TIGHT chrome — the Weigher's scanner header puts nine of
+      these in a card action row, where "Highest implied volatility" cannot
+      fit and "IV" says the same thing to the same reader. */
+  short: string;
   blurb: string;
   /** The heading over the metric column. */
   metricLabel: string;
@@ -60,15 +64,15 @@ export interface Screener {
 }
 
 export const SCREENERS: Screener[] = [
-  { key: 'gainers', label: 'Daily price jumps', blurb: 'The biggest gains in the session so far', metricLabel: 'Change', tone: 'up' },
-  { key: 'losers', label: 'Daily price dips', blurb: 'The biggest falls in the session so far', metricLabel: 'Change', tone: 'down' },
-  { key: 'earnings', label: 'Upcoming earnings', blurb: 'Names reporting inside the next two weeks', metricLabel: 'Reports', tone: 'neutral' },
-  { key: 'analyst', label: 'Analyst picks', blurb: 'Where the modelled consensus sits at buy or better', metricLabel: 'Rating', tone: 'up' },
-  { key: 'iv', label: 'Highest implied volatility', blurb: 'What the options market charges for a move', metricLabel: 'IV', tone: 'neutral' },
-  { key: 'optionsVolume', label: 'Highest options volume', blurb: 'Where the contracts are actually trading', metricLabel: 'Contracts', tone: 'neutral' },
-  { key: 'dividend', label: 'Highest dividend yield', blurb: 'Trailing yield above 2% — income, not momentum', metricLabel: 'Yield', tone: 'neutral' },
-  { key: 'high52', label: 'New 52-week highs', blurb: 'Trading through the top of their own year', metricLabel: 'From high', tone: 'up' },
-  { key: 'low52', label: 'New 52-week lows', blurb: 'Trading through the bottom of their own year', metricLabel: 'From low', tone: 'down' },
+  { key: 'gainers', label: 'Daily price jumps', short: 'Gainers', blurb: 'The biggest gains in the session so far', metricLabel: 'Change', tone: 'up' },
+  { key: 'losers', label: 'Daily price dips', short: 'Losers', blurb: 'The biggest falls in the session so far', metricLabel: 'Change', tone: 'down' },
+  { key: 'earnings', label: 'Upcoming earnings', short: 'Earnings', blurb: 'Names reporting inside the next two weeks', metricLabel: 'Reports', tone: 'neutral' },
+  { key: 'analyst', label: 'Analyst picks', short: 'Analyst', blurb: 'Where the modelled consensus sits at buy or better', metricLabel: 'Rating', tone: 'up' },
+  { key: 'iv', label: 'Highest implied volatility', short: 'IV', blurb: 'What the options market charges for a move', metricLabel: 'IV', tone: 'neutral' },
+  { key: 'optionsVolume', label: 'Highest options volume', short: 'Opt vol', blurb: 'Where the contracts are actually trading', metricLabel: 'Contracts', tone: 'neutral' },
+  { key: 'dividend', label: 'Highest dividend yield', short: 'Yield', blurb: 'Trailing yield above 2% — income, not momentum', metricLabel: 'Yield', tone: 'neutral' },
+  { key: 'high52', label: 'New 52-week highs', short: '52w hi', blurb: 'Trading through the top of their own year', metricLabel: 'From high', tone: 'up' },
+  { key: 'low52', label: 'New 52-week lows', short: '52w lo', blurb: 'Trading through the bottom of their own year', metricLabel: 'From low', tone: 'down' },
 ];
 
 export const screenerByKey = (key: string): Screener | null =>

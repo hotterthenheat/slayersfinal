@@ -217,7 +217,7 @@ for (const t of NAMES) Simulator.ensureTicker(t);
       putGex: netGex > 0 ? netGex : 0,
       callOI: 100, putOI: 100, gamma: 0,
       callDex: 0, putDex: 0, netDex: 0,
-      callVex: 0, putVex: 0, netVex: 0, vanna: 0, charm: 0,
+      callVex: 0, putVex: 0, netVex: 0, vanna: 0, charm: 0, callVanna: 0, putVanna: 0, netVanna: 0, callCharm: 0, putCharm: 0, netCharm: 0,
     });
   }
   const far = buildExposureProfile({ ...staged, spot, chain }, 'ALL', 10);
@@ -256,7 +256,7 @@ for (const t of NAMES) Simulator.ensureTicker(t);
       putGex: netGex > 0 ? netGex : 0,
       callOI: 100, putOI: 100, gamma: 0,
       callDex: 0, putDex: 0, netDex: 0,
-      callVex: 0, putVex: 0, netVex: 0, vanna: 0, charm: 0,
+      callVex: 0, putVex: 0, netVex: 0, vanna: 0, charm: 0, callVanna: 0, putVanna: 0, netVanna: 0, callCharm: 0, putCharm: 0, netCharm: 0,
     });
   }
   const farFlip = buildExposureProfile({ ...staged, spot, chain: flipChain }, 'ALL', 10);

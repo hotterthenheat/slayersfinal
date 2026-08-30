@@ -57,6 +57,7 @@ import SpotRule from '../ui/SpotRule';
 import Term from '../ui/Term';
 import { CALL_WALL, FLIP, KING, PUT_WALL } from './palette';
 import type { ExposureProfileData, StrikeExposure } from '../../types/gex';
+import { heatInk, heatPoleRgb } from './heatmap';
 
 interface StrikePressureLadderProps {
   data: ExposureProfileData;
@@ -74,11 +75,18 @@ interface StrikePressureLadderProps {
 // ALPHA carries the same number the length does — double encoding, on
 // purpose: brightness is what the eye catches scanning the column, length
 // is what it reads when it stops. A floor keeps the quiet rows from vanishing.
-const PUT_RGB = '245,197,66'; // honey gold
-const CALL_RGB = '226,234,244'; // platinum steel
-/** Steel as TEXT — a darker step of the same ramp; full platinum is white at 11px */
-const PUT_INK = '#F5C542';
-const CALL_INK = '#AAB6C6';
+/* DERIVED FROM THE ACTIVE RAMP, not copied out of it. These were literals —
+   the gold and platinum of `steel-gold` — and heatmap.ts's own rule says
+   legends must derive from its poles and never hardcode. This surface was
+   the exception, and it is the one surface whose colours carry EXACTLY the
+   heatmap's meaning, so a ramp change used to leave the ladder drawing the
+   old palette while every other surface moved. */
+const PUT_RGB = heatPoleRgb.pos;
+const CALL_RGB = heatPoleRgb.neg;
+/** The cool side as TEXT — a darker step of the same ramp; the full pole is
+    near-white at 11px and stops reading as the call side at all. */
+const PUT_INK = heatInk.pos;
+const CALL_INK = heatInk.neg;
 const INK_FLOOR = 0.3;
 const legInk = (rgb: string, strength: number) => `rgba(${rgb},${(INK_FLOOR + (1 - INK_FLOOR) * Math.pow(strength, 0.7)).toFixed(3)})`;
 const PUT_KEY = legInk(PUT_RGB, 1);

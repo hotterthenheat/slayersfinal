@@ -83,8 +83,32 @@ export interface StrikeNode {
   callVex: number;
   putVex: number;
   netVex: number;
+  /* RAW per-contract greeks — the shape of one option's sensitivity, not an
+     exposure. Kept because callers that model a scenario need the greek
+     itself; anything asking "how much dealer risk sits at this strike" wants
+     the net below. */
   vanna: number;
   charm: number;
+  /*
+    VANNA AND CHARM AS DEALER EXPOSURE, on the same footing as GEX/DEX/VEX.
+
+    Until the rail needed them these two were the only greeks on this node
+    that were never OI-weighted, never dollarised and never given the dealer
+    direction — and `charm` was the plain AVERAGE of its call and put legs,
+    which is not an exposure at all: it throws away which side the open
+    interest is actually on. A strike with 50k calls and 200 puts averaged
+    as though the two mattered equally.
+
+    These carry the same treatment every other net here gets — OI × 100 ×
+    greek × the spot factor that gives it dollars × the dealer's side — so a
+    rail can put all five on one ruler and mean it.
+  */
+  callVanna: number;
+  putVanna: number;
+  netVanna: number;
+  callCharm: number;
+  putCharm: number;
+  netCharm: number;
 }
 
 export type TradeDirection = 'BULLISH' | 'BEARISH';

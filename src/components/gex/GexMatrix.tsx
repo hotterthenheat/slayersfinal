@@ -1,5 +1,5 @@
 import { fmtUsd } from '../../data/gex';
-import { heatPoles, heatScaleGradient, heatScaleLabels } from './heatmap';
+import { heatPoles, heatScaleGradient, heatScaleLabels, heatScaleLabelStyle } from './heatmap';
 import HeatPill, { HiddenStrikes } from './HeatPill';
 import { foldQuietStrikes } from './foldStrikes';
 import { KING } from './palette';
@@ -180,12 +180,16 @@ const GexMatrix = ({ data, fill = false, strikeFormat, rowNotes, rowNotesLabel =
 
       {/* Diverging color scale */}
       <div className="shrink-0 w-9 flex flex-col items-center py-1 select-none">
-        <span className={`font-mono text-[9px] tnum ${heatScaleLabels.pos}`}>+{fmtUsd(maxAbs).replace('$', '')}</span>
+        <span className={`font-mono text-[9px] tnum ${heatScaleLabels.pos}`} style={heatScaleLabelStyle?.pos}>
+          +{fmtUsd(maxAbs).replace('$', '')}
+        </span>
         <div
           className="flex-grow w-2.5 my-1.5 rounded-full border border-borderSubtle"
           style={{ background: heatScaleGradient }}
         />
-        <span className={`font-mono text-[9px] tnum ${heatScaleLabels.neg}`}>−{fmtUsd(maxAbs).replace('$', '')}</span>
+        <span className={`font-mono text-[9px] tnum ${heatScaleLabels.neg}`} style={heatScaleLabelStyle?.neg}>
+          −{fmtUsd(maxAbs).replace('$', '')}
+        </span>
         <span className="mt-1 font-mono text-[8px] text-textMuted uppercase">gex</span>
       </div>
     </div>

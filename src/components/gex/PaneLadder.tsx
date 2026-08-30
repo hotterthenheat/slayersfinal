@@ -4,6 +4,7 @@ import { X } from 'lucide-react';
 import Simulator from '../../core/simulator';
 import { fmtUsd } from '../../data/gex';
 import { sessionVolumeProfile, type VolumeProfile } from '../../data/volumeProfile';
+import { flowAt, fmtContracts, type StrikeFlow } from '../../data/strikeFlow';
 import { heatCellStyle, heatMagnitude, heatRgb } from './heatmap';
 import type { PriceProjection } from './StrikeChart';
 import type { GexLevel } from '../../types/market';
@@ -70,6 +71,18 @@ interface PaneLadderProps {
   /** The chain's own strike spacing, used to work out what one strike is worth
       in pixels and therefore how crowded the column is. */
   step: number;
+  /*
+    LIVE CONTRACTS AT EACH STRIKE, off the print tape — shown while `Vol` is
+    on, beside the strike it belongs to.
+
+    The chain already carries a per-strike `volume` and it is a day-stable
+    hash of open interest that never moves while you watch it (its own
+    comment says so). This is the real tape, summed over a rolling window,
+    so a strike that is being hit right now says a bigger number than it did
+    a minute ago. Passed in rather than read here: the host already holds
+    the tape, and one rail should not start its own subscription.
+  */
+  flow?: StrikeFlow | null;
   /** The pane's own named levels — never re-derived here, see the note above */
   levels: KeyLevels;
   /** Currently flashed on the chart, so the column can show which row it is */
@@ -113,6 +126,10 @@ interface PaneLadderProps {
   own lanes on the bare surface, never over the bar.
 */
 const BAR_ALPHA = 0.5;
+/** How far back "going into this strike right now" reaches. Five minutes:
+    long enough that a quiet strike is not empty by chance, short enough that
+    the open's business is not still being reported at lunch. */
+export const FLOW_WINDOW_MS = 5 * 60_000;
 
 /*
   THE SAME ROWS, READ TWO WAYS (Noah, 2026-08-29: "can you make the strikes
@@ -291,6 +308,7 @@ const PaneLadder = ({
   rows,
   maxAbs,
   step,
+  flow = null,
   levels,
   focusPrice = null,
   onSelect,
@@ -891,6 +909,32 @@ const PaneLadder = ({
           const putSide = row.value >= 0;
           const label = `${fmtRail(row.strike)}, ${fmtUsd(row.value)}${named ? ` — ${named}` : ''}`;
 
+          /* THE FIGURE FOR HEAT MODE, built once and dropped into WHICHEVER
+             lane this row actually draws in.
+
+             The rail is SIDED — calls reach left of the strike column, puts
+             reach right — so there are two lanes and a row fills exactly
+             one. The first cut put this in the call lane unconditionally,
+             which was invisibly wrong: every put row rendered its number on
+             the empty dark half while its gold cell sat unlabelled on the
+             other side of the price. Caught by looking at the rail, not by
+             the typechecker. */
+          const rowFlow = flow ? flowAt(flow, row.strike) : null;
+
+          const heatValue =
+            heat && row.value !== 0 ? (
+              <span
+                aria-hidden
+                className="absolute inset-0 z-[1] flex items-center justify-center font-mono text-[7.5px] font-semibold tnum leading-none"
+                /* The ink flips with the cell's own brightness: a dark cell
+                   takes light text, a hot one takes dark. Measured on the
+                   ice-gold ramp, both poles cross over around 0.5. */
+                style={{ color: heatMagnitude(row.value, maxAbs) > 0.5 ? 'rgba(6,7,10,0.92)' : 'rgba(226,234,244,0.88)' }}
+              >
+                {fmtUsd(row.value)}
+              </span>
+            ) : null;
+
           const body = (
             <>
               <span
@@ -932,6 +976,7 @@ const PaneLadder = ({
                   and a bar's pixel length still tracks its value across
                   every row — the thing this rail exists to get right. */}
               <span className="relative flex-1 min-w-0 self-stretch my-px">
+                {!putSide && heatValue}
                 {!putSide && (
                   <span
                     aria-hidden
@@ -961,7 +1006,26 @@ const PaneLadder = ({
               >
                 {fmtRail(row.strike)}
               </span>
+              {/* CONTRACTS AT THIS STRIKE, while Vol is on. A suffix rather
+                  than a column: a fourth lane would move the strike numbers
+                  every time the toggle flipped, and the strike column is the
+                  one thing in this rail that must not move. Absent when
+                  nothing traded there — a strike with no flow says nothing,
+                  which is itself the reading. */}
+              {showVol && (
+                <span
+                  className="shrink-0 pl-1 font-mono text-[8px] tnum leading-none text-textMuted"
+                  title={
+                    rowFlow
+                      ? `${fmtContracts(rowFlow.volume)} contracts at ${fmtRail(row.strike)} in the last ${Math.round(FLOW_WINDOW_MS / 60000)}m — ${fmtContracts(rowFlow.callVolume)} calls, ${fmtContracts(rowFlow.putVolume)} puts, across ${rowFlow.prints} prints`
+                      : `nothing traded at ${fmtRail(row.strike)} in the last ${Math.round(FLOW_WINDOW_MS / 60000)}m`
+                  }
+                >
+                  {rowFlow ? fmtContracts(rowFlow.volume) : '·'}
+                </span>
+              )}
               <span className="relative flex-1 min-w-0 self-stretch my-px">
+                {putSide && heatValue}
                 {putSide && (
                   <span
                     aria-hidden

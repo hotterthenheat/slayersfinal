@@ -35,13 +35,12 @@ import FlowScanner from './pages/trace/FlowScanner';
 import DarkPool from './pages/trace/DarkPool';
 import VolLab from './pages/pinpoint/VolLab';
 import Stocks from './pages/Stocks';
-import News from './pages/News';
+import NewsRoom from './pages/newsroom/NewsRoom';
 import EarningsHub from './pages/EarningsHub';
 import EarningsDossier from './pages/EarningsDossier';
 import ProveIt from './pages/proveit/ProveIt';
 import Landing from './pages/landing/Landing';
 import NotFound from './pages/NotFound';
-import Screeners from './pages/Screeners';
 import CommunityLayout from './pages/community/CommunityLayout';
 import Ideas from './pages/community/Ideas';
 import Requests from './pages/community/Requests';
@@ -75,7 +74,6 @@ const App = () => {
             <Route path="/chain" element={<OptionChain />} />
             {/* The board for when you do not have a name yet — nine
                 questions asked of the whole universe rather than of one. */}
-            <Route path="/screeners" element={<Screeners />} />
             {/* §12 + §13 — one desk, because they are one question: what is
                 the underlying really doing, including while the cash is shut */}
             <Route path="/index-futures" element={<IndexFutures />} />
@@ -91,7 +89,10 @@ const App = () => {
             <Route path="/stocks" element={<Stocks />} />
             {/* §2 — the company behind the ticker */}
             <Route path="/stocks/:ticker" element={<TickerOverview />} />
-            <Route path="/news" element={<News />} />
+            {/* T-NEWS — the globe room replaces the wire list; /newsroom was
+                its spike URL and follows here so old links still land. */}
+            <Route path="/news" element={<NewsRoom />} />
+            <Route path="/newsroom" element={<Navigate to="/news" replace />} />
             <Route path="/earnings" element={<EarningsHub />} />
             <Route path="/earnings/:ticker" element={<EarningsDossier />} />
             <Route path="/prove-it" element={<ProveIt />} />

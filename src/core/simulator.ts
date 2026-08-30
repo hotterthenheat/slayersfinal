@@ -533,7 +533,8 @@ const Simulator = (() => {
       && a.gamma === b.gamma && a.netGex === b.netGex && a.callGex === b.callGex
       && a.putGex === b.putGex && a.netDex === b.netDex && a.callDex === b.callDex
       && a.putDex === b.putDex && a.netVex === b.netVex && a.callVex === b.callVex
-      && a.putVex === b.putVex && a.vanna === b.vanna && a.charm === b.charm;
+      && a.putVex === b.putVex && a.vanna === b.vanna && a.charm === b.charm
+      && a.netVanna === b.netVanna && a.netCharm === b.netCharm;
   }
 
   // Seed the core watchlist
@@ -642,6 +643,21 @@ const Simulator = (() => {
       const putVex = putOI * 100 * greeks.vega * dealerPutDirection;
       const netVex = callVex + putVex;
 
+      /* VANNA and CHARM given the same treatment as the three above, so the
+         rail can put all five on one ruler. Vanna is d(delta)/d(vol), so
+         x spot x 0.01 puts it in dollars per vol POINT, matching how GEX is
+         scaled per 1% move; charm is d(delta)/d(time), so x spot is dollars
+         of delta per day. Each leg takes its OWN side's open interest and
+         its own dealer direction — the node's plain `charm` averaged the two
+         legs together, which is not an exposure. */
+      const callVanna = callOI * 100 * greeks.vanna * spot * 0.01 * dealerCallDirection;
+      const putVanna = putOI * 100 * greeks.vanna * spot * 0.01 * dealerPutDirection;
+      const netVanna = callVanna + putVanna;
+
+      const callCharm = callOI * 100 * greeks.charmCall * spot * dealerCallDirection;
+      const putCharm = putOI * 100 * greeks.charmPut * spot * dealerPutDirection;
+      const netCharm = callCharm + putCharm;
+
       strikes.push({
         strike,
         callOI,
@@ -657,7 +673,13 @@ const Simulator = (() => {
         putVex,
         netVex,
         vanna: greeks.vanna,
-        charm: (greeks.charmCall + greeks.charmPut) / 2
+        charm: (greeks.charmCall + greeks.charmPut) / 2,
+        callVanna,
+        putVanna,
+        netVanna,
+        callCharm,
+        putCharm,
+        netCharm,
       });
     }
 

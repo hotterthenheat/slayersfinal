@@ -17,6 +17,7 @@ import type { CSSProperties } from 'react';
   Flip HEAT_MODE to switch instantly.
 */
 export type HeatMode =
+  | 'ice-gold'
   | 'steel-gold'
   | 'ice-plasma'
   | 'terminal'
@@ -32,7 +33,7 @@ export type HeatMode =
   | 'diverging';
 
 // `as HeatMode` stops TS from narrowing to the literal so the other branches stay legal.
-export const HEAT_MODE = 'steel-gold' as HeatMode;
+export const HEAT_MODE = 'ice-gold' as HeatMode;
 
 type RGB = [number, number, number];
 type Stops = [number, RGB][];
@@ -47,7 +48,17 @@ interface RampPalette {
 
 // Ramps run from neutral (t=0) → extreme (t=1)
 const RAMPS: Record<
-  'steel-gold' | 'ice-plasma' | 'terminal' | 'pastel' | 'spectrum' | 'amber' | 'redwood' | 'thermal' | 'teal-violet' | 'gold-slate',
+  | 'ice-gold'
+  | 'steel-gold'
+  | 'ice-plasma'
+  | 'terminal'
+  | 'pastel'
+  | 'spectrum'
+  | 'amber'
+  | 'redwood'
+  | 'thermal'
+  | 'teal-violet'
+  | 'gold-slate',
   RampPalette
 > = {
   /* THE HOUSE HEAT, round 3 (Noah, 2026-08-18 — ice-plasma kept on the
@@ -62,6 +73,60 @@ const RAMPS: Record<
      gold #F5C542 is yellower than warn orange #FF9500 and nowhere near
      lime's acid green-yellow. One hue per side, luminance walk, ARC-LENGTH
      EVEN stops (OKLab, spread 1.03x/1.05x — scratchpad regenerates). */
+  /*
+    ICE-GOLD — the house heat, round 4 (Noah, 2026-08-30: "take his heatmap
+    colors").
+
+    ONLY THE COOL SIDE MOVED. steel-gold's absorb ramp climbed a near-
+    achromatic grey; this one climbs ice-blue to a pale cyan. The gold is
+    untouched, so the pairing a reader already knows — cool absorbs, warm
+    amplifies — still reads the same way, and every surface that shares this
+    ramp moves together.
+
+    THE STOPS ARE MEASURED, NOT INVENTED. Sampled from the partner build's
+    own Time Machine heatmap, brightest to darkest:
+
+      #c1e7f2  #a3d0e3  #85c4d5  #74b3d6  #57a9c1  #3f9cc7  #194262
+
+    which is the ramp below, resampled onto our own nine even stops.
+
+    WHAT THIS COSTS, stated plainly. steel-gold's argument was that one side
+    is ACHROMATIC, so separating the two needed no hue discrimination at all
+    — the strongest possible answer for colour vision deficiency. Ice-blue
+    against gold is a blue/yellow axis instead. That is still the SAFEST
+    coloured axis (deuteranopia and protanopia, the common types, both keep
+    it, and the two sides remain far apart in lightness), but it is no
+    longer free: tritanopia, which is rare, loses hue here and is left with
+    lightness alone. steel-gold stays in this file, one word away.
+  */
+  'ice-gold': {
+    // positive = put-dominant = dealers short gamma = AMPLIFY (gold, unchanged)
+    pos: [
+      [0, [42, 42, 42]],
+      [0.125, [66, 53, 20]],
+      [0.25, [89, 72, 23]],
+      [0.375, [114, 91, 26]],
+      [0.5, [139, 110, 28]],
+      [0.625, [165, 131, 31]],
+      [0.75, [191, 152, 37]],
+      [0.875, [218, 174, 51]],
+      [1, [245, 197, 66]],
+    ],
+    // negative = call-dominant = dealers long gamma = ABSORB (ice)
+    neg: [
+      [0, [42, 42, 42]], //     #2A2A2A the shared neutral
+      [0.125, [25, 66, 98]], // #194262 measured, deep end
+      [0.25, [40, 92, 130]], // #285C82
+      [0.375, [63, 156, 199]], // #3F9CC7 measured
+      [0.5, [87, 169, 193]], // #57A9C1 measured
+      [0.625, [116, 179, 214]], // #74B3D6 measured
+      [0.75, [133, 196, 213]], // #85C4D5 measured
+      [0.875, [163, 208, 227]], // #A3D0E3 measured
+      [1, [193, 231, 242]], //  #C1E7F2 measured, pale ice
+    ],
+    gradient:
+      'linear-gradient(to top, #C1E7F2 0%, #74B3D6 22%, #3F9CC7 38%, #2A2A2A 50%, #8B6E1C 62%, #BF9825 78%, #F5C542 100%)',
+  },
   'steel-gold': {
     // positive = put-dominant = dealers short gamma = AMPLIFY (gold)
     pos: [
@@ -446,6 +511,38 @@ export const heatPoles = ramp
   ? { pos: poleHex(ramp.pos), neg: poleHex(ramp.neg) }
   : { pos: '#ededed', neg: '#8f8f8f' };
 
+/*
+  THE SAME POLES AS BARE "r,g,b", and a darker step of each for TEXT.
+
+  The rule above — "legends must derive from these, never hardcode" — was
+  stated for hex, and the Strike Pressure Ladder still kept its own
+  '226,234,244' because it needs the `rgba(${rgb},${alpha})` form, which the
+  hex export cannot give it. So the one surface whose colours carry exactly
+  the heatmap's meaning was the one surface holding a private copy, and
+  switching the ramp to ice-gold would have left it drawing calls in the old
+  platinum while every other surface moved.
+
+  `heatInk` is the 0.75 stop rather than the pole: the full pole is nearly
+  white at 11px and reads as plain text instead of as the call side.
+*/
+const rgbTriple = (stops: Stops): string => {
+  const c = stops[stops.length - 1][1];
+  return `${c[0]},${c[1]},${c[2]}`;
+};
+const stopHex = (stops: Stops, t: number): string => {
+  const hit = stops.reduce((best, cur) => (Math.abs(cur[0] - t) < Math.abs(best[0] - t) ? cur : best), stops[0]);
+  const [r, g, b] = hit[1];
+  return `#${[r, g, b].map(v => v.toString(16).padStart(2, '0')).join('')}`;
+};
+/** Pole colours as bare "r,g,b", for callers that build their own rgba(). */
+export const heatPoleRgb = ramp
+  ? { pos: rgbTriple(ramp.pos), neg: rgbTriple(ramp.neg) }
+  : { pos: '237,237,237', neg: '143,143,143' };
+/** A darker step of each pole, legible as small text on the panel. */
+export const heatInk = ramp
+  ? { pos: stopHex(ramp.pos, 1), neg: stopHex(ramp.neg, 0.75) }
+  : { pos: '#ededed', neg: '#8f8f8f' };
+
 export const heatScaleGradient: string = ramp
   ? ramp.gradient
   : HEAT_MODE === 'diverging'
@@ -455,15 +552,26 @@ export const heatScaleGradient: string = ramp
       : 'linear-gradient(to bottom, rgb(235,235,235), rgb(61,61,61) 50%, rgb(5,5,5))';
 
 /** Scale end-label classes (sign already carried by the printed values). */
+/*
+  END-LABEL COLOURS AS A STYLE, NOT A CLASS.
+
+  These used to be Tailwind class strings with the hex written inline
+  (`text-[#F5C542]`), one hand-kept pair per ramp mode. Deriving them from
+  the ramp is right, but it cannot stay a class: Tailwind only generates the
+  class names it can see LITERALLY in the source, so a `text-[${...}]` built
+  at run time reaches the stylesheet as nothing and the label renders in the
+  inherited colour. (The same trap cost the Weigher's scanner its column
+  grid this week.) A colour is a style; it goes in `style`.
+
+  The legacy non-ramp modes keep class names, because those ARE literal.
+*/
+export const heatScaleLabelStyle: { pos: CSSProperties; neg: CSSProperties } | null = ramp
+  ? { pos: { color: heatPoles.pos }, neg: { color: heatPoles.neg } }
+  : null;
+
 export const heatScaleLabels =
-  HEAT_MODE === 'steel-gold'
-    ? // Each end label wears its pole: + is the gold (amplify) end of the
-      // bar, − the steel (absorb) end.
-      { pos: 'text-[#F5C542]', neg: 'text-[#E2EAF4]' }
-    : HEAT_MODE === 'ice-plasma'
-    ? // Each end label wears its pole: + is the plasma (amplify) end of the
-      // bar, − the ice (absorb) end.
-      { pos: 'text-[#FF5EA8]', neg: 'text-[#3DD6E8]' }
+  ramp
+    ? { pos: '', neg: '' }
     : HEAT_MODE === 'terminal'
       ? // Terminal's poles are inverted vs 'diverging' — see the ramp note:
         // positive is put-dominant (red) and negative call-dominant (green),

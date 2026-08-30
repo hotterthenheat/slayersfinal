@@ -29,7 +29,7 @@ const check = (name: string, ok: boolean, extra = '') => {
 const node = (strike: number, callOI: number, putOI: number, netGex: number): StrikeNode => ({
   strike, callOI, putOI, netGex,
   gamma: 0, callGex: 0, putGex: 0, callDex: 0, putDex: 0, netDex: 0,
-  callVex: 0, putVex: 0, netVex: 0, vanna: 0, charm: 0,
+  callVex: 0, putVex: 0, netVex: 0, vanna: 0, charm: 0, callVanna: 0, putVanna: 0, netVanna: 0, callCharm: 0, putCharm: 0, netCharm: 0,
 });
 
 // ── 1. max pain is the payout minimiser ───────────────────────────────────

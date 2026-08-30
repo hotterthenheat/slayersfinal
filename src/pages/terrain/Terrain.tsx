@@ -33,7 +33,7 @@ import StrikeChart, {
 import ChartToolbar from '../../components/gex/ChartToolbar';
 import useTopEdgeReveal from '../../components/gex/useTopEdgeReveal';
 import CompareControl from '../../components/gex/CompareControl';
-import PaneLadder, { LADDER_WIDTH_PX } from '../../components/gex/PaneLadder';
+import PaneLadder, { LADDER_WIDTH_PX, FLOW_WINDOW_MS } from '../../components/gex/PaneLadder';
 import useFocusTrap from '../../components/ui/useFocusTrap';
 import { useIsBelowLg, useIsPhone } from '../../components/ui/useMediaQuery';
 import TickerQuickPick from '../../components/gex/TickerQuickPick';
@@ -47,6 +47,8 @@ import {
   SETUP_KEYS, applySetup, captureSetup, evict, readSetups, symKey, type SetupMap,
 } from './setups';
 import { flipRing, stepSymbol, stepTf } from './paneKeys';
+import { CALL_SIDE, PUT_SIDE } from '../../components/gex/palette';
+import { strikeFlow } from '../../data/strikeFlow';
 
 /*
 ==================================================
@@ -899,6 +901,20 @@ const Pane = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [ticker, revision]
   );
+  /* Contracts by strike over the last few minutes, off the live tape. Keyed
+     on the tape's own length as well as the revision, so it rebuilds when
+     prints land rather than only when the bar rolls. */
+  const railFlow = useMemo(
+    () => (ladder ? strikeFlow(flowTape, ticker, FLOW_WINDOW_MS) : null),
+    /* Keyed on the tape ITSELF, not on its length. The tape is capped and
+       aged, so once it is full its length stops changing while its contents
+       keep turning over — a length key would freeze this at the moment the
+       cap was reached and go on reporting the flow of ten minutes ago. The
+       context replaces the array on every absorb, so the identity check is
+       both correct and cheap. */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ticker, ladder, flowTape, revision]
+  );
   /*
     THE FIVE TIMEFRAMES' TREND STATE — T-12.
 
@@ -1337,7 +1353,15 @@ const Pane = ({
                         <span className="text-textSecondary">
                           {row.strike % 1 === 0 ? row.strike.toFixed(0) : row.strike.toFixed(2)}
                         </span>
-                        <span className={`ml-1.5 font-semibold ${row.value >= 0 ? 'text-[#F5C542]' : 'text-[#AAB6C6]'}`}>
+                        {/* The two sides come from the ramp, as a STYLE.
+                            These were literal hexes of the old steel-gold
+                            poles, so this strip kept printing gold-on-grey
+                            after the ramp went ice — and a Tailwind class
+                            cannot carry a runtime colour anyway. */}
+                        <span
+                          className="ml-1.5 font-semibold"
+                          style={{ color: row.value >= 0 ? PUT_SIDE : CALL_SIDE }}
+                        >
                           {fmtUsd(row.value)}
                         </span>
                       </span>
@@ -1512,6 +1536,7 @@ const Pane = ({
               maxAbs={rail.maxAbs}
               step={rail.step}
               levels={levels}
+              flow={railFlow}
               focusPrice={focus}
               projection={projectionRef}
               onClose={() => {
