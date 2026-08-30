@@ -4285,14 +4285,21 @@ head('sub-panes stack under the tape, and the one past the cap is refused with i
     ? ok(`with the reason in the row's own tooltip — "${refused.why.slice(0, 60)}"`)
     : bad(`the refused row carries no reason — title ${JSON.stringify(refused?.why ?? '')}`);
   /* The words on the menu have to name the same number the code enforces. */
+  /* THE LEAF, not the first ancestor that happens to contain the words.
+     `find` in document order returns an outer div whose textContent is the
+     WHOLE menu, so `includes('three')` would be satisfied by the word
+     appearing in any indicator's hint — the assertion would pass for a
+     heading that said something else entirely. Shortest match is the
+     heading itself. Caught by reading this check's own output: it printed
+     the entire menu back as "the heading". */
   const heading = await page.$$eval('[data-toolbar-menu] div', ds => {
-    const d = ds.find(x => /Own pane/.test(x.textContent || ''));
-    return d ? d.textContent.trim() : '';
+    const hits = ds.map(x => (x.textContent || '').trim()).filter(t => t.startsWith('Own pane'));
+    return hits.sort((a, b) => a.length - b.length)[0] ?? '';
   });
   const WORDS = { 1: 'one', 2: 'two', 3: 'three', 4: 'four' };
-  heading.includes(WORDS[accepted] ?? String(accepted))
+  heading && heading.length < 40 && heading.includes(WORDS[accepted] ?? String(accepted))
     ? ok(`and the heading names the same number the code enforced — "${heading}"`)
-    : bad(`the heading says "${heading}" but the code accepted ${accepted}`);
+    : bad(`the heading says "${heading.slice(0, 60)}" but the code accepted ${accepted}`);
 
   /* And the new overlays are offered alongside. */
   const labels = [];
