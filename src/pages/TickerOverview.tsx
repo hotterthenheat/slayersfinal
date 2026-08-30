@@ -11,6 +11,7 @@ import MetricGrid from '../components/ui/MetricGrid';
 import DataState from '../components/ui/DataState';
 import CompanyLogo from '../components/ui/CompanyLogo';
 import ProvenanceChip from '../components/ui/ProvenanceChip';
+import SeasonalityPanel from '../components/gex/SeasonalityPanel';
 
 /*
 ==================================================
@@ -127,6 +128,12 @@ const TickerOverview = () => {
       </Panel>
 
       {/* The three statements */}
+      {/* SEASONALITY sits above the statements on purpose: it is the one
+          reading on this page that ignores today entirely, and a reader
+          asking "is this a month this name usually does well in" is asking
+          it before they read a balance sheet. */}
+      <SeasonalityPanel ticker={p.ticker} className="w-full" />
+
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         <Panel title="Income statement" subtitle="trailing twelve months" className="w-full" collapsible id="fin-income">
           <Line label="Revenue" value={i.revenue} />
