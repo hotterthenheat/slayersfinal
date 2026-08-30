@@ -1114,7 +1114,17 @@ const Pane = ({
               cursor does.
             */}
             <div
-              ref={stripRef}
+              /* TWO READERS, ONE ELEMENT. The strip measurer wants it to size
+                 the row, and the reveal watches it as its keep-open band:
+                 while the pointer is inside this band the chrome stays up,
+                 whatever the distance rule says. Without that, the toolbar
+                 hid itself as a reader moved ONTO it — its controls sit
+                 113-146px below the pane's top edge and the hide threshold
+                 is 104. See useTopEdgeReveal. */
+              ref={el => {
+                stripRef.current = el;
+                chromeReveal.bandRef.current = el;
+              }}
               /* Padding clears the price gutter, so nothing floating ever
                  lands on a price tick — BOTH gutters whenever there is a left
                  one, with no width condition on it.

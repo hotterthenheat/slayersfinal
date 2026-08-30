@@ -46,6 +46,12 @@ export interface TopEdgeReveal {
     onPointerMove: (e: React.PointerEvent<HTMLElement>) => void;
     onPointerLeave: () => void;
   };
+  /**
+   * Put this on the band the chrome lives in. While the pointer is inside
+   * that band the strip stays up, whatever `hidePx` says — see THE BAND
+   * KEEPS ITSELF OPEN below.
+   */
+  bandRef: React.MutableRefObject<HTMLElement | null>;
 }
 
 export function useTopEdgeReveal(
@@ -59,6 +65,39 @@ export function useTopEdgeReveal(
   const nearRef = useRef(false);
   nearRef.current = near;
 
+  /*
+    THE BAND KEEPS ITSELF OPEN, and without this the feature did not work
+    with a mouse at all.
+
+    `hidePx` is 104, and it is a distance from the PANE's top edge — which
+    cannot know where the strip's controls actually sit. Measured on the
+    built desk, the Overlays trigger's centre is 113px below that edge at
+    1440x900 and 146px at 1600x950, because the toolbar wraps differently at
+    different widths. So the sequence a reader performs is:
+
+      reach the top band   -> the strip appears
+      move onto the button -> the pointer passes 104px, the strip HIDES
+
+    The control vanishes from under the cursor on the way to being clicked.
+    The browser sweep had been reporting this since the reveal landed, as a
+    30-second click timeout with the plot canvas named as the element
+    intercepting the click, and I read it twice as the probe's fault before
+    measuring the geometry.
+
+    So the pointer being inside the chrome's own band is a keep-open, whatever
+    the distance says. NO CIRCULARITY: the band is the container, not the
+    strip — it is `pointer-events: none` and laid out whether or not the
+    strip is shown — and this is a geometry test on its rect, not a `:hover`
+    that only exists while the grant it depends on does.
+  */
+  const bandRef = useRef<HTMLElement | null>(null);
+  const inBand = (x: number, y: number): boolean => {
+    const el = bandRef.current;
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+  };
+
   const onPointerMove = useCallback(
     (e: React.PointerEvent<HTMLElement>) => {
       /* A touch is not a hover. Coarse pointers get the chrome unconditionally
@@ -67,7 +106,7 @@ export function useTopEdgeReveal(
       if (e.pointerType === 'touch') return;
       const y = e.clientY - e.currentTarget.getBoundingClientRect().top;
       if (!nearRef.current && y <= revealPx) setNear(true);
-      else if (nearRef.current && y > hidePx) setNear(false);
+      else if (nearRef.current && y > hidePx && !inBand(e.clientX, e.clientY)) setNear(false);
     },
     [revealPx, hidePx],
   );
@@ -86,7 +125,7 @@ export function useTopEdgeReveal(
     };
   }, []);
 
-  return { shown: near || keepOpen, bind: { onPointerMove, onPointerLeave } };
+  return { shown: near || keepOpen, bind: { onPointerMove, onPointerLeave }, bandRef };
 }
 
 export default useTopEdgeReveal;
