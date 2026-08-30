@@ -36,6 +36,7 @@ import IntervalFlowPage from './pages/trace/IntervalFlow';
 import DarkPool from './pages/trace/DarkPool';
 import VolLab from './pages/pinpoint/VolLab';
 import Stocks from './pages/Stocks';
+import Disclosures from './pages/Disclosures';
 import NewsRoom from './pages/newsroom/NewsRoom';
 import EarningsHub from './pages/EarningsHub';
 import EarningsDossier from './pages/EarningsDossier';
@@ -88,6 +89,7 @@ const App = () => {
             <Route path="/backtest" element={<Backtest />} />
             <Route path="/skys-vision" element={<Navigate to="/compass" replace />} />
             <Route path="/stocks" element={<Stocks />} />
+            <Route path="/disclosures" element={<Disclosures />} />
             {/* §2 — the company behind the ticker */}
             <Route path="/stocks/:ticker" element={<TickerOverview />} />
             {/* T-NEWS — the globe room replaces the wire list; /newsroom was

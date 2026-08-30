@@ -5846,6 +5846,93 @@ head('the ticker page answers who is actually trading the name');
   await ctx.close();
 }
 
+head('the disclosures desk shows filings, not invented precision');
+{
+  /*
+    The page exists so a UI can be judged before real API keys go in, which
+    makes two things load-bearing: it must be obvious that nobody on it is
+    real, and the SHAPE must be the one a real feed will arrive in — because
+    the shape is what would have to be rebuilt.
+
+    So this checks the four decisions that separate it from every product in
+    the category: the transaction code gates the feed, the plan flag has
+    three states, an amount is a bracket and never a figure, and no date is
+    in the future.
+  */
+  const ctx = await browser.newContext({ viewport: { width: 1500, height: 1000 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/disclosures`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+
+  const text = async () => (await page.evaluate(() => document.body.innerText)).toLowerCase();
+  const rows = () => page.$$eval('tbody tr', rs => rs.length);
+
+  (await text()).includes('nobody here is real')
+    ? ok('the sample-data banner is on the page, unmissable')
+    : bad('nothing tells a reader the filers are invented');
+
+  /* ── the code gates the feed ── */
+  const codesOf = () => page.$$eval('tbody tr td:nth-child(4) span:first-child', ss => [...new Set(ss.map(s => s.textContent.trim()))].sort());
+  const before = await codesOf();
+  before.length > 0 && before.every(c => c === 'P' || c === 'S')
+    ? ok(`the insider feed opens on open-market codes only — ${before.join(',')}`)
+    : bad(`the default feed carries ${before.join(',')} — compensation events are mixed in`);
+  const n1 = await rows();
+  n1 > 0 ? ok(`the feed has rows — ${n1}`) : bad('the insider feed is empty');
+
+  await page.click('button:has-text("+ comp events")');
+  await page.waitForTimeout(700);
+  const after = await codesOf();
+  after.length > before.length
+    ? ok(`the toggle brings the compensation codes in — ${after.join(',')}`)
+    : bad(`the toggle changed nothing — still ${after.join(',')}`);
+  after.some(c => ['A', 'M', 'F', 'D', 'G'].includes(c))
+    ? ok('including a code that is not a market trade')
+    : bad('no non-market code appeared');
+
+  /* ── the plan flag has three states ── */
+  const flags = await page.$$eval('tbody tr td:nth-child(9) span', ss => [...new Set(ss.map(s => s.textContent.trim()))].sort());
+  flags.length >= 3
+    ? ok(`the plan flag renders three states, not a boolean — ${flags.join(',')}`)
+    : bad(`only ${flags.join(',')} — a two-state flag implies conviction the filing does not carry`);
+
+  /* ── congress: a bracket is a bracket ── */
+  await page.click('button:has-text("Congress")');
+  await page.waitForTimeout(900);
+  const ct = await page.evaluate(() => document.body.innerText);
+  /\$[\d,]+ - \$[\d,]+/.test(ct)
+    ? ok('amounts render as ranges, the way the filing wrote them')
+    : bad('no amount range on the page — a bracket has been flattened to a figure');
+  ct.toLowerCase().includes('brackets summed, not a point estimate')
+    ? ok('and the headline says the total is a range, not an estimate')
+    : bad('the headline claims a point total');
+  const cn = await rows();
+  cn > 0 ? ok(`the disclosure feed has rows — ${cn}`) : bad('the congress feed is empty');
+
+  /* ── no date is in the future ── */
+  const filed = await page.$$eval('tbody tr td:first-child', ts => ts.map(t => t.textContent.trim()));
+  const traded = await page.$$eval('tbody tr td:nth-child(7)', ts => ts.map(t => t.textContent.trim()));
+  filed.every(t => !t.startsWith('-'))
+    ? ok('no disclosure is dated in the future')
+    : bad(`disclosures dated ahead: ${filed.filter(t => t.startsWith('-')).slice(0, 3).join(', ')}`);
+  traded.every(t => !t.startsWith('-'))
+    ? ok('no trade is dated in the future')
+    : bad(`trades dated ahead: ${traded.filter(t => t.startsWith('-')).slice(0, 3).join(', ')}`);
+
+  /* ── the filter that carries the signal ── */
+  await page.click('button:has-text("On committee")');
+  await page.waitForTimeout(600);
+  const cf = await rows();
+  cf > 0 && cf < cn
+    ? ok(`the committee filter narrows the feed — ${cn} to ${cf}`)
+    : bad(`the committee filter left ${cf} of ${cn}`);
+
+  errs.length === 0 ? ok('no page errors on the desk') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
+  await ctx.close();
+}
+
 console.log(`\n${fails} failing`);
 await browser.close();
 process.exit(fails ? 1 : 0);
