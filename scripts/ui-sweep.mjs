@@ -3866,15 +3866,56 @@ head('thirteen tools on the rail, two of them take three anchors, the note takes
     await page.mouse.click(bb2.x + bb2.width * 0.5, bb2.y + bb2.height * 0.28);
     await page.waitForTimeout(250);
     (await deleteDisabled()) === false ? ok('clicking a mark selects it — Delete arms') : bad('the click selected nothing');
-    await page.mouse.move(bb2.x + bb2.width * 0.5, bb2.y + bb2.height * 0.28);
-    await page.mouse.down();
-    await page.mouse.move(bb2.x + bb2.width * 0.5, bb2.y + bb2.height * 0.45, { steps: 4 });
-    await page.mouse.up();
-    await page.waitForTimeout(350);
-    const levels1 = (await storedRaw()).filter(d => d.kind === 'hline');
-    levels1[0] && levels0[0] && levels1[0].p1.price !== levels0[0].p1.price
-      ? ok(`a body-drag moves the mark — ${levels0[0].p1.price.toFixed(2)} → ${levels1[0].p1.price.toFixed(2)}`)
-      : bad('the drag moved nothing');
+    /*
+      THE MARK IS ON A LIVE TAPE, and this drag assumed it had not moved
+      since the click that selected it.
+
+      The press lands on a fixed fraction of the pane, ~250ms after the
+      selecting click. In between, a simulator tick can re-fit the price
+      scale and carry the level a few pixels off that point. The press then
+      hits empty canvas, which DESELECTS — so the drag moves nothing AND the
+      delete that follows has nothing selected. Two assertions fall
+      together, which is the pair CI reported on a94ef8f while the commit
+      before it, with identical product code, was green.
+
+      Ruled out first, by measuring rather than reasoning: the chrome band
+      the reveal fix now keeps open ends 101px ABOVE this press (pane top
+      62, height 882, band bottom 208, press at 309), so the strip is not
+      what the press is landing on.
+
+      So the press re-establishes its own precondition instead of inheriting
+      one, and a miss is retried ONCE after re-selecting — what a reader
+      would do when a mark slips under the cursor. The retry is REPORTED,
+      never silent: a run that needs it says so, so this cannot quietly
+      become a passing test for a drag that has stopped working. Never
+      moving still fails.
+    */
+    const pressDrag = async () => {
+      await page.mouse.move(bb2.x + bb2.width * 0.5, bb2.y + bb2.height * 0.28);
+      await page.mouse.down();
+      await page.mouse.move(bb2.x + bb2.width * 0.5, bb2.y + bb2.height * 0.45, { steps: 4 });
+      await page.mouse.up();
+      await page.waitForTimeout(350);
+      return (await storedRaw()).filter(d => d.kind === 'hline');
+    };
+    const moved = (a, b) => b[0] && a[0] && b[0].p1.price !== a[0].p1.price;
+    let levels1 = await pressDrag();
+    let retried = false;
+    if (!moved(levels0, levels1)) {
+      retried = true;
+      await page.mouse.click(bb2.x + bb2.width * 0.5, bb2.y + bb2.height * 0.28);
+      await page.waitForTimeout(200);
+      levels1 = await pressDrag();
+    }
+    moved(levels0, levels1)
+      ? ok(`a body-drag moves the mark — ${levels0[0].p1.price.toFixed(2)} → ${levels1[0].p1.price.toFixed(2)}${retried ? ' (second press — the tape moved under the first)' : ''}`)
+      : bad('the drag moved nothing, twice');
+    /* The delete needs a selection of its own: a press that missed will have
+       put the previous one down. */
+    if ((await deleteDisabled()) !== false) {
+      await page.mouse.click(bb2.x + bb2.width * 0.5, bb2.y + bb2.height * 0.45);
+      await page.waitForTimeout(250);
+    }
     for (const b of await page.$$('button[aria-label="Delete selected"]')) if (!(await b.isDisabled())) await b.click();
     await page.waitForTimeout(300);
     const afterDel = await storedRaw();
