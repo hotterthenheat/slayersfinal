@@ -5757,6 +5757,95 @@ head('any point on the planet answers, not just the ones with a story on them');
   await ctx.close();
 }
 
+head('the ticker page answers who is actually trading the name');
+{
+  /*
+    The two surfaces that answer it from opposite ends: PASSIVE OWNERSHIP —
+    the money moving the name with no view on it — and INSIDER
+    TRANSACTIONS, the people with the most view of all.
+
+    And one page-wide invariant that belongs to no single panel: NO TEXT MAY
+    RENDER COLOURLESS. A Tailwind colour built from a runtime template
+    string never reaches the stylesheet, so the class lands in the DOM with
+    no rule behind it and the text paints as nothing — present in the
+    accessibility tree, invisible on screen, and silent in every other
+    check. That has shipped twice on this desk. Text painted by a background
+    clipped to its glyphs is exempt: the foil headings do that deliberately.
+  */
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/stocks/AAPL`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+
+  const body = () => page.evaluate(() => document.body.innerText.toLowerCase());
+  const seen = await body();
+  for (const phrase of [
+    'passive ownership',
+    'passive share of volume',
+    'net through funds',
+    'insider transactions',
+    'reads as',
+    'of that, on a schedule',
+  ]) {
+    /* innerText comes back as RENDERED, so an uppercase label arrives
+       uppercased — compare with the case folded. */
+    seen.includes(phrase) ? ok(`the page says "${phrase}"`) : bad(`the page never says "${phrase}"`);
+  }
+
+  const funds = await page.evaluate(() =>
+    [...document.querySelectorAll('table tbody tr td:first-child')].map(td => td.textContent?.trim() ?? '')
+  );
+  funds.some(f => /^SPY/.test(f))
+    ? ok('a broad fund is named among the holders')
+    : bad(`no broad fund on the board — ${funds.slice(0, 3).join(', ')}`);
+
+  const plans = await page.$$('span[title^="A 10b5-1 plan"]');
+  plans.length > 0
+    ? ok(`a scheduled sale wears its badge on the row — ${plans.length}`)
+    : bad('no plan badge — a scheduled sale is indistinguishable from a decision');
+
+  const colourless = await page.evaluate(() => {
+    const out = [];
+    for (const el of document.querySelectorAll('td, th, div, span, p, a, button')) {
+      const t = el.childElementCount === 0 ? el.textContent?.trim() : '';
+      if (!t || t.length < 2) continue;
+      const cs = getComputedStyle(el);
+      if (cs.color !== 'rgba(0, 0, 0, 0)' && cs.color !== 'transparent') continue;
+      const clipped =
+        (cs.webkitBackgroundClip === 'text' || cs.backgroundClip === 'text') && cs.backgroundImage !== 'none';
+      if (!clipped) out.push(`"${t.slice(0, 24)}"`);
+    }
+    return out.slice(0, 6);
+  });
+  colourless.length === 0
+    ? ok('no text renders colourless — every colour class reached the stylesheet')
+    : bad(`colourless: ${colourless.join(', ')}`);
+
+  const spill = await page.evaluate(() => {
+    const out = [];
+    for (const t of document.querySelectorAll('table')) {
+      const box = t.parentElement;
+      if (box && box.scrollWidth > box.clientWidth + 2 && getComputedStyle(box).overflowX === 'visible')
+        out.push(`a table overflows by ${box.scrollWidth - box.clientWidth}px with no scroller`);
+    }
+    if (document.documentElement.scrollWidth > document.documentElement.clientWidth + 2)
+      out.push(`the page scrolls sideways by ${document.documentElement.scrollWidth - document.documentElement.clientWidth}px`);
+    return out;
+  });
+  spill.length === 0 ? ok('every board fits its box') : bad(spill.join(' | '));
+
+  /* The window control has to actually move the board. */
+  const before = await body();
+  await page.click('button:has-text("30d")');
+  await page.waitForTimeout(700);
+  (await body()) !== before ? ok('the insider window re-reads the filings') : bad('30d changed nothing');
+
+  errs.length === 0 ? ok('no page errors on the ticker page') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
+  await ctx.close();
+}
+
 console.log(`\n${fails} failing`);
 await browser.close();
 process.exit(fails ? 1 : 0);
