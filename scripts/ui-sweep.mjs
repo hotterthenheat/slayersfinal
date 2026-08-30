@@ -4173,7 +4173,7 @@ head('the event lane draws, and a glyph answers with its card');
    and that the THIRD sub-pane is refused in place — a disabled row with the
    reason in its tooltip — rather than shrinking the tape past its floor.
    ───────────────────────────────────────────────────────────────────────── */
-head('two sub-panes stack under the tape, and the third is refused with its reason');
+head('sub-panes stack under the tape, and the one past the cap is refused with its reason');
 {
   const seed = JSON.stringify({
     layout: 1,
@@ -4210,27 +4210,90 @@ head('two sub-panes stack under the tape, and the third is refused with its reas
     ? ok('and the tape keeps the lion\u2019s share of the height')
     : bad(`the tape lost its floor: ${JSON.stringify(heights)}`);
 
-  /* The cap: with two sub-panes up, the third row is disabled and says why. */
-  const bb2 = await (await page.$$('.grid > div > div'))[0].boundingBox();
+  /*
+    THE CAP, ASSERTED AS A CAP — not as the number two.
+
+    This block used to seed two sub-panes and check that the THIRD row came
+    back disabled. `MAX_SUB_PANES` was raised from 2 to 3 with the second
+    indicator set, and the assertion went on encoding the retired number:
+    it failed with "the cap did not disable the third sub-pane row" about a
+    menu behaving exactly as designed.
+
+    It found something real on the way, though. The menu's own heading read
+    "Own pane — two at most" and its refusal tooltip "Two sub-panes are the
+    cap" while the code enforced three — the constant was raised and the
+    prose was not, so the reader was being told a limit that did not exist.
+    Both strings are derived from the constant now.
+
+    So this walks the sub-pane rows (`data-sub-pane`, a hook rather than a
+    name list that would itself go stale) turning them on until one is
+    refused, and asserts the SHAPE: more than one is allowed, a refusal
+    eventually comes, and the refused row says why. Whatever the cap is set
+    to, that holds — and a cap of one, or no cap at all, still fails.
+  */
   await reachForChrome(page);
   await page.waitForTimeout(500);
-  for (const b of await page.$$('[aria-haspopup="menu"]')) {
-    if (/Indicators/.test((await b.textContent()) ?? '')) { await b.click(); await page.waitForTimeout(400); break; }
+  const openIndicators = async () => {
+    for (const b of await page.$$('[aria-haspopup="menu"]')) {
+      if (/Indicators/.test((await b.textContent()) ?? '')) { await b.click(); await page.waitForTimeout(400); return true; }
+    }
+    return false;
+  };
+  (await openIndicators()) ? ok('PREMISE: the Indicators menu opens') : bad('PREMISE: no Indicators trigger');
+
+  const subRows = async () => {
+    const out = [];
+    for (const el of await page.$$('[data-toolbar-menu] [role="checkbox"][data-sub-pane]')) {
+      out.push({
+        el,
+        label: ((await el.textContent()) ?? '').trim().slice(0, 24),
+        on: (await el.getAttribute('aria-checked')) === 'true',
+        off: await el.isDisabled(),
+        why: (await el.getAttribute('title')) ?? '',
+      });
+    }
+    return out;
+  };
+
+  const rows0 = await subRows();
+  rows0.length >= 3
+    ? ok(`PREMISE: the menu marks its sub-pane rows — ${rows0.length} of them`)
+    : bad(`PREMISE: ${rows0.length} sub-pane rows found; the cap cannot be tested`);
+
+  /* Two are already on from the seed. Keep turning the next available one on
+     until the menu refuses, so the count comes from the product. */
+  let accepted = rows0.filter(r => r.on).length;
+  let refused = null;
+  for (let i = 0; i < rows0.length + 2 && !refused; i++) {
+    const rows = await subRows();
+    const next = rows.find(r => !r.on);
+    if (!next) break;
+    if (next.off) { refused = next; break; }
+    await next.el.click();
+    await page.waitForTimeout(500);
+    accepted++;
+    if (!(await page.$('[data-toolbar-menu]'))) await openIndicators();
   }
-  let atrRow = null;
-  for (const item of await page.$$('[data-toolbar-menu] [role="checkbox"]')) {
-    if (/ATR 14/.test((await item.textContent()) ?? '')) atrRow = item;
-  }
-  atrRow ? ok('PREMISE: the ATR sub-pane row is offered') : bad('PREMISE: no ATR 14 row in the Indicators menu');
-  if (atrRow) {
-    (await atrRow.isDisabled())
-      ? ok('the third sub-pane is refused while two are up')
-      : bad('the cap did not disable the third sub-pane row');
-    const reason = (await atrRow.getAttribute('title')) ?? '';
-    reason.includes('cap')
-      ? ok('with the reason in the row\u2019s own tooltip')
-      : bad(`the refused row carries no reason — title ${JSON.stringify(reason)}`);
-  }
+
+  refused
+    ? ok(`the cap refuses the next sub-pane in place — ${accepted} accepted, then "${refused.label}" is disabled`)
+    : bad(`no sub-pane row was ever refused after turning on ${accepted} — the cap is not being enforced`);
+  accepted >= 2
+    ? ok(`and it is a cap, not a ban — ${accepted} sub-panes were allowed`)
+    : bad(`only ${accepted} sub-pane(s) allowed before the refusal`);
+  refused && /cap/.test(refused.why)
+    ? ok(`with the reason in the row's own tooltip — "${refused.why.slice(0, 60)}"`)
+    : bad(`the refused row carries no reason — title ${JSON.stringify(refused?.why ?? '')}`);
+  /* The words on the menu have to name the same number the code enforces. */
+  const heading = await page.$$eval('[data-toolbar-menu] div', ds => {
+    const d = ds.find(x => /Own pane/.test(x.textContent || ''));
+    return d ? d.textContent.trim() : '';
+  });
+  const WORDS = { 1: 'one', 2: 'two', 3: 'three', 4: 'four' };
+  heading.includes(WORDS[accepted] ?? String(accepted))
+    ? ok(`and the heading names the same number the code enforced — "${heading}"`)
+    : bad(`the heading says "${heading}" but the code accepted ${accepted}`);
+
   /* And the new overlays are offered alongside. */
   const labels = [];
   for (const item of await page.$$('[data-toolbar-menu] [role="checkbox"]')) labels.push(((await item.textContent()) ?? '').slice(0, 30));
@@ -4341,10 +4404,13 @@ head('a 15s pane says live only, and the chip leaves with the timeframe');
 
   /* The picker: leaving 15s retires the chip, returning brings it back. */
   const pickTf = async label => {
-    /* Hover the pane first — the toolbar is hover-gated, and a chip clicked
-       while it is folded away gets intercepted by the plot canvas (this
-       exact call once timed out a whole sweep on that). */
-    await page.mouse.move(800, 420);
+    /* Reach for the chrome first — the strip reveals near the pane's TOP
+       edge, and a chip clicked while it is folded away gets intercepted by
+       the plot canvas. This exact call has now timed out a whole sweep
+       twice: once on the literal coordinate below, and again after the
+       coordinate was corrected but still pointed at the middle of the pane,
+       which is the gesture that HIDES the strip. */
+    await reachForChrome(page);
     await page.waitForTimeout(350);
     for (const b of await page.$$('button')) {
       if ((await b.textContent())?.trim() === label) { await b.click(); await page.waitForTimeout(900); return true; }
