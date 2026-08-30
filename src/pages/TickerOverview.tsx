@@ -13,6 +13,7 @@ import CompanyLogo from '../components/ui/CompanyLogo';
 import ProvenanceChip from '../components/ui/ProvenanceChip';
 import SeasonalityPanel from '../components/gex/SeasonalityPanel';
 import EtfExposurePanel from '../components/gex/EtfExposurePanel';
+import InsiderPanel from '../components/gex/InsiderPanel';
 
 /*
 ==================================================
@@ -140,6 +141,12 @@ const TickerOverview = () => {
           a reader deciding how much weight to put on an earnings line wants
           to know first whether the name trades on its own account. */}
       <EtfExposurePanel ticker={p.ticker} className="w-full" />
+
+      {/* And what the people who run it did with their own shares. Directly
+          under passive ownership on purpose: the two together answer "who is
+          actually trading this" from both ends — the money with no view, and
+          the people with the most. */}
+      <InsiderPanel ticker={p.ticker} className="w-full" />
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         <Panel title="Income statement" subtitle="trailing twelve months" className="w-full" collapsible id="fin-income">
