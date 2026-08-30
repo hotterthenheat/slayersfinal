@@ -3880,7 +3880,13 @@ const StrikeChart = ({
             onPointerUp={onDrawUp}
           />
         )}
-        {drawing && (
+        {/* PERSISTENT WHEN THERE IS A WAY IN. This rail used to render only
+            while `drawing`, which left no door: the host's pane strip no
+            longer carries a pencil, so a reader in a docked pane had no way
+            to start. It now shows whenever the host offers `onEnterDraw`,
+            and picking a tool is what arms the mode. Without that callback
+            it behaves exactly as before. */}
+        {(drawing || !!onEnterDraw) && (
           /*
             THE TOOL RAIL — vertical, docked centre-left (partner, 2026-08-27:
             "we should have an entire toolbar").
@@ -3937,7 +3943,15 @@ const StrikeChart = ({
                   {group.tools.map(item => (
                     <button
                       key={item.tool}
-                      onClick={() => setDrawTool(item.tool)}
+                      onClick={() => {
+                        setDrawTool(item.tool);
+                        /* A TOOL CLICKED AT REST ARMS DRAW MODE. The rail is
+                           persistent now (see the gate below), so picking a
+                           tool is the way IN — guarded on `drawing` so
+                           clicking tools while already drawing never toggles
+                           the mode back off. */
+                        if (!drawing) onEnterDraw?.();
+                      }}
                       title={item.label}
                       aria-label={item.label}
                       aria-pressed={drawTool === item.tool}

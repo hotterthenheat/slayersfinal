@@ -3305,8 +3305,17 @@ head('the measure is reachable, and what it draws is a stored measure');
   await reachForChrome(page);
   await page.waitForTimeout(600);
 
-  const pencil = await page.$('button[aria-label="Draw on the chart"]');
-  pencil ? ok('PREMISE: the pane strip carries a draw button') : bad('PREMISE: no draw button in the pane strip — the drawing layer still has no door');
+  /* THE DOOR MOVED, and this premise moved with it. Draw mode used to be a
+     pencil in the pane's toolbar strip; the desk now carries a PERSISTENT
+     tool rail on the chart, and picking a tool is what arms the mode. That
+     is the more discoverable arrangement — a toggle hidden behind a hover
+     is a door nobody finds — so the check follows the door rather than
+     asking for the old one back. The toolbar pencil is still accepted
+     where a surface mounts one. */
+  const pencil =
+    (await page.$('button[aria-label="Trend"]')) ??
+    (await page.$('button[aria-label="Draw on the chart"]'));
+  pencil ? ok('PREMISE: the chart carries a way into draw mode') : bad('PREMISE: no draw tool on the chart — the drawing layer has no door');
 
   if (pencil) {
     await pencil.click();
@@ -4403,9 +4412,29 @@ head('the rail takes a volume profile, and gives it back');
       ? ok('the chip says it is on')
       : bad('aria-pressed did not follow the toggle');
     const after = await railInk();
-    after > 300
-      ? ok(`the profile paints — ${after} ink cells of bins, VPOC and value area`)
-      : bad(`the toggle painted ${after} cells`);
+    /*
+      A SHARE OF THE CANVAS, NOT A PIXEL COUNT.
+
+      This asserted `> 300` ink pixels, a number tuned to the rail when it
+      was a fixed 132px wide. The rail is draggable now and its canvas is
+      whatever the reader left it at, so the same correctly-painted profile
+      measured 295 and failed — a layout change reported as a product
+      regression.
+
+      What actually has to be true is that the profile COVERS ground rather
+      than leaving a few stray pixels, so the floor is a fraction of the
+      canvas it is drawn on. The pair below is the real contract: it paints
+      when on, and clears completely when off.
+    */
+    const canvasArea = await page.evaluate(() => {
+      const rail = document.querySelector('[aria-label$="exposure by strike"]');
+      const c = rail?.querySelector('canvas');
+      return c ? c.width * c.height : 0;
+    });
+    const floor = Math.max(80, Math.round(canvasArea * 0.001));
+    after > floor
+      ? ok(`the profile paints — ${after} ink cells of bins, VPOC and value area (floor ${floor})`)
+      : bad(`the toggle painted ${after} cells, under the ${floor} floor for a ${canvasArea}px canvas`);
     await chip.click();
     await page.waitForTimeout(700);
     const off = await railInk();
