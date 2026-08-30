@@ -39,6 +39,7 @@ import CompanyLogo from '../../components/ui/CompanyLogo';
 import CatTag from '../../components/news/CatTag';
 import Simulator from '../../core/simulator';
 import { readAllClocks, fmtGap } from '../../data/worldClocks';
+import { placeAt, placeRead, bearingFrom, type PlaceReport, type PlaceHit } from '../../data/placeReport';
 import {
   buildEconCalendar,
   buildGeoNews,
@@ -250,12 +251,33 @@ const NewsRoom = () => {
      there and the right field reads from the same place. */
   const [cityView, setCityView] = useState<string | null>(null);
   const openCity = (city: string, topId: string) => {
+    setPlaceView(null);
     setCityView(city);
     pick(topId);
     /* Fly regardless — picking an already-selected story re-fires nothing,
        and opening a place must always take you there. */
     const ev = events.find(x => x.id === topId);
     if (ev) setRegion(r => ({ lat: ev.origin.lat, lng: ev.origin.lng, alt: 1.75, n: (r?.n ?? 0) + 1 }));
+  };
+
+  /* A POINT'S dossier — the third address type, and the one that makes the
+     whole sphere answer. A city ping opens the dossier above; clicking
+     anywhere else on the planet used to do nothing at all, which left most
+     of the globe as decoration. This reads the nearest centre, its local
+     clock, what came out of it and — the reading only a globe has — what is
+     AIMED at it from elsewhere.
+
+     It does NOT select a story. A click on open ocean has no story to
+     select, and quietly jumping the right field to some nearby headline
+     would be the panel answering a question the reader did not ask. The
+     camera does fly, because a place you asked about should be in front of
+     you. */
+  const [placeView, setPlaceView] = useState<PlaceReport | null>(null);
+  const openPlace = (lat: number, lng: number) => {
+    setTour(false);
+    setCityView(null);
+    setPlaceView(placeAt(lat, lng, events));
+    setRegion(r => ({ lat, lng, alt: 1.6, n: (r?.n ?? 0) + 1 }));
   };
 
   /* A name's dossier — the same drill, second address type: everything
@@ -619,6 +641,164 @@ const NewsRoom = () => {
       }
     : null;
 
+  /* THE PLACE DOSSIER — what is going on at a point the reader picked.
+
+     Two lists, kept apart on purpose. OUT OF HERE is the ordinary reading
+     every other surface on this desk can give. AIMED AT HERE is the one
+     only this room has: the globe draws the arcs, so it is the only place
+     that knows a Santa Clara headline lands on Taipei. Summing them would
+     destroy exactly the distinction that makes the surface worth building.
+
+     A remote click is told it is remote. The nearest centre is still named
+     — with the gap and a bearing — rather than pretending the reader
+     clicked it. */
+  const placeRow = (h: PlaceHit, kind: 'out' | 'in') => {
+    const e = h.event;
+    const isSel = e.id === selectedId;
+    const faded = freshnessOf(e) === 'faded';
+    return (
+      <button
+        key={`${kind}-${e.id}`}
+        onClick={() => pick(e.id)}
+        className={`w-full text-left px-3 py-2.5 border-b border-borderSubtle/60 last:border-b-0 transition-colors ${
+          isSel ? 'bg-white/[0.05] shadow-[inset_2px_0_0_0_rgba(237,237,237,0.7)]' : 'hover:bg-white/[0.03]'
+        } ${faded && !isSel ? 'opacity-55' : ''}`}
+      >
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-mono text-[9px] text-textMuted tnum">{e.item.time}</span>
+          {e.item.ticker && <TickerChip t={e.item.ticker} onOpen={openTicker} />}
+          <CatTag category={e.item.category} />
+          <span className={`font-mono text-[9px] font-semibold uppercase tracking-wider ${GRADE_TEXT[e.grade]}`}>
+            {e.grade}
+          </span>
+          <span className="ml-auto font-mono text-[9px] text-textMuted tnum">{h.km.toLocaleString()}km</span>
+        </div>
+        <p className="mt-1.5 text-[12px] text-textPrimary leading-snug">{e.item.headline}</p>
+        {/* A landing says where it came FROM and which zone caught it — the
+            two facts that turn "this is near you" into a trajectory. */}
+        {kind === 'in' && (
+          <p className="mt-1 font-mono text-[9px] text-textMuted">
+            from {e.origin.city}
+            {h.zone ? ` \u2192 ${h.zone}` : ''}
+          </p>
+        )}
+      </button>
+    );
+  };
+
+  const placeDrill = placeView
+    ? {
+        title: (
+          <span className="font-mono text-[11px] font-semibold text-textPrimary">
+            {placeView.remote ? `Near ${placeView.region.name}` : placeView.region.name}
+            <span className="ml-2 font-normal text-[10px] text-textMuted tnum">{placeView.localTime} local</span>
+          </span>
+        ),
+        onBack: () => setPlaceView(null),
+        body: (
+          <div className="flex flex-col">
+            <div className="px-3 py-2.5 border-b border-borderSubtle/60">
+              <div className="flex items-center gap-2 flex-wrap font-mono text-[9px] uppercase tracking-widest">
+                <span className="text-textMuted">{placeView.region.area}</span>
+                {placeView.clock ? (
+                  <span className={placeView.clock.open ? 'text-bull' : 'text-textMuted'}>
+                    {placeView.clock.open
+                      ? `open \u00b7 closes in ${fmtGap(placeView.clock.minutesToEdge)}`
+                      : `closed \u00b7 opens in ${fmtGap(placeView.clock.minutesToEdge)}`}
+                  </span>
+                ) : (
+                  /* No exchange here — say so, rather than leaving a gap a
+                     reader fills in with "closed". */
+                  <span className="text-textMuted">no exchange</span>
+                )}
+                <span className="ml-auto text-textMuted tnum">
+                  {placeView.lat.toFixed(1)}&deg;, {placeView.lng.toFixed(1)}&deg;
+                </span>
+              </div>
+              <p className="mt-1.5 text-[12px] text-textPrimary leading-snug">{placeRead(placeView)}</p>
+              {placeView.remote ? (
+                <p className="mt-1 font-mono text-[9px] text-textMuted">
+                  This point is {placeView.km.toLocaleString()}km {bearingFrom(placeView.region, placeView.lat, placeView.lng)} of{' '}
+                  {placeView.region.name} — outside its catchment, so nothing here is claimed for it.
+                </p>
+              ) : (
+                <p className="mt-1 font-mono text-[9px] text-textMuted">{placeView.region.known}.</p>
+              )}
+            </div>
+
+            {/* The pressure landing here, in the heat layer's own currency
+                so the bar and the pixels on the planet cannot disagree. */}
+            {(placeView.threat > 0 || placeView.ally > 0) && (
+              <div className="px-3 py-2 border-b border-borderSubtle/60">
+                <div className="flex items-center justify-between font-mono text-[9px] uppercase tracking-widest">
+                  <span className="text-bear">{placeView.threat.toFixed(1)} pressing</span>
+                  <span className="text-textMuted">weight here</span>
+                  <span className="text-bull">{placeView.ally.toFixed(1)} lifting</span>
+                </div>
+                <div className="mt-1.5 flex h-1.5 rounded-full overflow-hidden bg-white/[0.06]">
+                  <span
+                    className="h-full bg-bear/80"
+                    style={{
+                      width: `${(placeView.threat / Math.max(0.01, placeView.threat + placeView.ally)) * 100}%`,
+                      transition: `width 520ms ${EASE}`,
+                    }}
+                  />
+                  <span
+                    className="h-full bg-bull"
+                    style={{
+                      width: `${(placeView.ally / Math.max(0.01, placeView.threat + placeView.ally)) * 100}%`,
+                      transition: `width 520ms ${EASE}`,
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {placeView.origins.length > 0 && (
+              <>
+                <div className="px-3 py-1.5 border-b border-borderSubtle/60 font-mono text-[9px] uppercase tracking-widest text-textMuted">
+                  Out of here &middot; {placeView.origins.length}
+                </div>
+                {placeView.origins.map(h => placeRow(h, 'out'))}
+              </>
+            )}
+
+            {placeView.landings.length > 0 && (
+              <>
+                <div className="px-3 py-1.5 border-b border-borderSubtle/60 font-mono text-[9px] uppercase tracking-widest text-textMuted">
+                  Aimed at here &middot; {placeView.landings.length}
+                  <span className="ml-2 normal-case tracking-normal text-textMuted/70">
+                    stories that reach it from somewhere else
+                  </span>
+                </div>
+                {placeView.landings.map(h => placeRow(h, 'in'))}
+              </>
+            )}
+
+            {placeView.origins.length === 0 && placeView.landings.length === 0 && (
+              <div className="px-3 py-6 text-center">
+                <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Nothing here today</div>
+                <p className="mt-1.5 text-[11px] text-textSecondary leading-snug">
+                  No headline came out of this place and none is pointed at it. Spin to a lit ping, or try one of the
+                  centres along the bottom.
+                </p>
+              </div>
+            )}
+
+            {/* The names touching this place, as doors. */}
+            {placeView.tickers.length > 0 && (
+              <div className="px-3 py-2.5 border-t border-borderSubtle/60 flex items-center gap-3 flex-wrap">
+                <span className="font-mono text-[9px] uppercase tracking-widest text-textMuted">Names here</span>
+                {placeView.tickers.slice(0, 6).map(t => (
+                  <TickerChip key={t} t={t} onOpen={openTicker} />
+                ))}
+              </div>
+            )}
+          </div>
+        ),
+      }
+    : null;
+
   /* The name's dossier — its stories, its zones, its doors. */
   const tickerEvents = tickerView ? events.filter(e => e.item.ticker === tickerView) : [];
   const tickerZones = (() => {
@@ -737,6 +917,8 @@ const NewsRoom = () => {
             selectedId={selectedId}
             onSelect={pick}
             onCityOpen={openCity}
+            onPlaceClick={openPlace}
+            placeMark={placeView ? { lat: placeView.lat, lng: placeView.lng } : null}
             focusRegion={region}
             onReady={() => setReady(true)}
           />
@@ -833,7 +1015,9 @@ const NewsRoom = () => {
           Narrow screens stack them under the globe at full width. */}
       <div className="h-[440px] lg:h-auto lg:absolute lg:left-4 lg:top-16 lg:bottom-12 lg:w-[350px] lg:z-10">
         <Zone
-          drill={cityDrill}
+          /* A place click clears the city view and vice versa, so at most
+             one of these is ever non-null — the ?? is belt and braces. */
+          drill={placeDrill ?? cityDrill}
           pages={[
             { key: 'wire', label: 'Headlines', body: wireBody },
             { key: 'movers', label: 'Movers', body: moversBody },
