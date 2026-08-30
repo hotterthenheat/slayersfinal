@@ -3871,59 +3871,72 @@ head('thirteen tools on the rail, two of them take three anchors, the note takes
     const levels0 = (await storedRaw()).filter(d => d.kind === 'hline');
     levels0.length === 1 ? ok('PREMISE: one fresh level to edit') : bad(`PREMISE: ${levels0.length} levels stored`);
     (await deleteDisabled()) === true ? ok('Delete is disabled while nothing is selected') : bad('Delete armed with no selection');
-    await pick('Select');
-    await page.mouse.click(bb2.x + bb2.width * 0.5, bb2.y + bb2.height * 0.28);
-    await page.waitForTimeout(250);
-    (await deleteDisabled()) === false ? ok('clicking a mark selects it — Delete arms') : bad('the click selected nothing');
     /*
-      THE MARK IS ON A LIVE TAPE, and this drag assumed it had not moved
-      since the click that selected it.
+      AIM AT WHERE THE LEVEL IS, NOT WHERE IT WAS DRAWN.
 
-      The press lands on a fixed fraction of the pane, ~250ms after the
-      selecting click. In between, a simulator tick can re-fit the price
-      scale and carry the level a few pixels off that point. The press then
-      hits empty canvas, which DESELECTS — so the drag moves nothing AND the
-      delete that follows has nothing selected. Two assertions fall
-      together, which is the pair CI reported on a94ef8f while the commit
-      before it, with identical product code, was green.
+      The mark sits on a LIVE tape. Between the click that draws it and the
+      press that grabs it, a simulator tick re-fits the price scale and
+      carries the level a few pixels off the point it was drawn at. The
+      press then lands on empty canvas, which DESELECTS — so the drag moves
+      nothing and the delete that follows has nothing selected. Two
+      assertions fall together.
 
-      Ruled out first, by measuring rather than reasoning: the chrome band
-      the reveal fix now keeps open ends 101px ABOVE this press (pane top
-      62, height 882, band bottom 208, press at 309), so the strip is not
-      what the press is landing on.
+      The previous guard retried once, and could not help: it re-pressed the
+      SAME fixed fraction, which is precisely the point that had drifted.
+      Retrying a stale aim is not a retry. CI proved it — run #930 failed
+      both assertions on a tree whose own branch run, #929, was green with
+      identical product code.
 
-      So the press re-establishes its own precondition instead of inheriting
-      one, and a miss is retried ONCE after re-selecting — what a reader
-      would do when a mark slips under the cursor. The retry is REPORTED,
-      never silent: a run that needs it says so, so this cannot quietly
-      become a passing test for a drag that has stopped working. Never
-      moving still fails.
+      So the aim is MEASURED instead of assumed. A level spans the full
+      width, so only its price matters; the search steps outward from where
+      it was drawn and uses the app's OWN hit test — Delete arming — as the
+      detector, which is exactly what a reader does when a line has slipped
+      a few pixels under the cursor. Bounded to ±40px: further than that is
+      not drift, it is a broken mark, and it should fail.
     */
-    const pressDrag = async () => {
-      await page.mouse.move(bb2.x + bb2.width * 0.5, bb2.y + bb2.height * 0.28);
+    await pick('Select');
+    const drawY = bb2.y + bb2.height * 0.28;
+    const findMark = async () => {
+      for (const dy of [0, -6, 6, -12, 12, -18, 18, -26, 26, -34, 34, -40, 40]) {
+        await page.mouse.click(bb2.x + bb2.width * 0.5, drawY + dy);
+        await page.waitForTimeout(140);
+        if ((await deleteDisabled()) === false) return { y: drawY + dy, drift: dy };
+      }
+      return null;
+    };
+    const hit = await findMark();
+    hit
+      ? ok(`clicking a mark selects it — Delete arms${hit.drift ? ` (${hit.drift > 0 ? '+' : ''}${hit.drift}px — the tape moved it under the cursor)` : ''}`)
+      : bad('no click within 40px of the level selected it');
+
+    const moved = (a, b) => b[0] && a[0] && b[0].p1.price !== a[0].p1.price;
+    let levels1 = levels0;
+    if (hit) {
+      /* Press ON the mark, drag down, release. The press re-establishes the
+         selection itself, so this does not inherit one. */
+      await page.mouse.move(bb2.x + bb2.width * 0.5, hit.y);
       await page.mouse.down();
-      await page.mouse.move(bb2.x + bb2.width * 0.5, bb2.y + bb2.height * 0.45, { steps: 4 });
+      await page.mouse.move(bb2.x + bb2.width * 0.5, hit.y + bb2.height * 0.17, { steps: 4 });
       await page.mouse.up();
       await page.waitForTimeout(350);
-      return (await storedRaw()).filter(d => d.kind === 'hline');
-    };
-    const moved = (a, b) => b[0] && a[0] && b[0].p1.price !== a[0].p1.price;
-    let levels1 = await pressDrag();
-    let retried = false;
-    if (!moved(levels0, levels1)) {
-      retried = true;
-      await page.mouse.click(bb2.x + bb2.width * 0.5, bb2.y + bb2.height * 0.28);
-      await page.waitForTimeout(200);
-      levels1 = await pressDrag();
+      levels1 = (await storedRaw()).filter(d => d.kind === 'hline');
     }
     moved(levels0, levels1)
-      ? ok(`a body-drag moves the mark — ${levels0[0].p1.price.toFixed(2)} → ${levels1[0].p1.price.toFixed(2)}${retried ? ' (second press — the tape moved under the first)' : ''}`)
-      : bad('the drag moved nothing, twice');
-    /* The delete needs a selection of its own: a press that missed will have
-       put the previous one down. */
+      ? ok(`a body-drag moves the mark — ${levels0[0].p1.price.toFixed(2)} → ${levels1[0].p1.price.toFixed(2)}`)
+      : bad('the drag moved nothing');
+    /* The delete needs a selection of its own, and it needs it at the
+       mark's NEW home — the drag just moved it. Searching from the drop
+       point rather than another fixed fraction, for the same reason the
+       press does: a guessed pixel on a live tape is a guess. */
     if ((await deleteDisabled()) !== false) {
-      await page.mouse.click(bb2.x + bb2.width * 0.5, bb2.y + bb2.height * 0.45);
-      await page.waitForTimeout(250);
+      const dropY = hit ? hit.y + bb2.height * 0.17 : bb2.y + bb2.height * 0.45;
+      let regained = false;
+      for (const dy of [0, -6, 6, -12, 12, -20, 20, -30, 30, -40, 40]) {
+        await page.mouse.click(bb2.x + bb2.width * 0.5, dropY + dy);
+        await page.waitForTimeout(140);
+        if ((await deleteDisabled()) === false) { regained = true; break; }
+      }
+      if (!regained) bad('the moved mark could not be re-selected within 40px of where it was dropped');
     }
     for (const b of await page.$$('button[aria-label="Delete selected"]')) if (!(await b.isDisabled())) await b.click();
     await page.waitForTimeout(300);
