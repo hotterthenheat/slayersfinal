@@ -21,7 +21,7 @@ const SCAN_INTERVAL_MS = 10_000;
 const TAG_TONE: Record<TargetTag, Tone> = {
   WALL: 'warn',
   PIN: 'neutral',
-  KING: 'magenta',
+  SUPREME: 'supreme',
   'SPOT TARGET': 'select',
 };
 
@@ -173,7 +173,7 @@ const PodiumCard = forwardRef<
       title="See this strike on the chart"
       className={`group relative text-left rounded-md border overflow-hidden transition-colors ${
         isPrimary
-          ? 'border-king/40 bg-king/[0.05] hover:bg-king/[0.08]'
+          ? 'border-supreme/40 bg-supreme/[0.05] hover:bg-supreme/[0.08]'
           : 'border-borderSubtle bg-inset hover:border-borderMuted hover:bg-white/[0.02]'
       }`}
     >
@@ -419,10 +419,10 @@ const RankedTargets = () => {
         {primary && (
           <button
             onClick={() => flash(primary)}
-            className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-king/30 bg-king/[0.05] hover:bg-king/[0.1] transition-colors"
+            className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-supreme/30 bg-supreme/[0.05] hover:bg-supreme/[0.1] transition-colors"
             title="See the primary target on the chart"
           >
-            <span className="font-mono text-[9px] font-semibold uppercase tracking-widest text-king">Primary target</span>
+            <span className="font-mono text-[9px] font-semibold uppercase tracking-widest text-supreme">Primary target</span>
             <span className="font-mono text-[11px] font-bold tnum text-textPrimary">{fmtStrike(primary.strike)}</span>
             <ArrowUpRight className="w-3 h-3 text-textSecondary" />
           </button>

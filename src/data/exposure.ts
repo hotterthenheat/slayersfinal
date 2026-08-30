@@ -57,7 +57,7 @@ const EXPIRY_DECAY: Record<ExposureExpiry, number> = {
   `gex.net` is what picks the call wall, the put wall and the flip on the
   flagship map. So an undocumented per-strike jitter was quietly relocating
   the levels: measured across eight names, six disagreed with the levels rail
-  and three named a different KING (META by 25 points, TSLA by 12.5).
+  and three named a different SUPREME (META by 25 points, TSLA by 12.5).
 
   The jitter earns its keep as leg TEXTURE — a book where every strike splits
   identically looks synthetic — so it stays, moved to where it cannot lie: it
@@ -145,13 +145,13 @@ export function buildExposureProfile(
      defensive floor rather than a branch anything renders today.
 
      AND THE PICK READS THE FULL BOOK, not the drawn window — P-24B's second
-     half, and the same argument the KING below has always carried. A windowed
+     half, and the same argument the SUPREME below has always carried. A windowed
      pick answers "the heaviest bar currently drawn", which changes when the
      reader resizes the window: SPY's call wall moved 4 strikes and META's 5
      between this surface and the levels rail purely because they looked at
      different slices. The window is a drawing choice; it must not be an
      answer. When a wall lands outside the slice its band simply is not on
-     screen, exactly as an off-window king crowns no row. */
+     screen, exactly as an off-window supreme crowns no row. */
   const picked = pickWalls(chain, spot, n => n.netGex);
   const callWall = picked.callWall ?? spot;
   const putWall = picked.putWall ?? spot;
@@ -161,21 +161,21 @@ export function buildExposureProfile(
      function's own no-crossing fallback exactly as it was. */
   const flip = pickFlip(chain, spot, n => n.netGex) ?? spot;
 
-  // The book's king — argmax |net gamma| over the FULL chain, not the window.
+  // The book's supreme — argmax |net gamma| over the FULL chain, not the window.
   // A windowed argmax answers "the biggest bar currently drawn", which moves
   // when the panel resizes and can disagree with the levels rail; when the
-  // real king sits outside the window, no row is crowned.
-  let king = spot;
+  // real supreme sits outside the window, no row is crowned.
+  let supreme = spot;
   let kingAbs = 0;
   for (const n of chain) {
     const a = Math.abs(n.putGex + n.callGex);
     if (a > kingAbs) {
       kingAbs = a;
-      king = n.strike;
+      supreme = n.strike;
     }
   }
 
-  const levels: ExposureLevels = { spot, callWall, putWall, pin: pinStrike, flip, king };
+  const levels: ExposureLevels = { spot, callWall, putWall, pin: pinStrike, flip, supreme };
 
   // Zone bands (strikes descending: from ≥ to). One row of breathing room per wall.
   const strikeList = strikes.map(s => s.strike);

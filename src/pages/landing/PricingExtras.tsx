@@ -36,7 +36,7 @@ const LADDER: LadderTier[] = [
     kicker: 'the structure desk',
     inherits: null,
     items: [
-      { label: 'Pulse', detail: 'Chart with walls, flip & king, dealer pressure, order flow' },
+      { label: 'Pulse', detail: 'Chart with walls, flip & supreme, dealer pressure, order flow' },
       { label: 'Pinpoint', detail: 'GEX · DEX · VEX by strike — exposure matrix & positioning map' },
       { label: 'Ranked Targets', detail: 'Every strike ranked by structural priority — the levels that matter today' },
       { label: 'Trace', detail: 'Streaming options tape, sweeps, blocks & dark-pool intelligence' },

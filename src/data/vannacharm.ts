@@ -69,10 +69,10 @@ interface LevelSet {
   callWall: number;
   putWall: number;
   flip: number;
-  king: number;
+  supreme: number;
 }
 
-/** Walls / flip / king from a set of (strike, value) pairs, descending input. */
+/** Walls / flip / supreme from a set of (strike, value) pairs, descending input. */
 function levelsFrom(rows: { strike: number; value: number }[], spot: number): LevelSet {
   /* Walls from core/walls.ts, the ONE copy of this rule. This picked by
      |value| plus side of spot, which names a shelf by where it sits rather
@@ -90,13 +90,13 @@ function levelsFrom(rows: { strike: number; value: number }[], spot: number): Le
   const callWall = picked.callWall ?? spot;
   const putWall = picked.putWall ?? spot;
 
-  let king = spot;
+  let supreme = spot;
   let maxAll = 0;
   for (const r of rows) {
     const mag = Math.abs(r.value);
     if (mag > maxAll) {
       maxAll = mag;
-      king = r.strike;
+      supreme = r.strike;
     }
   }
   /*
@@ -110,7 +110,7 @@ function levelsFrom(rows: { strike: number; value: number }[], spot: number): Le
     file reads it like everybody else.
   */
   const flip = pickFlip(rows, spot, r => r.value) ?? spot;
-  return { callWall, putWall, flip, king };
+  return { callWall, putWall, flip, supreme };
 }
 
 // ---- scenario projection -------------------------------------------------------
@@ -216,7 +216,7 @@ export function buildVannaCharm(
     { label: 'Call Wall', kind: 'call-wall', current: base.callWall, projected: proj.callWall },
     { label: 'Gamma Flip', kind: 'flip', current: base.flip, projected: proj.flip },
     { label: 'Put Wall', kind: 'put-wall', current: base.putWall, projected: proj.putWall },
-    { label: 'King Node', kind: 'king', current: base.king, projected: proj.king },
+    { label: 'Supreme Node', kind: 'supreme', current: base.supreme, projected: proj.supreme },
   ];
 
   // The read — MEASUREMENTS, not narrative (Mo, 2026-08-19: "walls hold —

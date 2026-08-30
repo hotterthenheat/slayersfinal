@@ -107,7 +107,7 @@ function buildKeyLevels(snapshot: MarketSnapshot, levels: KeyLevels, pin: number
     { kind: 'put-wall', label: 'Put Wall', price: levels.putWall, distPct: dist(levels.putWall), pressure: pressureAt(snapshot, levels.putWall) },
     { kind: 'pin', label: 'Pin Level', price: pin, distPct: dist(pin), pressure: pressureAt(snapshot, pin) },
     { kind: 'flip', label: 'Flip Level', price: levels.flip, distPct: dist(levels.flip), pressure: pressureAt(snapshot, levels.flip) },
-    { kind: 'king', label: 'King Node', price: levels.king, distPct: dist(levels.king), pressure: pressureAt(snapshot, levels.king) },
+    { kind: 'supreme', label: 'Supreme Node', price: levels.supreme, distPct: dist(levels.supreme), pressure: pressureAt(snapshot, levels.supreme) },
   ];
   // Price-descending like a ladder, spot embedded naturally
   return rows.sort((a, b) => b.price - a.price);
@@ -193,13 +193,13 @@ export function makeAutoNote(snapshot: MarketSnapshot, levels: KeyLevels, bias: 
 export function buildPulseView(snapshot: MarketSnapshot): PulseView {
   const { chain, spot, plan } = snapshot;
 
-  // King = max |netGex| strike (same rule as the chart levels)
-  let king = spot;
+  // Supreme = max |netGex| strike (same rule as the chart levels)
+  let supreme = spot;
   let kingAbs = 0;
   for (const n of chain) {
     if (Math.abs(n.netGex) > kingAbs) {
       kingAbs = Math.abs(n.netGex);
-      king = n.strike;
+      supreme = n.strike;
     }
   }
   const levels: KeyLevels = {
@@ -207,7 +207,7 @@ export function buildPulseView(snapshot: MarketSnapshot): PulseView {
     callWall: plan.resistanceWall,
     putWall: plan.supportWall,
     flip: plan.flipZone,
-    king,
+    supreme,
   };
 
   const { rows, maxAbs } = buildPressure(snapshot, levels, 10);

@@ -51,11 +51,11 @@ const SpotScenarioPanel = ({ snapshot }: { snapshot: MarketSnapshot }) => {
   const moved = Math.abs(target - snapshot.spot) > 1e-9;
   const pct = ((target - snapshot.spot) / snapshot.spot) * 100;
 
-  const facts: { k: 'Call wall' | 'Put wall' | 'Gamma flip' | 'King'; v: number | null }[] = [
+  const facts: { k: 'Call wall' | 'Put wall' | 'Gamma flip' | 'Supreme'; v: number | null }[] = [
     { k: 'Call wall', v: scenario.callWall },
     { k: 'Put wall', v: scenario.putWall },
     { k: 'Gamma flip', v: scenario.flip },
-    { k: 'King', v: scenario.king },
+    { k: 'Supreme', v: scenario.supreme },
   ];
 
   return (

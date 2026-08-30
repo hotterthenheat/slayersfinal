@@ -208,6 +208,13 @@ function buildTakeProfits(mid: number, moveBias: number, rng: () => number, verd
   });
 }
 
+/** The tenor a bare DTE falls in — the Weigher and the print drilldown
+    grade user-named contracts on the sleeve their expiry belongs to, so
+    every surface asks the SAME engine the same question. */
+export function sleeveForDte(dte: number): SleeveKey {
+  return dte <= 0 ? 'odte' : dte <= 6 ? 'weekly' : dte <= 90 ? 'swing' : 'leaps';
+}
+
 export function makeSetup(
   ticker: string,
   spot: number,
@@ -517,7 +524,7 @@ export function buildImpact(snapshot: MarketSnapshot, sleeve: SleeveKey): Impact
  * PART it plays in the book this campaign trades through:
  *   This contract — the setup's own strike and side
  *   Call wall / Put wall — the heaviest call gamma above spot, put gamma below
- *   King — the largest net gamma strike on the book (its dominant side)
+ *   Supreme — the largest net gamma strike on the book (its dominant side)
  *   Pin — the max-open-interest strike (its dominant side)
  *   In the path — the heaviest exposure between spot and the final target,
  *                 the hedging the move has to get through
@@ -556,8 +563,8 @@ export function buildSetupDrivers(
   if (callWall) add(pick(callWall.strike, 'C'), 'Call wall');
   if (putWall) add(pick(putWall.strike, 'P'), 'Put wall');
 
-  const king = chain.reduce((a, n) => (Math.abs(n.netGex) > Math.abs(a.netGex) ? n : a), chain[0]);
-  add(pick(king.strike, Math.abs(king.callGex) >= Math.abs(king.putGex) ? 'C' : 'P'), 'King');
+  const supreme = chain.reduce((a, n) => (Math.abs(n.netGex) > Math.abs(a.netGex) ? n : a), chain[0]);
+  add(pick(supreme.strike, Math.abs(supreme.callGex) >= Math.abs(supreme.putGex) ? 'C' : 'P'), 'Supreme');
 
   const pin = chain.reduce((a, n) => (n.callOI + n.putOI > a.callOI + a.putOI ? n : a), chain[0]);
   add(pick(pin.strike, pin.callOI >= pin.putOI ? 'C' : 'P'), 'Pin');

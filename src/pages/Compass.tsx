@@ -1,6 +1,5 @@
 ﻿import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import DataState from '../components/ui/DataState';
 import { motion } from 'framer-motion';
 import { Filter } from 'lucide-react';
 import { useMarketData } from '../context/MarketDataContext';
@@ -25,11 +24,10 @@ import CampaignAnalysis from '../components/compass/CampaignAnalysis';
 import ImpactLeaderboard from '../components/compass/ImpactLeaderboard';
 import SetupScanBoard from '../components/compass/SetupScanBoard';
 
-/* ONE job again (Noah, 2026-08-26: "weigher should be its own page instead of
-   a subsection of compass") — the desk moved to /weigher, and the mode switch
-   that used to pick between the two went with it. Compass sweeps and grades;
-   that is the whole page, so its header states one set of facts rather than
-   looking them up per mode. */
+/* ONE job again (Noah, 2026-08-26: "weigher should be its own page instead
+   of a subsection of compass") — the desk moved to /weigher, and the mode
+   switch that used to pick between them went with it. Compass sweeps and
+   grades; that is the whole page. */
 const PAGE_META = {
   crumb: 'Setups',
   title: 'Trade Setups',
@@ -140,13 +138,19 @@ const Compass = () => {
     scroller.scrollTop = Math.max(0, scroller.scrollTop + delta - ANALYSIS_TOP_GAP);
   }, [inReviewMode, monitorTarget?.ticker, monitorTarget?.strike, monitorTarget?.right]);
 
-  // Deep links in: from Tracker (land in review mode on the tracked setup) or
-  // from a Trace print drilldown (land on the scale with that name loaded).
+  // Deep links in: from Tracker, landing in review mode on the tracked setup.
+  // (The "weigh it" link goes to /weigher now — its own page.)
   useEffect(() => {
     const state = location.state as {
-      monitor?: { ticker: string; strike: number; right: 'C' | 'P'; scanner: ScannerKey };
-      weigh?: { ticker: string };
+      monitor?: { ticker: string; strike: number; right: 'C' | 'P'; scanner: ScannerKey; sleeve?: SleeveKey };
+      /** News Room door: land on the browse board filtered to one name. */
+      tickerFilter?: string;
     } | null;
+    if (state?.tickerFilter && !state.monitor) {
+      setTickerFilter(state.tickerFilter);
+      window.history.replaceState({}, '');
+      return;
+    }
     if (state?.monitor) {
       const incoming = state.monitor;
       // Legacy deep links can carry pre-sleeve scanner keys ('weeklies',
@@ -156,6 +160,11 @@ const Compass = () => {
       if (!known) {
         setSleeve((incoming.scanner as string) === 'swings' ? 'swing' : 'weekly');
       }
+      /* The tracked setup's own tenor wins when it rides along — the id
+         embeds scanner AND sleeve, so review must rebuild the SAME campaign,
+         not this desk's current tenor of it (2026-08-29: Tracker's Review
+         landed on a wrong-sleeve rebuild that didn't read as tracked). */
+      if (incoming.sleeve) setSleeve(incoming.sleeve);
       changeTicker(incoming.ticker);
       setTrail([{ ticker: incoming.ticker, strike: incoming.strike, right: incoming.right }]);
       window.history.replaceState({}, ''); // consume so refresh doesn't re-enter
@@ -227,10 +236,8 @@ const Compass = () => {
   // Compute counts per scanner tab (scan tier — stable between sweeps).
   // Counts follow the ACTIVE SLEEVE and only its ELIGIBLE lenses — a tenor's
   // "All" sums exactly the tabs it shows, nothing hidden.
-  // Five full board builds a sweep — the reason the Weigher was never allowed
-  // to run them (Noah felt it as "a buffer" on every ticker switch), and the
-  // reason it is now a page of its own. The guard that used to hold them back
-  // went with the mode: on this page they always run.
+  // Five full board builds a sweep — the reason the Weigher was never
+  // allowed to run them, and the reason it is now a page of its own.
   const scannerCounts = useMemo(() => {
     if (!scanSnapshot) return {} as Record<ScannerKey, number>;
     const counts: Record<string, number> = {};
@@ -373,11 +380,8 @@ const Compass = () => {
     `${t.ticker} ${t.strike % 1 === 0 ? t.strike.toFixed(0) : t.strike.toFixed(2)}${t.right}`;
   const backLabel = trail.length > 1 ? contractLabel(trail[trail.length - 2]) : 'Board';
 
-  /* ONE header for Setups, browse and review alike (Noah, 2026-08-09: the
-     review page's ticker search "serves no purpose"). It never did: the
-     analysis page is pinned to the CONTRACT that was opened — repointing the
-     desk underneath it only risked pricing one name's setup against another's
-     book. The Weigher keeps its search; that mode really is ticker-driven. */
+  /* ONE header for browse and review alike (Noah, 2026-08-09: the review
+     page's ticker search "serves no purpose"). */
   const browseHeader = (
     <PageHeader
       breadcrumb={['Terminal', 'Compass', PAGE_META.crumb]}
@@ -390,9 +394,11 @@ const Compass = () => {
     return (
       <>
         {browseHeader}
-        <Panel className="w-full">
-        <DataState kind="loading" title="Reading the board" body="The first tick has not arrived yet." />
-      </Panel>
+        <Panel className="h-64" bodyClassName="flex items-center justify-center">
+          <span className="font-mono text-[11px] text-textMuted uppercase tracking-widest">
+            Awaiting feed initialization…
+          </span>
+        </Panel>
       </>
     );
   }
@@ -401,16 +407,6 @@ const Compass = () => {
   return (
     <>
       {browseHeader}
-
-      {/* Mode swap fades the new view in rather than snapping to it. Keyed CSS
-          animation, NOT AnimatePresence: an exit animation would hold the old
-          view mounted until it finishes, and anything that stalls the tick
-          (a backgrounded tab) leaves the page wedged on the old body under the
-          new header — the same trap that broke the print modal. No exit means
-          nothing to stall. It also lands faster, which a tab click wants.
-          The wrapper re-states the page's flex-col gap-4, since it now sits
-          between the shell and the children that were relying on it. */}
-      <div className="flex flex-col gap-4 animate-soft-in">
 
       {/* Tenor axis — the sleeve strip. UNIFORM boxes (an equal-width grid,
           not content-sized buttons) and ONE voice: tenor is terminal hardware,
@@ -616,7 +612,6 @@ const Compass = () => {
         </div>
       </div>
       )}
-      </div>
     </>
   );
 };

@@ -19,7 +19,7 @@ export interface KeyLevels {
   putWall: number;
   flip: number;
   /** Strike holding the largest absolute exposure */
-  king: number;
+  supreme: number;
 }
 
 /** The heat field read as ONE regime — the engine names the configuration
@@ -41,7 +41,7 @@ export interface NodeLevel {
 
 export interface MatrixCell {
   value: number;
-  king?: boolean;
+  supreme?: boolean;
 }
 
 export interface GexMatrixData {
@@ -71,7 +71,7 @@ export interface DarkPoolPrint {
 export interface LadderRow {
   strike: number;
   value: number;
-  king?: boolean;
+  supreme?: boolean;
 }
 
 export interface BoardTicker {
@@ -138,7 +138,7 @@ export interface ExposureLevels {
   /** Largest |net gamma| strike on the FULL book — may sit outside the
       rendered window, in which case the map crowns nothing rather than
       promoting a runner-up. */
-  king: number;
+  supreme: number;
 }
 
 export interface ExposureProfileData {
@@ -181,7 +181,7 @@ export interface PressureRow {
   net: number;
 }
 
-export type KeyLevelKind = 'call-wall' | 'spot' | 'put-wall' | 'pin' | 'flip' | 'king';
+export type KeyLevelKind = 'call-wall' | 'spot' | 'put-wall' | 'pin' | 'flip' | 'supreme';
 
 export interface KeyLevelRow {
   kind: KeyLevelKind;
@@ -363,7 +363,7 @@ export interface WallDriftPoint {
 
 export type HedgingClass = 'DOWNSIDE CUSHION' | 'UPSIDE RESISTANCE' | 'MAGNET' | 'NEUTRAL';
 
-export type TargetTag = 'WALL' | 'PIN' | 'KING' | 'SPOT TARGET';
+export type TargetTag = 'WALL' | 'PIN' | 'SUPREME' | 'SPOT TARGET';
 
 /** What earns a strike its priority — the five reasons, in bar order (Mo,
     2026-08-19: "I want to know exactly why #1 beat #2 — NBR + OI + volume +

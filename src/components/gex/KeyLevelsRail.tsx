@@ -18,7 +18,7 @@ const KIND_TEXT: Record<KeyLevelKind, string> = {
   'call-wall': 'text-bull',
   'put-wall': 'text-bear',
   flip: 'text-flip',
-  king: 'text-king',
+  supreme: 'text-supreme',
   pin: 'text-textSecondary',
   spot: 'text-textPrimary',
 };
@@ -27,7 +27,7 @@ const KIND_BAR: Record<KeyLevelKind, string> = {
   'call-wall': 'bg-bull/90',
   'put-wall': 'bg-bear/80',
   flip: 'bg-flip/60',
-  king: 'bg-king/60',
+  supreme: 'bg-supreme/60',
   pin: 'bg-textMuted/60',
   spot: 'bg-textPrimary/60',
 };
@@ -38,7 +38,7 @@ const KIND_TERM: Partial<Record<KeyLevelKind, TermKey>> = {
   'put-wall': 'Put wall',
   flip: 'Gamma flip',
   pin: 'Pin',
-  king: 'King',
+  supreme: 'Supreme',
 };
 
 /** Price-ordered ladder of structural levels: distance from spot + parked exposure. */

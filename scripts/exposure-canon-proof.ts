@@ -4,7 +4,7 @@
   The directive's warning was that seven surfaces render the same strike-level
   exposure and can disagree. They did. Measured across eight names before this
   landed: SIX disagreed with the levels rail about a wall or the flip, and
-  THREE named a different KING — META by 25 points, TSLA by 12.5.
+  THREE named a different SUPREME — META by 25 points, TSLA by 12.5.
 
   Two mechanisms, both closed here:
 
@@ -21,7 +21,7 @@
      leg's sign
   2. Every strike's profile net is the raw net times one positive constant —
      the property that makes levels lens-invariant
-  3. All three readers name the same walls, flip and king on every roster
+  3. All three readers name the same walls, flip and supreme on every roster
      name — the disagreement this exists to end
   4. The expiry lens moves magnitudes and NOT levels
   5. The drawn WINDOW is a drawing choice: levels are identical at every
@@ -95,14 +95,14 @@ for (const t of NAMES) Simulator.ensureTicker(t);
       prof.levels.callWall === rail.callWall &&
       prof.levels.putWall === rail.putWall &&
       prof.levels.flip === rail.flip &&
-      prof.levels.king === rail.king &&
+      prof.levels.supreme === rail.supreme &&
       rail.callWall === (now.callWall ?? rail.spot) &&
       rail.putWall === (now.putWall ?? rail.spot) &&
       rail.flip === (now.flip ?? rail.spot) &&
-      rail.king === (now.king ?? rail.spot);
+      rail.supreme === (now.supreme ?? rail.spot);
     if (!same) {
       disagree++;
-      notes.push(`${t}: profile ${prof.levels.callWall}/${prof.levels.putWall}/${prof.levels.king} vs rail ${rail.callWall}/${rail.putWall}/${rail.king}`);
+      notes.push(`${t}: profile ${prof.levels.callWall}/${prof.levels.putWall}/${prof.levels.supreme} vs rail ${rail.callWall}/${rail.putWall}/${rail.supreme}`);
     }
   }
   check('the profile, the rail and the canonical reader name the same levels', disagree === 0, notes.slice(0, 2).join(' | '));
@@ -114,7 +114,7 @@ for (const t of NAMES) Simulator.ensureTicker(t);
     const lad = buildLadderFor(t);
     const now = readExposureNow(lad.rows, lad.spot);
     const rail = buildLevelsFor(t);
-    if ((now.king ?? rail.spot) !== rail.king) ladderOff++;
+    if ((now.supreme ?? rail.spot) !== rail.supreme) ladderOff++;
   }
   check('and the ladder\'s own book crowns the strike the rail tags', ladderOff === 0, `${ladderOff} of ${NAMES.length} off`);
 
@@ -157,7 +157,7 @@ for (const t of NAMES) Simulator.ensureTicker(t);
         p.levels.callWall !== base.levels.callWall ||
         p.levels.putWall !== base.levels.putWall ||
         p.levels.flip !== base.levels.flip ||
-        p.levels.king !== base.levels.king
+        p.levels.supreme !== base.levels.supreme
       ) levelDrift++;
       if (lens !== '0DTE' && Math.abs(p.netGex - base.netGex) > 1) magnitudeMoved = true;
     }
@@ -180,7 +180,7 @@ for (const t of NAMES) Simulator.ensureTicker(t);
         p.levels.callWall !== base.levels.callWall ||
         p.levels.putWall !== base.levels.putWall ||
         p.levels.flip !== base.levels.flip ||
-        p.levels.king !== base.levels.king
+        p.levels.supreme !== base.levels.supreme
       ) drift++;
       if (p.strikes.length !== base.strikes.length) rowsMoved = true;
     }
@@ -227,9 +227,9 @@ for (const t of NAMES) Simulator.ensureTicker(t);
     `named ${far.levels.callWall}, expected ${spot + 20}`
   );
   check(
-    'and the king with it — the full book decides both',
-    far.levels.king === spot + 20,
-    `king ${far.levels.king}`
+    'and the supreme with it — the full book decides both',
+    far.levels.supreme === spot + 20,
+    `supreme ${far.levels.supreme}`
   );
   check(
     'while the drawn rows really did stop short of it',

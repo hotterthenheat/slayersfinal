@@ -57,9 +57,12 @@ export default {
            something on its own. */
         flip: '#9CA3AF',
         moon: '#7DD3FC',
-        // King = magenta — the engine's-standout family (TOP PICK, NET, king).
-        // Exception: the king LINE on charts is silver (palette.ts KING).
-        king: '#EA00FF',
+        /* THE ENGINE'S STANDOUT. Renamed king -> supreme (2026-08-29): the
+           token names a ROLE, not a hue, and "king" read as a chess piece
+           on a desk where the thing it marks is the heaviest strike on the
+           book. Same colour, and the standout badges are BLACK BOXES with
+           coloured words (tone `crown`) rather than filled cards. */
+        supreme: '#EA00FF',
         darkpool: '#2dd4bf',
 
         // Legacy aliases (pre-redesign pages)

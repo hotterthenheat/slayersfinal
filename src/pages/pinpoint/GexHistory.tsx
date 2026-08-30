@@ -10,7 +10,7 @@ import {
 } from '../../data/timeMachine';
 import GexMatrix from '../../components/gex/GexMatrix';
 import WallDrift from '../../components/gex/vannacharm/WallDrift';
-import { CALL_WALL, FLIP, KING, PUT_WALL, SPOT } from '../../components/gex/palette';
+import { CALL_WALL, FLIP, SUPREME, PUT_WALL, SPOT } from '../../components/gex/palette';
 import Panel from '../../components/ui/Panel';
 import ProvenanceChip from '../../components/ui/ProvenanceChip';
 import Term from '../../components/ui/Term';
@@ -38,7 +38,7 @@ import Simulator from '../../core/simulator';
   TWO INK CORRECTIONS from the first cut, both of the same species. The
   migration table drew the call wall RED and the put wall GREEN — exactly
   inverted against CALL_WALL/PUT_WALL in palette.ts, which every zone rail
-  and badge on the desk has followed since 2026-08-18; the king now wears
+  and badge on the desk has followed since 2026-08-18; the supreme now wears
   its magenta too. And HIST_02's heat was a hand-rolled red/green wash where
   net GEX heat on this desk has exactly one rendering: heatCellStyle. Level
   inks come from palette.ts, heat comes from heatmap.ts — nothing on this
@@ -143,7 +143,7 @@ const GexHistory = () => {
       </div>
 
       {/* HIST_01 */}
-      <Panel title="Level Migration Timeline" subtitle="HIST_01 — walls, flip and king through the session" className="w-full">
+      <Panel title="Level Migration Timeline" subtitle="HIST_01 — walls, flip and supreme through the session" className="w-full">
         <p className="font-mono text-[11px] leading-relaxed text-textPrimary mb-2">{migrationWords(migration)}</p>
         {drift.length >= 2 ? (
           <div className="h-64 min-h-0">

@@ -27,13 +27,14 @@
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import RGL, { WidthProvider, type Layout } from 'react-grid-layout';
+import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowDown, ArrowLeft, ArrowUp, Check, ChevronDown, ChevronRight, Columns3, GripHorizontal, Maximize2, Minimize2, Moon, Sun } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUp, ArrowUpRight, Check, ChevronDown, ChevronRight, Columns3, GripHorizontal, Maximize2, Minimize2, Moon, RotateCcw, Sun } from 'lucide-react';
 import Simulator from '../../core/simulator';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildLevelsFor, buildPrints, fmtUsd, spotChangePct } from '../../data/gex';
-import { estimatePremium } from '../../data/compass';
+import { buildCompassView, estimatePremium, makeSetup, sleeveForDte } from '../../data/compass';
 import {
   DESK_DTES,
   buildDeskChain,
@@ -45,6 +46,7 @@ import {
   type DeskContract,
 } from '../../data/weigherDesk';
 import { SCREENERS, runScreener, type ScreenerKey } from '../../data/screeners';
+import { useAnchoredMenu } from '../../components/ui/useAnchoredMenu';
 import StrikeChart, {
   DEFAULT_INDICATORS,
   DEFAULT_OVERLAYS,
@@ -53,15 +55,18 @@ import StrikeChart, {
   type ChartStyle,
 } from '../../components/gex/StrikeChart';
 import ChartToolbar from '../../components/gex/ChartToolbar';
+import { weighContract, type WeighYourOwn, type ContractVerdict } from '../../core/contractScore';
+import RichRead from '../../components/ui/RichRead';
+import SignalBadge from '../../components/ui/SignalBadge';
 import TickerQuickPick from '../../components/gex/TickerQuickPick';
 import SpotPrice from '../../components/gex/SpotPrice';
-import ContractPremiumPane from './ContractPremiumPane';
+import ContractPremiumPane from '../../components/gex/ContractPremiumPane';
 import Chip from '../../components/ui/Chip';
 import { useFadeClose } from '../../components/ui/useFadeClose';
 import Term from '../../components/ui/Term';
 import { TIMEFRAMES, type Timeframe } from '../../data/timeframe';
-import type { OptionRight } from '../../types/compass';
-import { useAnchoredMenu } from '../../components/ui/useAnchoredMenu';
+import VerdictBadge from '../../components/compass/VerdictBadge';
+import type { OptionRight, Setup } from '../../types/compass';
 
 const Grid = WidthProvider(RGL);
 
@@ -79,11 +84,21 @@ const SCAN_MS = 3000;
    to be the even spacing"): tape and ladder up top, scanner and the strike's
    weigh-up below. maxH is the Pulse rule — every card has a height past
    which it is only empty surface, so the resize stops there. */
+/* HALF-ROW UNITS (Noah, 2026-08-29: 480px max was "too much", 382 wanted
+   "a bit taller" — the 88px row was too coarse to say ~430). Row height
+   halved to 39 so two new rows equal one old row to the pixel
+   (2×39+10 = 88); every stored layout doubles its h/y once on load
+   (rowsV 2). The scanner and the strike read cap at 9 half-rows ≈ 431px —
+   the whole read with a breath of air, nothing past it. Width stays free. */
+/* An EVEN 2×2 from the first render (Noah, 2026-08-29: "reset this whole
+   page to be even sizes") — four equal quadrants at 9 half-rows (~431px);
+   the chart and chain may still be pulled taller, the scanner and the
+   strike read stay capped at their comfortable height. */
 const DEFAULT_LAYOUT: Layout[] = [
-  { i: 'chart', x: 0, y: 0, w: 6, h: 5, minW: 4, minH: 3, maxH: 8 },
-  { i: 'chain', x: 6, y: 0, w: 6, h: 5, minW: 4, minH: 3, maxH: 10 },
-  { i: 'scan', x: 0, y: 5, w: 6, h: 5, minW: 3, minH: 2, maxH: 8 },
-  { i: 'info', x: 6, y: 5, w: 6, h: 5, minW: 3, minH: 2, maxH: 8 },
+  { i: 'chart', x: 0, y: 0, w: 24, h: 9, minW: 16, minH: 6, maxH: 16 },
+  { i: 'chain', x: 24, y: 0, w: 24, h: 9, minW: 16, minH: 6, maxH: 20 },
+  { i: 'scan', x: 0, y: 9, w: 24, h: 9, minW: 12, minH: 4, maxH: 9 },
+  { i: 'info', x: 24, y: 9, w: 24, h: 9, minW: 12, minH: 4, maxH: 9 },
 ];
 
 /** How far the chain reaches each side of spot. The book maintains ~30; the
@@ -106,21 +121,37 @@ interface DeskState {
   /** Which catalog columns the chain shows, in catalog order */
   cols: string[];
   layout: Layout[];
+  /** Layout row-unit version — 2 = the 39px half-rows (2026-08-29). Absent
+      means the old 88px rows; loadDesk doubles h/y once to migrate. */
+  rowsV?: number;
+  /** Layout column-unit version — 4 = the 48-column grid (2026-08-29).
+      Absent means the old 12; loadDesk quadruples x/w once. */
+  colsV?: number;
 }
 
 const CARD_KEYS = new Set<string>(['chart', 'chain', 'scan', 'info']);
 
 function loadDesk(): DeskState {
-  const def: DeskState = { ticker: 'SPY', dte: 2, lens: 'stock', right: 'C', preset: 'gainers', depth: 150, cols: DEFAULT_COLS, layout: DEFAULT_LAYOUT };
+  const def: DeskState = { ticker: 'SPY', dte: 2, lens: 'stock', right: 'C', preset: 'gainers', depth: 150, cols: DEFAULT_COLS, layout: DEFAULT_LAYOUT, rowsV: 2, colsV: 4 };
   try {
     const raw = localStorage.getItem(DESK_KEY);
     if (!raw) return def;
     const c = JSON.parse(raw) as Partial<DeskState>;
+    /* Old 88px-row layouts double into the 39px half-row units — the same
+       pixels, finer grid. */
+    const unit = c.rowsV === 2 ? 1 : 2;
+    const cunit = c.colsV === 4 ? 1 : 4;
     const layout = Array.isArray(c.layout)
       ? DEFAULT_LAYOUT.map(d => {
           const hit = (c.layout as Layout[]).find(l => l && l.i === d.i);
           return hit && CARD_KEYS.has(hit.i)
-            ? { ...d, x: hit.x ?? d.x, y: hit.y ?? d.y, w: hit.w ?? d.w, h: hit.h ?? d.h }
+            ? {
+                ...d,
+                x: (hit.x ?? d.x / cunit) * cunit,
+                y: (hit.y ?? d.y / unit) * unit,
+                w: (hit.w ?? d.w / cunit) * cunit,
+                h: Math.min((hit.h ?? d.h / unit) * unit, d.maxH ?? Number.POSITIVE_INFINITY),
+              }
             : d;
         })
       : DEFAULT_LAYOUT;
@@ -133,10 +164,9 @@ function loadDesk(): DeskState {
       dte: typeof c.dte === 'number' && (DESK_DTES as readonly number[]).includes(c.dte) ? c.dte : def.dte,
       lens: c.lens === 'contract' ? 'contract' : 'stock',
       right: c.right === 'P' ? 'P' : 'C',
-      /* A stored preset is now a ScreenerKey. 'voliv' was the old desk-only
+      /* A stored preset is a ScreenerKey now. 'voliv' was the old desk-only
          board (options volume x IV); its nearest survivor is the volume
-         board, so a reader who left the desk on it lands somewhere that
-         still means what they picked rather than being reset to gainers. */
+         board, so a reader who left the desk on it lands where they meant. */
       preset:
         (c.preset as string) === 'voliv'
           ? 'optionsVolume'
@@ -146,6 +176,8 @@ function loadDesk(): DeskState {
       depth: typeof c.depth === 'number' && (DESK_DEPTHS as readonly number[]).includes(c.depth) ? c.depth : def.depth,
       cols: cols.length ? cols : [...def.cols],
       layout,
+      rowsV: 2,
+      colsV: 4,
     };
   } catch {
     return def;
@@ -174,7 +206,10 @@ const MOOD_WASH: Record<'up' | 'down' | 'flat', string> = {
    card and over the page header's black. Translucent, so nothing under it
    loses its ink. */
 const MoodField = ({ mood }: { mood: 'up' | 'down' | 'flat' }) => (
-  <div className="fixed left-0 right-0 top-14 bottom-0 overflow-hidden pointer-events-none" aria-hidden>
+  /* top-0, not top-14 (Noah, 2026-08-29: "even this top section should be
+     translucent with the red being in the background") — the wash runs
+     under the now-glassy top bar. */
+  <div className="fixed left-0 right-0 top-0 bottom-0 overflow-hidden pointer-events-none" aria-hidden>
     {(Object.keys(MOOD_WASH) as ('up' | 'down' | 'flat')[]).map(tone => (
       <div
         key={tone}
@@ -490,7 +525,13 @@ export const ChainCard = memo(function ChainCard({
         small for all the rows then there should be a horizontal scroll") -
         nowrap cells give the table a real minimum width, and past it the
         card scrolls sideways instead of crushing the numbers. */}
-    <div ref={scrollRef} onScroll={locate} className="h-full overflow-auto">
+    {/* overflow-anchor OFF (Noah, 2026-08-29: "stop shifting the active
+        card up... it should drop everything under it DOWN") — when the
+        drill unfolds, Chrome's scroll anchoring grabs a row BELOW the
+        growth and adjusts the scroll to hold it still, which shoves the
+        clicked row upward instead. Unanchored, the clicked row stays put
+        and the rows beneath give way. */}
+    <div ref={scrollRef} onScroll={locate} className="h-full overflow-auto [overflow-anchor:none]">
       <table className="w-full border-collapse">
         <thead className="sticky top-0 z-10">
           <tr style={{ background: 'rgba(13,14,17,0.92)' }}>
@@ -600,29 +641,151 @@ const WeighGrids = ({ c }: { c: DeskContract }) => (
   </>
 );
 
+/* States, never orders (the Compass ruling): BUY/WATCH/FADE are internal
+   loop vocabulary; the reader sees the state. */
+/* Conviction word from the Compass CONFIDENCE — the one sanctioned number,
+   from the one state engine (2026-08-30: the local BUY/WATCH/FADE vocabulary
+   died here; see contractScore.ts's header for the ruling). */
+const CONVICTION = (confidence: number) => (confidence >= 70 ? 'High conviction' : confidence >= 45 ? 'Medium conviction' : 'Low conviction');
+const SLEEVE_WORD: Record<string, string> = { odte: 'same-day', weekly: 'weekly', swing: 'swing', leaps: 'long-dated' };
+const DOOR_CLS =
+  'inline-flex items-center gap-1 px-2 py-1 rounded-md border border-borderSubtle bg-white/[0.03] hover:bg-white/[0.06] font-mono text-[9px] uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors';
+/* TRANSFORM, never width (Noah, 2026-08-29: "the confidence bars are moving
+   very laggy") — width is a LAYOUT property, and a layout animation under
+   this desk's per-second churn drops frames; scaleX rides the compositor
+   (the Trace live-meter law, applied here). Geometry takes the raw float. */
+const METER_GLIDE = 'transition-[transform,background-color] duration-700 ease-[cubic-bezier(0.16,1,0.3,1)]';
+
 /* The strike's weigh-up gets its OWN quadrant instead of unfolding inside
    the chain (Noah, 2026-08-26: "to differ from robinhood legend... the empty
    section in the bottom right be the information for the strike you click").
    Every pick lands on a soft fade - keyed remount, the Compass mode-swap
    recipe - and the content spreads to FILL the card rather than huddling at
    the top. Facts only; the greeks stay magnitudes with no direction ink. */
-export const StrikeCard = ({ c, contractKey }: { c: DeskContract | null; contractKey: string }) => {
-  if (!c) {
+export const StrikeCard = ({
+  c,
+  contractKey,
+  weigh,
+  grade,
+  boardRank,
+  onOpenSetup,
+  onSeeBoard,
+}: {
+  c: DeskContract | null;
+  contractKey: string;
+  weigh: WeighYourOwn | null;
+  /** THE state — from makeSetup, the same engine that grades the board. */
+  grade: Setup | null;
+  /** This contract's place on today's board for its sleeve; null = not on it. */
+  boardRank: number | null;
+  onOpenSetup: () => void;
+  onSeeBoard: () => void;
+}) => {
+  if (!c || !weigh || !grade) {
     return (
       <div className="h-full flex flex-col items-center justify-center gap-1.5 select-none animate-soft-in">
         <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-textMuted">
           Nothing on the scale
         </span>
         <span className="font-mono text-[9px] text-textMuted">
-          Click a strike in the chain and its full weigh-up lands here
+          Click a strike in the chain — its facts drop under the row, and the desk's read lands here
         </span>
       </div>
     );
   }
+  /*
+    THE DESK'S OWN TWO CENTS (Noah, 2026-08-29), regraded 2026-08-30 after
+    Noah caught the contradiction ("active high conviction on the weigher
+    chain but that same con is NOT found on compass"): the STATE up top —
+    badge, conviction word, confidence — now comes from makeSetup, the SAME
+    engine that grades the Compass board, so the two pages cannot disagree
+    by construction. The six factor meters below are the OTHER lens, framed
+    as what they are: the contract's own build quality. And the board line
+    at the bottom answers the absence question outright — on today's board
+    with a rank, or plainly not, with doors either way. No raw scores
+    anywhere — meters and words (the 2026-08-16 ruling).
+  */
+  /* NO key on the container (Noah, 2026-08-29: "transition between
+     different cons should have the confidence bars be a smooth
+     transition") — a keyed remount starts every meter at its new width
+     with no journey. The DOM persists across contract switches so the
+     bars GLIDE (METER_GLIDE), and only the PROSE crossfades, keyed by the
+     contract. The ContractWeigher's own doctrine, applied here. */
   return (
-    <div key={contractKey} className="h-full overflow-y-auto animate-soft-in">
-      <div className="min-h-full flex flex-col justify-evenly gap-3 px-3.5 py-3">
-        <WeighGrids c={c} />
+    <div className="h-full overflow-y-auto animate-soft-in">
+      {/* justify-evenly: a taller card spreads the read across its height
+          (Noah, 2026-08-29: "this should grow to fit the card when
+          extended") instead of huddling at the top over empty felt. */}
+      <div className="min-h-full flex flex-col justify-evenly gap-2 px-3.5 py-2.5">
+        <div key={contractKey} className="flex items-center gap-2 flex-wrap animate-soft-in">
+          <VerdictBadge verdict={grade.verdict} dot />
+          <span className={`font-mono text-[10px] font-semibold uppercase tracking-wider ${
+            grade.verdict === 'ENTER' ? 'text-bull' : grade.verdict === 'EXIT' ? 'text-bear' : 'text-warn'
+          }`}>
+            {CONVICTION(grade.confidence)}
+          </span>
+          <span className="font-mono text-[10px] tnum text-textSecondary">{grade.confidence}%</span>
+          <span className="ml-auto font-mono text-[9px] text-textMuted whitespace-nowrap">
+            graded on the {SLEEVE_WORD[grade.sleeve] ?? grade.sleeve} lens
+          </span>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <span className="font-mono text-[9px] uppercase tracking-widest text-textMuted">The contract itself</span>
+          {weigh.contract.factors.map(f => (
+            <div key={f.key} className="flex flex-col gap-0.5">
+              <div className="flex items-center gap-2">
+                <span className="w-28 shrink-0 font-mono text-[9px] uppercase tracking-wider text-textSecondary">{f.label}</span>
+                <span className="flex-1 h-[4px] rounded-full bg-white/[0.06] overflow-hidden">
+                  <span
+                    className={`block h-full w-full rounded-full origin-left ${METER_GLIDE} ${
+                      f.score >= 60 ? 'bg-bull/85' : f.score >= 40 ? 'bg-white/30' : 'bg-bear/75'
+                    }`}
+                    style={{ transform: `scaleX(${f.score / 100})` }}
+                  />
+                </span>
+              </div>
+              <p key={contractKey} className="pl-28 text-[11px] text-textPrimary leading-snug animate-soft-in">
+                <RichRead text={f.detail} />
+              </p>
+            </div>
+          ))}
+        </div>
+        {/* Edge speaks for the trade, risk against it — the labels wear
+            their sides (Noah, 2026-08-29: "edge and risk should be color
+            coded"). Crossfades with the prose; the sentences stay bright. */}
+        <div key={`er-${contractKey}`} className="grid grid-cols-1 gap-1.5 pt-1.5 border-t border-borderSubtle/60 animate-soft-in">
+          <p className="text-[11px] leading-snug">
+            <span className="font-mono text-[9px] font-semibold uppercase tracking-wider text-bull mr-2">Edge</span>
+            <span className="text-textPrimary"><RichRead text={weigh.contract.edge} /></span>
+          </p>
+          <p className="text-[11px] leading-snug">
+            <span className="font-mono text-[9px] font-semibold uppercase tracking-wider text-bear mr-2">Risk</span>
+            <span className="text-textPrimary"><RichRead text={weigh.contract.risk} /></span>
+          </p>
+        </div>
+        {/* The absence answered — the very question that exposed the two
+            engines. On the board: say where. Off it: say why plainly. */}
+        <div key={`bd-${contractKey}`} className="pt-1.5 border-t border-borderSubtle/60 flex items-center gap-2 flex-wrap animate-soft-in">
+          {boardRank != null ? (
+            <span className="font-mono text-[10px] text-textPrimary">
+              On today's Compass board · <span className="font-semibold tnum">#{boardRank}</span>
+            </span>
+          ) : (
+            <span className="font-mono text-[10px] text-textMuted">
+              Not on today's board — the scan lists only the strongest few
+            </span>
+          )}
+          <span className="ml-auto flex items-center gap-1.5">
+            <button onClick={onOpenSetup} className={DOOR_CLS}>
+              <ArrowUpRight className="w-3 h-3" />
+              Setup page
+            </button>
+            <button onClick={onSeeBoard} className={DOOR_CLS}>
+              <ArrowUpRight className="w-3 h-3" />
+              The board
+            </button>
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -660,7 +823,7 @@ const FragmentRow = ({
          click from highlighting the row's text. */
       onClick={e => onSelect(c.strike, e.detail)}
       aria-selected={active}
-      title="Click: weigh it below · double-click: chart it"
+      title="Click: facts drop down, the desk\u2019s read lands below · double-click: chart it"
       className={`cursor-pointer select-none transition-colors ${active ? 'bg-select/[0.08]' : 'hover:bg-white/[0.03]'}`}
     >
       <td className={`px-2 py-1.5 font-mono text-[11px] font-semibold tnum whitespace-nowrap ${active ? 'text-select' : 'text-textPrimary'}`}>
@@ -695,26 +858,24 @@ const FragmentRow = ({
         (and the reference's own move): the row's height eases open under the
         clicked strike and folds flat on the close, padding riding inside the
         collapsing box. */}
-    {inlineDrill && (
-      <AnimatePresence initial={false}>
-        {active && (
-          <motion.tr key="drill" className="bg-select/[0.04]">
-            <td colSpan={cols.length + 1} className="p-0">
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.24, ease: [0.25, 1, 0.5, 1] }}
-                className="overflow-hidden"
-              >
-                <div className="px-3 py-2.5 border-b border-white/[0.05] flex flex-col gap-3">
-                  <WeighGrids c={c} />
-                </div>
-              </motion.div>
-            </td>
-          </motion.tr>
-        )}
-      </AnimatePresence>
+    {/* CSS unfold, NOT framer (2026-08-29, the scroll-jump hunt): the
+        motion.tr height animation had framer's layout projection measuring
+        and compensating the chain's scroll — the container jumped by
+        exactly the drill's height on every open, shoving the clicked row.
+        A grid-rows keyframe animates the same 240ms unfold with zero
+        scroll math; close is an instant unmount (the house law). */}
+    {inlineDrill && active && (
+      <tr className="bg-select/[0.04]">
+        <td colSpan={cols.length + 1} className="p-0">
+          <div className="animate-drill-open">
+            <div className="min-h-0 overflow-hidden">
+              <div className="px-3 py-2.5 border-b border-white/[0.05] flex flex-col gap-3">
+                <WeighGrids c={c} />
+              </div>
+            </div>
+          </div>
+        </td>
+      </tr>
     )}
     {showDivider && (
       <tr aria-hidden>
@@ -832,8 +993,13 @@ const StrikePick = ({
    columns (or rows) the other takes, grid-snapped, clamped by each card's
    min and max. RGL's own edge handles stay for free-form resizing; this is
    the between-the-panes door the reference drives with. */
-const GRID_COLS = 12;
-const GRID_ROW_H = 88;
+/* 48 columns since 2026-08-29 (Noah: the sash "doesnt even notice if you
+   want to slide just a tad bit"). At 12 a column was ~127px, so the nearest
+   step was half a pane away and the divider read as dead until a long pull.
+   Quartered, a step is ~32px — fine enough that the sash tracks the hand.
+   Stored layouts multiply x/w once on load (colsV 4). */
+const GRID_COLS = 48;
+const GRID_ROW_H = 39; // half-rows since 2026-08-29 (2×39+10 = the old 88)
 const GRID_MARGIN = 10;
 
 interface Sash {
@@ -851,10 +1017,17 @@ const SashLayer = ({
   layout,
   width,
   onLayout,
+  onDragStart,
+  onDragEnd,
 }: {
   layout: Layout[];
   width: number;
   onLayout: (next: Layout[]) => void;
+  /** The desk freezes its market tick while a sash is held — the same
+      contract RGL's own drags get. Without it the 1s tick re-rendered the
+      whole desk mid-gesture, which is half of what read as lag. */
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
 }) => {
   const [dragging, setDragging] = useState<string | null>(null);
   if (width <= 0) return null;
@@ -917,11 +1090,17 @@ const SashLayer = ({
        moved — every human-scale drag did nothing and the divider read as
        dead (Noah, 2026-08-27: "ive tried moving either left or right but
        nothing moves"). Early first step, standard rounding after. */
-    const steps = (deltaPx: number) => {
-      const mag = Math.abs(deltaPx) / unit;
-      if (mag < 0.33) return 0;
-      return Math.sign(deltaPx) * Math.max(1, Math.round(mag));
-    };
+    /* Plain rounding now that a unit is ~32px rather than ~127 — the early
+       first step existed to paper over a grid too coarse to feel, and it
+       made the first move a jump. */
+    const steps = (deltaPx: number) => Math.round(deltaPx / unit);
+    /* THE LAST STEP COMMITTED, so an unchanged one writes nothing.
+       `onLayout` fired on EVERY pointermove — dozens of identical layouts a
+       second, each re-rendering four cards and re-serialising the desk into
+       storage. That was the lag; the grid's coarseness was the dead zone.
+       Two faults, two fixes. */
+    let lastD: number | null = null;
+    onDragStart?.();
     const move = (ev: PointerEvent) => {
       const a = start.find(l => l.i === sash.aId)!;
       const b = start.find(l => l.i === sash.bId)!;
@@ -929,18 +1108,23 @@ const SashLayer = ({
       if (sash.dir === 'v') {
         d = Math.max(d, (a.minW ?? 1) - a.w);
         d = Math.min(d, b.w - (b.minW ?? 1));
+        if (d === lastD) return;
+        lastD = d;
         onLayout(start.map(l => (l.i === a.i ? { ...l, w: a.w + d } : l.i === b.i ? { ...l, x: b.x + d, w: b.w - d } : { ...l })));
       } else {
         d = Math.max(d, (a.minH ?? 1) - a.h);
         d = Math.max(d, -((b.maxH ?? Infinity) - b.h));
         d = Math.min(d, b.h - (b.minH ?? 1));
         d = Math.min(d, (a.maxH ?? Infinity) - a.h);
+        if (d === lastD) return;
+        lastD = d;
         onLayout(start.map(l => (l.i === a.i ? { ...l, h: a.h + d } : l.i === b.i ? { ...l, y: b.y + d, h: b.h - d } : { ...l })));
       }
     };
     const up = () => {
       setDragging(null);
       window.removeEventListener('pointermove', move);
+      onDragEnd?.();
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up, { once: true });
@@ -1000,9 +1184,14 @@ const WeigherDesk = ({ incomingTicker }: { incomingTicker?: string | null }) => 
   const beginInteract = useCallback(() => {
     interactingRef.current = true;
   }, []);
-  const endInteract = useCallback((nextLayout: Layout[]) => {
+  /* `nextLayout` is OPTIONAL, and that is the sash's fix: RGL hands us the
+     final layout at drop, but the sash has been committing its own steps all
+     through the gesture — passing it the layout captured at pointer-DOWN
+     (the closure the drag handler holds) overwrote the whole drag on release
+     and the divider snapped home. Called bare, this only unfreezes. */
+  const endInteract = useCallback((nextLayout?: Layout[]) => {
     interactingRef.current = false;
-    setDesk(d => ({ ...d, layout: nextLayout }));
+    if (nextLayout) setDesk(d => ({ ...d, layout: nextLayout }));
     if (pendingTickRef.current) {
       pendingTickRef.current = false;
       setTick(t => t + 1);
@@ -1031,21 +1220,16 @@ const WeigherDesk = ({ incomingTicker }: { incomingTicker?: string | null }) => 
   const session = useMemo(() => marketSession(), [tick]);
   const chain = useMemo(() => buildDeskChain(ticker, dte, depth), [ticker, dte, depth, scanTick]); // eslint-disable-line react-hooks/exhaustive-deps
   const board = SCREENERS.find(b => b.key === preset) ?? SCREENERS[0];
+  const scan = useMemo(() => runScreener(preset, 60), [preset, scanTick]); // eslint-disable-line react-hooks/exhaustive-deps
   const [boardOpen, setBoardOpen] = useState(false);
   const { anchorRef: boardBtnRef, placed: boardPlaced, menuRef: boardMenuRef } =
     useAnchoredMenu<HTMLButtonElement>(boardOpen, 'bottom');
-  const scan = useMemo(() => runScreener(preset, 60), [preset, scanTick]); // eslint-disable-line react-hooks/exhaustive-deps
-  /* Gainers and losers ARE sorted by change, and the change column already
-     shows it — so those two boards drop the metric column instead of
-     printing the same number twice. */
+  /* Gainers and losers ARE sorted by change and the change column already
+     shows it, so those two drop the metric column instead of printing the
+     same number twice. An inline gridTemplateColumns, never a Tailwind class
+     built from a template string — those only reach the stylesheet when
+     Tailwind can see them literally in the source. */
   const showMetric = board.metricLabel !== 'Change';
-  /* AN INLINE STYLE, NOT A TAILWIND CLASS. `grid-cols-[...]` built from a
-     template string never reaches the stylesheet: Tailwind generates only
-     the class names it can see LITERALLY in the source, so a runtime one
-     resolves to nothing and the grid collapses to a single column. Caught
-     on the rendered desk — the header stacked LAST over CHANGE down the
-     right edge — and it typechecks perfectly either way, which is exactly
-     why this note is here. */
   const scanCols = showMetric ? 'minmax(0,1.2fr) 1fr 1fr 1fr' : 'minmax(0,1.4fr) 1fr 1fr';
   const levels = useMemo(() => buildLevelsFor(ticker), [ticker, tick]);
   const changePct = useMemo(() => spotChangePct(ticker), [ticker, tick]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1213,91 +1397,116 @@ const WeigherDesk = ({ incomingTicker }: { incomingTicker?: string | null }) => 
 
   /* The card bodies live in consts so the SAME JSX serves the grid cell and
      the fullscreen takeover — one source, two frames, no drift. */
+  /*
+    THE PULSE GRAMMAR, applied here (Noah, 2026-08-29: "the weigher chart is
+    currently having the same problem as we prev did with the pulse charts.
+    i clearly see padding on all 4 sides. the bar up top is not translucent
+    ... basically 2 rows of top sections instead of one"):
+
+    - the tape is EDGE TO EDGE — absolute inset-0, no header rows in flow;
+    - ONE strip, fused to the top, translucent over the tape (the card's own
+      surface at its own alpha + blur, so there is no second black);
+    - everything that lived on the old two rows rides that strip: the drag
+      grip, the identity, the toolbar, the Stock/Contract lens chips, and
+      the fullscreen door — which becomes the minimize door IN fullscreen,
+      because the takeover shows this same body and a Back row over it was
+      the second row Noah counted.
+  */
+  const chartStrip = (
+    <div
+      /* NO band (Noah, 2026-08-29, after two alpha attempts: "i beg to
+         differ" — a dark wash over a dark tape IS a solid box; there is
+         nothing behind it for translucency to reveal). The Terrain floating
+         chrome grammar instead: the strip is transparent and each control
+         carries its own pill, so the tape runs untouched to the card's top
+         edge. */
+      className="absolute top-0 inset-x-0 z-20 flex flex-wrap items-center gap-x-2.5 gap-y-1 px-2 py-1 select-none"
+    >
+      {full !== 'chart' && (
+        <div className="desk-drag cursor-grab active:cursor-grabbing flex items-center self-stretch shrink-0">
+          <GripHorizontal className="w-3.5 h-3.5 text-textMuted" />
+        </div>
+      )}
+      {lens === 'contract' && selected != null && sel != null ? (
+        <>
+          {contractIdentity}
+          <span className="inline-flex items-center gap-0.5">
+            {TIMEFRAMES.map(t => (
+              <Chip key={t.value} active={timeframe === t.value} onClick={() => setTimeframe(t.value)} title={t.label}>
+                {t.label}
+              </Chip>
+            ))}
+          </span>
+        </>
+      ) : (
+        <>
+          {identity}
+          <ChartToolbar
+            minimal
+            candles
+            alertTicker={ticker}
+            alertSpot={levels.spot}
+            compact
+            timeframe={timeframe}
+            onTimeframe={setTimeframe}
+            overlays={overlays}
+            onOverlays={setOverlays}
+            chartStyle={chartStyle}
+            onChartStyle={setChartStyle}
+            indicators={indicators}
+            onIndicators={setIndicators}
+          />
+        </>
+      )}
+      <span className="ml-auto flex items-center gap-1.5">
+        {chartActions}
+        {full === 'chart' ? (
+          <button
+            onClick={close}
+            title="Exit fullscreen (Esc)"
+            className="p-1 rounded text-textMuted hover:text-textPrimary hover:bg-white/[0.05] transition-colors"
+          >
+            <Minimize2 className="w-3 h-3" />
+          </button>
+        ) : (
+          fullBtn('chart')
+        )}
+      </span>
+    </div>
+  );
+
   const chartBody = (
     <div className="relative h-full">
-            {lens === 'contract' && selected ? (
-              <div className="h-full flex flex-col">
-                {/* The contract keeps the reader's interval — same timeframe
-                    state the stock lens uses, so flipping lenses never
-                    changes the clock. */}
-                <div className="shrink-0 px-2 py-1 flex items-center gap-2.5 flex-wrap">
-                  {contractIdentity}
-                  <span className="inline-flex items-center gap-0.5">
-                  {TIMEFRAMES.map(t => (
-                    <Chip key={t.value} active={timeframe === t.value} onClick={() => setTimeframe(t.value)} title={t.label}>
-                      {t.label}
-                    </Chip>
-                  ))}
-                  </span>
-                </div>
-                {/* Keyed remount: stepping strikes lands the new premium
-                    tape on a soft fade instead of a hard cut. */}
-                <div key={`${ticker}:${sel}:${right}:${dte}`} className="relative flex-1 min-h-0 animate-soft-in">
-                  <ContractPremiumPane
-                    ticker={ticker}
-                    strike={selected.strike}
-                    right={right}
-                    tYears={tYears}
-                    timeframe={timeframe}
-                    revision={tick}
-                  />
-                </div>
-              </div>
-            ) : (
-              <div className="h-full flex flex-col">
-                {/* The SAME chart Terrain and Pulse speak (Noah, 2026-08-25):
-                    full toolbar - style, indicators, theme, the blank Alerts -
-                    behind the Tools door, since a desk card is Terrain-pane
-                    narrow. */}
-                <div className="shrink-0 px-2 py-1 flex items-center gap-2.5 flex-wrap">
-                  {identity}
-                  {/* PORTED ONTO THIS TREE'S TOOLBAR, which asks for two of
-                      these differently and is the better side of both.
-
-                      `alerts` was a boolean that just revealed the menu. Here
-                      the control is wired instead of flagged — it takes the
-                      symbol and the spot, so an alert it creates is bound to a
-                      real name at a real price rather than to whatever the
-                      menu happened to be looking at. It renders whenever those
-                      are passed, minimal mode included, so the flag has
-                      nothing left to do.
-
-                      `collapsed` became `compact`, which is the same intent
-                      with more of it: the seven timeframes fold into one
-                      trigger AND every dropdown trades its word for its icon.
-                      That is what "a desk card is Terrain-pane narrow" needs. */}
-                  <ChartToolbar
-                    minimal
-                    candles
-                    compact
-                    alertTicker={ticker}
-                    alertSpot={levels.spot}
-                    timeframe={timeframe}
-                    onTimeframe={setTimeframe}
-                    overlays={overlays}
-                    onOverlays={setOverlays}
-                    chartStyle={chartStyle}
-                    onChartStyle={setChartStyle}
-                    indicators={indicators}
-                    onIndicators={setIndicators}
-                  />
-                </div>
-                <div className="flex-1 min-h-0">
-                  <StrikeChart
-                    ticker={ticker}
-                    revision={tick}
-                    levels={levels}
-                    timeframe={timeframe}
-                    overlays={overlays}
-                    chartStyle={chartStyle}
-                    indicators={indicators}
-                    prints={prints}
-                    height={180}
-                    frameless
-                  />
-                </div>
-              </div>
-            )}
+      <div className="absolute inset-0">
+        {lens === 'contract' && selected ? (
+          /* Keyed remount: stepping strikes lands the new premium tape on a
+             soft fade instead of a hard cut. */
+          <div key={`${ticker}:${sel}:${right}:${dte}`} className="h-full animate-soft-in">
+            <ContractPremiumPane
+              ticker={ticker}
+              strike={selected.strike}
+              right={right}
+              tYears={tYears}
+              timeframe={timeframe}
+              revision={tick}
+            />
+          </div>
+        ) : (
+          <StrikeChart
+            ticker={ticker}
+            revision={tick}
+            levels={levels}
+            timeframe={timeframe}
+            overlays={overlays}
+            chartStyle={chartStyle}
+            indicators={indicators}
+            prints={prints}
+            height={180}
+            frameless
+          />
+        )}
+      </div>
+      {chartStrip}
     </div>
   );
 
@@ -1306,11 +1515,7 @@ const WeigherDesk = ({ incomingTicker }: { incomingTicker?: string | null }) => 
       {/* The chain's own door to the desk ticker (Noah, 2026-08-25:
           "the chain should have its own ticker search") — same state as
           the chart's picker, so either one repoints both. */}
-      {/* `squared`, not the `slim` this arrived with — Noah, 2026-08-25:
-          "make the chain one more squared". Same trigger, square corners,
-          and it keeps the 112px pill a name is actually readable in rather
-          than shrinking to bare text. */}
-      <TickerQuickPick ticker={ticker} onPick={pickTicker} squared />
+      <TickerQuickPick ticker={ticker} onPick={pickTicker} slim />
       <span className="w-px h-3.5 bg-white/[0.08]" aria-hidden />
       <span className="flex items-center gap-0.5">
         <Chip active={right === 'C'} onClick={() => patch({ right: 'C' })} title="Calls">
@@ -1359,8 +1564,58 @@ const WeigherDesk = ({ incomingTicker }: { incomingTicker?: string | null }) => 
     </span>
   );
 
+  /* The desk's judgment for the strike on the scale — the same scorer the
+     Compass runs. Recomputed when the pick or the chain's sweep changes. */
+  /* THE STATE — the board's own engine grading this exact contract (the
+     dteOverride path makeSetup grew for user-named cons). Same cadence as
+     the quality weigh: re-graded when the chain sweeps or the pick moves. */
+  const compassGrade = useMemo(() => {
+    if (sel == null) return null;
+    const cfg = Simulator.TICKERS[ticker];
+    if (!cfg) return null;
+    return makeSetup(ticker, cfg.currentPrice, sel, right, 'top-setups', cfg.iv, sleeveForDte(chain.expiry.dte), chain.expiry.dte);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sel, right, ticker, chain]);
+
+  /* Is this con on today's board? The SAME sweep Compass runs for this
+     sleeve, checked at pick time — a snapshot answer for a snapshot
+     question ("why isn't it there?"). */
+  const boardRank = useMemo(() => {
+    if (sel == null) return null;
+    const view = buildCompassView(
+      Simulator.snapshotFor(ticker),
+      'top-setups',
+      Simulator.universeQuotes(ticker),
+      sleeveForDte(chain.expiry.dte)
+    );
+    const flat = view.groups.flatMap(g => g.setups);
+    const i = flat.findIndex(x => x.ticker === ticker && x.right === right && Math.abs(x.strike - sel) < 1e-9);
+    return i >= 0 ? i + 1 : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sel, right, ticker, chain]);
+
+  const navigate = useNavigate();
+  const openSetupPage = useCallback(() => {
+    if (sel == null) return;
+    navigate('/compass', {
+      state: { monitor: { ticker, strike: sel, right, scanner: 'top-setups', sleeve: sleeveForDte(chain.expiry.dte) } },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigate, ticker, sel, right, chain]);
+  const seeBoard = useCallback(
+    () => navigate('/compass', { state: { tickerFilter: ticker } }),
+    [navigate, ticker]
+  );
+
+  const weighed = useMemo(
+    () => (sel != null ? weighContract(Simulator.snapshotFor(ticker), right, sel, chain.expiry.dte) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sel, right, ticker, chain]
+  );
+
   const chainBody = (
     <ChainCard
+      inlineDrill
       chain={chain}
       right={right}
       sel={sel}
@@ -1379,10 +1634,21 @@ const WeigherDesk = ({ incomingTicker }: { incomingTicker?: string | null }) => 
           chart card (Noah, 2026-08-25: "this should be within the chart
           like robinhood legend"). */}
       <div className="relative flex items-center justify-center pb-1.5 min-h-[26px]">
+        {/* Always present (Noah, 2026-08-29: "there should also be a reset
+            button at all times. im having trouble dragging the live chart
+            and the chain back up") — one click puts every card back on the
+            even 2×2; tickers, columns and every other choice survive. */}
+        <button
+          onClick={() => setDesk(d => ({ ...d, layout: DEFAULT_LAYOUT.map(l => ({ ...l })) }))}
+          title="Put the four cards back to the even layout"
+          className="absolute right-0 inline-flex items-center gap-1.5 rounded-md border border-borderSubtle px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-textMuted hover:text-textPrimary hover:border-borderMuted transition-colors"
+        >
+          <RotateCcw className="w-3 h-3" /> Reset layout
+        </button>
         <span
           className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-mono text-[10px] font-semibold tnum select-none ${
             session === 'overnight'
-              ? 'border-[#7DD3FC]/30 bg-[#7DD3FC]/[0.13] text-[#7DD3FC]'
+              ? 'border-moon/30 bg-moon/[0.13] text-moon'
               : mood.mood === 'up'
                 ? 'border-bull/30 bg-bull/[0.12] text-bull'
                 : mood.mood === 'down'
@@ -1409,14 +1675,20 @@ const WeigherDesk = ({ incomingTicker }: { incomingTicker?: string | null }) => 
       <Grid
         className="relative desk-grid"
         layout={layout}
-        cols={12}
-        rowHeight={88}
+        cols={48}
+        rowHeight={39}
         margin={[10, 10]}
         containerPadding={[0, 0]}
         draggableHandle=".desk-drag"
         /* Every edge and corner resizes - the SE-only default read as "not
            fully movable" (Noah, 2026-08-25). */
-        resizeHandles={['s', 'w', 'e', 'n', 'sw', 'nw', 'se', 'ne']}
+        /* No top-side handles ('n'/'ne'/'nw') since the chart card's strip
+           reached the top edge (2026-08-29): the invisible 20px corner
+           handles sat OVER the strip's buttons and ate their clicks — the
+           card's backdrop-blur makes a stacking context, so no z-index
+           inside it can win. Bottom/side handles + the sashes cover every
+           resize. */
+        resizeHandles={['s', 'w', 'e', 'sw', 'se']}
         /* No state writes while a card is in hand — RGL animates the drag
            internally and hands us the final layout at drop. Re-rendering the
            desk on every placeholder step was the other half of the jank. */
@@ -1429,16 +1701,15 @@ const WeigherDesk = ({ incomingTicker }: { incomingTicker?: string | null }) => 
         }}
       >
         <div key="chart">
-          <DeskCard
-            actions={
-              <>
-                {chartActions}
-                {fullBtn('chart')}
-              </>
-            }
+          {/* NOT a DeskCard: the chart card has no header row — the strip
+              inside chartBody is its whole chrome (Noah, 2026-08-29: one
+              row, translucent, tape edge to edge). */}
+          <div
+            className="h-full relative overflow-hidden rounded-md border border-white/[0.07] backdrop-blur-[2px]"
+            style={{ background: 'rgba(13,14,17,0.55)' }}
           >
             {full === 'chart' ? <div className="h-full" /> : chartBody}
-          </DeskCard>
+          </div>
         </div>
 
         <div key="chain">
@@ -1462,16 +1733,13 @@ const WeigherDesk = ({ incomingTicker }: { incomingTicker?: string | null }) => 
               /*
                 NINE BOARDS BEHIND ONE TRIGGER, not nine chips.
 
-                The first cut laid all nine out as chips and let the row
-                scroll when it did not fit. The sweep caught that at 1024:
-                "TRUNC x by 59px (box 375, content 434)" — the desk's rule
-                is that content fits the box it is drawn in, and a strip
-                that scrolls sideways hides boards behind a gesture nobody
-                is told about. Three chips fit that header; nine never will.
-
-                So the caption names the current board and opens the rest,
-                which is the same shape the Terrain rail's metric picker
-                takes. Costs one trigger's width at every viewport.
+                Three chips fit this header; nine never will. Laid out flat
+                they overflowed at 1024 and the sweep said so exactly —
+                "TRUNC x by 59px (box 375, content 434)" — because the desk's
+                rule is that content fits the box it is drawn in, and a strip
+                that scrolls sideways hides boards behind a gesture nobody is
+                told about. The caption names the current board and opens the
+                rest, the same shape the Terrain rail uses.
               */
               <span className="relative">
                 <button
@@ -1525,8 +1793,12 @@ const WeigherDesk = ({ incomingTicker }: { incomingTicker?: string | null }) => 
             <div className="h-full overflow-y-auto">
               <div className="min-h-full flex flex-col">
                 <div
-                  className="sticky top-0 z-10 grid border-b border-white/[0.06]"
-                  style={{ background: 'rgba(13,14,17,0.92)', gridTemplateColumns: scanCols }}
+                  /* No tint — over the card's own surface any wash reads as
+                     a darker slab (Noah, 2026-08-29). The blur alone earns
+                     the sticky header's keep: at rest it is invisible, and
+                     rows scrolling beneath smear into legibility. */
+                  className="sticky top-0 z-10 grid border-b border-white/[0.06] backdrop-blur-md"
+                  style={{ gridTemplateColumns: scanCols }}
                 >
                   {(showMetric ? ['Ticker', 'Last', 'Change', board.metricLabel] : ['Ticker', 'Last', 'Change']).map((h, i) => (
                     <span
@@ -1540,8 +1812,8 @@ const WeigherDesk = ({ incomingTicker }: { incomingTicker?: string | null }) => 
                   ))}
                 </div>
                 {/* An empty board is a real answer — "nothing made a new
-                    52-week low today" is information — so it says which
-                    board came back empty rather than a generic blank. */}
+                    52-week low today" is information — so it names which
+                    board came back empty rather than going blank. */}
                 {scan.length === 0 && (
                   <div className="flex-1 flex items-center justify-center px-3 text-center font-mono text-[10px] uppercase tracking-widest text-textMuted">
                     Nothing on {board.short.toLowerCase()} today
@@ -1587,12 +1859,26 @@ const WeigherDesk = ({ incomingTicker }: { incomingTicker?: string | null }) => 
               ) : undefined
             }
           >
-            <StrikeCard c={selected} contractKey={`${ticker}-${sel ?? 'none'}-${right}-${chain.expiry.dte}`} />
+            <StrikeCard
+              c={selected}
+              weigh={weighed}
+              grade={compassGrade}
+              boardRank={boardRank}
+              onOpenSetup={openSetupPage}
+              onSeeBoard={seeBoard}
+              contractKey={`${ticker}-${sel ?? 'none'}-${right}-${chain.expiry.dte}`}
+            />
           </DeskCard>
         </div>
 
       </Grid>
-      <SashLayer layout={layout} width={gridW} onLayout={next => patch({ layout: next })} />
+      <SashLayer
+        layout={layout}
+        width={gridW}
+        onLayout={next => patch({ layout: next })}
+        onDragStart={beginInteract}
+        onDragEnd={() => endInteract()}
+      />
       </div>
 
       {/* Portal, not a plain fixed div: RGL positions cards with CSS
@@ -1600,7 +1886,21 @@ const WeigherDesk = ({ incomingTicker }: { incomingTicker?: string | null }) => 
           for position:fixed — an in-place overlay would size itself to the
           card. Escaping to <body> is the only way out (the ladder widget
           learned this first). */}
-      {full &&
+      {full === 'chart' &&
+        createPortal(
+          /* The Pulse takeover's grammar: the chart IS the screen — no
+             padding frame, no Back row; the strip inside chartBody carries
+             every control plus the minimize door, and Esc still works. */
+          <div
+            className={`fixed inset-0 z-[80] bg-canvas flex flex-col animate-soft-in transition-opacity duration-200 ease-out ${
+              closing ? 'opacity-0' : ''
+            }`}
+          >
+            <div className="flex-1 min-h-0">{chartBody}</div>
+          </div>,
+          document.body
+        )}
+      {full === 'chain' &&
         createPortal(
           <div
             className={`fixed inset-0 z-[80] bg-canvas p-3 flex flex-col animate-soft-in transition-opacity duration-200 ease-out ${
@@ -1608,16 +1908,10 @@ const WeigherDesk = ({ incomingTicker }: { incomingTicker?: string | null }) => 
             }`}
           >
             <div className="flex-1 min-h-0 border border-borderSubtle bg-panel rounded-lg overflow-hidden flex flex-col">
+              {/* ONE row (Noah, 2026-08-29: the Back button was the second
+                  one) — the chain's own controls, and the minimize door. */}
               <div className="shrink-0 flex items-center gap-2 px-2.5 py-1.5 border-b border-white/[0.05]">
-                <button
-                  onClick={close}
-                  className="group inline-flex items-center gap-1.5 border border-borderSubtle hover:border-borderMuted rounded-md px-2.5 py-1 font-mono text-[10px] text-textSecondary hover:text-textPrimary transition-colors"
-                >
-                  <ArrowLeft className="w-3 h-3 transition-transform duration-200 ease-out group-hover:-translate-x-0.5" /> Back
-                </button>
-                <span className="ml-auto flex flex-wrap items-center justify-end gap-1.5 min-w-0">
-                  {full === 'chart' ? chartActions : chainActions}
-                </span>
+                <span className="ml-auto flex flex-wrap items-center justify-end gap-1.5 min-w-0">{chainActions}</span>
                 <button
                   onClick={close}
                   title="Exit fullscreen (Esc)"
@@ -1626,7 +1920,7 @@ const WeigherDesk = ({ incomingTicker }: { incomingTicker?: string | null }) => 
                   <Minimize2 className="w-3 h-3" />
                 </button>
               </div>
-              <div className="flex-1 min-h-0">{full === 'chart' ? chartBody : chainBody}</div>
+              <div className="flex-1 min-h-0">{chainBody}</div>
             </div>
           </div>,
           document.body

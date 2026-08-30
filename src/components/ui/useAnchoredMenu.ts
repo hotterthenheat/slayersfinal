@@ -46,7 +46,9 @@ export function useAnchoredMenu<T extends HTMLElement, M extends HTMLElement = H
   menuSide: MenuSide = 'bottom',
   /** The menu's own width, so the placement can keep its FAR edge on screen.
       Omitted, the placement assumes MENU_MIN_WIDTH — see placeMenu. */
-  menuWidth?: number
+  menuWidth?: number,
+  /** Which edge the menu pins to — see placeMenu. */
+  align: 'start' | 'end' = 'end'
 ) {
   const anchorRef = useRef<T | null>(null);
   const [placed, setPlaced] = useState<{ box: MenuBox; side: MenuSide } | null>(null);
@@ -86,8 +88,8 @@ export function useAnchoredMenu<T extends HTMLElement, M extends HTMLElement = H
   const measure = useCallback(() => {
     const el = anchorRef.current;
     if (!el) return;
-    setPlaced(placeMenu(el.getBoundingClientRect(), menuSide, window.innerWidth, window.innerHeight, width));
-  }, [menuSide, width]);
+    setPlaced(placeMenu(el.getBoundingClientRect(), menuSide, window.innerWidth, window.innerHeight, width, align));
+  }, [menuSide, width, align]);
 
   /** Put this on the menu element itself when the width is not passed in. */
   const menuRef = useRef<M | null>(null);

@@ -126,7 +126,7 @@ export function buildRankedTargets(snapshot: MarketSnapshot): RankedTargetsView 
   const callWall = picked.callWall ?? spot;
   const putWall = picked.putWall ?? spot;
 
-  let king = spot;
+  let supreme = spot;
   let pin = spot;
   let maxAll = 0;
   let maxOI = 0;
@@ -134,7 +134,7 @@ export function buildRankedTargets(snapshot: MarketSnapshot): RankedTargetsView 
     const mag = Math.abs(n.netGex);
     if (mag > maxAll) {
       maxAll = mag;
-      king = n.strike;
+      supreme = n.strike;
     }
     if (n.callOI + n.putOI > maxOI) {
       maxOI = n.callOI + n.putOI;
@@ -189,7 +189,7 @@ export function buildRankedTargets(snapshot: MarketSnapshot): RankedTargetsView 
     const tags: TargetTag[] = [];
     if (n.strike === callWall || n.strike === putWall) tags.push('WALL');
     if (n.strike === pin) tags.push('PIN');
-    if (n.strike === king) tags.push('KING');
+    if (n.strike === supreme) tags.push('SUPREME');
     if (Math.abs(bps) <= 20) tags.push('SPOT TARGET');
 
     const strongGex = Math.abs(n.netGex) > maxAll * 0.35;

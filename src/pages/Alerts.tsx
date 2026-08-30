@@ -45,7 +45,7 @@ import ProvenanceChip from '../components/ui/ProvenanceChip';
 
 const KIND_WORDS: Record<string, string> = {
   price: 'Price', level: 'Level', indicator: 'Indicator',
-  gexFlip: 'Gamma flip', newKing: 'New king', wallMove: 'Wall move', flow: 'Flow',
+  gexFlip: 'Gamma flip', newKing: 'New supreme', wallMove: 'Wall move', flow: 'Flow',
 };
 
 const Alerts = () => {
@@ -152,7 +152,7 @@ const Alerts = () => {
             kind="empty"
             title={tab === 'armed' ? 'Nothing armed' : 'Nothing has fired'}
             body={tab === 'armed'
-              ? `Arm an alert from the menu above, or from any chart's bell — a level, an indicator cross, a gamma flip, a new king, a wall move, or a flow print over a floor.`
+              ? `Arm an alert from the menu above, or from any chart's bell — a level, an indicator cross, a gamma flip, a new supreme, a wall move, or a flow print over a floor.`
               : 'Alerts that trigger stay here with their timestamp, so the history survives the session.'}
           />
         ) : (

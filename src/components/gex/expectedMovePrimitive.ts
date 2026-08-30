@@ -12,7 +12,7 @@ import type { ExpectedMoveCone } from '../../data/expectedMove';
   bell. The engine is pure and proven headless; this file is only geometry.
 
   WHITE, AND ONLY WHITE. The dealer palette is spoken for (gold put-dominant,
-  steel call-dominant, magenta king, blue flip, lime the user's marks) and
+  steel call-dominant, magenta supreme, blue flip, lime the user's marks) and
   red/green mean price direction. The cone is neither: it is a claim ABOUT
   spot, so it wears spot's ink at low alpha — present under the tape, never
   competing with it. A crossing needs no colour of its own either: it is

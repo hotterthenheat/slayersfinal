@@ -29,7 +29,7 @@ import StrikeChart, {
   type CompareEntry,
   type CompareMode,
 } from '../../components/gex/StrikeChart';
-import { FOCUS, KING } from '../../components/gex/palette';
+import { FOCUS, SUPREME } from '../../components/gex/palette';
 import { buildLevelRead } from '../../data/levelview';
 
 const fmtFocus = (v: number) => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
@@ -340,11 +340,11 @@ const LiveChartWidget = ({ ctx, soleChart = false }: LiveChartWidgetProps) => {
           >
             Focus
             <span className="text-[11px] font-bold tnum normal-case tracking-normal">{fmtFocus(ctx.focusPrice)}</span>
-            {/* The strike's standing right now — it wears the king's magenta
+            {/* The strike's standing right now — it wears the supreme's magenta
                 on the tape while it holds the crown, and this says why */}
-            {Math.abs(ctx.gex.levels.king - ctx.focusPrice) < 1e-9 && (
-              <span className="font-bold" style={{ color: KING }}>
-                King
+            {Math.abs(ctx.gex.levels.supreme - ctx.focusPrice) < 1e-9 && (
+              <span className="font-bold" style={{ color: SUPREME }}>
+                Supreme
               </span>
             )}
             {/* The level read — the three things that decide whether a ranked

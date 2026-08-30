@@ -6,7 +6,7 @@
   Palette rules: lime/red are the bull/bear TOKENS (badges, bars, direction
   text) — candles must read up/down instantly WITHOUT stealing those tokens,
   and without colliding with level colors (lime wall / red wall / baby-blue
-  flip / silver king / white spot).
+  flip / silver supreme / white spot).
 */
 
 import { useSyncExternalStore } from 'react';

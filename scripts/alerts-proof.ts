@@ -10,12 +10,12 @@
      price crossings both ways; a level alert that waits on an absent level,
      establishes its side lazily, and fires when the LEVEL moves across the
      close (following the level is the point); the indicator timeframe gate;
-     RSI against its threshold; net GEX sign flip; a new king; wall migration
+     RSI against its threshold; net GEX sign flip; a new supreme; wall migration
      measured in strike-steps with an at-threshold fire; flow prints gated by
      BOTH the premium floor and the arming time
   4. Store discipline: markFired is idempotent, commitArm refuses a fired
      alert, rearm resets each kind to unestablished
-  5. `readExposureNow` — totals, king, real-null walls, and the chain's step
+  5. `readExposureNow` — totals, supreme, real-null walls, and the chain's step
 */
 import {
   MAX_ALERTS, alertLabel, armFlow, armGexFlip, armIndicator, armLevel, armNewKing,
@@ -42,7 +42,7 @@ const check = (name: string, ok: boolean, extra = '') => {
 const bare = (over: Partial<AlertContext> = {}): AlertContext => ({
   close: 100,
   tf: '5m',
-  levels: { callWall: null, putWall: null, flip: null, king: null },
+  levels: { callWall: null, putWall: null, flip: null, supreme: null },
   netGex: null,
   step: 0,
   values: {},
@@ -112,19 +112,19 @@ const mk = (a: Record<string, unknown>): Alert => ({ id: 'x', firedAt: 0, ...a }
   // level — the alert follows the level
   const a = mk({ kind: 'level', level: 'callWall', side: 0 });
   check('level: an absent level is waited on, not guessed', evaluateAlert(a, bare()).armed === undefined && !evaluateAlert(a, bare()).fire);
-  const seen = evaluateAlert(a, bare({ close: 100, levels: { callWall: 103, putWall: null, flip: null, king: null } }));
+  const seen = evaluateAlert(a, bare({ close: 100, levels: { callWall: 103, putWall: null, flip: null, supreme: null } }));
   check('level: the first readable tick establishes the side, without firing', !seen.fire && seen.armed !== undefined && (seen.armed as { side: number }).side === -1);
   const armed = seen.armed!;
-  check('level: sitting exactly on the level establishes nothing', evaluateAlert(a, bare({ close: 103, levels: { callWall: 103, putWall: null, flip: null, king: null } })).armed === undefined);
-  check('level: the same side again does not fire', !evaluateAlert(armed, bare({ close: 101, levels: { callWall: 103, putWall: null, flip: null, king: null } })).fire);
-  check('level: the CLOSE crossing the wall fires', evaluateAlert(armed, bare({ close: 103.2, levels: { callWall: 103, putWall: null, flip: null, king: null } })).fire);
-  check('level: the WALL moving across the close fires too — the alert follows the level', evaluateAlert(armed, bare({ close: 100, levels: { callWall: 99.5, putWall: null, flip: null, king: null } })).fire);
+  check('level: sitting exactly on the level establishes nothing', evaluateAlert(a, bare({ close: 103, levels: { callWall: 103, putWall: null, flip: null, supreme: null } })).armed === undefined);
+  check('level: the same side again does not fire', !evaluateAlert(armed, bare({ close: 101, levels: { callWall: 103, putWall: null, flip: null, supreme: null } })).fire);
+  check('level: the CLOSE crossing the wall fires', evaluateAlert(armed, bare({ close: 103.2, levels: { callWall: 103, putWall: null, flip: null, supreme: null } })).fire);
+  check('level: the WALL moving across the close fires too — the alert follows the level', evaluateAlert(armed, bare({ close: 100, levels: { callWall: 99.5, putWall: null, flip: null, supreme: null } })).fire);
   check('level: the level vanishing mid-watch waits instead of firing', !evaluateAlert(armed, bare({ close: 104 })).fire);
 
   /* And the other side: armed from ABOVE the level, touching it fires —
      the crossing floor is inclusive both ways. */
-  const wallsK = (k: number) => ({ callWall: null, putWall: null, flip: null, king: k });
-  const above = evaluateAlert(mk({ kind: 'level', level: 'king', side: 0 }), bare({ close: 104, levels: wallsK(103) })).armed!;
+  const wallsK = (k: number) => ({ callWall: null, putWall: null, flip: null, supreme: k });
+  const above = evaluateAlert(mk({ kind: 'level', level: 'supreme', side: 0 }), bare({ close: 104, levels: wallsK(103) })).armed!;
   check('level: armed from above, the side is 1', (above as { side: number }).side === 1);
   check('level: staying above does not fire', !evaluateAlert(above, bare({ close: 103.5, levels: wallsK(103) })).fire);
   check('level: touching the level from above fires — inclusive', evaluateAlert(above, bare({ close: 103, levels: wallsK(103) })).fire);
@@ -157,15 +157,15 @@ const mk = (a: Record<string, unknown>): Alert => ({ id: 'x', firedAt: 0, ...a }
 {
   // newking
   const a = mk({ kind: 'newking', strike: 0 });
-  const armed = evaluateAlert(a, bare({ levels: { callWall: null, putWall: null, flip: null, king: 505 } })).armed!;
-  check('newking: the first king seen is the baseline', (armed as { strike: number }).strike === 505);
-  check('newking: the crown staying put does not fire', !evaluateAlert(armed, bare({ levels: { callWall: null, putWall: null, flip: null, king: 505 } })).fire);
-  check('newking: the crown moving fires', evaluateAlert(armed, bare({ levels: { callWall: null, putWall: null, flip: null, king: 510 } })).fire);
+  const armed = evaluateAlert(a, bare({ levels: { callWall: null, putWall: null, flip: null, supreme: 505 } })).armed!;
+  check('newking: the first supreme seen is the baseline', (armed as { strike: number }).strike === 505);
+  check('newking: the crown staying put does not fire', !evaluateAlert(armed, bare({ levels: { callWall: null, putWall: null, flip: null, supreme: 505 } })).fire);
+  check('newking: the crown moving fires', evaluateAlert(armed, bare({ levels: { callWall: null, putWall: null, flip: null, supreme: 510 } })).fire);
 }
 {
   // wallmove
   const a = mk({ kind: 'wallmove', strikes: 2, callBase: 0, putBase: 0, step: 0 });
-  const walls = (cw: number | null, pw: number | null) => ({ callWall: cw, putWall: pw, flip: null, king: null });
+  const walls = (cw: number | null, pw: number | null) => ({ callWall: cw, putWall: pw, flip: null, supreme: null });
   check('wallmove: no walls yet means keep waiting', evaluateAlert(a, bare({ levels: walls(null, null), step: 1 })).armed === undefined);
   check('wallmove: an unknown strike spacing means keep waiting', evaluateAlert(a, bare({ levels: walls(505, 495), step: 0 })).armed === undefined);
   const armed = evaluateAlert(a, bare({ levels: walls(505, 495), step: 1 })).armed! as Alert & { callBase: number; putBase: number; step: number };
@@ -192,8 +192,8 @@ const mk = (a: Record<string, unknown>): Alert => ({ id: 'x', firedAt: 0, ...a }
 // ── 4. store discipline ───────────────────────────────────────────────────
 {
   const t = 'DISC';
-  const lvl = armLevel(t, 'king')!;
-  const armed = evaluateAlert(lvl, bare({ close: 100, levels: { callWall: null, putWall: null, flip: null, king: 103 } })).armed!;
+  const lvl = armLevel(t, 'supreme')!;
+  const armed = evaluateAlert(lvl, bare({ close: 100, levels: { callWall: null, putWall: null, flip: null, supreme: 103 } })).armed!;
   commitArm(t, armed);
   check('commitArm stores the established side', (getAlerts(t).find(a => a.id === lvl.id) as { side: number }).side === -1);
   markFired(t, lvl.id, 111);
@@ -224,11 +224,11 @@ const mk = (a: Record<string, unknown>): Alert => ({ id: 'x', firedAt: 0, ...a }
     { strike: 496, value: 9e8 },   // heaviest put-dominant below spot → put wall
     { strike: 498, value: 1e8 },
     { strike: 502, value: -3e8 },
-    { strike: 504, value: -12e8 }, // heaviest overall → king; call-dominant above → call wall
+    { strike: 504, value: -12e8 }, // heaviest overall → supreme; call-dominant above → call wall
   ];
   const e = readExposureNow(chain, 500);
   check('netGex is the signed total', Math.abs(e.netGex - (4e8 + 9e8 + 1e8 - 3e8 - 12e8)) < 1);
-  check('the king is the largest magnitude', e.king === 504);
+  check('the supreme is the largest magnitude', e.supreme === 504);
   check('the walls are the sign-checked rule', e.callWall === 504 && e.putWall === 496);
   check('the flip is the crossing nearest spot', e.flip === 500);
   check('the step is the chain\'s own spacing', e.step === 2);

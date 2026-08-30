@@ -87,7 +87,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     key: 'live-chart',
     title: 'Live Chart',
-    description: 'Candles with walls, flip, king & GEX nodes — own timeframe & overlays',
+    description: 'Candles with walls, flip, supreme & GEX nodes — own timeframe & overlays',
     w: 8,
     h: 5,
     minW: 4,
@@ -135,7 +135,7 @@ export const WIDGETS: WidgetDef[] = [
   {
     key: 'key-levels',
     title: 'Key Levels',
-    description: 'Walls, pin, flip & king — readable as SPY, SPX or ES on index names',
+    description: 'Walls, pin, flip & supreme — readable as SPY, SPX or ES on index names',
     w: 4,
     h: 4,
     minW: 3,

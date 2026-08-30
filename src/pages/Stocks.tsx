@@ -51,7 +51,7 @@ const StateTag = ({ verdict }: { verdict: StockVerdict }) => (
    than ladder position — named so it can't be read as rank. A mid-table
    sector can be RISING; the ladder says where it sits, the phase says
    which way it's moving. LEADING is reserved for the ladder's absolute
-   top (silver/holo — the king family), never used as a phase word. */
+   top (silver/holo — the supreme family), never used as a phase word. */
 const PHASE_LABEL: Record<SectorRow['phase'], string> = {
   LEADING: 'RISING',
   IMPROVING: 'TURNING UP',
@@ -272,7 +272,7 @@ const Stocks = () => {
         <div className="px-4 py-2.5 border-b border-borderSubtle bg-inset flex flex-col gap-1">
           <p className="text-[13px] text-textPrimary leading-relaxed">
             <span className="font-mono text-[11px] font-semibold uppercase tracking-wider mr-2 text-textSecondary">The read</span>
-            <span className="text-king font-semibold">{topSector.sector}</span> leads the ladder with {sectors[1].sector}{' '}
+            <span className="text-supreme font-semibold">{topSector.sector}</span> leads the ladder with {sectors[1].sector}{' '}
             close behind —{' '}
             {laggards.length > 0 ? (
               <>
@@ -303,13 +303,13 @@ const Stocks = () => {
                 <span className="font-mono text-[13px] text-textPrimary truncate font-semibold">{s.sector}</span>
                 <span className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-textPrimary">
                   <span
-                    className={`w-1.5 h-1.5 rounded-full shrink-0 ${isLeader ? 'bg-king' : phaseDot[s.phase]}`}
+                    className={`w-1.5 h-1.5 rounded-full shrink-0 ${isLeader ? 'bg-supreme' : phaseDot[s.phase]}`}
                   />
                   {isLeader ? 'LEADING' : PHASE_LABEL[s.phase]}
                 </span>
                 <span className="flex h-[5px] rounded-full overflow-hidden bg-white/[0.05] min-w-0">
                   <span
-                    className={`h-full rounded-full ${isLeader ? 'bg-king' : phaseBar[s.phase]}`}
+                    className={`h-full rounded-full ${isLeader ? 'bg-supreme' : phaseBar[s.phase]}`}
                     style={{ width: `${(s.score / topSector.score) * 100}%` }}
                   />
                 </span>

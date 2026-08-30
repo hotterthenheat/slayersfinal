@@ -139,7 +139,7 @@ const StrikeLadderWidget = ({ ctx }: { ctx: WorkspaceCtx }) => {
       flip: c(levels.flip),
       callWall: c(levels.callWall),
       putWall: c(levels.putWall),
-      king: c(levels.king),
+      supreme: c(levels.supreme),
     });
   }, [data, fam, tm, activeLens]);
 

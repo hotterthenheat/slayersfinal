@@ -245,7 +245,7 @@ export interface ImpactRow {
 
 /** Why a contract is on a setup's driver list — the part it plays in the
     book the campaign trades through. */
-export type DriverRole = 'This contract' | 'Call wall' | 'Put wall' | 'King' | 'Pin' | 'In the path';
+export type DriverRole = 'This contract' | 'Call wall' | 'Put wall' | 'Supreme' | 'Pin' | 'In the path';
 
 export interface DriverRow extends ImpactRow {
   role: DriverRole;

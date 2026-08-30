@@ -48,7 +48,7 @@ const LEVEL_CHIPS: { level: LevelName; label: string }[] = [
   { level: 'callWall', label: 'Call wall' },
   { level: 'putWall', label: 'Put wall' },
   { level: 'flip', label: 'Flip' },
-  { level: 'king', label: 'King' },
+  { level: 'supreme', label: 'Supreme' },
 ];
 
 const INDICATOR_CHIPS: { source: IndicatorSource; threshold: number; label: string }[] = [
@@ -202,7 +202,7 @@ const AlertsMenu = ({ ticker, spot, tf }: AlertsMenuProps) => {
                 GEX flips sign
               </button>
               <button onClick={() => tryArm(() => armNewKing(ticker), kingOn)} aria-pressed={kingOn} className={chipClass(kingOn)} style={chipStyle(kingOn)}>
-                New king
+                New supreme
               </button>
               {WALL_CHIPS.map(n => {
                 const on = alerts.some(a => a.kind === 'wallmove' && a.strikes === n);

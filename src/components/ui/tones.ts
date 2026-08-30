@@ -4,18 +4,29 @@
   Rule: a tone is never the only signal — always paired with a label or icon.
 */
 
-/* `holo` is the brand's silver foil, not a status colour — it means "terminal
-   hardware" (counts, chrome, navigation), never market direction. It is a
-   filled surface with dark ink, so it reads as a solid chip rather than a
-   tinted one; keep it scarce or it stops meaning hardware. */
-export type Tone = 'bull' | 'bear' | 'warn' | 'select' | 'magenta' | 'holo' | 'neutral';
+/* THE ENGINE'S STANDOUT IS MAGENTA, RESTORED (Noah, 2026-08-29, ending
+   the day's odyssey magenta → silver → baby blue → neon → back: "i
+   reveried and skylit doesnt have those colors"). What the odyssey KEPT:
+
+   - `crown` — a BLACK BOX with magenta words (the grammar Noah chose
+               during the neon leg: "mainly black with the words being
+               [the accent]... that would really bring it out" — never a
+               filled card). The engine's #1 and nothing lesser: TOP PICK.
+   - `supreme`  — the magenta tint at chip scale: supreme tags, NET, the whale.
+   - `white` — bright neutral ink. Compass process states (ACTIVE/MOVING),
+               kept by Noah's explicit word.
+   - `holo`  — flat silver, TERMINAL HARDWARE only (counts, chrome,
+               navigation); the animated foil is nav/brand. */
+export type Tone = 'bull' | 'bear' | 'warn' | 'select' | 'white' | 'crown' | 'supreme' | 'holo' | 'neutral';
 
 export const toneText: Record<Tone, string> = {
   bull: 'text-bull',
   bear: 'text-bear',
   warn: 'text-warn',
   select: 'text-select',
-  magenta: 'text-[#EA00FF]',
+  white: 'text-textPrimary',
+  crown: 'text-supreme',
+  supreme: 'text-supreme',
   holo: 'holo-text',
   neutral: 'text-textPrimary',
 };
@@ -25,7 +36,9 @@ export const toneDot: Record<Tone, string> = {
   bear: 'bg-bear',
   warn: 'bg-warn',
   select: 'bg-select',
-  magenta: 'bg-[#EA00FF]',
+  white: 'bg-[#EDEDED]',
+  crown: 'bg-supreme',
+  supreme: 'bg-supreme',
   holo: 'holo-bg',
   neutral: 'bg-textMuted',
 };
@@ -35,8 +48,16 @@ export const toneBadge: Record<Tone, string> = {
   bear: 'bg-bear/10 text-bear border-bear/20',
   warn: 'bg-warn/10 text-warn border-warn/20',
   select: 'bg-select/10 text-select border-select/20',
-  // Borderless by request — magenta rides the tint + ink alone
-  magenta: 'bg-[#EA00FF]/10 text-[#EA00FF] border-transparent',
+  /* Bright neutral — a rank BELOW the silvers: solid white ink, whisper tint.
+     Compass process states wear this so the TOP PICK foil owns the shine. */
+  white: 'bg-white/[0.07] text-textPrimary border-white/25',
+  /* The crown. A BLACK BOX whose words are the supreme magenta — the darkest
+     surface on the board carrying the engine's own ink, so the #1 is
+     findable from across the room without shouting a filled card. TOP PICK
+     only. */
+  crown: 'bg-[#0a0a0a] text-supreme border-supreme/40',
+  /* Supreme at chip scale — the standout family's tint+ink+border grammar. */
+  supreme: 'bg-supreme/10 text-supreme border-supreme/25',
   /* TINTED, not filled, and FLAT silver rather than the animated foil.
      A filled .holo-bg chip weighs exactly as much as the section subtabs
      (also .holo-bg) — same material at the same strength reads as the same
@@ -56,7 +77,9 @@ export const toneBar: Record<Tone, string> = {
   bear: 'bg-bear/80',
   warn: 'bg-warn/70',
   select: 'bg-select/70',
-  magenta: 'bg-[#EA00FF]/70',
+  white: 'bg-white/70',
+  crown: 'bg-supreme/90',
+  supreme: 'bg-supreme/70',
   holo: 'holo-bar',
   neutral: 'bg-white/20',
 };

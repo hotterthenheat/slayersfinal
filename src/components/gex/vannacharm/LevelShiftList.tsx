@@ -9,7 +9,7 @@ const KIND_TEXT: Record<KeyLevelKind, string> = {
   'call-wall': 'text-bull',
   'put-wall': 'text-bear',
   flip: 'text-flip',
-  king: 'text-king',
+  supreme: 'text-supreme',
   pin: 'text-textSecondary',
   spot: 'text-textPrimary',
 };

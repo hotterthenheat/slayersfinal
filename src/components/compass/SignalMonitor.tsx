@@ -173,7 +173,7 @@ const SignalMonitor = ({ setup, spot, gradedAt, onBack }: SignalMonitorProps) =>
             sweep that surfaced the row is named. */}
         {gradedAt != null && (
           <p className="mt-2 font-mono text-[11px] text-textSecondary">
-            Surfaced on the <span className="text-textPrimary tnum">{gradedAt}</span> sweep · reading live since
+            Found on the <span className="text-textPrimary tnum">{gradedAt}</span> scan · watching live since
           </p>
         )}
       </Panel>

@@ -14,7 +14,7 @@ import type { Candle, GexSnapshot } from '../types/market';
   history holds per-strike gamma at every bar, and the bars hold the session
   cut. This is those three modules.
 
-    HIST_01  LEVEL MIGRATION — the walls, the flip and the king through a
+    HIST_01  LEVEL MIGRATION — the walls, the flip and the supreme through a
              session. Not "roughly where the levels were": each point is
              re-picked from that snapshot with the SAME pickWalls and
              pickFlip the live map uses, so a historical wall means exactly
@@ -46,7 +46,7 @@ export interface MigrationPoint {
   callWall: number | null;
   putWall: number | null;
   flip: number | null;
-  king: number | null;
+  supreme: number | null;
 }
 
 export interface SessionSpan {
@@ -108,12 +108,12 @@ export function levelMigration(
     const spot = spotAt(s.time);
     const book = s.levels.map(l => ({ strike: l.strike, netGex: l.value }));
     const w = pickWalls(book, spot, n => n.netGex);
-    let king: number | null = null;
+    let supreme: number | null = null;
     let mag = 0;
     for (const l of book) {
       if (Math.abs(l.netGex) > mag) {
         mag = Math.abs(l.netGex);
-        king = l.strike;
+        supreme = l.strike;
       }
     }
     return {
@@ -122,7 +122,7 @@ export function levelMigration(
       callWall: w.callWall ?? null,
       putWall: w.putWall ?? null,
       flip: pickFlip(book, spot, n => n.netGex),
-      king,
+      supreme,
     };
   });
 }

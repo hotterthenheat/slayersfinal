@@ -55,7 +55,7 @@ export const TERMS = {
   'Gamma flip':
     'The price where dealer hedging switches sides — above it moves get absorbed (dealers long gamma), below it they get amplified (dealers short gamma). The regime label reads which side spot is on right now.',
   Pin: 'The max-open-interest strike that price tends to gravitate toward into expiry.',
-  King: 'The single largest gamma strike on the whole book — the level that matters most today.',
+  Supreme: 'The single largest gamma strike on the whole book — the level that matters most today.',
   // ---- contracts driving the setup ----
   'Gamma share': 'This contract’s slice of the whole book’s gamma, as a percent. The bigger the slice, the more dealer hedging this one strike commands.',
   'From spot': 'How far the strike sits from the current price — plus above it, minus below. The nearer, the more its hedging bears on today’s tape.',
@@ -149,7 +149,7 @@ export const TERMS = {
     'Bars that close on participation — each one holds the same traded volume. Time disappears from the axis: a bar is a unit of activity, wherever the clock was.',
   // ---- alert kinds (T-22) ----
   'Alert kinds':
-    'What a pane can watch besides a typed price: a named level being crossed (the alert follows the wall, flip or king as the book moves them), price crossing VWAP or an EMA, RSI crossing a threshold, net GEX flipping sign, a new king, a wall migrating N strikes, or an option print over a premium floor. All of it in-session only — nothing runs when the tab is closed.',
+    'What a pane can watch besides a typed price: a named level being crossed (the alert follows the wall, flip or supreme as the book moves them), price crossing VWAP or an EMA, RSI crossing a threshold, net GEX flipping sign, a new supreme, a wall migrating N strikes, or an option print over a premium floor. All of it in-session only — nothing runs when the tab is closed.',
   'Armed rail':
     'The list at a pane’s top-left of every alert armed on its symbol, so what’s watching is visible without opening a menu. A row lights orange when its alert fires.',
   // ---- volume profile (T-10) ----

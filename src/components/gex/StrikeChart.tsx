@@ -36,7 +36,7 @@ import {
 } from '../../data/timeframe';
 import { GexTrailsPrimitive } from './gexNodesPrimitive';
 import { DrawingsPrimitive, loadDrawings, needsThirdAnchor, saveDrawings, type Drawing, type DrawingKind } from './drawingsPrimitive';
-import { getCandleTheme, useCandleThemeKey, candleSeriesOptions, chartSurface, type CandleTheme } from './candleTheme';
+import { getCandleTheme, useCandleThemeKey, candleSeriesOptions, chartSurface, type CandleTheme, type CandleThemeKey } from './candleTheme';
 import { alertLabel, commitArm, evaluateAlert, markFired, useAlerts, type AlertContext, type IndicatorSource } from './alertStore';
 import { exposureNowFor } from '../../data/gex';
 import { barClockSpec, buildAltBars, type AltBarSpec } from '../../data/altBars';
@@ -221,7 +221,7 @@ export interface ChartOverlays {
     dashes and their shorthand ON THE FIELD rather than on the price axis.
 
     ONE INK, FOUR DASH PATTERNS. The dealer palette is spoken for — gold is
-    put-dominant, steel call-dominant, magenta the king, blue the flip, lime
+    put-dominant, steel call-dominant, magenta the supreme, blue the flip, lime
     selection, white spot — and red and green mean price direction. A session
     level is none of those things, so it takes none of those colours: the dash
     pattern carries which level it is, which is what the directive asks for
@@ -847,6 +847,15 @@ interface StrikeChartProps {
       surface and the tape bleeds to its edges (Noah, 2026-08-23: "i notice
       different layers of black"). */
   frameless?: boolean;
+  /* THE CANDLE THEME, host-owned when supplied — omitted it reads the global
+     store exactly as before. Lets two panes on one desk wear different
+     tapes. */
+  themeKey?: CandleThemeKey;
+  /** Fired when a drag starts a drawing — the host arms its persistent rail. */
+  onEnterDraw?: () => void;
+  /** False while something covers the rail's top edge, so overlays that park
+      there can stand down instead of drawing under it. */
+  railTopOk?: boolean;
   /** Transient user-focused price — renders a cyan FOCUS line while set */
   focusPrice?: number | null;
   overlays?: ChartOverlays;
@@ -980,13 +989,13 @@ export interface CrosshairBar {
 /** This chart's values at the hovered moment; null when nothing is hovered. */
 export type CrosshairReadout = (bar: CrosshairBar | null) => void;
 
-// Wall / flip / king overlay colors (independent of candle theme)
-import { BULL, CALL_WALL, PUT_WALL, FLIP, KING, FOCUS, DARK_POOL, ALERT as ALERT_INK } from './palette';
+// Wall / flip / supreme overlay colors (independent of candle theme)
+import { BULL, CALL_WALL, PUT_WALL, FLIP, SUPREME, FOCUS, DARK_POOL, ALERT as ALERT_INK } from './palette';
 
 // Level lines are created once per overlay/ticker, then their prices are
 // TWEENED (rAF + easeOutCubic) so scan-tier level moves glide instead of jumping.
 const LEVEL_SPEC: {
-  key: 'callWall' | 'putWall' | 'flip' | 'king';
+  key: 'callWall' | 'putWall' | 'flip' | 'supreme';
   color: string;
   title: string;
   style: LineStyle;
@@ -995,24 +1004,24 @@ const LEVEL_SPEC: {
   { key: 'callWall', color: CALL_WALL, title: 'CALL WALL', style: LineStyle.Solid, width: 1 },
   { key: 'putWall', color: PUT_WALL, title: 'PUT WALL', style: LineStyle.Solid, width: 1 },
   { key: 'flip', color: FLIP, title: 'FLIP ZONE', style: LineStyle.Dashed, width: 1 },
-  { key: 'king', color: KING, title: 'KING', style: LineStyle.Solid, width: 2 },
+  { key: 'supreme', color: SUPREME, title: 'SUPREME', style: LineStyle.Solid, width: 2 },
 ];
-/* NO axis chips at all now — the king's capsule left the right pane too
+/* NO axis chips at all now — the supreme's capsule left the right pane too
    (Noah, 2026-08-23: "we will have a separate section of the website where
    we explain everything"). The field alone carries every identity: magenta
-   band = king, green/red beads = walls, blue ticks = flip. LEVEL_SPEC stays
+   band = supreme, green/red beads = walls, blue ticks = flip. LEVEL_SPEC stays
    for the tween plumbing and any future re-enable. */
 const LINE_LEVELS: typeof LEVEL_SPEC = [];
 
 /*
   NOTHING IS NAMED ON THE PRICE AXIS — not the walls, not the flip, not the
-  king (Noah, 2026-08-25: "you can remove the flip zone and king node if you
+  supreme (Noah, 2026-08-25: "you can remove the flip zone and supreme node if you
   have it on the screen with its own UI touch that should be enough").
 
   That is the argument that took the walls off, carried the rest of the way.
   Every one of these levels already has a treatment ON the field: a green node
   band is the call wall, a red one the put wall, a dashed blue rule the flip,
-  a magenta band the king. A capsule in the gutter repeats a fact the chart
+  a magenta band the supreme. A capsule in the gutter repeats a fact the chart
   has already made, in the loudest form available, on top of the tape.
 
   LEVEL_SPEC above stays for the tween plumbing and any future re-enable; the
@@ -1055,6 +1064,9 @@ const StrikeChart = ({
   compact = false,
   pageScroll = false,
   frameless = false,
+  themeKey: themeKeyProp,
+  onEnterDraw,
+  railTopOk = true,
   focusPrice = null,
   overlays = DEFAULT_OVERLAYS,
   prints = [],
@@ -1086,7 +1098,9 @@ const StrikeChart = ({
   const barSizeRef = useRef(barSize);
   barSizeRef.current = barSize;
 
-  const themeKey = useCandleThemeKey();
+  const globalThemeKey = useCandleThemeKey();
+
+  const themeKey = themeKeyProp ?? globalThemeKey;
   /* Read straight from the store rather than taken as a prop: alerts belong to
      the SYMBOL, and two panes showing the same symbol must draw the same set.
      The drawings store is read the same way, from this same component. */
@@ -1166,7 +1180,7 @@ const StrikeChart = ({
      null = not a sub-minute view. */
   const [liveFrom, setLiveFrom] = useState<number | null>(null);
   const printLinesRef = useRef<IPriceLine[]>([]);
-  const levelLinesRef = useRef<Partial<Record<'callWall' | 'putWall' | 'flip' | 'king', IPriceLine>>>({});
+  const levelLinesRef = useRef<Partial<Record<'callWall' | 'putWall' | 'flip' | 'supreme', IPriceLine>>>({});
   const shownLevelsRef = useRef<KeyLevels | null>(null);
   /** T-6's layer. One primitive for the life of the chart; what it draws is
       swapped, never the primitive itself — see the session effect below. */
@@ -1618,7 +1632,7 @@ const StrikeChart = ({
     []
   );
 
-  // Widen the visible price range to always include the walls/king so several
+  // Widen the visible price range to always include the walls/supreme so several
   // strike-node bands are on screen, not just the couple around spot — and
   // the FOCUS strike, when one is set (a strike sent here to be SEEN
   // cannot be off-screen; Noah, 2026-08-22).
@@ -1626,7 +1640,7 @@ const StrikeChart = ({
     (original: () => { priceRange: { minValue: number; maxValue: number } } | null) => {
       const base = original();
       const lv = levelsRef.current;
-      const extras = [lv.putWall, lv.callWall, lv.king, lv.spot, focusPriceRef.current ?? NaN].filter(v =>
+      const extras = [lv.putWall, lv.callWall, lv.supreme, lv.spot, focusPriceRef.current ?? NaN].filter(v =>
         Number.isFinite(v)
       );
       let min = base?.priceRange.minValue ?? Math.min(...extras);
@@ -3222,7 +3236,7 @@ const StrikeChart = ({
   // Tween level prices to their new scan values — lines glide, never teleport
   useEffect(() => {
     const lines = levelLinesRef.current;
-    if (!lines.king) return; // levels hidden
+    if (!lines.supreme) return; // levels hidden
 
     // Ticker switch = new world: snap, don't tween across symbols
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -3273,8 +3287,8 @@ const StrikeChart = ({
       focusLineRef.current = candleSeries.createPriceLine({
         price: focusPrice,
         // The ink at creation too — a trails toggle recreates the line, and
-        // the ink effect below only re-runs when the focus or the king moves
-        color: Math.abs(levelsRef.current.king - focusPrice) < 1e-9 ? KING : FOCUS,
+        // the ink effect below only re-runs when the focus or the supreme moves
+        color: Math.abs(levelsRef.current.supreme - focusPrice) < 1e-9 ? SUPREME : FOCUS,
         title: 'FOCUS',
         lineVisible: !trailsDrawn,
         lineStyle: LineStyle.Solid,
@@ -3398,7 +3412,7 @@ const StrikeChart = ({
         callWall: exp?.callWall ?? null,
         putWall: exp?.putWall ?? null,
         flip: exp?.flip ?? null,
-        king: exp?.king ?? null,
+        supreme: exp?.supreme ?? null,
       },
       netGex: exp ? exp.netGex : null,
       step: exp?.step ?? 0,
@@ -3417,19 +3431,19 @@ const StrikeChart = ({
   }, [alerts, ticker, revision, replay, timeframe, flowPrints]);
 
   /* The focus INK follows the strike's standing, re-read every scan: magenta
-     while the focused strike is the king, lime otherwise. The focus itself
+     while the focused strike is the supreme, lime otherwise. The focus itself
      never moves — if 510 loses the crown, 510 turns lime and stays (Noah,
-     2026-08-22); the new king keeps its own line. Line and trail agree. */
+     2026-08-22); the new supreme keeps its own line. Line and trail agree. */
   useEffect(() => {
-    const isKing = focusPrice != null && Math.abs(levels.king - focusPrice) < 1e-9;
-    trailsRef.current?.setFocus(focusPrice, isKing ? 'king' : 'focus');
+    const isKing = focusPrice != null && Math.abs(levels.supreme - focusPrice) < 1e-9;
+    trailsRef.current?.setFocus(focusPrice, isKing ? 'supreme' : 'focus');
     /*
       ══ "KEY LEVELS" IS A SWITCH THAT NOW SWITCHES SOMETHING ══════════════
 
       It did nothing. `overlays.levels` gated exactly one loop — over
       LINE_LEVELS, which is `[]` because the axis capsules were deliberately
       removed (see its comment above). So the toggle had nothing left to turn
-      off, while its menu row went on offering "CW · PW · flip · king".
+      off, while its menu row went on offering "CW · PW · flip · supreme".
 
       Measured before this change: toggling it moved 23 pixels of a 1240x804
       plot, against 795 pixels of drift on an untouched chart over the same
@@ -3442,14 +3456,14 @@ const StrikeChart = ({
       promises. No primitive change, and `trails` still owns the field itself.
     */
     const showLevels = overlays.levels;
-    trailsRef.current?.setKing(showLevels && Number.isFinite(levels.king) ? levels.king : null);
+    trailsRef.current?.setKing(showLevels && Number.isFinite(levels.supreme) ? levels.supreme : null);
     trailsRef.current?.setWalls(
       showLevels && Number.isFinite(levels.callWall) ? levels.callWall : null,
       showLevels && Number.isFinite(levels.putWall) ? levels.putWall : null,
       showLevels && Number.isFinite(levels.flip) ? levels.flip : null
     );
-    focusLineRef.current?.applyOptions({ color: isKing ? KING : FOCUS });
-  }, [focusPrice, overlays.levels, levels.king, levels.callWall, levels.putWall, levels.flip]);
+    focusLineRef.current?.applyOptions({ color: isKing ? SUPREME : FOCUS });
+  }, [focusPrice, overlays.levels, levels.supreme, levels.callWall, levels.putWall, levels.flip]);
 
   // ---- replay lifecycle -----------------------------------------------------
   // Enter: snapshot the aggregated world and rewind. Exit: hand the series

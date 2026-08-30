@@ -163,7 +163,9 @@ export function buildSetupTrack(setup: Setup, bars: Candle[]): SetupTrack {
 
   const levels: TrackLevel[] = [
     mkLevel('ref', 'Reference', setup.mid, 'REF', null),
-    mkLevel('stop', 'Stop', stopPremium, 'STOP', setup.invalidationPrice),
+    /* No rungs, no stop (the 2026-08-30 earned-TPs rule): a thesis that
+       earned zero TPs draws no trade furniture on the premium tape. */
+    ...(setup.takeProfits.length > 0 ? [mkLevel('stop', 'Stop', stopPremium, 'STOP', setup.invalidationPrice)] : []),
     ...setup.takeProfits.map(tp =>
       mkLevel(
         `tp${tp.level}`,
@@ -192,7 +194,7 @@ export function buildSetupTrack(setup: Setup, bars: Candle[]): SetupTrack {
   return {
     past,
     forward,
-    stopCurve: stopOk ? stopCurve : null,
+    stopCurve: stopOk && setup.takeProfits.length > 0 ? stopCurve : null,
     levels,
     ref: setup.mid,
     spotNow,

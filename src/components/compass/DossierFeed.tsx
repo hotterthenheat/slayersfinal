@@ -239,7 +239,7 @@ const DossierCard = ({
         >
           {s.contract}
         </span>
-        {isTop && <SignalBadge tone="magenta">TOP PICK</SignalBadge>}
+        {isTop && <SignalBadge tone="crown">TOP PICK</SignalBadge>}
         <span className="font-mono text-[11px] text-textSecondary tnum">
           {s.ticker} ${spot.toFixed(2)}
         </span>
@@ -350,7 +350,7 @@ const DossierFeed = ({ groups, variant, onReview }: DossierFeedProps) => {
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-3 flex-wrap">
         <span className="font-mono text-[10px] font-bold uppercase tracking-widest text-textPrimary">
-          {live.length} campaigns on the board
+          {live.length} setups on the board
         </span>
         <span className="font-mono text-[10px] uppercase tracking-wider text-textSecondary">
           {variant === 'weeklies'

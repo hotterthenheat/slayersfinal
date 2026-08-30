@@ -46,7 +46,13 @@ const toneSurface: Record<Tone, string> = {
   bear: 'border-bear/30 bg-bear/[0.04]',
   warn: 'border-warn/30 bg-warn/[0.04]',
   select: 'border-select/30 bg-select/[0.04]',
-  magenta: 'border-king/30 bg-king/[0.04]',
+  supreme: 'border-supreme/30 bg-supreme/[0.04]',
+  /* `crown` is a BLACK BOX with coloured words at chip scale — as a whole
+     panel it would be a filled card, which is the thing the grammar rules
+     out, so it takes the neutral surface. `white` is bright ink, not a
+     tint. */
+  crown: 'border-supreme/30 bg-panel',
+  white: 'border-borderSubtle bg-panel',
   // A whole panel never wears the foil — holo is chip-scale hardware. Falls
   // back to the neutral surface so `tone="holo"` on a Panel can't tint it.
   holo: 'border-borderSubtle bg-panel',
@@ -58,7 +64,9 @@ const toneDivider: Record<Tone, string> = {
   bear: 'border-bear/20',
   warn: 'border-warn/20',
   select: 'border-select/20',
-  magenta: 'border-king/20',
+  supreme: 'border-supreme/20',
+  crown: 'border-supreme/20',
+  white: 'border-borderSubtle',
   holo: 'border-borderSubtle',
   neutral: 'border-borderSubtle',
 };

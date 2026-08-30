@@ -88,9 +88,9 @@ const BOOK: [number, number][] = [[140, -300], [135, -900], [125, -1_500], [110,
     `${points[0].callWall} vs ${at100.callWall}`
   );
   check('and the newer against its own', points[1].callWall === (at130.callWall ?? null), `${points[1].callWall} vs ${at130.callWall}`);
-  /* The king is a whole-book argmax and so is spot-independent — it must be
+  /* The supreme is a whole-book argmax and so is spot-independent — it must be
      the same at both, which also proves the two points are not just copies. */
-  check('the king is the same at both — it is a whole-book read', points[0].king === points[1].king && points[0].king === 125, String(points[0].king));
+  check('the supreme is the same at both — it is a whole-book read', points[0].supreme === points[1].supreme && points[0].supreme === 125, String(points[0].supreme));
 }
 
 // ── 3. confined to its session ────────────────────────────────────────────
