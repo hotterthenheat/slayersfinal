@@ -16,6 +16,7 @@ import {
   ClipboardCheck,
   type LucideIcon,
   Scale,
+  FileText,
 } from 'lucide-react';
 
 // Navigation is organised by WORKFLOW, not by product name: Discover → Analyze
@@ -125,6 +126,14 @@ export const NAV_ITEMS: NavItem[] = [
     icon: Users,
     description: 'Trade ideas, requests & feedback',
     group: 'Manage',
+  },
+  {
+    path: '/disclosures',
+    label: 'Disclosures',
+    code: '13',
+    icon: FileText,
+    description: 'Insider and congressional filings — and how late they were',
+    group: 'Analyze',
   },
   // ── Review — audit the models and the calls ──
   {

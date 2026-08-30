@@ -16,7 +16,7 @@
   6. An empty window is reachable and is stated as a fact, not a gap
   7. It is stable within a day
 */
-import { insiderFlow, insiderRead, insiderBuyers, isOpenMarketBuy } from '../src/data/insiderFlow';
+import { insiderFlow, insiderRead, insiderBuyers, isOpenMarketBuy, insiderFeed, TX_CODES, type TxCode } from '../src/data/insiderFlow';
 import { UNIVERSE, lookup } from '../src/data/universe';
 
 let pass = 0, fail = 0;
@@ -34,21 +34,63 @@ const withRows = all.filter(f => f.trades.length > 0);
   check('PREMISE: some names filed', withRows.length > 0, `${withRows.length}/${all.length}`);
   const rows = withRows.flatMap(f => f.trades);
   check('PREMISE: rows to inspect', rows.length > 10, `${rows.length}`);
-  check('no buy is modelled as scheduled', rows.every(t => !(t.kind === 'BUY' && t.planned)));
-  /* Which means the "open market" test can never see a planned buy in
-     generated data — so the definition is proven directly, over all four
-     combinations, rather than left to a guard nothing can reach. A real
-     filing feed will contain planned buys and this is the line that has to
-     be right when it does. */
-  check('an unplanned buy is an open-market buy', isOpenMarketBuy({ kind: 'BUY', planned: false }));
-  check('a PLANNED buy is not — nobody chose it', !isOpenMarketBuy({ kind: 'BUY', planned: true }));
-  check('a sale is never an open-market buy, planned or not',
-    !isOpenMarketBuy({ kind: 'SELL', planned: false }) && !isOpenMarketBuy({ kind: 'SELL', planned: true }));
+  /* Buy plans are now MODELLED — rare, but real, because a model that
+     forbids them can never be wrong about one. So the definition is proven
+     directly over the code table rather than inferred from what the
+     generator happens to emit. */
+  check('an open-market purchase is an open-market buy', isOpenMarketBuy({ code: 'P', plan: 'discretionary' }));
+  check('— and so is one whose plan flag was never captured', isOpenMarketBuy({ code: 'P', plan: 'unknown' }));
+  check('a PLANNED purchase is not — nobody chose the day', !isOpenMarketBuy({ code: 'P', plan: 'plan' }));
+  check('a sale is never an open-market buy, however flagged',
+    (['plan', 'discretionary', 'unknown'] as const).every(pl => !isOpenMarketBuy({ code: 'S', plan: pl })));
+  check('and neither is any compensation event',
+    (['A', 'M', 'F', 'D', 'G'] as const).every(c => !isOpenMarketBuy({ code: c, plan: 'discretionary' })),
+    'a grant is not a purchase');
   const planned = rows.filter(t => t.planned);
   check('PREMISE: plans exist', planned.length > 0, `${planned.length} of ${rows.length}`);
-  check('every planned row is a sale', planned.every(t => t.kind === 'SELL'));
+  check('a plan flag only ever sits on a market trade', planned.every(t => TX_CODES[t.code].openMarket));
+
+  /* DIRECTION IS THE CODE TABLE'S, not re-derived at the call site. A
+     mutation that read direction off `code === 'P'` — making every grant
+     and every conversion a SELL — passed every other assertion here. */
+  check(
+    'every row acquires or disposes exactly as its code says',
+    rows.every(t => (t.kind === 'BUY') === TX_CODES[t.code].acquires),
+    rows.filter(t => (t.kind === 'BUY') !== TX_CODES[t.code].acquires).map(t => `${t.code}:${t.kind}`).slice(0, 4).join(' ')
+  );
+  check('PREMISE: acquiring codes other than P are present', rows.some(t => TX_CODES[t.code].acquires && t.code !== 'P'), 'grants and conversions acquire');
+
+  /* ALL THREE PLAN STATES MUST BE REACHABLE. Collapsing the flag to a
+     boolean is the exact misreading this surface exists to prevent — an
+     old sale whose plan status was never captured would render as a
+     decision — and it passed every assertion until this one. */
+  const states = new Set(rows.map(t => t.plan));
+  check('the plan flag really has three states in the data', states.size === 3, [...states].sort().join(', '));
+  check('— including "unknown", which a boolean would have erased', states.has('unknown'));
+  check('a non-market row never claims a plan', rows.filter(t => !TX_CODES[t.code].openMarket).every(t => t.plan === 'discretionary'));
+
+  /* PLANS ARE A SELLING INSTRUMENT. Comparing the RATES, not the counts:
+     a shared rate still leaves sells the majority of planned rows simply
+     because sells are the majority of rows, so a count test passes a
+     mutation that gives buys the same rate. */
+  const mktBuys = rows.filter(t => TX_CODES[t.code].openMarket && t.kind === 'BUY');
+  const mktSells = rows.filter(t => TX_CODES[t.code].openMarket && t.kind === 'SELL');
+  check('PREMISE: both directions are present in the market rows', mktBuys.length > 3 && mktSells.length > 3, `${mktBuys.length} buys, ${mktSells.length} sells`);
+  const buyRate = mktBuys.filter(t => t.planned).length / mktBuys.length;
+  const sellRate = mktSells.filter(t => t.planned).length / mktSells.length;
+  check(
+    'a sale is far likelier to be scheduled than a purchase',
+    sellRate > buyRate * 2,
+    `${(buyRate * 100).toFixed(0)}% of buys vs ${(sellRate * 100).toFixed(0)}% of sells`
+  );
+  check('plans are overwhelmingly SELL plans, as in real filings',
+    planned.filter(t => t.kind === 'SELL').length > planned.length * 0.8,
+    `${planned.filter(t => t.kind === 'SELL').length} of ${planned.length}`);
   for (const f of withRows) {
-    const want = f.trades.filter(t => t.planned).reduce((s, t) => s + t.value, 0);
+    /* Planned SALES only — see the note in the engine. Folding a planned
+       purchase in here made the "% of selling that was scheduled" line
+       divide a mixed numerator by a sales-only denominator and print 555%. */
+    const want = f.trades.filter(t => t.planned && t.kind === 'SELL').reduce((s, t) => s + t.value, 0);
     check(`${f.ticker}: the planned total counts only badged rows`, f.plannedValue === want, `${f.plannedValue} vs ${want}`);
   }
 }
@@ -89,11 +131,21 @@ const withRows = all.filter(f => f.trades.length > 0);
 {
   for (const f of withRows) {
     check(`${f.ticker}: value is shares at the filed price`, f.trades.every(t => t.value === Math.round(t.shares * t.price)));
-    const b = f.trades.filter(t => t.kind === 'BUY').reduce((s, t) => s + t.value, 0);
-    const sl = f.trades.filter(t => t.kind === 'SELL').reduce((s, t) => s + t.value, 0);
-    check(`${f.ticker}: the two totals match their rows`, f.bought === b && f.sold === sl);
+    /* BOUGHT AND SOLD ARE MARKET ACTIVITY ONLY — the fix that stops a
+       vesting event reading as "the CFO dumped $4m". A grant and a tax
+       withholding both carry a share count and a price, and summing them
+       here is exactly the error this surface exists to avoid. */
+    const mkt = f.trades.filter(t => TX_CODES[t.code].openMarket);
+    const b = mkt.filter(t => t.kind === 'BUY').reduce((s, t) => s + t.value, 0);
+    const sl = mkt.filter(t => t.kind === 'SELL').reduce((s, t) => s + t.value, 0);
+    check(`${f.ticker}: the two totals count market rows only`, f.bought === b && f.sold === sl);
+    const comp = f.trades.filter(t => !TX_CODES[t.code].openMarket).reduce((s, t) => s + t.value, 0);
+    check(`${f.ticker}: compensation is counted apart, never in the totals`, f.compValue === comp, `${f.compValue} vs ${comp}`);
     check(`${f.ticker}: net is bought less sold`, f.net === f.bought - f.sold);
-    check(`${f.ticker}: open-market buys exclude nothing but plans`, f.openMarketBuys === f.trades.filter(t => t.kind === 'BUY' && !t.planned).reduce((s, t) => s + t.value, 0));
+    check(
+      `${f.ticker}: open-market buys are code P outside a plan`,
+      f.openMarketBuys === f.trades.filter(t => isOpenMarketBuy(t)).reduce((s, t) => s + t.value, 0)
+    );
     check(`${f.ticker}: newest first`, f.trades.every((t, i) => i === 0 || f.trades[i - 1].daysAgo <= t.daysAgo));
     check(`${f.ticker}: every row is inside the window`, f.trades.every(t => t.daysAgo >= 1 && t.daysAgo <= 90));
     check(`${f.ticker}: the stake share is a real fraction`, f.trades.every(t => t.stakePct > 0 && t.stakePct <= 100));
@@ -111,13 +163,49 @@ const withRows = all.filter(f => f.trades.length > 0);
 // ── 5. selling dominates ─────────────────────────────────────────────────
 {
   const rows = withRows.flatMap(f => f.trades);
-  const buys = rows.filter(t => t.kind === 'BUY').length;
-  check('selling is the majority, as in real filings', buys < rows.length * 0.45, `${buys} buys of ${rows.length}`);
+  /* The claim is about MARKET activity. Counting every acquiring row as a
+     "buy" folds in grants and option conversions — which acquire shares
+     and are not purchases — and that is the very conflation this surface
+     exists to undo. */
+  const mkt = rows.filter(t => TX_CODES[t.code].openMarket);
+  const buys = mkt.filter(t => t.kind === 'BUY').length;
+  check('PREMISE: market rows to weigh', mkt.length > 10, `${mkt.length} of ${rows.length}`);
+  check('open-market selling outweighs buying, as in real filings', buys < mkt.length * 0.45, `${buys} buys of ${mkt.length}`);
   check('but buying is not impossible', buys > 0, `${buys}`);
+  /* And the reason the feed defaults to the market pair: most Form 4 rows
+     are not trades at all. */
+  const compRows = rows.length - mkt.length;
+  check('most filings are compensation events, not trades', compRows > mkt.length, `${compRows} comp vs ${mkt.length} market`);
   const buyers = insiderBuyers(90, DAY);
   check('the buyers board finds them', buyers.length > 0, `${buyers.length} names`);
   check('every name on it actually bought discretionarily', buyers.every(f => f.openMarketBuys > 0));
   check('and it is ranked', buyers.every((f, i) => i === 0 || buyers[i - 1].openMarketBuys >= f.openMarketBuys));
+}
+
+// ── nobody holds two offices, and no office has two holders ──────────────
+{
+  /* A reader who spots two chief executives of one company stops believing
+     the rest of the table, and they are right to. Both directions of the
+     constraint are checked: one person with two titles, and one title held
+     by two people. */
+  const SINGULAR = ['CEO', 'CFO', 'COO'];
+  for (const f of withRows) {
+    const byPerson = new Map<string, Set<string>>();
+    const byRole = new Map<string, Set<string>>();
+    for (const t of f.trades) {
+      if (!byPerson.has(t.person)) byPerson.set(t.person, new Set());
+      byPerson.get(t.person)!.add(t.role);
+      if (!byRole.has(t.role)) byRole.set(t.role, new Set());
+      byRole.get(t.role)!.add(t.person);
+    }
+    const twoTitles = [...byPerson.entries()].filter(([, r]) => r.size > 1);
+    check(`${f.ticker}: nobody holds two titles`, twoTitles.length === 0, twoTitles.map(([p, r]) => `${p}: ${[...r].join('/')}`).join(', '));
+    const shared = [...byRole.entries()].filter(([role, ppl]) => SINGULAR.includes(role) && ppl.size > 1);
+    check(`${f.ticker}: no singular office has two holders`, shared.length === 0, shared.map(([r, p]) => `${r}: ${[...p].join(', ')}`).join(' | '));
+  }
+  /* And the roles must actually vary, or the constraint above is vacuous. */
+  const allRoles = new Set(withRows.flatMap(f => f.trades.map(t => t.role)));
+  check('PREMISE: more than one title appears across the desk', allRoles.size > 2, [...allRoles].join(', '));
 }
 
 // ── 6 & 7. empty windows, and stability ──────────────────────────────────
