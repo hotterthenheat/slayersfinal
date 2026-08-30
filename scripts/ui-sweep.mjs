@@ -5814,10 +5814,27 @@ head('the ticker page answers who is actually trading the name');
     ? ok('a broad fund is named among the holders')
     : bad(`no broad fund on the board — ${funds.slice(0, 3).join(', ')}`);
 
-  const plans = await page.$$('span[title^="A 10b5-1 plan"]');
-  plans.length > 0
-    ? ok(`a scheduled sale wears its badge on the row — ${plans.length}`)
-    : bad('no plan badge — a scheduled sale is indistinguishable from a decision');
+  /* WHICHEVER NAME HAS ONE TODAY. The feed is deterministic per day, so a
+     hardcoded ticker is a coin flip: a plan badge only appears where that
+     name has a scheduled SALE, and after plans became a selling instrument
+     (buys carry a far lower rate) a quiet name like AAPL can legitimately
+     have none. The claim is that a scheduled sale wears its badge, not that
+     any particular company filed one — so it is proven on the first name
+     that did. */
+  const PLAN_CANDIDATES = ['AAPL', 'JPM', 'WMT', 'MSFT', 'BAC', 'PG'];
+  let planBadges = 0;
+  let planTicker = '';
+  for (const t of PLAN_CANDIDATES) {
+    if (t !== 'AAPL') {
+      await page.goto(`${BASE}/stocks/${t}`, { waitUntil: 'networkidle' });
+      await page.waitForTimeout(BOOT_MS / 2);
+    }
+    planBadges = (await page.$$('span[title^="A 10b5-1 plan"]')).length;
+    if (planBadges > 0) { planTicker = t; break; }
+  }
+  planBadges > 0
+    ? ok(`a scheduled sale wears its badge on the row — ${planBadges} on ${planTicker}`)
+    : bad(`no plan badge on any of ${PLAN_CANDIDATES.join(', ')} — a scheduled sale is indistinguishable from a decision`);
 
   const colourless = await page.evaluate(() => {
     const out = [];
