@@ -254,6 +254,11 @@ const STYLE_GLYPHS: Record<ChartStyle, ReactNode> = {
    overlay rides the tape, a sub-pane takes height OFF it — which is also why
    the sub-panes carry T-3's cap (MAX_SUB_PANES, refused in place with the
    reason printed rather than a row that silently does nothing). */
+/* The cap spelled for a heading, derived from the constant so the words and
+   the enforcement cannot drift apart again — they did once, and the menu
+   read "two at most" against a cap of three for a whole release. */
+const SUB_PANE_WORD = ['none', 'one', 'two', 'three', 'four'][MAX_SUB_PANES] ?? String(MAX_SUB_PANES);
+
 const INDICATOR_ITEMS: { key: keyof ChartIndicators; label: string; hint: string; sub?: boolean }[] = [
   { key: 'ema9', label: 'EMA 9', hint: '9-bar exponential moving average' },
   { key: 'ema21', label: 'EMA 21', hint: '21-bar exponential moving average' },
@@ -657,20 +662,32 @@ const ChartToolbar = ({
                     {idx === 0 && (
                       <div className="px-2.5 pt-1 font-mono text-[9px] uppercase tracking-widest text-textMuted">On the tape</div>
                     )}
+                    {/* THE NUMBER COMES FROM THE CONSTANT. This heading and
+                        the refusal tooltip below both used to say "two" in
+                        prose while `MAX_SUB_PANES` said 3 — the cap was
+                        raised with the second indicator set and the copy was
+                        not, so the menu spent that release telling a reader
+                        a limit the code did not enforce. Neither string can
+                        disagree with the cap now. */}
                     {idx === firstSub && (
                       <div className="px-2.5 pt-2 font-mono text-[9px] uppercase tracking-widest text-textMuted">
-                        Own pane — two at most{capped ? '' : ''}
+                        Own pane — {SUB_PANE_WORD} at most
                       </div>
                     )}
+                    {/* `data-sub-pane` marks the rows that take a pane of
+                        their own — a hook, so a probe can find them without
+                        carrying a name list it would have to keep in step
+                        with the indicator set. */}
                     <button
                       role="checkbox"
                       aria-checked={on}
+                      data-sub-pane={item.sub ? '1' : undefined}
                       disabled={capped}
                       title={
                         heldByClock
                           ? 'Needs time bars — the pane is on a rule clock'
                           : capped
-                            ? 'Two sub-panes are the cap — turn one off first, or the tape shrinks past its floor'
+                            ? `${MAX_SUB_PANES} sub-panes are the cap — turn one off first, or the tape shrinks past its floor`
                             : undefined
                       }
                       onClick={() => !capped && onIndicators({ ...indicators, [item.key]: !on })}

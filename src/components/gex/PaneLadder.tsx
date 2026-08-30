@@ -683,15 +683,15 @@ const PaneLadder = ({
         const px = Math.min(Math.max(want, 0), cap);
         const t = px > 0 ? `translateX(${-px}px)` : '';
         if (el.style.transform !== t) el.style.transform = t;
-        /* WHERE IT ACTUALLY LANDED, handed back so the pass below can test
-           the real box rather than a threshold standing in for one. */
-        const right = track.clientWidth - 4 - px;
-        return { left: right - el.offsetWidth, right, y, h: el.offsetHeight };
+        return el;
       };
-      const spotBox = park(spotBadge, ySpot, 0);
-      const clash = ySpot != null && yFlip != null && Math.abs(ySpot - yFlip) < BADGE_CLEAR_PX;
-      const flipBox = park(flipBadge, yFlip, clash ? (spotBadge?.offsetWidth ?? 0) + 3 : 0);
-      const pills = [spotBox, flipBox].filter(Boolean) as { left: number; right: number; y: number; h: number }[];
+      const parked = [
+        park(spotBadge, ySpot, 0),
+        park(flipBadge, yFlip,
+          ySpot != null && yFlip != null && Math.abs(ySpot - yFlip) < BADGE_CLEAR_PX
+            ? (spotBadge?.offsetWidth ?? 0) + 3
+            : 0),
+      ].filter(Boolean) as HTMLElement[];
 
       /*
         AND THE ROW UNDER A PILL GIVES UP ITS NUMBER.
@@ -702,32 +702,38 @@ const PaneLadder = ({
         only — the bar still draws, the row is still clickable, and the
         number comes straight back when price moves on.
 
-        TESTED AGAINST THE PILL'S REAL BOX, on both axes. The first cut used
-        a fixed 14px of vertical distance, and the sweep caught it on the
-        build: 23 covers at 1024x768 layout 4, the worst of them spot
-        "501.06" over strike "501" by 12.0px. A row can be 22px tall against
-        a 14px pill, so their boxes still cross at 16px of centre-to-centre
-        distance — a threshold two pixels narrower than the geometry it was
-        standing in for. Horizontally it matters too: a flip pill stepped
-        aside from spot can clear the column entirely, and hiding a number
-        it no longer touches would be its own small lie.
+        MEASURED, NOT MODELLED, and it took two goes to get there. The first
+        cut used a fixed 14px of vertical distance and the sweep found 23
+        covers at 1024x768, the worst of them 12.0px — a 22px row against a
+        14px pill still crosses at 16px of centre-to-centre distance. The
+        second reconstructed the boxes from `offsetWidth`/`offsetHeight`,
+        which are ROUNDED to whole pixels, and the sweep came back with five
+        covers of 0.1 to 0.3px: the residue of two integers standing in for
+        two fractional heights.
+
+        So both boxes are read straight off `getBoundingClientRect`, which is
+        fractional and is the same measurement the sweep makes. No threshold
+        is left to be a little wrong.
+
+        The reads are all done BEFORE any write, so this costs one layout
+        pass rather than one per row.
 
         `visibility`, not `display`: the label keeps its lane, so the bars
         either side of it do not jump wider on the one row a rule crosses.
       */
+      const pillBoxes = parked.map(el => el.getBoundingClientRect());
+      const rowLabels: { label: HTMLElement; box: DOMRect | null }[] = [];
       for (const el of track.querySelectorAll<HTMLElement>('[data-strike]')) {
         const label = el.querySelector<HTMLElement>('[data-strike-label]');
         if (!label) continue;
-        let hide = false;
-        if (el.style.display !== 'none' && pills.length) {
-          const y = p.yFor(Number(el.dataset.strike));
-          if (y != null) {
-            const lLeft = label.offsetLeft;
-            const lRight = lLeft + label.offsetWidth;
-            hide = pills.some(b =>
-              Math.abs(b.y - y) < (b.h + rowH) / 2 && b.left < lRight && b.right > lLeft);
-          }
-        }
+        rowLabels.push({
+          label,
+          box: el.style.display === 'none' || pillBoxes.length === 0 ? null : label.getBoundingClientRect(),
+        });
+      }
+      for (const { label, box } of rowLabels) {
+        const hide = box != null && pillBoxes.some(b =>
+          b.left < box.right && b.right > box.left && b.top < box.bottom && b.bottom > box.top);
         const want = hide ? 'hidden' : '';
         if (label.style.visibility !== want) label.style.visibility = want;
       }

@@ -3555,10 +3555,25 @@ head('every Pinpoint tab opens with the flip already answered');
   const page = await ctx.newPage();
   const errs = [];
   page.on('pageerror', e => errs.push(String(e)));
+  /*
+    WAIT FOR THE STRIP, do not sleep at it.
+
+    Two tabs used a flat 2500ms and the third BOOT_MS+1000, and the short one
+    is marginal: measured on an idle machine the strip is up at 2500ms on all
+    three, but under this file's own load — dozens of contexts, a browser per
+    section — it is not, and the run reported "no flip strip — the shell is
+    not carrying it here" about a strip the shell was carrying perfectly. A
+    sleep long enough for a busy machine is wasted on every other run; the
+    element itself is the signal.
+
+    The bound stays generous, and a timeout still fails the check, so a strip
+    that genuinely never arrives is a red run rather than a slow one.
+  */
+  const STRIP = '[role="status"][aria-label*="GAMMA"], [role="status"][aria-label*="No gamma flip"]';
   for (const path of ['/pinpoint/exposure-profile', '/pinpoint/ranked-targets', '/pinpoint/vanna-charm']) {
     await page.goto(`${BASE}${path}`, { waitUntil: 'networkidle' });
-    await page.waitForTimeout(path.endsWith('exposure-profile') ? BOOT_MS + 1000 : 2500);
-    const strip = await page.$('[role="status"][aria-label*="GAMMA"], [role="status"][aria-label*="No gamma flip"]');
+    await page.waitForSelector(STRIP, { timeout: BOOT_MS + 12000 }).catch(() => {});
+    const strip = await page.$(STRIP);
     strip ? ok(`${path}: the strip is on the tab`) : bad(`${path}: no flip strip — the shell is not carrying it here`);
     if (!strip) continue;
     const label = (await strip.getAttribute('aria-label')) ?? '';
@@ -3851,15 +3866,56 @@ head('thirteen tools on the rail, two of them take three anchors, the note takes
     await page.mouse.click(bb2.x + bb2.width * 0.5, bb2.y + bb2.height * 0.28);
     await page.waitForTimeout(250);
     (await deleteDisabled()) === false ? ok('clicking a mark selects it — Delete arms') : bad('the click selected nothing');
-    await page.mouse.move(bb2.x + bb2.width * 0.5, bb2.y + bb2.height * 0.28);
-    await page.mouse.down();
-    await page.mouse.move(bb2.x + bb2.width * 0.5, bb2.y + bb2.height * 0.45, { steps: 4 });
-    await page.mouse.up();
-    await page.waitForTimeout(350);
-    const levels1 = (await storedRaw()).filter(d => d.kind === 'hline');
-    levels1[0] && levels0[0] && levels1[0].p1.price !== levels0[0].p1.price
-      ? ok(`a body-drag moves the mark — ${levels0[0].p1.price.toFixed(2)} → ${levels1[0].p1.price.toFixed(2)}`)
-      : bad('the drag moved nothing');
+    /*
+      THE MARK IS ON A LIVE TAPE, and this drag assumed it had not moved
+      since the click that selected it.
+
+      The press lands on a fixed fraction of the pane, ~250ms after the
+      selecting click. In between, a simulator tick can re-fit the price
+      scale and carry the level a few pixels off that point. The press then
+      hits empty canvas, which DESELECTS — so the drag moves nothing AND the
+      delete that follows has nothing selected. Two assertions fall
+      together, which is the pair CI reported on a94ef8f while the commit
+      before it, with identical product code, was green.
+
+      Ruled out first, by measuring rather than reasoning: the chrome band
+      the reveal fix now keeps open ends 101px ABOVE this press (pane top
+      62, height 882, band bottom 208, press at 309), so the strip is not
+      what the press is landing on.
+
+      So the press re-establishes its own precondition instead of inheriting
+      one, and a miss is retried ONCE after re-selecting — what a reader
+      would do when a mark slips under the cursor. The retry is REPORTED,
+      never silent: a run that needs it says so, so this cannot quietly
+      become a passing test for a drag that has stopped working. Never
+      moving still fails.
+    */
+    const pressDrag = async () => {
+      await page.mouse.move(bb2.x + bb2.width * 0.5, bb2.y + bb2.height * 0.28);
+      await page.mouse.down();
+      await page.mouse.move(bb2.x + bb2.width * 0.5, bb2.y + bb2.height * 0.45, { steps: 4 });
+      await page.mouse.up();
+      await page.waitForTimeout(350);
+      return (await storedRaw()).filter(d => d.kind === 'hline');
+    };
+    const moved = (a, b) => b[0] && a[0] && b[0].p1.price !== a[0].p1.price;
+    let levels1 = await pressDrag();
+    let retried = false;
+    if (!moved(levels0, levels1)) {
+      retried = true;
+      await page.mouse.click(bb2.x + bb2.width * 0.5, bb2.y + bb2.height * 0.28);
+      await page.waitForTimeout(200);
+      levels1 = await pressDrag();
+    }
+    moved(levels0, levels1)
+      ? ok(`a body-drag moves the mark — ${levels0[0].p1.price.toFixed(2)} → ${levels1[0].p1.price.toFixed(2)}${retried ? ' (second press — the tape moved under the first)' : ''}`)
+      : bad('the drag moved nothing, twice');
+    /* The delete needs a selection of its own: a press that missed will have
+       put the previous one down. */
+    if ((await deleteDisabled()) !== false) {
+      await page.mouse.click(bb2.x + bb2.width * 0.5, bb2.y + bb2.height * 0.45);
+      await page.waitForTimeout(250);
+    }
     for (const b of await page.$$('button[aria-label="Delete selected"]')) if (!(await b.isDisabled())) await b.click();
     await page.waitForTimeout(300);
     const afterDel = await storedRaw();
@@ -4131,7 +4187,7 @@ head('the event lane draws, and a glyph answers with its card');
 
   /* The toolbar offers the row. */
   const menuOpen = async () => (await page.$$('[data-toolbar-menu] [role="checkbox"]')).length > 0;
-  await page.mouse.move(bb.x + 600, bb.y + 400);
+  await reachForChrome(page);
   await page.waitForTimeout(500);
   if (!(await menuOpen())) {
     for (const b of await page.$$('[aria-haspopup="menu"]')) {
@@ -4158,7 +4214,7 @@ head('the event lane draws, and a glyph answers with its card');
    and that the THIRD sub-pane is refused in place — a disabled row with the
    reason in its tooltip — rather than shrinking the tape past its floor.
    ───────────────────────────────────────────────────────────────────────── */
-head('two sub-panes stack under the tape, and the third is refused with its reason');
+head('sub-panes stack under the tape, and the one past the cap is refused with its reason');
 {
   const seed = JSON.stringify({
     layout: 1,
@@ -4195,27 +4251,97 @@ head('two sub-panes stack under the tape, and the third is refused with its reas
     ? ok('and the tape keeps the lion\u2019s share of the height')
     : bad(`the tape lost its floor: ${JSON.stringify(heights)}`);
 
-  /* The cap: with two sub-panes up, the third row is disabled and says why. */
-  const bb2 = await (await page.$$('.grid > div > div'))[0].boundingBox();
-  await page.mouse.move(bb2.x + 600, bb2.y + 400);
+  /*
+    THE CAP, ASSERTED AS A CAP — not as the number two.
+
+    This block used to seed two sub-panes and check that the THIRD row came
+    back disabled. `MAX_SUB_PANES` was raised from 2 to 3 with the second
+    indicator set, and the assertion went on encoding the retired number:
+    it failed with "the cap did not disable the third sub-pane row" about a
+    menu behaving exactly as designed.
+
+    It found something real on the way, though. The menu's own heading read
+    "Own pane — two at most" and its refusal tooltip "Two sub-panes are the
+    cap" while the code enforced three — the constant was raised and the
+    prose was not, so the reader was being told a limit that did not exist.
+    Both strings are derived from the constant now.
+
+    So this walks the sub-pane rows (`data-sub-pane`, a hook rather than a
+    name list that would itself go stale) turning them on until one is
+    refused, and asserts the SHAPE: more than one is allowed, a refusal
+    eventually comes, and the refused row says why. Whatever the cap is set
+    to, that holds — and a cap of one, or no cap at all, still fails.
+  */
+  await reachForChrome(page);
   await page.waitForTimeout(500);
-  for (const b of await page.$$('[aria-haspopup="menu"]')) {
-    if (/Indicators/.test((await b.textContent()) ?? '')) { await b.click(); await page.waitForTimeout(400); break; }
+  const openIndicators = async () => {
+    for (const b of await page.$$('[aria-haspopup="menu"]')) {
+      if (/Indicators/.test((await b.textContent()) ?? '')) { await b.click(); await page.waitForTimeout(400); return true; }
+    }
+    return false;
+  };
+  (await openIndicators()) ? ok('PREMISE: the Indicators menu opens') : bad('PREMISE: no Indicators trigger');
+
+  const subRows = async () => {
+    const out = [];
+    for (const el of await page.$$('[data-toolbar-menu] [role="checkbox"][data-sub-pane]')) {
+      out.push({
+        el,
+        label: ((await el.textContent()) ?? '').trim().slice(0, 24),
+        on: (await el.getAttribute('aria-checked')) === 'true',
+        off: await el.isDisabled(),
+        why: (await el.getAttribute('title')) ?? '',
+      });
+    }
+    return out;
+  };
+
+  const rows0 = await subRows();
+  rows0.length >= 3
+    ? ok(`PREMISE: the menu marks its sub-pane rows — ${rows0.length} of them`)
+    : bad(`PREMISE: ${rows0.length} sub-pane rows found; the cap cannot be tested`);
+
+  /* Two are already on from the seed. Keep turning the next available one on
+     until the menu refuses, so the count comes from the product. */
+  let accepted = rows0.filter(r => r.on).length;
+  let refused = null;
+  for (let i = 0; i < rows0.length + 2 && !refused; i++) {
+    const rows = await subRows();
+    const next = rows.find(r => !r.on);
+    if (!next) break;
+    if (next.off) { refused = next; break; }
+    await next.el.click();
+    await page.waitForTimeout(500);
+    accepted++;
+    if (!(await page.$('[data-toolbar-menu]'))) await openIndicators();
   }
-  let atrRow = null;
-  for (const item of await page.$$('[data-toolbar-menu] [role="checkbox"]')) {
-    if (/ATR 14/.test((await item.textContent()) ?? '')) atrRow = item;
-  }
-  atrRow ? ok('PREMISE: the ATR sub-pane row is offered') : bad('PREMISE: no ATR 14 row in the Indicators menu');
-  if (atrRow) {
-    (await atrRow.isDisabled())
-      ? ok('the third sub-pane is refused while two are up')
-      : bad('the cap did not disable the third sub-pane row');
-    const reason = (await atrRow.getAttribute('title')) ?? '';
-    reason.includes('cap')
-      ? ok('with the reason in the row\u2019s own tooltip')
-      : bad(`the refused row carries no reason — title ${JSON.stringify(reason)}`);
-  }
+
+  refused
+    ? ok(`the cap refuses the next sub-pane in place — ${accepted} accepted, then "${refused.label}" is disabled`)
+    : bad(`no sub-pane row was ever refused after turning on ${accepted} — the cap is not being enforced`);
+  accepted >= 2
+    ? ok(`and it is a cap, not a ban — ${accepted} sub-panes were allowed`)
+    : bad(`only ${accepted} sub-pane(s) allowed before the refusal`);
+  refused && /cap/.test(refused.why)
+    ? ok(`with the reason in the row's own tooltip — "${refused.why.slice(0, 60)}"`)
+    : bad(`the refused row carries no reason — title ${JSON.stringify(refused?.why ?? '')}`);
+  /* The words on the menu have to name the same number the code enforces. */
+  /* THE LEAF, not the first ancestor that happens to contain the words.
+     `find` in document order returns an outer div whose textContent is the
+     WHOLE menu, so `includes('three')` would be satisfied by the word
+     appearing in any indicator's hint — the assertion would pass for a
+     heading that said something else entirely. Shortest match is the
+     heading itself. Caught by reading this check's own output: it printed
+     the entire menu back as "the heading". */
+  const heading = await page.$$eval('[data-toolbar-menu] div', ds => {
+    const hits = ds.map(x => (x.textContent || '').trim()).filter(t => t.startsWith('Own pane'));
+    return hits.sort((a, b) => a.length - b.length)[0] ?? '';
+  });
+  const WORDS = { 1: 'one', 2: 'two', 3: 'three', 4: 'four' };
+  heading && heading.length < 40 && heading.includes(WORDS[accepted] ?? String(accepted))
+    ? ok(`and the heading names the same number the code enforced — "${heading}"`)
+    : bad(`the heading says "${heading.slice(0, 60)}" but the code accepted ${accepted}`);
+
   /* And the new overlays are offered alongside. */
   const labels = [];
   for (const item of await page.$$('[data-toolbar-menu] [role="checkbox"]')) labels.push(((await item.textContent()) ?? '').slice(0, 30));
@@ -4326,10 +4452,13 @@ head('a 15s pane says live only, and the chip leaves with the timeframe');
 
   /* The picker: leaving 15s retires the chip, returning brings it back. */
   const pickTf = async label => {
-    /* Hover the pane first — the toolbar is hover-gated, and a chip clicked
-       while it is folded away gets intercepted by the plot canvas (this
-       exact call once timed out a whole sweep on that). */
-    await page.mouse.move(800, 420);
+    /* Reach for the chrome first — the strip reveals near the pane's TOP
+       edge, and a chip clicked while it is folded away gets intercepted by
+       the plot canvas. This exact call has now timed out a whole sweep
+       twice: once on the literal coordinate below, and again after the
+       coordinate was corrected but still pointed at the middle of the pane,
+       which is the gesture that HIDES the strip. */
+    await reachForChrome(page);
     await page.waitForTimeout(350);
     for (const b of await page.$$('button')) {
       if ((await b.textContent())?.trim() === label) { await b.click(); await page.waitForTimeout(900); return true; }
