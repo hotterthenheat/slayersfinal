@@ -89,7 +89,8 @@ const App = () => {
             <Route path="/backtest" element={<Backtest />} />
             <Route path="/skys-vision" element={<Navigate to="/compass" replace />} />
             <Route path="/stocks" element={<Stocks />} />
-            <Route path="/disclosures" element={<Disclosures />} />
+            <Route path="/keyhole" element={<Disclosures mode="insiders" />} />
+            <Route path="/disclosures" element={<Disclosures mode="congress" />} />
             {/* §2 — the company behind the ticker */}
             <Route path="/stocks/:ticker" element={<TickerOverview />} />
             {/* T-NEWS — the globe room replaces the wire list; /newsroom was
