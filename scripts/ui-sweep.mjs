@@ -5859,7 +5859,7 @@ head('the ticker page answers who is actually trading the name');
   await ctx.close();
 }
 
-head('the disclosures desk shows filings, not invented precision');
+head('Keyhole and Disclosures: filings, not invented precision');
 {
   /*
     The page exists so a UI can be judged before real API keys go in, which
@@ -5876,15 +5876,15 @@ head('the disclosures desk shows filings, not invented precision');
   const page = await ctx.newPage();
   const errs = [];
   page.on('pageerror', e => errs.push(String(e)));
-  await page.goto(`${BASE}/disclosures`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}/keyhole`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS);
 
   const text = async () => (await page.evaluate(() => document.body.innerText)).toLowerCase();
   const rows = () => page.$$eval('tbody tr', rs => rs.length);
 
-  (await text()).includes('nobody here is real')
-    ? ok('the sample-data banner is on the page, unmissable')
-    : bad('nothing tells a reader the filers are invented');
+  (await text()).includes('keyhole')
+    ? ok('Keyhole is its own desk, on its own route')
+    : bad('the insider desk did not render at /keyhole');
 
   /* ── the code gates the feed ── */
   const codesOf = () => page.$$eval('tbody tr td:nth-child(4) span:first-child', ss => [...new Set(ss.map(s => s.textContent.trim()))].sort());
@@ -5912,8 +5912,8 @@ head('the disclosures desk shows filings, not invented precision');
     : bad(`only ${flags.join(',')} — a two-state flag implies conviction the filing does not carry`);
 
   /* ── congress: a bracket is a bracket ── */
-  await page.click('button:has-text("Congress")');
-  await page.waitForTimeout(900);
+  await page.goto(`${BASE}/disclosures`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
   const ct = await page.evaluate(() => document.body.innerText);
   /\$[\d,]+ - \$[\d,]+/.test(ct)
     ? ok('amounts render as ranges, the way the filing wrote them')

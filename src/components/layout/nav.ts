@@ -17,6 +17,7 @@ import {
   type LucideIcon,
   Scale,
   FileText,
+  KeyRound,
 } from 'lucide-react';
 
 // Navigation is organised by WORKFLOW, not by product name: Discover → Analyze
@@ -128,11 +129,19 @@ export const NAV_ITEMS: NavItem[] = [
     group: 'Manage',
   },
   {
+    path: '/keyhole',
+    label: 'Keyhole',
+    code: '13',
+    icon: KeyRound,
+    description: "What the people who run these companies did with their own shares",
+    group: 'Analyze',
+  },
+  {
     path: '/disclosures',
     label: 'Disclosures',
-    code: '13',
+    code: '14',
     icon: FileText,
-    description: 'Insider and congressional filings — and how late they were',
+    description: 'Congressional trades — and how long they took to disclose them',
     group: 'Analyze',
   },
   // ── Review — audit the models and the calls ──

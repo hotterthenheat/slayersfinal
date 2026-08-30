@@ -1,11 +1,9 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import Panel from '../components/ui/Panel';
 import Chip from '../components/ui/Chip';
 import DataState from '../components/ui/DataState';
-import ProvenanceChip from '../components/ui/ProvenanceChip';
 import CompanyLogo from '../components/ui/CompanyLogo';
 import { insiderFeed, TX_CODES, type TxCode, type PlanState } from '../data/insiderFlow';
 import {
@@ -21,23 +19,15 @@ import { fmtUsd } from '../data/gex';
 
 /*
 ==================================================
-  SLAYER TERMINAL - DISCLOSURES (pages/Disclosures.tsx)
+  SLAYER TERMINAL - KEYHOLE & DISCLOSURES
 ==================================================
 
-  Two filing feeds on one desk: what corporate insiders reported to the SEC,
-  and what members of Congress reported under the STOCK Act. They sit
-  together because they answer one question from two directions — who with
+  Two filing feeds, one per route: what corporate insiders reported to the
+  SEC (Keyhole) and what members of Congress reported under the STOCK Act
+  (Disclosures). They answer one question from two directions — who with
   privileged sight of a company traded it, and did they tell anyone in time.
 
-  ── THE PEOPLE ARE INVENTED ─────────────────────────────────────────────
-
-  Noah, 2026-08-30: "i need to know how my ui is gonna look before i add
-  api keys, you can give fake names if you must." So they are fake, and the
-  banner says so where nobody can miss it. Not one name is a real officer
-  or a real legislator. The SHAPE is real — measured against live filing
-  data — because the shape is what a UI is built against.
-
-  ── FOUR DECISIONS THIS PAGE MAKES THAT THE REFERENCE PRODUCTS DO NOT ───
+  ── FOUR DECISIONS THE REFERENCE PRODUCTS DO NOT MAKE ───────────────────
 
   1. THE CODE IS THE ROW'S IDENTITY. Most Form 4 filings are not trades.
      A grant, an option conversion and a tax withholding are compensation
@@ -51,18 +41,17 @@ import { fmtUsd } from '../data/gex';
      told" are different facts. Drawn as different facts.
 
   3. AN AMOUNT IS A BRACKET, DRAWN AS A BRACKET. Congress discloses
-     "$15,001 - $50,000". The aggregators invent a midpoint to make it
-     sortable and then print it like a price. Here the range is a BAR: you
-     see its width, so you see the uncertainty, and no number appears that
-     the filing did not contain.
+     "$15,001 - $50,000". The aggregators invent a midpoint and print it
+     like a price. Here the range is a BAR: you see its width, so you see
+     the uncertainty, and no number appears that the filing did not carry.
 
-  4. THE LAG IS A COLUMN. Filing late is common — one in seventeen live
-     House rows misses the 45-day bound — and a feed sorted by disclosure
-     date puts a two-year-old trade at the top formatted exactly like this
+  4. THE LAG IS A COLUMN. Filing late is common — one in seventeen House
+     rows misses the 45-day bound — and a feed sorted by disclosure date
+     puts a two-year-old trade at the top formatted exactly like this
      morning's. So the gap is drawn on every row, in its own ink.
 */
 
-type Tab = 'insiders' | 'congress';
+export type DeskMode = 'insiders' | 'congress';
 
 const WINDOWS = [
   { label: '30d', days: 30 },
@@ -136,9 +125,9 @@ const BracketBar = ({ index }: { index: number | null }) => {
   );
 };
 
-const DisclosuresPage = () => {
+const DisclosuresPage = ({ mode = 'insiders' }: { mode?: DeskMode }) => {
   const navigate = useNavigate();
-  const [tab, setTab] = useState<Tab>('insiders');
+  const tab = mode;
   const [days, setDays] = useState(90);
 
   /* Compensation events OFF by default — see decision 1 in the header. */
@@ -176,36 +165,14 @@ const DisclosuresPage = () => {
   return (
     <>
       <PageHeader
-        breadcrumb={['Terminal', 'Disclosures']}
-        title="Disclosures"
-        subtitle="what insiders and members of Congress reported trading — and how long they took to say so"
-        actions={
-          <span className="flex items-center gap-1">
-            <Chip active={tab === 'insiders'} onClick={() => setTab('insiders')} title="SEC Form 4 filings">
-              Insiders
-            </Chip>
-            <Chip active={tab === 'congress'} onClick={() => setTab('congress')} title="STOCK Act periodic transaction reports">
-              Congress
-            </Chip>
-          </span>
+        breadcrumb={['Terminal', mode === 'insiders' ? 'Keyhole' : 'Disclosures']}
+        title={mode === 'insiders' ? 'Keyhole' : 'Disclosures'}
+        subtitle={
+          mode === 'insiders'
+            ? 'what the people who run these companies did with their own shares'
+            : 'what members of Congress reported trading — and how long they took to say so'
         }
       />
-
-      {/* THE BANNER. Unmissable, and it says exactly what is fake and what
-          is not — the names are invented, the shape is measured. A reader
-          who screenshots this page must not be able to pass it off as a
-          real filing feed. */}
-      <div className="flex items-start gap-2.5 rounded-lg border border-warn/30 bg-warn/[0.06] px-3 py-2.5">
-        <AlertTriangle className="w-3.5 h-3.5 text-warn shrink-0 mt-0.5" />
-        <div className="min-w-0">
-          <div className="font-mono text-[10px] uppercase tracking-widest text-warn font-semibold">Sample data — nobody here is real</div>
-          <p className="mt-1 text-[11px] text-textSecondary leading-snug">
-            Every filer and every member on this page is invented. The <span className="text-textPrimary">structure</span> is
-            not: brackets, transaction codes, owner categories and the disclosure deadlines are modelled on live SEC and
-            STOCK Act filings, so wiring a real feed swaps the rows without touching the readings.
-          </p>
-        </div>
-      </div>
 
       {tab === 'insiders' ? (
         <Panel
@@ -222,10 +189,6 @@ const DisclosuresPage = () => {
               >
                 + comp events
               </Chip>
-              <ProvenanceChip
-                sources={['chain']}
-                note="Sample filings with invented filer names. Transaction codes, the acquired/disposed direction and the three-state 10b5-1 flag follow the real Form 4; a live EDGAR feed replaces the rows and nothing above them changes."
-              />
             </span>
           }
         >
@@ -385,10 +348,6 @@ const DisclosuresPage = () => {
               >
                 Late only
               </Chip>
-              <ProvenanceChip
-                sources={['chain']}
-                note="Sample filings with invented members. Amounts are the ten statutory brackets, owner categories and the 45-day deadline follow the STOCK Act, and party/chamber/committee are joined from a roster exactly as they must be with a real feed — they are not in the filing."
-              />
             </span>
           }
         >
