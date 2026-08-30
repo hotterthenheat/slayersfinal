@@ -61,6 +61,7 @@ import { useFadeClose } from '../../components/ui/useFadeClose';
 import Term from '../../components/ui/Term';
 import { TIMEFRAMES, type Timeframe } from '../../data/timeframe';
 import type { OptionRight } from '../../types/compass';
+import { useAnchoredMenu } from '../../components/ui/useAnchoredMenu';
 
 const Grid = WidthProvider(RGL);
 
@@ -1030,6 +1031,9 @@ const WeigherDesk = ({ incomingTicker }: { incomingTicker?: string | null }) => 
   const session = useMemo(() => marketSession(), [tick]);
   const chain = useMemo(() => buildDeskChain(ticker, dte, depth), [ticker, dte, depth, scanTick]); // eslint-disable-line react-hooks/exhaustive-deps
   const board = SCREENERS.find(b => b.key === preset) ?? SCREENERS[0];
+  const [boardOpen, setBoardOpen] = useState(false);
+  const { anchorRef: boardBtnRef, placed: boardPlaced, menuRef: boardMenuRef } =
+    useAnchoredMenu<HTMLButtonElement>(boardOpen, 'bottom');
   const scan = useMemo(() => runScreener(preset, 60), [preset, scanTick]); // eslint-disable-line react-hooks/exhaustive-deps
   /* Gainers and losers ARE sorted by change, and the change column already
      shows it — so those two boards drop the metric column instead of
@@ -1455,16 +1459,60 @@ const WeigherDesk = ({ incomingTicker }: { incomingTicker?: string | null }) => 
           <DeskCard
             title="Scanner"
             actions={
-              /* NINE boards where there were three, so the row scrolls
-                 rather than wrapping the card's header into two lines and
-                 stealing a row of the table under it. Short labels here,
-                 the full blurb on hover. */
-              <span className="flex items-center gap-0.5 overflow-x-auto max-w-full">
-                {SCREENERS.map(b => (
-                  <Chip key={b.key} active={preset === b.key} onClick={() => patch({ preset: b.key })} title={b.blurb}>
-                    {b.short}
-                  </Chip>
-                ))}
+              /*
+                NINE BOARDS BEHIND ONE TRIGGER, not nine chips.
+
+                The first cut laid all nine out as chips and let the row
+                scroll when it did not fit. The sweep caught that at 1024:
+                "TRUNC x by 59px (box 375, content 434)" — the desk's rule
+                is that content fits the box it is drawn in, and a strip
+                that scrolls sideways hides boards behind a gesture nobody
+                is told about. Three chips fit that header; nine never will.
+
+                So the caption names the current board and opens the rest,
+                which is the same shape the Terrain rail's metric picker
+                takes. Costs one trigger's width at every viewport.
+              */
+              <span className="relative">
+                <button
+                  ref={boardBtnRef}
+                  onClick={() => setBoardOpen(o => !o)}
+                  aria-haspopup="menu"
+                  aria-expanded={boardOpen}
+                  title={board.blurb}
+                  className={`flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-widest transition-colors ${
+                    boardOpen ? 'bg-white/[0.12] text-textPrimary' : 'text-textSecondary hover:text-textPrimary hover:bg-white/[0.06]'
+                  }`}
+                >
+                  {board.short}
+                  <ChevronDown className="w-3 h-3 opacity-60" />
+                </button>
+                {boardOpen && boardPlaced && (
+                  <div
+                    role="menu"
+                    ref={boardMenuRef}
+                    className="fixed z-50 rounded-md border border-borderSubtle bg-panel shadow-xl py-1"
+                    style={{ left: boardPlaced.box.left, top: boardPlaced.box.top, minWidth: 232 }}
+                  >
+                    {SCREENERS.map(b => (
+                      <button
+                        key={b.key}
+                        role="menuitemradio"
+                        aria-checked={b.key === preset}
+                        onClick={() => {
+                          patch({ preset: b.key });
+                          setBoardOpen(false);
+                        }}
+                        className={`block w-full text-left px-2.5 py-1 transition-colors ${
+                          b.key === preset ? 'bg-white/[0.06] text-textPrimary' : 'text-textSecondary hover:bg-white/[0.04]'
+                        }`}
+                      >
+                        <span className="font-mono text-[10px] font-semibold">{b.label}</span>
+                        <span className="block text-[9px] leading-tight text-textMuted">{b.blurb}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </span>
             }
           >

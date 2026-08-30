@@ -4,9 +4,8 @@ import { X } from 'lucide-react';
 import Simulator from '../../core/simulator';
 import { fmtUsd } from '../../data/gex';
 import { sessionVolumeProfile, type VolumeProfile } from '../../data/volumeProfile';
+import { flowAt, fmtContracts, type StrikeFlow } from '../../data/strikeFlow';
 import { heatCellStyle, heatMagnitude, heatRgb } from './heatmap';
-import { RAIL_METRICS, type RailMetric } from '../../data/gex';
-import { useAnchoredMenu } from '../ui/useAnchoredMenu';
 import type { PriceProjection } from './StrikeChart';
 import type { GexLevel } from '../../types/market';
 import type { KeyLevels } from '../../types/gex';
@@ -73,16 +72,17 @@ interface PaneLadderProps {
       in pixels and therefore how crowded the column is. */
   step: number;
   /*
-    WHICH NET THE RAIL IS SHOWING — gamma, delta, vega, vanna or charm.
+    LIVE CONTRACTS AT EACH STRIKE, off the print tape — shown while `Vol` is
+    on, beside the strike it belongs to.
 
-    Held by the HOST rather than here, unlike `encoding` and `showVol` below.
-    Those two are ways of LOOKING at one number; this one changes WHICH
-    number, which means it changes what `rows` and `maxAbs` are — the host
-    builds those — and it is a choice a reader expects to still be there
-    tomorrow, so it rides the pane's saved config.
+    The chain already carries a per-strike `volume` and it is a day-stable
+    hash of open interest that never moves while you watch it (its own
+    comment says so). This is the real tape, summed over a rolling window,
+    so a strike that is being hit right now says a bigger number than it did
+    a minute ago. Passed in rather than read here: the host already holds
+    the tape, and one rail should not start its own subscription.
   */
-  metric: RailMetric;
-  onMetric: (m: RailMetric) => void;
+  flow?: StrikeFlow | null;
   /** The pane's own named levels — never re-derived here, see the note above */
   levels: KeyLevels;
   /** Currently flashed on the chart, so the column can show which row it is */
@@ -126,6 +126,10 @@ interface PaneLadderProps {
   own lanes on the bare surface, never over the bar.
 */
 const BAR_ALPHA = 0.5;
+/** How far back "going into this strike right now" reaches. Five minutes:
+    long enough that a quiet strike is not empty by chance, short enough that
+    the open's business is not still being reported at lunch. */
+export const FLOW_WINDOW_MS = 5 * 60_000;
 
 /*
   THE SAME ROWS, READ TWO WAYS (Noah, 2026-08-29: "can you make the strikes
@@ -304,8 +308,7 @@ const PaneLadder = ({
   rows,
   maxAbs,
   step,
-  metric,
-  onMetric,
+  flow = null,
   levels,
   focusPrice = null,
   onSelect,
@@ -340,12 +343,6 @@ const PaneLadder = ({
      same reason: it is a way of LOOKING at one pane's rail, not a setting a
      reader would expect to find waiting for them on a fresh desk. */
   const [encoding, setEncoding] = useState<LadderEncoding>('bars');
-  /* The metric menu. Anchored through the shared hook because this rail sits
-     inside a pane that clips its overflow — the same reason the compare and
-     quick-pick popovers use it. */
-  const [metricOpen, setMetricOpen] = useState(false);
-  const { anchorRef: metricBtnRef, placed: metricPlaced, menuRef: metricMenuRef } =
-    useAnchoredMenu<HTMLButtonElement>(metricOpen, 'bottom');
   const heat = encoding === 'heat';
   const vp = useMemo<VolumeProfile | null>(
     () => (showVol ? sessionVolumeProfile(Simulator.getCandles(ticker) ?? []) : null),
@@ -865,55 +862,7 @@ const PaneLadder = ({
         >
           {heat ? 'Heat' : 'Size'}
         </button>
-        {/* THE CENTRE CAPTION IS THE METRIC, and the same glyph switches it.
-
-            It used to read "Strike", naming the column of numbers beside it
-            — which a column of prices does not need — while the thing that
-            genuinely needed naming went unnamed: nothing on this rail said
-            whether the bars were gamma or delta or vega. A reader could not
-            tell one from another, and now the word both says which and
-            changes it. Same principle as the Size/Heat caption to its left,
-            which this rail already states. */}
-        <span className="ml-auto pointer-events-auto relative">
-          <button
-            ref={metricBtnRef}
-            onClick={() => setMetricOpen(o => !o)}
-            aria-haspopup="menu"
-            aria-expanded={metricOpen}
-            title={RAIL_METRICS.find(x => x.key === metric)?.hint}
-            className={`rounded px-1 font-mono text-[8px] font-semibold uppercase tracking-widest transition-colors ${
-              metricOpen ? 'bg-white/[0.14] text-textPrimary' : 'text-textMuted hover:text-textPrimary hover:bg-white/[0.08]'
-            }`}
-          >
-            {RAIL_METRICS.find(x => x.key === metric)?.label ?? 'GEX'}
-          </button>
-          {metricOpen && metricPlaced && (
-            <div
-              role="menu"
-              ref={metricMenuRef}
-              className="fixed z-50 rounded-md border border-borderSubtle bg-panel shadow-xl py-1"
-              style={{ left: metricPlaced.box.left, top: metricPlaced.box.top, minWidth: 168 }}
-            >
-              {RAIL_METRICS.map(o => (
-                <button
-                  key={o.key}
-                  role="menuitemradio"
-                  aria-checked={o.key === metric}
-                  onClick={() => {
-                    onMetric(o.key);
-                    setMetricOpen(false);
-                  }}
-                  className={`block w-full text-left px-2.5 py-1 font-mono text-[10px] transition-colors ${
-                    o.key === metric ? 'text-textPrimary bg-white/[0.06]' : 'text-textSecondary hover:bg-white/[0.04]'
-                  }`}
-                >
-                  <span className="font-semibold tracking-widest">{o.label}</span>
-                  <span className="block text-[8px] leading-tight text-textMuted normal-case tracking-normal">{o.hint}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </span>
+        <span className="ml-auto font-mono text-[8px] font-semibold uppercase tracking-widest text-textMuted">Strike</span>
         <button
           onClick={() => setShowVol(v => !v)}
           aria-pressed={showVol}
@@ -970,6 +919,8 @@ const PaneLadder = ({
              the empty dark half while its gold cell sat unlabelled on the
              other side of the price. Caught by looking at the rail, not by
              the typechecker. */
+          const rowFlow = flow ? flowAt(flow, row.strike) : null;
+
           const heatValue =
             heat && row.value !== 0 ? (
               <span
@@ -1055,6 +1006,24 @@ const PaneLadder = ({
               >
                 {fmtRail(row.strike)}
               </span>
+              {/* CONTRACTS AT THIS STRIKE, while Vol is on. A suffix rather
+                  than a column: a fourth lane would move the strike numbers
+                  every time the toggle flipped, and the strike column is the
+                  one thing in this rail that must not move. Absent when
+                  nothing traded there — a strike with no flow says nothing,
+                  which is itself the reading. */}
+              {showVol && (
+                <span
+                  className="shrink-0 pl-1 font-mono text-[8px] tnum leading-none text-textMuted"
+                  title={
+                    rowFlow
+                      ? `${fmtContracts(rowFlow.volume)} contracts at ${fmtRail(row.strike)} in the last ${Math.round(FLOW_WINDOW_MS / 60000)}m — ${fmtContracts(rowFlow.callVolume)} calls, ${fmtContracts(rowFlow.putVolume)} puts, across ${rowFlow.prints} prints`
+                      : `nothing traded at ${fmtRail(row.strike)} in the last ${Math.round(FLOW_WINDOW_MS / 60000)}m`
+                  }
+                >
+                  {rowFlow ? fmtContracts(rowFlow.volume) : '·'}
+                </span>
+              )}
               <span className="relative flex-1 min-w-0 self-stretch my-px">
                 {putSide && heatValue}
                 {putSide && (

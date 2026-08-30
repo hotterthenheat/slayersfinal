@@ -13,7 +13,7 @@ import {
   MAX_NAMED_LAYOUTS,
   LAYOUT_NAME_MAX, type NamedLayoutEntry,
 } from './layouts';
-import { RAIL_METRICS, type RailMetric, buildLadderFor, buildLevelsFor, buildPrints, fmtUsd, spotChangePct } from '../../data/gex';
+import { buildLadderFor, buildLevelsFor, buildPrints, fmtUsd, spotChangePct } from '../../data/gex';
 import StrikeChart, {
   PRICE_SCALE_MIN_WIDTH,
   DEFAULT_INDICATORS,
@@ -33,7 +33,7 @@ import StrikeChart, {
 import ChartToolbar from '../../components/gex/ChartToolbar';
 import useTopEdgeReveal from '../../components/gex/useTopEdgeReveal';
 import CompareControl from '../../components/gex/CompareControl';
-import PaneLadder, { LADDER_WIDTH_PX } from '../../components/gex/PaneLadder';
+import PaneLadder, { LADDER_WIDTH_PX, FLOW_WINDOW_MS } from '../../components/gex/PaneLadder';
 import useFocusTrap from '../../components/ui/useFocusTrap';
 import { useIsBelowLg, useIsPhone } from '../../components/ui/useMediaQuery';
 import TickerQuickPick from '../../components/gex/TickerQuickPick';
@@ -48,6 +48,7 @@ import {
 } from './setups';
 import { flipRing, stepSymbol, stepTf } from './paneKeys';
 import { CALL_SIDE, PUT_SIDE } from '../../components/gex/palette';
+import { strikeFlow } from '../../data/strikeFlow';
 
 /*
 ==================================================
@@ -157,8 +158,6 @@ export interface PaneCfg {
       removable") — the rail has its own × and the top button is a
       convenience that sets every pane at once, not the only way out. */
   ladder: boolean;
-  /** Which net the rail draws — T-RAIL. */
-  railMetric: RailMetric;
   /*
     HOW WIDE A BAR IS DRAWN, in pixels of horizontal pitch. Noah asked for
     the candles to be sizeable — "make the bars smaller or bigger on the
@@ -222,7 +221,6 @@ const defaultPanes = (): PaneCfg[] =>
     priceScale: 'normal' as PriceScale,
     sessionOr: 15 as OpeningRange,
     ladder: true,
-    railMetric: 'gex',
     barSize: DEFAULT_BAR_SIZE,
     link: null,
   }));
@@ -280,9 +278,6 @@ function readPane(raw: unknown, def: PaneCfg): PaneCfg {
     priceScale: typeof c.priceScale === 'string' && SCALES.has(c.priceScale) ? (c.priceScale as PriceScale) : def.priceScale,
     sessionOr: typeof c.sessionOr === 'number' && OR_VALUES.has(c.sessionOr) ? (c.sessionOr as OpeningRange) : def.sessionOr,
     ladder: typeof c.ladder === 'boolean' ? c.ladder : def.ladder,
-    /* A desk saved before the rail could show anything but gamma has no
-       `railMetric`; it lands on gex, which is exactly what it was drawing. */
-    railMetric: RAIL_METRICS.some(m => m.key === c.railMetric) ? (c.railMetric as RailMetric) : def.railMetric,
     /* VALIDATED AGAINST THE LIST, not merely type-checked. A stored setup
        is reader-editable JSON, and a barSize of 0 or 4000 would hand the
        engine a pitch it cannot draw. Anything off the ladder falls back to
@@ -749,7 +744,7 @@ const Pane = ({
   isActive, onActivate, paneCount, menuOpen, onMenu,
   boxRef, cell = '',
 }: PaneProps) => {
-  const { ticker, timeframe, overlays, indicators, chartStyle, clock, compares, priceScale, sessionOr, ladder, railMetric } = cfg;
+  const { ticker, timeframe, overlays, indicators, chartStyle, clock, compares, priceScale, sessionOr, ladder } = cfg;
   /* WHAT THE AXIS IS ACTUALLY DRAWING, from the one function that decides it.
      The chart asks the same question of the same list, so the picker's trigger
      and the price ticks can never disagree — a second `compares.some(...)`
@@ -902,9 +897,23 @@ const Pane = ({
      never name different strikes. Read even when the rail is hidden, because
      the header is not. */
   const rail = useMemo(
-    () => buildLadderFor(ticker, undefined, undefined, railMetric),
+    () => buildLadderFor(ticker),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ticker, revision, railMetric]
+    [ticker, revision]
+  );
+  /* Contracts by strike over the last few minutes, off the live tape. Keyed
+     on the tape's own length as well as the revision, so it rebuilds when
+     prints land rather than only when the bar rolls. */
+  const railFlow = useMemo(
+    () => (ladder ? strikeFlow(flowTape, ticker, FLOW_WINDOW_MS) : null),
+    /* Keyed on the tape ITSELF, not on its length. The tape is capped and
+       aged, so once it is full its length stops changing while its contents
+       keep turning over — a length key would freeze this at the moment the
+       cap was reached and go on reporting the flow of ten minutes ago. The
+       context replaces the array on every absorb, so the identity check is
+       both correct and cheap. */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ticker, ladder, flowTape, revision]
   );
   /*
     THE FIVE TIMEFRAMES' TREND STATE — T-12.
@@ -1527,8 +1536,7 @@ const Pane = ({
               maxAbs={rail.maxAbs}
               step={rail.step}
               levels={levels}
-              metric={railMetric}
-              onMetric={m => onCfg({ railMetric: m })}
+              flow={railFlow}
               focusPrice={focus}
               projection={projectionRef}
               onClose={() => {
