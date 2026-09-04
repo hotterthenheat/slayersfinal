@@ -5479,32 +5479,42 @@ head('the model error gauge audits, and names no stand-in');
   /(OVERSTATES|UNDERSTATES|CENTERED)/.test(body)
     ? ok('and the bias verdict')
     : bad('no bias read');
-  /* WHAT THE PAGE OWES THE READER, minus the promise it cannot keep.
-     
-     This read `/only the series swaps/` — the page used to carry "The day
-     the feed lands, only the series swaps", naming a vendor product and
-     what would happen when it connected. That sentence was removed
-     deliberately: this build has no backend and no vendor integration, so a
-     promise about the day a feed lands is a claim about software that does
-     not exist. Keeping the assertion would have forced the copy back.
-     
-     The honesty requirement it was protecting has not moved, and is not
-     weakened here — it is checked more directly. The page must say the
-     reference is a seeded stand-in rather than a real reading, AND must not
-     claim a connection it does not have. That second half is a guard the
-     original did not have: under the old assertion a page boasting "live
-     vendor feed connected" would have passed as long as it also mentioned
-     the swap. */
-  /seeded stand-in/i.test(body) && /rather than an actualized reading/i.test(body)
-    ? ok('and it says what the reference actually is — a seeded stand-in, not a reading')
-    : bad('the page does not say its reference is a stand-in for a real measurement');
+  /* WHAT THE PAGE OWES THE READER, TWICE REVISED, AND THE SECOND ONE IS
+     THE OWNER'S CALL RATHER THAN A CORRECTION.
+
+     It first read `/only the series swaps/` — the page used to carry "The
+     day the feed lands, only the series swaps", naming a vendor product and
+     what would happen when it connected. That sentence was removed because
+     this build has no backend, so a promise about the day a feed lands is a
+     claim about software that does not exist; the assertion moved to the
+     more direct requirement that the page name its reference a seeded
+     stand-in.
+
+     Noah, 2026-09-04: "strip all the fake sim mod". So that requirement goes
+     too, and this is the third and last place in this file that held it — I
+     inverted the other two and missed this one because I read a truncated
+     grep and took it for the whole list. CI found it, which is the system
+     working, but the cheaper lesson is not to truncate the search that tells
+     you how big a change is.
+
+     WHAT SURVIVES IS THE HALF WITH TEETH, and it is the more important half:
+     the page must not claim a connection it does not have. A build with no
+     backend boasting "live vendor feed connected" is a lie a reader could
+     act on; a build declining to label its own stand-in is chrome the owner
+     does not want. Those are different things and only one of them is now
+     enforced — deliberately. */
+  !/\b(simulated|modelled|modeled|synthetic|stand-in|seeded)\b/i.test(body)
+    ? ok('and it names no stand-in — the strip reached this page too')
+    : bad(`stand-in wording is back on the gauge — ${(body.match(/.{0,40}(simulated|modelled|modeled|synthetic|stand-in|seeded).{0,40}/i) ?? [''])[0]}`);
   !/(feed (is )?connected|live feed|vendor connected|now connected)/i.test(body)
     ? ok('and claims no feed it does not have — there is no backend in this build')
     : bad('the page claims a connected feed, and this build has none');
   const chip = await page.$('[aria-label^="Data provenance"]');
-  chip && /modelled/.test((await chip.getAttribute('aria-label')) ?? '')
-    ? ok('the provenance chip reads modelled, as it must')
-    : bad('no modelled provenance chip');
+  !chip
+    ? ok('and no provenance chip draws — this page stands on a stand-in, and those are silent now')
+    : !/\b(live|measured)\b/i.test((await chip.getAttribute('aria-label')) ?? '')
+      ? ok('a drawn chip claims neither live nor measured')
+      : bad('the chip claims sourced data this page does not have');
 
   errs.length === 0 ? ok('no page errors on the gauge') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
