@@ -49,3 +49,4 @@ _probe*
 _audit*
 .probe/
 .partner-src/
+shots/
