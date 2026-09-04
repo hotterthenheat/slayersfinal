@@ -5683,7 +5683,13 @@ head('the tape never ends and never says it is loading');
   !saidLoading ? ok('and it never once said it was loading') : bad('a loading state appeared at the bottom');
 
   // The same, under a scope — where sizing the extension is much harder.
-  const search = await page.$('input[type="text"]');
+  /* BY ITS ACCESSIBLE NAME, not by type. The tape's search box sets no `type`
+     attribute — it behaves as a text input, but `input[type="text"]` matches
+     the ATTRIBUTE, not the default, so this found nothing and the scoped half
+     of the check never ran. The aria-label is what a reader is offered and
+     what a screen reader announces; keying on it tests the same thing the
+     product promises. */
+  const search = await page.$('input[aria-label="Search by ticker or contract"]');
   if (search) {
     await search.fill('TSLA');
     await page.waitForTimeout(1200);
