@@ -100,7 +100,7 @@ const TraceLayout = () => {
             hang a vertical scrollbar on it. The padding gives that 1px a place
             to live inside the box. */}
         {/*
-          TEN TABS DO NOT FIT A PHONE, AND SCROLLING THEM IS NOT THE ANSWER.
+          ELEVEN TABS DO NOT FIT A PHONE, AND SCROLLING THEM IS NOT THE ANSWER.
 
           The Trace family grew from two subpages to ten; the row measures
           989px, so at 390 and 768 the last four ran off the window. The
@@ -112,8 +112,17 @@ const TraceLayout = () => {
           So the row is shown only where it fits, and below that the same
           registry becomes one control naming the current page. Same links,
           same order, no hidden ones.
+
+          THE BREAKPOINT IS `xl`, NOT `lg` (2026-09-04, Dark Pool's return).
+          The eleventh tab pushed the row to 986px, and the row does not get
+          the window — the section identity takes the left of the strip and
+          the ticker picker takes the right, leaving it 775px at lg. Measured
+          at 1024: the bar overflowed itself by 211px, Tracker ended past the
+          right edge, and the whole desk slid 67px sideways. The sweep did not
+          catch it because it samples 390, 768 and 1440, and the break lives
+          between the last two — it samples 1024 now as well.
         */}
-        <nav aria-label="Trace subpages" className="hidden lg:flex items-center gap-1 min-w-0 pb-px">
+        <nav aria-label="Trace subpages" className="hidden xl:flex items-center gap-0.5 min-w-0 pb-px">
           {TRACE_SUBPAGES.map(page => {
             const isActive = page.path === active.path;
             const TabIcon = page.icon;
@@ -139,7 +148,7 @@ const TraceLayout = () => {
                 // outline-none: the card is the focus indicator — the global
                 // ring, clipped by the scroll box, was the stray bar beside a
                 // tab that Noah kept seeing.
-                className={`relative flex items-center gap-1.5 px-2 pb-[7px] pt-0.5 text-xs whitespace-nowrap outline-none transition-colors ${
+                className={`relative flex items-center gap-1.5 px-1.5 pb-[7px] pt-0.5 text-xs whitespace-nowrap outline-none transition-colors ${
                   isActive ? 'text-textPrimary font-medium' : 'text-textSecondary hover:text-textPrimary'
                 }`}
               >
@@ -148,7 +157,7 @@ const TraceLayout = () => {
                 {isActive && (
                   <motion.span
                     layoutId="trace-tab-underline"
-                    className="absolute left-2 right-2 -bottom-px h-[2px] rounded-full bg-white"
+                    className="absolute left-1.5 right-1.5 -bottom-px h-[2px] rounded-full bg-white"
                     transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
                   />
                 )}
@@ -159,7 +168,7 @@ const TraceLayout = () => {
         {/* The narrow-width equivalent: every subpage, one tap, nothing
             off-screen. A native select so it is reachable by keyboard and
             by a screen reader without rebuilding a listbox. */}
-        <div className="lg:hidden flex items-center gap-1.5 min-w-0 pb-1.5">
+        <div className="xl:hidden flex items-center gap-1.5 min-w-0 pb-1.5">
           <active.icon className="w-3.5 h-3.5 shrink-0 text-textMuted" aria-hidden />
           <select
             aria-label="Trace subpages"

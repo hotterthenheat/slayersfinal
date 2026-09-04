@@ -221,7 +221,7 @@ const TickerOverview = () => {
                 to={`/stocks/${rt}`}
                 className="inline-flex items-center gap-1 px-2 py-1 rounded border border-borderSubtle font-mono text-[11px] text-textSecondary hover:text-textPrimary hover:bg-white/[0.03] focus:outline-none focus-visible:ring-1 focus-visible:ring-select"
               >
-                <CompanyLogo ticker={rt} size={14} /> {rt}
+                <CompanyLogo ticker={rt} size={14} beside /> {rt}
               </Link>
             ))}
           </div>

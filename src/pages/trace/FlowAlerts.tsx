@@ -220,7 +220,7 @@ const FlowAlerts = () => {
         sortValue: a => a.row.ticker,
         render: a => (
           <span className="inline-flex items-center gap-1.5">
-            <CompanyLogo ticker={a.row.ticker} size={15} />
+            <CompanyLogo ticker={a.row.ticker} size={15} beside />
             <span className="font-bold text-textPrimary">{a.row.ticker}</span>
           </span>
         ),

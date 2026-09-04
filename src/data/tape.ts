@@ -28,13 +28,17 @@ function h01(seed: string): number {
 const DTE_POOL = [0, 1, 2, 5, 9, 16, 30, 44, 72, 102, 254];
 const STRATS: StratTag[] = ['Vertical', 'Butterfly', 'Ratio', 'Custom'];
 
-export function enrichPrint(order: TapeOrder, id: number): FlowPrint {
+export function enrichPrint(order: TapeOrder, id: number, quote?: TapeQuote): FlowPrint {
   const seed = `${order.ticker}-${order.strike}-${order.side}-${order.size}-${id}`;
   const h = (tag: string) => h01(`${seed}-${tag}`);
 
+  /* The QUOTE wins when the caller has one. Only the seeded watchlist lives
+     in Simulator.TICKERS; the other eighteen names on the desk are quoted
+     without being simmed (universeQuotes), and falling through to the 100/0.2
+     default would print TSLA strikes 148% out of the money. */
   const cfg = Simulator.TICKERS[order.ticker];
-  const spot = cfg?.currentPrice ?? 100;
-  const baseIv = cfg?.iv ?? 0.2;
+  const spot = quote?.price ?? cfg?.currentPrice ?? 100;
+  const baseIv = quote?.iv ?? cfg?.iv ?? 0.2;
   const strike = Number(order.strike);
   const right = order.type;
 
@@ -172,7 +176,10 @@ export function sentimentOf(p: FlowPrint): PrintSentiment {
  * tape), then size, then how far out-of-the-money the bet was placed
  * (ITM prints earn nothing on that axis — conviction lives OTM).
  */
-export function rankNotable(prints: FlowPrint[]): FlowPrint[] {
+/** Generic in the print, so a caller ranking STAMPED prints gets stamped
+    prints back — the tape's day dividers read the arrival time off the very
+    rows this returned. */
+export function rankNotable<T extends FlowPrint>(prints: T[]): T[] {
   let maxPrem = 1;
   let maxSize = 1;
   let maxOtm = 1;
@@ -236,4 +243,84 @@ export function summarizeTape(prints: FlowPrint[]): TapeSummary {
       ? { ticker: largest.ticker, strike: largest.strike, right: largest.right, premium: largest.premium }
       : null,
   };
+}
+
+// ---- the tape's history -----------------------------------------------------
+
+/** A name the tape can print, priced without seeding it into the tick loop. */
+export interface TapeQuote {
+  ticker: string;
+  price: number;
+  iv: number;
+  step: number;
+}
+
+/** A print that knows when it landed. The live stream stamps its own; the
+    history stamps every row it generates, which is what lets the page draw a
+    day divider instead of letting a clock appear to run forwards. */
+export type TapePrint = FlowPrint & { at: number };
+
+/*
+  THE ENDLESS TAPE (Noah, 2026-09-04: "make it a endless scroll and don't let
+  it load when people get to the page it should be nonstop").
+
+  The live stream only ever holds the last few minutes of prints — scroll to
+  the bottom of it and you hit a wall with a spinner under it. So the tape has
+  a HISTORY: older prints spoken in the same grammar the simulator prints in,
+  walking backwards from a fixed anchor, forever.
+
+  It is a PURE FUNCTION of (page, index). Page 7 is the same sixty rows every
+  time it is asked for, so a filter change cannot reshuffle what the reader
+  already read, and there is nothing to cache, await or fail. That is the whole
+  reason the page can promise "nonstop": fetching IS computing here, and
+  computing sixty rows costs microseconds — the runway is always extended long
+  before the reader can see the end of it, and no loading state ever exists to
+  be shown.
+
+  Ids run NEGATIVE. The live head climbs from 0 upward, so the two streams can
+  never collide on a React key or inside the bookmark set, no matter how long
+  the tab is left open or how deep the reader goes.
+*/
+
+/** The watchlist prints harder than the rest of the desk, exactly as it does
+    live — a history that reads like an even lottery is not this tape. */
+const HEAVY = new Set(['SPY', 'QQQ', 'AAPL', 'NVDA']);
+
+const BACKFILL_STRIDE_S = 3;
+
+/** Seconds back from the anchor for global row i. Monotone by construction:
+    the stride is wider than the jitter, so row i+1 is always older than row i
+    and the clock cannot run forwards as you scroll down. */
+function backfillOffsetS(i: number): number {
+  return i * BACKFILL_STRIDE_S + Math.floor(h01(`bf-jit-${i}`) * BACKFILL_STRIDE_S);
+}
+
+export function backfillPrints(quotes: TapeQuote[], page: number, count: number, anchorMs: number): TapePrint[] {
+  if (quotes.length === 0) return [];
+  const pool: TapeQuote[] = [];
+  for (const q of quotes) {
+    const weight = HEAVY.has(q.ticker) ? 4 : 1;
+    for (let w = 0; w < weight; w++) pool.push(q);
+  }
+
+  const out: TapePrint[] = [];
+  for (let j = 0; j < count; j++) {
+    const i = page * count + j;
+    const s = `bf-${i}`;
+    const q = pool[Math.floor(h01(`${s}-t`) * pool.length)];
+    const offset = (Math.floor(h01(`${s}-o`) * 7) - 3) * q.step;
+    const strike = Math.round(q.price / q.step) * q.step + offset;
+    const at = anchorMs - backfillOffsetS(i) * 1000;
+    const order: TapeOrder = {
+      time: new Date(at).toLocaleTimeString(),
+      ticker: q.ticker,
+      strike: strike.toFixed(2),
+      type: h01(`${s}-r`) > 0.5 ? 'C' : 'P',
+      size: Math.floor(h01(`${s}-z`) * 250) + 10,
+      orderType: h01(`${s}-k`) > 0.65 ? 'SWEEP' : 'BLOCK',
+      side: h01(`${s}-s`) > 0.48 ? 'ASK' : 'BID',
+    };
+    out.push({ ...enrichPrint(order, -(i + 1), q), at });
+  }
+  return out;
 }

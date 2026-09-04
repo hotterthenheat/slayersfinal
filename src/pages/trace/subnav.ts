@@ -1,4 +1,17 @@
-import { Radio, Bookmark, SlidersHorizontal, Footprints, BellRing, Clock, Timer, Zap, Layers, Scale, type LucideIcon } from 'lucide-react';
+import {
+  Radio,
+  Bookmark,
+  SlidersHorizontal,
+  Footprints,
+  BellRing,
+  Clock,
+  Timer,
+  Zap,
+  Layers,
+  Scale,
+  EyeOff,
+  type LucideIcon,
+} from 'lucide-react';
 
 /** Trace subpage registry — drives the sub-tab bar and command palette. */
 export interface TraceSubpage {
@@ -12,7 +25,7 @@ export const TRACE_SUBPAGES: TraceSubpage[] = [
   {
     path: '/trace/live-tape',
     label: 'Live Tape',
-    subtitle: 'Streaming options prints, dark-pool crosses & session flow',
+    subtitle: 'Streaming options prints — endless, newest first, with the session’s concentration above it',
     icon: Radio,
   },
   // Expansion phase (Noah, 2026-08-30): the flow family grows here — the
@@ -66,9 +79,16 @@ export const TRACE_SUBPAGES: TraceSubpage[] = [
     subtitle: 'The tape reconstructed into structures — spreads, their legs & their defined risk',
     icon: Layers,
   },
-  // Launch trim (Noah, 2026-08-17): Dark Pool + Scanner pulled from the
-  // first launch — pages kept on disk, routes redirect to the tape (which
-  // still carries the dark-pool feed).
+  // Back on the bar (Noah, 2026-09-04: "i don't want the dark pool their make
+  // that a new page"). It was trimmed at launch on the grounds that the tape
+  // carried the feed in its rail; the tape does not carry it any more, so the
+  // page is the feed's home and it needs a way in. Scanner stays unlisted.
+  {
+    path: '/trace/dark-pool',
+    label: 'Dark Pool',
+    subtitle: 'Off-exchange flow — where the size crossed, which sectors led & what it left behind',
+    icon: EyeOff,
+  },
   {
     path: '/trace/tracker',
     label: 'Tracker',

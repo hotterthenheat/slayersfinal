@@ -178,7 +178,7 @@ const OptionsScreener = () => {
         sortValue: r => r.ticker,
         render: r => (
           <span className="inline-flex items-center gap-1.5">
-            <CompanyLogo ticker={r.ticker} size={15} />
+            <CompanyLogo ticker={r.ticker} size={15} beside />
             <span className="font-bold text-textPrimary">{r.ticker}</span>
           </span>
         ),

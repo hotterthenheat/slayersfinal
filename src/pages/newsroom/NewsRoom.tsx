@@ -168,7 +168,7 @@ const TickerChip = ({ t, size = 15, onOpen }: { t: string; size?: number; onOpen
     role="link"
     className="inline-flex items-center gap-1.5 cursor-pointer group/tk"
   >
-    <CompanyLogo ticker={t} size={size} />
+    <CompanyLogo ticker={t} size={size} beside />
     <span className="font-mono text-[11px] font-bold text-textPrimary underline-offset-2 group-hover/tk:underline">{t}</span>
   </span>
 );
@@ -810,7 +810,7 @@ const NewsRoom = () => {
     ? {
         title: (
           <span className="inline-flex items-center gap-1.5 font-mono text-[11px] font-semibold text-textPrimary">
-            <CompanyLogo ticker={tickerView} size={15} />
+            <CompanyLogo ticker={tickerView} size={15} beside />
             {tickerView}
             <span className="font-normal text-[10px] text-textMuted tnum">
               {tickerEvents.length} {tickerEvents.length === 1 ? 'story' : 'stories'}
