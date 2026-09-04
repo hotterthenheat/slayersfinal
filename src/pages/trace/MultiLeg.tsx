@@ -103,7 +103,7 @@ const SpreadCard = ({ trade, onClose }: { trade: SpreadTrade; onClose: () => voi
             close. The old line ran four registers together and trailed off
             after the name. */}
         <div className="flex items-center gap-2.5 mb-2.5">
-          <CompanyLogo ticker={trade.ticker} size={20} />
+          <CompanyLogo ticker={trade.ticker} size={20} beside />
           <span className="font-mono text-sm font-bold text-textPrimary">{trade.ticker}</span>
           <span className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.06] px-2 py-0.5 font-mono text-[10px] font-semibold text-textPrimary">
             <span className="w-1.5 h-1.5 rounded-full" style={{ background: KIND_DOT[trade.kind] }} />
@@ -322,7 +322,7 @@ const MultiLeg = () => {
         sortValue: t => t.ticker,
         render: t => (
           <span className="inline-flex items-center gap-1.5">
-            <CompanyLogo ticker={t.ticker} size={15} />
+            <CompanyLogo ticker={t.ticker} size={15} beside />
             <span className="font-bold text-textPrimary">{t.ticker}</span>
           </span>
         ),

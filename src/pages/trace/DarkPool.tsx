@@ -1,7 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { ShieldCheck, ArrowDownToLine, ArrowUpFromLine, Scale } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
-import { buildDarkPoolLeaders, buildDarkPoolView } from '../../data/darkpool';
+import { backfillCrosses, buildDarkPoolLeaders, buildDarkPoolView, type DarkCross } from '../../data/darkpool';
+import type { TapeQuote } from '../../data/tape';
+import Simulator from '../../core/simulator';
+import { useRunway, useRunwayScroll } from '../../components/trace/useRunway';
 import { buildGexView, fmtUsd } from '../../data/gex';
 import Panel from '../../components/ui/Panel';
 import RichRead from '../../components/ui/RichRead';
@@ -25,17 +28,15 @@ import type { Tone } from '../../components/ui/tones';
 
 type DpTab = 'leaders' | 'ticker';
 
-/** One off-exchange cross on the market-wide board. */
-interface DarkCross {
-  key: string;
-  ticker: string;
-  size: number;
-  price: number;
-  /** Billions — the board's own unit, multiplied back out at render. */
-  notional: number;
-  time: string;
-  date: string;
-}
+/* THE ENDLESS FEED's numbers. Blocks cross a few dozen times a session rather
+   than every few seconds, so a page here is smaller than the tape's and each
+   row is taller — but the promise and the machinery are the same one. */
+const CROSS_PAGE = 40;
+const CROSS_PREFETCH = 5;
+const CROSS_RUNWAY_PX = 2_400;
+const CROSS_ROW_PX = 34;
+const CROSS_MAX_PER_EXTEND = 24;
+const CROSS_MAX_PAGES = 1_000;
 
 // ---- shared micro-components ------------------------------------------------
 
@@ -104,7 +105,7 @@ const LeadersView = ({
       header: 'Ticker',
       render: r => (
         <span className="inline-flex items-center gap-1.5">
-          <CompanyLogo ticker={r.ticker} size={15} />
+          <CompanyLogo ticker={r.ticker} size={15} beside />
           <span className="font-mono text-xs font-semibold text-textPrimary">{r.ticker}</span>
         </span>
       ),
@@ -281,7 +282,32 @@ const LeadersView = ({
   reads as today, which is how a 15:02 print was first misread on a desk whose
   clock said 00:32.
 */
-const CrossFeed = ({ prints }: { prints: DarkCross[] }) => {
+const CrossFeed = ({ live, quotes }: { live: DarkCross[]; quotes: TapeQuote[] }) => {
+  /* Anchored at the oldest cross the live board carries, so the history starts
+     below everything already shown rather than overlapping it. Fixed once:
+     re-anchoring on a later tick would rewrite rows the reader scrolled past. */
+  const anchorRef = useRef<number>(live.length ? live[live.length - 1].at : Date.now());
+  const generate = useCallback(
+    (page: number) => backfillCrosses(quotes, page, CROSS_PAGE, anchorRef.current),
+    [quotes]
+  );
+  const runway = useRunway<DarkCross>({
+    generate,
+    pageSize: CROSS_PAGE,
+    prefetchPages: CROSS_PREFETCH,
+    runwayPx: CROSS_RUNWAY_PX,
+    rowPx: CROSS_ROW_PX,
+    maxPagesPerExtend: CROSS_MAX_PER_EXTEND,
+    maxPages: CROSS_MAX_PAGES,
+  });
+
+  /* Newest first, and by the CLOCK. The feed used to rank by notional, which
+     is a fine way to read a bounded list and a meaningless one for an endless
+     feed — scroll far enough and there is always a bigger cross, so the order
+     never settles. Time is the only ordering an unbounded tape can hold. */
+  const rows = useMemo(() => [...live, ...runway.rows].sort((a, b) => b.at - a.at), [live, runway.rows]);
+  useRunwayScroll(runway, rows.length, live.length + runway.rows.length);
+
   const columns: Column<DarkCross>[] = [
     {
       key: 'ticker',
@@ -290,7 +316,7 @@ const CrossFeed = ({ prints }: { prints: DarkCross[] }) => {
       render: r => (
         <span className="inline-flex items-center gap-1.5">
           <span className="inline-block w-1.5 h-1.5 rounded-full bg-darkpool shrink-0" />
-          <CompanyLogo ticker={r.ticker} size={15} />
+          <CompanyLogo ticker={r.ticker} size={15} beside />
           <span className="font-mono text-xs font-semibold text-textPrimary">{r.ticker}</span>
         </span>
       ),
@@ -320,7 +346,9 @@ const CrossFeed = ({ prints }: { prints: DarkCross[] }) => {
       key: 'when',
       header: 'When',
       align: 'right',
-      sortValue: r => `${r.date} ${r.time}`,
+      // The epoch, not "9/4 15:42" — string order puts 10/1 before 9/4 and
+      // has no idea which year it is looking at.
+      sortValue: r => r.at,
       render: r => (
         <span className="font-mono text-[11px] text-textSecondary tnum whitespace-nowrap">
           <span className="text-textMuted">{r.date}</span> {r.time.slice(0, 5)}
@@ -330,8 +358,8 @@ const CrossFeed = ({ prints }: { prints: DarkCross[] }) => {
   ];
 
   return (
-    <Panel title="Recent crosses" subtitle="off-exchange prints, recent sessions · by notional" flush>
-      <DataTable columns={columns} rows={prints} rowKey={r => r.key} initialSort={{ key: 'notional', dir: 'desc' }} />
+    <Panel title="Recent crosses" subtitle="off-exchange prints, newest first · reaching back session by session" flush>
+      <DataTable columns={columns} rows={rows} rowKey={r => r.key} initialSort={{ key: 'when', dir: 'desc' }} />
     </Panel>
   );
 };
@@ -349,22 +377,37 @@ const DarkPool = () => {
   const activeSym = marketData?.ticker;
   const crosses = useMemo<DarkCross[]>(() => {
     if (!marketData) return [];
+    const year = new Date().getFullYear();
     return buildGexView(marketData, 'GEX', 10)
       .board.flatMap(t =>
-        t.prints.map((p, i) => ({
-          key: `${t.ticker}-${i}`,
-          ticker: t.ticker,
-          size: p.size,
-          price: p.price,
-          notional: p.notional,
-          time: p.time,
-          date: p.date,
-        }))
+        t.prints.map((p, i) => {
+          /* The board speaks M/D and a clock; the feed orders on an epoch. A
+             cross dated in the future is last December's, not next year's —
+             the board draws from the last dozen sessions, so a date ahead of
+             today can only have rolled over the year boundary. */
+          const [mo, dd] = p.date.split('/').map(Number);
+          const [hh, mm, ss] = p.time.split(':').map(Number);
+          let at = new Date(year, mo - 1, dd, hh, mm, ss).getTime();
+          if (at > Date.now()) at = new Date(year - 1, mo - 1, dd, hh, mm, ss).getTime();
+          return {
+            key: `${t.ticker}-${i}`,
+            ticker: t.ticker,
+            size: p.size,
+            price: p.price,
+            notional: p.notional,
+            time: p.time,
+            date: p.date,
+            at,
+          };
+        })
       )
-      .sort((a, b) => b.notional - a.notional)
-      .slice(0, 24);
+      .sort((a, b) => b.at - a.at);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSym]);
+  /* Quoted, not simmed — the whole desk crosses in the history, and
+     registering twenty names would freeze the terminal. */
+  const quotesRef = useRef<TapeQuote[] | null>(null);
+  if (!quotesRef.current) quotesRef.current = Simulator.universeQuotes('SPY');
   const leaders = useMemo(() => buildDarkPoolLeaders(), [marketData]); // eslint-disable-line react-hooks/exhaustive-deps
   const [selectedPrice, setSelectedPrice] = useState<number | null>(null);
   const [selectedPrint, setSelectedPrint] = useState<number | null>(null);
@@ -484,7 +527,7 @@ const DarkPool = () => {
       {tab === 'leaders' ? (
         <div key="leaders" className="animate-soft-in flex flex-col gap-4">
           <LeadersView leaders={leaders} onOpenTicker={openTicker} />
-          <CrossFeed prints={crosses} />
+          <CrossFeed live={crosses} quotes={quotesRef.current} />
         </div>
       ) : (
         <div key="ticker" className="animate-soft-in flex flex-col gap-4">

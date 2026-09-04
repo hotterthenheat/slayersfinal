@@ -5627,16 +5627,19 @@ head('the tape never ends and never says it is loading');
   await page.waitForTimeout(BOOT_MS);
 
   const LOADING = /load(ing|\s+more)|awaiting|fetching|please wait/i;
-  const read = () =>
-    page.evaluate(() => {
+  const read = (which = 0) =>
+    page.evaluate(i => {
       const main = document.querySelector('main');
-      const table = document.querySelector('table');
+      const tables = [...document.querySelectorAll('table')];
+      // Negative indexes from the end — the Dark Pool's feed is the LAST table
+      // on its page, under the leaders board.
+      const table = i < 0 ? tables[tables.length + i] : tables[i];
       return {
         rows: table ? table.querySelectorAll('tbody tr:not([data-divider])').length : 0,
         gap: main ? main.scrollHeight - main.scrollTop - main.clientHeight : -1,
         text: document.body.innerText,
       };
-    });
+    }, which);
 
   const first = await read();
   first.rows > 200
@@ -5701,6 +5704,41 @@ head('the tape never ends and never says it is loading');
   }
 
   errs.length === 0 ? ok('no page errors down the whole tape') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
+
+  /* THE DARK POOL KEEPS THE SAME PROMISE. It was pulled out of the tape's
+     rail in the same breath that asked for the endless scroll, and it runs
+     the same runway hook on a different clock — sessions rather than
+     seconds. Same question, same way of asking it. */
+  await page.goto(`${BASE}/trace/dark-pool`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+  const dp0 = await read(-1);
+  dp0.rows > 100
+    ? ok(`the crosses feed opens full — ${dp0.rows} crosses already on the page`)
+    : bad(`the crosses feed opens with ${dp0.rows} crosses`);
+  !LOADING.test(dp0.text) ? ok('and says nothing about loading') : bad('the dark pool announces a load on arrival');
+
+  let dpWorst = Infinity;
+  let dpRows = dp0.rows;
+  let dpLoading = false;
+  for (let i = 0; i < 6; i++) {
+    await page.evaluate(() => {
+      const m = document.querySelector('main');
+      m.scrollTop = m.scrollHeight;
+    });
+    await page.waitForTimeout(380);
+    const g = await read(-1);
+    dpWorst = Math.min(dpWorst, g.gap);
+    if (LOADING.test(g.text)) dpLoading = true;
+    dpRows = g.rows;
+  }
+  dpRows > dp0.rows
+    ? ok(`and reaches back session by session — ${dp0.rows} crosses became ${dpRows}`)
+    : bad(`the crosses feed ended at ${dpRows}`);
+  dpWorst > 1500
+    ? ok(`never less than ${Math.round(dpWorst)}px of unread crosses below the fold`)
+    : bad(`the reader got within ${Math.round(dpWorst)}px of the end of the crosses`);
+  !dpLoading ? ok('and it never once said it was loading') : bad('a loading state appeared under the crosses');
+
   await ctx.close();
 }
 

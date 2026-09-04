@@ -15,6 +15,7 @@ import {
 import { fmtUsd } from '../../data/gex';
 import Simulator from '../../core/simulator';
 import CompanyLogo from '../../components/ui/CompanyLogo';
+import { useRunway, useRunwayScroll } from '../../components/trace/useRunway';
 import Chip from '../../components/ui/Chip';
 import Panel from '../../components/ui/Panel';
 import Term from '../../components/ui/Term';
@@ -330,7 +331,7 @@ const TAPE_COLUMNS: TapeColumn[] = [
        tinted backgrounds that were only decoration do not. */
     cell: r => (
       <span className="inline-flex items-center gap-1">
-        <CompanyLogo ticker={r.ticker} size={15} />
+        <CompanyLogo ticker={r.ticker} size={15} beside />
         <span className="font-mono text-[11px] font-bold text-textPrimary">{r.ticker}</span>
         <span className="font-mono text-[11px] font-bold tnum text-textPrimary">{r.strike}</span>
         <span className={`font-mono text-[10px] font-semibold ${r.right === 'C' ? 'text-bull' : 'text-bear'}`}>
@@ -772,17 +773,22 @@ const LiveTape = () => {
   const anchorRef = useRef<number>(
     flowTape[Math.min(flowTape.length, SEED_ROWS) - 1]?.at ?? Date.now()
   );
-  const pagesRef = useRef(PREFETCH_PAGES);
-  const [history, setHistory] = useState<TapePrint[]>(() => {
-    const seed: TapePrint[] = [];
-    for (let p = 0; p < PREFETCH_PAGES; p++) {
-      seed.push(...backfillPrints(quotesRef.current!, p, HISTORY_PAGE, anchorRef.current));
-    }
-    return seed;
+  const generate = useCallback(
+    (page: number) => backfillPrints(quotesRef.current!, page, HISTORY_PAGE, anchorRef.current),
+    []
+  );
+  const runway = useRunway<TapePrint>({
+    generate,
+    pageSize: HISTORY_PAGE,
+    prefetchPages: PREFETCH_PAGES,
+    runwayPx: RUNWAY_PX,
+    rowPx: ROW_PX,
+    maxPagesPerExtend: MAX_PAGES_PER_EXTEND,
+    maxPages: MAX_HISTORY_PAGES,
   });
 
   /** The whole tape, newest first: the live stream, then its past. */
-  const rows = useMemo<TapePrint[]>(() => [...live, ...history], [live, history]);
+  const rows = useMemo<TapePrint[]>(() => [...live, ...runway.rows], [live, runway.rows]);
   // The same hold every Trace page wears now (see LiveHold); the tape's own
   // effect below is what actually stops the prints.
   const hold = useHold(marketData);
@@ -794,7 +800,7 @@ const LiveTape = () => {
     /* Seeded from the composed tape, not the live buffer. A cold buffer used
        to open the page on "Awaiting prints…" above rows that were already
        there — the history means there is always something to read. */
-    const seed = [...flowTape.slice(0, SEED_ROWS), ...history].slice(0, SEED_ROWS);
+    const seed = [...flowTape.slice(0, SEED_ROWS), ...runway.rows].slice(0, SEED_ROWS);
     return seed.length ? tapeRead(seed, summarizeTape(seed)) : ['Awaiting prints…'];
   });
   const [flowFilter, setFlowFilter] = useState<FlowFilter>('ALL');
@@ -819,57 +825,6 @@ const LiveTape = () => {
      scroll THERE. Native smooth scroll, compositor-driven, no jitter;
      reduced-motion gets an instant jump. */
   const [showTop, setShowTop] = useState(false);
-  const scrollerRef = useRef<HTMLElement | null>(null);
-
-  /* EXTEND THE RUNWAY. Called on every scroll frame and again whenever the
-     rendered count changes — a filter can empty a page as effectively as
-     scrolling can, and a tape that stops being endless the moment you type a
-     ticker into it is not endless.
-
-     It measures the gap below the fold and, if that gap has fallen under the
-     runway, generates enough pages to put it back to twice the runway. The
-     row-height estimate only sizes the step; the next frame re-measures and
-     corrects, so a wrong guess costs one extra page, never a visible edge.
-
-     Nothing here awaits anything. That is deliberate: an async extension is
-     what forces every other infinite list to own a spinner and a failure
-     state, and to admit both of them to the reader. */
-  /* HOW MANY OF THE ROWS IT GENERATES ACTUALLY REACH THE PAGE. Under no scope
-     that is all of them; under "TSLA" it is about one in forty. Sizing an
-     extension as though every generated row were rendered is what left a
-     filtered tape holding 1,700px of runway while an open one held 7,500 —
-     the extension asked for two pages when it needed eighty. Held in a ref so
-     the scroll listener never has to re-bind to read it. */
-  const yieldRef = useRef(1);
-
-  const extendRunway = useCallback(() => {
-    const el = scrollerRef.current;
-    if (!el || pagesRef.current >= MAX_HISTORY_PAGES) return;
-    const gap = el.scrollHeight - el.scrollTop - el.clientHeight;
-    if (gap > RUNWAY_PX) return;
-    const want = Math.ceil((RUNWAY_PX * 2 - gap) / (HISTORY_PAGE * ROW_PX * yieldRef.current));
-    const add = Math.min(Math.max(1, want), MAX_PAGES_PER_EXTEND, MAX_HISTORY_PAGES - pagesRef.current);
-    const first = pagesRef.current;
-    pagesRef.current = first + add;
-    const grown: TapePrint[] = [];
-    for (let p = first; p < first + add; p++) {
-      grown.push(...backfillPrints(quotesRef.current!, p, HISTORY_PAGE, anchorRef.current));
-    }
-    setHistory(prev => [...prev, ...grown]);
-  }, []);
-
-  useEffect(() => {
-    const main = document.querySelector('main');
-    if (!main) return;
-    scrollerRef.current = main;
-    const onScroll = () => {
-      setShowTop(main.scrollTop > 600);
-      extendRunway();
-    };
-    main.addEventListener('scroll', onScroll, { passive: true });
-    onScroll();
-    return () => main.removeEventListener('scroll', onScroll);
-  }, [extendRunway]);
   /* NOT native smooth scroll: the tape PREPENDS a row per second, and scroll
      anchoring shoves scrollTop mid-animation — Chrome's untunable ~2s glide
      visibly fought it (the exact "lag or jitters" Noah banned). A 450ms
@@ -877,7 +832,9 @@ const LiveTape = () => {
      can't move it, and a timer finishes the jump even if frames never come
      (background tab). */
   const scrollToTop = () => {
-    const el = scrollerRef.current;
+    // Queried at click time rather than held: the runway hook owns the scroll
+    // listener now, and one query on a button press costs nothing.
+    const el = document.querySelector('main');
     if (!el) return;
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       el.scrollTop = 0;
@@ -989,10 +946,12 @@ const LiveTape = () => {
      rendered, not only on scroll — the history keeps reaching back until the
      filtered view is long again. This is why the tape stays endless INSIDE a
      search, which is the only place a reader would notice it was not. */
-  yieldRef.current = rows.length > 0 ? Math.max(0.01, displayRows.length / rows.length) : 1;
-  useLayoutEffect(() => {
-    extendRunway();
-  }, [displayRows.length, extendRunway]);
+  /* THE RUNWAY, bound to the app's scrolling <main>. It is called here rather
+     than up with the other scroll state because it needs the RENDERED count —
+     a filter empties a page as effectively as scrolling does, and the hook
+     divides its estimate by how much of what it generates actually lands. The
+     door-home threshold rides the same listener. */
+  useRunwayScroll(runway, displayRows.length, rows.length, main => setShowTop(main.scrollTop > 600));
 
   /* The beam is GONE (Noah + partner, 2026-08-23: "my partner doesnt like
      the idea of session flow") — but the tape read still speaks the active
@@ -1316,7 +1275,7 @@ const LiveTape = () => {
             }`}
           >
             <span className="flex items-center gap-1.5 min-w-0">
-              <CompanyLogo ticker={t.ticker} size={14} />
+              <CompanyLogo ticker={t.ticker} size={14} beside />
               <span
                 className={`font-mono text-[11px] font-semibold truncate transition-colors ${
                   searchQuery === t.ticker ? 'text-select' : i === 0 ? 'text-supreme' : 'text-textPrimary'

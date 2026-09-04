@@ -122,7 +122,7 @@ const NetFlow = () => {
               >
                 <span className="flex items-center gap-2">
                   <span className="font-mono text-[9px] text-textMuted tnum w-5">{String(i + 1).padStart(2, '0')}</span>
-                  <CompanyLogo ticker={l.ticker} size={15} />
+                  <CompanyLogo ticker={l.ticker} size={15} beside />
                   <span className="font-mono text-[11px] font-bold text-textPrimary">{l.ticker}</span>
                   <span className={`ml-auto font-mono text-[11px] tnum ${directionInk(l.net, netMarks)}`}>
                     {fmtUsd(l.net)}

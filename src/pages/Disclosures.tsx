@@ -247,7 +247,7 @@ const DisclosuresPage = ({ mode = 'insiders' }: { mode?: DeskMode }) => {
                           <td className="py-1.5 px-2 font-mono text-[10px] tnum text-textMuted">{t.daysAgo}d</td>
                           <td className="py-1.5 px-2">
                             <span className="inline-flex items-center gap-1.5">
-                              <CompanyLogo ticker={t.ticker} size={15} />
+                              <CompanyLogo ticker={t.ticker} size={15} beside />
                               <span className="font-mono text-[11px] font-bold text-textPrimary">{t.ticker}</span>
                             </span>
                           </td>
@@ -445,7 +445,7 @@ const DisclosuresPage = ({ mode = 'insiders' }: { mode?: DeskMode }) => {
                         </td>
                         <td className="py-1.5 px-2">
                           <span className="inline-flex items-center gap-1.5">
-                            <CompanyLogo ticker={t.ticker} size={15} />
+                            <CompanyLogo ticker={t.ticker} size={15} beside />
                             <span className="font-mono text-[11px] font-bold text-textPrimary">{t.ticker}</span>
                           </span>
                           <span className="ml-1.5 font-mono text-[9px] text-textMuted">{t.assetKind}</span>

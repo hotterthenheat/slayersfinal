@@ -311,3 +311,100 @@ export function buildDarkPoolView(snapshot: MarketSnapshot): DarkPoolView {
     largest,
   };
 }
+
+// ---- the off-exchange tape's history ----------------------------------------
+
+/** One cross on the market-wide board, in the board's own units. */
+export interface DarkCross {
+  key: string;
+  ticker: string;
+  size: number;
+  price: number;
+  /** Billions — the field's unit since the board was cut. */
+  notional: number;
+  /** 24-hour clock, HH:MM:SS. */
+  time: string;
+  /** M/D. */
+  date: string;
+  /** Epoch ms. What actually orders the feed; the two strings above are how
+      it is read, and a M/D string cannot be sorted or compared. */
+  at: number;
+}
+
+/*
+  THE DARK POOL'S HISTORY (Noah, 2026-09-04, the same breath that made it its
+  own page: "make it a endless scroll... it should be nonstop").
+
+  Same shape as the Live Tape's history and the same reasons — a pure function
+  of (page, index), so a page is the same page every time it is asked for and
+  there is nothing to await or fail. What differs is the CLOCK. Options prints
+  arrive seconds apart and the tape walks back in seconds; blocks cross a few
+  dozen times a session, so this walks back by SESSION — and skips the weekend,
+  because a feed that offers Saturday's crosses is telling you something false
+  about where the size went.
+*/
+
+/** Crosses per session before the feed steps back a day. */
+const CROSSES_PER_SESSION = 22;
+/** Minutes between crosses, walking back from the close. */
+const CROSS_STRIDE_MIN = 17;
+const SESSION_CLOSE_MIN = 16 * 60;
+
+/** n sessions before `from`, weekends skipped. */
+function sessionsBack(from: Date, n: number): Date {
+  const d = new Date(from.getTime());
+  let left = n;
+  while (left > 0) {
+    d.setDate(d.getDate() - 1);
+    const wd = d.getDay();
+    if (wd !== 0 && wd !== 6) left--;
+  }
+  return d;
+}
+
+export function backfillCrosses(
+  quotes: { ticker: string; price: number }[],
+  page: number,
+  count: number,
+  anchorMs: number
+): DarkCross[] {
+  if (quotes.length === 0) return [];
+  const anchor = new Date(anchorMs);
+  const out: DarkCross[] = [];
+
+  for (let j = 0; j < count; j++) {
+    const i = page * count + j;
+    const s = `dpx-${i}`;
+    const session = Math.floor(i / CROSSES_PER_SESSION);
+    const slot = i % CROSSES_PER_SESSION;
+
+    /* Monotone by construction, which is the one thing this may not get wrong:
+       within a session the slot walks the clock back from the close, and each
+       new session is a day earlier. A feed whose clock steps forward as you
+       scroll down it is unreadable. */
+    const day = sessionsBack(anchor, session);
+    const minute = SESSION_CLOSE_MIN - slot * CROSS_STRIDE_MIN;
+    const hh = Math.floor(minute / 60);
+    const mm = minute % 60;
+    const ss = Math.floor(h01(`${s}-s`) * 60);
+    day.setHours(hh, mm, ss, 0);
+
+    const q = quotes[Math.floor(h01(`${s}-t`) * quotes.length)];
+    const price = Number((q.price * (0.995 + h01(`${s}-p`) * 0.01)).toFixed(2));
+    /* ONE CROSS, NOT A DAY'S WORTH — the range buildPrints was corrected to,
+       kept here so the history and the live board speak the same size. */
+    const notional = Number((0.008 + h01(`${s}-n`) * 0.17).toFixed(4));
+
+    out.push({
+      key: `hx-${i}`,
+      ticker: q.ticker,
+      price,
+      notional,
+      size: Math.round((notional * 1e9) / price / 100) * 100,
+      time: `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`,
+      date: `${day.getMonth() + 1}/${day.getDate()}`,
+      at: day.getTime(),
+    });
+  }
+  return out;
+}

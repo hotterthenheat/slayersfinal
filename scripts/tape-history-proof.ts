@@ -1,7 +1,8 @@
 /*
-  Acceptance test for the ENDLESS TAPE — the history under the Live Tape's
-  live stream (Noah, 2026-09-04: "make it a endless scroll and don't let it
-  load when people get to the page it should be nonstop").
+  Acceptance test for the ENDLESS FEEDS — the history under the Live Tape's
+  live stream, and the one under the Dark Pool's crosses (Noah, 2026-09-04:
+  "make it a endless scroll and don't let it load when people get to the page
+  it should be nonstop").
 
   The page's promise is that a reader can scroll for as long as they like and
   never meet a spinner, an end, or a row that was not there a second ago. The
@@ -24,6 +25,7 @@
 */
 import Simulator from '../src/core/simulator';
 import { backfillPrints, type TapeQuote } from '../src/data/tape';
+import { backfillCrosses } from '../src/data/darkpool';
 
 let pass = 0, fail = 0;
 const check = (name: string, ok: boolean, extra = '') => {
@@ -167,6 +169,76 @@ const page = (p: number) => backfillPrints(quotes, p, PAGE, ANCHOR);
   for (let p = 0; p < 100; p++) n += page(p).length;
   const ms = Date.now() - t0;
   check('a hundred pages generate faster than a frame budget', ms < 400, `${n} prints in ${ms}ms`);
+}
+
+// ── 8. the dark pool's history keeps the same promise ────────────────────
+{
+  /* The Dark Pool feed is endless for the same reason and by the same
+     machinery (components/trace/useRunway), but on a different CLOCK: blocks
+     cross a few dozen times a session, not every few seconds, so this walks
+     back by SESSION rather than by second — and has a way to be wrong that
+     the tape does not. */
+  const CROSS_PAGE = 40;
+  const cpage = (n: number) => backfillCrosses(quotes, n, CROSS_PAGE, ANCHOR);
+  const ckey = (c: ReturnType<typeof cpage>[number]) =>
+    `${c.key}|${c.at}|${c.ticker}|${c.price}|${c.size}|${c.notional}|${c.date}|${c.time}`;
+
+  let stable = true;
+  for (const n of [0, 3, 25, 999]) if (cpage(n).map(ckey).join() !== cpage(n).map(ckey).join()) stable = false;
+  check('a page of crosses is identical however often it is asked for', stable);
+
+  const rows = [cpage(0), cpage(1), cpage(2)].flat();
+  let backwards = true;
+  let worst = '';
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i].at >= rows[i - 1].at) { backwards = false; worst = `row ${i}`; break; }
+  }
+  check('every cross is strictly older than the one above it', backwards, worst || `${rows.length} crosses, 2 page seams`);
+
+  /* NO WEEKEND CROSSES. A feed offering Saturday's blocks is telling you
+     something false about where the size went — and stepping back a fixed 24
+     hours per session is exactly how that happens. */
+  const days = new Set(rows.map(r => new Date(r.at).getDay()));
+  check('the feed never crosses on a weekend', !days.has(0) && !days.has(6), `weekdays present: ${[...days].sort().join(',')}`);
+
+  /* And it must not sit on one weekday either — a bug that skipped six days
+     instead of the weekend would pass the check above and be just as wrong. */
+  check('it walks back through the whole week', days.size >= 4, `${days.size} distinct weekdays`);
+
+  const inSession = rows.every(r => {
+    const d = new Date(r.at);
+    const m = d.getHours() * 60 + d.getMinutes();
+    return m >= 9 * 60 + 30 && m <= 16 * 60;
+  });
+  check('every cross lands inside a session', inSession);
+
+  const ids = new Set(rows.map(r => r.key));
+  check('cross keys are unique across pages', ids.size === rows.length, `${rows.length} crosses`);
+
+  /* ONE CROSS, NOT A DAY'S WORTH — the correction buildPrints already took,
+     which the history must not quietly undo. $8m to $178m per block. */
+  const deep = Array.from({ length: 10 }, (_, i) => cpage(i)).flat();
+  const notionals = deep.map(r => r.notional * 1e9);
+  const lo = Math.min(...notionals);
+  const hi = Math.max(...notionals);
+  check('a cross is one block, not a third of a day', lo > 5e6 && hi < 2.5e8, `$${(lo / 1e6).toFixed(0)}m - $${(hi / 1e6).toFixed(0)}m`);
+
+  const quoted = new Map(quotes.map(q => [q.ticker, q.price]));
+  const nearSpot = deep.every(r => {
+    const spot = quoted.get(r.ticker) ?? -1;
+    return spot > 0 && Math.abs(r.price - spot) / spot < 0.02;
+  });
+  check('every cross prints within a percent of its own name', nearSpot);
+
+  // Size and notional have to agree — they are two views of one trade.
+  const agree = deep.every(r => Math.abs(r.size * r.price - r.notional * 1e9) < r.notional * 1e9 * 0.01 + 100 * r.price);
+  check('size times price is the notional', agree);
+
+  const t0 = Date.now();
+  let n = 0;
+  for (let p = 0; p < 100; p++) n += cpage(p).length;
+  const ms = Date.now() - t0;
+  check('a hundred pages of crosses generate faster than a frame budget', ms < 400, `${n} crosses in ${ms}ms`);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

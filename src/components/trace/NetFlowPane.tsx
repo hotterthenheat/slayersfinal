@@ -537,7 +537,7 @@ const NetFlowPane = ({
       <div className="flex items-center gap-2 px-2.5 h-8 shrink-0 select-none">
         {ticker ? (
           <span className="flex items-center gap-1.5 shrink-0">
-            <CompanyLogo ticker={ticker} size={16} />
+            <CompanyLogo ticker={ticker} size={16} beside />
             <span className="font-mono text-[11px] font-bold text-textPrimary">{ticker}</span>
           </span>
         ) : (

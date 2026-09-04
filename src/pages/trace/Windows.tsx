@@ -144,7 +144,7 @@ const Windows = () => {
         sortValue: s => s.row.ticker,
         render: s => (
           <span className="inline-flex items-center gap-1.5">
-            <CompanyLogo ticker={s.row.ticker} size={15} />
+            <CompanyLogo ticker={s.row.ticker} size={15} beside />
             <span className="font-bold text-textPrimary">{s.row.ticker}</span>
           </span>
         ),
