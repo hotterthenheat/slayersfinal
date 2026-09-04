@@ -69,7 +69,7 @@ const ErrorDrift = ({ points }: { points: ErrorPoint[] }) => {
     <div className="w-full flex flex-col gap-2 h-full min-h-0">
       <div className="flex items-center gap-3 flex-wrap select-none">
         <LegendKey ink={SPOT}>Textbook GEX — ours</LegendKey>
-        <LegendKey ink={ALERT}>Reference — simulated</LegendKey>
+        <LegendKey ink={ALERT}>Reference</LegendKey>
         <LegendKey ink={ALERT} swatch>
           The gap is the error
         </LegendKey>

@@ -1,61 +1,83 @@
+import { lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { MotionConfig } from 'framer-motion';
 import { MarketDataProvider } from './context/MarketDataContext';
 import { TrackerProvider } from './context/TrackerContext';
 import AppShell from './components/layout/AppShell';
 import { LaunchProvider } from './components/layout/LaunchTransition';
-import Compass from './pages/Compass';
-import Weigher from './pages/Weigher';
-import OptionChain from './pages/weigher/OptionChain';
-import IndexFutures from './pages/IndexFutures';
-import MacroDesk from './pages/MacroDesk';
-import Journal from './pages/Journal';
-import AlertsPage from './pages/Alerts';
-import Backtest from './pages/Backtest';
-import TickerOverview from './pages/TickerOverview';
-import Tracker from './pages/Tracker';
 import PinpointLayout from './pages/pinpoint/PinpointLayout';
-import Pulse from './pages/workspace/Pulse';
-import PulseBoard from './pages/PulseBoard';
-import Terrain from './pages/terrain/Terrain';
-import ExposureProfile from './pages/pinpoint/ExposureProfile';
-import RankedTargets from './pages/pinpoint/RankedTargets';
-import VannaCharm from './pages/pinpoint/VannaCharm';
-import ExpiryLadder from './pages/pinpoint/ExpiryLadder';
-import GreekSurfaces from './pages/pinpoint/GreekSurfaces';
-import ExposureCompare from './pages/pinpoint/ExposureCompare';
-import GexHistory from './pages/pinpoint/GexHistory';
-import ModelError from './pages/pinpoint/ModelError';
-import OiHeatScreen from './pages/pinpoint/OiHeatScreen';
-import PainMap from './pages/pinpoint/PainMap';
 import TraceLayout from './pages/trace/TraceLayout';
-import LiveTape from './pages/trace/LiveTape';
-import FlowTracker from './pages/trace/FlowTracker';
-import FlowScanner from './pages/trace/FlowScanner';
-import IntervalFlowPage from './pages/trace/IntervalFlow';
-import OptionsScreener from './pages/trace/OptionsScreener';
-import NetFlow from './pages/trace/NetFlow';
-import Footprints from './pages/trace/Footprints';
-import FlowAlerts from './pages/trace/FlowAlerts';
-import TradeWindows from './pages/trace/Windows';
-import Odte from './pages/trace/Odte';
-import MultiLeg from './pages/trace/MultiLeg';
-import DarkPool from './pages/trace/DarkPool';
-import VolLab from './pages/pinpoint/VolLab';
-import Stocks from './pages/Stocks';
-import Disclosures from './pages/Disclosures';
-import NewsRoom from './pages/newsroom/NewsRoom';
-import EarningsHub from './pages/EarningsHub';
-import EarningsDossier from './pages/EarningsDossier';
-import ProveIt from './pages/proveit/ProveIt';
 import Landing from './pages/landing/Landing';
 import NotFound from './pages/NotFound';
 import CommunityLayout from './pages/community/CommunityLayout';
-import Ideas from './pages/community/Ideas';
-import Requests from './pages/community/Requests';
-import Feedback from './pages/community/Feedback';
-import Leaderboard from './pages/community/Leaderboard';
-import MemberProfile from './pages/community/MemberProfile';
+
+/*
+  FIFTY-TWO PAGES WERE IMPORTED EAGERLY, so every one of them landed in the
+  entry chunk and a cold /pulse fetched 2.2 MB of JavaScript to draw a single
+  screen. Manual chunking had already split the big libraries out, which
+  helped caching and did nothing at all for that first load: the libraries
+  were still reached from the entry, because the entry still contained every
+  page that imports them.
+
+  These are the leaf pages, and a reader visits one of them at a time. The
+  Suspense boundary that catches them is inside AppShell, around the outlet
+  only, so the chrome never unmounts while a chunk arrives — see the note
+  there for why the fallback is null.
+
+  WHAT STAYS EAGER, and why it is not an oversight: the three section
+  layouts (Pinpoint, Trace, Community) are chrome, not content — a lazy
+  layout would blank its own tab bar on the way in, which is the flicker
+  this arrangement exists to avoid. Landing is the first paint of the app,
+  so splitting it would only add a round trip before anything is on screen.
+  NotFound is a few lines and has to be there the moment it is needed.
+*/
+const AlertsPage = lazy(() => import('./pages/Alerts'));
+const Backtest = lazy(() => import('./pages/Backtest'));
+const Compass = lazy(() => import('./pages/Compass'));
+const DarkPool = lazy(() => import('./pages/trace/DarkPool'));
+const Disclosures = lazy(() => import('./pages/Disclosures'));
+const EarningsDossier = lazy(() => import('./pages/EarningsDossier'));
+const EarningsHub = lazy(() => import('./pages/EarningsHub'));
+const ExpiryLadder = lazy(() => import('./pages/pinpoint/ExpiryLadder'));
+const ExposureCompare = lazy(() => import('./pages/pinpoint/ExposureCompare'));
+const ExposureProfile = lazy(() => import('./pages/pinpoint/ExposureProfile'));
+const Feedback = lazy(() => import('./pages/community/Feedback'));
+const FlowAlerts = lazy(() => import('./pages/trace/FlowAlerts'));
+const FlowScanner = lazy(() => import('./pages/trace/FlowScanner'));
+const FlowTracker = lazy(() => import('./pages/trace/FlowTracker'));
+const Footprints = lazy(() => import('./pages/trace/Footprints'));
+const GexHistory = lazy(() => import('./pages/pinpoint/GexHistory'));
+const GreekSurfaces = lazy(() => import('./pages/pinpoint/GreekSurfaces'));
+const Ideas = lazy(() => import('./pages/community/Ideas'));
+const IndexFutures = lazy(() => import('./pages/IndexFutures'));
+const IntervalFlowPage = lazy(() => import('./pages/trace/IntervalFlow'));
+const Journal = lazy(() => import('./pages/Journal'));
+const Leaderboard = lazy(() => import('./pages/community/Leaderboard'));
+const LiveTape = lazy(() => import('./pages/trace/LiveTape'));
+const MacroDesk = lazy(() => import('./pages/MacroDesk'));
+const MemberProfile = lazy(() => import('./pages/community/MemberProfile'));
+const ModelError = lazy(() => import('./pages/pinpoint/ModelError'));
+const MultiLeg = lazy(() => import('./pages/trace/MultiLeg'));
+const NetFlow = lazy(() => import('./pages/trace/NetFlow'));
+const NewsRoom = lazy(() => import('./pages/newsroom/NewsRoom'));
+const Odte = lazy(() => import('./pages/trace/Odte'));
+const OiHeatScreen = lazy(() => import('./pages/pinpoint/OiHeatScreen'));
+const OptionChain = lazy(() => import('./pages/weigher/OptionChain'));
+const OptionsScreener = lazy(() => import('./pages/trace/OptionsScreener'));
+const PainMap = lazy(() => import('./pages/pinpoint/PainMap'));
+const ProveIt = lazy(() => import('./pages/proveit/ProveIt'));
+const Pulse = lazy(() => import('./pages/workspace/Pulse'));
+const PulseBoard = lazy(() => import('./pages/PulseBoard'));
+const RankedTargets = lazy(() => import('./pages/pinpoint/RankedTargets'));
+const Requests = lazy(() => import('./pages/community/Requests'));
+const Stocks = lazy(() => import('./pages/Stocks'));
+const Terrain = lazy(() => import('./pages/terrain/Terrain'));
+const TickerOverview = lazy(() => import('./pages/TickerOverview'));
+const Tracker = lazy(() => import('./pages/Tracker'));
+const TradeWindows = lazy(() => import('./pages/trace/Windows'));
+const VannaCharm = lazy(() => import('./pages/pinpoint/VannaCharm'));
+const VolLab = lazy(() => import('./pages/pinpoint/VolLab'));
+const Weigher = lazy(() => import('./pages/Weigher'));
 
 const App = () => {
   return (

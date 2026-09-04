@@ -97,7 +97,7 @@ const ProveIt = () => {
               ${mc.stats.rangeLow.toFixed(0)}–${mc.stats.rangeHigh.toFixed(0)}
             </span>
           }
-          sub="90% of modeled paths land inside"
+          sub="90% of paths land inside"
         />
         <StatCard
           label="Vol regime"

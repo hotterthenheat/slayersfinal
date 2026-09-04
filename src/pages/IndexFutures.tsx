@@ -133,7 +133,12 @@ const IndexFutures = () => {
         className="w-full"
         actions={<ProvenanceChip sources={['candles']} note="The overnight session and the settlement are modelled." />}
       >
-        <MetricGrid min="160px">
+        {/* 150, not 160: eight cards at 160 wanted 1,376px of track and the
+            row had a little less, so the eighth (ROLL) dropped alone onto a
+            second row beside five empty columns. At 150 the set fits on one
+            row from 1,284px up, which covers every desk width this is read
+            at, and below that it wraps in pairs rather than orphaning. */}
+        <MetricGrid min="150px">
           <StatCard label={`${spec.etf} · ETF`} value={etfPx ? `$${etfPx.toFixed(2)}` : '—'} sub="the tape this desk draws" />
           <StatCard label={`${spec.index} · cash index`} value={indexPx ? indexPx.toFixed(2) : '—'} sub="what the options are written on" />
           <StatCard label={`${root} · front month`} value={quote.last.toFixed(2)} sub={`${front.code}, ${front.daysToExpiry}d to expiry`} />

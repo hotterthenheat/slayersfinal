@@ -137,4 +137,4 @@ export function flowWords(s: SpotScenario): string {
 
 /** The assumption the panel must carry — load-bearing, so it is words. */
 export const HEDGING_ASSUMPTION =
-  'Assumes continuous delta hedging at the modelled dealer sign, over the book as it stands now. Real desks hedge in bands and on their own schedule.';
+  'Assumes continuous delta hedging at the dealer sign, over the book as it stands now. Real desks hedge in bands and on their own schedule.';

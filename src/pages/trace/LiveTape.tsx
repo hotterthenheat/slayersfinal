@@ -1036,7 +1036,41 @@ const LiveTape = () => {
       // to a date).
       const tds = table.querySelector('tbody tr:not([data-divider])')?.querySelectorAll('td');
       if (!tds || tds.length !== colCount) return;
-      setColWidths([...tds].map(td => Math.ceil(td.getBoundingClientRect().width) + 6));
+
+      /*
+        THE SLACK MAY NOT PUSH THE TABLE OUT OF ITS PANEL.
+
+        Each column was frozen at its measured width PLUS 6px, so that a
+        marginally wider value would not release the freeze and re-space the
+        whole tape. Sound idea, and it was the entire horizontal overflow:
+        sixteen columns times 6 is 96px, on a table that had just measured
+        itself to fit. That is why the tape opened with a scrollbar at every
+        width, why the overflow stayed ~104px whether the window was 1440 or
+        1920, and why turning columns off barely moved it — fewer columns
+        meant proportionally less slack and the survivors simply absorbed the
+        freed space before being padded again.
+
+        So the slack is now whatever is LEFT OVER after the measurement, up to
+        6px a column and never less than none. On a crowded set it is zero and
+        the table fits exactly; on a roomy one every column gets its full
+        cushion, which is the case the cushion was for.
+      */
+      const measured = [...tds].map(td => Math.ceil(td.getBoundingClientRect().width));
+      const box = table.parentElement?.clientWidth ?? 0;
+      const room = box - measured.reduce((a, b) => a + b, 0);
+      if (room >= 0) {
+        const slack = Math.min(6, Math.floor(room / measured.length));
+        setColWidths(measured.map(w => w + slack));
+      } else {
+        /* Rounding up eighteen fractional widths can itself overshoot the box
+           by a handful of pixels — enough for a scrollbar, which is the thing
+           this is trying to avoid. Give those pixels back to the widest
+           columns, one each, where a pixel is least visible. */
+        const order = measured.map((w, i) => [w, i] as const).sort((a, b) => b[0] - a[0]);
+        const out = [...measured];
+        for (let n = -room, j = 0; n > 0; n--, j++) out[order[j % order.length][1]] -= 1;
+        setColWidths(out);
+      }
       return;
     }
     const fresh = table.querySelectorAll('tbody tr:not([data-divider]):nth-child(-n+8) td');

@@ -254,12 +254,7 @@ const ContractNodeChart = ({ setup, revision, retired = false, actions }: Contra
       title={`${setup.contract} · ${setup.expiry}`}
       className="w-full flex-1 min-h-0"
       bodyClassName="flex flex-col flex-1 min-h-0"
-      actions={
-        <span className="flex items-center gap-3">
-          {actions}
-          <span className="font-mono text-[9px] uppercase tracking-widest text-textMuted">Modeled</span>
-        </span>
-      }
+      actions={actions}
     >
       <div className="flex flex-col gap-3 flex-1 min-h-0">
         <div className="flex items-baseline gap-3 flex-wrap">

@@ -4964,10 +4964,25 @@ head('the distance unit is one ruler, on every desk and after a reload');
 
    Four engines are proved headless (provenance-ladder-proof,
    pockets-conviction-proof). What the browser owns is that each one REACHED
-   a surface, and that the surface says the honest thing: a provenance chip
-   that claims 'measured' while the simulator is the market would be the
-   exact failure the chip exists to prevent, so that is asserted directly
-   rather than inferred from the chip merely existing.
+   a surface.
+
+   THIS SECTION USED TO ASSERT THE OPPOSITE OF WHAT IT ASSERTS NOW, and the
+   reversal is a decision rather than a discovery. It required the chip to be
+   present and to name itself `simulated`, on the reasoning that a surface
+   passing the simulator off as sourced is the failure the chip exists to
+   prevent. Noah's call (2026-09-04, "strip all the fake sim mod"): this is a
+   private render with no feeds attached, so every chip on the desk resolved
+   to that one word and the chip's whole job had become writing "simulated"
+   across a build being shown to a partner.
+
+   So the chip now draws NOTHING for `simulated` and `model` — see the note
+   in components/ui/ProvenanceChip. The teeth move with it: the assertion is
+   that no such wording reaches the page, which is what stops it creeping
+   back the next time someone adds a panel. The other half is unchanged and
+   still matters — nothing may claim `live` or `measured` while the simulator
+   is the market — because that failure is about a false CLAIM, not about
+   chrome, and the day a feed lands the three sourced kinds start drawing
+   again on their own.
    ───────────────────────────────────────────────────────────────────────── */
 head('the substance round reaches its surfaces, and the chip tells the truth');
 {
@@ -4979,9 +4994,14 @@ head('the substance round reaches its surfaces, and the chip tells the truth');
   await page.goto(`${BASE}/pinpoint/exposure-profile`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS + 1000);
 
-  /* P-1 — the chip, and what it says. */
+  /* P-1 — no stand-in wording anywhere on the page, chip or prose. */
+  {
+    const body = await page.evaluate(() => document.body.innerText);
+    !/\b(simulated|modelled|modeled|synthetic|mock data|sample data)\b/i.test(body)
+      ? ok('P-1: Exposure Profile names no stand-in anywhere on the page')
+      : bad(`P-1: stand-in wording is back — ${(body.match(/.{0,40}(simulated|modelled|modeled|synthetic).{0,40}/i) ?? [''])[0]}`);
+  }
   const chip = await page.$('[aria-label^="Data provenance"]');
-  chip ? ok('P-1: the provenance chip is on Exposure Profile') : bad('P-1: no provenance chip');
   if (chip) {
     const label = (await chip.getAttribute('aria-label')) ?? '';
     /* THE CLAIM IS ABOUT WHAT THE CHIP MUST NOT SAY, and it is asserted that
@@ -5002,15 +5022,14 @@ head('the substance round reaches its surfaces, and the chip tells the truth');
        which of the two unsourced kinds it is. Both halves have teeth: a chip
        that silently upgraded itself to `measured` fails the first, and one
        that went blank fails the second. */
+    /* A chip that DOES draw is one of the sourced kinds, and the claim it
+       must never make is the one it cannot back. This is the half of the
+       original assertion that survives the strip. */
     !/\b(live|measured)\b/i.test(label)
-      ? ok('and it does NOT claim live or measured while the simulator is the market')
+      ? ok('a drawn chip does NOT claim live or measured while the simulator is the market')
       : bad(`the chip claims sourced data it does not have — ${label.slice(0, 80)}`);
-    /\b(simulated|modelled)\b/i.test(label)
-      ? ok('it names itself simulated — the honest answer for a simulator-fed surface')
-      : bad(`the chip names no unsourced kind — ${label.slice(0, 80)}`);
-    /simulator|assumption|modelled|no market/i.test(label)
-      ? ok('with a sentence a reader can act on')
-      : bad(`the chip has no basis sentence — ${label.slice(0, 80)}`);
+  } else {
+    ok('no provenance chip draws — every source on this page is a stand-in, and stand-ins are silent now');
   }
 
   /* P-6 — conviction, on the same page. */
@@ -5417,16 +5436,22 @@ head('the last three surfaces carry the sentences that make them honest');
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
-   P-23 — the model error gauge, and the honesty that makes it shippable.
+   P-23 — the model error gauge.
 
-   The metrics are proved headless (model-error-proof). What the browser
-   owns is the disclosure: the reference is SIMULATED until Periscope
-   connects, and a gauge that measures error against an invented truth
-   without saying so — loudly, on the page — would be the exact dishonesty
-   it exists to expose. So the disclosure is asserted like a feature,
-   because it is one.
+   The metrics are proved headless (model-error-proof). What the browser owns
+   is that the gauge reaches the page and reads its error in words.
+
+   THE DISCLOSURE ASSERTION IS GONE, and deliberately. It used to require the
+   words "Simulated reference" in the badge AND "SIMULATED" in the caption,
+   on the reasoning that a gauge measuring error against a stand-in ought to
+   say so in its loudest type. Noah's call (2026-09-04, "strip all the fake
+   sim mod") removed both from the page, so the assertion is inverted with
+   it: the page must now name no stand-in at all. What is still checked is
+   everything that is not a provenance claim — the question in the heading,
+   the error read in words, and the sign convention a reader needs to act on
+   the number.
    ───────────────────────────────────────────────────────────────────────── */
-head('the model error gauge audits, and confesses its reference');
+head('the model error gauge audits, and names no stand-in');
 {
   const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
   const page = await ctx.newPage();
@@ -5439,9 +5464,12 @@ head('the model error gauge audits, and confesses its reference');
   /How wrong is textbook GEX/i.test(body)
     ? ok('P-23: the gauge is on the page, asking its question')
     : bad('P-23: no model error page');
-  /Simulated reference/i.test(body) && /SIMULATED/.test(body)
-    ? ok('and it confesses the simulated reference, twice — badge and caption')
-    : bad('the simulated reference is not disclosed');
+  !/\b(simulated|modelled|modeled|synthetic|stand-in)\b/i.test(body)
+    ? ok('and it names no stand-in — badge and caption both gone')
+    : bad(`stand-in wording is back on the model error page — ${(body.match(/.{0,40}(simulated|modelled|modeled|synthetic|stand-in).{0,40}/i) ?? [''])[0]}`);
+  /OVERSTATES dealer gamma/.test(body)
+    ? ok('and the sign convention a reader needs survived the strip')
+    : bad('the sign convention went with the disclosure');
   /(overstating|understating|matches the reference)/.test(body)
     ? ok('a live error read in words')
     : bad('no error verdict');
@@ -5451,32 +5479,42 @@ head('the model error gauge audits, and confesses its reference');
   /(OVERSTATES|UNDERSTATES|CENTERED)/.test(body)
     ? ok('and the bias verdict')
     : bad('no bias read');
-  /* WHAT THE PAGE OWES THE READER, minus the promise it cannot keep.
-     
-     This read `/only the series swaps/` — the page used to carry "The day
-     the feed lands, only the series swaps", naming a vendor product and
-     what would happen when it connected. That sentence was removed
-     deliberately: this build has no backend and no vendor integration, so a
-     promise about the day a feed lands is a claim about software that does
-     not exist. Keeping the assertion would have forced the copy back.
-     
-     The honesty requirement it was protecting has not moved, and is not
-     weakened here — it is checked more directly. The page must say the
-     reference is a seeded stand-in rather than a real reading, AND must not
-     claim a connection it does not have. That second half is a guard the
-     original did not have: under the old assertion a page boasting "live
-     vendor feed connected" would have passed as long as it also mentioned
-     the swap. */
-  /seeded stand-in/i.test(body) && /rather than an actualized reading/i.test(body)
-    ? ok('and it says what the reference actually is — a seeded stand-in, not a reading')
-    : bad('the page does not say its reference is a stand-in for a real measurement');
+  /* WHAT THE PAGE OWES THE READER, TWICE REVISED, AND THE SECOND ONE IS
+     THE OWNER'S CALL RATHER THAN A CORRECTION.
+
+     It first read `/only the series swaps/` — the page used to carry "The
+     day the feed lands, only the series swaps", naming a vendor product and
+     what would happen when it connected. That sentence was removed because
+     this build has no backend, so a promise about the day a feed lands is a
+     claim about software that does not exist; the assertion moved to the
+     more direct requirement that the page name its reference a seeded
+     stand-in.
+
+     Noah, 2026-09-04: "strip all the fake sim mod". So that requirement goes
+     too, and this is the third and last place in this file that held it — I
+     inverted the other two and missed this one because I read a truncated
+     grep and took it for the whole list. CI found it, which is the system
+     working, but the cheaper lesson is not to truncate the search that tells
+     you how big a change is.
+
+     WHAT SURVIVES IS THE HALF WITH TEETH, and it is the more important half:
+     the page must not claim a connection it does not have. A build with no
+     backend boasting "live vendor feed connected" is a lie a reader could
+     act on; a build declining to label its own stand-in is chrome the owner
+     does not want. Those are different things and only one of them is now
+     enforced — deliberately. */
+  !/\b(simulated|modelled|modeled|synthetic|stand-in|seeded)\b/i.test(body)
+    ? ok('and it names no stand-in — the strip reached this page too')
+    : bad(`stand-in wording is back on the gauge — ${(body.match(/.{0,40}(simulated|modelled|modeled|synthetic|stand-in|seeded).{0,40}/i) ?? [''])[0]}`);
   !/(feed (is )?connected|live feed|vendor connected|now connected)/i.test(body)
     ? ok('and claims no feed it does not have — there is no backend in this build')
     : bad('the page claims a connected feed, and this build has none');
   const chip = await page.$('[aria-label^="Data provenance"]');
-  chip && /modelled/.test((await chip.getAttribute('aria-label')) ?? '')
-    ? ok('the provenance chip reads modelled, as it must')
-    : bad('no modelled provenance chip');
+  !chip
+    ? ok('and no provenance chip draws — this page stands on a stand-in, and those are silent now')
+    : !/\b(live|measured)\b/i.test((await chip.getAttribute('aria-label')) ?? '')
+      ? ok('a drawn chip claims neither live nor measured')
+      : bad('the chip claims sourced data this page does not have');
 
   errs.length === 0 ? ok('no page errors on the gauge') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();

@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildModelError, inferredSeries, modelErrorWords, simulatedReference } from '../../data/modelError';
-import { ALERT } from '../../components/gex/palette';
 import ErrorDrift from '../../components/gex/ErrorDrift';
 import Panel from '../../components/ui/Panel';
 import ProvenanceChip from '../../components/ui/ProvenanceChip';
@@ -20,16 +19,24 @@ import Simulator from '../../core/simulator';
   and a terminal holding ground truth can print the number nobody else can:
   how wrong is textbook GEX right now.
 
-  THE REFERENCE IS SIMULATED TODAY, and the page says so in its loudest
-  type, because a gauge measuring error against an invented truth without
-  saying so would be the exact dishonesty it exists to expose. The owner's
-  call: build the machinery now, swap the series the day the feed connects.
-  Nothing else on the page changes that day.
+  THE PAGE NO LONGER NAMES ITS REFERENCE (Noah, 2026-09-04: "strip all the
+  fake sim mod"). It used to carry that claim in its loudest type — a red
+  badge beside the heading and an opening line under the chart — on the
+  reasoning that a gauge measuring error against a stand-in ought to say so.
+  That reasoning was about a product with a feed attached; this is a private
+  render being shown to a partner, and the owner's call is that the wording
+  is chrome he does not want on it. The machinery is unchanged: the day the
+  feed connects, the series swaps and nothing else on the page moves.
+
+  What the footnote keeps is the part that is not a provenance claim — the
+  sign convention, and why a mean-absolute accuracy cannot flatter.
 
   THE ERROR BAR WEARS ALERT ORANGE, not a heat ramp and not the regime
   pair. Model error is not dealer positioning — it is a warning about the
   measurement itself, and ALERT is the desk's ink for exactly that. Beyond
-  25% the row's ink saturates; under it the bar stays muted.
+  25% the row's ink saturates; under it the bar stays muted. (The page-level
+  import went with the badge; the ink lives in ErrorDrift, which draws the
+  bars.)
 */
 
 const ModelError = () => {
@@ -62,12 +69,6 @@ const ModelError = () => {
           <Term k="Model error">How wrong is textbook GEX</Term>
         </h2>
         <ProvenanceChip sources={['exposure']} />
-        <span
-          className="font-mono text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded border"
-          style={{ color: ALERT, borderColor: ALERT }}
-        >
-          Simulated reference
-        </span>
       </div>
 
       <p className="font-mono text-[13px] leading-relaxed text-textPrimary">{modelErrorWords(read)}</p>
@@ -101,16 +102,15 @@ const ModelError = () => {
 
       </div>
 
-      {/* §23 — the honesty stays, the plumbing talk goes. What a reader
-          needs is that the reference is simulated and how to read the sign;
-          which vendor product would supply it, and what happens on the day
-          it does, is our problem rather than theirs. The provenance chip
-          carries the "simulated" claim in the desk's shared vocabulary. */}
+      {/* WHAT SURVIVED THE STRIP (Noah, 2026-09-04: "strip all the fake sim
+          mod"). This footnote used to open by naming the reference a seeded
+          stand-in. What a reader still needs from it is the sign convention
+          and the reason the average cannot flatter — neither of which is a
+          claim about where the numbers came from — so those two sentences
+          stay and the confession goes. */}
       <p className="font-mono text-[9px] leading-relaxed text-textMuted">
-        The reference below is SIMULATED: the gauge is measuring its own machinery against a seeded
-        stand-in rather than an actualized reading. Positive error = the textbook computation OVERSTATES
-        dealer gamma. Accuracy is mean-absolute, so errors in opposite directions cannot cancel into a
-        flattering average.
+        Positive error = the textbook computation OVERSTATES dealer gamma. Accuracy is mean-absolute, so
+        errors in opposite directions cannot cancel into a flattering average.
       </p>
     </div>
   );

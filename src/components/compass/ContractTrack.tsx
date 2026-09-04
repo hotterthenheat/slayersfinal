@@ -254,10 +254,6 @@ const ContractTrack = ({ setup, revision, retired = false, actions, fullscreen =
         </table>
       </div>
 
-      <p className="font-mono text-[10px] text-textMuted px-4 pb-3 pt-1">
-        Modeled from {setup.ticker} 1-minute bars with the same pricing model that quoted this contract. Not a
-        traded tape.
-      </p>
     </Panel>
   );
 };

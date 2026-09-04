@@ -1,4 +1,4 @@
-import { Component, useCallback, useEffect, useState, type ReactNode } from 'react';
+import { Component, Suspense, useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { RotateCcw } from 'lucide-react';
@@ -97,7 +97,32 @@ const AppShell = () => {
                 short pages' footer at the viewport floor, not mid-screen */}
             <div className="px-4 lg:px-6 2xl:px-8 pt-5 pb-16 flex flex-col gap-4 flex-grow">
               <RouteBoundary resetKey={location.pathname}>
-                <Outlet />
+                {/*
+                  THE BOUNDARY THAT LETS ROUTES BE CODE-SPLIT, placed here and
+                  not around the shell on purpose.
+
+                  Every page used to be imported eagerly in App.tsx, so the
+                  entry chunk carried all fifty-two of them and a cold /pulse
+                  fetched 2.2 MB to draw one screen. React.lazy fixes that, but
+                  a lazy route needs a Suspense boundary somewhere above it,
+                  and WHERE decides what a reader sees while a chunk arrives.
+
+                  Above the shell, the whole terminal — top bar, section nav,
+                  ticker picker — would blank on every first visit to a page.
+                  Here, inside the shell and inside the error boundary, only
+                  the page body waits: the chrome a reader is looking at and
+                  clicking through never unmounts.
+
+                  The fallback is `null` rather than a spinner. These chunks
+                  are same-origin and small, so the gap is a frame or two, and
+                  a spinner that appears and vanishes that fast reads as a
+                  flicker — worse than an empty area that fills. It is also
+                  only ever paid ONCE per page: after the first visit the
+                  chunk is cached and navigation is as immediate as it was.
+                */}
+                <Suspense fallback={null}>
+                  <Outlet />
+                </Suspense>
               </RouteBoundary>
             </div>
             {/* The landing's footer ends every main page (Noah, 2026-08-23) */}
