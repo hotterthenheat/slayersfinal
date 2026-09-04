@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useLocation, useOutlet } from 'react-router-dom';
+import { Link, useNavigate, useLocation, useOutlet } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useMarketData } from '../../context/MarketDataContext';
 import TickerSearch from '../../components/ui/TickerSearch';
@@ -43,6 +43,7 @@ const TraceLayout = () => {
   const location = useLocation();
   const outlet = useOutlet();
 
+  const navigate = useNavigate();
   const active = TRACE_SUBPAGES.find(page => location.pathname.startsWith(page.path)) ?? TRACE_SUBPAGES[0];
 
   const stripRef = useRef<HTMLDivElement>(null);
@@ -98,7 +99,21 @@ const TraceLayout = () => {
             vertically by exactly 1px — and 1px is all it takes for Chrome to
             hang a vertical scrollbar on it. The padding gives that 1px a place
             to live inside the box. */}
-        <nav aria-label="Trace subpages" className="flex items-center gap-1 min-w-0 overflow-x-auto pb-px">
+        {/*
+          TEN TABS DO NOT FIT A PHONE, AND SCROLLING THEM IS NOT THE ANSWER.
+
+          The Trace family grew from two subpages to ten; the row measures
+          989px, so at 390 and 768 the last four ran off the window. The
+          `overflow-x-auto` that used to absorb that is exactly what this
+          desk forbids — a tab you have to discover by swiping is a tab
+          nobody finds, which is the rule the sweep enforces by asking the
+          bar to FIT rather than to scroll.
+
+          So the row is shown only where it fits, and below that the same
+          registry becomes one control naming the current page. Same links,
+          same order, no hidden ones.
+        */}
+        <nav aria-label="Trace subpages" className="hidden lg:flex items-center gap-1 min-w-0 pb-px">
           {TRACE_SUBPAGES.map(page => {
             const isActive = page.path === active.path;
             const TabIcon = page.icon;
@@ -141,6 +156,24 @@ const TraceLayout = () => {
             );
           })}
         </nav>
+        {/* The narrow-width equivalent: every subpage, one tap, nothing
+            off-screen. A native select so it is reachable by keyboard and
+            by a screen reader without rebuilding a listbox. */}
+        <div className="lg:hidden flex items-center gap-1.5 min-w-0 pb-1.5">
+          <active.icon className="w-3.5 h-3.5 shrink-0 text-textMuted" aria-hidden />
+          <select
+            aria-label="Trace subpages"
+            value={active.path}
+            onChange={e => navigate(e.target.value)}
+            className="min-w-0 max-w-[52vw] bg-transparent font-mono text-xs text-textPrimary outline-none cursor-pointer"
+          >
+            {TRACE_SUBPAGES.map(page => (
+              <option key={page.path} value={page.path} className="bg-panel text-textPrimary">
+                {page.label}
+              </option>
+            ))}
+          </select>
+        </div>
         {!noPicker && (
           <div className="flex items-center gap-2 shrink-0 ml-auto pb-1.5">
             <TickerSearch value={activeTicker} onChange={changeTicker} />
