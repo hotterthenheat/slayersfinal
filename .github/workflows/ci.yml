@@ -18,7 +18,7 @@ jobs:
   verify:
     name: Typecheck · Test · Build
     runs-on: ubuntu-latest
-    # 40, and the history of this number is the reason for the headroom.
+    # 75, and the history of this number is the reason for the headroom.
     #
     # It was 15 until the job crossed it on 4da6245, then 25. On the v2
     # directive's Terrain work the sweep gained sections for six features and
@@ -29,10 +29,34 @@ jobs:
     # like somebody stopped the run rather than like the budget being wrong —
     # which is exactly how the last two overruns were misread.
     #
-    # So it is set well clear of the measurement rather than just above it.
+    # AND IT HAPPENED AGAIN, THE SAME WAY, AT 40 (2026-09-04). The paragraph
+    # above was written when 25 was raised to 40 and it described this exact
+    # failure in advance; it still did not stop anyone — me included — from
+    # reading the next two overruns as somebody cancelling a run:
+    #
+    #   run 912  Aug 30                35m21s  success
+    #   run 922  Aug 30                36m14s  success
+    #   run 941  Aug 30                38m53s  success
+    #   run 945  #82 merged to main    39m52s  CANCELLED — timeout
+    #   run 948  #83 merged to main    40m38s  CANCELLED — timeout
+    #   run 958  this branch           40m13s  CANCELLED — timeout, and the
+    #                                          sweep step alone had run 32m55s
+    #                                          without reaching its end
+    #
+    # So two merges landed on main against a job that never finished, and
+    # nothing said so. 38m53s passing and 39m52s timing out is not a budget
+    # with headroom, it is a coin toss that had been coming up heads.
+    #
+    # 75 is not "40 plus a bit". The pre-sweep steps (install, typecheck,
+    # test, build, chromium) measure ~7m18s, so this leaves the sweep about
+    # 68 minutes against a need somewhere past 33 — roughly double, which is
+    # the point. Set it well clear of the measurement rather than just above
+    # it, so that growing the coverage by one section is a normal thing to do
+    # and not a thing that silently stops CI from reporting.
+    #
     # The sweep is the long pole by design (see the note on the step below);
     # the budget follows the coverage, never the other way round.
-    timeout-minutes: 40
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v5
 
